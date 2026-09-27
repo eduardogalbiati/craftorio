@@ -186,15 +186,21 @@
           </div>
         </div>
         <div class="tabs page-tabs" role="tablist">
-          <button class="tab active" data-wtab="definitions" role="tab" aria-selected="true">Definitions</button>
-          <button class="tab" data-wtab="runs" role="tab" aria-selected="false">Runs</button>
+          <button class="tab active" data-wtab="runs" role="tab" aria-selected="true">Runs</button>
+          <button class="tab" data-wtab="definitions" role="tab" aria-selected="false">Definitions</button>
         </div>
-        <div data-wpage="definitions">
+        <div data-wpage="runs">
+          <div class="pr-toolbar">
+            <div id="workflow-run-filters" class="chips"></div>
+            <span class="spacer"></span>
+            <label class="check small"><input type="checkbox" id="workflow-show-sim" /><span>Show simulated</span></label>
+            <button id="btn-workflow-runs-refresh" class="btn sm ghost">Refresh</button>
+          </div>
+          <p id="workflow-runs-error" class="error small"></p>
+          <div id="workflow-runs" class="pr-list"></div>
+        </div>
+        <div data-wpage="definitions" class="hidden">
           <div id="workflows-list" class="wf-list"></div>
-        </div>
-        <div data-wpage="runs" class="hidden">
-          <p class="muted small">Workflows executed by the orchestrator, most recent first. <span id="workflow-runs-live" class="badge live hidden">includes the running workflow</span></p>
-          <div id="workflow-runs" class="s-group table-wrap"></div>
         </div>
       </section>
 

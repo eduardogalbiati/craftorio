@@ -62,6 +62,17 @@ test('runsForProject matches the project id, then the current or previous folder
   assert.deepEqual(runs.runsForProject(list, { id: 'other', folder: path.join(root, 'old-folder') }).map((r) => r.runId), ['r2']);
 });
 
+test('projectOf finds the project a run belongs to, by id or by folder, or null', (t) => {
+  const root = workspace(t);
+  const [r1, r2, r3] = runs.listRuns(root);
+  const app = { id: 'app', name: 'App', folder: path.join(root, 'old-folder') };
+  const proj = { id: 'proj', name: 'Proj', folder: path.join(root, 'elsewhere') };
+  assert.equal(runs.projectOf(r1, [app, proj]).name, 'Proj');
+  assert.equal(runs.projectOf(r2, [app, proj]).name, 'App');
+  assert.equal(runs.projectOf(r3, [app, proj]), null);
+  assert.equal(runs.projectOf(r1, [app]), null); // its project was removed
+});
+
 test('updateProject remembers the previous folder', async (t) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'proj-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));

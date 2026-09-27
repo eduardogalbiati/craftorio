@@ -409,30 +409,42 @@ ipcMain.handle('supervisor:resume', async (_e, { runId, step, instruction }) => 
   });
 });
 
-// ---- runs of a project ---------------------------------------------------------------
+// ---- run lists (Projects > Project and Workflows > Runs) ------------------------------
+function runListItem(r) {
+  const current = !!currentRun && currentRun.runId === r.runId && currentRun.status === 'running';
+  const live = current ? [...currentRun.sessions.values()].map((x) => sessionView(currentRun.snapshot(x), false)) : null;
+  // the orchestrator first: its live log is the run's timeline
+  const sessions = (live || r.sessions.map((x) => sessionView(x, false))).sort((a, b) => (b.agent === 'orchestrator') - (a.agent === 'orchestrator'));
+  const providers = runProviders(current ? r.runId : 'disk', r.file);
+  const { inputs, ...info } = r;
+  return {
+    ...info,
+    artifacts: runs.runArtifacts(r.runDir),
+    status: current ? 'running' : r.status,
+    current,
+    costUsd: current ? sessions.reduce((a, x) => a + (x.costUsd || 0), 0) : r.costUsd,
+    sessions: sessions.map((x) => {
+      const why = cliReason(x, providers, current);
+      return { ...x, cliAvailable: !why, cliReason: why };
+    }),
+  };
+}
+
 ipcMain.handle('projects:runs', (_e, { id }) => {
   const project = projects.listProjects(ws.projects).find((p) => p.id === id);
   if (!project) throw new Error(`Project not found: ${id}`);
-  const list = runs.runsForProject(runs.listRuns(ws.runs), project).map((r) => {
-    const current = !!currentRun && currentRun.runId === r.runId && currentRun.status === 'running';
-    const live = current ? [...currentRun.sessions.values()].map((x) => sessionView(currentRun.snapshot(x), false)) : null;
-    // the orchestrator first: its live log is the run's timeline
-    const sessions = (live || r.sessions.map((x) => sessionView(x, false))).sort((a, b) => (b.agent === 'orchestrator') - (a.agent === 'orchestrator'));
-    const providers = runProviders(current ? r.runId : 'disk', r.file);
-    const { inputs, ...info } = r;
-    return {
-      ...info,
-      artifacts: runs.runArtifacts(r.runDir),
-      status: current ? 'running' : r.status,
-      current,
-      costUsd: current ? sessions.reduce((a, x) => a + (x.costUsd || 0), 0) : r.costUsd,
-      sessions: sessions.map((x) => {
-        const why = cliReason(x, providers, current);
-        return { ...x, cliAvailable: !why, cliReason: why };
-      }),
-    };
-  });
-  return { project, runs: list };
+  return { project, runs: runs.runsForProject(runs.listRuns(ws.runs), project).map(runListItem) };
+});
+
+// Every run, with the project it belongs to.
+ipcMain.handle('runs:list', () => {
+  const projectList = projects.listProjects(ws.projects);
+  return {
+    runs: runs.listRuns(ws.runs).map((r) => {
+      const owner = runs.projectOf(r, projectList);
+      return { ...runListItem(r), project: owner ? { id: owner.id, name: owner.name } : null };
+    }),
+  };
 });
 
 // ---- artifacts ------------------------------------------------------------------------
@@ -443,7 +455,7 @@ function artifactRuns({ projectId, runId } = {}) {
   const project = projectId ? projectList.find((x) => x.id === projectId) : null;
   const list = runId ? all.filter((r) => r.runId === runId) : project ? runs.runsForProject(all, project) : all;
   return list.map((r) => {
-    const owner = r.projectId ? projectList.find((x) => x.id === r.projectId) : projectList.find((x) => runs.runsForProject([r], x).length);
+    const owner = runs.projectOf(r, projectList);
     const current = !!currentRun && currentRun.runId === r.runId && currentRun.status === 'running';
     return {
       runId: r.runId, workflow: r.workflow, version: r.version, status: current ? 'running' : r.status,

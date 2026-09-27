@@ -191,6 +191,24 @@ test('shuffle filter is deterministic per seed and keeps every item', () => {
   assert.deepEqual(xs, ['a', 'b', 'c', 'd'], 'input not mutated');
 });
 
+test('github_repo filter turns a PR URL into HOST/OWNER/REPO for gh --repo', () => {
+  const t = '{{ url | github_repo }}';
+  assert.equal(render(t, { url: 'https://github.com/owner/repo/pull/123' }), 'github.com/owner/repo');
+  assert.equal(render(t, { url: 'https://ghe.acme.io/my-org/my.repo_2/pull/7/files' }), 'ghe.acme.io/my-org/my.repo_2');
+});
+
+test('github_repo filter rejects values that are not a PR URL, so nothing reaches the shell', () => {
+  const t = '{{ url | github_repo }}';
+  for (const url of [
+    'https://github.com/owner/repo/pull/1; rm -rf ~',
+    'https://github.com/owner/repo$(whoami)/pull/1',
+    'https://github.com/owner/repo/pull/1 & calc',
+    'github.com/owner/repo/pull/1',
+    'https://github.com/owner/repo/issues/1',
+    '',
+  ]) assert.throws(() => render(t, { url }), /not a GitHub pull request URL/, url);
+});
+
 test('decision log: ```decisions blocks are appended to decisions.tsv', (t) => {
   const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'));
   t.after(() => fs.rmSync(runsDir, { recursive: true, force: true }));

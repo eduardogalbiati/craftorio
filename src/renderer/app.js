@@ -42,13 +42,14 @@ const state = {
   approval: null,
   openDetails: new Set(),
   tab: 'detail',
-  workflowsTab: 'definitions', // 'definitions' | 'runs'
+  workflowsTab: 'runs', // 'runs' | 'definitions'
   pendingProject: null, // project to preselect in the panel on open
   usage: null,        // last api.getUsage() result
   usageError: null,
   art: { runs: null, error: null, projectId: "", q: "", showSim: false, sel: null, doc: null, mode: "rendered" },
   sup: { runId: null, question: '', loading: false, result: null, error: null, recMsgs: {} }, // supervisor panel
   pv: null,           // project detail view: { id, project, runs, error, filter, showSim, expanded, msgs }
+  wr: { runs: null, error: null, filter: 'all', showSim: false, expanded: new Set(), msgs: new Map() }, // Workflows > Runs
   usageScope: (() => { try { return localStorage.getItem(USAGE_SCOPE_KEY) === 'machine' ? 'machine' : 'orchestrator'; } catch { return 'orchestrator'; } })(),
 };
 
@@ -122,6 +123,8 @@ async function init() {
   // workflows
   $('#btn-workflows-folder').onclick = async () => api.openPath((await api.appInfo()).workflowsDir);
   document.querySelectorAll('[data-wtab]').forEach((b) => (b.onclick = () => showWorkflowsTab(b.dataset.wtab)));
+  $('#btn-workflow-runs-refresh').onclick = () => loadWorkflowRuns();
+  $('#workflow-show-sim').onchange = (e) => { state.wr.showSim = e.target.checked; renderWorkflowRuns(); };
 
   // skills
   $('#btn-new-skill').onclick = () => openSkillModal(null);
@@ -485,58 +488,69 @@ function renderProjectView() {
     </div>`;
   $('#pv-open-folder').onclick = () => p && api.openPath(p.folder);
   $('#pv-start').onclick = () => openDrawer({ project: pv.id });
-  $('#project-show-sim').checked = pv.showSim;
-  $('#project-runs-error').textContent = pv.error ? `Could not load runs: ${pv.error}` : '';
+  renderRunList(pv, {
+    prefix: 'project', box: '#project-runs', empty: 'No workflows have run in this project yet.',
+    start: () => openDrawer({ project: pv.id }), rerender: renderProjectView,
+  });
+}
 
-  const all = pv.runs || [];
-  const visible = all.filter((r) => pv.showSim || !r.mock);
-  $('#project-run-filters').innerHTML = RUN_FILTERS.map(([id, label, fn]) =>
-    `<button type="button" class="chip ${pv.filter === id ? 'active' : ''}" data-filter="${id}" ${id === 'failed' ? 'title="Failed, cancelled or interrupted"' : ''}>${label} <span class="muted">${visible.filter(fn).length}</span></button>`).join('');
-  $('#project-run-filters').querySelectorAll('[data-filter]').forEach((b) => (b.onclick = () => { pv.filter = b.dataset.filter; renderProjectView(); }));
+// Run list shared by Projects > Project and Workflows > Runs. `rl` is the list state
+// ({ runs, error, filter, showSim, expanded, msgs, id? }), `id` being the project when the
+// list belongs to one; otherwise each run shows its own project.
+function renderRunList(rl, { prefix, box: boxSel, empty, start, rerender }) {
+  $(`#${prefix}-show-sim`).checked = rl.showSim;
+  $(`#${prefix}-runs-error`).textContent = rl.error ? `Could not load runs: ${rl.error}` : '';
 
-  const box = $('#project-runs');
-  if (pv.runs == null) {
-    box.innerHTML = pv.error ? '' : '<p class="muted">Loading…</p>';
+  const all = rl.runs || [];
+  const visible = all.filter((r) => rl.showSim || !r.mock);
+  const filters = $(`#${prefix}-run-filters`);
+  filters.innerHTML = RUN_FILTERS.map(([id, label, fn]) =>
+    `<button type="button" class="chip ${rl.filter === id ? 'active' : ''}" data-filter="${id}" ${id === 'failed' ? 'title="Failed, cancelled or interrupted"' : ''}>${label} <span class="muted">${visible.filter(fn).length}</span></button>`).join('');
+  filters.querySelectorAll('[data-filter]').forEach((b) => (b.onclick = () => { rl.filter = b.dataset.filter; rerender(); }));
+
+  const box = $(boxSel);
+  if (rl.runs == null) {
+    box.innerHTML = rl.error ? '' : '<p class="muted">Loading…</p>';
     return;
   }
   const hiddenSim = all.length - visible.length;
   const simNote = hiddenSim ? `<p class="muted small">${hiddenSim} simulated run${hiddenSim > 1 ? 's' : ''} hidden.</p>` : '';
   if (!all.length || !visible.length) {
-    box.innerHTML = `<div class="empty-state"><b>No workflows have run in this project yet.</b>${simNote}<button class="btn primary" id="pv-empty-start">Start workflow</button></div>`;
-    $('#pv-empty-start').onclick = () => openDrawer({ project: pv.id });
+    box.innerHTML = `<div class="empty-state"><b>${esc(empty)}</b>${simNote}<button class="btn primary" data-empty-start>Start workflow</button></div>`;
+    box.querySelector('[data-empty-start]').onclick = start;
     return;
   }
-  const fn = RUN_FILTERS.find(([id]) => id === pv.filter)?.[2] || (() => true);
+  const fn = RUN_FILTERS.find(([id]) => id === rl.filter)?.[2] || (() => true);
   const runs = visible.filter(fn);
-  box.innerHTML = (runs.map((r) => projectRunRow(r, pv)).join('') || '<p class="muted pr-none">No runs match this filter.</p>') + simNote;
+  box.innerHTML = (runs.map((r) => runListRow(r, rl)).join('') || '<p class="muted pr-none">No runs match this filter.</p>') + simNote;
 
   box.querySelectorAll('.pr-row').forEach((row) => (row.onclick = () => {
     const id = row.closest('.pr-run').dataset.run;
-    pv.expanded.has(id) ? pv.expanded.delete(id) : pv.expanded.add(id);
-    renderProjectView();
+    rl.expanded.has(id) ? rl.expanded.delete(id) : rl.expanded.add(id);
+    rerender();
   }));
   box.querySelectorAll('[data-run-act]').forEach((b) => (b.onclick = () => {
-    const r = pv.runs.find((x) => x.runId === b.closest('.pr-run').dataset.run);
+    const r = rl.runs.find((x) => x.runId === b.closest('.pr-run').dataset.run);
     if (b.dataset.runAct === 'logs') api.openPath(r.runDir);
     if (b.dataset.runAct === 'view') showView('run');
     if (b.dataset.runAct === 'sup') openSupervisor({ runId: r.runId, workflow: r.workflow, status: r.status, error: r.error, mock: r.mock });
   }));
   box.querySelectorAll('[data-art]').forEach((b) => (b.onclick = () => {
-    const r = pv.runs.find((x) => x.runId === b.closest('.pr-run').dataset.run);
-    openArtifactsAt({ projectId: pv.id, runId: r.runId, path: b.dataset.art, mock: r.mock });
+    const r = rl.runs.find((x) => x.runId === b.closest('.pr-run').dataset.run);
+    openArtifactsAt({ projectId: rl.id || r.project?.id, runId: r.runId, path: b.dataset.art, mock: r.mock });
   }));
   box.querySelectorAll('[data-term]').forEach((b) => (b.onclick = async () => {
     const runId = b.closest('.pr-run').dataset.run;
     const row = b.closest('[data-session]');
     const sid = row.dataset.session;
     const key = `${runId}:${sid}`;
-    pv.msgs.set(key, await termAction(b, { sessionId: sid, runId, label: row.dataset.agent }));
+    rl.msgs.set(key, await termAction(b, { sessionId: sid, runId, label: row.dataset.agent }));
     const msg = b.closest('[data-session]').querySelector('[data-term-msg]');
-    if (msg) { msg.textContent = pv.msgs.get(key).text; msg.classList.toggle('error', pv.msgs.get(key).error); }
+    if (msg) { msg.textContent = rl.msgs.get(key).text; msg.classList.toggle('error', rl.msgs.get(key).error); }
   }));
 }
 
-function projectRunRow(r, pv) {
+function runListRow(r, pv) {
   const open = pv.expanded.has(r.runId);
   const task = String(r.task || '').trim();
   const firstLine = task.split('\n')[0];
@@ -546,7 +560,7 @@ function projectRunRow(r, pv) {
       <div class="pr-row" title="${open ? 'Hide' : 'Show'} sessions">
         <span class="pill pill-${esc(r.status)}">${esc(r.status)}</span>
         <div class="pr-main">
-          <div><b>${esc(r.workflow || r.file || 'workflow')}</b>${r.version ? ` <span class="muted small">v${esc(r.version)}</span>` : ''}${r.mock ? ' <span class="badge p-mock">simulated</span>' : ''}${r.current ? ' <span class="badge live">this window</span>' : ''}</div>
+          <div><b>${esc(r.workflow || r.file || 'workflow')}</b>${r.version ? ` <span class="muted small">v${esc(r.version)}</span>` : ''}${r.mock ? ' <span class="badge p-mock">simulated</span>' : ''}${r.current ? ' <span class="badge live">this window</span>' : ''}${!pv.id && r.project ? ` <span class="badge" title="project">${esc(r.project.name)}</span>` : ''}</div>
           <div class="muted small pr-task" title="${esc(task)}">${esc(firstLine || 'No task')}</div>
         </div>
         <span class="pr-meta"><label>started</label>${r.startedAt ? esc(dateOf(r.startedAt)) : '—'}</span>
@@ -658,15 +672,44 @@ function showWorkflowsTab(tab) {
   });
   document.querySelectorAll('[data-wpage]').forEach((p) => p.classList.toggle('hidden', p.dataset.wpage !== tab));
   if (tab === 'definitions') refreshWorkflows();
-  if (tab === 'runs') { renderWorkflowRuns(); loadUsage(); }
+  if (tab === 'runs') { renderWorkflowRuns(); loadWorkflowRuns(); }
 }
 
-// Same runs summary as Usage > Recent runs (shared runsTableHtml).
+const workflowRunsVisible = () => state.view === 'workflows' && state.workflowsTab === 'runs';
+
+// Every run, in the same list as Projects > Project.
 function renderWorkflowRuns() {
-  const u = state.usage;
-  $('#workflow-runs-live').classList.toggle('hidden', !u?.live);
-  $('#workflow-runs').innerHTML = u ? runsTableHtml(u)
-    : `<div class="s-row"><div class="s-label"><span>${state.usageError ? `Runs unavailable: ${esc(state.usageError)}` : 'Loading…'}</span></div></div>`;
+  renderRunList(state.wr, {
+    prefix: 'workflow', box: '#workflow-runs', empty: 'No workflows have run yet.',
+    start: () => openDrawer(), rerender: renderWorkflowRuns,
+  });
+}
+
+let wrLoading = null;
+let wrLastLoad = 0;
+let wrTimer = null;
+function loadWorkflowRuns() {
+  if (wrLoading) return wrLoading;
+  const wr = state.wr;
+  wrLoading = (async () => {
+    try {
+      wr.runs = (await api.listRuns()).runs || [];
+      wr.error = null;
+    } catch (e) {
+      wr.error = errMsg(e);
+    }
+    wrLoading = null;
+    wrLastLoad = Date.now();
+    if (workflowRunsVisible()) renderWorkflowRuns();
+  })();
+  return wrLoading;
+}
+
+// At most one reload every 3 s from run events while the tab is visible.
+function loadWorkflowRunsThrottled() {
+  if (wrTimer || !workflowRunsVisible()) return;
+  const wait = Math.max(0, 3000 - (Date.now() - wrLastLoad));
+  wrTimer = setTimeout(() => { wrTimer = null; if (workflowRunsVisible()) loadWorkflowRuns(); }, wait);
 }
 
 async function refreshWorkflows() {
@@ -923,7 +966,6 @@ function renderUsageAll() {
   renderUsageWidget();
   if (!$('#usage-pop').classList.contains('hidden')) renderUsagePopover();
   if (state.view === 'usage') renderUsage();
-  if (state.view === 'workflows' && state.workflowsTab === 'runs') renderWorkflowRuns();
 }
 
 function renderUsageWidget() {
@@ -1387,7 +1429,7 @@ function onEvent(ev) {
       break;
     }
   }
-  if (PROJECT_REFRESH_EVENTS.has(ev.type)) loadProjectRunsThrottled();
+  if (PROJECT_REFRESH_EVENTS.has(ev.type)) { loadProjectRunsThrottled(); loadWorkflowRunsThrottled(); }
   if (ev.type === 'workflow.finished' || ev.type === 'file.saved') loadArtifactsThrottled();
   scheduleRender();
 }

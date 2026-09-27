@@ -113,6 +113,12 @@ function runsForProject(runs, project) {
     : Object.values(r.inputs || {}).some((v) => typeof v === 'string' && /[\\/]/.test(v) && folders.has(normPath(v)))));
 }
 
+/** The project a run belongs to (same rules as runsForProject), or null. */
+function projectOf(run, projectList) {
+  return run.projectId ? projectList.find((p) => p.id === run.projectId) || null
+    : projectList.find((p) => runsForProject([run], p).length) || null;
+}
+
 // ---------------------------------------------------------------------------
 // Artifacts: files a run produced. Those written by the engine (`save_as`, `file.saved`
 // events, possibly outside the run folder, e.g. docs/arena in the project) plus any other file
@@ -164,4 +170,4 @@ function runArtifacts(runDir) {
   return [...byPath.values()].sort((a, b) => a.rel.localeCompare(b.rel));
 }
 
-module.exports = { readRun, listRuns, runsForProject, runArtifacts, kindOf };
+module.exports = { readRun, listRuns, runsForProject, projectOf, runArtifacts, kindOf };

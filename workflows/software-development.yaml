@@ -811,9 +811,11 @@ steps:
     # merge and delete the remote branch server side only: without it gh would also check out the
     # base and delete the local branch, which fails in a worktree (the base is checked out in the
     # main checkout). The engine deletes the local branch when it removes the worktree.
+    # `github_repo` validates pr_url (agent output) and reduces it to HOST/OWNER/REPO: the
+    # action runs in a shell, so an unexpected value fails the render instead of running.
     transitions:
       - when: "approved"
-        action: "{% if inputs.git_platform == 'gl' %}glab mr merge {{ steps.ci.output.pr_number }} --squash --remove-source-branch --yes{% else %}gh pr merge {{ steps.ci.output.pr_number }} --repo {{ steps.ci.output.pr_url.split('/pull/')[0] }} --squash --delete-branch{% endif %}"
+        action: "{% if inputs.git_platform == 'gl' %}glab mr merge {{ steps.ci.output.pr_number }} --squash --remove-source-branch --yes{% else %}gh pr merge {{ steps.ci.output.pr_number }} --repo {{ steps.ci.output.pr_url | github_repo }} --squash --delete-branch{% endif %}"
         goto: deploy_prod
       - when: "rejected"
         goto: end

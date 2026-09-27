@@ -36,6 +36,14 @@ tpl.addFilter('shuffle', (arr, seed = '') => {
   return out;
 });
 
+// PR URL (agent output) → HOST/OWNER/REPO for `gh --repo`. Actions run in a shell, so anything
+// that is not strictly a pull request URL throws instead of being interpolated.
+tpl.addFilter('github_repo', (url) => {
+  const m = /^https:\/\/([A-Za-z0-9.-]+)\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)\/pull\/\d+(?:\/[A-Za-z0-9_-]*)?$/.exec(String(url ?? '').trim());
+  if (!m) throw new Error(`not a GitHub pull request URL: ${JSON.stringify(url)}`);
+  return `${m[1]}/${m[2]}/${m[3]}`;
+});
+
 const render = (s, scope) => (s == null ? '' : tpl.renderString(String(s), scope));
 const evalExpr = (expr, scope) => render(`{% if ${expr} %}1{% else %}0{% endif %}`, scope).trim() === '1';
 

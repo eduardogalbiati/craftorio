@@ -28,6 +28,7 @@ contextBridge.exposeInMainWorld('api', {
   // mode: 'live' (follow the session's log) or 'cli' (resume the conversation in the provider's CLI)
   openSessionTerminal: (sessionId, mode, runId) => ipcRenderer.invoke('session:terminal', { sessionId, mode, runId }),
   listProjectRuns: (id) => ipcRenderer.invoke('projects:runs', { id }),
+  listRuns: () => ipcRenderer.invoke('runs:list'),
   setBudget: (provider, budget, scope) => ipcRenderer.invoke('usage:setBudget', { provider, budget, scope }),
   setPrice: (model, price, scope) => ipcRenderer.invoke('usage:setPrice', { model, price, scope }),
   // AI supervisor: analysis of a run and resume from a step (a new run)
