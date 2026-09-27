@@ -9,7 +9,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     env:
-      ELECTRON_SKIP_BINARY_DOWNLOAD: "1"   # os testes não abrem a UI
+      ELECTRON_SKIP_BINARY_DOWNLOAD: "1"   # the tests do not open the UI
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -17,9 +17,9 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - name: Checagem de sintaxe
+      - name: Syntax check
         run: for f in $(git ls-files '*.js'); do node --check "$f" || exit 1; done
-      - name: Testes (unitários + fluxo mock)
+      - name: Tests (unit + mock flow)
         run: npm test
-      - name: Vulnerabilidades em produção
+      - name: Production vulnerabilities
         run: npm audit --omit=dev --audit-level=high

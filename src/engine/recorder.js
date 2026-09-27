@@ -1,7 +1,7 @@
-// Grava a observabilidade do run em disco:
-//   runs/<run_id>/events.jsonl            todos os eventos
-//   runs/<run_id>/sessions/<id>.jsonl     eventos de cada sessão
-//   runs/<run_id>/summary.json            métricas finais por sessão
+// Writes the run's observability data to disk:
+//   runs/<run_id>/events.jsonl            all events
+//   runs/<run_id>/sessions/<id>.jsonl     events of each session
+//   runs/<run_id>/summary.json            final metrics per session
 
 const fs = require('fs');
 const path = require('path');

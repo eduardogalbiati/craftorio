@@ -1,0 +1,101 @@
+# =============================================================================
+# Workflow: Run Retrospective
+# -----------------------------------------------------------------------------
+#   analyze ──► end
+#
+# Reads the logs of a finished run (<workspace>/runs/<run_id>/) and proposes
+# concrete edits to skills and workflows, with evidence. It never applies them:
+# the report (retrospective.md, also copied into the analyzed run's folder) is
+# for a human to review.
+# Ideas adapted from reflect (cursor/plugins pstack) and retro (mattpocock/skills), MIT.
+# =============================================================================
+
+apiVersion: multiagent/v1
+kind: Workflow
+
+metadata:
+  name: run-retrospective
+  version: 0.1.0
+  description: Analyzes a finished run's logs and proposes evidence-backed improvements to skills and workflows.
+  tags: [retro, observability, skills]
+  category: monitor
+
+# -----------------------------------------------------------------------------
+inputs:
+  run_id:
+    type: string
+    required: true
+    description: Id of the run to analyze (its folder name in <workspace>/runs, shown in the run view and in "Open logs").
+  focus:
+    type: string
+    default: ""
+    description: Optional focus, e.g. "why the CI loop took 40 minutes" or "the arena synthesis quality".
+
+# -----------------------------------------------------------------------------
+providers:
+  codex:
+    type: codex-cli
+    command: codex
+    args: ["exec", "--json", "--skip-git-repo-check", "-m", "{{ model }}"]
+    resume_args: ["resume", "{{ session_id }}"]
+    stdin_arg: "-"
+
+defaults:
+  # the analyzed run's folder; the agent reads the skills from the paths logged in it
+  working_dir: "{{ runs_dir }}/{{ inputs.run_id }}"
+  timeout: 30m
+  retry:
+    max_attempts: 2
+    backoff: exponential
+    initial_delay: 10s
+
+orchestrator:
+  provider: codex
+  model: gpt-6-luna
+  limits:
+    max_total_duration: 1h
+    max_total_cost_usd: 10
+
+# -----------------------------------------------------------------------------
+agents:
+  # Codex in read-only mode can read any path, including the skill folders and
+  # workflow files referenced in the logs.
+  retro:
+    provider: codex
+    model: gpt-6-luna
+    session: ephemeral
+    cli_args: ["-s", "read-only"]
+    skills: [run-retrospective]
+    system_prompt: |
+      You analyze a finished multi-agent workflow run and propose improvements. You read
+      logs, skills and workflow files; you never modify anything.
+
+# -----------------------------------------------------------------------------
+steps:
+
+  - id: analyze
+    agent: retro
+    save_as:
+      - retrospective.md
+      - "{{ runs_dir }}/{{ inputs.run_id }}/retrospective.md"
+    prompt: |
+      Run to analyze: {{ inputs.run_id }} (the current folder).
+      {% if inputs.focus %}Focus: {{ inputs.focus }}{% endif %}
+
+      The skills the agents received are logged in events.jsonl as "skill ... loaded from
+      <path>" messages; the workflow file name is in the workflow.started event, and the
+      workflow files live in {{ workflows_dir }}.
+      Follow the run-retrospective skill and answer only with its Markdown report.
+
+# -----------------------------------------------------------------------------
+observability:
+  storage:
+    type: jsonl
+    path: "./runs/{{ run_id }}/"
+  capture:
+    prompts: true
+    outputs: true
+    thinking: true
+    tool_calls: true
+    redact:
+      - pattern: "(?i)(api[_-]?key|token|secret|password)\\s*[:=]\\s*\\S+"

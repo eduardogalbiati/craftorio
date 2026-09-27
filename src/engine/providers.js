@@ -1,15 +1,17 @@
-// Adapters que abrem/retomam sessões de cada provider e normalizam os eventos.
+// Adapters that open/resume sessions for each provider and normalize the events.
 //
-// Cada turno = 1 processo headless:
+// Each turn = 1 headless process:
 //   claude -p --output-format stream-json ...   (prompt via stdin)
 //   codex exec --json ... -                     (prompt via stdin)
-// A continuidade da sessão é feita com o session_id devolvido pelo provider.
+// Session continuity uses the session_id returned by the provider.
 //
-// Itens normalizados emitidos via onItem():
+// Normalized items emitted via onItem():
 //   { kind: 'spawn' | 'session' | 'thinking' | 'text' | 'tool_call' | 'tool_result' | 'usage' | 'stderr' | 'raw', ... }
 
 const { spawn, execSync } = require('child_process');
 const fs = require('fs');
+const os = require('os');
+const crypto = require('crypto');
 const path = require('path');
 const readline = require('readline');
 
@@ -17,19 +19,19 @@ const emptyUsage = () => ({ input: 0, output: 0, cache_read: 0, cache_write: 0, 
 
 function sleep(ms, signal) {
   return new Promise((resolve, reject) => {
-    if (signal?.aborted) return reject(new Error('Cancelado'));
+    if (signal?.aborted) return reject(new Error('Cancelled'));
     const t = setTimeout(() => { signal?.removeEventListener('abort', onAbort); resolve(); }, ms);
-    const onAbort = () => { clearTimeout(t); reject(new Error('Cancelado')); };
+    const onAbort = () => { clearTimeout(t); reject(new Error('Cancelled')); };
     signal?.addEventListener('abort', onAbort, { once: true });
   });
 }
 
 // ---------------------------------------------------------------------------
-// Resolução de comandos no Windows: `claude` pode ser um .exe (instalador
-// nativo) ou um .cmd (npm). .cmd/.bat precisam passar pelo cmd.exe.
+// Command resolution on Windows: `claude` can be an .exe (native
+// installer) or a .cmd (npm). .cmd/.bat must go through cmd.exe.
 // ---------------------------------------------------------------------------
-// Programas instalados depois que o terminal/app foi aberto só aparecem no PATH
-// do registro. Relemos HKCU/HKLM e acrescentamos as entradas que faltarem.
+// Programs installed after the terminal/app was opened only show up in the
+// registry PATH. We re-read HKCU/HKLM and append the missing entries.
 let pathRefreshed = false;
 function refreshWindowsPath() {
   if (process.platform !== 'win32' || pathRefreshed) return;
@@ -62,8 +64,8 @@ function resolveCommand(cmd) {
     path.join(process.env.APPDATA || '', 'npm'),
   ].filter(Boolean);
 
-  // 1) <cmd>.exe  2) binário com sufixo de plataforma (ex.: winget instala
-  // codex-x86_64-pc-windows-msvc.exe sem alias)  3) shims .cmd/.bat
+  // 1) <cmd>.exe  2) binary with a platform suffix (e.g. winget installs
+  // codex-x86_64-pc-windows-msvc.exe without an alias)  3) .cmd/.bat shims
   const exact = (ext) => (dir) => { const p = path.join(dir, cmd + ext); return fs.existsSync(p) ? p : null; };
   const suffixed = (dir) => {
     try {
@@ -104,9 +106,9 @@ function parseClaude(ev, emit, acc) {
       break;
     case 'assistant':
       for (const b of ev.message?.content || []) {
-        // O Claude Code pode omitir o conteúdo do thinking (só envia a assinatura)
+        // Claude Code may omit the thinking content (it only sends the signature)
         if (b.type === 'thinking') { if (b.thinking) emit({ kind: 'thinking', text: b.thinking }); }
-        else if (b.type === 'redacted_thinking') emit({ kind: 'thinking', text: '(thinking omitido pelo provider)' });
+        else if (b.type === 'redacted_thinking') emit({ kind: 'thinking', text: '(thinking omitted by the provider)' });
         else if (b.type === 'text') { acc.lastText = b.text; emit({ kind: 'text', text: b.text }); }
         else if (b.type === 'tool_use') emit({ kind: 'tool_call', id: b.id, name: b.name, input: b.input });
       }
@@ -128,10 +130,10 @@ function parseClaude(ev, emit, acc) {
         output: u.output_tokens || 0,
         cache_read: u.cache_read_input_tokens || 0,
         cache_write: u.cache_creation_input_tokens || 0,
-        reasoning: 0, // a API da Anthropic conta thinking dentro de output_tokens
+        reasoning: 0, // the Anthropic API counts thinking inside output_tokens
       };
       if (ev.session_id) acc.providerSessionId = ev.session_id;
-      if (ev.is_error) acc.error = `Claude retornou erro: ${ev.subtype} ${ev.result || ''}`;
+      if (ev.is_error) acc.error = `Claude returned an error: ${ev.subtype} ${ev.result || ''}`;
       emit({ kind: 'usage', usage: acc.usage, costUsd: acc.costUsd });
       break;
     }
@@ -166,7 +168,7 @@ function parseCodex(ev, emit, acc) {
     case 'turn.completed': {
       const u = ev.usage || {};
       acc.usage = acc.usage || emptyUsage();
-      // input_tokens da OpenAI já inclui os cacheados; separamos para não contar duas vezes
+      // OpenAI's input_tokens already includes cached ones; split them to avoid double counting
       acc.usage.input += (u.input_tokens || 0) - (u.cached_input_tokens || 0);
       acc.usage.cache_read += u.cached_input_tokens || 0;
       acc.usage.output += u.output_tokens || 0;
@@ -178,7 +180,7 @@ function parseCodex(ev, emit, acc) {
       acc.error = ev.error?.message || 'turn.failed';
       break;
     case 'error':
-      acc.error = ev.message || 'erro do codex';
+      acc.error = ev.message || 'codex error';
       break;
     case 'turn.started':
     case 'item.started':
@@ -189,28 +191,92 @@ function parseCodex(ev, emit, acc) {
   }
 }
 
+// Grok Build (`grok --output-format streaming-json`): thinking and text arrive as
+// token deltas, tools as tool_call / tool_call_update, and a final `end` event carries
+// the session id, usage and cost. Deltas are buffered into one item per block.
+function flushGrok(emit, acc) {
+  if (acc.buf?.text) emit({ kind: acc.buf.kind, text: acc.buf.text });
+  acc.buf = null;
+}
+
+function parseGrok(ev, emit, acc) {
+  const delta = ev.type === 'thought' ? 'thinking' : ev.type === 'text' ? 'text' : null;
+  if (delta) {
+    if (acc.buf && acc.buf.kind !== delta) flushGrok(emit, acc);
+    acc.buf ??= { kind: delta, text: '' };
+    acc.buf.text += ev.data ?? '';
+    if (delta === 'text') acc.segment = (acc.segment || '') + (ev.data ?? '');
+    return;
+  }
+  flushGrok(emit, acc);
+  switch (ev.type) {
+    case 'tool_call':
+      acc.segment = ''; // the final answer is the text after the last tool call
+      emit({ kind: 'tool_call', id: ev.toolCallId, name: ev.toolName || ev.title, input: ev.rawInput });
+      break;
+    case 'tool_call_update':
+      if (ev.status === 'completed' || ev.status === 'failed') {
+        const out = typeof ev.rawOutput === 'string' ? ev.rawOutput : JSON.stringify(ev.rawOutput ?? ev.content ?? '');
+        emit({ kind: 'tool_result', id: ev.toolCallId, output: String(out).slice(0, 4000), is_error: ev.status === 'failed' });
+      }
+      break;
+    case 'end': {
+      const u = ev.usage || {};
+      acc.text = acc.segment ?? acc.lastText ?? '';
+      acc.costUsd = ev.total_cost_usd ?? null;
+      acc.usage = {
+        input: u.input_tokens || 0,
+        output: u.output_tokens || 0,
+        cache_read: u.cache_read_input_tokens || 0,
+        cache_write: u.cache_creation_input_tokens || 0,
+        reasoning: u.reasoning_tokens || 0, // already included in output
+      };
+      if (ev.sessionId) {
+        acc.providerSessionId = ev.sessionId;
+        emit({ kind: 'session', sessionId: ev.sessionId });
+      }
+      emit({ kind: 'usage', usage: acc.usage, costUsd: acc.costUsd });
+      break;
+    }
+    case 'error':
+      acc.error = `Grok returned an error: ${ev.message || 'unknown'}`;
+      break;
+    case 'usage':             // per-call usage; the totals come in `end`
+    case 'available_commands':
+      break;
+    default:
+      emit({ kind: 'raw', event: ev });
+  }
+}
+parseGrok.flush = flushGrok;
+
 // ---------------------------------------------------------------------------
 // CLI runner
 // ---------------------------------------------------------------------------
 function runCli(opts, parser) {
   const { provider, model, providerSessionId, prompt, cwd, extraArgs, timeoutMs, signal, onItem, render } = opts;
-  const vars = { model, session_id: providerSessionId };
+  // `prompt_file_arg`: CLIs that take the prompt from a file (e.g. grok --prompt-file) instead of stdin
+  const promptFile = provider.prompt_file_arg ? path.join(os.tmpdir(), `multiagent-prompt-${crypto.randomUUID()}.md`) : null;
+  const vars = { model, session_id: providerSessionId, prompt_file: promptFile };
   const args = [
     ...(provider.args || []),
     ...(extraArgs || []),
     ...(providerSessionId ? provider.resume_args || [] : []),
     ...(provider.stdin_arg ? [provider.stdin_arg] : []),
+    ...(provider.prompt_file_arg || []),
   ].map((a) => render(String(a), vars));
 
   const resolved = resolveCommand(provider.command);
-  if (!resolved) return Promise.reject(new Error(`Comando "${provider.command}" não encontrado no PATH.`));
-  if (!fs.existsSync(cwd)) return Promise.reject(new Error(`Diretório de trabalho não existe: ${cwd}`));
-  if (signal?.aborted) return Promise.reject(new Error('Cancelado'));
+  if (!resolved) return Promise.reject(new Error(`Command "${provider.command}" not found in PATH.`));
+  if (!fs.existsSync(cwd)) return Promise.reject(new Error(`Working directory does not exist: ${cwd}`));
+  if (signal?.aborted) return Promise.reject(new Error('Cancelled'));
 
   onItem({ kind: 'spawn', command: resolved.file, args, cwd });
 
   const env = { ...process.env };
-  delete env.CLAUDECODE; // evita o bloqueio de "sessão aninhada" se o app for aberto de dentro do Claude Code
+  delete env.CLAUDECODE; // avoids the "nested session" block if the app is launched from inside Claude Code
+
+  if (promptFile) fs.writeFileSync(promptFile, prompt);
 
   return new Promise((resolve, reject) => {
     const child = resolved.shell
@@ -225,11 +291,12 @@ function runCli(opts, parser) {
       if (done) return;
       done = true;
       clearTimeout(timer);
+      if (promptFile) fs.rm(promptFile, { force: true }, () => {});
       signal?.removeEventListener('abort', onAbort);
       err ? reject(err) : resolve(val);
     };
-    const timer = setTimeout(() => { killTree(child); finish(new Error(`Timeout após ${Math.round(timeoutMs / 1000)}s`)); }, timeoutMs);
-    const onAbort = () => { killTree(child); finish(new Error('Cancelado')); };
+    const timer = setTimeout(() => { killTree(child); finish(new Error(`Timed out after ${Math.round(timeoutMs / 1000)}s`)); }, timeoutMs);
+    const onAbort = () => { killTree(child); finish(new Error('Cancelled')); };
     signal?.addEventListener('abort', onAbort, { once: true });
 
     readline.createInterface({ input: child.stdout }).on('line', (line) => {
@@ -243,8 +310,9 @@ function runCli(opts, parser) {
     child.stdin.on('error', () => {});
     child.on('error', (e) => finish(e));
     child.on('close', (code) => {
+      parser.flush?.(onItem, acc);
       if (acc.error) return finish(new Error(acc.error));
-      if (code !== 0 && !acc.text) return finish(new Error(`Processo saiu com código ${code}. ${stderr.slice(-800)}`));
+      if (code !== 0 && !acc.text) return finish(new Error(`Process exited with code ${code}. ${stderr.slice(-800)}`));
       finish(null, {
         text: acc.text || acc.lastText,
         usage: acc.usage || emptyUsage(),
@@ -254,12 +322,12 @@ function runCli(opts, parser) {
       });
     });
 
-    child.stdin.end(prompt);
+    child.stdin.end(promptFile ? '' : prompt);
   });
 }
 
 // ---------------------------------------------------------------------------
-// Mock: simula um agente para testar o fluxo sem gastar tokens
+// Mock: simulates an agent to test the flow without spending tokens
 // ---------------------------------------------------------------------------
 const rand = (a, b) => Math.floor(a + Math.random() * (b - a));
 
@@ -268,16 +336,16 @@ function mockString(key) {
     branch: 'feat/mock-feature',
     pr_url: 'https://github.com/acme/app/pull/42',
     deploy_url: 'https://staging.acme.dev',
-    fix_request: 'Comentário do revisor: extrair a constante mágica 60000 para uma configuração.',
-    question: 'Um revisor sugeriu trocar a biblioteca de YAML. Faz sentido neste PR?',
-    failure_log: 'test/engine.test.js:12 AssertionError: esperado "approved"',
-    failure_report: 'npm test: 1 falha em test/engine.test.js (validateSchema aceita enum inválido).',
+    fix_request: 'Reviewer comment: extract the magic constant 60000 into a setting.',
+    question: 'A reviewer suggested switching the YAML library. Does that make sense in this PR?',
+    failure_log: 'test/engine.test.js:12 AssertionError: expected "approved"',
+    failure_report: 'npm test: 1 failure in test/engine.test.js (validateSchema accepts an invalid enum).',
     file: 'src/auth/login.ts',
-    summary: 'Implementação simulada da feature com testes.',
-  })[key] || `(simulado) ${key}`;
+    summary: 'Simulated implementation of the feature with tests.',
+  })[key] || `(simulated) ${key}`;
 }
 
-// Sequências por visita: exercitam os caminhos de correção, /loop e decisão humana.
+// Per-visit sequences: exercise the fix, /loop and human-decision paths.
 const MOCK_SEQUENCES = {
   verdict: ['changes_requested', 'approved'],
   tests_status: ['fail', 'pass'],
@@ -291,7 +359,8 @@ const MOCK_SEQUENCES = {
 function mockValue(s, key, h) {
   if (s.enum) {
     const seq = MOCK_SEQUENCES[key];
-    if (seq) return seq[Math.min(h.visit - 1, seq.length - 1)];
+    // only when the sequence fits this enum (the same key can mean different things in different steps)
+    if (seq && seq.every((v) => s.enum.includes(v))) return seq[Math.min(h.visit - 1, seq.length - 1)];
     return s.enum[0];
   }
   if (s.type === 'integer') return key === 'pr_number' ? 42 : 0;
@@ -317,7 +386,7 @@ async function runMock({ providerSessionId, model, hint, signal, onItem }) {
 
   onItem({ kind: 'session', sessionId: sid, model });
   await d(600);
-  onItem({ kind: 'thinking', text: `Analisando o step "${hint?.stepId ?? 'delegado'}" (visita ${hint?.visit ?? '-'}).\nVou inspecionar o repositório e planejar os próximos passos.` });
+  onItem({ kind: 'thinking', text: `Analyzing step "${hint?.stepId ?? 'delegated'}" (visit ${hint?.visit ?? '-'}).\nI will inspect the repository and plan the next steps.` });
   await d(900);
   onItem({ kind: 'tool_call', id: 't1', name: 'Bash', input: { command: 'git status' } });
   await d(500);
@@ -326,8 +395,8 @@ async function runMock({ providerSessionId, model, hint, signal, onItem }) {
 
   const out = hint?.schema ? mockValue(hint.schema, '', hint) : null;
   const text = out
-    ? `Concluí o step **${hint.stepId}**.\n\n\`\`\`json\n${JSON.stringify(out, null, 2)}\n\`\`\``
-    : 'Feito. (resposta simulada)';
+    ? `Finished step **${hint.stepId}**.\n\n\`\`\`json\n${JSON.stringify(out, null, 2)}\n\`\`\``
+    : 'Done. (simulated response)';
   onItem({ kind: 'text', text });
 
   const usage = { input: rand(2000, 12000), output: rand(300, 2500), cache_read: rand(0, 8000), cache_write: rand(0, 2000), reasoning: rand(100, 1500) };
@@ -342,13 +411,14 @@ async function runTurn(opts) {
     case 'mock': return runMock(opts);
     case 'claude-code': return runCli(opts, parseClaude);
     case 'codex-cli': return runCli(opts, parseCodex);
-    default: throw new Error(`Provider desconhecido: ${opts.provider.type}`);
+    case 'grok-cli': return runCli(opts, parseGrok);
+    default: throw new Error(`Unknown provider: ${opts.provider.type}`);
   }
 }
 
-// Erros de requisição (modelo inválido, 4xx) não adianta repetir.
+// Request errors (invalid model, 4xx) are not worth retrying.
 function isRetryable(err) {
-  return !/"status":\s*4\d\d|invalid_request|not supported|não encontrado|não existe/i.test(String(err?.message || err));
+  return !/"status":\s*4\d\d|invalid_request|not supported|not found|does not exist/i.test(String(err?.message || err));
 }
 
-module.exports = { runTurn, resolveCommand, refreshWindowsPath, isRetryable, sleep, emptyUsage };
+module.exports = { parseGrok, runTurn, resolveCommand, refreshWindowsPath, isRetryable, sleep, emptyUsage };

@@ -1,0 +1,27 @@
+# Test fixture: fan-out (agents in parallel), agent and step skills, and save_as.
+apiVersion: multiagent/v1
+kind: Workflow
+metadata:
+  name: fixture-fanout
+inputs:
+  doc_skill:
+    type: string
+    default: demo
+providers:
+  claude:
+    type: claude-code
+    skill_args: ["--add-dir", "{{ skill_dir }}"]
+agents:
+  a:     { provider: claude, model: model-a, session: persistent }
+  b:     { provider: claude, model: model-b, session: persistent }
+  judge: { provider: claude, model: model-j, session: persistent, skills: [demo], system_prompt: "You are the judge." }
+steps:
+  - id: compete
+    agents: [a, b]
+    skills: ["{{ inputs.doc_skill }}"]
+    save_as: "out/{{ agent }}.md"
+    prompt: "i am {{ agent }}"
+  - id: judge
+    agent: judge
+    save_as: final.md
+    prompt: "{% for n in steps.compete.output.succeeded %}P{{ loop.index }}={{ agents[n].model }};{% endfor %}"

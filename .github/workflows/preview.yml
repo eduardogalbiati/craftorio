@@ -1,13 +1,13 @@
-# Ambiente de teste: publica a versão de teste de um PR como GitHub pre-release
-# (tag preview-pr-<n>). Disparado pelo Deployer antes do merge:
-#   gh workflow run preview.yml --ref <branch-do-pr> -f pr_number=<n>
+# Test environment: publishes a PR's test build as a GitHub pre-release
+# (tag preview-pr-<n>). Triggered by the Deployer before the merge:
+#   gh workflow run preview.yml --ref <pr-branch> -f pr_number=<n>
 name: Preview
 
 on:
   workflow_dispatch:
     inputs:
       pr_number:
-        description: Número do PR
+        description: PR number
         required: true
         type: number
 
@@ -31,21 +31,21 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
-      - name: Empacotar app (win32 x64)
+      - name: Package app (win32 x64)
         run: npm run package
-      - name: Compactar
+      - name: Compress
         shell: pwsh
         run: Compress-Archive -Path dist/MultiagentOrchestrator-win32-x64/* -DestinationPath MultiagentOrchestrator-win32-x64-preview.zip
-      - name: Publicar pre-release
+      - name: Publish pre-release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           TAG="preview-pr-${PR_NUMBER}"
-          # uma versão de teste por PR: substitui a anterior
+          # one test build per PR: replaces the previous one
           gh release delete "$TAG" --cleanup-tag -y 2>/dev/null || true
           gh release create "$TAG" MultiagentOrchestrator-win32-x64-preview.zip \
             --prerelease --target "${GITHUB_SHA}" \
             --title "Preview PR #${PR_NUMBER} (${GITHUB_SHA::7})" \
-            --notes "Versão de teste gerada a partir do PR #${PR_NUMBER} (branch ${GITHUB_REF_NAME}, commit ${GITHUB_SHA}). Não usar em produção."
-          echo "Pre-release publicada: $TAG"
+            --notes "Test build generated from PR #${PR_NUMBER} (branch ${GITHUB_REF_NAME}, commit ${GITHUB_SHA}). Not for production use."
+          echo "Pre-release published: $TAG"

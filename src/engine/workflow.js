@@ -1,5 +1,5 @@
-// Engine que executa o grafo de steps definido no YAML.
-// Emite eventos ('event') que alimentam a UI e o recorder de observabilidade.
+// Engine that runs the step graph defined in the YAML.
+// Emits events ('event') that feed the UI and the observability recorder.
 
 const fs = require('fs');
 const path = require('path');
@@ -9,13 +9,30 @@ const { exec } = require('child_process');
 const yaml = require('js-yaml');
 const nunjucks = require('nunjucks');
 const { runTurn, refreshWindowsPath, isRetryable, sleep, emptyUsage } = require('./providers');
+const { resolveSkill, skillPrompt } = require('../skills');
+const { providerId, sessionCost, totalTokens, WARN_AT } = require('../usage');
+
+// Skills bundled with the app (skills/ folder at the root). Workspace skills take precedence.
+const BUNDLED_SKILLS = path.join(__dirname, '..', '..', 'skills');
 
 // ---------------------------------------------------------------------------
-// Templates e expressões
+// Templates and expressions
 // ---------------------------------------------------------------------------
 const tpl = new nunjucks.Environment(null, { autoescape: false });
 tpl.addFilter('to_yaml', (v) => yaml.dump(v ?? null, { lineWidth: 120 }).trim());
 tpl.addFilter('to_json', (v) => JSON.stringify(v, null, 2));
+// Deterministic shuffle: the same seed (e.g. run_id) gives the same order in every step,
+// so anonymized labels ("Proposal 2") stay consistent within a run but vary across runs.
+tpl.addFilter('shuffle', (arr, seed = '') => {
+  const out = [...(arr || [])];
+  let h = crypto.createHash('sha256').update(String(seed)).digest().readUInt32BE(0);
+  const rand = () => { h = (Math.imul(h ^ (h >>> 15), 2246822507) + 0x9e3779b9) >>> 0; return h / 2 ** 32; };
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+});
 
 const render = (s, scope) => (s == null ? '' : tpl.renderString(String(s), scope));
 const evalExpr = (expr, scope) => render(`{% if ${expr} %}1{% else %}0{% endif %}`, scope).trim() === '1';
@@ -29,16 +46,21 @@ function parseDuration(v, def) {
 
 function loadWorkflow(file) {
   const wf = yaml.load(fs.readFileSync(file, 'utf8'));
-  if (!wf || !Array.isArray(wf.steps) || !wf.steps.length) throw new Error('Workflow sem "steps".');
-  if (!wf.agents) throw new Error('Workflow sem "agents".');
+  if (!wf || !Array.isArray(wf.steps) || !wf.steps.length) throw new Error('Workflow has no "steps".');
+  if (!wf.agents) throw new Error('Workflow has no "agents".');
   const ids = new Set(wf.steps.map((s) => s.id));
   for (const s of wf.steps) {
-    if (s.type !== 'human_approval' && !wf.agents[s.agent]) throw new Error(`Step "${s.id}" referencia agente inexistente "${s.agent}".`);
-    if (s.goal && !s.goal.until) throw new Error(`Step "${s.id}": goal precisa de "until".`);
-    if (s.choices && s.type !== 'human_approval') throw new Error(`Step "${s.id}": choices só vale para human_approval.`);
+    if (s.type !== 'human_approval') {
+      // `agents: [...]` = fan-out: the same prompt goes to several agents in parallel
+      if (s.agents && (!Array.isArray(s.agents) || !s.agents.length)) throw new Error(`Step "${s.id}": agents must be a non-empty list.`);
+      if (s.agents && s.goal) throw new Error(`Step "${s.id}": goal is not supported on a fan-out step (agents).`);
+      for (const n of s.agents || [s.agent]) if (!wf.agents[n]) throw new Error(`Step "${s.id}" references unknown agent "${n}".`);
+    }
+    if (s.goal && !s.goal.until) throw new Error(`Step "${s.id}": goal requires "until".`);
+    if (s.choices && s.type !== 'human_approval') throw new Error(`Step "${s.id}": choices is only valid for human_approval.`);
     for (const t of s.transitions || []) {
       for (const target of [t.goto, t.on_exhausted, t.loop?.on_exhausted, s.goal?.on_exhausted, s.loop?.on_exhausted].filter(Boolean)) {
-        if (!ids.has(target) && target !== 'end' && target !== 'fail') throw new Error(`Step "${s.id}" aponta para step inexistente "${target}".`);
+        if (!ids.has(target) && target !== 'end' && target !== 'fail') throw new Error(`Step "${s.id}" points to unknown step "${target}".`);
       }
     }
   }
@@ -46,7 +68,7 @@ function loadWorkflow(file) {
 }
 
 // ---------------------------------------------------------------------------
-// Saída estruturada
+// Structured output
 // ---------------------------------------------------------------------------
 function extractJson(text) {
   const src = String(text || '');
@@ -55,9 +77,9 @@ function extractJson(text) {
   const last = src.lastIndexOf('}');
   if (first >= 0 && last > first) blocks.push(src.slice(first, last + 1));
   for (const b of blocks) {
-    try { return JSON.parse(b); } catch { /* tenta o próximo */ }
+    try { return JSON.parse(b); } catch { /* try the next one */ }
   }
-  throw new Error('Nenhum bloco JSON válido encontrado na resposta.');
+  throw new Error('No valid JSON block found in the response.');
 }
 
 const TYPE_CHECK = {
@@ -71,10 +93,10 @@ const TYPE_CHECK = {
 
 function validateSchema(v, s, p = 'output', errs = []) {
   if (!s) return errs;
-  if (s.type && TYPE_CHECK[s.type] && !TYPE_CHECK[s.type](v)) { errs.push(`${p}: esperado ${s.type}`); return errs; }
-  if (s.enum && !s.enum.includes(v)) errs.push(`${p}: "${v}" fora de ${JSON.stringify(s.enum)}`);
+  if (s.type && TYPE_CHECK[s.type] && !TYPE_CHECK[s.type](v)) { errs.push(`${p}: expected ${s.type}`); return errs; }
+  if (s.enum && !s.enum.includes(v)) errs.push(`${p}: "${v}" not in ${JSON.stringify(s.enum)}`);
   if (s.type === 'object') {
-    for (const r of s.required || []) if (v[r] === undefined) errs.push(`${p}.${r}: obrigatório`);
+    for (const r of s.required || []) if (v[r] === undefined) errs.push(`${p}.${r}: required`);
     for (const [k, ps] of Object.entries(s.properties || {})) if (v[k] !== undefined) validateSchema(v[k], ps, `${p}.${k}`, errs);
   }
   if (s.type === 'array' && s.items) v.forEach((x, i) => validateSchema(x, s.items, `${p}[${i}]`, errs));
@@ -82,25 +104,27 @@ function validateSchema(v, s, p = 'output', errs = []) {
 }
 
 // ---------------------------------------------------------------------------
-// `loop` é o formato atual; `mode: polling` + `poll` continuam aceitos
+// `loop` is the current format; `mode: polling` + `poll` are still accepted
 const isLooping = (step) => !!step.loop || step.mode === 'polling';
 const loopConfig = (step) => step.loop || step.poll || {};
 
-// Instruções no estilo /goal e /loop do Claude Code. O engine é quem de fato
-// repete o step e aplica os limites; o agente só precisa saber o contrato.
+// Instructions in the style of Claude Code's /goal and /loop. The engine is what actually
+// repeats the step and enforces the limits; the agent only needs to know the contract.
 function goalLoopInstructions(step, st, scope) {
   const lines = [];
   if (step.goal) {
     lines.push(`/goal: ${render(step.goal.description, scope)}`);
-    lines.push('Seu trabalho neste step só termina quando esse objetivo for atingido. Não declare sucesso sem verificar o estado real.');
+    lines.push('Your work on this step is only done when this goal is met. Do not declare success without checking the real state.');
   }
   if (isLooping(step)) {
     const cfg = loopConfig(step);
-    lines.push(`/loop: iteração ${st.iteration}. O orquestrador vai chamar você de novo a cada ${cfg.interval || '1m'} (limite: ${cfg.max_duration || 'sem limite'}) até o /goal ser atingido.`);
-    lines.push('Em cada chamada: verifique o estado atual, tome a ação necessária e responda imediatamente. Não fique bloqueado esperando (não use watch/sleep longos).');
+    lines.push(`/loop: iteration ${st.iteration}. The orchestrator will call you again every ${cfg.interval || '1m'} (limit: ${cfg.max_duration || 'none'}) until the /goal is met.`);
+    lines.push('On each call: check the current state, take the necessary action and reply right away. Do not block waiting (no long watch/sleep).');
   }
   return lines.join('\n');
 }
+
+const stepAgentLabel = (s) => (s.agents ? s.agents.join(' · ') : s.agent || null);
 
 function newRunId() {
   const d = new Date();
@@ -113,20 +137,29 @@ function addUsage(total, u) {
 }
 
 class WorkflowRun extends EventEmitter {
-  constructor({ file, inputs, mock, runsDir }) {
+  // budget: { [provider id]: { name, limitUsd, limitTokens, blockOnLimit, usedUsd, usedTokens } }
+  // (this month's usage before this run, see src/usage.js); prices: USD per 1M tokens by model.
+  constructor({ file, inputs, mock, runsDir, skillsDirs, budget, prices }) {
     super();
-    refreshWindowsPath(); // ações (ex.: gh pr merge) precisam do PATH atualizado
+    refreshWindowsPath(); // actions (e.g. gh pr merge) need the refreshed PATH
     this.file = file;
     this.wf = loadWorkflow(file);
     this.mock = !!mock;
     this.runId = newRunId();
     this.runDir = path.join(runsDir, this.runId);
+    this.skillsDirs = [...(skillsDirs || []), BUNDLED_SKILLS];
+    this.budget = budget || {};
+    this.prices = prices || {};
+    this.budgetWarned = new Set();
     this.inputs = this.resolveInputs(inputs || {});
-    this.ctx = { inputs: this.inputs, steps: {}, loop: { iteration: 0 }, run_id: this.runId };
+    this.ctx = {
+      inputs: this.inputs, steps: {}, loop: { iteration: 0 }, run_id: this.runId, run_dir: this.runDir, runs_dir: runsDir, workflows_dir: path.dirname(path.resolve(file)),
+      agents: Object.fromEntries(Object.entries(this.wf.agents).map(([k, a]) => [k, { provider: a.provider, model: a.model }])),
+    };
     for (const s of this.wf.steps) this.ctx.steps[s.id] = { output: null, visits: 0 };
 
-    this.sessions = new Map();      // id local -> sessão
-    this.agentSessions = new Map(); // agente persistente -> id local
+    this.sessions = new Map();      // local id -> session
+    this.agentSessions = new Map(); // persistent agent -> local id
     this.counters = {};
     this.loops = {};
     this.approvals = new Map();
@@ -142,8 +175,8 @@ class WorkflowRun extends EventEmitter {
     for (const [k, def] of Object.entries(this.wf.inputs || {})) {
       let v = given[k];
       if (v === undefined || v === '') v = def.default;
-      if (def.required && (v === undefined || v === '')) throw new Error(`Input obrigatório não informado: ${k}`);
-      if (def.enum && v !== undefined && !def.enum.includes(v)) throw new Error(`Input "${k}" deve ser um de ${def.enum.join(', ')}`);
+      if (def.required && (v === undefined || v === '')) throw new Error(`Required input not provided: ${k}`);
+      if (def.enum && v !== undefined && !def.enum.includes(v)) throw new Error(`Input "${k}" must be one of ${def.enum.join(', ')}`);
       out[k] = v;
     }
     return out;
@@ -155,7 +188,7 @@ class WorkflowRun extends EventEmitter {
     return ev;
   }
 
-  // ---- sessões -------------------------------------------------------------
+  // ---- sessions -------------------------------------------------------------
   openSession({ agent, provider, model, parentId, stepId }) {
     const s = {
       id: agent === 'orchestrator' ? 'orchestrator' : `s${++this.nSession}`,
@@ -194,10 +227,10 @@ class WorkflowRun extends EventEmitter {
     };
   }
 
-  // ---- execução ------------------------------------------------------------
+  // ---- execution ------------------------------------------------------------
   stepById(id) {
     const s = this.wf.steps.find((x) => x.id === id);
-    if (!s) throw new Error(`Step inexistente: ${id}`);
+    if (!s) throw new Error(`Unknown step: ${id}`);
     return s;
   }
 
@@ -207,10 +240,10 @@ class WorkflowRun extends EventEmitter {
     this.emitEvent('workflow.started', {
       workflow: this.wf.metadata?.name, version: this.wf.metadata?.version,
       file: path.basename(this.file), inputs: this.inputs, mock: this.mock, run_dir: this.runDir,
-      steps: this.wf.steps.map((s) => ({ id: s.id, type: s.type || 'agent', agent: s.agent || null })),
+      steps: this.wf.steps.map((s) => ({ id: s.id, type: s.type || 'agent', agent: stepAgentLabel(s) })),
     });
     this.orchestrator = this.openSession({
-      agent: 'orchestrator', provider: 'engine', model: 'engine (determinístico)', parentId: null, stepId: null,
+      agent: 'orchestrator', provider: 'engine', model: 'engine (deterministic)', parentId: null, stepId: null,
     });
     this.setStatus(this.orchestrator, 'active');
 
@@ -218,9 +251,9 @@ class WorkflowRun extends EventEmitter {
     let guard = 0;
     try {
       while (current !== 'end') {
-        if (current === 'fail') throw new Error('Workflow encaminhado para "fail" (limite de tentativas atingido).');
-        if (++guard > 500) throw new Error('Limite de 500 transições atingido.');
-        if (this.abort.signal.aborted) throw new Error('Cancelado');
+        if (current === 'fail') throw new Error('Workflow routed to "fail" (retry limit reached).');
+        if (++guard > 500) throw new Error('Limit of 500 transitions reached.');
+        if (this.abort.signal.aborted) throw new Error('Cancelled');
         this.checkLimits();
         current = await this.runStep(this.stepById(current));
       }
@@ -232,7 +265,7 @@ class WorkflowRun extends EventEmitter {
 
   stop() {
     this.abort.abort();
-    for (const a of this.approvals.values()) a.reject(new Error('Cancelado'));
+    for (const a of this.approvals.values()) a.reject(new Error('Cancelled'));
   }
 
   checkLimits() {
@@ -240,12 +273,12 @@ class WorkflowRun extends EventEmitter {
     const maxDur = parseDuration(lim.max_total_duration, null);
     if (maxDur && Date.now() - this.startedAt > maxDur) {
       this.emitEvent('limit.exceeded', { limit: 'max_total_duration', value: lim.max_total_duration });
-      throw new Error(`Duração máxima excedida (${lim.max_total_duration}).`);
+      throw new Error(`Maximum duration exceeded (${lim.max_total_duration}).`);
     }
     const cost = [...this.sessions.values()].reduce((a, s) => a + s.costUsd, 0);
     if (lim.max_total_cost_usd && cost > lim.max_total_cost_usd) {
       this.emitEvent('limit.exceeded', { limit: 'max_total_cost_usd', value: lim.max_total_cost_usd, current: cost });
-      throw new Error(`Custo máximo excedido (US$ ${lim.max_total_cost_usd}).`);
+      throw new Error(`Maximum cost exceeded (US$ ${lim.max_total_cost_usd}).`);
     }
   }
 
@@ -253,12 +286,12 @@ class WorkflowRun extends EventEmitter {
     const st = this.ctx.steps[step.id];
     st.visits++;
     st.firstVisitAt ??= Date.now();
-    // iteração do /loop: reinicia sempre que o step é (re)entrado a partir de outro step
+    // /loop iteration: resets whenever the step is (re)entered from another step
     if (this.prevStepId !== step.id) { st.iteration = 0; st.loopStartedAt = Date.now(); }
     st.iteration++;
     this.prevStepId = step.id;
     const t0 = Date.now();
-    this.emitEvent('step.started', { step_id: step.id, visit: st.visits, iteration: st.iteration, step_type: step.type || 'agent', agent: step.agent || null });
+    this.emitEvent('step.started', { step_id: step.id, visit: st.visits, iteration: st.iteration, step_type: step.type || 'agent', agent: stepAgentLabel(step) });
 
     let output, scope;
     if (step.type === 'human_approval') {
@@ -272,7 +305,7 @@ class WorkflowRun extends EventEmitter {
       }
       st.output = output;
     } else {
-      output = await this.runAgentStep(step, st);
+      output = step.agents ? await this.runFanOut(step, st) : await this.runAgentStep(step, st, step.agent);
       st.output = output;
       scope = { ...this.ctx, output, iteration: st.iteration };
     }
@@ -286,7 +319,7 @@ class WorkflowRun extends EventEmitter {
     if (!step.transitions?.length) {
       const i = this.wf.steps.indexOf(step);
       const next = this.wf.steps[i + 1]?.id || 'end';
-      this.emitEvent('step.transition', { from: step.id, to: next, when: '(sequencial)' });
+      this.emitEvent('step.transition', { from: step.id, to: next, when: '(sequential)' });
       return next;
     }
 
@@ -295,18 +328,18 @@ class WorkflowRun extends EventEmitter {
       if (t.action) await this.runAction(render(t.action, scope));
       let delegated = null;
       if (t.delegate) {
-        this.emitEvent('log', { level: 'info', message: `${step.id} delegou para ${t.delegate.agent}` });
+        this.emitEvent('log', { level: 'info', message: `${step.id} delegated to ${t.delegate.agent}` });
         const res = await this.sendToAgent(t.delegate.agent, render(t.delegate.prompt, scope), { stepId: `${step.id}:delegate` });
         delegated = { agent: t.delegate.agent, text: res.text };
       }
       let target = this.applyCounters(step, t);
       if (target === step.id && isLooping(step)) target = await this.loopWait(step);
-      // o resultado da delegação vai para o próximo step (ex.: babysitter responde no PR com o hash)
+      // the delegation result goes to the next step (e.g. babysitter replies on the PR with the hash)
       if (delegated && this.ctx.steps[target]) this.ctx.steps[target].delegate_result = delegated;
       this.emitEvent('step.transition', { from: step.id, to: target, when: t.when });
       return target;
     }
-    throw new Error(`Nenhuma transição satisfeita no step "${step.id}".`);
+    throw new Error(`No transition matched in step "${step.id}".`);
   }
 
   applyCounters(step, t) {
@@ -316,7 +349,7 @@ class WorkflowRun extends EventEmitter {
       this.counters[key] = (this.counters[key] || 0) + 1;
       if (this.counters[key] > t.max_visits) {
         target = t.on_exhausted || 'fail';
-        this.emitEvent('log', { level: 'warn', message: `max_visits (${t.max_visits}) atingido em ${key} → ${target}` });
+        this.emitEvent('log', { level: 'warn', message: `max_visits (${t.max_visits}) reached at ${key} → ${target}` });
       }
     }
     if (t.loop) {
@@ -324,7 +357,7 @@ class WorkflowRun extends EventEmitter {
       this.loops[name] = (this.loops[name] || 0) + 1;
       if (this.loops[name] > t.loop.max_iterations) {
         target = t.loop.on_exhausted || 'fail';
-        this.emitEvent('log', { level: 'warn', message: `loop "${name}" atingiu ${t.loop.max_iterations} iterações → ${target}` });
+        this.emitEvent('log', { level: 'warn', message: `loop "${name}" reached ${t.loop.max_iterations} iterations → ${target}` });
       } else {
         this.ctx.loop = { name, iteration: this.loops[name] };
       }
@@ -338,7 +371,7 @@ class WorkflowRun extends EventEmitter {
     const maxDur = parseDuration(cfg.max_duration, null);
     if (maxDur && Date.now() - st.loopStartedAt > maxDur) {
       const target = step.goal?.on_exhausted || cfg.on_exhausted || 'fail';
-      this.emitEvent('log', { level: 'warn', message: `/loop de ${step.id} excedeu ${cfg.max_duration} sem atingir o /goal → ${target}` });
+      this.emitEvent('log', { level: 'warn', message: `/loop of ${step.id} exceeded ${cfg.max_duration} without meeting the /goal → ${target}` });
       return target;
     }
     const interval = Math.min(parseDuration(cfg.interval, 60000), this.mock ? 3000 : Infinity);
@@ -349,43 +382,162 @@ class WorkflowRun extends EventEmitter {
     return step.id;
   }
 
-  async runAgentStep(step, st) {
+  // Fan-out: the same step runs in parallel for each agent in `agents`, each one
+  // in its own session. output = { results: { agent: output }, succeeded, failed }.
+  // `min_success` (default: all) says how many must respond for the step to count.
+  async runFanOut(step, st) {
+    const settled = await Promise.allSettled(step.agents.map((name) => this.runAgentStep(step, st, name)));
+    st.delegate_result = null; // consumed by all agents
+    if (this.abort.signal.aborted) throw new Error('Cancelled');
+    const results = {};
+    const failed = [];
+    settled.forEach((r, i) => {
+      const name = step.agents[i];
+      if (r.status === 'fulfilled') { results[name] = r.value; return; }
+      failed.push({ agent: name, error: r.reason?.message || String(r.reason) });
+      this.emitEvent('log', { level: 'error', message: `[${step.id}] ${name} failed: ${r.reason?.message || r.reason}` });
+    });
+    const succeeded = Object.keys(results);
+    const min = step.min_success ?? step.agents.length;
+    if (succeeded.length < min) {
+      const why = failed.map((f) => `${f.agent}: ${f.error}`).join(' | ');
+      throw new Error(`Step "${step.id}": only ${succeeded.length}/${step.agents.length} agents responded (minimum ${min}). ${why}`);
+    }
+    return { results, succeeded, failed };
+  }
+
+  async runAgentStep(step, st, agentName) {
     const visit = st.visits;
     const schema = step.output_schema;
-    let prompt = render(step.prompt, { ...this.ctx, iteration: st.iteration, delegate_result: st.delegate_result }).trim();
-    st.delegate_result = null; // consumido
+    const scope = { ...this.ctx, iteration: st.iteration, delegate_result: st.delegate_result, agent: agentName };
+    let prompt = render(step.prompt, scope).trim();
+    if (!step.agents) st.delegate_result = null; // consumed (in a fan-out, after all of them)
+    // step skills go in the prompt itself; the name can be a template ("{{ inputs.document_skill }}")
+    const skills = this.loadSkills((step.skills || []).map((n) => render(n, scope).trim()));
+    if (skills.length) prompt = `${skills.map(skillPrompt).join('\n\n')}\n\n${prompt}`;
     const extra = goalLoopInstructions(step, st, this.ctx);
     if (extra) prompt += '\n\n---\n' + extra;
     if (schema) {
-      prompt += '\n\n---\nAo final da sua resposta, inclua OBRIGATORIAMENTE um bloco ```json com um objeto que valide contra este JSON Schema:\n```json\n'
+      prompt += '\n\n---\nAt the end of your response you MUST include a ```json block with an object that validates against this JSON Schema:\n```json\n'
         + JSON.stringify(schema, null, 2) + '\n```';
     }
-    const hint = { stepId: step.id, visit, schema };
-    let res = await this.sendToAgent(step.agent, prompt, { stepId: step.id, hint });
-    if (!schema) return { text: res.text };
+    const hint = { stepId: step.id, visit, schema, agent: agentName };
+    const opts = { stepId: step.id, hint, skills };
+    let res = await this.sendToAgent(agentName, prompt, opts);
+    if (!schema) {
+      this.saveOutput(step, scope, res.text);
+      return { text: res.text };
+    }
 
     for (let attempt = 0; ; attempt++) {
       let errs;
       try {
         const out = extractJson(res.text);
         errs = validateSchema(out, schema);
-        if (!errs.length) return out;
+        if (!errs.length) {
+          this.saveOutput(step, scope, JSON.stringify(out, null, 2));
+          return out;
+        }
       } catch (e) {
         errs = [e.message];
       }
-      this.emitEvent('log', { level: 'warn', message: `Saída inválida em ${step.id}: ${errs.join('; ')}` });
-      if (attempt >= 2) throw new Error(`Saída do step "${step.id}" não validou: ${errs.join('; ')}`);
-      res = await this.sendToAgent(step.agent,
-        `Sua última resposta não validou contra o schema:\n- ${errs.join('\n- ')}\nResponda novamente apenas com o bloco \`\`\`json corrigido.`,
-        { stepId: step.id, hint });
+      this.emitEvent('log', { level: 'warn', message: `Invalid output in ${step.id}${step.agents ? ` (${agentName})` : ''}: ${errs.join('; ')}` });
+      if (attempt >= 2) throw new Error(`Output of step "${step.id}" failed validation: ${errs.join('; ')}`);
+      res = await this.sendToAgent(agentName,
+        `Your last response did not validate against the schema:\n- ${errs.join('\n- ')}\nReply again with only the corrected \`\`\`json block.`,
+        opts);
     }
   }
 
-  async sendToAgent(agentName, prompt, { stepId, hint } = {}) {
+  // Read once per run: editing the skill mid-run does not change what the agents already received.
+  // Expands `uses:` from the skills' frontmatter: dependencies come first, each skill
+  // once, cycles ignored. E.g. unit-test-writer-go uses testing-principles.
+  loadSkills(names) {
+    const out = [];
+    const seen = new Set();
+    const visit = (name, chain) => {
+      if (!name || seen.has(name) || chain.includes(name)) return;
+      const skill = this.loadSkill(name);
+      for (const dep of skill.uses) visit(dep, [...chain, name]);
+      seen.add(name);
+      out.push(skill);
+    };
+    for (const n of names) visit(n, []);
+    return out;
+  }
+
+  loadSkill(name) {
+    this.skillCache ??= new Map();
+    if (!this.skillCache.has(name)) {
+      const skill = resolveSkill(this.skillsDirs, name);
+      this.skillCache.set(name, skill);
+      this.emitEvent('log', { level: 'info', message: `skill "${skill.name}" loaded from ${skill.path}` });
+    }
+    return this.skillCache.get(name);
+  }
+
+  // `save_as`: writes the agent's response to a file (a path or a list;
+  // templates have access to `agent`). Relative paths go in the run folder.
+  saveOutput(step, scope, text) {
+    for (const t of step.save_as ? [].concat(step.save_as) : []) {
+      const rel = render(t, scope).trim();
+      if (!rel) continue;
+      const file = path.resolve(this.runDir, rel);
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, String(text ?? ''));
+      this.emitEvent('file.saved', { step_id: step.id, agent: scope.agent, path: file });
+    }
+  }
+
+  // Monthly budget per provider: checked before every real (non-mock) turn.
+  checkBudget(providerName) {
+    const id = providerId(providerName);
+    const b = id && this.budget[id];
+    if (!b || (!b.limitUsd && !b.limitTokens)) return;
+    let usd = b.usedUsd || 0;
+    let tokens = b.usedTokens || 0;
+    for (const s of this.sessions.values()) {
+      if (providerId(s.provider) !== id) continue;
+      usd += sessionCost({ cost_usd: s.costUsd, model: s.model, tokens: s.tokens }, this.prices) || 0;
+      tokens += totalTokens(s.tokens);
+    }
+    const pct = Math.max(b.limitUsd ? usd / b.limitUsd : 0, b.limitTokens ? tokens / b.limitTokens : 0);
+    const detail = [b.limitUsd && `$${usd.toFixed(2)} of $${b.limitUsd}`, b.limitTokens && `${tokens} of ${b.limitTokens} tokens`].filter(Boolean).join(', ');
+    if (pct >= 1) {
+      this.emitEvent('budget.exceeded', { provider: id, usd, tokens, limit_usd: b.limitUsd, limit_tokens: b.limitTokens, blocked: b.blockOnLimit });
+      if (b.blockOnLimit) throw new Error(`Monthly budget for ${b.name || id} reached (${detail}). Raise it in Usage or wait for next month.`);
+    } else if (pct >= WARN_AT && !this.budgetWarned.has(id)) {
+      this.budgetWarned.add(id);
+      this.emitEvent('log', { level: 'warn', message: `${b.name || id} is at ${Math.round(pct * 100)}% of its monthly budget (${detail}).` });
+    }
+  }
+
+  // Decision log (decision-log skill): agents end their answer with a ```decisions block of
+  // "phase | decision | why | evidence | result" lines; the engine appends them, stamped with
+  // time, agent and step, to <run>/decisions.tsv. Works the same for every provider and needs
+  // no write access outside the repository.
+  recordDecisions(agentName, stepId, text) {
+    const rows = [...String(text || '').matchAll(/```decisions[^\n]*\n([\s\S]*?)```/g)]
+      .flatMap((m) => m[1].split('\n'))
+      .map((l) => l.trim().replace(/^[-*]\s+/, ''))
+      .filter(Boolean)
+      .map((l) => (l.includes('\t') ? l.split('\t') : l.split('|')).map((c) => c.trim().replace(/\s+/g, ' ')));
+    if (!rows.length) return;
+    const file = path.join(this.runDir, 'decisions.tsv');
+    fs.mkdirSync(this.runDir, { recursive: true });
+    if (!fs.existsSync(file)) fs.writeFileSync(file, 'ts\tagent\tstep\tphase\tdecision\twhy\tevidence\tresult\n');
+    const ts = new Date().toISOString();
+    fs.appendFileSync(file, rows.map((c) => [ts, agentName, stepId, ...[...c, '', '', '', '', ''].slice(0, 5)].join('\t')).join('\n') + '\n');
+    this.emitEvent('decision.logged', { agent: agentName, step_id: stepId, count: rows.length, path: file });
+  }
+
+  async sendToAgent(agentName, prompt, { stepId, hint, skills: stepSkills = [] } = {}) {
     const def = this.wf.agents[agentName];
-    if (!def) throw new Error(`Agente inexistente: ${agentName}`);
+    if (!def) throw new Error(`Unknown agent: ${agentName}`);
     const agent = { ...(this.wf.defaults || {}), ...def };
     const persistent = agent.session !== 'ephemeral';
+    // agent skills go in the system prompt (1st turn); step skills, in the step prompt
+    const agentSkills = this.loadSkills((agent.skills || []).map((n) => render(n, this.ctx).trim()));
 
     let session = persistent ? this.sessions.get(this.agentSessions.get(agentName)) : null;
     if (!session) {
@@ -398,13 +550,19 @@ class WorkflowRun extends EventEmitter {
 
     const turn = ++session.turns;
     let fullPrompt = prompt;
-    if (turn === 1 && agent.system_prompt) {
-      fullPrompt = `<system>\n${render(agent.system_prompt, this.ctx).trim()}\n</system>\n\n${prompt}`;
+    if (turn === 1 && (agent.system_prompt || agentSkills.length)) {
+      const system = [render(agent.system_prompt, this.ctx).trim(), ...agentSkills.map(skillPrompt)].filter(Boolean).join('\n\n');
+      fullPrompt = `<system>\n${system}\n</system>\n\n${prompt}`;
     }
     this.emitEvent('session.message_sent', { session_id: session.id, turn, step_id: stepId, prompt: fullPrompt });
 
     const provider = this.mock ? { type: 'mock' } : this.wf.providers?.[agent.provider];
-    if (!provider) throw new Error(`Provider "${agent.provider}" não definido.`);
+    if (!provider) throw new Error(`Provider "${agent.provider}" is not defined.`);
+    if (!this.mock) this.checkBudget(agent.provider);
+    // The provider's `skill_args` grants read access to each skill's folder, which lives
+    // outside the working_dir (e.g. claude --add-dir <folder>). Applies to every turn.
+    const skillDirs = [...new Set([...agentSkills, ...stepSkills].map((sk) => sk.path))];
+    const skillArgs = skillDirs.flatMap((dir) => (provider.skill_args || []).map((a) => render(a, { skill_dir: dir })));
 
     const retry = agent.retry || {};
     const maxAttempts = retry.max_attempts || 1;
@@ -417,8 +575,8 @@ class WorkflowRun extends EventEmitter {
       try {
         const res = await runTurn({
           provider, model: agent.model, providerSessionId: session.providerSessionId,
-          prompt: fullPrompt, cwd: render(agent.working_dir, this.ctx) || process.cwd(),
-          extraArgs: agent.cli_args || [], timeoutMs: parseDuration(agent.timeout, 30 * 60e3),
+          prompt: fullPrompt, cwd: this.workingDir(agent),
+          extraArgs: [...(agent.cli_args || []), ...skillArgs], timeoutMs: parseDuration(agent.timeout, 30 * 60e3),
           signal: this.abort.signal, hint, render,
           onItem: (item) => this.emitEvent('session.stream', { session_id: session.id, turn, item }),
         });
@@ -432,15 +590,16 @@ class WorkflowRun extends EventEmitter {
           session_id: session.id, turn, step_id: stepId, text: res.text, usage: res.usage,
           cost_usd: res.costUsd, duration_ms: dur, session: this.snapshot(session),
         });
+        this.recordDecisions(agentName, stepId, res.text);
         if (!persistent) this.closeSession(session, 'success');
         return res;
       } catch (e) {
         session.activeMs += Date.now() - t0;
         lastErr = e;
         if (this.abort.signal.aborted) break;
-        this.emitEvent('log', { level: 'error', message: `[${agentName}] tentativa ${a}/${maxAttempts} falhou: ${e.message}` });
+        this.emitEvent('log', { level: 'error', message: `[${agentName}] attempt ${a}/${maxAttempts} failed: ${e.message}` });
         if (!isRetryable(e)) {
-          this.emitEvent('log', { level: 'error', message: `[${agentName}] erro não recuperável, sem novas tentativas.` });
+          this.emitEvent('log', { level: 'error', message: `[${agentName}] non-retryable error, giving up.` });
           break;
         }
         if (a < maxAttempts) {
@@ -453,6 +612,14 @@ class WorkflowRun extends EventEmitter {
     if (persistent) this.setStatus(session, 'error');
     else this.closeSession(session, 'failed');
     throw lastErr;
+  }
+
+  // Without a working_dir (workflow with no repository), the agent runs in the run folder.
+  workingDir(agent) {
+    const dir = render(agent.working_dir, this.ctx).trim();
+    if (dir) return dir;
+    fs.mkdirSync(this.runDir, { recursive: true });
+    return this.runDir;
   }
 
   requestApproval(step) {
@@ -473,7 +640,7 @@ class WorkflowRun extends EventEmitter {
     });
   }
 
-  // answer: boolean (aprovar/rejeitar) ou o id de uma das choices do step
+  // answer: boolean (approve/reject) or the id of one of the step's choices
   resolveApproval(id, answer, by = 'user') {
     const a = this.approvals.get(id);
     if (!a) return false;
@@ -487,14 +654,14 @@ class WorkflowRun extends EventEmitter {
 
   runAction(cmd) {
     if (this.mock) {
-      this.emitEvent('action.executed', { command: cmd, skipped: true, output: '[mock] ação não executada' });
+      this.emitEvent('action.executed', { command: cmd, skipped: true, output: '[mock] action not executed' });
       return Promise.resolve();
     }
     return new Promise((resolve, reject) => {
       exec(cmd, { cwd: this.inputs.repo_path || process.cwd(), windowsHide: true, env: process.env }, (err, stdout, stderr) => {
         const exitCode = err ? err.code ?? 1 : 0;
         this.emitEvent('action.executed', { command: cmd, exit_code: exitCode, output: `${stdout}${stderr}`.slice(-4000) });
-        if (exitCode) reject(new Error(`Ação falhou (exit ${exitCode}): ${cmd}
+        if (exitCode) reject(new Error(`Action failed (exit ${exitCode}): ${cmd}
 ${stderr || stdout}`.slice(0, 1500)));
         else resolve();
       });
@@ -503,10 +670,10 @@ ${stderr || stdout}`.slice(0, 1500)));
 
   finish(status, err) {
     this.status = status;
-    for (const a of this.approvals.values()) a.reject(new Error('Encerrado'));
+    for (const a of this.approvals.values()) a.reject(new Error('Finished'));
     this.approvals.clear();
     for (const s of this.sessions.values()) {
-      // o status da sessão reflete a própria sessão, não o desfecho do workflow
+      // the session status reflects the session itself, not the workflow outcome
       if (!s.closedAt) this.closeSession(s, s.status === 'error' ? 'failed' : status === 'cancelled' ? 'cancelled' : s.id === 'orchestrator' ? status : 'success');
     }
     const sessions = [...this.sessions.values()].map((s) => this.snapshot(s));
@@ -526,4 +693,4 @@ ${stderr || stdout}`.slice(0, 1500)));
   }
 }
 
-module.exports = { WorkflowRun, loadWorkflow, extractJson, validateSchema, evalExpr };
+module.exports = { WorkflowRun, loadWorkflow, extractJson, validateSchema, evalExpr, render };

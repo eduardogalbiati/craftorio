@@ -1,5 +1,5 @@
-// Suíte de testes: unitários (node:test em test/*.test.js) + fluxo completo em modo mock.
-// Lista os arquivos explicitamente para funcionar em qualquer versão do Node.
+// Test suite: unit tests (node:test in test/*.test.js) + full flow in mock mode.
+// Lists the files explicitly so it works on any Node version.
 //   npm test
 
 const fs = require('fs');
@@ -13,12 +13,12 @@ const files = fs.readdirSync(path.join(root, 'test'))
   .filter((f) => f.endsWith('.test.js'))
   .map((f) => path.join('test', f));
 
-console.log(`\n== Testes unitários (${files.length} arquivo(s)) ==`);
+console.log(`\n== Unit tests (${files.length} file(s)) ==`);
 if (run(['--test', ...files]) !== 0) process.exit(1);
 
-console.log('\n== Fluxo completo em modo mock ==');
-// Workspace isolado: os testes não gravam no workspace do usuário nem no registro.
-const status = run(['scripts/run.js', '--mock', '--auto-approve', '--task', 'Teste do engine'], {
+console.log('\n== Full flow in mock mode ==');
+// Isolated workspace: the tests do not write to the user's workspace or the registry.
+const status = run(['scripts/run.js', '--mock', '--auto-approve', '--task', 'Engine test'], {
   MULTIAGENT_MOCK_DELAY_SCALE: '0.2',
   MULTIAGENT_WORKSPACE: path.join(root, 'runs', 'test-workspace'),
 });

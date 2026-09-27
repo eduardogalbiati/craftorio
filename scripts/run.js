@@ -1,14 +1,16 @@
-// Executa um workflow pelo terminal (sem Electron).
+// Runs a workflow from the terminal (without Electron).
 //
-//   node scripts/run.js --task "..." [--repo <path>] [--file <yaml>] [--mock] [--auto-approve] [--input chave=valor]
+//   node scripts/run.js --task "..." [--repo <path>] [--file <yaml>] [--mock] [--auto-approve] [--input key=value]
 //
-// --auto-approve aprova todos os gates humanos (use com cuidado fora do mock).
-// Sai com código 0 se o workflow terminar com sucesso, 1 caso contrário.
+// --auto-approve approves every human gate (use with care outside mock mode).
+// Exits with code 0 if the workflow succeeds, 1 otherwise.
 
 const path = require('path');
 const { WorkflowRun } = require('../src/engine/workflow');
 const { Recorder } = require('../src/engine/recorder');
-const { resolveWorkspace, setupWorkspace } = require('../src/workspace');
+const { resolveWorkspace, setupWorkspace, readSettings } = require('../src/workspace');
+const usage = require('../src/usage');
+const { resolveCommand } = require('../src/engine/providers');
 
 const root = path.join(__dirname, '..');
 
@@ -23,61 +25,73 @@ function parseArgs(argv) {
     else if (k === '--task') a.inputs.task = next();
     else if (k === '--repo') a.inputs.repo_path = next();
     else if (k === '--input') { const [key, ...v] = next().split('='); a.inputs[key] = v.join('='); }
-    else throw new Error(`Argumento desconhecido: ${k}`);
+    else throw new Error(`Unknown argument: ${k}`);
   }
   a.inputs.repo_path ??= root;
   return a;
 }
 
 const args = parseArgs(process.argv.slice(2));
-// Mesmo workspace do app (MULTIAGENT_WORKSPACE > caminho registrado > ~/multiagent-workspace).
-// Sem terminal interativo, cria a pasta padrão se nenhuma existir.
+// Same workspace as the app (MULTIAGENT_WORKSPACE > registered path > ~/multiagent-workspace).
+// With no interactive terminal, creates the default folder if none exists.
 const found = resolveWorkspace();
 const ws = setupWorkspace(found.dir || found.fallback, { persist: found.source !== 'env' });
+const settings = readSettings(ws);
+const needsLocal = Object.values(settings.budgets || {}).some((b) => b?.countOutside);
+const budget = usage.budgetBaseline({ runsDir: ws.runs, settings, local: needsLocal ? require('../src/local-usage').readLocalUsage() : null });
 const run = new WorkflowRun({
   file: path.isAbsolute(args.file) ? args.file : path.join(root, 'workflows', args.file),
   inputs: args.inputs,
   mock: args.mock,
   runsDir: ws.runs,
+  skillsDirs: [ws.skills],
+  budget,
+  prices: settings.prices,
 });
+if (!args.mock) {
+  const problems = usage.preflight(run.wf, budget, resolveCommand, run.inputs);
+  if (problems.length) { console.error(problems.join('\n')); process.exit(1); }
+}
 const rec = new Recorder(run.runDir, run.wf.observability?.capture?.redact);
 
-const t = () => new Date().toLocaleTimeString('pt-BR');
+const t = () => new Date().toLocaleTimeString('en-US');
 const short = (s, n = 160) => String(s ?? '').replace(/\s+/g, ' ').slice(0, n);
 
 run.on('event', (ev) => {
   rec.write(ev);
   switch (ev.type) {
-    case 'step.started': console.log(`${t()} ▶ ${ev.step_id} (visita ${ev.visit})`); break;
+    case 'step.started': console.log(`${t()} ▶ ${ev.step_id} (visit ${ev.visit})`); break;
     case 'step.finished': console.log(`${t()}   ✓ ${ev.step_id}: ${short(JSON.stringify(ev.output), 300)}`); break;
     case 'step.transition': console.log(`${t()}   → ${ev.to}   [${ev.when}]`); break;
-    case 'step.waiting': console.log(`${t()}   ⏳ /loop: próxima verificação em ${Math.round(ev.interval_ms / 1000)}s`); break;
-    case 'step.goal': console.log(`${t()}   🎯 /goal ${ev.met ? 'atingido' : 'ainda não atingido'}: ${ev.goal} (iteração ${ev.iteration})`); break;
-    case 'session.opened': console.log(`${t()}   + sessão ${ev.session_id} ${ev.session.agent} (${ev.session.provider}/${ev.session.model})`); break;
-    case 'session.closed': console.log(`${t()}   - sessão ${ev.session_id} ${ev.status}`); break;
+    case 'file.saved': console.log(`${t()}   💾 ${ev.step_id}${ev.agent ? ` (${ev.agent})` : ''} → ${ev.path}`); break;
+    case 'decision.logged': console.log(`${t()}   📝 ${ev.agent}: ${ev.count} decision(s) → ${ev.path}`); break;
+    case 'step.waiting': console.log(`${t()}   ⏳ /loop: next check in ${Math.round(ev.interval_ms / 1000)}s`); break;
+    case 'step.goal': console.log(`${t()}   🎯 /goal ${ev.met ? 'met' : 'not met yet'}: ${ev.goal} (iteration ${ev.iteration})`); break;
+    case 'session.opened': console.log(`${t()}   + session ${ev.session_id} ${ev.session.agent} (${ev.session.provider}/${ev.session.model})`); break;
+    case 'session.closed': console.log(`${t()}   - session ${ev.session_id} ${ev.status}`); break;
     case 'session.stream':
       if (ev.item.kind === 'tool_call') console.log(`${t()}     [${ev.session_id}] tool ${ev.item.name}: ${short(ev.item.input?.command ?? JSON.stringify(ev.item.input), 120)}`);
       break;
     case 'session.message_received':
-      console.log(`${t()}     [${ev.session_id}] turno ${ev.turn} ok em ${Math.round(ev.duration_ms / 1000)}s · in ${ev.usage.input} · cache ${ev.usage.cache_read} · out ${ev.usage.output}${ev.cost_usd != null ? ` · US$ ${ev.cost_usd.toFixed(4)}` : ''}`);
+      console.log(`${t()}     [${ev.session_id}] turn ${ev.turn} ok in ${Math.round(ev.duration_ms / 1000)}s · in ${ev.usage.input} · cache ${ev.usage.cache_read} · out ${ev.usage.output}${ev.cost_usd != null ? ` · US$ ${ev.cost_usd.toFixed(4)}` : ''}`);
       break;
-    case 'action.executed': console.log(`${t()}   $ ${ev.command} → ${ev.skipped ? 'pulado (mock)' : 'exit ' + ev.exit_code}\n${short(ev.output, 400)}`); break;
+    case 'action.executed': console.log(`${t()}   $ ${ev.command} → ${ev.skipped ? 'skipped (mock)' : 'exit ' + ev.exit_code}\n${short(ev.output, 400)}`); break;
     case 'approval.requested':
       console.log(`${t()}   ? ${short(ev.message, 200)}${ev.choices ? `  [${ev.choices.map((c) => c.id).join(' | ')}]` : ''}`);
       if (args.autoApprove) {
-        // com choices, escolhe a primeira opção
+        // with choices, picks the first option
         const answer = ev.choices ? ev.choices[0].id : true;
-        console.log(`${t()}     → ${ev.choices ? `escolhido "${answer}"` : 'aprovado'} automaticamente (--auto-approve)`);
+        console.log(`${t()}     → ${ev.choices ? `chose "${answer}"` : 'approved'} automatically (--auto-approve)`);
         setTimeout(() => run.resolveApproval(ev.approval_id, answer), 200);
       } else {
-        console.log('     aguardando aprovação: use a UI ou rode com --auto-approve');
+        console.log('     waiting for approval: use the UI or run with --auto-approve');
       }
       break;
     case 'log': console.log(`${t()}   [${ev.level}] ${short(ev.message, 400)}`); break;
     case 'workflow.finished':
       console.log(`\n■ ${ev.status}${ev.error ? ': ' + ev.error : ''}`);
-      console.log(`  duração: ${Math.round(ev.summary.duration_ms / 1000)}s · tokens: ${JSON.stringify(ev.summary.tokens)} · custo: US$ ${ev.summary.cost_usd}`);
-      console.log(`  run salvo em ${run.runDir}`);
+      console.log(`  duration: ${Math.round(ev.summary.duration_ms / 1000)}s · tokens: ${JSON.stringify(ev.summary.tokens)} · cost: US$ ${ev.summary.cost_usd}`);
+      console.log(`  run saved to ${run.runDir}`);
       process.exitCode = ev.status === 'success' ? 0 : 1;
       break;
   }

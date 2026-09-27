@@ -1,5 +1,5 @@
-# Fixture de teste: /goal + /loop com delegação e portão humano com choices.
-# O mock devolve ci_status na sequência pending → failed → pending → success.
+# Test fixture: /goal + /loop with delegation and a human gate with choices.
+# The mock returns ci_status in the sequence pending → failed → pending → success.
 apiVersion: multiagent/v1
 kind: Workflow
 metadata:
@@ -15,13 +15,13 @@ steps:
   - id: ci
     agent: pusher
     goal:
-      description: "CI verde no run {{ run_id }}"
+      description: "CI green on run {{ run_id }}"
       until: "output.ci_status == 'success'"
       on_exhausted: fail
     loop:
       interval: 1s
       max_duration: 5m
-    prompt: "{% if delegate_result %}DELEGATE:{{ delegate_result.agent }}{% endif %} iteracao={{ iteration }}"
+    prompt: "{% if delegate_result %}DELEGATE:{{ delegate_result.agent }}{% endif %} iteration={{ iteration }}"
     output_schema:
       type: object
       required: [ci_status]
@@ -33,16 +33,16 @@ steps:
       - when: "output.ci_status == 'pending'"
         goto: ci
       - when: "output.ci_status == 'failed'"
-        delegate: { agent: dev, prompt: "corrija" }
+        delegate: { agent: dev, prompt: "fix it" }
         goto: ci
   - id: decide
     type: human_approval
-    message: "Escolha"
+    message: "Choose"
     choices:
-      - { id: seguir, label: "Seguir" }
-      - { id: parar,  label: "Parar" }
+      - { id: proceed, label: "Proceed" }
+      - { id: stop,    label: "Stop" }
     transitions:
-      - when: "choice == 'seguir'"
+      - when: "choice == 'proceed'"
         goto: end
-      - when: "choice == 'parar'"
+      - when: "choice == 'stop'"
         goto: fail

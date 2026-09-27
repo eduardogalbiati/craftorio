@@ -1,23 +1,30 @@
 # =============================================================================
-# Workflow: Desenvolvimento de Software (Feature Workflow Agents)
+# Workflow: Software Development (Feature Workflow Agents)
 # -----------------------------------------------------------------------------
 # BUILD & TEST
-#   develop ─► code_review ─► test ─► build
-#     ▲            │            │        │
-#     └────────────┴────────────┴────────┘   (falhas voltam ao developer via orquestrador)
+#   develop ─► code_review ─► test ─► build ─► verify_change
+#     ▲            │            │        │           │
+#     └────────────┴────────────┴────────┴───────────┘   (failures go back to the developer via the orchestrator)
 #
 # DEPLOY · CI/CD
-#   ci (CI Pusher: /goal CI passando + /loop)
-#   ─► pr_babysitter (/goal PR mergeable + /loop)
-#   ─► deploy_test (pre-release do PR = ambiente de teste)
-#   ─► approve_merge (portão humano) ─► merge ─► deploy_prod (release automática)
+#   ci (CI Pusher: /goal CI green + /loop)
+#   ─► pr_babysitter (/goal PR/MR mergeable + /loop)
+#   ─► deploy_test (PR/MR preview = test environment)
+#   ─► approve_merge (human gate) ─► merge ─► deploy_prod (automatic release)
 #
-# Regras:
-#   - Os agentes nunca falam entre si: tudo passa pelo orquestrador (engine),
-#     que delega correções ao developer e repassa o resultado ao step seguinte.
-#   - A IA age até o portão humano e não o ultrapassa.
-#   - /goal e /loop: o engine repete o step (loop.interval) até `goal.until`
-#     ser verdadeiro ou estourar `loop.max_duration` (→ goal.on_exhausted).
+# Rules:
+#   - Agents never talk to each other: everything goes through the orchestrator
+#     (engine), which delegates fixes to the developer and hands results to the next step.
+#   - The AI acts up to a human gate and never crosses it.
+#   - /goal and /loop: the engine repeats the step (loop.interval) until `goal.until`
+#     is true or `loop.max_duration` runs out (→ goal.on_exhausted).
+#
+# Language and platform:
+#   - `language` picks unit-test-writer-<language> and build-audit-<language>.
+#   - `git_platform` picks ci-pipeline-<platform>, pr-babysitter-<platform> and
+#     deploy-<platform> (gh = GitHub/gh CLI, gl = GitLab/glab CLI).
+#   The YAML keeps the contract (who, when, output schema, transitions); the skills
+#   keep the know-how (commands, conventions, how to triage).
 # =============================================================================
 
 apiVersion: multiagent/v1
@@ -25,47 +32,68 @@ kind: Workflow
 
 metadata:
   name: software-development
-  version: 0.3.0
-  description: Implementa, revisa, testa, builda, acompanha CI e PR, publica versão de teste e, com aprovação, faz merge e acompanha o deploy.
-  tags: [dev, review, test, build, ci, pr, deploy]
+  version: 0.7.0
+  description: Implements, reviews, tests, builds, watches CI and the PR/MR, publishes a preview and, once approved, merges and tracks the production deploy. Works with several languages on GitHub or GitLab.
+  tags: [dev, review, test, build, ci, pr, deploy, github, gitlab]
+  # Dashboard category: plan (Plan & Design), build (Code & Build) or monitor (Monitor & Improve).
+  category: build
 
 # -----------------------------------------------------------------------------
 inputs:
   task:
     type: string
     required: true
-    description: Descrição da feature/bug a ser implementado.
+    description: Feature or bug to implement.
   repo_path:
     type: string
     required: true
-    description: Caminho local do repositório ou URL git (clonada em <workspace>/repos). Precisa ter remote no GitHub.
+    description: Local repository path or git URL (cloned into <workspace>/repos). Needs a GitHub or GitLab remote.
+  language:
+    type: string
+    enum: [js, python, go, java, csharp]
+    default: js
+    description: Main language of the repository. Picks the unit-test-writer-<language> and build-audit-<language> skills.
+  git_platform:
+    type: string
+    enum: [gh, gl]
+    default: gh
+    description: "gh = GitHub (gh CLI), gl = GitLab (glab CLI). Picks the ci-pipeline, pr-babysitter and deploy skills."
   base_branch:
     type: string
     default: main
   preview_workflow:
     type: string
     default: preview.yml
-    description: Workflow do GitHub Actions que publica a versão de teste (pre-release) do PR.
+    description: "GitHub only: Actions workflow that publishes the PR preview (pre-release). GitLab uses DEPLOY_TARGET=preview (see deploy-gl)."
   deploy_workflow:
     type: string
     default: deploy.yml
-    description: Workflow do GitHub Actions disparado pelo merge na base_branch.
+    description: "GitHub only: Actions workflow triggered by the merge into base_branch."
 
 # -----------------------------------------------------------------------------
-# Linha de comando final = args + agent.cli_args + (resume_args se a sessão já
-# existe) + stdin_arg. O prompt é sempre enviado via stdin.
+# Final command line = args + agent.cli_args + (resume_args if the session already
+# exists) + skill_args (once per skill) + stdin_arg. The prompt always goes via stdin.
 providers:
   claude:
     type: claude-code
     command: claude
     args: ["-p", "--output-format", "stream-json", "--verbose", "--model", "{{ model }}"]
     resume_args: ["--resume", "{{ session_id }}"]
+    # Lets the agent read the skill folder (outside working_dir). Codex in
+    # read-only mode can already read any path.
+    skill_args: ["--add-dir", "{{ skill_dir }}"]
   codex:
     type: codex-cli
     command: codex
     args: ["exec", "--json", "--skip-git-repo-check", "-m", "{{ model }}"]
     resume_args: ["resume", "{{ session_id }}"]
     stdin_arg: "-"
+
+# Allowed shell tools, shared by the agents below (YAML anchors).
+x-tools:
+  # every supported language toolchain: the language skill says which one to use
+  toolchains: &toolchains "Bash(git:*) Bash(npm:*) Bash(npx:*) Bash(node:*) Bash(pnpm:*) Bash(yarn:*) Bash(python:*) Bash(python3:*) Bash(py:*) Bash(pip:*) Bash(pytest:*) Bash(uv:*) Bash(poetry:*) Bash(pip-audit:*) Bash(osv-scanner:*) Bash(go:*) Bash(govulncheck:*) Bash(mvn:*) Bash(./mvnw:*) Bash(mvnw.cmd:*) Bash(gradle:*) Bash(./gradlew:*) Bash(gradlew.bat:*) Bash(dotnet:*)"
+  vcs: &vcs "Bash(git:*) Bash(gh:*) Bash(glab:*)"
 
 defaults:
   working_dir: "{{ inputs.repo_path }}"
@@ -75,7 +103,7 @@ defaults:
     backoff: exponential
     initial_delay: 10s
 
-# v1: o grafo é executado pelo engine determinístico do app (src/engine).
+# v1: the graph is run by the app's deterministic engine (src/engine).
 orchestrator:
   provider: claude
   model: claude-sonnet-5
@@ -84,110 +112,131 @@ orchestrator:
     max_total_cost_usd: 60
 
 # -----------------------------------------------------------------------------
-# Agentes. `permissions` é documental; o que vale são os cli_args.
+# Agents. `permissions` is documentation only; cli_args are what is enforced.
+# Skill names can be templates: they are resolved from the inputs at run time.
 # -----------------------------------------------------------------------------
 agents:
   developer:
     provider: claude
     model: claude-opus-5-5
     session: persistent
-    cli_args: ["--permission-mode", "acceptEdits", "--allowedTools", "Bash(git:*) Bash(npm:*) Bash(npx:*) Bash(node:*)"]
+    cli_args: ["--permission-mode", "acceptEdits", "--allowedTools", *toolchains]
+    # bug-diagnosis: fixes delegated after failures; merge-conflict-resolver: "update the branch with the base"
+    skills: ["unit-test-writer-{{ inputs.language }}", bug-diagnosis, merge-conflict-resolver, decision-log]
     permissions:
-      allow: [read, edit, write, bash:git, bash:npm, bash:node]
-      deny: [bash:"git push --force", bash:gh]
+      allow: [read, edit, write, bash:git, bash:toolchain]
+      deny: [bash:"git push --force", bash:gh, bash:glab]
     system_prompt: |
-      Você é um engenheiro de software sênior. Implemente mudanças pequenas,
-      testadas e coesas, seguindo a arquitetura e as convenções do código atual.
-      Trabalhe numa branch própria criada a partir de {{ inputs.base_branch }}
-      e faça commit das mudanças nela. Só faça `git push` quando o orquestrador
-      pedir explicitamente. Ao terminar uma correção pedida, informe o hash do commit.
+      You are a senior software engineer. Make small, tested, cohesive changes that
+      follow the architecture and conventions of the existing code.
+      Work on your own branch created from {{ inputs.base_branch }} and commit your
+      changes there. Run the project's tests the way the test skill describes.
+      Only `git push` when the orchestrator explicitly asks. When you finish a
+      requested fix, report the commit hash.
 
   reviewer:
     provider: codex
     model: gpt-6-luna
     session: persistent
     cli_args: ["-s", "read-only"]
+    # Criteria, severities and per-language rules live in the skill
+    # (<workspace>/skills/code-review, editable in the Skills screen).
+    skills: [code-review]
     permissions:
       allow: [read, bash:git-diff]
       deny: [edit, write]
     system_prompt: |
-      Você é um revisor de código rigoroso. Foque em bugs de corretude,
-      segurança, regressões e cobertura de testes. Seja objetivo; não
-      proponha mudanças puramente estéticas como bloqueantes. Só use
-      "changes_requested" se houver ao menos um finding blocker ou major.
+      You are the code reviewer of this workflow. Follow the code-review skill:
+      detect the languages in the diff and read the rules for each one before the verdict.
 
   test_writer:
     provider: claude
     model: claude-sonnet-5
     session: persistent
-    cli_args: ["--permission-mode", "acceptEdits", "--allowedTools", "Bash(git:*) Bash(npm:*) Bash(node:*)"]
+    cli_args: ["--permission-mode", "acceptEdits", "--allowedTools", *toolchains]
+    skills: ["unit-test-writer-{{ inputs.language }}"]
     permissions:
-      allow: [read, write:test/**, bash:npm-test, bash:git]
-      deny: [edit:src/**]
+      allow: [read, write:tests, bash:git, bash:toolchain]
+      deny: [edit:production-code]
     system_prompt: |
-      Você é o escritor de testes. Escreve e atualiza testes (pasta test/,
-      usando node:test) e roda a suíte. Você NÃO corrige código de produção:
-      quando um teste falha por bug no código, descreva a falha com precisão
-      (teste, arquivo, erro, causa provável) para o orquestrador acionar o developer.
-      Faça commit apenas de arquivos de teste.
+      You are the test writer. You write and update tests and run the suite, following
+      the test skill for this language. You do NOT fix production code: when a test
+      fails because of a bug in the code, describe the failure precisely (test, file,
+      error, probable cause) so the orchestrator can hand it to the developer.
+      Commit test files only.
 
   builder:
     provider: claude
     model: claude-sonnet-5
     session: persistent
-    cli_args: ["--allowedTools", "Bash(npm:*) Bash(node:*) Bash(git:*)"]
+    cli_args: ["--allowedTools", *toolchains]
+    skills: ["build-audit-{{ inputs.language }}"]
     permissions:
-      allow: [read, bash:npm, bash:node]
+      allow: [read, bash:toolchain]
       deny: [edit, write]
     system_prompt: |
-      Você é o builder. Faz o build da aplicação e verifica vulnerabilidades nas
-      dependências. Você não altera código. Política de vulnerabilidades:
-      - bloqueia: qualquer critical; high em dependências de produção (`npm audit --omit=dev`)
-      - só reporta: moderate/low e vulnerabilidades em devDependencies
+      You are the builder. You build the application and check its dependencies for
+      vulnerabilities, following the build skill for this language. You do not change
+      code. Vulnerability policy:
+      - blocks: any critical; high in production dependencies
+      - report only: moderate/low, and anything in development-only dependencies
+
+  verifier:
+    provider: claude
+    model: claude-sonnet-5
+    session: persistent
+    cli_args: ["--allowedTools", *toolchains]
+    skills: [claim-verification]
+    permissions:
+      allow: [read, bash:git, bash:toolchain]
+      deny: [edit, write]
+    system_prompt: |
+      You are the verifier. You prove or disprove that the change does what the task
+      asked, by running the same command before and after it. You do not change code.
 
   ci_pusher:
     provider: claude
     model: claude-opus-4-8
     session: persistent
-    cli_args: ["--allowedTools", "Bash(git:*) Bash(gh:*)"]
+    cli_args: ["--allowedTools", *vcs]
+    skills: ["ci-pipeline-{{ inputs.git_platform }}"]
     permissions:
-      allow: [read, bash:git, bash:gh]
-      deny: [edit, bash:"gh pr merge"]
+      allow: [read, bash:git, bash:gh, bash:glab]
+      deny: [edit, merge]
     system_prompt: |
-      Você é o CI Pusher. Envia a branch, garante que existe um PR aberto e
-      acompanha o CI até passar. Quando o CI falha, você busca o log da falha
-      (`gh run view <id> --log-failed`) e resume a causa raiz para o orquestrador
-      acionar o developer. Você não corrige código e não faz merge.
+      You are the CI Pusher. You push the branch, make sure a PR/MR is open and watch
+      CI until it passes. When CI fails, you fetch the failure log and summarize the
+      root cause so the orchestrator can hand it to the developer. You do not fix
+      code and you do not merge.
 
   pr_babysitter:
     provider: claude
     model: claude-opus-4-8
     session: persistent
-    cli_args: ["--allowedTools", "Bash(gh:*) Bash(git:*)"]
+    cli_args: ["--allowedTools", *vcs]
+    skills: ["pr-babysitter-{{ inputs.git_platform }}", decision-log]
     permissions:
-      allow: [read, bash:gh, bash:git]
-      deny: [edit, bash:"gh pr merge"]
+      allow: [read, bash:git, bash:gh, bash:glab]
+      deny: [edit, merge]
     system_prompt: |
-      Você é o PR Babysitter. Com o CI verde, acompanha o PR até ficar mergeable:
-      conflitos, reviews e comentários. Comentários pertinentes viram pedidos de
-      correção; comentários duvidosos vão para o humano decidir (corrigir,
-      justificar ou ignorar). Depois que uma correção é feita, você responde no
-      PR ao comentário citando o hash do commit. Você não corrige código e não faz merge.
+      You are the PR Babysitter. With CI green, you watch the PR/MR until it is
+      mergeable: conflicts, reviews and comments. Actionable comments become fix
+      requests; doubtful ones go to the human (fix, justify or ignore). After a fix
+      you reply to the comment citing the commit hash. You do not fix code and you do not merge.
 
   deployer:
     provider: claude
     model: claude-opus-4-8
     session: persistent
-    cli_args: ["--allowedTools", "Bash(gh:*) Bash(git:*)"]
+    cli_args: ["--allowedTools", *vcs]
+    skills: ["deploy-{{ inputs.git_platform }}"]
     permissions:
-      allow: [read, bash:gh, bash:git]
+      allow: [read, bash:git, bash:gh, bash:glab]
       deny: [edit]
     system_prompt: |
-      Você é o Deployer. Antes do merge, publica a versão de teste do PR
-      (pre-release via `{{ inputs.preview_workflow }}`). Depois do merge, que é
-      aprovado por um humano, acompanha o deploy de produção
-      (`{{ inputs.deploy_workflow }}`, disparado automaticamente pelo push na
-      {{ inputs.base_branch }}). Em falhas, diagnostica com `gh run view <id> --log-failed`.
+      You are the Deployer. Before the merge, you publish the PR/MR preview. After the
+      merge, which a human approves, you track the production deploy triggered by the
+      push to {{ inputs.base_branch }}. On failures, you diagnose from the failed job log.
 
 # -----------------------------------------------------------------------------
 steps:
@@ -197,16 +246,16 @@ steps:
   - id: develop
     agent: developer
     prompt: |
-      Tarefa: {{ inputs.task }}
+      Task: {{ inputs.task }}
 
       {% if steps.code_review.output and steps.code_review.output.verdict == 'changes_requested' %}
-      O revisor pediu as seguintes mudanças (iteração {{ loop.iteration }}):
+      The reviewer requested these changes (iteration {{ loop.iteration }}):
       {{ steps.code_review.output.findings | to_yaml }}
-      Corrija os itens bloqueantes, faça um novo commit e responda a cada um.
+      Fix the blocking items, make a new commit and answer each one.
       {% endif %}
       {% if steps.deploy_prod.output and steps.deploy_prod.output.deploy_status == 'failed' %}
-      O deploy de produção anterior falhou: {{ steps.deploy_prod.output.error_summary }}
-      Crie uma nova branch a partir da {{ inputs.base_branch }} atualizada (`git pull`) e corrija.
+      The previous production deploy failed: {{ steps.deploy_prod.output.error_summary }}
+      Create a new branch from an up-to-date {{ inputs.base_branch }} (`git pull`) and fix it.
       {% endif %}
     output_schema:
       type: object
@@ -230,9 +279,10 @@ steps:
   - id: code_review
     agent: reviewer
     prompt: |
-      Revise as mudanças da branch `{{ steps.develop.output.branch }}` contra
+      Review the changes on branch `{{ steps.develop.output.branch }}` against
       `{{ inputs.base_branch }}` (`git diff {{ inputs.base_branch }}...{{ steps.develop.output.branch }}`).
-      Resumo do desenvolvedor: {{ steps.develop.output.summary }}
+      Task (the spec for the spec axis): {{ inputs.task }}
+      Developer summary: {{ steps.develop.output.summary }}
     output_schema:
       type: object
       required: [verdict, findings]
@@ -244,6 +294,7 @@ steps:
             type: object
             required: [severity, file, description]
             properties:
+              axis:        { type: string, enum: [correctness, spec, standards] }
               severity:    { type: string, enum: [blocker, major, minor, nit] }
               file:        { type: string }
               line:        { type: integer }
@@ -260,35 +311,36 @@ steps:
 
   - id: human_review
     type: human_approval
-    message: "O loop de review não convergiu em 3 iterações. Seguir para os testes mesmo assim?"
+    message: "The review loop did not converge in 3 iterations. Move on to testing anyway?"
     transitions:
       - when: "approved"
         goto: test
       - when: "rejected"
         goto: end
 
-  # Escritor de testes: escreve/atualiza testes e roda a suíte. Se falha,
-  # o orquestrador aciona o developer e avisa o test_writer quando refeito.
+  # Test writer: writes/updates tests and runs the suite. On failure the
+  # orchestrator hands it to the developer and tells the test writer when it is fixed.
   - id: test
     agent: test_writer
     prompt: |
-      Branch `{{ steps.develop.output.branch }}` (já revisada).
-      Tarefa original: {{ inputs.task }}
-      Mudança feita: {{ steps.develop.output.summary }}
-      Arquivos: {{ steps.develop.output.files_changed | join(', ') }}
+      Branch `{{ steps.develop.output.branch }}` (already reviewed).
+      Original task: {{ inputs.task }}
+      Change made: {{ steps.develop.output.summary }}
+      Files: {{ steps.develop.output.files_changed | join(', ') }}
 
       {% if delegate_result %}
-      O developer aplicou a correção que você pediu:
+      The developer applied the fix you asked for:
       {{ delegate_result.text }}
-      Rode a suíte novamente (`npm test`) e confirme.
+      Run the full suite again and confirm.
       {% else %}
-      1. Faça checkout da branch. Avalie se a mudança precisa de testes novos ou
-         atualizados. Se sim, escreva-os em test/ (node:test) e faça commit só deles.
-         Mudanças puramente visuais podem não precisar de teste novo — justifique.
-      2. Rode a suíte completa: `npm test`.
+      1. Check out the branch. Decide whether the change needs new or updated tests.
+         If so, write them following the test skill (the framework and folder the
+         project already uses) and commit only them. Purely visual changes may not
+         need a new test — justify it.
+      2. Run the full suite with the project's test command.
       {% endif %}
-      Se algum teste falhar por problema no código de produção, NÃO corrija:
-      preencha failure_report com teste, arquivo, erro e causa provável.
+      If a test fails because of production code, do NOT fix it:
+      fill failure_report with test, file, error and probable cause.
     output_schema:
       type: object
       required: [tests_status, tests_added, committed]
@@ -305,10 +357,10 @@ steps:
         delegate:
           agent: developer
           prompt: |
-            O escritor de testes encontrou falhas na branch `{{ steps.develop.output.branch }}`:
+            The test writer found failures on branch `{{ steps.develop.output.branch }}`:
             {{ output.failure_report }}
-            Corrija o código de produção (não altere os testes sem justificar), rode
-            `npm test`, faça commit e informe o hash do commit.
+            Fix the production code (do not change the tests without justifying it), run
+            the test suite, commit and report the commit hash.
         goto: test
         max_visits: 3
         on_exhausted: test_failed
@@ -316,27 +368,27 @@ steps:
   - id: test_failed
     type: human_approval
     message: |
-      Os testes continuam falhando após 3 rodadas de correção:
+      Tests are still failing after 3 rounds of fixes:
       {{ steps.test.output.failure_report }}
-      Seguir mesmo assim?
+      Continue anyway?
     transitions:
       - when: "approved"
         goto: build
       - when: "rejected"
         goto: end
 
-  # Builder: build da aplicação + vulnerabilidades nas dependências.
+  # Builder: application build + dependency vulnerabilities.
   - id: build
     agent: builder
     prompt: |
-      Na branch `{{ steps.develop.output.branch }}`:
+      On branch `{{ steps.develop.output.branch }}`:
       {% if delegate_result %}
-      O developer aplicou uma correção: {{ delegate_result.text }}
+      The developer applied a fix: {{ delegate_result.text }}
       {% endif %}
-      1. Rode o build: `npm run build` (gera o app em build/).
-      2. Rode `npm audit --omit=dev --json` (produção) e `npm audit --json` (todas).
-      Aplique a política de vulnerabilidades do seu papel. Em `vulnerabilities`,
-      informe as contagens de PRODUÇÃO; resuma as de desenvolvimento em `dev_vulnerabilities`.
+      1. Build the project following the build skill.
+      2. Audit the dependencies following the build skill, separating production from development.
+      Apply your role's vulnerability policy. In `vulnerabilities`, report the PRODUCTION
+      counts; summarize the development ones in `dev_vulnerabilities`.
     output_schema:
       type: object
       required: [build_status, vulnerabilities, report]
@@ -354,15 +406,15 @@ steps:
         report:              { type: string }
     transitions:
       - when: "output.build_status == 'success' and output.vulnerabilities.critical == 0 and output.vulnerabilities.high == 0"
-        goto: ci
+        goto: verify_change
       - when: "true"
         delegate:
           agent: developer
           prompt: |
-            O builder bloqueou a branch `{{ steps.develop.output.branch }}`:
+            The builder blocked branch `{{ steps.develop.output.branch }}`:
             {{ output.report }}
-            Corrija (falha de build ou dependência vulnerável), rode `npm test`,
-            faça commit e informe o hash do commit.
+            Fix it (build failure or vulnerable dependency), run the test suite,
+            commit and report the commit hash.
         goto: build
         max_visits: 3
         on_exhausted: build_failed
@@ -370,9 +422,61 @@ steps:
   - id: build_failed
     type: human_approval
     message: |
-      O build continua bloqueado após 3 rodadas de correção:
+      The build is still blocked after 3 rounds of fixes:
       {{ steps.build.output.report }}
-      Seguir mesmo assim?
+      Continue anyway?
+    transitions:
+      - when: "approved"
+        goto: verify_change
+      - when: "rejected"
+        goto: end
+
+  # Verifier: does the change do what the task asked? Same command on the base and on
+  # the branch. inconclusive (nothing observable, e.g. a refactor) does not block.
+  - id: verify_change
+    agent: verifier
+    prompt: |
+      Task: {{ inputs.task }}
+      Change: {{ steps.develop.output.summary }}
+      Branch `{{ steps.develop.output.branch }}`, base `{{ inputs.base_branch }}`.
+      {% if delegate_result %}
+      The developer changed the code after your last verdict:
+      {{ delegate_result.text }}
+      Run the treatment side again (the baseline did not change).
+      {% endif %}
+      Verify the change following the claim-verification skill. Do not leave any
+      worktree, scratch file or stash behind.
+    output_schema:
+      type: object
+      required: [verdict, claim, evidence]
+      properties:
+        verdict:  { type: string, enum: [verified, not_verified, inconclusive] }
+        claim:    { type: string }
+        command:  { type: string }
+        evidence: { type: string }
+    transitions:
+      - when: "output.verdict != 'not_verified'"
+        goto: ci
+      - when: "output.verdict == 'not_verified'"
+        delegate:
+          agent: developer
+          prompt: |
+            The verifier could not confirm the change on branch `{{ steps.develop.output.branch }}`.
+            Claim: {{ output.claim }}
+            Command: {{ output.command }}
+            Observed: {{ output.evidence }}
+            Fix it, run the test suite, commit and report the commit hash.
+        goto: verify_change
+        max_visits: 2
+        on_exhausted: verify_failed
+
+  - id: verify_failed
+    type: human_approval
+    message: |
+      The change still does not do what the task asked after 2 rounds of fixes.
+      Claim: {{ steps.verify_change.output.claim }}
+      Observed: {{ steps.verify_change.output.evidence }}
+      Continue to CI anyway?
     transitions:
       - when: "approved"
         goto: ci
@@ -381,11 +485,11 @@ steps:
 
   # ============================ DEPLOY · CI/CD ===============================
 
-  # CI Pusher: /goal CI passando + /loop verificando o CI.
+  # CI Pusher: /goal CI green + /loop watching CI.
   - id: ci
     agent: ci_pusher
     goal:
-      description: "CI passando no PR da branch {{ steps.develop.output.branch }}"
+      description: "CI green on the PR/MR for branch {{ steps.develop.output.branch }}"
       until: "output.ci_status == 'success'"
       on_exhausted: ci_failed
     loop:
@@ -394,17 +498,20 @@ steps:
     prompt: |
       Branch: `{{ steps.develop.output.branch }}` → base `{{ inputs.base_branch }}`.
       {% if delegate_result %}
-      O developer corrigiu a falha anterior do CI e já fez push:
+      The developer fixed the previous CI failure and already pushed:
       {{ delegate_result.text }}
       {% endif %}
-      1. Garanta que a branch está atualizada no origin (`git push -u origin {{ steps.develop.output.branch }}`).
-      2. Garanta que existe um PR aberto para a base (reutilize se existir; senão `gh pr create`
-         com título curto e corpo com o resumo: {{ steps.develop.output.summary }}).
-      3. Verifique os checks do PR (`gh pr checks <n>`):
-         - algum rodando ou ainda não iniciado → ci_status: pending
-         - algum falhou → ci_status: failed. Pegue o log (`gh run view <run-id> --log-failed`)
-           e resuma em failure_log: job, passo, erro e causa raiz provável (arquivo/linha).
-         - todos passaram → ci_status: success
+      Following the CI skill for this platform:
+      1. Make sure the branch is up to date on the remote.
+      2. Make sure a PR/MR to the base is open (reuse it if it exists; otherwise create
+         one with a short title and this summary: {{ steps.develop.output.summary }}).
+      3. Check its CI:
+         - anything running or not started yet → ci_status: pending
+         - something failed → ci_status: failed, with failure_log = job, step, error and
+           probable root cause (file/line). For infrastructure/flaky failures, follow the
+           skill (retry once) and answer pending.
+         - everything passed → ci_status: success
+      pr_number is the PR number (GitHub) or the MR iid (GitLab).
     output_schema:
       type: object
       required: [pr_url, pr_number, ci_status]
@@ -422,10 +529,10 @@ steps:
         delegate:
           agent: developer
           prompt: |
-            O CI do PR #{{ output.pr_number }} falhou:
+            CI on PR/MR #{{ output.pr_number }} failed:
             {{ output.failure_log }}
-            Corrija na branch `{{ steps.develop.output.branch }}`, rode `npm test`,
-            faça commit, depois `git push`, e informe o hash do commit.
+            Fix it on branch `{{ steps.develop.output.branch }}`, run the test suite,
+            commit, then `git push`, and report the commit hash.
         goto: ci
         max_visits: 5
         on_exhausted: ci_failed
@@ -433,42 +540,41 @@ steps:
   - id: ci_failed
     type: human_approval
     message: |
-      O CI do PR {{ steps.ci.output.pr_url }} não passou dentro do limite.
-      Último erro: {{ steps.ci.output.failure_log }}
-      Tentar mais uma rodada do CI Pusher?
+      CI on {{ steps.ci.output.pr_url }} did not pass within the limit.
+      Last error: {{ steps.ci.output.failure_log }}
+      Try another CI Pusher round?
     transitions:
       - when: "approved"
         goto: ci
       - when: "rejected"
         goto: end
 
-  # PR Babysitter: /goal PR mergeable + /loop no PR.
+  # PR Babysitter: /goal PR/MR mergeable + /loop on the PR/MR.
   - id: pr_babysitter
     agent: pr_babysitter
     goal:
-      description: "PR #{{ steps.ci.output.pr_number }} mergeable: CI verde, sem conflitos e sem comentários pendentes"
+      description: "PR/MR #{{ steps.ci.output.pr_number }} mergeable: CI green, no conflicts and no pending comments"
       until: "output.state == 'ready_to_merge'"
       on_exhausted: fail
     loop:
       interval: 1m
       max_duration: 12h
     prompt: |
-      PR #{{ steps.ci.output.pr_number }} ({{ steps.ci.output.pr_url }}).
+      PR/MR #{{ steps.ci.output.pr_number }} ({{ steps.ci.output.pr_url }}).
       {% if delegate_result %}
-      Desde a última verificação, o orquestrador acionou o agente `{{ delegate_result.agent }}`:
+      Since the last check, the orchestrator called the `{{ delegate_result.agent }}` agent:
       {{ delegate_result.text }}
-      Se houve correção com commit, responda no PR a cada comentário tratado citando o
-      hash do commit (reply no comentário via `gh api` ou `gh pr comment`).
+      If a fix was committed, reply on the PR/MR to each handled comment citing the
+      commit hash (see the skill).
       {% endif %}
-      Verifique com `gh pr view <n> --json mergeable,mergeStateStatus,reviewDecision,reviews,comments`,
-      `gh api repos/{owner}/{repo}/pulls/<n>/comments` e `gh pr checks <n>`:
-      - checks falhando → ci_failed
-      - conflito com a base → needs_fix (fix_request: atualizar a branch com a base e resolver)
-      - comentário/review pertinente ainda não tratado → needs_fix (fix_request com o pedido e o id do comentário)
-      - comentário duvidoso (discutível, fora de escopo, contraditório) → needs_human (question: o comentário e sua dúvida)
-      - aguardando algo externo (checks rodando, review pendente obrigatório) → waiting
-      - tudo ok e mergeable → ready_to_merge
-      - já mergeado → merged; fechado sem merge → closed
+      Check the PR/MR following the skill for this platform and answer with one state:
+      - checks/pipeline failing → ci_failed
+      - conflict with (or behind) the base → needs_fix (fix_request: update the branch with the base and resolve)
+      - actionable comment/review not handled yet → needs_fix (fix_request with the request and the comment id)
+      - doubtful comment (debatable, out of scope, contradictory) → needs_human (question: the comment and your doubt)
+      - waiting on something external (checks running, required review/approval pending) → waiting
+      - all good and mergeable → ready_to_merge
+      - already merged → merged; closed without merge → closed
     output_schema:
       type: object
       required: [state, summary]
@@ -486,10 +592,10 @@ steps:
         delegate:
           agent: developer
           prompt: |
-            Pedido de correção no PR #{{ steps.ci.output.pr_number }}:
+            Fix request on PR/MR #{{ steps.ci.output.pr_number }}:
             {{ output.fix_request }}
-            Corrija na branch `{{ steps.develop.output.branch }}`, rode `npm test`,
-            faça commit, depois `git push`, e informe o hash do commit.
+            Fix it on branch `{{ steps.develop.output.branch }}`, run the test suite,
+            commit, then `git push`, and report the commit hash.
         goto: pr_babysitter
         max_visits: 5
         on_exhausted: fail
@@ -504,66 +610,64 @@ steps:
       - when: "output.state == 'closed'"
         goto: end
 
-  # Portão humano para comentários duvidosos
+  # Human gate for doubtful comments
   - id: comment_decision
     type: human_approval
     message: |
-      Comentário duvidoso no PR {{ steps.ci.output.pr_url }}:
+      Doubtful comment on {{ steps.ci.output.pr_url }}:
       {{ steps.pr_babysitter.output.question }}
     choices:
-      - { id: fix,     label: "Corrigir (developer aplica)" }
-      - { id: justify, label: "Justificar no PR sem mudar código" }
-      - { id: ignore,  label: "Ignorar" }
+      - { id: fix,     label: "Fix it (developer applies)" }
+      - { id: justify, label: "Justify on the PR/MR without changing code" }
+      - { id: ignore,  label: "Ignore" }
     transitions:
       - when: "choice == 'fix'"
         delegate:
           agent: developer
           prompt: |
-            O humano decidiu atender este comentário do PR #{{ steps.ci.output.pr_number }}:
+            The human decided to address this comment on PR/MR #{{ steps.ci.output.pr_number }}:
             {{ steps.pr_babysitter.output.question }}
-            Corrija na branch `{{ steps.develop.output.branch }}`, rode `npm test`,
-            faça commit, depois `git push`, e informe o hash do commit.
+            Fix it on branch `{{ steps.develop.output.branch }}`, run the test suite,
+            commit, then `git push`, and report the commit hash.
         goto: pr_babysitter
       - when: "choice == 'justify'"
         delegate:
           agent: pr_babysitter
           prompt: |
-            O humano decidiu NÃO mudar o código para este comentário:
+            The human decided NOT to change the code for this comment:
             {{ steps.pr_babysitter.output.question }}
-            Responda ao comentário no PR com uma justificativa técnica curta e educada.
+            Reply to the comment on the PR/MR with a short, polite technical justification.
         goto: pr_babysitter
       - when: "choice == 'ignore'"
         delegate:
           agent: pr_babysitter
           prompt: |
-            O humano decidiu ignorar este comentário:
+            The human decided to ignore this comment:
             {{ steps.pr_babysitter.output.question }}
-            Não responda no PR e não o considere mais como pendente.
+            Do not reply on the PR/MR and no longer treat it as pending.
         goto: pr_babysitter
 
-  # Deployer (antes do merge): versão de teste = pre-release do PR.
+  # Deployer (before the merge): preview of the PR/MR.
   - id: deploy_test
     agent: deployer
     goal:
-      description: "Versão de teste do PR #{{ steps.ci.output.pr_number }} publicada como pre-release"
+      description: "Preview of PR/MR #{{ steps.ci.output.pr_number }} published"
       until: "output.preview_status == 'success'"
       on_exhausted: preview_failed
     loop:
       interval: 1m
       max_duration: 45m
     prompt: |
-      Ambiente de teste deste projeto: uma GitHub pre-release (tag `preview-pr-{{ steps.ci.output.pr_number }}`)
-      gerada pelo workflow `{{ inputs.preview_workflow }}` a partir da branch do PR.
+      PR/MR #{{ steps.ci.output.pr_number }}, branch `{{ steps.develop.output.branch }}`.
       {% if not steps.deploy_test.output or steps.deploy_test.output.preview_status == 'failed' %}
-      Dispare a publicação:
-      `gh workflow run {{ inputs.preview_workflow }} --ref {{ steps.develop.output.branch }} -f pr_number={{ steps.ci.output.pr_number }}`
+      Trigger the preview publication following the "Preview" section of the deploy skill
+      (GitHub preview workflow: `{{ inputs.preview_workflow }}`).
       {% else %}
-      A publicação já foi disparada ({{ steps.deploy_test.output.run_url }}); apenas verifique.
+      The preview was already triggered ({{ steps.deploy_test.output.run_url }}); only check it.
       {% endif %}
-      Acompanhe: `gh run list --workflow {{ inputs.preview_workflow }} --branch {{ steps.develop.output.branch }} --json databaseId,status,conclusion,url,createdAt`.
-      - run ainda não apareceu, queued ou in_progress → pending
-      - concluído com sucesso → success; release_url = `gh release view preview-pr-{{ steps.ci.output.pr_number }} --json url`
-      - falhou → failed; resuma o erro com `gh run view <id> --log-failed`
+      - not started yet, queued or running → pending
+      - finished successfully → success, with release_url (preview URL)
+      - failed → failed, with error_summary
     output_schema:
       type: object
       required: [preview_status]
@@ -583,48 +687,46 @@ steps:
   - id: preview_failed
     type: human_approval
     message: |
-      A versão de teste do PR {{ steps.ci.output.pr_url }} falhou:
+      The preview of {{ steps.ci.output.pr_url }} failed:
       {{ steps.deploy_test.output.error_summary }}
-      Tentar publicar de novo?
+      Try publishing again?
     transitions:
       - when: "approved"
         goto: deploy_test
       - when: "rejected"
         goto: end
 
-  # Portão humano: testar a pre-release e aprovar o merge (= produção)
+  # Human gate: test the preview and approve the merge (= production)
   - id: approve_merge
     type: human_approval
     message: |
-      Versão de teste publicada: {{ steps.deploy_test.output.release_url }}
-      PR {{ steps.ci.output.pr_url }}: CI verde e mergeable.
-      Aprovar o merge na {{ inputs.base_branch }}? Isso gera a versão de produção.
+      Preview published: {{ steps.deploy_test.output.release_url }}
+      {{ steps.ci.output.pr_url }}: CI green and mergeable.
+      Approve the merge into {{ inputs.base_branch }}? This produces the production release.
     transitions:
       - when: "approved"
-        action: "gh pr merge {{ steps.ci.output.pr_number }} --squash --delete-branch"
+        action: "{% if inputs.git_platform == 'gl' %}glab mr merge {{ steps.ci.output.pr_number }} --squash --remove-source-branch --yes{% else %}gh pr merge {{ steps.ci.output.pr_number }} --squash --delete-branch{% endif %}"
         goto: deploy_prod
       - when: "rejected"
         goto: end
 
-  # Deployer (depois do merge): acompanha o deploy de produção automático.
+  # Deployer (after the merge): tracks the automatic production deploy.
   - id: deploy_prod
     agent: deployer
     goal:
-      description: "Deploy de produção do PR #{{ steps.ci.output.pr_number }} concluído"
+      description: "Production deploy of PR/MR #{{ steps.ci.output.pr_number }} finished"
       until: "output.deploy_status == 'success'"
       on_exhausted: deploy_failed
     loop:
       interval: 1m
       max_duration: 1h
     prompt: |
-      O PR #{{ steps.ci.output.pr_number }} foi mergeado na {{ inputs.base_branch }}.
-      1. Commit de merge: `gh pr view {{ steps.ci.output.pr_number }} --json mergeCommit`.
-      2. Run do `{{ inputs.deploy_workflow }}` para esse commit:
-         `gh run list --workflow {{ inputs.deploy_workflow }} --branch {{ inputs.base_branch }} --json databaseId,headSha,status,conclusion,url`.
-      - ainda não apareceu, queued ou in_progress → pending
-      - sucesso → success (release_url: `gh release list --exclude-pre-releases --limit 1`).
-        Em seguida apague a versão de teste: `gh release delete preview-pr-{{ steps.ci.output.pr_number }} --cleanup-tag -y`.
-      - falhou → failed (resuma com `gh run view <id> --log-failed`)
+      PR/MR #{{ steps.ci.output.pr_number }} was merged into {{ inputs.base_branch }}.
+      Track the production deploy of the merge commit following the "Production" section
+      of the deploy skill (GitHub deploy workflow: `{{ inputs.deploy_workflow }}`).
+      - not started yet, queued or running → pending
+      - success → success, with release_url; then clean up the preview as the skill says
+      - failed → failed, with error_summary
     output_schema:
       type: object
       required: [deploy_status]
@@ -644,9 +746,9 @@ steps:
   - id: deploy_failed
     type: human_approval
     message: |
-      O deploy de produção falhou: {{ steps.deploy_prod.output.error_summary }}
+      The production deploy failed: {{ steps.deploy_prod.output.error_summary }}
       Run: {{ steps.deploy_prod.output.run_url }}
-      Pedir ao developer uma correção (novo ciclo)?
+      Ask the developer for a fix (new cycle)?
     transitions:
       - when: "approved"
         goto: develop

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'" />
@@ -9,102 +9,427 @@
 <body>
   <header class="topbar">
     <div class="brand">Multiagent <span>Orchestrator</span></div>
-    <div class="run-meta">
-      <span id="run-status" class="pill pill-idle">parado</span>
+    <button id="run-meta" class="run-meta" type="button" title="View the current run">
+      <span id="run-status" class="pill pill-idle">idle</span>
       <span id="run-id" class="muted mono"></span>
-    </div>
+    </button>
     <div class="kpis">
-      <div class="kpi"><label>Tempo</label><b id="kpi-time">—</b></div>
-      <div class="kpi"><label>Sessões</label><b id="kpi-sessions">0</b></div>
+      <div class="kpi"><label>Time</label><b id="kpi-time">—</b></div>
+      <div class="kpi"><label>Sessions</label><b id="kpi-sessions">0</b></div>
       <div class="kpi"><label>Tokens in / out</label><b id="kpi-tokens">0 / 0</b></div>
       <div class="kpi"><label>Reasoning</label><b id="kpi-reasoning">0</b></div>
-      <div class="kpi"><label>Custo</label><b id="kpi-cost">US$ 0.00</b></div>
+      <div class="kpi"><label>Cost</label><b id="kpi-cost">$0.00</b></div>
     </div>
     <div class="actions">
-      <button id="btn-open-dir" class="btn ghost btn-icon" title="Abre a pasta de logs do run atual no explorador de arquivos (janela externa)">
-        Abrir Logs
+      <div class="usage-wrap">
+        <button id="usage-widget" class="btn ghost usage-widget" type="button" title="Usage this month" aria-haspopup="dialog" aria-expanded="false">
+          <span id="usage-widget-dot" class="u-dot"></span>
+          <span id="usage-widget-text" class="mono">—</span>
+          <span id="usage-widget-scope" class="u-scope hidden">machine</span>
+        </button>
+        <div id="usage-pop" class="usage-pop hidden" role="dialog" aria-label="Usage this month">
+          <div class="usage-pop-head"><div><b>Usage</b> <span id="usage-pop-month" class="muted small"></span></div><div class="seg sm" role="group" aria-label="Usage scope"><button type="button" data-scope="orchestrator">Orchestrator</button><button type="button" data-scope="machine">This machine</button></div></div>
+          <div id="usage-pop-body" class="usage-pop-body"></div>
+          <div class="usage-pop-foot"><button id="usage-pop-open" class="link-btn" type="button">Open usage →</button></div>
+        </div>
+      </div>
+      <button id="btn-open-dir" class="btn ghost btn-icon" title="Open the current run's log folder in the file explorer (external window)">
+        Open logs
         <svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
           <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
           <polyline points="15 3 21 3 21 9" />
           <line x1="10" y1="14" x2="21" y2="3" />
         </svg>
       </button>
-      <button id="btn-stop" class="btn danger" disabled>Parar</button>
+      <button id="btn-stop" class="btn danger" disabled>Stop</button>
+      <button id="btn-quick-start" class="btn primary btn-icon" title="Start a workflow (opens the side panel)">
+        <svg class="icon" width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M7 4.5v15a1 1 0 0 0 1.5.86l12-7.5a1 1 0 0 0 0-1.72l-12-7.5A1 1 0 0 0 7 4.5z" /></svg>
+        Start
+      </button>
     </div>
   </header>
 
-  <main class="layout">
-    <!-- Coluna 1: configuração -->
-    <aside class="panel config">
-      <section>
-        <h2>Workspace</h2>
-        <div id="ws-path" class="ws-path mono small" title="Logs em runs/, repositórios clonados em repos/"></div>
-        <div class="row">
-          <button id="btn-ws-open" class="btn sm ghost" type="button">Abrir</button>
-          <button id="btn-ws-change" class="btn sm ghost" type="button">Alterar…</button>
+  <div class="shell">
+    <!-- ================= Sidebar ================= -->
+    <nav class="sidebar">
+      <button class="nav-item active" data-view="dashboard">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1.5" /><rect x="14" y="3" width="7" height="5" rx="1.5" /><rect x="14" y="12" width="7" height="9" rx="1.5" /><rect x="3" y="16" width="7" height="5" rx="1.5" /></svg>
+        <span>Dashboard</span>
+      </button>
+      <button class="nav-item" data-view="projects">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /></svg>
+        <span>Projects</span>
+      </button>
+      <button class="nav-item" data-view="workflows">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="6" r="2.5" /><circle cx="18" cy="12" r="2.5" /><circle cx="6" cy="18" r="2.5" /><path d="M8.5 6H12a3 3 0 0 1 3 3v.5M8.5 18H12a3 3 0 0 0 3-3v-.5" /></svg>
+        <span>Workflows</span>
+      </button>
+      <button class="nav-item" data-view="skills">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z" /></svg>
+        <span>Skills</span>
+      </button>
+      <button class="nav-item" data-view="usage">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 17a9 9 0 1 1 17 0" /><path d="m12 14 4-5" /><circle cx="12" cy="14.5" r="1.3" /></svg>
+        <span>Usage</span>
+      </button>
+      <button class="nav-item" data-view="settings">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" /></svg>
+        <span>Settings</span>
+      </button>
+
+      <div class="nav-spacer"></div>
+      <button id="nav-run" class="nav-item nav-run hidden" data-view="run" title="Current run">
+        <span id="nav-run-dot" class="status-dot"></span>
+        <span>Run</span>
+      </button>
+    </nav>
+
+    <main class="content">
+      <!-- ================= Dashboard ================= -->
+      <section id="view-dashboard" class="view">
+        <div class="dash">
+          <h1 class="dash-title">What are we building today?</h1>
+          <p class="muted dash-sub">Pick a type of work to see the available workflows.</p>
+          <div class="dash-cards">
+            <button class="dash-card" data-category="plan">
+              <span class="dash-icon plan"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" /></svg></span>
+              <b>Plan &amp; Design</b>
+              <span class="muted">Spec out features, architecture and scope before coding.</span>
+              <span class="dash-count" data-count="plan"></span>
+            </button>
+            <button class="dash-card" data-category="build">
+              <span class="dash-icon build"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="16 18 22 12 16 6" /><polyline points="8 6 2 12 8 18" /></svg></span>
+              <b>Code &amp; Build</b>
+              <span class="muted">Implement, review, test, open a PR and ship.</span>
+              <span class="dash-count" data-count="build"></span>
+            </button>
+            <button class="dash-card" data-category="monitor">
+              <span class="dash-icon monitor"><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12" /></svg></span>
+              <b>Monitor &amp; Improve</b>
+              <span class="muted">Watch production, investigate errors and improve.</span>
+              <span class="dash-count" data-count="monitor"></span>
+            </button>
+          </div>
+          <div id="dash-run" class="dash-run hidden"></div>
         </div>
-        <p id="ws-error" class="error small"></p>
       </section>
 
-      <section>
-        <h2>Workflow</h2>
-        <select id="wf-select"></select>
-        <p id="wf-desc" class="muted small"></p>
-        <div id="wf-agents" class="agents"></div>
+      <!-- ================= Projects ================= -->
+      <section id="view-projects" class="view hidden">
+        <div class="page-head">
+          <div>
+            <h1>Projects</h1>
+            <p class="muted small">Each project points to a local folder and, optionally, a git repository. Stored in <span id="projects-dir" class="mono"></span></p>
+          </div>
+          <div class="row">
+            <button id="btn-projects-folder" class="btn ghost">Open folder</button>
+            <button id="btn-new-project" class="btn primary">New project</button>
+          </div>
+        </div>
+        <div id="projects-list" class="card-grid"></div>
       </section>
 
-      <section>
-        <h2>Inputs</h2>
+      <!-- ================= Workflows ================= -->
+      <section id="view-workflows" class="view hidden">
+        <div class="page-head">
+          <div>
+            <h1>Workflows</h1>
+            <p class="muted small">Defined as YAML in <span id="workflows-dir" class="mono"></span></p>
+          </div>
+          <div class="row">
+            <button id="btn-workflows-folder" class="btn ghost">Open folder</button>
+          </div>
+        </div>
+        <div id="workflows-list" class="wf-list"></div>
+      </section>
+
+      <!-- ================= Skills ================= -->
+      <section id="view-skills" class="view hidden">
+        <div class="page-head">
+          <div>
+            <h1>Skills</h1>
+            <p class="muted small">One folder per skill with a <span class="mono">SKILL.md</span> (Claude Code format). In <span id="skills-dir" class="mono"></span></p>
+          </div>
+          <div class="row">
+            <button id="btn-skills-folder" class="btn ghost">Open folder</button>
+            <button id="btn-new-skill" class="btn primary">New skill</button>
+          </div>
+        </div>
+        <div id="skills-list" class="card-grid"></div>
+      </section>
+
+      <!-- ================= Usage ================= -->
+      <section id="view-usage" class="view hidden">
+        <div class="page-head">
+          <div>
+            <h1>Usage</h1>
+            <p class="muted small"><span id="usage-sub">Tokens and cost of the orchestrator's runs</span> — <span id="usage-month">this month</span>. <span id="usage-live" class="badge live hidden">includes the running workflow</span></p>
+          </div>
+          <div class="row">
+            <div class="seg" role="group" aria-label="Usage scope"><button type="button" data-scope="orchestrator">Orchestrator</button><button type="button" data-scope="machine">This machine</button></div>
+            <button id="btn-usage-refresh" class="btn ghost">Refresh</button>
+          </div>
+        </div>
+        <div id="usage-error" class="usage-unavailable hidden"></div>
+        <div id="usage-cards" class="usage-cards"></div>
+
+        <div id="usage-extra" class="hidden">
+          <h3 class="s-subtitle">Prices <span class="muted">(for providers that don't report cost)</span></h3>
+          <p class="muted small">USD per 1M tokens, used to estimate cost when the CLI does not report it.</p>
+          <div id="usage-prices" class="s-group table-wrap"></div>
+
+          <h3 class="s-subtitle">Recent runs</h3>
+          <div id="usage-runs" class="s-group table-wrap"></div>
+        </div>
+
+        <p class="muted small usage-note">Costs reported by the CLIs are API-equivalent prices. On subscription plans, treat them as a usage indicator rather than an actual bill.</p>
+      </section>
+
+      <!-- ================= Settings ================= -->
+      <section id="view-settings" class="view hidden">
+        <div class="settings">
+          <aside class="settings-nav">
+            <h1>Settings</h1>
+            <button class="settings-tab active" data-stab="general">General</button>
+            <button class="settings-tab" data-stab="agents">Agents &amp; CLIs</button>
+            <button class="settings-tab" data-stab="execution">Execution</button>
+            <button class="settings-tab" data-stab="about">About</button>
+          </aside>
+          <div class="settings-body">
+            <div class="settings-page" data-spage="general">
+              <h2 class="settings-title">General</h2>
+              <div class="s-group">
+                <div class="s-row">
+                  <div class="s-label"><b>Workspace folder</b><span>Where runs, repos, projects, skills and settings.json live.</span><code id="set-ws-path"></code></div>
+                  <div class="s-ctrl row"><button id="btn-ws-open" class="btn sm ghost">Open</button><button id="btn-ws-change" class="btn sm">Change…</button></div>
+                </div>
+                <div class="s-row">
+                  <div class="s-label"><b>Path registry entry</b><span>The workspace path is loaded from here the next time the app opens.</span><code id="set-ws-registry"></code></div>
+                </div>
+              </div>
+              <p id="ws-error" class="error small"></p>
+              <h3 class="s-subtitle">Folders</h3>
+              <div id="set-ws-folders" class="s-group"></div>
+            </div>
+
+            <div class="settings-page hidden" data-spage="agents">
+              <h2 class="settings-title">Agents &amp; CLIs</h2>
+              <p class="muted small">Agent sessions are opened with these CLIs. Sign in from the terminal (<span class="mono">claude</span>, <span class="mono">codex login</span>, <span class="mono">gh auth login</span>).</p>
+              <div id="set-tools" class="s-group"><div class="s-row"><div class="s-label"><span>Checking…</span></div></div></div>
+              <button id="btn-tools-refresh" class="btn sm ghost">Check again</button>
+            </div>
+
+            <div class="settings-page hidden" data-spage="execution">
+              <h2 class="settings-title">Execution</h2>
+              <div class="s-group">
+                <div class="s-row">
+                  <div class="s-label"><b>Simulation mode by default</b><span>The start panel opens with "Simulation mode" already checked (does not call the CLIs).</span></div>
+                  <label class="switch"><input type="checkbox" data-setting="mockByDefault" /><span></span></label>
+                </div>
+                <div class="s-row">
+                  <div class="s-label"><b>Open the run on start</b><span>Switch to the sessions screen as soon as a workflow starts.</span></div>
+                  <label class="switch"><input type="checkbox" data-setting="openRunOnStart" /><span></span></label>
+                </div>
+                <div class="s-row">
+                  <div class="s-label"><b>Confirm before stopping</b><span>Ask for confirmation when clicking Stop.</span></div>
+                  <label class="switch"><input type="checkbox" data-setting="confirmStop" /><span></span></label>
+                </div>
+              </div>
+            </div>
+
+            <div class="settings-page hidden" data-spage="about">
+              <h2 class="settings-title">About</h2>
+              <div id="set-about" class="s-group"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= Run ================= -->
+      <section id="view-run" class="view hidden">
+        <div class="run-layout">
+          <aside class="panel config">
+            <section>
+              <h2>Workflow</h2>
+              <div id="run-summary" class="run-summary"><p class="muted small">No workflow started.</p></div>
+            </section>
+            <section>
+              <h2>Steps</h2>
+              <ol id="steps" class="steps"></ol>
+            </section>
+          </aside>
+
+          <section class="panel sessions-panel">
+            <h2>Sessions</h2>
+            <div id="sessions" class="sessions">
+              <p class="empty muted">No sessions yet. Click <b>Start</b> at the top to pick a workflow.</p>
+            </div>
+          </section>
+
+          <section class="panel detail-panel">
+            <div class="tabs">
+              <button class="tab active" data-tab="detail">Session</button>
+              <button class="tab" data-tab="events">Events</button>
+            </div>
+            <div id="tab-detail" class="tab-body">
+              <p class="empty muted">Select a session to see prompts, thinking, tool calls and output.</p>
+            </div>
+            <div id="tab-events" class="tab-body hidden"></div>
+          </section>
+        </div>
+      </section>
+    </main>
+
+    <!-- ================= Right drawer: start workflow ================= -->
+    <div id="drawer-backdrop" class="drawer-backdrop hidden"></div>
+    <aside id="drawer" class="drawer" aria-hidden="true">
+      <div class="drawer-head">
+        <h2 class="drawer-title">Start workflow</h2>
+        <button id="btn-drawer-close" class="icon-btn" title="Close (Esc)">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" /></svg>
+        </button>
+      </div>
+      <div class="drawer-body">
+        <div class="chips" id="drawer-categories"></div>
+
+        <div class="field">
+          <label for="wf-select">Workflow</label>
+          <select id="wf-select"></select>
+          <p id="wf-desc" class="hint"></p>
+          <div id="wf-steps-mini" class="steps-mini"></div>
+        </div>
+
+        <div class="field">
+          <label for="project-select">Project <span id="project-req" class="req">*</span></label>
+          <div class="row">
+            <select id="project-select"></select>
+            <button id="btn-drawer-new-project" class="btn sm" type="button" title="New project">+</button>
+          </div>
+          <p id="project-info" class="hint mono"></p>
+        </div>
+
         <form id="inputs-form"></form>
-      </section>
 
-      <section>
+        <details id="adv-inputs" class="adv">
+          <summary>Advanced parameters</summary>
+          <form id="adv-form"></form>
+          <div id="wf-agents" class="agents"></div>
+        </details>
+
         <label class="check">
           <input type="checkbox" id="mock-toggle" checked />
-          <span>Modo simulação <small class="muted">(não chama as CLIs)</small></span>
+          <span>Simulation mode <small class="muted">(does not call the CLIs)</small></span>
         </label>
         <div id="env-status" class="env small"></div>
-        <button id="btn-start" class="btn primary block">Iniciar workflow</button>
+      </div>
+      <div class="drawer-foot">
         <p id="start-info" class="muted small"></p>
         <p id="start-error" class="error small"></p>
-      </section>
-
-      <section>
-        <h2>Steps</h2>
-        <ol id="steps" class="steps"></ol>
-      </section>
+        <button id="btn-start" class="btn primary block">Start workflow</button>
+      </div>
     </aside>
+  </div>
 
-    <!-- Coluna 2: sessões -->
-    <section class="panel sessions-panel">
-      <h2>Sessões</h2>
-      <div id="sessions" class="sessions">
-        <p class="empty muted">Nenhuma sessão ainda. Escolha um workflow e clique em <b>Iniciar</b>.</p>
-      </div>
-    </section>
-
-    <!-- Coluna 3: detalhe -->
-    <section class="panel detail-panel">
-      <div class="tabs">
-        <button class="tab active" data-tab="detail">Sessão</button>
-        <button class="tab" data-tab="events">Eventos</button>
-      </div>
-      <div id="tab-detail" class="tab-body">
-        <p class="empty muted">Selecione uma sessão para ver prompts, thinking, tool calls e output.</p>
-      </div>
-      <div id="tab-events" class="tab-body hidden"></div>
-    </section>
-  </main>
-
+  <!-- ================= Modals ================= -->
   <div id="approval-modal" class="modal hidden">
     <div class="modal-card">
-      <h3>Aprovação necessária</h3>
+      <h3>Approval required</h3>
       <p id="approval-step" class="muted small mono"></p>
       <pre id="approval-message"></pre>
       <div id="approval-choices" class="modal-actions hidden"></div>
       <div id="approval-binary" class="modal-actions">
-        <button id="btn-reject" class="btn ghost">Rejeitar</button>
-        <button id="btn-approve" class="btn primary">Aprovar</button>
+        <button id="btn-reject" class="btn ghost">Reject</button>
+        <button id="btn-approve" class="btn primary">Approve</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="project-modal" class="modal hidden">
+    <form id="project-form" class="modal-card wide">
+      <h3 id="project-modal-title">New project</h3>
+      <div class="field">
+        <label for="pj-name">Name <span class="req">*</span></label>
+        <input type="text" id="pj-name" name="name" required />
+      </div>
+      <div class="field">
+        <label for="pj-description">Description</label>
+        <input type="text" id="pj-description" name="description" />
+      </div>
+      <div class="field">
+        <label for="pj-repo">Git repository <span class="muted">(optional)</span></label>
+        <input type="text" id="pj-repo" name="repo" placeholder="https://github.com/owner/repo.git" />
+        <div class="hint">If the folder is not a git repository, the repo is cloned into it.</div>
+      </div>
+      <div class="field">
+        <label for="pj-folder">Folder</label>
+        <div class="row">
+          <input type="text" id="pj-folder" name="folder" />
+          <button type="button" id="btn-pj-pick" class="btn sm">…</button>
+        </div>
+        <div id="pj-folder-hint" class="hint">Leave empty to create it in &lt;workspace&gt;/projects/&lt;name&gt;.</div>
+      </div>
+      <p id="pj-error" class="error small"></p>
+      <div class="modal-actions">
+        <button type="button" id="btn-pj-cancel" class="btn ghost">Cancel</button>
+        <button type="submit" id="btn-pj-save" class="btn primary">Create project</button>
+      </div>
+    </form>
+  </div>
+
+  <div id="skill-modal" class="modal hidden">
+    <form id="skill-form" class="modal-card wide">
+      <h3 id="skill-modal-title">New skill</h3>
+      <div class="field" id="sk-name-field">
+        <label for="sk-name">Name <span class="req">*</span></label>
+        <input type="text" id="sk-name" name="name" placeholder="e.g. code-review-checklist" />
+      </div>
+      <div class="field">
+        <label for="sk-description">Description <span class="muted">(when the agent should use the skill)</span></label>
+        <input type="text" id="sk-description" name="description" />
+      </div>
+      <div class="field">
+        <label for="sk-body">Instructions (Markdown)</label>
+        <textarea id="sk-body" name="body" rows="14" class="mono"></textarea>
+      </div>
+      <p id="sk-error" class="error small"></p>
+      <div class="modal-actions">
+        <button type="button" id="btn-sk-folder" class="btn ghost hidden">Open folder</button>
+        <span class="spacer"></span>
+        <button type="button" id="btn-sk-cancel" class="btn ghost">Cancel</button>
+        <button type="submit" class="btn primary">Save</button>
+      </div>
+    </form>
+  </div>
+
+  <div id="budget-modal" class="modal hidden">
+    <form id="budget-form" class="modal-card">
+      <h3 id="budget-modal-title">Edit budget</h3>
+      <div class="field">
+        <label for="bd-usd">Monthly limit (USD)</label>
+        <input type="text" inputmode="decimal" id="bd-usd" placeholder="No limit" />
+      </div>
+      <div class="field">
+        <label for="bd-tokens">Monthly limit (tokens)</label>
+        <input type="text" inputmode="numeric" id="bd-tokens" placeholder="No limit" />
+        <div class="hint">Leave empty for no limit. Accepts values like 500K or 1.5M. A warning is shown at 80%.</div>
+      </div>
+      <label class="check"><input type="checkbox" id="bd-block" /><span>Block runs when the limit is reached</span></label>
+      <label class="check bd-outside"><input type="checkbox" id="bd-outside" /><span>Count usage outside the orchestrator (this machine's CLI logs) toward this budget</span></label>
+      <p id="bd-error" class="error small"></p>
+      <div class="modal-actions">
+        <button type="button" id="btn-bd-cancel" class="btn ghost">Cancel</button>
+        <button type="submit" class="btn primary">Save</button>
+      </div>
+    </form>
+  </div>
+
+  <div id="confirm-modal" class="modal hidden">
+    <div class="modal-card">
+      <h3 id="confirm-title">Confirm</h3>
+      <p id="confirm-message" class="muted"></p>
+      <div class="modal-actions">
+        <button id="btn-confirm-no" class="btn ghost">Cancel</button>
+        <button id="btn-confirm-yes" class="btn danger-solid">Confirm</button>
       </div>
     </div>
   </div>

@@ -1,0 +1,364 @@
+# =============================================================================
+# Workflow: AI Arena
+# -----------------------------------------------------------------------------
+#   compete ──► critique ──► synthesize ──► verify ──► review
+#   (parallel)   (parallel,    (base +          (other     (human: accept
+#                 optional)     grafts)          family)    or redo)
+#
+# 1. compete:    the same request goes IN PARALLEL to different models (optionally each
+#                under a different lens, `lenses: on`). None of them
+#                sees the others' work. Each proposal is saved in arena/proposals/.
+# 2. critique:   (peer_review = yes) each model scores the OTHER proposals,
+#                anonymized ("Proposal 1, 2, 3"), and says what it would change in its own.
+# 3. synthesize: a separate agent (with no proposal of its own) picks the best proposal as
+#                the base and grafts the best ideas of the others (arena-synthesis skill).
+# 4. verify:     a model from another family checks the final document against the
+#                document skill and the proposals; one round of fixes at most.
+# 5. review:     the human sees who wrote each proposal and accepts or asks for a new synthesis.
+#
+# The document type comes from the skill in `document_skill` (default: prd-writing).
+# For another document (ADR, tech spec, test plan…), create a skill with the
+# structure and the rubric and pass its name in that input.
+#
+# Contenders come from three model families (Anthropic, OpenAI, xAI). To add one:
+# declare the agent and add it to `agents` in the compete and critique steps.
+# =============================================================================
+
+apiVersion: multiagent/v1
+kind: Workflow
+
+metadata:
+  name: ai-arena
+  version: 0.6.0
+  description: "Several models write the same document (e.g. a PRD) in parallel, blindly critique each other, and an orchestrator merges the final document."
+  tags: [arena, prd, plan, multi-model]
+  category: plan
+
+# -----------------------------------------------------------------------------
+inputs:
+  task:
+    type: string
+    required: true
+    description: "The request. E.g.: Write a PRD for an appointment-booking app for small clinics."
+  project_path:
+    type: string
+    required: true
+    description: Project folder, used as context (agents only read it) and as the destination of the final document.
+  document_skill:
+    type: string
+    default: prd-writing
+    description: Skill that defines the document's structure and scoring rubric.
+  peer_review:
+    type: string
+    enum: [yes, no]
+    default: "yes"
+    description: Blind cross-critique round before the synthesis (better quality, higher cost).
+  lenses:
+    type: string
+    enum: ["off", "on"]
+    default: "off"
+    description: "on = each contender writes under a different forced lens (user value, lean MVP, risk first) for more divergent proposals."
+  save_to:
+    type: string
+    default: docs/arena
+    description: Project subfolder where the final document is written (it is also kept in arena/final.md in the run folder).
+
+# -----------------------------------------------------------------------------
+providers:
+  claude:
+    type: claude-code
+    command: claude
+    args: ["-p", "--output-format", "stream-json", "--verbose", "--model", "{{ model }}"]
+    resume_args: ["--resume", "{{ session_id }}"]
+    skill_args: ["--add-dir", "{{ skill_dir }}"]
+  codex:
+    type: codex-cli
+    command: codex
+    args: ["exec", "--json", "--skip-git-repo-check", "-m", "{{ model }}"]
+    resume_args: ["resume", "{{ session_id }}"]
+    stdin_arg: "-"
+  grok:
+    type: grok-cli
+    command: grok
+    args: ["--output-format", "streaming-json", "-m", "{{ model }}", "--no-subagents"]
+    resume_args: ["--resume", "{{ session_id }}"]
+    # the prompt goes in a temporary file (grok --prompt-file)
+    prompt_file_arg: ["--prompt-file", "{{ prompt_file }}"]
+
+defaults:
+  working_dir: "{{ inputs.project_path }}"
+  timeout: 20m
+  retry:
+    max_attempts: 2
+    backoff: exponential
+    initial_delay: 10s
+
+orchestrator:
+  provider: claude
+  model: claude-sonnet-5
+  limits:
+    max_total_duration: 2h
+    max_total_cost_usd: 25
+
+# -----------------------------------------------------------------------------
+# Contenders: different models that read the project and may research the web (competitors,
+# market data), but never write: the document comes back as the answer and the engine
+# writes it to disk. Persistent sessions: during the critique each
+# one remembers its own proposal.
+# -----------------------------------------------------------------------------
+agents:
+  opus:
+    provider: claude
+    model: claude-opus-5-5
+    session: persistent
+    cli_args: &claude_contender ["--allowedTools", "Read Glob Grep WebSearch WebFetch", "--disallowedTools", "Edit Write NotebookEdit Bash"]
+    system_prompt: &contender |
+      You are taking part in an arena: other models get the same request and the best
+      content from each will be used. Work independently, be specific and honest:
+      state assumptions and open questions instead of inventing facts.
+      You read the project files (the current folder) and may search the web for public
+      facts such as competitors, pricing and market data: cite each one with its source link.
+      You never change any file.
+
+  sonnet:
+    provider: claude
+    model: claude-sonnet-5
+    session: persistent
+    cli_args: *claude_contender
+    system_prompt: *contender
+
+  gpt:
+    provider: codex
+    model: gpt-6-luna
+    session: persistent
+    cli_args: ["-s", "read-only"]
+    system_prompt: *contender
+
+  grok:
+    provider: grok
+    model: grok-4.7
+    session: persistent
+    # read and research tools only; --always-approve because nobody can answer prompts
+    cli_args: ["--tools", "read_file,list_dir,grep,web_search,web_fetch", "--always-approve"]
+    system_prompt: *contender
+
+  # Synthesis orchestrator: its own session, did not compete, not a judge in its own cause.
+  synthesizer:
+    provider: claude
+    model: claude-opus-5-5
+    session: persistent
+    cli_args: ["--disallowedTools", "Edit Write NotebookEdit Bash"]
+    skills: [arena-synthesis]
+    system_prompt: |
+      You are the arena's synthesis orchestrator. You receive anonymized proposals from
+      several models and produce the final document following the arena-synthesis skill.
+
+  # Verifier: a different model family from the synthesizer, fresh session, never competed.
+  verifier:
+    provider: codex
+    model: gpt-6-luna
+    session: ephemeral
+    cli_args: ["-s", "read-only"]
+    system_prompt: |
+      You verify an arena's final document. You check it, you do not rewrite it.
+
+# -----------------------------------------------------------------------------
+# Proposals are anonymized as "Proposal N" in an order shuffled per run
+# (`| shuffle(run_id)`), the same order in every step, revealed only at `review`.
+# -----------------------------------------------------------------------------
+steps:
+
+  - id: compete
+    agents: [opus, sonnet, gpt, grok]
+    min_success: 2
+    skills: ["{{ inputs.document_skill }}"]
+    save_as: "arena/proposals/{{ agent }}.md"
+    prompt: |
+      Request: {{ inputs.task }}
+      {% set lenses = {
+        opus: "User value first: start from the personas and their problem, and let every requirement earn its place through a user story.",
+        sonnet: "Lean MVP: find the smallest version that proves the value and push everything else to later slices or non-goals.",
+        gpt: "Risk first: security, privacy, operations and adoption risks shape the requirements and the delivery plan.",
+        grok: "Feasibility first: engineering effort, integration points and delivery sequencing decide what is in scope and when."
+      } %}
+      {% if inputs.lenses == 'on' and lenses[agent] %}
+      Your lens (it decides your emphasis and trade-offs): {{ lenses[agent] }}
+      Still produce a complete document.
+      {% endif %}
+
+      Write the document following the structure of the skill above. If the current
+      folder contains project code or documentation, use it as context (read-only).
+      Produce the best version you can on your own terms: do not drift to a safe-looking
+      middle ground; distinct choices are what make this useful.
+
+      Answer ONLY with the Markdown document, with no comments before it. After the
+      document, add a final section `## Author's rationale` (3 to 5 bullets): the main
+      alternatives you considered and rejected, and your key assumptions.
+    transitions:
+      - when: "inputs.peer_review == 'yes' and output.succeeded | length > 1"
+        goto: critique
+      - when: "true"
+        goto: synthesize
+
+  - id: critique
+    agents: [opus, sonnet, gpt, grok]
+    min_success: 1
+    skills: ["{{ inputs.document_skill }}"]
+    save_as: "arena/reviews/{{ agent }}.json"
+    prompt: |
+      The other arena participants delivered the proposals below for the same
+      request ("{{ inputs.task }}"). They are anonymized.
+      {% for name in steps.compete.output.succeeded | shuffle(run_id) %}{% if name != agent %}
+      ===== Proposal {{ loop.index }} =====
+      {{ steps.compete.output.results[name].text }}
+      {% endif %}{% endfor %}
+      ===== end of proposals =====
+
+      Score each one with the skill's rubric (0–10). Be concrete: point out errors,
+      gaps, and what it does better than the others. Report real problems only: do not
+      inflate nits, and "I would have done it differently" is not a weakness unless you
+      show what breaks. In `self_revision`, say what you would change in YOUR proposal
+      after seeing the others.
+      {% if not steps.compete.output.results[agent] %}
+      (You did not deliver a proposal this round; leave self_revision empty.)
+      {% endif %}
+    output_schema:
+      type: object
+      required: [evaluations, best_ideas, self_revision]
+      properties:
+        evaluations:
+          type: array
+          items:
+            type: object
+            required: [proposal, score, strengths, weaknesses]
+            properties:
+              proposal:   { type: integer }
+              score:      { type: number }
+              strengths:  { type: array, items: { type: string } }
+              weaknesses: { type: array, items: { type: string } }
+              errors:     { type: array, items: { type: string } }
+        best_ideas:    { type: array, items: { type: string } }
+        self_revision: { type: string }
+    transitions:
+      - when: "true"
+        goto: synthesize
+
+  - id: synthesize
+    agent: synthesizer
+    skills: ["{{ inputs.document_skill }}"]
+    save_as:
+      - "arena/final.md"
+      - "{% if inputs.save_to %}{{ inputs.project_path }}/{{ inputs.save_to }}/{{ inputs.document_skill }}-{{ run_id }}.md{% endif %}"
+    prompt: |
+      {% if steps.verify.output and steps.verify.output.verdict == 'issues' and steps.verify.visits == steps.synthesize.visits - 1 %}
+      A verifier checked your previous version and found these issues. Fix each one, or
+      explain in the appendix why it does not apply:
+      {{ steps.verify.output.issues | to_yaml }}
+      {% elif steps.review.output and steps.review.output.choice == 'redo' %}
+      The human asked for a NEW synthesis. Reread the proposals and reviews below with a
+      critical eye on your previous version: revisit the base, the grafts, the disagreements
+      and what was discarded.
+      {% endif %}
+      Original request: {{ inputs.task }}
+
+      {% for name in steps.compete.output.succeeded | shuffle(run_id) %}
+      ===== Proposal {{ loop.index }} =====
+      {{ steps.compete.output.results[name].text }}
+      {% endfor %}
+      ===== end of proposals =====
+      {% if steps.compete.output.failed | length %}
+      Dropouts: {{ steps.compete.output.failed | length }} contender(s) failed to deliver a proposal.
+      {% endif %}
+      {% if steps.critique.output %}
+
+      Cross-reviews (no reviewer scored its own proposal):
+      {% for critic, c in steps.critique.output.results %}
+      ----- Reviewer {% for n in steps.compete.output.succeeded | shuffle(run_id) %}{% if n == critic %}(author of Proposal {{ loop.index }}){% endif %}{% endfor %} -----
+      {{ c | to_yaml }}
+      {% endfor %}
+      {% endif %}
+
+      Produce the final document following the arena-synthesis skill and the structure of
+      the document skill. Leave out the authors' rationale sections. Answer ONLY with the
+      Markdown document (including the arena appendix).
+    transitions:
+      - when: "true"
+        goto: verify
+
+  # Independent check by another model family; one round of fixes at most.
+  - id: verify
+    agent: verifier
+    skills: ["{{ inputs.document_skill }}"]
+    prompt: |
+      Original request: {{ inputs.task }}
+
+      ===== Final document =====
+      {{ steps.synthesize.output.text }}
+      ===== end of final document =====
+
+      {% for name in steps.compete.output.succeeded | shuffle(run_id) %}
+      ===== Proposal {{ loop.index }} (source material) =====
+      {{ steps.compete.output.results[name].text }}
+      {% endfor %}
+
+      Check the final document and list only real, specific issues:
+      1. every section required by the document skill is present and filled;
+      2. no internal contradictions (between sections, or between the body and the appendix);
+      3. every factual claim, number or requirement is supported by some proposal or the
+         request, or is marked as an assumption;
+      4. every conflict is decided with a reason or listed as an open question with a default;
+      5. the appendix names a base, and its grafts and decisions are actually in the body;
+      6. nothing valuable that 2+ proposals agree on was silently dropped.
+      verdict = pass when there are no issues that matter; otherwise issues, each one short,
+      with the section it refers to.
+    output_schema:
+      type: object
+      required: [verdict, issues]
+      properties:
+        verdict: { type: string, enum: [pass, issues] }
+        issues:  { type: array, items: { type: string } }
+    transitions:
+      - when: "output.verdict == 'pass'"
+        goto: review
+      - when: "output.verdict == 'issues'"
+        goto: synthesize
+        max_visits: 1
+        on_exhausted: review
+
+  - id: review
+    type: human_approval
+    message: |
+      Final document: {{ run_dir }}/arena/final.md
+      {% if inputs.save_to %}Copy in the project: {{ inputs.project_path }}/{{ inputs.save_to }}/{{ inputs.document_skill }}-{{ run_id }}.md{% endif %}
+
+      Verifier: {{ steps.verify.output.verdict }}{% if steps.verify.output.verdict == 'issues' %} (still open after one round of fixes):
+      {% for i in steps.verify.output.issues %}- {{ i }}
+      {% endfor %}{% endif %}
+
+      Who wrote what:
+      {% for name in steps.compete.output.succeeded | shuffle(run_id) %}- Proposal {{ loop.index }}: {{ name }} ({{ agents[name].model }})
+      {% endfor %}{% for f in steps.compete.output.failed %}- {{ f.agent }} failed: {{ f.error }}
+      {% endfor %}
+    choices:
+      - { id: accept, label: "Accept document" }
+      - { id: redo,   label: "Redo the synthesis" }
+    transitions:
+      - when: "choice == 'accept'"
+        goto: end
+      - when: "choice == 'redo'"
+        goto: synthesize
+        max_visits: 2
+        on_exhausted: end
+
+# -----------------------------------------------------------------------------
+observability:
+  storage:
+    type: jsonl
+    path: "./runs/{{ run_id }}/"
+  capture:
+    prompts: true
+    outputs: true
+    thinking: true
+    tool_calls: true
+    redact:
+      - pattern: "(?i)(api[_-]?key|token|secret|password)\\s*[:=]\\s*\\S+"
