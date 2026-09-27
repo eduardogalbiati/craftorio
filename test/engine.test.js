@@ -234,3 +234,94 @@ test('schema retries resend the schema, and the task plus previous answer for ep
   assert.doesNotMatch(q, /ORIGINAL TASK|PREVIOUS ANSWER/); // the session already has them
   assert.match(q, /"verdict"/);
 });
+
+test('loadWorkflow validates a transition status (end outcome)', () => {
+  const tmp = path.join(os.tmpdir(), `wf-status-${process.pid}.yaml`);
+  const write = (t) => fs.writeFileSync(tmp, `agents: { a: { provider: claude, model: m } }\nsteps:\n  - id: s1\n    agent: a\n    transitions:\n      - ${t}\n`);
+  try {
+    write('{ when: "true", goto: end, status: failed }');
+    assert.doesNotThrow(() => loadWorkflow(tmp));
+    write('{ when: "true", goto: s1, max_visits: 1, on_exhausted: end, status: cancelled }');
+    assert.doesNotThrow(() => loadWorkflow(tmp));
+    write('{ when: "true", goto: end, status: broken }');
+    assert.throws(() => loadWorkflow(tmp), /status must be one of success, failed, cancelled/);
+    write('{ when: "true", goto: s1, status: failed }');
+    assert.throws(() => loadWorkflow(tmp), /only applies when the transition ends the run/);
+  } finally {
+    fs.unlinkSync(tmp);
+  }
+});
+
+// Full software-development flow in mock mode. Gates get `answers[step]` (default: approve /
+// first choice), like --auto-approve.
+async function runSoftwareDevelopment({ mockSequences, answers = {} }) {
+  const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'));
+  const run = new WorkflowRun({
+    file: path.join(root, 'workflows', 'software-development.yaml'),
+    inputs: { task: 'Engine test', repo_path: root },
+    mock: true,
+    runsDir,
+    mockSequences,
+  });
+  const events = [];
+  run.on('event', (ev) => {
+    events.push(ev);
+    if (ev.type === 'approval.requested') {
+      const answer = ev.step_id in answers ? answers[ev.step_id] : ev.choices ? ev.choices[0].id : true;
+      setImmediate(() => run.resolveApproval(ev.approval_id, answer));
+    }
+  });
+  await run.start();
+  const finished = events.find((e) => e.type === 'workflow.finished');
+  const transitions = events.filter((e) => e.type === 'step.transition').map((e) => `${e.from}>${e.to}`);
+  fs.rmSync(runsDir, { recursive: true, force: true });
+  return { events, finished, transitions };
+}
+
+test('software-development: a preview code failure goes to the developer, then ci → pr_babysitter → preview again', { timeout: 120000 }, async () => {
+  const { events, finished, transitions } = await runSoftwareDevelopment({
+    mockSequences: { preview_status: ['failed', 'success'], failure_class: ['code'] },
+  });
+  assert.equal(finished.status, 'success', finished.error);
+  const i = transitions.indexOf('deploy_test>ci');
+  assert.ok(i >= 0, transitions.join(' '));
+  assert.deepEqual(transitions.slice(i, i + 4), ['deploy_test>ci', 'ci>pr_babysitter', 'pr_babysitter>deploy_test', 'deploy_test>approve_merge']);
+  assert.ok(events.some((e) => e.type === 'log' && e.message === 'deploy_test delegated to developer'));
+  // the developer's fix reaches the CI Pusher
+  const ciPrompts = events.filter((e) => e.type === 'session.message_sent' && e.step_id === 'ci').map((e) => e.prompt);
+  assert.match(ciPrompts.at(-1), /The developer fixed a previous failure/);
+  assert.ok(!events.some((e) => e.type === 'approval.requested' && e.step_id === 'preview_failed'), 'no human gate for a fixable failure');
+  assert.equal(finished.summary.steps.deploy_test.visits, 2);
+});
+
+test('software-development: preview code failures stop at the human gate after 2 fix rounds', { timeout: 120000 }, async () => {
+  const { events, finished, transitions } = await runSoftwareDevelopment({
+    mockSequences: { preview_status: ['failed'], failure_class: ['code'] },
+    answers: { preview_failed: 'stop' },
+  });
+  assert.equal(transitions.filter((x) => x === 'deploy_test>ci').length, 2);
+  assert.equal(events.filter((e) => e.type === 'log' && e.message === 'deploy_test delegated to developer').length, 2, 'no fix is asked once the limit is reached');
+  assert.ok(transitions.includes('deploy_test>preview_failed'));
+  // stop: the run failed (it did not deliver), not a success
+  assert.equal(finished.status, 'failed');
+  assert.match(finished.error, /ended as failed at step "preview_failed"/);
+});
+
+test('software-development: a preview infra failure goes to the gate; "retry" publishes again', { timeout: 120000 }, async () => {
+  const { events, finished, transitions } = await runSoftwareDevelopment({
+    mockSequences: { preview_status: ['failed', 'success'], failure_class: ['infra'] },
+    answers: { preview_failed: 'retry' },
+  });
+  assert.equal(finished.status, 'success', finished.error);
+  const gate = events.find((e) => e.type === 'approval.requested' && e.step_id === 'preview_failed');
+  assert.deepEqual(gate.choices.map((c) => c.id), ['retry', 'fix', 'stop']);
+  assert.match(gate.message, /class: infra/);
+  assert.ok(!transitions.includes('deploy_test>ci'), 'an infra failure is not sent to the developer');
+  assert.deepEqual(transitions.filter((x) => /preview_failed|deploy_test>/.test(x)), ['deploy_test>preview_failed', 'preview_failed>deploy_test', 'deploy_test>approve_merge']);
+});
+
+test('software-development: rejecting the merge ends the run as cancelled', { timeout: 120000 }, async () => {
+  const { finished } = await runSoftwareDevelopment({ mockSequences: { preview_status: ['success'] }, answers: { approve_merge: false } });
+  assert.equal(finished.status, 'cancelled');
+  assert.match(finished.error, /ended as cancelled at step "approve_merge" \(rejected\)/);
+});

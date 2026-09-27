@@ -41,6 +41,19 @@ npm test
 
 Runs the unit tests (`test/`, node:test) and the full flow in mock mode. This is what CI runs.
 
+`npm test` must pass on **Windows, Linux and macOS**, locally and in CI (`ci.yml` runs it on all
+three). Tests must not depend on the machine:
+- git: the worktree tests run with an empty global config and no system config
+  (`GIT_CONFIG_GLOBAL`, `GIT_CONFIG_NOSYSTEM`) and pass identity, `init.defaultBranch` and
+  `core.autocrlf` with `-c`; match git messages that changed across versions loosely;
+- paths: build them with `path.join` under `os.tmpdir()` (no hard-coded `C:/`, `/tmp` or
+  separators) and compare them with `samePath`/`canonicalPath` (`src/engine/worktree.js`). The
+  worktree tests deliberately pass non-canonical spellings: a symlink (a junction on Windows) and,
+  on Windows, an 8.3 short name, since git prints canonical paths (macOS `/var` is
+  `/private/var`; the GitHub Windows runner's temp folder is `C:\Users\RUNNER~1\...`);
+- line endings: files may be checked out with CRLF (Windows `core.autocrlf`); do not compare raw
+  file contents with `\n`-only literals.
+
 ```bash
 npm run run -- --task "Task description" --repo C:/path/to/repo --input language=python --input git_platform=gl
 ```
@@ -61,7 +74,7 @@ Local build: `npm run build` (writes `build/`) or `npm run package` (writes `dis
 | | Verifier | Sonnet 5 | Proves the change does what the task asked: same command on the base and on the branch; `not_verified` goes back to the developer, `inconclusive` does not block | `claim-verification` |
 | CI/CD | CI Pusher | Opus 4.8 | Push, opens the PR/MR, **/goal** CI green with **/loop**; on failure fetches the log and calls the developer. A PR/MR that conflicts with the base (CI never starts) is reported as failed on the first visit | `ci-pipeline-<platform>` |
 | | PR Babysitter | Opus 4.8 | **/goal** PR/MR mergeable with **/loop**; actionable comments → developer (replies with the hash), doubtful ones → human | `pr-babysitter-<platform>`, `decision-log` |
-| | Deployer | Opus 4.8 | Publishes the preview, and after the merge tracks the production deploy | `deploy-<platform>` |
+| | Deployer | Opus 4.8 | Publishes the preview, and after the merge tracks the production deploy. A failure carries `failure_class` (`code`, `infra`, `unknown`): a preview `code` failure goes to the developer, then CI, the PR check and the preview run again (2 rounds at most) | `deploy-<platform>` |
 
 Two inputs choose the skills:
 - `language`: `js`, `python`, `go`, `java` or `csharp`.
@@ -71,6 +84,20 @@ Two inputs choose the skills:
 Human gates: a doubtful PR/MR comment (fix / justify / ignore) and the merge, which produces
 the production release. Agents never talk to each other: the orchestrator (engine) hands
 failures to the developer and returns the result to the agent that asked.
+
+Failure gates (a step that ran out of fix rounds, or a failure no commit can fix) only offer what
+can change the outcome:
+
+| Gate | Options |
+|---|---|
+| `test_failed`, `build_failed`, `verify_failed` | continue anyway / stop (`failed`) |
+| `ci_failed` | one more fix round by the developer / check CI again (stuck or flaky pipeline) / stop (`failed`) |
+| `preview_failed` | publish the same commit again (infrastructure) / send it to the developer (then CI, PR check, preview) / stop (`failed`) |
+| `deploy_failed` (after the merge) | new development cycle / track the deploy again (after re-running it yourself) / stop (`failed`) |
+| `human_review`, `approve_merge` | rejecting ends the run as `cancelled` |
+
+Once a fix loop reaches its limit the engine goes to the gate without asking for yet another fix,
+and a gate never re-runs the same failed thing as the only way forward.
 
 `/goal` and `/loop` are declared per step in the YAML (`goal.until`, `loop.interval`,
 `loop.max_duration`). The engine repeats the step until the goal is met and injects the /goal
@@ -86,7 +113,7 @@ Several models write the same document (default: a PRD) and an orchestrator merg
 | critique | the same, in parallel (`peer_review: yes`) | Each scores the **others'** anonymized proposals and says what it would change in its own |
 | synthesize | synthesizer (Opus 5.5, own session) | `arena-synthesis` skill: picks the best proposal as the **base** and grafts the best ideas of the others; convergence/divergence check; opinionated conflict decisions; appendix with scoreboard, base, grafts, rejected ideas, dismissed critiques and dropouts |
 | verify | verifier (gpt-6-luna, another family, fresh session) | Checks the final document against the document skill and the proposals (missing sections, contradictions, unsupported claims, dropped consensus); on issues, one more synthesis round |
-| review | human | Sees the verifier's verdict and who wrote each proposal; accepts or asks for a new synthesis |
+| review | human | Sees the verifier's verdict and who wrote each proposal; accepts, asks for a new synthesis (2 at most; a 3rd request ends the run as failed) or discards it (cancelled) |
 
 Proposals are anonymized as "Proposal N" in an order shuffled per run (the `shuffle(run_id)`
 template filter), the same in every step, so position and labels do not give the model away.
@@ -231,6 +258,31 @@ so a verifier failure still reaches the human review with the document). When an
 validate, the engine asks again with the schema; ephemeral agents also get the task and their
 previous answer back, since their retry runs in a fresh session.
 
+### Transitions: limits and how a run ends
+
+```yaml
+transitions:
+  - when: "output.tests_status == 'fail'"
+    delegate: { agent: developer, prompt: "Fix: {{ output.failure_report }}" }
+    goto: test
+    max_visits: 3              # this transition, at most 3 times per run...
+    on_exhausted: test_failed  # ...then here, WITHOUT the delegation (nothing would check that fix)
+  - when: "rejected"
+    goto: end
+    status: failed             # the run's outcome: success (default), failed or cancelled
+```
+
+- `goto: end` ends the run as `success`. Add `status: failed` or `status: cancelled` when the run
+  ends without delivering: a rejected failure gate is `failed`, a rejected merge or review is
+  `cancelled`. `status` also applies when `on_exhausted: end` ends the run (e.g. the arena's redo
+  limit), and is rejected on a transition that cannot end the run.
+- The outcome is the `status` of the `workflow.finished` event and of `summary.json` (with an
+  error such as `Run ended as failed at step "preview_failed" (choice == 'stop')`), and the
+  `step.transition` event to `end` carries it. Like any failed or cancelled run, the worktree is
+  kept so the run can be resumed, and the UI shows it as failed/cancelled.
+- `goto: fail` still ends the run as `failed` with "retry limit reached"; it is the default of
+  `on_exhausted`.
+
 ### A git worktree per run
 
 A workflow whose agents change a repository can give every run its own checkout, so runs never
@@ -276,7 +328,9 @@ Enabled in `software-development`. The other bundled workflows only read a folde
 
 ## CI/CD
 
-- `.github/workflows/ci.yml`: on every PR runs a syntax check, `npm test` and a production `npm audit`.
+- `.github/workflows/ci.yml`: on every PR runs a syntax check and `npm test` on Ubuntu, Windows
+  and macOS (checks `test (<os>)`), plus a production `npm audit`. The `test` check is green only
+  when all three are: use that name in branch protection.
 - `.github/workflows/preview.yml`: test environment. Triggered by the Deployer, publishes the
   pre-release `preview-pr-<n>` from the PR branch.
 - `.github/workflows/deploy.yml`: production. Every push to `main` tests, packages and publishes a release.

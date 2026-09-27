@@ -20,7 +20,7 @@ function workspace(t) {
   };
   // finished run, recorded with a project id
   add('r1', [
-    { ts: '2026-09-27T10:00:00Z', type: 'workflow.started', workflow: 'ai-arena', version: '0.6.1', file: 'ai-arena.yaml', project_id: 'proj', inputs: { task: 'Write a PRD', project_path: 'C:/elsewhere' }, mock: false },
+    { ts: '2026-09-27T10:00:00Z', type: 'workflow.started', workflow: 'ai-arena', version: '0.6.1', file: 'ai-arena.yaml', project_id: 'proj', inputs: { task: 'Write a PRD', project_path: path.join(root, 'elsewhere') }, mock: false },
     { ts: '2026-09-27T10:05:00Z', type: 'workflow.finished', status: 'failed', error: 'verify failed' },
   ], { run_id: 'r1', workflow: 'ai-arena', project_id: 'proj', status: 'failed', started_at: '2026-09-27T10:00:00Z', finished_at: '2026-09-27T10:05:00Z', duration_ms: 300000, inputs: { task: 'Write a PRD' }, sessions: [snap('orchestrator', 'orchestrator'), snap('s1', 'opus')] });
   // run that died with the app: rebuilt from events, matched by an old folder
@@ -32,7 +32,7 @@ function workspace(t) {
     { ts: '2026-09-26T09:00:31Z', type: 'session.status', session_id: 's1', status: 'active' },
   ]);
   // another project's run, and a folder that is not a run
-  add('r3', [{ ts: '2026-09-25T09:00:00Z', type: 'workflow.started', workflow: 'x', inputs: { repo_path: 'C:/other' } }]);
+  add('r3', [{ ts: '2026-09-25T09:00:00Z', type: 'workflow.started', workflow: 'x', inputs: { repo_path: path.join(root, 'other-project') } }]);
   fs.mkdirSync(path.join(root, 'not-a-run'));
   return root;
 }

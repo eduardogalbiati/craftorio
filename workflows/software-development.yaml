@@ -11,6 +11,13 @@
 #   ─► pr_babysitter (/goal PR/MR mergeable + /loop)
 #   ─► deploy_test (PR/MR preview = test environment)
 #   ─► approve_merge (human gate) ─► merge ─► deploy_prod (automatic release)
+#   A preview that fails because of the code goes back to the developer and then
+#   through ci ─► pr_babysitter ─► deploy_test again (new commit, new CI, new preview).
+#
+# Failure gates (human): they only offer what can change the outcome. Retrying
+# something that cannot change (the same commit, the same failed run) is not offered as
+# the way out of a code failure; stopping ends the run as `failed` (worktree kept, so it
+# can be resumed), rejecting the merge or the review loop ends it as `cancelled`.
 #
 # Rules:
 #   - Agents never talk to each other: everything goes through the orchestrator
@@ -32,7 +39,7 @@ kind: Workflow
 
 metadata:
   name: software-development
-  version: 0.8.0
+  version: 0.9.0
   description: Implements, reviews, tests, builds, watches CI and the PR/MR, publishes a preview and, once approved, merges and tracks the production deploy. Works with several languages on GitHub or GitLab.
   tags: [dev, review, test, build, ci, pr, deploy, github, gitlab]
   # Dashboard category: plan (Plan & Design), build (Code & Build) or monitor (Monitor & Improve).
@@ -335,12 +342,15 @@ steps:
 
   - id: human_review
     type: human_approval
-    message: "The review loop did not converge in 3 iterations. Move on to testing anyway?"
+    message: |
+      The review loop did not converge in 3 iterations.
+      Approve: move on to testing anyway. Reject: stop the run (cancelled).
     transitions:
       - when: "approved"
         goto: test
       - when: "rejected"
         goto: end
+        status: cancelled
 
   # Test writer: writes/updates tests and runs the suite. On failure the
   # orchestrator hands it to the developer and tells the test writer when it is fixed.
@@ -394,12 +404,13 @@ steps:
     message: |
       Tests are still failing after 3 rounds of fixes:
       {{ steps.test.output.failure_report }}
-      Continue anyway?
+      Approve: continue to the build anyway. Reject: stop the run as failed (the worktree is kept to resume it).
     transitions:
       - when: "approved"
         goto: build
       - when: "rejected"
         goto: end
+        status: failed
 
   # Builder: application build + dependency vulnerabilities.
   - id: build
@@ -448,12 +459,13 @@ steps:
     message: |
       The build is still blocked after 3 rounds of fixes:
       {{ steps.build.output.report }}
-      Continue anyway?
+      Approve: continue to verification anyway. Reject: stop the run as failed (the worktree is kept to resume it).
     transitions:
       - when: "approved"
         goto: verify_change
       - when: "rejected"
         goto: end
+        status: failed
 
   # Verifier: does the change do what the task asked? Same command on the base and on
   # the branch. inconclusive (nothing observable, e.g. a refactor) does not block.
@@ -500,12 +512,13 @@ steps:
       The change still does not do what the task asked after 2 rounds of fixes.
       Claim: {{ steps.verify_change.output.claim }}
       Observed: {{ steps.verify_change.output.evidence }}
-      Continue to CI anyway?
+      Approve: continue to CI anyway. Reject: stop the run as failed (the worktree is kept to resume it).
     transitions:
       - when: "approved"
         goto: ci
       - when: "rejected"
         goto: end
+        status: failed
 
   # ============================ DEPLOY · CI/CD ===============================
 
@@ -522,8 +535,9 @@ steps:
     prompt: |
       Branch: `{{ steps.develop.output.branch }}` → base `{{ inputs.base_branch }}`.
       {% if delegate_result %}
-      The developer fixed the previous CI failure and already pushed:
+      The developer fixed a previous failure (CI or the PR/MR preview) and already pushed:
       {{ delegate_result.text }}
+      Check CI for that new commit (the head of the branch), not an older run.
       {% endif %}
       Following the CI skill for this platform:
       1. Make sure the branch is up to date on the remote.
@@ -570,17 +584,33 @@ steps:
         max_visits: 5
         on_exhausted: ci_failed
 
+  # Reached when CI stays red after 5 rounds of fixes, or no result within the /loop limit.
+  # Re-checking the same commit only helps when something outside the code changed (a stuck or
+  # flaky pipeline re-run, a runner back online), so the gate also offers a fix round.
   - id: ci_failed
     type: human_approval
     message: |
-      CI on {{ steps.ci.output.pr_url }} did not pass within the limit.
-      Last error: {{ steps.ci.output.failure_log }}
-      Try another CI Pusher round?
+      CI on {{ steps.ci.output.pr_url }} did not pass within the limit (status: {{ steps.ci.output.ci_status }}).
+      Last error: {{ steps.ci.output.failure_log or '(none reported)' }}
+    choices:
+      - { id: fix,     label: "Send the failure to the developer (one more fix round, then CI again)" }
+      - { id: recheck, label: "Check CI again without code changes (stuck or flaky pipeline, re-run by you)" }
+      - { id: stop,    label: "Stop the run as failed (worktree kept to resume)" }
     transitions:
-      - when: "approved"
+      - when: "choice == 'fix'"
+        delegate:
+          agent: developer
+          prompt: |
+            CI on PR/MR #{{ steps.ci.output.pr_number }} is still failing. A human asked for one more fix round:
+            {{ steps.ci.output.failure_log }}
+            Fix it on branch `{{ steps.develop.output.branch }}`, run the test suite,
+            commit, then `git push`, and report the commit hash.
         goto: ci
-      - when: "rejected"
+      - when: "choice == 'recheck'"
+        goto: ci
+      - when: "choice == 'stop'"
         goto: end
+        status: failed
 
   # PR Babysitter: /goal PR/MR mergeable + /loop on the PR/MR.
   - id: pr_babysitter
@@ -640,8 +670,10 @@ steps:
         goto: deploy_test
       - when: "output.state == 'merged'"
         goto: deploy_prod
+      # closed without merge by someone else: nothing was delivered
       - when: "output.state == 'closed'"
         goto: end
+        status: cancelled
 
   # Human gate for doubtful comments
   - id: comment_decision
@@ -681,6 +713,10 @@ steps:
         goto: pr_babysitter
 
   # Deployer (before the merge): preview of the PR/MR.
+  # A `code` failure (the preview build runs the tests on another platform, for example) goes to
+  # the developer; the new commit then needs CI and the PR check again before a new preview
+  # (at most 2 automatic fix rounds). `infra`/`unknown` failures go to the human gate: publishing
+  # the same commit again cannot fix a code failure.
   - id: deploy_test
     agent: deployer
     goal:
@@ -694,18 +730,22 @@ steps:
       PR/MR #{{ steps.ci.output.pr_number }}, branch `{{ steps.develop.output.branch }}`.
       {% if not steps.deploy_test.output or steps.deploy_test.output.preview_status == 'failed' %}
       Trigger the preview publication following the "Preview" section of the deploy skill
-      (GitHub preview workflow: `{{ inputs.preview_workflow }}`).
+      (GitHub preview workflow: `{{ inputs.preview_workflow }}`), from the current head of the branch.
       {% else %}
       The preview was already triggered ({{ steps.deploy_test.output.run_url }}); only check it.
       {% endif %}
       - not started yet, queued or running → pending
       - finished successfully → success, with release_url (preview URL)
-      - failed → failed, with error_summary
+      - failed → failed, with error_summary and failure_class (see the skill):
+        code = a commit on the branch can fix it (code, tests, lockfile, build scripts);
+        infra = no commit can (runner, network, quota, secrets, permissions, approvals);
+        unknown = you cannot tell from the log.
     output_schema:
       type: object
       required: [preview_status]
       properties:
         preview_status: { type: string, enum: [pending, success, failed] }
+        failure_class:  { type: string, enum: [code, infra, unknown] }
         run_url:        { type: string }
         release_url:    { type: string }
         error_summary:  { type: string }
@@ -714,20 +754,51 @@ steps:
         goto: approve_merge
       - when: "output.preview_status == 'pending'"
         goto: deploy_test
+      - when: "output.preview_status == 'failed' and output.failure_class == 'code'"
+        delegate:
+          agent: developer
+          prompt: |
+            The preview build of PR/MR #{{ steps.ci.output.pr_number }} failed because of the code:
+            {{ output.error_summary }}
+            Run: {{ output.run_url }}
+            Fix it on branch `{{ steps.develop.output.branch }}` (it may be platform specific: the
+            preview can build on another OS than CI), run the test suite, commit, then `git push`,
+            and report the commit hash.
+        goto: ci
+        max_visits: 2
+        on_exhausted: preview_failed
       - when: "output.preview_status == 'failed'"
         goto: preview_failed
 
+  # Reached by an infra/unknown failure, a code failure after 2 fix rounds, or no result in 45m.
   - id: preview_failed
     type: human_approval
     message: |
-      The preview of {{ steps.ci.output.pr_url }} failed:
-      {{ steps.deploy_test.output.error_summary }}
-      Try publishing again?
+      The preview of {{ steps.ci.output.pr_url }} did not publish (status: {{ steps.deploy_test.output.preview_status }}, class: {{ steps.deploy_test.output.failure_class or 'unknown' }}).
+      {{ steps.deploy_test.output.error_summary or '(no error summary)' }}
+      Run: {{ steps.deploy_test.output.run_url or '(none)' }}
+      Publishing the same commit again only helps for infrastructure failures (runner, network,
+      quota, a secret or permission you have since fixed). A code failure needs a fix.
+    choices:
+      - { id: retry, label: "Publish the same commit again (infrastructure failure)" }
+      - { id: fix,   label: "Send the failure to the developer (fix, then CI, PR check and preview again)" }
+      - { id: stop,  label: "Stop the run as failed (worktree kept to resume)" }
     transitions:
-      - when: "approved"
+      - when: "choice == 'retry'"
         goto: deploy_test
-      - when: "rejected"
+      - when: "choice == 'fix'"
+        delegate:
+          agent: developer
+          prompt: |
+            The preview build of PR/MR #{{ steps.ci.output.pr_number }} failed and a human asked you to fix it:
+            {{ steps.deploy_test.output.error_summary }}
+            Run: {{ steps.deploy_test.output.run_url }}
+            Fix it on branch `{{ steps.develop.output.branch }}`, run the test suite, commit,
+            then `git push`, and report the commit hash.
+        goto: ci
+      - when: "choice == 'stop'"
         goto: end
+        status: failed
 
   # Human gate: test the preview and approve the merge (= production)
   - id: approve_merge
@@ -746,6 +817,7 @@ steps:
         goto: deploy_prod
       - when: "rejected"
         goto: end
+        status: cancelled
 
   # Deployer (after the merge): tracks the automatic production deploy.
   - id: deploy_prod
@@ -763,12 +835,13 @@ steps:
       of the deploy skill (GitHub deploy workflow: `{{ inputs.deploy_workflow }}`).
       - not started yet, queued or running → pending
       - success → success, with release_url; then clean up the preview as the skill says
-      - failed → failed, with error_summary
+      - failed → failed, with error_summary and failure_class (code | infra | unknown, see the skill)
     output_schema:
       type: object
       required: [deploy_status]
       properties:
         deploy_status: { type: string, enum: [pending, success, failed] }
+        failure_class: { type: string, enum: [code, infra, unknown] }
         run_url:       { type: string }
         release_url:   { type: string }
         error_summary: { type: string }
@@ -780,17 +853,27 @@ steps:
       - when: "output.deploy_status == 'failed'"
         goto: deploy_failed
 
+  # Production is already merged: every way forward goes through a human. The deployer never
+  # re-runs a production deploy, so checking again only helps after a person re-ran it.
   - id: deploy_failed
     type: human_approval
     message: |
-      The production deploy failed: {{ steps.deploy_prod.output.error_summary }}
-      Run: {{ steps.deploy_prod.output.run_url }}
-      Ask the developer for a fix (new cycle)?
+      The production deploy did not succeed (status: {{ steps.deploy_prod.output.deploy_status }}, class: {{ steps.deploy_prod.output.failure_class or 'unknown' }}).
+      {{ steps.deploy_prod.output.error_summary or '(no error summary)' }}
+      Run: {{ steps.deploy_prod.output.run_url or '(none)' }}
+      A code fix starts a new development cycle from the base; it will not help an infrastructure failure.
+    choices:
+      - { id: fix,     label: "Ask the developer for a fix (new cycle from the base)" }
+      - { id: recheck, label: "Track the deploy again (after you re-ran it yourself)" }
+      - { id: stop,    label: "Stop the run as failed" }
     transitions:
-      - when: "approved"
+      - when: "choice == 'fix'"
         goto: develop
-      - when: "rejected"
+      - when: "choice == 'recheck'"
+        goto: deploy_prod
+      - when: "choice == 'stop'"
         goto: end
+        status: failed
 
 # -----------------------------------------------------------------------------
 observability:

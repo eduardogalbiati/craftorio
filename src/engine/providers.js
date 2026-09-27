@@ -352,13 +352,16 @@ const MOCK_SEQUENCES = {
   build_status: ['success'],
   ci_status: ['pending', 'failed', 'pending', 'success'],
   state: ['waiting', 'needs_human', 'needs_fix', 'ready_to_merge'],
-  preview_status: ['pending', 'success'],
+  // the preview fails once because of the code: developer → ci → pr_babysitter → preview again
+  preview_status: ['pending', 'failed', 'success'],
+  failure_class: ['code'],
   deploy_status: ['pending', 'success'],
 };
 
+// h.sequences (WorkflowRun's mockSequences) overrides the defaults per field
 function mockValue(s, key, h) {
   if (s.enum) {
-    const seq = MOCK_SEQUENCES[key];
+    const seq = h.sequences?.[key] || MOCK_SEQUENCES[key];
     // only when the sequence fits this enum (the same key can mean different things in different steps)
     if (seq && seq.every((v) => s.enum.includes(v))) return seq[Math.min(h.visit - 1, seq.length - 1)];
     return s.enum[0];

@@ -33,17 +33,46 @@ function git(args, cwd, { timeout = GIT_TIMEOUT_MS, auth = false } = {}) {
 }
 const tryGit = (...a) => git(...a).catch(() => null);
 
-// Paths from git use forward slashes; Windows paths are case-insensitive.
+/**
+ * Canonical form of a path, for comparing (or relativizing) our paths with the ones git prints.
+ * The same folder can be spelled many ways: forward slashes (git on Windows), a Windows 8.3
+ * short name (os.tmpdir() on the GitHub Windows runner is C:\Users\RUNNER~1\..., git answers
+ * C:/Users/runneradmin/...), a symlink or junction (macOS /var -> /private/var). realpath
+ * resolves all of them. For a path that does not exist yet, the deepest existing ancestor is
+ * resolved and the rest appended.
+ */
+function canonicalPath(p) {
+  const abs = path.resolve(String(p));
+  const rest = [];
+  for (let cur = abs; ;) {
+    try {
+      return path.join(fs.realpathSync.native(cur), ...rest);
+    } catch {
+      const parent = path.dirname(cur);
+      if (parent === cur) return abs; // nothing exists (e.g. another drive): as given
+      rest.unshift(path.basename(cur));
+      cur = parent;
+    }
+  }
+}
+
+// Windows file systems are case-insensitive, and so is macOS's default (APFS/HFS+
+// case-insensitive): compare without case there. On a case-sensitive macOS volume two folders
+// that differ only by case would compare equal; run folders never do.
+const CASE_INSENSITIVE = process.platform === 'win32' || process.platform === 'darwin';
+
+/** True when `a` and `b` are the same folder (see canonicalPath). */
 const samePath = (a, b) => {
-  const n = (p) => path.resolve(p).replace(/[\\/]+$/, '');
-  return process.platform === 'win32' ? n(a).toLowerCase() === n(b).toLowerCase() : n(a) === n(b);
+  const x = canonicalPath(a);
+  const y = canonicalPath(b);
+  return CASE_INSENSITIVE ? x.toLowerCase() === y.toLowerCase() : x === y;
 };
 
-/** Top-level folder of the repository that contains `dir`, or null if it is not in a git repository. */
+/** Top-level folder (canonical) of the repository that contains `dir`, or null if it is not in a git repository. */
 async function repoRoot(dir) {
   if (!dir || !fs.existsSync(dir)) return null;
   const top = await tryGit(['rev-parse', '--show-toplevel'], dir);
-  return top ? path.resolve(top) : null;
+  return top ? canonicalPath(top) : null;
 }
 
 /** Registered worktrees of `repo`: [{ dir, branch|null, head }]. */
@@ -53,7 +82,7 @@ async function listWorktrees(repo) {
   return out.split(/\n\s*\n/).map((block) => {
     const get = (k) => block.split('\n').find((l) => l.startsWith(`${k} `))?.slice(k.length + 1) || null;
     const ref = get('branch');
-    return { dir: path.resolve(get('worktree') || ''), head: get('HEAD'), branch: ref ? ref.replace(/^refs\/heads\//, '') : null };
+    return { dir: canonicalPath(get('worktree') || ''), head: get('HEAD'), branch: ref ? ref.replace(/^refs\/heads\//, '') : null };
   });
 }
 
@@ -95,9 +124,11 @@ async function baseRef(repo, base, log = () => {}) {
 async function prepareWorktree({ repo, base, dir, branch = null, log = () => {} }) {
   const root = await repoRoot(repo);
   if (!root) return null;
-  dir = path.resolve(dir);
+  // canonical on both sides: a relative path between a short (8.3) or symlinked spelling and
+  // git's long one would climb out of the repository
+  dir = canonicalPath(dir);
   // repo_path may point to a subfolder of the repository: keep the same subfolder in the worktree
-  const workDir = (d) => path.join(d, path.relative(root, path.resolve(repo)));
+  const workDir = (d) => path.join(d, path.relative(root, canonicalPath(repo)));
   await tryGit(['worktree', 'prune'], root); // forget worktrees whose folder is gone
   const info = { dir, workDir: workDir(dir), repo: root, base: base || null, reused: false, recreated: false };
 
@@ -136,7 +167,9 @@ async function isMerged(repo, branch, base) {
   if (await git(['merge-base', '--is-ancestor', branch, base], repo).then(() => true, () => false)) return true;
   const mb = await tryGit(['merge-base', base, branch], repo);
   if (!mb) return false;
-  const squash = await tryGit(['commit-tree', `${branch}^{tree}`, '-p', mb, '-m', 'squash check'], repo);
+  // throwaway commit (no ref points at it): its own identity, so a machine without
+  // user.name/user.email configured (e.g. CI) can still run the check
+  const squash = await tryGit(['-c', 'user.name=multiagent', '-c', 'user.email=multiagent@localhost', 'commit-tree', `${branch}^{tree}`, '-p', mb, '-m', 'squash check'], repo);
   const cherry = squash && await tryGit(['cherry', base, squash], repo);
   return !!cherry && cherry.startsWith('-');
 }
@@ -147,6 +180,7 @@ async function isMerged(repo, branch, base) {
  * @returns {Promise<{ removed: boolean, branch: string|null, branchDeleted: boolean }>}
  */
 async function removeWorktree({ repo, dir, base, log = () => {} }) {
+  dir = canonicalPath(dir); // the spelling git registered the worktree with
   const branch = fs.existsSync(dir) ? await currentBranch(dir) : null;
   await git(['worktree', 'remove', '--force', dir], repo).catch((e) => {
     // not registered any more (or locked by a process): delete the folder itself
@@ -183,7 +217,7 @@ async function cleanupWorktrees({ worktreesDir, runsDir, active = [], maxAgeDays
     const dir = path.join(worktreesDir, name);
     if (active.some((a) => a && samePath(a, dir))) continue;
     const common = await tryGit(['rev-parse', '--git-common-dir'], dir);
-    const repo = common && path.dirname(path.resolve(dir, common));
+    const repo = common && canonicalPath(path.dirname(path.resolve(dir, common)));
     let status = null;
     try { status = JSON.parse(fs.readFileSync(path.join(runsDir, name, 'summary.json'), 'utf8')).status; } catch { /* running, interrupted or gone */ }
     const index = repo && await tryGit(['rev-parse', '--git-path', 'index'], dir);
@@ -201,4 +235,4 @@ async function cleanupWorktrees({ worktreesDir, runsDir, active = [], maxAgeDays
   return removed;
 }
 
-module.exports = { prepareWorktree, removeWorktree, cleanupWorktrees, listWorktrees, isMerged, repoRoot, currentBranch, samePath };
+module.exports = { prepareWorktree, removeWorktree, cleanupWorktrees, listWorktrees, isMerged, repoRoot, currentBranch, samePath, canonicalPath };

@@ -6,20 +6,44 @@ on:
   workflow_dispatch:
 
 jobs:
-  test:
-    runs-on: ubuntu-latest
+  # `npm test` must pass on every OS the app or its tests run on: paths (8.3 names, symlinks),
+  # git and shells differ. The preview build runs on Windows; this catches it before the merge.
+  platform:
+    name: test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash   # Git Bash on Windows: the same scripts on every OS
     env:
       ELECTRON_SKIP_BINARY_DOWNLOAD: "1"   # the tests do not open the UI
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
-          node-version: 24
+          node-version-file: .nvmrc
           cache: npm
+      # node-pty's install script is approved in package.json (allowScripts): prebuilt binaries on
+      # Windows and macOS, a node-gyp build on Linux
       - run: npm ci
       - name: Syntax check
         run: for f in $(git ls-files '*.js'); do node --check "$f" || exit 1; done
       - name: Tests (unit + mock flow)
         run: npm test
       - name: Production vulnerabilities
+        if: runner.os == 'Linux'   # same lockfile everywhere: once is enough
         run: npm audit --omit=dev --audit-level=high
+
+  # Stable check name for branch protection and the PR babysitter: green only when every OS is.
+  test:
+    needs: platform
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: All platforms passed
+        run: |
+          echo "platform matrix: ${{ needs.platform.result }}"
+          test "${{ needs.platform.result }}" = "success"

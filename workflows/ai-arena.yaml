@@ -3,7 +3,7 @@
 # -----------------------------------------------------------------------------
 #   compete ──► critique ──► synthesize ──► verify ──► review
 #   (parallel)   (parallel,    (base +          (other     (human: accept
-#                 optional)     grafts)          family)    or redo)
+#                 optional)     grafts)          family)    redo or discard)
 #
 # 1. compete:    the same request goes IN PARALLEL to different models (optionally each
 #                under a different lens, `lenses: on`). None of them
@@ -14,7 +14,8 @@
 #                the base and grafts the best ideas of the others (arena-synthesis skill).
 # 4. verify:     a model from another family checks the final document against the
 #                document skill and the proposals; one round of fixes at most.
-# 5. review:     the human sees who wrote each proposal and accepts or asks for a new synthesis.
+# 5. review:     the human sees who wrote each proposal and accepts, asks for a new synthesis
+#                (at most 2; a 3rd request ends the run as failed) or discards it (cancelled).
 #
 # The document type comes from the skill in `document_skill` (default: prd-writing).
 # For another document (ADR, tech spec, test plan…), create a skill with the
@@ -29,7 +30,7 @@ kind: Workflow
 
 metadata:
   name: ai-arena
-  version: 0.6.2
+  version: 0.7.0
   description: "Several models write the same document (e.g. a PRD) in parallel, blindly critique each other, and an orchestrator merges the final document."
   tags: [arena, prd, plan, multi-model]
   category: plan
@@ -348,15 +349,21 @@ steps:
       {% endfor %}{% for f in steps.compete.output.failed %}- {{ f.agent }} failed: {{ f.error }}
       {% endfor %}
     choices:
-      - { id: accept, label: "Accept document" }
-      - { id: redo,   label: "Redo the synthesis" }
+      - { id: accept,  label: "Accept document" }
+      - { id: redo,    label: "Redo the synthesis" }
+      - { id: discard, label: "Discard the document (ends the run as cancelled)" }
     transitions:
       - when: "choice == 'accept'"
         goto: end
       - when: "choice == 'redo'"
         goto: synthesize
         max_visits: 2
+        # no accepted document after the redo limit: the run did not deliver
         on_exhausted: end
+        status: failed
+      - when: "choice == 'discard'"
+        goto: end
+        status: cancelled
 
 # -----------------------------------------------------------------------------
 observability:

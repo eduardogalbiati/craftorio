@@ -1,19 +1,32 @@
 // Git worktree per run (src/engine/worktree.js + orchestrator.worktree in the engine).
 // Uses throwaway repositories in os.tmpdir() with a local bare repository as `origin` (no network).
+//
+// Must pass on Windows, Linux and macOS, whatever the machine's git config. The paths handed to
+// the code under test are deliberately NOT the canonical spelling git prints: by default they go
+// through a symlink (a junction on Windows, which needs no admin rights), like macOS's
+// /var -> /private/var; on Windows the path tests also run through an 8.3 short name, like
+// os.tmpdir() on the GitHub Windows runner (C:\Users\RUNNER~1 vs git's C:/Users/runneradmin).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
-const { prepareWorktree, removeWorktree, cleanupWorktrees, listWorktrees, isMerged, samePath } = require('../src/engine/worktree');
+const { prepareWorktree, removeWorktree, cleanupWorktrees, listWorktrees, isMerged, samePath, canonicalPath } = require('../src/engine/worktree');
 const { WorkflowRun } = require('../src/engine/workflow');
 const { Recorder } = require('../src/engine/recorder');
 const supervisor = require('../src/supervisor');
 
 process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.05';
+// No user git config (identity, hooks, aliases), as on CI: a local user.name must not hide a
+// production git call that needs one.
+const emptyConfig = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'gitcfg-')), 'config');
+fs.writeFileSync(emptyConfig, '');
+process.env.GIT_CONFIG_GLOBAL = emptyConfig;
+process.env.GIT_CONFIG_NOSYSTEM = '1';
 
-const git = (cwd, ...args) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', ...args], { cwd, stdio: ['ignore', 'pipe', 'pipe'] }).toString().trim();
+// identity and default branch fixed here: nothing depends on the machine's git setup
+const git = (cwd, ...args) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'init.defaultBranch=main', '-c', 'core.autocrlf=false', ...args], { cwd, stdio: ['ignore', 'pipe', 'pipe'] }).toString().trim();
 
 function commit(cwd, file, text, msg = file) {
   fs.writeFileSync(path.join(cwd, file), text);
@@ -22,10 +35,38 @@ function commit(cwd, file, text, msg = file) {
   return git(cwd, 'rev-parse', 'HEAD');
 }
 
+/** Windows 8.3 short name of an existing folder, or null (other OS, or 8.3 names disabled on the volume). */
+function shortPath(dir) {
+  if (process.platform !== 'win32') return null;
+  try {
+    const out = execFileSync('cmd.exe', ['/d', '/s', '/c', `for %I in ("${dir}") do @echo %~sI`], { windowsVerbatimArguments: true, stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
+    return out && out.toLowerCase() !== dir.toLowerCase() && fs.existsSync(out) ? out : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * A folder in os.tmpdir() spelled in a non-canonical way:
+ * 'link' = through a symlink/junction, 'short' = 8.3 short name (Windows; null when unavailable),
+ * 'canonical' = the real path.
+ */
+function scratch(t, spelling = 'link') {
+  const base = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'wt-')));
+  t.after(() => fs.rmSync(base, { recursive: true, force: true, maxRetries: 3 }));
+  const real = path.join(base, 'fixture-with-a-long-name');
+  fs.mkdirSync(real);
+  if (spelling === 'canonical') return real;
+  if (spelling === 'short') return shortPath(real);
+  const link = path.join(base, 'linked');
+  fs.symlinkSync(real, link, process.platform === 'win32' ? 'junction' : 'dir');
+  return link;
+}
+
 // origin (bare) + repo (the workspace clone) + other (someone else pushing to origin)
-function fixture(t) {
-  const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'wt-')));
-  t.after(() => fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 3 }));
+function fixture(t, spelling = 'link') {
+  const tmp = scratch(t, spelling);
+  if (!tmp) return null;
   const origin = path.join(tmp, 'origin.git');
   const repo = path.join(tmp, 'repo');
   const other = path.join(tmp, 'other');
@@ -37,6 +78,34 @@ function fixture(t) {
   git(tmp, 'clone', '-q', '-b', 'main', origin, other);
   return { tmp, origin, repo, other, worktrees: path.join(tmp, 'worktrees') };
 }
+
+// Path tests run with every spelling this machine has (8.3 names only on Windows volumes that keep them).
+const SPELLINGS = ['canonical', 'link', 'short'];
+// null (and the test skipped) when this machine has no such spelling
+const spelled = (t, spelling) => {
+  const f = fixture(t, spelling);
+  if (!f) t.skip(`no ${spelling} path spelling on this machine`);
+  return f;
+};
+
+test('canonicalPath/samePath: symlinks, 8.3 names, missing tails, separators and case', (t) => {
+  const real = scratch(t, 'canonical');
+  const link = path.join(path.dirname(real), 'linked');
+  fs.symlinkSync(real, link, process.platform === 'win32' ? 'junction' : 'dir');
+  assert.equal(canonicalPath(link), real);
+  // a path that does not exist yet: the existing ancestor is resolved, the rest appended
+  assert.equal(canonicalPath(path.join(link, 'not', 'yet')), path.join(real, 'not', 'yet'));
+  assert.ok(samePath(path.join(link, 'x'), path.join(real, 'x')));
+  assert.ok(samePath(`${real}${path.sep}`, real));
+  assert.ok(samePath(real.replace(/\\/g, '/'), real), 'forward slashes, as git prints them on Windows');
+  assert.ok(!samePath(path.join(real, 'a'), path.join(real, 'b')));
+  if (process.platform === 'win32' || process.platform === 'darwin') assert.ok(samePath(real.toUpperCase(), real));
+  const short = shortPath(real);
+  if (short) {
+    assert.equal(canonicalPath(short), real);
+    assert.ok(samePath(path.join(short, 'missing'), path.join(link, 'missing')));
+  }
+});
 
 const logger = () => {
   const lines = [];
@@ -51,24 +120,30 @@ test('prepareWorktree: a folder outside git returns null (the caller works in th
   assert.equal(await prepareWorktree({ repo: path.join(dir, 'missing'), base: 'main', dir: path.join(dir, 'wt') }), null);
 });
 
-test('prepareWorktree: detached at the freshly fetched origin/<base>, not the stale local base', async (t) => {
-  const f = fixture(t);
-  const fresh = commit(f.other, 'b.txt', 'b\n');
-  git(f.other, 'push', '-q', 'origin', 'main');
-  const dir = path.join(f.worktrees, 'run1');
-  const wt = await prepareWorktree({ repo: f.repo, base: 'main', dir });
-  assert.equal(wt.ref, 'origin/main');
-  assert.equal(wt.commit, fresh);
-  assert.ok(samePath(wt.workDir, dir));
-  assert.equal(git(dir, 'rev-parse', 'HEAD'), fresh);
-  assert.equal(git(dir, 'rev-parse', '--abbrev-ref', 'HEAD'), 'HEAD', 'detached');
-  assert.notEqual(git(f.repo, 'rev-parse', 'main'), fresh, 'the local main is untouched');
-  assert.ok((await listWorktrees(f.repo)).some((w) => samePath(w.dir, dir)));
+for (const spelling of SPELLINGS) {
+  test(`prepareWorktree (${spelling} paths): detached at the freshly fetched origin/<base>, not the stale local base`, async (t) => {
+    const f = spelled(t, spelling);
+    if (!f) return;
+    const fresh = commit(f.other, 'b.txt', 'b\n');
+    git(f.other, 'push', '-q', 'origin', 'main');
+    const dir = path.join(f.worktrees, 'run1');
+    const wt = await prepareWorktree({ repo: f.repo, base: 'main', dir });
+    assert.equal(wt.ref, 'origin/main');
+    assert.equal(wt.commit, fresh);
+    assert.equal(wt.dir, canonicalPath(dir));
+    assert.equal(wt.workDir, canonicalPath(dir), 'the worktree itself, not the repository or a path climbing out of it');
+    assert.equal(wt.repo, canonicalPath(f.repo));
+    assert.equal(git(dir, 'rev-parse', 'HEAD'), fresh);
+    assert.equal(git(dir, 'rev-parse', '--abbrev-ref', 'HEAD'), 'HEAD', 'detached');
+    assert.notEqual(git(f.repo, 'rev-parse', 'main'), fresh, 'the local main is untouched');
+    assert.ok((await listWorktrees(f.repo)).some((w) => samePath(w.dir, dir)));
 
-  // same folder again (resume): reused as is
-  const again = await prepareWorktree({ repo: f.repo, base: 'main', dir });
-  assert.equal(again.reused, true);
-});
+    // same folder again (resume): reused as is
+    const again = await prepareWorktree({ repo: f.repo, base: 'main', dir });
+    assert.equal(again.reused, true);
+    assert.equal(again.workDir, wt.workDir);
+  });
+}
 
 test('prepareWorktree: no reachable remote only warns and falls back to what is local', async (t) => {
   const f = fixture(t);
@@ -84,16 +159,19 @@ test('prepareWorktree: no reachable remote only warns and falls back to what is 
   assert.match(lines.join('\n'), /starting from the local main/);
 });
 
-test('prepareWorktree: a subfolder of the repository keeps the same subfolder in the worktree', async (t) => {
-  const f = fixture(t);
-  fs.mkdirSync(path.join(f.repo, 'app'));
-  commit(f.repo, 'app/x.txt', 'x\n');
-  git(f.repo, 'push', '-q', 'origin', 'main');
-  const dir = path.join(f.worktrees, 'run1');
-  const wt = await prepareWorktree({ repo: path.join(f.repo, 'app'), base: 'main', dir });
-  assert.ok(samePath(wt.workDir, path.join(dir, 'app')));
-  assert.ok(fs.existsSync(path.join(wt.workDir, 'x.txt')));
-});
+for (const spelling of SPELLINGS) {
+  test(`prepareWorktree (${spelling} paths): a subfolder of the repository keeps the same subfolder in the worktree`, async (t) => {
+    const f = spelled(t, spelling);
+    if (!f) return;
+    fs.mkdirSync(path.join(f.repo, 'app'));
+    commit(f.repo, 'app/x.txt', 'x\n');
+    git(f.repo, 'push', '-q', 'origin', 'main');
+    const dir = path.join(f.worktrees, 'run1');
+    const wt = await prepareWorktree({ repo: path.join(f.repo, 'app'), base: 'main', dir });
+    assert.equal(wt.workDir, path.join(canonicalPath(dir), 'app'));
+    assert.ok(fs.existsSync(path.join(wt.workDir, 'x.txt')));
+  });
+}
 
 test('removeWorktree: deletes a squash-merged branch, keeps an unmerged one', async (t) => {
   const f = fixture(t);
@@ -144,8 +222,9 @@ test('prepareWorktree: resume recreates a deleted worktree from the run branch',
   assert.equal(git(dir, 'rev-parse', 'HEAD'), head);
 });
 
-test('cleanupWorktrees: removes succeeded and stale runs, keeps failed, recent and active ones', async (t) => {
-  const f = fixture(t);
+for (const spelling of SPELLINGS) test(`cleanupWorktrees (${spelling} paths): removes succeeded and stale runs, keeps failed, recent and active ones`, async (t) => {
+  const f = spelled(t, spelling);
+  if (!f) return;
   const runsDir = path.join(f.tmp, 'runs');
   const mk = async (name, status) => {
     const dir = path.join(f.worktrees, name);
@@ -174,24 +253,32 @@ test('cleanupWorktrees: removes succeeded and stale runs, keeps failed, recent a
 });
 
 // ---- engine -----------------------------------------------------------------------
-async function runFixture({ inputs, worktreesDir, runsDir, resume }) {
-  const run = new WorkflowRun({ file: path.join(__dirname, 'fixtures', 'worktree.yaml'), inputs, mock: true, runsDir, worktreesDir, resume });
+// answer: what every human gate gets (true/false, or a choice id)
+async function runFixture({ inputs, worktreesDir, runsDir, resume, file = 'worktree.yaml', answer = true }) {
+  const run = new WorkflowRun({ file: path.join(__dirname, 'fixtures', file), inputs, mock: true, runsDir, worktreesDir, resume });
   const rec = new Recorder(run.runDir);
   const events = [];
-  run.on('event', (ev) => { rec.write(ev); events.push(ev); });
+  run.on('event', (ev) => {
+    rec.write(ev);
+    events.push(ev);
+    if (ev.type === 'approval.requested') setImmediate(() => run.resolveApproval(ev.approval_id, answer));
+  });
   await run.start();
+  if (!rec.events.writableFinished) await new Promise((r) => rec.events.once('finish', r)); // events.jsonl flushed
   return { run, events, finished: events.find((e) => e.type === 'workflow.finished') };
 }
 
-test('engine: agents work in the run worktree; removed on success, kept on failure and reused on resume', { timeout: 60000 }, async (t) => {
-  const f = fixture(t);
+for (const spelling of SPELLINGS) test(`engine (${spelling} paths): agents work in the run worktree; removed on success, kept on failure and reused on resume`, { timeout: 60000 }, async (t) => {
+  const f = spelled(t, spelling);
+  if (!f) return;
   const runsDir = path.join(f.tmp, 'runs');
 
   const ok = await runFixture({ inputs: { repo_path: f.repo }, worktreesDir: f.worktrees, runsDir });
   assert.equal(ok.finished.status, 'success', ok.finished.error);
   const dir = path.join(f.worktrees, ok.run.runId);
   const sent = ok.events.find((e) => e.type === 'session.message_sent');
-  assert.match(sent.prompt, new RegExp(`work in ${dir.replace(/\\/g, '\\\\')}`));
+  // worktree_dir is the worktree itself, spelled canonically (no doubled or climbing segments)
+  assert.equal(/work in (.+)$/m.exec(sent.prompt)?.[1].trim(), canonicalPath(dir));
   assert.ok(samePath(ok.finished.summary.sessions.find((s) => s.agent === 'a').cwd, dir));
   assert.equal(ok.finished.summary.worktree.removed, true);
   assert.ok(!fs.existsSync(dir));
@@ -215,6 +302,35 @@ test('engine: agents work in the run worktree; removed on success, kept on failu
   assert.equal(resumed.events.find((e) => e.type === 'worktree.ready').reused, true);
   assert.ok(samePath(resumed.finished.summary.sessions.find((s) => s.agent === 'a').cwd, kept));
   assert.ok(!fs.existsSync(kept), 'removed once the resumed run succeeds');
+});
+
+test('engine: `goto: end` + `status` sets the outcome; a rejected failure gate is failed and keeps the worktree', { timeout: 60000 }, async (t) => {
+  const f = fixture(t);
+  const runsDir = path.join(f.tmp, 'runs');
+
+  // approved: plain `goto: end` → success, worktree removed
+  const ok = await runFixture({ file: 'gate-end.yaml', inputs: { repo_path: f.repo }, worktreesDir: f.worktrees, runsDir, answer: true });
+  assert.equal(ok.finished.status, 'success', ok.finished.error);
+  assert.equal(ok.finished.error, null);
+  assert.equal(ok.finished.summary.status, 'success');
+  assert.equal(ok.finished.summary.worktree.removed, true);
+  assert.ok(!fs.existsSync(path.join(f.worktrees, ok.run.runId)));
+
+  // rejected: `goto: end` + `status: failed` → failed, worktree kept for a resume
+  const bad = await runFixture({ file: 'gate-end.yaml', inputs: { repo_path: f.repo }, worktreesDir: f.worktrees, runsDir, answer: false });
+  assert.equal(bad.finished.status, 'failed');
+  assert.equal(bad.finished.summary.status, 'failed');
+  assert.match(bad.finished.error, /ended as failed at step "work_failed" \(rejected\)/);
+  const end = bad.events.find((e) => e.type === 'step.transition' && e.from === 'work_failed');
+  assert.deepEqual([end.to, end.status], ['end', 'failed']);
+  assert.equal(bad.finished.summary.worktree.removed, false);
+  assert.ok(bad.events.some((e) => e.type === 'worktree.kept'));
+  assert.ok(fs.existsSync(path.join(f.worktrees, bad.run.runId)));
+  // summary.json and the runs list agree (the UI reads them)
+  assert.equal(JSON.parse(fs.readFileSync(path.join(bad.run.runDir, 'summary.json'), 'utf8')).status, 'failed');
+  const listed = require('../src/runs').readRun(runsDir, bad.run.runId);
+  assert.equal(listed.status, 'failed');
+  assert.match(listed.error, /work_failed/);
 });
 
 test('engine: without worktreesDir (simulation) or outside git, worktree_dir is the repository folder', { timeout: 30000 }, async (t) => {

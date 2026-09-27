@@ -46,6 +46,10 @@ function parseDuration(v, def) {
   return m ? +m[1] * { ms: 1, s: 1e3, m: 6e4, h: 36e5 }[m[2]] : def;
 }
 
+// Outcome of a run that reaches `end` through a transition with `status:` (default success),
+// e.g. a rejected failure gate → failed, a rejected merge → cancelled.
+const END_STATUSES = ['success', 'failed', 'cancelled'];
+
 function loadWorkflow(file) {
   const wf = yaml.load(fs.readFileSync(file, 'utf8'));
   if (!wf || !Array.isArray(wf.steps) || !wf.steps.length) throw new Error('Workflow has no "steps".');
@@ -63,6 +67,10 @@ function loadWorkflow(file) {
     for (const t of s.transitions || []) {
       for (const target of [t.goto, t.on_exhausted, t.loop?.on_exhausted, s.goal?.on_exhausted, s.loop?.on_exhausted, s.on_error].filter(Boolean)) {
         if (!ids.has(target) && target !== 'end' && target !== 'fail') throw new Error(`Step "${s.id}" points to unknown step "${target}".`);
+      }
+      if (t.status !== undefined) {
+        if (!END_STATUSES.includes(t.status)) throw new Error(`Step "${s.id}": transition status must be one of ${END_STATUSES.join(', ')}.`);
+        if (![t.goto, t.on_exhausted, t.loop?.on_exhausted].includes('end')) throw new Error(`Step "${s.id}": a transition status only applies when the transition ends the run (goto: end or on_exhausted: end).`);
       }
     }
   }
@@ -147,12 +155,14 @@ class WorkflowRun extends EventEmitter {
   //   in the previous run's worktree.
   // worktreesDir: where orchestrator.worktree creates the run's git worktree (<workspace>/worktrees);
   //   without it (e.g. simulation runs) the agents work in the repository folder itself.
-  constructor({ file, inputs, mock, runsDir, skillsDirs, budget, prices, projectId, resume, worktreesDir }) {
+  // mockSequences: { field: [value per visit] } over the mock provider's defaults (tests).
+  constructor({ file, inputs, mock, runsDir, skillsDirs, budget, prices, projectId, resume, worktreesDir, mockSequences }) {
     super();
     refreshWindowsPath(); // actions (e.g. gh pr merge) need the refreshed PATH
     this.file = file;
     this.wf = loadWorkflow(file);
     this.mock = !!mock;
+    this.mockSequences = mockSequences || null;
     this.runId = newRunId();
     this.runDir = path.join(runsDir, this.runId);
     this.skillsDirs = [...(skillsDirs || []), BUNDLED_SKILLS];
@@ -282,6 +292,11 @@ class WorkflowRun extends EventEmitter {
         if (this.abort.signal.aborted) throw new Error('Cancelled');
         this.checkLimits();
         current = await this.runStep(this.stepById(current));
+      }
+      // `goto: end` + `status: failed|cancelled` (e.g. a rejected gate): not a success
+      if (this.endStatus) {
+        status = this.endStatus.status;
+        error = new Error(this.endStatus.message);
       }
     } catch (e) {
       status = this.abort.signal.aborted ? 'cancelled' : 'failed';
@@ -442,17 +457,21 @@ class WorkflowRun extends EventEmitter {
     for (const t of step.transitions) {
       if (!evalExpr(t.when, scope)) continue;
       if (t.action) await this.runAction(render(t.action, scope));
+      // limits first: once max_visits / loop.max_iterations is reached the flow goes to
+      // on_exhausted and the delegation is skipped (nothing would check that fix any more)
+      let target = this.applyCounters(step, t);
       let delegated = null;
-      if (t.delegate) {
+      if (t.delegate && target === t.goto) {
         this.emitEvent('log', { level: 'info', message: `${step.id} delegated to ${t.delegate.agent}` });
         const res = await this.sendToAgent(t.delegate.agent, render(t.delegate.prompt, scope), { stepId: `${step.id}:delegate` });
         delegated = { agent: t.delegate.agent, text: res.text };
       }
-      let target = this.applyCounters(step, t);
       if (target === step.id && isLooping(step)) target = await this.loopWait(step);
       // the delegation result goes to the next step (e.g. babysitter replies on the PR with the hash)
       if (delegated && this.ctx.steps[target]) this.ctx.steps[target].delegate_result = delegated;
-      this.emitEvent('step.transition', { from: step.id, to: target, when: t.when });
+      const ends = target === 'end' && t.status && t.status !== 'success';
+      if (ends) this.endStatus = { status: t.status, message: `Run ended as ${t.status} at step "${step.id}" (${t.when}).` };
+      this.emitEvent('step.transition', { from: step.id, to: target, when: t.when, ...(ends ? { status: t.status } : {}) });
       return target;
     }
     throw new Error(`No transition matched in step "${step.id}".`);
@@ -490,7 +509,8 @@ class WorkflowRun extends EventEmitter {
       this.emitEvent('log', { level: 'warn', message: `/loop of ${step.id} exceeded ${cfg.max_duration} without meeting the /goal → ${target}` });
       return target;
     }
-    const interval = Math.min(parseDuration(cfg.interval, 60000), this.mock ? 3000 : Infinity);
+    // simulation: at most 3s, scaled like the mock's delays (tests run with a small scale)
+    const interval = Math.min(parseDuration(cfg.interval, 60000), this.mock ? 3000 * +(process.env.MULTIAGENT_MOCK_DELAY_SCALE ?? 1) : Infinity);
     this.emitEvent('step.waiting', { step_id: step.id, until: new Date(Date.now() + interval).toISOString(), interval_ms: interval });
     this.setStatus(this.orchestrator, 'waiting');
     await sleep(interval, this.abort.signal);
@@ -542,7 +562,7 @@ class WorkflowRun extends EventEmitter {
       prompt += '\n\n---\nAt the end of your response you MUST include a ```json block with an object that validates against this JSON Schema:\n```json\n'
         + JSON.stringify(schema, null, 2) + '\n```';
     }
-    const hint = { stepId: step.id, visit, schema, agent: agentName };
+    const hint = { stepId: step.id, visit, schema, agent: agentName, sequences: this.mockSequences };
     const opts = { stepId: step.id, hint, skills };
     let res = await this.sendToAgent(agentName, prompt, opts);
     st.lastAnswer = res.text;

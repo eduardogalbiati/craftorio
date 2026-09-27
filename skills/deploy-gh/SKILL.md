@@ -28,7 +28,12 @@ gh run list --workflow <preview_workflow> --branch <branch> --json databaseId,st
 
 - not listed yet, `queued`, `in_progress`, `waiting` → `pending`
 - `completed` + `success` → `success`; `release_url` from `gh release view preview-pr-<n> --json url`
-- `completed` + anything else → `failed`; summarize with `gh run view <id> --log-failed`
+- `completed` + anything else → `failed`; summarize with `gh run view <id> --log-failed` and set
+  `failure_class` (see below)
+
+After a fix the preview is triggered again: track the run of the branch's current head
+(`git ls-remote origin refs/heads/<branch>` gives the sha; add `headSha` to the `--json` fields and
+pick the run whose `headSha` matches), never the older failed run.
 
 ## Production (after the merge)
 
@@ -40,10 +45,20 @@ gh run list --workflow <preview_workflow> --branch <branch> --json databaseId,st
    - `release_url`: `gh release list --exclude-pre-releases --limit 1 --json tagName,url` (or `gh release view <tag> --json url`);
    - clean up the preview: `gh release delete preview-pr-<n> --cleanup-tag -y` (ignore "not found").
 
-## Failure summary
+## Failure summary and class
 
-`error_summary` follows ci-failure-triage. A failure in a deploy step or job (credentials,
-environment approval, quota) is class `needs-human`: say so, a code fix will not help.
+`error_summary` follows ci-failure-triage. Every `failed` answer also carries `failure_class`,
+which decides what the orchestrator does next:
+
+| failure_class | When | Next |
+|---|---|---|
+| `code` | a commit on the branch can fix it: compile, test or lint errors (including tests that only fail on the preview's OS), a lockfile out of sync, a build script or workflow file in the repository (triage classes code and environment drift) | the developer fixes it; CI, the PR check and the preview run again |
+| `infra` | no commit can: runner lost, network or registry errors, timeouts, quota, a missing secret or permission, a protected environment waiting for approval (triage classes infrastructure and needs-human) | a human decides: publish again or stop |
+| `unknown` | the log does not tell | a human decides |
+
+For a preview failure that looks like infrastructure, trigger it once more yourself and answer
+`pending`; if it fails again, answer `failed` with `failure_class: infra`. Only answer `code` with
+the log lines that prove it: a wrong `code` sends the developer after a problem the code does not have.
 
 ## Evidence
 
