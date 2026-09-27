@@ -107,6 +107,11 @@ defaults:
 orchestrator:
   provider: claude
   model: claude-sonnet-5
+  # AI supervisor: called only when a step fails; explains it and picks a recovery the engine
+  # validates (fix the output, retry with an instruction, an allowed goto, or ask a human).
+  supervisor:
+    enabled: true
+    max_interventions: 2   # per step
   limits:
     max_total_duration: 8h
     max_total_cost_usd: 60

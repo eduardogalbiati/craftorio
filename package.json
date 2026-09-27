@@ -4,6 +4,9 @@
   "private": true,
   "description": "Multi-agent workflow orchestrator (Claude Code + Codex CLI) with observability.",
   "main": "src/main.js",
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "start": "electron .",
     "run": "node scripts/run.js",
@@ -13,11 +16,19 @@
     "package": "node scripts/package.js"
   },
   "dependencies": {
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
+    "dompurify": "^3.4.16",
     "js-yaml": "^4.1.0",
+    "marked": "^18.0.14",
+    "node-pty": "^1.1.0",
     "nunjucks": "^3.2.4"
   },
   "devDependencies": {
     "@electron/packager": "^20.3.0",
-    "electron": "^33.2.0"
+    "electron": "^44.4.5"
+  },
+  "allowScripts": {
+    "node-pty@1.1.0": true
   }
 }

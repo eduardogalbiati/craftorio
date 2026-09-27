@@ -18,7 +18,8 @@ Keep **Simulation mode** checked to try a flow without calling the CLIs.
 | Menu | What it has |
 |---|---|
 | Dashboard | "What are we building today?": Plan & Design, Code & Build and Monitor & Improve open the start panel filtered by the workflow's `metadata.category` (`plan`, `build`, `monitor`) |
-| Projects | Projects in `<workspace>/projects/<id>.json`. Every project has a folder (default: `<workspace>/projects/<id>/`) and optionally a git repository, cloned into the folder if it is not a repo yet |
+| Projects | Projects in `<workspace>/projects/<id>.json`. Every project has a folder and optionally a git repository. With a repository and no folder, it is cloned into `<workspace>/repos/<owner>-<repo>`; without either, the folder is `<workspace>/projects/<id>/`. Clicking a project shows every workflow run in it (status, cost, task), and for each run its sessions, with **Live terminal** / **Open in CLI** to watch or resume any of them. Runs are linked by the project id they were started with (older ones by the project's current or previous folders) |
+| Artifacts | Every file a run produced (documents, proposals, reviews, reports), grouped by run and filterable by project. The viewer renders Markdown (tables, table of contents; sanitized with DOMPurify), pretty-prints JSON and shows TSV/CSV as tables. Also listed per run in the project view |
 | Workflows | The YAMLs in `workflows/` with their steps, agents/models, skills, `/goal`, `/loop`, parallel steps and branches |
 | Skills | One folder per skill in `<workspace>/skills/<id>/SKILL.md` (Claude Code format) |
 | Usage | Tokens and cost per provider this month and today, monthly budgets (USD and/or tokens), per-model prices for CLIs that do not report cost, recent runs. The topbar widget shows this month's total; click it for a per-provider popover |
@@ -28,7 +29,9 @@ The **Start** button at the top (next to Stop) opens the right side panel: pick 
 the project (its folder becomes `repo_path`/`project_path`) and the input. During and after a
 run, **Run** shows up at the bottom of the menu with the sessions and events.
 
-Recommended: Node 24 LTS (the build also works on older Node, using the Node bundled with Electron).
+Requires Node 24 LTS (`.nvmrc`; `engines` in package.json). The app runs on Electron 44, which
+bundles Node 24 too. npm 11 only runs install scripts that are approved in `allowScripts`
+(package.json): `node-pty` is approved; after upgrading it, run `npm approve-scripts node-pty`.
 
 From the terminal (no UI):
 
@@ -184,11 +187,49 @@ What is shared by a family lives in a suffix-less skill referenced with `uses:`.
 All of them are rewritten for agents that run unattended: where the originals ask the user, ours
 record an assumption or a recommended default instead.
 
+### AI supervisor
+
+The engine is deterministic (same graph, same gates, auditable); an AI **supervisor** (skill
+`run-supervisor`, model from `orchestrator:` in the YAML) steps in only when something goes wrong:
+
+```yaml
+orchestrator:
+  provider: claude
+  model: claude-sonnet-5
+  supervisor:
+    enabled: true
+    max_interventions: 2   # per step (max_total: 6 per run)
+```
+
+- **During a run**, when a step fails (agent error, output that never validates), the engine gives
+  the supervisor the step, the error, the agent's last answer and the recent timeline. It answers
+  with an explanation and one action, which the engine validates:
+  - `fix_output`: rebuild the output from the agent's answer, accepted only if it matches the step's schema;
+  - `retry`: run the step again with an instruction added to the agent's prompt;
+  - `goto`: continue at one of the step's own targets (never a human gate);
+  - `ask_human`: an approval with the explanation (retry with the suggestion / stop);
+  - `fail`: fall back to `on_error`, or end the run.
+  It shows up as a `supervisor` session, and its decisions in the orchestrator log
+  (`supervisor.decision` events).
+- **On demand**, "Ask the supervisor" on any run (Run view, orchestrator, project view): it reads
+  the run (timeline, every attempt of the failing step, artifacts), explains what happened and the
+  root cause, and recommends actions: **resume** from a step (a new run that reuses the previous
+  steps' outputs and the agents' conversations, with an instruction for that step), **rerun**, or
+  something only a person can change. The analysis is saved as `supervisor/analysis-*.md` in the
+  run folder (an artifact). **Chat in terminal** opens the supervisor's CLI in the run folder,
+  read-only, to ask follow-up questions.
+
 ### Parallel steps
 
 Steps with `agents: [a, b, c]` run in parallel (fan-out; `min_success` sets how many must answer)
 and return `{ results: { agent: output }, succeeded, failed }`. `save_as` writes the answer to a
 file (relative to the run folder).
+
+`on_error: <step>` keeps a failing step (agent error, output that never validates) from ending the
+run: its output becomes `{ error }` and the flow continues at that step (the arena's `verify` uses it,
+so a verifier failure still reaches the human review with the document). When an answer does not
+validate, the engine asks again with the schema; ephemeral agents also get the task and their
+previous answer back, since their retry runs in a fresh session.
 
 ## CI/CD
 
@@ -248,6 +289,22 @@ Each turn of each agent is a headless child process of Electron:
 - `persistent` sessions are resumed with the `session_id` returned by the provider
   (`--resume <id>` / `codex exec ... resume <id>` / `grok --resume <id>`).
 - The command lines live under `providers:` in the YAML and can be changed without touching code.
+
+**Terminals** (Run view session detail and Project view, for any run, including past ones):
+- They open in an **embedded terminal dock** at the bottom of the app, with tabs (xterm.js). The
+  **↗** button next to each opens the same thing in an external console window instead (Windows).
+- **Live terminal** follows a session as it runs: prompts, thinking, text, tool calls, results and
+  usage. For the **orchestrator** it follows the whole run: steps, transitions, sessions,
+  approvals, actions and logs. It is read by the app itself (`src/session-tail.js`), no child process.
+- **Open in CLI** runs the provider's interactive CLI resuming the same conversation in the
+  session's folder (`claude --resume <id>`, `codex resume <id>`, `grok --resume <id>`) in a real
+  pseudoterminal (node-pty: ConPTY on Windows, forkpty on macOS/Linux; `src/terminals.js`). Only
+  between turns; whatever you send there becomes part of the agent's conversation for its next turn.
+- Keys: **Ctrl+C** copies when text is selected, otherwise interrupts; **Ctrl+V** / Shift+Insert
+  paste; Ctrl+Shift+C always copies; right-click copies the selection or pastes. On macOS, Cmd
+  instead of Ctrl.
+- node-pty ships prebuilt binaries for Windows and macOS; on Linux `npm install` compiles it
+  (needs python3, make and a C++ compiler). The package keeps it outside app.asar.
 
 ## Installing the CLIs on Windows
 

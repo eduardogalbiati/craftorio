@@ -11,6 +11,7 @@ const nunjucks = require('nunjucks');
 const { runTurn, refreshWindowsPath, isRetryable, sleep, emptyUsage } = require('./providers');
 const { resolveSkill, skillPrompt } = require('../skills');
 const { providerId, sessionCost, totalTokens, WARN_AT } = require('../usage');
+const supervisor = require('../supervisor');
 
 // Skills bundled with the app (skills/ folder at the root). Workspace skills take precedence.
 const BUNDLED_SKILLS = path.join(__dirname, '..', '..', 'skills');
@@ -59,7 +60,7 @@ function loadWorkflow(file) {
     if (s.goal && !s.goal.until) throw new Error(`Step "${s.id}": goal requires "until".`);
     if (s.choices && s.type !== 'human_approval') throw new Error(`Step "${s.id}": choices is only valid for human_approval.`);
     for (const t of s.transitions || []) {
-      for (const target of [t.goto, t.on_exhausted, t.loop?.on_exhausted, s.goal?.on_exhausted, s.loop?.on_exhausted].filter(Boolean)) {
+      for (const target of [t.goto, t.on_exhausted, t.loop?.on_exhausted, s.goal?.on_exhausted, s.loop?.on_exhausted, s.on_error].filter(Boolean)) {
         if (!ids.has(target) && target !== 'end' && target !== 'fail') throw new Error(`Step "${s.id}" points to unknown step "${target}".`);
       }
     }
@@ -139,7 +140,10 @@ function addUsage(total, u) {
 class WorkflowRun extends EventEmitter {
   // budget: { [provider id]: { name, limitUsd, limitTokens, blockOnLimit, usedUsd, usedTokens } }
   // (this month's usage before this run, see src/usage.js); prices: USD per 1M tokens by model.
-  constructor({ file, inputs, mock, runsDir, skillsDirs, budget, prices }) {
+  // projectId: the project the run belongs to (recorded in workflow.started and summary.json).
+  // resume: { runId, fromStep, steps: { id: { output, visits } }, sessions: { agent: providerSessionId }, instruction }
+  //   starts at fromStep with the previous run's step outputs and agent conversations (src/supervisor.js resumeSpec).
+  constructor({ file, inputs, mock, runsDir, skillsDirs, budget, prices, projectId, resume }) {
     super();
     refreshWindowsPath(); // actions (e.g. gh pr merge) need the refreshed PATH
     this.file = file;
@@ -148,6 +152,7 @@ class WorkflowRun extends EventEmitter {
     this.runId = newRunId();
     this.runDir = path.join(runsDir, this.runId);
     this.skillsDirs = [...(skillsDirs || []), BUNDLED_SKILLS];
+    this.projectId = projectId || null;
     this.budget = budget || {};
     this.prices = prices || {};
     this.budgetWarned = new Set();
@@ -157,6 +162,16 @@ class WorkflowRun extends EventEmitter {
       agents: Object.fromEntries(Object.entries(this.wf.agents).map(([k, a]) => [k, { provider: a.provider, model: a.model }])),
     };
     for (const s of this.wf.steps) this.ctx.steps[s.id] = { output: null, visits: 0 };
+    this.resume = resume || null;
+    if (resume) {
+      if (!this.wf.steps.some((x) => x.id === resume.fromStep)) throw new Error(`Cannot resume: step "${resume.fromStep}" does not exist in this workflow.`);
+      for (const [id, v] of Object.entries(resume.steps || {})) {
+        if (this.ctx.steps[id] && id !== resume.fromStep) Object.assign(this.ctx.steps[id], { output: v.output ?? null, visits: v.visits || 1 });
+      }
+      if (resume.instruction) this.ctx.steps[resume.fromStep].supervisorNote = resume.instruction;
+    }
+    this.recent = []; // last events, for the supervisor's timeline
+    this.setupSupervisor();
 
     this.sessions = new Map();      // local id -> session
     this.agentSessions = new Map(); // persistent agent -> local id
@@ -184,6 +199,7 @@ class WorkflowRun extends EventEmitter {
 
   emitEvent(type, data = {}) {
     const ev = { seq: ++this.seq, ts: new Date().toISOString(), run_id: this.runId, type, ...data };
+    if (type !== 'session.stream') { this.recent.push(ev); if (this.recent.length > 300) this.recent.shift(); }
     this.emit('event', ev);
     return ev;
   }
@@ -223,7 +239,7 @@ class WorkflowRun extends EventEmitter {
       closed_at: s.closedAt ? new Date(s.closedAt).toISOString() : null,
       duration_ms: duration, active_ms: s.activeMs, idle_ms: Math.max(0, duration - s.activeMs),
       turns: s.turns, tokens: { ...s.tokens }, cost_usd: +s.costUsd.toFixed(6),
-      status: s.status, provider_session_id: s.providerSessionId,
+      status: s.status, provider_session_id: s.providerSessionId, cwd: s.cwd || null,
     };
   }
 
@@ -238,8 +254,9 @@ class WorkflowRun extends EventEmitter {
     this.startedAt = Date.now();
     this.status = 'running';
     this.emitEvent('workflow.started', {
-      workflow: this.wf.metadata?.name, version: this.wf.metadata?.version,
+      workflow: this.wf.metadata?.name, version: this.wf.metadata?.version, project_id: this.projectId,
       file: path.basename(this.file), inputs: this.inputs, mock: this.mock, run_dir: this.runDir,
+      resumed_from: this.resume ? { run_id: this.resume.runId, step: this.resume.fromStep } : undefined,
       steps: this.wf.steps.map((s) => ({ id: s.id, type: s.type || 'agent', agent: stepAgentLabel(s) })),
     });
     this.orchestrator = this.openSession({
@@ -247,7 +264,7 @@ class WorkflowRun extends EventEmitter {
     });
     this.setStatus(this.orchestrator, 'active');
 
-    let current = this.wf.steps[0].id;
+    let current = this.resume?.fromStep || this.wf.steps[0].id;
     let guard = 0;
     try {
       while (current !== 'end') {
@@ -305,7 +322,33 @@ class WorkflowRun extends EventEmitter {
       }
       st.output = output;
     } else {
-      output = step.agents ? await this.runFanOut(step, st) : await this.runAgentStep(step, st, step.agent);
+      try {
+        output = step.agents ? await this.runFanOut(step, st) : await this.runAgentStep(step, st, step.agent);
+      } catch (e) {
+        this.lastStepError = e.message;
+        if (this.abort.signal.aborted) throw e;
+        // the AI supervisor may fix the output, retry with an instruction, or go to an allowed step
+        const r = await this.superviseFailure(step, st, e);
+        if (r?.output) {
+          output = r.output;
+        } else if (r?.goto) {
+          st.output = { error: e.message, supervisor: r.decision };
+          this.emitEvent('step.finished', { step_id: step.id, visit: st.visits, iteration: st.iteration, output: st.output, duration_ms: Date.now() - t0, error: true });
+          this.emitEvent('step.transition', { from: step.id, to: r.goto, when: `supervisor: ${r.decision.action}` });
+          return r.goto;
+        }
+      }
+      if (output === undefined) {
+        const e = new Error(this.lastStepError || `Step "${step.id}" failed.`);
+        // `on_error: <step>`: a failing step (agent error, invalid output) does not end the run;
+        // its output becomes { error } and the flow goes to that step.
+        if (!step.on_error) throw e;
+        st.output = { error: e.message };
+        this.emitEvent('log', { level: 'error', message: `${step.id} failed: ${e.message} → ${step.on_error}` });
+        this.emitEvent('step.finished', { step_id: step.id, visit: st.visits, iteration: st.iteration, output: st.output, duration_ms: Date.now() - t0, error: true });
+        this.emitEvent('step.transition', { from: step.id, to: step.on_error, when: 'on_error' });
+        return step.on_error;
+      }
       st.output = output;
       scope = { ...this.ctx, output, iteration: st.iteration };
     }
@@ -388,6 +431,7 @@ class WorkflowRun extends EventEmitter {
   async runFanOut(step, st) {
     const settled = await Promise.allSettled(step.agents.map((name) => this.runAgentStep(step, st, name)));
     st.delegate_result = null; // consumed by all agents
+    st.supervisorNote = null;
     if (this.abort.signal.aborted) throw new Error('Cancelled');
     const results = {};
     const failed = [];
@@ -411,6 +455,10 @@ class WorkflowRun extends EventEmitter {
     const schema = step.output_schema;
     const scope = { ...this.ctx, iteration: st.iteration, delegate_result: st.delegate_result, agent: agentName };
     let prompt = render(step.prompt, scope).trim();
+    if (st.supervisorNote) {
+      prompt += `\n\n---\nNote from the run supervisor (a previous attempt of this step failed):\n${st.supervisorNote}`;
+      if (!step.agents) st.supervisorNote = null;
+    }
     if (!step.agents) st.delegate_result = null; // consumed (in a fan-out, after all of them)
     // step skills go in the prompt itself; the name can be a template ("{{ inputs.document_skill }}")
     const skills = this.loadSkills((step.skills || []).map((n) => render(n, scope).trim()));
@@ -424,6 +472,7 @@ class WorkflowRun extends EventEmitter {
     const hint = { stepId: step.id, visit, schema, agent: agentName };
     const opts = { stepId: step.id, hint, skills };
     let res = await this.sendToAgent(agentName, prompt, opts);
+    st.lastAnswer = res.text;
     if (!schema) {
       this.saveOutput(step, scope, res.text);
       return { text: res.text };
@@ -443,10 +492,116 @@ class WorkflowRun extends EventEmitter {
       }
       this.emitEvent('log', { level: 'warn', message: `Invalid output in ${step.id}${step.agents ? ` (${agentName})` : ''}: ${errs.join('; ')}` });
       if (attempt >= 2) throw new Error(`Output of step "${step.id}" failed validation: ${errs.join('; ')}`);
-      res = await this.sendToAgent(agentName,
-        `Your last response did not validate against the schema:\n- ${errs.join('\n- ')}\nReply again with only the corrected \`\`\`json block.`,
-        opts);
+      res = await this.sendToAgent(agentName, this.retryPrompt(agentName, prompt, res.text, schema, errs), opts);
+      st.lastAnswer = res.text;
     }
+  }
+
+  // ---- AI supervisor (orchestrator.supervisor in the YAML; skill run-supervisor) ------------
+  // Called only when a step fails. It explains the failure and picks a recovery; the engine
+  // validates it: fixed outputs must match the step's schema, goto only to the step's own
+  // targets, and it never touches a human gate.
+  setupSupervisor() {
+    const orch = this.wf.orchestrator || {};
+    const cfg = orch.supervisor;
+    if (!cfg || cfg.enabled === false) { this.supervisorCfg = null; return; }
+    const providerName = cfg.provider || orch.provider || 'claude';
+    const type = this.wf.providers?.[providerName]?.type;
+    const name = this.wf.agents.supervisor ? '_supervisor' : 'supervisor';
+    const readOnly = {
+      'claude-code': ['--allowedTools', 'Read Glob Grep', '--disallowedTools', 'Edit Write NotebookEdit Bash'],
+      'codex-cli': ['-s', 'read-only'],
+      'grok-cli': ['--tools', 'read_file,list_dir,grep', '--always-approve'],
+    }[type] || [];
+    this.wf.agents[name] = {
+      provider: providerName, model: cfg.model || orch.model, session: 'ephemeral', working_dir: '{{ run_dir }}',
+      skills: ['run-supervisor'], cli_args: readOnly, timeout: cfg.timeout || '10m',
+      system_prompt: 'You are the run supervisor of this workflow engine.',
+    };
+    this.ctx.agents[name] = { provider: providerName, model: cfg.model || orch.model };
+    this.supervisorCfg = { agent: name, perStep: cfg.max_interventions ?? 2, total: cfg.max_total ?? 6 };
+    this.supervisorUsed = 0;
+  }
+
+  async superviseFailure(step, st, err) {
+    const cfg = this.supervisorCfg;
+    if (!cfg) return null;
+    st.interventions ??= [];
+    if (st.interventions.length >= cfg.perStep || this.supervisorUsed >= cfg.total) {
+      this.emitEvent('log', { level: 'warn', message: `Supervisor: no more interventions allowed on ${step.id}.` });
+      return null;
+    }
+    this.supervisorUsed++;
+    const allowed = [...new Set([step.id, step.on_error, ...(step.transitions || []).flatMap((t) => [t.goto, t.on_exhausted])])]
+      .filter((x) => x && x !== 'end' && x !== 'fail' && this.wf.steps.some((y) => y.id === x && y.type !== 'human_approval'));
+    this.emitEvent('supervisor.started', { step_id: step.id, error: err.message });
+    const prompt = supervisor.decisionPrompt({ wf: this.wf, step, error: err.message, answer: st.lastAnswer, allowed, events: this.recent, previous: st.interventions });
+    const schema = supervisor.DECISION_SCHEMA;
+    const opts = { stepId: `${step.id}:supervisor`, hint: { stepId: `${step.id}:supervisor`, visit: st.interventions.length + 1, schema } };
+    let decision;
+    try {
+      const full = `${prompt}\n\n---\nAt the end of your response you MUST include a \`\`\`json block with an object that validates against this JSON Schema:\n\`\`\`json\n${JSON.stringify(schema, null, 2)}\n\`\`\``;
+      let res = await this.sendToAgent(cfg.agent, full, opts);
+      for (let attempt = 0; ; attempt++) {
+        let errs;
+        try { decision = extractJson(res.text); errs = validateSchema(decision, schema); } catch (e) { errs = [e.message]; }
+        if (!errs.length) break;
+        if (attempt >= 1) throw new Error(`invalid decision: ${errs.join('; ')}`);
+        res = await this.sendToAgent(cfg.agent, this.retryPrompt(cfg.agent, full, res.text, schema, errs), opts);
+      }
+    } catch (e) {
+      this.emitEvent('log', { level: 'error', message: `Supervisor could not decide on ${step.id}: ${e.message}` });
+      return null;
+    }
+    st.interventions.push({ action: decision.action, explanation: decision.explanation });
+    const emit = (action, extra = {}) => this.emitEvent('supervisor.decision', {
+      step_id: step.id, action, cause_class: decision.cause_class || null, explanation: decision.explanation,
+      instruction: decision.instruction || null, goto: decision.goto || null, ...extra,
+    });
+    const retry = (instruction) => { st.supervisorNote = instruction || decision.instruction || 'Your previous attempt failed; read the error and try again.'; return { goto: step.id, decision }; };
+
+    switch (decision.action) {
+      case 'fix_output': {
+        const errs = step.agents ? ['parallel steps cannot be fixed'] : step.output_schema ? validateSchema(decision.output, step.output_schema) : [];
+        if (decision.output != null && !errs.length) { emit('fix_output'); return { output: decision.output, decision }; }
+        emit('retry', { note: `fixed output rejected: ${errs.join('; ') || 'empty'}` });
+        return retry();
+      }
+      case 'retry':
+        emit('retry');
+        return retry();
+      case 'goto':
+        if (allowed.includes(decision.goto)) { emit('goto'); return { goto: decision.goto, decision }; }
+        emit('ask_human', { note: `goto "${decision.goto}" is not allowed` });
+        return this.supervisorAsksHuman(step, decision, retry);
+      case 'ask_human':
+        emit('ask_human');
+        return this.supervisorAsksHuman(step, decision, retry);
+      default:
+        emit('fail');
+        return null;
+    }
+  }
+
+  async supervisorAsksHuman(step, decision, retry) {
+    const answer = await this.requestApproval({
+      id: step.id, raw: true,
+      message: `The step "${step.id}" failed and the supervisor needs you.\n\n${decision.explanation}${decision.instruction ? `\n\nSuggested instruction for a new attempt:\n${decision.instruction}` : ''}`,
+      choices: [{ id: 'retry', label: 'Retry the step with the suggestion' }, { id: 'stop', label: 'Stop here' }],
+    });
+    return answer === 'retry' ? retry() : null;
+  }
+
+  // Asks the agent to fix an answer that did not validate. The schema always goes along; an
+  // ephemeral agent answers in a fresh session that has not seen the task nor its previous
+  // answer, so those go along too (otherwise it answers "{}" or describes the errors).
+  retryPrompt(agentName, prompt, previous, schema, errs) {
+    const fix = `Your last response did not validate against the JSON Schema:\n- ${errs.join('\n- ')}\n`
+      + `Reply again with only a \`\`\`json block that validates against this schema, keeping the content of your answer:\n`
+      + `\`\`\`json\n${JSON.stringify(schema, null, 2)}\n\`\`\``;
+    const def = { ...(this.wf.defaults || {}), ...this.wf.agents[agentName] };
+    if (def.session !== 'ephemeral') return fix;
+    return `${prompt}\n\n---\nYou already answered this task:\n<previous_answer>\n${String(previous).slice(-20000)}\n</previous_answer>\n\n${fix}`;
   }
 
   // Read once per run: editing the skill mid-run does not change what the agents already received.
@@ -546,6 +701,9 @@ class WorkflowRun extends EventEmitter {
         parentId: this.orchestrator.id, stepId,
       });
       if (persistent) this.agentSessions.set(agentName, session.id);
+      // resumed run: continue the agent's previous conversation (its system prompt is already there)
+      const previous = persistent && !this.mock && this.resume?.sessions?.[agentName];
+      if (previous) { session.providerSessionId = previous; session.turns = 1; }
     }
 
     const turn = ++session.turns;
@@ -575,7 +733,7 @@ class WorkflowRun extends EventEmitter {
       try {
         const res = await runTurn({
           provider, model: agent.model, providerSessionId: session.providerSessionId,
-          prompt: fullPrompt, cwd: this.workingDir(agent),
+          prompt: fullPrompt, cwd: (session.cwd = this.workingDir(agent)),
           extraArgs: [...(agent.cli_args || []), ...skillArgs], timeoutMs: parseDuration(agent.timeout, 30 * 60e3),
           signal: this.abort.signal, hint, render,
           onItem: (item) => this.emitEvent('session.stream', { session_id: session.id, turn, item }),
@@ -624,7 +782,7 @@ class WorkflowRun extends EventEmitter {
 
   requestApproval(step) {
     const id = `a${++this.nApproval}`;
-    const message = render(step.message, this.ctx).trim();
+    const message = step.raw ? String(step.message).trim() : render(step.message, this.ctx).trim();
     const choices = step.choices ? step.choices.map((c) => ({ id: c.id, label: render(c.label, this.ctx) })) : null;
     this.emitEvent('approval.requested', { approval_id: id, step_id: step.id, message, choices });
     this.setStatus(this.orchestrator, 'waiting');
@@ -682,7 +840,7 @@ ${stderr || stdout}`.slice(0, 1500)));
     this.emitEvent('workflow.finished', {
       status, error: err?.message || null,
       summary: {
-        run_id: this.runId, workflow: this.wf.metadata?.name, status,
+        run_id: this.runId, workflow: this.wf.metadata?.name, project_id: this.projectId, status,
         started_at: new Date(this.startedAt).toISOString(), finished_at: new Date().toISOString(),
         duration_ms: Date.now() - this.startedAt, inputs: this.inputs, mock: this.mock,
         tokens, cost_usd: +sessions.reduce((a, s) => a + s.cost_usd, 0).toFixed(6),

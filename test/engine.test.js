@@ -207,3 +207,30 @@ test('decision log: ```decisions blocks are appended to decisions.tsv', (t) => {
   assert.deepEqual(lines[2].split('\t').slice(3), ['fix', 'skipped flaky test', 'fails on main', 'run 4812', 'pending']);
   assert.equal(events.find((e) => e.type === 'decision.logged').count, 2);
 });
+
+test('on_error: a failing step records { error } and continues at the given step', { timeout: 30000 }, async () => {
+  const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'));
+  const run = new WorkflowRun({ file: path.join(__dirname, 'fixtures', 'on-error.yaml'), inputs: {}, mock: true, runsDir, skillsDirs: [] });
+  const events = [];
+  run.on('event', (ev) => events.push(ev));
+  await run.start();
+  const finished = events.find((e) => e.type === 'workflow.finished');
+  assert.equal(finished.status, 'success', finished.error);
+  assert.match(finished.summary.steps.check.output.error, /Skill not found/);
+  assert.equal(finished.summary.steps.never.visits, 0);
+  const prompt = events.find((e) => e.type === 'session.message_sent' && e.step_id === 'after').prompt;
+  assert.match(prompt, /check said .*Skill not found/);
+});
+
+test('schema retries resend the schema, and the task plus previous answer for ephemeral agents', () => {
+  const run = new WorkflowRun({ file: path.join(__dirname, 'fixtures', 'on-error.yaml'), inputs: {}, mock: true, runsDir: os.tmpdir() });
+  const schema = { type: 'object', required: ['verdict'] };
+  const p = run.retryPrompt('a', 'ORIGINAL TASK', 'PREVIOUS ANSWER', schema, ['output.verdict: required']);
+  assert.match(p, /ORIGINAL TASK/);
+  assert.match(p, /<previous_answer>\nPREVIOUS ANSWER\n<\/previous_answer>/);
+  assert.match(p, /"required": \[\s*"verdict"\s*\]/);
+  run.wf.agents.a.session = 'persistent';
+  const q = run.retryPrompt('a', 'ORIGINAL TASK', 'PREVIOUS ANSWER', schema, ['x']);
+  assert.doesNotMatch(q, /ORIGINAL TASK|PREVIOUS ANSWER/); // the session already has them
+  assert.match(q, /"verdict"/);
+});

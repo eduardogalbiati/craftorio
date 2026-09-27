@@ -1,8 +1,8 @@
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
-const { execFile } = require('child_process');
-const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
+const { execFile, spawn } = require('child_process');
+const { app, BrowserWindow, ipcMain, dialog, shell, clipboard } = require('electron');
 const { WorkflowRun, loadWorkflow } = require('./engine/workflow');
 const { Recorder } = require('./engine/recorder');
 const { resolveCommand } = require('./engine/providers');
@@ -11,6 +11,10 @@ const projects = require('./projects');
 const skills = require('./skills');
 const usage = require('./usage');
 const { readLocalUsage } = require('./local-usage');
+const runs = require('./runs');
+const { Terminals } = require('./terminals');
+const { followSession } = require('./session-tail');
+const supervisor = require('./supervisor');
 
 const ROOT = path.join(__dirname, '..');
 const WORKFLOWS_DIR = path.join(ROOT, 'workflows');
@@ -67,6 +71,16 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
     },
+  });
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//i.test(url)) shell.openExternal(url);
+    return { action: 'deny' };
+  });
+  win.webContents.on('will-navigate', (e, url) => {
+    if (!url.startsWith('file:')) {
+      e.preventDefault();
+      if (/^https?:\/\//i.test(url)) shell.openExternal(url);
+    }
   });
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
 }
@@ -163,7 +177,7 @@ ipcMain.handle('settings:set', (_e, patch) => workspace.writeSettings(ws, patch)
 
 // ---- projects -----------------------------------------------------------------
 ipcMain.handle('projects:list', () => projects.listProjects(ws.projects));
-ipcMain.handle('projects:create', (_e, data) => projects.createProject(ws.projects, data));
+ipcMain.handle('projects:create', (_e, data) => projects.createProject(ws.projects, data, { reposDir: ws.repos }));
 ipcMain.handle('projects:update', (_e, { id, patch }) => projects.updateProject(ws.projects, id, patch));
 ipcMain.handle('projects:remove', (_e, id) => projects.removeProject(ws.projects, id));
 
@@ -193,19 +207,23 @@ ipcMain.handle('workspace:change', async () => {
 
 ipcMain.handle('workspace:open', () => shell.openPath(ws.root));
 
-ipcMain.handle('run:start', async (_e, { file, inputs, mock }) => {
+ipcMain.handle('run:start', (_e, { file, inputs, mock }) => startWorkflowRun({ file, inputs, mock }));
+
+async function startWorkflowRun({ file, inputs, mock, resume = null, projectId: forcedProject = null }) {
   if (currentRun?.status === 'running') throw new Error('A workflow is already running.');
   // repo_path can be a git URL: clones (or updates) it into <workspace>/repos.
   if (workspace.isGitUrl(inputs?.repo_path)) {
     inputs = { ...inputs, repo_path: (await workspace.cloneRepo(inputs.repo_path, ws.repos)).dir };
   }
   const settings = workspace.readSettings(ws);
+  const folders = Object.values(inputs || {}).filter((v) => typeof v === 'string' && /[\\/]/.test(v)).map((v) => path.resolve(v).toLowerCase());
+  const projectId = forcedProject || projects.listProjects(ws.projects).find((p) => p.folder && folders.includes(path.resolve(p.folder).toLowerCase()))?.id || null;
   // budgets that count usage outside the orchestrator need the CLIs' own logs
   const needsLocal = Object.values(settings.budgets || {}).some((b) => b?.countOutside);
   const budget = usage.budgetBaseline({ runsDir: ws.runs, settings, local: needsLocal ? readLocalUsage() : null });
   const run = new WorkflowRun({
     file: path.join(WORKFLOWS_DIR, path.basename(file)), inputs, mock, runsDir: ws.runs, skillsDirs: [ws.skills],
-    budget, prices: settings.prices,
+    budget, prices: settings.prices, projectId, resume,
   });
   if (!mock) {
     const problems = usage.preflight(run.wf, budget, resolveCommand, run.inputs);
@@ -219,9 +237,242 @@ ipcMain.handle('run:start', async (_e, { file, inputs, mock }) => {
   currentRun = run;
   run.start();
   return { runId: run.runId, runDir: run.runDir };
-});
+}
 
 ipcMain.handle('run:stop', () => { currentRun?.stop(); return true; });
+
+// ---- session terminals --------------------------------------------------------------
+// Opens a separate terminal window for an agent session of any run (default: the current one):
+// - live: follows the session's log (src/session-tail.js, run by the Electron binary in
+//   Node mode, so it also works in the packaged app);
+// - cli: the provider's interactive CLI resuming the same conversation in the session's
+//   folder (claude --resume / codex resume / grok --resume).
+const RESUME_ARGS = { 'claude-code': (id) => ['--resume', id], 'codex-cli': (id) => ['resume', id], 'grok-cli': (id) => ['--resume', id] };
+const q = (a) => `"${String(a).replace(/"/g, '""')}"`;
+
+function openTerminal({ title, cwd, file, args, env }) {
+  if (process.platform !== 'win32') throw new Error('Opening a terminal is only supported on Windows for now.');
+  const cmdline = [file, ...args].map(q).join(' ');
+  // start "<title>" /D "<cwd>" cmd /k "<command line>": a new console that stays open on exit
+  const child = spawn('cmd.exe', ['/d', '/s', '/c', `start ${q(title)} /D ${q(cwd)} cmd /k "${cmdline}"`], {
+    windowsVerbatimArguments: true, detached: true, stdio: 'ignore', env,
+  });
+  child.unref();
+}
+
+const isCurrent = (runId) => !runId || (currentRun && currentRun.runId === runId);
+
+// A session in the same shape whether it comes from the live engine or from a run on disk.
+function sessionView(x, live) {
+  return {
+    id: x.id, agent: x.agent, provider: x.provider, model: x.model, status: x.status,
+    providerSessionId: live ? x.providerSessionId : x.provider_session_id || null,
+    cwd: x.cwd || null, turns: x.turns || 0, costUsd: live ? x.costUsd : x.cost_usd || 0,
+  };
+}
+
+// Provider config of a run's workflow: the live one, or the workflow file named in its events.
+function runProviders(runId, file) {
+  if (isCurrent(runId) && currentRun) return currentRun.wf.providers || {};
+  try { return loadWorkflow(path.join(WORKFLOWS_DIR, path.basename(file || ''))).providers || {}; } catch { return {}; }
+}
+
+// Why "Open in CLI" is not possible for a session ('' = possible).
+function cliReason(sess, providers, running) {
+  if (sess.agent === 'orchestrator') return 'The orchestrator is the app itself: only its live log can be opened.';
+  if (sess.provider === 'mock') return 'Simulated sessions have no CLI conversation.';
+  if (!sess.providerSessionId) return 'No provider conversation yet: the first turn has not finished.';
+  if (running && (sess.status === 'active' || sess.status === 'retrying')) return 'The agent is in the middle of a turn.';
+  const cfg = providers[sess.provider];
+  if (!cfg || !RESUME_ARGS[cfg.type]) return `Provider "${sess.provider}" cannot be opened interactively.`;
+  if (!resolveCommand(cfg.command)) return `Command "${cfg.command}" is not installed.`;
+  return '';
+}
+
+// Everything needed to open a session: from the current run, or from the run folder on disk.
+function findSession(runId, sessionId) {
+  if (isCurrent(runId) && currentRun) {
+    const x = currentRun.sessions.get(sessionId);
+    return x && { run: { runDir: currentRun.runDir, file: path.basename(currentRun.file), inputs: currentRun.inputs, running: currentRun.status === 'running' }, sess: sessionView(x, true) };
+  }
+  const r = runs.readRun(ws.runs, path.basename(String(runId)));
+  const x = r?.sessions.find((y) => y.id === sessionId);
+  return x && { run: { runDir: r.runDir, file: r.file, inputs: r.inputs, running: false }, sess: sessionView(x, false) };
+}
+
+// What to run to watch (live) or resume (cli) a session: { title, file, args, cwd, env }.
+function terminalSpec(runId, sessionId, mode) {
+  const found = findSession(runId, sessionId);
+  if (!found) throw new Error('Session not found.');
+  const { run, sess } = found;
+  const env = { ...process.env };
+  delete env.CLAUDECODE;
+  if (mode === 'live') {
+    return {
+      title: sess.agent === 'orchestrator' ? 'orchestrator · live' : `${sess.agent} (${sess.id}) · live`,
+      cwd: run.runDir, file: process.execPath,
+      args: [path.join(__dirname, 'session-tail.js'), run.runDir, sess.id], env: { ...env, ELECTRON_RUN_AS_NODE: '1', FORCE_COLOR: '1' },
+    };
+  }
+  const providers = runProviders(runId, run.file);
+  const why = cliReason(sess, providers, run.running);
+  if (why) throw new Error(why);
+  const cfg = providers[sess.provider];
+  // older runs did not record the session folder: fall back to the run's repo/project folder
+  const folder = [sess.cwd, run.inputs?.repo_path, run.inputs?.project_path].find((d) => d && fs.existsSync(d)) || run.runDir;
+  delete env.ELECTRON_RUN_AS_NODE;
+  return { title: `${sess.agent} (${sess.id}) · ${cfg.command}`, cwd: folder, file: resolveCommand(cfg.command).file, args: RESUME_ARGS[cfg.type](sess.providerSessionId), env };
+}
+
+// Interactive chat with the supervisor about a run: the provider's CLI in the run folder, with the
+// run report written to supervisor/context.md and a first message that points to it.
+function supervisorChatSpec(runId) {
+  const runDir = runFolder(runId);
+  const cfg = supervisor.supervisorConfig(runDir, WORKFLOWS_DIR);
+  const skill = skills.resolveSkill([ws.skills, path.join(ROOT, 'skills')], 'run-supervisor');
+  const ctxFile = path.join(runDir, 'supervisor', 'context.md');
+  fs.mkdirSync(path.dirname(ctxFile), { recursive: true });
+  fs.writeFileSync(ctxFile, supervisor.runReport(runDir, { workflowsDir: WORKFLOWS_DIR }));
+  const cmd = resolveCommand(cfg.provider.command || 'claude');
+  if (!cmd) throw new Error(`The supervisor needs ${cfg.provider.command}, which is not installed.`);
+  const first = `You are the supervisor of the multi-agent workflow run in this folder. Read ${path.join(skill.path, 'SKILL.md')} (your method) and supervisor/context.md (the run report); events.jsonl, sessions/ and the other files have the details. Then explain briefly what happened in this run and wait for my questions. Do not change any file.`;
+  const args = {
+    'claude-code': ['--model', cfg.model, '--permission-mode', 'plan', '--add-dir', skill.path, first],
+    'codex-cli': ['-m', cfg.model, '-s', 'read-only', first],
+    'grok-cli': ['-m', cfg.model, '--tools', 'read_file,list_dir,grep', first],
+  }[cfg.provider.type] || [first];
+  const env = { ...process.env };
+  delete env.CLAUDECODE;
+  delete env.ELECTRON_RUN_AS_NODE;
+  return { title: `supervisor · ${path.basename(runDir)}`, cwd: runDir, file: cmd.file, args, env };
+}
+
+// External console window (Windows)
+ipcMain.handle('session:terminal', (_e, { sessionId, mode, runId }) => {
+  openTerminal(terminalSpec(runId, sessionId, mode));
+  return true;
+});
+
+// Embedded terminals (xterm.js in the renderer + node-pty here)
+const terminals = new Terminals((channel, payload) => { if (win && !win.isDestroyed()) win.webContents.send(channel, payload); });
+ipcMain.handle('term:open', (_e, { kind, runId, sessionId, cols, rows }) => {
+  if (kind === 'supervisor') return terminals.open({ ...supervisorChatSpec(runId || currentRun?.runId), cols, rows });
+  const spec = terminalSpec(runId, sessionId, kind === 'cli' ? 'cli' : 'live');
+  if (kind !== 'cli') {
+    // live: follow the log in this process (see src/terminals.js for why not a child process)
+    const [, runDir, id] = spec.args;
+    return terminals.openVirtual({ title: spec.title, start: (write) => followSession(runDir, id, write) });
+  }
+  // .cmd/.bat shims (npm-installed CLIs) run through cmd.exe; node-pty re-quotes array
+  // arguments on Windows, so cmd.exe gets its command line as a single string
+  const shim = process.platform === 'win32' && /\.(cmd|bat)$/i.test(spec.file);
+  return terminals.open({
+    ...spec, cols, rows,
+    file: shim ? 'cmd.exe' : spec.file,
+    args: shim ? `/d /s /c "${[spec.file, ...spec.args].map(q).join(' ')}"` : spec.args,
+  });
+});
+ipcMain.on('term:input', (_e, { id, data }) => terminals.input(id, data));
+ipcMain.on('term:resize', (_e, { id, cols, rows }) => terminals.resize(id, cols, rows));
+ipcMain.handle('term:kill', (_e, { id }) => terminals.kill(id));
+
+// Clipboard for the terminals (the sandboxed renderer has no clipboard module)
+ipcMain.handle('clipboard:read', () => clipboard.readText());
+ipcMain.handle('clipboard:write', (_e, { text }) => { clipboard.writeText(String(text ?? '')); return true; });
+
+// ---- AI supervisor on demand ------------------------------------------------------------
+// Explains any run (running, failed or finished) and recommends actions; the analysis is saved in
+// the run folder (supervisor/analysis-*.md), so it shows up in Artifacts.
+function runFolder(runId) {
+  const dir = path.join(ws.runs, path.basename(String(runId || '')));
+  if (!fs.existsSync(path.join(dir, 'events.jsonl'))) throw new Error(`Run not found: ${runId}`);
+  return dir;
+}
+
+ipcMain.handle('supervisor:analyze', (_e, { runId, question }) => supervisor.analyzeRun({
+  runDir: runFolder(runId), question, workflowsDir: WORKFLOWS_DIR, skillsDirs: [ws.skills, path.join(ROOT, 'skills')], resolveCommand,
+}));
+
+// Continues a run from a step: a new run with the previous outputs, agent conversations and an instruction.
+ipcMain.handle('supervisor:resume', async (_e, { runId, step, instruction }) => {
+  const runDir = runFolder(runId);
+  const spec = supervisor.resumeSpec(runDir, step);
+  if (!spec.file) throw new Error('The run does not record its workflow file.');
+  const first = loadWorkflow(path.join(WORKFLOWS_DIR, path.basename(spec.file))).steps[0].id;
+  return startWorkflowRun({
+    file: spec.file, inputs: spec.inputs, mock: spec.mock, projectId: spec.projectId,
+    resume: { runId: spec.runId, fromStep: step || first, steps: spec.steps, sessions: spec.sessions, instruction: instruction || null },
+  });
+});
+
+// ---- runs of a project ---------------------------------------------------------------
+ipcMain.handle('projects:runs', (_e, { id }) => {
+  const project = projects.listProjects(ws.projects).find((p) => p.id === id);
+  if (!project) throw new Error(`Project not found: ${id}`);
+  const list = runs.runsForProject(runs.listRuns(ws.runs), project).map((r) => {
+    const current = !!currentRun && currentRun.runId === r.runId && currentRun.status === 'running';
+    const live = current ? [...currentRun.sessions.values()].map((x) => sessionView(currentRun.snapshot(x), false)) : null;
+    // the orchestrator first: its live log is the run's timeline
+    const sessions = (live || r.sessions.map((x) => sessionView(x, false))).sort((a, b) => (b.agent === 'orchestrator') - (a.agent === 'orchestrator'));
+    const providers = runProviders(current ? r.runId : 'disk', r.file);
+    const { inputs, ...info } = r;
+    return {
+      ...info,
+      artifacts: runs.runArtifacts(r.runDir),
+      status: current ? 'running' : r.status,
+      current,
+      costUsd: current ? sessions.reduce((a, x) => a + (x.costUsd || 0), 0) : r.costUsd,
+      sessions: sessions.map((x) => {
+        const why = cliReason(x, providers, current);
+        return { ...x, cliAvailable: !why, cliReason: why };
+      }),
+    };
+  });
+  return { project, runs: list };
+});
+
+// ---- artifacts ------------------------------------------------------------------------
+// Files produced by runs (documents, proposals, reviews, reports…), newest run first.
+function artifactRuns({ projectId, runId } = {}) {
+  const all = runs.listRuns(ws.runs);
+  const projectList = projects.listProjects(ws.projects);
+  const project = projectId ? projectList.find((x) => x.id === projectId) : null;
+  const list = runId ? all.filter((r) => r.runId === runId) : project ? runs.runsForProject(all, project) : all;
+  return list.map((r) => {
+    const owner = r.projectId ? projectList.find((x) => x.id === r.projectId) : projectList.find((x) => runs.runsForProject([r], x).length);
+    const current = !!currentRun && currentRun.runId === r.runId && currentRun.status === 'running';
+    return {
+      runId: r.runId, workflow: r.workflow, version: r.version, status: current ? 'running' : r.status,
+      mock: r.mock, startedAt: r.startedAt, task: r.task, runDir: r.runDir,
+      project: owner ? { id: owner.id, name: owner.name } : null,
+      artifacts: runs.runArtifacts(r.runDir),
+    };
+  }).filter((r) => r.artifacts.length);
+}
+
+ipcMain.handle('artifacts:list', (_e, opts) => artifactRuns(opts || {}));
+
+// Reads an artifact for the viewer. Only files that some run lists as an artifact can be read.
+const MAX_ARTIFACT_BYTES = 5 * 1024 * 1024;
+ipcMain.handle('artifacts:read', (_e, { path: file }) => {
+  const norm = (x) => (process.platform === 'win32' ? path.resolve(x).toLowerCase() : path.resolve(x));
+  const found = artifactRuns().flatMap((r) => r.artifacts).find((a) => norm(a.path) === norm(file));
+  if (!found) throw new Error('Not an artifact of any run.');
+  if (!found.exists) throw new Error(`The file no longer exists: ${found.path}`);
+  const buf = fs.readFileSync(found.path);
+  const truncated = buf.length > MAX_ARTIFACT_BYTES;
+  const binary = buf.subarray(0, 8000).includes(0);
+  return { ...found, truncated, binary, text: binary ? null : buf.subarray(0, MAX_ARTIFACT_BYTES).toString('utf8') };
+});
+
+// Opens an artifact with the default app, or shows it in the file explorer.
+ipcMain.handle('artifacts:open', (_e, { path: file, reveal }) => {
+  const norm = (x) => (process.platform === 'win32' ? path.resolve(x).toLowerCase() : path.resolve(x));
+  const found = artifactRuns().flatMap((r) => r.artifacts).find((a) => norm(a.path) === norm(file));
+  if (!found?.exists) throw new Error('Artifact not found.');
+  if (reveal) { shell.showItemInFolder(found.path); return ''; }
+  return shell.openPath(found.path);
+});
 
 // ---- usage and budgets ------------------------------------------------------------
 function usageSnapshot(scope = 'orchestrator') {
@@ -275,6 +526,7 @@ app.whenReady().then(async () => {
   createWindow();
 });
 app.on('window-all-closed', () => {
+  terminals.killAll();
   currentRun?.stop();
   app.quit();
 });

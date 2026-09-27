@@ -64,6 +64,7 @@ run.on('event', (ev) => {
     case 'step.finished': console.log(`${t()}   ✓ ${ev.step_id}: ${short(JSON.stringify(ev.output), 300)}`); break;
     case 'step.transition': console.log(`${t()}   → ${ev.to}   [${ev.when}]`); break;
     case 'file.saved': console.log(`${t()}   💾 ${ev.step_id}${ev.agent ? ` (${ev.agent})` : ''} → ${ev.path}`); break;
+    case 'supervisor.decision': console.log(`${t()}   ◆ supervisor on ${ev.step_id}: ${ev.action}${ev.goto ? ' → ' + ev.goto : ''} — ${short(ev.explanation, 300)}`); break;
     case 'decision.logged': console.log(`${t()}   📝 ${ev.agent}: ${ev.count} decision(s) → ${ev.path}`); break;
     case 'step.waiting': console.log(`${t()}   ⏳ /loop: next check in ${Math.round(ev.interval_ms / 1000)}s`); break;
     case 'step.goal': console.log(`${t()}   🎯 /goal ${ev.met ? 'met' : 'not met yet'}: ${ev.goal} (iteration ${ev.iteration})`); break;

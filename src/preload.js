@@ -25,8 +25,36 @@ contextBridge.exposeInMainWorld('api', {
   resolveApproval: (id, answer) => ipcRenderer.invoke('approval:resolve', { id, answer }),
   openRunDir: () => ipcRenderer.invoke('run:openDir'),
   getUsage: (scope) => ipcRenderer.invoke('usage:get', { scope }),
+  // mode: 'live' (follow the session's log) or 'cli' (resume the conversation in the provider's CLI)
+  openSessionTerminal: (sessionId, mode, runId) => ipcRenderer.invoke('session:terminal', { sessionId, mode, runId }),
+  listProjectRuns: (id) => ipcRenderer.invoke('projects:runs', { id }),
   setBudget: (provider, budget, scope) => ipcRenderer.invoke('usage:setBudget', { provider, budget, scope }),
   setPrice: (model, price, scope) => ipcRenderer.invoke('usage:setPrice', { model, price, scope }),
+  // AI supervisor: analysis of a run and resume from a step (a new run)
+  askSupervisor: (runId, question) => ipcRenderer.invoke('supervisor:analyze', { runId, question }),
+  resumeRun: (runId, step, instruction) => ipcRenderer.invoke('supervisor:resume', { runId, step, instruction }),
+  // documents and files produced by runs
+  listArtifacts: (opts) => ipcRenderer.invoke('artifacts:list', opts || {}),
+  readArtifact: (path) => ipcRenderer.invoke('artifacts:read', { path }),
+  openArtifact: (path, reveal) => ipcRenderer.invoke('artifacts:open', { path, reveal: !!reveal }),
+  // embedded terminals (xterm in the renderer, process in main)
+  termOpen: (opts) => ipcRenderer.invoke('term:open', opts),
+  termInput: (id, data) => ipcRenderer.send('term:input', { id, data }),
+  termResize: (id, cols, rows) => ipcRenderer.send('term:resize', { id, cols, rows }),
+  termKill: (id) => ipcRenderer.invoke('term:kill', { id }),
+  onTermData: (cb) => {
+    const handler = (_e, msg) => cb(msg);
+    ipcRenderer.on('term:data', handler);
+    return () => ipcRenderer.removeListener('term:data', handler);
+  },
+  onTermExit: (cb) => {
+    const handler = (_e, msg) => cb(msg);
+    ipcRenderer.on('term:exit', handler);
+    return () => ipcRenderer.removeListener('term:exit', handler);
+  },
+  clipboardRead: () => ipcRenderer.invoke('clipboard:read'),
+  clipboardWrite: (text) => ipcRenderer.invoke('clipboard:write', { text }),
+  platform: process.platform,
   onEvent: (cb) => {
     const handler = (_e, ev) => cb(ev);
     ipcRenderer.on('run:event', handler);

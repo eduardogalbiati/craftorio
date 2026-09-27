@@ -1,0 +1,19 @@
+# Test fixture: a failing step (missing skill) goes to its on_error step instead of failing the run.
+apiVersion: multiagent/v1
+kind: Workflow
+metadata:
+  name: fixture-on-error
+agents:
+  a: { provider: claude, model: m, session: ephemeral }
+steps:
+  - id: check
+    agent: a
+    skills: [does-not-exist]
+    on_error: after
+    prompt: "check"
+  - id: never
+    agent: a
+    prompt: "skipped"
+  - id: after
+    agent: a
+    prompt: "check said {{ steps.check.output.error }}"

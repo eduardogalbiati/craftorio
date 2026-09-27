@@ -29,7 +29,7 @@ kind: Workflow
 
 metadata:
   name: ai-arena
-  version: 0.6.0
+  version: 0.6.2
   description: "Several models write the same document (e.g. a PRD) in parallel, blindly critique each other, and an orchestrator merges the final document."
   tags: [arena, prd, plan, multi-model]
   category: plan
@@ -96,6 +96,11 @@ defaults:
 orchestrator:
   provider: claude
   model: claude-sonnet-5
+  # AI supervisor: called only when a step fails; explains it and picks a recovery the engine
+  # validates (fix the output, retry with an instruction, an allowed goto, or ask a human).
+  supervisor:
+    enabled: true
+    max_interventions: 2   # per step
   limits:
     max_total_duration: 2h
     max_total_cost_usd: 25
@@ -250,7 +255,7 @@ steps:
       - "arena/final.md"
       - "{% if inputs.save_to %}{{ inputs.project_path }}/{{ inputs.save_to }}/{{ inputs.document_skill }}-{{ run_id }}.md{% endif %}"
     prompt: |
-      {% if steps.verify.output and steps.verify.output.verdict == 'issues' and steps.verify.visits == steps.synthesize.visits - 1 %}
+      {% if steps.verify.output and steps.verify.output.verdict != 'pass' and steps.verify.visits == steps.synthesize.visits - 1 %}
       A verifier checked your previous version and found these issues. Fix each one, or
       explain in the appendix why it does not apply:
       {{ steps.verify.output.issues | to_yaml }}
@@ -289,6 +294,8 @@ steps:
   - id: verify
     agent: verifier
     skills: ["{{ inputs.document_skill }}"]
+    # the document already exists: a verifier that fails must not lose it
+    on_error: review
     prompt: |
       Original request: {{ inputs.task }}
 
@@ -309,18 +316,19 @@ steps:
       4. every conflict is decided with a reason or listed as an open question with a default;
       5. the appendix names a base, and its grafts and decisions are actually in the body;
       6. nothing valuable that 2+ proposals agree on was silently dropped.
-      verdict = pass when there are no issues that matter; otherwise issues, each one short,
-      with the section it refers to.
+      verdict = "pass" when there are no issues that matter, otherwise "issues". Each issue is a
+      short plain-text string that names the section it refers to.
     output_schema:
       type: object
       required: [verdict, issues]
       properties:
-        verdict: { type: string, enum: [pass, issues] }
-        issues:  { type: array, items: { type: string } }
+        # "fail" is accepted as a synonym of "issues"; items may be strings or objects
+        verdict: { type: string, enum: [pass, issues, fail] }
+        issues:  { type: array }
     transitions:
       - when: "output.verdict == 'pass'"
         goto: review
-      - when: "output.verdict == 'issues'"
+      - when: "output.verdict != 'pass'"
         goto: synthesize
         max_visits: 1
         on_exhausted: review
@@ -331,8 +339,8 @@ steps:
       Final document: {{ run_dir }}/arena/final.md
       {% if inputs.save_to %}Copy in the project: {{ inputs.project_path }}/{{ inputs.save_to }}/{{ inputs.document_skill }}-{{ run_id }}.md{% endif %}
 
-      Verifier: {{ steps.verify.output.verdict }}{% if steps.verify.output.verdict == 'issues' %} (still open after one round of fixes):
-      {% for i in steps.verify.output.issues %}- {{ i }}
+      {% if steps.verify.output.error %}Verifier could not check the document: {{ steps.verify.output.error }}{% else %}Verifier: {{ steps.verify.output.verdict }}{% endif %}{% if steps.verify.output.verdict and steps.verify.output.verdict != 'pass' %} (still open after one round of fixes):
+      {% for i in steps.verify.output.issues %}- {{ i if i is string else (i | to_json) }}
       {% endfor %}{% endif %}
 
       Who wrote what:

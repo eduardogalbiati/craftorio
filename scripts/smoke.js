@@ -11,7 +11,8 @@ require('../src/main');
 const out = process.argv.find((a) => a.endsWith('.png')) || path.join(__dirname, '..', 'runs', 'smoke.png');
 
 app.on('browser-window-created', (_e, win) => {
-  win.webContents.on('console-message', (_ev, level, message) => console.log(`[renderer:${level}] ${message}`));
+  // Electron 35+: the details come in the event object
+  win.webContents.on('console-message', (ev) => console.log(`[renderer:${ev.level}] ${ev.message}`));
   win.webContents.once('did-finish-load', async () => {
     const js = (code) => win.webContents.executeJavaScript(code);
     await new Promise((r) => setTimeout(r, 1500));

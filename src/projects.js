@@ -1,11 +1,12 @@
 // Projects: each project is a JSON file in <workspace>/projects/<id>.json pointing to
 // a local folder (required) and, optionally, to a git repository.
-// With no folder given, the code lives in <workspace>/projects/<id>/ (cloned from the
-// repository, if any).
+// With no folder given, a project with a repository is cloned into <workspace>/repos/<owner>-<repo>
+// (the same place git URLs given as repo_path go); one without a repository gets an empty
+// <workspace>/projects/<id>/.
 
 const fs = require('fs');
 const path = require('path');
-const { execGit } = require('./workspace');
+const { execGit, repoNameFromUrl } = require('./workspace');
 
 const isDir = (p) => { try { return fs.statSync(p).isDirectory(); } catch { return false; } };
 
@@ -37,8 +38,9 @@ function listProjects(dir) {
  * Creates a project. If `repo` is given and the folder is not a git repository,
  * clones the repository into it (the folder must be empty or not exist).
  * @param {{ name: string, folder?: string, repo?: string, description?: string }} data
+ * @param {{ git?: Function, reposDir?: string }} opts reposDir: <workspace>/repos
  */
-async function createProject(dir, data, { git = execGit } = {}) {
+async function createProject(dir, data, { git = execGit, reposDir = null } = {}) {
   const name = String(data.name || '').trim();
   if (!name) throw new Error('Enter the project name.');
   fs.mkdirSync(dir, { recursive: true });
@@ -46,8 +48,9 @@ async function createProject(dir, data, { git = execGit } = {}) {
   let id = slugify(name);
   for (let i = 2; fs.existsSync(metaFile(dir, id)); i++) id = `${slugify(name)}-${i}`;
 
-  const folder = path.resolve(data.folder?.trim() || path.join(dir, id));
   let repo = data.repo?.trim() || null;
+  const defaultFolder = repo && reposDir ? path.join(reposDir, repoNameFromUrl(repo)) : path.join(dir, id);
+  const folder = path.resolve(data.folder?.trim() || defaultFolder);
 
   if (repo && !isDir(path.join(folder, '.git'))) {
     if (isDir(folder) && fs.readdirSync(folder).length) throw new Error(`The folder ${folder} is not empty and is not a git repository; cannot clone into it.`);
@@ -72,6 +75,7 @@ function updateProject(dir, id, patch) {
   if (patch.folder !== undefined) {
     const folder = path.resolve(String(patch.folder).trim());
     if (!isDir(folder)) throw new Error(`Folder does not exist: ${folder}`);
+    if (cur.folder && path.resolve(cur.folder) !== folder) next.previousFolders = [...new Set([...(cur.previousFolders || []), cur.folder])];
     next.folder = folder;
   }
   fs.writeFileSync(metaFile(dir, id), JSON.stringify(next, null, 2));

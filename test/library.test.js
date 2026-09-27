@@ -217,3 +217,17 @@ test('every `uses` dependency of the bundled skills exists', () => {
     for (const dep of s.uses) assert.doesNotThrow(() => skills.resolveSkill([dir], dep), `${s.id} uses missing skill ${dep}`);
   }
 });
+
+test('a project with a repository and no folder is cloned into <workspace>/repos/<owner>-<repo>', async (t) => {
+  const dir = path.join(tmp(t), 'projects');
+  const reposDir = path.join(tmp(t), 'repos');
+  const calls = [];
+  const git = async (args) => { calls.push(args); if (args[0] === 'clone') fs.mkdirSync(path.join(args[2], '.git'), { recursive: true }); return ''; };
+  const p = await projects.createProject(dir, { name: 'Orchestrator', repo: 'git@github.com:acme/multiagent-orchestrator.git' }, { git, reposDir });
+  assert.equal(p.folder, path.join(reposDir, 'acme-multiagent-orchestrator'));
+  assert.deepEqual(calls[0], ['clone', 'git@github.com:acme/multiagent-orchestrator.git', p.folder]);
+  assert.equal(p.isGit, true);
+  // no repository: still an empty folder under projects/
+  const q = await projects.createProject(dir, { name: 'Docs' }, { git, reposDir });
+  assert.equal(q.folder, path.join(dir, 'docs'));
+});

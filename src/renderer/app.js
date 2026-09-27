@@ -45,6 +45,9 @@ const state = {
   pendingProject: null, // project to preselect in the panel on open
   usage: null,        // last api.getUsage() result
   usageError: null,
+  art: { runs: null, error: null, projectId: "", q: "", showSim: false, sel: null, doc: null, mode: "rendered" },
+  sup: { runId: null, question: '', loading: false, result: null, error: null, recMsgs: {} }, // supervisor panel
+  pv: null,           // project detail view: { id, project, runs, error, filter, showSim, expanded, msgs }
   usageScope: (() => { try { return localStorage.getItem(USAGE_SCOPE_KEY) === 'machine' ? 'machine' : 'orchestrator'; } catch { return 'orchestrator'; } })(),
 };
 
@@ -72,6 +75,7 @@ async function init() {
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
     if (!$('#usage-pop').classList.contains('hidden')) return closeUsagePopover();
+    if ($('#sup-drawer').classList.contains('open')) return closeSupervisor();
     if (!$('#budget-modal').classList.contains('hidden')) return closeModal('#budget-modal');
     if (!$('#project-modal').classList.contains('hidden')) return closeModal('#project-modal');
     if (!$('#skill-modal').classList.contains('hidden')) return closeModal('#skill-modal');
@@ -95,6 +99,24 @@ async function init() {
   $('#project-form').onsubmit = saveProject;
   $('#btn-pj-cancel').onclick = () => closeModal('#project-modal');
   $('#btn-pj-pick').onclick = async () => { const d = await api.pickFolder(); if (d) $('#pj-folder').value = d; };
+
+  // supervisor
+  $('#btn-sup-close').onclick = closeSupervisor;
+  $('#sup-backdrop').onclick = closeSupervisor;
+  $('#btn-sup-analyze').onclick = analyzeRun;
+  $('#btn-sup-chat').onclick = supervisorChat;
+  $('#sup-question').oninput = (e) => { state.sup.question = e.target.value; };
+
+  // artifacts
+  $('#btn-art-refresh').onclick = () => loadArtifacts();
+  $('#art-project').onchange = (e) => { state.art.projectId = e.target.value; renderArtifactList(); };
+  $('#art-search').oninput = (e) => { state.art.q = e.target.value; renderArtifactList(); };
+  $('#art-show-sim').onchange = (e) => { state.art.showSim = e.target.checked; renderArtifactList(); };
+
+  // project detail
+  $('#btn-project-back').onclick = () => showView('projects');
+  $('#btn-project-refresh').onclick = () => loadProjectRuns();
+  $('#project-show-sim').onchange = (e) => { if (state.pv) { state.pv.showSim = e.target.checked; renderProjectView(); } };
 
   // workflows
   $('#btn-workflows-folder').onclick = async () => api.openPath((await api.appInfo()).workflowsDir);
@@ -127,6 +149,7 @@ async function init() {
   }));
 
   api.onEvent(onEvent);
+  initTerminalDock();
   setInterval(renderTicking, 1000);
   loadUsage();
 
@@ -148,9 +171,11 @@ async function init() {
 function showView(view) {
   state.view = view;
   document.querySelectorAll('.view').forEach((v) => v.classList.toggle('hidden', v.id !== `view-${view}`));
-  document.querySelectorAll('.nav-item').forEach((b) => b.classList.toggle('active', b.dataset.view === view));
+  document.querySelectorAll('.nav-item').forEach((b) => b.classList.toggle('active', b.dataset.view === (view === 'project' ? 'projects' : view)));
   if (view === 'dashboard') renderDashboard();
   if (view === 'projects') refreshProjects();
+  if (view === 'project') { renderProjectView(); loadProjectRuns(); }
+  if (view === 'artifacts') { renderArtifacts(); loadArtifacts(); }
   if (view === 'workflows') refreshWorkflows();
   if (view === 'skills') refreshSkills();
   if (view === 'usage') { renderUsage(); loadUsage(); }
@@ -359,7 +384,7 @@ async function refreshProjects() {
     return;
   }
   box.innerHTML = state.projects.map((p) => `
-    <div class="card" data-id="${esc(p.id)}">
+    <div class="card clickable" data-id="${esc(p.id)}" title="View the runs of this project">
       <div class="card-head">
         <span class="card-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /></svg></span>
         <b class="card-title">${esc(p.name)}</b>
@@ -388,6 +413,195 @@ async function refreshProjects() {
       refreshProjects();
     }
   }));
+  box.querySelectorAll('.card').forEach((c) => (c.onclick = (e) => {
+    if (e.target.closest('button, a, input, [data-act]')) return;
+    openProjectView(c.dataset.id);
+  }));
+}
+
+// ---------------------------------------------------------------------------
+// Project detail: runs of one project and their sessions
+// ---------------------------------------------------------------------------
+const RUN_FILTERS = [
+  ['all', 'All', () => true],
+  ['running', 'Running', (r) => r.status === 'running'],
+  ['success', 'Success', (r) => r.status === 'success'],
+  ['failed', 'Failed', (r) => ['failed', 'cancelled', 'interrupted'].includes(r.status)],
+];
+
+function openProjectView(id) {
+  if (state.pv?.id !== id) {
+    state.pv = { id, project: state.projects.find((p) => p.id === id) || null, runs: null, error: null, filter: 'all', showSim: false, expanded: new Set(), msgs: new Map() };
+  }
+  showView('project');
+}
+
+let pvLoading = null;
+let pvLastLoad = 0;
+let pvTimer = null;
+function loadProjectRuns() {
+  const pv = state.pv;
+  if (!pv) return;
+  if (pvLoading) return pvLoading;
+  pvLoading = (async () => {
+    try {
+      const res = await api.listProjectRuns(pv.id);
+      if (state.pv === pv) { pv.project = res.project || pv.project; pv.runs = res.runs || []; pv.error = null; }
+    } catch (e) {
+      if (state.pv === pv) pv.error = errMsg(e);
+    }
+    pvLoading = null;
+    pvLastLoad = Date.now();
+    if (state.view === 'project') renderProjectView();
+  })();
+  return pvLoading;
+}
+
+// At most one reload every 3 s from run events while the view is visible.
+function loadProjectRunsThrottled() {
+  if (pvTimer || state.view !== 'project') return;
+  const wait = Math.max(0, 3000 - (Date.now() - pvLastLoad));
+  pvTimer = setTimeout(() => { pvTimer = null; if (state.view === 'project') loadProjectRuns(); }, wait);
+}
+
+function renderProjectView() {
+  const pv = state.pv;
+  if (!pv) return;
+  const p = pv.project;
+  $('#project-head').innerHTML = `
+    <div class="pr-head-info">
+      <h1>${esc(p?.name || 'Project')}</h1>
+      ${p?.description ? `<p class="muted">${esc(p.description)}</p>` : ''}
+      <dl class="kv">
+        <dt>folder</dt><dd class="${p && !p.exists ? 'warn-text' : ''}">${esc(p?.folder || '—')}${p && !p.exists ? ' (not found)' : ''}</dd>
+        <dt>repository</dt><dd>${esc(p?.repo || '—')}</dd>
+      </dl>
+    </div>
+    <div class="row">
+      <button class="btn ghost" id="pv-open-folder" ${p?.exists ? '' : 'disabled'}>Open folder</button>
+      <button class="btn primary" id="pv-start">Start workflow</button>
+    </div>`;
+  $('#pv-open-folder').onclick = () => p && api.openPath(p.folder);
+  $('#pv-start').onclick = () => openDrawer({ project: pv.id });
+  $('#project-show-sim').checked = pv.showSim;
+  $('#project-runs-error').textContent = pv.error ? `Could not load runs: ${pv.error}` : '';
+
+  const all = pv.runs || [];
+  const visible = all.filter((r) => pv.showSim || !r.mock);
+  $('#project-run-filters').innerHTML = RUN_FILTERS.map(([id, label, fn]) =>
+    `<button type="button" class="chip ${pv.filter === id ? 'active' : ''}" data-filter="${id}" ${id === 'failed' ? 'title="Failed, cancelled or interrupted"' : ''}>${label} <span class="muted">${visible.filter(fn).length}</span></button>`).join('');
+  $('#project-run-filters').querySelectorAll('[data-filter]').forEach((b) => (b.onclick = () => { pv.filter = b.dataset.filter; renderProjectView(); }));
+
+  const box = $('#project-runs');
+  if (pv.runs == null) {
+    box.innerHTML = pv.error ? '' : '<p class="muted">Loading…</p>';
+    return;
+  }
+  const hiddenSim = all.length - visible.length;
+  const simNote = hiddenSim ? `<p class="muted small">${hiddenSim} simulated run${hiddenSim > 1 ? 's' : ''} hidden.</p>` : '';
+  if (!all.length || !visible.length) {
+    box.innerHTML = `<div class="empty-state"><b>No workflows have run in this project yet.</b>${simNote}<button class="btn primary" id="pv-empty-start">Start workflow</button></div>`;
+    $('#pv-empty-start').onclick = () => openDrawer({ project: pv.id });
+    return;
+  }
+  const fn = RUN_FILTERS.find(([id]) => id === pv.filter)?.[2] || (() => true);
+  const runs = visible.filter(fn);
+  box.innerHTML = (runs.map((r) => projectRunRow(r, pv)).join('') || '<p class="muted pr-none">No runs match this filter.</p>') + simNote;
+
+  box.querySelectorAll('.pr-row').forEach((row) => (row.onclick = () => {
+    const id = row.closest('.pr-run').dataset.run;
+    pv.expanded.has(id) ? pv.expanded.delete(id) : pv.expanded.add(id);
+    renderProjectView();
+  }));
+  box.querySelectorAll('[data-run-act]').forEach((b) => (b.onclick = () => {
+    const r = pv.runs.find((x) => x.runId === b.closest('.pr-run').dataset.run);
+    if (b.dataset.runAct === 'logs') api.openPath(r.runDir);
+    if (b.dataset.runAct === 'view') showView('run');
+    if (b.dataset.runAct === 'sup') openSupervisor({ runId: r.runId, workflow: r.workflow, status: r.status, error: r.error, mock: r.mock });
+  }));
+  box.querySelectorAll('[data-art]').forEach((b) => (b.onclick = () => {
+    const r = pv.runs.find((x) => x.runId === b.closest('.pr-run').dataset.run);
+    openArtifactsAt({ projectId: pv.id, runId: r.runId, path: b.dataset.art, mock: r.mock });
+  }));
+  box.querySelectorAll('[data-term]').forEach((b) => (b.onclick = async () => {
+    const runId = b.closest('.pr-run').dataset.run;
+    const row = b.closest('[data-session]');
+    const sid = row.dataset.session;
+    const key = `${runId}:${sid}`;
+    pv.msgs.set(key, await termAction(b, { sessionId: sid, runId, label: row.dataset.agent }));
+    const msg = b.closest('[data-session]').querySelector('[data-term-msg]');
+    if (msg) { msg.textContent = pv.msgs.get(key).text; msg.classList.toggle('error', pv.msgs.get(key).error); }
+  }));
+}
+
+function projectRunRow(r, pv) {
+  const open = pv.expanded.has(r.runId);
+  const task = String(r.task || '').trim();
+  const firstLine = task.split('\n')[0];
+  const dur = r.status === 'running' && r.startedAt ? Date.now() - Date.parse(r.startedAt) : r.durationMs;
+  return `
+    <div class="pr-run ${open ? 'open' : ''}" data-run="${esc(r.runId)}">
+      <div class="pr-row" title="${open ? 'Hide' : 'Show'} sessions">
+        <span class="pill pill-${esc(r.status)}">${esc(r.status)}</span>
+        <div class="pr-main">
+          <div><b>${esc(r.workflow || r.file || 'workflow')}</b>${r.version ? ` <span class="muted small">v${esc(r.version)}</span>` : ''}${r.mock ? ' <span class="badge p-mock">simulated</span>' : ''}${r.current ? ' <span class="badge live">this window</span>' : ''}</div>
+          <div class="muted small pr-task" title="${esc(task)}">${esc(firstLine || 'No task')}</div>
+        </div>
+        <span class="pr-meta"><label>started</label>${r.startedAt ? esc(dateOf(r.startedAt)) : '—'}</span>
+        <span class="pr-meta"><label>duration</label>${fmtDur(dur)}</span>
+        <span class="pr-meta"><label>tokens</label>${fmtTok(r.tokens?.total)}</span>
+        <span class="pr-meta"><label>cost</label>${fmtUsd(r.costUsd)}</span>
+        <span class="pr-chev" aria-hidden="true">${open ? '▾' : '▸'}</span>
+      </div>
+      ${open ? projectRunBody(r, pv) : ''}
+    </div>`;
+}
+
+function projectRunBody(r, pv) {
+  const sessions = r.sessions || [];
+  return `<div class="pr-body">
+    <div class="row">
+      <button class="btn sm ghost" data-run-act="logs">Open logs</button>
+      <button class="btn sm ghost sup-btn" data-run-act="sup"><span class="sup-mark">◆</span> Ask the supervisor</button>
+      ${r.current ? '<button class="btn sm" data-run-act="view">View run</button>' : ''}
+      <span class="spacer"></span>
+      <span class="muted small mono">${esc(r.runId)}</span>
+    </div>
+    ${r.error ? `<pre class="pr-error">${esc(r.error)}</pre>` : ''}
+    ${runTaskBlock(r)}
+    ${r.artifacts?.length ? `<div class="pr-arts">
+      <div class="pr-arts-head">Artifacts <span class="muted">${r.artifacts.length}</span></div>
+      <div class="pr-arts-list">${r.artifacts.map((a) => `
+        <button class="pr-art ${a.exists ? '' : 'missing'}" data-art="${esc(a.path)}" title="${esc(a.path)}">
+          ${artKindIcon(a.kind)}<span class="pr-art-name">${esc(a.name)}</span>
+          ${a.location === 'external' ? '<span class="badge">project copy</span>' : ''}${a.exists ? '' : '<span class="muted small">deleted</span>'}
+          <span class="muted small">${esc(fmtSize(a.size))}</span>
+        </button>`).join('')}</div>
+    </div>` : ''}
+    ${sessions.length ? `<table class="u-table pr-sessions">
+      <thead><tr><th>Agent</th><th>Provider · model</th><th>Status</th><th class="num">Turns</th><th class="num">Cost</th><th></th></tr></thead>
+      <tbody>${[...sessions].sort((a, b) => isOrchSession(b) - isOrchSession(a)).map((s) => {
+        const m = pv.msgs.get(`${r.runId}:${s.id}`);
+        return `<tr data-session="${esc(s.id)}" data-agent="${esc(s.agent)}">
+          <td><b>${esc(s.agent)}</b> <span class="muted small mono">${esc(s.id)}</span></td>
+          <td><span class="badge p-${esc(s.provider)}">${esc(s.provider)}</span> <span class="mono small">${esc(s.model || '')}</span></td>
+          <td><span class="status st-${esc(s.status)}"><span class="status-dot"></span>${esc(s.status)}</span></td>
+          <td class="num mono">${fmtNum(s.turns)}</td>
+          <td class="num mono">${fmtUsd(s.costUsd)}</td>
+          <td class="pr-term">
+            <span class="small ${m?.error ? 'error' : 'muted'}" data-term-msg>${esc(m?.text || '')}</span>
+            ${termButtons('live', isOrchSession(s) ? 'Follow the orchestrator log in a terminal' : '')}
+            ${termButtons('cli', '', s.cliAvailable ? '' : s.cliReason || 'Not available')}
+          </td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>` : '<p class="muted small">No agent sessions in this run.</p>'}
+  </div>`;
+}
+
+function runTaskBlock(r) {
+  const t = String(r.task || '').trim();
+  return t.includes('\n') || t.length > 120 ? `<details class="pr-fulltask"><summary class="muted small">Full task</summary><pre>${esc(t)}</pre></details>` : '';
 }
 
 let editingProject = null;
@@ -1024,6 +1238,7 @@ function onEvent(ev) {
     case 'workflow.finished':
       state.run.status = ev.status;
       state.run.finishedAt = Date.parse(ev.ts);
+      state.run.error = ev.error || null;
       state.steps.forEach((s) => { if (s.status !== 'pending') s.status = 'done'; });
       orch(ev, `workflow finished: ${ev.status}${ev.error ? ' — ' + ev.error : ''}`, ev.status === 'success' ? 'transition' : 'error');
       if (state.approval) closeApproval();
@@ -1136,9 +1351,24 @@ function onEvent(ev) {
     case 'log':
       orch(ev, ev.message, ev.level);
       break;
+
+    case 'supervisor.started':
+      orch(ev, `◆ supervisor called on ${ev.step_id}: ${ev.error || 'step failed'}`, 'supervisor');
+      break;
+
+    case 'supervisor.decision': {
+      const target = ev.action === 'goto' && ev.goto ? ` ${ev.goto}` : '';
+      orch(ev, `◆ supervisor → ${ev.action}${target}${ev.cause_class ? ` [${ev.cause_class}]` : ''} — ${ev.explanation || ''}${ev.note ? ` (${ev.note})` : ''}`, 'supervisor');
+      showToast(`◆ Supervisor on "${ev.step_id}": ${SUP_ACTIONS[ev.action] || ev.action}`, ev.explanation);
+      break;
+    }
   }
+  if (PROJECT_REFRESH_EVENTS.has(ev.type)) loadProjectRunsThrottled();
+  if (ev.type === 'workflow.finished' || ev.type === 'file.saved') loadArtifactsThrottled();
   scheduleRender();
 }
+
+const PROJECT_REFRESH_EVENTS = new Set(['workflow.started', 'workflow.finished', 'session.opened', 'session.closed', 'session.status', 'step.started']);
 
 function orch(ev, text, level = '') {
   state.orchLog.push({ ts: ev.ts, text, level });
@@ -1157,6 +1387,7 @@ function scheduleRender() {
 function render() {
   renderHeader();
   if (state.view !== 'run') return;
+  renderRunBanner();
   renderRunSummary();
   renderSteps();
   renderSessions();
@@ -1210,7 +1441,23 @@ function renderRunSummary() {
   $('#run-summary').innerHTML = `
     <div class="run-summary-name"><b>${esc(r.workflow || '')}</b>${r.version ? ` <span class="muted small">v${esc(r.version)}</span>` : ''}</div>
     ${r.project ? `<div class="small">Project: <b>${esc(r.project)}</b></div>` : ''}
-    <dl class="kv">${inputs.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(String(v).length > 160 ? String(v).slice(0, 160) + '…' : v)}</dd>`).join('')}</dl>`;
+    <dl class="kv">${inputs.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(String(v).length > 160 ? String(v).slice(0, 160) + '…' : v)}</dd>`).join('')}</dl>
+    <button class="btn sm ghost sup-btn" id="btn-run-sup" title="Ask the AI supervisor to explain this run and suggest how to continue"><span class="sup-mark">◆</span> Ask the supervisor</button>`;
+  $('#btn-run-sup').onclick = () => openSupervisorForCurrent();
+}
+
+function renderRunBanner() {
+  const r = state.run;
+  const box = $('#run-fail-banner');
+  const show = r?.status === 'failed';
+  box.classList.toggle('hidden', !show);
+  if (!show) return;
+  const key = `${r.id}:${r.error || ''}`;
+  if (box.dataset.key === key) return;
+  box.dataset.key = key;
+  box.innerHTML = `<div class="fail-banner-text"><b>The workflow failed</b>${r.error ? `<span class="mono small" title="${esc(r.error)}">${esc(r.error)}</span>` : ''}</div>
+    <button class="btn sm sup-btn solid" id="btn-banner-sup"><span class="sup-mark">◆</span> Ask the supervisor</button>`;
+  $('#btn-banner-sup').onclick = () => openSupervisorForCurrent();
 }
 
 function renderSteps() {
@@ -1287,6 +1534,12 @@ function renderDetail() {
   let html = `
     <div class="detail-head">
       <h3>${esc(s.agent)} <span class="badge p-${esc(s.provider)}">${esc(s.provider)}</span> <span class="badge">${esc(s.model)}</span></h3>
+      <div class="detail-actions">
+        ${termButtons('live', s.id === 'orchestrator' ? 'Follow the orchestrator log (steps, transitions, sessions, approvals) in a terminal' : 'Follow this session live in a terminal')}
+        ${s.id === 'orchestrator' ? '' : termButtons('cli', '', cliBlocked(s))}
+        ${s.id === 'orchestrator' ? '<button class="btn sm ghost sup-btn" data-sup><span class="sup-mark">◆</span> Ask the supervisor</button>' : ''}
+        <span class="muted small" data-term-msg></span>
+      </div>
       <dl class="kv">
         <dt>session</dt><dd>${esc(s.id)}</dd>
         <dt>provider session</dt><dd>${esc(s.provider_session_id || '—')}</dd>
@@ -1320,7 +1573,46 @@ function renderDetail() {
   }
 
   box.innerHTML = html;
+  box.querySelector('[data-sup]')?.addEventListener('click', () => openSupervisorForCurrent());
+  box.querySelectorAll('[data-term]').forEach((b) => (b.onclick = async () => {
+    const msg = box.querySelector('[data-term-msg]');
+    const r = await termAction(b, { sessionId: s.id, label: s.agent });
+    if (msg) { msg.textContent = r.text; msg.classList.toggle('error', r.error); }
+  }));
   if (atBottom) box.scrollTop = box.scrollHeight;
+}
+
+const CLI_TITLE = "Open the provider CLI resuming this conversation. Messages you send there become part of the agent's conversation.";
+
+// "Live terminal" / "Open in CLI" (embedded in the dock) + "↗" (external window).
+function termButtons(kind, title, blocked = '') {
+  const label = kind === 'live' ? 'Live terminal' : 'Open in CLI';
+  const t = blocked || title || (kind === 'cli' ? CLI_TITLE : 'Follow this session live in a terminal');
+  const dis = blocked ? 'disabled' : '';
+  return `<span class="term-btns"><button class="btn sm ghost" data-term="${kind}" ${dis} title="${esc(t)}">${label}</button><button class="btn sm ghost term-ext" data-term="${kind}" data-ext="1" ${dis} title="${esc(blocked || `${label} in an external window`)}">↗</button></span>`;
+}
+
+// Runs a terminal button: embedded tab or external window. Returns the inline message.
+async function termAction(btn, { sessionId, runId, label }) {
+  const kind = btn.dataset.term;
+  try {
+    if (btn.dataset.ext) {
+      await api.openSessionTerminal(sessionId, kind, runId);
+      return { text: 'Terminal opened in a new window.', error: false };
+    }
+    await openTerminal({ kind, sessionId, runId, label });
+    return { text: '', error: false };
+  } catch (e) {
+    return { text: errMsg(e), error: true };
+  }
+}
+
+// Why "Open in CLI" is not available for a session right now ('' = available).
+function cliBlocked(s) {
+  if (s.provider === 'mock') return 'Simulated sessions have no CLI conversation.';
+  if (!s.provider_session_id) return 'Available after the first turn finishes.';
+  if (s.status === 'active' || s.status === 'retrying') return 'The agent is in the middle of a turn.';
+  return '';
 }
 
 function renderEvents() {
@@ -1332,6 +1624,738 @@ function renderEvents() {
       <pre>${esc(JSON.stringify(rest, null, 1)).slice(0, 2000)}</pre></div>`;
   }).join('');
   if (atBottom) box.scrollTop = box.scrollHeight;
+}
+
+// ---------------------------------------------------------------------------
+// Artifacts: documents and files produced by runs
+// ---------------------------------------------------------------------------
+const ART_KIND = { markdown: ['MD', 'k-md'], json: ['{ }', 'k-json'], table: ['TSV', 'k-table'], text: ['TXT', 'k-text'], other: ['FILE', 'k-other'] };
+const artKindIcon = (kind) => { const [l, c] = ART_KIND[kind] || ART_KIND.other; return `<span class="art-kind ${c}">${l}</span>`; };
+function fmtSize(n) {
+  if (n == null) return '';
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(n < 10240 ? 1 : 0)} KB`;
+  return `${(n / 1024 / 1024).toFixed(1)} MB`;
+}
+
+let artLoading = null;
+let artLastLoad = 0;
+let artTimer = null;
+function loadArtifacts() {
+  if (artLoading) return artLoading;
+  const a = state.art;
+  artLoading = (async () => {
+    try {
+      const [runs, projects] = await Promise.all([api.listArtifacts({}), state.projects.length ? state.projects : api.listProjects()]);
+      a.runs = runs || [];
+      state.projects = projects;
+      a.error = null;
+    } catch (e) {
+      a.error = errMsg(e);
+    }
+    artLoading = null;
+    artLastLoad = Date.now();
+    if (state.view === 'artifacts') renderArtifacts();
+  })();
+  return artLoading;
+}
+
+function loadArtifactsThrottled() {
+  if (artTimer || state.view !== 'artifacts') return;
+  const wait = Math.max(0, 2000 - (Date.now() - artLastLoad));
+  artTimer = setTimeout(() => { artTimer = null; if (state.view === 'artifacts') loadArtifacts(); }, wait);
+}
+
+// Opens the Artifacts view focused on one file (from the project view).
+function openArtifactsAt({ projectId, path, mock }) {
+  const a = state.art;
+  a.projectId = projectId || '';
+  a.q = '';
+  if (mock) a.showSim = true;
+  showView('artifacts');
+  selectArtifact(path);
+}
+
+function renderArtifacts() {
+  const a = state.art;
+  const sel = $('#art-project');
+  sel.innerHTML = `<option value="">All projects</option>${state.projects.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}`;
+  sel.value = a.projectId;
+  if (sel.value !== a.projectId) a.projectId = '';
+  $('#art-search').value = a.q;
+  $('#art-show-sim').checked = a.showSim;
+  $('#art-error').textContent = a.error ? `Could not load artifacts: ${a.error}` : '';
+  renderArtifactList();
+  renderArtifactViewer();
+}
+
+function artifactRunsFiltered() {
+  const a = state.art;
+  const q = a.q.trim().toLowerCase();
+  return (a.runs || [])
+    .filter((r) => a.showSim || !r.mock)
+    .filter((r) => !a.projectId || r.project?.id === a.projectId)
+    .map((r) => {
+      if (!q) return r;
+      const runHit = [r.workflow, r.task, r.project?.name].some((x) => String(x || '').toLowerCase().includes(q));
+      return runHit ? r : { ...r, artifacts: r.artifacts.filter((f) => `${f.name} ${f.rel}`.toLowerCase().includes(q)) };
+    })
+    .filter((r) => r.artifacts.length);
+}
+
+function renderArtifactList() {
+  const a = state.art;
+  const box = $('#art-list');
+  if (a.runs == null) { box.innerHTML = a.error ? '' : '<p class="muted small art-pad">Loading…</p>'; return; }
+  const runs = artifactRunsFiltered();
+  const hiddenSim = (a.runs || []).filter((r) => r.mock && !a.showSim).length;
+  if (!runs.length) {
+    box.innerHTML = `<div class="art-pad muted small">${a.runs.length ? 'No artifacts match these filters.' : 'No run has produced documents or files yet.'}${hiddenSim ? `<br>${hiddenSim} simulated run${hiddenSim > 1 ? 's' : ''} hidden.` : ''}</div>`;
+    return;
+  }
+  box.innerHTML = runs.map((r) => `
+    <div class="art-run">
+      <div class="art-run-head" title="${esc(r.task || '')}">
+        <div class="row"><b class="art-run-name">${esc(r.workflow || 'workflow')}</b><span class="pill pill-${esc(r.status)}">${esc(r.status)}</span>${r.mock ? '<span class="badge p-mock">simulated</span>' : ''}</div>
+        <div class="muted small">${r.project ? `${esc(r.project.name)} · ` : ''}${r.startedAt ? esc(dateOf(r.startedAt)) : ''}</div>
+      </div>
+      ${r.artifacts.map((f) => `
+        <button class="art-file ${a.sel === f.path ? 'active' : ''} ${f.exists ? '' : 'missing'}" data-path="${esc(f.path)}" title="${esc(f.path)}">
+          ${artKindIcon(f.kind)}
+          <span class="art-file-main">
+            <span class="art-file-name">${esc(f.name)}${f.location === 'external' ? ' <span class="badge">project copy</span>' : ''}${f.exists ? '' : ' <span class="badge">deleted</span>'}</span>
+            <span class="art-file-sub muted">${esc(f.rel || '')}${f.step ? ` · ${esc(f.step)}${f.agent ? ` · ${esc(f.agent)}` : ''}` : f.agent ? ` · ${esc(f.agent)}` : ''}</span>
+          </span>
+          <span class="art-file-size muted">${esc(fmtSize(f.size))}</span>
+        </button>`).join('')}
+    </div>`).join('') + (hiddenSim ? `<p class="muted small art-pad">${hiddenSim} simulated run${hiddenSim > 1 ? 's' : ''} hidden.</p>` : '');
+  box.querySelectorAll('.art-file').forEach((b) => (b.onclick = () => selectArtifact(b.dataset.path)));
+}
+
+let artReadSeq = 0;
+async function selectArtifact(path) {
+  const a = state.art;
+  a.sel = path;
+  a.doc = { path, loading: true };
+  document.querySelectorAll('.art-file').forEach((b) => b.classList.toggle('active', b.dataset.path === path));
+  renderArtifactViewer();
+  const seq = ++artReadSeq;
+  let doc;
+  try {
+    doc = await api.readArtifact(path);
+  } catch (e) {
+    doc = { path, error: errMsg(e) };
+  }
+  if (seq !== artReadSeq) return; // a newer selection won
+  a.doc = doc;
+  if (state.view === 'artifacts') renderArtifactViewer();
+}
+
+function findArtifactMeta(path) {
+  for (const r of state.art.runs || []) for (const f of r.artifacts) if (f.path === path) return f;
+  return null;
+}
+
+function renderArtifactViewer() {
+  const a = state.art;
+  const bar = $('#art-toolbar');
+  const body = $('#art-body');
+  const d = a.doc;
+  if (!d) {
+    bar.classList.add('hidden');
+    body.innerHTML = '<div class="art-empty muted">Select a file to preview it.</div>';
+    return;
+  }
+  const meta = { ...(findArtifactMeta(d.path) || {}), ...d };
+  const name = meta.name || d.path.split(/[\\/]/).pop();
+  bar.classList.remove('hidden');
+  bar.innerHTML = `
+    <div class="art-title">
+      ${artKindIcon(meta.kind)}
+      <div class="art-title-text"><b>${esc(name)}</b><span class="mono muted art-path" title="${esc(d.path)}">${esc(d.path)}</span></div>
+    </div>
+    ${meta.kind === 'markdown' && d.text != null ? `<div class="seg sm"><button type="button" data-mode="rendered" class="${a.mode === 'rendered' ? 'active' : ''}">Rendered</button><button type="button" data-mode="source" class="${a.mode === 'source' ? 'active' : ''}">Source</button></div>` : ''}
+    <div class="row">
+      <button class="btn sm ghost" data-art-act="open" ${meta.exists === false ? 'disabled' : ''}>Open</button>
+      <button class="btn sm ghost" data-art-act="reveal" ${meta.exists === false ? 'disabled' : ''}>Show in folder</button>
+      <button class="btn sm ghost" data-art-act="copy">Copy path</button>
+    </div>
+    <span class="muted small art-msg"></span>`;
+  bar.querySelectorAll('[data-mode]').forEach((b) => (b.onclick = () => { a.mode = b.dataset.mode; renderArtifactViewer(); }));
+  bar.querySelectorAll('[data-art-act]').forEach((b) => (b.onclick = async () => {
+    const msg = bar.querySelector('.art-msg');
+    try {
+      if (b.dataset.artAct === 'open') { const err = await api.openArtifact(d.path); if (err) throw new Error(err); }
+      if (b.dataset.artAct === 'reveal') await api.openArtifact(d.path, true);
+      if (b.dataset.artAct === 'copy') { await api.clipboardWrite(d.path); msg.textContent = 'Path copied.'; }
+    } catch (e) {
+      msg.textContent = errMsg(e);
+    }
+  }));
+
+  body.scrollTop = 0;
+  if (d.loading) { body.innerHTML = '<div class="art-empty muted">Loading…</div>'; return; }
+  if (d.error) { body.innerHTML = `<div class="art-empty"><p class="error">${esc(d.error)}</p></div>`; return; }
+  const notice = d.truncated ? '<div class="art-notice">This file is larger than 5 MB: only the first 5 MB are shown.</div>' : '';
+  if (d.binary || d.text == null || meta.kind === 'other') {
+    body.innerHTML = `${notice}<div class="art-empty"><p class="muted">Preview not available for this file.</p><button class="btn primary" id="art-open-default">Open</button></div>`;
+    $('#art-open-default').onclick = () => api.openArtifact(d.path).catch(() => {});
+    return;
+  }
+  if (meta.kind === 'markdown' && a.mode === 'rendered') return renderMarkdownDoc(body, d.text, notice);
+  if (meta.kind === 'markdown') { body.innerHTML = `${notice}<pre class="art-code">${esc(d.text)}</pre>`; return; }
+  if (meta.kind === 'json') { body.innerHTML = `${notice}<pre class="art-code json">${renderJsonText(d.text, /\.jsonl$/i.test(d.path))}</pre>`; return; }
+  if (meta.kind === 'table') { body.innerHTML = `${notice}${renderDelimited(d.text, /\.csv$/i.test(d.path) ? ',' : '\t')}`; return; }
+  body.innerHTML = `${notice}<pre class="art-code">${esc(d.text)}</pre>`;
+}
+
+// ---- markdown ----
+let mdHooked = false;
+function sanitizeHtml(html) {
+  if (!mdHooked) {
+    mdHooked = true;
+    DOMPurify.addHook('afterSanitizeAttributes', (node) => {
+      if (node.tagName === 'A' && node.getAttribute('href') && !node.getAttribute('href').startsWith('#')) {
+        node.setAttribute('target', '_blank');
+        node.setAttribute('rel', 'noopener noreferrer');
+      }
+    });
+  }
+  return DOMPurify.sanitize(html);
+}
+
+const slugify = (s) => String(s).toLowerCase().trim().replace(/[^\p{L}\p{N}\s-]/gu, '').replace(/\s+/g, '-');
+
+// Sanitized markdown -> HTML string (escaped text when the libraries are missing).
+function markdownHtml(text) {
+  if (typeof marked === 'undefined' || typeof DOMPurify === 'undefined') return `<pre class="art-code">${esc(text)}</pre>`;
+  const tmp = document.createElement('div');
+  tmp.innerHTML = sanitizeHtml(marked.parse(String(text || ''), { gfm: true }));
+  // wide tables scroll on their own
+  tmp.querySelectorAll('table').forEach((t) => { const w = document.createElement('div'); w.className = 'md-table'; t.replaceWith(w); w.appendChild(t); });
+  return tmp.innerHTML;
+}
+
+function renderMarkdownDoc(body, text, notice) {
+  if (typeof marked === 'undefined' || typeof DOMPurify === 'undefined') {
+    body.innerHTML = `${notice}<pre class="art-code">${esc(text)}</pre>`;
+    return;
+  }
+  body.innerHTML = `${notice}<div class="md-wrap"><nav class="md-toc hidden"></nav><article class="md"></article></div>`;
+  const doc = body.querySelector('.md');
+  doc.innerHTML = markdownHtml(text);
+  const used = new Set();
+  const heads = [...doc.querySelectorAll('h1, h2, h3, h4')];
+  heads.forEach((h) => {
+    let id = slugify(h.textContent) || 'section';
+    for (let i = 2; used.has(id); i++) id = `${slugify(h.textContent)}-${i}`;
+    used.add(id);
+    h.id = id;
+  });
+  const scrollTo = (id) => { const el = doc.querySelector(`[id="${CSS.escape(id)}"]`); if (el) body.scrollTo({ top: el.offsetTop - 12, behavior: 'smooth' }); };
+  doc.addEventListener('click', (e) => {
+    const link = e.target.closest('a[href^="#"]');
+    if (!link) return;
+    e.preventDefault();
+    scrollTo(decodeURIComponent(link.getAttribute('href').slice(1)));
+  });
+  const tocItems = heads.filter((h) => h.tagName === 'H2' || h.tagName === 'H3');
+  if (heads.length >= 4 && tocItems.length) {
+    const toc = body.querySelector('.md-toc');
+    toc.classList.remove('hidden');
+    toc.innerHTML = `<div class="md-toc-title">Contents</div>${tocItems.map((h) =>
+      `<a href="#" class="${h.tagName === 'H3' ? 'sub' : ''}" data-id="${esc(h.id)}">${esc(h.textContent)}</a>`).join('')}`;
+    toc.querySelectorAll('[data-id]').forEach((l) => (l.onclick = (e) => { e.preventDefault(); scrollTo(l.dataset.id); }));
+  }
+}
+
+// ---- JSON ----
+function highlightJson(src) {
+  const re = /("(?:\\u[a-fA-F0-9]{4}|\\[^u]|[^\\"])*")(\s*:)?|\b(true|false|null)\b|(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)/g;
+  let out = '', last = 0, m;
+  while ((m = re.exec(src))) {
+    out += esc(src.slice(last, m.index));
+    if (m[1]) out += m[2] ? `<span class="j-key">${esc(m[1])}</span>${esc(m[2])}` : `<span class="j-str">${esc(m[1])}</span>`;
+    else if (m[3]) out += `<span class="j-${m[3] === 'null' ? 'null' : 'bool'}">${m[3]}</span>`;
+    else out += `<span class="j-num">${m[4]}</span>`;
+    last = re.lastIndex;
+  }
+  return out + esc(src.slice(last));
+}
+
+function renderJsonText(text, lines) {
+  if (lines) {
+    return text.split(/\r?\n/).filter((l) => l.trim()).map((l) => {
+      try { return highlightJson(JSON.stringify(JSON.parse(l), null, 2)); } catch { return esc(l); }
+    }).join('\n<span class="j-sep"></span>\n');
+  }
+  try { return highlightJson(JSON.stringify(JSON.parse(text), null, 2)); } catch { return esc(text); }
+}
+
+// ---- TSV / CSV ----
+function parseDelimited(text, sep) {
+  const rows = [];
+  if (sep === '\t') return text.split(/\r?\n/).filter((l) => l.length).map((l) => l.split('\t'));
+  let row = [], cell = '', q = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (q) {
+      if (c === '"' && text[i + 1] === '"') { cell += '"'; i++; } else if (c === '"') q = false; else cell += c;
+    } else if (c === '"' && cell === '') q = true;
+    else if (c === sep) { row.push(cell); cell = ''; }
+    else if (c === '\n' || c === '\r') {
+      if (c === '\r' && text[i + 1] === '\n') i++;
+      row.push(cell); cell = '';
+      if (row.some((x) => x !== '')) rows.push(row);
+      row = [];
+    } else cell += c;
+  }
+  if (cell !== '' || row.length) { row.push(cell); rows.push(row); }
+  return rows;
+}
+
+function renderDelimited(text, sep) {
+  const rows = parseDelimited(text, sep);
+  if (!rows.length) return '<div class="art-empty muted">Empty file.</div>';
+  const MAX = 2000;
+  const [head, ...rest] = rows;
+  return `<div class="md-table art-table"><table>
+    <thead><tr>${head.map((h) => `<th>${esc(h)}</th>`).join('')}</tr></thead>
+    <tbody>${rest.slice(0, MAX).map((r) => `<tr>${head.map((_, i) => `<td>${esc(r[i] ?? '')}</td>`).join('')}</tr>`).join('')}</tbody>
+  </table></div>${rest.length > MAX ? `<p class="muted small art-pad">Showing the first ${MAX} of ${rest.length} rows.</p>` : ''}`;
+}
+
+// ---------------------------------------------------------------------------
+// AI supervisor: analysis of a run, resume from a step, chat
+// ---------------------------------------------------------------------------
+const SUP_ACTIONS = { retry: 'retry the step', fix_output: 'fix the output', goto: 'go to another step', ask_human: 'ask you', fail: 'stop the run' };
+
+function openSupervisorForCurrent() {
+  const r = state.run;
+  if (!r) return;
+  openSupervisor({ runId: r.id, workflow: r.workflow, status: r.status, error: r.error, mock: r.mock });
+}
+
+function openSupervisor(run) {
+  const sup = state.sup;
+  if (sup.runId !== run.runId) {
+    Object.assign(sup, { runId: run.runId, question: '', loading: false, result: null, error: null, recMsgs: {} });
+  }
+  Object.assign(sup, { workflow: run.workflow, status: run.status, runError: run.error, mock: !!run.mock });
+  $('#sup-question').value = sup.question;
+  $('#sup-chat-msg').textContent = '';
+  $('#sup-drawer').classList.add('open');
+  $('#sup-drawer').setAttribute('aria-hidden', 'false');
+  $('#sup-backdrop').classList.remove('hidden');
+  renderSupervisor();
+  setTimeout(() => $('#sup-question').focus(), 200);
+}
+
+function closeSupervisor() {
+  $('#sup-drawer').classList.remove('open');
+  $('#sup-drawer').setAttribute('aria-hidden', 'true');
+  $('#sup-backdrop').classList.add('hidden');
+}
+
+async function analyzeRun() {
+  const sup = state.sup;
+  if (!sup.runId || sup.loading) return;
+  const runId = sup.runId;
+  Object.assign(sup, { loading: true, error: null, recMsgs: {} });
+  renderSupervisor();
+  try {
+    const res = await api.askSupervisor(runId, sup.question.trim() || undefined);
+    if (sup.runId !== runId) return;
+    sup.result = res;
+  } catch (e) {
+    if (sup.runId !== runId) return;
+    sup.error = errMsg(e);
+  } finally {
+    if (sup.runId === runId) sup.loading = false;
+  }
+  renderSupervisor();
+}
+
+async function supervisorChat() {
+  const msg = $('#sup-chat-msg');
+  msg.textContent = '';
+  msg.classList.remove('error');
+  try {
+    await openTerminal({ kind: 'supervisor', runId: state.sup.runId, label: 'supervisor' });
+  } catch (e) {
+    msg.textContent = errMsg(e);
+    msg.classList.add('error');
+  }
+}
+
+function renderSupervisor() {
+  const sup = state.sup;
+  $('#sup-run').innerHTML = `<span class="mono">${esc(sup.runId || '')}</span>${sup.workflow ? ` · ${esc(sup.workflow)}` : ''}${sup.status ? ` <span class="pill pill-${esc(sup.status)}">${esc(sup.status)}</span>` : ''}${sup.mock ? ' <span class="badge p-mock">simulated</span>' : ''}`;
+  $('#btn-sup-analyze').disabled = sup.loading;
+  $('#btn-sup-analyze').textContent = sup.result ? 'Analyze again' : 'Analyze';
+  const box = $('#sup-result');
+  if (sup.loading) {
+    box.innerHTML = '<div class="sup-loading"><span class="spinner"></span><span>The supervisor is reading the run… (this can take a minute)</span></div>';
+    return;
+  }
+  if (sup.error) { box.innerHTML = `<p class="error small">${esc(sup.error)}</p>`; return; }
+  const res = sup.result;
+  if (!res) {
+    box.innerHTML = `${sup.runError ? `<div class="sup-runerror"><div class="sup-h">Error</div><pre>${esc(sup.runError)}</pre></div>` : ''}
+      <p class="muted small">The supervisor reads the run's events, outputs and logs, explains what happened and suggests how to continue. You can also chat with it in a terminal.</p>`;
+    return;
+  }
+  const a = res.analysis || {};
+  const steps = res.steps || [];
+  const recs = a.recommendations || [];
+  box.innerHTML = `
+    <div class="sup-meta muted small">
+      <span>${esc(res.model || 'supervisor')}${res.costUsd != null ? ` · ${esc(fmtCost(res.costUsd))}` : ''}</span>
+      ${res.artifactPath ? '<button class="link-btn small" id="sup-open-art">Open in Artifacts</button>' : ''}
+    </div>
+    <section class="sup-sec"><div class="sup-h">What happened</div><div class="md md-compact">${markdownHtml(a.summary || '_No summary._')}</div></section>
+    ${a.root_cause ? `<section class="sup-sec"><div class="sup-h">Root cause</div><div class="md md-compact">${markdownHtml(a.root_cause)}</div></section>` : ''}
+    ${recs.length ? `<section class="sup-sec"><div class="sup-h">Recommendations</div>${recs.map((r, i) => recCard(r, i, steps)).join('')}</section>` : ''}`;
+  $('#sup-open-art')?.addEventListener('click', () => {
+    closeSupervisor();
+    openArtifactsAt({ projectId: '', path: res.artifactPath, mock: sup.mock });
+    loadArtifacts().then(() => renderArtifactList());
+  });
+  box.querySelectorAll('[data-rec]').forEach((b) => (b.onclick = () => runRecommendation(Number(b.dataset.rec))));
+}
+
+function recCard(r, i, steps) {
+  const m = state.sup.recMsgs[i];
+  const msg = m ? `<span class="small ${m.error ? 'error' : 'muted'}">${esc(m.text)}</span>` : '';
+  let ctrl = '';
+  if (r.action === 'resume') {
+    const pre = steps.includes(r.step) ? r.step : steps[0];
+    ctrl = `<div class="field"><label for="rec-step-${i}">Resume from step</label>
+        <select id="rec-step-${i}">${steps.map((s) => `<option ${s === pre ? 'selected' : ''}>${esc(s)}</option>`).join('')}</select></div>
+      <div class="field"><label for="rec-ins-${i}">Instruction for the agents</label>
+        <textarea id="rec-ins-${i}" rows="4">${esc(r.instruction || '')}</textarea></div>
+      <div class="row"><button class="btn sm primary" data-rec="${i}">Resume from this step</button>${msg}</div>`;
+  } else if (r.action === 'rerun') {
+    ctrl = `${r.instruction ? `<p class="small muted sup-ins">${esc(r.instruction)}</p>` : ''}<div class="row"><button class="btn sm" data-rec="${i}">Run again</button>${msg}</div>`;
+  } else if (r.instruction) {
+    ctrl = `<p class="small muted sup-ins">${esc(r.instruction)}</p>`;
+  }
+  const tag = { resume: 'resume', rerun: 'run again', none: 'advice' }[r.action] || r.action;
+  return `<div class="sup-rec"><div class="sup-rec-head"><b>${esc(r.title || 'Recommendation')}</b><span class="badge">${esc(tag)}</span></div>${ctrl}</div>`;
+}
+
+async function runRecommendation(i) {
+  const sup = state.sup;
+  const res = sup.result;
+  const r = res?.analysis?.recommendations?.[i];
+  if (!r) return;
+  const steps = res.steps || [];
+  const step = r.action === 'resume' ? $(`#rec-step-${i}`).value : steps[0];
+  const instruction = r.action === 'resume' ? $(`#rec-ins-${i}`).value.trim() : r.instruction || '';
+  const btn = document.querySelector(`[data-rec="${i}"]`);
+  if (btn) btn.disabled = true;
+  sup.recMsgs[i] = { text: 'Starting…', error: false };
+  try {
+    await api.resumeRun(sup.runId, step, instruction || undefined);
+    sup.recMsgs = {};
+    closeSupervisor();
+    showView('run');
+  } catch (e) {
+    sup.recMsgs[i] = { text: errMsg(e), error: true };
+    renderSupervisor();
+  }
+}
+
+let toastTimer = null;
+function showToast(title, detail) {
+  const el = $('#toast');
+  el.innerHTML = `<b>${esc(title)}</b>${detail ? `<span>${esc(String(detail).slice(0, 220))}</span>` : ''}`;
+  el.classList.remove('hidden');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.add('hidden'), 7000);
+  el.onclick = () => { el.classList.add('hidden'); if (state.run) showView('run'); };
+}
+
+// ---------------------------------------------------------------------------
+// Terminal dock (xterm tabs; the process lives in the main process)
+// ---------------------------------------------------------------------------
+const TERM_HEIGHT_KEY = 'multiagent.termHeight';
+const IS_MAC = (api.platform || navigator.platform || '').toLowerCase().startsWith('mac') || api.platform === 'darwin';
+const isOrchSession = (s) => s.id === 'orchestrator' || s.agent === 'orchestrator';
+const dock = {
+  tabs: [],            // { key, id, kind, runId, sessionId, title, term, fit, pane, exited, lastPaste }
+  active: null,
+  collapsed: false,
+  pending: new Map(),  // backend id -> [{ data } | { exitCode }] received before term:open resolved
+};
+
+function initTerminalDock() {
+  let h = 280;
+  try { h = Number(localStorage.getItem(TERM_HEIGHT_KEY)) || h; } catch { /* ignore */ }
+  setDockHeight(h, false);
+  $('#btn-term-collapse').onclick = () => setDockCollapsed(!dock.collapsed);
+  $('#btn-term-popout').onclick = popOutActive;
+
+  // drag handle
+  $('#term-resize').addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    if (dock.collapsed) setDockCollapsed(false);
+    const startY = e.clientY, startH = $('#term-dock').getBoundingClientRect().height;
+    document.body.classList.add('resizing-dock');
+    const move = (ev) => setDockHeight(startH + (startY - ev.clientY), false);
+    const up = () => {
+      document.removeEventListener('mousemove', move);
+      document.removeEventListener('mouseup', up);
+      document.body.classList.remove('resizing-dock');
+      setDockHeight($('#term-dock').getBoundingClientRect().height, true);
+    };
+    document.addEventListener('mousemove', move);
+    document.addEventListener('mouseup', up);
+  });
+
+  api.onTermData?.(({ id, data }) => {
+    const t = dock.tabs.find((x) => x.id === id);
+    if (t) t.term.write(data);
+    else queuePending(id, { data });
+  });
+  api.onTermExit?.(({ id, exitCode }) => {
+    const t = dock.tabs.find((x) => x.id === id);
+    if (t) markExited(t, exitCode);
+    else queuePending(id, { exitCode });
+  });
+
+  window.addEventListener('resize', () => { setDockHeight(dock.height, false); fitActive(); });
+  if (window.ResizeObserver) new ResizeObserver(() => fitActive()).observe($('#term-body'));
+}
+
+function queuePending(id, item) {
+  if (!dock.pending.has(id)) dock.pending.set(id, []);
+  dock.pending.get(id).push(item);
+  if (dock.pending.size > 50) dock.pending.delete(dock.pending.keys().next().value);
+}
+
+function setDockHeight(h, persist) {
+  const max = Math.round(window.innerHeight * 0.7);
+  dock.height = Math.max(120, Math.min(max, Math.round(h)));
+  $('#term-dock').style.height = dock.collapsed ? '' : `${dock.height}px`;
+  if (persist) { try { localStorage.setItem(TERM_HEIGHT_KEY, String(dock.height)); } catch { /* ignore */ } }
+}
+
+function setDockCollapsed(c) {
+  dock.collapsed = c;
+  $('#term-dock').classList.toggle('collapsed', c);
+  $('#btn-term-collapse').title = c ? 'Expand the terminal panel' : 'Collapse the terminal panel';
+  setDockHeight(dock.height, false);
+  if (!c) requestAnimationFrame(() => { fitActive(); dock.active?.term.focus(); });
+}
+
+function xtermTheme() {
+  const css = getComputedStyle(document.documentElement);
+  const v = (name, fb) => css.getPropertyValue(name).trim() || fb;
+  const accent = v('--accent', '#7c9cff');
+  const m = /^#([0-9a-f]{6})$/i.exec(accent);
+  const sel = m ? `rgba(${parseInt(m[1].slice(0, 2), 16)},${parseInt(m[1].slice(2, 4), 16)},${parseInt(m[1].slice(4, 6), 16)},0.35)` : 'rgba(124,156,255,0.35)';
+  return {
+    background: v('--bg', '#0e1014'),
+    foreground: v('--text', '#e6e8ee'),
+    cursor: accent,
+    cursorAccent: v('--bg', '#0e1014'),
+    selectionBackground: sel,
+  };
+}
+
+// Opens (or focuses) an embedded terminal. Throws with a readable message on failure.
+async function openTerminal({ kind, sessionId, runId, label }) {
+  if (typeof Terminal === 'undefined') throw new Error('The terminal component failed to load.');
+  const key = `${kind}:${runId || state.run?.id || 'current'}:${sessionId}`;
+  const existing = dock.tabs.find((t) => t.key === key);
+  if (existing) { showDock(); activateTab(existing); return existing; }
+
+  const pane = document.createElement('div');
+  pane.className = 'term-pane';
+  $('#term-body').appendChild(pane);
+  const css = getComputedStyle(document.documentElement);
+  const term = new Terminal({
+    theme: xtermTheme(),
+    fontFamily: css.getPropertyValue('--mono').trim() || 'Consolas, monospace',
+    fontSize: 12,
+    lineHeight: 1.2,
+    cursorBlink: kind !== 'live',
+    cursorStyle: kind === 'live' ? 'underline' : 'block',
+    cursorInactiveStyle: 'none',
+    scrollback: 5000,
+    convertEol: false,
+    allowProposedApi: false,
+  });
+  const fit = new FitAddon.FitAddon();
+  term.loadAddon(fit);
+  const tab = { key, id: null, kind, runId, sessionId, title: `${label || sessionId} · ${kind}`, term, fit, pane, exited: false, lastPaste: 0, sent: 0 };
+  dock.tabs.push(tab);
+  showDock();
+  term.open(pane);
+  wireTerminal(tab);
+  activateTab(tab);
+
+  try {
+    const res = await api.termOpen({ kind, runId, sessionId, cols: term.cols, rows: term.rows });
+    tab.id = res.id;
+    if (res.title) tab.title = res.title;
+    renderTermTabs();
+    // what arrived before we knew the id
+    for (const item of dock.pending.get(res.id) || []) {
+      if ('data' in item) term.write(item.data);
+      else markExited(tab, item.exitCode);
+    }
+    dock.pending.delete(res.id);
+    fitActive();
+    return tab;
+  } catch (e) {
+    closeTab(tab, { kill: false });
+    throw e;
+  }
+}
+
+function wireTerminal(tab) {
+  const { term, pane } = tab;
+  term.onData((d) => {
+    if (tab.kind === 'live' || tab.exited || !tab.id) return; // live tabs are read-only
+    tab.sent++;
+    api.termInput(tab.id, d);
+  });
+  term.onResize(({ cols, rows }) => {
+    if (tab.id && !tab.exited) api.termResize(tab.id, cols, rows);
+  });
+  term.attachCustomKeyEventHandler((e) => {
+    if (e.type !== 'keydown') return true;
+    const mod = IS_MAC ? e.metaKey : e.ctrlKey;
+    const k = e.key.toLowerCase();
+    if (mod && k === 'c' && (e.shiftKey || term.hasSelection())) {
+      e.preventDefault();
+      copyFromTerm(tab);
+      return false;
+    }
+    if ((mod && k === 'v') || (e.shiftKey && e.key === 'Insert')) {
+      e.preventDefault();
+      pasteIntoTerm(tab);
+      return false;
+    }
+    return true;
+  });
+  // The keyboard path above does the paste; swallow the browser's native paste event so it
+  // never pastes a second time. A paste that did not come from our key handler (e.g. an Edit
+  // menu accelerator) is handled here instead, once.
+  pane.addEventListener('paste', (e) => {
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    if (Date.now() - tab.lastPaste < 800) return;
+    const text = e.clipboardData?.getData('text/plain');
+    if (text) { tab.lastPaste = Date.now(); term.paste(text); }
+  }, true);
+  pane.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    if (term.hasSelection()) copyFromTerm(tab);
+    else pasteIntoTerm(tab);
+  });
+  pane.addEventListener('mousedown', () => activateTab(tab));
+}
+
+async function copyFromTerm(tab) {
+  const text = tab.term.getSelection();
+  if (!text) return;
+  tab.term.clearSelection();
+  try { await api.clipboardWrite(text); flashTermMsg('Copied.'); } catch (e) { flashTermMsg(errMsg(e), true); }
+}
+
+async function pasteIntoTerm(tab) {
+  tab.lastPaste = Date.now();
+  try {
+    const text = await api.clipboardRead();
+    tab.lastPaste = Date.now();
+    if (!text) return;
+    if (tab.kind === 'live') flashTermMsg('This terminal is read-only.');
+    tab.term.paste(text); // onData ignores it for live tabs
+  } catch (e) {
+    flashTermMsg(errMsg(e), true);
+  }
+}
+
+let termMsgTimer = null;
+function flashTermMsg(text, error = false) {
+  const el = $('#term-msg');
+  el.textContent = text;
+  el.classList.toggle('error', error);
+  clearTimeout(termMsgTimer);
+  termMsgTimer = setTimeout(() => (el.textContent = ''), 2500);
+}
+
+function markExited(tab, exitCode) {
+  if (tab.exited) return;
+  tab.exited = true;
+  tab.term.write(`\r\n\x1b[90m[process exited with code ${exitCode ?? '?'}]\x1b[0m\r\n`);
+  renderTermTabs();
+}
+
+function showDock() {
+  $('#term-dock').classList.remove('hidden');
+  if (dock.collapsed) setDockCollapsed(false);
+}
+
+function activateTab(tab) {
+  if (dock.active === tab && tab.pane.classList.contains('active')) return;
+  dock.active = tab;
+  dock.tabs.forEach((t) => t.pane.classList.toggle('active', t === tab));
+  renderTermTabs();
+  requestAnimationFrame(() => { fitActive(); tab.term.focus(); });
+}
+
+function fitActive() {
+  const t = dock.active;
+  if (!t || dock.collapsed || $('#term-dock').classList.contains('hidden')) return;
+  try { t.fit.fit(); } catch { /* not visible yet */ }
+}
+
+function closeTab(tab, { kill = true } = {}) {
+  const i = dock.tabs.indexOf(tab);
+  if (i < 0) return;
+  if (kill && tab.id && !tab.exited) api.termKill(tab.id).catch(() => {});
+  dock.tabs.splice(i, 1);
+  tab.term.dispose();
+  tab.pane.remove();
+  if (dock.active === tab) {
+    dock.active = null;
+    const next = dock.tabs[i] || dock.tabs[i - 1];
+    if (next) activateTab(next);
+  }
+  if (!dock.tabs.length) $('#term-dock').classList.add('hidden');
+  renderTermTabs();
+}
+
+function renderTermTabs() {
+  const box = $('#term-tabs');
+  box.innerHTML = dock.tabs.map((t, i) => `
+    <div class="term-tab ${t === dock.active ? 'active' : ''}" data-i="${i}" role="tab" aria-selected="${t === dock.active}" title="${esc(t.title)}${t.kind === 'live' ? ' (read-only)' : ''}">
+      <span class="term-dot ${t.exited ? 'exited' : t.id ? 'running' : 'starting'}"></span>
+      <span class="term-title">${esc(t.title)}</span>
+      <button class="term-close" data-close="${i}" title="Close (ends the process)" aria-label="Close">×</button>
+    </div>`).join('');
+  box.querySelectorAll('.term-tab').forEach((el) => (el.onclick = (e) => {
+    const t = dock.tabs[Number(el.dataset.i)];
+    if (e.target.closest('[data-close]')) closeTab(t);
+    else activateTab(t);
+  }));
+  box.querySelectorAll('.term-tab').forEach((el) => (el.onauxclick = (e) => { if (e.button === 1) closeTab(dock.tabs[Number(el.dataset.i)]); }));
+  $('#btn-term-popout').disabled = !dock.active || dock.active.kind === 'supervisor';
+}
+
+async function popOutActive() {
+  const t = dock.active;
+  if (!t) return;
+  try {
+    await api.openSessionTerminal(t.sessionId, t.kind, t.runId);
+    flashTermMsg('Opened in an external window.');
+  } catch (e) {
+    flashTermMsg(errMsg(e), true);
+  }
 }
 
 init();
