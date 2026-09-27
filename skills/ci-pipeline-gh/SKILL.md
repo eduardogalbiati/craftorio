@@ -23,8 +23,9 @@ gh pr list --head <branch> --base <base> --state open --json number,url
 ```
 
 - Found → reuse it.
-- Not found → `gh pr create --base <base> --head <branch> --title "<title>" --body-file <file>`,
-  with the title and body written following the pr-description skill.
+- Not found → `gh pr create --base <base> --head <branch> --title "<title>" --body "<body>"`,
+  with the title and body written following the pr-description skill (pass the body inline:
+  you cannot write files, so no `--body-file`).
 
 `pr_number` is the PR number; `pr_url` its URL.
 

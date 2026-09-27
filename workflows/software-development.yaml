@@ -32,7 +32,7 @@ kind: Workflow
 
 metadata:
   name: software-development
-  version: 0.7.0
+  version: 0.8.0
   description: Implements, reviews, tests, builds, watches CI and the PR/MR, publishes a preview and, once approved, merges and tracks the production deploy. Works with several languages on GitHub or GitLab.
   tags: [dev, review, test, build, ci, pr, deploy, github, gitlab]
   # Dashboard category: plan (Plan & Design), build (Code & Build) or monitor (Monitor & Improve).
@@ -96,7 +96,8 @@ x-tools:
   vcs: &vcs "Bash(git:*) Bash(gh:*) Bash(glab:*)"
 
 defaults:
-  working_dir: "{{ inputs.repo_path }}"
+  # the run's own git worktree (orchestrator.worktree), or repo_path when it is not a git repo
+  working_dir: "{{ worktree_dir }}"
   timeout: 30m
   retry:
     max_attempts: 2
@@ -107,6 +108,12 @@ defaults:
 orchestrator:
   provider: claude
   model: claude-sonnet-5
+  # One git worktree per run: <workspace>/worktrees/<run_id>, detached at the freshly fetched
+  # origin/<base>. Runs never share a checkout; removed when the run succeeds, kept otherwise
+  # so "resume from step" continues there.
+  worktree:
+    repo: "{{ inputs.repo_path }}"
+    base: "{{ inputs.base_branch }}"
   # AI supervisor: called only when a step fails; explains it and picks a recovery the engine
   # validates (fix the output, retry with an instruction, an allowed goto, or ask a human).
   supervisor:
@@ -134,13 +141,14 @@ agents:
     system_prompt: |
       You are a senior software engineer. Make small, tested, cohesive changes that
       follow the architecture and conventions of the existing code.
-      Work on your own branch and commit your changes there. The checkout is shared and
-      its local {{ inputs.base_branch }} may be stale or dirty, so always start a new
+      Work on your own branch and commit your changes there. This run has its own git
+      worktree (the current folder), which starts detached at origin/{{ inputs.base_branch }};
+      the local {{ inputs.base_branch }} of the repository may be stale, so always start a new
       branch from the remote base: `git fetch origin`, then
-      `git switch -c <branch> origin/{{ inputs.base_branch }}` (never from the local
-      {{ inputs.base_branch }}). Then reinstall dependencies if they are missing or the
-      lockfile changed (e.g. `npm ci` when node_modules is missing or package-lock.json
-      differs from the previous HEAD). Run the project's tests the way the test skill describes.
+      `git switch --no-track -c <branch> origin/{{ inputs.base_branch }}` (never from the local
+      {{ inputs.base_branch }}). A fresh worktree has no installed dependencies: install them
+      when they are missing or the lockfile changed (e.g. `npm ci` when node_modules is missing
+      or package-lock.json differs from the previous HEAD). Run the project's tests the way the test skill describes.
       Only `git push` when the orchestrator explicitly asks. When you finish a
       requested fix, report the commit hash.
 
@@ -266,7 +274,7 @@ steps:
       {% if steps.deploy_prod.output and steps.deploy_prod.output.deploy_status == 'failed' %}
       The previous production deploy failed: {{ steps.deploy_prod.output.error_summary }}
       Create a new branch from the remote base (`git fetch origin`, then
-      `git switch -c <branch> origin/{{ inputs.base_branch }}`) and fix it.
+      `git switch --no-track -c <branch> origin/{{ inputs.base_branch }}`) and fix it.
       {% endif %}
       {% if not steps.develop.output %}
       Before changing code: `git fetch origin` and create your branch from
@@ -460,8 +468,8 @@ steps:
       {{ delegate_result.text }}
       Run the treatment side again (the baseline did not change).
       {% endif %}
-      Verify the change following the claim-verification skill. Do not leave any
-      worktree, scratch file or stash behind.
+      Verify the change following the claim-verification skill. Stay read-only: the
+      working tree must not change (no files, stash, worktree or checkout).
     output_schema:
       type: object
       required: [verdict, claim, evidence]
@@ -728,9 +736,13 @@ steps:
       Preview published: {{ steps.deploy_test.output.release_url }}
       {{ steps.ci.output.pr_url }}: CI green and mergeable.
       Approve the merge into {{ inputs.base_branch }}? This produces the production release.
+    # The action runs in the run's worktree, where the PR branch is checked out. `--repo` makes gh
+    # merge and delete the remote branch server side only: without it gh would also check out the
+    # base and delete the local branch, which fails in a worktree (the base is checked out in the
+    # main checkout). The engine deletes the local branch when it removes the worktree.
     transitions:
       - when: "approved"
-        action: "{% if inputs.git_platform == 'gl' %}glab mr merge {{ steps.ci.output.pr_number }} --squash --remove-source-branch --yes{% else %}gh pr merge {{ steps.ci.output.pr_number }} --squash --delete-branch{% endif %}"
+        action: "{% if inputs.git_platform == 'gl' %}glab mr merge {{ steps.ci.output.pr_number }} --squash --remove-source-branch --yes{% else %}gh pr merge {{ steps.ci.output.pr_number }} --repo {{ steps.ci.output.pr_url.split('/pull/')[0] }} --squash --delete-branch{% endif %}"
         goto: deploy_prod
       - when: "rejected"
         goto: end

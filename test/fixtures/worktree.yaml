@@ -1,0 +1,22 @@
+# Test fixture: one git worktree per run (orchestrator.worktree). `skill` = a missing skill makes the run fail.
+apiVersion: multiagent/v1
+kind: Workflow
+metadata:
+  name: fixture-worktree
+inputs:
+  repo_path: { type: string, required: true }
+  base_branch: { type: string, default: main }
+  skill: { type: string, default: "" }
+orchestrator:
+  worktree:
+    repo: "{{ inputs.repo_path }}"
+    base: "{{ inputs.base_branch }}"
+defaults:
+  working_dir: "{{ worktree_dir }}"
+agents:
+  a: { provider: claude, model: m, session: ephemeral }
+steps:
+  - id: work
+    agent: a
+    skills: ["{{ inputs.skill }}"]
+    prompt: "work in {{ worktree_dir }}"

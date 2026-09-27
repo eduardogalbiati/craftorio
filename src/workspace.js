@@ -1,6 +1,6 @@
 // The app's local workspace: a single folder holding the run logs (runs/), the
-// cloned repositories (repos/), the projects (projects/), the skills (skills/) and
-// the app preferences (settings.json).
+// cloned repositories (repos/), the runs' git worktrees (worktrees/), the projects (projects/),
+// the skills (skills/) and the app preferences (settings.json).
 //
 // Resolution order:
 //   1. MULTIAGENT_WORKSPACE environment variable (tests/CI; not persisted)
@@ -97,6 +97,8 @@ function layout(root) {
     repos: path.join(root, 'repos'),
     projects: path.join(root, 'projects'),
     skills: path.join(root, 'skills'),
+    // one git worktree per run (orchestrator.worktree), created on demand
+    worktrees: path.join(root, 'worktrees'),
     settings: path.join(root, 'settings.json'),
   };
 }
@@ -196,4 +198,5 @@ module.exports = {
   repoNameFromUrl,
   cloneRepo,
   execGit,
+  gitAuthArgs,
 };

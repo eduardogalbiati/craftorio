@@ -6,8 +6,14 @@ description: Finds what a change can break outside its own diff - callers, consu
 # Blast radius
 
 Adapted from the blast-radius skill in cursor/plugins pstack (MIT). Code review looks inside
-the diff; this looks at everything the diff touches from the outside. Read-only on the
-repository: write scratch scripts only in a temporary folder.
+the diff; this looks at everything the diff touches from the outside.
+
+Strictly read-only: you usually run with shell tools only and no file-writing permission.
+The working tree must not change: no scratch files, no output redirection (`>`, `tee`), no
+heredocs, no stash, worktree or checkout of another branch. Ad-hoc code is a single short
+`node -e "..."` / `python -c "..."` command (double quotes outside, single quotes inside, no
+`$`, backticks or `!`), or an existing test run with a filter. Base versions of files come from
+`git show <base>:<path>`. If a proof needs more than that, stop at the highest level you reached.
 
 ## 1. Inventory what changed at the boundaries
 
@@ -39,7 +45,7 @@ The one statement that, if false, causes the worst damage. Examples:
 | 0 | someone said so (PR description, comment) |
 | 1 | read the code and reasoned about it |
 | 2 | an existing test covers exactly this case and passes |
-| 3 | you wrote and ran a scratch script/test that exercises it |
+| 3 | you ran a one-liner (`node -e`, `python -c`) or a focused test that exercises it |
 | 4 | reproduced against the running app or a real copy of the data format |
 
 Aim for level 3 or 4. If you cannot run it (needs a real service or credentials), stop at the

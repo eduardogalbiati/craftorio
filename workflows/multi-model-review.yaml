@@ -61,7 +61,7 @@ providers:
 
 x-tools:
   readonly_git: &readonly_git "Bash(git diff:*) Bash(git log:*) Bash(git show:*) Bash(git grep:*) Bash(git rev-parse:*) Bash(git status:*)"
-  # blast radius also runs scratch scripts and tests to prove its safety fact
+  # blast radius also runs one-liners (node -e, python -c) and tests to prove its safety fact
   toolchains: &toolchains "Bash(git:*) Bash(npm:*) Bash(npx:*) Bash(node:*) Bash(python:*) Bash(python3:*) Bash(py:*) Bash(pytest:*) Bash(uv:*) Bash(go:*) Bash(mvn:*) Bash(./mvnw:*) Bash(gradle:*) Bash(./gradlew:*) Bash(dotnet:*)"
 
 defaults:
@@ -119,8 +119,8 @@ agents:
     cli_args: ["--allowedTools", *toolchains, "--disallowedTools", "Edit NotebookEdit"]
     skills: [blast-radius]
     system_prompt: |
-      You check what a change can break outside its diff. You do not modify tracked files;
-      scratch scripts go in a temporary folder that you delete at the end.
+      You check what a change can break outside its diff. You are read-only: the working
+      tree must not change; ad-hoc code runs as a single node -e / python -c command.
 
   judge:
     provider: claude

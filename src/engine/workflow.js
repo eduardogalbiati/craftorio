@@ -12,6 +12,7 @@ const { runTurn, refreshWindowsPath, isRetryable, sleep, emptyUsage } = require(
 const { resolveSkill, skillPrompt } = require('../skills');
 const { providerId, sessionCost, totalTokens, WARN_AT } = require('../usage');
 const supervisor = require('../supervisor');
+const { prepareWorktree, removeWorktree, currentBranch } = require('./worktree');
 
 // Skills bundled with the app (skills/ folder at the root). Workspace skills take precedence.
 const BUNDLED_SKILLS = path.join(__dirname, '..', '..', 'skills');
@@ -141,9 +142,12 @@ class WorkflowRun extends EventEmitter {
   // budget: { [provider id]: { name, limitUsd, limitTokens, blockOnLimit, usedUsd, usedTokens } }
   // (this month's usage before this run, see src/usage.js); prices: USD per 1M tokens by model.
   // projectId: the project the run belongs to (recorded in workflow.started and summary.json).
-  // resume: { runId, fromStep, steps: { id: { output, visits } }, sessions: { agent: providerSessionId }, instruction }
-  //   starts at fromStep with the previous run's step outputs and agent conversations (src/supervisor.js resumeSpec).
-  constructor({ file, inputs, mock, runsDir, skillsDirs, budget, prices, projectId, resume }) {
+  // resume: { runId, fromStep, steps: { id: { output, visits } }, sessions: { agent: providerSessionId }, instruction, worktree: { dir, branch } }
+  //   starts at fromStep with the previous run's step outputs and agent conversations (src/supervisor.js resumeSpec),
+  //   in the previous run's worktree.
+  // worktreesDir: where orchestrator.worktree creates the run's git worktree (<workspace>/worktrees);
+  //   without it (e.g. simulation runs) the agents work in the repository folder itself.
+  constructor({ file, inputs, mock, runsDir, skillsDirs, budget, prices, projectId, resume, worktreesDir }) {
     super();
     refreshWindowsPath(); // actions (e.g. gh pr merge) need the refreshed PATH
     this.file = file;
@@ -153,6 +157,8 @@ class WorkflowRun extends EventEmitter {
     this.runDir = path.join(runsDir, this.runId);
     this.skillsDirs = [...(skillsDirs || []), BUNDLED_SKILLS];
     this.projectId = projectId || null;
+    this.worktreesDir = worktreesDir || null;
+    this.worktree = null; // see setupWorktree
     this.budget = budget || {};
     this.prices = prices || {};
     this.budgetWarned = new Set();
@@ -266,7 +272,10 @@ class WorkflowRun extends EventEmitter {
 
     let current = this.resume?.fromStep || this.wf.steps[0].id;
     let guard = 0;
+    let status = 'success';
+    let error = null;
     try {
+      await this.setupWorktree();
       while (current !== 'end') {
         if (current === 'fail') throw new Error('Workflow routed to "fail" (retry limit reached).');
         if (++guard > 500) throw new Error('Limit of 500 transitions reached.');
@@ -274,10 +283,74 @@ class WorkflowRun extends EventEmitter {
         this.checkLimits();
         current = await this.runStep(this.stepById(current));
       }
-      this.finish('success');
     } catch (e) {
-      this.finish(this.abort.signal.aborted ? 'cancelled' : 'failed', e);
+      status = this.abort.signal.aborted ? 'cancelled' : 'failed';
+      error = e;
     }
+    await this.finishWorktree(status);
+    this.finish(status, error);
+  }
+
+  // ---- git worktree per run (orchestrator.worktree: { repo, base }) ------------------------
+  // The run works in its own checkout, <worktreesDir>/<run_id>, detached at the freshly fetched
+  // origin/<base>; `worktree_dir` in the templates points to it. A resumed run reuses the previous
+  // run's folder (recreated from its branch if it was deleted), so resumed CLI sessions keep their cwd.
+  // Not a git repository, or no worktreesDir (simulation): worktree_dir = the repository folder.
+  async setupWorktree() {
+    const cfg = this.wf.orchestrator?.worktree;
+    if (!cfg) return;
+    const repo = render(cfg.repo, this.ctx).trim();
+    const base = render(cfg.base, this.ctx).trim() || null;
+    this.ctx.worktree_dir = repo;
+    const log = (level, message) => this.emitEvent('log', { level, message });
+    if (!this.worktreesDir) {
+      log('info', `worktree: ${this.mock ? 'simulation, ' : ''}no worktree for this run; agents work in ${repo}`);
+      return;
+    }
+    const prev = this.resume?.worktree;
+    const dir = prev?.dir || path.join(this.worktreesDir, this.runId);
+    const info = await prepareWorktree({ repo, base, dir, branch: prev?.branch || null, log });
+    if (!info) {
+      log('info', `worktree: ${repo} is not a git repository; agents work in it directly`);
+      return;
+    }
+    this.worktree = info;
+    this.ctx.worktree_dir = info.workDir;
+    const how = info.reused ? 'reusing' : info.recreated ? 'recreated' : 'created';
+    this.emitEvent('worktree.ready', {
+      dir: info.dir, work_dir: info.workDir, repo: info.repo, base: info.base, ref: info.ref, commit: info.commit, reused: info.reused, recreated: info.recreated,
+    });
+    log('info', `worktree: ${how} ${info.dir} at ${info.ref || 'its branch'} (${String(info.commit || '').slice(0, 8)})`);
+  }
+
+  // Success: remove the worktree and its local branch when merged. Otherwise keep it for a resume.
+  async finishWorktree(status) {
+    const wt = this.worktree;
+    if (!wt) return;
+    const log = (level, message) => this.emitEvent('log', { level, message });
+    try {
+      if (status === 'success') {
+        const r = await removeWorktree({ repo: wt.repo, dir: wt.dir, base: wt.base, log });
+        Object.assign(wt, { removed: r.removed, branch: r.branch, branchDeleted: r.branchDeleted });
+        this.emitEvent('worktree.removed', { dir: wt.dir, removed: r.removed, branch: r.branch, branch_deleted: r.branchDeleted });
+        log('info', `worktree: removed ${wt.dir}${r.branch ? `; branch ${r.branch} ${r.branchDeleted ? 'deleted (merged)' : 'kept'}` : ''}`);
+      } else {
+        Object.assign(wt, { removed: false, branch: await currentBranch(wt.dir) });
+        this.emitEvent('worktree.kept', { dir: wt.dir, branch: wt.branch });
+        log('info', `worktree: kept ${wt.dir}${wt.branch ? ` (branch ${wt.branch})` : ''} to resume the run`);
+      }
+    } catch (e) {
+      log('warn', `worktree: cleanup failed: ${e.message}`);
+    }
+  }
+
+  worktreeSummary() {
+    const wt = this.worktree;
+    if (!wt) return this.ctx.worktree_dir ? { dir: null, work_dir: this.ctx.worktree_dir } : null;
+    return {
+      dir: wt.dir, work_dir: wt.workDir, repo: wt.repo, base: wt.base, ref: wt.ref, commit: wt.commit,
+      branch: wt.branch || null, removed: !!wt.removed, branch_deleted: !!wt.branchDeleted,
+    };
   }
 
   stop() {
@@ -815,8 +888,10 @@ class WorkflowRun extends EventEmitter {
       this.emitEvent('action.executed', { command: cmd, skipped: true, output: '[mock] action not executed' });
       return Promise.resolve();
     }
+    // in the run's worktree when there is one (the feature branch is checked out there)
+    const cwd = [this.ctx.worktree_dir, this.inputs.repo_path].find((d) => d && fs.existsSync(d)) || process.cwd();
     return new Promise((resolve, reject) => {
-      exec(cmd, { cwd: this.inputs.repo_path || process.cwd(), windowsHide: true, env: process.env }, (err, stdout, stderr) => {
+      exec(cmd, { cwd, windowsHide: true, env: process.env }, (err, stdout, stderr) => {
         const exitCode = err ? err.code ?? 1 : 0;
         this.emitEvent('action.executed', { command: cmd, exit_code: exitCode, output: `${stdout}${stderr}`.slice(-4000) });
         if (exitCode) reject(new Error(`Action failed (exit ${exitCode}): ${cmd}
@@ -842,7 +917,7 @@ ${stderr || stdout}`.slice(0, 1500)));
       summary: {
         run_id: this.runId, workflow: this.wf.metadata?.name, project_id: this.projectId, status,
         started_at: new Date(this.startedAt).toISOString(), finished_at: new Date().toISOString(),
-        duration_ms: Date.now() - this.startedAt, inputs: this.inputs, mock: this.mock,
+        duration_ms: Date.now() - this.startedAt, inputs: this.inputs, mock: this.mock, worktree: this.worktreeSummary(),
         tokens, cost_usd: +sessions.reduce((a, s) => a + s.cost_usd, 0).toFixed(6),
         steps: Object.fromEntries(Object.entries(this.ctx.steps).map(([k, v]) => [k, { visits: v.visits, output: v.output }])),
         sessions,

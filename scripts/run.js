@@ -47,6 +47,8 @@ const run = new WorkflowRun({
   skillsDirs: [ws.skills],
   budget,
   prices: settings.prices,
+  // orchestrator.worktree: one git worktree per run in <workspace>/worktrees (never in simulation)
+  worktreesDir: args.mock ? null : ws.worktrees,
 });
 if (!args.mock) {
   const problems = usage.preflight(run.wf, budget, resolveCommand, run.inputs);

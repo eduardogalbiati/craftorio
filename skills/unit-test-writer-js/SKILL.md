@@ -20,6 +20,9 @@ uses: [testing-principles]
 - No framework yet: plain Node → `node:test` + `node:assert/strict`; Vite/TS front end → Vitest.
 - Always non-interactive (`vitest run`, never watch mode; set `CI=true` if needed).
 - While iterating run single files; run the full suite once at the end.
+- Dependencies first: a fresh checkout (each run has its own worktree) has no `node_modules`.
+  When it is missing or the lockfile changed, install with the lockfile's manager
+  (`npm ci` · `pnpm install --frozen-lockfile` · `yarn install --frozen-lockfile`) before running tests.
 
 ## Idioms
 

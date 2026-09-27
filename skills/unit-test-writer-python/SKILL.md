@@ -17,6 +17,9 @@ uses: [testing-principles]
 
 - Environment from the lockfile: `uv.lock` → prefix `uv run`; `poetry.lock` → `poetry run`; otherwise the active venv (`python -m ...`).
 - No framework yet: pytest.
+- Dependencies first: a fresh checkout (each run has its own worktree) has no environment.
+  When it is missing or the lockfile changed: `uv sync` · `poetry install` · otherwise
+  `python -m pip install -r requirements.txt` (plus the dev requirements file) in a venv.
 
 ## Idioms
 

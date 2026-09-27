@@ -19,8 +19,9 @@ uses: [dependency-audit-policy]
 
 ## Audit
 
-Separate the scopes into temporary files (delete them at the end):
-- uv: `uv export --no-dev --format requirements-txt > req-prod.txt` and `uv export --format requirements-txt > req-all.txt`
+Separate the scopes into temporary files, written by the tool's own output flag (shell
+redirection is not allowed) and removed at the end with `git clean -fx -- req-prod.txt req-all.txt`:
+- uv: `uv export --no-dev --format requirements-txt -o req-prod.txt` and `uv export --format requirements-txt -o req-all.txt`
 - poetry: `poetry export --only main -f requirements.txt -o req-prod.txt` and `poetry export --with dev -f requirements.txt -o req-all.txt`
 - requirements files: `requirements.txt` is production; `requirements-dev.txt`/`dev-requirements.txt` is development.
 

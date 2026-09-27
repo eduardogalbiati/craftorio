@@ -15,6 +15,7 @@ const runs = require('./runs');
 const { Terminals } = require('./terminals');
 const { followSession } = require('./session-tail');
 const supervisor = require('./supervisor');
+const { cleanupWorktrees } = require('./engine/worktree');
 
 const ROOT = path.join(__dirname, '..');
 const WORKFLOWS_DIR = path.join(ROOT, 'workflows');
@@ -22,7 +23,7 @@ const BUNDLED_SKILLS_DIR = path.join(ROOT, 'skills'); // skills bundled with the
 
 let win = null;
 let currentRun = null;
-let ws = null; // { root, runs, repos, projects, skills, settings } (see src/workspace.js)
+let ws = null; // { root, runs, repos, projects, skills, worktrees, settings } (see src/workspace.js)
 
 // Resolves the workspace before opening the window. If the registered folder (or the default
 // ~/multiagent-workspace) does not exist, asks whether to create the default or pick another.
@@ -224,6 +225,8 @@ async function startWorkflowRun({ file, inputs, mock, resume = null, projectId: 
   const run = new WorkflowRun({
     file: path.join(WORKFLOWS_DIR, path.basename(file)), inputs, mock, runsDir: ws.runs, skillsDirs: [ws.skills],
     budget, prices: settings.prices, projectId, resume,
+    // simulation runs never touch git: the agents are mocked and work in the repository folder
+    worktreesDir: mock ? null : ws.worktrees,
   });
   if (!mock) {
     const problems = usage.preflight(run.wf, budget, resolveCommand, run.inputs);
@@ -318,7 +321,8 @@ function terminalSpec(runId, sessionId, mode) {
   const why = cliReason(sess, providers, run.running);
   if (why) throw new Error(why);
   const cfg = providers[sess.provider];
-  // older runs did not record the session folder: fall back to the run's repo/project folder
+  // older runs did not record the session folder, and a succeeded run's worktree is removed:
+  // fall back to the run's repo/project folder
   const folder = [sess.cwd, run.inputs?.repo_path, run.inputs?.project_path].find((d) => d && fs.existsSync(d)) || run.runDir;
   delete env.ELECTRON_RUN_AS_NODE;
   return { title: `${sess.agent} (${sess.id}) · ${cfg.command}`, cwd: folder, file: resolveCommand(cfg.command).file, args: RESUME_ARGS[cfg.type](sess.providerSessionId), env };
@@ -401,7 +405,7 @@ ipcMain.handle('supervisor:resume', async (_e, { runId, step, instruction }) => 
   const first = loadWorkflow(path.join(WORKFLOWS_DIR, path.basename(spec.file))).steps[0].id;
   return startWorkflowRun({
     file: spec.file, inputs: spec.inputs, mock: spec.mock, projectId: spec.projectId,
-    resume: { runId: spec.runId, fromStep: step || first, steps: spec.steps, sessions: spec.sessions, instruction: instruction || null },
+    resume: { runId: spec.runId, fromStep: step || first, steps: spec.steps, sessions: spec.sessions, instruction: instruction || null, worktree: spec.worktree },
   });
 });
 
@@ -524,6 +528,9 @@ app.whenReady().then(async () => {
   if (!ws) return app.quit();
   try { skills.seedSkills(BUNDLED_SKILLS_DIR, ws.skills); } catch (e) { console.error('skill seeding:', e); }
   createWindow();
+  // run worktrees left behind: succeeded runs whose removal failed, or unused for 14 days
+  // (no run is in progress yet at startup)
+  cleanupWorktrees({ worktreesDir: ws.worktrees, runsDir: ws.runs }).catch((e) => console.error('worktree cleanup:', e));
 });
 app.on('window-all-closed', () => {
   terminals.killAll();

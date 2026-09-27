@@ -14,6 +14,9 @@ uses: [testing-principles]
 | Gradle (`build.gradle[.kts]`; prefer `./gradlew`) | `./gradlew test` | `./gradlew test --tests 'pkg.ClassTest.method'` |
 
 On Windows use `mvnw.cmd`/`gradlew.bat` if the extensionless scripts do not run.
+Dependencies: a fresh checkout (each run has its own worktree) has no build output; the first
+`test` run resolves dependencies into the shared Maven/Gradle cache, so give it time and do not
+treat a slow first run as a failure.
 Libraries: read the test dependencies (JUnit 4 vs 5, AssertJ/Hamcrest, Mockito/MockK, Kotest) and use what is there.
 
 ## Idioms

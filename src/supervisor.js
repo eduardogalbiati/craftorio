@@ -151,11 +151,13 @@ function resumeSpec(runDir, fromStep) {
   if (!started) throw new Error('Not a run folder.');
   const steps = {};
   const sessions = {};
+  let worktree = null; // the run's git worktree (worktree.ready / .kept / .removed): the resume continues there
   for (const ev of events) {
     if (ev.type === 'step.finished' && !ev.error) steps[ev.step_id] = { output: ev.output, visits: ev.visit };
     if (ev.session?.agent && ev.session.provider_session_id && ev.session.provider !== 'mock') sessions[ev.session.agent] = ev.session.provider_session_id;
+    if (/^worktree\./.test(ev.type) && ev.dir) worktree = { dir: ev.dir, branch: ev.branch || worktree?.branch || null };
   }
-  return { runId: path.basename(runDir), file: started.file, inputs: started.inputs || {}, mock: !!started.mock, projectId: started.project_id || null, fromStep, steps, sessions };
+  return { runId: path.basename(runDir), file: started.file, inputs: started.inputs || {}, mock: !!started.mock, projectId: started.project_id || null, fromStep, steps, sessions, worktree };
 }
 
 // The workflow's supervisor settings (orchestrator.supervisor + providers), from the run's workflow file.
