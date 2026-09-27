@@ -65,6 +65,8 @@ h3 { margin: 0 0 6px; }
 .btn.ghost { background: transparent; }
 .btn.block { width: 100%; margin-top: 10px; }
 .btn.sm { padding: 4px 8px; font-size: 12px; }
+.btn.btn-icon { display: inline-flex; align-items: center; gap: 6px; }
+.btn .icon { flex-shrink: 0; opacity: .8; }
 
 /* ---------- layout ---------- */
 .layout {
