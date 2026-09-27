@@ -185,7 +185,17 @@
             <button id="btn-workflows-folder" class="btn ghost">Open folder</button>
           </div>
         </div>
-        <div id="workflows-list" class="wf-list"></div>
+        <div class="tabs page-tabs" role="tablist">
+          <button class="tab active" data-wtab="definitions" role="tab" aria-selected="true">Definitions</button>
+          <button class="tab" data-wtab="runs" role="tab" aria-selected="false">Runs</button>
+        </div>
+        <div data-wpage="definitions">
+          <div id="workflows-list" class="wf-list"></div>
+        </div>
+        <div data-wpage="runs" class="hidden">
+          <p class="muted small">Workflows executed by the orchestrator, most recent first. <span id="workflow-runs-live" class="badge live hidden">includes the running workflow</span></p>
+          <div id="workflow-runs" class="s-group table-wrap"></div>
+        </div>
       </section>
 
       <!-- ================= Skills ================= -->

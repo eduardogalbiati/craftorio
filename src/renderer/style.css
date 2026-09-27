@@ -326,7 +326,8 @@ select:focus, input:focus, textarea:focus { outline: none; border-color: var(--a
 .tabs { display: flex; border-bottom: 1px solid var(--border); background: var(--panel); flex: none; }
 .tab { background: none; border: none; color: var(--muted); padding: 10px 16px; cursor: pointer; font: inherit; font-weight: 600; border-bottom: 2px solid transparent; }
 .tab.active { color: var(--text); border-bottom-color: var(--accent); }
-.tab-body { flex: 1; overflow: auto; padding: 16px; min-height: 0; }
+.tabs.page-tabs { background: none; margin-bottom: 16px; }
+.tab-body {flex: 1; overflow: auto; padding: 16px; min-height: 0; }
 
 .detail-head { margin-bottom: 14px; }
 .detail-actions { display: flex; gap: 8px; align-items: center; margin: 6px 0 10px; }

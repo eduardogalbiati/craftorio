@@ -42,6 +42,7 @@ const state = {
   approval: null,
   openDetails: new Set(),
   tab: 'detail',
+  workflowsTab: 'definitions', // 'definitions' | 'runs'
   pendingProject: null, // project to preselect in the panel on open
   usage: null,        // last api.getUsage() result
   usageError: null,
@@ -86,7 +87,7 @@ async function init() {
   // run
   $('#btn-approve').onclick = () => resolveApproval(true);
   $('#btn-reject').onclick = () => resolveApproval(false);
-  document.querySelectorAll('.tab').forEach((t) => (t.onclick = () => switchTab(t.dataset.tab)));
+  document.querySelectorAll('.tab[data-tab]').forEach((t) => (t.onclick = () => switchTab(t.dataset.tab)));
   $('#tab-detail').addEventListener('toggle', (e) => {
     const key = e.target.dataset?.key;
     if (!key) return;
@@ -120,6 +121,7 @@ async function init() {
 
   // workflows
   $('#btn-workflows-folder').onclick = async () => api.openPath((await api.appInfo()).workflowsDir);
+  document.querySelectorAll('[data-wtab]').forEach((b) => (b.onclick = () => showWorkflowsTab(b.dataset.wtab)));
 
   // skills
   $('#btn-new-skill').onclick = () => openSkillModal(null);
@@ -176,7 +178,7 @@ function showView(view) {
   if (view === 'projects') refreshProjects();
   if (view === 'project') { renderProjectView(); loadProjectRuns(); }
   if (view === 'artifacts') { renderArtifacts(); loadArtifacts(); }
-  if (view === 'workflows') refreshWorkflows();
+  if (view === 'workflows') showWorkflowsTab(state.workflowsTab);
   if (view === 'skills') refreshSkills();
   if (view === 'usage') { renderUsage(); loadUsage(); }
   if (view === 'settings') renderSettings();
@@ -647,6 +649,26 @@ async function saveProject(e) {
 // ---------------------------------------------------------------------------
 // Workflows
 // ---------------------------------------------------------------------------
+function showWorkflowsTab(tab) {
+  state.workflowsTab = tab;
+  document.querySelectorAll('[data-wtab]').forEach((b) => {
+    const on = b.dataset.wtab === tab;
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-selected', String(on));
+  });
+  document.querySelectorAll('[data-wpage]').forEach((p) => p.classList.toggle('hidden', p.dataset.wpage !== tab));
+  if (tab === 'definitions') refreshWorkflows();
+  if (tab === 'runs') { renderWorkflowRuns(); loadUsage(); }
+}
+
+// Same runs summary as Usage > Recent runs (shared runsTableHtml).
+function renderWorkflowRuns() {
+  const u = state.usage;
+  $('#workflow-runs-live').classList.toggle('hidden', !u?.live);
+  $('#workflow-runs').innerHTML = u ? runsTableHtml(u)
+    : `<div class="s-row"><div class="s-label"><span>${state.usageError ? `Runs unavailable: ${esc(state.usageError)}` : 'Loading…'}</span></div></div>`;
+}
+
 async function refreshWorkflows() {
   state.workflows = await api.listWorkflows();
   const box = $('#workflows-list');
@@ -901,6 +923,7 @@ function renderUsageAll() {
   renderUsageWidget();
   if (!$('#usage-pop').classList.contains('hidden')) renderUsagePopover();
   if (state.view === 'usage') renderUsage();
+  if (state.view === 'workflows' && state.workflowsTab === 'runs') renderWorkflowRuns();
 }
 
 function renderUsageWidget() {
@@ -1166,14 +1189,15 @@ async function savePrice(tr) {
 }
 
 function renderUsageRuns() {
-  const u = state.usage;
+  $('#usage-runs').innerHTML = runsTableHtml(state.usage);
+}
+
+// Recent runs table, shared by Usage > Recent runs and Workflows > Runs.
+function runsTableHtml(u) {
   const runs = u.runs || [];
-  if (!runs.length) {
-    $('#usage-runs').innerHTML = '<div class="s-row"><div class="s-label"><span>No runs recorded yet (simulation runs are not counted).</span></div></div>';
-    return;
-  }
+  if (!runs.length) return '<div class="s-row"><div class="s-label"><span>No runs recorded yet (simulation runs are not counted).</span></div></div>';
   const names = Object.fromEntries((u.providers || []).map((p) => [p.id, p.name]));
-  $('#usage-runs').innerHTML = `<table class="u-table">
+  return `<table class="u-table">
     <thead><tr><th>Date</th><th>Workflow</th><th>Status</th><th class="num">Tokens</th><th class="num">Cost</th><th>By provider</th></tr></thead>
     <tbody>${runs.map((r) => `<tr title="${esc(r.runId)}">
       <td class="nowrap">${r.startedAt ? esc(dateOf(r.startedAt)) : '—'}</td>
@@ -1201,7 +1225,7 @@ function closeApproval() {
 
 function switchTab(tab) {
   state.tab = tab;
-  document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.dataset.tab === tab));
+  document.querySelectorAll('.tab[data-tab]').forEach((t) => t.classList.toggle('active', t.dataset.tab === tab));
   $('#tab-detail').classList.toggle('hidden', tab !== 'detail');
   $('#tab-events').classList.toggle('hidden', tab !== 'events');
   scheduleRender();
