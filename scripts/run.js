@@ -8,6 +8,7 @@
 const path = require('path');
 const { WorkflowRun } = require('../src/engine/workflow');
 const { Recorder } = require('../src/engine/recorder');
+const { resolveWorkspace, setupWorkspace } = require('../src/workspace');
 
 const root = path.join(__dirname, '..');
 
@@ -29,11 +30,15 @@ function parseArgs(argv) {
 }
 
 const args = parseArgs(process.argv.slice(2));
+// Mesmo workspace do app (MULTIAGENT_WORKSPACE > caminho registrado > ~/multiagent-workspace).
+// Sem terminal interativo, cria a pasta padrão se nenhuma existir.
+const found = resolveWorkspace();
+const ws = setupWorkspace(found.dir || found.fallback, { persist: found.source !== 'env' });
 const run = new WorkflowRun({
   file: path.isAbsolute(args.file) ? args.file : path.join(root, 'workflows', args.file),
   inputs: args.inputs,
   mock: args.mock,
-  runsDir: path.join(root, 'runs'),
+  runsDir: ws.runs,
 });
 const rec = new Recorder(run.runDir, run.wf.observability?.capture?.redact);
 

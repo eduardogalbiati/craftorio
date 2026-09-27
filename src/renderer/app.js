@@ -42,8 +42,11 @@ async function init() {
     if (!key) return;
     e.target.open ? state.openDetails.add(key) : state.openDetails.delete(key);
   }, true);
+  $('#btn-ws-open').onclick = () => api.openWorkspace();
+  $('#btn-ws-change').onclick = changeWorkspace;
   api.onEvent(onEvent);
   setInterval(renderTicking, 1000);
+  renderWorkspace(await api.getWorkspace());
 
   state.workflows = await api.listWorkflows();
   const sel = $('#wf-select');
@@ -57,6 +60,23 @@ async function init() {
     env[k] ? `<span class="ok">✓ ${k}: <span class="mono">${esc(env[k])}</span></span>`
            : `<span class="missing">✗ ${k} não encontrado no PATH (use o modo simulação)</span>`).join('');
 }
+
+function renderWorkspace(ws) {
+  $('#ws-path').textContent = ws.root;
+  $('#ws-path').title = `Logs: ${ws.runs}\nRepositórios clonados: ${ws.repos}${ws.registry ? `\nRegistrado em: ${ws.registry}` : ''}`;
+}
+
+async function changeWorkspace() {
+  $('#ws-error').textContent = '';
+  try {
+    renderWorkspace(await api.changeWorkspace());
+  } catch (e) {
+    $('#ws-error').textContent = errMsg(e);
+  }
+}
+
+const errMsg = (e) => String(e.message || e).replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
+const isGitUrl = (s) => /^(https?|ssh|git):\/\/\S+$/i.test(s || '') || /^[\w.-]+@[\w.-]+:\S+$/.test(s || '');
 
 function selectWorkflow(i) {
   const wf = state.workflows[i];
@@ -104,10 +124,20 @@ async function startRun() {
   $('#start-error').textContent = '';
   const inputs = readInputs();
   try { localStorage.setItem(`${LS_KEY}.${state.wf.file}`, JSON.stringify(inputs)); } catch { /* ignore */ }
+  const cloning = isGitUrl(inputs.repo_path);
+  if (cloning) {
+    $('#start-info').textContent = 'Clonando/atualizando o repositório no workspace…';
+    $('#btn-start').disabled = true;
+  }
   try {
     await api.startRun({ file: state.wf.file, inputs, mock: $('#mock-toggle').checked });
   } catch (e) {
-    $('#start-error').textContent = String(e.message || e).replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
+    $('#start-error').textContent = errMsg(e);
+  } finally {
+    if (cloning) {
+      $('#start-info').textContent = '';
+      renderHeader();
+    }
   }
 }
 

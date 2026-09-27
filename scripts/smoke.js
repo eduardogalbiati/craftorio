@@ -5,6 +5,7 @@
 const path = require('path');
 const { app } = require('electron');
 process.env.MULTIAGENT_MOCK_DELAY_SCALE ??= '0.2';
+process.env.MULTIAGENT_WORKSPACE ??= path.join(__dirname, '..', 'runs', 'smoke-workspace'); // sem diálogo de workspace
 require('../src/main');
 
 const out = process.argv.find((a) => a.endsWith('.png')) || path.join(__dirname, '..', 'runs', 'smoke.png');

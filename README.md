@@ -92,9 +92,30 @@ npm install -g @openai/codex
 Depois faça login uma vez em cada uma, de forma interativa (`claude` e `codex login`).
 O app mostra na barra lateral se encontrou cada comando no PATH.
 
+## Workspace
+
+Tudo que o app gera fica numa pasta local de workspace:
+
+```
+<workspace>/
+  runs/    logs de cada run (ver Observabilidade)
+  repos/   repositórios clonados
+```
+
+- Ao abrir, o app procura `%USERPROFILE%\multiagent-workspace`. Se ela não existir, pergunta se
+  deve criá-la ou se você quer escolher outra pasta.
+- O caminho escolhido fica registrado no Windows em
+  `HKCU\Software\MultiagentOrchestrator\WorkspacePath` e é recarregado nas próximas aberturas
+  (em outros SOs, em `~/.multiagent-orchestrator.json`). Se a pasta registrada sumir, o app pergunta de novo.
+- A barra lateral mostra o workspace atual, com **Abrir** e **Alterar…**.
+- No input `repo_path` dá para colar uma URL git (`https://…` ou `git@…`): o app clona em
+  `repos/<owner>-<repo>` (ou faz `git fetch` se já foi clonado) e roda o workflow nessa cópia.
+- `MULTIAGENT_WORKSPACE=<pasta>` sobrescreve o workspace sem gravar no registro (usado pelo `npm test`).
+- `scripts/run.js` usa o mesmo workspace; sem nada registrado, cria a pasta padrão.
+
 ## Observabilidade
 
-Cada run grava em `runs/<run_id>/`:
+Cada run grava em `<workspace>/runs/<run_id>/`:
 
 - `events.jsonl`: todos os eventos (step, transição, sessão, aprovação…)
 - `sessions/<id>.jsonl`: eventos de cada sessão (prompts, thinking, tools, output)
@@ -109,6 +130,7 @@ Observações:
 ```
 src/main.js              processo principal do Electron + IPC
 src/preload.js           API segura exposta ao renderer
+src/workspace.js         pasta de workspace (registro do Windows, runs/, repos/, clone)
 src/engine/workflow.js   engine que executa o grafo do YAML
 src/engine/providers.js  adapters claude / codex / mock
 src/engine/recorder.js   gravação em disco (jsonl + summary)

@@ -38,7 +38,7 @@ inputs:
   repo_path:
     type: string
     required: true
-    description: Caminho local do repositório (precisa ter remote no GitHub).
+    description: Caminho local do repositório ou URL git (clonada em <workspace>/repos). Precisa ter remote no GitHub.
   base_branch:
     type: string
     default: main

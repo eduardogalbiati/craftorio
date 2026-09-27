@@ -37,6 +37,16 @@
     <!-- Coluna 1: configuração -->
     <aside class="panel config">
       <section>
+        <h2>Workspace</h2>
+        <div id="ws-path" class="ws-path mono small" title="Logs em runs/, repositórios clonados em repos/"></div>
+        <div class="row">
+          <button id="btn-ws-open" class="btn sm ghost" type="button">Abrir</button>
+          <button id="btn-ws-change" class="btn sm ghost" type="button">Alterar…</button>
+        </div>
+        <p id="ws-error" class="error small"></p>
+      </section>
+
+      <section>
         <h2>Workflow</h2>
         <select id="wf-select"></select>
         <p id="wf-desc" class="muted small"></p>
@@ -55,6 +65,7 @@
         </label>
         <div id="env-status" class="env small"></div>
         <button id="btn-start" class="btn primary block">Iniciar workflow</button>
+        <p id="start-info" class="muted small"></p>
         <p id="start-error" class="error small"></p>
       </section>
 

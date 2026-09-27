@@ -17,5 +17,9 @@ console.log(`\n== Testes unitários (${files.length} arquivo(s)) ==`);
 if (run(['--test', ...files]) !== 0) process.exit(1);
 
 console.log('\n== Fluxo completo em modo mock ==');
-const status = run(['scripts/run.js', '--mock', '--auto-approve', '--task', 'Teste do engine'], { MULTIAGENT_MOCK_DELAY_SCALE: '0.2' });
+// Workspace isolado: os testes não gravam no workspace do usuário nem no registro.
+const status = run(['scripts/run.js', '--mock', '--auto-approve', '--task', 'Teste do engine'], {
+  MULTIAGENT_MOCK_DELAY_SCALE: '0.2',
+  MULTIAGENT_WORKSPACE: path.join(root, 'runs', 'test-workspace'),
+});
 process.exit(status ?? 1);
