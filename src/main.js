@@ -17,13 +17,27 @@ const { followSession } = require('./session-tail');
 const supervisor = require('./supervisor');
 const { cleanupWorktrees } = require('./engine/worktree');
 
+const workflows = require('./workflows');
+
 const ROOT = path.join(__dirname, '..');
-const WORKFLOWS_DIR = path.join(ROOT, 'workflows');
-const BUNDLED_SKILLS_DIR = path.join(ROOT, 'skills'); // skills bundled with the app
+// Bundled defaults (read-only in the packaged app): only a seed source for the workspace copies.
+const BUNDLED_WORKFLOWS_DIR = workflows.BUNDLED_WORKFLOWS_DIR;
+const BUNDLED_SKILLS_DIR = path.join(ROOT, 'skills');
 
 let win = null;
 let currentRun = null;
-let ws = null; // { root, runs, repos, projects, skills, worktrees, settings } (see src/workspace.js)
+let ws = null; // { root, runs, repos, projects, skills, workflows, worktrees, settings } (see src/workspace.js)
+
+// Copies/updates the bundled skills and workflows into the workspace (src/seed.js).
+function seedDefaults() {
+  try { skills.seedSkills(BUNDLED_SKILLS_DIR, ws.skills); } catch (e) { console.error('skill seeding:', e); }
+  try { workflows.seedWorkflows(BUNDLED_WORKFLOWS_DIR, ws.workflows); } catch (e) { console.error('workflow seeding:', e); }
+}
+
+// Workflows are read from the workspace; the bundled copy is a fallback for runs whose workflow
+// file the user deleted (e.g. resuming an old run).
+const workflowDirs = () => [ws.workflows, BUNDLED_WORKFLOWS_DIR];
+const workflowPath = (file) => workflows.resolveWorkflow(path.basename(String(file || '')), workflowDirs());
 
 // Resolves the workspace before opening the window. If the registered folder (or the default
 // ~/multiagent-workspace) does not exist, asks whether to create the default or pick another.
@@ -87,14 +101,20 @@ function createWindow() {
 }
 
 ipcMain.handle('workflows:list', () => {
-  if (!fs.existsSync(WORKFLOWS_DIR)) return [];
-  return fs.readdirSync(WORKFLOWS_DIR)
-    .filter((f) => /\.ya?ml$/i.test(f))
+  if (!fs.existsSync(ws.workflows)) return [];
+  const status = workflows.workflowStatus(BUNDLED_WORKFLOWS_DIR, ws.workflows);
+  const bundledVersion = (file) => { try { return loadWorkflow(path.join(BUNDLED_WORKFLOWS_DIR, file)).metadata?.version || null; } catch { return null; } };
+  return fs.readdirSync(ws.workflows)
+    .filter(workflows.isWorkflowFile)
     .map((file) => {
+      // origin: default (untouched bundled copy), modified (edited bundled copy) or custom (user-created)
+      const st = status[file] || { origin: 'custom', updateAvailable: false, restorable: false };
+      const origin = { origin: st.origin, updateAvailable: st.updateAvailable, restorable: st.restorable, bundledVersion: st.updateAvailable ? bundledVersion(file) : null };
       try {
-        const wf = loadWorkflow(path.join(WORKFLOWS_DIR, file));
+        const wf = loadWorkflow(path.join(ws.workflows, file));
         return {
           file,
+          ...origin,
           name: wf.metadata?.name || file,
           version: wf.metadata?.version,
           description: wf.metadata?.description,
@@ -114,9 +134,19 @@ ipcMain.handle('workflows:list', () => {
           })),
         };
       } catch (e) {
-        return { file, name: file, error: e.message, steps: [] };
+        return { file, ...origin, name: file, error: e.message, steps: [] };
       }
     });
+});
+
+// Replaces the user's edited copy of a bundled workflow with the default; the edited copy goes to
+// the trash (recoverable).
+ipcMain.handle('workflows:restore', async (_e, file) => {
+  const name = path.basename(String(file || ''));
+  if (!workflows.workflowStatus(BUNDLED_WORKFLOWS_DIR, ws.workflows)[name]?.restorable) throw new Error(`"${name}" has no bundled default to restore.`);
+  await shell.trashItem(path.join(ws.workflows, name));
+  workflows.restoreWorkflow(BUNDLED_WORKFLOWS_DIR, ws.workflows, name);
+  return true;
 });
 
 ipcMain.handle('env:check', () => ({
@@ -162,11 +192,11 @@ ipcMain.handle('app:info', () => ({
   version: app.getVersion(),
   electron: process.versions.electron,
   node: process.versions.node,
-  workflowsDir: WORKFLOWS_DIR,
+  workflowsDir: ws.workflows,
 }));
 
 ipcMain.handle('path:open', (_e, p) => {
-  const allowed = [ws.root, WORKFLOWS_DIR, ...projects.listProjects(ws.projects).map((x) => x.folder)];
+  const allowed = [ws.root, ...projects.listProjects(ws.projects).map((x) => x.folder)];
   const norm = (x) => { const r = path.resolve(x); return process.platform === 'win32' ? r.toLowerCase() : r; };
   if (!allowed.some((dir) => norm(p) === norm(dir) || norm(p).startsWith(norm(dir) + path.sep))) throw new Error('Path is outside the workspace.');
   return shell.openPath(p);
@@ -201,7 +231,7 @@ ipcMain.handle('workspace:change', async () => {
   const dir = await pickWorkspaceDir(win);
   if (dir) {
     ws = workspace.setupWorkspace(dir);
-    try { skills.seedSkills(BUNDLED_SKILLS_DIR, ws.skills); } catch (e) { console.error('skill seeding:', e); }
+    seedDefaults();
   }
   return ws;
 });
@@ -222,8 +252,15 @@ async function startWorkflowRun({ file, inputs, mock, resume = null, projectId: 
   // budgets that count usage outside the orchestrator need the CLIs' own logs
   const needsLocal = Object.values(settings.budgets || {}).some((b) => b?.countOutside);
   const budget = usage.budgetBaseline({ runsDir: ws.runs, settings, local: needsLocal ? readLocalUsage() : null });
+  const wfFile = workflowPath(file);
+  const notices = [];
+  if (wfFile.fallback) {
+    const msg = `workflow ${path.basename(wfFile.file)} is not in ${ws.workflows}; using the copy bundled with the app (${wfFile.file})`;
+    console.warn(msg);
+    notices.push({ level: 'warn', message: msg });
+  }
   const run = new WorkflowRun({
-    file: path.join(WORKFLOWS_DIR, path.basename(file)), inputs, mock, runsDir: ws.runs, skillsDirs: [ws.skills],
+    file: wfFile.file, inputs, mock, runsDir: ws.runs, skillsDirs: [ws.skills], notices,
     budget, prices: settings.prices, projectId, resume,
     // simulation runs never touch git: the agents are mocked and work in the repository folder
     worktreesDir: mock ? null : ws.worktrees,
@@ -277,7 +314,7 @@ function sessionView(x, live) {
 // Provider config of a run's workflow: the live one, or the workflow file named in its events.
 function runProviders(runId, file) {
   if (isCurrent(runId) && currentRun) return currentRun.wf.providers || {};
-  try { return loadWorkflow(path.join(WORKFLOWS_DIR, path.basename(file || ''))).providers || {}; } catch { return {}; }
+  try { return loadWorkflow(workflowPath(file).file).providers || {}; } catch { return {}; }
 }
 
 // Why "Open in CLI" is not possible for a session ('' = possible).
@@ -332,11 +369,11 @@ function terminalSpec(runId, sessionId, mode) {
 // run report written to supervisor/context.md and a first message that points to it.
 function supervisorChatSpec(runId) {
   const runDir = runFolder(runId);
-  const cfg = supervisor.supervisorConfig(runDir, WORKFLOWS_DIR);
+  const cfg = supervisor.supervisorConfig(runDir, workflowDirs());
   const skill = skills.resolveSkill([ws.skills, path.join(ROOT, 'skills')], 'run-supervisor');
   const ctxFile = path.join(runDir, 'supervisor', 'context.md');
   fs.mkdirSync(path.dirname(ctxFile), { recursive: true });
-  fs.writeFileSync(ctxFile, supervisor.runReport(runDir, { workflowsDir: WORKFLOWS_DIR }));
+  fs.writeFileSync(ctxFile, supervisor.runReport(runDir, { workflowsDir: workflowDirs() }));
   const cmd = resolveCommand(cfg.provider.command || 'claude');
   if (!cmd) throw new Error(`The supervisor needs ${cfg.provider.command}, which is not installed.`);
   const first = `You are the supervisor of the multi-agent workflow run in this folder. Read ${path.join(skill.path, 'SKILL.md')} (your method) and supervisor/context.md (the run report); events.jsonl, sessions/ and the other files have the details. Then explain briefly what happened in this run and wait for my questions. Do not change any file.`;
@@ -394,7 +431,7 @@ function runFolder(runId) {
 }
 
 ipcMain.handle('supervisor:analyze', (_e, { runId, question }) => supervisor.analyzeRun({
-  runDir: runFolder(runId), question, workflowsDir: WORKFLOWS_DIR, skillsDirs: [ws.skills, path.join(ROOT, 'skills')], resolveCommand,
+  runDir: runFolder(runId), question, workflowsDir: workflowDirs(), skillsDirs: [ws.skills, path.join(ROOT, 'skills')], resolveCommand,
 }));
 
 // Continues a run from a step: a new run with the previous outputs, agent conversations and an instruction.
@@ -402,7 +439,7 @@ ipcMain.handle('supervisor:resume', async (_e, { runId, step, instruction }) => 
   const runDir = runFolder(runId);
   const spec = supervisor.resumeSpec(runDir, step);
   if (!spec.file) throw new Error('The run does not record its workflow file.');
-  const first = loadWorkflow(path.join(WORKFLOWS_DIR, path.basename(spec.file))).steps[0].id;
+  const first = loadWorkflow(workflowPath(spec.file).file).steps[0].id;
   return startWorkflowRun({
     file: spec.file, inputs: spec.inputs, mock: spec.mock, projectId: spec.projectId,
     resume: { runId: spec.runId, fromStep: step || first, steps: spec.steps, sessions: spec.sessions, instruction: instruction || null, worktree: spec.worktree },
@@ -538,7 +575,7 @@ ipcMain.handle('run:openDir', () => {
 app.whenReady().then(async () => {
   ws = await ensureWorkspace();
   if (!ws) return app.quit();
-  try { skills.seedSkills(BUNDLED_SKILLS_DIR, ws.skills); } catch (e) { console.error('skill seeding:', e); }
+  seedDefaults();
   createWindow();
   // run worktrees left behind: succeeded runs whose removal failed, or unused for 14 days
   // (no run is in progress yet at startup)

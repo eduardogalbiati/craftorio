@@ -121,7 +121,7 @@ async function init() {
   $('#project-show-sim').onchange = (e) => { if (state.pv) { state.pv.showSim = e.target.checked; renderProjectView(); } };
 
   // workflows
-  $('#btn-workflows-folder').onclick = async () => api.openPath((await api.appInfo()).workflowsDir);
+  $('#btn-workflows-folder').onclick = () => api.openPath(state.ws.workflows);
   document.querySelectorAll('[data-wtab]').forEach((b) => (b.onclick = () => showWorkflowsTab(b.dataset.wtab)));
   $('#btn-workflow-runs-refresh').onclick = () => loadWorkflowRuns();
   $('#workflow-show-sim').onchange = (e) => { state.wr.showSim = e.target.checked; renderWorkflowRuns(); };
@@ -206,7 +206,7 @@ function renderWorkspacePaths() {
   const ws = state.ws;
   $('#projects-dir').textContent = ws.projects;
   $('#skills-dir').textContent = ws.skills;
-  api.appInfo().then((i) => ($('#workflows-dir').textContent = i.workflowsDir));
+  $('#workflows-dir').textContent = ws.workflows;
 }
 
 // ---------------------------------------------------------------------------
@@ -748,14 +748,37 @@ async function refreshWorkflows() {
             <span class="badge">${(w.steps || []).length} steps</span>
             <span class="badge">${Object.keys(w.agents || {}).length} agents</span>
             <span class="badge mono">${esc(w.file)}</span>
+            ${originBadge(w)}
           </div>
         </div>
-        <button class="btn primary sm" data-run ${w.error ? 'disabled' : ''}>Run</button>
+        <div class="row">
+          ${w.restorable ? '<button class="btn ghost sm" data-restore title="Move your edited copy to the trash and use the default bundled with the app">Restore default</button>' : ''}
+          <button class="btn primary sm" data-run ${w.error ? 'disabled' : ''}>Run</button>
+        </div>
       </div>
       <ol class="wf-steps">${steps}</ol>
     </article>`;
   }).join('');
   box.querySelectorAll('[data-run]').forEach((b) => (b.onclick = () => openDrawer({ workflow: b.closest('.wf-card').dataset.file })));
+  box.querySelectorAll('[data-restore]').forEach((b) => (b.onclick = async () => {
+    const file = b.closest('.wf-card').dataset.file;
+    if (!(await confirmDialog('Restore default', `Move your edited "${file}" to the trash and restore the default bundled with the app?`, 'Restore'))) return;
+    try { await api.restoreWorkflow(file); } catch (e) { showToast('Restore failed', e.message); }
+    refreshWorkflows();
+  }));
+}
+
+// Where a workflow file comes from (see src/seed.js): the bundled default, edited by the user or user-created.
+function originBadge(w) {
+  const badges = {
+    default: '<span class="badge" title="Default bundled with the app; updated automatically with new app versions">default</span>',
+    modified: '<span class="badge warn" title="Bundled default edited by you; app updates do not overwrite it">modified</span>',
+    custom: '<span class="badge cat-build" title="Created by you">custom</span>',
+  };
+  const update = w.updateAvailable
+    ? `<span class="badge warn" title="The app ships a newer default than the one you edited. Restore default to use it (your copy goes to the trash).">newer default${w.bundledVersion ? ` v${esc(w.bundledVersion)}` : ''}</span>`
+    : '';
+  return (badges[w.origin] || '') + update;
 }
 
 // ---------------------------------------------------------------------------

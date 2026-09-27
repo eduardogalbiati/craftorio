@@ -2,6 +2,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('api', {
   listWorkflows: () => ipcRenderer.invoke('workflows:list'),
+  restoreWorkflow: (file) => ipcRenderer.invoke('workflows:restore', file),
   checkEnv: () => ipcRenderer.invoke('env:check'),
   envDetails: () => ipcRenderer.invoke('env:details'),
   appInfo: () => ipcRenderer.invoke('app:info'),

@@ -98,6 +98,15 @@ function decisionPrompt({ wf, step, error, answer, allowed, events, previous }) 
   ].filter(Boolean).join('\n');
 }
 
+// The run's workflow file (runs record its basename). workflowsDir: a folder or a list of folders
+// searched in order (workspace first, then the bundled defaults). Throws if it is gone.
+function readRunWorkflow(workflowsDir, file) {
+  const name = path.basename(file || '');
+  const dirs = [].concat(workflowsDir || '');
+  const found = dirs.map((d) => path.join(d, name)).find((p) => name && fs.existsSync(p)) || path.join(dirs[0], name);
+  return yaml.load(fs.readFileSync(found, 'utf8'));
+}
+
 /** Text report of a run for a person's question (UI-side). */
 function runReport(runDir, { workflowsDir } = {}) {
   const events = readEvents(runDir);
@@ -105,7 +114,7 @@ function runReport(runDir, { workflowsDir } = {}) {
   const finished = [...events].reverse().find((e) => e.type === 'workflow.finished');
   let steps = '';
   try {
-    const wf = yaml.load(fs.readFileSync(path.join(workflowsDir || '', path.basename(started.file || '')), 'utf8'));
+    const wf = readRunWorkflow(workflowsDir, started.file);
     steps = (wf.steps || []).map((s) => `- ${s.id} (${s.type || (s.agents ? `parallel: ${s.agents.join(', ')}` : s.agent)})${s.on_error ? ` on_error→${s.on_error}` : ''}`).join('\n');
   } catch { /* workflow file gone */ }
   const answers = {};
@@ -164,7 +173,7 @@ function resumeSpec(runDir, fromStep) {
 function supervisorConfig(runDir, workflowsDir) {
   const started = readEvents(runDir).find((e) => e.type === 'workflow.started') || {};
   let wf = {};
-  try { wf = yaml.load(fs.readFileSync(path.join(workflowsDir || '', path.basename(started.file || '')), 'utf8')) || {}; } catch { /* workflow file gone */ }
+  try { wf = readRunWorkflow(workflowsDir, started.file) || {}; } catch { /* workflow file gone */ }
   const orch = wf.orchestrator || {};
   const providerName = orch.supervisor?.provider || orch.provider || 'claude';
   const provider = wf.providers?.[providerName] || { type: 'claude-code', command: 'claude', args: ['-p', '--output-format', 'stream-json', '--verbose', '--model', '{{ model }}'], skill_args: ['--add-dir', '{{ skill_dir }}'] };

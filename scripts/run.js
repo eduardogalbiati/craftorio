@@ -2,6 +2,8 @@
 //
 //   node scripts/run.js --task "..." [--repo <path>] [--file <yaml>] [--mock] [--auto-approve] [--input key=value]
 //
+// --file: an absolute path is used as is; a name or relative path is looked up in <workspace>/workflows
+// first, then in the workflows bundled with the app (workflows/ in this repository).
 // --auto-approve approves every human gate (use with care outside mock mode).
 // Exits with code 0 if the workflow succeeds, 1 otherwise.
 
@@ -11,6 +13,8 @@ const { Recorder } = require('../src/engine/recorder');
 const { resolveWorkspace, setupWorkspace, readSettings } = require('../src/workspace');
 const usage = require('../src/usage');
 const { resolveCommand } = require('../src/engine/providers');
+const { BUNDLED_WORKFLOWS_DIR, seedWorkflows, resolveWorkflow } = require('../src/workflows');
+const { seedSkills } = require('../src/skills');
 
 const root = path.join(__dirname, '..');
 
@@ -36,11 +40,16 @@ const args = parseArgs(process.argv.slice(2));
 // With no interactive terminal, creates the default folder if none exists.
 const found = resolveWorkspace();
 const ws = setupWorkspace(found.dir || found.fallback, { persist: found.source !== 'env' });
+// Same defaults as the app: bundled skills and workflows are seeded into the workspace.
+seedSkills(path.join(root, 'skills'), ws.skills);
+seedWorkflows(BUNDLED_WORKFLOWS_DIR, ws.workflows);
+const wfFile = resolveWorkflow(args.file, [ws.workflows, BUNDLED_WORKFLOWS_DIR]);
+if (wfFile.fallback) console.warn(`workflow ${args.file} is not in ${ws.workflows}; using the bundled copy ${wfFile.file}`);
 const settings = readSettings(ws);
 const needsLocal = Object.values(settings.budgets || {}).some((b) => b?.countOutside);
 const budget = usage.budgetBaseline({ runsDir: ws.runs, settings, local: needsLocal ? require('../src/local-usage').readLocalUsage() : null });
 const run = new WorkflowRun({
-  file: path.isAbsolute(args.file) ? args.file : path.join(root, 'workflows', args.file),
+  file: wfFile.file,
   inputs: args.inputs,
   mock: args.mock,
   runsDir: ws.runs,

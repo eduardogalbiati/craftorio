@@ -1,6 +1,6 @@
 # Multiagent Orchestrator
 
-Electron app that runs multi-agent workflows defined in YAML (`workflows/`), opening
+Electron app that runs multi-agent workflows defined in YAML (`<workspace>/workflows/`), opening
 **Claude Code**, **Codex CLI** and **Grok Build** sessions and recording the observability of each session
 (open/active time, tokens, cost, prompts, thinking, tool calls, output).
 
@@ -20,7 +20,7 @@ Keep **Simulation mode** checked to try a flow without calling the CLIs.
 | Dashboard | "What are we building today?": Plan & Design, Code & Build and Monitor & Improve open the start panel filtered by the workflow's `metadata.category` (`plan`, `build`, `monitor`) |
 | Projects | Projects in `<workspace>/projects/<id>.json`. Every project has a folder and optionally a git repository. With a repository and no folder, it is cloned into `<workspace>/repos/<owner>-<repo>`; without either, the folder is `<workspace>/projects/<id>/`. Clicking a project shows every workflow run in it (status, cost, task), and for each run its sessions, with **Live terminal** / **Open in CLI** to watch or resume any of them. Runs are linked by the project id they were started with (older ones by the project's current or previous folders) |
 | Artifacts | Every file a run produced (documents, proposals, reviews, reports), grouped by run and filterable by project. The viewer renders Markdown (tables, table of contents; sanitized with DOMPurify), pretty-prints JSON and shows TSV/CSV as tables. Also listed per run in the project view |
-| Workflows | The YAMLs in `workflows/` with their steps, agents/models, skills, `/goal`, `/loop`, parallel steps and branches |
+| Workflows | The YAMLs in `<workspace>/workflows/` with their steps, agents/models, skills, `/goal`, `/loop`, parallel steps and branches. Each one is marked **default** (untouched copy of a workflow bundled with the app), **modified** (a default you edited; **Restore default** moves your copy to the trash and restores the bundled one, and **newer default** means the app ships a newer version than the one you edited) or **custom** (created by you) |
 | Skills | One folder per skill in `<workspace>/skills/<id>/SKILL.md` (Claude Code format) |
 | Usage | Tokens and cost per provider this month and today, monthly budgets (USD and/or tokens), per-model prices for CLIs that do not report cost, recent runs. The topbar widget shows this month's total; click it for a per-provider popover |
 | Settings | Workspace, CLI status (Claude Code, Codex, Grok Build, GitHub CLI, GitLab CLI, Git) and run preferences (`<workspace>/settings.json`) |
@@ -58,7 +58,9 @@ three). Tests must not depend on the machine:
 npm run run -- --task "Task description" --repo C:/path/to/repo --input language=python --input git_platform=gl
 ```
 
-Runs the workflow for real. `--file ai-arena.yaml` picks another workflow. `--auto-approve`
+Runs the workflow for real. `--file ai-arena.yaml` picks another workflow: a name or relative path is
+looked up in `<workspace>/workflows/` first, then in the repository's `workflows/`; an absolute path is
+used as is (e.g. to try an edited repository copy while the workspace copy is modified). `--auto-approve`
 approves every human gate without interaction (tests only: in practice the AI must not cross the gates).
 
 Local build: `npm run build` (writes `build/`) or `npm run package` (writes `dist/`, used by the deploy).
@@ -433,7 +435,25 @@ Everything the app produces lives in a local workspace folder:
   worktrees/ one git worktree per run (<run_id>), see "A git worktree per run"
   projects/  projects (one .json per project)
   skills/    skills (one folder with SKILL.md per skill)
+  workflows/ workflow definitions (one .yaml per workflow)
+  settings.json  app preferences, budgets and prices
 ```
+
+- **Bundled defaults.** The app folder (read-only `app.asar` in the packaged app) only holds the
+  default skills and workflows; the app and `scripts/run.js` copy them into `skills/` and
+  `workflows/` on startup, and everything is read and edited there. `.seeded.json` in each folder
+  records the content hash of each copied default:
+  - a default not copied yet is copied (unless you already have a file with that name, which is kept);
+  - an untouched copy is updated when a new app version ships a new version of it (e.g.
+    `software-development` 0.9.0 → 0.10.0);
+  - a copy you edited is never overwritten; Workflows > Definitions shows it as **modified**, with
+    **newer default** when the app ships a newer version, and **Restore default** (your copy goes to
+    the trash);
+  - a default you deleted is not brought back (to get it back, remove its entry from `.seeded.json`);
+  - files you created are never touched.
+- Runs record the workflow file name. Resuming a run (or opening its sessions or supervisor) reads
+  the workflow from `<workspace>/workflows/`; if you deleted it, the bundled copy is used and the run
+  log says so.
 
 - On startup the app looks for `%USERPROFILE%\multiagent-workspace`. If it does not exist, it asks
   whether to create it or pick another folder.
@@ -465,9 +485,11 @@ Notes:
 ```
 src/main.js              Electron main process + IPC
 src/preload.js           safe API exposed to the renderer
-src/workspace.js         workspace folder (Windows registry, runs/, repos/, clone)
+src/workspace.js         workspace folder (Windows registry, runs/, repos/, workflows/, clone)
 src/projects.js          projects: CRUD and folder/repository setup
+src/seed.js              seeding of bundled defaults into the workspace (.seeded.json, origin status, restore)
 src/skills.js            skills: CRUD, lookup, seeding and prompt block
+src/workflows.js         workflows: seeding, origin status, lookup (workspace, then bundled)
 src/usage.js             token/cost usage per provider and scope, budgets and the pre-run CLI check
 src/local-usage.js       readers of the CLIs' own local usage logs (Claude Code, Codex, Grok)
 src/engine/workflow.js   engine that runs the YAML graph
@@ -475,7 +497,7 @@ src/engine/providers.js  claude / codex / grok / mock adapters
 src/engine/recorder.js   writes to disk (jsonl + summary)
 src/engine/worktree.js   git worktree per run: create, reuse on resume, remove, orphan cleanup
 src/renderer/            UI (plain HTML/CSS/JS)
-workflows/               workflow definitions
+workflows/               bundled workflow definitions (copied into <workspace>/workflows)
 skills/                  bundled skills (copied into <workspace>/skills)
 .github/workflows/       CI (PRs) and deploy (merge into main)
 scripts/                 terminal runner, tests, build and UI smoke test

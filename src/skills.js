@@ -6,6 +6,7 @@ const crypto = require('crypto');
 const path = require('path');
 const yaml = require('js-yaml');
 const { slugify } = require('./projects');
+const { seedBundle, copyDir } = require('./seed');
 
 const isDir = (p) => { try { return fs.statSync(p).isDirectory(); } catch { return false; } };
 const FRONTMATTER = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
@@ -102,22 +103,9 @@ function skillPrompt(skill) {
   return `<skill name="${skill.name}" dir="${skill.path}">\n${skill.body.trim()}${files}\n</skill>`;
 }
 
-// Copies the skills bundled with the app into the workspace (only missing ones, and only once
-// per skill: if the user deletes one, it does not come back). Manual copy because
-// fs.cpSync cannot read from inside app.asar.
-const SEEDED = '.seeded.json';
-function copyDir(src, dest) {
-  fs.mkdirSync(dest, { recursive: true });
-  for (const e of fs.readdirSync(src, { withFileTypes: true })) {
-    const s = path.join(src, e.name);
-    const d = path.join(dest, e.name);
-    if (e.isDirectory()) copyDir(s, d);
-    else fs.writeFileSync(d, fs.readFileSync(s));
-  }
-}
-
-// Content hash of a skill folder (paths + bytes), used to tell whether the user
-// edited a seeded copy.
+// Skills bundled with the app are seeded into the workspace (src/seed.js): copied once, untouched
+// copies updated when the app ships a new version, edited or deleted ones left alone.
+// Content hash of a skill folder (paths + bytes), used to tell whether the user edited a seeded copy.
 function hashDir(dir) {
   const h = crypto.createHash('sha256');
   for (const f of supportFiles(dir).concat('SKILL.md').sort()) {
@@ -126,41 +114,15 @@ function hashDir(dir) {
   return h.digest('hex');
 }
 
-// .seeded.json maps skill id -> hash of what was copied. For each bundled skill:
-// - never seeded and missing          -> copy it
-// - seeded, user deleted it           -> leave it deleted
-// - seeded, untouched, app has update -> replace it with the new version
-// - seeded, edited by the user        -> keep the user's version
-// Returns the ids that were copied or updated.
-function seedSkills(srcDir, destDir) {
-  if (!isDir(srcDir)) return [];
-  fs.mkdirSync(destDir, { recursive: true });
-  const markFile = path.join(destDir, SEEDED);
-  let seeded = {};
-  try {
-    const raw = JSON.parse(fs.readFileSync(markFile, 'utf8').replace(/^\uFEFF/, ''));
-    // legacy format: list of ids without hashes (never auto-updated)
-    seeded = Array.isArray(raw) ? Object.fromEntries(raw.map((id) => [id, null])) : raw;
-  } catch { /* first time */ }
-  const changed = [];
-  for (const id of fs.readdirSync(srcDir).filter((d) => fs.existsSync(skillFile(srcDir, d)))) {
-    const src = path.join(srcDir, id);
-    const dest = path.join(destDir, id);
-    const srcHash = hashDir(src);
-    const exists = fs.existsSync(skillFile(destDir, id));
-    if (!(id in seeded)) {
-      if (exists) continue; // the user already has a skill with this name
-    } else if (!exists || seeded[id] === null || seeded[id] === srcHash || hashDir(dest) !== seeded[id]) {
-      continue; // deleted, legacy, already current, or edited by the user
-    } else {
-      fs.rmSync(dest, { recursive: true, force: true });
-    }
-    copyDir(src, dest);
-    seeded[id] = srcHash;
-    changed.push(id);
-  }
-  fs.writeFileSync(markFile, JSON.stringify(seeded, null, 2));
-  return changed;
-}
+const SKILL_KIND = {
+  list: (dir) => fs.readdirSync(dir).filter((d) => fs.existsSync(skillFile(dir, d))),
+  exists: (dir, id) => fs.existsSync(skillFile(dir, id)),
+  hash: (dir, id) => hashDir(path.join(dir, id)),
+  copy: (srcDir, destDir, id) => copyDir(path.join(srcDir, id), path.join(destDir, id)),
+  remove: (dir, id) => fs.rmSync(path.join(dir, id), { recursive: true, force: true }),
+};
 
-module.exports = { parseSkill, serializeSkill, listSkills, readSkill, createSkill, saveSkill, resolveSkill, skillPrompt, seedSkills };
+/** Returns the ids that were copied or updated. */
+const seedSkills = (srcDir, destDir) => seedBundle(srcDir, destDir, SKILL_KIND);
+
+module.exports = { parseSkill, serializeSkill, listSkills, readSkill, createSkill, saveSkill, resolveSkill, skillPrompt, seedSkills, SKILL_KIND };

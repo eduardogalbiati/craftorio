@@ -164,13 +164,15 @@ class WorkflowRun extends EventEmitter {
   // worktreesDir: where orchestrator.worktree creates the run's git worktree (<workspace>/worktrees);
   //   without it (e.g. simulation runs) the agents work in the repository folder itself.
   // mockSequences: { field: [value per visit] } over the mock provider's defaults (tests).
-  constructor({ file, inputs, mock, runsDir, skillsDirs, budget, prices, projectId, resume, worktreesDir, mockSequences }) {
+  // notices: [{ level, message }] logged right after workflow.started (e.g. the workflow file came from a fallback folder).
+  constructor({ file, inputs, mock, runsDir, skillsDirs, budget, prices, projectId, resume, worktreesDir, mockSequences, notices }) {
     super();
     refreshWindowsPath(); // actions (e.g. gh pr merge) need the refreshed PATH
     this.file = file;
     this.wf = loadWorkflow(file);
     this.mock = !!mock;
     this.mockSequences = mockSequences || null;
+    this.notices = notices || [];
     this.runId = newRunId();
     this.runDir = path.join(runsDir, this.runId);
     this.skillsDirs = [...(skillsDirs || []), BUNDLED_SKILLS];
@@ -283,6 +285,7 @@ class WorkflowRun extends EventEmitter {
       resumed_from: this.resume ? { run_id: this.resume.runId, step: this.resume.fromStep } : undefined,
       steps: this.wf.steps.map((s) => ({ id: s.id, type: s.type || 'agent', agent: stepAgentLabel(s) })),
     });
+    for (const n of this.notices) this.emitEvent('log', { level: n.level || 'info', message: n.message });
     this.orchestrator = this.openSession({
       agent: 'orchestrator', provider: 'engine', model: 'engine (deterministic)', parentId: null, stepId: null,
     });
