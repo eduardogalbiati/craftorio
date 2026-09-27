@@ -134,8 +134,13 @@ agents:
     system_prompt: |
       You are a senior software engineer. Make small, tested, cohesive changes that
       follow the architecture and conventions of the existing code.
-      Work on your own branch created from {{ inputs.base_branch }} and commit your
-      changes there. Run the project's tests the way the test skill describes.
+      Work on your own branch and commit your changes there. The checkout is shared and
+      its local {{ inputs.base_branch }} may be stale or dirty, so always start a new
+      branch from the remote base: `git fetch origin`, then
+      `git switch -c <branch> origin/{{ inputs.base_branch }}` (never from the local
+      {{ inputs.base_branch }}). Then reinstall dependencies if they are missing or the
+      lockfile changed (e.g. `npm ci` when node_modules is missing or package-lock.json
+      differs from the previous HEAD). Run the project's tests the way the test skill describes.
       Only `git push` when the orchestrator explicitly asks. When you finish a
       requested fix, report the commit hash.
 
@@ -260,7 +265,13 @@ steps:
       {% endif %}
       {% if steps.deploy_prod.output and steps.deploy_prod.output.deploy_status == 'failed' %}
       The previous production deploy failed: {{ steps.deploy_prod.output.error_summary }}
-      Create a new branch from an up-to-date {{ inputs.base_branch }} (`git pull`) and fix it.
+      Create a new branch from the remote base (`git fetch origin`, then
+      `git switch -c <branch> origin/{{ inputs.base_branch }}`) and fix it.
+      {% endif %}
+      {% if not steps.develop.output %}
+      Before changing code: `git fetch origin` and create your branch from
+      `origin/{{ inputs.base_branch }}` (not the local {{ inputs.base_branch }}, which may be
+      behind), then make sure dependencies are installed for that base.
       {% endif %}
     output_schema:
       type: object
@@ -510,8 +521,17 @@ steps:
       1. Make sure the branch is up to date on the remote.
       2. Make sure a PR/MR to the base is open (reuse it if it exists; otherwise create
          one with a short title and this summary: {{ steps.develop.output.summary }}).
-      3. Check its CI:
-         - anything running or not started yet → ci_status: pending
+      3. On EVERY visit, before anything else, check the PR/MR mergeability (see the
+         skill). If it conflicts with the base (GitHub `mergeable: CONFLICTING` /
+         `mergeStateStatus: DIRTY`; GitLab `has_conflicts` / `detailed_merge_status:
+         conflict`), CI will never start: answer ci_status: failed right away, with a
+         failure_log saying the branch conflicts with `{{ inputs.base_branch }}` (list the
+         conflicting files if you can) and that the developer must merge
+         `origin/{{ inputs.base_branch }}` into the branch, resolve, test and push.
+      4. Check its CI:
+         - anything running or not started yet → ci_status: pending (but if no check or
+           pipeline has registered well after the push, follow the skill instead of
+           answering pending forever)
          - something failed → ci_status: failed, with failure_log = job, step, error and
            probable root cause (file/line). For infrastructure/flaky failures, follow the
            skill (retry once) and answer pending.

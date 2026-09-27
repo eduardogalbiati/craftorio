@@ -54,12 +54,12 @@ Local build: `npm run build` (writes `build/`) or `npm run package` (writes `dis
 
 | Stage | Agent | Model | What it does | Skills |
 |---|---|---|---|---|
-| Build & Test | Developer | Opus 5.5 | Implements and fixes everything the other agents report | `unit-test-writer-<language>`, `bug-diagnosis`, `merge-conflict-resolver`, `decision-log` |
+| Build & Test | Developer | Opus 5.5 | Implements and fixes everything the other agents report; always branches from a freshly fetched `origin/<base_branch>` | `unit-test-writer-<language>`, `bug-diagnosis`, `merge-conflict-resolver`, `decision-log` |
 | | Code Review | Codex gpt-6-luna | Reviews the diff on correctness, spec and standards; requests changes only for blocker/major | `code-review` |
 | | Test Writer | Sonnet 5 | Writes/updates tests and runs the suite; failures go back to the developer | `unit-test-writer-<language>` |
 | | Builder | Sonnet 5 | Build + dependency audit; a broken build or a high/critical production vulnerability goes back to the developer | `build-audit-<language>` |
 | | Verifier | Sonnet 5 | Proves the change does what the task asked: same command on the base and on the branch; `not_verified` goes back to the developer, `inconclusive` does not block | `claim-verification` |
-| CI/CD | CI Pusher | Opus 4.8 | Push, opens the PR/MR, **/goal** CI green with **/loop**; on failure fetches the log and calls the developer | `ci-pipeline-<platform>` |
+| CI/CD | CI Pusher | Opus 4.8 | Push, opens the PR/MR, **/goal** CI green with **/loop**; on failure fetches the log and calls the developer. A PR/MR that conflicts with the base (CI never starts) is reported as failed on the first visit | `ci-pipeline-<platform>` |
 | | PR Babysitter | Opus 4.8 | **/goal** PR/MR mergeable with **/loop**; actionable comments → developer (replies with the hash), doubtful ones → human | `pr-babysitter-<platform>`, `decision-log` |
 | | Deployer | Opus 4.8 | Publishes the preview, and after the merge tracks the production deploy | `deploy-<platform>` |
 
@@ -163,7 +163,7 @@ What is shared by a family lives in a suffix-less skill referenced with `uses:`.
 | `testing-principles` | via `uses` | Seams first, no tautological or implementation-coupled tests, mocks only at boundaries, red before green for bug fixes |
 | `build-audit-{js,python,go,java,csharp}` | builder | Build and audit commands, production vs development scope per ecosystem |
 | `dependency-audit-policy` | via `uses` | Severity from CVSS, how to report blockers with a fix, redaction |
-| `ci-pipeline-{gh,gl}` | CI pusher | Push, PR/MR, CI status, fetching failed logs, retrying flaky jobs |
+| `ci-pipeline-{gh,gl}` | CI pusher | Push, PR/MR, mergeability (conflicts fail fast), CI status, missing checks, fetching failed logs, retrying flaky jobs |
 | `ci-failure-triage` | via `uses` | Classify a failure (code, environment, infrastructure, needs-human) and write a root-cause report |
 | `pr-description` | via `uses` | PR/MR title and body: visual summary, evidence, merge danger |
 | `pr-babysitter-{gh,gl}` | PR babysitter | Mergeability signals, threads/discussions, replies |
