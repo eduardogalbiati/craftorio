@@ -1,0 +1,25 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      ELECTRON_SKIP_BINARY_DOWNLOAD: "1"   # os testes não abrem a UI
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Checagem de sintaxe
+        run: for f in $(git ls-files '*.js'); do node --check "$f" || exit 1; done
+      - name: Validar workflows YAML
+        run: node -e "const {loadWorkflow}=require('./src/engine/workflow'); for (const f of require('fs').readdirSync('workflows')) { loadWorkflow('workflows/'+f); console.log('ok', f); }"
+      - name: Teste do engine (modo mock)
+        run: npm run test:engine

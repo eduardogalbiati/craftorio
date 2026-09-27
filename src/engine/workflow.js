@@ -8,7 +8,7 @@ const { EventEmitter } = require('events');
 const { exec } = require('child_process');
 const yaml = require('js-yaml');
 const nunjucks = require('nunjucks');
-const { runTurn, sleep, emptyUsage } = require('./providers');
+const { runTurn, refreshWindowsPath, isRetryable, sleep, emptyUsage } = require('./providers');
 
 // ---------------------------------------------------------------------------
 // Templates e expressões
@@ -93,6 +93,7 @@ function addUsage(total, u) {
 class WorkflowRun extends EventEmitter {
   constructor({ file, inputs, mock, runsDir }) {
     super();
+    refreshWindowsPath(); // ações (ex.: gh pr merge) precisam do PATH atualizado
     this.file = file;
     this.wf = loadWorkflow(file);
     this.mock = !!mock;
@@ -391,6 +392,10 @@ class WorkflowRun extends EventEmitter {
         lastErr = e;
         if (this.abort.signal.aborted) break;
         this.emitEvent('log', { level: 'error', message: `[${agentName}] tentativa ${a}/${maxAttempts} falhou: ${e.message}` });
+        if (!isRetryable(e)) {
+          this.emitEvent('log', { level: 'error', message: `[${agentName}] erro não recuperável, sem novas tentativas.` });
+          break;
+        }
         if (a < maxAttempts) {
           this.setStatus(session, 'retrying');
           await sleep(delay, this.abort.signal);
@@ -434,10 +439,13 @@ class WorkflowRun extends EventEmitter {
       this.emitEvent('action.executed', { command: cmd, skipped: true, output: '[mock] ação não executada' });
       return Promise.resolve();
     }
-    return new Promise((resolve) => {
-      exec(cmd, { cwd: this.inputs.repo_path || process.cwd(), windowsHide: true }, (err, stdout, stderr) => {
-        this.emitEvent('action.executed', { command: cmd, exit_code: err ? err.code ?? 1 : 0, output: `${stdout}${stderr}`.slice(-4000) });
-        resolve();
+    return new Promise((resolve, reject) => {
+      exec(cmd, { cwd: this.inputs.repo_path || process.cwd(), windowsHide: true, env: process.env }, (err, stdout, stderr) => {
+        const exitCode = err ? err.code ?? 1 : 0;
+        this.emitEvent('action.executed', { command: cmd, exit_code: exitCode, output: `${stdout}${stderr}`.slice(-4000) });
+        if (exitCode) reject(new Error(`Ação falhou (exit ${exitCode}): ${cmd}
+${stderr || stdout}`.slice(0, 1500)));
+        else resolve();
       });
     });
   }
@@ -447,7 +455,8 @@ class WorkflowRun extends EventEmitter {
     for (const a of this.approvals.values()) a.reject(new Error('Encerrado'));
     this.approvals.clear();
     for (const s of this.sessions.values()) {
-      if (!s.closedAt) this.closeSession(s, s.status === 'error' ? 'failed' : status === 'success' ? 'success' : status);
+      // o status da sessão reflete a própria sessão, não o desfecho do workflow
+      if (!s.closedAt) this.closeSession(s, s.status === 'error' ? 'failed' : status === 'cancelled' ? 'cancelled' : s.id === 'orchestrator' ? status : 'success');
     }
     const sessions = [...this.sessions.values()].map((s) => this.snapshot(s));
     const tokens = emptyUsage();

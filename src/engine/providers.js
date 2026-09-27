@@ -104,7 +104,9 @@ function parseClaude(ev, emit, acc) {
       break;
     case 'assistant':
       for (const b of ev.message?.content || []) {
-        if (b.type === 'thinking') emit({ kind: 'thinking', text: b.thinking });
+        // O Claude Code pode omitir o conteúdo do thinking (só envia a assinatura)
+        if (b.type === 'thinking') { if (b.thinking) emit({ kind: 'thinking', text: b.thinking }); }
+        else if (b.type === 'redacted_thinking') emit({ kind: 'thinking', text: '(thinking omitido pelo provider)' });
         else if (b.type === 'text') { acc.lastText = b.text; emit({ kind: 'text', text: b.text }); }
         else if (b.type === 'tool_use') emit({ kind: 'tool_call', id: b.id, name: b.name, input: b.input });
       }
@@ -147,7 +149,7 @@ function parseCodex(ev, emit, acc) {
     case 'item.completed': {
       const it = ev.item || {};
       switch (it.type) {
-        case 'reasoning': emit({ kind: 'thinking', text: it.text }); break;
+        case 'reasoning': if (it.text) emit({ kind: 'thinking', text: it.text }); break;
         case 'agent_message': acc.text = it.text; emit({ kind: 'text', text: it.text }); break;
         case 'command_execution':
           emit({ kind: 'tool_call', id: it.id, name: 'shell', input: { command: it.command } });
@@ -164,7 +166,8 @@ function parseCodex(ev, emit, acc) {
     case 'turn.completed': {
       const u = ev.usage || {};
       acc.usage = acc.usage || emptyUsage();
-      acc.usage.input += u.input_tokens || 0;
+      // input_tokens da OpenAI já inclui os cacheados; separamos para não contar duas vezes
+      acc.usage.input += (u.input_tokens || 0) - (u.cached_input_tokens || 0);
       acc.usage.cache_read += u.cached_input_tokens || 0;
       acc.usage.output += u.output_tokens || 0;
       acc.usage.reasoning += u.reasoning_output_tokens || 0;
@@ -328,4 +331,9 @@ async function runTurn(opts) {
   }
 }
 
-module.exports = { runTurn, resolveCommand, sleep, emptyUsage };
+// Erros de requisição (modelo inválido, 4xx) não adianta repetir.
+function isRetryable(err) {
+  return !/"status":\s*4\d\d|invalid_request|not supported|não encontrado|não existe/i.test(String(err?.message || err));
+}
+
+module.exports = { runTurn, resolveCommand, refreshWindowsPath, isRetryable, sleep, emptyUsage };

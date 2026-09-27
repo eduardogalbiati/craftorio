@@ -13,13 +13,29 @@ npm start
 
 Deixe **Modo simulação** marcado para testar o fluxo sem chamar as CLIs.
 
-Outros scripts:
+Pelo terminal (sem UI):
 
 ```bash
 npm run test:engine
 ```
 
-Executa o workflow em modo mock no terminal, aprovando os gates automaticamente.
+Roda o workflow em modo mock, aprovando os gates automaticamente (é o teste usado no CI).
+
+```bash
+npm run run -- --task "Descrição da tarefa" --repo C:/caminho/do/repo
+```
+
+Roda o workflow de verdade. Adicione `--auto-approve` para aprovar os gates humanos sem interação.
+
+## Fluxo e deploy
+
+`develop → code_review → open_pr → pr_babysitter (CI) → approve_merge → merge → deploy`
+
+O deploy é automático: o merge na `main` dispara `.github/workflows/deploy.yml`, que testa,
+empacota o app para Windows e publica uma GitHub Release. O step `deploy` do workflow só
+acompanha esse pipeline até o fim. Os PRs rodam `.github/workflows/ci.yml`.
+
+Os agentes de PR e deploy usam o GitHub CLI (`gh`), que precisa estar autenticado (`gh auth login`).
 
 ## Como as sessões são abertas (sem tmux)
 
@@ -73,6 +89,7 @@ src/engine/workflow.js   engine que executa o grafo do YAML
 src/engine/providers.js  adapters claude / codex / mock
 src/engine/recorder.js   gravação em disco (jsonl + summary)
 src/renderer/            UI (HTML/CSS/JS puro)
+.github/workflows/       CI (PRs) e deploy (merge na main)
 workflows/               definições de workflow
 scripts/                 teste do engine e smoke test da UI
 ```

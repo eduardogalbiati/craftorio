@@ -7,7 +7,9 @@ const { resolveCommand } = require('./engine/providers');
 
 const ROOT = path.join(__dirname, '..');
 const WORKFLOWS_DIR = path.join(ROOT, 'workflows');
-const RUNS_DIR = path.join(ROOT, 'runs');
+// Empacotado, o código fica dentro do app.asar (somente leitura): os runs vão
+// para a pasta de dados do usuário (%APPDATA%\multiagent-orchestrator\runs).
+const RUNS_DIR = app.isPackaged ? path.join(app.getPath('userData'), 'runs') : path.join(ROOT, 'runs');
 
 let win = null;
 let currentRun = null;

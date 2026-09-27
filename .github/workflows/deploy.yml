@@ -1,0 +1,43 @@
+# Deploy automático: todo push/merge na main gera o app Windows empacotado
+# e publica como GitHub Release.
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Teste do engine (modo mock)
+        run: npm run test:engine
+      - name: Empacotar app (win32 x64)
+        run: npm run package
+      - name: Compactar
+        shell: pwsh
+        run: Compress-Archive -Path dist/MultiagentOrchestrator-win32-x64/* -DestinationPath MultiagentOrchestrator-win32-x64.zip
+      - name: Publicar release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          TAG="v${VERSION}-build.${{ github.run_number }}"
+          gh release create "$TAG" MultiagentOrchestrator-win32-x64.zip \
+            --target "${{ github.sha }}" --title "$TAG" --generate-notes
+          echo "Release publicada: $TAG"
