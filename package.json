@@ -1,14 +1,16 @@
 {
   "name": "multiagent-orchestrator",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "private": true,
   "description": "Orquestrador de workflows multi-agente (Claude Code + Codex CLI) com observabilidade.",
   "main": "src/main.js",
   "scripts": {
     "start": "electron .",
     "run": "node scripts/run.js",
+    "test": "node scripts/test.js",
     "test:engine": "node scripts/run.js --mock --auto-approve --task \"Teste do engine\"",
-    "package": "electron-packager . MultiagentOrchestrator --platform=win32 --arch=x64 --out=dist --overwrite --prune=true --ignore=\"^/(runs|dist|scripts|.github)\""
+    "build": "node scripts/package.js build",
+    "package": "node scripts/package.js"
   },
   "dependencies": {
     "js-yaml": "^4.1.0",

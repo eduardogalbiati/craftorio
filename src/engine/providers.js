@@ -268,29 +268,43 @@ function mockString(key) {
     branch: 'feat/mock-feature',
     pr_url: 'https://github.com/acme/app/pull/42',
     deploy_url: 'https://staging.acme.dev',
-    fix_request: 'O CI falhou em test_login: ajuste o mock de sessão no teste.',
+    fix_request: 'Comentário do revisor: extrair a constante mágica 60000 para uma configuração.',
+    question: 'Um revisor sugeriu trocar a biblioteca de YAML. Faz sentido neste PR?',
+    failure_log: 'test/engine.test.js:12 AssertionError: esperado "approved"',
+    failure_report: 'npm test: 1 falha em test/engine.test.js (validateSchema aceita enum inválido).',
     file: 'src/auth/login.ts',
     summary: 'Implementação simulada da feature com testes.',
   })[key] || `(simulado) ${key}`;
 }
 
+// Sequências por visita: exercitam os caminhos de correção, /loop e decisão humana.
+const MOCK_SEQUENCES = {
+  verdict: ['changes_requested', 'approved'],
+  tests_status: ['fail', 'pass'],
+  build_status: ['success'],
+  ci_status: ['pending', 'failed', 'pending', 'success'],
+  state: ['waiting', 'needs_human', 'needs_fix', 'ready_to_merge'],
+  preview_status: ['pending', 'success'],
+  deploy_status: ['pending', 'success'],
+};
+
 function mockValue(s, key, h) {
   if (s.enum) {
-    if (key === 'verdict') return h.visit < 2 ? 'changes_requested' : 'approved';
-    if (key === 'state') return ['waiting', 'needs_fix', 'waiting', 'ready_to_merge'][Math.min(h.visit - 1, 3)];
-    if (key === 'deploy_status') return 'success';
+    const seq = MOCK_SEQUENCES[key];
+    if (seq) return seq[Math.min(h.visit - 1, seq.length - 1)];
     return s.enum[0];
   }
+  if (s.type === 'integer') return key === 'pr_number' ? 42 : 0;
   switch (s.type) {
     case 'object': {
       const o = {};
       for (const [k, ps] of Object.entries(s.properties || {})) o[k] = mockValue(ps, k, h);
       if ('state' in o && o.state !== 'needs_fix') delete o.fix_request;
+      if ('state' in o && o.state !== 'needs_human') delete o.question;
       return o;
     }
     case 'array': return [mockValue(s.items || { type: 'string' }, key, h)];
     case 'boolean': return true;
-    case 'integer': return 42;
     case 'number': return 1.5;
     default: return mockString(key);
   }
@@ -298,7 +312,8 @@ function mockValue(s, key, h) {
 
 async function runMock({ providerSessionId, model, hint, signal, onItem }) {
   const sid = providerSessionId || `mock-${Math.random().toString(36).slice(2, 10)}`;
-  const d = (ms) => sleep(ms * (0.6 + Math.random() * 0.8), signal);
+  const scale = +(process.env.MULTIAGENT_MOCK_DELAY_SCALE ?? 1);
+  const d = (ms) => sleep(ms * scale * (0.6 + Math.random() * 0.8), signal);
 
   onItem({ kind: 'session', sessionId: sid, model });
   await d(600);

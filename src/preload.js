@@ -6,7 +6,7 @@ contextBridge.exposeInMainWorld('api', {
   pickFolder: () => ipcRenderer.invoke('dialog:pickFolder'),
   startRun: (payload) => ipcRenderer.invoke('run:start', payload),
   stopRun: () => ipcRenderer.invoke('run:stop'),
-  resolveApproval: (id, approved) => ipcRenderer.invoke('approval:resolve', { id, approved }),
+  resolveApproval: (id, answer) => ipcRenderer.invoke('approval:resolve', { id, answer }),
   openRunDir: () => ipcRenderer.invoke('run:openDir'),
   onEvent: (cb) => {
     const handler = (_e, ev) => cb(ev);

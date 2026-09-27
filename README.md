@@ -13,29 +13,53 @@ npm start
 
 Deixe **Modo simulação** marcado para testar o fluxo sem chamar as CLIs.
 
+Recomendado: Node 24 LTS (o build também roda em Node antigo, usando o Node embutido no Electron).
+
 Pelo terminal (sem UI):
 
 ```bash
-npm run test:engine
+npm test
 ```
 
-Roda o workflow em modo mock, aprovando os gates automaticamente (é o teste usado no CI).
+Roda os testes unitários (`test/`, node:test) e o fluxo completo em modo mock. É o que o CI usa.
 
 ```bash
 npm run run -- --task "Descrição da tarefa" --repo C:/caminho/do/repo
 ```
 
-Roda o workflow de verdade. Adicione `--auto-approve` para aprovar os gates humanos sem interação.
+Roda o workflow de verdade. `--auto-approve` aprova todos os portões humanos sem interação
+(só para testes: na prática a IA não deve ultrapassar os portões).
 
-## Fluxo e deploy
+Build local: `npm run build` (gera `build/`) ou `npm run package` (gera `dist/`, usado no deploy).
 
-`develop → code_review → open_pr → pr_babysitter (CI) → approve_merge → merge → deploy`
+## Fluxo (Feature Workflow Agents)
 
-O deploy é automático: o merge na `main` dispara `.github/workflows/deploy.yml`, que testa,
-empacota o app para Windows e publica uma GitHub Release. O step `deploy` do workflow só
-acompanha esse pipeline até o fim. Os PRs rodam `.github/workflows/ci.yml`.
+| Etapa | Agente | Modelo | O que faz |
+|---|---|---|---|
+| Build & Test | Developer | Opus 5.5 | Implementa e corrige tudo que os outros agentes apontam |
+| | Code Review | Codex gpt-6-luna | Revisa o diff; pede mudanças só para blocker/major |
+| | Test Writer | Sonnet 5 | Escreve/atualiza testes e roda `npm test`; falhas voltam ao developer |
+| | Builder | Sonnet 5 | `npm run build` + `npm audit`; build quebrado ou vulnerabilidade high/critical em produção voltam ao developer |
+| CI/CD | CI Pusher | Opus 4.8 | Push, abre o PR, **/goal** CI passando com **/loop**; em falha pega o log e aciona o developer |
+| | PR Babysitter | Opus 4.8 | **/goal** PR mergeable com **/loop**; comentários pertinentes → developer (responde no PR com o hash), duvidosos → humano |
+| | Deployer | Opus 4.8 | Publica a versão de teste (pre-release `preview-pr-<n>`), e após o merge acompanha o deploy de produção |
 
-Os agentes de PR e deploy usam o GitHub CLI (`gh`), que precisa estar autenticado (`gh auth login`).
+Portões humanos: comentário duvidoso no PR (corrigir / justificar / ignorar) e o merge, que
+gera a versão de produção. Os agentes nunca falam entre si: o orquestrador (engine) repassa
+falhas ao developer e devolve o resultado ao agente que pediu.
+
+`/goal` e `/loop` são declarados por step no YAML (`goal.until`, `loop.interval`,
+`loop.max_duration`). O engine repete o step até o objetivo ser atingido e injeta no prompt
+do agente as instruções de /goal e /loop (iteração atual, intervalo e limite).
+
+## CI/CD
+
+- `.github/workflows/ci.yml`: em cada PR roda sintaxe, `npm test` e `npm audit` de produção.
+- `.github/workflows/preview.yml`: ambiente de teste. Disparado pelo Deployer, publica a
+  pre-release `preview-pr-<n>` a partir da branch do PR.
+- `.github/workflows/deploy.yml`: produção. Todo push na `main` testa, empacota e publica uma release.
+
+Os agentes de CI/CD usam o GitHub CLI (`gh`), que precisa estar autenticado (`gh auth login`).
 
 ## Como as sessões são abertas (sem tmux)
 
@@ -91,5 +115,6 @@ src/engine/recorder.js   gravação em disco (jsonl + summary)
 src/renderer/            UI (HTML/CSS/JS puro)
 .github/workflows/       CI (PRs) e deploy (merge na main)
 workflows/               definições de workflow
-scripts/                 teste do engine e smoke test da UI
+scripts/                 runner de terminal, testes, build e smoke test da UI
+test/                    testes unitários (node:test) e fixtures
 ```

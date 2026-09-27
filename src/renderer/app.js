@@ -111,9 +111,14 @@ async function startRun() {
   }
 }
 
-function resolveApproval(approved) {
+// answer: true/false ou o id de uma choice
+function resolveApproval(answer) {
   if (!state.approval) return;
-  api.resolveApproval(state.approval.approval_id, approved);
+  api.resolveApproval(state.approval.approval_id, answer);
+  closeApproval();
+}
+
+function closeApproval() {
   state.approval = null;
   $('#approval-modal').classList.add('hidden');
 }
@@ -159,7 +164,7 @@ function onEvent(ev) {
       state.run.finishedAt = Date.parse(ev.ts);
       state.steps.forEach((s) => { if (s.status !== 'pending') s.status = 'done'; });
       orch(ev, `workflow finalizado: ${ev.status}${ev.error ? ' — ' + ev.error : ''}`, ev.status === 'success' ? 'transition' : 'error');
-      if (state.approval) resolveApproval(false);
+      if (state.approval) closeApproval();
       break;
 
     case 'session.opened':
@@ -215,9 +220,12 @@ function onEvent(ev) {
     case 'step.waiting': {
       const s = state.steps.get(ev.step_id);
       if (s) s.status = 'waiting';
-      orch(ev, `⏳ ${ev.step_id} aguardando ${fmtDur(ev.interval_ms)} (polling)`);
+      orch(ev, `⏳ ${ev.step_id}: /loop, próxima verificação em ${fmtDur(ev.interval_ms)}`);
       break;
     }
+    case 'step.goal':
+      orch(ev, `🎯 /goal ${ev.met ? 'atingido' : 'pendente'}: ${ev.goal} (iteração ${ev.iteration})`, ev.met ? 'transition' : '');
+      break;
     case 'step.transition':
       orch(ev, `${ev.from} → ${ev.to}   [${ev.when}]`, 'transition');
       break;
@@ -226,16 +234,19 @@ function onEvent(ev) {
       state.approval = ev;
       $('#approval-step').textContent = `step: ${ev.step_id}`;
       $('#approval-message').textContent = ev.message;
+      $('#approval-binary').classList.toggle('hidden', !!ev.choices);
+      $('#approval-choices').classList.toggle('hidden', !ev.choices);
+      $('#approval-choices').innerHTML = (ev.choices || []).map((c, i) =>
+        `<button class="btn ${i === 0 ? 'primary' : 'ghost'}" data-choice="${esc(c.id)}">${esc(c.label)}</button>`).join('');
+      $('#approval-choices').querySelectorAll('[data-choice]').forEach((b) => (b.onclick = () => resolveApproval(b.dataset.choice)));
       $('#approval-modal').classList.remove('hidden');
       orch(ev, `? aprovação solicitada em ${ev.step_id}`, 'warn');
       break;
 
     case 'approval.resolved':
-      if (state.approval?.approval_id === ev.approval_id) {
-        state.approval = null;
-        $('#approval-modal').classList.add('hidden');
-      }
-      orch(ev, `aprovação ${ev.approved ? 'concedida' : 'negada'} (${ev.by})`, ev.approved ? 'transition' : 'warn');
+      if (state.approval?.approval_id === ev.approval_id) closeApproval();
+      if (ev.choice !== undefined) orch(ev, `decisão humana: ${ev.choice} (${ev.by})`, 'transition');
+      else orch(ev, `aprovação ${ev.approved ? 'concedida' : 'negada'} (${ev.by})`, ev.approved ? 'transition' : 'warn');
       break;
 
     case 'action.executed':

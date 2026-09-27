@@ -1,0 +1,48 @@
+# Fixture de teste: /goal + /loop com delegação e portão humano com choices.
+# O mock devolve ci_status na sequência pending → failed → pending → success.
+apiVersion: multiagent/v1
+kind: Workflow
+metadata:
+  name: fixture-loop-goal
+inputs:
+  repo_path:
+    type: string
+    required: true
+agents:
+  pusher: { provider: claude, model: mock-model, session: persistent }
+  dev:    { provider: claude, model: mock-model, session: persistent }
+steps:
+  - id: ci
+    agent: pusher
+    goal:
+      description: "CI verde no run {{ run_id }}"
+      until: "output.ci_status == 'success'"
+      on_exhausted: fail
+    loop:
+      interval: 1s
+      max_duration: 5m
+    prompt: "{% if delegate_result %}DELEGATE:{{ delegate_result.agent }}{% endif %} iteracao={{ iteration }}"
+    output_schema:
+      type: object
+      required: [ci_status]
+      properties:
+        ci_status: { type: string, enum: [pending, failed, success] }
+    transitions:
+      - when: "output.ci_status == 'success'"
+        goto: decide
+      - when: "output.ci_status == 'pending'"
+        goto: ci
+      - when: "output.ci_status == 'failed'"
+        delegate: { agent: dev, prompt: "corrija" }
+        goto: ci
+  - id: decide
+    type: human_approval
+    message: "Escolha"
+    choices:
+      - { id: seguir, label: "Seguir" }
+      - { id: parar,  label: "Parar" }
+    transitions:
+      - when: "choice == 'seguir'"
+        goto: end
+      - when: "choice == 'parar'"
+        goto: fail

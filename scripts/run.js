@@ -46,7 +46,8 @@ run.on('event', (ev) => {
     case 'step.started': console.log(`${t()} ▶ ${ev.step_id} (visita ${ev.visit})`); break;
     case 'step.finished': console.log(`${t()}   ✓ ${ev.step_id}: ${short(JSON.stringify(ev.output), 300)}`); break;
     case 'step.transition': console.log(`${t()}   → ${ev.to}   [${ev.when}]`); break;
-    case 'step.waiting': console.log(`${t()}   ⏳ aguardando ${Math.round(ev.interval_ms / 1000)}s`); break;
+    case 'step.waiting': console.log(`${t()}   ⏳ /loop: próxima verificação em ${Math.round(ev.interval_ms / 1000)}s`); break;
+    case 'step.goal': console.log(`${t()}   🎯 /goal ${ev.met ? 'atingido' : 'ainda não atingido'}: ${ev.goal} (iteração ${ev.iteration})`); break;
     case 'session.opened': console.log(`${t()}   + sessão ${ev.session_id} ${ev.session.agent} (${ev.session.provider}/${ev.session.model})`); break;
     case 'session.closed': console.log(`${t()}   - sessão ${ev.session_id} ${ev.status}`); break;
     case 'session.stream':
@@ -57,10 +58,12 @@ run.on('event', (ev) => {
       break;
     case 'action.executed': console.log(`${t()}   $ ${ev.command} → ${ev.skipped ? 'pulado (mock)' : 'exit ' + ev.exit_code}\n${short(ev.output, 400)}`); break;
     case 'approval.requested':
-      console.log(`${t()}   ? ${short(ev.message, 200)}`);
+      console.log(`${t()}   ? ${short(ev.message, 200)}${ev.choices ? `  [${ev.choices.map((c) => c.id).join(' | ')}]` : ''}`);
       if (args.autoApprove) {
-        console.log(`${t()}     → aprovado automaticamente (--auto-approve)`);
-        setTimeout(() => run.resolveApproval(ev.approval_id, true), 200);
+        // com choices, escolhe a primeira opção
+        const answer = ev.choices ? ev.choices[0].id : true;
+        console.log(`${t()}     → ${ev.choices ? `escolhido "${answer}"` : 'aprovado'} automaticamente (--auto-approve)`);
+        setTimeout(() => run.resolveApproval(ev.approval_id, answer), 200);
       } else {
         console.log('     aguardando aprovação: use a UI ou rode com --auto-approve');
       }

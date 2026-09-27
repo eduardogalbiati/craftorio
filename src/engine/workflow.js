@@ -34,8 +34,10 @@ function loadWorkflow(file) {
   const ids = new Set(wf.steps.map((s) => s.id));
   for (const s of wf.steps) {
     if (s.type !== 'human_approval' && !wf.agents[s.agent]) throw new Error(`Step "${s.id}" referencia agente inexistente "${s.agent}".`);
+    if (s.goal && !s.goal.until) throw new Error(`Step "${s.id}": goal precisa de "until".`);
+    if (s.choices && s.type !== 'human_approval') throw new Error(`Step "${s.id}": choices só vale para human_approval.`);
     for (const t of s.transitions || []) {
-      for (const target of [t.goto, t.on_exhausted, t.loop?.on_exhausted].filter(Boolean)) {
+      for (const target of [t.goto, t.on_exhausted, t.loop?.on_exhausted, s.goal?.on_exhausted, s.loop?.on_exhausted].filter(Boolean)) {
         if (!ids.has(target) && target !== 'end' && target !== 'fail') throw new Error(`Step "${s.id}" aponta para step inexistente "${target}".`);
       }
     }
@@ -80,6 +82,26 @@ function validateSchema(v, s, p = 'output', errs = []) {
 }
 
 // ---------------------------------------------------------------------------
+// `loop` é o formato atual; `mode: polling` + `poll` continuam aceitos
+const isLooping = (step) => !!step.loop || step.mode === 'polling';
+const loopConfig = (step) => step.loop || step.poll || {};
+
+// Instruções no estilo /goal e /loop do Claude Code. O engine é quem de fato
+// repete o step e aplica os limites; o agente só precisa saber o contrato.
+function goalLoopInstructions(step, st, scope) {
+  const lines = [];
+  if (step.goal) {
+    lines.push(`/goal: ${render(step.goal.description, scope)}`);
+    lines.push('Seu trabalho neste step só termina quando esse objetivo for atingido. Não declare sucesso sem verificar o estado real.');
+  }
+  if (isLooping(step)) {
+    const cfg = loopConfig(step);
+    lines.push(`/loop: iteração ${st.iteration}. O orquestrador vai chamar você de novo a cada ${cfg.interval || '1m'} (limite: ${cfg.max_duration || 'sem limite'}) até o /goal ser atingido.`);
+    lines.push('Em cada chamada: verifique o estado atual, tome a ação necessária e responda imediatamente. Não fique bloqueado esperando (não use watch/sleep longos).');
+  }
+  return lines.join('\n');
+}
+
 function newRunId() {
   const d = new Date();
   const p = (n) => String(n).padStart(2, '0');
@@ -231,20 +253,35 @@ class WorkflowRun extends EventEmitter {
     const st = this.ctx.steps[step.id];
     st.visits++;
     st.firstVisitAt ??= Date.now();
+    // iteração do /loop: reinicia sempre que o step é (re)entrado a partir de outro step
+    if (this.prevStepId !== step.id) { st.iteration = 0; st.loopStartedAt = Date.now(); }
+    st.iteration++;
+    this.prevStepId = step.id;
     const t0 = Date.now();
-    this.emitEvent('step.started', { step_id: step.id, visit: st.visits, step_type: step.type || 'agent', agent: step.agent || null });
+    this.emitEvent('step.started', { step_id: step.id, visit: st.visits, iteration: st.iteration, step_type: step.type || 'agent', agent: step.agent || null });
 
     let output, scope;
     if (step.type === 'human_approval') {
-      const approved = await this.requestApproval(step);
-      output = { approved };
-      scope = { ...this.ctx, output, approved, rejected: !approved };
-    } else {
-      output = await this.runAgentStep(step, st.visits);
+      const answer = await this.requestApproval(step);
+      if (step.choices) {
+        output = { choice: answer };
+        scope = { ...this.ctx, output, choice: answer };
+      } else {
+        output = { approved: answer };
+        scope = { ...this.ctx, output, approved: answer, rejected: !answer };
+      }
       st.output = output;
-      scope = { ...this.ctx, output };
+    } else {
+      output = await this.runAgentStep(step, st);
+      st.output = output;
+      scope = { ...this.ctx, output, iteration: st.iteration };
     }
-    this.emitEvent('step.finished', { step_id: step.id, visit: st.visits, output, duration_ms: Date.now() - t0 });
+    this.emitEvent('step.finished', { step_id: step.id, visit: st.visits, iteration: st.iteration, output, duration_ms: Date.now() - t0 });
+
+    if (step.goal) {
+      const met = evalExpr(step.goal.until, scope);
+      this.emitEvent('step.goal', { step_id: step.id, goal: render(step.goal.description, scope), met, iteration: st.iteration });
+    }
 
     if (!step.transitions?.length) {
       const i = this.wf.steps.indexOf(step);
@@ -256,12 +293,16 @@ class WorkflowRun extends EventEmitter {
     for (const t of step.transitions) {
       if (!evalExpr(t.when, scope)) continue;
       if (t.action) await this.runAction(render(t.action, scope));
+      let delegated = null;
       if (t.delegate) {
         this.emitEvent('log', { level: 'info', message: `${step.id} delegou para ${t.delegate.agent}` });
-        await this.sendToAgent(t.delegate.agent, render(t.delegate.prompt, scope), { stepId: `${step.id}:delegate` });
+        const res = await this.sendToAgent(t.delegate.agent, render(t.delegate.prompt, scope), { stepId: `${step.id}:delegate` });
+        delegated = { agent: t.delegate.agent, text: res.text };
       }
       let target = this.applyCounters(step, t);
-      if (target === step.id && step.mode === 'polling') target = await this.pollWait(step);
+      if (target === step.id && isLooping(step)) target = await this.loopWait(step);
+      // o resultado da delegação vai para o próximo step (ex.: babysitter responde no PR com o hash)
+      if (delegated && this.ctx.steps[target]) this.ctx.steps[target].delegate_result = delegated;
       this.emitEvent('step.transition', { from: step.id, to: target, when: t.when });
       return target;
     }
@@ -291,14 +332,16 @@ class WorkflowRun extends EventEmitter {
     return target;
   }
 
-  async pollWait(step) {
+  async loopWait(step) {
     const st = this.ctx.steps[step.id];
-    const maxDur = parseDuration(step.poll?.max_duration, null);
-    if (maxDur && Date.now() - st.firstVisitAt > maxDur) {
-      this.emitEvent('log', { level: 'warn', message: `Polling de ${step.id} excedeu ${step.poll.max_duration}` });
-      return 'fail';
+    const cfg = loopConfig(step);
+    const maxDur = parseDuration(cfg.max_duration, null);
+    if (maxDur && Date.now() - st.loopStartedAt > maxDur) {
+      const target = step.goal?.on_exhausted || cfg.on_exhausted || 'fail';
+      this.emitEvent('log', { level: 'warn', message: `/loop de ${step.id} excedeu ${cfg.max_duration} sem atingir o /goal → ${target}` });
+      return target;
     }
-    const interval = this.mock ? 3000 : parseDuration(step.poll?.interval, 60000);
+    const interval = Math.min(parseDuration(cfg.interval, 60000), this.mock ? 3000 : Infinity);
     this.emitEvent('step.waiting', { step_id: step.id, until: new Date(Date.now() + interval).toISOString(), interval_ms: interval });
     this.setStatus(this.orchestrator, 'waiting');
     await sleep(interval, this.abort.signal);
@@ -306,9 +349,13 @@ class WorkflowRun extends EventEmitter {
     return step.id;
   }
 
-  async runAgentStep(step, visit) {
+  async runAgentStep(step, st) {
+    const visit = st.visits;
     const schema = step.output_schema;
-    let prompt = render(step.prompt, this.ctx).trim();
+    let prompt = render(step.prompt, { ...this.ctx, iteration: st.iteration, delegate_result: st.delegate_result }).trim();
+    st.delegate_result = null; // consumido
+    const extra = goalLoopInstructions(step, st, this.ctx);
+    if (extra) prompt += '\n\n---\n' + extra;
     if (schema) {
       prompt += '\n\n---\nAo final da sua resposta, inclua OBRIGATORIAMENTE um bloco ```json com um objeto que valide contra este JSON Schema:\n```json\n'
         + JSON.stringify(schema, null, 2) + '\n```';
@@ -411,12 +458,14 @@ class WorkflowRun extends EventEmitter {
   requestApproval(step) {
     const id = `a${++this.nApproval}`;
     const message = render(step.message, this.ctx).trim();
-    this.emitEvent('approval.requested', { approval_id: id, step_id: step.id, message });
+    const choices = step.choices ? step.choices.map((c) => ({ id: c.id, label: render(c.label, this.ctx) })) : null;
+    this.emitEvent('approval.requested', { approval_id: id, step_id: step.id, message, choices });
     this.setStatus(this.orchestrator, 'waiting');
     const timeout = parseDuration(step.timeout, null);
 
     return new Promise((resolve, reject) => {
-      const timer = timeout ? setTimeout(() => this.resolveApproval(id, false, 'timeout'), timeout) : null;
+      const onTimeout = step.choices ? step.choices[step.choices.length - 1].id : false;
+      const timer = timeout ? setTimeout(() => this.resolveApproval(id, onTimeout, 'timeout'), timeout) : null;
       this.approvals.set(id, {
         resolve: (v) => { clearTimeout(timer); resolve(v); },
         reject: (e) => { clearTimeout(timer); reject(e); },
@@ -424,13 +473,15 @@ class WorkflowRun extends EventEmitter {
     });
   }
 
-  resolveApproval(id, approved, by = 'user') {
+  // answer: boolean (aprovar/rejeitar) ou o id de uma das choices do step
+  resolveApproval(id, answer, by = 'user') {
     const a = this.approvals.get(id);
     if (!a) return false;
     this.approvals.delete(id);
-    this.emitEvent('approval.resolved', { approval_id: id, approved, by });
+    const data = typeof answer === 'boolean' ? { approved: answer } : { choice: answer };
+    this.emitEvent('approval.resolved', { approval_id: id, ...data, by });
     this.setStatus(this.orchestrator, 'active');
-    a.resolve(approved);
+    a.resolve(answer);
     return true;
   }
 

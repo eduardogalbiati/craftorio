@@ -1,19 +1,23 @@
 # =============================================================================
-# Workflow: Desenvolvimento de Software
+# Workflow: Desenvolvimento de Software (Feature Workflow Agents)
 # -----------------------------------------------------------------------------
-# Fluxo:
-#   develop -> code_review (loop de correções) -> open_pr -> pr_babysitter (CI)
-#   -> approve_merge (humano) -> merge na main -> deploy
+# BUILD & TEST
+#   develop ─► code_review ─► test ─► build
+#     ▲            │            │        │
+#     └────────────┴────────────┴────────┘   (falhas voltam ao developer via orquestrador)
 #
-# O deploy é AUTOMÁTICO: o GitHub Actions (.github/workflows/deploy.yml) roda a
-# cada push na main. O step `deploy` apenas acompanha esse pipeline até o fim.
+# DEPLOY · CI/CD
+#   ci (CI Pusher: /goal CI passando + /loop)
+#   ─► pr_babysitter (/goal PR mergeable + /loop)
+#   ─► deploy_test (pre-release do PR = ambiente de teste)
+#   ─► approve_merge (portão humano) ─► merge ─► deploy_prod (release automática)
 #
-# Princípio de design:
-#   - O GRAFO (ordem, loops, condições) é declarativo e determinístico aqui no YAML.
-#   - O ENGINE executa o grafo: monta as mensagens para cada sessão, valida as
-#     saídas e decide as transições.
-#   - Cada step devolve uma saída ESTRUTURADA (output_schema) para que as
-#     transições não dependam de interpretar texto livre.
+# Regras:
+#   - Os agentes nunca falam entre si: tudo passa pelo orquestrador (engine),
+#     que delega correções ao developer e repassa o resultado ao step seguinte.
+#   - A IA age até o portão humano e não o ultrapassa.
+#   - /goal e /loop: o engine repete o step (loop.interval) até `goal.until`
+#     ser verdadeiro ou estourar `loop.max_duration` (→ goal.on_exhausted).
 # =============================================================================
 
 apiVersion: multiagent/v1
@@ -21,12 +25,10 @@ kind: Workflow
 
 metadata:
   name: software-development
-  version: 0.2.0
-  description: Implementa uma feature, revisa, abre o PR, acompanha o CI, faz merge e acompanha o deploy automático.
-  tags: [dev, review, pr, deploy]
+  version: 0.3.0
+  description: Implementa, revisa, testa, builda, acompanha CI e PR, publica versão de teste e, com aprovação, faz merge e acompanha o deploy.
+  tags: [dev, review, test, build, ci, pr, deploy]
 
-# -----------------------------------------------------------------------------
-# Entradas que o usuário fornece ao escolher o workflow
 # -----------------------------------------------------------------------------
 inputs:
   task:
@@ -40,33 +42,31 @@ inputs:
   base_branch:
     type: string
     default: main
+  preview_workflow:
+    type: string
+    default: preview.yml
+    description: Workflow do GitHub Actions que publica a versão de teste (pre-release) do PR.
   deploy_workflow:
     type: string
     default: deploy.yml
     description: Workflow do GitHub Actions disparado pelo merge na base_branch.
 
 # -----------------------------------------------------------------------------
-# Providers: como abrir uma sessão de cada tipo de agente
-# -----------------------------------------------------------------------------
 # Linha de comando final = args + agent.cli_args + (resume_args se a sessão já
-# existe) + stdin_arg. O prompt é sempre enviado via stdin (evita problemas de
-# escape no Windows). `{{ model }}` e `{{ session_id }}` são substituídos.
+# existe) + stdin_arg. O prompt é sempre enviado via stdin.
 providers:
   claude:
     type: claude-code
     command: claude
     args: ["-p", "--output-format", "stream-json", "--verbose", "--model", "{{ model }}"]
-    resume_args: ["--resume", "{{ session_id }}"]   # reaproveita a sessão entre iterações
+    resume_args: ["--resume", "{{ session_id }}"]
   codex:
     type: codex-cli
     command: codex
     args: ["exec", "--json", "--skip-git-repo-check", "-m", "{{ model }}"]
     resume_args: ["resume", "{{ session_id }}"]
-    stdin_arg: "-"                   # "-" = ler o prompt do stdin
+    stdin_arg: "-"
 
-# -----------------------------------------------------------------------------
-# Defaults aplicados a todos os agentes (podem ser sobrescritos)
-# -----------------------------------------------------------------------------
 defaults:
   working_dir: "{{ inputs.repo_path }}"
   timeout: 30m
@@ -74,55 +74,90 @@ defaults:
     max_attempts: 2
     backoff: exponential
     initial_delay: 10s
-  thinking:
-    enabled: true
-    capture: true                    # grava o thinking/reasoning no trace
 
-# -----------------------------------------------------------------------------
-# Orquestrador
-# -----------------------------------------------------------------------------
 # v1: o grafo é executado pelo engine determinístico do app (src/engine).
-# A sessão LLM do orquestrador abaixo ainda não é usada — fica para a v2.
 orchestrator:
   provider: claude
   model: claude-sonnet-5
   limits:
-    max_total_duration: 6h
-    max_total_cost_usd: 50
+    max_total_duration: 8h
+    max_total_cost_usd: 60
 
 # -----------------------------------------------------------------------------
-# Agentes: definições de sessão reutilizáveis
+# Agentes. `permissions` é documental; o que vale são os cli_args.
 # -----------------------------------------------------------------------------
 agents:
   developer:
     provider: claude
     model: claude-opus-5-5
-    session: persistent              # mesma sessão durante os loops de correção
-    # `permissions` é documental na v1; o que vale de fato são os cli_args.
+    session: persistent
     cli_args: ["--permission-mode", "acceptEdits", "--allowedTools", "Bash(git:*) Bash(npm:*) Bash(npx:*) Bash(node:*)"]
     permissions:
       allow: [read, edit, write, bash:git, bash:npm, bash:node]
       deny: [bash:"git push --force", bash:gh]
     system_prompt: |
       Você é um engenheiro de software sênior. Implemente mudanças pequenas,
-      testadas e coesas. Sempre rode os testes do projeto antes de concluir.
+      testadas e coesas, seguindo a arquitetura e as convenções do código atual.
       Trabalhe numa branch própria criada a partir de {{ inputs.base_branch }}
-      e faça commit das mudanças nela. Não faça push e não abra PR — isso é
-      responsabilidade de outro agente.
+      e faça commit das mudanças nela. Só faça `git push` quando o orquestrador
+      pedir explicitamente. Ao terminar uma correção pedida, informe o hash do commit.
 
   reviewer:
     provider: codex
-    model: gpt-6-luna                # gpt-6-sol não é aceito em contas ChatGPT
-    session: persistent              # lembra dos pontos já levantados na iteração anterior
+    model: gpt-6-luna
+    session: persistent
     cli_args: ["-s", "read-only"]
     permissions:
-      allow: [read, bash:git-diff, bash:test]
-      deny: [edit, write]            # revisor não altera código
+      allow: [read, bash:git-diff]
+      deny: [edit, write]
     system_prompt: |
       Você é um revisor de código rigoroso. Foque em bugs de corretude,
       segurança, regressões e cobertura de testes. Seja objetivo; não
       proponha mudanças puramente estéticas como bloqueantes. Só use
       "changes_requested" se houver ao menos um finding blocker ou major.
+
+  test_writer:
+    provider: claude
+    model: claude-sonnet-5
+    session: persistent
+    cli_args: ["--permission-mode", "acceptEdits", "--allowedTools", "Bash(git:*) Bash(npm:*) Bash(node:*)"]
+    permissions:
+      allow: [read, write:test/**, bash:npm-test, bash:git]
+      deny: [edit:src/**]
+    system_prompt: |
+      Você é o escritor de testes. Escreve e atualiza testes (pasta test/,
+      usando node:test) e roda a suíte. Você NÃO corrige código de produção:
+      quando um teste falha por bug no código, descreva a falha com precisão
+      (teste, arquivo, erro, causa provável) para o orquestrador acionar o developer.
+      Faça commit apenas de arquivos de teste.
+
+  builder:
+    provider: claude
+    model: claude-sonnet-5
+    session: persistent
+    cli_args: ["--allowedTools", "Bash(npm:*) Bash(node:*) Bash(git:*)"]
+    permissions:
+      allow: [read, bash:npm, bash:node]
+      deny: [edit, write]
+    system_prompt: |
+      Você é o builder. Faz o build da aplicação e verifica vulnerabilidades nas
+      dependências. Você não altera código. Política de vulnerabilidades:
+      - bloqueia: qualquer critical; high em dependências de produção (`npm audit --omit=dev`)
+      - só reporta: moderate/low e vulnerabilidades em devDependencies
+
+  ci_pusher:
+    provider: claude
+    model: claude-opus-4-8
+    session: persistent
+    cli_args: ["--allowedTools", "Bash(git:*) Bash(gh:*)"]
+    permissions:
+      allow: [read, bash:git, bash:gh]
+      deny: [edit, bash:"gh pr merge"]
+    system_prompt: |
+      Você é o CI Pusher. Envia a branch, garante que existe um PR aberto e
+      acompanha o CI até passar. Quando o CI falha, você busca o log da falha
+      (`gh run view <id> --log-failed`) e resume a causa raiz para o orquestrador
+      acionar o developer. Você não corrige código e não faz merge.
 
   pr_babysitter:
     provider: claude
@@ -133,10 +168,11 @@ agents:
       allow: [read, bash:gh, bash:git]
       deny: [edit, bash:"gh pr merge"]
     system_prompt: |
-      Você é dono do ciclo de vida do PR: abre o PR e o acompanha até estar
-      pronto para merge, monitorando CI, comentários de review e conflitos.
-      Você NÃO corrige código e NÃO faz merge — correções são delegadas ao
-      developer e o merge depende de aprovação humana.
+      Você é o PR Babysitter. Com o CI verde, acompanha o PR até ficar mergeable:
+      conflitos, reviews e comentários. Comentários pertinentes viram pedidos de
+      correção; comentários duvidosos vão para o humano decidir (corrigir,
+      justificar ou ignorar). Depois que uma correção é feita, você responde no
+      PR ao comentário citando o hash do commit. Você não corrige código e não faz merge.
 
   deployer:
     provider: claude
@@ -147,17 +183,17 @@ agents:
       allow: [read, bash:gh, bash:git]
       deny: [edit]
     system_prompt: |
-      Você acompanha o deploy automático: o merge na {{ inputs.base_branch }}
-      dispara o workflow `{{ inputs.deploy_workflow }}` no GitHub Actions.
-      Você não dispara nem altera o deploy; apenas verifica o resultado e,
-      em caso de falha, diagnostica pelos logs (`gh run view --log-failed`).
+      Você é o Deployer. Antes do merge, publica a versão de teste do PR
+      (pre-release via `{{ inputs.preview_workflow }}`). Depois do merge, que é
+      aprovado por um humano, acompanha o deploy de produção
+      (`{{ inputs.deploy_workflow }}`, disparado automaticamente pelo push na
+      {{ inputs.base_branch }}). Em falhas, diagnostica com `gh run view <id> --log-failed`.
 
-# -----------------------------------------------------------------------------
-# Steps: o grafo do workflow
 # -----------------------------------------------------------------------------
 steps:
 
-  # 1) DESENVOLVIMENTO ---------------------------------------------------------
+  # ============================ BUILD & TEST =================================
+
   - id: develop
     agent: developer
     prompt: |
@@ -168,9 +204,8 @@ steps:
       {{ steps.code_review.output.findings | to_yaml }}
       Corrija os itens bloqueantes, faça um novo commit e responda a cada um.
       {% endif %}
-      {% if steps.deploy.output and steps.deploy.output.deploy_status == 'failed' %}
-      O deploy da versão anterior falhou: {{ steps.deploy.output.error_summary }}
-      Run: {{ steps.deploy.output.run_url }}
+      {% if steps.deploy_prod.output and steps.deploy_prod.output.deploy_status == 'failed' %}
+      O deploy de produção anterior falhou: {{ steps.deploy_prod.output.error_summary }}
       Crie uma nova branch a partir da {{ inputs.base_branch }} atualizada (`git pull`) e corrija.
       {% endif %}
     output_schema:
@@ -182,29 +217,27 @@ steps:
         files_changed: { type: array, items: { type: string } }
         tests_passed:  { type: boolean }
         committed:     { type: boolean }
+        commit_sha:    { type: string }
         notes:         { type: string }
     transitions:
       - when: "output.tests_passed and output.committed"
         goto: code_review
       - when: "true"
-        goto: develop                # tenta de novo com o mesmo agente
+        goto: develop
         max_visits: 3
         on_exhausted: fail
 
-  # 2) CODE REVIEW -------------------------------------------------------------
   - id: code_review
     agent: reviewer
     prompt: |
-      Revise as mudanças da branch `{{ steps.develop.output.branch }}`
-      contra `{{ inputs.base_branch }}` (use `git diff {{ inputs.base_branch }}...{{ steps.develop.output.branch }}`).
+      Revise as mudanças da branch `{{ steps.develop.output.branch }}` contra
+      `{{ inputs.base_branch }}` (`git diff {{ inputs.base_branch }}...{{ steps.develop.output.branch }}`).
       Resumo do desenvolvedor: {{ steps.develop.output.summary }}
     output_schema:
       type: object
       required: [verdict, findings]
       properties:
-        verdict:
-          type: string
-          enum: [approved, changes_requested]
+        verdict: { type: string, enum: [approved, changes_requested] }
         findings:
           type: array
           items:
@@ -217,117 +250,381 @@ steps:
               description: { type: string }
     transitions:
       - when: "output.verdict == 'approved'"
-        goto: open_pr
+        goto: test
       - when: "output.verdict == 'changes_requested'"
         goto: develop
         loop:
           name: review_cycle
           max_iterations: 3
-          on_exhausted: human_review # escala para humano após 3 rodadas
+          on_exhausted: human_review
 
   - id: human_review
     type: human_approval
-    message: "O loop de review não convergiu em 3 iterações. Abrir o PR mesmo assim?"
+    message: "O loop de review não convergiu em 3 iterações. Seguir para os testes mesmo assim?"
     transitions:
       - when: "approved"
-        goto: open_pr
+        goto: test
       - when: "rejected"
         goto: end
 
-  # 3) ABRIR PR ----------------------------------------------------------------
-  - id: open_pr
-    agent: pr_babysitter
+  # Escritor de testes: escreve/atualiza testes e roda a suíte. Se falha,
+  # o orquestrador aciona o developer e avisa o test_writer quando refeito.
+  - id: test
+    agent: test_writer
     prompt: |
-      Faça push da branch `{{ steps.develop.output.branch }}` para `origin` e abra
-      um PR para `{{ inputs.base_branch }}` com `gh pr create`.
-      Título: um resumo curto da tarefa. Corpo: o resumo abaixo e a lista de arquivos.
-      Se já existir PR aberto para essa branch, apenas reutilize-o.
-
-      Tarefa: {{ inputs.task }}
-      Resumo: {{ steps.develop.output.summary }}
+      Branch `{{ steps.develop.output.branch }}` (já revisada).
+      Tarefa original: {{ inputs.task }}
+      Mudança feita: {{ steps.develop.output.summary }}
       Arquivos: {{ steps.develop.output.files_changed | join(', ') }}
-    output_schema:
-      type: object
-      required: [pr_url, pr_number]
-      properties:
-        pr_url:    { type: string }
-        pr_number: { type: integer }
-    transitions:
-      - when: "true"
-        goto: pr_babysitter
 
-  # 4) PR BABYSITTER -----------------------------------------------------------
-  - id: pr_babysitter
-    agent: pr_babysitter
-    mode: polling
-    poll:
-      interval: 1m
-      max_duration: 12h
-    prompt: |
-      Verifique o estado do PR #{{ steps.open_pr.output.pr_number }} ({{ steps.open_pr.output.pr_url }})
-      com `gh pr view` e `gh pr checks`: status do CI, comentários de review,
-      conflitos com a base e se já foi mergeado.
-      - checks ainda rodando → waiting
-      - checks falharam, conflito ou pedido de mudança → needs_fix (descreva a correção em fix_request)
-      - todos os checks verdes e mergeável → ready_to_merge
+      {% if delegate_result %}
+      O developer aplicou a correção que você pediu:
+      {{ delegate_result.text }}
+      Rode a suíte novamente (`npm test`) e confirme.
+      {% else %}
+      1. Faça checkout da branch. Avalie se a mudança precisa de testes novos ou
+         atualizados. Se sim, escreva-os em test/ (node:test) e faça commit só deles.
+         Mudanças puramente visuais podem não precisar de teste novo — justifique.
+      2. Rode a suíte completa: `npm test`.
+      {% endif %}
+      Se algum teste falhar por problema no código de produção, NÃO corrija:
+      preencha failure_report com teste, arquivo, erro e causa provável.
     output_schema:
       type: object
-      required: [state]
+      required: [tests_status, tests_added, committed]
       properties:
-        state:
-          type: string
-          enum: [waiting, needs_fix, ready_to_merge, merged, closed]
-        fix_request: { type: string }   # preenchido quando state == needs_fix
-        summary:     { type: string }
+        tests_status:   { type: string, enum: [pass, fail] }
+        tests_added:    { type: array, items: { type: string } }
+        committed:      { type: boolean }
+        failure_report: { type: string }
+        summary:        { type: string }
     transitions:
-      - when: "output.state == 'waiting'"
-        goto: pr_babysitter          # continua o polling
-      - when: "output.state == 'needs_fix'"
+      - when: "output.tests_status == 'pass'"
+        goto: build
+      - when: "output.tests_status == 'fail'"
         delegate:
-          agent: developer           # retoma a sessão persistente do developer
+          agent: developer
           prompt: |
-            O PR #{{ steps.open_pr.output.pr_number }} precisa de correção:
-            {{ output.fix_request }}
-            Corrija na branch `{{ steps.develop.output.branch }}`, rode os testes,
-            faça commit e depois `git push`.
-        goto: pr_babysitter
-        max_visits: 5
-        on_exhausted: fail
-      - when: "output.state == 'ready_to_merge'"
-        goto: approve_merge
-      - when: "output.state == 'merged'"
-        goto: deploy
-      - when: "output.state == 'closed'"
-        goto: end
+            O escritor de testes encontrou falhas na branch `{{ steps.develop.output.branch }}`:
+            {{ output.failure_report }}
+            Corrija o código de produção (não altere os testes sem justificar), rode
+            `npm test`, faça commit e informe o hash do commit.
+        goto: test
+        max_visits: 3
+        on_exhausted: test_failed
 
-  - id: approve_merge
+  - id: test_failed
     type: human_approval
     message: |
-      PR {{ steps.open_pr.output.pr_url }} com CI verde.
-      Fazer merge na {{ inputs.base_branch }}? Isso dispara o deploy automático.
+      Os testes continuam falhando após 3 rodadas de correção:
+      {{ steps.test.output.failure_report }}
+      Seguir mesmo assim?
     transitions:
       - when: "approved"
-        action: "gh pr merge {{ steps.open_pr.output.pr_number }} --squash --delete-branch"
-        goto: deploy
+        goto: build
       - when: "rejected"
         goto: end
 
-  # 5) DEPLOY (automático no merge) -------------------------------------------
-  - id: deploy
-    agent: deployer
-    mode: polling
-    poll:
+  # Builder: build da aplicação + vulnerabilidades nas dependências.
+  - id: build
+    agent: builder
+    prompt: |
+      Na branch `{{ steps.develop.output.branch }}`:
+      {% if delegate_result %}
+      O developer aplicou uma correção: {{ delegate_result.text }}
+      {% endif %}
+      1. Rode o build: `npm run build` (gera o app em build/).
+      2. Rode `npm audit --omit=dev --json` (produção) e `npm audit --json` (todas).
+      Aplique a política de vulnerabilidades do seu papel. Em `vulnerabilities`,
+      informe as contagens de PRODUÇÃO; resuma as de desenvolvimento em `dev_vulnerabilities`.
+    output_schema:
+      type: object
+      required: [build_status, vulnerabilities, report]
+      properties:
+        build_status: { type: string, enum: [success, failed] }
+        vulnerabilities:
+          type: object
+          required: [critical, high, moderate, low]
+          properties:
+            critical: { type: integer }
+            high:     { type: integer }
+            moderate: { type: integer }
+            low:      { type: integer }
+        dev_vulnerabilities: { type: string }
+        report:              { type: string }
+    transitions:
+      - when: "output.build_status == 'success' and output.vulnerabilities.critical == 0 and output.vulnerabilities.high == 0"
+        goto: ci
+      - when: "true"
+        delegate:
+          agent: developer
+          prompt: |
+            O builder bloqueou a branch `{{ steps.develop.output.branch }}`:
+            {{ output.report }}
+            Corrija (falha de build ou dependência vulnerável), rode `npm test`,
+            faça commit e informe o hash do commit.
+        goto: build
+        max_visits: 3
+        on_exhausted: build_failed
+
+  - id: build_failed
+    type: human_approval
+    message: |
+      O build continua bloqueado após 3 rodadas de correção:
+      {{ steps.build.output.report }}
+      Seguir mesmo assim?
+    transitions:
+      - when: "approved"
+        goto: ci
+      - when: "rejected"
+        goto: end
+
+  # ============================ DEPLOY · CI/CD ===============================
+
+  # CI Pusher: /goal CI passando + /loop verificando o CI.
+  - id: ci
+    agent: ci_pusher
+    goal:
+      description: "CI passando no PR da branch {{ steps.develop.output.branch }}"
+      until: "output.ci_status == 'success'"
+      on_exhausted: ci_failed
+    loop:
       interval: 1m
       max_duration: 1h
     prompt: |
-      O PR #{{ steps.open_pr.output.pr_number }} foi mergeado na {{ inputs.base_branch }}.
-      1. Descubra o commit de merge: `gh pr view {{ steps.open_pr.output.pr_number }} --json mergeCommit`.
-      2. Encontre o run do workflow `{{ inputs.deploy_workflow }}` para esse commit:
+      Branch: `{{ steps.develop.output.branch }}` → base `{{ inputs.base_branch }}`.
+      {% if delegate_result %}
+      O developer corrigiu a falha anterior do CI e já fez push:
+      {{ delegate_result.text }}
+      {% endif %}
+      1. Garanta que a branch está atualizada no origin (`git push -u origin {{ steps.develop.output.branch }}`).
+      2. Garanta que existe um PR aberto para a base (reutilize se existir; senão `gh pr create`
+         com título curto e corpo com o resumo: {{ steps.develop.output.summary }}).
+      3. Verifique os checks do PR (`gh pr checks <n>`):
+         - algum rodando ou ainda não iniciado → ci_status: pending
+         - algum falhou → ci_status: failed. Pegue o log (`gh run view <run-id> --log-failed`)
+           e resuma em failure_log: job, passo, erro e causa raiz provável (arquivo/linha).
+         - todos passaram → ci_status: success
+    output_schema:
+      type: object
+      required: [pr_url, pr_number, ci_status]
+      properties:
+        pr_url:      { type: string }
+        pr_number:   { type: integer }
+        ci_status:   { type: string, enum: [pending, failed, success] }
+        failure_log: { type: string }
+    transitions:
+      - when: "output.ci_status == 'success'"
+        goto: pr_babysitter
+      - when: "output.ci_status == 'pending'"
+        goto: ci
+      - when: "output.ci_status == 'failed'"
+        delegate:
+          agent: developer
+          prompt: |
+            O CI do PR #{{ output.pr_number }} falhou:
+            {{ output.failure_log }}
+            Corrija na branch `{{ steps.develop.output.branch }}`, rode `npm test`,
+            faça commit, depois `git push`, e informe o hash do commit.
+        goto: ci
+        max_visits: 5
+        on_exhausted: ci_failed
+
+  - id: ci_failed
+    type: human_approval
+    message: |
+      O CI do PR {{ steps.ci.output.pr_url }} não passou dentro do limite.
+      Último erro: {{ steps.ci.output.failure_log }}
+      Tentar mais uma rodada do CI Pusher?
+    transitions:
+      - when: "approved"
+        goto: ci
+      - when: "rejected"
+        goto: end
+
+  # PR Babysitter: /goal PR mergeable + /loop no PR.
+  - id: pr_babysitter
+    agent: pr_babysitter
+    goal:
+      description: "PR #{{ steps.ci.output.pr_number }} mergeable: CI verde, sem conflitos e sem comentários pendentes"
+      until: "output.state == 'ready_to_merge'"
+      on_exhausted: fail
+    loop:
+      interval: 1m
+      max_duration: 12h
+    prompt: |
+      PR #{{ steps.ci.output.pr_number }} ({{ steps.ci.output.pr_url }}).
+      {% if delegate_result %}
+      Desde a última verificação, o orquestrador acionou o agente `{{ delegate_result.agent }}`:
+      {{ delegate_result.text }}
+      Se houve correção com commit, responda no PR a cada comentário tratado citando o
+      hash do commit (reply no comentário via `gh api` ou `gh pr comment`).
+      {% endif %}
+      Verifique com `gh pr view <n> --json mergeable,mergeStateStatus,reviewDecision,reviews,comments`,
+      `gh api repos/{owner}/{repo}/pulls/<n>/comments` e `gh pr checks <n>`:
+      - checks falhando → ci_failed
+      - conflito com a base → needs_fix (fix_request: atualizar a branch com a base e resolver)
+      - comentário/review pertinente ainda não tratado → needs_fix (fix_request com o pedido e o id do comentário)
+      - comentário duvidoso (discutível, fora de escopo, contraditório) → needs_human (question: o comentário e sua dúvida)
+      - aguardando algo externo (checks rodando, review pendente obrigatório) → waiting
+      - tudo ok e mergeable → ready_to_merge
+      - já mergeado → merged; fechado sem merge → closed
+    output_schema:
+      type: object
+      required: [state, summary]
+      properties:
+        state:
+          type: string
+          enum: [waiting, needs_fix, needs_human, ci_failed, ready_to_merge, merged, closed]
+        fix_request: { type: string }
+        question:    { type: string }
+        summary:     { type: string }
+    transitions:
+      - when: "output.state == 'waiting'"
+        goto: pr_babysitter
+      - when: "output.state == 'needs_fix'"
+        delegate:
+          agent: developer
+          prompt: |
+            Pedido de correção no PR #{{ steps.ci.output.pr_number }}:
+            {{ output.fix_request }}
+            Corrija na branch `{{ steps.develop.output.branch }}`, rode `npm test`,
+            faça commit, depois `git push`, e informe o hash do commit.
+        goto: pr_babysitter
+        max_visits: 5
+        on_exhausted: fail
+      - when: "output.state == 'needs_human'"
+        goto: comment_decision
+      - when: "output.state == 'ci_failed'"
+        goto: ci
+      - when: "output.state == 'ready_to_merge'"
+        goto: deploy_test
+      - when: "output.state == 'merged'"
+        goto: deploy_prod
+      - when: "output.state == 'closed'"
+        goto: end
+
+  # Portão humano para comentários duvidosos
+  - id: comment_decision
+    type: human_approval
+    message: |
+      Comentário duvidoso no PR {{ steps.ci.output.pr_url }}:
+      {{ steps.pr_babysitter.output.question }}
+    choices:
+      - { id: fix,     label: "Corrigir (developer aplica)" }
+      - { id: justify, label: "Justificar no PR sem mudar código" }
+      - { id: ignore,  label: "Ignorar" }
+    transitions:
+      - when: "choice == 'fix'"
+        delegate:
+          agent: developer
+          prompt: |
+            O humano decidiu atender este comentário do PR #{{ steps.ci.output.pr_number }}:
+            {{ steps.pr_babysitter.output.question }}
+            Corrija na branch `{{ steps.develop.output.branch }}`, rode `npm test`,
+            faça commit, depois `git push`, e informe o hash do commit.
+        goto: pr_babysitter
+      - when: "choice == 'justify'"
+        delegate:
+          agent: pr_babysitter
+          prompt: |
+            O humano decidiu NÃO mudar o código para este comentário:
+            {{ steps.pr_babysitter.output.question }}
+            Responda ao comentário no PR com uma justificativa técnica curta e educada.
+        goto: pr_babysitter
+      - when: "choice == 'ignore'"
+        delegate:
+          agent: pr_babysitter
+          prompt: |
+            O humano decidiu ignorar este comentário:
+            {{ steps.pr_babysitter.output.question }}
+            Não responda no PR e não o considere mais como pendente.
+        goto: pr_babysitter
+
+  # Deployer (antes do merge): versão de teste = pre-release do PR.
+  - id: deploy_test
+    agent: deployer
+    goal:
+      description: "Versão de teste do PR #{{ steps.ci.output.pr_number }} publicada como pre-release"
+      until: "output.preview_status == 'success'"
+      on_exhausted: preview_failed
+    loop:
+      interval: 1m
+      max_duration: 45m
+    prompt: |
+      Ambiente de teste deste projeto: uma GitHub pre-release (tag `preview-pr-{{ steps.ci.output.pr_number }}`)
+      gerada pelo workflow `{{ inputs.preview_workflow }}` a partir da branch do PR.
+      {% if not steps.deploy_test.output or steps.deploy_test.output.preview_status == 'failed' %}
+      Dispare a publicação:
+      `gh workflow run {{ inputs.preview_workflow }} --ref {{ steps.develop.output.branch }} -f pr_number={{ steps.ci.output.pr_number }}`
+      {% else %}
+      A publicação já foi disparada ({{ steps.deploy_test.output.run_url }}); apenas verifique.
+      {% endif %}
+      Acompanhe: `gh run list --workflow {{ inputs.preview_workflow }} --branch {{ steps.develop.output.branch }} --json databaseId,status,conclusion,url,createdAt`.
+      - run ainda não apareceu, queued ou in_progress → pending
+      - concluído com sucesso → success; release_url = `gh release view preview-pr-{{ steps.ci.output.pr_number }} --json url`
+      - falhou → failed; resuma o erro com `gh run view <id> --log-failed`
+    output_schema:
+      type: object
+      required: [preview_status]
+      properties:
+        preview_status: { type: string, enum: [pending, success, failed] }
+        run_url:        { type: string }
+        release_url:    { type: string }
+        error_summary:  { type: string }
+    transitions:
+      - when: "output.preview_status == 'success'"
+        goto: approve_merge
+      - when: "output.preview_status == 'pending'"
+        goto: deploy_test
+      - when: "output.preview_status == 'failed'"
+        goto: preview_failed
+
+  - id: preview_failed
+    type: human_approval
+    message: |
+      A versão de teste do PR {{ steps.ci.output.pr_url }} falhou:
+      {{ steps.deploy_test.output.error_summary }}
+      Tentar publicar de novo?
+    transitions:
+      - when: "approved"
+        goto: deploy_test
+      - when: "rejected"
+        goto: end
+
+  # Portão humano: testar a pre-release e aprovar o merge (= produção)
+  - id: approve_merge
+    type: human_approval
+    message: |
+      Versão de teste publicada: {{ steps.deploy_test.output.release_url }}
+      PR {{ steps.ci.output.pr_url }}: CI verde e mergeable.
+      Aprovar o merge na {{ inputs.base_branch }}? Isso gera a versão de produção.
+    transitions:
+      - when: "approved"
+        action: "gh pr merge {{ steps.ci.output.pr_number }} --squash --delete-branch"
+        goto: deploy_prod
+      - when: "rejected"
+        goto: end
+
+  # Deployer (depois do merge): acompanha o deploy de produção automático.
+  - id: deploy_prod
+    agent: deployer
+    goal:
+      description: "Deploy de produção do PR #{{ steps.ci.output.pr_number }} concluído"
+      until: "output.deploy_status == 'success'"
+      on_exhausted: deploy_failed
+    loop:
+      interval: 1m
+      max_duration: 1h
+    prompt: |
+      O PR #{{ steps.ci.output.pr_number }} foi mergeado na {{ inputs.base_branch }}.
+      1. Commit de merge: `gh pr view {{ steps.ci.output.pr_number }} --json mergeCommit`.
+      2. Run do `{{ inputs.deploy_workflow }}` para esse commit:
          `gh run list --workflow {{ inputs.deploy_workflow }} --branch {{ inputs.base_branch }} --json databaseId,headSha,status,conclusion,url`.
-      3. Informe o estado SEM ficar bloqueado esperando:
-         - run ainda não apareceu, ou está queued/in_progress → pending
-         - concluído com sucesso → success (inclua a URL da release/deploy se houver: `gh release list`)
-         - concluído com falha → failed (resuma o erro com `gh run view <id> --log-failed`)
+      - ainda não apareceu, queued ou in_progress → pending
+      - sucesso → success (release_url: `gh release list --exclude-pre-releases --limit 1`).
+        Em seguida apague a versão de teste: `gh release delete preview-pr-{{ steps.ci.output.pr_number }} --cleanup-tag -y`.
+      - falhou → failed (resuma com `gh run view <id> --log-failed`)
     output_schema:
       type: object
       required: [deploy_status]
@@ -337,18 +634,18 @@ steps:
         release_url:   { type: string }
         error_summary: { type: string }
     transitions:
-      - when: "output.deploy_status == 'pending'"
-        goto: deploy
       - when: "output.deploy_status == 'success'"
         goto: end
+      - when: "output.deploy_status == 'pending'"
+        goto: deploy_prod
       - when: "output.deploy_status == 'failed'"
         goto: deploy_failed
 
   - id: deploy_failed
     type: human_approval
     message: |
-      O deploy falhou: {{ steps.deploy.output.error_summary }}
-      Run: {{ steps.deploy.output.run_url }}
+      O deploy de produção falhou: {{ steps.deploy_prod.output.error_summary }}
+      Run: {{ steps.deploy_prod.output.run_url }}
       Pedir ao developer uma correção (novo ciclo)?
     transitions:
       - when: "approved"
@@ -357,16 +654,14 @@ steps:
         goto: end
 
 # -----------------------------------------------------------------------------
-# Observabilidade
-# -----------------------------------------------------------------------------
 observability:
   storage:
     type: jsonl
-    path: "./runs/{{ run_id }}/"     # events.jsonl + sessions/<session_id>.jsonl + summary.json
+    path: "./runs/{{ run_id }}/"
   capture:
     prompts: true
     outputs: true
     thinking: true
     tool_calls: true
-    redact:                          # remove segredos antes de gravar
+    redact:
       - pattern: "(?i)(api[_-]?key|token|secret|password)\\s*[:=]\\s*\\S+"

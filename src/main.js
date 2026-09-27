@@ -79,7 +79,8 @@ ipcMain.handle('run:start', (_e, { file, inputs, mock }) => {
 
 ipcMain.handle('run:stop', () => { currentRun?.stop(); return true; });
 
-ipcMain.handle('approval:resolve', (_e, { id, approved }) => currentRun?.resolveApproval(id, approved) ?? false);
+// answer: true/false ou o id de uma choice
+ipcMain.handle('approval:resolve', (_e, { id, answer }) => currentRun?.resolveApproval(id, answer) ?? false);
 
 ipcMain.handle('run:openDir', () => {
   const dir = currentRun?.runDir || RUNS_DIR;
