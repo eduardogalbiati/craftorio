@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'" />
+  <title>Multiagent Orchestrator</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">Multiagent <span>Orchestrator</span></div>
+    <div class="run-meta">
+      <span id="run-status" class="pill pill-idle">parado</span>
+      <span id="run-id" class="muted mono"></span>
+    </div>
+    <div class="kpis">
+      <div class="kpi"><label>Tempo</label><b id="kpi-time">—</b></div>
+      <div class="kpi"><label>Sessões</label><b id="kpi-sessions">0</b></div>
+      <div class="kpi"><label>Tokens in / out</label><b id="kpi-tokens">0 / 0</b></div>
+      <div class="kpi"><label>Reasoning</label><b id="kpi-reasoning">0</b></div>
+      <div class="kpi"><label>Custo</label><b id="kpi-cost">US$ 0.00</b></div>
+    </div>
+    <div class="actions">
+      <button id="btn-open-dir" class="btn ghost">Abrir pasta do run</button>
+      <button id="btn-stop" class="btn danger" disabled>Parar</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <!-- Coluna 1: configuração -->
+    <aside class="panel config">
+      <section>
+        <h2>Workflow</h2>
+        <select id="wf-select"></select>
+        <p id="wf-desc" class="muted small"></p>
+        <div id="wf-agents" class="agents"></div>
+      </section>
+
+      <section>
+        <h2>Inputs</h2>
+        <form id="inputs-form"></form>
+      </section>
+
+      <section>
+        <label class="check">
+          <input type="checkbox" id="mock-toggle" checked />
+          <span>Modo simulação <small class="muted">(não chama as CLIs)</small></span>
+        </label>
+        <div id="env-status" class="env small"></div>
+        <button id="btn-start" class="btn primary block">Iniciar workflow</button>
+        <p id="start-error" class="error small"></p>
+      </section>
+
+      <section>
+        <h2>Steps</h2>
+        <ol id="steps" class="steps"></ol>
+      </section>
+    </aside>
+
+    <!-- Coluna 2: sessões -->
+    <section class="panel sessions-panel">
+      <h2>Sessões</h2>
+      <div id="sessions" class="sessions">
+        <p class="empty muted">Nenhuma sessão ainda. Escolha um workflow e clique em <b>Iniciar</b>.</p>
+      </div>
+    </section>
+
+    <!-- Coluna 3: detalhe -->
+    <section class="panel detail-panel">
+      <div class="tabs">
+        <button class="tab active" data-tab="detail">Sessão</button>
+        <button class="tab" data-tab="events">Eventos</button>
+      </div>
+      <div id="tab-detail" class="tab-body">
+        <p class="empty muted">Selecione uma sessão para ver prompts, thinking, tool calls e output.</p>
+      </div>
+      <div id="tab-events" class="tab-body hidden"></div>
+    </section>
+  </main>
+
+  <div id="approval-modal" class="modal hidden">
+    <div class="modal-card">
+      <h3>Aprovação necessária</h3>
+      <p id="approval-step" class="muted small mono"></p>
+      <pre id="approval-message"></pre>
+      <div class="modal-actions">
+        <button id="btn-reject" class="btn ghost">Rejeitar</button>
+        <button id="btn-approve" class="btn primary">Aprovar</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

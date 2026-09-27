@@ -1,0 +1,374 @@
+# =============================================================================
+# Workflow: Desenvolvimento de Software
+# -----------------------------------------------------------------------------
+# Fluxo: develop -> code_review (loop de correções) -> deploy -> pr_babysitter
+#
+# Princípio de design:
+#   - O GRAFO (ordem, loops, condições) é declarativo e determinístico aqui no YAML.
+#   - O ORQUESTRADOR (LLM) executa o grafo: redige as mensagens para cada sessão,
+#     interpreta respostas ambíguas e decide dentro das regras definidas.
+#   - Cada step devolve uma saída ESTRUTURADA (output_schema) para que as
+#     transições não dependam de interpretar texto livre.
+# =============================================================================
+
+apiVersion: multiagent/v1
+kind: Workflow
+
+metadata:
+  name: software-development
+  version: 0.1.0
+  description: Implementa uma feature, revisa, faz deploy e acompanha o PR até o merge.
+  tags: [dev, review, deploy, pr]
+
+# -----------------------------------------------------------------------------
+# Entradas que o usuário fornece ao escolher o workflow
+# -----------------------------------------------------------------------------
+inputs:
+  task:
+    type: string
+    required: true
+    description: Descrição da feature/bug a ser implementado.
+  repo_path:
+    type: string
+    required: true
+    description: Caminho local do repositório.
+  base_branch:
+    type: string
+    default: main
+  deploy_environment:
+    type: string
+    enum: [preview, staging, production]
+    default: staging
+
+# -----------------------------------------------------------------------------
+# Providers: como abrir uma sessão de cada tipo de agente
+# -----------------------------------------------------------------------------
+# Linha de comando final = args + agent.cli_args + (resume_args se a sessão já
+# existe) + stdin_arg. O prompt é sempre enviado via stdin (evita problemas de
+# escape no Windows). `{{ model }}` e `{{ session_id }}` são substituídos.
+providers:
+  claude:
+    type: claude-code
+    command: claude
+    args: ["-p", "--output-format", "stream-json", "--verbose", "--model", "{{ model }}"]
+    resume_args: ["--resume", "{{ session_id }}"]   # reaproveita a sessão entre iterações
+  codex:
+    type: codex-cli
+    command: codex
+    args: ["exec", "--json", "--skip-git-repo-check", "-m", "{{ model }}"]
+    resume_args: ["resume", "{{ session_id }}"]
+    stdin_arg: "-"                   # "-" = ler o prompt do stdin
+
+# -----------------------------------------------------------------------------
+# Defaults aplicados a todos os agentes (podem ser sobrescritos)
+# -----------------------------------------------------------------------------
+defaults:
+  working_dir: "{{ inputs.repo_path }}"
+  timeout: 30m
+  retry:
+    max_attempts: 2
+    backoff: exponential
+    initial_delay: 10s
+  thinking:
+    enabled: true
+    capture: true                    # grava o thinking/reasoning no trace
+
+# -----------------------------------------------------------------------------
+# Orquestrador: sessão raiz aberta ao iniciar o workflow
+# -----------------------------------------------------------------------------
+# v1: o grafo é executado pelo engine determinístico do app (src/engine).
+# A sessão LLM do orquestrador abaixo ainda não é usada — fica para a v2.
+orchestrator:
+  provider: claude
+  model: claude-sonnet-5             # roteamento/redação de mensagens; troque se quiser
+  system_prompt: |
+    Você é o orquestrador do workflow "software-development".
+    Siga estritamente o grafo de steps definido. Para cada step:
+      1. Monte a mensagem para o agente usando o `prompt` do step e o contexto
+         (saídas dos steps anteriores).
+      2. Aguarde a resposta e valide contra o `output_schema`.
+      3. Se a saída for inválida, peça ao agente para corrigir o formato
+         (máx. 2 tentativas) antes de marcar o step como falho.
+      4. Avalie as `transitions` para decidir o próximo step.
+    Nunca pule um gate de aprovação humana. Nunca invente saídas de agentes.
+  limits:
+    max_total_duration: 6h
+    max_total_cost_usd: 50
+
+# -----------------------------------------------------------------------------
+# Agentes: definições de sessão reutilizáveis
+# -----------------------------------------------------------------------------
+agents:
+  developer:
+    provider: claude
+    model: claude-opus-5-5
+    session: persistent              # mesma sessão durante os loops de correção
+    # `permissions` é documental na v1; o que vale de fato são os cli_args.
+    cli_args: ["--permission-mode", "acceptEdits", "--allowedTools", "Bash(git:*) Bash(npm:*) Bash(npx:*)"]
+    permissions:
+      allow: [read, edit, write, bash:git, bash:test, bash:build]
+      deny: [bash:"git push --force", bash:deploy]
+    system_prompt: |
+      Você é um engenheiro de software sênior. Implemente mudanças pequenas,
+      testadas e coesas. Sempre rode os testes antes de concluir.
+      Trabalhe numa branch própria a partir de {{ inputs.base_branch }}.
+
+  reviewer:
+    provider: codex
+    model: gpt-6-sol
+    session: persistent              # lembra dos pontos já levantados na iteração anterior
+    cli_args: ["-s", "read-only"]
+    permissions:
+      allow: [read, bash:git-diff, bash:test]
+      deny: [edit, write]            # revisor não altera código
+    system_prompt: |
+      Você é um revisor de código rigoroso. Foque em bugs de corretude,
+      segurança, regressões e cobertura de testes. Seja objetivo; não
+      proponha mudanças puramente estéticas como bloqueantes.
+
+  deployer:
+    provider: claude
+    model: claude-opus-4-8           # confirme o ID exato do modelo no seu provider
+    session: ephemeral
+    cli_args: ["--allowedTools", "Bash(git:*) Bash(gh:*)"]
+    permissions:
+      allow: [read, bash:git, bash:gh, bash:deploy]
+      deny: [edit]
+    system_prompt: |
+      Você é responsável por abrir o PR e fazer o deploy no ambiente
+      {{ inputs.deploy_environment }}. Verifique health checks após o deploy.
+      Em caso de falha, faça rollback e reporte.
+
+  pr_babysitter:
+    provider: claude
+    model: claude-opus-4-8
+    session: persistent
+    cli_args: ["--allowedTools", "Bash(gh:*) Bash(git:*)"]
+    permissions:
+      allow: [read, bash:gh, bash:git]
+      deny: [edit, bash:"gh pr merge --admin"]
+    system_prompt: |
+      Você acompanha um PR até o merge: monitora CI, comentários de review
+      e conflitos com a base. Você NÃO corrige código diretamente — quando
+      algo precisa mudar, descreva a correção para ser delegada ao developer.
+
+# -----------------------------------------------------------------------------
+# Steps: o grafo do workflow
+# -----------------------------------------------------------------------------
+steps:
+
+  # 1) DESENVOLVIMENTO ---------------------------------------------------------
+  - id: develop
+    agent: developer
+    prompt: |
+      Tarefa: {{ inputs.task }}
+
+      {% if steps.code_review.output %}
+      O revisor pediu as seguintes mudanças (iteração {{ loop.iteration }}):
+      {{ steps.code_review.output.findings | to_yaml }}
+      Corrija os itens bloqueantes e responda a cada um.
+      {% endif %}
+    output_schema:
+      type: object
+      required: [branch, summary, files_changed, tests_passed]
+      properties:
+        branch:        { type: string }
+        summary:       { type: string }
+        files_changed: { type: array, items: { type: string } }
+        tests_passed:  { type: boolean }
+        notes:         { type: string }
+    transitions:
+      - when: "output.tests_passed == true"
+        goto: code_review
+      - when: "output.tests_passed == false"
+        goto: develop                # tenta de novo com o mesmo agente
+        max_visits: 3
+        on_exhausted: fail
+
+  # 2) CODE REVIEW -------------------------------------------------------------
+  - id: code_review
+    agent: reviewer
+    prompt: |
+      Revise as mudanças da branch `{{ steps.develop.output.branch }}`
+      contra `{{ inputs.base_branch }}`.
+      Resumo do desenvolvedor: {{ steps.develop.output.summary }}
+    output_schema:
+      type: object
+      required: [verdict, findings]
+      properties:
+        verdict:
+          type: string
+          enum: [approved, changes_requested]
+        findings:
+          type: array
+          items:
+            type: object
+            required: [severity, file, description]
+            properties:
+              severity:    { type: string, enum: [blocker, major, minor, nit] }
+              file:        { type: string }
+              line:        { type: integer }
+              description: { type: string }
+    transitions:
+      - when: "output.verdict == 'approved'"
+        goto: approve_deploy
+      - when: "output.verdict == 'changes_requested'"
+        goto: develop
+        loop:
+          name: review_cycle
+          max_iterations: 3
+          on_exhausted: human_review # escala para humano após 3 rodadas
+
+  # Gate humano antes do deploy ------------------------------------------------
+  - id: approve_deploy
+    type: human_approval
+    message: |
+      Código aprovado pelo reviewer. Autorizar deploy em
+      {{ inputs.deploy_environment }}?
+    timeout: 24h
+    transitions:
+      - when: "approved"
+        goto: deploy
+      - when: "rejected"
+        goto: end
+
+  - id: human_review
+    type: human_approval
+    message: "Loop de review não convergiu em 3 iterações. Intervir manualmente?"
+    transitions:
+      - when: "approved"
+        goto: deploy
+      - when: "rejected"
+        goto: end
+
+  # 3) DEPLOY ------------------------------------------------------------------
+  - id: deploy
+    agent: deployer
+    prompt: |
+      1. Faça push da branch `{{ steps.develop.output.branch }}` e abra um PR
+         para `{{ inputs.base_branch }}` com o resumo abaixo.
+      2. Faça deploy no ambiente `{{ inputs.deploy_environment }}`.
+      3. Rode os health checks.
+
+      Resumo: {{ steps.develop.output.summary }}
+    output_schema:
+      type: object
+      required: [pr_url, deploy_status]
+      properties:
+        pr_url:        { type: string }
+        pr_number:     { type: integer }
+        deploy_status: { type: string, enum: [success, failed, rolled_back] }
+        deploy_url:    { type: string }
+        logs_excerpt:  { type: string }
+    transitions:
+      - when: "output.deploy_status == 'success'"
+        goto: pr_babysitter
+      - when: "output.deploy_status != 'success'"
+        goto: develop
+        max_visits: 2
+        on_exhausted: fail
+
+  # 4) PR BABYSITTER -----------------------------------------------------------
+  - id: pr_babysitter
+    agent: pr_babysitter
+    mode: polling
+    poll:
+      interval: 5m
+      max_duration: 48h
+    prompt: |
+      Verifique o estado do PR {{ steps.deploy.output.pr_url }}:
+      status do CI, novos comentários de review, conflitos e aprovações.
+    output_schema:
+      type: object
+      required: [state]
+      properties:
+        state:
+          type: string
+          enum: [waiting, needs_fix, ready_to_merge, merged, closed]
+        fix_request: { type: string }   # preenchido quando state == needs_fix
+        summary:     { type: string }
+    transitions:
+      - when: "output.state == 'waiting'"
+        goto: pr_babysitter          # continua o polling
+      - when: "output.state == 'needs_fix'"
+        delegate:
+          agent: developer           # reabre a sessão persistente do developer
+          prompt: "{{ output.fix_request }}"
+        goto: pr_babysitter
+      - when: "output.state == 'ready_to_merge'"
+        goto: approve_merge
+      - when: "output.state in ['merged', 'closed']"
+        goto: end
+
+  - id: approve_merge
+    type: human_approval
+    message: "PR {{ steps.deploy.output.pr_url }} pronto para merge. Fazer merge?"
+    transitions:
+      - when: "approved"
+        goto: end
+        action: "gh pr merge {{ steps.deploy.output.pr_number }} --squash"
+      - when: "rejected"
+        goto: pr_babysitter
+
+# -----------------------------------------------------------------------------
+# Observabilidade
+# -----------------------------------------------------------------------------
+observability:
+  run_id: "{{ now | date('%Y%m%d-%H%M%S') }}-{{ uuid4 | truncate(8) }}"
+  storage:
+    type: jsonl
+    path: "./runs/{{ run_id }}/"     # events.jsonl + sessions/<session_id>.jsonl
+
+  # Métricas por sessão (orquestrador + cada agente)
+  session_metrics:
+    - session_id
+    - parent_session_id              # monta a árvore orquestrador -> agentes
+    - agent
+    - provider
+    - model
+    - step_id
+    - loop_iteration
+    - started_at
+    - ended_at
+    - duration_ms
+    - active_ms                      # tempo gerando/executando tools
+    - idle_ms                        # tempo aguardando (ex.: polling, gate humano)
+    - tokens.input
+    - tokens.output
+    - tokens.cache_read
+    - tokens.cache_write
+    - tokens.reasoning               # thinking / reasoning tokens
+    - cost_usd
+    - tool_calls_count
+    - exit_status                    # success | failed | timeout | cancelled
+
+  # Conteúdo capturado
+  capture:
+    prompts: true                    # mensagens enviadas pelo orquestrador
+    outputs: true                    # respostas finais
+    thinking: true                   # blocos de thinking/reasoning (quando o provider expõe)
+    tool_calls: true                 # nome, args, resultado resumido, duração
+    redact:                          # remove segredos antes de gravar
+      - pattern: "(?i)(api[_-]?key|token|secret|password)\\s*[:=]\\s*\\S+"
+
+  # Eventos emitidos no events.jsonl
+  events:
+    - workflow.started
+    - workflow.finished
+    - step.started
+    - step.finished
+    - step.transition
+    - session.opened
+    - session.message_sent
+    - session.message_received
+    - session.closed
+    - approval.requested
+    - approval.resolved
+    - limit.exceeded
+
+  # Exportação opcional para ferramenta externa
+  exporters:
+    - type: opentelemetry
+      enabled: false
+      endpoint: http://localhost:4318
+      # cada sessão vira um span; o workflow é o trace raiz
