@@ -24,6 +24,12 @@ const ROOT = path.join(__dirname, '..');
 const BUNDLED_WORKFLOWS_DIR = workflows.BUNDLED_WORKFLOWS_DIR;
 const BUNDLED_SKILLS_DIR = path.join(ROOT, 'skills');
 
+// The packaged app doesn't accept Chromium's remote debugging switches (the Node inspector is
+// already disabled by a fuse, see scripts/package.js)
+if (app.isPackaged && ['remote-debugging-port', 'remote-debugging-pipe'].some((s) => app.commandLine.hasSwitch(s))) {
+  app.exit(1);
+}
+
 let win = null;
 let currentRun = null;
 let ws = null; // { root, runs, repos, projects, skills, workflows, worktrees, settings } (see src/workspace.js)
@@ -85,6 +91,7 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      devTools: !app.isPackaged,
     },
   });
   win.webContents.setWindowOpenHandler(({ url }) => {
@@ -348,10 +355,15 @@ function terminalSpec(runId, sessionId, mode) {
   const env = { ...process.env };
   delete env.CLAUDECODE;
   if (mode === 'live') {
+    // Dev: Electron itself as node. Packaged: the RunAsNode fuse is off, so the system node runs
+    // the unpacked copy of session-tail.js (node can't read app.asar).
+    const node = app.isPackaged ? resolveCommand('node') : { file: process.execPath };
+    if (!node) throw new Error('The external live terminal needs Node.js on the PATH. Use the embedded live terminal instead.');
+    const tail = path.join(__dirname, 'session-tail.js').replace(/app\.asar([\\/])/, 'app.asar.unpacked$1');
     return {
       title: sess.agent === 'orchestrator' ? 'orchestrator · live' : `${sess.agent} (${sess.id}) · live`,
-      cwd: run.runDir, file: process.execPath,
-      args: [path.join(__dirname, 'session-tail.js'), run.runDir, sess.id], env: { ...env, ELECTRON_RUN_AS_NODE: '1', FORCE_COLOR: '1' },
+      cwd: run.runDir, file: node.file,
+      args: [tail, run.runDir, sess.id], env: { ...env, ELECTRON_RUN_AS_NODE: '1', FORCE_COLOR: '1' },
     };
   }
   const providers = runProviders(runId, run.file);
