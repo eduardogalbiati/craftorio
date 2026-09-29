@@ -33,7 +33,15 @@ function fileStorage(file, { encrypt = (s) => Buffer.from(s, 'utf8'), decrypt = 
   let data = null;
   const load = () => {
     if (data) return data;
-    try { data = JSON.parse(decrypt(fs.readFileSync(file))); } catch { data = {}; }
+    let raw = null;
+    try { raw = fs.readFileSync(file); } catch { /* no file yet */ }
+    try {
+      data = raw ? JSON.parse(decrypt(raw)) : {};
+    } catch (e) {
+      // the session is lost (sign-in needed again): say why instead of failing silently
+      console.error(`account storage: could not read ${file}: ${e.message}`);
+      data = {};
+    }
     return data;
   };
   const save = () => {

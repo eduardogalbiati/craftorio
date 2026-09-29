@@ -23,20 +23,27 @@ let win = null;
 // ---- account (sign-in and free trial) --------------------------------------------------------
 // The session is machine- and OS-user-specific, so it lives in the app's user data folder
 // (%APPDATA%), not in the workspace, encrypted with the OS (DPAPI on Windows).
+// Created once the app is ready: safeStorage can't decrypt before that, and the Supabase client
+// reads the stored session as soon as it is created (reading it too early lost the session and
+// asked for a new sign-in at every start).
 const devEnv = app.isPackaged ? {} : process.env;
 const authOff = devEnv.MULTIAGENT_AUTH === 'off';
-const auth = createAuth({
-  url: authOff ? '' : devEnv.MULTIAGENT_SUPABASE_URL || authConfig.url,
-  key: authOff ? '' : devEnv.MULTIAGENT_SUPABASE_KEY || authConfig.publishableKey,
-  providers: authConfig.providers,
-  // development builds without a Supabase project run without sign-in; the packaged app never does
-  required: app.isPackaged || (!!(authConfig.url || devEnv.MULTIAGENT_SUPABASE_URL) && !authOff),
-  storage: fileStorage(path.join(app.getPath('userData'), 'account.bin'), {
-    encrypt: (s) => (safeStorage.isEncryptionAvailable() ? safeStorage.encryptString(s) : Buffer.from(s, 'utf8')),
-    decrypt: (b) => (safeStorage.isEncryptionAvailable() ? safeStorage.decryptString(b) : b.toString('utf8')),
-  }),
-  openExternal: (url) => shell.openExternal(url),
-});
+let auth = null;
+function createAccount() {
+  auth = createAuth({
+    url: authOff ? '' : devEnv.MULTIAGENT_SUPABASE_URL || authConfig.url,
+    key: authOff ? '' : devEnv.MULTIAGENT_SUPABASE_KEY || authConfig.publishableKey,
+    providers: authConfig.providers,
+    // development builds without a Supabase project run without sign-in; the packaged app never does
+    required: app.isPackaged || (!!(authConfig.url || devEnv.MULTIAGENT_SUPABASE_URL) && !authOff),
+    storage: fileStorage(path.join(app.getPath('userData'), 'account.bin'), {
+      encrypt: (s) => (safeStorage.isEncryptionAvailable() ? safeStorage.encryptString(s) : Buffer.from(s, 'utf8')),
+      decrypt: (b) => (safeStorage.isEncryptionAvailable() ? safeStorage.decryptString(b) : b.toString('utf8')),
+    }),
+    openExternal: (url) => shell.openExternal(url),
+  });
+  auth.onChange((s) => { if (win && !win.isDestroyed()) win.webContents.send('auth:changed', s); });
+}
 
 const service = createService({
   host: {
@@ -56,7 +63,6 @@ ipcMain.handle('auth:signIn', async (_e, provider) => {
 });
 ipcMain.handle('auth:cancel', () => auth.cancelSignIn());
 ipcMain.handle('auth:signOut', () => auth.signOut());
-auth.onChange((s) => { if (win && !win.isDestroyed()) win.webContents.send('auth:changed', s); });
 
 // ---- IPC transport ------------------------------------------------------------------
 for (const [channel, fn] of Object.entries(service.api)) ipcMain.handle(channel, (_e, arg) => fn(arg));
@@ -184,6 +190,7 @@ ipcMain.handle('session:terminal', (_e, { sessionId, mode, runId }) => {
 });
 
 app.whenReady().then(async () => {
+  createAccount();
   const ws = await ensureWorkspace();
   if (!ws) return app.quit();
   service.setWorkspace(ws);
