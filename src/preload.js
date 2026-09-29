@@ -56,6 +56,17 @@ contextBridge.exposeInMainWorld('api', {
   },
   clipboardRead: () => ipcRenderer.invoke('clipboard:read'),
   clipboardWrite: (text) => ipcRenderer.invoke('clipboard:write', { text }),
+  // account: sign-in with an OAuth provider (system browser) and the free trial
+  authState: () => ipcRenderer.invoke('auth:state'),
+  authRefresh: () => ipcRenderer.invoke('auth:refresh'),
+  signIn: (provider) => ipcRenderer.invoke('auth:signIn', provider),
+  cancelSignIn: () => ipcRenderer.invoke('auth:cancel'),
+  signOut: () => ipcRenderer.invoke('auth:signOut'),
+  onAuthChange: (cb) => {
+    const handler = (_e, s) => cb(s);
+    ipcRenderer.on('auth:changed', handler);
+    return () => ipcRenderer.removeListener('auth:changed', handler);
+  },
   platform: process.platform,
   onEvent: (cb) => {
     const handler = (_e, ev) => cb(ev);

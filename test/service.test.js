@@ -94,3 +94,14 @@ test('the workspace cannot change while a run is in progress', async (t) => {
   assert.throws(() => service.setWorkspace(service.workspace()), /while a workflow is running/);
   await finished;
 });
+
+test('a run starts only if the host allows it (account / free trial)', async (t) => {
+  const { service, api } = makeService(t);
+  const asked = [];
+  const blocked = createService({ host: { trashItem: async () => {}, appVersion: '0', isPackaged: false, assertCanRun: async (o) => { asked.push(o); throw new Error('Your 7-day free trial has ended.'); } } });
+  blocked.setWorkspace(service.workspace());
+  await assert.rejects(blocked.api['run:start']({ file: 'fixture-service.yaml', inputs: {}, mock: false }), /trial has ended/);
+  assert.deepEqual(asked, [{ mock: false }]);
+  assert.equal(blocked.isRunning(), false);
+  assert.deepEqual(api['runs:list']().runs, []);
+});

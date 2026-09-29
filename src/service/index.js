@@ -10,6 +10,7 @@
 //   trashItem(path)  moves a file to the trash (skills and workflows are never hard-deleted)
 //   appVersion       shown in Settings
 //   isPackaged       the packaged app can't run itself as node (see terminalSpec)
+//   assertCanRun({ mock })  optional; throws when the account may not start or resume a run
 
 const path = require('path');
 const fs = require('fs');
@@ -177,6 +178,7 @@ function createService({ host }) {
 
   async function startWorkflowRun({ file, inputs, mock, resume = null, projectId: forcedProject = null }) {
     if (isRunning()) throw new Error('A workflow is already running.');
+    await host.assertCanRun?.({ mock: !!mock });
     // repo_path can be a git URL: clones (or updates) it into <workspace>/repos.
     if (workspace.isGitUrl(inputs?.repo_path)) {
       inputs = { ...inputs, repo_path: (await workspace.cloneRepo(inputs.repo_path, ws.repos)).dir };

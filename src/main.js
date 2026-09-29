@@ -6,9 +6,11 @@ const path = require('path');
 const os = require('os');
 const fs = require('fs');
 const { spawn } = require('child_process');
-const { app, BrowserWindow, ipcMain, dialog, shell, clipboard } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, clipboard, safeStorage } = require('electron');
 const workspace = require('./workspace');
 const { createService } = require('./service');
+const { createAuth, fileStorage } = require('./auth');
+const authConfig = require('./auth-config');
 
 // The packaged app doesn't accept Chromium's remote debugging switches (the Node inspector is
 // already disabled by a fuse, see scripts/package.js)
@@ -18,13 +20,43 @@ if (app.isPackaged && ['remote-debugging-port', 'remote-debugging-pipe'].some((s
 
 let win = null;
 
+// ---- account (sign-in and free trial) --------------------------------------------------------
+// The session is machine- and OS-user-specific, so it lives in the app's user data folder
+// (%APPDATA%), not in the workspace, encrypted with the OS (DPAPI on Windows).
+const devEnv = app.isPackaged ? {} : process.env;
+const authOff = devEnv.MULTIAGENT_AUTH === 'off';
+const auth = createAuth({
+  url: authOff ? '' : devEnv.MULTIAGENT_SUPABASE_URL || authConfig.url,
+  key: authOff ? '' : devEnv.MULTIAGENT_SUPABASE_KEY || authConfig.publishableKey,
+  providers: authConfig.providers,
+  // development builds without a Supabase project run without sign-in; the packaged app never does
+  required: app.isPackaged || (!!(authConfig.url || devEnv.MULTIAGENT_SUPABASE_URL) && !authOff),
+  storage: fileStorage(path.join(app.getPath('userData'), 'account.bin'), {
+    encrypt: (s) => (safeStorage.isEncryptionAvailable() ? safeStorage.encryptString(s) : Buffer.from(s, 'utf8')),
+    decrypt: (b) => (safeStorage.isEncryptionAvailable() ? safeStorage.decryptString(b) : b.toString('utf8')),
+  }),
+  openExternal: (url) => shell.openExternal(url),
+});
+
 const service = createService({
   host: {
     trashItem: (p) => shell.trashItem(p),
     appVersion: app.getVersion(),
     isPackaged: app.isPackaged,
+    assertCanRun: (opts) => auth.assertCanRun(opts),
   },
 });
+
+ipcMain.handle('auth:state', () => auth.state());
+ipcMain.handle('auth:refresh', () => auth.refresh());
+ipcMain.handle('auth:signIn', async (_e, provider) => {
+  const s = await auth.signIn(String(provider));
+  if (win && !win.isDestroyed()) { if (win.isMinimized()) win.restore(); win.focus(); }
+  return s;
+});
+ipcMain.handle('auth:cancel', () => auth.cancelSignIn());
+ipcMain.handle('auth:signOut', () => auth.signOut());
+auth.onChange((s) => { if (win && !win.isDestroyed()) win.webContents.send('auth:changed', s); });
 
 // ---- IPC transport ------------------------------------------------------------------
 for (const [channel, fn] of Object.entries(service.api)) ipcMain.handle(channel, (_e, arg) => fn(arg));
@@ -157,6 +189,10 @@ app.whenReady().then(async () => {
   service.setWorkspace(ws);
   createWindow();
   service.cleanupWorktrees().catch((e) => console.error('worktree cleanup:', e));
+  // the trial can end while the app is open
+  const checkAccount = () => auth.refresh().catch((e) => console.error('account:', e.message));
+  checkAccount();
+  setInterval(checkAccount, 60 * 60 * 1000).unref();
 });
 app.on('window-all-closed', () => {
   service.shutdown();

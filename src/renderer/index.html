@@ -47,6 +47,18 @@
         <svg class="icon" width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M7 4.5v15a1 1 0 0 0 1.5.86l12-7.5a1 1 0 0 0 0-1.72l-12-7.5A1 1 0 0 0 7 4.5z" /></svg>
         Start
       </button>
+      <div class="account-wrap hidden" id="account-wrap">
+        <button id="account-btn" class="btn ghost account-btn" type="button" aria-haspopup="dialog" aria-expanded="false">
+          <span id="account-avatar" class="account-avatar" aria-hidden="true"></span>
+          <span id="account-trial" class="pill"></span>
+        </button>
+        <div id="account-pop" class="account-pop hidden" role="dialog" aria-label="Account">
+          <b id="account-name"></b>
+          <div id="account-email" class="muted small"></div>
+          <p id="account-plan" class="small"></p>
+          <button id="btn-sign-out" class="btn ghost sm" type="button">Sign out</button>
+        </div>
+      </div>
     </div>
   </header>
 
@@ -435,6 +447,21 @@
     </div>
     <div id="term-body" class="term-body"></div>
   </section>
+
+  <!-- ================= Sign-in ================= -->
+  <div id="login-screen" class="login-screen hidden">
+    <div class="login-card">
+      <div class="brand">Multiagent <span>Orchestrator</span></div>
+      <h3>Sign in</h3>
+      <p class="muted">New accounts start with a 7-day free trial. No credit card needed.</p>
+      <div id="login-providers" class="login-providers"></div>
+      <div id="login-waiting" class="login-waiting hidden">
+        <span class="muted small">Finish signing in in your browser…</span>
+        <button id="btn-login-cancel" class="link-btn" type="button">Cancel</button>
+      </div>
+      <p id="login-error" class="error" role="alert"></p>
+    </div>
+  </div>
 
   <!-- ================= Modals ================= -->
   <div id="approval-modal" class="modal hidden">
