@@ -108,6 +108,8 @@ function layout(root) {
     settings: path.join(root, 'settings.json'),
     // titles the user gave to CLI sessions on the Sessions screen ({ "<provider>:<id>": title })
     sessionTitles: path.join(root, 'session-titles.json'),
+    // the run the app has in progress, removed when it ends: found at the next start, the run died with the app
+    activeRun: path.join(root, 'active-run.json'),
   };
 }
 
@@ -119,6 +121,9 @@ const DEFAULT_SETTINGS = {
   developerMode: false,
   openRunOnStart: true,   // when a workflow starts, switch to the run screen
   confirmStop: true,      // ask for confirmation before stopping a workflow
+  // desktop notifications (see src/notifications.js): run status changes, CLI sessions waiting for you
+  notifyRuns: true,
+  notifySessions: true,
   lastProject: null,
   lastWorkflow: null,
   // where the Backlog screen syncs issues from by default: github | gitlab | bitbucket

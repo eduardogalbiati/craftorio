@@ -221,6 +221,7 @@
     sx.tabs.forEach((t) => t.pane.classList.toggle('active', t === tab));
     renderHead();
     renderList();
+    window.reportNotifyContext?.();
     requestAnimationFrame(() => { fitActive(); tab.term.focus(); });
   }
 
@@ -236,6 +237,7 @@
       if (res.title && tab.kind === 'cli-resume' && res.title !== '(no prompt)') tab.title = res.title;
       if (res.cwd) { tab.cwd = res.cwd; tab.meta = [tab.model, res.cwd].filter(Boolean).join(' · '); }
       replayPending(tab);
+      window.reportNotifyContext?.();
       renderHead();
       renderList();
       fitActive();
@@ -354,7 +356,7 @@
     sx.active = null;
     const next = sx.tabs[i] || sx.tabs[i - 1];
     if (next) activate(next);
-    else { renderHead(); renderList(); }
+    else { renderHead(); renderList(); window.reportNotifyContext?.(); }
   }
 
   function restartActive() {
@@ -483,6 +485,17 @@
     renderHead();
   }
 
+  // A desktop notification about a terminal was clicked: show it.
+  function focusTerminal(id) {
+    const tab = findTab(id);
+    if (!tab) return false;
+    if (!visible()) showView('sessions');
+    activate(tab);
+    return true;
+  }
+  // the terminal the screen shows, for desktop notifications
+  const shownTerminalId = () => (visible() ? sx.active?.id || null : null);
+
   init();
-  window.SessionsView = { show, findTab, openNew };
+  window.SessionsView = { show, findTab, openNew, focusTerminal, shownTerminalId };
 })();

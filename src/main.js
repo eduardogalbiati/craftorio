@@ -6,7 +6,7 @@ const path = require('path');
 const os = require('os');
 const fs = require('fs');
 const { spawn } = require('child_process');
-const { app, BrowserWindow, ipcMain, dialog, shell, clipboard, safeStorage } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, clipboard, safeStorage, Notification } = require('electron');
 const workspace = require('./workspace');
 const { createService } = require('./service');
 const { createAuth, fileStorage } = require('./auth');
@@ -71,6 +71,28 @@ for (const channel of ['run:event', 'term:data', 'term:exit']) {
   service.events.on(channel, (payload) => { if (win && !win.isDestroyed()) win.webContents.send(channel, payload); });
 }
 
+// ---- desktop notifications -------------------------------------------------------------
+// The service decides what deserves one (settings, what the window shows); clicking it brings the
+// window forward on the run or session. Shown notifications are kept referenced until clicked or
+// closed, or their click handler could be garbage-collected.
+const shownNotices = new Set();
+service.events.on('notify', (n) => {
+  if (!Notification.isSupported()) return;
+  const note = new Notification({ title: n.title, body: n.body });
+  shownNotices.add(note);
+  const forget = () => shownNotices.delete(note);
+  note.on('click', () => {
+    forget();
+    if (!win || win.isDestroyed()) return;
+    if (win.isMinimized()) win.restore();
+    win.show();
+    win.focus();
+    win.webContents.send('notify:open', n.target);
+  });
+  note.on('close', forget);
+  note.show();
+});
+
 // Resolves the workspace before opening the window. If the registered folder (or the default
 // ~/multiagent-workspace) does not exist, asks whether to create the default or pick another.
 async function ensureWorkspace() {
@@ -131,6 +153,8 @@ function createWindow() {
     }
   });
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
+  // a run that died with the app last time, once the window can open it
+  win.webContents.once('did-finish-load', () => service.notifyInterruptedRun());
 }
 
 // ---- desktop-only actions ----------------------------------------------------------------
@@ -188,6 +212,9 @@ ipcMain.handle('session:terminal', (_e, { sessionId, mode, runId }) => {
   openConsole(service.terminalSpec(runId, sessionId, mode));
   return true;
 });
+
+// Windows shows notifications under the app's AppUserModelID (the exe itself in development).
+if (process.platform === 'win32') app.setAppUserModelId(app.isPackaged ? 'MultiagentOrchestrator' : process.execPath);
 
 app.whenReady().then(async () => {
   createAccount();

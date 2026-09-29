@@ -1,7 +1,8 @@
 // Engine service: everything the UI can ask of the engine, with no dependency on Electron or on a
 // transport. `api` maps a channel name ('projects:list', 'run:start', ...) to a function taking
 // one argument; `notifications` are the fire-and-forget channels (no reply). Pushed data
-// ('run:event', 'term:data', 'term:exit') is emitted on `events`.
+// ('run:event', 'term:data', 'term:exit') is emitted on `events`, and so are desktop notifications
+// ('notify', see src/notifications.js), already filtered by the settings and what the UI shows.
 //
 // Today src/main.js exposes it over Electron IPC; the same object can be exposed over HTTP +
 // WebSocket so the engine runs on a server and the UI connects to it.
@@ -36,6 +37,7 @@ const workflows = require('../workflows');
 const { Terminals } = require('../terminals');
 const { followSession } = require('../session-tail');
 const supervisor = require('../supervisor');
+const notifier = require('../notifications');
 
 const SRC = path.join(__dirname, '..');
 const ROOT = path.join(SRC, '..');
@@ -82,7 +84,41 @@ function createService({ host }) {
   const events = new EventEmitter();
   let ws = null; // { root, runs, repos, projects, skills, workflows, worktrees, settings } (see src/workspace.js)
   let currentRun = null;
-  const terminals = new Terminals((channel, payload) => events.emit(channel, payload));
+
+  // ---- desktop notifications ----------------------------------------------------------------
+  // uiContext: what the window shows ({ focused, runId, terminalId }), reported by the UI.
+  let uiContext = notifier.normalizeContext(null);
+  function notify(notice) {
+    let settings = {};
+    try { if (ws) settings = workspace.readSettings(ws); } catch { /* defaults */ }
+    if (notifier.shouldNotify(notice, { settings, context: uiContext })) events.emit('notify', notice);
+  }
+  // CLIs in Sessions terminals that stop and wait for the user
+  const waiting = new notifier.WaitDetector({ onWaiting: (id, info, message) => notify(notifier.sessionNotice(id, info, message)) });
+  const terminals = new Terminals((channel, payload) => {
+    if (channel === 'term:data') waiting.output(payload.id, payload.data);
+    if (channel === 'term:exit') waiting.close(payload.id);
+    events.emit(channel, payload);
+  });
+
+  // The run in progress is written down until it ends: still there at the next start = it died with the app.
+  function markActiveRun(info) {
+    try {
+      if (info) fs.writeFileSync(ws.activeRun, JSON.stringify(info));
+      else fs.rmSync(ws.activeRun, { force: true });
+    } catch (e) { console.error('active run marker:', e.message); }
+  }
+  function notifyInterruptedRun() {
+    if (!ws || isRunning()) return null;
+    let info = null;
+    try { info = JSON.parse(fs.readFileSync(ws.activeRun, 'utf8')); } catch { return null; }
+    markActiveRun(null);
+    const r = info?.runId && runs.readRun(ws.runs, path.basename(String(info.runId)));
+    if (r?.status !== 'interrupted') return null;
+    const notice = notifier.interruptedNotice(info);
+    notify(notice);
+    return notice;
+  }
 
   const workspaceDir = () => {
     if (!ws) throw new Error('No workspace is open.');
@@ -222,9 +258,16 @@ function createService({ host }) {
       if (problems.length) throw new Error(problems.join('\n'));
     }
     const recorder = new Recorder(run.runDir, run.wf.observability?.capture?.redact);
+    const runInfo = {
+      runId: run.runId, workflow: run.wf.metadata?.name || path.basename(wfFile.file), mock: !!run.mock,
+      project: projectId ? projects.listProjects(ws.projects).find((p) => p.id === projectId)?.name || projectId : null,
+    };
     run.on('event', (ev) => {
       try { recorder.write(ev); } catch (e) { console.error('recorder:', e); }
       events.emit('run:event', ev);
+      if (ev.type === 'workflow.started') markActiveRun(runInfo);
+      if (ev.type === 'workflow.finished') markActiveRun(null);
+      notify(notifier.runNotice(ev, runInfo));
       // the next issue waiting in a Backlog queue starts once this run is over; a queued issue whose
       // run failed pauses its queue (a failure that repeats would otherwise burn through it)
       if (ev.type === 'workflow.finished') {
@@ -425,7 +468,9 @@ function createService({ host }) {
     if (kind === 'supervisor') return openProgram(supervisorChatSpec(runId || currentRun?.runId), cols, rows);
     if (kind === 'cli-resume' || kind === 'cli-new') {
       const spec = cliSessionSpec({ kind, sessionId, ...opts });
-      return { ...openProgram(spec, cols, rows), cwd: spec.cwd };
+      const opened = openProgram(spec, cols, rows);
+      waiting.watch(opened.id, { title: spec.title });
+      return { ...opened, cwd: spec.cwd };
     }
     const spec = terminalSpec(runId, sessionId, kind === 'cli' ? 'cli' : 'live');
     if (kind !== 'cli') {
@@ -698,12 +743,14 @@ function createService({ host }) {
     'cliSessions:list': () => listCliSessions(),
     'cliSessions:rename': (opts) => renameCliSession(opts),
     'term:open': (opts) => openTerminal(opts),
-    'term:kill': ({ id }) => terminals.kill(id),
+    'term:kill': ({ id }) => { waiting.close(id); return terminals.kill(id); },
   }).map(([channel, fn]) => [channel, withWorkspace(fn)]));
 
   const notifications = {
-    'term:input': ({ id, data }) => terminals.input(id, data),
+    'term:input': ({ id, data }) => { waiting.input(id); terminals.input(id, data); },
     'term:resize': ({ id, cols, rows }) => terminals.resize(id, cols, rows),
+    // what the window shows: no notification about the run or session the user is looking at
+    'notify:context': (ctx) => { uiContext = notifier.normalizeContext(ctx); },
   };
 
   return {
@@ -721,7 +768,10 @@ function createService({ host }) {
     // run worktrees left behind: succeeded runs whose removal failed, or unused for 14 days
     // (call at startup, when no run is in progress yet)
     cleanupWorktrees: () => cleanupWorktrees({ worktreesDir: ws.worktrees, runsDir: ws.runs }),
+    // the run the app had in progress when it last closed, as a notification (call at startup)
+    notifyInterruptedRun,
     shutdown() {
+      waiting.closeAll();
       terminals.killAll();
       currentRun?.stop();
     },

@@ -739,6 +739,8 @@
   // true while this screen shows the live run (its gate is answered in the chat, not in a dialog)
   window.arenaShowsRun = (runId) => chat.live && chat.runId === runId
     && !$a('#view-arena').classList.contains('hidden') && !$a('#arena-chat').classList.contains('hidden');
+  // the run this screen shows (live or replayed), for desktop notifications
+  window.arenaShownRunId = () => (!$a('#view-arena').classList.contains('hidden') && !$a('#arena-chat').classList.contains('hidden') ? chat.runId : null);
 
   // ---------------------------------------------------------------- help ("?")
   function openHelp() {

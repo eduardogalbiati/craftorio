@@ -487,6 +487,8 @@
   // true while this screen shows the live run (its gates are answered in the chat, not in a dialog)
   window.duoShowsRun = (runId) => chat.live && chat.runId === runId
     && !$d('#view-duo').classList.contains('hidden') && !$d('#duo-chat').classList.contains('hidden');
+  // the run this screen shows (live or replayed), for desktop notifications
+  window.duoShownRunId = () => (!$d('#view-duo').classList.contains('hidden') && !$d('#duo-chat').classList.contains('hidden') ? chat.runId : null);
 
   // ---------------------------------------------------------------- help ("?")
   // The guide shows the robots of the current setup in a few of their states.

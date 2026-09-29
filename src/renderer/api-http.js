@@ -107,6 +107,9 @@
     cancelSignIn: () => call('auth:cancel'),
     signOut: () => call('auth:signOut'),
     onAuthChange: subscribe('auth:changed'),
+    // desktop notifications are shown by the desktop app only; the browser never gets a click
+    setNotifyContext: (ctx) => notify('notify:context', ctx),
+    onNotificationClick: subscribe('notify:open'),
     platform: 'browser',
     onEvent: subscribe('run:event'),
   };

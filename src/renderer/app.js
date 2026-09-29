@@ -160,6 +160,7 @@ async function init() {
   $('#set-backlog-platform').onchange = async (e) => { state.settings = await api.setSettings({ backlogPlatform: e.target.value }); };
 
   api.onEvent(onEvent);
+  initNotifications();
   initTerminalDock();
   setInterval(renderTicking, 1000);
   loadUsage();
@@ -198,6 +199,47 @@ function showView(view) {
   if (view === 'run') scheduleRender();
   // a pending gate hidden behind a run chat shows up elsewhere
   if (state.approval && $('#approval-modal').classList.contains('hidden')) openApproval();
+  reportNotifyContext();
+}
+
+// ---------------------------------------------------------------------------
+// Desktop notifications: the engine skips those about the run or session this window shows while
+// it is focused, so it is told what that is; clicking a notification opens its run or terminal.
+// ---------------------------------------------------------------------------
+function shownRunId() {
+  if (state.view === 'run') return state.run?.id || null;
+  if (state.view === 'runchat') return window.runChatShownRunId?.() || null;
+  if (state.view === 'duo') return window.duoShownRunId?.() || null;
+  if (state.view === 'arena') return window.arenaShownRunId?.() || null;
+  return null;
+}
+
+// After the current task: the screens set the run they show right after switching to it.
+let notifyContextTimer = null;
+function reportNotifyContext() {
+  if (notifyContextTimer) return;
+  notifyContextTimer = setTimeout(() => {
+    notifyContextTimer = null;
+    api.setNotifyContext({
+      focused: document.hasFocus() && !document.hidden,
+      runId: shownRunId(),
+      terminalId: state.view === 'sessions' ? window.SessionsView?.shownTerminalId() || null : null,
+    });
+  }, 0);
+}
+window.reportNotifyContext = reportNotifyContext;
+
+function initNotifications() {
+  window.addEventListener('focus', reportNotifyContext);
+  window.addEventListener('blur', reportNotifyContext);
+  document.addEventListener('visibilitychange', reportNotifyContext);
+  api.onNotificationClick((target) => {
+    if (target?.terminalId) { window.SessionsView?.focusTerminal(target.terminalId); return; }
+    if (!target?.runId) return;
+    const running = state.run?.id === target.runId && state.run.status === 'running';
+    window.openRunChat?.({ runId: target.runId, workflow: target.workflow, running });
+  });
+  reportNotifyContext();
 }
 
 // Developer mode (Settings › Execution): the Simulation checkboxes (.dev-only) are shown and checked
@@ -1383,6 +1425,7 @@ function getTurn(sess, n) {
 }
 
 function onEvent(ev) {
+  if (ev.type === 'workflow.started' || ev.type === 'workflow.finished') reportNotifyContext();
   state.events.push(ev);
   const sess = ev.session_id ? state.sessions.get(ev.session_id) : null;
 

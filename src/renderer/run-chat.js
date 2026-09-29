@@ -230,6 +230,8 @@
   window.openRunChat = openChatFor;
   // true while this screen shows the live run (its gates are answered here, not in a dialog)
   window.runChatShowsRun = (runId) => chat.live && chat.runId === runId && visible();
+  // the run this screen shows (live or replayed), for desktop notifications
+  window.runChatShownRunId = () => (visible() ? chat.runId : null);
 
   function init() {
     if (!$c('#view-runchat')) return;

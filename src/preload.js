@@ -82,6 +82,13 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.on('auth:changed', handler);
     return () => ipcRenderer.removeListener('auth:changed', handler);
   },
+  // desktop notifications: what the window shows (none about it), and clicks on one ({ runId, workflow } | { terminalId })
+  setNotifyContext: (ctx) => ipcRenderer.send('notify:context', ctx),
+  onNotificationClick: (cb) => {
+    const handler = (_e, target) => cb(target);
+    ipcRenderer.on('notify:open', handler);
+    return () => ipcRenderer.removeListener('notify:open', handler);
+  },
   platform: process.platform,
   onEvent: (cb) => {
     const handler = (_e, ev) => cb(ev);
