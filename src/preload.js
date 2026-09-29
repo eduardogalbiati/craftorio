@@ -16,6 +16,10 @@ contextBridge.exposeInMainWorld('api', {
   // a project's issues: the last sync, and a new sync from its git platform (gh / glab)
   getBacklog: (projectId) => ipcRenderer.invoke('backlog:get', { projectId }),
   syncBacklog: (projectId, platform) => ipcRenderer.invoke('backlog:sync', { projectId, platform }),
+  // assign a workflow to issues (queued, one run at a time), take one out of the queue, pause/resume it
+  assignWorkflow: (projectId, numbers, workflow, inputs, mock) => ipcRenderer.invoke('backlog:assign', { projectId, numbers, workflow, inputs, mock }),
+  unqueueIssue: (projectId, number) => ipcRenderer.invoke('backlog:unqueue', { projectId, number }),
+  pauseQueue: (projectId, paused) => ipcRenderer.invoke('backlog:pause', { projectId, paused }),
   listSkills: () => ipcRenderer.invoke('skills:list'),
   createSkill: (data) => ipcRenderer.invoke('skills:create', data),
   saveSkill: (id, data) => ipcRenderer.invoke('skills:save', { id, data }),

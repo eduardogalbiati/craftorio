@@ -158,6 +158,7 @@ class WorkflowRun extends EventEmitter {
   // budget: { [provider id]: { name, limitUsd, limitTokens, blockOnLimit, usedUsd, usedTokens } }
   // (this month's usage before this run, see src/usage.js); prices: USD per 1M tokens by model.
   // projectId: the project the run belongs to (recorded in workflow.started and summary.json).
+  // issue: { number, url, title } the run implements (Backlog screen), recorded the same way.
   // resume: { runId, fromStep, steps: { id: { output, visits } }, sessions: { agent: providerSessionId }, instruction, worktree: { dir, branch } }
   //   starts at fromStep with the previous run's step outputs and agent conversations (src/supervisor.js resumeSpec),
   //   in the previous run's worktree.
@@ -165,7 +166,7 @@ class WorkflowRun extends EventEmitter {
   //   without it (e.g. simulation runs) the agents work in the repository folder itself.
   // mockSequences: { field: [value per visit] } over the mock provider's defaults (tests).
   // notices: [{ level, message }] logged right after workflow.started (e.g. the workflow file came from a fallback folder).
-  constructor({ file, inputs, mock, runsDir, skillsDirs, budget, prices, projectId, resume, worktreesDir, mockSequences, notices }) {
+  constructor({ file, inputs, mock, runsDir, skillsDirs, budget, prices, projectId, issue, resume, worktreesDir, mockSequences, notices }) {
     super();
     refreshWindowsPath(); // actions (e.g. gh pr merge) need the refreshed PATH
     this.file = file;
@@ -177,6 +178,7 @@ class WorkflowRun extends EventEmitter {
     this.runDir = path.join(runsDir, this.runId);
     this.skillsDirs = [...(skillsDirs || []), BUNDLED_SKILLS];
     this.projectId = projectId || null;
+    this.issue = issue || null;
     this.worktreesDir = worktreesDir || null;
     this.worktree = null; // see setupWorktree
     this.budget = budget || {};
@@ -343,6 +345,7 @@ class WorkflowRun extends EventEmitter {
     this.status = 'running';
     this.emitEvent('workflow.started', {
       workflow: this.wf.metadata?.name, version: this.wf.metadata?.version, project_id: this.projectId,
+      issue: this.issue || undefined,
       file: path.basename(this.file), inputs: this.inputs, mock: this.mock, run_dir: this.runDir,
       resumed_from: this.resume ? { run_id: this.resume.runId, step: this.resume.fromStep } : undefined,
       steps: this.wf.steps.map((s) => ({ id: s.id, type: s.type || 'agent', agent: stepAgentLabel(s) })),
@@ -1027,7 +1030,7 @@ ${stderr || stdout}`.slice(0, 1500)));
     this.emitEvent('workflow.finished', {
       status, error: err?.message || null,
       summary: {
-        run_id: this.runId, workflow: this.wf.metadata?.name, project_id: this.projectId, status,
+        run_id: this.runId, workflow: this.wf.metadata?.name, project_id: this.projectId, issue: this.issue || undefined, status,
         started_at: new Date(this.startedAt).toISOString(), finished_at: new Date().toISOString(),
         duration_ms: Date.now() - this.startedAt, inputs: this.inputs, mock: this.mock, worktree: this.worktreeSummary(),
         tokens, cost_usd: +sessions.reduce((a, s) => a + s.cost_usd, 0).toFixed(6),

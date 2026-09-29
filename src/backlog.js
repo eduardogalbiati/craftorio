@@ -127,26 +127,128 @@ async function syncBacklog({ dir, project, platform, exec }) {
   return data;
 }
 
-// A run works on an issue when its task or one of its text inputs mentions the issue's URL or
-// "#<number>". Simulated runs are left out (they don't touch the issue).
+// ---- issue ↔ run links -------------------------------------------------------------------
+// A run works on an issue when it was started for it (the Backlog's "Assign workflow", recorded
+// as run.issue) or, for runs started by hand, when its task or one of its text inputs mentions
+// the issue's URL or "#<number>". Simulated runs only count through the explicit link.
 function mentions(run, issue) {
   const text = [run.task, ...Object.values(run.inputs || {})].filter((v) => typeof v === 'string').join('\n');
   return (!!issue.url && text.includes(issue.url)) || new RegExp(`(^|[^\\w/&])#${issue.number}(?!\\d)`).test(text);
 }
+const startedFor = (run, issue) => !!run.issue && (run.issue.url ? run.issue.url === issue.url : run.issue.number === issue.number);
+
+// Kanban column from the issue state, its place in the queue and its latest run.
+function columnOf(issue, latest, queued) {
+  if (issue.state === 'closed') return 'done';
+  if (queued) return 'in_progress';
+  if (!latest) return 'todo';
+  if (latest.waiting) return 'waiting';
+  if (latest.status === 'success') return 'done';
+  if (latest.status === 'cancelled') return 'todo';
+  return 'in_progress'; // running, failed, interrupted
+}
 
 /**
- * Adds to each issue the project's runs that work on it (newest first) and its column:
- * done (closed), in_progress (open with a linked run whose latest one was not cancelled) or todo.
+ * Adds to each issue the project's runs that work on it (newest first), its place in the queue
+ * and its column: todo | in_progress | waiting (a run stopped at a human gate) | done.
  * @param {object[]} issues from fetchIssues
- * @param {{ runId, workflow, status, startedAt, mock?, task?, inputs? }[]} runs the project's runs
+ * @param {{ runId, workflow, status, startedAt, mock?, waiting?, issue?, task?, inputs? }[]} runs the project's runs
+ * @param {{ items: object[] } | null} queue the project's queue (readQueue)
  */
-function linkRuns(issues, runs) {
-  const real = runs.filter((r) => !r.mock).sort((a, b) => String(b.startedAt).localeCompare(String(a.startedAt)));
+function linkRuns(issues, runs, queue = null) {
+  const sorted = [...runs].sort((a, b) => String(b.startedAt).localeCompare(String(a.startedAt)));
+  const items = queue?.items || [];
   return issues.map((issue) => {
-    const linked = real.filter((r) => mentions(r, issue)).map((r) => ({ runId: r.runId, workflow: r.workflow, status: r.status, startedAt: r.startedAt }));
-    const column = issue.state === 'closed' ? 'done' : linked.length && linked[0].status !== 'cancelled' ? 'in_progress' : 'todo';
-    return { ...issue, runs: linked, column };
+    const linked = sorted.filter((r) => startedFor(r, issue) || (!r.mock && !r.issue && mentions(r, issue)))
+      .map((r) => ({ runId: r.runId, workflow: r.workflow, status: r.status, startedAt: r.startedAt, mock: !!r.mock, waiting: !!r.waiting }));
+    const at = items.findIndex((q) => q.number === issue.number);
+    const queued = at < 0 ? null : { position: at + 1, workflow: items[at].workflowName || items[at].workflow, mock: !!items[at].mock };
+    return { ...issue, runs: linked, queued, column: columnOf(issue, linked[0], queued) };
   });
 }
 
-module.exports = { PLATFORMS, DEFAULT_PLATFORM, parseRepoUrl, platformOfHost, taskProgress, fetchIssues, readBacklog, syncBacklog, linkRuns };
+// ---- queue -----------------------------------------------------------------------------------
+// Issues assigned to a workflow wait in <workspace>/backlog/<project id>.queue.json until the
+// service starts them, one at a time: { paused, error, inputs: { <workflow file>: inputs }, items }.
+const queueFile = (dir, projectId) => path.join(dir, `${path.basename(String(projectId))}.queue.json`);
+const emptyQueue = () => ({ paused: false, error: null, inputs: {}, items: [] });
+
+function readQueue(dir, projectId) {
+  try { return { ...emptyQueue(), ...JSON.parse(fs.readFileSync(queueFile(dir, projectId), 'utf8')) }; } catch { return emptyQueue(); }
+}
+
+function writeQueue(dir, projectId, queue) {
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(queueFile(dir, projectId), JSON.stringify(queue, null, 2));
+  return queue;
+}
+
+const updateQueue = (dir, projectId, fn) => writeQueue(dir, projectId, fn(readQueue(dir, projectId)) || readQueue(dir, projectId));
+
+/**
+ * Queues issues for a workflow and remembers the inputs used for it in this project. Issues
+ * already queued are skipped. Assigning resumes a paused queue.
+ * @param {{ issues: { number, url, title, body }[], workflow: string, workflowName?: string, inputs?: object, mock?: boolean }} a
+ */
+function enqueue(dir, projectId, { issues, workflow, workflowName = null, inputs = {}, mock = false }) {
+  return updateQueue(dir, projectId, (q) => {
+    const have = new Set(q.items.map((x) => x.number));
+    const now = new Date().toISOString();
+    const added = issues.filter((i) => !have.has(i.number)).map((i) => ({
+      number: i.number, url: i.url, title: i.title, body: i.body || '', workflow, workflowName, inputs, mock: !!mock, addedAt: now,
+    }));
+    return { ...q, paused: false, error: null, inputs: { ...q.inputs, [workflow]: inputs }, items: [...q.items, ...added] };
+  });
+}
+
+function unqueue(dir, projectId, number) {
+  return updateQueue(dir, projectId, (q) => ({ ...q, items: q.items.filter((x) => x.number !== number) }));
+}
+
+function setPaused(dir, projectId, paused, error = null) {
+  return updateQueue(dir, projectId, (q) => ({ ...q, paused: !!paused, error: paused ? error : null }));
+}
+
+// Project ids with a queue file.
+function queuedProjects(dir) {
+  try { return fs.readdirSync(dir).filter((f) => f.endsWith('.queue.json')).map((f) => f.slice(0, -'.queue.json'.length)); } catch { return []; }
+}
+
+/** The next item to start: the oldest one across the projects whose queue is not paused. */
+function nextQueued(dir) {
+  const heads = queuedProjects(dir)
+    .map((projectId) => ({ projectId, q: readQueue(dir, projectId) }))
+    .filter(({ q }) => !q.paused && q.items.length)
+    .map(({ projectId, q }) => ({ projectId, item: q.items[0] }));
+  heads.sort((a, b) => String(a.item.addedAt).localeCompare(String(b.item.addedAt)));
+  return heads[0] || null;
+}
+
+/** Pauses every queue with items waiting (the app restarted: nothing starts without the user). */
+function pauseAll(dir, reason) {
+  for (const projectId of queuedProjects(dir)) {
+    const q = readQueue(dir, projectId);
+    if (q.items.length && !q.paused) writeQueue(dir, projectId, { ...q, paused: true, error: reason });
+  }
+}
+
+/**
+ * The inputs of a run started for a queued issue: the saved inputs, the task (issue title, URL and
+ * body), the project folder in the path inputs left empty, and `issue` when the workflow has it.
+ * @param {{ inputs: object }} wf the workflow (its input definitions)
+ */
+function runInputs(item, wf, folder) {
+  const inputs = { ...item.inputs };
+  const defs = wf.inputs || {};
+  if (defs.task) inputs.task = `${item.title}\n\nIssue: ${item.url}\n\n${item.body || ''}`.trim();
+  for (const [k, def] of Object.entries(defs)) {
+    if (k !== 'task' && (def.type || 'string') === 'string' && /path|dir/i.test(k) && !inputs[k] && folder) inputs[k] = folder;
+  }
+  if (defs.issue) inputs.issue = item.url;
+  return inputs;
+}
+
+module.exports = {
+  PLATFORMS, DEFAULT_PLATFORM, parseRepoUrl, platformOfHost, taskProgress, fetchIssues, readBacklog, syncBacklog, linkRuns,
+  readQueue, enqueue, unqueue, setPaused, nextQueued, pauseAll, runInputs,
+};

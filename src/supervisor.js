@@ -166,7 +166,7 @@ function resumeSpec(runDir, fromStep) {
     if (ev.session?.agent && ev.session.provider_session_id && ev.session.provider !== 'mock') sessions[ev.session.agent] = ev.session.provider_session_id;
     if (/^worktree\./.test(ev.type) && ev.dir) worktree = { dir: ev.dir, branch: ev.branch || worktree?.branch || null };
   }
-  return { runId: path.basename(runDir), file: started.file, inputs: started.inputs || {}, mock: !!started.mock, projectId: started.project_id || null, fromStep, steps, sessions, worktree };
+  return { runId: path.basename(runDir), file: started.file, inputs: started.inputs || {}, mock: !!started.mock, projectId: started.project_id || null, issue: started.issue || null, fromStep, steps, sessions, worktree };
 }
 
 // The workflow's supervisor settings (orchestrator.supervisor + providers), from the run's workflow file.

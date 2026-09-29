@@ -110,11 +110,71 @@ test('issues link to the runs that mention them and land in a kanban column', ()
   const out = backlog.linkRuns([issue(1, 'open'), issue(2, 'open'), issue(3, 'open'), issue(4, 'closed'), issue(22, 'open')], runs);
   const by = Object.fromEntries(out.map((i) => [i.number, i]));
   assert.deepEqual(by[1].runs.map((r) => r.runId), ['b', 'a']); // newest first
-  assert.deepEqual(by[1].runs[0], { runId: 'b', workflow: 'software-development', status: 'running', startedAt: '2026-09-03' });
+  assert.deepEqual(by[1].runs[0], { runId: 'b', workflow: 'software-development', status: 'running', startedAt: '2026-09-03', mock: false, waiting: false });
   assert.equal(by[1].column, 'in_progress');
+  assert.equal(by[1].queued, null);
   assert.equal(by[2].column, 'todo'); // its only run was cancelled
   assert.deepEqual(by[3].runs, []); // simulated and look-alike mentions don't count
   assert.equal(by[3].column, 'todo');
   assert.equal(by[4].column, 'done');
   assert.deepEqual(by[22].runs.map((r) => r.runId), ['b']);
+});
+
+test('a run started for an issue links to it even when simulated; its state picks the column', () => {
+  const issue = (number) => ({ number, state: 'open', url: `https://github.com/o/r/issues/${number}` });
+  const run = (runId, number, extra) => ({ runId, workflow: 'w', startedAt: `2026-09-0${runId.length}`, issue: { number, url: `https://github.com/o/r/issues/${number}` }, ...extra });
+  const out = backlog.linkRuns([issue(1), issue(2), issue(3), issue(4), issue(5)], [
+    run('a', 1, { status: 'running', waiting: true, mock: true }),
+    run('b', 2, { status: 'success' }),
+    run('c', 3, { status: 'failed' }),
+    // started for #5 but its task mentions #4: only the explicit link counts
+    run('d', 5, { status: 'running', task: 'Also see #4' }),
+  ], { items: [{ number: 4, workflow: 'software-development.yaml', workflowName: 'software-development', mock: true }] });
+  const by = Object.fromEntries(out.map((i) => [i.number, i]));
+  assert.equal(by[1].column, 'waiting');
+  assert.equal(by[1].runs[0].mock, true);
+  assert.equal(by[2].column, 'done');
+  assert.equal(by[3].column, 'in_progress');
+  assert.deepEqual(by[4].runs, []);
+  assert.deepEqual(by[4].queued, { position: 1, workflow: 'software-development', mock: true });
+  assert.equal(by[4].column, 'in_progress');
+  assert.equal(by[5].column, 'in_progress');
+});
+
+test('the queue: enqueue skips duplicates and remembers inputs, next item across projects, pause', (t) => {
+  const dir = tmp(t);
+  const issue = (number) => ({ number, url: `u${number}`, title: `T${number}`, body: `B${number}` });
+  assert.deepEqual(backlog.readQueue(dir, 'p'), { paused: false, error: null, inputs: {}, items: [] });
+  assert.equal(backlog.nextQueued(dir), null);
+
+  backlog.setPaused(dir, 'p', true, 'stopped');
+  let q = backlog.enqueue(dir, 'p', { issues: [issue(1), issue(2)], workflow: 'sd.yaml', inputs: { language: 'go' } });
+  assert.equal(q.paused, false); // assigning resumes the queue
+  assert.equal(q.error, null);
+  q = backlog.enqueue(dir, 'p', { issues: [issue(2), issue(3)], workflow: 'sd.yaml', inputs: { language: 'js' }, mock: true });
+  assert.deepEqual(q.items.map((x) => [x.number, x.inputs.language, x.mock]), [[1, 'go', false], [2, 'go', false], [3, 'js', true]]);
+  assert.deepEqual(q.inputs, { 'sd.yaml': { language: 'js' } });
+
+  backlog.enqueue(dir, 'other', { issues: [issue(9)], workflow: 'sd.yaml' });
+  assert.deepEqual(backlog.nextQueued(dir), { projectId: 'p', item: q.items[0] }); // the oldest first
+  backlog.setPaused(dir, 'p', true, 'why');
+  assert.equal(backlog.nextQueued(dir).projectId, 'other');
+  assert.equal(backlog.readQueue(dir, 'p').error, 'why');
+
+  backlog.unqueue(dir, 'other', 9);
+  assert.equal(backlog.nextQueued(dir), null);
+  backlog.setPaused(dir, 'p', false);
+  backlog.pauseAll(dir, 'restarted');
+  assert.deepEqual([backlog.readQueue(dir, 'p').paused, backlog.readQueue(dir, 'p').error], [true, 'restarted']);
+  assert.equal(backlog.readQueue(dir, 'other').paused, false); // nothing waiting there
+});
+
+test('a queued issue becomes the run inputs: task, project folder and issue', () => {
+  const item = { number: 7, url: 'https://github.com/o/r/issues/7', title: 'Add X', body: 'Details', inputs: { language: 'go', repo_path: '' } };
+  const wf = { inputs: { task: {}, repo_path: { type: 'string' }, language: {}, issue: {}, run_id: { type: 'run' } } };
+  assert.deepEqual(backlog.runInputs(item, wf, 'C:/repo'), {
+    task: 'Add X\n\nIssue: https://github.com/o/r/issues/7\n\nDetails', repo_path: 'C:/repo', language: 'go', issue: 'https://github.com/o/r/issues/7',
+  });
+  // no `issue` input: the URL is only in the task
+  assert.equal(backlog.runInputs(item, { inputs: { task: {} } }, 'C:/repo').issue, undefined);
 });

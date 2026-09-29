@@ -1,9 +1,11 @@
 // Backlog screen: a project's issues synced from its git platform (src/backlog.js), as a list or a
-// kanban (To do / In progress / Done). Shows the last sync right away and syncs again in the
-// background each time the screen opens. The platform defaults to Settings › General › Backlog
-// and can be switched here. Issues link to the runs working on them (a run whose task mentions
-// the issue); "In progress" = open with such a run.
-// Uses app.js globals ($, esc, state, errMsg, dateOf, markdownHtml, showView).
+// kanban (To do / In progress / Waiting for approval / Done). Shows the last sync right away and
+// syncs again in the background each time the screen opens. The platform defaults to
+// Settings › General › Backlog and can be switched here.
+// Selected To do issues can be assigned to a workflow: they are queued and the service runs them
+// one at a time (the run records the issue). Issues link to the runs working on them.
+// Uses app.js globals ($, esc, state, errMsg, dateOf, markdownHtml, showView, openModal,
+// closeModal, devMode, openApproval).
 /* global api */
 (() => {
   // Must match PLATFORMS in src/backlog.js (soon = no sync yet).
@@ -11,8 +13,9 @@
   window.BACKLOG_PLATFORMS = PLATFORMS;
   const PROJECT_KEY = 'multiagent.backlogProject';
   const MODE_KEY = 'multiagent.backlogMode';
+  const WORKFLOW_KEY = 'multiagent.backlogWorkflow';
   const FILTERS = [['open', 'Open'], ['closed', 'Closed'], ['all', 'All']];
-  const COLUMNS = [['todo', 'To do'], ['in_progress', 'In progress'], ['done', 'Done']];
+  const COLUMNS = [['todo', 'To do'], ['in_progress', 'In progress'], ['waiting', 'Waiting for approval'], ['done', 'Done']];
 
   const load = (key) => { try { return localStorage.getItem(key); } catch { return null; } };
   const save = (key, v) => { try { localStorage.setItem(key, v); } catch { /* storage unavailable */ } };
@@ -20,10 +23,12 @@
   const bl = {
     projects: [], projectId: null, platform: null, data: null, error: null, syncing: false,
     mode: load(MODE_KEY) === 'kanban' ? 'kanban' : 'list', filter: 'open', q: '', expanded: new Set(), seq: 0,
+    selected: new Set(), workflows: [],
   };
   const $b = (sel) => document.querySelector(sel);
   const project = () => bl.projects.find((p) => p.id === bl.projectId) || null;
   const visible = () => state.view === 'backlog';
+  const selectable = (i) => i.state === 'open' && i.column === 'todo';
 
   async function refreshBacklog() {
     try {
@@ -47,12 +52,20 @@
     bl.data = null;
     bl.error = null;
     bl.expanded.clear();
+    bl.selected.clear();
     if (id) save(PROJECT_KEY, id);
     if (!id) { render(); return; }
     try { bl.data = await api.getBacklog(id); } catch (e) { bl.error = errMsg(e); }
     bl.platform = bl.data?.platform || state.settings.backlogPlatform || 'github';
     render();
     if (project()?.repo && !PLATFORMS[bl.platform]?.soon) sync();
+  }
+
+  function setData(data) {
+    bl.data = data;
+    // selected issues that left To do (assigned, closed) are dropped from the selection
+    const ok = new Set((data?.issues || []).filter(selectable).map((i) => i.number));
+    for (const n of [...bl.selected]) if (!ok.has(n)) bl.selected.delete(n);
   }
 
   async function sync() {
@@ -64,7 +77,7 @@
     render();
     try {
       const data = await api.syncBacklog(p.id, bl.platform);
-      if (seq === bl.seq && bl.projectId === p.id) bl.data = data;
+      if (seq === bl.seq && bl.projectId === p.id) setData(data);
     } catch (e) {
       if (seq === bl.seq) bl.error = errMsg(e);
     } finally {
@@ -73,29 +86,112 @@
     }
   }
 
-  // Runs start and end while the screen is open: re-reads the cached issues (cheap, no sync).
+  // Re-reads the cached issues with their runs and queue (cheap, no sync).
+  async function reload() {
+    const id = bl.projectId;
+    if (!id || bl.syncing) return;
+    try {
+      const data = await api.getBacklog(id);
+      if (data && bl.projectId === id && !bl.syncing) { setData(data); render(); }
+    } catch { /* keep what is shown */ }
+  }
+
+  // Runs start, stop at gates and end while the screen is open.
   let runTimer = null;
   api.onEvent(() => {
-    if (!visible() || !bl.projectId || runTimer) return;
-    runTimer = setTimeout(async () => {
-      runTimer = null;
-      const id = bl.projectId;
-      try {
-        const data = await api.getBacklog(id);
-        if (data && bl.projectId === id && !bl.syncing) { bl.data = data; render(); }
-      } catch { /* keep what is shown */ }
-    }, 3000);
+    if (!visible() || runTimer) return;
+    runTimer = setTimeout(() => { runTimer = null; reload(); }, 1500);
   });
+  // The queue also changes without run events (a start that fails, the next issue starting).
+  setInterval(() => {
+    const busy = bl.data?.queue?.items?.length || bl.data?.issues?.some((i) => i.runs?.[0]?.status === 'running');
+    if (visible() && busy) reload();
+  }, 5000);
 
   // Opens a run in Workflows › Runs, expanded.
   function openRun(runId) {
     state.workflowsTab = 'runs';
     state.wr.filter = 'all';
+    state.wr.showSim = true;
     state.wr.expanded.add(runId);
     showView('workflows');
     setTimeout(() => document.querySelector(`.pr-run[data-run="${CSS.escape(runId)}"]`)?.scrollIntoView({ block: 'center' }), 600);
   }
 
+  // A waiting card opens the pending approval of the current run (or the run screen).
+  function openGate() {
+    if (state.approval) openApproval(); else showView('run');
+  }
+
+  // ---- assign a workflow -------------------------------------------------------------------
+  const skipInput = (k, def) => k === 'task' || k === 'issue' || def.type === 'run' || ((def.type || 'string') === 'string' && /path|dir/i.test(k));
+
+  function renderAssignInputs() {
+    const wf = bl.workflows.find((w) => w.file === $b('#assign-workflow').value);
+    $b('#assign-wf-desc').textContent = wf?.description || '';
+    const saved = bl.data?.queue?.inputs?.[wf?.file] || {};
+    const fields = Object.entries(wf?.inputs || {}).filter(([k, def]) => !skipInput(k, def || {}));
+    $b('#assign-inputs').innerHTML = fields.map(([k, def = {}]) => {
+      const value = saved[k] ?? def.default ?? '';
+      const label = `<label for="ai-${esc(k)}">${esc(k)}${def.required ? ' <span class="req">*</span>' : ''}</label>`;
+      const ctrl = Array.isArray(def.enum)
+        ? `<select id="ai-${esc(k)}" data-input="${esc(k)}">${def.enum.map((o) => `<option value="${esc(o)}"${String(o) === String(value) ? ' selected' : ''}>${esc(o)}</option>`).join('')}</select>`
+        : `<input type="text" id="ai-${esc(k)}" data-input="${esc(k)}" value="${esc(value)}" />`;
+      return `<div class="field">${label}${ctrl}${def.description ? `<div class="hint">${esc(def.description)}</div>` : ''}</div>`;
+    }).join('');
+    updateAssignNote();
+  }
+
+  function updateAssignNote() {
+    const n = bl.selected.size;
+    const mock = $b('#assign-mock').checked;
+    const plural = n > 1 ? 's' : '';
+    $b('#btn-assign-ok').textContent = `${mock ? 'Simulate' : 'Start'} ${n} run${plural}`;
+    const note = $b('#assign-note');
+    note.className = `small ${mock ? 'muted' : 'warn-text'}`;
+    note.textContent = mock
+      ? `${n} simulated run${plural}: no CLI is called and nothing is spent.`
+      : `${n} real run${plural}, one at a time, starting now if nothing else is running. They use your CLI subscriptions. Human gates still wait for you.`;
+  }
+
+  async function openAssign() {
+    if (!bl.selected.size) return;
+    $b('#assign-error').textContent = '';
+    try { bl.workflows = (await api.listWorkflows()).filter((w) => !w.error && w.inputs?.task); } catch (e) { bl.error = errMsg(e); render(); return; }
+    if (!bl.workflows.length) { bl.error = 'No workflow has a task input to receive the issues.'; render(); return; }
+    const issues = (bl.data?.issues || []).filter((i) => bl.selected.has(i.number));
+    $b('#assign-issues').textContent = issues.map((i) => `#${i.number} ${i.title}`).join(' · ');
+    const sel = $b('#assign-workflow');
+    sel.innerHTML = bl.workflows.map((w) => `<option value="${esc(w.file)}">${esc(w.name)}</option>`).join('');
+    const files = bl.workflows.map((w) => w.file);
+    sel.value = [load(WORKFLOW_KEY), 'software-development.yaml', files[0]].find((f) => f && files.includes(f));
+    $b('#assign-mock').checked = devMode();
+    renderAssignInputs();
+    openModal('#assign-modal');
+  }
+
+  async function submitAssign(e) {
+    e.preventDefault();
+    const workflow = $b('#assign-workflow').value;
+    const inputs = {};
+    document.querySelectorAll('#assign-inputs [data-input]').forEach((el) => { if (el.value.trim() !== '') inputs[el.dataset.input] = el.value.trim(); });
+    const btn = $b('#btn-assign-ok');
+    btn.disabled = true;
+    try {
+      const data = await api.assignWorkflow(bl.projectId, [...bl.selected], workflow, inputs, devMode() && $b('#assign-mock').checked);
+      save(WORKFLOW_KEY, workflow);
+      bl.selected.clear();
+      setData(data);
+      closeModal('#assign-modal');
+      render();
+    } catch (err) {
+      $b('#assign-error').textContent = errMsg(err);
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  // ---- rendering ---------------------------------------------------------------------------
   const matches = (i) => {
     if (!bl.q) return true;
     const hay = `#${i.number} ${i.title} ${i.labels.map((l) => l.name).join(' ')} ${i.author || ''} ${i.assignees.join(' ')}`.toLowerCase();
@@ -108,23 +204,34 @@
     const pct = Math.round((i.tasks.done / i.tasks.total) * 100);
     return `<span class="bl-tasks" title="${i.tasks.done} of ${i.tasks.total} tasks done"><span class="bl-bar"><span style="width:${pct}%"></span></span><span class="mono small">${i.tasks.done}/${i.tasks.total}</span></span>`;
   };
-  // The latest run on the issue, as a link (all of them when expanded).
   const runLink = (r) => `<button class="bl-run" type="button" data-run="${esc(r.runId)}" title="Open run ${esc(r.runId)}">
-      <span class="pill pill-${esc(r.status)}">${esc(r.status)}</span><span>${esc(r.workflow || 'workflow')}</span></button>`;
+      <span class="pill pill-${esc(r.status)}">${esc(r.waiting ? 'waiting' : r.status)}</span><span>${esc(r.workflow || 'workflow')}</span>${r.mock ? '<span class="badge p-mock">simulated</span>' : ''}</button>`;
+  const checkbox = (i) => (selectable(i) ? `<input type="checkbox" class="bl-check" data-sel="${i.number}" aria-label="Select #${i.number}"${bl.selected.has(i.number) ? ' checked' : ''} />` : '');
+  // What the automation is doing with the issue: queued, its latest run, the gate waiting for you.
+  function status(i) {
+    if (i.queued) {
+      return `<span class="bl-queued"><span class="badge">queued #${i.queued.position}</span><span class="small">${esc(i.queued.workflow)}</span>${i.queued.mock ? '<span class="badge p-mock">simulated</span>' : ''}
+        <button class="link-btn small" type="button" data-unqueue="${i.number}" title="Take it out of the queue">remove</button></span>`;
+    }
+    const r = i.runs?.[0];
+    if (!r) return '';
+    return `${runLink(r)}${i.column === 'waiting' ? '<button class="btn sm primary" type="button" data-gate>Review approval</button>' : ''}`;
+  }
 
   function issueRow(i) {
     const open = bl.expanded.has(i.number);
     const host = PLATFORMS[bl.data?.platform]?.label || 'the platform';
     return `
-      <div class="pr-run bl-issue${open ? ' open' : ''}" data-n="${i.number}">
+      <div class="pr-run bl-issue${open ? ' open' : ''}${bl.selected.has(i.number) ? ' selected' : ''}" data-n="${i.number}">
         <div class="bl-row" data-act="toggle">
+          <span class="bl-sel">${checkbox(i)}</span>
           <span class="bl-state ${i.state}" title="${i.state === 'open' ? 'Open' : 'Closed'}"></span>
           <span class="bl-num mono">#${i.number}</span>
           <div class="bl-main">
             <div class="bl-title">${esc(i.title)}</div>
             <div class="bl-labels">${labels(i)}</div>
           </div>
-          <span>${i.runs?.[0] ? runLink(i.runs[0]) : ''}</span>
+          <span class="bl-status">${status(i)}</span>
           ${tasks(i) || '<span></span>'}
           <span class="pr-meta"><label>Updated</label>${esc(dateOf(i.updatedAt))}</span>
           <span class="pr-chev">${open ? '▾' : '▸'}</span>
@@ -140,11 +247,11 @@
   }
 
   const card = (i) => `
-    <div class="bl-card">
-      <div class="bl-card-head"><span class="bl-num mono">#${i.number}</span><a class="bl-card-title" href="${esc(i.url)}" target="_blank" rel="noopener" title="Open on ${esc(PLATFORMS[bl.data?.platform]?.label || 'the platform')}">${esc(i.title)}</a></div>
+    <div class="bl-card${bl.selected.has(i.number) ? ' selected' : ''}" data-n="${i.number}">
+      <div class="bl-card-head">${checkbox(i)}<span class="bl-num mono">#${i.number}</span><a class="bl-card-title" href="${esc(i.url)}" target="_blank" rel="noopener" title="Open on ${esc(PLATFORMS[bl.data?.platform]?.label || 'the platform')}">${esc(i.title)}</a></div>
       <div class="bl-labels">${labels(i)}</div>
       ${tasks(i)}
-      ${i.runs?.[0] ? `<div class="bl-card-run">${runLink(i.runs[0])}</div>` : ''}
+      ${status(i) ? `<div class="bl-card-run">${status(i)}</div>` : ''}
     </div>`;
 
   function renderList(issues) {
@@ -161,6 +268,20 @@
         <div class="bl-col-body">${items.map(card).join('') || '<p class="muted small">Nothing here.</p>'}</div>
       </section>`;
     }).join('')}</div>`;
+  }
+
+  function renderQueue() {
+    const box = $b('#bl-queue');
+    const q = bl.data?.queue;
+    const n = q?.items?.length || 0;
+    box.classList.toggle('hidden', !n && !q?.error);
+    if (!n && !q?.error) { box.innerHTML = ''; return; }
+    const mode = q.paused ? '<span class="badge warn">paused</span>' : '<span class="badge live">active</span>';
+    box.innerHTML = `
+      <span><b>Queue</b> ${mode} ${n ? `${n} issue${n > 1 ? 's' : ''} waiting · next #${q.items[0].number} (${esc(q.items[0].workflowName || q.items[0].workflow)})` : 'empty'}</span>
+      ${q.error ? `<span class="error small">${esc(q.error)}</span>` : ''}
+      <span class="spacer"></span>
+      <button class="btn sm${q.paused ? ' primary' : ' ghost'}" type="button" data-pause="${q.paused ? 'off' : 'on'}">${q.paused ? 'Resume' : 'Pause'}</button>`;
   }
 
   function render() {
@@ -182,6 +303,11 @@
       b.classList.toggle('active', b.dataset.mode === bl.mode);
       b.setAttribute('aria-selected', String(b.dataset.mode === bl.mode));
     });
+    const n = bl.selected.size;
+    $b('#btn-bl-assign').classList.toggle('hidden', !n);
+    $b('#btn-bl-assign').textContent = `Assign workflow… (${n})`;
+    $b('#btn-bl-clear').classList.toggle('hidden', !n);
+
     const issues = bl.data?.issues || [];
     const count = (f) => issues.filter((i) => f === 'all' || i.state === f).length;
     const filters = $b('#bl-filters');
@@ -190,6 +316,7 @@
       `<button class="chip${bl.filter === f ? ' active' : ''}" data-f="${f}">${label} <span class="muted">${count(f)}</span></button>`).join('');
     $b('#bl-synced').textContent = bl.syncing ? 'Syncing…' : bl.data ? `Synced ${dateOf(bl.data.syncedAt)} from ${PLATFORMS[bl.data.platform]?.label || bl.data.platform}` : '';
     $b('#bl-error').textContent = bl.error || '';
+    renderQueue();
 
     const list = $b('#bl-list');
     if (!bl.projects.length) {
@@ -205,6 +332,7 @@
     }
   }
 
+  // ---- events --------------------------------------------------------------------------------
   $b('#bl-project').onchange = (e) => selectProject(e.target.value || null);
   $b('#bl-platform').onchange = (e) => {
     bl.platform = e.target.value;
@@ -215,6 +343,8 @@
     if (!PLATFORMS[bl.platform]?.soon) sync();
   };
   $b('#btn-bl-sync').onclick = sync;
+  $b('#btn-bl-assign').onclick = openAssign;
+  $b('#btn-bl-clear').onclick = () => { bl.selected.clear(); render(); };
   $b('#bl-search').oninput = (e) => { bl.q = e.target.value.trim(); render(); };
   $b('#bl-mode').onclick = (e) => {
     const mode = e.target.closest('[data-mode]')?.dataset.mode;
@@ -224,9 +354,30 @@
     const f = e.target.closest('[data-f]')?.dataset.f;
     if (f) { bl.filter = f; render(); }
   };
-  $b('#bl-list').onclick = (e) => {
+  $b('#bl-queue').onclick = async (e) => {
+    const b = e.target.closest('[data-pause]');
+    if (!b) return;
+    b.disabled = true;
+    try { setData(await api.pauseQueue(bl.projectId, b.dataset.pause === 'on')); } catch (err) { bl.error = errMsg(err); }
+    render();
+  };
+  $b('#bl-list').onclick = async (e) => {
+    const check = e.target.closest('[data-sel]');
+    if (check) {
+      const n = Number(check.dataset.sel);
+      if (check.checked) bl.selected.add(n); else bl.selected.delete(n);
+      render();
+      return;
+    }
     const run = e.target.closest('[data-run]');
     if (run) { openRun(run.dataset.run); return; }
+    if (e.target.closest('[data-gate]')) { openGate(); return; }
+    const out = e.target.closest('[data-unqueue]');
+    if (out) {
+      try { setData(await api.unqueueIssue(bl.projectId, Number(out.dataset.unqueue))); } catch (err) { bl.error = errMsg(err); }
+      render();
+      return;
+    }
     if (e.target.closest('a')) return;
     const row = e.target.closest('[data-act="toggle"]');
     if (!row) return;
@@ -234,6 +385,10 @@
     if (bl.expanded.has(n)) bl.expanded.delete(n); else bl.expanded.add(n);
     render();
   };
+  $b('#assign-workflow').onchange = renderAssignInputs;
+  $b('#assign-mock').onchange = updateAssignNote;
+  $b('#assign-form').onsubmit = submitAssign;
+  $b('#btn-assign-cancel').onclick = () => closeModal('#assign-modal');
 
   window.refreshBacklog = refreshBacklog;
 })();

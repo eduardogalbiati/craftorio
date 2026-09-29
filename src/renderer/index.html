@@ -251,9 +251,12 @@
           </div>
           <div id="bl-filters" class="chips"></div>
           <input type="text" id="bl-search" placeholder="Search issues, labels…" aria-label="Search" />
+          <button id="btn-bl-assign" class="btn sm primary hidden" type="button">Assign workflow…</button>
+          <button id="btn-bl-clear" class="btn sm ghost hidden" type="button">Clear selection</button>
           <span class="spacer"></span>
           <span id="bl-synced" class="muted small"></span>
         </div>
+        <div id="bl-queue" class="bl-queue hidden"></div>
         <p id="bl-error" class="error small"></p>
         <div id="bl-list" class="pr-list"></div>
       </section>
@@ -1011,6 +1014,26 @@
       <div class="modal-actions">
         <button type="button" id="btn-bd-cancel" class="btn ghost">Cancel</button>
         <button type="submit" class="btn primary">Save</button>
+      </div>
+    </form>
+  </div>
+
+  <div id="assign-modal" class="modal hidden">
+    <form id="assign-form" class="modal-card">
+      <h3 id="assign-title">Assign a workflow</h3>
+      <p id="assign-issues" class="muted small"></p>
+      <div class="field">
+        <label for="assign-workflow">Workflow</label>
+        <select id="assign-workflow"></select>
+        <div id="assign-wf-desc" class="hint"></div>
+      </div>
+      <div id="assign-inputs"></div>
+      <label class="check dev-only"><input type="checkbox" id="assign-mock" /><span>Simulation (no CLI is called, nothing is spent)</span></label>
+      <p id="assign-note" class="small"></p>
+      <p id="assign-error" class="error small"></p>
+      <div class="modal-actions">
+        <button type="button" id="btn-assign-cancel" class="btn ghost">Cancel</button>
+        <button type="submit" id="btn-assign-ok" class="btn primary">Start</button>
       </div>
     </form>
   </div>

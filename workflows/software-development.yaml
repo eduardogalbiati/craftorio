@@ -39,7 +39,7 @@ kind: Workflow
 
 metadata:
   name: software-development
-  version: 0.9.0
+  version: 0.10.0
   description: Implements, reviews, tests, builds, watches CI and the PR/MR, publishes a preview and, once approved, merges and tracks the production deploy. Works with several languages on GitHub or GitLab.
   tags: [dev, review, test, build, ci, pr, deploy, github, gitlab]
   # Dashboard category: plan (Plan & Design), build (Code & Build) or monitor (Monitor & Improve).
@@ -51,6 +51,10 @@ inputs:
     type: string
     required: true
     description: Feature or bug to implement.
+  issue:
+    type: string
+    default: ""
+    description: "URL of the issue this run implements (set by the Backlog screen). The PR/MR closes it."
   repo_path:
     type: string
     required: true
@@ -543,6 +547,9 @@ steps:
       1. Make sure the branch is up to date on the remote.
       2. Make sure a PR/MR to the base is open (reuse it if it exists; otherwise create
          one with a short title and this summary: {{ steps.develop.output.summary }}).
+         {% if inputs.issue %}The PR/MR body must also close the issue this run implements,
+         {{ inputs.issue }}: add a line `Closes #<number>` with the issue number from that URL
+         (if the PR/MR already exists without it, edit its body to add it).{% endif %}
       3. On EVERY visit, before anything else, check the PR/MR mergeability (see the
          skill). If it conflicts with the base (GitHub `mergeable: CONFLICTING` /
          `mergeStateStatus: DIRTY`; GitLab `has_conflicts` / `detailed_merge_status:

@@ -83,6 +83,7 @@ function readRun(runsDir, runId) {
     costUsd: sessions.reduce((a, s) => a + (s.cost_usd || 0), 0),
     tokens: sumTokens(sessions),
     projectId: summary?.project_id || started?.project_id || null,
+    issue: summary?.issue || started?.issue || null,
     task: firstText(inputs),
     error,
     inputs,
