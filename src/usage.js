@@ -74,7 +74,8 @@ const recordAsSession = (r) => ({ provider: r.provider, model: r.model, tokens: 
  * @param local       readLocalUsage() result, for the machine scope and countOutside budgets
  * @param runsDir     <workspace>/runs
  * @param settings    workspace settings ({ budgets, prices })
- * @param live        optional summary-like object of the run in progress ({ run_id, workflow, started_at, sessions })
+ * @param live        optional summary-like object of a run in progress ({ run_id, workflow, started_at, sessions }),
+ *                    or a list of them (concurrent runs)
  * @param installed   { claude: bool, codex: bool, grok: bool }
  * @param now         Date (tests)
  */
@@ -83,8 +84,10 @@ function computeUsage({ runsDir, settings = {}, live = null, installed = {}, now
   const budgets = settings.budgets || {};
   const month = monthKey(now);
   const today = dayKey(now);
-  const runs = readRuns(runsDir).filter((r) => !live || r.run_id !== live.run_id);
-  if (live) runs.push({ ...live, status: 'running' });
+  const lives = [].concat(live || []);
+  const liveIds = new Set(lives.map((l) => l.run_id));
+  const runs = readRuns(runsDir).filter((r) => !liveIds.has(r.run_id));
+  for (const l of lives) runs.push({ ...l, status: 'running' });
 
   const byProvider = Object.fromEntries(PROVIDERS.map((p) => [p.id, { month: emptyTotals(), today: emptyTotals(), models: {} }]));
   const totals = { month: emptyTotals(), today: emptyTotals() };
@@ -188,7 +191,7 @@ function computeUsage({ runsDir, settings = {}, live = null, installed = {}, now
 
   return {
     scope: machine ? 'machine' : 'orchestrator', month, totals: scopeTotals, providers, prices,
-    runs: recent.slice(0, 30), live: !!live, sources: local?.sources || null,
+    runs: recent.slice(0, 30), live: lives.length > 0, sources: local?.sources || null,
   };
 }
 
@@ -211,6 +214,22 @@ function budgetBaseline({ runsDir, settings = {}, now = new Date(), local = null
     countOutside: !!(o.budget.countOutside && all),
   }];
   }));
+}
+
+/**
+ * The budget state with the usage of other runs in progress added (their sessions are not on disk
+ * yet): what a new run's preflight checks against.
+ * @param sessions [{ provider, model, tokens, costUsd }]
+ */
+function withPeerUsage(budget, sessions, prices = {}) {
+  const out = Object.fromEntries(Object.entries(budget || {}).map(([id, b]) => [id, { ...b }]));
+  for (const s of sessions || []) {
+    const b = out[providerId(s.provider)];
+    if (!b) continue;
+    b.usedUsd = (b.usedUsd || 0) + (sessionCost({ cost_usd: s.costUsd, model: s.model, tokens: s.tokens }, prices) || 0);
+    b.usedTokens = (b.usedTokens || 0) + totalTokens(s.tokens);
+  }
+  return out;
 }
 
 /**
@@ -244,4 +263,4 @@ function preflight(wf, budget, resolveCommand, inputs = {}) {
   return problems;
 }
 
-module.exports = { PROVIDERS, WARN_AT, providerId, sessionCost, totalTokens, computeUsage, budgetBaseline, preflight };
+module.exports = { PROVIDERS, WARN_AT, providerId, sessionCost, totalTokens, computeUsage, budgetBaseline, withPeerUsage, preflight };

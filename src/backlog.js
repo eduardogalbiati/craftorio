@@ -169,7 +169,8 @@ function linkRuns(issues, runs, queue = null) {
 
 // ---- queue -----------------------------------------------------------------------------------
 // Issues assigned to a workflow wait in <workspace>/backlog/<project id>.queue.json until the
-// service starts them, one at a time: { paused, error, inputs: { <workflow file>: inputs }, items }.
+// service starts them while there are free run slots (Settings › Execution › Concurrent runs; one at
+// a time by default): { paused, error, inputs: { <workflow file>: inputs }, items }.
 const queueFile = (dir, projectId) => path.join(dir, `${path.basename(String(projectId))}.queue.json`);
 const emptyQueue = () => ({ paused: false, error: null, inputs: {}, items: [] });
 
@@ -222,12 +223,16 @@ function queuedProjects(dir) {
   try { return fs.readdirSync(dir).filter((f) => f.endsWith('.queue.json')).map((f) => f.slice(0, -'.queue.json'.length)); } catch { return []; }
 }
 
-/** The next item to start: the oldest one across the projects whose queue is not paused. */
-function nextQueued(dir) {
+/**
+ * The next item to start: the oldest one across the projects whose queue is not paused, among
+ * those `canStart(projectId, item)` accepts (a project at its limit of concurrent runs waits).
+ */
+function nextQueued(dir, canStart = () => true) {
   const heads = queuedProjects(dir)
     .map((projectId) => ({ projectId, q: readQueue(dir, projectId) }))
     .filter(({ q }) => !q.paused && q.items.length)
-    .map(({ projectId, q }) => ({ projectId, item: q.items[0] }));
+    .map(({ projectId, q }) => ({ projectId, item: q.items[0] }))
+    .filter(({ projectId, item }) => canStart(projectId, item));
   heads.sort((a, b) => String(a.item.addedAt).localeCompare(String(b.item.addedAt)));
   return heads[0] || null;
 }

@@ -279,7 +279,9 @@ class WorkflowRun extends EventEmitter {
   //   worktree (src/engine/processes.js). Default: the real one, none for simulations (mock agents start nothing).
   // probe: ({ probe, target, cwd, signal, stepId, baseline }) => Promise<{ state, detail, fingerprint? }>, the
   //   check of a `wait:` step (src/engine/probes.js). Default: the real one; simulations use MOCK_PROBES.
-  constructor({ file, inputs, mock, runsDir, skillsDirs, budget, prices, projectId, issue, resume, worktreesDir, mockSequences, notices, stopProcesses, probe }) {
+  // peerSessions: () => [{ provider, model, tokens, costUsd }], the sessions of the other runs in progress (and of
+  //   those that finished after `budget` was computed): the per-turn budget check counts them too (concurrent runs).
+  constructor({ file, inputs, mock, runsDir, skillsDirs, budget, prices, projectId, issue, resume, worktreesDir, mockSequences, notices, stopProcesses, probe, peerSessions }) {
     super();
     refreshWindowsPath(); // actions (e.g. gh pr merge) need the refreshed PATH
     this.file = file;
@@ -301,6 +303,7 @@ class WorkflowRun extends EventEmitter {
     this.budget = budget || {};
     this.prices = prices || {};
     this.budgetWarned = new Set();
+    this.peerSessions = peerSessions || (() => []);
     this.inputs = this.resolveInputs(inputs || {});
     // An agent's provider, model and effort can be templates over the inputs
     // (provider: "{{ inputs.writer_provider }}"), so a workflow can let the user pick them.
@@ -1101,14 +1104,15 @@ class WorkflowRun extends EventEmitter {
     }
   }
 
-  // Monthly budget per provider: checked before every real (non-mock) turn.
+  // Monthly budget per provider: checked before every real (non-mock) turn, over this run's sessions
+  // and those of the other runs in progress.
   checkBudget(providerName) {
     const id = providerId(providerName);
     const b = id && this.budget[id];
     if (!b || (!b.limitUsd && !b.limitTokens)) return;
     let usd = b.usedUsd || 0;
     let tokens = b.usedTokens || 0;
-    for (const s of this.sessions.values()) {
+    for (const s of [...this.sessions.values(), ...this.peerSessions()]) {
       if (providerId(s.provider) !== id) continue;
       usd += sessionCost({ cost_usd: s.costUsd, model: s.model, tokens: s.tokens }, this.prices) || 0;
       tokens += totalTokens(s.tokens);

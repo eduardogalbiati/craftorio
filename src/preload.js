@@ -33,9 +33,11 @@ contextBridge.exposeInMainWorld('api', {
   changeWorkspace: () => ipcRenderer.invoke('workspace:change'),
   openWorkspace: () => ipcRenderer.invoke('workspace:open'),
   startRun: (payload) => ipcRenderer.invoke('run:start', payload),
-  stopRun: () => ipcRenderer.invoke('run:stop'),
-  resolveApproval: (id, answer, feedback) => ipcRenderer.invoke('approval:resolve', { id, answer, feedback }),
-  openRunDir: () => ipcRenderer.invoke('run:openDir'),
+  // runId: which run (several can be in progress, see Settings › Execution › Concurrent runs)
+  stopRun: (runId) => ipcRenderer.invoke('run:stop', { runId }),
+  listActiveRuns: () => ipcRenderer.invoke('runs:active'),
+  resolveApproval: (id, answer, feedback, runId) => ipcRenderer.invoke('approval:resolve', { id, answer, feedback, runId }),
+  openRunDir: (runId) => ipcRenderer.invoke('run:openDir', { runId }),
   getUsage: (scope) => ipcRenderer.invoke('usage:get', { scope }),
   // mode: 'live' (follow the session's log) or 'cli' (resume the conversation in the provider's CLI)
   openSessionTerminal: (sessionId, mode, runId) => ipcRenderer.invoke('session:terminal', { sessionId, mode, runId }),

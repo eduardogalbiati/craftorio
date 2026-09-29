@@ -74,6 +74,24 @@ test('engine blocks a turn when the provider budget is exhausted and warns at 80
   assert.doesNotThrow(() => run.checkBudget('grok')); // no budget
 });
 
+test('concurrent runs share the budgets: the engine counts the other runs, preflight adds their usage', () => {
+  const peers = [];
+  const run = new WorkflowRun({
+    file: path.join(__dirname, 'fixtures', 'fanout.yaml'), inputs: {}, mock: true, runsDir: os.tmpdir(),
+    budget: { claude: { name: 'Claude Code', limitUsd: 1, usedUsd: 0.5, blockOnLimit: true } },
+    peerSessions: () => peers,
+  });
+  assert.doesNotThrow(() => run.checkBudget('claude'));
+  peers.push({ provider: 'claude', model: 'm', tokens: { input: 10 }, costUsd: 0.6 }, { provider: 'codex', model: 'm', tokens: {}, costUsd: 5 });
+  assert.throws(() => run.checkBudget('claude'), /Monthly budget for Claude Code reached \(\$1\.10 of \$1\)/);
+
+  const budget = { claude: { limitUsd: 1, usedUsd: 0.5, usedTokens: 5, blockOnLimit: true } };
+  const merged = usage.withPeerUsage(budget, peers);
+  assert.equal(merged.claude.usedUsd, 1.1);
+  assert.equal(merged.claude.usedTokens, 15);
+  assert.equal(budget.claude.usedUsd, 0.5); // the baseline is not changed
+});
+
 test('preflight reports missing CLIs and exhausted budgets', () => {
   const wf = { agents: { a: { provider: 'claude' }, b: { provider: 'grok' } }, providers: { claude: { type: 'claude-code', command: 'claude' }, grok: { type: 'grok-cli', command: 'grok' } } };
   const resolve = (cmd) => (cmd === 'claude' ? { file: 'claude.exe' } : null);

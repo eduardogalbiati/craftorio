@@ -215,3 +215,17 @@ test('a run that died with the app is notified as interrupted at the next start'
   assert.equal(fs.existsSync(ws.activeRun), false);
   assert.equal(service.notifyInterruptedRun(), null, 'only once');
 });
+
+test('concurrent runs that died with the app are each notified as interrupted', async (t) => {
+  const { service, api, shown } = makeService(t);
+  const ws = service.workspace();
+  const a = await runToEnd(service, api);
+  const b = await runToEnd(service, api);
+  shown.length = 0;
+  for (const r of [a, b]) fs.rmSync(path.join(ws.runs, r.runId, 'summary.json'));
+  fs.writeFileSync(ws.activeRun, JSON.stringify([a, b].map((r) => ({ runId: r.runId, workflow: 'fixture-notify', project: null, mock: true }))));
+
+  assert.equal(service.notifyInterruptedRun().target.runId, a.runId);
+  assert.deepEqual(shown.map((n) => n.target.runId), [a.runId, b.runId]);
+  assert.equal(fs.existsSync(ws.activeRun), false);
+});

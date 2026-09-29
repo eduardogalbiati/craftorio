@@ -170,7 +170,7 @@ ipcMain.handle('dialog:pickFolder', async () => {
 });
 
 ipcMain.handle('workspace:change', async () => {
-  if (service.isRunning()) throw new Error('Cannot change the workspace while a workflow is running.');
+  if (service.isRunning()) throw new Error('Cannot change the workspace while workflows are running.');
   const dir = await pickWorkspaceDir(win);
   if (dir) service.setWorkspace(workspace.setupWorkspace(dir));
   return service.workspace();
@@ -178,8 +178,8 @@ ipcMain.handle('workspace:change', async () => {
 
 ipcMain.handle('workspace:open', () => shell.openPath(service.workspace().root));
 
-ipcMain.handle('run:openDir', () => {
-  const dir = service.currentRunDir() || service.workspace().runs;
+ipcMain.handle('run:openDir', (_e, arg) => {
+  const dir = service.runDir(arg?.runId) || service.workspace().runs;
   fs.mkdirSync(dir, { recursive: true });
   return shell.openPath(dir);
 });

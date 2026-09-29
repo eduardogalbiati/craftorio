@@ -24,6 +24,7 @@
       <div class="kpi"><label>Tokens in / out</label><b id="kpi-tokens">0 / 0</b></div>
       <div class="kpi"><label>Reasoning</label><b id="kpi-reasoning">0</b></div>
       <div class="kpi"><label>Cost</label><b id="kpi-cost">$0.00</b></div>
+      <div id="kpi-all" class="kpi kpi-all hidden"><label>All runs</label><b id="kpi-all-value"></b></div>
     </div>
     <div class="actions">
       <div class="usage-wrap">
@@ -123,10 +124,12 @@
       </button>
 
       <div class="nav-spacer"></div>
-      <button id="nav-run" class="nav-item nav-run hidden" data-view="run" title="Current run">
+      <button id="nav-run" class="nav-item nav-run hidden" data-view="run" title="The run shown in the top bar">
         <span id="nav-run-dot" class="status-dot"></span>
         <span>Run</span>
+        <span id="nav-run-gates" class="nav-gates hidden" role="button"></span>
       </button>
+      <div id="nav-runs" class="nav-runs hidden" aria-label="Runs in progress"></div>
     </nav>
 
     <main class="content">
@@ -439,6 +442,25 @@
                 <div class="s-row">
                   <div class="s-label"><b>Notify when a session waits for you</b><span>A desktop notification when a CLI in a Sessions terminal stops and waits for your answer (a question, a permission prompt, the end of its turn). Not shown while this window is focused on that terminal.</span></div>
                   <label class="switch"><input type="checkbox" data-setting="notifySessions" /><span></span></label>
+                </div>
+              </div>
+              <h3 class="s-subtitle">Concurrent runs</h3>
+              <div id="set-concurrency" class="s-group">
+                <div class="s-row">
+                  <div class="s-label"><b>Allow several workflows at the same time</b><span>Off: one run at a time. On: runs start while there are free slots, and the Backlog queues fill them. Each run works in its own git worktree.</span></div>
+                  <label class="switch"><input type="checkbox" id="set-cr-enabled" /><span></span></label>
+                </div>
+                <div class="s-row cr-opt">
+                  <div class="s-label"><b>Maximum concurrent runs</b><span>A new run is refused while this many are in progress.</span></div>
+                  <div class="s-ctrl"><input type="number" id="set-cr-max" min="1" max="20" step="1" class="s-num" aria-label="Maximum concurrent runs" /></div>
+                </div>
+                <div class="s-row cr-opt">
+                  <div class="s-label"><b>Maximum per project</b><span>So one project's queue can't take every slot. Empty: no limit per project.</span></div>
+                  <div class="s-ctrl"><input type="number" id="set-cr-project" min="1" max="20" step="1" class="s-num" placeholder="no limit" aria-label="Maximum concurrent runs per project" /></div>
+                </div>
+                <div class="s-row cr-opt">
+                  <div class="s-label"><b>Simulations count toward the limits</b><span>Off: simulated runs (no CLI, no cost) start even when the real runs use every slot.</span></div>
+                  <label class="switch"><input type="checkbox" id="set-cr-sims" /><span></span></label>
                 </div>
               </div>
             </div>

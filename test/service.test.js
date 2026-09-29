@@ -83,7 +83,8 @@ test('runs a mock workflow, pushes its events and resolves the human gate', asyn
   });
   const { runId, runDir } = await api['run:start']({ file: 'fixture-service.yaml', inputs: {}, mock: true });
   assert.ok(service.isRunning());
-  assert.equal(service.currentRunDir(), runDir);
+  assert.equal(service.runDir(), runDir);
+  assert.deepEqual(api['runs:active']().map((r) => r.runId), [runId]);
   await assert.rejects(api['run:start']({ file: 'fixture-service.yaml', inputs: {}, mock: true }), /already running/);
 
   const end = await finished;
@@ -101,7 +102,7 @@ test('the workspace cannot change while a run is in progress', async (t) => {
     if (ev.type === 'workflow.finished') resolve();
   }));
   await api['run:start']({ file: 'fixture-service.yaml', inputs: {}, mock: true });
-  assert.throws(() => service.setWorkspace(service.workspace()), /while a workflow is running/);
+  assert.throws(() => service.setWorkspace(service.workspace()), /while workflows are running/);
   await finished;
 });
 
@@ -205,4 +206,103 @@ test('backlog: queues are paused when the workspace opens; a start that fails pa
   assert.match(q.error, /Could not start #1/);
   assert.equal(q.items.length, 1);
   assert.ok(!service.isRunning());
+});
+
+// ---- concurrent runs (Settings › Execution › Concurrent runs) --------------------------------
+const until = async (fn) => { for (let i = 0; i < 200 && !fn(); i++) await new Promise((r) => setTimeout(r, 50)); assert.ok(fn()); };
+
+// Gates and finished runs by run id, from the pushed events.
+function watchRuns(service) {
+  const gates = new Map();
+  const finished = new Map();
+  service.events.on('run:event', (ev) => {
+    if (ev.type === 'approval.requested') gates.set(ev.run_id, ev.approval_id);
+    if (ev.type === 'workflow.finished') finished.set(ev.run_id, ev.status);
+  });
+  return { gates, finished };
+}
+
+test('concurrent runs: each run resolves its own gates, stop affects only its run, the limit refuses one more', async (t) => {
+  const { service, api } = makeService(t);
+  const { gates, finished } = watchRuns(service);
+  const start = () => api['run:start']({ file: 'fixture-service.yaml', inputs: {}, mock: true });
+
+  // off by default: one run at a time
+  const first = await start();
+  await assert.rejects(start(), /already running/);
+  api['settings:set']({ concurrentRuns: { enabled: true, max: 2, perProject: null, countSimulations: true } });
+  const second = await start();
+  await assert.rejects(start(), /2 of 2 runs in progress/);
+  assert.deepEqual(api['runs:active']().map((r) => r.runId).sort(), [first.runId, second.runId].sort());
+  assert.throws(() => service.setWorkspace(service.workspace()), /while workflows are running/);
+
+  await until(() => gates.size === 2);
+  // both runs wait on a gate with the same id: without the run it is ambiguous
+  assert.equal(gates.get(first.runId), gates.get(second.runId));
+  assert.equal(api['approval:resolve']({ id: gates.get(first.runId), answer: true }), false);
+  assert.throws(() => api['run:stop']({}), /say which one/);
+
+  assert.equal(api['approval:resolve']({ runId: first.runId, id: gates.get(first.runId), answer: true }), true);
+  await until(() => finished.has(first.runId));
+  assert.equal(finished.get(first.runId), 'success');
+  assert.ok(!finished.has(second.runId));
+  assert.equal(api['runs:list']().runs.find((r) => r.runId === second.runId).status, 'running');
+
+  // a slot is free again
+  const third = await start();
+  assert.equal(api['run:stop']({ runId: second.runId }), true);
+  await until(() => finished.has(second.runId));
+  assert.equal(finished.get(second.runId), 'cancelled');
+  assert.ok(!finished.has(third.runId));
+  assert.deepEqual(api['runs:active']().map((r) => r.runId), [third.runId]);
+  api['run:stop']({ runId: third.runId });
+  await until(() => !service.isRunning());
+});
+
+test('concurrent runs: simulations do not count unless the setting says so', async (t) => {
+  const { service, api } = makeService(t);
+  api['settings:set']({ concurrentRuns: { enabled: true, max: 1, perProject: null, countSimulations: false } });
+  const a = await api['run:start']({ file: 'fixture-service.yaml', inputs: {}, mock: true });
+  const b = await api['run:start']({ file: 'fixture-service.yaml', inputs: {}, mock: true });
+  assert.equal(api['runs:active']().length, 2);
+  api['run:stop']({ runId: a.runId });
+  api['run:stop']({ runId: b.runId });
+  await until(() => !service.isRunning());
+});
+
+test('backlog: the dispatcher fills free slots from the queues, oldest first, within the limit per project', async (t) => {
+  const { service, api } = makeService(t);
+  const ws = service.workspace();
+  fs.writeFileSync(path.join(ws.workflows, 'fixture-issue.yaml'), ISSUE_WORKFLOW);
+  api['settings:set']({ concurrentRuns: { enabled: true, max: 2, perProject: 1, countSimulations: true } });
+  const issue = (number) => ({ number, title: `Issue ${number}`, state: 'open', url: `https://github.com/o/r/issues/${number}`, body: 'Do it', labels: [], assignees: [], tasks: { done: 0, total: 0 } });
+  const project = async (name, numbers) => {
+    const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'service-slots-'));
+    t.after(() => fs.rmSync(folder, { recursive: true, force: true }));
+    const p = await api['projects:create']({ name, folder });
+    fs.mkdirSync(ws.backlog, { recursive: true });
+    fs.writeFileSync(path.join(ws.backlog, `${p.id}.json`), JSON.stringify({ projectId: p.id, platform: 'github', repo: 'https://github.com/o/r', issues: numbers.map(issue) }));
+    return p;
+  };
+  const p1 = await project('one', [1, 2]);
+  const p2 = await project('two', [7]);
+  const { gates } = watchRuns(service);
+  const running = () => api['runs:active']().map((r) => `${r.projectId}#${r.issue.number}`).sort();
+
+  let data = await api['backlog:assign']({ projectId: p1.id, numbers: [1, 2], workflow: 'fixture-issue.yaml', mock: true });
+  assert.deepEqual(running(), [`${p1.id}#1`]); // one run per project
+  assert.deepEqual(data.queue.items.map((x) => x.number), [2]);
+  await api['backlog:assign']({ projectId: p2.id, numbers: [7], workflow: 'fixture-issue.yaml', mock: true });
+  assert.deepEqual(running(), [`${p1.id}#1`, `${p2.id}#7`]); // the other project takes the free slot
+
+  await until(() => gates.size === 2);
+  const run1 = api['runs:active']().find((r) => r.issue.number === 1).runId;
+  api['approval:resolve']({ runId: run1, id: gates.get(run1), answer: true });
+  await until(() => running().includes(`${p1.id}#2`)); // p1's next issue once its run is over
+  assert.deepEqual(running(), [`${p1.id}#2`, `${p2.id}#7`]);
+  data = api['backlog:get']({ projectId: p1.id });
+  assert.deepEqual(data.queue.items, []);
+
+  for (const r of api['runs:active']()) api['run:stop']({ runId: r.runId });
+  await until(() => !service.isRunning());
 });

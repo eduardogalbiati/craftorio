@@ -157,6 +157,8 @@ test('the queue: enqueue skips duplicates and remembers inputs, next item across
 
   backlog.enqueue(dir, 'other', { issues: [issue(9)], workflow: 'sd.yaml' });
   assert.deepEqual(backlog.nextQueued(dir), { projectId: 'p', item: q.items[0] }); // the oldest first
+  assert.equal(backlog.nextQueued(dir, (projectId) => projectId !== 'p').projectId, 'other'); // p at its limit of runs
+  assert.equal(backlog.nextQueued(dir, () => false), null);
   backlog.setPaused(dir, 'p', true, 'why');
   assert.equal(backlog.nextQueued(dir).projectId, 'other');
   assert.equal(backlog.readQueue(dir, 'p').error, 'why');

@@ -529,7 +529,7 @@
       if (e.detail?.name === 'supervisor') $d('[data-robot="supervisor"]').innerHTML = robotSvg('supervisor');
     });
     $d('#duo-run').onclick = startRun;
-    $d('#duo-stop').onclick = () => api.stopRun();
+    $d('#duo-stop').onclick = () => api.stopRun(chat.runId);
     $d('#duo-logs').onclick = () => chat.runDir && api.openPath(chat.runDir);
     $d('#duo-back').onclick = () => {
       $d('#duo-chat').classList.add('hidden');
@@ -543,7 +543,7 @@
       if (b && chat.live) {
         const v = b.dataset.choice;
         const text = b.closest('.duo-ask')?.querySelector('textarea')?.value || '';
-        api.resolveApproval(b.dataset.approval, v === 'true' ? true : v === 'false' ? false : v, text);
+        api.resolveApproval(b.dataset.approval, v === 'true' ? true : v === 'false' ? false : v, text, chat.runId);
       }
     });
     api.onEvent(onEvent);

@@ -28,4 +28,3 @@ actions, or any code that deletes or checks out branches.
 - Confirm with the first real merge that `gh pr merge --repo` leaves local branches alone.
 - "Open in CLI" after a worktree is removed opens in `repo_path`, where `claude --resume` may not
   find the session (Claude keys sessions by folder).
-- Allow concurrent runs in the app.

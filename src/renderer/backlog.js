@@ -108,19 +108,18 @@
     if (visible() && busy) reload();
   }, 5000);
 
-  // Opens a run as a chat, live when it is the run in progress (its Details button leads to
+  // Opens a run as a chat, live when it is in progress (its Details button leads to
   // Workflows › Runs).
   function openRun(el) {
     const runId = el.dataset.run;
-    window.openRunChat({ runId, workflow: el.dataset.workflow, running: state.run?.id === runId && state.run.status === 'running' });
+    window.openRunChat({ runId, workflow: el.dataset.workflow, running: isRunLive(runId) });
   }
 
-  // A waiting card opens the chat of its run, where the gate is answered (or the approval dialog).
+  // A waiting card opens the chat of its run, where the gate is answered (or its Run screen).
   function openGate(el) {
     const run = el.closest('[data-n]')?.querySelector('[data-run]');
-    if (run && state.run?.id === run.dataset.run) openRun(run);
-    else if (state.approval) openApproval();
-    else showView('run');
+    if (run && isRunLive(run.dataset.run)) openRun(run);
+    else openNextGate();
   }
 
   // ---- assign a workflow -------------------------------------------------------------------

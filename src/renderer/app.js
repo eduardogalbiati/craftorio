@@ -33,14 +33,12 @@ const state = {
   skills: [],
   wf: null,           // workflow selected in the start panel
   category: null,     // panel category filter (null = all)
-  run: null,          // { id, status, startedAt, finishedAt, mock, workflow, project, inputs }
-  sessions: new Map(),// id -> { ...snapshot, turnLog: Map, localOpenedAt }
-  steps: new Map(),   // id -> { id, type, agent, visits, status }
-  orchLog: [],
-  events: [],
-  selected: null,
-  approval: null,
-  openDetails: new Set(),
+  // Runs followed in this window (several can be in progress: Settings › Execution › Concurrent
+  // runs), by run id; runId is the one the Run screen and the top bar show. state.run, sessions,
+  // steps, orchLog, events, selected and openDetails read the selected run (defined below).
+  runs: new Map(),
+  runId: null,
+  approval: null,     // the gate shown in the approval dialog (approval.requested event)
   tab: 'detail',
   workflowsTab: 'runs', // 'runs' | 'definitions'
   pendingProject: null, // project to preselect in the panel on open
@@ -53,15 +51,41 @@ const state = {
   usageScope: (() => { try { return localStorage.getItem(USAGE_SCOPE_KEY) === 'machine' ? 'machine' : 'orchestrator'; } catch { return 'orchestrator'; } })(),
 };
 
+// What the window knows of one run, rebuilt from its events.
+//   run: { id, status, startedAt, finishedAt, mock, workflow, project, issue, inputs }
+//   sessions: id -> { ...snapshot, turnLog: Map, localOpenedAt }; steps: id -> { id, type, agent, visits, status }
+//   approvals: approval id -> approval.requested event (gates waiting)
+const newRunView = () => ({ run: null, sessions: new Map(), steps: new Map(), orchLog: [], events: [], selected: null, openDetails: new Set(), approvals: new Map() });
+const NO_RUN = newRunView();
+const selectedView = () => state.runs.get(state.runId) || NO_RUN;
+for (const key of ['run', 'sessions', 'steps', 'orchLog', 'events', 'openDetails']) {
+  Object.defineProperty(state, key, { get: () => selectedView()[key] });
+}
+Object.defineProperty(state, 'selected', { get: () => selectedView().selected, set: (v) => { selectedView().selected = v; } });
+const isRunLive = (runId) => state.runs.get(runId)?.run?.status === 'running';
+const liveRuns = () => [...state.runs.values()].filter((v) => v.run?.status === 'running');
+const pendingGates = () => [...state.runs.values()].flatMap((v) => [...v.approvals.values()]);
+// "workflow · project · #issue" of a run, for lists, toasts and dialogs
+const runLabel = (r) => [r?.workflow || 'workflow', r?.project, r?.issue ? `#${r.issue.number}` : null].filter(Boolean).join(' · ');
+
+// Shows a run on the Run screen and in the top bar.
+function selectRun(runId, { open = true } = {}) {
+  if (!state.runs.has(runId)) return;
+  state.runId = runId;
+  if (open) showView('run');
+  scheduleRender();
+}
+
 // ---------------------------------------------------------------------------
 // Initialization
 // ---------------------------------------------------------------------------
 async function init() {
   // top bar
   $('#btn-stop').onclick = stopRun;
-  $('#btn-open-dir').onclick = () => api.openRunDir();
+  $('#btn-open-dir').onclick = () => api.openRunDir(state.run?.id);
   $('#btn-quick-start').onclick = () => openDrawer();
   $('#run-meta').onclick = () => state.run && showView('run');
+  $('#nav-run-gates').onclick = (e) => { e.stopPropagation(); openNextGate(); };
 
   // navigation
   document.querySelectorAll('.nav-item').forEach((b) => (b.onclick = () => showView(b.dataset.view)));
@@ -158,6 +182,7 @@ async function init() {
     if (el.dataset.setting === 'developerMode') applyDeveloperMode();
   }));
   $('#set-backlog-platform').onchange = async (e) => { state.settings = await api.setSettings({ backlogPlatform: e.target.value }); };
+  for (const sel of ['#set-cr-enabled', '#set-cr-max', '#set-cr-project', '#set-cr-sims']) $(sel).onchange = saveConcurrency;
 
   api.onEvent(onEvent);
   initNotifications();
@@ -170,12 +195,28 @@ async function init() {
   applyDeveloperMode();
   [state.workflows, state.projects, state.skills] = await Promise.all([api.listWorkflows(), api.listProjects(), api.listSkills()]);
   renderWorkspacePaths();
+  await loadActiveRuns();
   renderDashboard();
 
   const env = await api.checkEnv();
   $('#env-status').innerHTML = ['claude', 'codex'].map((k) =>
     env[k] ? `<span class="ok">✓ ${k}</span>`
            : `<span class="missing">✗ ${k} not found in PATH (use simulation mode)</span>`).join('');
+}
+
+// Runs already in progress when the window opens (a reload, or the UI in a browser): listed in
+// the Run menu from the start; their details fill in from their next events.
+async function loadActiveRuns() {
+  let list = [];
+  try { list = (await api.listActiveRuns?.()) || []; } catch { return; }
+  for (const a of list) {
+    if (state.runs.has(a.runId)) continue;
+    const v = newRunView();
+    v.run = { ...runInfo(a), status: 'running' };
+    state.runs.set(a.runId, v);
+    if (!state.runId) state.runId = a.runId;
+  }
+  scheduleRender();
 }
 
 // ---------------------------------------------------------------------------
@@ -197,8 +238,8 @@ function showView(view) {
   if (view === 'usage') { renderUsage(); loadUsage(); }
   if (view === 'settings') renderSettings();
   if (view === 'run') scheduleRender();
-  // a pending gate hidden behind a run chat shows up elsewhere
-  if (state.approval && $('#approval-modal').classList.contains('hidden')) openApproval();
+  // gates never pop up over the rest of the app: the Run screen of their run asks them
+  if (view === 'run' && $('#approval-modal').classList.contains('hidden')) openApproval();
   reportNotifyContext();
 }
 
@@ -236,7 +277,7 @@ function initNotifications() {
   api.onNotificationClick((target) => {
     if (target?.terminalId) { window.SessionsView?.focusTerminal(target.terminalId); return; }
     if (!target?.runId) return;
-    const running = state.run?.id === target.runId && state.run.status === 'running';
+    const running = isRunLive(target.runId);
     window.openRunChat?.({ runId: target.runId, workflow: target.workflow, running });
   });
   reportNotifyContext();
@@ -287,15 +328,15 @@ function renderDashboard() {
     el.textContent = n ? `${n} workflow${n > 1 ? 's' : ''}` : 'no workflows yet';
     el.classList.toggle('none', !n);
   });
-  const r = state.run;
+  // the runs in progress, or the selected one once it is over
+  const list = liveRuns().length ? liveRuns() : state.run ? [selectedView()] : [];
   const box = $('#dash-run');
-  box.classList.toggle('hidden', !r);
-  if (r) {
-    box.innerHTML = `<span class="status st-${esc(runSessionStatus(r.status))}"><span class="status-dot"></span></span>
-      <span><b>${esc(r.workflow || 'workflow')}</b>${r.project ? ` · ${esc(r.project)}` : ''} <span class="muted">— ${esc(statusLabel(r))}</span></span>
-      <button class="btn sm ghost" id="dash-run-open">View run</button>`;
-    $('#dash-run-open').onclick = () => showView('run');
-  }
+  box.classList.toggle('hidden', !list.length);
+  box.innerHTML = list.map(({ run: r, approvals }) => `<div class="dash-run-row">
+      <span class="status st-${esc(runSessionStatus(r.status))}"><span class="status-dot"></span></span>
+      <span><b>${esc(r.workflow || 'workflow')}</b>${r.project ? ` · ${esc(r.project)}` : ''}${r.issue ? ` · #${esc(r.issue.number)}` : ''} <span class="muted">— ${esc(statusLabel(r))}${approvals.size ? ' · waiting for approval' : ''}</span></span>
+      <button class="btn sm ghost" data-run="${esc(r.id)}">View run</button></div>`).join('');
+  box.querySelectorAll('[data-run]').forEach((b) => (b.onclick = () => selectRun(b.dataset.run)));
 }
 
 const runSessionStatus = (st) => ({ running: 'active', success: 'success', failed: 'failed', cancelled: 'cancelled' })[st] || 'idle';
@@ -414,8 +455,12 @@ function selectWorkflow(file) {
   // a folder input with `required: false` (e.g. writer-reviewer's project_path) makes the project optional
   const needsProject = Object.entries(wf.inputs || {}).some(([k, def]) => isPathInput(k) && def.required !== false);
   $('#project-req').classList.toggle('hidden', !needsProject);
-  $('#btn-start').disabled = !!wf.error || state.run?.status === 'running';
+  $('#btn-start').disabled = !!wf.error || oneRunAtATime();
 }
+
+// Without concurrent runs (Settings › Execution) a second run can't start; with them, the engine
+// says when the limit is reached.
+const oneRunAtATime = () => !state.settings.concurrentRuns?.enabled && liveRuns().length > 0;
 
 function readInputs() {
   const out = {};
@@ -438,11 +483,13 @@ async function startRun() {
 
   $('#btn-start').disabled = true;
   try {
-    await api.startRun({ file: wf.file, inputs, mock: devMode() && $('#mock-toggle').checked });
+    const { runId } = await api.startRun({ file: wf.file, inputs, mock: devMode() && $('#mock-toggle').checked });
     state.settings = await api.setSettings({ lastWorkflow: wf.file, lastProject: project?.id || null });
-    if (state.run) state.run.project = project?.name || null;
+    const view = state.runs.get(runId);
+    if (view?.run && project) view.run.project = project.name;
     closeDrawer();
-    if (state.settings.openRunOnStart) showView('run');
+    // the run started here is the one shown
+    if (view) selectRun(runId, { open: state.settings.openRunOnStart });
   } catch (e) {
     $('#start-error').textContent = errMsg(e);
   } finally {
@@ -450,9 +497,12 @@ async function startRun() {
   }
 }
 
+// Stops the run shown in the top bar (only that one).
 async function stopRun() {
-  if (state.settings.confirmStop && !(await confirmDialog('Stop workflow', 'Running sessions will be closed. Stop the workflow?', 'Stop'))) return;
-  api.stopRun();
+  const r = state.run;
+  if (r?.status !== 'running') return;
+  if (state.settings.confirmStop && !(await confirmDialog('Stop workflow', `Running sessions of ${runLabel(r)} will be closed. Stop this run?`, 'Stop'))) return;
+  api.stopRun(r.id);
 }
 
 // ---------------------------------------------------------------------------
@@ -968,7 +1018,29 @@ async function renderSettings() {
   const platform = $('#set-backlog-platform');
   platform.innerHTML = Object.entries(window.BACKLOG_PLATFORMS || {}).map(([id, p]) => `<option value="${id}">${esc(p.label)}${p.soon ? ' (sync not available yet)' : ''}</option>`).join('');
   platform.value = state.settings.backlogPlatform || 'github';
+  renderConcurrency();
   if (!document.querySelector('[data-spage="agents"]').classList.contains('hidden')) renderTools();
+}
+
+// Settings › Execution › Concurrent runs (settings.concurrentRuns).
+function renderConcurrency() {
+  const c = state.settings.concurrentRuns || {};
+  $('#set-cr-enabled').checked = !!c.enabled;
+  $('#set-cr-max').value = c.max || 2;
+  $('#set-cr-project').value = c.perProject || '';
+  $('#set-cr-sims').checked = !!c.countSimulations;
+  document.querySelectorAll('#set-concurrency .cr-opt').forEach((el) => el.classList.toggle('hidden', !c.enabled));
+}
+
+async function saveConcurrency() {
+  const int = (sel) => { const n = Math.floor(Number($(sel).value)); return Number.isFinite(n) && n >= 1 ? Math.min(n, 20) : null; };
+  const concurrentRuns = {
+    enabled: $('#set-cr-enabled').checked, max: int('#set-cr-max') || 2,
+    perProject: int('#set-cr-project'), countSimulations: $('#set-cr-sims').checked,
+  };
+  state.settings = await api.setSettings({ concurrentRuns });
+  renderConcurrency();
+  renderHeader();
 }
 
 async function renderTools() {
@@ -1376,16 +1448,21 @@ function runsTableHtml(u) {
 
 // answer: true/false or a choice id
 function resolveApproval(answer) {
-  if (!state.approval) return;
-  api.resolveApproval(state.approval.approval_id, answer, $('#approval-feedback-text').value);
+  const ev = state.approval;
+  if (!ev) return;
+  api.resolveApproval(ev.approval_id, answer, $('#approval-feedback-text').value, ev.run_id);
   closeApproval();
 }
 
-function openApproval() {
-  const ev = state.approval;
+// Opens the approval dialog for a gate: `ev`, or the oldest gate waiting in the selected run.
+// Gates never open it by themselves elsewhere in the app (a badge and a toast say they wait).
+function openApproval(ev = null) {
+  ev = ev || [...selectedView().approvals.values()][0];
   // the run chats (Write & Review, AI Arena, any run) ask the question inline for the run they show
   if (!ev || window.duoShowsRun?.(ev.run_id) || window.arenaShowsRun?.(ev.run_id) || window.runChatShowsRun?.(ev.run_id)) return;
-  $('#approval-step').textContent = `step: ${ev.step_id}`;
+  state.approval = ev;
+  const r = state.runs.get(ev.run_id)?.run;
+  $('#approval-step').textContent = `${r ? `${runLabel(r)} · ` : ''}step: ${ev.step_id}`;
   $('#approval-message').textContent = ev.message;
   $('#approval-binary').classList.toggle('hidden', !!ev.choices);
   $('#approval-choices').classList.toggle('hidden', !ev.choices);
@@ -1415,45 +1492,92 @@ function switchTab(tab) {
 // ---------------------------------------------------------------------------
 // Engine events
 // ---------------------------------------------------------------------------
-function resetSteps(steps) {
-  state.steps = new Map(steps.map((s) => [s.id, { ...s, visits: 0, status: 'pending' }]));
+// Opens the oldest gate waiting across runs, on its run (the badge on the Run menu item).
+function openNextGate() {
+  const ev = pendingGates()[0];
+  if (!ev) return;
+  selectRun(ev.run_id);
+  openApproval(ev);
 }
+window.openNextGate = openNextGate;
 
 function getTurn(sess, n) {
   if (!sess.turnLog.has(n)) sess.turnLog.set(n, { n, items: [], prompt: null, result: null, stepId: null, startedAt: null });
   return sess.turnLog.get(n);
 }
 
+// The view of an event's run. A run that started before this window opened (or reconnected) is
+// picked up from its next event: its earlier events are in its chat and on disk.
+function viewOf(ev) {
+  let v = state.runs.get(ev.run_id);
+  if (!v) {
+    v = newRunView();
+    state.runs.set(ev.run_id, v);
+    if (ev.type !== 'workflow.started') {
+      v.run = { id: ev.run_id, status: 'running', startedAt: Date.parse(ev.ts), workflow: null, inputs: {} };
+      if (!isRunLive(state.runId)) state.runId = ev.run_id;
+      api.listActiveRuns?.().then((list) => {
+        const a = list.find((x) => x.runId === ev.run_id);
+        if (a && v.run) Object.assign(v.run, runInfo(a), { status: v.run.status });
+        scheduleRender();
+      }).catch(() => {});
+    }
+  }
+  return v;
+}
+
+// Workflow, project and issue of a run, from workflow.started or from runs:active.
+function runInfo(x) {
+  const inputs = x.inputs || {};
+  const project = state.projects.find((p) => p.id === (x.project_id || x.projectId)) || state.projects.find((p) => Object.values(inputs).includes(p.folder));
+  return {
+    id: x.run_id || x.runId, startedAt: Date.parse(x.ts || x.startedAt) || Date.now(), mock: !!x.mock, workflow: x.workflow,
+    version: x.version, inputs, issue: x.issue || null, project: project?.name || null,
+  };
+}
+
+// Finished runs that are not shown are forgotten (their chat and files keep everything).
+function pruneRuns() {
+  for (const [id, v] of state.runs) {
+    if (state.runs.size <= 8) return;
+    if (id !== state.runId && v.run?.status !== 'running') state.runs.delete(id);
+  }
+}
+
 function onEvent(ev) {
   if (ev.type === 'workflow.started' || ev.type === 'workflow.finished') reportNotifyContext();
-  state.events.push(ev);
-  const sess = ev.session_id ? state.sessions.get(ev.session_id) : null;
+  const v = viewOf(ev);
+  v.events.push(ev);
+  const sess = ev.session_id ? v.sessions.get(ev.session_id) : null;
 
   switch (ev.type) {
     case 'workflow.started':
-      state.run = { id: ev.run_id, status: 'running', startedAt: Date.parse(ev.ts), mock: ev.mock, workflow: ev.workflow, version: ev.version, inputs: ev.inputs || {}, project: state.projects.find((p) => Object.values(ev.inputs || {}).includes(p.folder))?.name || null };
-      state.sessions.clear();
-      state.orchLog = [];
-      state.events = [ev];
-      state.selected = null;
-      state.openDetails.clear();
-      resetSteps(ev.steps);
+      v.run = { ...runInfo(ev), status: 'running' };
+      v.events = [ev];
+      v.steps = new Map((ev.steps || []).map((s) => [s.id, { ...s, visits: 0, status: 'pending' }]));
+      // a new run takes the Run screen only from a run that is over
+      if (!isRunLive(state.runId) || state.runId === ev.run_id) state.runId = ev.run_id;
       orch(ev, `workflow "${ev.workflow}" started ${ev.mock ? '(simulation)' : ''}`);
+      pruneRuns();
       break;
 
     case 'workflow.finished':
-      state.run.status = ev.status;
-      state.run.finishedAt = Date.parse(ev.ts);
-      state.run.error = ev.error || null;
-      state.steps.forEach((s) => { if (s.status !== 'pending') s.status = 'done'; });
+      v.run.status = ev.status;
+      v.run.finishedAt = Date.parse(ev.ts);
+      v.run.error = ev.error || null;
+      v.steps.forEach((s) => { if (s.status !== 'pending') s.status = 'done'; });
+      v.approvals.clear();
       orch(ev, `workflow finished: ${ev.status}${ev.error ? ' — ' + ev.error : ''}`, ev.status === 'success' ? 'transition' : 'error');
-      if (state.approval) closeApproval();
+      if (state.approval?.run_id === ev.run_id) closeApproval();
+      // the Run screen moves on to a run still in progress when the one it showed ends elsewhere
+      if (state.runId === ev.run_id && state.view !== 'run' && liveRuns().length) state.runId = liveRuns()[0].run.id;
+      if (liveRuns().length) showToast(`${runLabel(v.run)}: ${statusLabel(v.run)}`, ev.error, ev.run_id);
       loadUsage();
       break;
 
     case 'session.opened':
-      state.sessions.set(ev.session_id, { ...ev.session, turnLog: new Map(), localOpenedAt: Date.parse(ev.ts) });
-      if (!state.selected) state.selected = ev.session_id;
+      v.sessions.set(ev.session_id, { ...ev.session, turnLog: new Map(), localOpenedAt: Date.parse(ev.ts) });
+      if (!v.selected) v.selected = ev.session_id;
       if (ev.session_id !== 'orchestrator') orch(ev, `session ${ev.session_id} opened: ${ev.session.agent} (${ev.session.provider} · ${ev.session.model})`);
       break;
 
@@ -1488,22 +1612,22 @@ function onEvent(ev) {
         Object.assign(sess, ev.session);
         orch(ev, `← ${ev.session_id} replied in ${fmtDur(ev.duration_ms)}`);
       }
-      if (state.run?.status === 'running') loadUsageThrottled();
+      if (v.run?.status === 'running') loadUsageThrottled();
       break;
 
     case 'step.started': {
-      const s = state.steps.get(ev.step_id);
+      const s = v.steps.get(ev.step_id);
       if (s) { s.status = 'running'; s.visits = ev.visit; }
       orch(ev, `▶ step ${ev.step_id} (visit ${ev.visit})`, 'transition');
       break;
     }
     case 'step.finished': {
-      const s = state.steps.get(ev.step_id);
+      const s = v.steps.get(ev.step_id);
       if (s) s.status = 'done';
       break;
     }
     case 'step.waiting': {
-      const s = state.steps.get(ev.step_id);
+      const s = v.steps.get(ev.step_id);
       if (s) s.status = 'waiting';
       orch(ev, `⏳ ${ev.step_id}: /loop, next check in ${fmtDur(ev.interval_ms)}`);
       break;
@@ -1515,14 +1639,21 @@ function onEvent(ev) {
       orch(ev, `${ev.from} → ${ev.to}   [${ev.when}]`, 'transition');
       break;
 
-    case 'approval.requested':
-      state.approval = ev;
-      openApproval();
+    case 'approval.requested': {
+      v.approvals.set(ev.approval_id, ev);
       orch(ev, `? approval requested at ${ev.step_id}`, 'warn');
+      // asked right away only on the Run screen of this run; elsewhere a badge and a toast say it waits
+      const shown = state.view === 'run' && state.runId === ev.run_id;
+      if (shown) openApproval(ev);
+      else if (!window.duoShowsRun?.(ev.run_id) && !window.arenaShowsRun?.(ev.run_id) && !window.runChatShowsRun?.(ev.run_id)) {
+        showToast(`Approval waiting: ${runLabel(v.run)}`, `Step ${ev.step_id}. Click to review it.`, ev.run_id, ev);
+      }
       break;
+    }
 
     case 'approval.resolved':
-      if (state.approval?.approval_id === ev.approval_id) closeApproval();
+      v.approvals.delete(ev.approval_id);
+      if (state.approval?.approval_id === ev.approval_id && state.approval.run_id === ev.run_id) closeApproval();
       if (ev.choice !== undefined) orch(ev, `human decision: ${ev.choice} (${ev.by})`, 'transition');
       else orch(ev, `approval ${ev.approved ? 'granted' : 'denied'} (${ev.by})`, ev.approved ? 'transition' : 'warn');
       break;
@@ -1558,7 +1689,7 @@ function onEvent(ev) {
     case 'supervisor.decision': {
       const target = ev.action === 'goto' && ev.goto ? ` ${ev.goto}` : '';
       orch(ev, `◆ supervisor → ${ev.action}${target}${ev.cause_class ? ` [${ev.cause_class}]` : ''} — ${ev.explanation || ''}${ev.note ? ` (${ev.note})` : ''}`, 'supervisor');
-      showToast(`◆ Supervisor on "${ev.step_id}": ${SUP_ACTIONS[ev.action] || ev.action}`, ev.explanation);
+      showToast(`◆ Supervisor on "${ev.step_id}"${liveRuns().length > 1 ? ` (${runLabel(v.run)})` : ''}: ${SUP_ACTIONS[ev.action] || ev.action}`, ev.explanation, ev.run_id);
       break;
     }
   }
@@ -1570,7 +1701,7 @@ function onEvent(ev) {
 const PROJECT_REFRESH_EVENTS = new Set(['workflow.started', 'workflow.finished', 'session.opened', 'session.closed', 'session.status', 'step.started']);
 
 function orch(ev, text, level = '') {
-  state.orchLog.push({ ts: ev.ts, text, level });
+  viewOf(ev).orchLog.push({ ts: ev.ts, text, level });
 }
 
 // ---------------------------------------------------------------------------
@@ -1595,7 +1726,8 @@ function render() {
 }
 
 function renderTicking() {
-  if (state.run?.status === 'running') { renderHeader(); renderSessions(); }
+  if (liveRuns().length) renderHeader();
+  if (state.run?.status === 'running' && state.view === 'run') renderSessions();
 }
 
 function liveDuration(s) {
@@ -1603,9 +1735,9 @@ function liveDuration(s) {
   return Date.now() - (s.localOpenedAt || Date.parse(s.opened_at));
 }
 
-function totals() {
+function totals(sessions = state.sessions) {
   const t = { input: 0, output: 0, cache_read: 0, cache_write: 0, reasoning: 0, cost: 0 };
-  state.sessions.forEach((s) => {
+  sessions.forEach((s) => {
     for (const k of ['input', 'output', 'cache_read', 'cache_write', 'reasoning']) t[k] += s.tokens?.[k] || 0;
     t.cost += s.cost_usd || 0;
   });
@@ -1619,7 +1751,9 @@ function renderHeader() {
   pill.className = `pill pill-${st}`;
   pill.textContent = statusLabel(r);
   $('#run-meta').classList.toggle('clickable', !!r);
+  $('#run-meta').title = r ? `View ${runLabel(r)}` : 'View the current run';
   $('#nav-run-dot').parentElement.className = `nav-item nav-run st-${runSessionStatus(st)}${state.view === 'run' ? ' active' : ''}${r ? '' : ' hidden'}`;
+  renderNavRuns();
   $('#run-id').textContent = r?.id || '';
   $('#kpi-time').textContent = r ? fmtDur((r.finishedAt || Date.now()) - r.startedAt) : '—';
   $('#kpi-sessions').textContent = String([...state.sessions.keys()].filter((k) => k !== 'orchestrator').length);
@@ -1627,10 +1761,45 @@ function renderHeader() {
   $('#kpi-tokens').textContent = `${fmtNum(t.input + t.cache_read)} / ${fmtNum(t.output)}`;
   $('#kpi-reasoning').textContent = fmtNum(t.reasoning);
   $('#kpi-cost').textContent = `$${t.cost.toFixed(4)}`;
+  // several runs in progress: their total next to the selected run's numbers
+  const live = liveRuns();
+  const others = live.length > 1 || (live.length && !isRunLive(state.runId));
+  $('#kpi-all').classList.toggle('hidden', !others);
+  if (others) {
+    const all = live.reduce((a, v) => { const x = totals(v.sessions); return { tokens: a.tokens + x.input + x.cache_read + x.output, cost: a.cost + x.cost }; }, { tokens: 0, cost: 0 });
+    $('#kpi-all-value').textContent = `${live.length} · $${all.cost.toFixed(4)}`;
+    $('#kpi-all').title = `${live.length} runs in progress: ${fmtNum(all.tokens)} tokens, $${all.cost.toFixed(4)} in total`;
+  }
   $('#btn-stop').disabled = st !== 'running';
-  $('#btn-start').disabled = st === 'running' || !state.wf || !!state.wf.error;
-  $('#btn-start').textContent = st === 'running' ? 'A workflow is already running' : 'Start workflow';
+  $('#btn-stop').title = st === 'running' ? `Stop ${runLabel(r)} (only this run)` : '';
+  const blocked = oneRunAtATime();
+  $('#btn-start').disabled = blocked || !state.wf || !!state.wf.error;
+  $('#btn-start').textContent = blocked ? 'A workflow is already running' : 'Start workflow';
   if (state.view === 'dashboard') renderDashboard();
+}
+
+// The Run menu item: the runs in progress (and the one shown), each with its status dot,
+// workflow, project/issue and gates waiting; the badge counts the gates across runs.
+function renderNavRuns() {
+  const gates = pendingGates().length;
+  const badge = $('#nav-run-gates');
+  badge.classList.toggle('hidden', !gates);
+  badge.textContent = String(gates);
+  badge.title = `${gates} approval${gates === 1 ? '' : 's'} waiting: click to review`;
+  const list = [...state.runs.values()].filter((v) => v.run && (v.run.status === 'running' || v.run.id === state.runId));
+  const box = $('#nav-runs');
+  const show = list.length > 1;
+  box.classList.toggle('hidden', !show);
+  if (!show) { box.innerHTML = ''; return; }
+  const html = list.map(({ run: r, approvals }) => `<button type="button" class="nav-run-item st-${runSessionStatus(r.status)}${r.id === state.runId ? ' selected' : ''}" data-run="${esc(r.id)}" title="${esc(`${runLabel(r)} — ${statusLabel(r)}`)}">
+      <span class="status-dot"></span>
+      <span class="nav-run-text"><span class="nav-run-wf">${esc(r.workflow || 'workflow')}</span><span class="nav-run-sub">${esc([r.project, r.issue ? `#${r.issue.number}` : null].filter(Boolean).join(' · ') || statusLabel(r))} · ${esc(new Date(r.startedAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }))}</span></span>
+      ${approvals.size ? `<span class="nav-gates" title="Approval waiting">${approvals.size}</span>` : ''}
+    </button>`).join('');
+  if (box.dataset.html === html) return;
+  box.dataset.html = html;
+  box.innerHTML = html;
+  box.querySelectorAll('[data-run]').forEach((b) => (b.onclick = () => selectRun(b.dataset.run)));
 }
 
 function renderRunSummary() {
@@ -1775,7 +1944,7 @@ function renderDetail() {
   box.querySelector('[data-sup]')?.addEventListener('click', () => openSupervisorForCurrent());
   box.querySelectorAll('[data-term]').forEach((b) => (b.onclick = async () => {
     const msg = box.querySelector('[data-term-msg]');
-    const r = await termAction(b, { sessionId: s.id, label: s.agent });
+    const r = await termAction(b, { sessionId: s.id, runId: state.run?.id, label: s.agent });
     if (msg) { msg.textContent = r.text; msg.classList.toggle('error', r.error); }
   }));
   if (atBottom) box.scrollTop = box.scrollHeight;
@@ -2309,13 +2478,19 @@ async function runRecommendation(i) {
 }
 
 let toastTimer = null;
-function showToast(title, detail) {
+// runId: the run it is about (a click shows it); gate: an approval.requested event to open.
+function showToast(title, detail, runId = null, gate = null) {
   const el = $('#toast');
   el.innerHTML = `<b>${esc(title)}</b>${detail ? `<span>${esc(String(detail).slice(0, 220))}</span>` : ''}`;
   el.classList.remove('hidden');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.add('hidden'), 7000);
-  el.onclick = () => { el.classList.add('hidden'); if (state.run) showView('run'); };
+  toastTimer = setTimeout(() => el.classList.add('hidden'), gate ? 15000 : 7000);
+  el.onclick = () => {
+    el.classList.add('hidden');
+    if (runId && state.runs.has(runId)) selectRun(runId);
+    else if (state.run) showView('run');
+    if (gate && state.runs.get(gate.run_id)?.approvals.has(gate.approval_id)) openApproval(gate);
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -2411,7 +2586,8 @@ function xtermTheme() {
 // Opens (or focuses) an embedded terminal. Throws with a readable message on failure.
 async function openTerminal({ kind, sessionId, runId, label }) {
   if (typeof Terminal === 'undefined') throw new Error('The terminal component failed to load.');
-  const key = `${kind}:${runId || state.run?.id || 'current'}:${sessionId}`;
+  runId = runId || state.run?.id;
+  const key = `${kind}:${runId || 'current'}:${sessionId}`;
   const existing = dock.tabs.find((t) => t.key === key);
   if (existing) { showDock(); activateTab(existing); return existing; }
 

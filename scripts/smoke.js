@@ -21,11 +21,14 @@ app.on('browser-window-created', (_e, win) => {
     await js(`(async () => {
       const list = await api.listProjects();
       const p = list.find((x) => x.folder === ${repo}) || await api.createProject({ name: 'multiagent', folder: ${repo} });
+      // without developer mode the Simulation checkbox is ignored and the run would be real (paid)
+      await api.setSettings({ developerMode: true, lastWorkflow: 'software-development.yaml' });
       document.querySelector('#btn-quick-start').click();
       await new Promise((r) => setTimeout(r, 500));
       document.querySelector('#project-select').value = p.id;
       document.querySelector('#in-task').value = 'Add a /health endpoint';
       document.querySelector('#mock-toggle').checked = true;
+      if (!document.body.classList.contains('dev-mode')) throw new Error('developer mode is off: refusing to start a real run');
       document.querySelector('#btn-start').click();
     })()`);
     const timer = setInterval(() => js(`(document.querySelector('#approval-modal:not(.hidden) #approval-choices:not(.hidden) button') || document.querySelector('#approval-modal:not(.hidden) #btn-approve'))?.click()`), 1000);

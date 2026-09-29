@@ -83,7 +83,15 @@ function cliReason(sess, providers, running) {
 function createService({ host }) {
   const events = new EventEmitter();
   let ws = null; // { root, runs, repos, projects, skills, workflows, worktrees, settings } (see src/workspace.js)
-  let currentRun = null;
+  // Runs in progress, by run id (several with Settings › Execution › Concurrent runs). A run leaves
+  // the map when it finishes; from then on it is read from its folder.
+  const active = new Map();
+  // Starts under way (between the limit check and the run entering `active`): counted like runs.
+  const reserved = new Set();
+  // Budget baseline time of each active run, and real runs that finished while others were running:
+  // their usage is not in the baseline of those runs, so the per-turn budget check adds it.
+  const budgetAt = new Map();
+  let finishedPeers = []; // [{ finishedAt, sessions }]
 
   // ---- desktop notifications ----------------------------------------------------------------
   // uiContext: what the window shows ({ focused, runId, terminalId }), reported by the UI.
@@ -101,23 +109,26 @@ function createService({ host }) {
     events.emit(channel, payload);
   });
 
-  // The run in progress is written down until it ends: still there at the next start = it died with the app.
-  function markActiveRun(info) {
+  // The runs in progress are written down until they end: still there at the next start = they
+  // died with the app. The file holds a list (one object in older versions).
+  const marked = new Map(); // run id -> { runId, workflow, project, mock }
+  function markActiveRun(runId, info) {
+    if (info) marked.set(runId, info); else marked.delete(runId);
     try {
-      if (info) fs.writeFileSync(ws.activeRun, JSON.stringify(info));
+      if (marked.size) fs.writeFileSync(ws.activeRun, JSON.stringify([...marked.values()]));
       else fs.rmSync(ws.activeRun, { force: true });
     } catch (e) { console.error('active run marker:', e.message); }
   }
+  // Notifies each run the app had in progress when it last closed; returns the first notice.
   function notifyInterruptedRun() {
     if (!ws || isRunning()) return null;
-    let info = null;
-    try { info = JSON.parse(fs.readFileSync(ws.activeRun, 'utf8')); } catch { return null; }
-    markActiveRun(null);
-    const r = info?.runId && runs.readRun(ws.runs, path.basename(String(info.runId)));
-    if (r?.status !== 'interrupted') return null;
-    const notice = notifier.interruptedNotice(info);
-    notify(notice);
-    return notice;
+    let list = null;
+    try { list = [].concat(JSON.parse(fs.readFileSync(ws.activeRun, 'utf8'))); } catch { return null; }
+    fs.rmSync(ws.activeRun, { force: true });
+    const notices = list.filter((info) => info?.runId && runs.readRun(ws.runs, path.basename(String(info.runId)))?.status === 'interrupted')
+      .map((info) => notifier.interruptedNotice(info));
+    notices.forEach(notify);
+    return notices[0] || null;
   }
 
   const workspaceDir = () => {
@@ -132,7 +143,7 @@ function createService({ host }) {
   }
 
   function setWorkspace(next) {
-    if (currentRun?.status === 'running') throw new Error('Cannot change the workspace while a workflow is running.');
+    if (isRunning()) throw new Error('Cannot change the workspace while workflows are running.');
     ws = next;
     seedDefaults();
     // queued issues never start on their own after a restart or a workspace change
@@ -144,8 +155,62 @@ function createService({ host }) {
   // file the user deleted (e.g. resuming an old run).
   const workflowDirs = () => [ws.workflows, BUNDLED_WORKFLOWS_DIR];
   const workflowPath = (file) => workflows.resolveWorkflow(path.basename(String(file || '')), workflowDirs());
-  const isCurrent = (runId) => !runId || (currentRun && currentRun.runId === runId);
-  const isRunning = () => currentRun?.status === 'running';
+  const isRunning = () => active.size > 0 || reserved.size > 0;
+  // The run in progress with this id; without an id, the only one in progress (older callers).
+  const liveRun = (runId) => (runId ? active.get(String(runId)) : active.size === 1 ? [...active.values()][0] : null) || null;
+  const usageOf = (run) => [...run.sessions.values()].map((s) => ({ provider: s.provider, model: s.model, tokens: s.tokens, costUsd: s.costUsd }));
+
+  // ---- concurrent runs ------------------------------------------------------------------
+  // Settings › Execution › Concurrent runs. Disabled: one run at a time, simulations included.
+  function concurrency() {
+    const c = { ...workspace.DEFAULT_SETTINGS.concurrentRuns, ...(workspace.readSettings(ws).concurrentRuns || {}) };
+    if (!c.enabled) return { enabled: false, max: 1, perProject: null, countSimulations: true };
+    return {
+      enabled: true, max: Math.max(1, Math.floor(num(c.max) || 1)),
+      perProject: num(c.perProject) ? Math.max(1, Math.floor(num(c.perProject))) : null, countSimulations: !!c.countSimulations,
+    };
+  }
+
+  // Why a run ({ mock, projectId }) cannot start now ('' = it can). `self` is its own reservation.
+  function slotProblem({ mock, projectId }, self = null) {
+    const c = concurrency();
+    if (mock && !c.countSimulations) return '';
+    const taken = [...active.values(), ...[...reserved].filter((x) => x !== self)].filter((r) => c.countSimulations || !r.mock);
+    if (taken.length >= c.max) {
+      return c.enabled ? `${taken.length} of ${c.max} runs in progress: wait for one to finish, or raise the limit in Settings › Execution.` : 'A workflow is already running.';
+    }
+    const same = projectId ? taken.filter((r) => r.projectId === projectId).length : 0;
+    if (c.perProject && same >= c.perProject) {
+      return `${same} of ${c.perProject} runs of this project in progress: wait for one to finish, or raise the limit per project in Settings › Execution.`;
+    }
+    return '';
+  }
+
+  // Usage of the other real runs that count toward a run's budget (see WorkflowRun peerSessions).
+  function peerSessions(run) {
+    const since = budgetAt.get(run.runId) ?? Date.now();
+    return [
+      ...[...active.values()].filter((r) => r !== run && !r.mock).flatMap(usageOf),
+      ...finishedPeers.filter((f) => f.finishedAt >= since).flatMap((f) => f.sessions),
+    ];
+  }
+
+  function runEnded(run) {
+    active.delete(run.runId);
+    budgetAt.delete(run.runId);
+    if (!run.mock && active.size) finishedPeers.push({ finishedAt: Date.now(), sessions: usageOf(run) });
+    const oldest = Math.min(...budgetAt.values());
+    finishedPeers = finishedPeers.filter((f) => f.finishedAt >= oldest); // none left when nothing runs
+  }
+
+  // What the UI shows of each run in progress (the Run menu list).
+  function activeRuns() {
+    return [...active.values()].map((r) => ({
+      runId: r.runId, workflow: r.wf.metadata?.name || path.basename(r.file), file: path.basename(r.file), mock: r.mock,
+      projectId: r.projectId, issue: r.issue, startedAt: r.startedAt ? new Date(r.startedAt).toISOString() : null,
+      waiting: r.approvals.size, inputs: r.inputs,
+    }));
+  }
 
   function listWorkflows() {
     if (!fs.existsSync(ws.workflows)) return [];
@@ -228,47 +293,66 @@ function createService({ host }) {
 
   // mockSequences: simulation scenario ({ field: [value per visit] }, invalid_answers), ignored for real runs
   async function startWorkflowRun({ file, inputs, mock, mockSequences = null, resume = null, projectId: forcedProject = null, issue = null }) {
-    if (isRunning()) throw new Error('A workflow is already running.');
-    await host.assertCanRun?.({ mock: !!mock });
-    // repo_path can be a git URL: clones (or updates) it into <workspace>/repos.
-    if (workspace.isGitUrl(inputs?.repo_path)) {
-      inputs = { ...inputs, repo_path: (await workspace.cloneRepo(inputs.repo_path, ws.repos)).dir };
-    }
-    const settings = workspace.readSettings(ws);
-    const folders = Object.values(inputs || {}).filter((v) => typeof v === 'string' && /[\\/]/.test(v)).map((v) => path.resolve(v).toLowerCase());
-    const projectId = forcedProject || projects.listProjects(ws.projects).find((p) => p.folder && folders.includes(path.resolve(p.folder).toLowerCase()))?.id || null;
-    // budgets that count usage outside the orchestrator need the CLIs' own logs
-    const needsLocal = Object.values(settings.budgets || {}).some((b) => b?.countOutside);
-    const budget = usage.budgetBaseline({ runsDir: ws.runs, settings, local: needsLocal ? readLocalUsage() : null });
-    const wfFile = workflowPath(file);
-    const notices = [];
-    if (wfFile.fallback) {
-      const msg = `workflow ${path.basename(wfFile.file)} is not in ${ws.workflows}; using the copy bundled with the app (${wfFile.file})`;
-      console.warn(msg);
-      notices.push({ level: 'warn', message: msg });
-    }
-    const run = new WorkflowRun({
-      file: wfFile.file, inputs, mock, runsDir: ws.runs, skillsDirs: [ws.skills], notices,
-      budget, prices: settings.prices, projectId, issue, resume, mockSequences: mock ? mockSequences : null,
-      // simulation runs never touch git: the agents are mocked and work in the repository folder
-      worktreesDir: mock ? null : ws.worktrees,
-    });
-    if (!mock) {
-      const problems = usage.preflight(run.wf, budget, resolveCommand, run.inputs);
-      if (problems.length) throw new Error(problems.join('\n'));
+    const slot = { mock: !!mock, projectId: forcedProject };
+    const busy = slotProblem(slot);
+    if (busy) throw new Error(busy);
+    reserved.add(slot);
+    let run;
+    try {
+      await host.assertCanRun?.({ mock: !!mock });
+      // repo_path can be a git URL: clones (or updates) it into <workspace>/repos.
+      if (workspace.isGitUrl(inputs?.repo_path)) {
+        inputs = { ...inputs, repo_path: (await workspace.cloneRepo(inputs.repo_path, ws.repos)).dir };
+      }
+      const settings = workspace.readSettings(ws);
+      const folders = Object.values(inputs || {}).filter((v) => typeof v === 'string' && /[\\/]/.test(v)).map((v) => path.resolve(v).toLowerCase());
+      const projectId = forcedProject || projects.listProjects(ws.projects).find((p) => p.folder && folders.includes(path.resolve(p.folder).toLowerCase()))?.id || null;
+      // the project is known now: its own limit applies
+      slot.projectId = projectId;
+      const busyProject = slotProblem(slot, slot);
+      if (busyProject) throw new Error(busyProject);
+      // budgets that count usage outside the orchestrator need the CLIs' own logs
+      const needsLocal = Object.values(settings.budgets || {}).some((b) => b?.countOutside);
+      const baselineAt = Date.now();
+      const budget = usage.budgetBaseline({ runsDir: ws.runs, settings, local: needsLocal ? readLocalUsage() : null });
+      const wfFile = workflowPath(file);
+      const notices = [];
+      if (wfFile.fallback) {
+        const msg = `workflow ${path.basename(wfFile.file)} is not in ${ws.workflows}; using the copy bundled with the app (${wfFile.file})`;
+        console.warn(msg);
+        notices.push({ level: 'warn', message: msg });
+      }
+      run = new WorkflowRun({
+        file: wfFile.file, inputs, mock, runsDir: ws.runs, skillsDirs: [ws.skills], notices,
+        budget, prices: settings.prices, projectId, issue, resume, mockSequences: mock ? mockSequences : null,
+        // simulation runs never touch git: the agents are mocked and work in the repository folder
+        worktreesDir: mock ? null : ws.worktrees,
+        // concurrent runs share the monthly budgets
+        peerSessions: () => peerSessions(run),
+      });
+      if (!mock) {
+        // the runs in progress have not written their usage to disk yet
+        const problems = usage.preflight(run.wf, usage.withPeerUsage(budget, peerSessions(run), settings.prices), resolveCommand, run.inputs);
+        if (problems.length) throw new Error(problems.join('\n'));
+      }
+      budgetAt.set(run.runId, baselineAt);
+      active.set(run.runId, run);
+    } finally {
+      reserved.delete(slot);
     }
     const recorder = new Recorder(run.runDir, run.wf.observability?.capture?.redact);
     const runInfo = {
-      runId: run.runId, workflow: run.wf.metadata?.name || path.basename(wfFile.file), mock: !!run.mock,
-      project: projectId ? projects.listProjects(ws.projects).find((p) => p.id === projectId)?.name || projectId : null,
+      runId: run.runId, workflow: run.wf.metadata?.name || path.basename(run.file), mock: !!run.mock,
+      project: run.projectId ? projects.listProjects(ws.projects).find((p) => p.id === run.projectId)?.name || run.projectId : null,
     };
     run.on('event', (ev) => {
       try { recorder.write(ev); } catch (e) { console.error('recorder:', e); }
+      if (ev.type === 'workflow.finished') runEnded(run);
       events.emit('run:event', ev);
-      if (ev.type === 'workflow.started') markActiveRun(runInfo);
-      if (ev.type === 'workflow.finished') markActiveRun(null);
+      if (ev.type === 'workflow.started') markActiveRun(run.runId, runInfo);
+      if (ev.type === 'workflow.finished') markActiveRun(run.runId, null);
       notify(notifier.runNotice(ev, runInfo));
-      // the next issue waiting in a Backlog queue starts once this run is over; a queued issue whose
+      // the next issues waiting in a Backlog queue start once this run is over; a queued issue whose
       // run failed pauses its queue (a failure that repeats would otherwise burn through it)
       if (ev.type === 'workflow.finished') {
         if (run.issue && run.projectId && ev.status === 'failed' && !run.mock) {
@@ -277,26 +361,28 @@ function createService({ host }) {
         setTimeout(() => dispatchQueue().catch((e) => console.error('backlog dispatch:', e)), 1000);
       }
     });
-    currentRun = run;
     run.start();
     return { runId: run.runId, runDir: run.runDir };
   }
 
   // Provider config of a run's workflow: the live one, or the workflow file named in its events.
   function runProviders(runId, file) {
-    if (isCurrent(runId) && currentRun) return currentRun.wf.providers || {};
+    const live = active.get(runId);
+    if (live) return live.wf.providers || {};
     try { return loadWorkflow(workflowPath(file).file).providers || {}; } catch { return {}; }
   }
 
-  // Everything needed to open a session: from the current run, or from the run folder on disk.
+  // Everything needed to open a session: from the run in progress, or from the run folder on disk.
   function findSession(runId, sessionId) {
-    if (isCurrent(runId) && currentRun) {
-      const x = currentRun.sessions.get(sessionId);
-      return x && { run: { runDir: currentRun.runDir, file: path.basename(currentRun.file), inputs: currentRun.inputs, running: currentRun.status === 'running' }, sess: sessionView(x, true) };
+    const live = liveRun(runId);
+    if (live) {
+      const x = live.sessions.get(sessionId);
+      return x && { run: { runId: live.runId, runDir: live.runDir, file: path.basename(live.file), inputs: live.inputs, running: live.status === 'running' }, sess: sessionView(x, true) };
     }
+    if (!runId) return null;
     const r = runs.readRun(ws.runs, path.basename(String(runId)));
     const x = r?.sessions.find((y) => y.id === sessionId);
-    return x && { run: { runDir: r.runDir, file: r.file, inputs: r.inputs, running: false }, sess: sessionView(x, false) };
+    return x && { run: { runId: r.runId, runDir: r.runDir, file: r.file, inputs: r.inputs, running: false }, sess: sessionView(x, false) };
   }
 
   // What to run to watch (live) or resume (cli) a session: { title, file, args, cwd, env }.
@@ -321,7 +407,7 @@ function createService({ host }) {
         args: [tail, run.runDir, sess.id], env: { ...env, ELECTRON_RUN_AS_NODE: '1', FORCE_COLOR: '1' },
       };
     }
-    const providers = runProviders(runId, run.file);
+    const providers = runProviders(run.runId, run.file);
     const why = cliReason(sess, providers, run.running);
     if (why) throw new Error(why);
     const cfg = providers[sess.provider];
@@ -465,7 +551,7 @@ function createService({ host }) {
 
   // Embedded terminals (xterm.js in the UI + node-pty here)
   function openTerminal({ kind, runId, sessionId, cols, rows, ...opts }) {
-    if (kind === 'supervisor') return openProgram(supervisorChatSpec(runId || currentRun?.runId), cols, rows);
+    if (kind === 'supervisor') return openProgram(supervisorChatSpec(runId || liveRun(null)?.runId), cols, rows);
     if (kind === 'cli-resume' || kind === 'cli-new') {
       const spec = cliSessionSpec({ kind, sessionId, ...opts });
       const opened = openProgram(spec, cols, rows);
@@ -495,8 +581,9 @@ function createService({ host }) {
 
   // ---- run lists (Projects > Project and Workflows > Runs) ------------------------------
   function runListItem(r) {
-    const current = !!currentRun && currentRun.runId === r.runId && currentRun.status === 'running';
-    const live = current ? [...currentRun.sessions.values()].map((x) => sessionView(currentRun.snapshot(x), false)) : null;
+    const run = active.get(r.runId);
+    const current = !!run && run.status === 'running';
+    const live = current ? [...run.sessions.values()].map((x) => sessionView(run.snapshot(x), false)) : null;
     // the orchestrator first: its live log is the run's timeline
     const sessions = (live || r.sessions.map((x) => sessionView(x, false))).sort((a, b) => (b.agent === 'orchestrator') - (a.agent === 'orchestrator'));
     const providers = runProviders(current ? r.runId : 'disk', r.file);
@@ -520,20 +607,19 @@ function createService({ host }) {
     return { project, runs: runs.runsForProject(runs.listRuns(ws.runs), project).map(runListItem) };
   }
 
-  // A synced backlog with each issue's runs (computed on every read: runs come and go).
   // A synced backlog with each issue's runs and place in the queue (computed on every read: runs
   // come and go), plus the queue itself.
   function withIssueRuns(data) {
     if (!data) return null;
     const project = projects.listProjects(ws.projects).find((p) => p.id === data.projectId);
     const list = project ? runs.runsForProject(runs.listRuns(ws.runs), project) : [];
-    const live = list.map((r) => (isCurrent(r.runId) && isRunning() ? { ...r, status: 'running', waiting: currentRun.approvals.size > 0 } : r));
+    const live = list.map((r) => (active.has(r.runId) ? { ...r, status: 'running', waiting: active.get(r.runId).approvals.size > 0 } : r));
     const queue = backlog.readQueue(ws.backlog, data.projectId);
     return { ...data, queue, issues: backlog.linkRuns(data.issues, live, queue) };
   }
 
-  // Queues issues of a project's synced backlog for a workflow and starts the first one if nothing
-  // is running. Only open issues; the workflow needs a `task` input (the issue goes there).
+  // Queues issues of a project's synced backlog for a workflow and starts the first ones if there
+  // are free run slots. Only open issues; the workflow needs a `task` input (the issue goes there).
   async function assignWorkflow({ projectId, numbers, workflow, inputs, mock }) {
     const project = projects.readProject(ws.projects, path.basename(String(projectId)));
     const data = backlog.readBacklog(ws.backlog, project.id);
@@ -550,26 +636,29 @@ function createService({ host }) {
     return withIssueRuns(backlog.readBacklog(ws.backlog, project.id));
   }
 
-  // Starts the oldest queued issue (across projects) when no run is in progress. A start that
-  // fails (budget, missing CLI, bad input) pauses that project's queue with the reason.
+  // Starts queued issues while there are free run slots: the oldest first across projects, a
+  // project at its own limit waiting. A start that fails (budget, missing CLI, bad input) pauses
+  // that project's queue with the reason.
   let dispatching = false;
   async function dispatchQueue() {
-    if (dispatching || !ws || isRunning()) return;
+    if (dispatching || !ws) return;
     dispatching = true;
     try {
-      const next = backlog.nextQueued(ws.backlog);
-      if (!next) return;
-      const { projectId, item } = next;
-      try {
-        const project = projects.readProject(ws.projects, projectId);
-        const wf = loadWorkflow(workflowPath(item.workflow).file);
-        await startWorkflowRun({
-          file: item.workflow, inputs: backlog.runInputs(item, wf, project.folder), mock: item.mock,
-          projectId, issue: { number: item.number, url: item.url, title: item.title },
-        });
-        backlog.unqueue(ws.backlog, projectId, item.number);
-      } catch (e) {
-        backlog.setPaused(ws.backlog, projectId, true, `Could not start #${item.number}: ${e.message}`);
+      for (;;) {
+        const next = backlog.nextQueued(ws.backlog, (projectId, item) => !slotProblem({ mock: !!item.mock, projectId }));
+        if (!next) return;
+        const { projectId, item } = next;
+        try {
+          const project = projects.readProject(ws.projects, projectId);
+          const wf = loadWorkflow(workflowPath(item.workflow).file);
+          await startWorkflowRun({
+            file: item.workflow, inputs: backlog.runInputs(item, wf, project.folder), mock: item.mock,
+            projectId, issue: { number: item.number, url: item.url, title: item.title },
+          });
+          backlog.unqueue(ws.backlog, projectId, item.number);
+        } catch (e) {
+          backlog.setPaused(ws.backlog, projectId, true, `Could not start #${item.number}: ${e.message}`);
+        }
       }
     } finally {
       dispatching = false;
@@ -596,7 +685,7 @@ function createService({ host }) {
     const list = runId ? all.filter((r) => r.runId === runId) : project ? runs.runsForProject(all, project) : all;
     return list.map((r) => {
       const owner = runs.projectOf(r, projectList);
-      const current = !!currentRun && currentRun.runId === r.runId && currentRun.status === 'running';
+      const current = active.get(r.runId)?.status === 'running';
       return {
         runId: r.runId, workflow: r.workflow, version: r.version, status: current ? 'running' : r.status,
         mock: r.mock, startedAt: r.startedAt, task: r.task, runDir: r.runDir,
@@ -624,10 +713,9 @@ function createService({ host }) {
 
   // ---- usage and budgets ------------------------------------------------------------
   function usageSnapshot(scope = 'orchestrator') {
-    const r = currentRun;
-    const live = r?.status === 'running' && !r.mock
-      ? { run_id: r.runId, workflow: r.wf.metadata?.name, started_at: new Date(r.startedAt).toISOString(), sessions: [...r.sessions.values()].map((x) => r.snapshot(x)) }
-      : null;
+    const live = [...active.values()].filter((r) => r.status === 'running' && !r.mock).map((r) => ({
+      run_id: r.runId, workflow: r.wf.metadata?.name, started_at: new Date(r.startedAt).toISOString(), sessions: [...r.sessions.values()].map((x) => r.snapshot(x)),
+    }));
     const installed = Object.fromEntries(usage.PROVIDERS.map((p) => [p.id, !!resolveCommand(p.command)]));
     const local = scope === 'machine' ? readLocalUsage() : null;
     return usage.computeUsage({ runsDir: ws.runs, settings: workspace.readSettings(ws), live, installed, scope, local });
@@ -675,7 +763,12 @@ function createService({ host }) {
     }),
 
     'settings:get': () => workspace.readSettings(ws),
-    'settings:set': (patch) => workspace.writeSettings(ws, patch),
+    'settings:set': (patch) => {
+      const next = workspace.writeSettings(ws, patch);
+      // a higher limit of concurrent runs frees slots for the Backlog queues
+      if (patch && 'concurrentRuns' in patch) dispatchQueue().catch((e) => console.error('backlog dispatch:', e));
+      return next;
+    },
 
     'projects:list': () => projects.listProjects(ws.projects),
     'projects:create': (data) => projects.createProject(ws.projects, data, { reposDir: ws.repos }),
@@ -691,7 +784,7 @@ function createService({ host }) {
       project: projects.readProject(ws.projects, path.basename(String(projectId))),
       platform: platform || workspace.readSettings(ws).backlogPlatform,
     })),
-    // Assign a workflow to issues: they are queued and run one at a time (see dispatchQueue).
+    // Assign a workflow to issues: they are queued and start while there are free run slots (see dispatchQueue).
     'backlog:assign': (opts) => assignWorkflow(opts),
     'backlog:unqueue': async ({ projectId, number }) => {
       backlog.unqueue(ws.backlog, path.basename(String(projectId)), Number(number));
@@ -719,12 +812,24 @@ function createService({ host }) {
     'workspace:get': () => ({ ...ws, registry: process.env[workspace.ENV_VAR] ? null : workspace.defaultStore().describe }),
 
     'run:start': ({ file, inputs, mock, mockSequences }) => startWorkflowRun({ file, inputs, mock, mockSequences }),
-    'run:stop': () => { currentRun?.stop(); return true; },
+    // runId: the run to stop (without it, the only run in progress)
+    'run:stop': (opts) => {
+      const run = liveRun(opts?.runId);
+      if (!run && !opts?.runId && active.size > 1) throw new Error('Several runs are in progress: say which one to stop.');
+      run?.stop();
+      return !!run;
+    },
+    'runs:active': () => activeRuns(),
     'runs:list': () => listAllRuns(),
     // activity: also the agents' tool calls and thinking, compacted (the run chat shows them)
     'runs:events': ({ runId, activity }) => runs.runEvents(runFolder(runId), { activity: !!activity }),
-    // answer: true/false or the id of a choice; feedback: the optional text typed at the gate
-    'approval:resolve': ({ id, answer, feedback }) => currentRun?.resolveApproval(id, answer, 'user', feedback) ?? false,
+    // answer: true/false or the id of a choice; feedback: the optional text typed at the gate.
+    // Gate ids are per run (a1, a2…): runId says which run (without it, the only run waiting on that id).
+    'approval:resolve': ({ runId, id, answer, feedback }) => {
+      const waiting = [...active.values()].filter((r) => r.approvals.has(id));
+      const run = runId ? active.get(String(runId)) : waiting.length === 1 ? waiting[0] : null;
+      return run?.resolveApproval(id, answer, 'user', feedback) ?? false;
+    },
 
     // Explains any run (running, failed or finished) and recommends actions; the analysis is saved in
     // the run folder (supervisor/analysis-*.md), so it shows up in Artifacts.
@@ -760,20 +865,27 @@ function createService({ host }) {
     workspace: () => ws,
     setWorkspace,
     isRunning,
-    currentRunDir: () => currentRun?.runDir || null,
+    // a run's folder (the run in progress without an id), for "Open log folder"
+    runDir: (runId) => {
+      if (!runId) return liveRun(null)?.runDir || null;
+      try { return runFolder(runId); } catch { return null; }
+    },
     // folders the UI may open on this machine: the workspace and the projects' folders
     openableFolders: () => [ws.root, ...projects.listProjects(ws.projects).map((x) => x.folder)],
     findArtifact,
     terminalSpec,
     // run worktrees left behind: succeeded runs whose removal failed, or unused for 14 days
-    // (call at startup, when no run is in progress yet)
-    cleanupWorktrees: () => cleanupWorktrees({ worktreesDir: ws.worktrees, runsDir: ws.runs }),
-    // the run the app had in progress when it last closed, as a notification (call at startup)
+    // (call at startup; the worktrees of runs in progress are never touched)
+    cleanupWorktrees: () => cleanupWorktrees({
+      worktreesDir: ws.worktrees, runsDir: ws.runs,
+      active: [...active.values()].flatMap((r) => [r.worktree?.dir, r.resume?.worktree?.dir, path.join(ws.worktrees, r.runId)]).filter(Boolean),
+    }),
+    // the runs the app had in progress when it last closed, as notifications (call at startup)
     notifyInterruptedRun,
     shutdown() {
       waiting.closeAll();
       terminals.killAll();
-      currentRun?.stop();
+      for (const run of active.values()) run.stop();
     },
   };
 }

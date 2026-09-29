@@ -9,6 +9,11 @@ Read this before changing anything in `src/renderer/`.
   artifacts, workflows (agents with their session mode and capabilities), agents, skills, usage,
   settings, run (+ run chat); terminal dock; supervisor drawer. The code map
   ([code-map.md](code-map.md)) says which file draws which screen.
+- Several runs can be in progress: `state.runs` (run id → view: run, sessions, steps, log, gates) and
+  `state.runId` (the one the Run screen and the top bar show); `state.run`, `state.sessions`… read the
+  selected one. Route anything run-specific by `ev.run_id` and pass the `runId` to `stopRun`,
+  `resolveApproval` and the terminals. Gates open the approval dialog only on their run's Run screen
+  (elsewhere: the Run badge and a toast).
 - Write & Review and AI Arena keep their own chat screens; every other run uses the run chat
   (`run-chat-model.js` is pure and unit-tested, `run-chat.js` draws it).
 - Test changes with a temporary Electron script (see `scripts/smoke.js`:

@@ -166,7 +166,7 @@
     delete $c('#rc-typing').dataset.key;
   }
 
-  const isCurrentRun = (runId) => state.run?.id === runId && state.run.status === 'running';
+  const isCurrentRun = (runId) => isRunLive(runId);
 
   // Opens a run's chat: replays what is on disk, then follows it live when it is the run in
   // progress. `follow`: when the run ends, the next run started in this window takes its place.
@@ -176,7 +176,7 @@
     // set before showing the view, so a pending gate of this run does not open the dialog
     chat.live = running || isCurrentRun(runId);
     showView('runchat');
-    if (chat.live && state.approval?.run_id === runId) $c('#approval-modal').classList.add('hidden'); // answered inline
+    if (chat.live && state.approval?.run_id === runId) closeApproval(); // answered inline
     drawHead();
     let events = [];
     try {
@@ -241,13 +241,13 @@
       const v = b.dataset.choice;
       const text = b.closest('.duo-ask')?.querySelector('textarea')?.value || '';
       b.closest('.duo-ask').querySelectorAll('button').forEach((x) => { x.disabled = true; });
-      api.resolveApproval(b.dataset.approval, v === 'true' ? true : v === 'false' ? false : v, text);
+      api.resolveApproval(b.dataset.approval, v === 'true' ? true : v === 'false' ? false : v, text, chat.runId);
     });
-    $c('#rc-stop').onclick = () => api.stopRun();
+    $c('#rc-stop').onclick = () => api.stopRun(chat.runId);
     $c('#rc-logs').onclick = () => chat.model.run.runDir && api.openPath(chat.model.run.runDir);
     // Chat / Details: the Run screen for the run in progress, the runs list for a past one.
     $c('#rc-details').onclick = () => {
-      if (state.run?.id === chat.model.run.id || state.run?.id === chat.runId) showView('run');
+      if (state.runs.has(chat.runId)) selectRun(chat.runId);
       else showRunInList(chat.runId);
     };
     $c('#run-mode-chat').onclick = () => state.run && openChatFor({ runId: state.run.id, workflow: state.run.workflow, running: state.run.status === 'running', follow: true });

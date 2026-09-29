@@ -789,7 +789,7 @@
     const internal = INTERNAL();
     for (const k of ['synthesizer', 'verifier', 'supervisor']) $a(`[data-arena-robot="${k}"]`).innerHTML = robotSvg({ ...internal[k], side: 'left' });
     $a('#arena-run').onclick = startRun;
-    $a('#arena-stop').onclick = () => api.stopRun();
+    $a('#arena-stop').onclick = () => api.stopRun(chat.runId);
     $a('#arena-logs').onclick = () => chat.runDir && api.openPath(chat.runDir);
     $a('#arena-back').onclick = () => {
       $a('#arena-chat').classList.add('hidden');
@@ -804,7 +804,7 @@
       if (b && chat.live) {
         const v = b.dataset.choice;
         const text = b.closest('.duo-ask')?.querySelector('textarea')?.value || '';
-        api.resolveApproval(b.dataset.approval, v === 'true' ? true : v === 'false' ? false : v, text);
+        api.resolveApproval(b.dataset.approval, v === 'true' ? true : v === 'false' ? false : v, text, chat.runId);
       }
     });
     api.onEvent(onEvent);
