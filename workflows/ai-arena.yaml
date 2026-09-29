@@ -33,7 +33,7 @@ kind: Workflow
 
 metadata:
   name: ai-arena
-  version: 0.8.0
+  version: 0.9.0
   description: "Up to five models you pick write the same document (e.g. a PRD) in parallel, blindly critique each other, and an orchestrator merges the final document."
   tags: [arena, prd, plan, multi-model]
   category: plan
@@ -108,19 +108,16 @@ providers:
   grok:
     type: grok-cli
     command: grok
-    args: ["--output-format", "streaming-json", "-m", "{{ model }}", "--no-subagents"]
+    args: ["--output-format", "streaming-json", "-m", "{{ model }}"]
     effort_args: ["--reasoning-effort", "{{ effort }}"]
     resume_args: ["--resume", "{{ session_id }}"]
     # the prompt goes in a temporary file (grok --prompt-file)
     prompt_file_arg: ["--prompt-file", "{{ prompt_file }}"]
 
 x-tools:
-  # Contenders read the project and may research the web, but never write. Per provider,
-  # because the user picks it; grok needs --always-approve headless (nobody can answer prompts).
-  contender_tools: &contender_tools
-    claude: ["--allowedTools", "Read Glob Grep WebSearch WebFetch", "--disallowedTools", "Edit Write NotebookEdit Bash"]
-    codex: ["-s", "read-only"]
-    grok: ["--tools", "read_file,list_dir,grep,web_search,web_fetch", "--always-approve"]
+  # Contenders read the project and may research the web, but never write. The engine turns this
+  # into the flags of whichever CLI the user picks (and keeps the user's own CLI setup out).
+  contender_tools: &contender_tools { tools: [read], web: true }
 
 defaults:
   # empty (no project): the run folder
@@ -156,7 +153,7 @@ agents:
     model: "{{ inputs.contender_1_model }}"
     effort: "{{ inputs.contender_1_effort }}"
     session: persistent
-    cli_args: *contender_tools
+    capabilities: *contender_tools
     system_prompt: &contender |
       You are taking part in an arena: other models get the same request and the best
       content from each will be used. Work independently, be specific and honest:
@@ -171,7 +168,7 @@ agents:
     model: "{{ inputs.contender_2_model }}"
     effort: "{{ inputs.contender_2_effort }}"
     session: persistent
-    cli_args: *contender_tools
+    capabilities: *contender_tools
     system_prompt: *contender
 
   contender_3:
@@ -180,7 +177,7 @@ agents:
     model: "{{ inputs.contender_3_model }}"
     effort: "{{ inputs.contender_3_effort }}"
     session: persistent
-    cli_args: *contender_tools
+    capabilities: *contender_tools
     system_prompt: *contender
 
   contender_4:
@@ -189,7 +186,7 @@ agents:
     model: "{{ inputs.contender_4_model }}"
     effort: "{{ inputs.contender_4_effort }}"
     session: persistent
-    cli_args: *contender_tools
+    capabilities: *contender_tools
     system_prompt: *contender
 
   contender_5:
@@ -198,7 +195,7 @@ agents:
     model: "{{ inputs.contender_5_model }}"
     effort: "{{ inputs.contender_5_effort }}"
     session: persistent
-    cli_args: *contender_tools
+    capabilities: *contender_tools
     system_prompt: *contender
 
   # Synthesis orchestrator: its own session, did not compete, not a judge in its own cause.
@@ -206,7 +203,7 @@ agents:
     provider: claude
     model: claude-opus-5-5
     session: persistent
-    cli_args: ["--disallowedTools", "Edit Write NotebookEdit Bash"]
+    capabilities: { tools: [read], web: false }
     skills: [arena-synthesis]
     system_prompt: |
       You are the arena's synthesis orchestrator. You receive anonymized proposals from
@@ -217,7 +214,7 @@ agents:
     provider: codex
     model: gpt-6-luna
     session: ephemeral
-    cli_args: ["-s", "read-only"]
+    capabilities: { tools: [read], web: false }
     system_prompt: |
       You verify an arena's final document. You check it, you do not rewrite it.
 

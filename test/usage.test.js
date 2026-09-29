@@ -91,7 +91,9 @@ test('parseGrok turns a real grok streaming-json capture into items, final text,
     parseGrok(JSON.parse(line), (i) => items.push(i), acc);
   }
   parseGrok.flush((i) => items.push(i), acc);
-  assert.deepEqual(items.map((i) => i.kind), ['thinking', 'text', 'tool_call', 'tool_result', 'thinking', 'text', 'session', 'usage']);
+  assert.deepEqual(items.map((i) => i.kind).filter((k) => k !== 'context'), ['thinking', 'text', 'tool_call', 'tool_result', 'thinking', 'text', 'session', 'usage']);
+  // each model request's context window (input + cached), from the per-call usage events
+  assert.deepEqual(items.filter((i) => i.kind === 'context').map((i) => i.tokens), [15043 + 1792, 83 + 16896]);
   assert.equal(items.find((i) => i.kind === 'tool_call').name, 'list_dir');
   assert.equal(acc.text, '6'); // only the text after the last tool call
   assert.equal(acc.costUsd, 0.040184);

@@ -20,6 +20,7 @@ const { EventEmitter } = require('events');
 const { WorkflowRun, loadWorkflow } = require('../engine/workflow');
 const { Recorder } = require('../engine/recorder');
 const { resolveCommand } = require('../engine/providers');
+const capabilities = require('../engine/capabilities');
 const { cleanupWorktrees, canonicalPath } = require('../engine/worktree');
 const workspace = require('../workspace');
 const projects = require('../projects');
@@ -131,7 +132,13 @@ function createService({ host }) {
             category: wf.metadata?.category || 'build',
             tags: wf.metadata?.tags || [],
             inputs: wf.inputs || {},
-            agents: Object.fromEntries(Object.entries(wf.agents).map(([k, a]) => [k, { provider: a.provider, model: a.model, session: a.session, skills: a.skills || [] }])),
+            agents: Object.fromEntries(Object.entries(wf.agents).map(([k, a]) => {
+              const d = { ...(wf.defaults || {}), ...a };
+              return [k, {
+                provider: a.provider, model: a.model, session: d.session || 'persistent', max_context: d.max_context || null, skills: a.skills || [],
+                capabilities: capabilities.describe(a.capabilities), isolated: d.isolation !== false,
+              }];
+            })),
             steps: wf.steps.map((s) => ({
               id: s.id,
               type: s.type || 'agent',
@@ -437,7 +444,7 @@ function createService({ host }) {
     const first = loadWorkflow(workflowPath(spec.file).file).steps[0].id;
     return startWorkflowRun({
       file: spec.file, inputs: spec.inputs, mock: spec.mock, projectId: spec.projectId, issue: spec.issue,
-      resume: { runId: spec.runId, fromStep: step || first, steps: spec.steps, sessions: spec.sessions, instruction: instruction || null, worktree: spec.worktree },
+      resume: { runId: spec.runId, fromStep: step || first, steps: spec.steps, sessions: spec.sessions, handoffs: spec.handoffs, instruction: instruction || null, worktree: spec.worktree },
     });
   }
 

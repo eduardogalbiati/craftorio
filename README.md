@@ -93,7 +93,7 @@ Local build: `npm run build` (writes `build/`) or `npm run package` (writes `dis
 
 | Stage | Agent | Model | What it does | Skills |
 |---|---|---|---|---|
-| Build & Test | Developer | Opus 5.5 | Implements and fixes everything the other agents report; always branches from a freshly fetched `origin/<base_branch>` | `unit-test-writer-<language>`, `bug-diagnosis`, `merge-conflict-resolver`, `decision-log` |
+| Build & Test | Developer | Opus 5.5 | Implements and fixes everything the other agents report; always branches from a freshly fetched `origin/<base_branch>`. Handoff session: each fix round starts fresh from its handoff note | `unit-test-writer-<language>`, `bug-diagnosis`, `merge-conflict-resolver`, `context-economy`, `decision-log` |
 | | Code Review | Codex gpt-6-luna | Reviews the diff on correctness, spec and standards; requests changes only for blocker/major | `code-review` |
 | | Test Writer | Sonnet 5 | Writes/updates tests and runs the suite; failures go back to the developer | `unit-test-writer-<language>` |
 | | Builder | Sonnet 5 | Build + dependency audit; a broken build or a high/critical production vulnerability goes back to the developer | `build-audit-<language>` |
@@ -134,6 +134,12 @@ iterations in a row (default 3, `0` turns it off) in which it checked nothing (e
 refused by its allowlist, or none made) or had calls refused and gave the same answer again.
 The reason goes to the run log and `decisions.tsv`. Many refused calls in one turn also log a
 warning that the supervisor sees.
+
+Sessions: the developer, the CI pusher and the PR babysitter come back many times for small
+turns (a fix, a CI check), so they run in `handoff` sessions: every turn is a fresh session that
+starts from the agent's latest handoff note, instead of carrying 200k+ tokens of history. The
+other agents keep one conversation (`persistent`) up to `max_context: 150k`. Each agent may only
+use what its `capabilities` declare (e.g. the CI pusher: read, `git`, `gh`, `glab`; no edits, no web).
 
 ## AI Arena (`workflows/ai-arena.yaml`)
 
@@ -276,6 +282,7 @@ What is shared by a family lives in a suffix-less skill referenced with `uses:`.
 | `claim-verification` | verifier | Falsifiable claim, baseline vs treatment with the same command, verified / not_verified / inconclusive |
 | `blast-radius` | multi-model review | Boundary changes, their consumers, and the safety fact proven on an evidence ladder |
 | `review-synthesis` | multi-model review judge | Lead judgment: merge, verify, weigh agreement and nitpicks, act on / consider / noted / dismissed |
+| `context-economy` | developer | Maps the code with exploration sub-agents, reads excerpts instead of whole files, writes handoff notes the next fresh session can act on |
 | `decision-log` | developer, PR babysitter | Agents end answers with a ```` ```decisions ```` block; the engine appends it to `<run>/decisions.tsv` |
 | `run-retrospective` | run retrospective | Friction, waste, skill gaps and no-ops in a run's logs, turned into proposals with evidence |
 | `arena-synthesis` | arena synthesizer | Merge method and the arena appendix |
@@ -480,6 +487,69 @@ Each turn of each agent is a headless child process of Electron:
   (`--resume <id>` / `codex exec ... resume <id>` / `grok --resume <id>`).
 - The command lines live under `providers:` in the YAML and can be changed without touching code.
 
+### Session modes and handoff notes
+
+```yaml
+defaults:
+  max_context: 150k        # persistent agents: a fresh session once a turn ends above this
+agents:
+  developer:
+    session: handoff       # persistent (default) | ephemeral | handoff
+```
+
+- `persistent`: one conversation for the whole run. With `max_context`, a turn that ends above it
+  (its largest request) makes the next turn start a fresh session from the agent's handoff note;
+  a turn is never cut in the middle.
+- `ephemeral`: a fresh session per turn with only the step prompt.
+- `handoff`: a fresh session per turn that gets the system prompt, the skills, the agent's latest
+  handoff note and the new request. The code itself is in git, so the note stays short.
+- **Handoff notes**: persistent and handoff agents end each turn with a ```` ```handoff ```` block
+  (goal, branch and commits, done, left, decisions and why, key files, known problems). The engine
+  takes it out of the answer and saves it as `runs/<id>/handoffs/<step>-v<visit>-<agent>.md`; it
+  shows in the run chat (under the answer) and in Artifacts. When a turn that needs one forgets it,
+  one short follow-up in the same conversation asks only for the note. The supervisor reads the
+  notes instead of full transcripts, and a resumed run starts its agents from them.
+- Works the same for Claude Code, Codex and Grok (a fresh session = no `--resume`). The context size
+  per request comes from Claude's and Grok's streams; Codex doesn't report it, so `max_context` does
+  not rotate Codex agents (use `handoff` for them).
+
+### Agent capabilities and isolation
+
+What an agent may use is declared per agent (and per step when needed) and enforced by the engine,
+which turns it into each CLI's own flags:
+
+```yaml
+agents:
+  ci_pusher:
+    capabilities:
+      tools: [read, bash:git, bash:gh, bash:glab]   # also edit, write, bash (any command)
+      web: false            # web search / fetch
+      mcp: []               # MCP servers from the workflow's mcp_servers, none by default
+      subagents: false      # the CLI's own sub-agents
+steps:
+  - id: research
+    agent: ci_pusher
+    capabilities: { web: true }   # this step only, merged over the agent's
+```
+
+- **Isolated by default**: agents run the user's CLIs headless, but without the user's personal
+  setup: no MCP servers (e.g. a logged-in browser), plugins, user settings, CLI skill listings or
+  auto-memory; only the project and what the workflow declares. `isolation: false` on an agent (or
+  in `defaults`) turns it off. Claude Code isolates fully; Codex drops the user's MCP servers,
+  plugins, apps, browser/computer use and memories; Grok has no flags for it (only its tools are
+  restricted). What a CLI can't enforce is written to the run log.
+- **Fewer tool definitions**: tools an agent can't use aren't offered at all (Claude `--tools`), which
+  shrinks every request. Measured on a Claude agent's first request: 41.1k tokens with the user's
+  setup, 22.0k isolated with the developer's capabilities.
+- Per CLI: Claude gets `--tools` / `--allowedTools` (`bash:git` → `Bash(git:*)`) and `acceptEdits`
+  when it may edit; Codex gets a `read-only` or `workspace-write` sandbox (it can't restrict which
+  commands run) and web search off; Grok gets a read-only tool list, `--disable-web-search` and
+  `--no-subagents`.
+- `loadWorkflow` validates capabilities; the Workflows screen shows each agent's session mode and
+  capabilities. `cli_args` still work for anything else; `permissions:` (documentation only) is gone.
+- Agents with `bash:gh` / `bash:glab` call them bare, in the Bash tool, one command per call (the
+  only form the allowlist accepts); the engine refreshes PATH so that works inside runs.
+
 **Terminals** (Run view session detail and Project view, for any run, including past ones):
 - They open in an **embedded terminal dock** at the bottom of the app, with tabs (xterm.js). The
   **↗** button next to each opens the same thing in an external console window instead (Windows).
@@ -559,13 +629,32 @@ Everything the app produces lives in a local workspace folder:
 - `MULTIAGENT_WORKSPACE=<folder>` overrides the workspace without writing to the registry (used by `npm test`).
 - `scripts/run.js` uses the same workspace; with nothing stored, it creates the default folder.
 
+## Structuring your repository's CLAUDE.md for unattended agents
+
+Claude Code loads a repository's `CLAUDE.md` (Codex: `AGENTS.md`) into every session that works
+in it, on every request: each workflow agent pays for all of it, on every turn. Keep it a short
+index (a few KB) and move the details to topic docs the agents read only when their task needs them:
+
+- `CLAUDE.md`: what the project is, the hard rules (what must never happen), the commands, and one
+  line per topic doc saying **when** to read it (e.g. "before changing the database schema").
+- `docs/agents/<topic>.md`: the code map, architecture notes, gotchas, testing, deployment...
+  Each section of the old file lands in exactly one doc; the user docs (README) are not duplicated.
+- A test that fails when `CLAUDE.md` grows past its limit or points to a missing doc keeps it honest.
+
+This repository does it itself: `CLAUDE.md` went from 25 KB to 4 KB, and a Claude agent's first
+request from 22.0k to 15.7k tokens (with isolation; 41.1k before both changes).
+
 ## Observability
 
 Each run writes to `<workspace>/runs/<run_id>/`:
 
 - `events.jsonl`: every event (step, transition, session, approval, saved file…)
 - `sessions/<id>.jsonl`: each session's events (prompts, thinking, tools, output)
-- `summary.json`: final metrics per session (duration, active, idle, tokens, cost)
+- `summary.json`: final metrics per session (duration, active, idle, tokens, cost) and, in `context`,
+  per agent: the context at the start and peak of each turn, total tokens, fresh sessions, and the
+  tokens spent on turns that could not progress (`waste`: every tool call refused, or a blocked `/loop`
+  iteration). The run chat shows each turn's context (start → peak).
+- `handoffs/`: the agents' handoff notes, one per turn
 - files written by `save_as` (e.g. `arena/`, `review.md`)
 - `decisions.tsv`: the agents' decision log (time, agent, step, phase, decision, why, evidence, result)
 
@@ -589,6 +678,7 @@ src/usage.js             token/cost usage per provider and scope, budgets and th
 src/local-usage.js       readers of the CLIs' own local usage logs (Claude Code, Codex, Grok)
 src/engine/workflow.js   engine that runs the YAML graph
 src/engine/providers.js  claude / codex / grok / mock adapters
+src/engine/capabilities.js  agent capabilities and isolation → each CLI's flags
 src/engine/recorder.js   writes to disk (jsonl + summary)
 src/engine/worktree.js   git worktree per run: create, reuse on resume, remove, orphan cleanup
 src/renderer/            UI (plain HTML/CSS/JS)
@@ -597,4 +687,5 @@ skills/                  bundled skills (copied into <workspace>/skills)
 .github/workflows/       CI (PRs) and deploy (merge into main)
 scripts/                 terminal runner, tests, build and UI smoke test
 test/                    unit tests (node:test) and fixtures
+CLAUDE.md, docs/agents/  context for coding agents working on this repository (short index + topic docs)
 ```

@@ -13,6 +13,7 @@ const { resolveSkill, skillPrompt } = require('../skills');
 const { providerId, sessionCost, totalTokens, WARN_AT } = require('../usage');
 const supervisor = require('../supervisor');
 const { prepareWorktree, removeWorktree, currentBranch } = require('./worktree');
+const capabilities = require('./capabilities');
 const { stopProcessesIn } = require('./processes');
 
 // Skills bundled with the app (skills/ folder at the root). Workspace skills take precedence.
@@ -55,16 +56,36 @@ function parseDuration(v, def) {
   return m ? +m[1] * { ms: 1, s: 1e3, m: 6e4, h: 36e5 }[m[2]] : def;
 }
 
+// Token counts written as 150k / 1.2m / 150000 (max_context).
+function parseTokens(v) {
+  if (v == null || v === '') return null;
+  if (typeof v === 'number') return v > 0 ? v : null;
+  const m = /^(\d+(?:\.\d+)?)\s*([km]?)$/i.exec(String(v).trim());
+  return m ? Math.round(+m[1] * { '': 1, k: 1e3, m: 1e6 }[m[2].toLowerCase()]) : null;
+}
+
 // Outcome of a run that reaches `end` through a transition with `status:` (default success),
 // e.g. a rejected failure gate → failed, a rejected merge → cancelled.
 const END_STATUSES = ['success', 'failed', 'cancelled'];
+
+// persistent: one conversation for the whole run (max_context: a fresh one with the handoff note
+// once a turn ends above it); ephemeral: a fresh session per turn with only the step prompt;
+// handoff: a fresh session per turn that starts from the agent's latest handoff note.
+const SESSION_MODES = ['persistent', 'ephemeral', 'handoff'];
 
 function loadWorkflow(file) {
   const wf = yaml.load(fs.readFileSync(file, 'utf8'));
   if (!wf || !Array.isArray(wf.steps) || !wf.steps.length) throw new Error('Workflow has no "steps".');
   if (!wf.agents) throw new Error('Workflow has no "agents".');
+  const mcpServers = wf.mcp_servers || {};
+  for (const [name, a] of [['defaults', wf.defaults || {}], ...Object.entries(wf.agents).map(([n, a]) => [`Agent "${n}"`, a || {}])]) {
+    if (a.session !== undefined && !SESSION_MODES.includes(a.session)) throw new Error(`${name}: session must be one of ${SESSION_MODES.join(', ')}.`);
+    if (a.max_context !== undefined && !String(a.max_context).includes('{{') && !parseTokens(a.max_context)) throw new Error(`${name}: max_context must be a token count such as 150k.`);
+    capabilities.validate(a.capabilities, name, mcpServers);
+  }
   const ids = new Set(wf.steps.map((s) => s.id));
   for (const s of wf.steps) {
+    capabilities.validate(s.capabilities, `Step "${s.id}"`, mcpServers);
     if (s.type !== 'human_approval') {
       // `agents: [...]` = fan-out: the same prompt goes to several agents in parallel
       if (s.agents && (!Array.isArray(s.agents) || !s.agents.length)) throw new Error(`Step "${s.id}": agents must be a non-empty list.`);
@@ -164,6 +185,38 @@ function decisionKey(output, schema) {
 
 const stepAgentLabel = (s) => (s.agents ? s.agents.join(' · ') : s.agent || null);
 
+// ---------------------------------------------------------------------------
+// Handoff notes: at the end of each turn an agent that comes back (persistent or handoff session)
+// leaves a short note for whoever continues in a fresh session. The engine removes it from the
+// answer, saves it in runs/<id>/handoffs/ and starts the agent's next fresh session from it.
+const HANDOFF_INSTRUCTIONS = [
+  'Handoff note: your next turn in this run may start in a fresh session that does not have this conversation.',
+  'Before the final ```json block (or at the very end if there is none), write a ```handoff block, at most 250 words of',
+  'plain Markdown bullets, no code blocks inside:',
+  '- Goal: what this agent is trying to achieve in the run',
+  '- State: branch, commits (hashes), PR/MR, what is running',
+  '- Done: what this turn did',
+  '- Left: what is still open, in order',
+  '- Decisions: each decision and why',
+  '- Key files: path (what matters there)',
+  '- Known problems: blockers, flaky things, what did not work',
+  'The code is in git: point to files and commits instead of pasting code. The orchestrator removes this block from your answer.',
+].join('\n');
+
+const HANDOFF_ONLY = 'Write only your ```handoff block now, following the format asked before (Goal, State, Done, Left, Decisions, Key files, Known problems; at most 250 words). Nothing else.';
+
+// [answer without its last ```handoff block, the note | null]
+function takeHandoff(text) {
+  const src = String(text || '');
+  const all = [...src.matchAll(/```handoff[^\n]*\n([\s\S]*?)```/g)];
+  if (!all.length) return [src, null];
+  const m = all[all.length - 1];
+  const note = m[1].trim();
+  return [(src.slice(0, m.index) + src.slice(m.index + m[0].length)).replace(/\n{3,}/g, '\n\n').trim(), note || null];
+}
+
+const kTokens = (n) => (n == null ? '?' : n >= 1000 ? `${Math.round(n / 1000)}k` : String(n));
+
 function newRunId() {
   const d = new Date();
   const p = (n) => String(n).padStart(2, '0');
@@ -179,9 +232,10 @@ class WorkflowRun extends EventEmitter {
   // (this month's usage before this run, see src/usage.js); prices: USD per 1M tokens by model.
   // projectId: the project the run belongs to (recorded in workflow.started and summary.json).
   // issue: { number, url, title } the run implements (Backlog screen), recorded the same way.
-  // resume: { runId, fromStep, steps: { id: { output, visits } }, sessions: { agent: providerSessionId }, instruction, worktree: { dir, branch } }
-  //   starts at fromStep with the previous run's step outputs and agent conversations (src/supervisor.js resumeSpec),
-  //   in the previous run's worktree.
+  // resume: { runId, fromStep, steps: { id: { output, visits } }, sessions: { agent: providerSessionId }, handoffs: { agent: note },
+  //   instruction, worktree: { dir, branch } }
+  //   starts at fromStep with the previous run's step outputs, agent conversations and handoff notes
+  //   (src/supervisor.js resumeSpec), in the previous run's worktree.
   // worktreesDir: where orchestrator.worktree creates the run's git worktree (<workspace>/worktrees);
   //   without it (e.g. simulation runs) the agents work in the repository folder itself.
   // mockSequences: { field: [value per visit] } over the mock provider's defaults (tests).
@@ -239,6 +293,11 @@ class WorkflowRun extends EventEmitter {
 
     this.sessions = new Map();      // local id -> session
     this.agentSessions = new Map(); // persistent agent -> local id
+    // agent -> its latest handoff note { text, step, visit, path } (a resumed run starts from the previous run's)
+    this.handoffNotes = new Map(Object.entries(resume?.handoffs || {}));
+    this.rotate = new Set();        // persistent agents whose last turn ended above max_context
+    this.turnLog = [];              // one record per agent turn: context at start / peak, tokens, waste
+    this.capsLogged = new Set();
     this.counters = {};
     this.loops = {};
     this.approvals = new Map();
@@ -318,10 +377,10 @@ class WorkflowRun extends EventEmitter {
   }
 
   // ---- sessions -------------------------------------------------------------
-  openSession({ agent, provider, model, parentId, stepId }) {
+  openSession({ agent, provider, model, parentId, stepId, mode = null }) {
     const s = {
       id: agent === 'orchestrator' ? 'orchestrator' : `s${++this.nSession}`,
-      agent, provider, model, parentId, stepId,
+      agent, provider, model, parentId, stepId, mode,
       openedAt: Date.now(), closedAt: null,
       turns: 0, activeMs: 0, tokens: emptyUsage(), costUsd: 0,
       status: 'idle', providerSessionId: null,
@@ -352,7 +411,7 @@ class WorkflowRun extends EventEmitter {
       closed_at: s.closedAt ? new Date(s.closedAt).toISOString() : null,
       duration_ms: duration, active_ms: s.activeMs, idle_ms: Math.max(0, duration - s.activeMs),
       turns: s.turns, tokens: { ...s.tokens }, cost_usd: +s.costUsd.toFixed(6),
-      status: s.status, provider_session_id: s.providerSessionId, cwd: s.cwd || null,
+      status: s.status, provider_session_id: s.providerSessionId, cwd: s.cwd || null, mode: s.mode || null,
     };
   }
 
@@ -515,6 +574,7 @@ class WorkflowRun extends EventEmitter {
     if (this.prevStepId !== step.id) { st.iteration = 0; st.loopStartedAt = Date.now(); st.blocked = null; }
     st.iteration++;
     st.tools = { ran: 0, denials: 0, denied: [] }; // this visit's tool calls, for the blocked-loop check
+    st.turnRecs = []; // this visit's turn records (turnLog), marked as waste when the visit was blocked
     this.ctx.previous_step = this.prevStepId || null;
     this.prevStepId = step.id;
     const t0 = Date.now();
@@ -668,6 +728,7 @@ class WorkflowRun extends EventEmitter {
     const repeated = tools.denials > 0 && (!prev || prev.key === key);
     if (!blind && !repeated) { st.blocked = null; return null; }
     st.blocked = { count: (prev?.count || 0) + 1, key, denied: [...(prev?.denied || []), ...tools.denied].slice(-10) };
+    for (const rec of st.turnRecs || []) rec.waste ??= 'blocked'; // tokens spent on an iteration that could not progress
     if (!max || st.blocked.count < max) return null;
     const why = blind && !tools.denials ? 'made no tool call' : blind ? 'had every tool call refused' : 'had tool calls refused and gave the same answer';
     return `${st.blocked.count} iterations in a row blocked (the agent ${why}, ${tools.denials} refused in the last one)`;
@@ -718,8 +779,9 @@ class WorkflowRun extends EventEmitter {
         + JSON.stringify(schema, null, 2) + '\n```';
     }
     const hint = { stepId: step.id, visit, schema, agent: agentName, sequences: this.mockSequences };
-    const opts = { stepId: step.id, hint, skills };
+    const opts = { stepId: step.id, hint, skills, capabilities: step.capabilities };
     const countTools = (r) => {
+      if (r.turnRec) st.turnRecs?.push(r.turnRec);
       if (!r.tools || !st.tools) return;
       st.tools.ran += r.tools.ran;
       st.tools.denials += r.tools.denials;
@@ -747,7 +809,7 @@ class WorkflowRun extends EventEmitter {
       }
       this.emitEvent('log', { level: 'warn', message: `Invalid output in ${step.id}${step.agents ? ` (${agentName})` : ''}: ${errs.join('; ')}` });
       if (attempt >= 2) throw new Error(`Output of step "${step.id}" failed validation: ${errs.join('; ')}`);
-      res = await this.sendToAgent(agentName, this.retryPrompt(agentName, prompt, res.text, schema, errs), opts);
+      res = await this.sendToAgent(agentName, this.retryPrompt(agentName, prompt, res.text, schema, errs), { ...opts, retry: true });
       countTools(res);
       st.lastAnswer = res.text;
     }
@@ -762,16 +824,11 @@ class WorkflowRun extends EventEmitter {
     const cfg = orch.supervisor;
     if (!cfg || cfg.enabled === false) { this.supervisorCfg = null; return; }
     const providerName = cfg.provider || orch.provider || 'claude';
-    const type = this.wf.providers?.[providerName]?.type;
     const name = this.wf.agents.supervisor ? '_supervisor' : 'supervisor';
-    const readOnly = {
-      'claude-code': ['--allowedTools', 'Read Glob Grep', '--disallowedTools', 'Edit Write NotebookEdit Bash'],
-      'codex-cli': ['-s', 'read-only'],
-      'grok-cli': ['--tools', 'read_file,list_dir,grep', '--always-approve'],
-    }[type] || [];
+    // read-only on the run folder: it works on the workflow, never on the user's code
     this.wf.agents[name] = {
       provider: providerName, model: cfg.model || orch.model, session: 'ephemeral', working_dir: '{{ run_dir }}',
-      skills: ['run-supervisor'], cli_args: readOnly, timeout: cfg.timeout || '10m',
+      skills: ['run-supervisor'], capabilities: { tools: ['read'], web: false }, timeout: cfg.timeout || '10m',
       system_prompt: 'You are the run supervisor of this workflow engine.',
     };
     this.ctx.agents[name] = { provider: providerName, model: cfg.model || orch.model };
@@ -791,7 +848,9 @@ class WorkflowRun extends EventEmitter {
     const allowed = [...new Set([step.id, step.on_error, ...(step.transitions || []).flatMap((t) => [t.goto, t.on_exhausted])])]
       .filter((x) => x && x !== 'end' && x !== 'fail' && this.wf.steps.some((y) => y.id === x && y.type !== 'human_approval'));
     this.emitEvent('supervisor.started', { step_id: step.id, error: err.message });
-    const prompt = supervisor.decisionPrompt({ wf: this.wf, step, error: err.message, answer: st.lastAnswer, allowed, events: this.recent, previous: st.interventions });
+    // the agents' own summaries of where they are, instead of their full transcripts
+    const handoffs = (step.agents || [step.agent]).map((a) => this.handoffNotes.get(a) && { agent: a, ...this.handoffNotes.get(a) }).filter(Boolean);
+    const prompt = supervisor.decisionPrompt({ wf: this.wf, step, error: err.message, answer: st.lastAnswer, allowed, events: this.recent, previous: st.interventions, handoffs });
     const schema = supervisor.DECISION_SCHEMA;
     const opts = { stepId: `${step.id}:supervisor`, hint: { stepId: `${step.id}:supervisor`, visit: st.interventions.length + 1, schema } };
     let decision;
@@ -850,14 +909,14 @@ class WorkflowRun extends EventEmitter {
   }
 
   // Asks the agent to fix an answer that did not validate. The schema always goes along; an
-  // ephemeral agent answers in a fresh session that has not seen the task nor its previous
+  // ephemeral or handoff agent answers in a fresh session that has not seen the task nor its previous
   // answer, so those go along too (otherwise it answers "{}" or describes the errors).
   retryPrompt(agentName, prompt, previous, schema, errs) {
     const fix = `Your last response did not validate against the JSON Schema:\n- ${errs.join('\n- ')}\n`
       + `Reply again with only a \`\`\`json block that validates against this schema, keeping the content of your answer:\n`
       + `\`\`\`json\n${JSON.stringify(schema, null, 2)}\n\`\`\``;
     const def = { ...(this.wf.defaults || {}), ...this.wf.agents[agentName] };
-    if (def.session !== 'ephemeral') return fix;
+    if ((def.session || 'persistent') === 'persistent') return fix;
     return `${prompt}\n\n---\nYou already answered this task:\n<previous_answer>\n${String(previous).slice(-20000)}\n</previous_answer>\n\n${fix}`;
   }
 
@@ -953,46 +1012,172 @@ class WorkflowRun extends EventEmitter {
     this.emitEvent('decision.logged', { agent: agentName, step_id: stepId, count: rows.length, path: file });
   }
 
-  async sendToAgent(agentName, prompt, { stepId, hint, skills: stepSkills = [] } = {}) {
+  // One turn of an agent. `session` in the YAML (agent or defaults):
+  // - persistent (default): one conversation for the whole run. With `max_context` (e.g. 150k), a turn
+  //   that ends above it makes the next turn start a fresh session from the agent's handoff note
+  //   (never in the middle of a turn);
+  // - ephemeral: a fresh session per turn with only the prompt;
+  // - handoff: a fresh session per turn that starts from the agent's latest handoff note.
+  // Persistent and handoff agents end each turn with a handoff note (runs/<id>/handoffs/).
+  // opts.capabilities: the step's capabilities over the agent's; opts.retry: a schema retry
+  // (no new note, no rotation).
+  async sendToAgent(agentName, prompt, { stepId, hint, skills: stepSkills = [], capabilities: stepCaps, retry = false } = {}) {
     const def = this.wf.agents[agentName];
     if (!def) throw new Error(`Unknown agent: ${agentName}`);
     const agent = { ...(this.wf.defaults || {}), ...def };
-    const persistent = agent.session !== 'ephemeral';
+    const mode = agent.session || 'persistent';
+    const persistent = mode === 'persistent';
     // agent skills go in the system prompt (1st turn); step skills, in the step prompt
     const agentSkills = this.loadSkills((agent.skills || []).map((n) => render(n, this.ctx).trim()));
 
+    // the conversation grew above max_context in its last turn: continue in a fresh one
+    if (persistent && !retry && this.rotate.has(agentName)) {
+      this.rotate.delete(agentName);
+      const old = this.sessions.get(this.agentSessions.get(agentName));
+      if (old) this.closeSession(old, 'success');
+      this.agentSessions.delete(agentName);
+    }
     let session = persistent ? this.sessions.get(this.agentSessions.get(agentName)) : null;
     if (!session) {
       session = this.openSession({
         agent: agentName, provider: this.mock ? 'mock' : agent.provider, model: agent.model,
-        parentId: this.orchestrator.id, stepId,
+        parentId: this.orchestrator.id, stepId, mode,
       });
       if (persistent) this.agentSessions.set(agentName, session.id);
-      // resumed run: continue the agent's previous conversation (its system prompt is already there)
-      const previous = persistent && !this.mock && this.resume?.sessions?.[agentName];
+      // resumed run: continue the agent's previous conversation (its system prompt is already there),
+      // only for its first session in this run
+      this.resumeSessions ??= { ...(this.resume?.sessions || {}) };
+      const previous = persistent && !this.mock && this.resumeSessions[agentName];
+      delete this.resumeSessions[agentName];
       if (previous) { session.providerSessionId = previous; session.turns = 1; }
     }
 
     const turn = ++session.turns;
-    let fullPrompt = prompt;
+    const wantNote = mode !== 'ephemeral' && !retry;
+    // a fresh session of an agent that already worked in this run (or the run it resumes) starts from its note
+    const note = turn === 1 ? this.handoffNotes.get(agentName) : null;
+    const parts = [];
     if (turn === 1 && (agent.system_prompt || agentSkills.length)) {
       const system = [render(agent.system_prompt, this.ctx).trim(), ...agentSkills.map(skillPrompt)].filter(Boolean).join('\n\n');
-      fullPrompt = `<system>\n${system}\n</system>\n\n${prompt}`;
+      parts.push(`<system>\n${system}\n</system>`);
     }
-    this.emitEvent('session.message_sent', { session_id: session.id, turn, step_id: stepId, prompt: fullPrompt });
+    if (note) {
+      parts.push(`<handoff_note>\n${note.text}\n</handoff_note>\nThis is a fresh session. The note above is what you wrote at the end of your previous turn in this run`
+        + ` (step ${note.step}, visit ${note.visit}). The code is in git: re-read only the files you need.`);
+    }
+    parts.push(wantNote ? `${prompt}\n\n---\n${HANDOFF_INSTRUCTIONS}` : prompt);
+    const fullPrompt = parts.join('\n\n');
 
     const provider = this.mock ? { type: 'mock' } : this.wf.providers?.[agent.provider];
-    if (!provider) throw new Error(`Provider "${agent.provider}" is not defined.`);
-    if (!this.mock) this.checkBudget(agent.provider);
-    // simulation: which answer of this step this is (mockSequences.invalid_answers: { step: n } makes the first n invalid)
-    if (this.mock && hint) { this.mockCalls ??= {}; hint.call = this.mockCalls[hint.stepId] = (this.mockCalls[hint.stepId] || 0) + 1; }
+    // capabilities + isolation → this CLI's flags (see capabilities.js); cli_args still apply on top
+    const providerType = this.wf.providers?.[agent.provider]?.type;
+    const caps = capabilities.merge(agent.capabilities, stepCaps);
+    const isolated = agent.isolation !== false;
+    const { args: capArgs, notes } = capabilities.providerArgs(providerType, { caps, isolated, mcpServers: this.wf.mcp_servers || {} });
+    const capsKey = `${agentName}|${capabilities.describe(caps)}`;
+    if (!this.capsLogged.has(capsKey)) {
+      this.capsLogged.add(capsKey);
+      this.emitEvent('log', {
+        level: 'info', kind: 'capabilities', agent: agentName,
+        message: `capabilities: ${agentName} (${providerType || agent.provider}, ${isolated ? 'isolated' : 'not isolated'}): ${capabilities.describe(caps)}${notes.length ? ` · not enforced: ${notes.join('; ')}` : ''}`,
+      });
+    }
     // The provider's `skill_args` grants read access to each skill's folder, which lives
     // outside the working_dir (e.g. claude --add-dir <folder>). Applies to every turn.
     const skillDirs = [...new Set([...agentSkills, ...stepSkills].map((sk) => sk.path))];
-    const skillArgs = skillDirs.flatMap((dir) => (provider.skill_args || []).map((a) => render(a, { skill_dir: dir })));
+    const skillArgs = skillDirs.flatMap((dir) => (provider?.skill_args || []).map((a) => render(a, { skill_dir: dir })));
+    // cli_args may be keyed by provider when the provider is picked at run time
+    const cliArgs = Array.isArray(agent.cli_args) ? agent.cli_args : agent.cli_args?.[agent.provider] || [];
+    const extraArgs = capabilities.dedupeFlags([...capArgs, ...cliArgs, ...skillArgs], provider?.args || []);
+
+    const visit = this.ctx.steps[String(stepId).split(':')[0]]?.visits || 0;
+    hint = { ...(hint || { stepId, visit }), handoff: wantNote };
+    // simulation: which answer of this step this is (mockSequences.invalid_answers: { step: n } makes the first n invalid)
+    if (this.mock) { this.mockCalls ??= {}; hint.call = this.mockCalls[hint.stepId] = (this.mockCalls[hint.stepId] || 0) + 1; }
+
+    const call = { session, agentName, agent, provider, extraArgs, stepId, hint };
+    let res;
+    try {
+      res = await this.invokeTurn(call, turn, fullPrompt);
+    } catch (e) {
+      if (persistent) this.setStatus(session, 'error');
+      else this.closeSession(session, 'failed');
+      throw e;
+    }
+
+    // metrics: context at the start and peak of the turn, tokens, and whether they were wasted
+    const rec = {
+      agent: agentName, step: stepId, visit, session: session.id, mode, fresh: turn === 1,
+      context_start: res.context.start, context_peak: res.context.peak,
+      tokens: totalTokens(res.usage), cost_usd: res.costUsd || 0,
+      waste: res.tools.ran === 0 && res.tools.denials > 0 ? 'refused' : null,
+    };
+    this.turnLog.push(rec);
+    res.turnRec = rec;
+    const max = persistent && !retry ? parseTokens(render(String(agent.max_context ?? ''), this.ctx)) : null;
+    if (max && res.context.peak > max) {
+      this.rotate.add(agentName);
+      this.emitEvent('log', {
+        level: 'info', kind: 'context_rotation', agent: agentName, step_id: stepId, context: res.context.peak, max_context: max,
+        message: `[${agentName}] context reached ${kTokens(res.context.peak)} (max_context ${kTokens(max)}): its next turn starts a fresh session from its handoff note`,
+      });
+    }
+    if (wantNote) {
+      const needed = mode === 'handoff' || this.rotate.has(agentName);
+      let text = res.handoff;
+      if (!text && needed) text = await this.requestHandoffNote(call, rec);
+      let fallback = false;
+      if (!text && needed) {
+        fallback = true;
+        text = `- (No handoff note: the agent did not write one.)\n- Its last answer (step ${stepId}), shortened:\n\n${String(res.text || '').slice(0, 1500)}`;
+      }
+      if (text) this.saveHandoff({ agentName, stepId, visit, session, text, fallback });
+    }
+    if (!persistent) this.closeSession(session, 'success');
+    return res;
+  }
+
+  // A turn that ended without its note, when the next one needs it: one cheap follow-up in the
+  // same provider conversation asking only for the note.
+  async requestHandoffNote(call, rec) {
+    const { session } = call;
+    if (!session.providerSessionId) return null;
+    try {
+      const res = await this.invokeTurn({ ...call, hint: { ...call.hint, handoffOnly: true }, attempts: 1 }, ++session.turns, HANDOFF_ONLY);
+      rec.tokens += totalTokens(res.usage);
+      rec.cost_usd += res.costUsd || 0;
+      const plain = String(res.text || '').trim();
+      return res.handoff || (plain && !plain.includes('```') ? plain.slice(0, 4000) : null);
+    } catch (e) {
+      session.status = 'idle';
+      this.emitEvent('log', { level: 'warn', message: `[${call.agentName}] could not get a handoff note: ${e.message}` });
+      return null;
+    }
+  }
+
+  // runs/<id>/handoffs/<step>-v<visit>-<agent>.md, one per turn (a second turn of the same visit,
+  // e.g. a delegation, gets -2, -3...). The latest one per agent starts its next fresh session.
+  saveHandoff({ agentName, stepId, visit, session, text, fallback }) {
+    const dir = path.join(this.runDir, 'handoffs');
+    const base = `${String(stepId).replace(/[^A-Za-z0-9_.-]+/g, '-')}-v${visit}-${agentName}`;
+    let file = path.join(dir, `${base}.md`);
+    for (let n = 2; fs.existsSync(file); n++) file = path.join(dir, `${base}-${n}.md`);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(file, `# Handoff note: ${agentName}\n\n_Step ${stepId}, visit ${visit}, session ${session.id}, ${new Date().toISOString()}_\n\n${text.trim()}\n`);
+    this.handoffNotes.set(agentName, { text: text.trim(), step: stepId, visit, path: file });
+    this.emitEvent('handoff.saved', { agent: agentName, step_id: stepId, visit, session_id: session.id, path: file, note: text.trim(), fallback: fallback || undefined });
+  }
+
+  // Runs one provider turn in `session` (with the agent's retry policy) and reports it:
+  // session.message_sent / .stream / .message_received. The answer comes back without its
+  // ```handoff block (res.handoff), with its tool calls (res.tools) and context size (res.context).
+  async invokeTurn({ session, agentName, agent, provider, extraArgs, stepId, hint, attempts }, turn, fullPrompt) {
+    this.emitEvent('session.message_sent', { session_id: session.id, turn, step_id: stepId, prompt: fullPrompt });
+    if (!provider) throw new Error(`Provider "${agent.provider}" is not defined.`);
+    if (!this.mock) this.checkBudget(agent.provider);
 
     const retry = agent.retry || {};
-    const maxAttempts = retry.max_attempts || 1;
+    const maxAttempts = attempts || retry.max_attempts || 1;
     let delay = this.mock ? 1000 : parseDuration(retry.initial_delay, 5000);
     let lastErr;
 
@@ -1001,8 +1186,11 @@ class WorkflowRun extends EventEmitter {
       this.setStatus(session, 'active');
       // tool calls of this turn: refused ones (allowlist) vs the ones that ran
       const tools = { ran: 0, denials: 0, streak: 0, maxStreak: 0, denied: [] };
+      // context window of each model request: the first one and the largest
+      const context = { start: null, peak: null };
       const calls = new Map();
       const track = (item) => {
+        if (item.kind === 'context') { context.start ??= item.tokens; context.peak = Math.max(context.peak || 0, item.tokens); return; }
         if (item.kind === 'tool_call') calls.set(item.id, item);
         if (item.kind !== 'tool_result') return;
         if (!isPermissionDenial(item)) { tools.ran++; tools.streak = 0; return; }
@@ -1014,14 +1202,14 @@ class WorkflowRun extends EventEmitter {
       try {
         const res = await runTurn({
           provider, model: agent.model, effort: agent.effort, providerSessionId: session.providerSessionId,
-          prompt: fullPrompt, cwd: (session.cwd = this.workingDir(agent)),
-          // cli_args may be keyed by provider when the provider is picked at run time
-          extraArgs: [...(Array.isArray(agent.cli_args) ? agent.cli_args : agent.cli_args?.[agent.provider] || []), ...skillArgs],
+          prompt: fullPrompt, cwd: (session.cwd = this.workingDir(agent)), extraArgs,
           timeoutMs: parseDuration(agent.timeout, 30 * 60e3),
           signal: this.abort.signal, hint, render,
           onItem: (item) => { track(item); this.emitEvent('session.stream', { session_id: session.id, turn, item }); },
         });
         res.tools = tools;
+        res.context = context;
+        [res.text, res.handoff] = takeHandoff(res.text);
         if (tools.maxStreak >= DENIAL_WARN) {
           // the agent is fighting its allowlist (cli_args): visible in the run, the supervisor's timeline and the run chat
           this.emitEvent('log', {
@@ -1038,9 +1226,9 @@ class WorkflowRun extends EventEmitter {
         this.emitEvent('session.message_received', {
           session_id: session.id, turn, step_id: stepId, text: res.text, usage: res.usage,
           cost_usd: res.costUsd, duration_ms: dur, session: this.snapshot(session),
+          context, ...(res.handoff ? { handoff: res.handoff } : {}),
         });
         this.recordDecisions(agentName, stepId, res.text);
-        if (!persistent) this.closeSession(session, 'success');
         return res;
       } catch (e) {
         session.activeMs += Date.now() - t0;
@@ -1058,9 +1246,25 @@ class WorkflowRun extends EventEmitter {
         }
       }
     }
-    if (persistent) this.setStatus(session, 'error');
-    else this.closeSession(session, 'failed');
     throw lastErr;
+  }
+
+  // Per run and per agent: context at the start of each turn, its peak, tokens, and the tokens spent
+  // on turns that could not progress ("waste": every tool call refused, or a blocked /loop iteration).
+  contextSummary() {
+    const agents = {};
+    let waste = 0;
+    for (const r of this.turnLog) {
+      const a = (agents[r.agent] ??= { mode: r.mode, turns: 0, fresh_sessions: 0, tokens: 0, peak: null, waste_tokens: 0, per_turn: [] });
+      a.turns++;
+      if (r.fresh) a.fresh_sessions++;
+      a.tokens += r.tokens;
+      if (r.context_peak != null) a.peak = Math.max(a.peak || 0, r.context_peak);
+      if (r.waste) { a.waste_tokens += r.tokens; waste += r.tokens; }
+      a.per_turn.push({ step: r.step, visit: r.visit, start: r.context_start, peak: r.context_peak, tokens: r.tokens, ...(r.waste ? { waste: r.waste } : {}) });
+      if (a.per_turn.length > 200) a.per_turn.shift();
+    }
+    return { agents, waste_tokens: waste };
   }
 
   // Without a working_dir (workflow with no repository), the agent runs in the run folder.
@@ -1145,6 +1349,7 @@ ${stderr || stdout}`.slice(0, 1500)));
         started_at: new Date(this.startedAt).toISOString(), finished_at: new Date().toISOString(),
         duration_ms: Date.now() - this.startedAt, inputs: this.inputs, mock: this.mock, worktree: this.worktreeSummary(),
         tokens, cost_usd: +sessions.reduce((a, s) => a + s.cost_usd, 0).toFixed(6),
+        context: this.contextSummary(),
         steps: Object.fromEntries(Object.entries(this.ctx.steps).map(([k, v]) => [k, { visits: v.visits, output: v.output }])),
         sessions,
       },
@@ -1152,4 +1357,4 @@ ${stderr || stdout}`.slice(0, 1500)));
   }
 }
 
-module.exports = { WorkflowRun, loadWorkflow, extractJson, validateSchema, evalExpr, render };
+module.exports = { WorkflowRun, loadWorkflow, extractJson, validateSchema, evalExpr, render, takeHandoff, parseTokens };

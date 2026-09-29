@@ -21,7 +21,7 @@ kind: Workflow
 
 metadata:
   name: multi-model-review
-  version: 0.1.0
+  version: 0.2.0
   description: Several models review the same diff in parallel, a blast-radius check looks outside the diff, and a lead judge merges, verifies and ranks the findings.
   tags: [review, multi-model, quality]
   category: build
@@ -59,10 +59,11 @@ providers:
     resume_args: ["resume", "{{ session_id }}"]
     stdin_arg: "-"
 
+# Allowed commands (YAML anchors, used in capabilities.tools).
 x-tools:
-  readonly_git: &readonly_git "Bash(git diff:*) Bash(git log:*) Bash(git show:*) Bash(git grep:*) Bash(git rev-parse:*) Bash(git status:*)"
+  readonly_git: &readonly_git [read, "bash:git diff", "bash:git log", "bash:git show", "bash:git grep", "bash:git rev-parse", "bash:git status"]
   # blast radius also runs one-liners (node -e, python -c) and tests to prove its safety fact
-  toolchains: &toolchains "Bash(git:*) Bash(npm:*) Bash(npx:*) Bash(node:*) Bash(python:*) Bash(python3:*) Bash(py:*) Bash(pytest:*) Bash(uv:*) Bash(go:*) Bash(mvn:*) Bash(./mvnw:*) Bash(gradle:*) Bash(./gradlew:*) Bash(dotnet:*)"
+  toolchains: &toolchains [read, bash:git, bash:npm, bash:npx, bash:node, bash:python, bash:python3, bash:py, bash:pytest, bash:uv, bash:go, bash:mvn, bash:./mvnw, bash:gradle, bash:./gradlew, bash:dotnet]
 
 defaults:
   working_dir: "{{ inputs.repo_path }}"
@@ -90,7 +91,7 @@ agents:
     provider: claude
     model: claude-opus-5-5
     session: ephemeral
-    cli_args: ["--allowedTools", *readonly_git, "--disallowedTools", "Edit Write NotebookEdit"]
+    capabilities: { tools: *readonly_git, web: false }
     skills: [code-review]
     system_prompt: &reviewer |
       You are one of several independent reviewers of the same change. Review it on
@@ -100,7 +101,7 @@ agents:
     provider: claude
     model: claude-sonnet-5
     session: ephemeral
-    cli_args: ["--allowedTools", *readonly_git, "--disallowedTools", "Edit Write NotebookEdit"]
+    capabilities: { tools: *readonly_git, web: false }
     skills: [code-review]
     system_prompt: *reviewer
 
@@ -108,7 +109,7 @@ agents:
     provider: codex
     model: gpt-6-luna
     session: ephemeral
-    cli_args: ["-s", "read-only"]
+    capabilities: { tools: [read, bash:git], web: false }
     skills: [code-review]
     system_prompt: *reviewer
 
@@ -116,7 +117,7 @@ agents:
     provider: claude
     model: claude-sonnet-5
     session: ephemeral
-    cli_args: ["--allowedTools", *toolchains, "--disallowedTools", "Edit NotebookEdit"]
+    capabilities: { tools: *toolchains, web: false }
     skills: [blast-radius]
     system_prompt: |
       You check what a change can break outside its diff. You are read-only: the working
@@ -126,7 +127,7 @@ agents:
     provider: claude
     model: claude-opus-5-5
     session: ephemeral
-    cli_args: ["--allowedTools", *readonly_git, "--disallowedTools", "Edit Write NotebookEdit"]
+    capabilities: { tools: *readonly_git, web: false }
     skills: [review-synthesis]
     system_prompt: |
       You are the lead judge. You did not review this change before; you read the diff

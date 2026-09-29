@@ -140,6 +140,13 @@ test('/loop: an agent whose tools are refused stops after 3 blocked iterations i
   assert.equal(rows[0][4], 'stopped the /loop of watch → stuck');
   assert.match(rows[0][6], /refused: .*gh\.exe/);
   assert.equal(rows[0][7], 'stuck');
+
+  // every token of those turns is waste in the run's context metrics
+  const sitter = finished.summary.context.agents.sitter;
+  assert.equal(sitter.per_turn.length, 3);
+  assert.ok(sitter.per_turn.every((x) => x.waste));
+  assert.equal(sitter.waste_tokens, sitter.tokens);
+  assert.equal(finished.summary.context.waste_tokens, sitter.tokens);
 });
 
 test('/loop: an agent that gets past its refused tools keeps polling until the goal is met', { timeout: 60000 }, async (t) => {

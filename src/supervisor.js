@@ -77,7 +77,7 @@ function timelineLine(ev) {
 const timeline = (events, max = 80) => events.map(timelineLine).filter(Boolean).slice(-max).join('\n');
 
 /** Prompt for a decision on a failed step (engine-side). */
-function decisionPrompt({ wf, step, error, answer, allowed, events, previous }) {
+function decisionPrompt({ wf, step, error, answer, allowed, events, previous, handoffs }) {
   const def = { ...step };
   const stepYaml = yaml.dump(def, { lineWidth: 120 }).trim();
   return [
@@ -87,6 +87,7 @@ function decisionPrompt({ wf, step, error, answer, allowed, events, previous }) 
     `\n## Error\n${clip(error, 3000)}`,
     answer ? `\n## The agent's last answer\n<answer>\n${tail(answer, 15000)}\n</answer>` : '\n## The agent\'s last answer\n(none: the agent did not answer)',
     previous?.length ? `\n## Your previous interventions on this step\n${previous.map((p, i) => `${i + 1}. ${p.action}: ${p.explanation}`).join('\n')}` : '',
+    handoffs?.length ? `\n## The agents' handoff notes (their own summary of where they are, latest turn)\n${handoffs.map((h) => `### ${h.agent} (step ${h.step}, visit ${h.visit})\n${clip(h.text, 3000)}`).join('\n\n')}` : '',
     `\n## Recent timeline\n${timeline(events, 40) || '(empty)'}`,
     `\n## Your options (the engine validates them)`,
     `- fix_output: put in \`output\` the step's output rebuilt ONLY from the agent's answer above; it must validate against the step's output_schema${step.agents ? ' (not available for parallel steps)' : ''}.`,
@@ -118,8 +119,10 @@ function runReport(runDir, { workflowsDir } = {}) {
     steps = (wf.steps || []).map((s) => `- ${s.id} (${s.type || (s.agents ? `parallel: ${s.agents.join(', ')}` : s.agent)})${s.on_error ? ` on_error→${s.on_error}` : ''}`).join('\n');
   } catch { /* workflow file gone */ }
   const answers = {};
+  const handoffs = {}; // latest handoff note per agent
   for (const ev of events) {
     if (ev.type === 'session.message_received' && ev.step_id) (answers[ev.step_id] ??= []).push(ev.text);
+    if (ev.type === 'handoff.saved' && ev.agent) handoffs[ev.agent] = ev;
   }
   const failing = finished?.status === 'failed' ? [...events].reverse().find((e) => e.type === 'step.started')?.step_id : null;
   let files = [];
@@ -131,9 +134,10 @@ function runReport(runDir, { workflowsDir } = {}) {
     `\n## Inputs\n${Object.entries(started.inputs || {}).map(([k, v]) => `- ${k}: ${clip(v, 600)}`).join('\n')}`,
     steps ? `\n## Workflow steps\n${steps}` : '',
     `\n## Timeline\n${timeline(events, 150)}`,
+    Object.keys(handoffs).length ? `\n## Handoff notes (each agent's own summary at the end of its latest turn: read them before the transcripts)\n${Object.values(handoffs).map((h) => `### ${h.agent} (step ${h.step_id}, visit ${h.visit})\n${clip(h.note, 2500)}`).join('\n\n')}` : '',
     failing && answers[failing] ? `\n## Answers of the step that was running (${failing}), every attempt\n${answers[failing].slice(-4).map((a, i, all) => `### Attempt ${answers[failing].length - all.length + i + 1}\n${tail(a, 6000)}`).join('\n\n')}` : '',
     files.length ? `\n## Files produced (in this folder)\n${files.join('\n')}` : '',
-    `\nThe run folder is the current directory: events.jsonl (every event), sessions/<id>.jsonl (each agent's stream), summary.json and the files above. Read them when you need more detail.`,
+    `\nThe run folder is the current directory: events.jsonl (every event), sessions/<id>.jsonl (each agent's stream), handoffs/ (the agents' notes, one per turn), summary.json and the files above. Read them when you need more detail.`,
   ].filter(Boolean).join('\n');
 }
 
@@ -152,7 +156,8 @@ function analysisMarkdown(a, { question, model } = {}) {
 
 /**
  * What a new run needs to resume a previous one from `fromStep`: the previous steps' outputs and
- * visits, and the agents' provider conversations (so persistent agents keep their context).
+ * visits, the agents' provider conversations (so persistent agents keep their context) and their
+ * latest handoff notes (handoff sessions, and agents with no conversation to resume, start from them).
  */
 function resumeSpec(runDir, fromStep) {
   const events = readEvents(runDir);
@@ -160,13 +165,15 @@ function resumeSpec(runDir, fromStep) {
   if (!started) throw new Error('Not a run folder.');
   const steps = {};
   const sessions = {};
+  const handoffs = {};
   let worktree = null; // the run's git worktree (worktree.ready / .kept / .removed): the resume continues there
   for (const ev of events) {
     if (ev.type === 'step.finished' && !ev.error) steps[ev.step_id] = { output: ev.output, visits: ev.visit };
     if (ev.session?.agent && ev.session.provider_session_id && ev.session.provider !== 'mock') sessions[ev.session.agent] = ev.session.provider_session_id;
     if (/^worktree\./.test(ev.type) && ev.dir) worktree = { dir: ev.dir, branch: ev.branch || worktree?.branch || null };
+    if (ev.type === 'handoff.saved' && ev.agent && ev.note) handoffs[ev.agent] = { text: ev.note, step: ev.step_id, visit: ev.visit, path: ev.path };
   }
-  return { runId: path.basename(runDir), file: started.file, inputs: started.inputs || {}, mock: !!started.mock, projectId: started.project_id || null, issue: started.issue || null, fromStep, steps, sessions, worktree };
+  return { runId: path.basename(runDir), file: started.file, inputs: started.inputs || {}, mock: !!started.mock, projectId: started.project_id || null, issue: started.issue || null, fromStep, steps, sessions, handoffs, worktree };
 }
 
 // The workflow's supervisor settings (orchestrator.supervisor + providers), from the run's workflow file.
@@ -180,11 +187,6 @@ function supervisorConfig(runDir, workflowsDir) {
   return { started, wf, provider, providerName, model: orch.supervisor?.model || orch.model || 'claude-sonnet-5' };
 }
 
-const READ_ONLY_ARGS = {
-  'claude-code': ['--allowedTools', 'Read Glob Grep', '--disallowedTools', 'Edit Write NotebookEdit Bash'],
-  'codex-cli': ['-s', 'read-only'],
-  'grok-cli': ['--tools', 'read_file,list_dir,grep', '--always-approve'],
-};
 
 /**
  * Asks the supervisor about a run (a person's question from the UI). Simulated runs use the mock
@@ -210,7 +212,10 @@ async function analyzeRun({ runDir, question, workflowsDir, skillsDirs, resolveC
   const mock = !!cfg.started.mock;
   const provider = mock ? { type: 'mock' } : cfg.provider;
   if (!mock && !resolveCommand(provider.command)) throw new Error(`The supervisor needs ${provider.command}, which is not installed.`);
-  const extraArgs = [...(READ_ONLY_ARGS[provider.type] || []), ...(provider.skill_args || []).map((x) => render(x, { skill_dir: skill.path }))];
+  // read-only and isolated, like the supervisor inside a run (engine/capabilities.js)
+  const { providerArgs, normalize, dedupeFlags } = require('./engine/capabilities');
+  const readOnly = providerArgs(provider.type, { caps: normalize({ tools: ['read'] }) }).args;
+  const extraArgs = dedupeFlags([...readOnly, ...(provider.skill_args || []).map((x) => render(x, { skill_dir: skill.path }))], provider.args || []);
   const turn = (text) => runTurn({
     provider, model: cfg.model, prompt: text, cwd: runDir, extraArgs, timeoutMs: 15 * 60e3, render,
     hint: { stepId: 'supervisor', visit: 1, schema }, onItem: () => {},

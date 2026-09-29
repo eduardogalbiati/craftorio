@@ -1,0 +1,48 @@
+# Test fixture: session modes. The developer runs in handoff sessions (a fresh session per turn,
+# started from its latest handoff note); the reviewer is persistent with a max_context that the
+# mock's growing context crosses on its 2nd turn (20k + 30k per turn, peak +20k).
+apiVersion: multiagent/v1
+kind: Workflow
+metadata:
+  name: fixture-handoff
+defaults:
+  max_context: 60k
+agents:
+  developer:
+    provider: claude
+    model: mock-model
+    session: handoff
+    system_prompt: "You are the developer."
+    capabilities: { tools: [read, edit, write, bash:git], subagents: true }
+  reviewer:
+    provider: claude
+    model: mock-model
+    session: persistent
+    system_prompt: "You are the reviewer."
+    capabilities: { tools: [read, bash:git] }
+steps:
+  - id: develop
+    agent: developer
+    prompt: "Implement the task (round {{ steps.develop.visits }})."
+    output_schema:
+      type: object
+      required: [summary]
+      properties:
+        summary: { type: string }
+  - id: review
+    agent: reviewer
+    prompt: "Review round {{ steps.review.visits }}."
+    output_schema:
+      type: object
+      required: [verdict]
+      properties:
+        verdict: { type: string, enum: [changes_requested, approved] }
+    transitions:
+      - when: "output.verdict == 'changes_requested'"
+        goto: develop
+        loop:
+          name: rounds
+          max_iterations: 2
+          on_exhausted: end
+      - when: "output.verdict == 'approved'"
+        goto: end

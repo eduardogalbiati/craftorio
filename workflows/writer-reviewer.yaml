@@ -30,7 +30,7 @@ kind: Workflow
 
 metadata:
   name: writer-reviewer
-  version: 0.3.0
+  version: 0.4.0
   description: A writer drafts a document from your prompt, a reviewer scores it against your goal and sends notes back until it passes, and the supervisor checks it and asks you what to do.
   tags: [writing, review, documents]
   category: plan
@@ -102,24 +102,22 @@ providers:
   grok:
     type: grok-cli
     command: grok
-    args: ["--output-format", "streaming-json", "-m", "{{ model }}", "--no-subagents"]
+    args: ["--output-format", "streaming-json", "-m", "{{ model }}"]
     effort_args: ["--reasoning-effort", "{{ effort }}"]
     resume_args: ["--resume", "{{ session_id }}"]
     prompt_file_arg: ["--prompt-file", "{{ prompt_file }}"]
 
 x-tools:
-  # Writing and reviewing need no tools: the whole exchange goes through the prompts.
-  claude_no_tools: &claude_no_tools ["--disallowedTools", "Bash Edit Write NotebookEdit"]
-  # Per provider, because the user picks it: read-only everywhere; grok needs --always-approve
-  # headless (nobody can answer its prompts).
-  no_tools: &no_tools
-    claude: *claude_no_tools
-    codex: ["-s", "read-only"]
-    grok: ["--tools", "read_file,list_dir,grep", "--always-approve"]
+  # Writing and reviewing only read: the whole exchange goes through the prompts. The engine turns
+  # this into the flags of whichever CLI the user picks (and keeps the user's own CLI setup out).
+  read_only: &read_only { tools: [read], web: false }
 
 defaults:
   # no working_dir: agents run in the run folder
   timeout: 20m
+  # the writer and the reviewer keep their conversation (continuity is the point of the loop), but
+  # once a turn ends above this size the next one starts fresh from the agent's handoff note
+  max_context: 150k
   retry:
     max_attempts: 2
     backoff: exponential
@@ -146,7 +144,7 @@ agents:
     model: "{{ inputs.writer_model }}"
     effort: "{{ inputs.writer_effort }}"
     session: persistent   # remembers its drafts across rounds
-    cli_args: *no_tools   # read-only: it can read the project's files, never change them
+    capabilities: *read_only   # it can read the project's files, never change them
     working_dir: "{{ inputs.project_path }}"   # empty: the run folder
     system_prompt: |
       You are the writer in a writer/reviewer loop. You write the document you are asked for
@@ -163,7 +161,7 @@ agents:
     model: "{{ inputs.reviewer_model }}"
     effort: "{{ inputs.reviewer_effort }}"
     session: persistent   # checks whether its previous notes were addressed
-    cli_args: *no_tools
+    capabilities: *read_only
     working_dir: "{{ inputs.project_path }}"
     system_prompt: |
       You are the reviewer in a writer/reviewer loop. You score each draft from 0 to 10
@@ -180,7 +178,7 @@ agents:
     model: claude-opus-5-5
     effort: high
     session: ephemeral
-    cli_args: *claude_no_tools
+    capabilities: *read_only
     system_prompt: |
       You are the supervisor of this platform and you are responsible for this flow. A
       reviewer approved a document; you check it against the user's goal and report to the

@@ -185,6 +185,17 @@ test('run chat: the supervisor shows its decision, not its raw turn', () => {
   assert.equal(model.active.size, 0);
 });
 
+test('run chat: turns carry their handoff note and context; a max_context rotation shows as a line', { timeout: 60000 }, async () => {
+  const events = await mockRun(path.join(__dirname, 'fixtures', 'handoff.yaml'), { mockSequences: { verdict: ['changes_requested', 'changes_requested', 'approved'] } });
+  const model = chatOf(events);
+  const turns = kinds(model, 'turn');
+  assert.equal(turns.length, 6);
+  assert.ok(turns.every((it) => /^- Goal: simulated goal/.test(it.handoff)));
+  assert.ok(turns.every((it) => !it.text.includes('```handoff')));
+  assert.deepEqual(turns.filter((it) => it.agent === 'reviewer').map((it) => [it.context.start, it.context.peak, it.fresh]), [[20000, 40000, true], [50000, 70000, false], [20000, 40000, true]]);
+  assert.ok(kinds(model, 'system').some((it) => /\[reviewer\] context reached 70k/.test(it.text)));
+});
+
 test('splitAnswer separates the prose, the structured output and the decision log', () => {
   const text = 'Implemented it.\n\n```decisions\nimplement | a | b | c | ok\n```\n\n```json\n{"branch": "x"}\n```\n';
   assert.deepEqual(splitAnswer(text), { prose: 'Implemented it.', json: '{"branch": "x"}', decisions: 'implement | a | b | c | ok' });

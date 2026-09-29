@@ -40,6 +40,7 @@
     const extras = [];
     if (json && prose) extras.push(`<details class="rc-more"><summary>Structured answer</summary><pre class="rc-json">${esc(json)}</pre></details>`);
     if (decisions) extras.push(`<details class="rc-more"><summary>Decision log</summary><pre class="rc-json">${esc(decisions)}</pre></details>`);
+    if (it.handoff) extras.push(`<details class="rc-more"><summary>Handoff note</summary><div class="rc-body md">${md(it.handoff)}</div></details>`);
     const tools = it.activity.filter((a) => a.kind === 'tool');
     const thinking = it.activity.filter((a) => a.kind === 'thinking');
     if (it.activity.length) {
@@ -48,7 +49,9 @@
         ? `<li class="${a.error ? 'err' : ''}"><b class="mono">${esc(a.name)}</b> <span class="mono muted">${esc(a.input)}</span></li>`
         : `<li class="think"><i>${esc(a.text)}</i></li>`)).join('')}</ol></details>`);
     }
-    const foot = it.durationMs ? `${fmtK(it.tokensIn)} in / ${fmtK(it.tokensOut)} out · $${it.cost.toFixed(2)} · ${fmtSecs(it.durationMs)}` : '';
+    // context window: at the first request of the turn → its largest request (a fresh session starts small)
+    const ctx = it.context?.peak ? ` · context ${it.fresh ? 'fresh ' : ''}${fmtK(it.context.start)} → ${fmtK(it.context.peak)}` : '';
+    const foot = it.durationMs ? `${fmtK(it.tokensIn)} in / ${fmtK(it.tokensOut)} out${ctx} · $${it.cost.toFixed(2)} · ${fmtSecs(it.durationMs)}` : '';
     return `<div class="rc-msg" data-item="${it.id}"${colorStyle(it.agent)}>${avatar(it)}<div class="duo-bubble">
       <div class="duo-meta"><b>${esc(it.agent)}</b>${it.model ? `<span class="tag">${esc(it.model)}</span>` : ''}${stepTag(it.stepId, it.visit, it.sub)}<span class="time">${clock(it.ts)}</span></div>
       <div class="rc-body md">${body}</div>${extras.join('')}${foot ? `<div class="duo-foot">${esc(foot)}</div>` : ''}</div></div>`;

@@ -162,7 +162,7 @@ function runArtifacts(runDir) {
     });
   };
   for (const ev of readEvents(path.join(runDir, 'events.jsonl'))) {
-    if (ev.type === 'file.saved' && ev.path) add(ev.path, { step: ev.step_id || null, agent: ev.agent || null });
+    if ((ev.type === 'file.saved' || ev.type === 'handoff.saved') && ev.path) add(ev.path, { step: ev.step_id || null, agent: ev.agent || null });
   }
   for (const rel of walkFiles(runDir)) {
     const file = path.join(runDir, rel);

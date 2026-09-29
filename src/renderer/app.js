@@ -336,8 +336,11 @@ function selectWorkflow(file) {
   $('#wf-desc').textContent = wf.error ? `Error: ${wf.error}` : wf.description || '';
   $('#wf-steps-mini').innerHTML = (wf.steps || []).map((s) =>
     `<span class="step-chip ${s.type === 'human_approval' ? 'human' : ''}" title="${esc(s.type === 'human_approval' ? 'human approval' : s.agent)}">${esc(s.id)}</span>`).join('<span class="arrow">›</span>');
-  $('#wf-agents').innerHTML = Object.entries(wf.agents || {}).map(([name, a]) =>
-    `<div class="agent-row"><span>${esc(name)}</span><span class="model">${esc(a.provider)} · ${esc(a.model)}</span></div>`).join('');
+  // what each agent may use (capabilities) and how its conversation is kept (session)
+  $('#wf-agents').innerHTML = Object.entries(wf.agents || {}).map(([name, a]) => `<div class="agent-row">
+      <div class="agent-row-main"><span>${esc(name)}</span><span class="model">${esc(a.provider)} · ${esc(a.model)}</span></div>
+      <div class="agent-caps">${esc([`session: ${a.session || 'persistent'}${a.max_context && (a.session || 'persistent') === 'persistent' ? ` (max ${a.max_context})` : ''}`, a.capabilities, a.isolated === false ? 'not isolated' : ''].filter(Boolean).join(' · '))}</div>
+    </div>`).join('');
 
   let saved = {};
   try { saved = JSON.parse(localStorage.getItem(`${LS_KEY}.${wf.file}`) || '{}'); } catch { /* ignore */ }

@@ -96,6 +96,9 @@ function killTree(child) {
 // ---------------------------------------------------------------------------
 // Parsers
 // ---------------------------------------------------------------------------
+// Tokens in one request's context window (Anthropic-style usage: new + cached input).
+const contextTokens = (u) => (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0);
+
 function parseClaude(ev, emit, acc) {
   switch (ev.type) {
     case 'system':
@@ -105,6 +108,8 @@ function parseClaude(ev, emit, acc) {
       }
       break;
     case 'assistant':
+      // each model request's context window (the main conversation's, not a sub-agent's)
+      if (ev.message?.usage && !ev.parent_tool_use_id) emit({ kind: 'context', tokens: contextTokens(ev.message.usage) });
       for (const b of ev.message?.content || []) {
         // Claude Code may omit the thinking content (it only sends the signature)
         if (b.type === 'thinking') { if (b.thinking) emit({ kind: 'thinking', text: b.thinking }); }
@@ -241,7 +246,11 @@ function parseGrok(ev, emit, acc) {
     case 'error':
       acc.error = `Grok returned an error: ${ev.message || 'unknown'}`;
       break;
-    case 'usage':             // per-call usage; the totals come in `end`
+    case 'usage': {           // per-call usage (the context of that request); the totals come in `end`
+      const tokens = contextTokens(ev.usage || ev);
+      if (tokens) emit({ kind: 'context', tokens });
+      break;
+    }
     case 'available_commands':
       break;
     default:
@@ -404,12 +413,29 @@ function mockValue(s, key, h) {
   }
 }
 
+// Simulated context window: grows with each turn of the same conversation (30k more per turn),
+// so max_context and handoff sessions can be exercised deterministically.
+const mockTurns = new Map();
+const MOCK_HANDOFF = '```handoff\n- Goal: simulated goal of this agent\n- State: branch feat/mock-feature, commit abc1234\n- Done: simulated work of this turn\n- Left: nothing blocking\n- Decisions: none\n- Key files: src/auth/login.ts\n- Known problems: none\n```';
+
 async function runMock({ providerSessionId, model, hint, signal, onItem }) {
   const sid = providerSessionId || `mock-${Math.random().toString(36).slice(2, 10)}`;
   const scale = +(process.env.MULTIAGENT_MOCK_DELAY_SCALE ?? 1);
   const d = (ms) => sleep(ms * scale * (0.6 + Math.random() * 0.8), signal);
+  const n = (mockTurns.get(sid) || 0) + 1;
+  mockTurns.set(sid, n);
+  const start = 20000 + 30000 * (n - 1);
 
   onItem({ kind: 'session', sessionId: sid, model });
+  onItem({ kind: 'context', tokens: start });
+  // the follow-up that asks only for the handoff note
+  if (hint?.handoffOnly) {
+    await d(300);
+    onItem({ kind: 'text', text: MOCK_HANDOFF });
+    const usage = { input: 200, output: 150, cache_read: start, cache_write: 0, reasoning: 0 };
+    onItem({ kind: 'usage', usage, costUsd: 0.001 });
+    return { text: MOCK_HANDOFF, usage, costUsd: 0.001, providerSessionId: sid, exitCode: 0 };
+  }
   await d(600);
   onItem({ kind: 'thinking', text: `Analyzing step "${hint?.stepId ?? 'delegated'}" (visit ${hint?.visit ?? '-'}).\nI will inspect the repository and plan the next steps.` });
   await d(900);
@@ -432,12 +458,16 @@ async function runMock({ providerSessionId, model, hint, signal, onItem }) {
   const out = hint?.schema ? mockValue(hint.schema, '', hint) : null;
   // sequences.invalid_answers: { stepId: n }: the first n answers of that step miss the required fields
   const invalid = out && hint.call <= (hint.sequences?.invalid_answers?.[hint.stepId] || 0);
-  const text = invalid
+  let text = invalid
     ? 'Here is my answer. (simulated: it forgets the fields the step requires)\n\n```json\n{ "comment": "Looks good to me." }\n```'
     : out
       ? `Finished step **${hint.stepId}**.\n\n\`\`\`json\n${JSON.stringify(out, null, 2)}\n\`\`\``
       // free-text steps (e.g. ai-arena's proposals and final document) get a small Markdown document
       : `# Simulated document\n\nDone. (simulated response by ${hint?.agent || 'the agent'} for step "${hint?.stepId ?? 'delegated'}")\n\n## Summary\n\n- First point\n- Second point\n`;
+  // sequences.no_handoff: { stepId: n }: the first n answers of that step forget the handoff note
+  const withNote = hint?.handoff && !(hint.call <= (hint.sequences?.no_handoff?.[hint.stepId] || 0));
+  if (withNote) text = `${MOCK_HANDOFF}\n\n${text}`;
+  onItem({ kind: 'context', tokens: start + 20000 });
   onItem({ kind: 'text', text });
 
   const usage = { input: rand(2000, 12000), output: rand(300, 2500), cache_read: rand(0, 8000), cache_write: rand(0, 2000), reasoning: rand(100, 1500) };

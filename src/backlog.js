@@ -185,6 +185,14 @@ function writeQueue(dir, projectId, queue) {
 
 const updateQueue = (dir, projectId, fn) => writeQueue(dir, projectId, fn(readQueue(dir, projectId)) || readQueue(dir, projectId));
 
+// addedAt of an assignment: strictly increasing, so nextQueued's "oldest first" across projects
+// never ties (two assignments in the same millisecond would fall back to the folder listing order).
+let lastStamp = 0;
+function queueStamp() {
+  lastStamp = Math.max(Date.now(), lastStamp + 1);
+  return new Date(lastStamp).toISOString();
+}
+
 /**
  * Queues issues for a workflow and remembers the inputs used for it in this project. Issues
  * already queued are skipped. Assigning resumes a paused queue.
@@ -193,7 +201,7 @@ const updateQueue = (dir, projectId, fn) => writeQueue(dir, projectId, fn(readQu
 function enqueue(dir, projectId, { issues, workflow, workflowName = null, inputs = {}, mock = false }) {
   return updateQueue(dir, projectId, (q) => {
     const have = new Set(q.items.map((x) => x.number));
-    const now = new Date().toISOString();
+    const now = queueStamp();
     const added = issues.filter((i) => !have.has(i.number)).map((i) => ({
       number: i.number, url: i.url, title: i.title, body: i.body || '', workflow, workflowName, inputs, mock: !!mock, addedAt: now,
     }));

@@ -155,6 +155,8 @@
         model: s.model || '', stepId, sub, visit: this.visits[stepId] || 1, text: String(ev.text || ''), activity: t.activity,
         tokensIn: (u.input || 0) + (u.cache_read || 0) + (u.cache_write || 0), tokensOut: u.output || 0,
         cost: ev.cost_usd || 0, durationMs: ev.duration_ms || 0, parent: group?.id,
+        // the engine takes the ```handoff block out of the answer; context = { start, peak } tokens
+        handoff: ev.handoff || null, context: ev.context || null, fresh: ev.turn === 1,
       });
     },
 
@@ -239,6 +241,8 @@
 
     log(ev) {
       if (ev.level === 'warn' || ev.level === 'error') this.system(ev, ev.level, clip(String(ev.message || ''), 400));
+      // a persistent conversation that outgrew max_context: the agent's next turn starts fresh from its note
+      else if (ev.kind === 'context_rotation') this.system(ev, 'plain', clip(String(ev.message || ''), 400));
     },
 
     'limit.exceeded'(ev) { this.system(ev, 'error', `Limit exceeded: ${ev.limit}`); },

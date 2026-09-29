@@ -42,7 +42,7 @@ kind: Workflow
 
 metadata:
   name: software-development
-  version: 0.11.0
+  version: 0.12.0
   description: Implements, reviews, tests, builds, watches CI and the PR/MR, publishes a preview and, once approved, merges and tracks the production deploy. Works with several languages on GitHub or GitLab.
   tags: [dev, review, test, build, ci, pr, deploy, github, gitlab]
   # Dashboard category: plan (Plan & Design), build (Code & Build) or monitor (Monitor & Improve).
@@ -85,8 +85,8 @@ inputs:
     description: "GitHub only: Actions workflow triggered by the merge into base_branch."
 
 # -----------------------------------------------------------------------------
-# Final command line = args + agent.cli_args + (resume_args if the session already
-# exists) + skill_args (once per skill) + stdin_arg. The prompt always goes via stdin.
+# Final command line = args + capability and isolation flags + agent.cli_args + (resume_args if
+# the session already exists) + skill_args (once per skill) + stdin_arg. The prompt always goes via stdin.
 providers:
   claude:
     type: claude-code
@@ -103,16 +103,22 @@ providers:
     resume_args: ["resume", "{{ session_id }}"]
     stdin_arg: "-"
 
-# Allowed shell tools, shared by the agents below (YAML anchors).
+# Allowed commands, shared by the agents below (YAML anchors, used in capabilities.tools).
 x-tools:
   # every supported language toolchain: the language skill says which one to use
-  toolchains: &toolchains "Bash(git:*) Bash(npm:*) Bash(npx:*) Bash(node:*) Bash(pnpm:*) Bash(yarn:*) Bash(python:*) Bash(python3:*) Bash(py:*) Bash(pip:*) Bash(pytest:*) Bash(uv:*) Bash(poetry:*) Bash(pip-audit:*) Bash(osv-scanner:*) Bash(go:*) Bash(govulncheck:*) Bash(mvn:*) Bash(./mvnw:*) Bash(mvnw.cmd:*) Bash(gradle:*) Bash(./gradlew:*) Bash(gradlew.bat:*) Bash(dotnet:*)"
-  vcs: &vcs "Bash(git:*) Bash(gh:*) Bash(glab:*)"
+  toolchains: &toolchains [bash:git, bash:npm, bash:npx, bash:node, bash:pnpm, bash:yarn, bash:python, bash:python3, bash:py, bash:pip, bash:pytest, bash:uv, bash:poetry, bash:pip-audit, bash:osv-scanner, bash:go, bash:govulncheck, bash:mvn, bash:./mvnw, bash:mvnw.cmd, bash:gradle, bash:./gradlew, bash:gradlew.bat, bash:dotnet]
+  # gh / glab: called bare, in the Bash tool, one command per call. That is the only form this
+  # allowlist accepts: no PowerShell, no full or 8.3 paths, no PATH edits, no ;/&&/pipes, no body
+  # files (use --body). The engine refreshes PATH, so bare gh works inside runs.
+  vcs: &vcs [bash:git, bash:gh, bash:glab]
 
 defaults:
   # the run's own git worktree (orchestrator.worktree), or repo_path when it is not a git repo
   working_dir: "{{ worktree_dir }}"
   timeout: 30m
+  # persistent agents: once a turn ends above this context size, the next turn starts a fresh
+  # session from the agent's handoff note (runs/<id>/handoffs/)
+  max_context: 150k
   retry:
     max_attempts: 2
     backoff: exponential
@@ -138,20 +144,21 @@ orchestrator:
     max_total_cost_usd: 60
 
 # -----------------------------------------------------------------------------
-# Agents. `permissions` is documentation only; cli_args are what is enforced.
+# Agents. `capabilities` is what each agent may use; the engine turns it into each CLI's flags
+# and runs every agent isolated from the user's own CLI setup (MCP servers, plugins, memory).
+# Sessions: `handoff` (a fresh session per turn, started from the agent's handoff note) for the
+# agents that come back for fixes and checks; `persistent` (with defaults.max_context) elsewhere.
 # Skill names can be templates: they are resolved from the inputs at run time.
 # -----------------------------------------------------------------------------
 agents:
   developer:
     provider: claude
     model: claude-opus-5-5
-    session: persistent
-    cli_args: ["--permission-mode", "acceptEdits", "--allowedTools", *toolchains]
+    session: handoff
+    # subagents: exploration sub-agents map the code, so the main context stays small
+    capabilities: { tools: [read, edit, write, *toolchains], web: false, subagents: true }
     # bug-diagnosis: fixes delegated after failures; merge-conflict-resolver: "update the branch with the base"
-    skills: ["unit-test-writer-{{ inputs.language }}", bug-diagnosis, merge-conflict-resolver, decision-log]
-    permissions:
-      allow: [read, edit, write, bash:git, bash:toolchain]
-      deny: [bash:"git push --force", bash:gh, bash:glab]
+    skills: ["unit-test-writer-{{ inputs.language }}", bug-diagnosis, merge-conflict-resolver, context-economy, decision-log]
     system_prompt: |
       You are a senior software engineer. Make small, tested, cohesive changes that
       follow the architecture and conventions of the existing code.
@@ -170,13 +177,10 @@ agents:
     provider: codex
     model: gpt-6-luna
     session: persistent
-    cli_args: ["-s", "read-only"]
+    capabilities: { tools: [read, bash:git], web: false }
     # Criteria, severities and per-language rules live in the skill
     # (<workspace>/skills/code-review, editable in the Skills screen).
     skills: [code-review]
-    permissions:
-      allow: [read, bash:git-diff]
-      deny: [edit, write]
     system_prompt: |
       You are the code reviewer of this workflow. Follow the code-review skill:
       detect the languages in the diff and read the rules for each one before the verdict.
@@ -185,11 +189,9 @@ agents:
     provider: claude
     model: claude-sonnet-5
     session: persistent
-    cli_args: ["--permission-mode", "acceptEdits", "--allowedTools", *toolchains]
+    # edits test files only (a convention of its role: the tools can't tell tests from code)
+    capabilities: { tools: [read, edit, write, *toolchains], web: false }
     skills: ["unit-test-writer-{{ inputs.language }}"]
-    permissions:
-      allow: [read, write:tests, bash:git, bash:toolchain]
-      deny: [edit:production-code]
     system_prompt: |
       You are the test writer. You write and update tests and run the suite, following
       the test skill for this language. You do NOT fix production code: when a test
@@ -201,11 +203,8 @@ agents:
     provider: claude
     model: claude-sonnet-5
     session: persistent
-    cli_args: ["--allowedTools", *toolchains]
+    capabilities: { tools: [read, *toolchains], web: false }
     skills: ["build-audit-{{ inputs.language }}"]
-    permissions:
-      allow: [read, bash:toolchain]
-      deny: [edit, write]
     system_prompt: |
       You are the builder. You build the application and check its dependencies for
       vulnerabilities, following the build skill for this language. You do not change
@@ -217,11 +216,8 @@ agents:
     provider: claude
     model: claude-sonnet-5
     session: persistent
-    cli_args: ["--allowedTools", *toolchains]
+    capabilities: { tools: [read, *toolchains], web: false }
     skills: [claim-verification]
-    permissions:
-      allow: [read, bash:git, bash:toolchain]
-      deny: [edit, write]
     system_prompt: |
       You are the verifier. You prove or disprove that the change does what the task
       asked, by running the same command before and after it. You do not change code.
@@ -229,12 +225,9 @@ agents:
   ci_pusher:
     provider: claude
     model: claude-opus-4-8
-    session: persistent
-    cli_args: ["--allowedTools", *vcs]
+    session: handoff
+    capabilities: { tools: [read, *vcs], web: false }
     skills: ["ci-pipeline-{{ inputs.git_platform }}"]
-    permissions:
-      allow: [read, bash:git, bash:gh, bash:glab]
-      deny: [edit, merge]
     system_prompt: |
       You are the CI Pusher. You push the branch, make sure a PR/MR is open and watch
       CI until it passes. When CI fails, you fetch the failure log and summarize the
@@ -244,12 +237,9 @@ agents:
   pr_babysitter:
     provider: claude
     model: claude-opus-4-8
-    session: persistent
-    cli_args: ["--allowedTools", *vcs]
+    session: handoff
+    capabilities: { tools: [read, *vcs], web: false }
     skills: ["pr-babysitter-{{ inputs.git_platform }}", decision-log]
-    permissions:
-      allow: [read, bash:git, bash:gh, bash:glab]
-      deny: [edit, merge]
     system_prompt: |
       You are the PR Babysitter. With CI green, you watch the PR/MR until it is
       mergeable: conflicts, reviews and comments. Actionable comments become fix
@@ -260,11 +250,8 @@ agents:
     provider: claude
     model: claude-opus-4-8
     session: persistent
-    cli_args: ["--allowedTools", *vcs]
+    capabilities: { tools: [read, *vcs], web: false }
     skills: ["deploy-{{ inputs.git_platform }}"]
-    permissions:
-      allow: [read, bash:git, bash:gh, bash:glab]
-      deny: [edit]
     system_prompt: |
       You are the Deployer. Before the merge, you publish the PR/MR preview. After the
       merge, which a human approves, you track the production deploy triggered by the
