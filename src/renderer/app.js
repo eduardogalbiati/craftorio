@@ -183,6 +183,7 @@ function showView(view) {
   state.view = view;
   document.querySelectorAll('.view').forEach((v) => v.classList.toggle('hidden', v.id !== `view-${view}`));
   document.querySelectorAll('.nav-item').forEach((b) => b.classList.toggle('active', b.dataset.view === (view === 'project' ? 'projects' : view)));
+  if (view === 'sessions') window.SessionsView?.show();
   if (view === 'dashboard') renderDashboard();
   if (view === 'projects') refreshProjects();
   if (view === 'project') { renderProjectView(); loadProjectRuns(); }
@@ -2244,13 +2245,15 @@ function initTerminalDock() {
     document.addEventListener('mouseup', up);
   });
 
+  // terminals live in the dock or in the Sessions screen (sessions.js)
+  const findTab = (id) => dock.tabs.find((x) => x.id === id) || window.SessionsView?.findTab(id);
   api.onTermData?.(({ id, data }) => {
-    const t = dock.tabs.find((x) => x.id === id);
+    const t = findTab(id);
     if (t) t.term.write(data);
     else queuePending(id, { data });
   });
   api.onTermExit?.(({ id, exitCode }) => {
-    const t = dock.tabs.find((x) => x.id === id);
+    const t = findTab(id);
     if (t) markExited(t, exitCode);
     else queuePending(id, { exitCode });
   });
@@ -2305,6 +2308,40 @@ async function openTerminal({ kind, sessionId, runId, label }) {
   const pane = document.createElement('div');
   pane.className = 'term-pane';
   $('#term-body').appendChild(pane);
+  const { term, fit } = createXterm(kind);
+  const tab = { key, id: null, kind, runId, sessionId, title: `${label || sessionId} · ${kind}`, term, fit, pane, exited: false, lastPaste: 0, sent: 0 };
+  dock.tabs.push(tab);
+  showDock();
+  term.open(pane);
+  wireTerminal(tab);
+  activateTab(tab);
+
+  try {
+    const res = await api.termOpen({ kind, runId, sessionId, cols: term.cols, rows: term.rows });
+    tab.id = res.id;
+    if (res.windowsPty) term.options.windowsPty = res.windowsPty;
+    if (res.title) tab.title = res.title;
+    renderTermTabs();
+    replayPending(tab);
+    fitActive();
+    return tab;
+  } catch (e) {
+    closeTab(tab, { kill: false });
+    throw e;
+  }
+}
+
+// What arrived for a terminal before term:open answered with its id.
+function replayPending(tab) {
+  for (const item of dock.pending.get(tab.id) || []) {
+    if ('data' in item) tab.term.write(item.data);
+    else markExited(tab, item.exitCode);
+  }
+  dock.pending.delete(tab.id);
+}
+
+// An xterm with the app's theme and a fit addon (not opened yet). Live terminals are read-only.
+function createXterm(kind) {
   const css = getComputedStyle(document.documentElement);
   const term = new Terminal({
     theme: xtermTheme(),
@@ -2320,30 +2357,7 @@ async function openTerminal({ kind, sessionId, runId, label }) {
   });
   const fit = new FitAddon.FitAddon();
   term.loadAddon(fit);
-  const tab = { key, id: null, kind, runId, sessionId, title: `${label || sessionId} · ${kind}`, term, fit, pane, exited: false, lastPaste: 0, sent: 0 };
-  dock.tabs.push(tab);
-  showDock();
-  term.open(pane);
-  wireTerminal(tab);
-  activateTab(tab);
-
-  try {
-    const res = await api.termOpen({ kind, runId, sessionId, cols: term.cols, rows: term.rows });
-    tab.id = res.id;
-    if (res.title) tab.title = res.title;
-    renderTermTabs();
-    // what arrived before we knew the id
-    for (const item of dock.pending.get(res.id) || []) {
-      if ('data' in item) term.write(item.data);
-      else markExited(tab, item.exitCode);
-    }
-    dock.pending.delete(res.id);
-    fitActive();
-    return tab;
-  } catch (e) {
-    closeTab(tab, { kill: false });
-    throw e;
-  }
+  return { term, fit };
 }
 
 function wireTerminal(tab) {
@@ -2353,8 +2367,12 @@ function wireTerminal(tab) {
     tab.sent++;
     api.termInput(tab.id, d);
   });
+  // One resize after the size settles: every resize makes a full-screen CLI redraw, and dragging
+  // the window or the dock produces dozens.
+  let resizeTimer = null;
   term.onResize(({ cols, rows }) => {
-    if (tab.id && !tab.exited) api.termResize(tab.id, cols, rows);
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => { if (tab.id && !tab.exited) api.termResize(tab.id, cols, rows); }, 120);
   });
   term.attachCustomKeyEventHandler((e) => {
     if (e.type !== 'keydown') return true;
@@ -2387,14 +2405,15 @@ function wireTerminal(tab) {
     if (term.hasSelection()) copyFromTerm(tab);
     else pasteIntoTerm(tab);
   });
-  pane.addEventListener('mousedown', () => activateTab(tab));
+  pane.addEventListener('mousedown', () => (tab.onFocus ? tab.onFocus() : activateTab(tab)));
 }
 
 async function copyFromTerm(tab) {
   const text = tab.term.getSelection();
   if (!text) return;
   tab.term.clearSelection();
-  try { await api.clipboardWrite(text); flashTermMsg('Copied.'); } catch (e) { flashTermMsg(errMsg(e), true); }
+  const flash = tab.flash || flashTermMsg;
+  try { await api.clipboardWrite(text); flash('Copied.'); } catch (e) { flash(errMsg(e), true); }
 }
 
 async function pasteIntoTerm(tab) {
@@ -2403,10 +2422,10 @@ async function pasteIntoTerm(tab) {
     const text = await api.clipboardRead();
     tab.lastPaste = Date.now();
     if (!text) return;
-    if (tab.kind === 'live') flashTermMsg('This terminal is read-only.');
+    if (tab.kind === 'live') (tab.flash || flashTermMsg)('This terminal is read-only.');
     tab.term.paste(text); // onData ignores it for live tabs
   } catch (e) {
-    flashTermMsg(errMsg(e), true);
+    (tab.flash || flashTermMsg)(errMsg(e), true);
   }
 }
 
@@ -2423,7 +2442,8 @@ function markExited(tab, exitCode) {
   if (tab.exited) return;
   tab.exited = true;
   tab.term.write(`\r\n\x1b[90m[process exited with code ${exitCode ?? '?'}]\x1b[0m\r\n`);
-  renderTermTabs();
+  if (tab.onChange) tab.onChange();
+  else renderTermTabs();
 }
 
 function showDock() {

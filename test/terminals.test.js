@@ -54,3 +54,21 @@ test('virtual terminals stream with CRLF, ignore input and stop on kill', async 
   assert.equal(stopped, true);
   assert.equal(terms.kill(id), false);
 });
+
+test('killing a pseudoterminal ends the programs it started too', async (t) => {
+  // a parent that starts a detached long-running child (own console / process group, like an
+  // MCP server or a daemon: it survives the pty closing) and prints the child's pid
+  const script = "const c=require('child_process').spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:'ignore',detached:true});console.log('CHILD='+c.pid);setInterval(()=>{},1000)";
+  let out = '';
+  const sink = new Terminals((channel, p) => { if (channel === 'term:data') out += p.data; });
+  t.after(() => sink.killAll());
+  const { id } = sink.open({ title: 'tree', file: process.execPath, args: ['-e', script], cwd: process.cwd(), env: process.env });
+  let child = null;
+  for (let i = 0; i < 100 && !child; i++) { await wait(100); child = Number((/CHILD=(\d+)/.exec(out) || [])[1]) || null; }
+  assert.ok(child, `the child started (output: ${JSON.stringify(out)})`);
+  const alive = (pid) => { try { process.kill(pid, 0); return true; } catch { return false; } };
+  assert.equal(alive(child), true);
+  sink.kill(id);
+  for (let i = 0; i < 50 && alive(child); i++) await wait(100);
+  assert.equal(alive(child), false, 'the child was killed with its parent');
+});

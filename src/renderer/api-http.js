@@ -86,6 +86,8 @@
     listArtifacts: (opts) => call('artifacts:list', opts || {}),
     readArtifact: (path) => call('artifacts:read', { path }),
     openArtifact: desktopOnly('Opening files with their app'),
+    listCliSessions: () => call('cliSessions:list'),
+    renameCliSession: (provider, id, title) => call('cliSessions:rename', { provider, id, title }),
     termOpen: (opts) => call('term:open', opts),
     termInput: (id, data) => notify('term:input', { id, data }),
     termResize: (id, cols, rows) => notify('term:resize', { id, cols, rows }),

@@ -14,18 +14,21 @@
 
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 const { execFile } = require('child_process');
 const { EventEmitter } = require('events');
 const { WorkflowRun, loadWorkflow } = require('../engine/workflow');
 const { Recorder } = require('../engine/recorder');
 const { resolveCommand } = require('../engine/providers');
-const { cleanupWorktrees } = require('../engine/worktree');
+const { cleanupWorktrees, canonicalPath } = require('../engine/worktree');
 const workspace = require('../workspace');
 const projects = require('../projects');
 const skills = require('../skills');
 const agents = require('../agents');
 const usage = require('../usage');
 const { readLocalUsage } = require('../local-usage');
+const cliSessions = require('../cli-sessions');
+const { trustFolder } = require('../cli-trust');
 const runs = require('../runs');
 const workflows = require('../workflows');
 const { Terminals } = require('../terminals');
@@ -297,23 +300,122 @@ function createService({ host }) {
     return { title: `supervisor · ${path.basename(runDir)}`, cwd: runDir, file: cmd.file, args, env };
   }
 
+  // ---- Sessions screen: the CLIs' own conversations on this machine --------------------
+  // Whether a folder is (inside) another, compared canonically (8.3 names, symlinks), memoized.
+  function folderMatcher() {
+    const memo = new Map();
+    const canon = (p) => {
+      if (!memo.has(p)) memo.set(p, canonicalPath(p).toLowerCase());
+      return memo.get(p);
+    };
+    return (dir, root) => {
+      if (!dir || !root) return false;
+      const a = canon(dir), b = canon(root);
+      return a === b || a.startsWith(b.endsWith(path.sep) ? b : b + path.sep);
+    };
+  }
+
+  // Titles given on the Sessions screen, kept in the workspace (the CLIs' files are never edited).
+  const titleKey = (provider, id) => `${provider}:${id}`;
+  function sessionTitles() {
+    try { return JSON.parse(fs.readFileSync(ws.sessionTitles, 'utf8')) || {}; } catch { return {}; }
+  }
+  function renameCliSession({ provider, id, title }) {
+    const titles = sessionTitles();
+    const clean = String(title || '').replace(/\s+/g, ' ').trim().slice(0, 200);
+    if (clean) titles[titleKey(provider, id)] = clean;
+    else delete titles[titleKey(provider, id)]; // empty: back to the CLI's own title
+    fs.writeFileSync(ws.sessionTitles, JSON.stringify(titles, null, 2));
+    return { title: clean || cliSessions.findCliSession(provider, id)?.title || null, renamed: !!clean };
+  }
+
+  // Every session with the project it belongs to and whether a workflow agent created it (a
+  // headless CLI call, or a run's folder), plus which CLIs can start new sessions.
+  function listCliSessions() {
+    const within = folderMatcher();
+    const projectList = projects.listProjects(ws.projects);
+    const titles = sessionTitles();
+    const sessions = cliSessions.listCliSessions().map((x) => {
+      const owner = projectList.find((p) => [p.folder, ...(p.previousFolders || [])].some((d) => within(x.cwd, d)));
+      const agent = x.headless || within(x.cwd, ws.runs) || within(x.cwd, ws.worktrees);
+      const title = titles[titleKey(x.provider, x.id)];
+      return { ...x, title: title || x.title, renamed: !!title, workflowAgent: !!agent, project: owner ? { id: owner.id, name: owner.name } : null };
+    });
+    const providers = Object.entries(cliSessions.CLI_PROVIDERS).map(([id, p]) => ({
+      id, name: p.name, installed: !!resolveCommand(p.command), models: cliSessions.providerModels(id), efforts: p.efforts,
+    }));
+    return { sessions, providers };
+  }
+
+  const cliEnv = () => {
+    const env = { ...process.env };
+    delete env.CLAUDECODE;
+    delete env.ELECTRON_RUN_AS_NODE;
+    return env;
+  };
+
+  // What to run for the Sessions screen: reopen a recorded session in its folder, or start a new
+  // one (in a project's folder, a chosen folder, or the home folder) with a model and effort.
+  function cliSessionSpec({ kind, provider, sessionId, model, effort, projectId, folder }) {
+    const p = cliSessions.CLI_PROVIDERS[provider];
+    if (!p) throw new Error(`Unknown provider: ${provider}`);
+    const cmd = resolveCommand(p.command);
+    if (!cmd) throw new Error(`${p.name} (${p.command}) is not installed.`);
+    if (kind === 'cli-resume') {
+      const sess = cliSessions.findCliSession(provider, String(sessionId || ''));
+      if (!sess) throw new Error('Session not found.');
+      // the CLIs look conversations up by folder: resuming elsewhere would not find it
+      if (!sess.cwd || !fs.existsSync(sess.cwd)) throw new Error(`The session's folder no longer exists: ${sess.cwd || 'unknown'}`);
+      trustWorkspaceFolder(provider, sess.cwd);
+      const title = sessionTitles()[titleKey(provider, sess.id)] || sess.title;
+      return { title, cwd: sess.cwd, file: cmd.file, args: cliSessions.cliArgs(provider, { resume: sess.id }), env: cliEnv() };
+    }
+    const project = projectId ? projects.listProjects(ws.projects).find((x) => x.id === projectId) : null;
+    if (projectId && !project) throw new Error(`Project not found: ${projectId}`);
+    const cwd = folder || project?.folder || os.homedir();
+    if (!fs.existsSync(cwd) || !fs.statSync(cwd).isDirectory()) throw new Error(`Folder not found: ${cwd}`);
+    trustWorkspaceFolder(provider, cwd);
+    const title = `${project?.name || path.basename(cwd) || cwd} · ${model || p.name}`;
+    return { title, cwd, file: cmd.file, args: cliSessions.cliArgs(provider, { model, effort }), env: cliEnv() };
+  }
+
+  // Folders inside the workspace are the app's own: the CLI does not ask whether to trust them.
+  // Folders elsewhere keep the CLI's own question (asked once per folder).
+  function trustWorkspaceFolder(provider, dir) {
+    if (!folderMatcher()(dir, ws.root)) return;
+    try { trustFolder(provider, canonicalPath(dir)); } catch (e) { console.warn(`folder trust (${provider}):`, e.message); }
+  }
+
+  // A program in a pseudoterminal. .cmd/.bat shims (npm-installed CLIs) run through cmd.exe;
+  // node-pty re-quotes array arguments on Windows, so cmd.exe gets its command line as a single string.
+  // `windowsPty` tells xterm.js the program runs in ConPTY: ConPTY reflows the lines itself on a
+  // resize, and xterm reflowing them too leaves pieces of the old layout on screen (full-screen
+  // CLIs like Grok's end up garbled).
+  function openProgram(spec, cols, rows) {
+    const win = process.platform === 'win32';
+    const shim = win && /\.(cmd|bat)$/i.test(spec.file);
+    const opened = terminals.open({
+      ...spec, cols, rows,
+      file: shim ? 'cmd.exe' : spec.file,
+      args: shim ? `/d /s /c "${[spec.file, ...spec.args].map(q).join(' ')}"` : spec.args,
+    });
+    return win ? { ...opened, windowsPty: { backend: 'conpty', buildNumber: Number(os.release().split('.')[2]) || undefined } } : opened;
+  }
+
   // Embedded terminals (xterm.js in the UI + node-pty here)
-  function openTerminal({ kind, runId, sessionId, cols, rows }) {
-    if (kind === 'supervisor') return terminals.open({ ...supervisorChatSpec(runId || currentRun?.runId), cols, rows });
+  function openTerminal({ kind, runId, sessionId, cols, rows, ...opts }) {
+    if (kind === 'supervisor') return openProgram(supervisorChatSpec(runId || currentRun?.runId), cols, rows);
+    if (kind === 'cli-resume' || kind === 'cli-new') {
+      const spec = cliSessionSpec({ kind, sessionId, ...opts });
+      return { ...openProgram(spec, cols, rows), cwd: spec.cwd };
+    }
     const spec = terminalSpec(runId, sessionId, kind === 'cli' ? 'cli' : 'live');
     if (kind !== 'cli') {
       // live: follow the log in this process (see src/terminals.js for why not a child process)
       const [, runDir, id] = spec.args;
       return terminals.openVirtual({ title: spec.title, start: (write) => followSession(runDir, id, write) });
     }
-    // .cmd/.bat shims (npm-installed CLIs) run through cmd.exe; node-pty re-quotes array
-    // arguments on Windows, so cmd.exe gets its command line as a single string
-    const shim = process.platform === 'win32' && /\.(cmd|bat)$/i.test(spec.file);
-    return terminals.open({
-      ...spec, cols, rows,
-      file: shim ? 'cmd.exe' : spec.file,
-      args: shim ? `/d /s /c "${[spec.file, ...spec.args].map(q).join(' ')}"` : spec.args,
-    });
+    return openProgram(spec, cols, rows);
   }
 
   // Continues a run from a step: a new run with the previous outputs, agent conversations and an instruction.
@@ -498,6 +600,8 @@ function createService({ host }) {
     'usage:setBudget': (opts) => setBudget(opts),
     'usage:setPrice': (opts) => setPrice(opts),
 
+    'cliSessions:list': () => listCliSessions(),
+    'cliSessions:rename': (opts) => renameCliSession(opts),
     'term:open': (opts) => openTerminal(opts),
     'term:kill': ({ id }) => terminals.kill(id),
   }).map(([channel, fn]) => [channel, withWorkspace(fn)]));

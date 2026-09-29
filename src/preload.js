@@ -44,6 +44,9 @@ contextBridge.exposeInMainWorld('api', {
   listArtifacts: (opts) => ipcRenderer.invoke('artifacts:list', opts || {}),
   readArtifact: (path) => ipcRenderer.invoke('artifacts:read', { path }),
   openArtifact: (path, reveal) => ipcRenderer.invoke('artifacts:open', { path, reveal: !!reveal }),
+  // Sessions screen: the CLIs' own conversations on this machine (opened with termOpen)
+  listCliSessions: () => ipcRenderer.invoke('cliSessions:list'),
+  renameCliSession: (provider, id, title) => ipcRenderer.invoke('cliSessions:rename', { provider, id, title }),
   // embedded terminals (xterm in the renderer, process in main)
   termOpen: (opts) => ipcRenderer.invoke('term:open', opts),
   termInput: (id, data) => ipcRenderer.send('term:input', { id, data }),
