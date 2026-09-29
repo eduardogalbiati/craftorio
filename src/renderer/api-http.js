@@ -61,6 +61,10 @@
     createSkill: (data) => call('skills:create', data),
     saveSkill: (id, data) => call('skills:save', { id, data }),
     removeSkill: (id) => call('skills:remove', id),
+    listAgents: () => call('agents:list'),
+    createAgent: (data) => call('agents:create', data),
+    saveAgent: (id, data) => call('agents:save', { id, data }),
+    removeAgent: (id) => call('agents:remove', id),
     // no native folder picker in the browser: the path is typed (a folder on the server)
     pickFolder: async () => window.prompt('Folder path on the server:')?.trim() || null,
     getWorkspace: () => call('workspace:get'),

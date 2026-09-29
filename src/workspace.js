@@ -1,6 +1,6 @@
 // The app's local workspace: a single folder holding the run logs (runs/), the
 // cloned repositories (repos/), the runs' git worktrees (worktrees/), the projects (projects/),
-// the skills (skills/), the workflows (workflows/) and the app preferences (settings.json).
+// the skills (skills/), the agents (agents/), the workflows (workflows/) and the app preferences (settings.json).
 //
 // Resolution order:
 //   1. MULTIAGENT_WORKSPACE environment variable (tests/CI; not persisted)
@@ -85,7 +85,7 @@ function resolveWorkspace({ store = defaultStore(), env = process.env, home = os
 function setupWorkspace(dir, { store = defaultStore(), persist = true } = {}) {
   const root = path.resolve(dir);
   const ws = layout(root);
-  for (const d of [ws.root, ws.runs, ws.repos, ws.projects, ws.skills, ws.workflows]) fs.mkdirSync(d, { recursive: true });
+  for (const d of [ws.root, ws.runs, ws.repos, ws.projects, ws.skills, ws.agents, ws.workflows]) fs.mkdirSync(d, { recursive: true });
   if (persist) store.set(root);
   return ws;
 }
@@ -97,6 +97,8 @@ function layout(root) {
     repos: path.join(root, 'repos'),
     projects: path.join(root, 'projects'),
     skills: path.join(root, 'skills'),
+    // user-defined agents, one JSON file each (see src/agents.js)
+    agents: path.join(root, 'agents'),
     // editable workflow YAML files (bundled defaults are seeded here, see src/workflows.js)
     workflows: path.join(root, 'workflows'),
     // one git worktree per run (orchestrator.worktree), created on demand

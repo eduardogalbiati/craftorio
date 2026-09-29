@@ -2,7 +2,8 @@
 // one animated state per phase of a turn (thinking, writing, done...). Ported from the owner's
 // avatar generators. Animations are CSS classes prefixed with `rb-` (see duo.css), so the SVGs can
 // be inlined in the page without clashing with the app's own class names.
-// Exposes window.Robots = { svg(variant, state, opts), variantFor(provider, model), VARIANTS, STATES }.
+// Exposes window.Robots = { svg(variant, state, opts), variantFor(provider, model), plaqueFor(model),
+// fromAppearance(appearance, label), define(name, appearance), emblem(name), VARIANTS, STATES, ... }.
 (() => {
   const C = Math.cos(Math.PI / 6), S = 0.5;
   const f = (n) => +(+n).toFixed(2);
@@ -73,6 +74,27 @@
         `<line x1="${f(-r * .5)}" y1="${f(r * .5)}" x2="${f(r * .9)}" y2="${f(-r * .9)}"/></g>`;
     },
   };
+
+  // Generic emblems for the user's own agents (no brand), drawn in a 20x20 box centered on 0.
+  // Keep the names in sync with EMBLEMS in src/agents.js.
+  const line = (d, w = 2.4) => `<path d="${d}" fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round"/>`;
+  const ICONS = {
+    bolt: '<path d="M2 -10 L-6 2 H-1 L-2 10 L6 -2 H1 Z"/>',
+    heart: '<path d="M0 8 C-9 2 -10 -4 -6 -7 C-3 -9 0 -7 0 -4 C0 -7 3 -9 6 -7 C10 -4 9 2 0 8Z"/>',
+    shield: '<path d="M0 -9 L8 -6 V0 C8 5 4 8 0 10 C-4 8 -8 5 -8 0 V-6Z"/>',
+    leaf: '<path d="M-7 8 C-10 -3 -3 -9 9 -9 C9 3 3 9 -7 8Z"/>',
+    gear: '<circle r="5" fill="none" stroke="currentColor" stroke-width="3.6"/>' +
+      [0, 45, 90, 135, 180, 225, 270, 315].map((a) => `<rect transform="rotate(${a})" x="-1.8" y="-9.5" width="3.6" height="4.5" rx="1"/>`).join(''),
+    code: line('M-4 -6 L-9 0 L-4 6 M4 -6 L9 0 L4 6 M1.8 -8 L-1.8 8'),
+    rocket: '<path d="M0 -10 C5 -6 5 2 3 6 H-3 C-5 2 -5 -6 0 -10Z M-3 1 L-7 7 L-3 6Z M3 1 L7 7 L3 6Z M-2 7.5 L0 10.5 L2 7.5Z"/>',
+    eye: line('M-10 0 Q0 -9 10 0 Q0 9 -10 0Z', 2.2) + '<circle r="3.4"/>',
+    crown: '<path d="M-9 6 L-9 -5 L-4 0 L0 -8 L4 0 L9 -5 L9 6Z"/>',
+    flask: '<path d="M-2.5 -9 H2.5 V-3 L8 7 Q9 9 6.5 9 H-6.5 Q-9 9 -8 7 L-2.5 -3Z"/>',
+    star5: '<path d="M0 -10 L2.9 -4 L9.5 -3.1 L4.7 1.5 L5.9 8.1 L0 5 L-5.9 8.1 L-4.7 1.5 L-9.5 -3.1 L-2.9 -4Z"/>',
+  };
+  for (const [name, art] of Object.entries(ICONS)) {
+    LOGOS[name] = (r, col) => `<g transform="scale(${f(r / 10)})" fill="${col}" color="${col}">${art}</g>`;
+  }
 
   // ---------- eyes on the visor (front face coordinates, 120x110) ----------
   const EYES = {
@@ -261,12 +283,44 @@ ${flip(v.overlay || '')}
     },
   };
 
+  // ---------- user-defined looks (Agents screen, src/agents.js) ----------
+  // An appearance is { body, shell, visor, glow, eyes, emblem }: the main color (body, shoulder plate),
+  // the shell (head and limbs), the visor (screen), the glow (eyes and antennas), the eye style and
+  // an emblem ('none' = the plain panel). Base and outline are derived from the main color.
+  const EYE_STYLES = Object.keys(EYES);
+  const EMBLEMS = ['none', ...Object.keys(ICONS)];
+  const luma = (h) => { const n = parseInt(h.slice(1), 16); return (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255; };
+  const hex = (h, d) => (/^#[0-9a-f]{6}$/i.test(h || '') ? h : d);
+  function fromAppearance(a = {}, label = '') {
+    const body = hex(a.body, '#7C5CFF'), shell = hex(a.shell, '#F4F4F6');
+    // an emblem on a light body would vanish in white
+    const mark = luma(body) > 0.7 ? darken(body, .6) : '#FFFFFF';
+    return {
+      label,
+      head: shell, limb: shell, body, plate: body, base: darken(body, .55),
+      screen: hex(a.visor, '#15161A'), accent: hex(a.glow, '#C9B8FF'),
+      eyes: EYE_STYLES.includes(a.eyes) ? a.eyes : 'dots', outline: darken(body, .65),
+      logo: ICONS[a.emblem] ? a.emblem : undefined, chestLogo: mark, plateLogo: mark,
+      bg1: lighten(body, .88), bg2: lighten(body, .6),
+    };
+  }
+  // Replaces (or adds) a named variant, e.g. the supervisor with the look saved in Agents. Screens
+  // that already drew it listen for 'robots:changed'.
+  function define(name, appearance, label) {
+    VARIANTS[name] = fromAppearance(appearance, label ?? VARIANTS[name]?.label ?? name);
+    document.dispatchEvent(new CustomEvent('robots:changed', { detail: { name } }));
+  }
+  // An emblem alone, for pickers: an <svg> with a 20x20 viewBox in `color`.
+  const emblem = (name, color = 'currentColor') =>
+    `<svg viewBox="-11 -11 22 22" aria-hidden="true" focusable="false">${ICONS[name] ? LOGOS[name](10, color) : ''}</svg>`;
+
   let uid = 0;
+  // `variant` is a name from VARIANTS or a variant object (see fromAppearance).
   // `bubble: false` drops the balloon overlay (small avatars, where it would be unreadable);
   // `plaque` is the name plate text (the model), `mirror` faces the robot right.
   function svg(variant, state = 'idle', opts = {}) {
     const st = STATES[state] || STATES.idle;
-    const v = { ...(VARIANTS[variant] || VARIANTS.vanilla), ...st };
+    const v = { ...(typeof variant === 'object' && variant ? variant : VARIANTS[variant] || VARIANTS.vanilla), ...st };
     v.mirror = !!opts.mirror;
     if (opts.plaque !== undefined) v.plaque = opts.plaque;
     if (opts.bubble === false) delete v.overlay;
@@ -287,5 +341,5 @@ ${flip(v.overlay || '')}
       .join(' ').replace(/^GPT (\d)/, 'GPT-$1');
   }
 
-  window.Robots = { svg, variantFor, plaqueFor, VARIANTS, STATES };
+  window.Robots = { svg, variantFor, plaqueFor, fromAppearance, define, emblem, VARIANTS, STATES, EYE_STYLES, EMBLEMS };
 })();

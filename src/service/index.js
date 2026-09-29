@@ -23,6 +23,7 @@ const { cleanupWorktrees } = require('../engine/worktree');
 const workspace = require('../workspace');
 const projects = require('../projects');
 const skills = require('../skills');
+const agents = require('../agents');
 const usage = require('../usage');
 const { readLocalUsage } = require('../local-usage');
 const runs = require('../runs');
@@ -466,6 +467,13 @@ function createService({ host }) {
     'skills:save': ({ id, data }) => skills.saveSkill(ws.skills, id, data),
     // Moves to the trash (recoverable), does not delete permanently.
     'skills:remove': (id) => host.trashItem(path.join(ws.skills, path.basename(id))),
+
+    // The built-in supervisor is always listed first; only its look can be changed.
+    'agents:list': () => agents.listAgents(ws.agents),
+    'agents:create': (data) => agents.createAgent(ws.agents, data),
+    'agents:save': ({ id, data }) => agents.saveAgent(ws.agents, id, data),
+    // Moves to the trash (recoverable), like skills.
+    'agents:remove': (id) => host.trashItem(agents.agentPathForRemoval(ws.agents, id)),
 
     'workspace:get': () => ({ ...ws, registry: process.env[workspace.ENV_VAR] ? null : workspace.defaultStore().describe }),
 

@@ -21,6 +21,7 @@ Keep **Simulation mode** checked to try a flow without calling the CLIs.
 | Projects | Projects in `<workspace>/projects/<id>.json`. Every project has a folder and optionally a git repository. With a repository and no folder, it is cloned into `<workspace>/repos/<owner>-<repo>`; without either, the folder is `<workspace>/projects/<id>/`. Clicking a project shows every workflow run in it (status, cost, task), and for each run its sessions, with **Live terminal** / **Open in CLI** to watch or resume any of them. Runs are linked by the project id they were started with (older ones by the project's current or previous folders) |
 | Artifacts | Every file a run produced (documents, proposals, reviews, reports), grouped by run and filterable by project. The viewer renders Markdown (tables, table of contents; sanitized with DOMPurify), pretty-prints JSON and shows TSV/CSV as tables. Also listed per run in the project view |
 | Workflows | The YAMLs in `<workspace>/workflows/` with their steps, agents/models, skills, `/goal`, `/loop`, parallel steps and branches. Each one is marked **default** (untouched copy of a workflow bundled with the app), **modified** (a default you edited; **Restore default** moves your copy to the trash and restores the bundled one, and **newer default** means the app ships a newer version than the one you edited) or **custom** (created by you) |
+| Agents | Reusable agents in `<workspace>/agents/<id>.json`: a robot look (main color, shell, visor, glow, eyes, emblem; live preview of the animated states), a prompt with what the agent is for and the skills it always gets. The built-in **Supervisor** is always listed: its prompt and skills are fixed, only its look can be changed (it shows wherever the supervisor appears, e.g. Write & Review). Workflows don't pick these agents yet |
 | Skills | One folder per skill in `<workspace>/skills/<id>/SKILL.md` (Claude Code format) |
 | Usage | Tokens and cost per provider this month and today, monthly budgets (USD and/or tokens), per-model prices for CLIs that do not report cost, recent runs. The topbar widget shows this month's total; click it for a per-provider popover |
 | Settings | Workspace, CLI status (Claude Code, Codex, Grok Build, GitHub CLI, GitLab CLI, Git) and run preferences (`<workspace>/settings.json`) |
@@ -495,6 +496,7 @@ Everything the app produces lives in a local workspace folder:
   worktrees/ one git worktree per run (<run_id>), see "A git worktree per run"
   projects/  projects (one .json per project)
   skills/    skills (one folder with SKILL.md per skill)
+  agents/    user-defined agents (one .json per agent; supervisor.json = the supervisor's look)
   workflows/ workflow definitions (one .yaml per workflow)
   settings.json  app preferences, budgets and prices
 ```
@@ -549,6 +551,7 @@ src/workspace.js         workspace folder (Windows registry, runs/, repos/, work
 src/projects.js          projects: CRUD and folder/repository setup
 src/seed.js              seeding of bundled defaults into the workspace (.seeded.json, origin status, restore)
 src/skills.js            skills: CRUD, lookup, seeding and prompt block
+src/agents.js            agents: CRUD, appearance validation, the built-in supervisor
 src/workflows.js         workflows: seeding, origin status, lookup (workspace, then bundled)
 src/usage.js             token/cost usage per provider and scope, budgets and the pre-run CLI check
 src/local-usage.js       readers of the CLIs' own local usage logs (Claude Code, Codex, Grok)

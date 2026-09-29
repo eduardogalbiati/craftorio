@@ -81,6 +81,7 @@ async function init() {
     if (!$('#budget-modal').classList.contains('hidden')) return closeModal('#budget-modal');
     if (!$('#project-modal').classList.contains('hidden')) return closeModal('#project-modal');
     if (!$('#skill-modal').classList.contains('hidden')) return closeModal('#skill-modal');
+    if (!$('#agent-modal').classList.contains('hidden')) return closeModal('#agent-modal');
     if (!$('#drawer').classList.contains('open')) return;
     closeDrawer();
   });
@@ -187,6 +188,7 @@ function showView(view) {
   if (view === 'project') { renderProjectView(); loadProjectRuns(); }
   if (view === 'artifacts') { renderArtifacts(); loadArtifacts(); }
   if (view === 'workflows') showWorkflowsTab(state.workflowsTab);
+  if (view === 'agents') window.refreshAgents?.();
   if (view === 'skills') refreshSkills();
   if (view === 'usage') { renderUsage(); loadUsage(); }
   if (view === 'settings') renderSettings();
@@ -226,6 +228,7 @@ function renderWorkspacePaths() {
   const ws = state.ws;
   $('#projects-dir').textContent = ws.projects;
   $('#skills-dir').textContent = ws.skills;
+  $('#agents-dir').textContent = ws.agents || '';
   $('#workflows-dir').textContent = ws.workflows;
 }
 

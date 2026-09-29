@@ -47,7 +47,7 @@ Owner: Eduardo Galbiati (GitHub `eduardogalbiati/multiagent-orchestrator`, defau
   PowerShell), `glab` optional.
 - Workspace: `%USERPROFILE%\multiagent-workspace` (registry `HKCU\Software\MultiagentOrchestrator\WorkspacePath`,
   overridable with `MULTIAGENT_WORKSPACE`). Layout: `runs/`, `repos/` (git checkouts, `<owner>-<repo>`),
-  `worktrees/` (one git worktree per run, `<run_id>`), `projects/` (`<id>.json`), `skills/`, `settings.json`. The owner's project `multiagent-orchestrator`
+  `worktrees/` (one git worktree per run, `<run_id>`), `projects/` (`<id>.json`), `skills/`, `agents/` (`<id>.json`), `settings.json`. The owner's project `multiagent-orchestrator`
   points at `repos/eduardogalbiati-multiagent-orchestrator` (SSH remote; the repo is private).
 - The owner uses **subscription plans** (Claude, ChatGPT free for Codex, SuperGrok), not API keys.
 
@@ -82,8 +82,9 @@ run on `windows-latest` and also run `npm test`.
 | `supabase/migrations/` | `accounts` table (`trial_ends_at` = now + 7 days via trigger on `auth.users`, `plan` trial/pro, RLS read-own only) and `entitlement()`. Applied by pasting into the Supabase SQL editor. |
 | `src/preload.js` | `window.api` exposed to the renderer (sandboxed; no Node there). |
 | `src/renderer/duo.js` / `robots.js` | Write & Review screen: setup (prompt, goal, writer/reviewer CLI + model + effort) and the run as a chat rebuilt from run events, live or replayed (`runs:events`, "Open chat" in the runs list). `robots.js` draws the isometric robot avatars (variant per provider, animated states, model name plate, mirroring). |
-| `src/renderer/` | Plain HTML/CSS/JS UI, no bundler. Libraries loaded with `<script src="../../node_modules/...">` (UMD): xterm, addon-fit, marked, DOMPurify. Views: dashboard, projects (+ project detail with runs/sessions/artifacts), artifacts, workflows, skills, usage, settings, run; terminal dock; supervisor drawer. |
+| `src/renderer/` | Plain HTML/CSS/JS UI, no bundler. Libraries loaded with `<script src="../../node_modules/...">` (UMD): xterm, addon-fit, marked, DOMPurify. Views: dashboard, projects (+ project detail with runs/sessions/artifacts), artifacts, workflows, agents, skills, usage, settings, run; terminal dock; supervisor drawer. |
 | `src/skills.js` | Skill CRUD, `resolveSkill` (workspace first, then bundled `skills/`), `skillPrompt`, `seedSkills` (copies bundled skills once, updates untouched copies by content hash, `.seeded.json`). |
+| `src/agents.js` | Agents menu: user-defined agents in `agents/<id>.json` (name, description, prompt, skills, `appearance` = { body, shell, visor, glow, eyes, emblem }). The built-in supervisor is always first, can't be removed and only saves its look (`agents/supervisor.json`). EYES/EMBLEMS must match `robots.js` (a test checks). Renderer: `src/renderer/agents.js`; `Robots.define('supervisor', look)` recolors it in Write & Review. Not used by workflows yet. |
 | `src/workspace.js` | Workspace path (registry / env) and `layout()` (`runs`, `repos`, `worktrees`, ...); exports `gitAuthArgs` (gh credential helper for clone/fetch). |
 | `src/projects.js` | Projects; a project with a repo and no folder is cloned into `repos/`; `previousFolders` kept when the folder changes. |
 | `src/runs.js` | Runs on disk (`readRun`/`listRuns`, interrupted runs rebuilt from events), `runsForProject` (project id, else folders), `projectOf` (a run's project), `runArtifacts`. The same run list component is shown in Projects > Project and Workflows > Runs (IPC `projects:runs` and `runs:list`, shared `runListItem`). |

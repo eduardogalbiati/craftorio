@@ -520,6 +520,10 @@
     fillAgentForm('writer');
     fillAgentForm('reviewer');
     $d('[data-robot="supervisor"]').innerHTML = robotSvg('supervisor');
+    // the supervisor's look is customizable in Agents
+    document.addEventListener('robots:changed', (e) => {
+      if (e.detail?.name === 'supervisor') $d('[data-robot="supervisor"]').innerHTML = robotSvg('supervisor');
+    });
     $d('#duo-run').onclick = startRun;
     $d('#duo-stop').onclick = () => api.stopRun();
     $d('#duo-logs').onclick = () => chat.runDir && api.openPath(chat.runDir);
