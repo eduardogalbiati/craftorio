@@ -81,6 +81,7 @@ run on `windows-latest` and also run `npm test`.
 | `src/auth.js` / `src/auth-config.js` | Account sign-in (Supabase Auth, OAuth: system browser + PKCE + one-shot loopback server on `127.0.0.1:47823/auth/callback`) and the 7-day trial. No Electron: main passes a `fileStorage` encrypted with `safeStorage` (`%APPDATA%/…/account.bin`). `assertCanRun({ mock })` gates `run:start`/`supervisor:resume` via `host.assertCanRun` (simulations always allowed). Entitlement comes from the SQL function `entitlement()` (server clock), cached 3 days for offline use. `auth-config.js` holds the public URL + publishable key and the enabled providers (only `google` for now). Dev only: `MULTIAGENT_SUPABASE_URL`/`_KEY` override, `MULTIAGENT_AUTH=off` disables; the packaged app ignores them and always requires sign-in. |
 | `supabase/migrations/` | `accounts` table (`trial_ends_at` = now + 7 days via trigger on `auth.users`, `plan` trial/pro, RLS read-own only) and `entitlement()`. Applied by pasting into the Supabase SQL editor. |
 | `src/preload.js` | `window.api` exposed to the renderer (sandboxed; no Node there). |
+| `src/renderer/duo.js` / `robots.js` | Write & Review screen: setup (prompt, goal, writer/reviewer CLI + model + effort) and the run as a chat rebuilt from run events, live or replayed (`runs:events`, "Open chat" in the runs list). `robots.js` draws the isometric robot avatars (variant per provider, animated states, model name plate, mirroring). |
 | `src/renderer/` | Plain HTML/CSS/JS UI, no bundler. Libraries loaded with `<script src="../../node_modules/...">` (UMD): xterm, addon-fit, marked, DOMPurify. Views: dashboard, projects (+ project detail with runs/sessions/artifacts), artifacts, workflows, skills, usage, settings, run; terminal dock; supervisor drawer. |
 | `src/skills.js` | Skill CRUD, `resolveSkill` (workspace first, then bundled `skills/`), `skillPrompt`, `seedSkills` (copies bundled skills once, updates untouched copies by content hash, `.seeded.json`). |
 | `src/workspace.js` | Workspace path (registry / env) and `layout()` (`runs`, `repos`, `worktrees`, ...); exports `gitAuthArgs` (gh credential helper for clone/fetch). |
@@ -89,7 +90,7 @@ run on `windows-latest` and also run `npm test`.
 | `src/usage.js` / `src/local-usage.js` | Token/cost usage per provider (scope orchestrator vs this machine from the CLIs' own logs: ~/.claude/projects, ~/.codex/sessions, ~/.grok/sessions), Codex plan limits/credits, budgets, `preflight` (missing CLI, budget, empty folder inputs). |
 | `src/supervisor.js` | AI supervisor: decision/analysis schemas, prompts, `runReport`, `analyzeRun` (saves `supervisor/analysis-*.md`), `resumeSpec` (also returns the run's `worktree: { dir, branch }`). Skill: `skills/run-supervisor`. |
 | `src/terminals.js` / `src/session-tail.js` | Embedded terminals: node-pty pseudoterminals (CLI resume, supervisor chat) and virtual terminals (live log follower, no process). |
-| `workflows/*.yaml` | `software-development` (language + git_platform inputs pick skills), `ai-arena` (4 models compete → blind critique → base+graft synthesis → verify → human review), `multi-model-review`, `run-retrospective`. |
+| `workflows/*.yaml` | `software-development` (language + git_platform inputs pick skills), `ai-arena` (4 models compete → blind critique → base+graft synthesis → verify → human review), `multi-model-review`, `run-retrospective`, `writer-reviewer` (user-picked writer/reviewer loop until a score threshold, internal Opus 5.5 sign-off). |
 | `skills/` | 33 bundled skills (see README table). |
 
 ## Engine features to know (YAML)
@@ -97,7 +98,13 @@ run on `windows-latest` and also run `npm test`.
 - `agents.<name>.skills` (system prompt, 1st turn) and `steps[].skills` (step prompt); names can be
   templates (`"unit-test-writer-{{ inputs.language }}"`).
 - `agents: [a, b]` = parallel fan-out → `{ results, succeeded, failed }`, `min_success`.
-- `save_as` (string or list, relative to the run folder), `on_error: <step>`.
+- `save_as` (string or list, relative to the run folder; `{ path, content }` saves one field), `on_error: <step>`.
+- Agent `provider`/`model`/`effort` can be templates over the inputs (resolved once in the constructor);
+  `cli_args` can be a map keyed by provider; providers' `effort_args` get `{{ effort }}`.
+  `max_visits` / `loop.max_iterations` accept templates.
+- Human gates can ask for free text (`feedback: true | { label, placeholder }`): `output.feedback` and the
+  run-wide `feedback` list in templates (`approval:resolve` takes `feedback`). `previous_step` = the step that
+  ran before. The Write & Review chat answers its run's gates inline (the approval dialog stays hidden there).
 - `orchestrator.supervisor: { enabled, max_interventions }` — per step 2, per run 6.
 - How a run ends: a transition with `goto: end` may carry `status: success | failed | cancelled`
   (default success; also valid with `on_exhausted: end`; `loadWorkflow` rejects other values).
@@ -142,6 +149,10 @@ run on `windows-latest` and also run `npm test`.
   the previous answer and the schema (`retryPrompt`). Mock provider picks the first enum value
   unless `MOCK_SEQUENCES` has a fitting sequence (or the run's `mockSequences` option overrides
   it). The default sequence fails the preview once with `failure_class: code` and recovers.
+  Numbers and booleans take sequences too (`score`, `ready`); `mockSequences.invalid_answers: { step: n }` makes
+  the first n answers of a step miss its schema (exercises the retries and the supervisor). `run:start` takes
+  `mockSequences` (simulation only): the Write & Review scenario picker uses it. Settings `developerMode`
+  (replaces `mockByDefault`) shows the `.dev-only` Simulation checkboxes, checked by default; off = real runs.
   Simulated `/loop` waits scale with `MULTIAGENT_MOCK_DELAY_SCALE`.
 - Claude local transcripts repeat each message while streaming: dedupe by message id + request id.
 - Renderer changes: test with a temporary Electron script (see `scripts/smoke.js`) and screenshots;
@@ -175,7 +186,7 @@ run on `windows-latest` and also run `npm test`.
   with fallbacks when a CLI is missing or over budget (discussed, not built; the owner accepted
   requiring all three CLIs for now).
 - Ticket slicer / planner step feeding fan-out implementers; arena "design-sketch" runs.
-- Pop-out window for the supervisor chat; free-text feedback on human gates (e.g. arena redo).
+- Pop-out window for the supervisor chat; free-text feedback on the arena's gates (redo); the engine supports it now.
 - Arena ideas not done: rubric hidden from contenders, contenders configurable by input.
 - Worktree follow-ups: confirm with the first real merge that `gh pr merge --repo` leaves local
   branches alone; "Open in CLI" after a worktree is removed opens in `repo_path`, where

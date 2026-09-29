@@ -154,6 +154,7 @@ async function init() {
   $('#btn-tools-refresh').onclick = renderTools;
   document.querySelectorAll('[data-setting]').forEach((el) => (el.onchange = async () => {
     state.settings = await api.setSettings({ [el.dataset.setting]: el.checked });
+    if (el.dataset.setting === 'developerMode') applyDeveloperMode();
   }));
 
   api.onEvent(onEvent);
@@ -163,6 +164,7 @@ async function init() {
 
   state.ws = await api.getWorkspace();
   state.settings = await api.getSettings();
+  applyDeveloperMode();
   [state.workflows, state.projects, state.skills] = await Promise.all([api.listWorkflows(), api.listProjects(), api.listSkills()]);
   renderWorkspacePaths();
   renderDashboard();
@@ -189,6 +191,21 @@ function showView(view) {
   if (view === 'usage') { renderUsage(); loadUsage(); }
   if (view === 'settings') renderSettings();
   if (view === 'run') scheduleRender();
+  // a pending gate hidden behind the Write & Review chat shows up elsewhere
+  if (state.approval && $('#approval-modal').classList.contains('hidden')) openApproval();
+}
+
+// Developer mode (Settings › Execution): the Simulation checkboxes (.dev-only) are shown and checked
+// by default; without it they are hidden and every run is real.
+const devMode = () => !!state.settings.developerMode;
+function applyDeveloperMode() {
+  document.body.classList.toggle('dev-mode', devMode());
+  for (const sel of ['#mock-toggle', '#duo-mock']) {
+    const box = $(sel);
+    if (!box) continue;
+    box.checked = devMode();
+    box.dispatchEvent(new Event('change'));
+  }
 }
 
 function openModal(sel) { $(sel).classList.remove('hidden'); }
@@ -242,7 +259,7 @@ async function openDrawer({ category = null, workflow = null, project = null } =
   state.category = category;
   state.pendingProject = project;
   [state.workflows, state.projects, state.settings] = await Promise.all([api.listWorkflows(), api.listProjects(), api.getSettings()]);
-  $('#mock-toggle').checked = !!state.settings.mockByDefault;
+  applyDeveloperMode();
   $('#start-error').textContent = '';
   renderDrawerCategories();
   renderWorkflowOptions(workflow || state.settings.lastWorkflow);
@@ -337,7 +354,8 @@ function selectWorkflow(file) {
   $('#inputs-form').innerHTML = entries.filter(([k]) => k === mainKey).map((e) => field(e, true)).join('');
   $('#adv-form').innerHTML = entries.filter(([k]) => k !== mainKey).map((e) => field(e, false)).join('');
 
-  const needsProject = Object.keys(wf.inputs || {}).some(isPathInput);
+  // a folder input with `required: false` (e.g. writer-reviewer's project_path) makes the project optional
+  const needsProject = Object.entries(wf.inputs || {}).some(([k, def]) => isPathInput(k) && def.required !== false);
   $('#project-req').classList.toggle('hidden', !needsProject);
   $('#btn-start').disabled = !!wf.error || state.run?.status === 'running';
 }
@@ -354,16 +372,16 @@ async function startRun() {
   if (!wf) return;
   const project = state.projects.find((p) => p.id === $('#project-select').value);
   const pathKeys = Object.keys(wf.inputs || {}).filter(isPathInput);
-  if (pathKeys.length && !project) return ($('#start-error').textContent = 'Select a project: its folder is used as the workflow repository.');
+  if (pathKeys.some((k) => wf.inputs[k].required !== false) && !project) return ($('#start-error').textContent = 'Select a project: its folder is used as the workflow repository.');
   if (project && !project.exists) return ($('#start-error').textContent = `The project folder does not exist: ${project.folder}`);
 
   const inputs = readInputs();
   try { localStorage.setItem(`${LS_KEY}.${wf.file}`, JSON.stringify(inputs)); } catch { /* ignore */ }
-  for (const k of pathKeys) inputs[k] = project.folder;
+  if (project) for (const k of pathKeys) inputs[k] = project.folder;
 
   $('#btn-start').disabled = true;
   try {
-    await api.startRun({ file: wf.file, inputs, mock: $('#mock-toggle').checked });
+    await api.startRun({ file: wf.file, inputs, mock: devMode() && $('#mock-toggle').checked });
     state.settings = await api.setSettings({ lastWorkflow: wf.file, lastProject: project?.id || null });
     if (state.run) state.run.project = project?.name || null;
     closeDrawer();
@@ -536,6 +554,7 @@ function renderRunList(rl, { prefix, box: boxSel, empty, start, rerender }) {
     const r = rl.runs.find((x) => x.runId === b.closest('.pr-run').dataset.run);
     if (b.dataset.runAct === 'logs') api.openPath(r.runDir);
     if (b.dataset.runAct === 'view') showView('run');
+    if (b.dataset.runAct === 'chat') window.openDuoRun?.(r.runId, { running: r.current && r.status === 'running' });
     if (b.dataset.runAct === 'sup') openSupervisor({ runId: r.runId, workflow: r.workflow, status: r.status, error: r.error, mock: r.mock });
   }));
   box.querySelectorAll('[data-art]').forEach((b) => (b.onclick = () => {
@@ -582,6 +601,7 @@ function projectRunBody(r, pv) {
     <div class="row">
       <button class="btn sm ghost" data-run-act="logs">Open logs</button>
       <button class="btn sm ghost sup-btn" data-run-act="sup"><span class="sup-mark">◆</span> Ask the supervisor</button>
+      ${r.workflow === 'writer-reviewer' ? '<button class="btn sm" data-run-act="chat" title="See the writer, reviewer and supervisor conversation">Open chat</button>' : ''}
       ${r.current ? '<button class="btn sm" data-run-act="view">View run</button>' : ''}
       <span class="spacer"></span>
       <span class="muted small mono">${esc(r.runId)}</span>
@@ -1282,8 +1302,26 @@ function runsTableHtml(u) {
 // answer: true/false or a choice id
 function resolveApproval(answer) {
   if (!state.approval) return;
-  api.resolveApproval(state.approval.approval_id, answer);
+  api.resolveApproval(state.approval.approval_id, answer, $('#approval-feedback-text').value);
   closeApproval();
+}
+
+function openApproval() {
+  const ev = state.approval;
+  // the Write & Review chat asks the question inline for the run it shows
+  if (!ev || window.duoShowsRun?.(ev.run_id)) return;
+  $('#approval-step').textContent = `step: ${ev.step_id}`;
+  $('#approval-message').textContent = ev.message;
+  $('#approval-binary').classList.toggle('hidden', !!ev.choices);
+  $('#approval-choices').classList.toggle('hidden', !ev.choices);
+  $('#approval-choices').innerHTML = (ev.choices || []).map((c, i) =>
+    `<button class="btn ${i === 0 ? 'primary' : 'ghost'}" data-choice="${esc(c.id)}">${esc(c.label)}</button>`).join('');
+  $('#approval-choices').querySelectorAll('[data-choice]').forEach((b) => (b.onclick = () => resolveApproval(b.dataset.choice)));
+  $('#approval-feedback').classList.toggle('hidden', !ev.feedback);
+  $('#approval-feedback-label').textContent = ev.feedback?.label || '';
+  $('#approval-feedback-text').placeholder = ev.feedback?.placeholder || '';
+  $('#approval-feedback-text').value = '';
+  $('#approval-modal').classList.remove('hidden');
 }
 
 function closeApproval() {
@@ -1403,14 +1441,7 @@ function onEvent(ev) {
 
     case 'approval.requested':
       state.approval = ev;
-      $('#approval-step').textContent = `step: ${ev.step_id}`;
-      $('#approval-message').textContent = ev.message;
-      $('#approval-binary').classList.toggle('hidden', !!ev.choices);
-      $('#approval-choices').classList.toggle('hidden', !ev.choices);
-      $('#approval-choices').innerHTML = (ev.choices || []).map((c, i) =>
-        `<button class="btn ${i === 0 ? 'primary' : 'ghost'}" data-choice="${esc(c.id)}">${esc(c.label)}</button>`).join('');
-      $('#approval-choices').querySelectorAll('[data-choice]').forEach((b) => (b.onclick = () => resolveApproval(b.dataset.choice)));
-      $('#approval-modal').classList.remove('hidden');
+      openApproval();
       orch(ev, `? approval requested at ${ev.step_id}`, 'warn');
       break;
 

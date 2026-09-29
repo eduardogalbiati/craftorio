@@ -109,7 +109,8 @@ function layout(root) {
 // Preferences (settings.json in the workspace)
 // ---------------------------------------------------------------------------
 const DEFAULT_SETTINGS = {
-  mockByDefault: true,    // the run panel opens with "Simulation mode" checked
+  // shows the Simulation checkboxes (checked by default) and the simulation scenarios; off = real runs only
+  developerMode: false,
   openRunOnStart: true,   // when a workflow starts, switch to the run screen
   confirmStop: true,      // ask for confirmation before stopping a workflow
   lastProject: null,

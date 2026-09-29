@@ -170,4 +170,8 @@ function runArtifacts(runDir) {
   return [...byPath.values()].sort((a, b) => a.rel.localeCompare(b.rel));
 }
 
-module.exports = { readRun, listRuns, runsForProject, projectOf, runArtifacts, kindOf };
+// A run's events without the streamed CLI output (session.stream), which is most of the file:
+// enough to replay the run (e.g. the Write & Review chat of a past run).
+const runEvents = (runDir) => readEvents(path.join(runDir, 'events.jsonl')).filter((e) => e.type !== 'session.stream');
+
+module.exports = { readRun, listRuns, runsForProject, projectOf, runArtifacts, kindOf, runEvents };

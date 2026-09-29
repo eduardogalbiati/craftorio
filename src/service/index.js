@@ -176,7 +176,8 @@ function createService({ host }) {
     }));
   }
 
-  async function startWorkflowRun({ file, inputs, mock, resume = null, projectId: forcedProject = null }) {
+  // mockSequences: simulation scenario ({ field: [value per visit] }, invalid_answers), ignored for real runs
+  async function startWorkflowRun({ file, inputs, mock, mockSequences = null, resume = null, projectId: forcedProject = null }) {
     if (isRunning()) throw new Error('A workflow is already running.');
     await host.assertCanRun?.({ mock: !!mock });
     // repo_path can be a git URL: clones (or updates) it into <workspace>/repos.
@@ -198,7 +199,7 @@ function createService({ host }) {
     }
     const run = new WorkflowRun({
       file: wfFile.file, inputs, mock, runsDir: ws.runs, skillsDirs: [ws.skills], notices,
-      budget, prices: settings.prices, projectId, resume,
+      budget, prices: settings.prices, projectId, resume, mockSequences: mock ? mockSequences : null,
       // simulation runs never touch git: the agents are mocked and work in the repository folder
       worktreesDir: mock ? null : ws.worktrees,
     });
@@ -468,11 +469,12 @@ function createService({ host }) {
 
     'workspace:get': () => ({ ...ws, registry: process.env[workspace.ENV_VAR] ? null : workspace.defaultStore().describe }),
 
-    'run:start': ({ file, inputs, mock }) => startWorkflowRun({ file, inputs, mock }),
+    'run:start': ({ file, inputs, mock, mockSequences }) => startWorkflowRun({ file, inputs, mock, mockSequences }),
     'run:stop': () => { currentRun?.stop(); return true; },
     'runs:list': () => listAllRuns(),
-    // answer: true/false or the id of a choice
-    'approval:resolve': ({ id, answer }) => currentRun?.resolveApproval(id, answer) ?? false,
+    'runs:events': ({ runId }) => runs.runEvents(runFolder(runId)),
+    // answer: true/false or the id of a choice; feedback: the optional text typed at the gate
+    'approval:resolve': ({ id, answer, feedback }) => currentRun?.resolveApproval(id, answer, 'user', feedback) ?? false,
 
     // Explains any run (running, failed or finished) and recommends actions; the analysis is saved in
     // the run folder (supervisor/analysis-*.md), so it shows up in Artifacts.

@@ -343,3 +343,147 @@ test('software-development: rejecting the merge ends the run as cancelled', { ti
   assert.equal(finished.status, 'cancelled');
   assert.match(finished.error, /ended as cancelled at step "approve_merge" \(rejected\)/);
 });
+
+// ---------------------------------------------------------------------------
+// writer-reviewer: the writer and the reviewer are picked at run time (templated agents)
+async function runWriterReviewer({ inputs = {}, mockSequences, answers = {}, feedback = {} } = {}) {
+  const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'));
+  const run = new WorkflowRun({
+    file: path.join(root, 'workflows', 'writer-reviewer.yaml'),
+    inputs: { prompt: 'A one-page PRD', goal: 'Every requirement is testable', ...inputs },
+    mock: true, runsDir, mockSequences,
+  });
+  const events = [];
+  run.on('event', (ev) => {
+    events.push(ev);
+    if (ev.type === 'approval.requested') {
+      // answers[step]: a choice id, or a list of them (one per visit); feedback[step]: the text typed
+      const a = answers[ev.step_id];
+      const answer = Array.isArray(a) ? a.shift() ?? ev.choices[0].id : a ?? ev.choices[0].id;
+      const f = feedback[ev.step_id];
+      setImmediate(() => run.resolveApproval(ev.approval_id, answer, 'user', Array.isArray(f) ? f.shift() : f));
+    }
+  });
+  await run.start();
+  const finished = events.find((e) => e.type === 'workflow.finished');
+  const transitions = events.filter((e) => e.type === 'step.transition').map((e) => `${e.from}>${e.to}`);
+  const files = (rel) => fs.readFileSync(path.join(run.runDir, rel), 'utf8');
+  return { run, events, finished, transitions, files, cleanup: () => fs.rmSync(runsDir, { recursive: true, force: true }) };
+}
+
+test('writer-reviewer: agents take provider, model and effort from the inputs', () => {
+  const run = new WorkflowRun({
+    file: path.join(root, 'workflows', 'writer-reviewer.yaml'),
+    inputs: { prompt: 'x', goal: 'y', writer_provider: 'grok', writer_model: 'grok-4.7', writer_effort: 'low' },
+    mock: true, runsDir: os.tmpdir(),
+  });
+  assert.deepEqual(
+    ['provider', 'model', 'effort'].map((k) => run.wf.agents.writer[k]),
+    ['grok', 'grok-4.7', 'low'],
+  );
+  assert.equal(run.wf.agents.reviewer.provider, 'codex'); // default input
+  assert.deepEqual(run.ctx.agents.writer, { provider: 'grok', model: 'grok-4.7' });
+});
+
+test('writer-reviewer: notes go back to the writer until the score passes, then the supervisor asks the user', { timeout: 60000 }, async () => {
+  const { events, finished, transitions, files, cleanup } = await runWriterReviewer();
+  try {
+    assert.equal(finished.status, 'success', finished.error);
+    // default mock scores 5.5, 7, 8.6 with threshold 8
+    assert.deepEqual(transitions, ['write>review', 'review>write', 'write>review', 'review>write', 'write>review', 'review>signoff', 'signoff>decide', 'decide>end']);
+    // save_as { path, content }: the document field only, one file per draft
+    assert.match(files('document.md'), /^# Simulated document/);
+    assert.equal(files('drafts/v3.md'), files('document.md'));
+    const writes = events.filter((e) => e.type === 'session.message_sent' && e.step_id === 'write').map((e) => e.prompt);
+    assert.match(writes[1], /scored draft v1 5\.5\/10/);
+    assert.match(writes[1], /\[major\] Simulated note on the draft\./);
+  } finally { cleanup(); }
+});
+
+test('writer-reviewer: when the rounds run out a human decides (templated loop limit)', { timeout: 60000 }, async () => {
+  const { events, finished, transitions, cleanup } = await runWriterReviewer({
+    inputs: { max_rounds: 2 }, mockSequences: { score: [4] }, answers: { out_of_rounds: 'stop' },
+  });
+  try {
+    assert.equal(transitions.filter((t) => t === 'write>review').length, 2);
+    assert.ok(transitions.includes('review>out_of_rounds'), transitions.join(' '));
+    assert.ok(events.some((e) => e.type === 'approval.requested' && e.step_id === 'out_of_rounds'));
+    assert.equal(finished.status, 'cancelled');
+  } finally { cleanup(); }
+});
+
+test('writer-reviewer: the user sends the document back with instructions that reach every agent', { timeout: 60000 }, async () => {
+  const { events, finished, transitions, cleanup } = await runWriterReviewer({
+    mockSequences: { score: [9] },
+    answers: { decide: ['revise', 'accept'] },
+    feedback: { decide: ['Keep the pricing as an open question.', ''] },
+  });
+  try {
+    assert.equal(finished.status, 'success', finished.error);
+    assert.deepEqual(transitions, ['write>review', 'review>signoff', 'signoff>decide', 'decide>write', 'write>review', 'review>signoff', 'signoff>decide', 'decide>end']);
+    const gate = events.find((e) => e.type === 'approval.requested' && e.step_id === 'decide');
+    assert.match(gate.feedback.label, /Instructions for the writer/);
+    assert.equal(events.find((e) => e.type === 'approval.resolved').feedback, 'Keep the pricing as an open question.');
+    const prompt = (step, i) => events.filter((e) => e.type === 'session.message_sent' && e.step_id === step)[i].prompt;
+    // the writer knows the draft came back from the supervisor and the user
+    assert.match(prompt('write', 1), /The supervisor checked draft v1/);
+    assert.match(prompt('write', 1), /The user asked for another revision/);
+    for (const [step, i] of [['write', 1], ['review', 1], ['signoff', 1]]) assert.match(prompt(step, i), /- Keep the pricing as an open question./, step);
+    assert.doesNotMatch(prompt('review', 0), /decisions so far/);
+    assert.equal(finished.summary.steps.decide.output.feedback, '');
+  } finally { cleanup(); }
+});
+
+test('writer-reviewer simulation: the supervisor finds gaps and the user sends the draft back', { timeout: 60000 }, async () => {
+  const { events, finished, transitions, cleanup } = await runWriterReviewer({
+    mockSequences: { score: [9], ready: [false, true], ok: [false, true] },
+    answers: { decide: ['revise', 'accept'] },
+  });
+  try {
+    assert.equal(finished.status, 'success', finished.error);
+    const signoffs = events.filter((e) => e.type === 'step.finished' && e.step_id === 'signoff').map((e) => e.output.ready);
+    assert.deepEqual(signoffs, [false, true]);
+    const asks = events.filter((e) => e.type === 'approval.requested' && e.step_id === 'decide').map((e) => e.message);
+    assert.match(asks[0], /Some parts of the goal are not met yet/);
+    assert.match(asks[1], /The document meets the goal/);
+    assert.ok(transitions.includes('decide>write'));
+  } finally { cleanup(); }
+});
+
+test('writer-reviewer simulation: invalid answers are asked again, then the supervisor steps in', { timeout: 60000 }, async () => {
+  const { events, finished, cleanup } = await runWriterReviewer({ mockSequences: { score: [9], invalid_answers: { review: 3 } } });
+  try {
+    assert.equal(finished.status, 'success', finished.error);
+    assert.equal(events.filter((e) => e.type === 'log' && /^Invalid output in review/.test(e.message)).length, 3);
+    const decision = events.find((e) => e.type === 'supervisor.decision');
+    assert.equal(decision.step_id, 'review');
+    assert.equal(decision.action, 'retry');
+    // after the supervisor's retry the review answers correctly and the run goes on
+    assert.equal(events.filter((e) => e.type === 'step.finished' && e.step_id === 'review' && !e.error).length, 1);
+  } finally { cleanup(); }
+});
+
+test('writer-reviewer: with a project the writer and the reviewer work in its folder, the drafts stay in the run', { timeout: 60000 }, async () => {
+  const { run, events, finished, files, cleanup } = await runWriterReviewer({ inputs: { project_path: root }, mockSequences: { score: [9] } });
+  try {
+    assert.equal(finished.status, 'success', finished.error);
+    const cwd = (agent) => finished.summary.sessions.find((s) => s.agent === agent).cwd;
+    assert.equal(cwd('writer'), root);
+    assert.equal(cwd('reviewer'), root);
+    assert.equal(cwd('signoff'), run.runDir);
+    assert.match(files('document.md'), /^# Simulated document/);
+    const first = events.find((e) => e.type === 'session.message_sent' && e.step_id === 'write').prompt;
+    assert.match(first, /The current folder is the user's project/);
+    assert.match(first, /Project: the current folder/);
+  } finally { cleanup(); }
+});
+
+test('writer-reviewer: without a project the agents work in the run folder and are told they have no files', { timeout: 60000 }, async () => {
+  const { run, events, finished, cleanup } = await runWriterReviewer({ mockSequences: { score: [9] } });
+  try {
+    assert.equal(finished.summary.sessions.find((s) => s.agent === 'writer').cwd, run.runDir);
+    const first = events.find((e) => e.type === 'session.message_sent' && e.step_id === 'write').prompt;
+    assert.match(first, /you have no files, repository or web access/);
+    assert.doesNotMatch(first, /Project: the current folder/);
+  } finally { cleanup(); }
+});

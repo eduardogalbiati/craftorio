@@ -254,12 +254,14 @@ parseGrok.flush = flushGrok;
 // CLI runner
 // ---------------------------------------------------------------------------
 function runCli(opts, parser) {
-  const { provider, model, providerSessionId, prompt, cwd, extraArgs, timeoutMs, signal, onItem, render } = opts;
+  const { provider, model, effort, providerSessionId, prompt, cwd, extraArgs, timeoutMs, signal, onItem, render } = opts;
   // `prompt_file_arg`: CLIs that take the prompt from a file (e.g. grok --prompt-file) instead of stdin
   const promptFile = provider.prompt_file_arg ? path.join(os.tmpdir(), `multiagent-prompt-${crypto.randomUUID()}.md`) : null;
-  const vars = { model, session_id: providerSessionId, prompt_file: promptFile };
+  const vars = { model, effort, session_id: providerSessionId, prompt_file: promptFile };
   const args = [
     ...(provider.args || []),
+    // `effort_args` (e.g. claude --effort {{ effort }}): only when the agent sets an effort
+    ...(effort ? provider.effort_args || [] : []),
     ...(extraArgs || []),
     ...(providerSessionId ? provider.resume_args || [] : []),
     ...(provider.stdin_arg ? [provider.stdin_arg] : []),
@@ -342,6 +344,12 @@ function mockString(key) {
     failure_report: 'npm test: 1 failure in test/engine.test.js (validateSchema accepts an invalid enum).',
     file: 'src/auth/login.ts',
     summary: 'Simulated implementation of the feature with tests.',
+    message: 'Simulated draft: I covered the request and applied the latest notes.',
+    document: '# Simulated document\n\n## Summary\n\nThis draft was written by the mock provider.\n\n## Details\n\n- First point\n- Second point\n',
+    text: 'Simulated note on the draft.',
+    explanation: 'The answer did not have the fields this step requires, so the run could not use it. I asked for it again with the expected format.',
+    instruction: 'Answer only with the JSON object the step asks for, with every required field.',
+    item: 'Simulated part of the goal',
   })[key] || `(simulated) ${key}`;
 }
 
@@ -356,6 +364,8 @@ const MOCK_SEQUENCES = {
   preview_status: ['pending', 'failed', 'success'],
   failure_class: ['code'],
   deploy_status: ['pending', 'success'],
+  // writer-reviewer: the draft is approved on the 3rd review (threshold 8)
+  score: [5.5, 7, 8.6],
 };
 
 // h.sequences (WorkflowRun's mockSequences) overrides the defaults per field
@@ -365,6 +375,10 @@ function mockValue(s, key, h) {
     // only when the sequence fits this enum (the same key can mean different things in different steps)
     if (seq && seq.every((v) => s.enum.includes(v))) return seq[Math.min(h.visit - 1, seq.length - 1)];
     return s.enum[0];
+  }
+  if (s.type === 'number' || s.type === 'integer') {
+    const seq = h.sequences?.[key] || MOCK_SEQUENCES[key];
+    if (seq && seq.every(Number.isFinite)) return seq[Math.min(h.visit - 1, seq.length - 1)];
   }
   if (s.type === 'integer') return key === 'pr_number' ? 42 : 0;
   switch (s.type) {
@@ -376,7 +390,10 @@ function mockValue(s, key, h) {
       return o;
     }
     case 'array': return [mockValue(s.items || { type: 'string' }, key, h)];
-    case 'boolean': return true;
+    case 'boolean': {
+      const seq = h.sequences?.[key];
+      return seq && seq.every((v) => typeof v === 'boolean') ? seq[Math.min(h.visit - 1, seq.length - 1)] : true;
+    }
     case 'number': return 1.5;
     default: return mockString(key);
   }
@@ -397,9 +414,13 @@ async function runMock({ providerSessionId, model, hint, signal, onItem }) {
   await d(800);
 
   const out = hint?.schema ? mockValue(hint.schema, '', hint) : null;
-  const text = out
-    ? `Finished step **${hint.stepId}**.\n\n\`\`\`json\n${JSON.stringify(out, null, 2)}\n\`\`\``
-    : 'Done. (simulated response)';
+  // sequences.invalid_answers: { stepId: n }: the first n answers of that step miss the required fields
+  const invalid = out && hint.call <= (hint.sequences?.invalid_answers?.[hint.stepId] || 0);
+  const text = invalid
+    ? 'Here is my answer. (simulated: it forgets the fields the step requires)\n\n```json\n{ "comment": "Looks good to me." }\n```'
+    : out
+      ? `Finished step **${hint.stepId}**.\n\n\`\`\`json\n${JSON.stringify(out, null, 2)}\n\`\`\``
+      : 'Done. (simulated response)';
   onItem({ kind: 'text', text });
 
   const usage = { input: rand(2000, 12000), output: rand(300, 2500), cache_read: rand(0, 8000), cache_write: rand(0, 2000), reasoning: rand(100, 1500) };

@@ -183,9 +183,21 @@ class WorkflowRun extends EventEmitter {
     this.prices = prices || {};
     this.budgetWarned = new Set();
     this.inputs = this.resolveInputs(inputs || {});
+    // An agent's provider, model and effort can be templates over the inputs
+    // (provider: "{{ inputs.writer_provider }}"), so a workflow can let the user pick them.
+    // Resolved once per run, before anything reads them (preflight, budgets, sessions).
+    for (const a of Object.values(this.wf.agents)) {
+      for (const k of ['provider', 'model', 'effort']) {
+        if (typeof a[k] === 'string' && a[k].includes('{{')) a[k] = render(a[k], { inputs: this.inputs }).trim();
+      }
+    }
     this.ctx = {
       inputs: this.inputs, steps: {}, loop: { iteration: 0 }, run_id: this.runId, run_dir: this.runDir, runs_dir: runsDir, workflows_dir: path.dirname(path.resolve(file)),
       agents: Object.fromEntries(Object.entries(this.wf.agents).map(([k, a]) => [k, { provider: a.provider, model: a.model }])),
+      // what the user typed at the human gates, oldest first: [{ step, choice, text, ts }]
+      feedback: [],
+      // the step that ran before the current one (null for the first)
+      previous_step: null,
     };
     for (const s of this.wf.steps) this.ctx.steps[s.id] = { output: null, visits: 0 };
     this.resume = resume || null;
@@ -405,19 +417,20 @@ class WorkflowRun extends EventEmitter {
     // /loop iteration: resets whenever the step is (re)entered from another step
     if (this.prevStepId !== step.id) { st.iteration = 0; st.loopStartedAt = Date.now(); }
     st.iteration++;
+    this.ctx.previous_step = this.prevStepId || null;
     this.prevStepId = step.id;
     const t0 = Date.now();
     this.emitEvent('step.started', { step_id: step.id, visit: st.visits, iteration: st.iteration, step_type: step.type || 'agent', agent: stepAgentLabel(step) });
 
     let output, scope;
     if (step.type === 'human_approval') {
-      const answer = await this.requestApproval(step);
+      const { answer, feedback } = await this.requestApproval(step);
       if (step.choices) {
-        output = { choice: answer };
-        scope = { ...this.ctx, output, choice: answer };
+        output = { choice: answer, feedback };
+        scope = { ...this.ctx, output, choice: answer, feedback };
       } else {
-        output = { approved: answer };
-        scope = { ...this.ctx, output, approved: answer, rejected: !answer };
+        output = { approved: answer, feedback };
+        scope = { ...this.ctx, output, approved: answer, rejected: !answer, feedback };
       }
       st.output = output;
     } else {
@@ -490,10 +503,12 @@ class WorkflowRun extends EventEmitter {
 
   applyCounters(step, t) {
     let target = t.goto;
+    // limits can be templates over the inputs (max_iterations: "{{ inputs.max_rounds }}")
+    const limit = (v) => +render(String(v), this.ctx);
     if (t.max_visits) {
       const key = `${step.id}->${t.goto}`;
       this.counters[key] = (this.counters[key] || 0) + 1;
-      if (this.counters[key] > t.max_visits) {
+      if (this.counters[key] > limit(t.max_visits)) {
         target = t.on_exhausted || 'fail';
         this.emitEvent('log', { level: 'warn', message: `max_visits (${t.max_visits}) reached at ${key} → ${target}` });
       }
@@ -501,7 +516,7 @@ class WorkflowRun extends EventEmitter {
     if (t.loop) {
       const name = t.loop.name || `${step.id}->${t.goto}`;
       this.loops[name] = (this.loops[name] || 0) + 1;
-      if (this.loops[name] > t.loop.max_iterations) {
+      if (this.loops[name] > limit(t.loop.max_iterations)) {
         target = t.loop.on_exhausted || 'fail';
         this.emitEvent('log', { level: 'warn', message: `loop "${name}" reached ${t.loop.max_iterations} iterations → ${target}` });
       } else {
@@ -578,7 +593,7 @@ class WorkflowRun extends EventEmitter {
     let res = await this.sendToAgent(agentName, prompt, opts);
     st.lastAnswer = res.text;
     if (!schema) {
-      this.saveOutput(step, scope, res.text);
+      this.saveOutput(step, scope, res.text, { text: res.text });
       return { text: res.text };
     }
 
@@ -588,7 +603,7 @@ class WorkflowRun extends EventEmitter {
         const out = extractJson(res.text);
         errs = validateSchema(out, schema);
         if (!errs.length) {
-          this.saveOutput(step, scope, JSON.stringify(out, null, 2));
+          this.saveOutput(step, scope, JSON.stringify(out, null, 2), out);
           return out;
         }
       } catch (e) {
@@ -688,12 +703,13 @@ class WorkflowRun extends EventEmitter {
   }
 
   async supervisorAsksHuman(step, decision, retry) {
-    const answer = await this.requestApproval({
+    const { answer, feedback } = await this.requestApproval({
       id: step.id, raw: true,
       message: `The step "${step.id}" failed and the supervisor needs you.\n\n${decision.explanation}${decision.instruction ? `\n\nSuggested instruction for a new attempt:\n${decision.instruction}` : ''}`,
       choices: [{ id: 'retry', label: 'Retry the step with the suggestion' }, { id: 'stop', label: 'Stop here' }],
+      feedback: { label: 'Your instruction for the new attempt (optional, replaces the suggestion)' },
     });
-    return answer === 'retry' ? retry() : null;
+    return answer === 'retry' ? retry(feedback) : null;
   }
 
   // Asks the agent to fix an answer that did not validate. The schema always goes along; an
@@ -737,13 +753,16 @@ class WorkflowRun extends EventEmitter {
 
   // `save_as`: writes the agent's response to a file (a path or a list;
   // templates have access to `agent`). Relative paths go in the run folder.
-  saveOutput(step, scope, text) {
+  // An entry can also be `{ path, content }`: `content` is a template with the step's `output`,
+  // e.g. { path: document.md, content: "{{ output.document }}" } saves one field of a JSON answer.
+  saveOutput(step, scope, text, output) {
     for (const t of step.save_as ? [].concat(step.save_as) : []) {
-      const rel = render(t, scope).trim();
+      const rel = render(typeof t === 'object' ? t.path : t, scope).trim();
       if (!rel) continue;
+      const content = typeof t === 'object' && t.content != null ? render(t.content, { ...scope, output }) : text;
       const file = path.resolve(this.runDir, rel);
       fs.mkdirSync(path.dirname(file), { recursive: true });
-      fs.writeFileSync(file, String(text ?? ''));
+      fs.writeFileSync(file, String(content ?? ''));
       this.emitEvent('file.saved', { step_id: step.id, agent: scope.agent, path: file });
     }
   }
@@ -821,6 +840,8 @@ class WorkflowRun extends EventEmitter {
     const provider = this.mock ? { type: 'mock' } : this.wf.providers?.[agent.provider];
     if (!provider) throw new Error(`Provider "${agent.provider}" is not defined.`);
     if (!this.mock) this.checkBudget(agent.provider);
+    // simulation: which answer of this step this is (mockSequences.invalid_answers: { step: n } makes the first n invalid)
+    if (this.mock && hint) { this.mockCalls ??= {}; hint.call = this.mockCalls[hint.stepId] = (this.mockCalls[hint.stepId] || 0) + 1; }
     // The provider's `skill_args` grants read access to each skill's folder, which lives
     // outside the working_dir (e.g. claude --add-dir <folder>). Applies to every turn.
     const skillDirs = [...new Set([...agentSkills, ...stepSkills].map((sk) => sk.path))];
@@ -836,9 +857,11 @@ class WorkflowRun extends EventEmitter {
       this.setStatus(session, 'active');
       try {
         const res = await runTurn({
-          provider, model: agent.model, providerSessionId: session.providerSessionId,
+          provider, model: agent.model, effort: agent.effort, providerSessionId: session.providerSessionId,
           prompt: fullPrompt, cwd: (session.cwd = this.workingDir(agent)),
-          extraArgs: [...(agent.cli_args || []), ...skillArgs], timeoutMs: parseDuration(agent.timeout, 30 * 60e3),
+          // cli_args may be keyed by provider when the provider is picked at run time
+          extraArgs: [...(Array.isArray(agent.cli_args) ? agent.cli_args : agent.cli_args?.[agent.provider] || []), ...skillArgs],
+          timeoutMs: parseDuration(agent.timeout, 30 * 60e3),
           signal: this.abort.signal, hint, render,
           onItem: (item) => this.emitEvent('session.stream', { session_id: session.id, turn, item }),
         });
@@ -884,11 +907,16 @@ class WorkflowRun extends EventEmitter {
     return this.runDir;
   }
 
+  // Resolves to { answer, feedback }. `feedback: true | { label, placeholder }` on the step asks the
+  // UI for an optional free text next to the choices; it is the gate's `output.feedback`, and every
+  // non-empty one is appended to the run-wide `feedback` list the next prompts can include.
   requestApproval(step) {
     const id = `a${++this.nApproval}`;
     const message = step.raw ? String(step.message).trim() : render(step.message, this.ctx).trim();
     const choices = step.choices ? step.choices.map((c) => ({ id: c.id, label: render(c.label, this.ctx) })) : null;
-    this.emitEvent('approval.requested', { approval_id: id, step_id: step.id, message, choices });
+    const fb = step.feedback === true ? {} : step.feedback || null;
+    const feedback = fb && { label: render(fb.label || 'Anything to add? (optional)', this.ctx), placeholder: render(fb.placeholder || '', this.ctx) };
+    this.emitEvent('approval.requested', { approval_id: id, step_id: step.id, message, choices, feedback });
     this.setStatus(this.orchestrator, 'waiting');
     const timeout = parseDuration(step.timeout, null);
 
@@ -896,21 +924,24 @@ class WorkflowRun extends EventEmitter {
       const onTimeout = step.choices ? step.choices[step.choices.length - 1].id : false;
       const timer = timeout ? setTimeout(() => this.resolveApproval(id, onTimeout, 'timeout'), timeout) : null;
       this.approvals.set(id, {
+        stepId: step.id,
         resolve: (v) => { clearTimeout(timer); resolve(v); },
         reject: (e) => { clearTimeout(timer); reject(e); },
       });
     });
   }
 
-  // answer: boolean (approve/reject) or the id of one of the step's choices
-  resolveApproval(id, answer, by = 'user') {
+  // answer: boolean (approve/reject) or the id of one of the step's choices; feedback: optional text
+  resolveApproval(id, answer, by = 'user', feedback = '') {
     const a = this.approvals.get(id);
     if (!a) return false;
     this.approvals.delete(id);
+    const text = String(feedback ?? '').trim();
     const data = typeof answer === 'boolean' ? { approved: answer } : { choice: answer };
-    this.emitEvent('approval.resolved', { approval_id: id, ...data, by });
+    this.emitEvent('approval.resolved', { approval_id: id, ...data, by, ...(text ? { feedback: text } : {}) });
+    if (text) this.ctx.feedback.push({ step: a.stepId, choice: typeof answer === 'boolean' ? String(answer) : answer, text, ts: new Date().toISOString() });
     this.setStatus(this.orchestrator, 'active');
-    a.resolve(answer);
+    a.resolve({ answer, feedback: text });
     return true;
   }
 

@@ -1,0 +1,374 @@
+# =============================================================================
+# Workflow: Writer & Reviewer
+# -----------------------------------------------------------------------------
+#   write ──► review ──(score >= threshold)──► signoff ──► decide (you) ──► end
+#     ▲         │                                            │
+#     ├─────────┘ (below threshold)                          │ revise
+#     └──────────────────────────────────────────────────────┘
+#               review ──(rounds used up)──► out_of_rounds (you)
+#
+# 1. write:   the writer drafts the document from the prompt, then revises it with the
+#             reviewer's notes. Every draft is saved (drafts/vN.md and document.md).
+# 2. review:  the reviewer scores the draft 0-10 against the goal and lists what to fix.
+#             The ENGINE decides: score >= threshold goes to the sign-off, otherwise the
+#             notes go back to the writer, up to max_rounds reviews.
+# 3. signoff: the platform's supervisor checks the approved draft against the goal and
+#             reports to the user with a recommendation.
+# 4. decide:  the supervisor always asks the user: accept, send it back to the writer, or
+#             stop. The user can also write instructions (e.g. "keep the open questions
+#             open, they are handled later"); every instruction goes into the next prompts
+#             of the writer, the reviewer and the supervisor (the run-wide `feedback`).
+#
+# The user picks the CLI, model and effort of the writer and the reviewer (inputs); the
+# supervisor is internal. Agents work in the run folder, or read-only in the project folder
+# when one is picked (project_path); drafts are always saved in the run folder.
+# The Write & Review screen shows this run as a chat.
+# =============================================================================
+
+apiVersion: multiagent/v1
+kind: Workflow
+
+metadata:
+  name: writer-reviewer
+  version: 0.3.0
+  description: A writer drafts a document from your prompt, a reviewer scores it against your goal and sends notes back until it passes, and the supervisor checks it and asks you what to do.
+  tags: [writing, review, documents]
+  category: plan
+
+# -----------------------------------------------------------------------------
+inputs:
+  prompt:
+    type: string
+    required: true
+    description: What should be written (e.g. a one-page PRD for offline mode, a migration plan, a blog post).
+  goal:
+    type: string
+    required: true
+    description: When the document is good enough. The reviewer scores each draft against it.
+  project_path:
+    type: string
+    required: false
+    default: ""
+    description: Optional project folder. The writer and the reviewer work in it and read its files (read-only) to ground the document.
+  threshold:
+    type: number
+    default: 8
+    description: Minimum reviewer score (0-10) to approve a draft.
+  max_rounds:
+    type: integer
+    default: 5
+    description: Maximum number of reviews. When they run out, a human decides.
+  writer_provider:
+    type: string
+    enum: [claude, codex, grok]
+    default: claude
+    description: CLI of the writer.
+  writer_model:
+    type: string
+    default: claude-opus-5-5
+  writer_effort:
+    type: string
+    enum: [low, medium, high, xhigh]
+    default: high
+  reviewer_provider:
+    type: string
+    enum: [claude, codex, grok]
+    default: codex
+    description: CLI of the reviewer.
+  reviewer_model:
+    type: string
+    default: gpt-6-luna
+  reviewer_effort:
+    type: string
+    enum: [low, medium, high, xhigh]
+    default: high
+
+# -----------------------------------------------------------------------------
+providers:
+  claude:
+    type: claude-code
+    command: claude
+    args: ["-p", "--output-format", "stream-json", "--verbose", "--model", "{{ model }}"]
+    effort_args: ["--effort", "{{ effort }}"]
+    resume_args: ["--resume", "{{ session_id }}"]
+    skill_args: ["--add-dir", "{{ skill_dir }}"]
+  codex:
+    type: codex-cli
+    command: codex
+    args: ["exec", "--json", "--skip-git-repo-check", "-m", "{{ model }}"]
+    effort_args: ["-c", "model_reasoning_effort={{ effort }}"]
+    resume_args: ["resume", "{{ session_id }}"]
+    stdin_arg: "-"
+  grok:
+    type: grok-cli
+    command: grok
+    args: ["--output-format", "streaming-json", "-m", "{{ model }}", "--no-subagents"]
+    effort_args: ["--reasoning-effort", "{{ effort }}"]
+    resume_args: ["--resume", "{{ session_id }}"]
+    prompt_file_arg: ["--prompt-file", "{{ prompt_file }}"]
+
+x-tools:
+  # Writing and reviewing need no tools: the whole exchange goes through the prompts.
+  claude_no_tools: &claude_no_tools ["--disallowedTools", "Bash Edit Write NotebookEdit"]
+  # Per provider, because the user picks it: read-only everywhere; grok needs --always-approve
+  # headless (nobody can answer its prompts).
+  no_tools: &no_tools
+    claude: *claude_no_tools
+    codex: ["-s", "read-only"]
+    grok: ["--tools", "read_file,list_dir,grep", "--always-approve"]
+
+defaults:
+  # no working_dir: agents run in the run folder
+  timeout: 20m
+  retry:
+    max_attempts: 2
+    backoff: exponential
+    initial_delay: 10s
+
+orchestrator:
+  provider: claude
+  model: claude-opus-5-5
+  # The platform's supervisor: internal, not chosen by the user. Called when a step fails
+  # (e.g. an answer that does not match its schema); it never crosses the human gate.
+  supervisor:
+    enabled: true
+    provider: claude
+    model: claude-opus-5-5
+    max_interventions: 2   # per step
+  limits:
+    max_total_duration: 2h
+    max_total_cost_usd: 20
+
+# -----------------------------------------------------------------------------
+agents:
+  writer:
+    provider: "{{ inputs.writer_provider }}"
+    model: "{{ inputs.writer_model }}"
+    effort: "{{ inputs.writer_effort }}"
+    session: persistent   # remembers its drafts across rounds
+    cli_args: *no_tools   # read-only: it can read the project's files, never change them
+    working_dir: "{{ inputs.project_path }}"   # empty: the run folder
+    system_prompt: |
+      You are the writer in a writer/reviewer loop. You write the document you are asked for
+      and revise it with the reviewer's notes until it meets the goal.
+      {% if inputs.project_path %}The current folder is the user's project ({{ inputs.project_path }}): read the
+      files you need to ground the document in what really exists. It is read-only for you:
+      never create, edit or delete anything there. You have no web access.
+      {% else %}Work only from the prompt and the notes: you have no files, repository or web access.
+      {% endif %}Nobody can answer questions. When something is unspecified, make a reasonable
+      assumption and state it in the document. Always return the complete document, never a diff.
+
+  reviewer:
+    provider: "{{ inputs.reviewer_provider }}"
+    model: "{{ inputs.reviewer_model }}"
+    effort: "{{ inputs.reviewer_effort }}"
+    session: persistent   # checks whether its previous notes were addressed
+    cli_args: *no_tools
+    working_dir: "{{ inputs.project_path }}"
+    system_prompt: |
+      You are the reviewer in a writer/reviewer loop. You score each draft from 0 to 10
+      against the goal and list what must change for it to pass. Be strict but fair: a
+      score of {{ inputs.threshold }} or more means the document can ship as it is. Judge
+      the document, not the effort; do not rewrite it yourself. The user's decisions (e.g.
+      points to leave open) take precedence: never count them against the draft.
+      {% if inputs.project_path %}The current folder is the project the document is about ({{ inputs.project_path }}):
+      check the draft's claims against its files when it matters. It is read-only for you:
+      never create, edit or delete anything there.{% endif %}
+
+  signoff:
+    provider: claude
+    model: claude-opus-5-5
+    effort: high
+    session: ephemeral
+    cli_args: *claude_no_tools
+    system_prompt: |
+      You are the supervisor of this platform and you are responsible for this flow. A
+      reviewer approved a document; you check it against the user's goal and report to the
+      user, who decides what happens next. You never edit the document. The user's decisions
+      (e.g. points to leave open) take precedence over the goal.
+
+# -----------------------------------------------------------------------------
+steps:
+
+  - id: write
+    agent: writer
+    save_as:
+      - { path: "drafts/v{{ steps.write.visits }}.md", content: "{{ output.document }}" }
+      - { path: "document.md", content: "{{ output.document }}" }
+    prompt: |
+      {% if steps.write.visits == 1 %}
+      Write this document:
+      {{ inputs.prompt }}
+
+      Goal (the reviewer scores your draft against it, approval at {{ inputs.threshold }}/10):
+      {{ inputs.goal }}
+      {% if inputs.project_path %}
+      Project: the current folder ({{ inputs.project_path }}). Read the files that matter for this
+      document before writing (read-only).
+      {% endif %}
+      {% else %}
+      {% if previous_step == 'decide' %}
+      The supervisor checked draft v{{ steps.write.visits - 1 }} against the goal:
+      {{ steps.signoff.output.summary }}
+      {% for c in steps.signoff.output.checks %}{% if not c.ok %}- Not met: {{ c.item }}
+      {% endif %}{% endfor %}
+      The user asked for another revision.
+      {% else %}
+      The reviewer scored draft v{{ steps.write.visits - 1 }} {{ steps.review.output.score }}/10 (approval at {{ inputs.threshold }}).
+      {{ steps.review.output.summary }}
+      Notes:
+      {% for n in steps.review.output.notes %}- [{{ n.severity }}] {{ n.text }}
+      {% endfor %}
+      {% endif %}
+      Revise the document to address this. Goal, as a reminder: {{ inputs.goal }}
+      {% endif %}
+      {% if feedback | length %}
+      The user's decisions so far (they take precedence over the goal where they conflict):
+      {% for f in feedback %}- {{ f.text }}
+      {% endfor %}{% endif %}
+
+      Answer with `message` (one or two sentences to the reviewer: what you wrote or changed)
+      and `document` (the complete document in Markdown).
+    output_schema:
+      type: object
+      required: [message, document]
+      properties:
+        message:  { type: string }
+        document: { type: string }
+
+  - id: review
+    agent: reviewer
+    prompt: |
+      Goal the document must meet:
+      {{ inputs.goal }}
+
+      (It was written for this request: {{ inputs.prompt }})
+
+      Draft v{{ steps.write.visits }}, with the writer's note: "{{ steps.write.output.message }}"
+      <document>
+      {{ steps.write.output.document }}
+      </document>
+
+      Score it from 0 to 10 against the goal ({{ inputs.threshold }} or more = approved) and list
+      what must change, most important first ("major" blocks approval, "minor" does not).
+      {% if steps.review.visits > 1 %}Check whether your previous notes were addressed.{% endif %}
+      {% if feedback | length %}
+      The user's decisions so far (they take precedence over the goal where they conflict; do not count them against the draft):
+      {% for f in feedback %}- {{ f.text }}
+      {% endfor %}{% endif %}
+    output_schema:
+      type: object
+      required: [score, summary, notes]
+      properties:
+        score:   { type: number }
+        summary: { type: string }
+        notes:
+          type: array
+          items:
+            type: object
+            required: [severity, text]
+            properties:
+              severity: { type: string, enum: [major, minor] }
+              text:     { type: string }
+    transitions:
+      - when: "output.score >= (inputs.threshold | float)"
+        goto: signoff
+      - when: "true"
+        goto: write
+        loop: { name: rounds, max_iterations: "{{ (inputs.max_rounds | int) - 1 }}", on_exhausted: out_of_rounds }
+
+  - id: signoff
+    agent: signoff
+    prompt: |
+      User's request: {{ inputs.prompt }}
+      User's goal: {{ inputs.goal }}
+
+      The reviewer approved draft v{{ steps.write.visits }} with {{ steps.review.output.score }}/10:
+      {{ steps.review.output.summary }}
+
+      <document>
+      {{ steps.write.output.document }}
+      </document>
+
+      {% if feedback | length %}
+      The user's decisions so far (they take precedence over the goal where they conflict):
+      {% for f in feedback %}- {{ f.text }}
+      {% endfor %}{% endif %}
+
+      Check the document against each part of the goal (and the user's decisions above, if any).
+      `ready` is true only when every part is met. `summary` is your message to the user: one
+      short paragraph that starts with the verdict and ends with your recommendation (accept, or
+      what one more revision should fix). `checks` lists each part of the goal with whether it is
+      met. The user decides next; you can suggest points they may prefer to leave open.
+    output_schema:
+      type: object
+      required: [ready, summary, checks]
+      properties:
+        ready:   { type: boolean }
+        summary: { type: string }
+        checks:
+          type: array
+          items:
+            type: object
+            required: [item, ok]
+            properties:
+              item: { type: string }
+              ok:   { type: boolean }
+
+  # The supervisor always asks the user what to do with the checked document.
+  - id: decide
+    type: human_approval
+    message: |
+      {% if steps.signoff.output.ready %}The document meets the goal.{% else %}Some parts of the goal are not met yet (see my check above).{% endif %}
+      What do you want to do? You can also write instructions for the writer and the reviewer,
+      e.g. points to keep open because they will be handled later.
+    feedback:
+      label: Instructions for the writer and the reviewer (optional)
+      placeholder: "e.g. Keep the pricing and the launch date as open questions: they are decided later."
+    choices:
+      - { id: accept, label: "Accept the document{% if not steps.signoff.output.ready %} as it is{% endif %}" }
+      - { id: revise, label: "Send it back to the writer" }
+      - { id: stop,   label: "Stop without accepting" }
+    transitions:
+      - when: "choice == 'accept'"
+        goto: end
+      - when: "choice == 'revise'"
+        goto: write
+      - when: "choice == 'stop'"
+        goto: end
+        status: cancelled
+
+  - id: out_of_rounds
+    type: human_approval
+    message: |
+      The document did not pass within {{ inputs.max_rounds }} reviews (last score: {{ steps.review.output.score }}/10, approval at {{ inputs.threshold }}).
+      The last draft is saved as document.md. What do you want to do? You can also write
+      instructions for the next round, e.g. points to keep open.
+    feedback:
+      label: Instructions for the next round (optional)
+      placeholder: "e.g. Leave the migration details open; focus on the metrics."
+    choices:
+      - { id: accept, label: "Accept the last draft as it is" }
+      - { id: more,   label: "One more round (write and review again)" }
+      - { id: stop,   label: "Stop without a document" }
+    transitions:
+      - when: "choice == 'accept'"
+        goto: end
+      - when: "choice == 'more'"
+        goto: write
+      - when: "choice == 'stop'"
+        goto: end
+        status: cancelled
+
+# -----------------------------------------------------------------------------
+observability:
+  storage:
+    type: jsonl
+    path: "./runs/{{ run_id }}/"
+  capture:
+    prompts: true
+    outputs: true
+    thinking: true
+    tool_calls: true
+    redact:
+      - pattern: "(?i)(api[_-]?key|token|secret|password)\\s*[:=]\\s*\\S+"

@@ -158,6 +158,33 @@ Reviews an existing branch without changing anything or posting to the PR/MR.
 | blast_radius | Sonnet 5 | `blast-radius`: consumers outside the diff and the key safety fact, proven by running code |
 | judge | Opus 5.5 (own session) | `review-synthesis`: reads the diff, merges and verifies the anonymized findings into act on / consider / noted / dismissed, with a verdict (`review.md`) |
 
+## Writer & Reviewer (`workflows/writer-reviewer.yaml`)
+
+Plan & Design. Give it a **prompt** (what to write) and a **goal** (when it is good enough), and
+pick the CLI, model and effort of the writer and of the reviewer. Optionally pick a **project**: the
+writer and the reviewer then work in its folder and read its files (read-only) to ground the document;
+the run shows up under that project. The **Write & Review** screen
+(sidebar, "lab") starts it and shows the run as a chat between the agents, with a robot per model.
+
+| Stage | Who | What it does |
+|---|---|---|
+| write | writer (your pick) | Drafts the document, then revises it with the notes (`drafts/vN.md`, `document.md`) |
+| review | reviewer (your pick) | Scores the draft 0-10 against the goal and lists major/minor notes. The engine approves at the threshold (default 8), otherwise back to write, up to `max_rounds` reviews |
+| signoff | supervisor (Opus 5.5, internal) | Checks the approved draft against each part of the goal and reports to you with a recommendation |
+| decide | you, asked by the supervisor | Accept, send it back to the writer, or stop; plus optional instructions (e.g. "keep the pricing open") |
+| out_of_rounds | you | When the rounds run out: accept the last draft, one more round, or stop; plus optional instructions |
+
+Whatever you write at these questions goes into every later prompt of the writer, the reviewer
+and the supervisor, and takes precedence over the goal where they conflict.
+
+Past runs open as a chat again from Workflows › Runs › **Open chat**.
+
+**Simulation** (Settings › Execution › **Developer mode**): shows the "Simulation" checkboxes, checked
+by default, and a **Scenario** picker on Write & Review: approved on the 3rd review (5.5 → 7 → 8.6),
+approved on the 1st review, never reaches the score (rounds run out), the supervisor finds gaps in the
+approved draft, and the reviewer answers in the wrong format (asked again twice, then the supervisor
+steps in). Without developer mode every run is real.
+
 ## Run retrospective (`workflows/run-retrospective.yaml`)
 
 Monitor & Improve. Given a `run_id`, reads that run's `events.jsonl`, sessions,
@@ -273,7 +300,18 @@ orchestrator:
 
 Steps with `agents: [a, b, c]` run in parallel (fan-out; `min_success` sets how many must answer)
 and return `{ results: { agent: output }, succeeded, failed }`. `save_as` writes the answer to a
-file (relative to the run folder).
+file (relative to the run folder); an entry `{ path, content: "{{ output.document }}" }` writes one
+field of a JSON answer instead.
+
+An agent's `provider`, `model` and `effort` can be templates over the inputs
+(`model: "{{ inputs.writer_model }}"`), so the user picks them per run; `cli_args` can then be a map
+keyed by provider. A provider's `effort_args` (e.g. `["--effort", "{{ effort }}"]`) are added when the
+agent sets an `effort`. `max_visits` and `loop.max_iterations` accept templates too.
+
+A `human_approval` step with `feedback: true` (or `{ label, placeholder }`) also asks for an optional
+free text: it is the gate's `output.feedback`, and every non-empty one is added to `feedback`
+(`[{ step, choice, text }]`, the whole run) for the next prompts. `previous_step` is the id of the step
+that ran before the current one.
 
 `on_error: <step>` keeps a failing step (agent error, output that never validates) from ending the
 run: its output becomes `{ error }` and the flow continues at that step (the arena's `verify` uses it,

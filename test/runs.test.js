@@ -115,3 +115,14 @@ test('runArtifacts lists saved files (also outside the run folder) and other run
   assert.equal(by['prd.md:external'].rel, external);
   assert.equal(by['gone.md:external'].exists, false);
 });
+
+test('runEvents returns the events to replay a run, without the streamed CLI output', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'run-events-'));
+  fs.writeFileSync(path.join(dir, 'events.jsonl'), jl(
+    { seq: 1, type: 'workflow.started', workflow: 'writer-reviewer' },
+    { seq: 2, type: 'session.stream', item: { kind: 'text', text: 'x' } },
+    { seq: 3, type: 'step.finished', step_id: 'write', output: { document: '# Doc' } },
+  ) + 'not json\n');
+  assert.deepEqual(runs.runEvents(dir).map((e) => e.seq), [1, 3]);
+  fs.rmSync(dir, { recursive: true, force: true });
+});

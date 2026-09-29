@@ -31,6 +31,7 @@ h3 { margin: 0 0 6px; }
 .small { font-size: 12px; }
 .mono { font-family: var(--mono); }
 .hidden { display: none !important; }
+body:not(.dev-mode) .dev-only { display: none !important; }
 .error { color: var(--red); min-height: 1em; margin: 6px 0 0; }
 
 /* ---------- topbar ---------- */
