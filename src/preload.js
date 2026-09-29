@@ -41,7 +41,7 @@ contextBridge.exposeInMainWorld('api', {
   openSessionTerminal: (sessionId, mode, runId) => ipcRenderer.invoke('session:terminal', { sessionId, mode, runId }),
   listProjectRuns: (id) => ipcRenderer.invoke('projects:runs', { id }),
   listRuns: () => ipcRenderer.invoke('runs:list'),
-  runEvents: (runId) => ipcRenderer.invoke('runs:events', { runId }),
+  runEvents: (runId, opts = {}) => ipcRenderer.invoke('runs:events', { runId, activity: !!opts.activity }),
   setBudget: (provider, budget, scope) => ipcRenderer.invoke('usage:setBudget', { provider, budget, scope }),
   setPrice: (model, price, scope) => ipcRenderer.invoke('usage:setPrice', { model, price, scope }),
   // AI supervisor: analysis of a run and resume from a step (a new run)

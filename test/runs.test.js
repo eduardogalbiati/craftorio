@@ -126,3 +126,32 @@ test('runEvents returns the events to replay a run, without the streamed CLI out
   assert.deepEqual(runs.runEvents(dir).map((e) => e.seq), [1, 3]);
   fs.rmSync(dir, { recursive: true, force: true });
 });
+
+test('runEvents with activity keeps tool calls and thinking, compacted, and drops the streamed text', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'run-events-'));
+  const s = (seq, turn, item, session_id = 's1') => ({ seq, type: 'session.stream', session_id, turn, item });
+  fs.writeFileSync(path.join(dir, 'events.jsonl'), jl(
+    { seq: 1, type: 'workflow.started', workflow: 'software-development' },
+    s(2, 1, { kind: 'thinking', text: 'Read ' }),
+    s(3, 1, { kind: 'text', text: 'partial answer' }),
+    s(4, 1, { kind: 'thinking', text: 'the tests.' }),
+    s(5, 1, { kind: 'tool_call', name: 'Bash', input: { command: 'npm test', pad: 'x'.repeat(2000) } }),
+    s(6, 1, { kind: 'tool_result', is_error: true, output: 'y'.repeat(5000) }),
+    s(7, 1, { kind: 'tool_result', output: 'ok' }),
+    s(8, 1, { kind: 'thinking', text: 'z'.repeat(5000) }),
+    s(9, 1, { kind: 'usage', usage: { input: 1 } }),
+    s(10, 2, { kind: 'stderr', text: 'warn' }),
+    { seq: 11, type: 'session.message_received', session_id: 's1', turn: 1, text: 'Done.' },
+  ));
+  const events = runs.runEvents(dir, { activity: true });
+  assert.deepEqual(events.map((e) => e.seq), [1, 2, 5, 6, 8, 11]);
+  assert.deepEqual(events[1].item, { kind: 'thinking', text: 'Read the tests.' });
+  assert.equal(events[2].item.name, 'Bash');
+  assert.equal(events[2].item.input.length, 601); // 600 characters + "…"
+  assert.ok(events[2].item.input.startsWith('{"command":"npm test"'));
+  assert.deepEqual(events[3].item, { kind: 'tool_result', is_error: true });
+  assert.equal(events[4].item.text.length, 4001);
+  // without the option nothing streamed comes back
+  assert.deepEqual(runs.runEvents(dir).map((e) => e.seq), [1, 11]);
+  fs.rmSync(dir, { recursive: true, force: true });
+});

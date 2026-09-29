@@ -173,6 +173,34 @@ function runArtifacts(runDir) {
 
 // A run's events without the streamed CLI output (session.stream), which is most of the file:
 // enough to replay the run (e.g. the Write & Review chat of a past run).
-const runEvents = (runDir) => readEvents(path.join(runDir, 'events.jsonl')).filter((e) => e.type !== 'session.stream');
+// `activity: true` (the run chat) keeps what the agents did, compacted: thinking merged into one
+// event per turn and truncated, tool calls with a short input, failed tool results as a flag.
+// Streamed answer text, stderr, raw CLI events and usage are still dropped (the answer arrives
+// whole in session.message_received).
+const ACTIVITY_TEXT = 4000;
+const ACTIVITY_INPUT = 600;
+const cut = (s, n) => (s.length > n ? `${s.slice(0, n)}…` : s);
+function runEvents(runDir, { activity = false } = {}) {
+  const events = readEvents(path.join(runDir, 'events.jsonl'));
+  if (!activity) return events.filter((e) => e.type !== 'session.stream');
+  const out = [];
+  let thinking = null; // the thinking event being merged, while the same turn keeps thinking
+  for (const e of events) {
+    if (e.type !== 'session.stream') { out.push(e); continue; }
+    const item = e.item || {};
+    const same = thinking && thinking.session_id === e.session_id && thinking.turn === e.turn;
+    if (item.kind === 'thinking' && item.text) {
+      if (same && thinking === out.at(-1)) { thinking.item.text = cut(thinking.item.text + item.text, ACTIVITY_TEXT); continue; }
+      thinking = { ...e, item: { kind: 'thinking', text: cut(String(item.text), ACTIVITY_TEXT) } };
+      out.push(thinking);
+    } else if (item.kind === 'tool_call') {
+      const input = typeof item.input === 'string' ? item.input : JSON.stringify(item.input ?? '');
+      out.push({ ...e, item: { kind: 'tool_call', name: item.name, input: cut(input, ACTIVITY_INPUT) } });
+    } else if (item.kind === 'tool_result' && item.is_error) {
+      out.push({ ...e, item: { kind: 'tool_result', is_error: true } });
+    }
+  }
+  return out;
+}
 
 module.exports = { readRun, listRuns, runsForProject, projectOf, runArtifacts, kindOf, runEvents };

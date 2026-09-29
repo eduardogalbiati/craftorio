@@ -669,7 +669,8 @@ function createService({ host }) {
     'run:start': ({ file, inputs, mock, mockSequences }) => startWorkflowRun({ file, inputs, mock, mockSequences }),
     'run:stop': () => { currentRun?.stop(); return true; },
     'runs:list': () => listAllRuns(),
-    'runs:events': ({ runId }) => runs.runEvents(runFolder(runId)),
+    // activity: also the agents' tool calls and thinking, compacted (the run chat shows them)
+    'runs:events': ({ runId, activity }) => runs.runEvents(runFolder(runId), { activity: !!activity }),
     // answer: true/false or the id of a choice; feedback: the optional text typed at the gate
     'approval:resolve': ({ id, answer, feedback }) => currentRun?.resolveApproval(id, answer, 'user', feedback) ?? false,
 

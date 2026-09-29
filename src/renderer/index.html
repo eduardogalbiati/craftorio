@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="style.css" />
   <link rel="stylesheet" href="duo.css" />
   <link rel="stylesheet" href="arena.css" />
+  <link rel="stylesheet" href="run-chat.css" />
   <link rel="stylesheet" href="sessions.css" />
 </head>
 <body>
@@ -443,6 +444,12 @@
       <!-- ================= Run ================= -->
       <section id="view-run" class="view hidden">
         <div id="run-fail-banner" class="fail-banner hidden"></div>
+        <div class="run-modebar">
+          <div class="seg sm" role="group" aria-label="Run view">
+            <button id="run-mode-chat" type="button" title="Follow this run as a chat">Chat</button>
+            <button type="button" class="active" aria-pressed="true">Details</button>
+          </div>
+        </div>
         <div class="run-layout">
           <aside class="panel config">
             <section>
@@ -472,6 +479,26 @@
             </div>
             <div id="tab-events" class="tab-body hidden"></div>
           </section>
+        </div>
+      </section>
+
+      <!-- ================= Run chat (any workflow run as a conversation) ================= -->
+      <section id="view-runchat" class="view hidden">
+        <header class="duo-chat-head">
+          <div class="seg sm" role="group" aria-label="Run view">
+            <button type="button" class="active" aria-pressed="true">Chat</button>
+            <button id="rc-details" type="button" title="Sessions, prompts and events of this run">Details</button>
+          </div>
+          <div id="rc-title" class="rc-title"></div>
+          <span id="rc-status" class="pill"></span>
+          <div class="spacer"></div>
+          <span id="rc-cost" class="mono small muted" title="Cost so far"></span>
+          <button id="rc-logs" class="btn ghost sm" type="button" title="Open the run folder (events, sessions, artifacts)">Run folder</button>
+          <button id="rc-stop" class="btn danger sm hidden" type="button">Stop</button>
+        </header>
+        <div id="rc-scroll" class="rc-scroll">
+          <div id="rc-messages" class="duo-messages rc-messages"></div>
+          <div id="rc-typing" class="rc-typing"></div>
         </div>
       </section>
 
@@ -1177,6 +1204,8 @@
   <script src="duo.js"></script>
   <script src="arena-shuffle.js"></script>
   <script src="arena.js"></script>
+  <script src="run-chat-model.js"></script>
+  <script src="run-chat.js"></script>
   <script src="agents.js"></script>
   <script src="sessions.js"></script>
   <script src="backlog.js"></script>

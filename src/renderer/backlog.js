@@ -108,19 +108,19 @@
     if (visible() && busy) reload();
   }, 5000);
 
-  // Opens a run in Workflows › Runs, expanded.
-  function openRun(runId) {
-    state.workflowsTab = 'runs';
-    state.wr.filter = 'all';
-    state.wr.showSim = true;
-    state.wr.expanded.add(runId);
-    showView('workflows');
-    setTimeout(() => document.querySelector(`.pr-run[data-run="${CSS.escape(runId)}"]`)?.scrollIntoView({ block: 'center' }), 600);
+  // Opens a run as a chat, live when it is the run in progress (its Details button leads to
+  // Workflows › Runs).
+  function openRun(el) {
+    const runId = el.dataset.run;
+    window.openRunChat({ runId, workflow: el.dataset.workflow, running: state.run?.id === runId && state.run.status === 'running' });
   }
 
-  // A waiting card opens the pending approval of the current run (or the run screen).
-  function openGate() {
-    if (state.approval) openApproval(); else showView('run');
+  // A waiting card opens the chat of its run, where the gate is answered (or the approval dialog).
+  function openGate(el) {
+    const run = el.closest('[data-n]')?.querySelector('[data-run]');
+    if (run && state.run?.id === run.dataset.run) openRun(run);
+    else if (state.approval) openApproval();
+    else showView('run');
   }
 
   // ---- assign a workflow -------------------------------------------------------------------
@@ -204,7 +204,7 @@
     const pct = Math.round((i.tasks.done / i.tasks.total) * 100);
     return `<span class="bl-tasks" title="${i.tasks.done} of ${i.tasks.total} tasks done"><span class="bl-bar"><span style="width:${pct}%"></span></span><span class="mono small">${i.tasks.done}/${i.tasks.total}</span></span>`;
   };
-  const runLink = (r) => `<button class="bl-run" type="button" data-run="${esc(r.runId)}" title="Open run ${esc(r.runId)}">
+  const runLink = (r) => `<button class="bl-run" type="button" data-run="${esc(r.runId)}" data-workflow="${esc(r.workflow || '')}" title="Open run ${esc(r.runId)} as a chat">
       <span class="pill pill-${esc(r.status)}">${esc(r.waiting ? 'waiting' : r.status)}</span><span>${esc(r.workflow || 'workflow')}</span>${r.mock ? '<span class="badge p-mock">simulated</span>' : ''}</button>`;
   const checkbox = (i) => (selectable(i) ? `<input type="checkbox" class="bl-check" data-sel="${i.number}" aria-label="Select #${i.number}"${bl.selected.has(i.number) ? ' checked' : ''} />` : '');
   // What the automation is doing with the issue: queued, its latest run, the gate waiting for you.
@@ -370,8 +370,9 @@
       return;
     }
     const run = e.target.closest('[data-run]');
-    if (run) { openRun(run.dataset.run); return; }
-    if (e.target.closest('[data-gate]')) { openGate(); return; }
+    if (run) { openRun(run); return; }
+    const gate = e.target.closest('[data-gate]');
+    if (gate) { openGate(gate); return; }
     const out = e.target.closest('[data-unqueue]');
     if (out) {
       try { setData(await api.unqueueIssue(bl.projectId, Number(out.dataset.unqueue))); } catch (err) { bl.error = errMsg(err); }

@@ -83,7 +83,7 @@
     openSessionTerminal: desktopOnly('External terminal windows'),
     listProjectRuns: (id) => call('projects:runs', { id }),
     listRuns: () => call('runs:list'),
-    runEvents: (runId) => call('runs:events', { runId }),
+    runEvents: (runId, opts = {}) => call('runs:events', { runId, activity: !!opts.activity }),
     setBudget: (provider, budget, scope) => call('usage:setBudget', { provider, budget, scope }),
     setPrice: (model, price, scope) => call('usage:setPrice', { model, price, scope }),
     askSupervisor: (runId, question) => call('supervisor:analyze', { runId, question }),
