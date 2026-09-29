@@ -35,6 +35,19 @@ uses: [testing-principles]
 - TypeScript: typed tests; no `any`/`as` to silence the compiler. For partial fixtures use `@total-typescript/shoehorn` (`fromPartial`) if the project already has it.
 - React: Testing Library queries by role/label (`getByRole`, `getByLabelText`), `userEvent` for interaction, `findBy*` for async; assert what the user sees.
 
+## UI checks and long-running programs (Electron, dev servers)
+
+A program left running from the worktree locks its files: the next `npm ci` fails with EBUSY/EPERM
+and the run cannot recover by itself.
+- Electron UI checks quit on their own: the script calls `app.quit()` when done **and** after a hard
+  timeout (`setTimeout(() => app.exit(1), 60000)`), on errors too, as `scripts/smoke.js` does when the
+  project has one.
+- Run them in the **foreground** with a command timeout (`npx electron check.js`). Never start them in
+  the background, and never stop them with TaskStop or by killing `npx`: that kills the launcher and
+  leaves `electron.exe` running.
+- The same for servers: start them inside the test (and close them in `after`/`afterAll`), not as a
+  separate background command.
+
 ## Coverage (only when asked)
 
 `npx vitest run --coverage` · `npx jest --coverage` · `node --test --experimental-test-coverage`

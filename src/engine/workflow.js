@@ -13,6 +13,7 @@ const { resolveSkill, skillPrompt } = require('../skills');
 const { providerId, sessionCost, totalTokens, WARN_AT } = require('../usage');
 const supervisor = require('../supervisor');
 const { prepareWorktree, removeWorktree, currentBranch } = require('./worktree');
+const { stopProcessesIn } = require('./processes');
 
 // Skills bundled with the app (skills/ folder at the root). Workspace skills take precedence.
 const BUNDLED_SKILLS = path.join(__dirname, '..', '..', 'skills');
@@ -185,7 +186,9 @@ class WorkflowRun extends EventEmitter {
   //   without it (e.g. simulation runs) the agents work in the repository folder itself.
   // mockSequences: { field: [value per visit] } over the mock provider's defaults (tests).
   // notices: [{ level, message }] logged right after workflow.started (e.g. the workflow file came from a fallback folder).
-  constructor({ file, inputs, mock, runsDir, skillsDirs, budget, prices, projectId, issue, resume, worktreesDir, mockSequences, notices }) {
+  // stopProcesses: (dir) => Promise<[{ pid, exe, cwd, reason, stopped }]>, stops what agents left running in the
+  //   worktree (src/engine/processes.js). Default: the real one, none for simulations (mock agents start nothing).
+  constructor({ file, inputs, mock, runsDir, skillsDirs, budget, prices, projectId, issue, resume, worktreesDir, mockSequences, notices, stopProcesses }) {
     super();
     refreshWindowsPath(); // actions (e.g. gh pr merge) need the refreshed PATH
     this.file = file;
@@ -200,6 +203,7 @@ class WorkflowRun extends EventEmitter {
     this.issue = issue || null;
     this.worktreesDir = worktreesDir || null;
     this.worktree = null; // see setupWorktree
+    this.stopProcesses = stopProcesses === undefined ? (this.mock ? null : stopProcessesIn) : stopProcesses;
     this.budget = budget || {};
     this.prices = prices || {};
     this.budgetWarned = new Set();
@@ -397,6 +401,7 @@ class WorkflowRun extends EventEmitter {
       status = this.abort.signal.aborted ? 'cancelled' : 'failed';
       error = e;
     }
+    await this.stopWorktreeProcesses('run end');
     await this.finishWorktree(status);
     this.finish(status, error);
   }
@@ -452,6 +457,26 @@ class WorkflowRun extends EventEmitter {
     } catch (e) {
       log('warn', `worktree: cleanup failed: ${e.message}`);
     }
+  }
+
+  // Programs an agent started from the worktree and left running (a UI check's electron.exe, a
+  // dev server) hold its files: every later `npm ci` fails with EBUSY and no agent may stop them.
+  // Stopped after each agent turn and at the end of the run; see src/engine/processes.js.
+  async stopWorktreeProcesses(after) {
+    const dir = this.worktree?.dir;
+    if (!dir || !this.stopProcesses) return;
+    let found;
+    try {
+      found = await this.stopProcesses(dir);
+    } catch (e) {
+      this.emitEvent('log', { level: 'warn', message: `worktree: could not check for processes left in ${dir}: ${e.message}` });
+      return;
+    }
+    if (!found?.length) return;
+    const processes = found.map((p) => ({ pid: p.pid, exe: p.exe || null, cwd: p.cwd || null, reason: p.reason, stopped: !!p.stopped, error: p.error }));
+    this.emitEvent('worktree.processes_stopped', { dir, after, processes });
+    const list = processes.map((p) => `${path.basename(p.exe || '?')} (pid ${p.pid}${p.stopped ? '' : `, not stopped: ${p.error}`})`).join(', ');
+    this.emitEvent('log', { level: 'warn', kind: 'worktree_processes', message: `worktree: stopped ${processes.filter((p) => p.stopped).length} process(es) left running in ${dir} after ${after}: ${list}` });
   }
 
   worktreeSummary() {
@@ -522,6 +547,8 @@ class WorkflowRun extends EventEmitter {
           this.emitEvent('step.transition', { from: step.id, to: r.goto, when: `supervisor: ${r.decision.action}` });
           return r.goto;
         }
+      } finally {
+        await this.stopWorktreeProcesses(`step ${step.id}`);
       }
       if (output === undefined) {
         const e = new Error(this.lastStepError || `Step "${step.id}" failed.`);
@@ -560,7 +587,8 @@ class WorkflowRun extends EventEmitter {
       let delegated = null;
       if (t.delegate && target === t.goto) {
         this.emitEvent('log', { level: 'info', message: `${step.id} delegated to ${t.delegate.agent}` });
-        const res = await this.sendToAgent(t.delegate.agent, render(t.delegate.prompt, scope), { stepId: `${step.id}:delegate` });
+        const res = await this.sendToAgent(t.delegate.agent, render(t.delegate.prompt, scope), { stepId: `${step.id}:delegate` })
+          .finally(() => this.stopWorktreeProcesses(`${step.id} delegation to ${t.delegate.agent}`));
         delegated = { agent: t.delegate.agent, text: res.text };
       }
       if (delegated) st.blocked = null; // another agent acted: the next check is a fresh start

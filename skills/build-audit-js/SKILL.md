@@ -18,6 +18,19 @@ From the lockfile: `package-lock.json` → npm · `pnpm-lock.yaml` → pnpm · `
 3. No build script: TS project → `npx tsc --noEmit`; plain JS → build is OK, say so in the report.
 4. Also run `scripts.typecheck`/`scripts.lint` if they exist and CI does not already run them; report (do not block on) lint findings.
 
+## Build failures: code or environment
+
+- **code**: a commit can fix it (compile error, failing script, lockfile out of sync with `package.json`).
+- **infra**: no commit can. Typical case: the install fails with `EBUSY`/`EPERM`/`resource busy or locked`
+  under `node_modules` (often `node_modules/electron/dist/...`): a program started from this folder
+  (an Electron window, a dev server) is still running and holds the file. Report `failure_class: infra`,
+  name the locked path in the report, and **stop**: do not retry the install in a loop, do not delete
+  `node_modules` by hand, and do not try to find or kill the process (you have no permission to, and
+  stopping `electron.exe` by name would close the user's own app). The orchestrator stops processes
+  started from the run's folder; a human decides when to build again.
+  An interrupted `npm ci` leaves `node_modules` incomplete (missing packages): later `npm test` or
+  `npm run build` errors such as `Cannot find module` are a consequence, not a separate code failure.
+
 ## Audit
 
 | Manager | Production | Everything |

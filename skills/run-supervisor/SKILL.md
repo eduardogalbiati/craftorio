@@ -26,6 +26,7 @@ Work from what the run recorded, not from assumptions:
 | **Instruction** | the agent misunderstood the task, answered something else, or stopped early | `retry` with a precise instruction |
 | **Context** | missing or wrong input: empty project folder, wrong branch, file not found | `ask_human` (the input must change) |
 | **Environment** | CLI not installed/logged in, network, rate limit, timeout, budget | `retry` once if transient, else `ask_human` |
+| **Locked worktree** | `EBUSY`/`EPERM`/"resource busy or locked" under the worktree's `node_modules` (e.g. `node_modules/electron/dist/default_app.asar`), `npm ci` failing again and again, then `Cannot find module` for packages an interrupted install removed | `ask_human`: a program started from the worktree still runs and holds the file; no retry or code fix changes it. Check the `worktree_processes` warnings (the engine stops such processes after each step). Give the user a command scoped to the worktree, never a kill by name (it would close their app): PowerShell `Get-CimInstance Win32_Process \| Where-Object { $_.ExecutablePath -like '<worktree>\*' } \| ForEach-Object { Stop-Process -Id $_.ProcessId -Force }`, Linux/macOS `pkill -f '<worktree>/'`; then "Build again" at the gate |
 | **Capability** | the agent keeps failing the same way after retries | `goto` an allowed alternative step, or `ask_human` |
 | **Workflow design** | the schema, prompt or transitions make success impossible | `ask_human`, and say what to change in the YAML |
 

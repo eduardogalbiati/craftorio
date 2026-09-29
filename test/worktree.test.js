@@ -254,8 +254,8 @@ for (const spelling of SPELLINGS) test(`cleanupWorktrees (${spelling} paths): re
 
 // ---- engine -----------------------------------------------------------------------
 // answer: what every human gate gets (true/false, or a choice id)
-async function runFixture({ inputs, worktreesDir, runsDir, resume, file = 'worktree.yaml', answer = true }) {
-  const run = new WorkflowRun({ file: path.join(__dirname, 'fixtures', file), inputs, mock: true, runsDir, worktreesDir, resume });
+async function runFixture({ inputs, worktreesDir, runsDir, resume, file = 'worktree.yaml', answer = true, stopProcesses }) {
+  const run = new WorkflowRun({ file: path.join(__dirname, 'fixtures', file), inputs, mock: true, runsDir, worktreesDir, resume, stopProcesses });
   const rec = new Recorder(run.runDir);
   const events = [];
   run.on('event', (ev) => {
@@ -331,6 +331,53 @@ test('engine: `goto: end` + `status` sets the outcome; a rejected failure gate i
   const listed = require('../src/runs').readRun(runsDir, bad.run.runId);
   assert.equal(listed.status, 'failed');
   assert.match(listed.error, /work_failed/);
+});
+
+test('engine: processes left in the worktree are stopped after each agent step and before the worktree is removed', { timeout: 60000 }, async (t) => {
+  const f = fixture(t);
+  const runsDir = path.join(f.tmp, 'runs');
+  const calls = [];
+  // the process table is the boundary: this one has an electron.exe left by the `work` step
+  const stopProcesses = async (dir) => {
+    calls.push({ dir, removed: !fs.existsSync(dir) });
+    return calls.length > 1 ? [] : [{ pid: 4242, exe: path.join(dir, 'node_modules', 'electron', 'dist', 'electron.exe'), reason: 'executable', stopped: true }];
+  };
+  const r = await runFixture({ file: 'gate-end.yaml', inputs: { repo_path: f.repo }, worktreesDir: f.worktrees, runsDir, answer: true, stopProcesses });
+  assert.equal(r.finished.status, 'success', r.finished.error);
+  const dir = path.join(f.worktrees, r.run.runId);
+  // after the agent step `work` and at the end of the run; not after the human gate
+  assert.equal(calls.length, 2);
+  assert.ok(calls.every((c) => samePath(c.dir, dir) && !c.removed), 'the worktree still exists when its processes are stopped');
+  const ev = r.events.find((e) => e.type === 'worktree.processes_stopped');
+  assert.equal(ev.after, 'step work');
+  assert.deepEqual(ev.processes.map((p) => [p.pid, path.basename(p.exe), p.reason, p.stopped]), [[4242, 'electron.exe', 'executable', true]]);
+  const warn = r.events.find((e) => e.type === 'log' && e.kind === 'worktree_processes');
+  assert.match(warn.message, /stopped 1 process\(es\) left running .* after step work: electron\.exe \(pid 4242\)/);
+
+  // a failing check only warns: the run goes on
+  const failing = await runFixture({ inputs: { repo_path: f.repo }, worktreesDir: f.worktrees, runsDir, stopProcesses: async () => { throw new Error('no access'); } });
+  assert.equal(failing.finished.status, 'success', failing.finished.error);
+  assert.ok(failing.events.some((e) => e.type === 'log' && e.level === 'warn' && /could not check for processes left .*no access/.test(e.message)));
+});
+
+test('engine: processes left in the worktree are also stopped after a delegation', { timeout: 60000 }, async (t) => {
+  const f = fixture(t);
+  const runsDir = path.join(f.tmp, 'runs');
+  const calls = [];
+  // a process left running by the delegated agent (2nd call only): step build (visit 1) ->
+  // delegation to dev -> step build (visit 2, exhausted, no delegate this time) -> run end
+  const stopProcesses = async (dir) => {
+    calls.push(dir);
+    return calls.length === 2 ? [{ pid: 5555, exe: path.join(dir, 'node_modules', '.bin', 'watch'), reason: 'executable', stopped: true }] : [];
+  };
+  const r = await runFixture({ file: 'worktree-delegate.yaml', inputs: { repo_path: f.repo }, worktreesDir: f.worktrees, runsDir, stopProcesses });
+  assert.equal(r.finished.status, 'success', r.finished.error);
+  const dir = path.join(f.worktrees, r.run.runId);
+  assert.equal(calls.length, 4);
+  assert.ok(calls.every((c) => samePath(c, dir)));
+  const ev = r.events.find((e) => e.type === 'worktree.processes_stopped');
+  assert.equal(ev.after, 'build delegation to dev');
+  assert.deepEqual(ev.processes.map((p) => [p.pid, p.reason, p.stopped]), [[5555, 'executable', true]]);
 });
 
 test('engine: without worktreesDir (simulation) or outside git, worktree_dir is the repository folder', { timeout: 30000 }, async (t) => {

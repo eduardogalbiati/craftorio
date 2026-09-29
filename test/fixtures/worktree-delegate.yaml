@@ -1,0 +1,27 @@
+# Test fixture: a step that delegates a fix to another agent, inside a run worktree, once
+# (max_visits: 1 exhausts on the second visit, skipping the delegate).
+apiVersion: multiagent/v1
+kind: Workflow
+metadata:
+  name: fixture-worktree-delegate
+inputs:
+  repo_path: { type: string, required: true }
+orchestrator:
+  worktree:
+    repo: "{{ inputs.repo_path }}"
+    base: main
+defaults:
+  working_dir: "{{ worktree_dir }}"
+agents:
+  a:   { provider: claude, model: m, session: ephemeral }
+  dev: { provider: claude, model: m, session: ephemeral }
+steps:
+  - id: build
+    agent: a
+    prompt: "build in {{ worktree_dir }}"
+    transitions:
+      - when: "true"
+        delegate: { agent: dev, prompt: "fix it" }
+        goto: build
+        max_visits: 1
+        on_exhausted: end

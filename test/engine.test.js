@@ -396,6 +396,27 @@ test('software-development: a preview infra failure goes to the gate; "retry" pu
   assert.deepEqual(transitions.filter((x) => /preview_failed|deploy_test>/.test(x)), ['deploy_test>preview_failed', 'preview_failed>deploy_test', 'deploy_test>approve_merge']);
 });
 
+test('software-development: an infra build failure skips the fix rounds; "retry" builds again', { timeout: 120000 }, async () => {
+  const { events, finished, transitions } = await runSoftwareDevelopment({
+    mockSequences: { build_status: ['failed', 'success'], failure_class: ['infra'], preview_status: ['success'] },
+    answers: { build_failed: 'retry' },
+  });
+  assert.equal(finished.status, 'success', finished.error);
+  const gate = events.find((e) => e.type === 'approval.requested' && e.step_id === 'build_failed');
+  assert.deepEqual(gate.choices.map((c) => c.id), ['continue', 'retry', 'stop']);
+  assert.match(gate.message, /because of the environment, not the code/);
+  assert.ok(!events.some((e) => e.type === 'log' && e.message === 'build delegated to developer'), 'no developer round for an infra failure');
+  assert.deepEqual(transitions.filter((x) => /build_failed|^build>/.test(x)), ['build>build_failed', 'build_failed>build', 'build>verify_change']);
+});
+
+test('software-development: a code build failure still goes to the developer first', { timeout: 120000 }, async () => {
+  const { events, transitions } = await runSoftwareDevelopment({
+    mockSequences: { build_status: ['failed', 'success'], failure_class: ['code'], preview_status: ['success'] },
+  });
+  assert.ok(events.some((e) => e.type === 'log' && e.message === 'build delegated to developer'));
+  assert.ok(!transitions.includes('build>build_failed'));
+});
+
 test('software-development: rejecting the merge ends the run as cancelled', { timeout: 120000 }, async () => {
   const { finished } = await runSoftwareDevelopment({ mockSequences: { preview_status: ['success'] }, answers: { approve_merge: false } });
   assert.equal(finished.status, 'cancelled');

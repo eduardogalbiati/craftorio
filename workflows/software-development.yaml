@@ -42,7 +42,7 @@ kind: Workflow
 
 metadata:
   name: software-development
-  version: 0.10.1
+  version: 0.11.0
   description: Implements, reviews, tests, builds, watches CI and the PR/MR, publishes a preview and, once approved, merges and tracks the production deploy. Works with several languages on GitHub or GitLab.
   tags: [dev, review, test, build, ci, pr, deploy, github, gitlab]
   # Dashboard category: plan (Plan & Design), build (Code & Build) or monitor (Monitor & Improve).
@@ -431,11 +431,18 @@ steps:
       2. Audit the dependencies following the build skill, separating production from development.
       Apply your role's vulnerability policy. In `vulnerabilities`, report the PRODUCTION
       counts; summarize the development ones in `dev_vulnerabilities`.
+      When the build fails, set failure_class (see the build skill):
+        code = a commit on the branch can fix it (code, tests, lockfile, build scripts);
+        infra = no commit can (a file locked by a running process, e.g. EBUSY/EPERM under
+        node_modules, missing permissions, network, disk): say what holds it in the report
+        and do not retry the install in a loop;
+        unknown = you could not tell.
     output_schema:
       type: object
       required: [build_status, vulnerabilities, report]
       properties:
         build_status: { type: string, enum: [success, failed] }
+        failure_class: { type: string, enum: [code, infra, unknown] }
         vulnerabilities:
           type: object
           required: [critical, high, moderate, low]
@@ -449,6 +456,9 @@ steps:
     transitions:
       - when: "output.build_status == 'success' and output.vulnerabilities.critical == 0 and output.vulnerabilities.high == 0"
         goto: verify_change
+      # the environment, not the code: a developer round can't change it, a human can
+      - when: "output.build_status == 'failed' and output.failure_class == 'infra'"
+        goto: build_failed
       - when: "true"
         delegate:
           agent: developer
@@ -461,16 +471,24 @@ steps:
         max_visits: 3
         on_exhausted: build_failed
 
+  # Reached by an infra failure (at once) or a build still blocked after 3 fix rounds.
   - id: build_failed
     type: human_approval
     message: |
-      The build is still blocked after 3 rounds of fixes:
+      {% if steps.build.output.build_status == 'failed' and steps.build.output.failure_class == 'infra' %}The build failed because of the environment, not the code (no fix round was spent):{% else %}The build is still blocked after 3 rounds of fixes:{% endif %}
       {{ steps.build.output.report }}
-      Approve: continue to verification anyway. Reject: stop the run as failed (the worktree is kept to resume it).
+      Building again only helps once the environment is fixed (e.g. the process holding a file
+      of the worktree is stopped: the orchestrator stops the ones started from the worktree).
+    choices:
+      - { id: continue, label: "Continue to verification anyway" }
+      - { id: retry,    label: "Build again (I fixed the environment)" }
+      - { id: stop,     label: "Stop the run as failed (worktree kept to resume)" }
     transitions:
-      - when: "approved"
+      - when: "choice == 'continue'"
         goto: verify_change
-      - when: "rejected"
+      - when: "choice == 'retry'"
+        goto: build
+      - when: "choice == 'stop'"
         goto: end
         status: failed
 

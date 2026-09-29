@@ -116,7 +116,8 @@ can change the outcome:
 
 | Gate | Options |
 |---|---|
-| `test_failed`, `build_failed`, `verify_failed` | continue anyway / stop (`failed`) |
+| `test_failed`, `verify_failed` | continue anyway / stop (`failed`) |
+| `build_failed` (also reached at once by an `infra` build failure, e.g. a file locked by a running process) | continue to verification anyway / build again (after fixing the environment) / stop (`failed`) |
 | `ci_failed` | one more fix round by the developer / check CI again (stuck or flaky pipeline) / stop (`failed`) |
 | `preview_failed` | publish the same commit again (infrastructure) / send it to the developer (then CI, PR check, preview) / stop (`failed`) |
 | `deploy_failed` (after the merge) | new development cycle / track the deploy again (after re-running it yourself) / stop (`failed`) |
@@ -397,6 +398,13 @@ defaults:
 - The path, branch and outcome are in `summary.json` (`worktree`) and in the `worktree.ready`,
   `worktree.kept` and `worktree.removed` events. Sessions record their `cwd`; a session terminal of
   a removed worktree opens in the repository folder instead.
+- **Processes left running**: after each agent step (delegations included) and when the run ends,
+  the engine stops the processes started from the worktree that are still running (an Electron UI
+  check, a dev server), with their process trees: their executable is inside the worktree (Windows,
+  Linux, macOS) or, on Linux/macOS, their working directory is (processes with a terminal, such as
+  your own shell there, are spared). Nothing outside the worktree is touched, nor the app itself
+  and its terminals. What was stopped is logged (`worktree.processes_stopped` event and a warning).
+  Otherwise such a process locks files and every later `npm ci` fails with EBUSY.
 - **Not a git repository**, or a simulation (mock) run: no worktree, `worktree_dir` is the
   repository folder itself (the old behaviour).
 - **Orphans**: at startup the app removes worktrees whose run succeeded (a removal that failed) and
