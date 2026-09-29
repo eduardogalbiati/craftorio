@@ -8,7 +8,7 @@ const { EventEmitter } = require('events');
 const { exec } = require('child_process');
 const yaml = require('js-yaml');
 const nunjucks = require('nunjucks');
-const { runTurn, refreshWindowsPath, isRetryable, sleep, emptyUsage } = require('./providers');
+const { runTurn, refreshWindowsPath, isRetryable, isPermissionDenial, sleep, emptyUsage } = require('./providers');
 const { resolveSkill, skillPrompt } = require('../skills');
 const { providerId, sessionCost, totalTokens, WARN_AT } = require('../usage');
 const supervisor = require('../supervisor');
@@ -138,8 +138,27 @@ function goalLoopInstructions(step, st, scope) {
     const cfg = loopConfig(step);
     lines.push(`/loop: iteration ${st.iteration}. The orchestrator will call you again every ${cfg.interval || '1m'} (limit: ${cfg.max_duration || 'none'}) until the /goal is met.`);
     lines.push('On each call: check the current state, take the necessary action and reply right away. Do not block waiting (no long watch/sleep).');
+    lines.push(`If your tools are refused (not allowed), do not retry other forms of the same command and do not keep answering the same: after ${maxBlocked(step)} blocked iterations in a row the orchestrator stops this loop.`);
   }
   return lines.join('\n');
+}
+
+// A /loop iteration is "blocked" when the agent could not observe anything (every tool call was
+// refused, or it made none) or when its tools were refused and it gave the same decision again.
+// `loop.max_blocked` in a row (default 3, 0 = off) ends the loop like `max_duration` does, instead
+// of polling for hours with an agent that cannot change anything.
+const DEFAULT_MAX_BLOCKED = 3;
+const maxBlocked = (step) => loopConfig(step).max_blocked ?? DEFAULT_MAX_BLOCKED;
+// Consecutive refused tool calls in one turn that are worth a warning (agent fighting its allowlist).
+const DENIAL_WARN = 5;
+
+// What the transitions decide on: enum, boolean and number fields of the schema (not the
+// free text, which an LLM rewords on every call). Without a schema, the whole answer.
+function decisionKey(output, schema) {
+  const props = schema?.properties;
+  if (!props || !output || typeof output !== 'object') return JSON.stringify(output ?? null);
+  const keys = Object.keys(props).filter((k) => props[k].enum || ['boolean', 'integer', 'number'].includes(props[k].type));
+  return JSON.stringify(keys.length ? keys.map((k) => output[k] ?? null) : output);
 }
 
 const stepAgentLabel = (s) => (s.agents ? s.agents.join(' · ') : s.agent || null);
@@ -468,8 +487,9 @@ class WorkflowRun extends EventEmitter {
     st.visits++;
     st.firstVisitAt ??= Date.now();
     // /loop iteration: resets whenever the step is (re)entered from another step
-    if (this.prevStepId !== step.id) { st.iteration = 0; st.loopStartedAt = Date.now(); }
+    if (this.prevStepId !== step.id) { st.iteration = 0; st.loopStartedAt = Date.now(); st.blocked = null; }
     st.iteration++;
+    st.tools = { ran: 0, denials: 0, denied: [] }; // this visit's tool calls, for the blocked-loop check
     this.ctx.previous_step = this.prevStepId || null;
     this.prevStepId = step.id;
     const t0 = Date.now();
@@ -543,7 +563,8 @@ class WorkflowRun extends EventEmitter {
         const res = await this.sendToAgent(t.delegate.agent, render(t.delegate.prompt, scope), { stepId: `${step.id}:delegate` });
         delegated = { agent: t.delegate.agent, text: res.text };
       }
-      if (target === step.id && isLooping(step)) target = await this.loopWait(step);
+      if (delegated) st.blocked = null; // another agent acted: the next check is a fresh start
+      if (target === step.id && isLooping(step)) target = await this.loopWait(step, output);
       // the delegation result goes to the next step (e.g. babysitter replies on the PR with the hash)
       if (delegated && this.ctx.steps[target]) this.ctx.steps[target].delegate_result = delegated;
       const ends = target === 'end' && t.status && t.status !== 'success';
@@ -579,14 +600,25 @@ class WorkflowRun extends EventEmitter {
     return target;
   }
 
-  async loopWait(step) {
+  async loopWait(step, output) {
     const st = this.ctx.steps[step.id];
     const cfg = loopConfig(step);
+    const exhausted = step.goal?.on_exhausted || cfg.on_exhausted || 'fail';
     const maxDur = parseDuration(cfg.max_duration, null);
     if (maxDur && Date.now() - st.loopStartedAt > maxDur) {
-      const target = step.goal?.on_exhausted || cfg.on_exhausted || 'fail';
-      this.emitEvent('log', { level: 'warn', message: `/loop of ${step.id} exceeded ${cfg.max_duration} without meeting the /goal → ${target}` });
-      return target;
+      this.emitEvent('log', { level: 'warn', message: `/loop of ${step.id} exceeded ${cfg.max_duration} without meeting the /goal → ${exhausted}` });
+      return exhausted;
+    }
+    const stop = this.checkBlocked(step, st, output);
+    if (stop) {
+      this.emitEvent('log', { level: 'warn', kind: 'loop_blocked', step_id: step.id, message: `/loop of ${step.id} stopped: ${stop} → ${exhausted}` });
+      this.logDecisions('orchestrator', step.id, [[
+        'loop', `stopped the /loop of ${step.id} → ${exhausted}`,
+        `${stop}; polling again (every ${cfg.interval || '1m'}, up to ${cfg.max_duration || 'no limit'}) could not change anything`,
+        `refused: ${st.blocked.denied.slice(-3).join(' · ') || '(no tool call)'}; answer: ${JSON.stringify(output).slice(0, 200)}`,
+        exhausted,
+      ]]);
+      return exhausted;
     }
     // simulation: at most 3s, scaled like the mock's delays (tests run with a small scale)
     const interval = Math.min(parseDuration(cfg.interval, 60000), this.mock ? 3000 * +(process.env.MULTIAGENT_MOCK_DELAY_SCALE ?? 1) : Infinity);
@@ -595,6 +627,22 @@ class WorkflowRun extends EventEmitter {
     await sleep(interval, this.abort.signal);
     this.setStatus(this.orchestrator, 'active');
     return step.id;
+  }
+
+  // Counts blocked /loop iterations in a row (see DEFAULT_MAX_BLOCKED); returns why the loop
+  // must stop once `loop.max_blocked` is reached, else null.
+  checkBlocked(step, st, output) {
+    const max = +render(String(maxBlocked(step)), this.ctx);
+    const tools = st.tools || { ran: 0, denials: 0, denied: [] };
+    const key = decisionKey(output, step.output_schema);
+    const prev = st.blocked;
+    const blind = tools.ran === 0; // everything refused, or no tool call at all
+    const repeated = tools.denials > 0 && (!prev || prev.key === key);
+    if (!blind && !repeated) { st.blocked = null; return null; }
+    st.blocked = { count: (prev?.count || 0) + 1, key, denied: [...(prev?.denied || []), ...tools.denied].slice(-10) };
+    if (!max || st.blocked.count < max) return null;
+    const why = blind && !tools.denials ? 'made no tool call' : blind ? 'had every tool call refused' : 'had tool calls refused and gave the same answer';
+    return `${st.blocked.count} iterations in a row blocked (the agent ${why}, ${tools.denials} refused in the last one)`;
   }
 
   // Fan-out: the same step runs in parallel for each agent in `agents`, each one
@@ -643,7 +691,14 @@ class WorkflowRun extends EventEmitter {
     }
     const hint = { stepId: step.id, visit, schema, agent: agentName, sequences: this.mockSequences };
     const opts = { stepId: step.id, hint, skills };
+    const countTools = (r) => {
+      if (!r.tools || !st.tools) return;
+      st.tools.ran += r.tools.ran;
+      st.tools.denials += r.tools.denials;
+      st.tools.denied.push(...r.tools.denied);
+    };
     let res = await this.sendToAgent(agentName, prompt, opts);
+    countTools(res);
     st.lastAnswer = res.text;
     if (!schema) {
       this.saveOutput(step, scope, res.text, { text: res.text });
@@ -665,6 +720,7 @@ class WorkflowRun extends EventEmitter {
       this.emitEvent('log', { level: 'warn', message: `Invalid output in ${step.id}${step.agents ? ` (${agentName})` : ''}: ${errs.join('; ')}` });
       if (attempt >= 2) throw new Error(`Output of step "${step.id}" failed validation: ${errs.join('; ')}`);
       res = await this.sendToAgent(agentName, this.retryPrompt(agentName, prompt, res.text, schema, errs), opts);
+      countTools(res);
       st.lastAnswer = res.text;
     }
   }
@@ -852,7 +908,14 @@ class WorkflowRun extends EventEmitter {
       .flatMap((m) => m[1].split('\n'))
       .map((l) => l.trim().replace(/^[-*]\s+/, ''))
       .filter(Boolean)
-      .map((l) => (l.includes('\t') ? l.split('\t') : l.split('|')).map((c) => c.trim().replace(/\s+/g, ' ')));
+      .map((l) => (l.includes('\t') ? l.split('\t') : l.split('|')));
+    this.logDecisions(agentName, stepId, rows);
+  }
+
+  // Appends rows of [phase, decision, why, evidence, result] to decisions.tsv (also used by the
+  // engine itself, as agent "orchestrator", for decisions like stopping a blocked /loop).
+  logDecisions(agentName, stepId, rows) {
+    rows = rows.map((r) => r.map((c) => String(c).trim().replace(/\s+/g, ' ')));
     if (!rows.length) return;
     const file = path.join(this.runDir, 'decisions.tsv');
     fs.mkdirSync(this.runDir, { recursive: true });
@@ -908,6 +971,18 @@ class WorkflowRun extends EventEmitter {
     for (let a = 1; a <= maxAttempts; a++) {
       const t0 = Date.now();
       this.setStatus(session, 'active');
+      // tool calls of this turn: refused ones (allowlist) vs the ones that ran
+      const tools = { ran: 0, denials: 0, streak: 0, maxStreak: 0, denied: [] };
+      const calls = new Map();
+      const track = (item) => {
+        if (item.kind === 'tool_call') calls.set(item.id, item);
+        if (item.kind !== 'tool_result') return;
+        if (!isPermissionDenial(item)) { tools.ran++; tools.streak = 0; return; }
+        tools.denials++;
+        tools.maxStreak = Math.max(tools.maxStreak, ++tools.streak);
+        const call = calls.get(item.id);
+        tools.denied.push(`${call?.name || 'tool'}: ${String(call?.input?.command ?? JSON.stringify(call?.input ?? '')).slice(0, 120)}`);
+      };
       try {
         const res = await runTurn({
           provider, model: agent.model, effort: agent.effort, providerSessionId: session.providerSessionId,
@@ -916,8 +991,16 @@ class WorkflowRun extends EventEmitter {
           extraArgs: [...(Array.isArray(agent.cli_args) ? agent.cli_args : agent.cli_args?.[agent.provider] || []), ...skillArgs],
           timeoutMs: parseDuration(agent.timeout, 30 * 60e3),
           signal: this.abort.signal, hint, render,
-          onItem: (item) => this.emitEvent('session.stream', { session_id: session.id, turn, item }),
+          onItem: (item) => { track(item); this.emitEvent('session.stream', { session_id: session.id, turn, item }); },
         });
+        res.tools = tools;
+        if (tools.maxStreak >= DENIAL_WARN) {
+          // the agent is fighting its allowlist (cli_args): visible in the run, the supervisor's timeline and the run chat
+          this.emitEvent('log', {
+            level: 'warn', kind: 'permission_denials', step_id: stepId, agent: agentName, denials: tools.denials,
+            message: `[${agentName}] ${tools.denials} tool calls refused by its allowlist in one turn of ${stepId} (${tools.maxStreak} in a row), e.g. ${tools.denied.slice(-2).join(' · ')}`,
+          });
+        }
         const dur = Date.now() - t0;
         session.activeMs += dur;
         if (res.providerSessionId) session.providerSessionId = res.providerSessionId;

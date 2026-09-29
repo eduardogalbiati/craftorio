@@ -8,6 +8,19 @@ uses: [ci-failure-triage]
 
 In `glab api` paths, `:id` is replaced by the current project automatically.
 
+## How to call glab
+
+Your allowlist only accepts `glab` (and `git`) called **bare, in the Bash tool, one command per
+call**: `glab ci list --per-page 5`. Every other form is refused, and each refusal burns a turn:
+
+- no PowerShell tool, no `cmd /c`, no full or 8.3 path to `glab.exe`: the orchestrator already
+  put `glab` on the PATH;
+- no `PATH`/`$env:PATH` changes, no variables, no `;`, `&&`, `||` or pipes: one command per call;
+- long texts go inline with `--notes "..."` (no files, no heredocs).
+
+If a bare `glab` call is refused, do not try other forms: say so in `error_summary`. The
+orchestrator stops a loop whose agent stays blocked.
+
 Convention in this project:
 - **Preview** = a pipeline on the MR branch run with variables `DEPLOY_TARGET=preview` and
   `MR_IID=<iid>`. Its deploy job publishes a review app (environment `review/<branch>`) and/or a

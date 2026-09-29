@@ -6,6 +6,21 @@ uses: [pr-comment-triage]
 
 # PR babysitting: GitHub (gh CLI)
 
+## How to call gh
+
+Your allowlist only accepts `gh` (and `git`) called **bare, in the Bash tool, one command per
+call**: `gh pr view 12 --json state`. Every other form is refused, and each refusal burns a turn:
+
+- no PowerShell tool, no `cmd /c`, no full or 8.3 path (`"/c/Program Files/GitHub CLI/gh.exe"`,
+  `C:\PROGRA~1\...`): the orchestrator already put `gh` on the PATH;
+- no `PATH`/`$env:PATH` changes, no variables, no `;`, `&&`, `||` or pipes: one command per call
+  (use `--json` + `--jq` to filter instead of piping);
+- long bodies go inline with `--body "..."` / `-f body="..."` (no files, no heredocs).
+
+Call `gh` again on **every** iteration, even if an earlier one was refused: never answer from
+memory. If a bare `gh` call is refused, do not try other forms: say so in `summary`. The
+orchestrator stops a loop whose agent stays blocked.
+
 ## 1. Read the PR state
 
 ```

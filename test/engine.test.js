@@ -93,6 +93,64 @@ test('/goal + /loop: repeats the step, delegates the failure and passes on the r
   assert.equal(events.filter((e) => e.type === 'step.waiting').length, 3);
 });
 
+test('isPermissionDenial tells a tool call refused by the allowlist from a command that failed', () => {
+  const { isPermissionDenial } = require('../src/engine/providers');
+  const result = (output, is_error = true) => ({ kind: 'tool_result', id: 'x', output, is_error });
+  assert.equal(isPermissionDenial(result('This command requires approval')), true);
+  assert.equal(isPermissionDenial(result("Claude requested permissions to use PowerShell, but you haven't granted it yet.")), true);
+  assert.equal(isPermissionDenial(result('Permission to use Bash with command gh pr view has been denied.')), true);
+  assert.equal(isPermissionDenial(result('gh: Not Found (HTTP 404)')), false);
+  assert.equal(isPermissionDenial(result('fatal: could not read from remote: permission denied (publickey)', false)), false);
+  assert.equal(isPermissionDenial({ kind: 'text', text: 'This command requires approval' }), false);
+});
+
+async function runLoopBlocked(t, mockSequences) {
+  const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'));
+  t.after(() => fs.rmSync(runsDir, { recursive: true, force: true }));
+  const run = new WorkflowRun({ file: path.join(__dirname, 'fixtures', 'loop-blocked.yaml'), inputs: {}, mock: true, runsDir, mockSequences });
+  const events = [];
+  run.on('event', (ev) => {
+    events.push(ev);
+    if (ev.type === 'approval.requested') setImmediate(() => run.resolveApproval(ev.approval_id, false));
+  });
+  await run.start();
+  return { run, events, finished: events.find((e) => e.type === 'workflow.finished') };
+}
+
+test('/loop: an agent whose tools are refused stops after 3 blocked iterations instead of polling until max_duration', { timeout: 60000 }, async (t) => {
+  const { run, events, finished } = await runLoopBlocked(t, { permission_denials: { watch: 99 } });
+
+  assert.equal(events.filter((e) => e.type === 'step.started' && e.step_id === 'watch').length, 3);
+  assert.equal(events.filter((e) => e.type === 'step.waiting').length, 2);
+  assert.ok(events.some((e) => e.type === 'step.transition' && e.from === 'watch' && e.to === 'stuck'), 'goes to on_exhausted');
+  assert.equal(finished.status, 'failed');
+
+  const stop = events.find((e) => e.type === 'log' && e.kind === 'loop_blocked');
+  assert.match(stop.message, /3 iterations in a row blocked/);
+  // each turn refused 6 calls in a row: a warning the supervisor's timeline and the run chat show
+  const warns = events.filter((e) => e.type === 'log' && e.kind === 'permission_denials');
+  assert.equal(warns.length, 3);
+  assert.equal(warns[0].level, 'warn');
+  assert.equal(warns[0].denials, 6);
+  assert.match(warns[0].message, /\[sitter\] 6 tool calls refused/);
+
+  const rows = fs.readFileSync(path.join(run.runDir, 'decisions.tsv'), 'utf8').trim().split('\n').slice(1).map((l) => l.split('\t'));
+  assert.equal(rows.length, 1);
+  assert.deepEqual(rows[0].slice(1, 4), ['orchestrator', 'watch', 'loop']);
+  assert.equal(rows[0][4], 'stopped the /loop of watch → stuck');
+  assert.match(rows[0][6], /refused: .*gh\.exe/);
+  assert.equal(rows[0][7], 'stuck');
+});
+
+test('/loop: an agent that gets past its refused tools keeps polling until the goal is met', { timeout: 60000 }, async (t) => {
+  const { events, finished } = await runLoopBlocked(t, { permission_denials: { watch: 2 }, state: ['waiting', 'waiting', 'waiting', 'waiting', 'ready'] });
+
+  assert.equal(finished.status, 'success', finished.error);
+  assert.equal(events.filter((e) => e.type === 'step.started' && e.step_id === 'watch').length, 5);
+  assert.ok(!events.some((e) => e.kind === 'loop_blocked'));
+  assert.ok(!events.some((e) => e.type === 'approval.requested'));
+});
+
 test('fan-out: agents in parallel, step/agent skills and save_as', { timeout: 30000 }, async () => {
   const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'));
   const run = new WorkflowRun({

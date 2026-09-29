@@ -413,9 +413,20 @@ async function runMock({ providerSessionId, model, hint, signal, onItem }) {
   await d(600);
   onItem({ kind: 'thinking', text: `Analyzing step "${hint?.stepId ?? 'delegated'}" (visit ${hint?.visit ?? '-'}).\nI will inspect the repository and plan the next steps.` });
   await d(900);
-  onItem({ kind: 'tool_call', id: 't1', name: 'Bash', input: { command: 'git status' } });
-  await d(500);
-  onItem({ kind: 'tool_result', id: 't1', output: 'On branch feat/mock-feature\nnothing to commit, working tree clean' });
+  // sequences.permission_denials: { stepId: n }: in the first n answers of that step every tool
+  // call is refused by the allowlist (an agent fighting its cli_args)
+  if (hint?.call <= (hint?.sequences?.permission_denials?.[hint.stepId] || 0)) {
+    const refused = ['gh pr view', '& "C:\\Program Files\\GitHub CLI\\gh.exe" pr view', 'cmd /c gh pr view',
+      '"/c/Program Files/GitHub CLI/gh.exe" pr view', 'C:\\PROGRA~1\\GITHUB~1\\gh.exe pr view', '$env:PATH += ";C:\\Program Files\\GitHub CLI"; gh pr view'];
+    for (const [i, command] of refused.entries()) {
+      onItem({ kind: 'tool_call', id: `d${i}`, name: i % 2 ? 'Bash' : 'PowerShell', input: { command } });
+      onItem({ kind: 'tool_result', id: `d${i}`, output: 'This command requires approval', is_error: true });
+    }
+  } else {
+    onItem({ kind: 'tool_call', id: 't1', name: 'Bash', input: { command: 'git status' } });
+    await d(500);
+    onItem({ kind: 'tool_result', id: 't1', output: 'On branch feat/mock-feature\nnothing to commit, working tree clean' });
+  }
   await d(800);
 
   const out = hint?.schema ? mockValue(hint.schema, '', hint) : null;
@@ -446,9 +457,17 @@ async function runTurn(opts) {
   }
 }
 
+// A tool call refused by the agent's allowlist (cli_args) rather than a command that ran and
+// failed: Claude Code answers "This command requires approval" / "... you haven't granted it
+// yet" in headless mode; the other CLIs report sandbox or policy refusals.
+function isPermissionDenial(item) {
+  if (item?.kind !== 'tool_result' || !item.is_error) return false;
+  return /requires approval|haven't granted|permission[^.\n]{0,80}denied|denied by (?:the )?(?:policy|sandbox|user)|rejected by (?:the )?(?:policy|sandbox|user)|not allowed by/i.test(String(item.output || ''));
+}
+
 // Request errors (invalid model, 4xx) are not worth retrying.
 function isRetryable(err) {
   return !/"status":\s*4\d\d|invalid_request|not supported|not found|does not exist/i.test(String(err?.message || err));
 }
 
-module.exports = { parseGrok, runTurn, resolveCommand, refreshWindowsPath, isRetryable, sleep, emptyUsage };
+module.exports = { parseGrok, runTurn, resolveCommand, refreshWindowsPath, isRetryable, isPermissionDenial, sleep, emptyUsage };

@@ -24,7 +24,10 @@
 #     (engine), which delegates fixes to the developer and hands results to the next step.
 #   - The AI acts up to a human gate and never crosses it.
 #   - /goal and /loop: the engine repeats the step (loop.interval) until `goal.until`
-#     is true or `loop.max_duration` runs out (→ goal.on_exhausted).
+#     is true or `loop.max_duration` runs out (→ goal.on_exhausted). It also stops after
+#     `loop.max_blocked` (default 3) blocked iterations in a row: the agent checked nothing
+#     (every tool call refused by its allowlist, or none made), or it had calls refused and
+#     gave the same answer again.
 #
 # Language and platform:
 #   - `language` picks unit-test-writer-<language> and build-audit-<language>.
@@ -39,7 +42,7 @@ kind: Workflow
 
 metadata:
   name: software-development
-  version: 0.10.0
+  version: 0.10.1
   description: Implements, reviews, tests, builds, watches CI and the PR/MR, publishes a preview and, once approved, merges and tracks the production deploy. Works with several languages on GitHub or GitLab.
   tags: [dev, review, test, build, ci, pr, deploy, github, gitlab]
   # Dashboard category: plan (Plan & Design), build (Code & Build) or monitor (Monitor & Improve).
@@ -626,9 +629,10 @@ steps:
       description: "PR/MR #{{ steps.ci.output.pr_number }} mergeable: CI green, no conflicts and no pending comments"
       until: "output.state == 'ready_to_merge'"
       on_exhausted: fail
+    # 4h, not a day: each iteration is a model turn. Waiting longer for a reviewer is a resume.
     loop:
-      interval: 1m
-      max_duration: 12h
+      interval: 2m
+      max_duration: 4h
     prompt: |
       PR/MR #{{ steps.ci.output.pr_number }} ({{ steps.ci.output.pr_url }}).
       {% if delegate_result %}

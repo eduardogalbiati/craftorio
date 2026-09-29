@@ -8,6 +8,20 @@ uses: [ci-failure-triage, pr-description]
 
 Requires an authenticated `gh` (`gh auth status`). Run commands from the repository root.
 
+## How to call gh
+
+Your allowlist only accepts `gh` (and `git`) called **bare, in the Bash tool, one command per
+call**: `gh pr view 12 --json state`. Every other form is refused, and each refusal burns a turn:
+
+- no PowerShell tool, no `cmd /c`, no full or 8.3 path (`"/c/Program Files/GitHub CLI/gh.exe"`,
+  `C:\PROGRA~1\...`): the orchestrator already put `gh` on the PATH;
+- no `PATH`/`$env:PATH` changes, no variables, no `;`, `&&`, `||` or pipes: one command per call
+  (use `--json` + `--jq` to filter instead of piping);
+- long bodies go inline with `--body "..."` (no files, no `--body-file`, no heredocs).
+
+If a bare `gh` call is refused, do not try other forms: answer with what you know and say that
+`gh` is refused in your answer. The orchestrator stops a loop whose agent stays blocked.
+
 ## 1. Push the branch
 
 ```

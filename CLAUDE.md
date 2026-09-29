@@ -43,8 +43,11 @@ Owner: Eduardo Galbiati (GitHub `eduardogalbiati/multiagent-orchestrator`, defau
 - Electron **44.4.5** (bundles Node 24.21). Electron 44 has no postinstall: its binary downloads on
   first use (`node node_modules/electron/install.js` to force it).
 - Installed CLIs: `claude` (~/.local/bin), `codex` (WinGet), `grok` (~/.grok/bin), `gh` in
-  `C:\Program Files\GitHub CLI\gh.exe` (**not on the Git Bash PATH**; call it by full path from
-  PowerShell), `glab` optional.
+  `C:\Program Files\GitHub CLI\gh.exe`, `glab` optional. Inside runs the engine refreshes PATH
+  (`refreshWindowsPath`), so agents call **bare `gh`/`glab` in the Bash tool, one command per
+  call**: that is the only form a `Bash(gh:*)` allowlist accepts (no PowerShell tool, full or 8.3
+  paths, PATH edits, `;`/`&&`/pipes, body files). A shell opened outside the app may still lack
+  it on PATH.
 - Workspace: `%USERPROFILE%\multiagent-workspace` (registry `HKCU\Software\MultiagentOrchestrator\WorkspacePath`,
   overridable with `MULTIAGENT_WORKSPACE`). Layout: `runs/`, `repos/` (git checkouts, `<owner>-<repo>`),
   `worktrees/` (one git worktree per run, `<run_id>`), `backlog/` (issue sync per project), `projects/` (`<id>.json`), `skills/`, `agents/` (`<id>.json`), `settings.json`. The owner's project `multiagent-orchestrator`
@@ -116,6 +119,13 @@ run on `windows-latest` and also run `npm test`.
   run-wide `feedback` list in templates (`approval:resolve` takes `feedback`). `previous_step` = the step that
   ran before. The Write & Review chat answers its run's gates inline (the approval dialog stays hidden there).
 - `orchestrator.supervisor: { enabled, max_interventions }` — per step 2, per run 6.
+- Refused tool calls: `isPermissionDenial` (providers.js) spots allowlist refusals in the stream
+  ("requires approval"); 5+ in a row in one turn → `log` warn with `kind: permission_denials`
+  (supervisor timeline, run chat). A `/loop` stops after `loop.max_blocked` (default 3, 0 = off)
+  blocked iterations in a row → `goal.on_exhausted`, with a `loop_blocked` warn and an
+  `orchestrator` row in `decisions.tsv`. Blocked = no tool call ran, or calls were refused and the
+  enum/number/boolean fields of the answer (`decisionKey`) repeat. A delegation resets the count.
+  Simulate with `mockSequences.permission_denials: { step: n }`.
 - How a run ends: a transition with `goto: end` may carry `status: success | failed | cancelled`
   (default success; also valid with `on_exhausted: end`; `loadWorkflow` rejects other values).
   Rejecting a failure gate → `failed`; rejecting `human_review`/`approve_merge` → `cancelled`.

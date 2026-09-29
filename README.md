@@ -128,6 +128,11 @@ and a gate never re-runs the same failed thing as the only way forward.
 `/goal` and `/loop` are declared per step in the YAML (`goal.until`, `loop.interval`,
 `loop.max_duration`). The engine repeats the step until the goal is met and injects the /goal
 and /loop instructions (current iteration, interval and limit) into the agent's prompt.
+A loop whose agent is blocked also stops early, at `goal.on_exhausted`: after `loop.max_blocked`
+iterations in a row (default 3, `0` turns it off) in which it checked nothing (every tool call
+refused by its allowlist, or none made) or had calls refused and gave the same answer again.
+The reason goes to the run log and `decisions.tsv`. Many refused calls in one turn also log a
+warning that the supervisor sees.
 
 ## AI Arena (`workflows/ai-arena.yaml`)
 

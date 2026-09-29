@@ -9,6 +9,19 @@ uses: [ci-failure-triage, pr-description]
 Requires an authenticated `glab` (`glab auth status`). Run commands from the repository root.
 In `glab api` paths, `:id` is replaced by the current project automatically.
 
+## How to call glab
+
+Your allowlist only accepts `glab` (and `git`) called **bare, in the Bash tool, one command per
+call**: `glab mr view 12 --output json`. Every other form is refused, and each refusal burns a turn:
+
+- no PowerShell tool, no `cmd /c`, no full or 8.3 path to `glab.exe`: the orchestrator already
+  put `glab` on the PATH;
+- no `PATH`/`$env:PATH` changes, no variables, no `;`, `&&`, `||` or pipes: one command per call;
+- long bodies go inline with `--description "..."` (no files, no heredocs).
+
+If a bare `glab` call is refused, do not try other forms: answer with what you know and say that
+`glab` is refused in your answer. The orchestrator stops a loop whose agent stays blocked.
+
 ## 1. Push the branch
 
 ```

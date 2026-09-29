@@ -6,6 +6,21 @@ uses: [ci-failure-triage]
 
 # Deploy: GitHub (gh CLI)
 
+## How to call gh
+
+Your allowlist only accepts `gh` (and `git`) called **bare, in the Bash tool, one command per
+call**: `gh run list --workflow preview.yml --limit 5`. Every other form is refused, and each
+refusal burns a turn:
+
+- no PowerShell tool, no `cmd /c`, no full or 8.3 path (`"/c/Program Files/GitHub CLI/gh.exe"`,
+  `C:\PROGRA~1\...`): the orchestrator already put `gh` on the PATH;
+- no `PATH`/`$env:PATH` changes, no variables, no `;`, `&&`, `||` or pipes: one command per call
+  (use `--json` + `--jq` to filter instead of piping);
+- long texts go inline with `--notes "..."` / `--body "..."` (no files, no heredocs).
+
+If a bare `gh` call is refused, do not try other forms: say so in `error_summary`. The
+orchestrator stops a loop whose agent stays blocked.
+
 Convention in this project:
 - **Preview** = GitHub pre-release tagged `preview-pr-<n>`, built by the preview workflow
   (input `preview_workflow`, e.g. `preview.yml`) through `workflow_dispatch`.

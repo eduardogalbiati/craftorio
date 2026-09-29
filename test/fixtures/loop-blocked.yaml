@@ -1,0 +1,39 @@
+# Test fixture: a /goal + /loop step whose agent may have its tools refused by its allowlist
+# (mockSequences.permission_denials). Blocked iterations in a row end the loop at the gate.
+apiVersion: multiagent/v1
+kind: Workflow
+metadata:
+  name: fixture-loop-blocked
+agents:
+  sitter: { provider: claude, model: mock-model, session: persistent }
+steps:
+  - id: watch
+    agent: sitter
+    goal:
+      description: "PR ready to merge"
+      until: "output.state == 'ready'"
+      on_exhausted: stuck
+    loop:
+      interval: 1s
+      max_duration: 12h
+    prompt: "Check the PR."
+    output_schema:
+      type: object
+      required: [state, summary]
+      properties:
+        state:   { type: string, enum: [waiting, ready] }
+        summary: { type: string }
+    transitions:
+      - when: "output.state == 'waiting'"
+        goto: watch
+      - when: "output.state == 'ready'"
+        goto: end
+  - id: stuck
+    type: human_approval
+    message: "The PR watch is blocked."
+    transitions:
+      - when: "approved"
+        goto: watch
+      - when: "rejected"
+        goto: end
+        status: failed
