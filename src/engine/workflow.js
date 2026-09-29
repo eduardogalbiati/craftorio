@@ -191,6 +191,7 @@ class WorkflowRun extends EventEmitter {
         if (typeof a[k] === 'string' && a[k].includes('{{')) a[k] = render(a[k], { inputs: this.inputs }).trim();
       }
     }
+    this.dropDisabledAgents();
     this.ctx = {
       inputs: this.inputs, steps: {}, loop: { iteration: 0 }, run_id: this.runId, run_dir: this.runDir, runs_dir: runsDir, workflows_dir: path.dirname(path.resolve(file)),
       agents: Object.fromEntries(Object.entries(this.wf.agents).map(([k, a]) => [k, { provider: a.provider, model: a.model }])),
@@ -234,6 +235,28 @@ class WorkflowRun extends EventEmitter {
       out[k] = v;
     }
     return out;
+  }
+
+  // `agents.<name>.enabled` (a boolean or a template over the inputs) leaves an agent out of
+  // the run, e.g. the contender slots of ai-arena the user did not fill. Fan-out steps run
+  // without it (`min_success` is capped at the agents left); a single-agent step can't.
+  dropDisabledAgents() {
+    const off = (v) => ['', 'false', '0', 'no', 'off', 'none'].includes(String(v).trim().toLowerCase());
+    for (const [name, a] of Object.entries(this.wf.agents)) {
+      if (a.enabled === undefined) continue;
+      const enabled = typeof a.enabled === 'string' ? !off(render(a.enabled, { inputs: this.inputs })) : !!a.enabled;
+      if (!enabled) delete this.wf.agents[name];
+    }
+    for (const s of this.wf.steps) {
+      if (s.type === 'human_approval') continue;
+      if (!s.agents) {
+        if (!this.wf.agents[s.agent]) throw new Error(`Step "${s.id}" uses agent "${s.agent}", which is disabled for this run.`);
+        continue;
+      }
+      s.agents = s.agents.filter((n) => this.wf.agents[n]);
+      if (!s.agents.length) throw new Error(`Step "${s.id}": every agent of the fan-out is disabled for this run.`);
+      if (s.min_success > s.agents.length) s.min_success = s.agents.length;
+    }
   }
 
   // `type: run` inputs name another run by its id (its folder in runs/). Empty or "latest" picks

@@ -380,7 +380,12 @@ function mockValue(s, key, h) {
     const seq = h.sequences?.[key] || MOCK_SEQUENCES[key];
     if (seq && seq.every(Number.isFinite)) return seq[Math.min(h.visit - 1, seq.length - 1)];
   }
-  if (s.type === 'integer') return key === 'pr_number' ? 42 : 0;
+  if (s.type === 'integer') {
+    if (key === 'pr_number') return 42;
+    // ai-arena's critique: each critic scores a different "Proposal N"
+    if (key === 'proposal') return 1 + (((h.call || 1) - 1) % 2);
+    return 0;
+  }
   switch (s.type) {
     case 'object': {
       const o = {};
@@ -420,7 +425,8 @@ async function runMock({ providerSessionId, model, hint, signal, onItem }) {
     ? 'Here is my answer. (simulated: it forgets the fields the step requires)\n\n```json\n{ "comment": "Looks good to me." }\n```'
     : out
       ? `Finished step **${hint.stepId}**.\n\n\`\`\`json\n${JSON.stringify(out, null, 2)}\n\`\`\``
-      : 'Done. (simulated response)';
+      // free-text steps (e.g. ai-arena's proposals and final document) get a small Markdown document
+      : `# Simulated document\n\nDone. (simulated response by ${hint?.agent || 'the agent'} for step "${hint?.stepId ?? 'delegated'}")\n\n## Summary\n\n- First point\n- Second point\n`;
   onItem({ kind: 'text', text });
 
   const usage = { input: rand(2000, 12000), output: rand(300, 2500), cache_read: rand(0, 8000), cache_write: rand(0, 2000), reasoning: rand(100, 1500) };

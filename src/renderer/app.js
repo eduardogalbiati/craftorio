@@ -194,7 +194,7 @@ function showView(view) {
   if (view === 'usage') { renderUsage(); loadUsage(); }
   if (view === 'settings') renderSettings();
   if (view === 'run') scheduleRender();
-  // a pending gate hidden behind the Write & Review chat shows up elsewhere
+  // a pending gate hidden behind the Write & Review or AI Arena chat shows up elsewhere
   if (state.approval && $('#approval-modal').classList.contains('hidden')) openApproval();
 }
 
@@ -203,7 +203,7 @@ function showView(view) {
 const devMode = () => !!state.settings.developerMode;
 function applyDeveloperMode() {
   document.body.classList.toggle('dev-mode', devMode());
-  for (const sel of ['#mock-toggle', '#duo-mock']) {
+  for (const sel of ['#mock-toggle', '#duo-mock', '#arena-mock']) {
     const box = $(sel);
     if (!box) continue;
     box.checked = devMode();
@@ -564,7 +564,7 @@ function renderRunList(rl, { prefix, box: boxSel, empty, start, rerender }) {
     const r = rl.runs.find((x) => x.runId === b.closest('.pr-run').dataset.run);
     if (b.dataset.runAct === 'logs') api.openPath(r.runDir);
     if (b.dataset.runAct === 'view') showView('run');
-    if (b.dataset.runAct === 'chat') window.openDuoRun?.(r.runId, { running: r.current && r.status === 'running' });
+    if (b.dataset.runAct === 'chat') (r.workflow === 'ai-arena' ? window.openArenaRun : window.openDuoRun)?.(r.runId, { running: r.current && r.status === 'running' });
     if (b.dataset.runAct === 'sup') openSupervisor({ runId: r.runId, workflow: r.workflow, status: r.status, error: r.error, mock: r.mock });
   }));
   box.querySelectorAll('[data-art]').forEach((b) => (b.onclick = () => {
@@ -612,6 +612,7 @@ function projectRunBody(r, pv) {
       <button class="btn sm ghost" data-run-act="logs">Open logs</button>
       <button class="btn sm ghost sup-btn" data-run-act="sup"><span class="sup-mark">◆</span> Ask the supervisor</button>
       ${r.workflow === 'writer-reviewer' ? '<button class="btn sm" data-run-act="chat" title="See the writer, reviewer and supervisor conversation">Open chat</button>' : ''}
+      ${r.workflow === 'ai-arena' ? '<button class="btn sm" data-run-act="chat" title="See the contenders, the synthesis and the supervisor as a chat">Open chat</button>' : ''}
       ${r.current ? '<button class="btn sm" data-run-act="view">View run</button>' : ''}
       <span class="spacer"></span>
       <span class="muted small mono">${esc(r.runId)}</span>
@@ -1318,8 +1319,8 @@ function resolveApproval(answer) {
 
 function openApproval() {
   const ev = state.approval;
-  // the Write & Review chat asks the question inline for the run it shows
-  if (!ev || window.duoShowsRun?.(ev.run_id)) return;
+  // the Write & Review and AI Arena chats ask the question inline for the run they show
+  if (!ev || window.duoShowsRun?.(ev.run_id) || window.arenaShowsRun?.(ev.run_id)) return;
   $('#approval-step').textContent = `step: ${ev.step_id}`;
   $('#approval-message').textContent = ev.message;
   $('#approval-binary').classList.toggle('hidden', !!ev.choices);

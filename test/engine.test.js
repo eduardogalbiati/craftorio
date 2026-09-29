@@ -519,3 +519,99 @@ test('writer-reviewer: without a project the agents work in the run folder and a
     assert.doesNotMatch(first, /Project: the current folder/);
   } finally { cleanup(); }
 });
+
+// ---------------------------------------------------------------------------
+// ai-arena: up to five contender slots picked at run time; `enabled` leaves the unused ones out
+function arenaRun(inputs = {}, mockSequences) {
+  const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'));
+  const cleanup = () => fs.rmSync(runsDir, { recursive: true, force: true });
+  try {
+    return { run: new WorkflowRun({ file: path.join(root, 'workflows', 'ai-arena.yaml'), inputs: { task: 'A PRD', ...inputs }, mock: true, runsDir, mockSequences }), cleanup };
+  } catch (e) { cleanup(); throw e; }
+}
+
+test('ai-arena: contenders come from the inputs and a slot with provider none is left out', () => {
+  const { run, cleanup } = arenaRun({ contender_2_provider: 'none', contender_5_provider: 'grok', contender_5_model: 'grok-4.7', contender_5_effort: 'low' });
+  try {
+    const compete = run.wf.steps.find((s) => s.id === 'compete');
+    assert.deepEqual(compete.agents, ['contender_1', 'contender_3', 'contender_4', 'contender_5']);
+    assert.deepEqual(run.wf.steps.find((s) => s.id === 'critique').agents, compete.agents);
+    assert.equal(run.wf.agents.contender_2, undefined);
+    assert.deepEqual(['provider', 'model', 'effort'].map((k) => run.wf.agents.contender_5[k]), ['grok', 'grok-4.7', 'low']);
+    // defaults: four models, the 5th slot off
+    const def = arenaRun();
+    assert.deepEqual(def.run.wf.steps[0].agents, ['contender_1', 'contender_2', 'contender_3', 'contender_4']);
+    assert.equal(def.run.wf.agents.contender_2.model, 'claude-sonnet-5-5');
+    def.cleanup();
+  } finally { cleanup(); }
+});
+
+test('agents.enabled: min_success is capped at the agents left, a disabled single agent or an empty fan-out fails', () => {
+  const two = arenaRun({ contender_3_provider: 'none', contender_4_provider: 'none', contender_2_provider: 'none' });
+  assert.equal(two.run.wf.steps[0].min_success, 1);
+  two.cleanup();
+  assert.throws(() => arenaRun({ contender_1_provider: 'none', contender_2_provider: 'none', contender_3_provider: 'none', contender_4_provider: 'none' }),
+    /every agent of the fan-out is disabled/);
+});
+
+test('ai-arena simulation: 3 contenders compete, critique, the synthesis is verified and the user accepts', { timeout: 60000 }, async () => {
+  const { run, cleanup } = arenaRun({ contender_4_provider: 'none', peer_review: 'yes' }, { verdict: ['issues', 'pass'] });
+  const events = [];
+  run.on('event', (ev) => {
+    events.push(ev);
+    if (ev.type === 'approval.requested') setImmediate(() => run.resolveApproval(ev.approval_id, 'accept', 'user'));
+  });
+  try {
+    await run.start();
+    const finished = events.find((e) => e.type === 'workflow.finished');
+    assert.equal(finished.status, 'success', finished.error);
+    const transitions = events.filter((e) => e.type === 'step.transition').map((e) => `${e.from}>${e.to}`);
+    assert.deepEqual(transitions, ['compete>critique', 'critique>synthesize', 'synthesize>verify', 'verify>synthesize', 'synthesize>verify', 'verify>review', 'review>end']);
+    for (const a of ['contender_1', 'contender_2', 'contender_3']) assert.ok(fs.existsSync(path.join(run.runDir, 'arena', 'proposals', `${a}.md`)), a);
+    assert.match(fs.readFileSync(path.join(run.runDir, 'arena', 'final.md'), 'utf8'), /^# Simulated document/);
+    // no project: agents work in the run folder and nothing is copied elsewhere
+    assert.ok(finished.summary.sessions.filter((s) => /^contender_/.test(s.agent)).every((s) => s.cwd === run.runDir));
+    const gate = events.find((e) => e.type === 'approval.requested');
+    assert.match(gate.message, /Proposal 1: \S+ \(contender \d\)/);
+    assert.doesNotMatch(gate.message, /Copy in the project/);
+    assert.ok(gate.feedback);
+  } finally { cleanup(); }
+});
+
+test('the renderer shuffle (arena-shuffle.js) gives the same order as the engine filter', () => {
+  const { shuffle, sha256Word } = require('../src/renderer/arena-shuffle.js');
+  const crypto = require('crypto');
+  for (const seed of ['', 'abc', '20260929-150045-d112f7dc', 'ção ✓'.repeat(40)]) {
+    assert.equal(sha256Word(seed), crypto.createHash('sha256').update(seed).digest().readUInt32BE(0), seed);
+    const list = ['contender_1', 'contender_2', 'contender_3', 'contender_4', 'contender_5'];
+    assert.deepEqual(shuffle(list, seed), render('{{ l | shuffle(s) | join(",") }}', { l: list, s: seed }).split(','));
+  }
+});
+
+test('ai-arena: attached documents reach the contenders, the synthesizer and the verifier', async () => {
+  const { run, cleanup } = arenaRun({ attachments: '===== Attached file: notes.md =====\nClinics close at 6 pm.', peer_review: 'no' });
+  const events = [];
+  run.on('event', (ev) => {
+    events.push(ev);
+    if (ev.type === 'approval.requested') setImmediate(() => run.resolveApproval(ev.approval_id, 'accept', 'user'));
+  });
+  try {
+    await run.start();
+    const prompts = (step) => events.filter((e) => e.type === 'session.message_sent' && e.step_id === step).map((e) => e.prompt);
+    for (const step of ['compete', 'synthesize', 'verify']) {
+      assert.ok(prompts(step).length, step);
+      for (const p of prompts(step)) assert.match(p, /Attached file: notes\.md =====\s+Clinics close at 6 pm\./, step);
+    }
+    const plain = arenaRun();
+    assert.doesNotMatch(render(plain.run.wf.steps[0].prompt, { ...plain.run.ctx, agent: 'contender_1' }), /attached/i);
+    plain.cleanup();
+  } finally { cleanup(); }
+});
+
+test('document skills for the arena exist and have a structure and a rubric', () => {
+  for (const id of ['prd-writing', 'adr-writing', 'rfc-writing', 'test-plan-writing', 'design-doc-writing', 'design-sketch']) {
+    const text = fs.readFileSync(path.join(root, 'skills', id, 'SKILL.md'), 'utf8');
+    assert.match(text, new RegExp(`^---\r?\nname: ${id}\r?\n`), id);
+    assert.match(text, /rubric/i, id);
+  }
+});

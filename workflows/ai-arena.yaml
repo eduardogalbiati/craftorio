@@ -5,8 +5,8 @@
 #   (parallel)   (parallel,    (base +          (other     (human: accept
 #                 optional)     grafts)          family)    redo or discard)
 #
-# 1. compete:    the same request goes IN PARALLEL to different models (optionally each
-#                under a different lens, `lenses: on`). None of them
+# 1. compete:    the same request goes IN PARALLEL to up to five models picked by the user
+#                (optionally each under a different lens, `lenses: on`). None of them
 #                sees the others' work. Each proposal is saved in arena/proposals/.
 # 2. critique:   (peer_review = yes) each model scores the OTHER proposals,
 #                anonymized ("Proposal 1, 2, 3"), and says what it would change in its own.
@@ -15,14 +15,17 @@
 # 4. verify:     a model from another family checks the final document against the
 #                document skill and the proposals; one round of fixes at most.
 # 5. review:     the human sees who wrote each proposal and accepts, asks for a new synthesis
-#                (at most 2; a 3rd request ends the run as failed) or discards it (cancelled).
+#                (at most 2, with optional instructions; a 3rd request ends the run as failed)
+#                or discards it (cancelled).
 #
 # The document type comes from the skill in `document_skill` (default: prd-writing).
 # For another document (ADR, tech spec, test plan…), create a skill with the
 # structure and the rubric and pass its name in that input.
 #
-# Contenders come from three model families (Anthropic, OpenAI, xAI). To add one:
-# declare the agent and add it to `agents` in the compete and critique steps.
+# Contenders are five slots (contender_1 … contender_5): the user picks the CLI, model and
+# effort of each one (inputs contender_N_provider/_model/_effort); provider `none` leaves the
+# slot out of the run (agent `enabled`). The defaults are four models from three families
+# (Anthropic, OpenAI, xAI). The AI Arena screen shows this run as a chat.
 # =============================================================================
 
 apiVersion: multiagent/v1
@@ -30,8 +33,8 @@ kind: Workflow
 
 metadata:
   name: ai-arena
-  version: 0.7.0
-  description: "Several models write the same document (e.g. a PRD) in parallel, blindly critique each other, and an orchestrator merges the final document."
+  version: 0.8.0
+  description: "Up to five models you pick write the same document (e.g. a PRD) in parallel, blindly critique each other, and an orchestrator merges the final document."
   tags: [arena, prd, plan, multi-model]
   category: plan
 
@@ -43,26 +46,48 @@ inputs:
     description: "The request. E.g.: Write a PRD for an appointment-booking app for small clinics."
   project_path:
     type: string
-    required: true
-    description: Project folder, used as context (agents only read it) and as the destination of the final document.
+    required: false
+    default: ""
+    description: Optional project folder, used as context (agents only read it) and as the destination of a copy of the final document. Without it the agents work in the run folder.
+  attachments:
+    type: string
+    required: false
+    default: ""
+    description: "Reference documents attached by the user (text), each one after a '===== Attached file: <name> =====' line. Every contender, the synthesizer and the verifier read them."
   document_skill:
     type: string
     default: prd-writing
-    description: Skill that defines the document's structure and scoring rubric.
+    description: "Skill that defines the document's structure and scoring rubric: prd-writing, adr-writing, rfc-writing, design-doc-writing, test-plan-writing, design-sketch, or your own."
   peer_review:
     type: string
-    enum: [yes, no]
+    enum: ["yes", "no"]
     default: "yes"
     description: Blind cross-critique round before the synthesis (better quality, higher cost).
   lenses:
     type: string
     enum: ["off", "on"]
     default: "off"
-    description: "on = each contender writes under a different forced lens (user value, lean MVP, risk first) for more divergent proposals."
+    description: "on = each contender writes under a different forced lens (user value, lean MVP, risk first, feasibility, evidence) for more divergent proposals."
   save_to:
     type: string
     default: docs/arena
-    description: Project subfolder where the final document is written (it is also kept in arena/final.md in the run folder).
+    description: Project subfolder where the final document is copied (it is always kept in arena/final.md in the run folder).
+  # The contenders: `none` leaves a slot out. At least two are needed for the critique.
+  contender_1_provider: { type: string, enum: [none, claude, codex, grok], default: claude, description: CLI of contender 1. }
+  contender_1_model:    { type: string, default: claude-opus-5-5 }
+  contender_1_effort:   { type: string, enum: [low, medium, high, xhigh], default: high }
+  contender_2_provider: { type: string, enum: [none, claude, codex, grok], default: claude, description: CLI of contender 2. }
+  contender_2_model:    { type: string, default: claude-sonnet-5-5 }
+  contender_2_effort:   { type: string, enum: [low, medium, high, xhigh], default: high }
+  contender_3_provider: { type: string, enum: [none, claude, codex, grok], default: codex, description: CLI of contender 3. }
+  contender_3_model:    { type: string, default: gpt-6-luna }
+  contender_3_effort:   { type: string, enum: [low, medium, high, xhigh], default: high }
+  contender_4_provider: { type: string, enum: [none, claude, codex, grok], default: grok, description: CLI of contender 4. }
+  contender_4_model:    { type: string, default: grok-4.7 }
+  contender_4_effort:   { type: string, enum: [low, medium, high, xhigh], default: high }
+  contender_5_provider: { type: string, enum: [none, claude, codex, grok], default: none, description: "CLI of contender 5 (none = not used)." }
+  contender_5_model:    { type: string, default: claude-haiku-4-5 }
+  contender_5_effort:   { type: string, enum: [low, medium, high, xhigh], default: high }
 
 # -----------------------------------------------------------------------------
 providers:
@@ -70,23 +95,35 @@ providers:
     type: claude-code
     command: claude
     args: ["-p", "--output-format", "stream-json", "--verbose", "--model", "{{ model }}"]
+    effort_args: ["--effort", "{{ effort }}"]
     resume_args: ["--resume", "{{ session_id }}"]
     skill_args: ["--add-dir", "{{ skill_dir }}"]
   codex:
     type: codex-cli
     command: codex
     args: ["exec", "--json", "--skip-git-repo-check", "-m", "{{ model }}"]
+    effort_args: ["-c", "model_reasoning_effort={{ effort }}"]
     resume_args: ["resume", "{{ session_id }}"]
     stdin_arg: "-"
   grok:
     type: grok-cli
     command: grok
     args: ["--output-format", "streaming-json", "-m", "{{ model }}", "--no-subagents"]
+    effort_args: ["--reasoning-effort", "{{ effort }}"]
     resume_args: ["--resume", "{{ session_id }}"]
     # the prompt goes in a temporary file (grok --prompt-file)
     prompt_file_arg: ["--prompt-file", "{{ prompt_file }}"]
 
+x-tools:
+  # Contenders read the project and may research the web, but never write. Per provider,
+  # because the user picks it; grok needs --always-approve headless (nobody can answer prompts).
+  contender_tools: &contender_tools
+    claude: ["--allowedTools", "Read Glob Grep WebSearch WebFetch", "--disallowedTools", "Edit Write NotebookEdit Bash"]
+    codex: ["-s", "read-only"]
+    grok: ["--tools", "read_file,list_dir,grep,web_search,web_fetch", "--always-approve"]
+
 defaults:
+  # empty (no project): the run folder
   working_dir: "{{ inputs.project_path }}"
   timeout: 20m
   retry:
@@ -107,45 +144,61 @@ orchestrator:
     max_total_cost_usd: 25
 
 # -----------------------------------------------------------------------------
-# Contenders: different models that read the project and may research the web (competitors,
-# market data), but never write: the document comes back as the answer and the engine
-# writes it to disk. Persistent sessions: during the critique each
-# one remembers its own proposal.
+# Contenders: the models the user picked. They read the project and may research the web
+# (competitors, market data), but never write: the document comes back as the answer and the
+# engine writes it to disk. Persistent sessions: during the critique each one remembers its
+# own proposal.
 # -----------------------------------------------------------------------------
 agents:
-  opus:
-    provider: claude
-    model: claude-opus-5-5
+  contender_1:
+    enabled: "{{ inputs.contender_1_provider != 'none' }}"
+    provider: "{{ inputs.contender_1_provider }}"
+    model: "{{ inputs.contender_1_model }}"
+    effort: "{{ inputs.contender_1_effort }}"
     session: persistent
-    cli_args: &claude_contender ["--allowedTools", "Read Glob Grep WebSearch WebFetch", "--disallowedTools", "Edit Write NotebookEdit Bash"]
+    cli_args: *contender_tools
     system_prompt: &contender |
       You are taking part in an arena: other models get the same request and the best
       content from each will be used. Work independently, be specific and honest:
       state assumptions and open questions instead of inventing facts.
-      You read the project files (the current folder) and may search the web for public
-      facts such as competitors, pricing and market data: cite each one with its source link.
-      You never change any file.
+      {% if inputs.project_path %}You read the project files (the current folder) and may{% else %}You have no project files; you may{% endif %}
+      search the web for public facts such as competitors, pricing and market data: cite each
+      one with its source link. You never change any file.
 
-  sonnet:
-    provider: claude
-    model: claude-sonnet-5
+  contender_2:
+    enabled: "{{ inputs.contender_2_provider != 'none' }}"
+    provider: "{{ inputs.contender_2_provider }}"
+    model: "{{ inputs.contender_2_model }}"
+    effort: "{{ inputs.contender_2_effort }}"
     session: persistent
-    cli_args: *claude_contender
+    cli_args: *contender_tools
     system_prompt: *contender
 
-  gpt:
-    provider: codex
-    model: gpt-6-luna
+  contender_3:
+    enabled: "{{ inputs.contender_3_provider != 'none' }}"
+    provider: "{{ inputs.contender_3_provider }}"
+    model: "{{ inputs.contender_3_model }}"
+    effort: "{{ inputs.contender_3_effort }}"
     session: persistent
-    cli_args: ["-s", "read-only"]
+    cli_args: *contender_tools
     system_prompt: *contender
 
-  grok:
-    provider: grok
-    model: grok-4.7
+  contender_4:
+    enabled: "{{ inputs.contender_4_provider != 'none' }}"
+    provider: "{{ inputs.contender_4_provider }}"
+    model: "{{ inputs.contender_4_model }}"
+    effort: "{{ inputs.contender_4_effort }}"
     session: persistent
-    # read and research tools only; --always-approve because nobody can answer prompts
-    cli_args: ["--tools", "read_file,list_dir,grep,web_search,web_fetch", "--always-approve"]
+    cli_args: *contender_tools
+    system_prompt: *contender
+
+  contender_5:
+    enabled: "{{ inputs.contender_5_provider != 'none' }}"
+    provider: "{{ inputs.contender_5_provider }}"
+    model: "{{ inputs.contender_5_model }}"
+    effort: "{{ inputs.contender_5_effort }}"
+    session: persistent
+    cli_args: *contender_tools
     system_prompt: *contender
 
   # Synthesis orchestrator: its own session, did not compete, not a judge in its own cause.
@@ -175,17 +228,27 @@ agents:
 steps:
 
   - id: compete
-    agents: [opus, sonnet, gpt, grok]
+    agents: [contender_1, contender_2, contender_3, contender_4, contender_5]
     min_success: 2
     skills: ["{{ inputs.document_skill }}"]
     save_as: "arena/proposals/{{ agent }}.md"
     prompt: |
       Request: {{ inputs.task }}
+      {% if inputs.attachments %}
+
+      The user attached these reference documents. Use them as source material: facts in them
+      count as given (cite the document by name), and when the request asks to improve or
+      rewrite one of them, it is your starting point.
+      <attachments>
+      {{ inputs.attachments }}
+      </attachments>
+      {% endif %}
       {% set lenses = {
-        opus: "User value first: start from the personas and their problem, and let every requirement earn its place through a user story.",
-        sonnet: "Lean MVP: find the smallest version that proves the value and push everything else to later slices or non-goals.",
-        gpt: "Risk first: security, privacy, operations and adoption risks shape the requirements and the delivery plan.",
-        grok: "Feasibility first: engineering effort, integration points and delivery sequencing decide what is in scope and when."
+        contender_1: "User value first: start from the personas and their problem, and let every requirement earn its place through a user story.",
+        contender_2: "Lean MVP: find the smallest version that proves the value and push everything else to later slices or non-goals.",
+        contender_3: "Risk first: security, privacy, operations and adoption risks shape the requirements and the delivery plan.",
+        contender_4: "Feasibility first: engineering effort, integration points and delivery sequencing decide what is in scope and when.",
+        contender_5: "Evidence first: ground every requirement in data from the project, the market or the request, and flag what is still unproven."
       } %}
       {% if inputs.lenses == 'on' and lenses[agent] %}
       Your lens (it decides your emphasis and trade-offs): {{ lenses[agent] }}
@@ -207,7 +270,7 @@ steps:
         goto: synthesize
 
   - id: critique
-    agents: [opus, sonnet, gpt, grok]
+    agents: [contender_1, contender_2, contender_3, contender_4, contender_5]
     min_success: 1
     skills: ["{{ inputs.document_skill }}"]
     save_as: "arena/reviews/{{ agent }}.json"
@@ -254,7 +317,7 @@ steps:
     skills: ["{{ inputs.document_skill }}"]
     save_as:
       - "arena/final.md"
-      - "{% if inputs.save_to %}{{ inputs.project_path }}/{{ inputs.save_to }}/{{ inputs.document_skill }}-{{ run_id }}.md{% endif %}"
+      - "{% if inputs.save_to and inputs.project_path %}{{ inputs.project_path }}/{{ inputs.save_to }}/{{ inputs.document_skill }}-{{ run_id }}.md{% endif %}"
     prompt: |
       {% if steps.verify.output and steps.verify.output.verdict != 'pass' and steps.verify.visits == steps.synthesize.visits - 1 %}
       A verifier checked your previous version and found these issues. Fix each one, or
@@ -265,7 +328,18 @@ steps:
       critical eye on your previous version: revisit the base, the grafts, the disagreements
       and what was discarded.
       {% endif %}
+      {% if feedback | length %}
+      The user's instructions (they take precedence over the proposals where they conflict):
+      {% for f in feedback %}- {{ f.text }}
+      {% endfor %}{% endif %}
       Original request: {{ inputs.task }}
+      {% if inputs.attachments %}
+
+      The user attached these reference documents. The proposals were written from them; keep what they establish.
+      <attachments>
+      {{ inputs.attachments }}
+      </attachments>
+      {% endif %}
 
       {% for name in steps.compete.output.succeeded | shuffle(run_id) %}
       ===== Proposal {{ loop.index }} =====
@@ -308,12 +382,22 @@ steps:
       ===== Proposal {{ loop.index }} (source material) =====
       {{ steps.compete.output.results[name].text }}
       {% endfor %}
+      {% if inputs.attachments %}
+      Reference documents attached by the user (source material too):
+      <attachments>
+      {{ inputs.attachments }}
+      </attachments>
+      {% endif %}
+      {% if feedback | length %}
+      The user's instructions (the document follows them even where a proposal differs):
+      {% for f in feedback %}- {{ f.text }}
+      {% endfor %}{% endif %}
 
       Check the final document and list only real, specific issues:
       1. every section required by the document skill is present and filled;
       2. no internal contradictions (between sections, or between the body and the appendix);
-      3. every factual claim, number or requirement is supported by some proposal or the
-         request, or is marked as an assumption;
+      3. every factual claim, number or requirement is supported by some proposal, the
+         request or an attached document, or is marked as an assumption;
       4. every conflict is decided with a reason or listed as an open question with a default;
       5. the appendix names a base, and its grafts and decisions are actually in the body;
       6. nothing valuable that 2+ proposals agree on was silently dropped.
@@ -338,16 +422,19 @@ steps:
     type: human_approval
     message: |
       Final document: {{ run_dir }}/arena/final.md
-      {% if inputs.save_to %}Copy in the project: {{ inputs.project_path }}/{{ inputs.save_to }}/{{ inputs.document_skill }}-{{ run_id }}.md{% endif %}
+      {% if inputs.save_to and inputs.project_path %}Copy in the project: {{ inputs.project_path }}/{{ inputs.save_to }}/{{ inputs.document_skill }}-{{ run_id }}.md{% endif %}
 
       {% if steps.verify.output.error %}Verifier could not check the document: {{ steps.verify.output.error }}{% else %}Verifier: {{ steps.verify.output.verdict }}{% endif %}{% if steps.verify.output.verdict and steps.verify.output.verdict != 'pass' %} (still open after one round of fixes):
       {% for i in steps.verify.output.issues %}- {{ i if i is string else (i | to_json) }}
       {% endfor %}{% endif %}
 
       Who wrote what:
-      {% for name in steps.compete.output.succeeded | shuffle(run_id) %}- Proposal {{ loop.index }}: {{ name }} ({{ agents[name].model }})
-      {% endfor %}{% for f in steps.compete.output.failed %}- {{ f.agent }} failed: {{ f.error }}
+      {% for name in steps.compete.output.succeeded | shuffle(run_id) %}- Proposal {{ loop.index }}: {{ agents[name].model }} ({{ name | replace('_', ' ') }})
+      {% endfor %}{% for f in steps.compete.output.failed %}- {{ agents[f.agent].model }} ({{ f.agent | replace('_', ' ') }}) failed: {{ f.error }}
       {% endfor %}
+    feedback:
+      label: Instructions for a new synthesis (optional)
+      placeholder: "e.g. Use Proposal 2 as the base and keep the pricing as an open question."
     choices:
       - { id: accept,  label: "Accept document" }
       - { id: redo,    label: "Redo the synthesis" }

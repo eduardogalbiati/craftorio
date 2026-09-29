@@ -169,10 +169,12 @@ test('every templated skill in the workflows resolves for every enum input value
   for (const file of fs.readdirSync(path.join(root, 'workflows'))) {
     const wf = loadWorkflow(path.join(root, 'workflows', file));
     const names = [...Object.values(wf.agents).flatMap((a) => a.skills || []), ...wf.steps.flatMap((s) => s.skills || [])];
-    // cartesian product of the enum inputs (defaults for the others)
+    // cartesian product of the enum inputs the skill names use (defaults for the others; e.g.
+    // ai-arena's ten contender enums would make millions of combinations for nothing)
     let combos = [{}];
     for (const [k, def] of Object.entries(wf.inputs || {})) {
-      const values = def.enum || [def.default];
+      const used = names.some((n) => n.includes(`inputs.${k}`));
+      const values = def.enum && used ? def.enum : [def.default];
       combos = combos.flatMap((c) => values.map((v) => ({ ...c, [k]: v })));
     }
     for (const inputs of combos) {

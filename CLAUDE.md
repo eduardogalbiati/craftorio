@@ -82,6 +82,7 @@ run on `windows-latest` and also run `npm test`.
 | `supabase/migrations/` | `accounts` table (`trial_ends_at` = now + 7 days via trigger on `auth.users`, `plan` trial/pro, RLS read-own only) and `entitlement()`. Applied by pasting into the Supabase SQL editor. |
 | `src/preload.js` | `window.api` exposed to the renderer (sandboxed; no Node there). |
 | `src/renderer/duo.js` / `robots.js` | Write & Review screen: setup (prompt, goal, writer/reviewer CLI + model + effort) and the run as a chat rebuilt from run events, live or replayed (`runs:events`, "Open chat" in the runs list). `robots.js` draws the isometric robot avatars (variant per provider, animated states, model name plate, mirroring). |
+| `src/renderer/arena.js` / `arena-shuffle.js` | AI Arena screen: setup (request, optional project, document skill, peer review, lenses, 2–5 contenders with CLI + model + effort) and the ai-arena run as a chat (proposals, blind critiques with the real authors, synthesis, verifier, the supervisor's gate inline, peer-score board), live or replayed ("Open chat"). Reuses duo.css + `window.ChatModels` from duo.js. `arena-shuffle.js` mirrors the engine's `shuffle` filter (inline SHA-256) to map "Proposal N" to its author; a test keeps them equal. |
 | `src/renderer/` | Plain HTML/CSS/JS UI, no bundler. Libraries loaded with `<script src="../../node_modules/...">` (UMD): xterm, addon-fit, marked, DOMPurify. Views: dashboard, projects (+ project detail with runs/sessions/artifacts), artifacts, workflows, agents, skills, usage, settings, run; terminal dock; supervisor drawer. |
 | `src/skills.js` | Skill CRUD, `resolveSkill` (workspace first, then bundled `skills/`), `skillPrompt`, `seedSkills` (copies bundled skills once, updates untouched copies by content hash, `.seeded.json`). |
 | `src/agents.js` | Agents menu: user-defined agents in `agents/<id>.json` (name, description, prompt, skills, `appearance` = { body, shell, visor, glow, eyes, emblem }). The built-in supervisor is always first, can't be removed and only saves its look (`agents/supervisor.json`). EYES/EMBLEMS must match `robots.js` (a test checks). Renderer: `src/renderer/agents.js`; `Robots.define('supervisor', look)` recolors it in Write & Review. Not used by workflows yet. |
@@ -92,8 +93,8 @@ run on `windows-latest` and also run `npm test`.
 | `src/supervisor.js` | AI supervisor: decision/analysis schemas, prompts, `runReport`, `analyzeRun` (saves `supervisor/analysis-*.md`), `resumeSpec` (also returns the run's `worktree: { dir, branch }`). Skill: `skills/run-supervisor`. |
 | `src/terminals.js` / `src/session-tail.js` | Embedded terminals: node-pty pseudoterminals (CLI resume, supervisor chat) and virtual terminals (live log follower, no process). |
 | `src/cli-sessions.js` / `src/renderer/sessions.js` | Sessions screen (first menu item): lists the CLIs' own conversations on this machine (head/tail of each file, cached by mtime+size; `CLI_PROVIDERS` = interactive new/resume args, `cliArgs` rejects unsafe values) and runs the CLIs in embedded terminals (`term:open` kinds `cli-resume` — folder looked up server side, never from the caller — and `cli-new`). The service tags sessions with their project and `workflowAgent` (headless, or in `runs/`/`worktrees/`). Terminals there reuse app.js's `createXterm`/`wireTerminal`; `SessionsView.findTab` routes `term:data`. In automated checks put a fake **`.exe`** first on PATH (`resolveCommand` prefers any `.exe` over a `.cmd`) or a real CLI starts. Folders inside the workspace are pre-trusted in each CLI's own config (`src/cli-trust.js`; Claude's trust does not cross a git root, so the folder and its repo root are written). Titles the user gives live in `<workspace>/session-titles.json` (the CLIs' files are never edited). Codex runs with `--no-daemon` (the shared app-server refuses the WinGet install and would outlive the terminal). `Terminals.kill` kills the whole process tree (taskkill /T; `pgrep -P` elsewhere). |
-| `workflows/*.yaml` | `software-development` (language + git_platform inputs pick skills), `ai-arena` (4 models compete → blind critique → base+graft synthesis → verify → human review), `multi-model-review`, `run-retrospective`, `writer-reviewer` (user-picked writer/reviewer loop until a score threshold, internal Opus 5.5 sign-off). |
-| `skills/` | 33 bundled skills (see README table). |
+| `workflows/*.yaml` | `software-development` (language + git_platform inputs pick skills), `ai-arena` (2–5 user-picked models compete → blind critique → base+graft synthesis → verify → human review), `multi-model-review`, `run-retrospective`, `writer-reviewer` (user-picked writer/reviewer loop until a score threshold, internal Opus 5.5 sign-off). |
+| `skills/` | 37 bundled skills (see README table). |
 
 ## Engine features to know (YAML)
 
@@ -106,7 +107,9 @@ run on `windows-latest` and also run `npm test`.
   it before anything starts). Used by `run-retrospective`.
 - Agent `provider`/`model`/`effort` can be templates over the inputs (resolved once in the constructor);
   `cli_args` can be a map keyed by provider; providers' `effort_args` get `{{ effort }}`.
-  `max_visits` / `loop.max_iterations` accept templates.
+  `max_visits` / `loop.max_iterations` accept templates. `agents.<name>.enabled` (bool or template)
+  drops an agent from the run (`dropDisabledAgents`: removed from fan-outs, `min_success` capped;
+  a single-agent step on it throws). ai-arena's five contender slots use it (`provider: none`).
 - Human gates can ask for free text (`feedback: true | { label, placeholder }`): `output.feedback` and the
   run-wide `feedback` list in templates (`approval:resolve` takes `feedback`). `previous_step` = the step that
   ran before. The Write & Review chat answers its run's gates inline (the approval dialog stays hidden there).

@@ -15,6 +15,8 @@
   };
   const BY_KEY = Object.fromEntries(Object.entries(PROVIDERS).map(([id, p]) => [p.key, id]));
   const EFFORTS = ['low', 'medium', 'high', 'xhigh'];
+  // shared with the AI Arena screen (arena.js)
+  window.ChatModels = { PROVIDERS, EFFORTS };
   // Simulation scenarios (developer mode): what the simulated agents answer, as the engine's
   // mockSequences ({ field: [value per visit] }; invalid_answers: { step: n } = first n answers invalid).
   const SCENARIOS = {
