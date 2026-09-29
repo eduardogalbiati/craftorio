@@ -15,7 +15,7 @@ kind: Workflow
 
 metadata:
   name: run-retrospective
-  version: 0.1.0
+  version: 0.2.0
   description: Analyzes a finished run's logs and proposes evidence-backed improvements to skills and workflows.
   tags: [retro, observability, skills]
   category: monitor
@@ -23,9 +23,9 @@ metadata:
 # -----------------------------------------------------------------------------
 inputs:
   run_id:
-    type: string
-    required: true
-    description: Id of the run to analyze (its folder name in <workspace>/runs, shown in the run view and in "Open logs").
+    type: run
+    default: latest
+    description: 'Id of the run to analyze (its folder name in <workspace>/runs, shown in the run view and in "Open logs"), or "latest" for the most recent run of another workflow.'
   focus:
     type: string
     default: ""

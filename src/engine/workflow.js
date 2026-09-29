@@ -230,9 +230,36 @@ class WorkflowRun extends EventEmitter {
       if (v === undefined || v === '') v = def.default;
       if (def.required && (v === undefined || v === '')) throw new Error(`Required input not provided: ${k}`);
       if (def.enum && v !== undefined && !def.enum.includes(v)) throw new Error(`Input "${k}" must be one of ${def.enum.join(', ')}`);
+      if (def.type === 'run') v = this.resolveRunInput(k, v);
       out[k] = v;
     }
     return out;
+  }
+
+  // `type: run` inputs name another run by its id (its folder in runs/). Empty or "latest" picks
+  // the most recent run of another workflow (so a retrospective that failed is not analyzed by the
+  // next one); an id with no run folder is refused before this run starts.
+  resolveRunInput(key, value) {
+    const runsDir = path.dirname(this.runDir);
+    const hasEvents = (id) => fs.existsSync(path.join(runsDir, id, 'events.jsonl'));
+    const v = String(value ?? '').trim();
+    if (!v || /^(latest|last)$/i.test(v)) {
+      const workflowOf = (id) => {
+        try {
+          const first = fs.readFileSync(path.join(runsDir, id, 'events.jsonl'), 'utf8').split('\n', 1)[0];
+          return JSON.parse(first).workflow || null;
+        } catch { return null; }
+      };
+      const ids = fs.existsSync(runsDir) ? fs.readdirSync(runsDir).filter((id) => id !== this.runId && hasEvents(id)).sort().reverse() : [];
+      const latest = ids.find((id) => workflowOf(id) !== this.wf.metadata?.name);
+      if (!latest) throw new Error(`Input "${key}": there is no run to use as "latest" in ${runsDir}.`);
+      return latest;
+    }
+    const id = path.basename(v);
+    if (id !== v || !hasEvents(id)) {
+      throw new Error(`Input "${key}": "${v}" is not a run id. Use the id of a run (its folder name in ${runsDir}, shown in the run view) or "latest".`);
+    }
+    return id;
   }
 
   emitEvent(type, data = {}) {

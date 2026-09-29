@@ -336,14 +336,19 @@ function selectWorkflow(file) {
   try { saved = JSON.parse(localStorage.getItem(`${LS_KEY}.${wf.file}`) || '{}'); } catch { /* ignore */ }
 
   const entries = Object.entries(wf.inputs || {}).filter(([key]) => !isPathInput(key));
-  const mainKey = entries.find(([k]) => k === 'task')?.[0] || entries.find(([, d]) => d.required)?.[0] || entries[0]?.[0];
+  // the main field is a free-text one: never a run id or a fixed list
+  const textual = entries.filter(([, d]) => d.type !== 'run' && !d.enum);
+  const mainKey = textual.find(([k]) => k === 'task')?.[0] || textual.find(([, d]) => d.required)?.[0] || textual[0]?.[0];
   const field = ([key, def], main) => {
-    const val = saved[key] ?? def.default ?? '';
+    // a run id is not remembered: the default ("latest") is usually what is wanted next time
+    const val = (def.type === 'run' ? null : saved[key]) ?? def.default ?? '';
     const label = `<label for="in-${key}">${main ? 'Input' : esc(key)} ${def.required ? '<span class="req">*</span>' : ''}</label>`;
     const hint = def.description ? `<div class="hint">${esc(def.description)}</div>` : '';
     let control;
     if (def.enum) {
       control = `<select id="in-${key}" name="${key}">${def.enum.map((o) => `<option ${o === val ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>`;
+    } else if (def.type === 'run') {
+      control = `<input type="text" id="in-${key}" name="${key}" value="${esc(val)}" placeholder="latest" spellcheck="false" class="mono" />`;
     } else if (main || def.multiline) {
       control = `<textarea id="in-${key}" name="${key}" rows="${main ? 7 : 4}" placeholder="${main ? 'Describe what needs to be done…' : ''}">${esc(val)}</textarea>`;
     } else {

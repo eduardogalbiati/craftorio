@@ -99,6 +99,9 @@ run on `windows-latest` and also run `npm test`.
   templates (`"unit-test-writer-{{ inputs.language }}"`).
 - `agents: [a, b]` = parallel fan-out → `{ results, succeeded, failed }`, `min_success`.
 - `save_as` (string or list, relative to the run folder; `{ path, content }` saves one field), `on_error: <step>`.
+- Inputs with `type: run` take another run's id: empty/`latest` → the most recent run of another
+  workflow; an id with no `runs/<id>/events.jsonl` is refused when the run is created (the UI shows
+  it before anything starts). Used by `run-retrospective`.
 - Agent `provider`/`model`/`effort` can be templates over the inputs (resolved once in the constructor);
   `cli_args` can be a map keyed by provider; providers' `effort_args` get `{{ effort }}`.
   `max_visits` / `loop.max_iterations` accept templates.

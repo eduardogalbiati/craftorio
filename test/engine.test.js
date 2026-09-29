@@ -344,6 +344,38 @@ test('software-development: rejecting the merge ends the run as cancelled', { ti
   assert.match(finished.error, /ended as cancelled at step "approve_merge" \(rejected\)/);
 });
 
+// `type: run` inputs (run-retrospective): "latest", a real id, or refused before the run starts.
+function runsWith(t, runs) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'run-input-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  for (const [id, workflow] of runs) {
+    fs.mkdirSync(path.join(dir, id));
+    fs.writeFileSync(path.join(dir, id, 'events.jsonl'), `${JSON.stringify({ seq: 1, type: 'workflow.started', workflow })}\n`);
+  }
+  return dir;
+}
+const retro = (runsDir, runId) => new WorkflowRun({ file: path.join(root, 'workflows', 'run-retrospective.yaml'), inputs: { run_id: runId }, mock: true, runsDir, skillsDirs: [] });
+
+test('a run input defaults to the latest run of another workflow', (t) => {
+  const runsDir = runsWith(t, [
+    ['20260927-101010-aaaaaaaa', 'software-development'],
+    ['20260928-101010-bbbbbbbb', 'ai-arena'],
+    ['20260929-101010-cccccccc', 'run-retrospective'], // a retrospective itself is skipped
+  ]);
+  assert.equal(retro(runsDir, undefined).inputs.run_id, '20260928-101010-bbbbbbbb');
+  assert.equal(retro(runsDir, 'latest').inputs.run_id, '20260928-101010-bbbbbbbb');
+  assert.equal(retro(runsDir, ' LAST ').inputs.run_id, '20260928-101010-bbbbbbbb');
+  assert.equal(retro(runsDir, '20260927-101010-aaaaaaaa').inputs.run_id, '20260927-101010-aaaaaaaa');
+});
+
+test('a run input that is not a run id is refused before the run starts', (t) => {
+  const runsDir = runsWith(t, [['20260927-101010-aaaaaaaa', 'software-development']]);
+  assert.throws(() => retro(runsDir, 'analise o ultimo run'), /"analise o ultimo run" is not a run id\. .*or "latest"/);
+  assert.throws(() => retro(runsDir, '../20260927-101010-aaaaaaaa'), /is not a run id/);
+  assert.deepEqual(fs.readdirSync(runsDir), ['20260927-101010-aaaaaaaa']); // nothing was created
+  assert.throws(() => retro(runsWith(t, []), 'latest'), /no run to use as "latest"/);
+});
+
 // ---------------------------------------------------------------------------
 // writer-reviewer: the writer and the reviewer are picked at run time (templated agents)
 async function runWriterReviewer({ inputs = {}, mockSequences, answers = {}, feedback = {} } = {}) {
