@@ -98,9 +98,9 @@ Local build: `npm run build` (writes `build/`) or `npm run package` (writes `dis
 | | Test Writer | Sonnet 5 | Writes/updates tests and runs the suite; failures go back to the developer | `unit-test-writer-<language>` |
 | | Builder | Sonnet 5 | Build + dependency audit; a broken build or a high/critical production vulnerability goes back to the developer | `build-audit-<language>` |
 | | Verifier | Sonnet 5 | Proves the change does what the task asked: same command on the base and on the branch; `not_verified` goes back to the developer, `inconclusive` does not block | `claim-verification` |
-| CI/CD | CI Pusher | Opus 4.8 | Push, opens the PR/MR, **/goal** CI green with **/loop**; on failure fetches the log and calls the developer. A PR/MR that conflicts with the base (CI never starts) is reported as failed on the first visit | `ci-pipeline-<platform>` |
+| CI/CD | CI Pusher | Sonnet 5 | Push, opens the PR/MR, **/goal** CI green with **/loop**; on failure fetches the log and calls the developer. A PR/MR that conflicts with the base (CI never starts) is reported as failed on the first visit | `ci-pipeline-<platform>` |
 | | PR Babysitter | Opus 4.8 | **/goal** PR/MR mergeable with **/loop**; actionable comments → developer (replies with the hash), doubtful ones → human | `pr-babysitter-<platform>`, `decision-log` |
-| | Deployer | Opus 4.8 | Publishes the preview, and after the merge tracks the production deploy. A failure carries `failure_class` (`code`, `infra`, `unknown`): a preview `code` failure goes to the developer, then CI, the PR check and the preview run again (2 rounds at most) | `deploy-<platform>` |
+| | Deployer | Sonnet 5 | Publishes the preview, and after the merge tracks the production deploy. A failure carries `failure_class` (`code`, `infra`, `unknown`): a preview `code` failure goes to the developer, then CI, the PR check and the preview run again (2 rounds at most) | `deploy-<platform>` |
 
 Two inputs choose the skills:
 - `language`: `js`, `python`, `go`, `java` or `csharp`.
@@ -134,6 +134,30 @@ iterations in a row (default 3, `0` turns it off) in which it checked nothing (e
 refused by its allowlist, or none made) or had calls refused and gave the same answer again.
 The reason goes to the run log and `decisions.tsv`. Many refused calls in one turn also log a
 warning that the supervisor sees.
+
+Polling without the model: a `/loop` step can declare `wait:`. Between the agent's turns the
+engine checks the PR/MR or the CI run itself with `gh`/`glab` (no tokens) and calls the agent only
+when there is something to think about:
+
+```yaml
+wait:
+  probe: pr_checks                         # pr_checks | pr_changes | workflow_run
+  target: "{{ steps.ci.output.pr_url }}"   # the PR/MR URL (or the run/pipeline URL)
+  output: { ci_status: success, failure_log: "" }  # all green: finish the step with this, no agent turn
+  grace: 10m                               # no check registered this long after the agent's last turn: ask it
+```
+
+- `pr_checks`: running checks → poll again; a failed check, a conflict with the base, a merged or
+  closed PR/MR, an unknown state → the agent; all passed → `output` (or the agent without it).
+- `pr_changes`: the agent is called again only when the PR/MR changed since its last turn (head
+  commit, comments, reviews, review decision, checks, mergeability).
+- `workflow_run`: a GitHub Actions run or a GitLab pipeline; the agent is called when it ends.
+
+The first visit, a visit after a delegation (a fix was pushed) and a check that could not run
+always go to the agent. Each check is a `step.probe` event (run chat, supervisor timeline), and
+`summary.probes` counts, per step, the checks made without the agent, the agent turns they asked
+for and the steps they finished. In software-development, `ci` (the CI pusher only pushes, opens
+the PR/MR and triages failures), `pr_babysitter`, `deploy_test` and `deploy_prod` use it.
 
 Sessions: the developer, the CI pusher and the PR babysitter come back many times for small
 turns (a fix, a CI check), so they run in `handoff` sessions: every turn is a fresh session that

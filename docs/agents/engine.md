@@ -59,6 +59,18 @@ same features for users; this is the implementer's summary.
   `orchestrator` row in `decisions.tsv`. Blocked = no tool call ran, or calls were refused and the
   enum/number/boolean fields of the answer (`decisionKey`) repeat. A delegation resets the count.
   Simulate with `mockSequences.permission_denials: { step: n }`.
+- `wait: { probe, target, output?, grace? }` on a single-agent `/loop` step (`loadWorkflow`
+  validates it): when the step loops back to itself without a delegation or supervisor note,
+  `pollStep` runs the probe (`src/engine/probes.js`, `gh`/`glab`, no tokens) instead of the agent.
+  `pending`/`unchanged` (and `none` within `grace`, default 10m after the agent's last turn) →
+  `loopWait` again (never counted as blocked); `passed` + `output` → the agent's last output with
+  `output` over it, validated, then `finishStep` (goal + transitions, `step.finished` with `probe`,
+  an `orchestrator` row in `decisions.tsv`); anything else, or a probe error (`probe_error` warn) →
+  the agent turn, whose prompt says why (`st.probeNews`). `pr_changes` compares a fingerprint
+  taken right after each agent turn (`afterAgentTurn`). Probe polls do not count as visits
+  (mock sequences stay per agent visit). Events `step.probe`; `summary.probes`. The `probe`
+  constructor option replaces the real one (tests); simulations use `MOCK_PROBES` or
+  `mockSequences.probes: { step: [states] }`.
 - How a run ends: a transition with `goto: end` may carry `status: success | failed | cancelled`
   (default success; also valid with `on_exhausted: end`; `loadWorkflow` rejects other values).
   Rejecting a failure gate → `failed`; rejecting `human_review`/`approve_merge` → `cancelled`.

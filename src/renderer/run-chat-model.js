@@ -198,6 +198,12 @@
       this.system(ev, 'loop', `/loop: ${ev.step_id} checks again in ${s >= 60 ? `${Math.round(s / 60)}m` : `${s}s`}`);
     },
 
+    // `wait:` the engine checked the PR/MR or CI run itself, without an agent turn
+    'step.probe'(ev) {
+      const then = { poll: 'no agent turn', output: 'step finished by the orchestrator', agent: `calling ${ev.step_id}'s agent` }[ev.action] || ev.action;
+      this.system(ev, ev.action === 'agent' ? 'transition' : 'loop', `Orchestrator check (${ev.probe}) on ${ev.step_id}: ${clip(String(ev.detail || ev.state), 200)} · ${then}`);
+    },
+
     'step.goal'(ev) {
       this.system(ev, ev.met ? 'transition' : 'loop', `/goal ${ev.met ? 'met' : 'not met yet'}: ${ev.goal} (iteration ${ev.iteration})`);
     },

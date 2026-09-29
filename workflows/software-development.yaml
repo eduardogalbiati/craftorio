@@ -28,6 +28,9 @@
 #     `loop.max_blocked` (default 3) blocked iterations in a row: the agent checked nothing
 #     (every tool call refused by its allowlist, or none made), or it had calls refused and
 #     gave the same answer again.
+#   - `wait:` on a /loop step: between the agent's turns the engine checks the PR/MR or the CI
+#     run itself with gh/glab (no model call) and calls the agent only on news: a failure, a
+#     conflict, a change on the PR/MR, an unknown state. CI all green finishes `ci` directly.
 #
 # Language and platform:
 #   - `language` picks unit-test-writer-<language> and build-audit-<language>.
@@ -42,7 +45,7 @@ kind: Workflow
 
 metadata:
   name: software-development
-  version: 0.12.0
+  version: 0.13.0
   description: Implements, reviews, tests, builds, watches CI and the PR/MR, publishes a preview and, once approved, merges and tracks the production deploy. Works with several languages on GitHub or GitLab.
   tags: [dev, review, test, build, ci, pr, deploy, github, gitlab]
   # Dashboard category: plan (Plan & Design), build (Code & Build) or monitor (Monitor & Improve).
@@ -222,9 +225,10 @@ agents:
       You are the verifier. You prove or disprove that the change does what the task
       asked, by running the same command before and after it. You do not change code.
 
+  # Push, PR/MR and failure triage need no frontier model, and the engine does the polling (wait:).
   ci_pusher:
     provider: claude
-    model: claude-opus-4-8
+    model: claude-sonnet-5
     session: handoff
     capabilities: { tools: [read, *vcs], web: false }
     skills: ["ci-pipeline-{{ inputs.git_platform }}"]
@@ -246,9 +250,10 @@ agents:
       requests; doubtful ones go to the human (fix, justify or ignore). After a fix
       you reply to the comment citing the commit hash. You do not fix code and you do not merge.
 
+  # Triggers workflows and reads their logs; the engine watches the runs between its turns (wait:).
   deployer:
     provider: claude
-    model: claude-opus-4-8
+    model: claude-sonnet-5
     session: persistent
     capabilities: { tools: [read, *vcs], web: false }
     skills: ["deploy-{{ inputs.git_platform }}"]
@@ -534,7 +539,10 @@ steps:
 
   # ============================ DEPLOY · CI/CD ===============================
 
-  # CI Pusher: /goal CI green + /loop watching CI.
+  # CI Pusher: /goal CI green + /loop watching CI. The agent pushes and opens the PR/MR; after
+  # that the engine polls the checks itself (wait:) and calls the agent only when a check failed,
+  # the PR/MR conflicts with the base, or no check registered within `grace` after its last turn.
+  # All checks green finishes the step with `output`, without an agent turn.
   - id: ci
     agent: ci_pusher
     goal:
@@ -544,6 +552,12 @@ steps:
     loop:
       interval: 1m
       max_duration: 1h
+    wait:
+      probe: pr_checks
+      target: "{{ steps.ci.output.pr_url }}"
+      # over the agent's last answer (pr_url, pr_number); an older failure_log no longer applies
+      output: { ci_status: success, failure_log: "" }
+      grace: 10m
     prompt: |
       Branch: `{{ steps.develop.output.branch }}` → base `{{ inputs.base_branch }}`.
       {% if delegate_result %}
@@ -634,10 +648,15 @@ steps:
       description: "PR/MR #{{ steps.ci.output.pr_number }} mergeable: CI green, no conflicts and no pending comments"
       until: "output.state == 'ready_to_merge'"
       on_exhausted: fail
-    # 4h, not a day: each iteration is a model turn. Waiting longer for a reviewer is a resume.
+    # Between its turns the engine polls the PR/MR (wait:) and calls the agent only when something
+    # changed since its last turn (commits, comments, reviews, checks, mergeability).
+    # Waiting longer than 4h for a reviewer is a resume.
     loop:
       interval: 2m
       max_duration: 4h
+    wait:
+      probe: pr_changes
+      target: "{{ steps.ci.output.pr_url }}"
     prompt: |
       PR/MR #{{ steps.ci.output.pr_number }} ({{ steps.ci.output.pr_url }}).
       {% if delegate_result %}
@@ -742,6 +761,10 @@ steps:
     loop:
       interval: 1m
       max_duration: 45m
+    # once the agent reports run_url, the engine watches that run and calls the agent when it ends
+    wait:
+      probe: workflow_run
+      target: "{{ steps.deploy_test.output.run_url }}"
     prompt: |
       PR/MR #{{ steps.ci.output.pr_number }}, branch `{{ steps.develop.output.branch }}`.
       {% if not steps.deploy_test.output or steps.deploy_test.output.preview_status == 'failed' %}
@@ -750,7 +773,8 @@ steps:
       {% else %}
       The preview was already triggered ({{ steps.deploy_test.output.run_url }}); only check it.
       {% endif %}
-      - not started yet, queued or running → pending
+      - not started yet, queued or running → pending, with run_url as soon as the run exists
+        (the orchestrator then watches that run itself and calls you when it ends)
       - finished successfully → success, with release_url (preview URL)
       - failed → failed, with error_summary and failure_class (see the skill):
         code = a commit on the branch can fix it (code, tests, lockfile, build scripts);
@@ -847,11 +871,15 @@ steps:
     loop:
       interval: 1m
       max_duration: 1h
+    wait:
+      probe: workflow_run
+      target: "{{ steps.deploy_prod.output.run_url }}"
     prompt: |
       PR/MR #{{ steps.ci.output.pr_number }} was merged into {{ inputs.base_branch }}.
       Track the production deploy of the merge commit following the "Production" section
       of the deploy skill (GitHub deploy workflow: `{{ inputs.deploy_workflow }}`).
-      - not started yet, queued or running → pending
+      - not started yet, queued or running → pending, with run_url as soon as the run exists
+        (the orchestrator then watches that run itself and calls you when it ends)
       - success → success, with release_url; then clean up the preview as the skill says
       - failed → failed, with error_summary and failure_class (code | infra | unknown, see the skill)
     output_schema:

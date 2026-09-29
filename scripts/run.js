@@ -78,6 +78,7 @@ run.on('event', (ev) => {
     case 'supervisor.decision': console.log(`${t()}   ◆ supervisor on ${ev.step_id}: ${ev.action}${ev.goto ? ' → ' + ev.goto : ''} — ${short(ev.explanation, 300)}`); break;
     case 'decision.logged': console.log(`${t()}   📝 ${ev.agent}: ${ev.count} decision(s) → ${ev.path}`); break;
     case 'step.waiting': console.log(`${t()}   ⏳ /loop: next check in ${Math.round(ev.interval_ms / 1000)}s`); break;
+    case 'step.probe': console.log(`${t()}   🔎 ${ev.step_id} check (${ev.probe}): ${short(ev.detail, 200)} → ${{ poll: 'no agent turn', output: 'step finished', agent: 'calling the agent' }[ev.action] || ev.action}`); break;
     case 'step.goal': console.log(`${t()}   🎯 /goal ${ev.met ? 'met' : 'not met yet'}: ${ev.goal} (iteration ${ev.iteration})`); break;
     case 'session.opened': console.log(`${t()}   + session ${ev.session_id} ${ev.session.agent} (${ev.session.provider}/${ev.session.model})`); break;
     case 'session.closed': console.log(`${t()}   - session ${ev.session_id} ${ev.status}`); break;

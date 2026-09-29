@@ -135,6 +135,19 @@ test('run chat: a gate still open when the run ends is closed, not answered', ()
   assert.equal(kinds(model, 'reply').length, 0);
 });
 
+test('run chat: the orchestrator\'s own checks (wait:) show as lines saying whether the agent is called', () => {
+  const model = chatOf([
+    { seq: 1, type: 'workflow.started', run_id: 'r1', workflow: 'wf', inputs: {} },
+    { seq: 2, type: 'step.probe', run_id: 'r1', step_id: 'ci', probe: 'pr_checks', state: 'pending', detail: '2 of 3 checks still running', action: 'poll' },
+    { seq: 3, type: 'step.probe', run_id: 'r1', step_id: 'ci', probe: 'pr_checks', state: 'failed', detail: 'checks failed: test', action: 'agent' },
+  ]);
+  const lines = kinds(model, 'system').map((it) => it.text).filter((x) => /Orchestrator check/.test(x));
+  assert.deepEqual(lines, [
+    'Orchestrator check (pr_checks) on ci: 2 of 3 checks still running · no agent turn',
+    'Orchestrator check (pr_checks) on ci: checks failed: test · calling ci\'s agent',
+  ]);
+});
+
 test('run chat: events seen twice (replay, then live) are applied once', () => {
   const model = new RunChatModel();
   const started = { seq: 1, type: 'workflow.started', run_id: 'r1', workflow: 'wf', inputs: {} };

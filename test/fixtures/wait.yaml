@@ -1,0 +1,71 @@
+# Test fixture: /loop steps with `wait:`. Between the agent's turns the engine runs the probe
+# (injected by the test) and calls the agent only on news; CI all green finishes `ci` directly.
+apiVersion: multiagent/v1
+kind: Workflow
+metadata:
+  name: fixture-wait
+agents:
+  pusher: { provider: claude, model: mock-model, session: handoff }
+  sitter: { provider: claude, model: mock-model, session: handoff }
+  dev:    { provider: claude, model: mock-model, session: handoff }
+steps:
+  - id: ci
+    agent: pusher
+    goal:
+      description: "CI green"
+      until: "output.ci_status == 'success'"
+      on_exhausted: stuck
+    loop:
+      interval: 1s
+      max_duration: 1h
+    wait:
+      probe: pr_checks
+      target: "{{ steps.ci.output.pr_url }}"
+      output: { ci_status: success }
+      grace: 1h
+    prompt: "Push the branch, open the PR and check CI."
+    output_schema:
+      type: object
+      required: [pr_url, ci_status]
+      properties:
+        pr_url:      { type: string }
+        ci_status:   { type: string, enum: [pending, failed, success] }
+        failure_log: { type: string }
+    transitions:
+      - when: "output.ci_status == 'success'"
+        goto: watch
+      - when: "output.ci_status == 'pending'"
+        goto: ci
+      - when: "output.ci_status == 'failed'"
+        delegate:
+          agent: dev
+          prompt: "CI failed: {{ output.failure_log }}"
+        goto: ci
+  - id: watch
+    agent: sitter
+    loop:
+      interval: 1s
+      max_duration: 1h
+    wait:
+      probe: pr_changes
+      target: "{{ steps.ci.output.pr_url }}"
+    prompt: "Check the PR."
+    output_schema:
+      type: object
+      required: [state]
+      properties:
+        state: { type: string, enum: [waiting, ready] }
+    transitions:
+      - when: "output.state == 'waiting'"
+        goto: watch
+      - when: "output.state == 'ready'"
+        goto: end
+  - id: stuck
+    type: human_approval
+    message: "CI did not pass."
+    transitions:
+      - when: "approved"
+        goto: ci
+      - when: "rejected"
+        goto: end
+        status: failed

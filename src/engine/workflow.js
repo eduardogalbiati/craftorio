@@ -15,6 +15,7 @@ const supervisor = require('../supervisor');
 const { prepareWorktree, removeWorktree, currentBranch } = require('./worktree');
 const capabilities = require('./capabilities');
 const { stopProcessesIn } = require('./processes');
+const { PROBES, runProbe } = require('./probes');
 
 // Skills bundled with the app (skills/ folder at the root). Workspace skills take precedence.
 const BUNDLED_SKILLS = path.join(__dirname, '..', '..', 'skills');
@@ -93,6 +94,16 @@ function loadWorkflow(file) {
       for (const n of s.agents || [s.agent]) if (!wf.agents[n]) throw new Error(`Step "${s.id}" references unknown agent "${n}".`);
     }
     if (s.goal && !s.goal.until) throw new Error(`Step "${s.id}": goal requires "until".`);
+    if (s.wait !== undefined) {
+      const w = s.wait || {};
+      if (!isLooping(s) || s.agents || s.type === 'human_approval') throw new Error(`Step "${s.id}": wait is only valid on a single-agent step with a loop.`);
+      if (!PROBES.includes(w.probe)) throw new Error(`Step "${s.id}": wait.probe must be one of ${PROBES.join(', ')}.`);
+      if (!w.target) throw new Error(`Step "${s.id}": wait requires "target" (the PR/MR or CI run URL).`);
+      if (w.output !== undefined && (w.probe === 'pr_changes' || !w.output || typeof w.output !== 'object' || Array.isArray(w.output))) {
+        throw new Error(`Step "${s.id}": wait.output must be a map of output fields, and only applies to the pr_checks and workflow_run probes.`);
+      }
+      if (w.grace !== undefined && parseDuration(w.grace, null) == null) throw new Error(`Step "${s.id}": wait.grace must be a duration such as 10m.`);
+    }
     if (s.choices && s.type !== 'human_approval') throw new Error(`Step "${s.id}": choices is only valid for human_approval.`);
     for (const t of s.transitions || []) {
       for (const target of [t.goto, t.on_exhausted, t.loop?.on_exhausted, s.goal?.on_exhausted, s.loop?.on_exhausted, s.on_error].filter(Boolean)) {
@@ -148,6 +159,25 @@ function validateSchema(v, s, p = 'output', errs = []) {
 const isLooping = (step) => !!step.loop || step.mode === 'polling';
 const loopConfig = (step) => step.loop || step.poll || {};
 
+// `wait:` on a /loop step: between the agent's turns the engine checks the PR/MR or the CI run
+// itself (src/engine/probes.js) and calls the agent only on news. What each probe watches, for
+// the agent's prompt:
+const PROBE_WHAT = {
+  pr_checks: 'the PR/MR checks and mergeability',
+  pr_changes: 'the PR/MR (new commits, comments, reviews, checks, mergeability)',
+  workflow_run: 'the CI run',
+};
+// A PR/MR with no check registered yet is polled this long after the agent's last turn (the push),
+// then the agent is called to find out why (`wait.grace`).
+const DEFAULT_WAIT_GRACE = '10m';
+// Simulation: probe states per call, per probe (mockSequences.probes: { step: [...] } overrides them).
+// The CI check fails once (the agent triages it), then passes without an agent turn.
+const MOCK_PROBES = {
+  pr_checks: ['pending', 'failed', 'pending', 'passed'],
+  pr_changes: ['unchanged', 'changed'],
+  workflow_run: ['pending', 'passed'],
+};
+
 // Instructions in the style of Claude Code's /goal and /loop. The engine is what actually
 // repeats the step and enforces the limits; the agent only needs to know the contract.
 function goalLoopInstructions(step, st, scope) {
@@ -158,7 +188,12 @@ function goalLoopInstructions(step, st, scope) {
   }
   if (isLooping(step)) {
     const cfg = loopConfig(step);
-    lines.push(`/loop: iteration ${st.iteration}. The orchestrator will call you again every ${cfg.interval || '1m'} (limit: ${cfg.max_duration || 'none'}) until the /goal is met.`);
+    if (step.wait) {
+      lines.push(`/loop: iteration ${st.iteration}. Between your turns the orchestrator checks ${PROBE_WHAT[step.wait.probe]} itself every ${cfg.interval || '1m'} (limit: ${cfg.max_duration || 'none'}), without you, and calls you again only when something changed or needs a decision, until the /goal is met.`);
+      if (st.probeNews) lines.push(`Since your last turn the orchestrator checked ${st.probeNews.polls} time(s) without you. It calls you now because: ${st.probeNews.detail}.`);
+    } else {
+      lines.push(`/loop: iteration ${st.iteration}. The orchestrator will call you again every ${cfg.interval || '1m'} (limit: ${cfg.max_duration || 'none'}) until the /goal is met.`);
+    }
     lines.push('On each call: check the current state, take the necessary action and reply right away. Do not block waiting (no long watch/sleep).');
     lines.push(`If your tools are refused (not allowed), do not retry other forms of the same command and do not keep answering the same: after ${maxBlocked(step)} blocked iterations in a row the orchestrator stops this loop.`);
   }
@@ -242,7 +277,9 @@ class WorkflowRun extends EventEmitter {
   // notices: [{ level, message }] logged right after workflow.started (e.g. the workflow file came from a fallback folder).
   // stopProcesses: (dir) => Promise<[{ pid, exe, cwd, reason, stopped }]>, stops what agents left running in the
   //   worktree (src/engine/processes.js). Default: the real one, none for simulations (mock agents start nothing).
-  constructor({ file, inputs, mock, runsDir, skillsDirs, budget, prices, projectId, issue, resume, worktreesDir, mockSequences, notices, stopProcesses }) {
+  // probe: ({ probe, target, cwd, signal, stepId, baseline }) => Promise<{ state, detail, fingerprint? }>, the
+  //   check of a `wait:` step (src/engine/probes.js). Default: the real one; simulations use MOCK_PROBES.
+  constructor({ file, inputs, mock, runsDir, skillsDirs, budget, prices, projectId, issue, resume, worktreesDir, mockSequences, notices, stopProcesses, probe }) {
     super();
     refreshWindowsPath(); // actions (e.g. gh pr merge) need the refreshed PATH
     this.file = file;
@@ -258,6 +295,9 @@ class WorkflowRun extends EventEmitter {
     this.worktreesDir = worktreesDir || null;
     this.worktree = null; // see setupWorktree
     this.stopProcesses = stopProcesses === undefined ? (this.mock ? null : stopProcessesIn) : stopProcesses;
+    this.probe = probe || (this.mock ? (args) => this.mockProbe(args) : runProbe);
+    this.probeStats = {}; // step -> { polls, agent_calls, completed, errors } (summary.probes)
+    this.mockProbeCalls = {};
     this.budget = budget || {};
     this.prices = prices || {};
     this.budgetWarned = new Set();
@@ -568,16 +608,22 @@ class WorkflowRun extends EventEmitter {
 
   async runStep(step) {
     const st = this.ctx.steps[step.id];
-    st.visits++;
-    st.firstVisitAt ??= Date.now();
     // /loop iteration: resets whenever the step is (re)entered from another step
-    if (this.prevStepId !== step.id) { st.iteration = 0; st.loopStartedAt = Date.now(); st.blocked = null; }
+    const again = this.prevStepId === step.id;
+    if (!again) { st.iteration = 0; st.loopStartedAt = Date.now(); st.blocked = null; st.probeBaseline = null; }
     st.iteration++;
-    st.tools = { ran: 0, denials: 0, denied: [] }; // this visit's tool calls, for the blocked-loop check
-    st.turnRecs = []; // this visit's turn records (turnLog), marked as waste when the visit was blocked
     this.ctx.previous_step = this.prevStepId || null;
     this.prevStepId = step.id;
     const t0 = Date.now();
+    // `wait:` the engine checks the PR/MR or CI run itself; the agent only runs on news
+    if (again && step.wait) {
+      const next = await this.pollStep(step, st, t0);
+      if (next) return next;
+    }
+    st.visits++;
+    st.firstVisitAt ??= Date.now();
+    st.tools = { ran: 0, denials: 0, denied: [] }; // this visit's tool calls, for the blocked-loop check
+    st.turnRecs = []; // this visit's turn records (turnLog), marked as waste when the visit was blocked
     this.emitEvent('step.started', { step_id: step.id, visit: st.visits, iteration: st.iteration, step_type: step.type || 'agent', agent: stepAgentLabel(step) });
 
     let output, scope;
@@ -623,8 +669,14 @@ class WorkflowRun extends EventEmitter {
       }
       st.output = output;
       scope = { ...this.ctx, output, iteration: st.iteration };
+      if (step.wait) await this.afterAgentTurn(step, st);
     }
-    this.emitEvent('step.finished', { step_id: step.id, visit: st.visits, iteration: st.iteration, output, duration_ms: Date.now() - t0 });
+    return this.finishStep(step, st, output, scope, t0);
+  }
+
+  // step.finished, the /goal check and the transitions of a step that has its output.
+  async finishStep(step, st, output, scope, t0, extra = {}) {
+    this.emitEvent('step.finished', { step_id: step.id, visit: st.visits, iteration: st.iteration, output, duration_ms: Date.now() - t0, ...extra });
 
     if (step.goal) {
       const met = evalExpr(step.goal.until, scope);
@@ -652,7 +704,7 @@ class WorkflowRun extends EventEmitter {
         delegated = { agent: t.delegate.agent, text: res.text };
       }
       if (delegated) st.blocked = null; // another agent acted: the next check is a fresh start
-      if (target === step.id && isLooping(step)) target = await this.loopWait(step, output);
+      if (target === step.id && isLooping(step)) target = await this.loopWait(step, output, { probed: !!extra.probe });
       // the delegation result goes to the next step (e.g. babysitter replies on the PR with the hash)
       if (delegated && this.ctx.steps[target]) this.ctx.steps[target].delegate_result = delegated;
       const ends = target === 'end' && t.status && t.status !== 'success';
@@ -661,6 +713,90 @@ class WorkflowRun extends EventEmitter {
       return target;
     }
     throw new Error(`No transition matched in step "${step.id}".`);
+  }
+
+  // ---- `wait:` deterministic checks between the agent's turns of a /loop (src/engine/probes.js) ----
+  // Returns the next step (poll again, /loop limit, or the step finished by the check), or null to
+  // run the agent turn: after a delegation or a supervisor note, and whenever the check has news
+  // (a failure, a conflict, a change on the PR/MR, an unknown state or a check that could not run).
+  async pollStep(step, st, t0) {
+    const w = step.wait;
+    if (st.delegate_result || st.supervisorNote || !st.output || st.output.error) return null;
+    const target = render(w.target, { ...this.ctx, output: st.output }).trim();
+    const stats = (this.probeStats[step.id] ??= { polls: 0, agent_calls: 0, completed: 0, errors: 0 });
+    let r;
+    try {
+      if (!target) throw new Error(`${w.probe}: no target yet (${w.target} is empty)`);
+      r = await this.probe({ probe: w.probe, target, cwd: this.ctx.worktree_dir || undefined, signal: this.abort.signal, stepId: step.id });
+    } catch (e) {
+      if (this.abort.signal.aborted) throw new Error('Cancelled');
+      r = { state: 'error', detail: `the check could not run (${e.message})` };
+      stats.errors++;
+    }
+    let state = r.state;
+    // pr_changes: news = the PR/MR differs from what the agent saw at the end of its last turn
+    if (w.probe === 'pr_changes' && r.fingerprint !== undefined && !['merged', 'closed', 'error'].includes(state)) {
+      state = st.probeBaseline && r.fingerprint === st.probeBaseline ? 'unchanged' : 'changed';
+      if (state === 'changed') r.detail = st.probeBaseline ? `the PR/MR changed since your last turn (${r.detail})` : `the PR/MR could not be compared with your last turn (${r.detail})`;
+    }
+    let action = 'agent';
+    let output = null;
+    if (state === 'pending' || state === 'unchanged') action = 'poll';
+    else if (state === 'none') action = Date.now() - (st.lastAgentAt || 0) < parseDuration(w.grace ?? DEFAULT_WAIT_GRACE, 600000) ? 'poll' : 'agent';
+    else if (state === 'passed' && w.output) {
+      const scope = { ...this.ctx, output: st.output };
+      output = { ...st.output, ...Object.fromEntries(Object.entries(w.output).map(([k, v]) => [k, typeof v === 'string' ? render(v, scope) : v])) };
+      const errs = validateSchema(output, step.output_schema);
+      if (errs.length) {
+        this.emitEvent('log', { level: 'warn', message: `${step.id}: wait.output does not match the output schema (${errs.join('; ')}); calling the agent` });
+        output = null;
+      } else action = 'output';
+    }
+    if (state === 'none' && action === 'agent') r.detail = `${r.detail}, ${w.grace ?? DEFAULT_WAIT_GRACE} after your last turn`;
+    st.probePolls = (st.probePolls || 0) + 1;
+    this.emitEvent('step.probe', {
+      step_id: step.id, probe: w.probe, target, state, detail: r.detail || state, action, iteration: st.iteration, polls: st.probePolls,
+    });
+    if (state === 'error') this.emitEvent('log', { level: 'warn', kind: 'probe_error', step_id: step.id, message: `${step.id}: ${r.detail}; calling the agent instead` });
+
+    if (action === 'poll') {
+      stats.polls++;
+      const next = await this.loopWait(step, st.output, { probed: true });
+      if (next !== step.id) this.emitEvent('step.transition', { from: step.id, to: next, when: `/loop limit (${loopConfig(step).max_duration})` });
+      return next;
+    }
+    if (action === 'output') {
+      stats.completed++;
+      this.logDecisions('orchestrator', step.id, [['wait', `finished ${step.id} without an agent turn`, `${w.probe}: ${r.detail}`, target, JSON.stringify(w.output)]]);
+      st.output = output;
+      return this.finishStep(step, st, output, { ...this.ctx, output, iteration: st.iteration }, t0, { probe: w.probe });
+    }
+    stats.agent_calls++;
+    st.probeNews = { detail: r.detail || state, polls: st.probePolls };
+    return null;
+  }
+
+  // After an agent turn of a `wait:` step: the grace period for "no check yet" starts again, and
+  // pr_changes records what the agent saw, so only a later change calls it again.
+  async afterAgentTurn(step, st) {
+    st.lastAgentAt = Date.now();
+    st.probePolls = 0;
+    st.probeBaseline = null;
+    if (step.wait.probe !== 'pr_changes') return;
+    const target = render(step.wait.target, { ...this.ctx, output: st.output }).trim();
+    if (!target) return;
+    try {
+      const r = await this.probe({ probe: step.wait.probe, target, cwd: this.ctx.worktree_dir || undefined, signal: this.abort.signal, stepId: step.id, baseline: true });
+      st.probeBaseline = r?.fingerprint ?? null;
+    } catch { /* no baseline: the next check calls the agent */ }
+  }
+
+  mockProbe({ probe, stepId, baseline }) {
+    if (baseline) return Promise.resolve({});
+    const seq = this.mockSequences?.probes?.[stepId] || MOCK_PROBES[probe];
+    const n = (this.mockProbeCalls[stepId] = (this.mockProbeCalls[stepId] || 0) + 1);
+    const state = seq[Math.min(n - 1, seq.length - 1)];
+    return Promise.resolve({ state, detail: `(simulated) ${probe}: ${state}` });
   }
 
   applyCounters(step, t) {
@@ -688,7 +824,8 @@ class WorkflowRun extends EventEmitter {
     return target;
   }
 
-  async loopWait(step, output) {
+  // probed: the iteration was the engine's own check (`wait:`), not an agent turn, so it cannot be "blocked"
+  async loopWait(step, output, { probed = false } = {}) {
     const st = this.ctx.steps[step.id];
     const cfg = loopConfig(step);
     const exhausted = step.goal?.on_exhausted || cfg.on_exhausted || 'fail';
@@ -697,7 +834,7 @@ class WorkflowRun extends EventEmitter {
       this.emitEvent('log', { level: 'warn', message: `/loop of ${step.id} exceeded ${cfg.max_duration} without meeting the /goal → ${exhausted}` });
       return exhausted;
     }
-    const stop = this.checkBlocked(step, st, output);
+    const stop = probed ? null : this.checkBlocked(step, st, output);
     if (stop) {
       this.emitEvent('log', { level: 'warn', kind: 'loop_blocked', step_id: step.id, message: `/loop of ${step.id} stopped: ${stop} → ${exhausted}` });
       this.logDecisions('orchestrator', step.id, [[
@@ -773,6 +910,7 @@ class WorkflowRun extends EventEmitter {
     const skills = this.loadSkills((step.skills || []).map((n) => render(n, scope).trim()));
     if (skills.length) prompt = `${skills.map(skillPrompt).join('\n\n')}\n\n${prompt}`;
     const extra = goalLoopInstructions(step, st, this.ctx);
+    st.probeNews = null; // consumed
     if (extra) prompt += '\n\n---\n' + extra;
     if (schema) {
       prompt += '\n\n---\nAt the end of your response you MUST include a ```json block with an object that validates against this JSON Schema:\n```json\n'
@@ -1350,6 +1488,8 @@ ${stderr || stdout}`.slice(0, 1500)));
         duration_ms: Date.now() - this.startedAt, inputs: this.inputs, mock: this.mock, worktree: this.worktreeSummary(),
         tokens, cost_usd: +sessions.reduce((a, s) => a + s.cost_usd, 0).toFixed(6),
         context: this.contextSummary(),
+        // `wait:` steps: checks made without an agent turn, agent turns they asked for, steps they finished
+        ...(Object.keys(this.probeStats).length ? { probes: this.probeStats } : {}),
         steps: Object.fromEntries(Object.entries(this.ctx.steps).map(([k, v]) => [k, { visits: v.visits, output: v.output }])),
         sessions,
       },

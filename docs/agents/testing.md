@@ -25,6 +25,9 @@ creates a commit needs its own `-c user.name/email`.
 - `mockSequences.invalid_answers: { step: n }` makes the first n answers of a step miss its schema
   (exercises the retries and the supervisor); `permission_denials: { step: n }` refuses every tool
   call; `no_handoff: { step: n }` leaves out the handoff note (exercises the follow-up request).
+- `wait:` probes are simulated too (`MOCK_PROBES` in workflow.js: CI fails once, then passes with
+  no agent turn); `mockSequences.probes: { step: [states] }` overrides them, and the `probe` option
+  of `WorkflowRun` injects a fake (`test/probes.test.js`). A mock run never calls `gh`/`glab`.
 - Its context grows 30k per turn of the same conversation (start 20k, peak +20k): `max_context`
   rotations are deterministic (`test/fixtures/handoff.yaml`).
 - `run:start` takes `mockSequences` (simulation only): the Write & Review scenario picker uses it.
