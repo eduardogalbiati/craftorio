@@ -46,7 +46,7 @@ const state = {
   pendingProject: null, // project to preselect in the panel on open
   usage: null,        // last api.getUsage() result
   usageError: null,
-  art: { runs: null, error: null, projectId: "", q: "", showSim: false, sel: null, doc: null, mode: "rendered" },
+  art: { runs: null, error: null, projectId: "", q: "", showSim: false, sel: null, doc: null, mode: "rendered", reveal: null },
   sup: { runId: null, question: '', loading: false, result: null, error: null, recMsgs: {} }, // supervisor panel
   pv: null,           // project detail view: { id, project, runs, error, filter, showSim, expanded, msgs }
   wr: { runs: null, error: null, filter: 'all', showSim: false, expanded: new Set(), msgs: new Map() }, // Workflows > Runs
@@ -209,6 +209,7 @@ function applyDeveloperMode() {
     box.checked = devMode();
     box.dispatchEvent(new Event('change'));
   }
+  if (state.view === 'artifacts') renderArtifactList(); // simulated runs are listed only in developer mode
 }
 
 function openModal(sel) { $(sel).classList.remove('hidden'); }
@@ -1804,6 +1805,7 @@ function openArtifactsAt({ projectId, path, mock }) {
   a.projectId = projectId || '';
   a.q = '';
   if (mock) a.showSim = true;
+  a.reveal = path; // opens the file's group once the list knows which run it belongs to
   showView('artifacts');
   selectArtifact(path);
 }
@@ -1821,11 +1823,14 @@ function renderArtifacts() {
   renderArtifactViewer();
 }
 
+// Simulated runs only exist for developer mode: without it they are never listed nor counted.
+const artShowSim = () => devMode() && state.art.showSim;
+
 function artifactRunsFiltered() {
   const a = state.art;
   const q = a.q.trim().toLowerCase();
   return (a.runs || [])
-    .filter((r) => a.showSim || !r.mock)
+    .filter((r) => artShowSim() || !r.mock)
     .filter((r) => !a.projectId || r.project?.id === a.projectId)
     .map((r) => {
       if (!q) return r;
@@ -1840,18 +1845,25 @@ function renderArtifactList() {
   const box = $('#art-list');
   if (a.runs == null) { box.innerHTML = a.error ? '' : '<p class="muted small art-pad">Loading…</p>'; return; }
   const runs = artifactRunsFiltered();
-  const hiddenSim = (a.runs || []).filter((r) => r.mock && !a.showSim).length;
+  const hiddenSim = devMode() ? (a.runs || []).filter((r) => r.mock && !a.showSim).length : 0;
   if (!runs.length) {
     box.innerHTML = `<div class="art-pad muted small">${a.runs.length ? 'No artifacts match these filters.' : 'No run has produced documents or files yet.'}${hiddenSim ? `<br>${hiddenSim} simulated run${hiddenSim > 1 ? 's' : ''} hidden.` : ''}</div>`;
     return;
   }
-  box.innerHTML = runs.map((r) => `
-    <div class="art-run">
-      <div class="art-run-head" title="${esc(r.task || '')}">
-        <div class="row"><b class="art-run-name">${esc(r.workflow || 'workflow')}</b><span class="pill pill-${esc(r.status)}">${esc(r.status)}</span>${r.mock ? '<span class="badge p-mock">simulated</span>' : ''}</div>
-        <div class="muted small">${r.project ? `${esc(r.project.name)} · ` : ''}${r.startedAt ? esc(dateOf(r.startedAt)) : ''}</div>
-      </div>
-      ${r.artifacts.map((f) => `
+  if (a.reveal) {
+    const owner = runs.find((r) => r.artifacts.some((f) => f.path === a.reveal));
+    if (owner) { setArtGroupOpen(owner.runId, true); a.reveal = null; }
+  }
+  const searching = !!a.q.trim();
+  box.innerHTML = runs.map((r, i) => {
+    const open = searching || artGroupOpen(r.runId, i === 0);
+    return `
+    <div class="art-run ${open ? 'open' : ''}" data-run="${esc(r.runId)}">
+      <button class="art-run-head" title="${esc(r.task || '')}" aria-expanded="${open}">
+        <div class="row"><span class="art-chev" aria-hidden="true">${open ? '▾' : '▸'}</span><b class="art-run-name">${esc(r.workflow || 'workflow')}</b><span class="pill pill-${esc(r.status)}">${esc(r.status)}</span>${r.mock ? '<span class="badge p-mock">simulated</span>' : ''}</div>
+        <div class="muted small art-run-sub">${r.project ? `${esc(r.project.name)} · ` : ''}${r.startedAt ? esc(dateOf(r.startedAt)) : ''} · ${r.artifacts.length} file${r.artifacts.length > 1 ? 's' : ''}</div>
+      </button>
+      ${!open ? '' : r.artifacts.map((f) => `
         <button class="art-file ${a.sel === f.path ? 'active' : ''} ${f.exists ? '' : 'missing'}" data-path="${esc(f.path)}" title="${esc(f.path)}">
           ${artKindIcon(f.kind)}
           <span class="art-file-main">
@@ -1860,8 +1872,40 @@ function renderArtifactList() {
           </span>
           <span class="art-file-size muted">${esc(fmtSize(f.size))}</span>
         </button>`).join('')}
-    </div>`).join('') + (hiddenSim ? `<p class="muted small art-pad">${hiddenSim} simulated run${hiddenSim > 1 ? 's' : ''} hidden.</p>` : '');
+    </div>`;
+  }).join('') + (hiddenSim ? `<p class="muted small art-pad">${hiddenSim} simulated run${hiddenSim > 1 ? 's' : ''} hidden.</p>` : '');
   box.querySelectorAll('.art-file').forEach((b) => (b.onclick = () => selectArtifact(b.dataset.path)));
+  box.querySelectorAll('.art-run-head').forEach((b) => (b.onclick = () => {
+    if (searching) return; // every matching group is shown open while searching
+    const g = b.closest('.art-run');
+    setArtGroupOpen(g.dataset.run, !g.classList.contains('open'));
+    renderArtifactList();
+  }));
+}
+
+// Open/closed state of the run groups, remembered across restarts. Groups the user never
+// toggled use the default: only the first one open.
+const ART_GROUPS_KEY = 'multiagent.artifactGroups';
+let artGroups = null;
+function artGroupsState() {
+  if (!artGroups) {
+    try { artGroups = JSON.parse(localStorage.getItem(ART_GROUPS_KEY) || '{}') || {}; } catch { artGroups = {}; }
+  }
+  return artGroups;
+}
+function artGroupOpen(runId, fallback) {
+  const v = artGroupsState()[runId];
+  return typeof v === 'boolean' ? v : fallback;
+}
+function setArtGroupOpen(runId, open) {
+  const g = artGroupsState();
+  g[runId] = open;
+  // Forget runs that no longer have artifacts so the stored map doesn't grow forever.
+  if (state.art.runs) {
+    const live = new Set(state.art.runs.map((r) => r.runId));
+    for (const id of Object.keys(g)) if (!live.has(id)) delete g[id];
+  }
+  try { localStorage.setItem(ART_GROUPS_KEY, JSON.stringify(g)); } catch { /* ignore */ }
 }
 
 let artReadSeq = 0;

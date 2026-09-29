@@ -579,7 +579,13 @@ body.resizing-dock .term-body { pointer-events: none; }
 .art-list { flex: 1; overflow: auto; padding: 6px 8px 16px; }
 .art-pad { padding: 10px 8px; margin: 0; }
 .art-run { margin-top: 10px; }
-.art-run-head { padding: 4px 8px 6px; }
+.art-run-head {
+  display: block; width: 100%; text-align: left; padding: 4px 8px 6px; border: none; border-radius: 7px;
+  background: none; color: var(--text); font: inherit; cursor: pointer;
+}
+.art-run-head:hover { background: var(--panel-2); }
+.art-chev { color: var(--muted); width: 12px; display: inline-block; font-size: 14px; line-height: 1; }
+.art-run-sub { padding-left: 16px; }
 .art-run-head .row { gap: 6px; flex-wrap: wrap; }
 .art-run-name { font-size: 13px; }
 .art-run-head .pill { font-size: 10px; padding: 1px 7px; }
