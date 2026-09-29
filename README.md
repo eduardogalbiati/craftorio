@@ -63,6 +63,27 @@ looked up in `<workspace>/workflows/` first, then in the repository's `workflows
 used as is (e.g. to try an edited repository copy while the workspace copy is modified). `--auto-approve`
 approves every human gate without interaction (tests only: in practice the AI must not cross the gates).
 
+### Engine server (HTTP + WebSocket)
+
+```bash
+npm run serve -- --port 7300 --host 127.0.0.1 --workspace C:/path/to/workspace
+```
+
+Runs the engine without Electron and serves the same UI to a browser: open the printed
+`http://…/?token=…` URL. The token (from `MULTIAGENT_SERVER_TOKEN`, else random) is kept in an
+HttpOnly cookie after the first visit; API clients send `Authorization: Bearer <token>`.
+
+- API: `POST /api/<channel>` with `{ "arg": … }` → `{ "result": … }` or `{ "error": … }`. The channels are the
+  desktop app's IPC channels (`projects:list`, `run:start`, `artifacts:read`, `auth:state`, …).
+- `GET /ws` (WebSocket): the server pushes `{ "channel", "payload" }` for `run:event`, `term:data`,
+  `term:exit` and `auth:changed`; the client sends `term:input` / `term:resize` the same way.
+- Requests from another origin are refused. Beyond `127.0.0.1` the traffic is plain HTTP: put the
+  server behind a reverse proxy with TLS.
+- Runs need the same account as the app (sign in from the browser UI; the sign-in page opens on the
+  server machine). `MULTIAGENT_AUTH=off` disables it in development.
+- Desktop-only actions (native folder picker, opening files in their app, external console
+  windows, changing the workspace) are not available in the browser; folder paths are typed.
+
 Local build: `npm run build` (writes `build/`) or `npm run package` (writes `dist/`, used by the deploy).
 
 ## Software development flow (`workflows/software-development.yaml`)
