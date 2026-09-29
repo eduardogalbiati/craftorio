@@ -57,6 +57,8 @@
     createProject: (data) => call('projects:create', data),
     updateProject: (id, patch) => call('projects:update', { id, patch }),
     removeProject: (id) => call('projects:remove', id),
+    getBacklog: (projectId) => call('backlog:get', { projectId }),
+    syncBacklog: (projectId, platform) => call('backlog:sync', { projectId, platform }),
     listSkills: () => call('skills:list'),
     createSkill: (data) => call('skills:create', data),
     saveSkill: (id, data) => call('skills:save', { id, data }),

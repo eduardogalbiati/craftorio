@@ -157,6 +157,7 @@ async function init() {
     state.settings = await api.setSettings({ [el.dataset.setting]: el.checked });
     if (el.dataset.setting === 'developerMode') applyDeveloperMode();
   }));
+  $('#set-backlog-platform').onchange = async (e) => { state.settings = await api.setSettings({ backlogPlatform: e.target.value }); };
 
   api.onEvent(onEvent);
   initTerminalDock();
@@ -187,6 +188,7 @@ function showView(view) {
   if (view === 'dashboard') renderDashboard();
   if (view === 'projects') refreshProjects();
   if (view === 'project') { renderProjectView(); loadProjectRuns(); }
+  if (view === 'backlog') window.refreshBacklog?.();
   if (view === 'artifacts') { renderArtifacts(); loadArtifacts(); }
   if (view === 'workflows') showWorkflowsTab(state.workflowsTab);
   if (view === 'agents') window.refreshAgents?.();
@@ -904,6 +906,9 @@ async function renderSettings() {
     </div>`).join('');
   $('#set-ws-folders').querySelectorAll('[data-open]').forEach((b) => (b.onclick = () => api.openPath(b.dataset.open)));
   document.querySelectorAll('[data-setting]').forEach((el) => (el.checked = !!state.settings[el.dataset.setting]));
+  const platform = $('#set-backlog-platform');
+  platform.innerHTML = Object.entries(window.BACKLOG_PLATFORMS || {}).map(([id, p]) => `<option value="${id}">${esc(p.label)}${p.soon ? ' (sync not available yet)' : ''}</option>`).join('');
+  platform.value = state.settings.backlogPlatform || 'github';
   if (!document.querySelector('[data-spage="agents"]').classList.contains('hidden')) renderTools();
 }
 

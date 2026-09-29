@@ -23,6 +23,7 @@ const { resolveCommand } = require('../engine/providers');
 const { cleanupWorktrees, canonicalPath } = require('../engine/worktree');
 const workspace = require('../workspace');
 const projects = require('../projects');
+const backlog = require('../backlog');
 const skills = require('../skills');
 const agents = require('../agents');
 const usage = require('../usage');
@@ -457,6 +458,15 @@ function createService({ host }) {
     return { project, runs: runs.runsForProject(runs.listRuns(ws.runs), project).map(runListItem) };
   }
 
+  // A synced backlog with each issue's runs (computed on every read: runs come and go).
+  function withIssueRuns(data) {
+    if (!data) return null;
+    const project = projects.listProjects(ws.projects).find((p) => p.id === data.projectId);
+    const list = project ? runs.runsForProject(runs.listRuns(ws.runs), project) : [];
+    const live = list.map((r) => (isCurrent(r.runId) && isRunning() ? { ...r, status: 'running' } : r));
+    return { ...data, issues: backlog.linkRuns(data.issues, live) };
+  }
+
   // Every run, with the project it belongs to.
   function listAllRuns() {
     const projectList = projects.listProjects(ws.projects);
@@ -563,6 +573,15 @@ function createService({ host }) {
     'projects:update': ({ id, patch }) => projects.updateProject(ws.projects, id, patch),
     'projects:remove': (id) => projects.removeProject(ws.projects, id),
     'projects:runs': (opts) => projectRuns(opts),
+
+    // A project's issues: the last sync (instant) and a new sync with gh/glab, each issue with
+    // the runs working on it.
+    'backlog:get': ({ projectId }) => withIssueRuns(backlog.readBacklog(ws.backlog, projectId)),
+    'backlog:sync': async ({ projectId, platform }) => withIssueRuns(await backlog.syncBacklog({
+      dir: ws.backlog,
+      project: projects.readProject(ws.projects, path.basename(String(projectId))),
+      platform: platform || workspace.readSettings(ws).backlogPlatform,
+    })),
 
     'skills:list': () => skills.listSkills(ws.skills),
     'skills:create': (data) => skills.createSkill(ws.skills, data),

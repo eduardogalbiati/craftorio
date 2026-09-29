@@ -103,6 +103,8 @@ function layout(root) {
     workflows: path.join(root, 'workflows'),
     // one git worktree per run (orchestrator.worktree), created on demand
     worktrees: path.join(root, 'worktrees'),
+    // last issue sync of each project (see src/backlog.js)
+    backlog: path.join(root, 'backlog'),
     settings: path.join(root, 'settings.json'),
     // titles the user gave to CLI sessions on the Sessions screen ({ "<provider>:<id>": title })
     sessionTitles: path.join(root, 'session-titles.json'),
@@ -119,6 +121,8 @@ const DEFAULT_SETTINGS = {
   confirmStop: true,      // ask for confirmation before stopping a workflow
   lastProject: null,
   lastWorkflow: null,
+  // where the Backlog screen syncs issues from by default: github | gitlab | bitbucket
+  backlogPlatform: 'github',
   // monthly limits per provider (see src/usage.js); null = no limit
   budgets: {},
   // USD per 1M tokens, for CLIs that do not report cost: { model: { input, output, cache_read } }

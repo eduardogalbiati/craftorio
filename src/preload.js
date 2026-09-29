@@ -13,6 +13,9 @@ contextBridge.exposeInMainWorld('api', {
   createProject: (data) => ipcRenderer.invoke('projects:create', data),
   updateProject: (id, patch) => ipcRenderer.invoke('projects:update', { id, patch }),
   removeProject: (id) => ipcRenderer.invoke('projects:remove', id),
+  // a project's issues: the last sync, and a new sync from its git platform (gh / glab)
+  getBacklog: (projectId) => ipcRenderer.invoke('backlog:get', { projectId }),
+  syncBacklog: (projectId, platform) => ipcRenderer.invoke('backlog:sync', { projectId, platform }),
   listSkills: () => ipcRenderer.invoke('skills:list'),
   createSkill: (data) => ipcRenderer.invoke('skills:create', data),
   saveSkill: (id, data) => ipcRenderer.invoke('skills:save', { id, data }),

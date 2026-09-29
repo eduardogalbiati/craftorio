@@ -20,6 +20,7 @@ Keep **Simulation mode** checked to try a flow without calling the CLIs.
 | Sessions | Every Claude Code, Codex and Grok conversation recorded on this machine (read from `~/.claude/projects`, `~/.codex/sessions`, `~/.grok/sessions`), newest first, with its project, model and folder; filter by provider or search. Clicking one reopens it in its CLI (`claude --resume`, `codex resume`, `grok --resume`) in an embedded terminal, in the session's folder. **New session** starts a CLI with a provider, model, effort and project (or folder). Terminals keep running while you use other screens; sessions created by workflow agents are hidden unless you ask for them |
 | Dashboard | "What are we building today?": Plan & Design, Code & Build and Monitor & Improve open the start panel filtered by the workflow's `metadata.category` (`plan`, `build`, `monitor`) |
 | Projects | Projects in `<workspace>/projects/<id>.json`. Every project has a folder and optionally a git repository. With a repository and no folder, it is cloned into `<workspace>/repos/<owner>-<repo>`; without either, the folder is `<workspace>/projects/<id>/`. Clicking a project shows every workflow run in it (status, cost, task), and for each run its sessions, with **Live terminal** / **Open in CLI** to watch or resume any of them. Runs are linked by the project id they were started with (older ones by the project's current or previous folders) |
+| Backlog | A project's issues, synced from its git platform: **GitHub** (gh CLI) or **GitLab** (glab CLI); Bitbucket is listed but has no sync yet. The default platform is in Settings › General › Backlog and can be switched on the screen. The last sync is kept in `<workspace>/backlog/<project id>.json` (shown instantly, a new sync runs each time the screen opens). **List** view (open/closed filters, labels, task-list progress, the issue rendered as Markdown) or **Kanban** (To do / In progress / Done). A run is linked to an issue when its task or a text input mentions the issue URL or `#<number>` (simulated runs don't count); an open issue with a linked run (latest not cancelled) is **In progress**, and the run's status links to it in Workflows › Runs |
 | Artifacts | Every file a run produced (documents, proposals, reviews, reports), grouped by run and filterable by project. The viewer renders Markdown (tables, table of contents; sanitized with DOMPurify), pretty-prints JSON and shows TSV/CSV as tables. Also listed per run in the project view |
 | Workflows | The YAMLs in `<workspace>/workflows/` with their steps, agents/models, skills, `/goal`, `/loop`, parallel steps and branches. Each one is marked **default** (untouched copy of a workflow bundled with the app), **modified** (a default you edited; **Restore default** moves your copy to the trash and restores the bundled one, and **newer default** means the app ships a newer version than the one you edited) or **custom** (created by you) |
 | Agents | Reusable agents in `<workspace>/agents/<id>.json`: a robot look (main color, shell, visor, glow, eyes, emblem; live preview of the animated states), a prompt with what the agent is for and the skills it always gets. The built-in **Supervisor** is always listed: its prompt and skills are fixed, only its look can be changed (it shows wherever the supervisor appears, e.g. Write & Review). Workflows don't pick these agents yet |
@@ -512,6 +513,7 @@ Everything the app produces lives in a local workspace folder:
   worktrees/ one git worktree per run (<run_id>), see "A git worktree per run"
   projects/  projects (one .json per project)
   skills/    skills (one folder with SKILL.md per skill)
+  backlog/   last issue sync of each project (one .json per project)
   agents/    user-defined agents (one .json per agent; supervisor.json = the supervisor's look)
   workflows/ workflow definitions (one .yaml per workflow)
   settings.json  app preferences, budgets and prices
@@ -565,6 +567,7 @@ src/main.js              Electron main process + IPC
 src/preload.js           safe API exposed to the renderer
 src/workspace.js         workspace folder (Windows registry, runs/, repos/, workflows/, clone)
 src/projects.js          projects: CRUD and folder/repository setup
+src/backlog.js           backlog: project issues via gh/glab, sync cache, issue ↔ run links
 src/seed.js              seeding of bundled defaults into the workspace (.seeded.json, origin status, restore)
 src/skills.js            skills: CRUD, lookup, seeding and prompt block
 src/agents.js            agents: CRUD, appearance validation, the built-in supervisor

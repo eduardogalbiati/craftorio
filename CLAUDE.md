@@ -47,7 +47,7 @@ Owner: Eduardo Galbiati (GitHub `eduardogalbiati/multiagent-orchestrator`, defau
   PowerShell), `glab` optional.
 - Workspace: `%USERPROFILE%\multiagent-workspace` (registry `HKCU\Software\MultiagentOrchestrator\WorkspacePath`,
   overridable with `MULTIAGENT_WORKSPACE`). Layout: `runs/`, `repos/` (git checkouts, `<owner>-<repo>`),
-  `worktrees/` (one git worktree per run, `<run_id>`), `projects/` (`<id>.json`), `skills/`, `agents/` (`<id>.json`), `settings.json`. The owner's project `multiagent-orchestrator`
+  `worktrees/` (one git worktree per run, `<run_id>`), `backlog/` (issue sync per project), `projects/` (`<id>.json`), `skills/`, `agents/` (`<id>.json`), `settings.json`. The owner's project `multiagent-orchestrator`
   points at `repos/eduardogalbiati-multiagent-orchestrator` (SSH remote; the repo is private).
 - The owner uses **subscription plans** (Claude, ChatGPT free for Codex, SuperGrok), not API keys.
 
@@ -88,6 +88,7 @@ run on `windows-latest` and also run `npm test`.
 | `src/agents.js` | Agents menu: user-defined agents in `agents/<id>.json` (name, description, prompt, skills, `appearance` = { body, shell, visor, glow, eyes, emblem }). The built-in supervisor is always first, can't be removed and only saves its look (`agents/supervisor.json`). EYES/EMBLEMS must match `robots.js` (a test checks). Renderer: `src/renderer/agents.js`; `Robots.define('supervisor', look)` recolors it in Write & Review. Not used by workflows yet. |
 | `src/workspace.js` | Workspace path (registry / env) and `layout()` (`runs`, `repos`, `worktrees`, ...); exports `gitAuthArgs` (gh credential helper for clone/fetch). |
 | `src/projects.js` | Projects; a project with a repo and no folder is cloned into `repos/`; `previousFolders` kept when the folder changes. |
+| `src/backlog.js` / `src/renderer/backlog.js` | Backlog screen: a project's issues via `gh issue list` / `glab issue list` (Bitbucket: no sync yet), cached in `<workspace>/backlog/<id>.json`; `linkRuns` ties runs to issues (task/inputs mention the URL or `#n`, mock runs excluded) and picks the kanban column. Default platform: setting `backlogPlatform`. IPC `backlog:get`/`backlog:sync`. |
 | `src/runs.js` | Runs on disk (`readRun`/`listRuns`, interrupted runs rebuilt from events), `runsForProject` (project id, else folders), `projectOf` (a run's project), `runArtifacts`. The same run list component is shown in Projects > Project and Workflows > Runs (IPC `projects:runs` and `runs:list`, shared `runListItem`). |
 | `src/usage.js` / `src/local-usage.js` | Token/cost usage per provider (scope orchestrator vs this machine from the CLIs' own logs: ~/.claude/projects, ~/.codex/sessions, ~/.grok/sessions), Codex plan limits/credits, budgets, `preflight` (missing CLI, budget, empty folder inputs). |
 | `src/supervisor.js` | AI supervisor: decision/analysis schemas, prompts, `runReport`, `analyzeRun` (saves `supervisor/analysis-*.md`), `resumeSpec` (also returns the run's `worktree: { dir, branch }`). Skill: `skills/run-supervisor`. |

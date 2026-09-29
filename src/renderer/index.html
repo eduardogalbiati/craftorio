@@ -81,6 +81,10 @@
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /></svg>
         <span>Projects</span>
       </button>
+      <button class="nav-item" data-view="backlog">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 6 1.5 1.5L8 5" /><path d="m4 12 1.5 1.5L8 11" /><path d="m4 18 1.5 1.5L8 17" /><path d="M11 6h9M11 12h9M11 18h9" /></svg>
+        <span>Backlog</span>
+      </button>
       <button class="nav-item" data-view="artifacts">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><polyline points="14 3 14 8 19 8" /><line x1="9" y1="13" x2="15" y2="13" /><line x1="9" y1="17" x2="13" y2="17" /></svg>
         <span>Artifacts</span>
@@ -227,6 +231,33 @@
         <div id="project-runs" class="pr-list"></div>
       </section>
 
+      <!-- ================= Backlog ================= -->
+      <section id="view-backlog" class="view hidden">
+        <div class="page-head">
+          <div>
+            <h1>Backlog</h1>
+            <p class="muted small">A project's issues, synced from its git platform. The last sync is kept in <span id="backlog-dir" class="mono"></span></p>
+          </div>
+          <div class="row">
+            <select id="bl-project" aria-label="Project"></select>
+            <select id="bl-platform" aria-label="Platform"></select>
+            <button id="btn-bl-sync" class="btn primary nowrap">Sync</button>
+          </div>
+        </div>
+        <div class="pr-toolbar">
+          <div id="bl-mode" class="chips" role="tablist" aria-label="View">
+            <button class="chip" data-mode="list" role="tab">List</button>
+            <button class="chip" data-mode="kanban" role="tab">Kanban</button>
+          </div>
+          <div id="bl-filters" class="chips"></div>
+          <input type="text" id="bl-search" placeholder="Search issues, labels…" aria-label="Search" />
+          <span class="spacer"></span>
+          <span id="bl-synced" class="muted small"></span>
+        </div>
+        <p id="bl-error" class="error small"></p>
+        <div id="bl-list" class="pr-list"></div>
+      </section>
+
       <!-- ================= Artifacts ================= -->
       <section id="view-artifacts" class="view hidden">
         <div class="art-layout">
@@ -362,6 +393,13 @@
                 </div>
               </div>
               <p id="ws-error" class="error small"></p>
+              <h3 class="s-subtitle">Backlog</h3>
+              <div class="s-group">
+                <div class="s-row">
+                  <div class="s-label"><b>Default platform</b><span>Where the Backlog screen syncs a project's issues from. It can be changed on the Backlog screen too. GitHub uses the gh CLI and GitLab the glab CLI; Bitbucket sync is not available yet.</span></div>
+                  <div class="s-ctrl"><select id="set-backlog-platform" aria-label="Default backlog platform"></select></div>
+                </div>
+              </div>
               <h3 class="s-subtitle">Folders</h3>
               <div id="set-ws-folders" class="s-group"></div>
             </div>
@@ -1118,5 +1156,6 @@
   <script src="arena.js"></script>
   <script src="agents.js"></script>
   <script src="sessions.js"></script>
+  <script src="backlog.js"></script>
 </body>
 </html>
