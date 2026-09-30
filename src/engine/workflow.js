@@ -12,7 +12,7 @@ const { runTurn, refreshWindowsPath, isRetryable, isPermissionDenial, sleep, emp
 const { resolveSkill, skillPrompt } = require('../skills');
 const { providerId, sessionCost, totalTokens, WARN_AT } = require('../usage');
 const supervisor = require('../supervisor');
-const { prepareWorktree, removeWorktree, currentBranch } = require('./worktree');
+const { prepareWorktree, removeWorktree, mergeLocally, currentBranch } = require('./worktree');
 const capabilities = require('./capabilities');
 const { stopProcessesIn } = require('./processes');
 const { PROBES, runProbe } = require('./probes');
@@ -77,6 +77,9 @@ function parseTokens(v) {
   return m ? Math.round(+m[1] * { '': 1, k: 1e3, m: 1e6 }[m[2].toLowerCase()]) : null;
 }
 
+// Context an agent read in its turns: everything sent to the model, cached or not.
+const contextTokens = (t) => (t ? (t.input || 0) + (t.cache_read || 0) + (t.cache_write || 0) : 0);
+
 // Outcome of a run that reaches `end` through a transition with `status:` (default success),
 // e.g. a rejected failure gate → failed, a rejected merge → cancelled.
 const END_STATUSES = ['success', 'failed', 'cancelled'];
@@ -119,15 +122,21 @@ function loadWorkflow(file) {
     }
     if (s.choices && s.type !== 'human_approval') throw new Error(`Step "${s.id}": choices is only valid for human_approval.`);
     for (const t of s.transitions || []) {
-      for (const target of [t.goto, t.on_exhausted, t.loop?.on_exhausted, s.goal?.on_exhausted, s.loop?.on_exhausted, s.on_error].filter(Boolean)) {
+      for (const target of [t.goto, t.on_exhausted, t.on_error, t.loop?.on_exhausted, s.goal?.on_exhausted, s.loop?.on_exhausted, s.on_error].filter(Boolean)) {
         if (!ids.has(target) && target !== 'end' && target !== 'fail') throw new Error(`Step "${s.id}" points to unknown step "${target}".`);
       }
       if (t.status !== undefined) {
         if (!END_STATUSES.includes(t.status)) throw new Error(`Step "${s.id}": transition status must be one of ${END_STATUSES.join(', ')}.`);
         if (![t.goto, t.on_exhausted, t.loop?.on_exhausted].includes('end')) throw new Error(`Step "${s.id}": a transition status only applies when the transition ends the run (goto: end or on_exhausted: end).`);
       }
+      if (t.merge !== undefined) {
+        if (t.merge !== 'local') throw new Error(`Step "${s.id}": transition merge must be "local".`);
+        if (!wf.orchestrator?.worktree) throw new Error(`Step "${s.id}": merge: local needs orchestrator.worktree (the run's branch lives in its worktree).`);
+      }
     }
   }
+  const maxCtx = wf.orchestrator?.limits?.max_total_context;
+  if (maxCtx != null && !String(maxCtx).includes('{{') && !parseTokens(maxCtx)) throw new Error('orchestrator.limits.max_total_context must be a token count such as 20M.');
   validateGroups(wf.groups, ids);
   return wf;
 }
@@ -592,6 +601,8 @@ class WorkflowRun extends EventEmitter {
     if (!cfg) return;
     const repo = render(cfg.repo, this.ctx).trim();
     const base = render(cfg.base, this.ctx).trim() || null;
+    // remote: false = a local workflow: start from the local base (no fetch) and merge back into it
+    const remote = cfg.remote !== false && String(cfg.remote).trim().toLowerCase() !== 'false';
     this.ctx.worktree_dir = repo;
     const log = (level, message) => this.emitEvent('log', { level, message });
     if (!this.worktreesDir) {
@@ -600,7 +611,7 @@ class WorkflowRun extends EventEmitter {
     }
     const prev = this.resume?.worktree;
     const dir = prev?.dir || path.join(this.worktreesDir, this.runId);
-    const info = await prepareWorktree({ repo, base, dir, branch: prev?.branch || null, log });
+    const info = await prepareWorktree({ repo, base, dir, branch: prev?.branch || null, log, remote });
     if (!info) {
       log('info', `worktree: ${repo} is not a git repository; agents work in it directly`);
       return;
@@ -621,7 +632,7 @@ class WorkflowRun extends EventEmitter {
     const log = (level, message) => this.emitEvent('log', { level, message });
     try {
       if (status === 'success') {
-        const r = await removeWorktree({ repo: wt.repo, dir: wt.dir, base: wt.base, log });
+        const r = await removeWorktree({ repo: wt.repo, dir: wt.dir, base: wt.base, log, remote: wt.remote !== false });
         Object.assign(wt, { removed: r.removed, branch: r.branch, branchDeleted: r.branchDeleted });
         this.emitEvent('worktree.removed', { dir: wt.dir, removed: r.removed, branch: r.branch, branch_deleted: r.branchDeleted });
         log('info', `worktree: removed ${wt.dir}${r.branch ? `; branch ${r.branch} ${r.branchDeleted ? 'deleted (merged)' : 'kept'}` : ''}`);
@@ -771,7 +782,19 @@ class WorkflowRun extends EventEmitter {
       if (!evalExpr(t.when, scope)) continue;
       // an action that renders empty (a conditional one whose condition is false) runs nothing
       const action = t.action ? render(t.action, scope).trim() : '';
-      if (action) await this.runAction(action);
+      try {
+        if (action) await this.runAction(action);
+        // `merge: local`: the engine merges the run's branch into the local base (no push, no PR)
+        if (t.merge === 'local') await this.mergeWorktreeLocally();
+      } catch (e) {
+        // `on_error: <step>` on the transition: a failed action or merge goes there (the error is
+        // in the template context as `action_error`) instead of ending the run
+        if (!t.on_error || this.abort.signal.aborted) throw e;
+        this.ctx.action_error = { step: step.id, message: e.message };
+        this.emitEvent('log', { level: 'warn', message: `${step.id}: ${e.message} → ${t.on_error}` });
+        this.emitEvent('step.transition', { from: step.id, to: t.on_error, when: 'on_error' });
+        return t.on_error;
+      }
       // limits first: once max_visits / loop.max_iterations is reached the flow goes to
       // on_exhausted and the delegation is skipped (nothing would check that fix any more)
       let target = this.applyCounters(step, t);
@@ -1220,6 +1243,34 @@ class WorkflowRun extends EventEmitter {
 
   // Monthly budget per provider: checked before every real (non-mock) turn, over this run's sessions
   // and those of the other runs in progress.
+  // orchestrator.limits.max_total_context (e.g. 20M): the context the run's agents have read
+  // (input + cache read/write, summed over every turn). Past it, the run pauses before the next
+  // agent turn until the user answers: Continue grants one more block of the same size, Stop
+  // ends the run as cancelled (its worktree is kept, so it can be resumed). Never cuts a turn.
+  async contextGate(stepId) {
+    const raw = this.wf.orchestrator?.limits?.max_total_context;
+    const lim = raw == null ? null : parseTokens(render(String(raw), this.ctx));
+    if (!lim) return;
+    const used = [...this.sessions.values()].reduce((a, s) => a + contextTokens(s.tokens), 0);
+    this.contextAllowance ??= lim;
+    if (used < this.contextAllowance) return;
+    const m = (n) => `${(n / 1e6).toFixed(1)}M`;
+    this.emitEvent('limit.exceeded', { limit: 'max_total_context', value: this.contextAllowance, current: used, paused: true });
+    const { answer } = await this.requestApproval({
+      id: `${stepId}:context_limit`, raw: true,
+      message: `Paused: this run's agents have read ${m(used)} tokens of context, past its limit of ${m(this.contextAllowance)} (orchestrator.limits.max_total_context).\n\nContinue to allow another ${m(lim)}, or stop the run (its worktree is kept, so it can be resumed).`,
+      choices: [{ id: 'continue', label: `Continue (another ${m(lim)})` }, { id: 'stop', label: 'Stop the run' }],
+    });
+    if (answer !== 'continue') {
+      this.emitEvent('log', { level: 'info', message: `context limit: stopped by ${answer === false || answer === 'stop' ? 'the user' : 'timeout'}` });
+      this.stop();
+      throw new Error('Cancelled');
+    }
+    this.contextAllowance = used + lim;
+    this.emitEvent('log', { level: 'info', message: `context limit: continued up to ${m(this.contextAllowance)}` });
+    this.setStatus(this.orchestrator, 'active');
+  }
+
   checkBudget(providerName) {
     const id = providerId(providerName);
     const b = id && this.budget[id];
@@ -1431,6 +1482,7 @@ class WorkflowRun extends EventEmitter {
     this.emitEvent('session.message_sent', { session_id: session.id, turn, step_id: stepId, prompt: fullPrompt });
     if (!provider) throw new Error(`Provider "${agent.provider}" is not defined.`);
     if (!this.mock) this.checkBudget(agent.provider);
+    await this.contextGate(stepId);
 
     const retry = agent.retry || {};
     const maxAttempts = attempts || retry.max_attempts || 1;
@@ -1630,6 +1682,23 @@ class WorkflowRun extends EventEmitter {
     this.setStatus(this.orchestrator, 'active');
     a.resolve({ answer, feedback: text });
     return true;
+  }
+
+  // The `merge: local` transition (local workflows): fast-forwards the local base to the run's
+  // branch, rebasing it first when the base moved; see mergeLocally in src/engine/worktree.js.
+  // A failure (conflict, uncommitted changes where the base is checked out) fails the run with
+  // the reason; the worktree is kept, so the run can be resumed after fixing it.
+  async mergeWorktreeLocally() {
+    if (this.mock) {
+      this.emitEvent('action.executed', { command: 'merge: local', skipped: true, output: '[mock] local merge not executed' });
+      return;
+    }
+    const wt = this.worktree;
+    if (!wt) throw new Error('merge: local needs the run\'s git worktree (orchestrator.worktree on a git repository).');
+    const log = (level, message) => this.emitEvent('log', { level, message });
+    const r = await mergeLocally({ repo: wt.repo, dir: wt.dir, base: wt.base, log });
+    this.emitEvent('worktree.merged', { branch: r.branch, base: r.base, commit: r.commit, checkout: r.checkout, rebased: r.rebased });
+    this.ctx.local_merge = r;
   }
 
   runAction(cmd) {

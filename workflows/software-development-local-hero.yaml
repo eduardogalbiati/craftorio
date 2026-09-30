@@ -1,0 +1,649 @@
+# =============================================================================
+# Workflow: Software Development, local hero
+# -----------------------------------------------------------------------------
+#   develop ─► code_review ─► test ─► build ─► verify_change ──merge: local──► end
+#     ▲            │            │        │           │              │ conflict
+#     └────────────┴────────────┴────────┴───────────┘              ▼
+#                  ▲                                          resolve_merge (developer)
+#                  └──────────── code_review ◄─────────────────────┘
+#
+# The software-development pipeline without GitHub/GitLab and without a merge approval: no
+# push, no PR/MR, no CI, no preview, no deploy. Each run works in its own git worktree, started
+# from the LOCAL <base> branch (orchestrator.worktree.remote: false: nothing is fetched, so a run
+# sees the local merges of earlier runs that were never pushed). Once verified, the engine merges
+# the run's branch into the local <base> automatically (`merge: local`): rebased onto it first
+# when it moved, fast-forward only (linear history), never pushed.
+#   - A merge that fails (usually a conflict with another run merged meanwhile) goes to
+#     resolve_merge: the developer rebases onto the local <base>, resolves the conflicts, runs the
+#     suite, and the change goes through review, tests, build and verification again before the
+#     next merge attempt (at most 3 rounds). Only what the developer can't fix (e.g. uncommitted
+#     changes in the checkout where <base> is checked out: the user's) stops at merge_blocked.
+#   - orchestrator.limits.max_total_context: past 20M tokens of context the run pauses before its
+#     next agent turn; Continue allows another 20M, Stop ends it (worktree kept).
+#   - Commits end with "Closes #<n>" for the run's issues: GitHub closes them when you push <base>.
+# Push whenever you want: `git push origin <base>` from the repository.
+#
+# Rules (as in software-development):
+#   - Agents never talk to each other: the engine delegates fixes to the developer.
+#   - `language` picks unit-test-writer-<language> and build-audit-<language>.
+# =============================================================================
+
+apiVersion: multiagent/v1
+kind: Workflow
+
+metadata:
+  name: software-development-local-hero
+  version: 0.2.0
+  description: Implements, reviews, tests, builds and verifies a change in its own worktree, then merges it into the local base branch automatically, resolving conflicts on the way. No push, no PR, no CI; push when you want.
+  tags: [dev, review, test, build, local, worktree]
+  # Dashboard category: plan (Plan & Design), build (Code & Build) or monitor (Monitor & Improve).
+  category: build
+
+# -----------------------------------------------------------------------------
+inputs:
+  task:
+    type: string
+    required: true
+    description: Feature or bug to implement.
+  issue:
+    type: string
+    default: ""
+    description: "URL of the issue this run implements (set by the Backlog screen). Nothing is closed on GitHub/GitLab until you push."
+  issues:
+    type: array
+    default: []
+    description: "URLs of the issues this run implements together, in one branch (set by the Backlog screen; one per line)."
+  repo_path:
+    type: string
+    required: true
+    description: Local repository path (a git repository; no remote needed).
+  language:
+    type: string
+    enum: [js, python, go, java, csharp]
+    default: js
+    description: Main language of the repository. Picks the unit-test-writer-<language> and build-audit-<language> skills.
+  base_branch:
+    type: string
+    default: main
+
+# -----------------------------------------------------------------------------
+# Final command line = args + capability and isolation flags + agent.cli_args + (resume_args if
+# the session already exists) + skill_args (once per skill) + stdin_arg. The prompt always goes via stdin.
+providers:
+  claude:
+    type: claude-code
+    command: claude
+    args: ["-p", "--output-format", "stream-json", "--verbose", "--model", "{{ model }}"]
+    resume_args: ["--resume", "{{ session_id }}"]
+    # Lets the agent read the skill folder (outside working_dir). Codex in
+    # read-only mode can already read any path.
+    skill_args: ["--add-dir", "{{ skill_dir }}"]
+  codex:
+    type: codex-cli
+    command: codex
+    args: ["exec", "--json", "--skip-git-repo-check", "-m", "{{ model }}"]
+    resume_args: ["resume", "{{ session_id }}"]
+    stdin_arg: "-"
+
+# Allowed commands, shared by the agents below (YAML anchors, used in capabilities.tools).
+x-tools:
+  # every supported language toolchain: the language skill says which one to use
+  toolchains: &toolchains [bash:git, bash:npm, bash:npx, bash:node, bash:pnpm, bash:yarn, bash:python, bash:python3, bash:py, bash:pip, bash:pytest, bash:uv, bash:poetry, bash:pip-audit, bash:osv-scanner, bash:go, bash:govulncheck, bash:mvn, bash:./mvnw, bash:mvnw.cmd, bash:gradle, bash:./gradlew, bash:gradlew.bat, bash:dotnet]
+  # gh / glab: called bare, in the Bash tool, one command per call. That is the only form this
+  # allowlist accepts: no PowerShell, no full or 8.3 paths, no PATH edits, no ;/&&/pipes, no body
+  # files (use --body). The engine refreshes PATH, so bare gh works inside runs.
+  vcs: &vcs [bash:git, bash:gh, bash:glab]
+
+defaults:
+  # the run's own git worktree (orchestrator.worktree), or repo_path when it is not a git repo
+  working_dir: "{{ worktree_dir }}"
+  timeout: 30m
+  # persistent agents: once a turn ends above this context size, the next turn starts a fresh
+  # session from the agent's handoff note (runs/<id>/handoffs/)
+  max_context: 150k
+  retry:
+    max_attempts: 2
+    backoff: exponential
+    initial_delay: 10s
+
+# v1: the graph is run by the app's deterministic engine (src/engine).
+orchestrator:
+  provider: claude
+  model: claude-sonnet-5
+  # One git worktree per run: <workspace>/worktrees/<run_id>, detached at the LOCAL <base>
+  # (remote: false: no fetch). Removed when the run succeeds (its branch is deleted once merged
+  # into the local <base>), kept otherwise so "resume from step" continues there.
+  worktree:
+    repo: "{{ inputs.repo_path }}"
+    base: "{{ inputs.base_branch }}"
+    remote: false
+  # AI supervisor: called only when a step fails; explains it and picks a recovery the engine
+  # validates (fix the output, retry with an instruction, an allowed goto, or ask a human).
+  supervisor:
+    enabled: true
+    max_interventions: 2   # per step
+  limits:
+    max_total_duration: 8h
+    max_total_cost_usd: 60
+    # context the agents read (input + cache), summed over every turn: past it the run pauses
+    # before the next agent turn until you choose Continue (another 20M) or Stop
+    max_total_context: 20M
+
+# -----------------------------------------------------------------------------
+# Agents. `capabilities` is what each agent may use; the engine turns it into each CLI's flags
+# and runs every agent isolated from the user's own CLI setup (MCP servers, plugins, memory).
+# Sessions: `handoff` (a fresh session per turn, started from the agent's handoff note) for the
+# agents that come back for fixes and checks; `persistent` (with defaults.max_context) elsewhere.
+# Skill names can be templates: they are resolved from the inputs at run time.
+# -----------------------------------------------------------------------------
+agents:
+  developer:
+    provider: claude
+    model: claude-opus-5-5
+    session: handoff
+    # subagents: exploration sub-agents map the code, so the main context stays small
+    capabilities: { tools: [read, edit, write, *toolchains], web: false, subagents: true }
+    # bug-diagnosis: fixes delegated after failures; merge-conflict-resolver: "update the branch with the base";
+    # long-commands: suites and builds in the foreground (explicit, not only through the test writer's `uses`)
+    skills: ["unit-test-writer-{{ inputs.language }}", long-commands, bug-diagnosis, merge-conflict-resolver, context-economy, decision-log]
+    system_prompt: |
+      You are a senior software engineer. Make small, tested, cohesive changes that
+      follow the architecture and conventions of the existing code.
+      Work on your own branch and commit your changes there. This run has its own git
+      worktree (the current folder), which starts detached at the LOCAL {{ inputs.base_branch }}:
+      this workflow works locally, and the local {{ inputs.base_branch }} holds earlier local
+      merges that were never pushed. Start your branch right where the worktree is:
+      `git switch -c <branch>`. Never fetch, pull or branch from origin, and never push: the
+      orchestrator merges your branch into the local {{ inputs.base_branch }} after approval.
+      A fresh worktree has no installed dependencies: install them
+      when they are missing or the lockfile changed (e.g. `npm ci` when node_modules is missing
+      or package-lock.json differs from the previous HEAD). Run the project's tests the way the test skill describes.
+      {% if inputs.issue or (inputs.issues | length) %}End every commit message with one line per issue this run implements,
+      `Closes #<number>` (the numbers from: {{ inputs.issue }}{% for u in inputs.issues %} {{ u }}{% endfor %}):
+      GitHub closes them when the local {{ inputs.base_branch }} is pushed.
+      {% endif %}When you finish a requested fix, report the commit hash.
+
+  reviewer:
+    provider: codex
+    model: gpt-6-luna
+    session: persistent
+    capabilities: { tools: [read, bash:git], web: false }
+    # Criteria, severities and per-language rules live in the skill
+    # (<workspace>/skills/code-review, editable in the Skills screen).
+    skills: [code-review]
+    system_prompt: |
+      You are the code reviewer of this workflow. Follow the code-review skill:
+      detect the languages in the diff and read the rules for each one before the verdict.
+
+  test_writer:
+    provider: claude
+    model: claude-sonnet-5
+    session: persistent
+    # edits test files only (a convention of its role: the tools can't tell tests from code)
+    capabilities: { tools: [read, edit, write, *toolchains], web: false }
+    skills: ["unit-test-writer-{{ inputs.language }}"]
+    system_prompt: |
+      You are the test writer. You write and update tests and run the suite, following
+      the test skill for this language. You do NOT fix production code: when a test
+      fails because of a bug in the code, describe the failure precisely (test, file,
+      error, probable cause) so the orchestrator can hand it to the developer.
+      Commit test files only.
+
+  builder:
+    provider: claude
+    model: claude-sonnet-5
+    session: persistent
+    capabilities: { tools: [read, *toolchains], web: false }
+    skills: ["build-audit-{{ inputs.language }}"]
+    system_prompt: |
+      You are the builder. You build the application and check its dependencies for
+      vulnerabilities, following the build skill for this language. You do not change
+      code. Vulnerability policy:
+      - blocks: any critical; high in production dependencies
+      - report only: moderate/low, and anything in development-only dependencies
+
+  verifier:
+    provider: claude
+    model: claude-sonnet-5
+    session: persistent
+    capabilities: { tools: [read, *toolchains], web: false }
+    skills: [claim-verification]
+    system_prompt: |
+      You are the verifier. You prove or disprove that the change does what the task
+      asked, by running the same command before and after it. You do not change code.
+
+groups:
+  - name: Develop
+    steps: [develop, issue_not_done]
+  - name: Review
+    steps: [code_review, human_review]
+  - name: Validate
+    steps: [test, test_failed, build, build_failed, verify_change, verify_failed]
+  - name: Merge
+    steps: [resolve_merge, merge_blocked]
+
+# -----------------------------------------------------------------------------
+steps:
+
+  # ============================ BUILD & TEST =================================
+
+  - id: develop
+    agent: developer
+    prompt: |
+      Task: {{ inputs.task }}
+
+      {% if inputs.issues | length > 1 %}
+      This run implements {{ inputs.issues | length }} issues together, in one branch:
+      {{ inputs.issues | join(', ') }}.
+      In `issues`, answer one entry per issue (its URL in `issue`): `done` and a `summary` of what
+      you did for it, or `done: false` and why it cannot be done in this run. Never drop an issue
+      silently: the owner decides whether the run goes on without it. Your `summary` lists what
+      was done per issue.
+      {% if steps.issue_not_done.output %}
+      The owner chose to continue without the issues you could not do; leave them out.
+      {% endif %}
+      {% endif %}
+      {% if steps.code_review.output and steps.code_review.output.verdict == 'changes_requested' %}
+      The reviewer requested these changes (iteration {{ loop.iteration }}):
+      {{ steps.code_review.output.findings | to_yaml }}
+      Fix the blocking items, make a new commit and answer each one.
+      {% endif %}
+      {% if not steps.develop.output %}
+      Before changing code: create your branch where the worktree starts (the local
+      {{ inputs.base_branch }}): `git switch -c <branch>`, then make sure dependencies are
+      installed for that base.
+      {% endif %}
+    output_schema:
+      type: object
+      required: [branch, summary, files_changed, tests_passed, committed]
+      properties:
+        branch:        { type: string }
+        summary:       { type: string }
+        files_changed: { type: array, items: { type: string } }
+        tests_passed:  { type: boolean }
+        committed:     { type: boolean }
+        commit_sha:    { type: string }
+        notes:         { type: string }
+        # a run for several issues (inputs.issues): what was done for each one
+        issues:
+          type: array
+          items:
+            type: object
+            required: [issue, done, summary]
+            properties:
+              issue:   { type: string }
+              done:    { type: boolean }
+              summary: { type: string }
+    transitions:
+      # an issue of the group could not be done: the owner decides (once) whether the run goes on without it
+      - when: "output.tests_passed and output.committed and inputs.issues | length > 1 and not steps.issue_not_done.output and (output.issues or []) | rejectattr('done') | list | length"
+        goto: issue_not_done
+      - when: "output.tests_passed and output.committed"
+        goto: code_review
+      - when: "true"
+        goto: develop
+        max_visits: 3
+        on_exhausted: fail
+
+  # A run for several issues where the developer could not do one of them: never dropped silently.
+  - id: issue_not_done
+    type: human_approval
+    message: |
+      The developer could not do every issue of this run:
+      {% for i in steps.develop.output.issues %}{% if not i.done %}
+      - {{ i.issue }}: {{ i.summary }}{% endif %}{% endfor %}
+      The other issues are done on branch `{{ steps.develop.output.branch }}`.
+    choices:
+      - { id: continue, label: "Continue without them" }
+      - { id: stop,     label: "Stop the run as failed (worktree kept to resume)" }
+    transitions:
+      - when: "choice == 'continue'"
+        goto: code_review
+      - when: "choice == 'stop'"
+        goto: end
+        status: failed
+
+  - id: code_review
+    agent: reviewer
+    prompt: |
+      Review the changes on branch `{{ steps.develop.output.branch }}` against
+      `{{ inputs.base_branch }}` (`git diff {{ inputs.base_branch }}...{{ steps.develop.output.branch }}`).
+      Task (the spec for the spec axis): {{ inputs.task }}
+      Developer summary: {{ steps.develop.output.summary }}
+      {% if inputs.issues | length > 1 %}
+      This run implements several issues: check the spec axis per issue, and set `issue` (its URL)
+      on the findings about one of them. An issue the change misses or only half does is a blocker,
+      unless the developer reported it as not done:
+      {{ steps.develop.output.issues | to_yaml }}
+      {% endif %}
+    output_schema:
+      type: object
+      required: [verdict, findings]
+      properties:
+        verdict: { type: string, enum: [approved, changes_requested] }
+        findings:
+          type: array
+          items:
+            type: object
+            required: [severity, file, description]
+            properties:
+              axis:        { type: string, enum: [correctness, spec, standards] }
+              severity:    { type: string, enum: [blocker, major, minor, nit] }
+              file:        { type: string }
+              line:        { type: integer }
+              description: { type: string }
+              issue:       { type: string }
+    transitions:
+      - when: "output.verdict == 'approved'"
+        goto: test
+      - when: "output.verdict == 'changes_requested'"
+        goto: develop
+        loop:
+          name: review_cycle
+          max_iterations: 3
+          on_exhausted: human_review
+
+  - id: human_review
+    type: human_approval
+    message: |
+      The review loop did not converge in 3 iterations.
+      Approve: move on to testing anyway. Reject: stop the run (cancelled).
+    transitions:
+      - when: "approved"
+        goto: test
+      - when: "rejected"
+        goto: end
+        status: cancelled
+
+  # Test writer: writes/updates tests and runs the suite. On failure the
+  # orchestrator hands it to the developer and tells the test writer when it is fixed.
+  - id: test
+    agent: test_writer
+    prompt: |
+      Branch `{{ steps.develop.output.branch }}` (already reviewed).
+      Original task: {{ inputs.task }}
+      Change made: {{ steps.develop.output.summary }}
+      Files: {{ steps.develop.output.files_changed | join(', ') }}
+
+      {% if delegate_result %}
+      The developer applied the fix you asked for:
+      {{ delegate_result.text }}
+      Run the full suite again and confirm. If the fix changed the UI, capture the "after"
+      screenshots again (same names, same folder) and return the updated list.
+      {% else %}
+      1. Check out the branch. Decide whether the change needs new or updated tests.
+         If so, write them following the test skill (the framework and folder the
+         project already uses) and commit only them. Purely visual changes may not
+         need a new test — justify it.
+      2. Run the full suite with the project's test command.
+      3. If the diff against the local `{{ inputs.base_branch }}` touches the UI, capture the
+         affected screens before (base `{{ inputs.base_branch }}`) and after (the branch)
+         following the test skill, into `{{ run_dir }}/screenshots` (PNGs + screenshots.json,
+         never committed), and return them in `screenshots`. Not a visual change, or no
+         screenshot command in the project: say why in `screenshots_note`.
+      {% endif %}
+      If a test fails because of production code, do NOT fix it:
+      fill failure_report with test, file, error and probable cause.
+    output_schema:
+      type: object
+      required: [tests_status, tests_added, committed]
+      properties:
+        tests_status:   { type: string, enum: [pass, fail] }
+        tests_added:    { type: array, items: { type: string } }
+        committed:      { type: boolean }
+        failure_report: { type: string }
+        summary:        { type: string }
+        # UI changes: files in the run folder (Artifacts); this local workflow publishes nothing
+        screenshots:
+          type: array
+          items:
+            type: object
+            required: [path, caption]
+            properties:
+              path:    { type: string }
+              caption: { type: string }
+              before:  { type: string }
+        screenshots_note: { type: string }
+    transitions:
+      - when: "output.tests_status == 'pass'"
+        goto: build
+      - when: "output.tests_status == 'fail'"
+        delegate:
+          agent: developer
+          prompt: |
+            The test writer found failures on branch `{{ steps.develop.output.branch }}`:
+            {{ output.failure_report }}
+            Fix the production code (do not change the tests without justifying it), run
+            the test suite, commit and report the commit hash.
+        goto: test
+        max_visits: 3
+        on_exhausted: test_failed
+
+  - id: test_failed
+    type: human_approval
+    message: |
+      Tests are still failing after 3 rounds of fixes:
+      {{ steps.test.output.failure_report }}
+      Approve: continue to the build anyway. Reject: stop the run as failed (the worktree is kept to resume it).
+    transitions:
+      - when: "approved"
+        goto: build
+      - when: "rejected"
+        goto: end
+        status: failed
+
+  # Builder: application build + dependency vulnerabilities.
+  - id: build
+    agent: builder
+    prompt: |
+      On branch `{{ steps.develop.output.branch }}`:
+      {% if delegate_result %}
+      The developer applied a fix: {{ delegate_result.text }}
+      {% endif %}
+      1. Build the project following the build skill.
+      2. Audit the dependencies following the build skill, separating production from development.
+      Apply your role's vulnerability policy. In `vulnerabilities`, report the PRODUCTION
+      counts; summarize the development ones in `dev_vulnerabilities`.
+      When the build fails, set failure_class (see the build skill):
+        code = a commit on the branch can fix it (code, tests, lockfile, build scripts);
+        infra = no commit can (a file locked by a running process, e.g. EBUSY/EPERM under
+        node_modules, missing permissions, network, disk): say what holds it in the report
+        and do not retry the install in a loop;
+        unknown = you could not tell.
+    output_schema:
+      type: object
+      required: [build_status, vulnerabilities, report]
+      properties:
+        build_status: { type: string, enum: [success, failed] }
+        failure_class: { type: string, enum: [code, infra, unknown] }
+        vulnerabilities:
+          type: object
+          required: [critical, high, moderate, low]
+          properties:
+            critical: { type: integer }
+            high:     { type: integer }
+            moderate: { type: integer }
+            low:      { type: integer }
+        dev_vulnerabilities: { type: string }
+        report:              { type: string }
+    transitions:
+      - when: "output.build_status == 'success' and output.vulnerabilities.critical == 0 and output.vulnerabilities.high == 0"
+        goto: verify_change
+      # the environment, not the code: a developer round can't change it, a human can
+      - when: "output.build_status == 'failed' and output.failure_class == 'infra'"
+        goto: build_failed
+      - when: "true"
+        delegate:
+          agent: developer
+          prompt: |
+            The builder blocked branch `{{ steps.develop.output.branch }}`:
+            {{ output.report }}
+            Fix it (build failure or vulnerable dependency), run the test suite,
+            commit and report the commit hash.
+        goto: build
+        max_visits: 3
+        on_exhausted: build_failed
+
+  # Reached by an infra failure (at once) or a build still blocked after 3 fix rounds.
+  - id: build_failed
+    type: human_approval
+    message: |
+      {% if steps.build.output.build_status == 'failed' and steps.build.output.failure_class == 'infra' %}The build failed because of the environment, not the code (no fix round was spent):{% else %}The build is still blocked after 3 rounds of fixes:{% endif %}
+      {{ steps.build.output.report }}
+      Building again only helps once the environment is fixed (e.g. the process holding a file
+      of the worktree is stopped: the orchestrator stops the ones started from the worktree).
+    choices:
+      - { id: continue, label: "Continue to verification anyway" }
+      - { id: retry,    label: "Build again (I fixed the environment)" }
+      - { id: stop,     label: "Stop the run as failed (worktree kept to resume)" }
+    transitions:
+      - when: "choice == 'continue'"
+        goto: verify_change
+      - when: "choice == 'retry'"
+        goto: build
+      - when: "choice == 'stop'"
+        goto: end
+        status: failed
+
+  # Verifier: does the change do what the task asked? Same command on the base and on
+  # the branch. inconclusive (nothing observable, e.g. a refactor) does not block.
+  - id: verify_change
+    agent: verifier
+    prompt: |
+      Task: {{ inputs.task }}
+      Change: {{ steps.develop.output.summary }}
+      Branch `{{ steps.develop.output.branch }}`, base `{{ inputs.base_branch }}`.
+      {% if delegate_result %}
+      The developer changed the code after your last verdict:
+      {{ delegate_result.text }}
+      Run the treatment side again (the baseline did not change).
+      {% endif %}
+      Verify the change following the claim-verification skill. Stay read-only: the
+      working tree must not change (no files, stash, worktree or checkout).
+      {% if inputs.issues | length > 1 %}
+      This run implements several issues: verify each one the developer did (their report:
+      {{ steps.develop.output.issues | to_json }}). In `issues`, one entry per issue with its own
+      verdict and evidence; `claim` lists each issue with its verdict. The overall `verdict` is
+      not_verified when any issue the run still implements is not_verified.
+      {% endif %}
+    output_schema:
+      type: object
+      required: [verdict, claim, evidence]
+      properties:
+        verdict:  { type: string, enum: [verified, not_verified, inconclusive] }
+        claim:    { type: string }
+        command:  { type: string }
+        evidence: { type: string }
+        # a run for several issues: the verdict per issue
+        issues:
+          type: array
+          items:
+            type: object
+            required: [issue, verdict]
+            properties:
+              issue:    { type: string }
+              verdict:  { type: string, enum: [verified, not_verified, inconclusive] }
+              evidence: { type: string }
+    transitions:
+      - when: "output.verdict != 'not_verified'"
+        merge: local
+        goto: end
+        on_error: resolve_merge
+      - when: "output.verdict == 'not_verified'"
+        delegate:
+          agent: developer
+          prompt: |
+            The verifier could not confirm the change on branch `{{ steps.develop.output.branch }}`.
+            Claim: {{ output.claim }}
+            Command: {{ output.command }}
+            Observed: {{ output.evidence }}
+            Fix it, run the test suite, commit and report the commit hash.
+        goto: verify_change
+        max_visits: 2
+        on_exhausted: verify_failed
+
+  - id: verify_failed
+    type: human_approval
+    message: |
+      The change still does not do what the task asked after 2 rounds of fixes.
+      Claim: {{ steps.verify_change.output.claim }}
+      Observed: {{ steps.verify_change.output.evidence }}
+      Approve: merge it into the local {{ inputs.base_branch }} anyway. Reject: stop the run as failed (the worktree is kept to resume it).
+    transitions:
+      - when: "approved"
+        merge: local
+        goto: end
+        on_error: resolve_merge
+      - when: "rejected"
+        goto: end
+        status: failed
+
+  # ============================ LOCAL MERGE ==================================
+
+  # The merge itself is automatic (merge: local on verify_change). When it fails, the error is
+  # in `action_error` and the developer resolves it on the run's branch; the change is then
+  # reviewed, tested, built and verified again before the next merge attempt.
+  - id: resolve_merge
+    agent: developer
+    prompt: |
+      Merging branch `{{ steps.develop.output.branch }}` into the local `{{ inputs.base_branch }}` failed:
+      {{ action_error.message if action_error else 'unknown error' }}
+
+      If it is a conflict with the local {{ inputs.base_branch }} (another run merged into it meanwhile):
+      on your branch run `git rebase {{ inputs.base_branch }}`, resolve every conflict following the
+      merge-conflict-resolver skill (keep the intent of both sides; never drop the other change),
+      `git rebase --continue`, then run the project's test suite and make sure everything is
+      committed. Never fetch, pull or push.
+      If it is anything you can't fix on your branch (for example uncommitted changes in the
+      checkout where {{ inputs.base_branch }} is checked out: that is the user's work, don't touch it),
+      change nothing and answer blocked: true with the reason.
+    output_schema:
+      type: object
+      required: [resolved, blocked, summary]
+      properties:
+        resolved:      { type: boolean }
+        blocked:       { type: boolean }
+        summary:       { type: string }
+        files_changed: { type: array, items: { type: string } }
+        tests_passed:  { type: boolean }
+    transitions:
+      - when: "output.blocked"
+        goto: merge_blocked
+      - when: "output.resolved and output.tests_passed"
+        goto: code_review
+        max_visits: 3
+        on_exhausted: merge_blocked
+      - when: "true"
+        goto: merge_blocked
+
+  # Only when the automation can't go on: the developer is blocked, or 3 resolution rounds ran out.
+  - id: merge_blocked
+    type: human_approval
+    message: |
+      Branch `{{ steps.develop.output.branch }}` could not be merged into the local `{{ inputs.base_branch }}`:
+      {{ action_error.message if action_error else '' }}
+      {% if steps.resolve_merge.output %}Developer: {{ steps.resolve_merge.output.summary }}{% endif %}
+      Fix what is in the way (e.g. commit or stash the changes where {{ inputs.base_branch }} is checked out), then retry.
+    choices:
+      - { id: retry, label: "Retry the merge" }
+      - { id: stop,  label: "Stop the run as failed (worktree kept to resume)" }
+    transitions:
+      - when: "choice == 'retry'"
+        merge: local
+        goto: end
+        on_error: resolve_merge
+      - when: "choice == 'stop'"
+        goto: end
+        status: failed
+
+observability:
+  storage:
+    type: jsonl
+    path: "./runs/{{ run_id }}/"
+  capture:
+    prompts: true
+    outputs: true
+    thinking: true
+    tool_calls: true
+    redact:
+      - pattern: "(?i)(api[_-]?key|token|secret|password)\\s*[:=]\\s*\\S+"

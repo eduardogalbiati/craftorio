@@ -93,7 +93,14 @@ const refExists = async (repo, ref) => !!(await tryGit(['rev-parse', '--verify',
  * Fetches origin/<base> (a missing remote or no network only warns) and picks the start point:
  * origin/<base>, else the local <base>, else the repository's HEAD.
  */
-async function baseRef(repo, base, log = () => {}) {
+async function baseRef(repo, base, log = () => {}, { remote = true } = {}) {
+  // local workflows (orchestrator.worktree.remote: false) start from the local branch: it may
+  // hold local merges that were never pushed, and nothing is fetched
+  if (base && !remote) {
+    if (await refExists(repo, `refs/heads/${base}`)) return base;
+    log('warn', `worktree: local branch "${base}" not found, starting from the repository's HEAD`);
+    return 'HEAD';
+  }
   if (base) {
     try {
       await git(['fetch', 'origin', base], repo, { timeout: FETCH_TIMEOUT_MS, auth: true });
@@ -118,10 +125,11 @@ async function baseRef(repo, base, log = () => {}) {
  * @param {string} o.dir     worktree folder, e.g. <workspace>/worktrees/<run_id>
  * @param {string} [o.branch] resume: the previous run's branch, used if the folder has to be recreated
  * @param {Function} [o.log] (level, message)
- * @returns {Promise<object|null>} { dir, workDir, repo, base, ref, commit, reused, recreated } or
+ * @param {boolean} [o.remote] false: start from the local base, without fetching origin
+ * @returns {Promise<object|null>} { dir, workDir, repo, base, remote, ref, commit, reused, recreated } or
  *   null when `repo` is not a git repository (the caller then works in the repository folder).
  */
-async function prepareWorktree({ repo, base, dir, branch = null, log = () => {} }) {
+async function prepareWorktree({ repo, base, dir, branch = null, log = () => {}, remote = true }) {
   const root = await repoRoot(repo);
   if (!root) return null;
   // canonical on both sides: a relative path between a short (8.3) or symlinked spelling and
@@ -130,7 +138,7 @@ async function prepareWorktree({ repo, base, dir, branch = null, log = () => {} 
   // repo_path may point to a subfolder of the repository: keep the same subfolder in the worktree
   const workDir = (d) => path.join(d, path.relative(root, canonicalPath(repo)));
   await tryGit(['worktree', 'prune'], root); // forget worktrees whose folder is gone
-  const info = { dir, workDir: workDir(dir), repo: root, base: base || null, reused: false, recreated: false };
+  const info = { dir, workDir: workDir(dir), repo: root, base: base || null, remote, reused: false, recreated: false };
 
   if (await isWorktree(root, dir)) {
     info.reused = true;
@@ -146,7 +154,7 @@ async function prepareWorktree({ repo, base, dir, branch = null, log = () => {} 
       info.ref = branch;
       info.recreated = true;
     } else {
-      info.ref = await baseRef(root, base, log);
+      info.ref = await baseRef(root, base, log, { remote });
       await git(['worktree', 'add', '--detach', dir, info.ref], root);
       info.recreated = !!branch;
     }
@@ -179,7 +187,7 @@ async function isMerged(repo, branch, base) {
  * merged into origin/<base> (fetched first) or the local <base>. An unmerged branch is kept.
  * @returns {Promise<{ removed: boolean, branch: string|null, branchDeleted: boolean }>}
  */
-async function removeWorktree({ repo, dir, base, log = () => {} }) {
+async function removeWorktree({ repo, dir, base, log = () => {}, remote = true }) {
   dir = canonicalPath(dir); // the spelling git registered the worktree with
   const branch = fs.existsSync(dir) ? await currentBranch(dir) : null;
   await git(['worktree', 'remove', '--force', dir], repo).catch((e) => {
@@ -190,8 +198,9 @@ async function removeWorktree({ repo, dir, base, log = () => {} }) {
   await tryGit(['worktree', 'prune'], repo);
   let branchDeleted = false;
   if (branch) {
-    if (base) await tryGit(['fetch', 'origin', base], repo, { timeout: FETCH_TIMEOUT_MS, auth: true });
-    const into = base && (await refExists(repo, `origin/${base}`)) ? `origin/${base}` : base;
+    // local workflows merge into the local base (see mergeLocally): compare with it, not origin
+    if (base && remote) await tryGit(['fetch', 'origin', base], repo, { timeout: FETCH_TIMEOUT_MS, auth: true });
+    const into = base && remote && (await refExists(repo, `origin/${base}`)) ? `origin/${base}` : base;
     if (into && await isMerged(repo, branch, into)) {
       branchDeleted = !!(await tryGit(['branch', '-D', branch], repo));
     } else {
@@ -199,6 +208,63 @@ async function removeWorktree({ repo, dir, base, log = () => {} }) {
     }
   }
   return { removed: !fs.existsSync(dir), branch, branchDeleted };
+}
+
+// Committer identity for the rebase below: the user's own when git has one, otherwise a fixed
+// one (a machine or CI with no user.name/email must not make the merge fail).
+async function identityArgs(repo) {
+  const email = await tryGit(['config', 'user.email'], repo);
+  return email ? [] : ['-c', 'user.name=Multiagent Orchestrator', '-c', 'user.email=orchestrator@localhost'];
+}
+
+/**
+ * Merges the run's branch into the local base branch, without GitHub/GitLab and without pushing
+ * (orchestrator.worktree.remote: false + a transition with `merge: local`).
+ *   1. the run's worktree must be on a branch with everything committed;
+ *   2. the branch is rebased onto the local base when the base moved (another local merge); a
+ *      conflict aborts the rebase and fails with the conflicting files, leaving the branch as it was;
+ *   3. the base is fast-forwarded to the branch: with `git merge --ff-only` in the worktree where
+ *      the base is checked out (refused when that checkout has uncommitted changes to tracked
+ *      files), or by moving the ref (compare-and-swap) when it is checked out nowhere.
+ * History stays linear and nothing else is touched: no push, no fetch.
+ * @returns {Promise<{ branch, base, commit, checkout, rebased }>}
+ */
+async function mergeLocally({ repo, dir, base, log = () => {} }) {
+  const root = await repoRoot(repo);
+  if (!root) throw new Error(`local merge: ${repo} is not a git repository.`);
+  if (!base || !(await refExists(root, `refs/heads/${base}`))) throw new Error(`local merge: the local branch "${base}" does not exist.`);
+  const branch = await currentBranch(dir);
+  if (!branch) throw new Error('local merge: the run\'s worktree is not on a branch (detached HEAD): nothing to merge.');
+  if (branch === base) throw new Error(`local merge: the run's worktree is on ${base} itself.`);
+  if (await tryGit(['status', '--porcelain', '--untracked-files=no'], dir)) {
+    throw new Error(`local merge: the run's worktree has uncommitted changes on ${branch}; commit them first.`);
+  }
+  let rebased = false;
+  if (!(await git(['merge-base', '--is-ancestor', base, branch], root).then(() => true, () => false))) {
+    log('info', `local merge: ${base} moved since ${branch} started; rebasing ${branch} onto it`);
+    try {
+      await git([...(await identityArgs(root)), 'rebase', base], dir);
+      rebased = true;
+    } catch (e) {
+      const files = (await tryGit(['diff', '--name-only', '--diff-filter=U'], dir)) || '';
+      await tryGit(['rebase', '--abort'], dir);
+      const list = files.split('\n').filter(Boolean);
+      throw new Error(`local merge: ${branch} conflicts with the local ${base}${list.length ? ` in ${list.join(', ')}` : ''}. The branch was left as it was; resolve the conflict on it and merge again.`);
+    }
+  }
+  const commit = await git(['rev-parse', `refs/heads/${branch}`], root);
+  const checkout = (await listWorktrees(root)).find((w) => w.branch === base);
+  if (checkout) {
+    if (await tryGit(['status', '--porcelain', '--untracked-files=no'], checkout.dir)) {
+      throw new Error(`local merge: ${checkout.dir} has uncommitted changes on ${base}; commit or stash them, then merge again.`);
+    }
+    await git(['merge', '--ff-only', branch], checkout.dir);
+  } else {
+    const old = await git(['rev-parse', `refs/heads/${base}`], root);
+    await git(['update-ref', `refs/heads/${base}`, commit, old], root);
+  }
+  log('info', `local merge: ${base} fast-forwarded to ${branch} (${commit.slice(0, 8)})${checkout ? ` in ${checkout.dir}` : ''}; nothing pushed`);
+  return { branch, base, commit, checkout: checkout?.dir || null, rebased };
 }
 
 /**
@@ -235,4 +301,4 @@ async function cleanupWorktrees({ worktreesDir, runsDir, active = [], maxAgeDays
   return removed;
 }
 
-module.exports = { prepareWorktree, removeWorktree, cleanupWorktrees, listWorktrees, isMerged, repoRoot, currentBranch, samePath, canonicalPath };
+module.exports = { prepareWorktree, removeWorktree, mergeLocally, cleanupWorktrees, listWorktrees, isMerged, repoRoot, currentBranch, samePath, canonicalPath };

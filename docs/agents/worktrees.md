@@ -9,7 +9,8 @@ actions, or any code that deletes or checks out branches.
   works in its own worktree (`<workspace>/worktrees/<run_id>`, detached at a freshly fetched
   `origin/<base>`). Removed on success, kept on failure/cancel for resume. Approval actions run in
   `worktree_dir`. Falls back to the repo path when it isn't a git repo; mock runs never create
-  worktrees. Only `software-development` uses it (`multi-model-review` reviews the checked-out branch).
+  worktrees. `software-development` and `software-development-local-hero` use it (`multi-model-review` reviews the checked-out branch).
+- **Local workflows**: `orchestrator.worktree.remote: false` starts the worktree from the **local** `<base>` without fetching (it may hold local merges never pushed), and `removeWorktree` checks "merged" against the local base. A transition with `merge: local` (validated by `loadWorkflow`; needs `orchestrator.worktree`) calls `mergeLocally`: the run's worktree must be on a branch with everything committed; the branch is rebased onto the local base when it moved (a conflict aborts the rebase, leaves the branch untouched and fails with the files); then the base is fast-forwarded with `merge --ff-only` where it is checked out (refused when that checkout has uncommitted changes to tracked files) or by `update-ref` (compare-and-swap) when it is checked out nowhere. No push, no fetch; simulated runs skip it (`action.executed` skipped). Emits `worktree.merged`. Used by `software-development-local-hero`.
 - Starts without `node_modules`: the language skills install dependencies when missing.
 
 ## Gotchas

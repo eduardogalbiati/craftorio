@@ -412,7 +412,7 @@ test('loadWorkflow validates groups: known steps, one group per step, unique nam
 });
 
 test('the bundled workflows group every step', () => {
-  for (const f of ['software-development.yaml', 'ai-arena.yaml', 'writer-reviewer.yaml', 'multi-model-review.yaml', 'run-retrospective.yaml']) {
+  for (const f of ['software-development.yaml', 'software-development-local-hero.yaml', 'ai-arena.yaml', 'writer-reviewer.yaml', 'multi-model-review.yaml', 'run-retrospective.yaml']) {
     const wf = loadWorkflow(path.join(root, 'workflows', f));
     assert.ok(wf.groups?.length, `${f} has groups`);
     assert.deepEqual(wf.groups.flatMap((g) => g.steps).sort(), wf.steps.map((s) => s.id).sort(), f);
@@ -822,4 +822,173 @@ test('document skills for the arena exist and have a structure and a rubric', ()
     assert.match(text, new RegExp(`^---\r?\nname: ${id}\r?\n`), id);
     assert.match(text, /rubric/i, id);
   }
+});
+
+// ---- software-development-local-hero: local worktree, automatic local merge, no CI/PR --------
+
+test('local hero workflow: no CI/PR/deploy, a local worktree, an automatic merge with a resolution path, a 20M context limit', () => {
+  const wf = loadWorkflow(path.join(root, 'workflows', 'software-development-local-hero.yaml'));
+  assert.equal(wf.orchestrator.worktree.remote, false);
+  assert.equal(wf.orchestrator.limits.max_total_context, '20M');
+  const ids = wf.steps.map((s) => s.id);
+  for (const gone of ['ci', 'pr_babysitter', 'deploy_test', 'approve_merge', 'deploy_prod', 'approve_local_merge']) assert.ok(!ids.includes(gone), gone);
+  assert.ok(!Object.keys(wf.agents).some((a) => ['ci_pusher', 'pr_babysitter', 'deployer'].includes(a)));
+  const verify = wf.steps.find((s) => s.id === 'verify_change');
+  assert.deepEqual(verify.transitions[0], { when: "output.verdict != 'not_verified'", merge: 'local', goto: 'end', on_error: 'resolve_merge' });
+  assert.equal(wf.steps.find((s) => s.id === 'resolve_merge').agent, 'developer');
+
+  const tmp = path.join(os.tmpdir(), `merge-local-${process.pid}.yaml`);
+  const write = (merge, { worktree = true, limit = '' } = {}) => fs.writeFileSync(tmp, `apiVersion: multiagent/v1
+kind: Workflow
+metadata: { name: m }
+${worktree ? 'orchestrator:\n  worktree: { repo: ".", base: main, remote: false }\n' : ''}${limit ? `  limits: { max_total_context: ${limit} }\n` : ''}agents:
+  a: { provider: claude, model: m }
+steps:
+  - id: gate
+    type: human_approval
+    message: ok?
+    transitions:
+      - when: "approved"
+        merge: ${merge}
+        goto: end
+        on_error: nowhere
+      - when: "rejected"
+        goto: end
+`);
+  try {
+    write('remote');
+    assert.throws(() => loadWorkflow(tmp), /points to unknown step "nowhere"|merge must be "local"/);
+    fs.writeFileSync(tmp, fs.readFileSync(tmp, 'utf8').replace('on_error: nowhere', 'on_error: gate'));
+    assert.throws(() => loadWorkflow(tmp), /merge must be "local"/);
+    write('local', { worktree: false });
+    fs.writeFileSync(tmp, fs.readFileSync(tmp, 'utf8').replace('on_error: nowhere', 'on_error: gate'));
+    assert.throws(() => loadWorkflow(tmp), /merge: local needs orchestrator.worktree/);
+    write('local', { limit: 'lots' });
+    fs.writeFileSync(tmp, fs.readFileSync(tmp, 'utf8').replace('on_error: nowhere', 'on_error: gate'));
+    assert.throws(() => loadWorkflow(tmp), /max_total_context must be a token count/);
+  } finally {
+    fs.unlinkSync(tmp);
+  }
+});
+
+test('local hero workflow: a simulated run merges right after verify_change and ends as success', { timeout: 120000 }, async () => {
+  const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'));
+  const run = new WorkflowRun({ file: path.join(root, 'workflows', 'software-development-local-hero.yaml'), inputs: { task: 'Engine test', repo_path: root }, mock: true, runsDir });
+  const events = [];
+  run.on('event', (ev) => {
+    events.push(ev);
+    if (ev.type === 'approval.requested') setImmediate(() => run.resolveApproval(ev.approval_id, ev.choices ? ev.choices[0].id : true));
+  });
+  await run.start();
+  fs.rmSync(runsDir, { recursive: true, force: true });
+  const finished = events.find((e) => e.type === 'workflow.finished');
+  assert.equal(finished.status, 'success', finished.error);
+  const transitions = events.filter((e) => e.type === 'step.transition').map((e) => `${e.from}>${e.to}`);
+  assert.ok(transitions.includes('verify_change>end'), transitions.join(' '));
+  // no gate on the way to the merge; in simulation the merge is skipped, never run
+  assert.ok(!events.some((e) => e.type === 'approval.requested' && ['verify_change', 'resolve_merge', 'merge_blocked'].includes(e.step_id)));
+  assert.ok(events.some((e) => e.type === 'action.executed' && e.command === 'merge: local' && e.skipped));
+});
+
+// A small workflow file in a temp folder; returns its path.
+function tempWorkflow(t, yaml) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wf-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const file = path.join(dir, 'wf.yaml');
+  fs.writeFileSync(file, yaml);
+  return { dir, file };
+}
+
+async function runWith(file, { mock, answer, cwd }) {
+  const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'));
+  const run = new WorkflowRun({ file, inputs: { task: 't', dir: cwd || '' }, mock, runsDir });
+  const events = [];
+  run.on('event', (ev) => {
+    events.push(ev);
+    if (ev.type === 'approval.requested') setImmediate(() => run.resolveApproval(ev.approval_id, answer(ev)));
+  });
+  await run.start();
+  fs.rmSync(runsDir, { recursive: true, force: true });
+  return { events, finished: events.find((e) => e.type === 'workflow.finished') };
+}
+
+test('transition on_error: a failed action goes to the named step with action_error; without it the run fails', { timeout: 60000 }, async (t) => {
+  const yaml = (onError) => `apiVersion: multiagent/v1
+kind: Workflow
+metadata: { name: onerr }
+inputs:
+  task: { type: string }
+  dir: { type: string }
+defaults:
+  working_dir: "{{ inputs.dir }}"
+agents:
+  a: { provider: claude, model: m }
+steps:
+  - id: gate
+    type: human_approval
+    message: go?
+    transitions:
+      - when: "approved"
+        action: node -e "process.exit(3)"
+        goto: end
+${onError ? '        on_error: fixup\n' : ''}      - when: "rejected"
+        goto: end
+  - id: fixup
+    type: human_approval
+    message: "failed: {{ action_error.message }}"
+    transitions:
+      - when: "approved"
+        goto: end
+      - when: "rejected"
+        goto: end
+        status: failed
+`;
+  const { dir, file } = tempWorkflow(t, yaml(true));
+  const routed = await runWith(file, { mock: false, cwd: dir, answer: () => true });
+  assert.equal(routed.finished.status, 'success', routed.finished.error);
+  const fix = routed.events.find((e) => e.type === 'approval.requested' && e.step_id === 'fixup');
+  assert.match(fix.message, /failed: Action failed \(exit 3\)/);
+  assert.ok(routed.events.some((e) => e.type === 'step.transition' && e.from === 'gate' && e.to === 'fixup' && e.when === 'on_error'));
+
+  fs.writeFileSync(file, yaml(false));
+  const failed = await runWith(file, { mock: false, cwd: dir, answer: () => true });
+  assert.equal(failed.finished.status, 'failed');
+  assert.match(failed.finished.error, /Action failed \(exit 3\)/);
+});
+
+test('max_total_context: the run pauses before the next agent turn; Continue grants another block, Stop cancels', { timeout: 60000 }, async (t) => {
+  const { file } = tempWorkflow(t, `apiVersion: multiagent/v1
+kind: Workflow
+metadata: { name: ctx }
+inputs:
+  task: { type: string }
+  dir: { type: string }
+orchestrator:
+  limits: { max_total_context: 1k }
+agents:
+  a: { provider: claude, model: m, session: ephemeral }
+steps:
+  - id: one
+    agent: a
+    prompt: first
+  - id: two
+    agent: a
+    prompt: second
+  - id: three
+    agent: a
+    prompt: third
+`);
+  const go = await runWith(file, { mock: true, answer: () => 'continue' });
+  assert.equal(go.finished.status, 'success', go.finished.error);
+  const pauses = go.events.filter((e) => e.type === 'approval.requested' && /context_limit$/.test(e.step_id));
+  // the first turn runs (nothing read yet); each later turn is past the allowance and asks
+  assert.ok(pauses.length >= 1, 'paused at least once');
+  assert.equal(pauses[0].step_id, 'two:context_limit');
+  assert.match(pauses[0].message, /past its limit of 0\.0M/);
+  assert.deepEqual(pauses[0].choices.map((c) => c.id), ['continue', 'stop']);
+  assert.ok(go.events.some((e) => e.type === 'limit.exceeded' && e.limit === 'max_total_context' && e.paused));
+
+  const stop = await runWith(file, { mock: true, answer: () => 'stop' });
+  assert.equal(stop.finished.status, 'cancelled');
+  assert.ok(!stop.events.some((e) => e.type === 'step.started' && e.step_id === 'three'));
 });

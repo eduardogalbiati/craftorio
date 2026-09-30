@@ -165,6 +165,19 @@ starts from the agent's latest handoff note, instead of carrying 200k+ tokens of
 other agents keep one conversation (`persistent`) up to `max_context: 150k`. Each agent may only
 use what its `capabilities` declare (e.g. the CI pusher: read, `git`, `gh`, `glab`; no edits, no web).
 
+## Software development, local hero (`workflows/software-development-local-hero.yaml`)
+
+The same develop → code review → test → build → verify pipeline as `software-development`, for working fast on your machine without GitHub or GitLab: no push, no PR/MR, no CI, no preview, no deploy.
+
+- Each run still gets its own git worktree, started from your **local** `base_branch` (nothing is fetched, so a run sees the local merges of earlier runs you haven't pushed).
+- **No merge approval**: once `verify_change` passes, the engine merges the run's branch into the local `base_branch` automatically: rebased onto it first if it moved (another run merged meanwhile), fast-forward only (linear history), never pushed. The run's worktree and branch are then removed.
+- **Conflicts are resolved automatically**: a failed merge goes to `resolve_merge`, where the developer rebases onto the local base and resolves the conflicts (skill `merge-conflict-resolver`), and the change goes through code review, tests, build and verification again before the next attempt (at most 3 rounds). Only what the developer can't fix, such as uncommitted changes in the checkout where the base is checked out (your work), stops at the `merge_blocked` gate (retry / stop).
+- **Context limit**: `orchestrator.limits.max_total_context: 20M`. Past 20M tokens of context the run pauses before its next agent turn; choose **Continue** (another 20M) or **Stop**.
+- **Issues close when you push**: commits end with `Closes #<n>` for the run's issues, so GitHub closes them when you push the base branch.
+- Push when you want: `git push origin main` from the repository.
+
+Engine options behind it: `orchestrator.worktree.remote: false`, a transition with `merge: local` and `on_error`, and `orchestrator.limits.max_total_context` (see `docs/agents/worktrees.md` and `docs/agents/engine.md`).
+
 ## AI Arena (`workflows/ai-arena.yaml`)
 
 Up to five models write the same document (default: a PRD) and an orchestrator merges them. The

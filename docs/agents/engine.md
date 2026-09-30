@@ -9,6 +9,8 @@ same features for users; this is the implementer's summary.
   names can be templates (`"unit-test-writer-{{ inputs.language }}"`).
 - `agents: [a, b]` on a step = parallel fan-out → `{ results, succeeded, failed }`, `min_success`.
 - `save_as` (string or list, relative to the run folder; `{ path, content }` saves one field), `on_error: <step>`.
+- A **transition** can also take `on_error: <step>`: when its `action` or `merge: local` fails, the run goes there instead of failing, with the error in the template context as `action_error` (`{ step, message }`).
+- `orchestrator.limits.max_total_context` (e.g. `20M`): the context the run's agents read (input + cache, summed over every turn). Past it, `contextGate` pauses the run before the next agent turn with a `<step>:context_limit` gate (choices `continue` = allow another block of the same size, `stop` = cancel; the worktree is kept). A turn is never cut; `limit.exceeded` is emitted with `paused: true`.
 - `groups: [{ name, steps }]` (optional, top level): progress views only, the graph ignores it;
   `validateGroups` in `loadWorkflow`. Recorded in `workflow.started` and `summary.groups`, with
   `summary.progress` = the engine's `StepTrail` (`src/renderer/run-progress-model.js`).
