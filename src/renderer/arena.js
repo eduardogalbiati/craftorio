@@ -321,10 +321,11 @@
     const label = busy.length === 1 ? `${roles[busy[0][0]].name} is ${DOING[busy[0][1]] || 'working'}` : `${busy.length} models are working`;
     $a('#arena-chat-status').textContent = `${label}…`;
     if (!chat.live) return;
+    // the row sits on the right only when every busy robot does; its robots face the other side
     const right = busy.every(([r]) => roles[r].side === 'right');
     const stick = box.scrollHeight - box.scrollTop - box.clientHeight < 240;
     box.insertAdjacentHTML('beforeend', `<div class="ar-working${busy.length === 1 ? ' solo' : ''}${right ? ' right' : ''}">${busy.map(([r, st]) =>
-      `<figure ${styleOf(r)}><span class="duo-robot" aria-hidden="true">${robotSvg(roles[r], st)}</span><figcaption><b>${esc(roles[r].name)}</b> · ${esc(DOING[st] || st)}</figcaption></figure>`).join('')}
+      `<figure ${styleOf(r)}><span class="duo-robot" aria-hidden="true">${robotSvg(roles[r], st, { mirror: !right })}</span><figcaption><b>${esc(roles[r].name)}</b> · ${esc(DOING[st] || st)}</figcaption></figure>`).join('')}
       <span class="duo-dots"><i></i><i></i><i></i></span></div>`);
     if (stick) box.scrollTop = box.scrollHeight;
   }
@@ -350,7 +351,7 @@
 
   function failRow(role, text) {
     if (!roles[role]) return;
-    addToChat(`<div class="duo-fail"><span class="duo-robot${chat.live ? '' : ' still'}" aria-hidden="true">${robotSvg(roles[role], 'error')}</span><span class="duo-fail-text">${esc(text)}</span></div>`);
+    addToChat(`<div class="duo-fail${roles[role].side === 'left' ? ' left' : ''}"><span class="duo-robot${chat.live ? '' : ' still'}" aria-hidden="true">${robotSvg(roles[role], 'error')}</span><span class="duo-fail-text">${esc(text)}</span></div>`);
     chat.working.delete(role);
     renderWorking();
     setCast(role, 'error');

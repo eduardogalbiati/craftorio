@@ -231,7 +231,7 @@
   }
 
   function failRow(role, text) {
-    addToChat(`<div class="duo-fail"><span class="duo-robot ${role}${chat.live ? '' : ' still'}" aria-hidden="true">${robotSvg(role, 'error')}</span><span class="duo-fail-text">${esc(text)}</span></div>`);
+    addToChat(`<div class="duo-fail${MIRRORED[role] ? ' left' : ''}"><span class="duo-robot ${role}${chat.live ? '' : ' still'}" aria-hidden="true">${robotSvg(role, 'error')}</span><span class="duo-fail-text">${esc(text)}</span></div>`);
     setCast(role, 'error');
   }
 

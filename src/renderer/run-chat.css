@@ -57,7 +57,6 @@
 .rc-group-head b { color: var(--rc-agent, var(--text)); }
 .rc-group-body { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; align-items: start; }
 .rc-group-body .rc-msg { max-width: none; }
-.rc-group-body .rc-msg .duo-robot { width: 34px; height: 34px; }
 .rc-group-body .rc-body.md { max-height: 380px; }
 
 /* orchestrator lines */
@@ -80,5 +79,7 @@
 /* who is working right now */
 .rc-typing { display: flex; flex-wrap: wrap; gap: 4px 24px; padding: 0 24px 20px; }
 .rc-typing .duo-typing b { color: var(--rc-agent, var(--supervisor)); }
-.rc-typing .duo-robot { width: 88px; height: 88px; }
+/* the same sizes as the AI Arena: 132px working alone, 96px when several work at once */
+.rc-typing .duo-robot { width: 96px; height: 96px; }
+.rc-typing .duo-typing:only-child .duo-robot { width: 132px; height: 132px; }
 .rc-typing .duo-typing.rc-right { margin-left: auto; flex-direction: row-reverse; }
