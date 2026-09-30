@@ -1,0 +1,20 @@
+# Test fixture: a gate whose transition action is conditional (renders empty when `cleanup` is
+# false) and runs a bundled skill's script through skill_dir().
+apiVersion: multiagent/v1
+kind: Workflow
+metadata:
+  name: fixture-conditional-action
+agents:
+  unused: { provider: claude, model: mock-model }
+inputs:
+  cleanup: { type: boolean, default: false }
+steps:
+  - id: gate
+    type: human_approval
+    message: "Merge?"
+    transitions:
+      - when: "approved"
+        action: "{% if inputs.cleanup %}node \"{{ skill_dir('pr-screenshots') }}/publish.js\" --cleanup{% endif %}"
+        goto: end
+      - when: "rejected"
+        goto: end

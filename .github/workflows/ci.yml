@@ -34,6 +34,13 @@ jobs:
         run: for f in $(git ls-files '*.js'); do node --check "$f" || exit 1; done
       - name: Tests (unit + mock flow)
         run: npm test
+      # scripts/screenshot.js (the test step's UI screenshots): every view opens in simulation and the
+      # app quits by itself. Needs the Electron binary and a display: Windows only.
+      - name: UI screenshots (every view, simulation)
+        if: runner.os == 'Windows'
+        env:
+          MULTIAGENT_UI_TESTS: "1"
+        run: node node_modules/electron/install.js && node --test test/screenshot.test.js
       - name: Production vulnerabilities
         if: runner.os == 'Linux'   # same lockfile everywhere: once is enough
         run: npm audit --omit=dev --audit-level=high

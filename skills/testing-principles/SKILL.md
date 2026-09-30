@@ -56,8 +56,26 @@ You run unattended. When something is ambiguous (which seam, which expected valu
 option most consistent with the existing tests and code, and list it under **Assumptions** in
 your answer.
 
+## Visual changes: screenshots
+
+A change to the UI is checked by looking at it. When the diff touches the UI (the language skill
+lists the usual paths; the project's docs may name others), capture the affected screens **before**
+(the base) and **after** (the branch):
+
+- Use the project's own screenshot command (the language skill says where to look). Never write your
+  own browser or desktop-app script to take them. No such command: skip the capture and say so.
+- Simulated data only: never sign in, start real runs or call paid services to fill a screen.
+- Run the captures in the foreground, one at a time; the command must stop by itself.
+- Pick only the screens the change affects (usually one to three), the same scenario before and after.
+- Save the PNGs and a `screenshots.json` in the folder the orchestrator gives you (the run's
+  `screenshots/` folder, not the repository): `[{ "path": "<after>.png", "caption": "<screen>",
+  "before": "<before>.png" }]` (`before` omitted for a new screen; some screenshot commands write
+  it for you). Return the same list in your answer. The files are not test files: never commit them.
+- Not a visual change (no UI path in the diff): say so in one line and skip.
+
 ## Done when
 
 - every seam you listed has at least one test for the behaviour that changed;
+- a UI change has before/after screenshots, or the reason there are none;
 - the full suite was run with the project's command and the result (pass/fail counts) is reported;
 - every failure is reported as test name, error, and probable cause (production bug vs outdated test).

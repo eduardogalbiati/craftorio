@@ -397,3 +397,20 @@ test('backlog: the dispatcher fills free slots from the queues, oldest first, wi
   for (const r of api['runs:active']()) api['run:stop']({ runId: r.runId });
   await until(() => !service.isRunning());
 });
+
+test('artifacts: a run screenshot is read as an image data URL, a text file as text', (t) => {
+  const { api, service } = makeService(t);
+  const run = path.join(service.workspace().runs, '20260101-000000-abcd1234');
+  fs.mkdirSync(path.join(run, 'screenshots'), { recursive: true });
+  fs.writeFileSync(path.join(run, 'events.jsonl'), `${JSON.stringify({ seq: 1, type: 'workflow.started', run_id: '20260101-000000-abcd1234', workflow: 'software-development' })}\n`);
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
+  fs.writeFileSync(path.join(run, 'screenshots', 'settings-after.png'), png);
+  fs.writeFileSync(path.join(run, 'screenshots', 'screenshots.json'), '[]');
+
+  const image = api['artifacts:read']({ path: path.join(run, 'screenshots', 'settings-after.png') });
+  assert.equal(image.kind, 'image');
+  assert.equal(image.image, 'data:image/png;base64,iVBORw0KGgoAAAAA');
+  const text = api['artifacts:read']({ path: path.join(run, 'screenshots', 'screenshots.json') });
+  assert.equal(text.image, null);
+  assert.equal(text.text, '[]');
+});

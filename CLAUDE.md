@@ -39,6 +39,7 @@ npm run run -- --file ai-arena.yaml --mock --auto-approve --input project_path=C
 npm run serve -- --port 7300 [--host h] [--workspace dir]   # engine server + UI in a browser
 npm run build              # packaged app in build/ (npm run package → dist/)
 npx electron scripts/smoke.js <out.png>   # UI smoke test: mock run + screenshot
+npm run screenshot -- --view backlog --mode kanban [--ref origin/main] --out <dir>   # one screen, simulated data
 ```
 
 ## Topic docs (read the one that matches your task)

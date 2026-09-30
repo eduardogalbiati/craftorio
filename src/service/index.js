@@ -51,6 +51,7 @@ const RESUME_ARGS = { 'claude-code': (id) => ['--resume', id], 'codex-cli': (id)
 const q = (a) => `"${String(a).replace(/"/g, '""')}"`;
 const num = (v) => (v === '' || v == null || !Number.isFinite(+v) || +v <= 0 ? null : +v);
 const MAX_ARTIFACT_BYTES = 5 * 1024 * 1024;
+const IMAGE_TYPES = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp' };
 
 // Details for the Settings screen: path, version and (gh) authentication of each CLI.
 function runTool(file, args, shellMode) {
@@ -797,7 +798,9 @@ function createService({ host }) {
     const buf = fs.readFileSync(found.path);
     const truncated = buf.length > MAX_ARTIFACT_BYTES;
     const binary = buf.subarray(0, 8000).includes(0);
-    return { ...found, truncated, binary, text: binary ? null : buf.subarray(0, MAX_ARTIFACT_BYTES).toString('utf8') };
+    // images (e.g. the test step's UI screenshots) come whole as a data URL, for an <img>
+    const image = found.kind === 'image' && !truncated ? `data:${IMAGE_TYPES[path.extname(found.path).toLowerCase()]};base64,${buf.toString('base64')}` : null;
+    return { ...found, truncated, binary, image, text: binary ? null : buf.subarray(0, MAX_ARTIFACT_BYTES).toString('utf8') };
   }
 
   // ---- usage and budgets ------------------------------------------------------------

@@ -17,6 +17,13 @@ Read this before changing anything in `src/renderer/`.
   (elsewhere: the Run badge and a toast).
 - Write & Review and AI Arena keep their own chat screens; every other run uses the run chat
   (`run-chat-model.js` is pure and unit-tested, `run-chat.js` draws it).
+- Check changes by looking at screenshots: `npm run screenshot -- --view <view> [--tab|--mode|--click]
+  --out <dir>` opens one screen with demo data and quits by itself (`--ref origin/main` for the
+  "before"; usage at the top of `scripts/screenshot.js`). A new view or
+  tab goes into its `VIEWS` table, so `test/screenshot.test.js` opens it too. `scripts/smoke.js`
+  runs a whole mock run from the Start panel. Never open real CLI terminals or start real runs in
+  those checks.
+- Artifacts previews images (`kind: image`, read as a data URL; the CSP allows `img-src data:`).
 - Test changes with a temporary Electron script (see `scripts/smoke.js`:
   `npx electron scripts/smoke.js <out.png>` runs a mock run and takes a screenshot) and look at
   the screenshots. Never open real CLI terminals or start real runs in those checks. In a fresh

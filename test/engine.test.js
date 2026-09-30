@@ -274,6 +274,59 @@ test('github_repo filter rejects values that are not a PR URL, so nothing reache
   ]) assert.throws(() => render(t, { url }), /not a GitHub pull request URL/, url);
 });
 
+test('pr_url filter passes GitHub PR and GitLab MR URLs and rejects anything else', () => {
+  const t = '{{ url | pr_url }}';
+  assert.equal(render(t, { url: 'https://github.com/owner/repo/pull/12' }), 'https://github.com/owner/repo/pull/12');
+  assert.equal(render(t, { url: 'https://gitlab.example.com/group/sub/app/-/merge_requests/5' }), 'https://gitlab.example.com/group/sub/app/-/merge_requests/5');
+  for (const url of [
+    'https://github.com/owner/repo/pull/1 && calc',
+    'https://gitlab.com/g/app/-/merge_requests/1"; whoami',
+    'https://github.com/owner/repo/issues/1',
+    '',
+  ]) assert.throws(() => render(t, { url }), /not a pull\/merge request URL/, url);
+});
+
+async function runConditionalAction(t, cleanup) {
+  const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'));
+  t.after(() => fs.rmSync(runsDir, { recursive: true, force: true }));
+  const run = new WorkflowRun({ file: path.join(__dirname, 'fixtures', 'conditional-action.yaml'), inputs: { cleanup }, mock: true, runsDir, skillsDirs: [] });
+  const events = [];
+  run.on('event', (ev) => {
+    events.push(ev);
+    if (ev.type === 'approval.requested') setImmediate(() => run.resolveApproval(ev.approval_id, true));
+  });
+  await run.start();
+  return events.filter((e) => e.type === 'action.executed');
+}
+
+test('a transition action runs a skill script through skill_dir()', async (t) => {
+  const actions = await runConditionalAction(t, true);
+  assert.equal(actions.length, 1);
+  const script = path.join(root, 'skills', 'pr-screenshots');
+  assert.equal(actions[0].command, `node "${script}/publish.js" --cleanup`);
+});
+
+test('software-development removes the PR screenshots on merge or close, only when some were posted', () => {
+  const wf = loadWorkflow(path.join(root, 'workflows', 'software-development.yaml'));
+  const action = (stepId, when) => wf.steps.find((s) => s.id === stepId).transitions.find((x) => x.when === when).action;
+  const scope = (posted) => ({
+    inputs: { git_platform: 'gh' },
+    skill_dir: () => 'C:/skills/pr-screenshots',
+    steps: { ci: { output: { pr_number: 12, pr_url: 'https://github.com/acme/app/pull/12', screenshots_posted: posted } } },
+  });
+  const cleanupCmd = 'node "C:/skills/pr-screenshots/publish.js" --cleanup --platform gh --pr-url https://github.com/acme/app/pull/12';
+  assert.equal(render(action('approve_merge', 'approved'), scope(true)), `gh pr merge 12 --repo github.com/acme/app --squash --delete-branch && ${cleanupCmd}`);
+  assert.equal(render(action('approve_merge', 'approved'), scope(false)), 'gh pr merge 12 --repo github.com/acme/app --squash --delete-branch');
+  for (const when of ["output.state == 'merged'", "output.state == 'closed'"]) {
+    assert.equal(render(action('pr_babysitter', when), scope(true)), cleanupCmd);
+    assert.equal(render(action('pr_babysitter', when), scope(false)), '');
+  }
+});
+
+test('a transition action that renders empty runs nothing', async (t) => {
+  assert.deepEqual(await runConditionalAction(t, false), []);
+});
+
 test('decision log: ```decisions blocks are appended to decisions.tsv', (t) => {
   const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'));
   t.after(() => fs.rmSync(runsDir, { recursive: true, force: true }));

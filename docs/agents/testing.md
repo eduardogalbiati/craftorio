@@ -10,6 +10,10 @@ Read this before writing or changing tests, and before any check that could star
   plus a combined `test` check that is green only when all three are. `preview.yml`/`deploy.yml`
   run on `windows-latest` and also run `npm test`. Tests that pass locally can still fail on
   another OS: CI is the judge.
+- The Electron part of `test/screenshot.test.js` (every view of `scripts/screenshot.js` opens and
+  quits by itself, ~1 min, ~25 windows) only runs with `MULTIAGENT_UI_TESTS=1`: CI's Windows job
+  has a step for it (after `node node_modules/electron/install.js`; the matrix sets
+  `ELECTRON_SKIP_BINARY_DOWNLOAD`). Run it locally when you change the script or add a view.
 
 ## Machine-independent tests
 

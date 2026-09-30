@@ -148,7 +148,7 @@ function projectOf(run, projectList) {
 // in the run folder, except the run's own logs.
 // ---------------------------------------------------------------------------
 const INTERNAL = new Set(['events.jsonl', 'summary.json']);
-const KINDS = { '.md': 'markdown', '.markdown': 'markdown', '.json': 'json', '.jsonl': 'json', '.tsv': 'table', '.csv': 'table', '.txt': 'text', '.log': 'text', '.yaml': 'text', '.yml': 'text', '.html': 'text', '.patch': 'text', '.diff': 'text' };
+const KINDS = { '.md': 'markdown', '.markdown': 'markdown', '.json': 'json', '.jsonl': 'json', '.tsv': 'table', '.csv': 'table', '.txt': 'text', '.log': 'text', '.yaml': 'text', '.yml': 'text', '.html': 'text', '.patch': 'text', '.diff': 'text', '.png': 'image', '.jpg': 'image', '.jpeg': 'image', '.gif': 'image', '.webp': 'image' };
 const kindOf = (file) => KINDS[path.extname(file).toLowerCase()] || 'other';
 
 function walkFiles(dir, rel = '') {

@@ -45,7 +45,7 @@ kind: Workflow
 
 metadata:
   name: software-development
-  version: 0.13.0
+  version: 0.14.0
   description: Implements, reviews, tests, builds, watches CI and the PR/MR, publishes a preview and, once approved, merges and tracks the production deploy. Works with several languages on GitHub or GitLab.
   tags: [dev, review, test, build, ci, pr, deploy, github, gitlab]
   # Dashboard category: plan (Plan & Design), build (Code & Build) or monitor (Monitor & Improve).
@@ -231,10 +231,10 @@ agents:
     model: claude-sonnet-5
     session: handoff
     capabilities: { tools: [read, *vcs], web: false }
-    skills: ["ci-pipeline-{{ inputs.git_platform }}"]
+    skills: ["ci-pipeline-{{ inputs.git_platform }}", "pr-screenshots-{{ inputs.git_platform }}"]
     system_prompt: |
-      You are the CI Pusher. You push the branch, make sure a PR/MR is open and watch
-      CI until it passes. When CI fails, you fetch the failure log and summarize the
+      You are the CI Pusher. You push the branch, make sure a PR/MR is open (with the
+      test step's UI screenshots, when there are any) and watch CI until it passes. When CI fails, you fetch the failure log and summarize the
       root cause so the orchestrator can hand it to the developer. You do not fix
       code and you do not merge.
 
@@ -377,13 +377,19 @@ steps:
       {% if delegate_result %}
       The developer applied the fix you asked for:
       {{ delegate_result.text }}
-      Run the full suite again and confirm.
+      Run the full suite again and confirm. If the fix changed the UI, capture the "after"
+      screenshots again (same names, same folder) and return the updated list.
       {% else %}
       1. Check out the branch. Decide whether the change needs new or updated tests.
          If so, write them following the test skill (the framework and folder the
          project already uses) and commit only them. Purely visual changes may not
          need a new test — justify it.
       2. Run the full suite with the project's test command.
+      3. If the diff against `origin/{{ inputs.base_branch }}` touches the UI, capture the
+         affected screens before (base `origin/{{ inputs.base_branch }}`) and after (the branch)
+         following the test skill, into `{{ run_dir }}/screenshots` (PNGs + screenshots.json,
+         never committed), and return them in `screenshots`. Not a visual change, or no
+         screenshot command in the project: say why in `screenshots_note`.
       {% endif %}
       If a test fails because of production code, do NOT fix it:
       fill failure_report with test, file, error and probable cause.
@@ -396,6 +402,17 @@ steps:
         committed:      { type: boolean }
         failure_report: { type: string }
         summary:        { type: string }
+        # UI changes: files in the run folder (Artifacts), published on the PR/MR by the ci step
+        screenshots:
+          type: array
+          items:
+            type: object
+            required: [path, caption]
+            properties:
+              path:    { type: string }
+              caption: { type: string }
+              before:  { type: string }
+        screenshots_note: { type: string }
     transitions:
       - when: "output.tests_status == 'pass'"
         goto: build
@@ -600,7 +617,15 @@ steps:
            probable root cause (file/line). For infrastructure/flaky failures, follow the
            skill (retry once) and answer pending.
          - everything passed → ci_status: success
+      {% if steps.test.output.screenshots and not steps.ci.output.screenshots_posted %}
+      5. Once the PR/MR exists, publish the test step's UI screenshots on it following the
+         screenshots skill (`--dir {{ run_dir }}/screenshots`), then answer screenshots_posted:
+         true. If publishing fails, put the error in screenshots_error and go on: it never
+         changes ci_status.
+      {% endif %}
       pr_number is the PR number (GitHub) or the MR iid (GitLab).
+    # node: the screenshots skill's publish script
+    capabilities: { tools: [read, *vcs, bash:node] }
     output_schema:
       type: object
       required: [pr_url, pr_number, ci_status]
@@ -609,6 +634,8 @@ steps:
         pr_number:   { type: integer }
         ci_status:   { type: string, enum: [pending, failed, success] }
         failure_log: { type: string }
+        screenshots_posted: { type: boolean }
+        screenshots_error:  { type: string }
     transitions:
       - when: "output.ci_status == 'success'"
         goto: pr_babysitter
@@ -716,10 +743,14 @@ steps:
         goto: ci
       - when: "output.state == 'ready_to_merge'"
         goto: deploy_test
+      # merged or closed by someone else: its screenshots leave the pr-screenshots branch
+      # (best effort, exits 0; an empty action is skipped)
       - when: "output.state == 'merged'"
+        action: "{% if steps.ci.output.screenshots_posted %}node \"{{ skill_dir('pr-screenshots') }}/publish.js\" --cleanup --platform {{ inputs.git_platform }} --pr-url {{ steps.ci.output.pr_url | pr_url }}{% endif %}"
         goto: deploy_prod
-      # closed without merge by someone else: nothing was delivered
+      # closed without merge: nothing was delivered
       - when: "output.state == 'closed'"
+        action: "{% if steps.ci.output.screenshots_posted %}node \"{{ skill_dir('pr-screenshots') }}/publish.js\" --cleanup --platform {{ inputs.git_platform }} --pr-url {{ steps.ci.output.pr_url | pr_url }}{% endif %}"
         goto: end
         status: cancelled
 
@@ -866,9 +897,10 @@ steps:
     # main checkout). The engine deletes the local branch when it removes the worktree.
     # `github_repo` validates pr_url (agent output) and reduces it to HOST/OWNER/REPO: the
     # action runs in a shell, so an unexpected value fails the render instead of running.
+    # Once merged, the PR/MR's screenshots leave the pr-screenshots branch (best effort, exits 0).
     transitions:
       - when: "approved"
-        action: "{% if inputs.git_platform == 'gl' %}glab mr merge {{ steps.ci.output.pr_number }} --squash --remove-source-branch --yes{% else %}gh pr merge {{ steps.ci.output.pr_number }} --repo {{ steps.ci.output.pr_url | github_repo }} --squash --delete-branch{% endif %}"
+        action: "{% if inputs.git_platform == 'gl' %}glab mr merge {{ steps.ci.output.pr_number }} --squash --remove-source-branch --yes{% else %}gh pr merge {{ steps.ci.output.pr_number }} --repo {{ steps.ci.output.pr_url | github_repo }} --squash --delete-branch{% endif %}{% if steps.ci.output.screenshots_posted %} && node \"{{ skill_dir('pr-screenshots') }}/publish.js\" --cleanup --platform {{ inputs.git_platform }} --pr-url {{ steps.ci.output.pr_url | pr_url }}{% endif %}"
         goto: deploy_prod
       - when: "rejected"
         goto: end

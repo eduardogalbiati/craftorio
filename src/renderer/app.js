@@ -2170,7 +2170,7 @@ function renderEvents() {
 // ---------------------------------------------------------------------------
 // Artifacts: documents and files produced by runs
 // ---------------------------------------------------------------------------
-const ART_KIND = { markdown: ['MD', 'k-md'], json: ['{ }', 'k-json'], table: ['TSV', 'k-table'], text: ['TXT', 'k-text'], other: ['FILE', 'k-other'] };
+const ART_KIND = { markdown: ['MD', 'k-md'], json: ['{ }', 'k-json'], table: ['TSV', 'k-table'], text: ['TXT', 'k-text'], image: ['IMG', 'k-image'], other: ['FILE', 'k-other'] };
 const artKindIcon = (kind) => { const [l, c] = ART_KIND[kind] || ART_KIND.other; return `<span class="art-kind ${c}">${l}</span>`; };
 function fmtSize(n) {
   if (n == null) return '';
@@ -2381,6 +2381,7 @@ function renderArtifactViewer() {
   if (d.loading) { body.innerHTML = '<div class="art-empty muted">Loading…</div>'; return; }
   if (d.error) { body.innerHTML = `<div class="art-empty"><p class="error">${esc(d.error)}</p></div>`; return; }
   const notice = d.truncated ? '<div class="art-notice">This file is larger than 5 MB: only the first 5 MB are shown.</div>' : '';
+  if (meta.kind === 'image' && d.image) { body.innerHTML = `<div class="art-image"><img src="${esc(d.image)}" alt="${esc(name)}" /></div>`; return; }
   if (d.binary || d.text == null || meta.kind === 'other') {
     body.innerHTML = `${notice}<div class="art-empty"><p class="muted">Preview not available for this file.</p><button class="btn primary" id="art-open-default">Open</button></div>`;
     $('#art-open-default').onclick = () => api.openArtifact(d.path).catch(() => {});

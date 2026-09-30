@@ -12,6 +12,7 @@
     "run": "node scripts/run.js",
     "serve": "node scripts/serve.js",
     "test": "node scripts/test.js",
+    "screenshot": "electron scripts/screenshot.js",
     "test:engine": "node scripts/run.js --mock --auto-approve --task \"Engine test\"",
     "build": "node scripts/package.js build",
     "package": "node scripts/package.js"

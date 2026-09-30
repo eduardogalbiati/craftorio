@@ -94,7 +94,11 @@ same features for users; this is the implementer's summary.
 
 - `orchestrator.worktree: { repo, base }` + `defaults.working_dir: "{{ worktree_dir }}"`: see [worktrees.md](worktrees.md).
 - Template context: `inputs`, `steps.<id>.output/visits`, `run_id`, `run_dir`, `runs_dir`,
-  `workflows_dir`, `worktree_dir`, `agents.<name>.model`, `agent` (in fan-out), `delegate_result`.
+  `workflows_dir`, `worktree_dir`, `agents.<name>.model`, `agent` (in fan-out), `delegate_result`,
+  `skill_dir('<name>')` (a skill's folder, to run its script in an action).
+- Transition `action:` is a shell command run in the worktree (skipped in simulation); one that
+  renders empty runs nothing. Agent output reaching it goes through a validating filter
+  (`github_repo`, `pr_url`). The PR screenshots cleanup on merge/close uses this.
 
 ## Providers
 

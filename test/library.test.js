@@ -193,6 +193,7 @@ test('language and platform skill families are complete', () => {
     'build-audit': ['js', 'python', 'go', 'java', 'csharp'],
     'ci-pipeline': ['gh', 'gl'],
     'pr-babysitter': ['gh', 'gl'],
+    'pr-screenshots': ['gh', 'gl'],
     deploy: ['gh', 'gl'],
     'issue-creator': ['gh', 'gl'],
   };

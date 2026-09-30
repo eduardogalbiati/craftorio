@@ -48,6 +48,16 @@ tpl.addFilter('github_repo', (url) => {
   return `${m[1]}/${m[2]}/${m[3]}`;
 });
 
+// PR/MR URL (agent output) passed as is to a command in an action: a GitHub pull request or a
+// GitLab merge request URL, or it throws.
+tpl.addFilter('pr_url', (url) => {
+  const u = String(url ?? '').trim();
+  const ok = /^https:\/\/[A-Za-z0-9.-]+\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/pull\/\d+$/.test(u)
+    || /^https:\/\/[A-Za-z0-9.-]+(?:\/[A-Za-z0-9_.-]+)+\/-\/merge_requests\/\d+$/.test(u);
+  if (!ok) throw new Error(`not a pull/merge request URL: ${JSON.stringify(url)}`);
+  return u;
+});
+
 const render = (s, scope) => (s == null ? '' : tpl.renderString(String(s), scope));
 const evalExpr = (expr, scope) => render(`{% if ${expr} %}1{% else %}0{% endif %}`, scope).trim() === '1';
 
@@ -345,6 +355,8 @@ class WorkflowRun extends EventEmitter {
       feedback: [],
       // the step that ran before the current one (null for the first)
       previous_step: null,
+      // folder of a skill (workspace first, then bundled), e.g. to run its script in an action
+      skill_dir: (name) => resolveSkill(this.skillsDirs, name).path,
     };
     for (const s of this.wf.steps) this.ctx.steps[s.id] = { output: null, visits: 0 };
     this.resume = resume || null;
@@ -747,7 +759,9 @@ class WorkflowRun extends EventEmitter {
 
     for (const t of step.transitions) {
       if (!evalExpr(t.when, scope)) continue;
-      if (t.action) await this.runAction(render(t.action, scope));
+      // an action that renders empty (a conditional one whose condition is false) runs nothing
+      const action = t.action ? render(t.action, scope).trim() : '';
+      if (action) await this.runAction(action);
       // limits first: once max_visits / loop.max_iterations is reached the flow goes to
       // on_exhausted and the delegation is skipped (nothing would check that fix any more)
       let target = this.applyCounters(step, t);

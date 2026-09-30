@@ -95,10 +95,10 @@ Local build: `npm run build` (writes `build/`) or `npm run package` (writes `dis
 |---|---|---|---|---|
 | Build & Test | Developer | Opus 5.5 | Implements and fixes everything the other agents report; always branches from a freshly fetched `origin/<base_branch>`. Handoff session: each fix round starts fresh from its handoff note | `unit-test-writer-<language>`, `bug-diagnosis`, `merge-conflict-resolver`, `context-economy`, `decision-log` |
 | | Code Review | Codex gpt-6-luna | Reviews the diff on correctness, spec and standards; requests changes only for blocker/major | `code-review` |
-| | Test Writer | Sonnet 5 | Writes/updates tests and runs the suite; failures go back to the developer | `unit-test-writer-<language>` |
+| | Test Writer | Sonnet 5 | Writes/updates tests and runs the suite; failures go back to the developer. A UI change gets before/after screenshots (simulation only) in the run's `screenshots/` folder, shown in Artifacts | `unit-test-writer-<language>` |
 | | Builder | Sonnet 5 | Build + dependency audit; a broken build or a high/critical production vulnerability goes back to the developer | `build-audit-<language>` |
 | | Verifier | Sonnet 5 | Proves the change does what the task asked: same command on the base and on the branch; `not_verified` goes back to the developer, `inconclusive` does not block | `claim-verification` |
-| CI/CD | CI Pusher | Sonnet 5 | Push, opens the PR/MR, **/goal** CI green with **/loop**; on failure fetches the log and calls the developer. A PR/MR that conflicts with the base (CI never starts) is reported as failed on the first visit | `ci-pipeline-<platform>` |
+| CI/CD | CI Pusher | Sonnet 5 | Push, opens the PR/MR, **/goal** CI green with **/loop**; on failure fetches the log and calls the developer. A PR/MR that conflicts with the base (CI never starts) is reported as failed on the first visit. Posts the test step's screenshots on the PR/MR (one comment, before/after) | `ci-pipeline-<platform>`, `pr-screenshots-<platform>` |
 | | PR Babysitter | Opus 4.8 | **/goal** PR/MR mergeable with **/loop**; actionable comments → developer (replies with the hash), doubtful ones → human | `pr-babysitter-<platform>`, `decision-log` |
 | | Deployer | Sonnet 5 | Publishes the preview, and after the merge tracks the production deploy. A failure carries `failure_class` (`code`, `infra`, `unknown`): a preview `code` failure goes to the developer, then CI, the PR check and the preview run again (2 rounds at most) | `deploy-<platform>` |
 
@@ -320,12 +320,14 @@ What is shared by a family lives in a suffix-less skill referenced with `uses:`.
 |---|---|---|
 | `code-review` | reviewer | Correctness, spec and standards axes, severities, `rules/` per language (JS/TS, Python, Go, Java/Kotlin, C#, SQL, Shell/CI) and `rules/smells.md` |
 | `unit-test-writer-{js,python,go,java,csharp}` | developer, test writer | Framework detection, commands, idioms per language |
-| `testing-principles` | via `uses` | Seams first, no tautological or implementation-coupled tests, mocks only at boundaries, red before green for bug fixes |
+| `testing-principles` | via `uses` | Seams first, no tautological or implementation-coupled tests, mocks only at boundaries, red before green for bug fixes, before/after screenshots of UI changes |
 | `build-audit-{js,python,go,java,csharp}` | builder | Build and audit commands, production vs development scope per ecosystem |
 | `dependency-audit-policy` | via `uses` | Severity from CVSS, how to report blockers with a fix, redaction |
 | `ci-pipeline-{gh,gl}` | CI pusher | Push, PR/MR, mergeability (conflicts fail fast), CI status, missing checks, fetching failed logs, retrying flaky jobs |
 | `ci-failure-triage` | via `uses` | Classify a failure (code, environment, infrastructure, needs-human) and write a root-cause report |
 | `pr-description` | via `uses` | PR/MR title and body: visual summary, evidence, merge danger |
+| `pr-screenshots-{gh,gl}` | CI pusher | Screenshots comment on the PR/MR (GitHub `blob/...?raw=true`, GitLab `-/raw/` URLs) |
+| `pr-screenshots` | via `uses` | `publish.js`: commits the PNGs to the `pr-screenshots` branch (one folder per PR/MR, closed ones pruned) without touching the checkout, then posts one before/after comment |
 | `issue-creator-{gh,gl}` | backlog planner (#30), any agent that files issues | Search for duplicates, create/comment/edit issues with gh or glab, existing labels only |
 | `issue-writing` | via `uses` | Issue structure: concrete context with evidence, decisions taken, a checklist of verifiable acceptance criteria, related issues |
 | `pr-babysitter-{gh,gl}` | PR babysitter | Mergeability signals, threads/discussions, replies |
@@ -772,7 +774,7 @@ src/renderer/            UI (plain HTML/CSS/JS)
 workflows/               bundled workflow definitions (copied into <workspace>/workflows)
 skills/                  bundled skills (copied into <workspace>/skills)
 .github/workflows/       CI (PRs) and deploy (merge into main)
-scripts/                 terminal runner, tests, build and UI smoke test
+scripts/                 terminal runner, tests, build, UI smoke test and UI screenshots (screenshot.js)
 test/                    unit tests (node:test) and fixtures
 CLAUDE.md, docs/agents/  context for coding agents working on this repository (short index + topic docs)
 ```
