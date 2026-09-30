@@ -50,6 +50,19 @@ same features for users; this is the implementer's summary.
   `refused` = every tool call refused, `blocked` = a blocked `/loop` iteration);
   `summary.context = { agents: { <name>: { turns, fresh_sessions, tokens, peak, waste_tokens, per_turn } }, waste_tokens }`.
   `session.message_received` carries `context: { start, peak }` and `handoff`.
+- Idle agents (`src/engine/idle.js`, #46): an agent with no stream item for `idleWarnMs` (setting
+  `idleWarningMinutes`, default 5, 0 = off) while a tool call is open → one `log` warn
+  `kind: agent_idle` per silence, with `step_id`, `agent`, `tool`, `command`, `idle_ms` (run log,
+  run chat, supervisor timeline). Each turn is split into `active_ms` (the model) / `waiting_ms` (a
+  tool call open) / `stalled_ms` (silent waiting past the threshold) on `session.message_received`,
+  summed per step in `summary.timing = { steps: { <id>: { turns, duration_ms, active_ms, waiting_ms, stalled_ms } }, ...totals }`.
+  Codex reports a command only when it ends, so its waits count as active. On a step's turn, with
+  `orchestrator.supervisor` on, the warning also wakes the supervisor (`superviseIdle`,
+  `supervisor.IDLE_SCHEMA`, `idlePrompt` with the command): `supervisor.started`/`supervisor.decision`
+  with `kind: idle`, action `wait` (nothing happens) or `interrupt` (the turn's own AbortController
+  stops it, `log kind: agent_interrupted`, and the step runs again with the instruction as the
+  supervisor note, without a second supervisor call). Idle checks count against `max_total` only.
+  Simulate with `mockSequences.slow_tools: { step: ms }` and `action: ['interrupt', 'wait']`.
 - The supervisor's decision prompt and `runReport` include the latest note per agent;
   `resumeSpec` returns `handoffs` and the resumed run starts from them.
 

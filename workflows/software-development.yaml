@@ -160,8 +160,9 @@ agents:
     session: handoff
     # subagents: exploration sub-agents map the code, so the main context stays small
     capabilities: { tools: [read, edit, write, *toolchains], web: false, subagents: true }
-    # bug-diagnosis: fixes delegated after failures; merge-conflict-resolver: "update the branch with the base"
-    skills: ["unit-test-writer-{{ inputs.language }}", bug-diagnosis, merge-conflict-resolver, context-economy, decision-log]
+    # bug-diagnosis: fixes delegated after failures; merge-conflict-resolver: "update the branch with the base";
+    # long-commands: suites and builds in the foreground (explicit, not only through the test writer's `uses`)
+    skills: ["unit-test-writer-{{ inputs.language }}", long-commands, bug-diagnosis, merge-conflict-resolver, context-economy, decision-log]
     system_prompt: |
       You are a senior software engineer. Make small, tested, cohesive changes that
       follow the architecture and conventions of the existing code.

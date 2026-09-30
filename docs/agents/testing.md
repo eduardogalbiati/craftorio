@@ -28,7 +28,8 @@ creates a commit needs its own `-c user.name/email`.
   `failure_class: code` and recovers. Numbers and booleans take sequences too (`score`, `ready`).
 - `mockSequences.invalid_answers: { step: n }` makes the first n answers of a step miss its schema
   (exercises the retries and the supervisor); `permission_denials: { step: n }` refuses every tool
-  call; `no_handoff: { step: n }` leaves out the handoff note (exercises the follow-up request).
+  call; `no_handoff: { step: n }` leaves out the handoff note (exercises the follow-up request);
+  `slow_tools: { step: ms }` makes the step's tool call wait ms silently (exercises the idle warning).
 - `wait:` probes are simulated too (`MOCK_PROBES` in workflow.js: CI fails once, then passes with
   no agent turn); `mockSequences.probes: { step: [states] }` overrides them, and the `probe` option
   of `WorkflowRun` injects a fake (`test/probes.test.js`). A mock run never calls `gh`/`glab`.

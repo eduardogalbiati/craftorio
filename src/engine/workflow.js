@@ -16,6 +16,7 @@ const { prepareWorktree, removeWorktree, currentBranch } = require('./worktree')
 const capabilities = require('./capabilities');
 const { stopProcessesIn } = require('./processes');
 const { PROBES, runProbe } = require('./probes');
+const { IdleWatch } = require('./idle');
 const { StepTrail } = require('../renderer/run-progress-model');
 
 // Skills bundled with the app (skills/ folder at the root). Workspace skills take precedence.
@@ -240,6 +241,8 @@ const DEFAULT_MAX_BLOCKED = 3;
 const maxBlocked = (step) => loopConfig(step).max_blocked ?? DEFAULT_MAX_BLOCKED;
 // Consecutive refused tool calls in one turn that are worth a warning (agent fighting its allowlist).
 const DENIAL_WARN = 5;
+// Silence with a command waiting that is worth a warning (an agent polling for text that never shows up).
+const IDLE_WARN_MS = 5 * 60e3;
 
 // What the transitions decide on: enum, boolean and number fields of the schema (not the
 // free text, which an LLM rewords on every call). Without a schema, the whole answer.
@@ -313,8 +316,10 @@ class WorkflowRun extends EventEmitter {
   //   check of a `wait:` step (src/engine/probes.js). Default: the real one; simulations use MOCK_PROBES.
   // peerSessions: () => [{ provider, model, tokens, costUsd }], the sessions of the other runs in progress (and of
   //   those that finished after `budget` was computed): the per-turn budget check counts them too (concurrent runs).
+  // idleWarnMs: an agent silent this long while a tool call is open gets an `agent_idle` warning (src/engine/idle.js).
+  //   Default 5 minutes; 0 disables it.
   // personas: [{ id, name, prompt, skills }] the user's agents (Agents menu), for `persona: random`.
-  constructor({ file, inputs, mock, runsDir, skillsDirs, budget, prices, projectId, issue, resume, worktreesDir, mockSequences, notices, stopProcesses, probe, peerSessions, personas }) {
+  constructor({ file, inputs, mock, runsDir, skillsDirs, budget, prices, projectId, issue, resume, worktreesDir, mockSequences, notices, stopProcesses, probe, peerSessions, idleWarnMs, personas }) {
     super();
     refreshWindowsPath(); // actions (e.g. gh pr merge) need the refreshed PATH
     this.file = file;
@@ -337,6 +342,8 @@ class WorkflowRun extends EventEmitter {
     this.prices = prices || {};
     this.budgetWarned = new Set();
     this.peerSessions = peerSessions || (() => []);
+    this.idleWarnMs = idleWarnMs ?? IDLE_WARN_MS;
+    this.stepTiming = {};           // step id -> { turns, duration_ms, active_ms, waiting_ms, stalled_ms } (summary.timing)
     this.inputs = this.resolveInputs(inputs || {});
     // An agent's provider, model and effort can be templates over the inputs
     // (provider: "{{ inputs.writer_provider }}"), so a workflow can let the user pick them.
@@ -711,7 +718,7 @@ class WorkflowRun extends EventEmitter {
         this.lastStepError = e.message;
         if (this.abort.signal.aborted) throw e;
         // the AI supervisor may fix the output, retry with an instruction, or go to an allowed step
-        const r = await this.superviseFailure(step, st, e);
+        const r = e.idleInterrupt ? this.idleRetry(step, st, e) : await this.superviseFailure(step, st, e);
         if (r?.output) {
           output = r.output;
         } else if (r?.goto) {
@@ -1058,23 +1065,8 @@ class WorkflowRun extends EventEmitter {
     // the agents' own summaries of where they are, instead of their full transcripts
     const handoffs = (step.agents || [step.agent]).map((a) => this.handoffNotes.get(a) && { agent: a, ...this.handoffNotes.get(a) }).filter(Boolean);
     const prompt = supervisor.decisionPrompt({ wf: this.wf, step, error: err.message, answer: st.lastAnswer, allowed, events: this.recent, previous: st.interventions, handoffs });
-    const schema = supervisor.DECISION_SCHEMA;
-    const opts = { stepId: `${step.id}:supervisor`, hint: { stepId: `${step.id}:supervisor`, visit: st.interventions.length + 1, schema } };
-    let decision;
-    try {
-      const full = `${prompt}\n\n---\nAt the end of your response you MUST include a \`\`\`json block with an object that validates against this JSON Schema:\n\`\`\`json\n${JSON.stringify(schema, null, 2)}\n\`\`\``;
-      let res = await this.sendToAgent(cfg.agent, full, opts);
-      for (let attempt = 0; ; attempt++) {
-        let errs;
-        try { decision = extractJson(res.text); errs = validateSchema(decision, schema); } catch (e) { errs = [e.message]; }
-        if (!errs.length) break;
-        if (attempt >= 1) throw new Error(`invalid decision: ${errs.join('; ')}`);
-        res = await this.sendToAgent(cfg.agent, this.retryPrompt(cfg.agent, full, res.text, schema, errs), opts);
-      }
-    } catch (e) {
-      this.emitEvent('log', { level: 'error', message: `Supervisor could not decide on ${step.id}: ${e.message}` });
-      return null;
-    }
+    const decision = await this.askSupervisor(step, prompt, supervisor.DECISION_SCHEMA, st.interventions.length + 1);
+    if (!decision) return null;
     st.interventions.push({ action: decision.action, explanation: decision.explanation });
     const emit = (action, extra = {}) => this.emitEvent('supervisor.decision', {
       step_id: step.id, action, cause_class: decision.cause_class || null, explanation: decision.explanation,
@@ -1103,6 +1095,59 @@ class WorkflowRun extends EventEmitter {
         emit('fail');
         return null;
     }
+  }
+
+  // One supervisor decision that validates against `schema` (asked again once), or null.
+  async askSupervisor(step, prompt, schema, visit) {
+    const cfg = this.supervisorCfg;
+    const opts = { stepId: `${step.id}:supervisor`, hint: { stepId: `${step.id}:supervisor`, visit, schema, sequences: this.mockSequences } };
+    let decision;
+    try {
+      const full = `${prompt}\n\n---\nAt the end of your response you MUST include a \`\`\`json block with an object that validates against this JSON Schema:\n\`\`\`json\n${JSON.stringify(schema, null, 2)}\n\`\`\``;
+      let res = await this.sendToAgent(cfg.agent, full, opts);
+      for (let attempt = 0; ; attempt++) {
+        let errs;
+        try { decision = extractJson(res.text); errs = validateSchema(decision, schema); } catch (e) { errs = [e.message]; }
+        if (!errs.length) return decision;
+        if (attempt >= 1) throw new Error(`invalid decision: ${errs.join('; ')}`);
+        res = await this.sendToAgent(cfg.agent, this.retryPrompt(cfg.agent, full, res.text, schema, errs), opts);
+      }
+    } catch (e) {
+      this.emitEvent('log', { level: 'error', message: `Supervisor could not decide on ${step.id}: ${e.message}` });
+      return null;
+    }
+  }
+
+  // An agent_idle warning on a step's turn wakes the supervisor with the command being waited on.
+  // `wait` leaves the turn alone; `interrupt` stops it (interrupt()), and the step runs again with the
+  // supervisor's instruction (idleRetry). Counts against max_total, not the step's failure interventions.
+  async superviseIdle(step, stall, { agentName, interrupt }) {
+    const cfg = this.supervisorCfg;
+    if (this.supervisorUsed >= cfg.total) {
+      this.emitEvent('log', { level: 'warn', message: `Supervisor: no more interventions allowed; ${step.id} keeps waiting.` });
+      return;
+    }
+    this.supervisorUsed++;
+    const st = this.ctx.steps[step.id];
+    st.idleChecks = (st.idleChecks || 0) + 1;
+    this.emitEvent('supervisor.started', { step_id: step.id, kind: 'idle', error: `agent idle: ${stall.command}` });
+    const handoffs = (step.agents || [step.agent]).map((a) => this.handoffNotes.get(a) && { agent: a, ...this.handoffNotes.get(a) }).filter(Boolean);
+    const prompt = supervisor.idlePrompt({ wf: this.wf, step, agent: agentName, idle: stall, events: this.recent, handoffs });
+    const decision = await this.askSupervisor(step, prompt, supervisor.IDLE_SCHEMA, st.idleChecks);
+    if (!decision) return;
+    const interrupted = decision.action === 'interrupt' && interrupt(decision, stall);
+    this.emitEvent('supervisor.decision', {
+      step_id: step.id, kind: 'idle', action: decision.action, explanation: decision.explanation,
+      instruction: decision.instruction || null, command: stall.command,
+      ...(decision.action === 'interrupt' && !interrupted ? { note: 'not interrupted: the agent had resumed or the turn had ended' } : {}),
+    });
+  }
+
+  // A turn the supervisor interrupted: the step runs again with its instruction (no second supervisor call).
+  idleRetry(step, st, e) {
+    st.supervisorNote = e.idleInterrupt.instruction
+      || `Your previous attempt was stopped after waiting with no output on: ${e.idleInterrupt.command}. Run long commands in the foreground with a timeout and read their exit code.`;
+    return { goto: step.id, decision: { action: 'retry', explanation: e.message } };
   }
 
   async supervisorAsksHuman(step, decision, retry) {
@@ -1407,14 +1452,39 @@ class WorkflowRun extends EventEmitter {
         const call = calls.get(item.id);
         tools.denied.push(`${call?.name || 'tool'}: ${String(call?.input?.command ?? JSON.stringify(call?.input ?? '')).slice(0, 120)}`);
       };
+      // this turn's own abort: the run's cancel, or the supervisor interrupting an idle wait
+      const turnAbort = new AbortController();
+      const cancel = () => turnAbort.abort();
+      this.abort.signal.addEventListener('abort', cancel, { once: true });
+      let interrupted = null;
+      // only while the stall the supervisor decided on still holds: the command may have produced
+      // output or finished while it was thinking
+      const interrupt = (decision, stall) => {
+        if (timed || !idle.stillStalled(stall)) return false;
+        interrupted = decision;
+        turnAbort.abort();
+        return true;
+      };
+      const idle = new IdleWatch({ idleMs: this.idleWarnMs });
+      const idleTimer = this.idleWarnMs > 0 && setInterval(() => this.warnIdle(idle, { session, agentName, stepId, turn, interrupt }), Math.min(30e3, Math.max(50, this.idleWarnMs / 4)));
+      idleTimer?.unref?.();
+      let timed = null;
+      const timing = () => {
+        if (timed) return timed;
+        this.abort.signal.removeEventListener('abort', cancel);
+        clearInterval(idleTimer);
+        this.addStepTiming(stepId, (timed = idle.finish()));
+        return timed;
+      };
       try {
         const res = await runTurn({
           provider, model: agent.model, effort: agent.effort, providerSessionId: session.providerSessionId,
           prompt: fullPrompt, cwd: (session.cwd = this.workingDir(agent)), extraArgs,
           timeoutMs: parseDuration(agent.timeout, 30 * 60e3),
-          signal: this.abort.signal, hint, render,
-          onItem: (item) => { track(item); this.emitEvent('session.stream', { session_id: session.id, turn, item }); },
+          signal: turnAbort.signal, hint, render,
+          onItem: (item) => { track(item); idle.item(item); this.emitEvent('session.stream', { session_id: session.id, turn, item }); },
         });
+        const { active_ms, waiting_ms, stalled_ms } = timing();
         res.tools = tools;
         res.context = context;
         [res.text, res.handoff] = takeHandoff(res.text);
@@ -1433,15 +1503,23 @@ class WorkflowRun extends EventEmitter {
         session.status = 'idle';
         this.emitEvent('session.message_received', {
           session_id: session.id, turn, step_id: stepId, text: res.text, usage: res.usage,
-          cost_usd: res.costUsd, duration_ms: dur, session: this.snapshot(session),
+          cost_usd: res.costUsd, duration_ms: dur, active_ms, waiting_ms, stalled_ms, session: this.snapshot(session),
           context, ...(res.handoff ? { handoff: res.handoff } : {}),
         });
         this.recordDecisions(agentName, stepId, res.text);
         return res;
       } catch (e) {
+        timing();
         session.activeMs += Date.now() - t0;
         lastErr = e;
         if (this.abort.signal.aborted) break;
+        if (interrupted) {
+          const stall = idle.lastStall;
+          lastErr = Object.assign(new Error(`[${agentName}] turn interrupted by the supervisor: no output while waiting on ${stall?.tool || 'a tool'}: ${stall?.command || '?'}`),
+            { idleInterrupt: { instruction: interrupted.instruction || null, command: stall?.command || null } });
+          this.emitEvent('log', { level: 'warn', kind: 'agent_interrupted', step_id: stepId, agent: agentName, message: lastErr.message });
+          break;
+        }
         this.emitEvent('log', { level: 'error', message: `[${agentName}] attempt ${a}/${maxAttempts} failed: ${e.message}` });
         if (!isRetryable(e)) {
           this.emitEvent('log', { level: 'error', message: `[${agentName}] non-retryable error, giving up.` });
@@ -1455,6 +1533,36 @@ class WorkflowRun extends EventEmitter {
       }
     }
     throw lastErr;
+  }
+
+  // An agent silent for idleWarnMs while a command is waiting: probably polling for output that never
+  // comes, or a hung process. Visible in the run, the run chat and the supervisor's timeline; on a
+  // step's turn it also wakes the supervisor, when the workflow has one (superviseIdle).
+  warnIdle(idle, { session, agentName, stepId, turn, interrupt }) {
+    const stall = idle.check();
+    if (!stall) return;
+    const minutes = Math.round(stall.idle_ms / 6e3) / 10;
+    this.emitEvent('log', {
+      level: 'warn', kind: 'agent_idle', step_id: stepId, agent: agentName, session_id: session.id, turn,
+      idle_ms: stall.idle_ms, tool: stall.tool, command: stall.command,
+      message: `[${agentName}] no output for ${minutes} min in ${stepId || 'a delegated turn'} while waiting on ${stall.tool}: ${stall.command}`,
+    });
+    const step = this.supervisorCfg && this.wf.steps.find((s) => s.id === stepId);
+    if (step) this.superviseIdle(step, stall, { agentName, interrupt }).catch((e) => this.emitEvent('log', { level: 'error', message: `Supervisor could not decide on ${stepId}: ${e.message}` }));
+  }
+
+  addStepTiming(stepId, t) {
+    const s = (this.stepTiming[stepId || 'delegated'] ??= { turns: 0, duration_ms: 0, active_ms: 0, waiting_ms: 0, stalled_ms: 0 });
+    s.turns++;
+    for (const k of ['duration_ms', 'active_ms', 'waiting_ms', 'stalled_ms']) s[k] += t[k];
+  }
+
+  // Agent time per step: active (the model working) vs waiting (a tool call running), and the part
+  // of the waits with no output past idleWarnMs (stalled). Explains why a slow step was slow.
+  timingSummary() {
+    const total = { duration_ms: 0, active_ms: 0, waiting_ms: 0, stalled_ms: 0 };
+    for (const s of Object.values(this.stepTiming)) for (const k of Object.keys(total)) total[k] += s[k];
+    return { steps: this.stepTiming, ...total };
   }
 
   // Per run and per agent: context at the start of each turn, its peak, tokens, and the tokens spent
@@ -1558,6 +1666,7 @@ ${stderr || stdout}`.slice(0, 1500)));
         duration_ms: Date.now() - this.startedAt, inputs: this.inputs, mock: this.mock, worktree: this.worktreeSummary(),
         tokens, cost_usd: +sessions.reduce((a, s) => a + s.cost_usd, 0).toFixed(6),
         context: this.contextSummary(),
+        timing: this.timingSummary(),
         // `wait:` steps: checks made without an agent turn, agent turns they asked for, steps they finished
         ...(Object.keys(this.probeStats).length ? { probes: this.probeStats } : {}),
         steps: Object.fromEntries(Object.entries(this.ctx.steps).map(([k, v]) => [k, { visits: v.visits, output: v.output }])),

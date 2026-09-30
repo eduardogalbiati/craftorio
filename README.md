@@ -323,6 +323,7 @@ What is shared by a family lives in a suffix-less skill referenced with `uses:`.
 | `testing-principles` | via `uses` | Seams first, no tautological or implementation-coupled tests, mocks only at boundaries, red before green for bug fixes, before/after screenshots of UI changes |
 | `build-audit-{js,python,go,java,csharp}` | builder | Build and audit commands, production vs development scope per ecosystem |
 | `dependency-audit-policy` | via `uses` | Severity from CVSS, how to report blockers with a fix, redaction |
+| `long-commands` | developer; via `uses` (test writer, builder, verifier) | Suites and builds in the foreground with a sized timeout, never backgrounded and polled for text; full output kept, exit code read |
 | `ci-pipeline-{gh,gl}` | CI pusher | Push, PR/MR, mergeability (conflicts fail fast), CI status, missing checks, fetching failed logs, retrying flaky jobs |
 | `ci-failure-triage` | via `uses` | Classify a failure (code, environment, infrastructure, needs-human) and write a root-cause report |
 | `pr-description` | via `uses` | PR/MR title and body: visual summary, evidence, merge danger |
@@ -741,7 +742,10 @@ Each run writes to `<workspace>/runs/<run_id>/`:
 - `summary.json`: final metrics per session (duration, active, idle, tokens, cost) and, in `context`,
   per agent: the context at the start and peak of each turn, total tokens, fresh sessions, and the
   tokens spent on turns that could not progress (`waste`: every tool call refused, or a blocked `/loop`
-  iteration). The run chat shows each turn's context (start → peak).
+  iteration). The run chat shows each turn's context (start → peak). In `timing`, per step: the
+  agents' time split into active (the model working), waiting (a command running) and stalled
+  (waiting with no output for longer than `idleWarningMinutes`, default 5, which also logs a
+  warning in the run and its chat).
 - `handoffs/`: the agents' handoff notes, one per turn
 - files written by `save_as` (e.g. `arena/`, `review.md`)
 - `decisions.tsv`: the agents' decision log (time, agent, step, phase, decision, why, evidence, result)

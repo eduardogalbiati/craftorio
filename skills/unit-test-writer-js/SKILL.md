@@ -1,7 +1,7 @@
 ---
 name: unit-test-writer-js
 description: Writes, updates and runs unit tests for JavaScript/TypeScript (Node, browser, React) with the framework the project already uses (node:test, Vitest, Jest, Mocha). Use to add tests for a change or run the suite of a JS/TS project.
-uses: [testing-principles]
+uses: [testing-principles, long-commands]
 ---
 
 # Unit tests: JavaScript / TypeScript

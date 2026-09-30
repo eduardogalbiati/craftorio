@@ -1,7 +1,7 @@
 ---
 name: unit-test-writer-go
 description: Writes, updates and runs unit tests for Go with the standard testing package (table-driven tests, httptest; testify only if the project already uses it). Use to add tests for a change or run the suite of a Go project.
-uses: [testing-principles]
+uses: [testing-principles, long-commands]
 ---
 
 # Unit tests: Go

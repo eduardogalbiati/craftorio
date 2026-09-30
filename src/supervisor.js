@@ -2,7 +2,8 @@
 //
 // The engine stays deterministic; the supervisor is only called
 // - by the engine, when a step fails during a run (src/engine/workflow.js, superviseFailure):
-//   it explains the failure and picks a recovery the engine validates;
+//   it explains the failure and picks a recovery the engine validates; and when an agent is silent
+//   while a command waits (superviseIdle): keep waiting, or interrupt the turn and retry the step;
 // - by a person, from the UI, for any run (analyzeRun): it explains what happened and recommends
 //   actions such as resuming the run from a step (resumeSpec) with an instruction.
 
@@ -21,6 +22,18 @@ const DECISION_SCHEMA = {
     instruction: { type: 'string' },
     output: {},
     goto: { type: 'string' },
+  },
+};
+
+// Decision on an agent silent while a command waits (agent_idle). `wait` first: the mock's default,
+// and the safe one (a long foreground build prints nothing until it ends).
+const IDLE_SCHEMA = {
+  type: 'object',
+  required: ['explanation', 'action'],
+  properties: {
+    explanation: { type: 'string' },
+    action: { type: 'string', enum: ['wait', 'interrupt'] },
+    instruction: { type: 'string' },
   },
 };
 
@@ -95,6 +108,22 @@ function decisionPrompt({ wf, step, error, answer, allowed, events, previous, ha
     `- goto: continue at one of these steps: ${allowed.length ? allowed.join(', ') : '(none)'}.`,
     '- ask_human: stop and ask the person (explain what they need to decide or change).',
     '- fail: end the run.',
+    'Explain in the language of the workflow\'s task, for the person running it.',
+  ].filter(Boolean).join('\n');
+}
+
+/** Prompt for a decision on an agent that has been silent while a command waits (engine-side). */
+function idlePrompt({ wf, step, agent, idle, events, handoffs }) {
+  const minutes = Math.round(idle.idle_ms / 6e3) / 10;
+  return [
+    `An agent of the workflow "${wf.metadata?.name}" has produced no output for ${minutes} minutes while a command is waiting. Decide whether the engine should keep waiting or interrupt the agent's turn, following the run-supervisor skill.`,
+    `\n## Step\n${step.id} (agent ${agent})`,
+    `\n## The command it is waiting on (${idle.tool})\n\`\`\`\n${clip(idle.command, 1000)}\n\`\`\``,
+    handoffs?.length ? `\n## The agents' handoff notes (their own summary of where they are, latest turn)\n${handoffs.map((h) => `### ${h.agent} (step ${h.step}, visit ${h.visit})\n${clip(h.text, 3000)}`).join('\n\n')}` : '',
+    `\n## Recent timeline\n${timeline(events, 40) || '(empty)'}`,
+    `\n## Your options`,
+    '- wait: the command can plausibly still finish (a long build or test suite in the foreground prints nothing until it ends).',
+    '- interrupt: the wait cannot end on its own (polling for a text that may never appear, a background job with no exit check, an interactive prompt); the engine stops this turn and runs the step again with `instruction` added to the agent\'s prompt. Describe the evidence and what to do instead (e.g. run the command in the foreground with a timeout and read its exit code); never prescribe a code fix.',
     'Explain in the language of the workflow\'s task, for the person running it.',
   ].filter(Boolean).join('\n');
 }
@@ -238,4 +267,4 @@ async function analyzeRun({ runDir, question, workflowsDir, skillsDirs, resolveC
   return { analysis, artifactPath, model, costUsd: cost, steps: (cfg.wf.steps || []).map((x) => x.id) };
 }
 
-module.exports = { analyzeRun, supervisorConfig, DECISION_SCHEMA, ANALYSIS_SCHEMA, decisionPrompt, runReport, analysisMarkdown, resumeSpec, timeline, readEvents };
+module.exports = { analyzeRun, supervisorConfig, DECISION_SCHEMA, IDLE_SCHEMA, ANALYSIS_SCHEMA, decisionPrompt, idlePrompt, runReport, analysisMarkdown, resumeSpec, timeline, readEvents };

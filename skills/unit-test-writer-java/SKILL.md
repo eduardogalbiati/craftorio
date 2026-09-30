@@ -1,7 +1,7 @@
 ---
 name: unit-test-writer-java
 description: Writes, updates and runs unit tests for Java/Kotlin (JUnit 5, AssertJ, Mockito/MockK, Spring test slices) with Maven or Gradle. Use to add tests for a change or run the suite of a JVM project.
-uses: [testing-principles]
+uses: [testing-principles, long-commands]
 ---
 
 # Unit tests: Java / Kotlin

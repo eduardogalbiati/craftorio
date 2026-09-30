@@ -10,5 +10,8 @@ Read this when planning new work, to avoid redoing a discussion.
 - Arena ideas not done: rubric hidden from contenders, contenders configurable by input.
 - Visual builder (#26) follow-ups: draw loops, parallel desks, output schemas and custom inputs;
   drag to reorder; show the builder's robots in the run chat.
-- Analytics screen (#27): the per-turn context metrics are in `summary.context` of every run.
+- Analytics screen (#27): the per-turn context metrics are in `summary.context` of every run, the
+  active / waiting / stalled time per step in `summary.timing`.
+- Idle agents (#46 → #41): the `agent_idle` warning wakes the supervisor (wait / interrupt) only on
+  a step's turn, not on delegated turns; there is no UI for the `idleWarningMinutes` setting.
 - Worktree follow-ups: see [worktrees.md](worktrees.md).

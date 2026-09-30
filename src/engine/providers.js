@@ -450,8 +450,11 @@ async function runMock({ providerSessionId, model, hint, signal, onItem }) {
       onItem({ kind: 'tool_result', id: `d${i}`, output: 'This command requires approval', is_error: true });
     }
   } else {
-    onItem({ kind: 'tool_call', id: 't1', name: 'Bash', input: { command: 'git status' } });
-    await d(500);
+    // sequences.slow_tools: { stepId: ms }: the tool call of that step's turns waits ms (not scaled),
+    // with no output meanwhile (an agent waiting on a command that does not end)
+    const slow = hint?.stepId != null && hint?.sequences?.slow_tools?.[hint.stepId];
+    onItem({ kind: 'tool_call', id: 't1', name: 'Bash', input: { command: slow ? 'until grep -q "duration_ms" out.log; do sleep 5; done' : 'git status' } });
+    await (slow ? sleep(slow, signal) : d(500));
     onItem({ kind: 'tool_result', id: 't1', output: 'On branch feat/mock-feature\nnothing to commit, working tree clean' });
   }
   await d(800);

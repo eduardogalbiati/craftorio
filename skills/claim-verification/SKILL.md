@@ -1,6 +1,7 @@
 ---
 name: claim-verification
 description: Proves or disproves a concrete claim about a change ("the endpoint now returns 404 for unknown ids", "the build is 30% faster") by running the same command before and after and comparing raw evidence, ending in exactly one verdict - verified, not_verified or inconclusive. Strictly read-only - never changes the working tree. Use after a change is built to confirm it does what the task asked.
+uses: [long-commands]
 ---
 
 # Claim verification

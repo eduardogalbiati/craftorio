@@ -131,6 +131,8 @@ const DEFAULT_SETTINGS = {
   // several workflows at the same time (Settings › Execution); disabled = one run at a time.
   // perProject: null = no limit per project; simulations count toward the limits only if countSimulations.
   concurrentRuns: { enabled: false, max: 2, perProject: null, countSimulations: false },
+  // warn when an agent shows no output for this long while a command it started is waiting; 0 = off
+  idleWarningMinutes: 5,
   // monthly limits per provider (see src/usage.js); null = no limit
   budgets: {},
   // USD per 1M tokens, for CLIs that do not report cost: { model: { input, output, cache_read } }

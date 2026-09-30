@@ -396,6 +396,7 @@ function createService({ host }) {
         worktreesDir: mock ? null : ws.worktrees,
         // concurrent runs share the monthly budgets
         peerSessions: () => peerSessions(run),
+        idleWarnMs: settings.idleWarningMinutes != null && Number.isFinite(+settings.idleWarningMinutes) ?+settings.idleWarningMinutes * 60e3 : undefined,
         // `persona: random` agents become one of the user's agents (Agents menu)
         personas: agents.listAgents(ws.agents).filter((a) => !a.system && !a.error),
       });

@@ -2513,7 +2513,7 @@ function renderDelimited(text, sep) {
 // ---------------------------------------------------------------------------
 // AI supervisor: analysis of a run, resume from a step, chat
 // ---------------------------------------------------------------------------
-const SUP_ACTIONS = { retry: 'retry the step', fix_output: 'fix the output', goto: 'go to another step', ask_human: 'ask you', fail: 'stop the run' };
+const SUP_ACTIONS = { retry: 'retry the step', fix_output: 'fix the output', goto: 'go to another step', ask_human: 'ask you', fail: 'stop the run', wait: 'keep waiting', interrupt: 'interrupt the idle agent' };
 
 function openSupervisorForCurrent() {
   const r = state.run;

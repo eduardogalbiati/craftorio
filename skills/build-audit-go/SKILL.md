@@ -1,7 +1,7 @@
 ---
 name: build-audit-go
 description: Builds a Go project and audits vulnerabilities with govulncheck, treating code-reachable vulnerabilities as production and module-only ones as development. Use to check whether a Go project builds and has vulnerable dependencies.
-uses: [dependency-audit-policy]
+uses: [dependency-audit-policy, long-commands]
 ---
 
 # Build and audit: Go

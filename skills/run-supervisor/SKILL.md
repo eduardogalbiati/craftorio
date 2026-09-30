@@ -42,6 +42,16 @@ Work from what the run recorded, not from assumptions:
 - Two failed interventions on the same step mean it is not going to fix itself: escalate.
 - Money and time matter: do not retry expensive steps for a cosmetic problem.
 
+## An idle agent (the step has not failed)
+
+The engine also wakes you when an agent has been silent for minutes while a command waits, and
+gives you that command. Choose `wait` when it can still end on its own (a long build or suite in
+the foreground prints nothing until it exits). Choose `interrupt` only when it cannot: a loop
+polling for a text that may never appear, a background job nobody waits on by exit code, an
+interactive prompt. The engine then stops the turn and runs the step again with your
+`instruction`: name the command and say how to run it instead (foreground, a timeout sized for
+the project, read the exit code). Never prescribe a code fix.
+
 ## Explain for a person
 
 The explanation is read by the person who runs the workflow, in the language of the task.
