@@ -301,7 +301,8 @@ class WorkflowRun extends EventEmitter {
   // budget: { [provider id]: { name, limitUsd, limitTokens, blockOnLimit, usedUsd, usedTokens } }
   // (this month's usage before this run, see src/usage.js); prices: USD per 1M tokens by model.
   // projectId: the project the run belongs to (recorded in workflow.started and summary.json).
-  // issue: { number, url, title } the run implements (Backlog screen), recorded the same way.
+  // issues: [{ number, url, title }] the run implements (Backlog screen; several when a group of issues
+  //   goes as one run), recorded the same way. `issue` (one issue, the option before groups) is still accepted.
   // resume: { runId, fromStep, steps: { id: { output, visits } }, sessions: { agent: providerSessionId }, handoffs: { agent: note },
   //   instruction, worktree: { dir, branch } }
   //   starts at fromStep with the previous run's step outputs, agent conversations and handoff notes
@@ -319,7 +320,7 @@ class WorkflowRun extends EventEmitter {
   // idleWarnMs: an agent silent this long while a tool call is open gets an `agent_idle` warning (src/engine/idle.js).
   //   Default 5 minutes; 0 disables it.
   // personas: [{ id, name, prompt, skills }] the user's agents (Agents menu), for `persona: random`.
-  constructor({ file, inputs, mock, runsDir, skillsDirs, budget, prices, projectId, issue, resume, worktreesDir, mockSequences, notices, stopProcesses, probe, peerSessions, idleWarnMs, personas }) {
+  constructor({ file, inputs, mock, runsDir, skillsDirs, budget, prices, projectId, issues, issue, resume, worktreesDir, mockSequences, notices, stopProcesses, probe, peerSessions, idleWarnMs, personas }) {
     super();
     refreshWindowsPath(); // actions (e.g. gh pr merge) need the refreshed PATH
     this.file = file;
@@ -331,7 +332,7 @@ class WorkflowRun extends EventEmitter {
     this.runDir = path.join(runsDir, this.runId);
     this.skillsDirs = [...(skillsDirs || []), BUNDLED_SKILLS];
     this.projectId = projectId || null;
-    this.issue = issue || null;
+    this.issues = issues?.length ? issues : issue ? [issue] : null;
     this.worktreesDir = worktreesDir || null;
     this.worktree = null; // see setupWorktree
     this.stopProcesses = stopProcesses === undefined ? (this.mock ? null : stopProcessesIn) : stopProcesses;
@@ -403,6 +404,8 @@ class WorkflowRun extends EventEmitter {
       if (def.required && (v === undefined || v === '')) throw new Error(`Required input not provided: ${k}`);
       if (def.enum && v !== undefined && !def.enum.includes(v)) throw new Error(`Input "${k}" must be one of ${def.enum.join(', ')}`);
       if (def.type === 'run') v = this.resolveRunInput(k, v);
+      // a list typed in a form arrives as text: one item per line or comma
+      if (def.type === 'array' && typeof v === 'string') v = v.split(/[\n,]/).map((x) => x.trim()).filter(Boolean);
       out[k] = v;
     }
     return out;
@@ -539,7 +542,7 @@ class WorkflowRun extends EventEmitter {
     this.status = 'running';
     this.emitEvent('workflow.started', {
       workflow: this.wf.metadata?.name, version: this.wf.metadata?.version, project_id: this.projectId,
-      issue: this.issue || undefined,
+      issues: this.issues || undefined,
       file: path.basename(this.file), inputs: this.inputs, mock: this.mock, run_dir: this.runDir,
       resumed_from: this.resume ? { run_id: this.resume.runId, step: this.resume.fromStep } : undefined,
       personas: Object.keys(this.personas).length ? this.personas : undefined,
@@ -1661,7 +1664,7 @@ ${stderr || stdout}`.slice(0, 1500)));
     this.emitEvent('workflow.finished', {
       status, error: err?.message || null,
       summary: {
-        run_id: this.runId, workflow: this.wf.metadata?.name, project_id: this.projectId, issue: this.issue || undefined, status,
+        run_id: this.runId, workflow: this.wf.metadata?.name, project_id: this.projectId, issues: this.issues || undefined, status,
         started_at: new Date(this.startedAt).toISOString(), finished_at: new Date().toISOString(),
         duration_ms: Date.now() - this.startedAt, inputs: this.inputs, mock: this.mock, worktree: this.worktreeSummary(),
         tokens, cost_usd: +sessions.reduce((a, s) => a + s.cost_usd, 0).toFixed(6),

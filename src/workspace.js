@@ -128,6 +128,8 @@ const DEFAULT_SETTINGS = {
   lastWorkflow: null,
   // where the Backlog screen syncs issues from by default: github | gitlab | bitbucket
   backlogPlatform: 'github',
+  // the most issues the Backlog sends as one run (one branch, one PR/MR)
+  backlogMaxGroup: 5,
   // several workflows at the same time (Settings › Execution); disabled = one run at a time.
   // perProject: null = no limit per project; simulations count toward the limits only if countSimulations.
   concurrentRuns: { enabled: false, max: 2, perProject: null, countSimulations: false },

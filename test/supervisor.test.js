@@ -152,7 +152,19 @@ test('resumeSpec and runReport read a run folder', (t) => {
   assert.deepEqual(spec.steps, { check: { output: { verdict: 'pass' }, visits: 1 } });
   assert.deepEqual(spec.sessions, { a: 'ps-1' });
   assert.equal(spec.projectId, 'p');
+  assert.equal(spec.issues, null);
   const report = supervisor.runReport(dir, { workflowsDir: dir });
   assert.match(report, /Status: failed\nError: boom/);
   assert.match(report, /▶ check \(visit 1\)/);
+});
+
+test('resumeSpec carries the issues over; a run recorded with one `issue` resumes with a list of one', (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'run-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const ref = (n) => ({ number: n, url: `https://github.com/o/r/issues/${n}`, title: `T${n}` });
+  const started = (o) => fs.writeFileSync(path.join(dir, 'events.jsonl'), `${JSON.stringify({ type: 'workflow.started', file: 'wf.yaml', inputs: {}, ...o })}\n`);
+  started({ issues: [ref(53), ref(65)] });
+  assert.deepEqual(supervisor.resumeSpec(dir, 'x').issues, [ref(53), ref(65)]);
+  started({ issue: ref(7) });
+  assert.deepEqual(supervisor.resumeSpec(dir, 'x').issues, [ref(7)]);
 });

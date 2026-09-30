@@ -54,6 +54,25 @@ test('listRuns reads finished runs from summary.json and rebuilds interrupted on
   assert.equal(r2.sessions[0].provider_session_id, 'p-s1');
 });
 
+test('readRun gives the issues a run implements; a run recorded with one `issue` still loads as a list of one', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-issues-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const ref = (n) => ({ number: n, url: `https://github.com/o/r/issues/${n}`, title: `T${n}` });
+  const add = (id, started, summary) => {
+    fs.mkdirSync(path.join(root, id));
+    fs.writeFileSync(path.join(root, id, 'events.jsonl'), jl({ ts: '2026-09-27T10:00:00Z', type: 'workflow.started', workflow: 'w', ...started }));
+    if (summary) fs.writeFileSync(path.join(root, id, 'summary.json'), JSON.stringify({ run_id: id, workflow: 'w', status: 'success', started_at: '2026-09-27T10:00:00Z', sessions: [], ...summary }));
+  };
+  add('group', { issues: [ref(53), ref(65)] }, { issues: [ref(53), ref(65)] });
+  add('old-finished', { issue: ref(7) }, { issue: ref(7) });
+  add('old-interrupted', { issue: ref(8) });
+  add('none', {});
+  assert.deepEqual(runs.readRun(root, 'group').issues, [ref(53), ref(65)]);
+  assert.deepEqual(runs.readRun(root, 'old-finished').issues, [ref(7)]);
+  assert.deepEqual(runs.readRun(root, 'old-interrupted').issues, [ref(8)]);
+  assert.equal(runs.readRun(root, 'none').issues, null);
+});
+
 test('runsForProject matches the project id, then the current or previous folders', (t) => {
   const root = workspace(t);
   const list = runs.listRuns(root);

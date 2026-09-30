@@ -201,13 +201,17 @@ async function syncBacklog({ dir, project, platform, exec }) {
 
 // ---- issue ↔ run links -------------------------------------------------------------------
 // A run works on an issue when it was started for it (the Backlog's "Assign workflow", recorded
-// as run.issue) or, for runs started by hand, when its task or one of its text inputs mentions
-// the issue's URL or "#<number>". Simulated runs only count through the explicit link.
+// as run.issues; runs recorded before groups have run.issue) or, for runs started by hand, when
+// its task or one of its text inputs mentions the issue's URL or "#<number>". Simulated runs only
+// count through the explicit link.
 function mentions(run, issue) {
   const text = [run.task, ...Object.values(run.inputs || {})].filter((v) => typeof v === 'string').join('\n');
   return (!!issue.url && text.includes(issue.url)) || new RegExp(`(^|[^\\w/&])#${issue.number}(?!\\d)`).test(text);
 }
-const startedFor = (run, issue) => !!run.issue && (run.issue.url ? run.issue.url === issue.url : run.issue.number === issue.number);
+/** The issues a run was started for: run.issues, or [run.issue] for runs recorded before groups. */
+const runIssues = (run) => (Array.isArray(run?.issues) ? run.issues : run?.issue ? [run.issue] : []);
+const sameIssue = (a, issue) => (a.url ? a.url === issue.url : a.number === issue.number);
+const startedFor = (run, issue) => runIssues(run).some((a) => sameIssue(a, issue));
 
 // Kanban column from the issue state, its place in the queue and its latest run.
 function columnOf(issue, latest, queued) {
@@ -231,10 +235,17 @@ function linkRuns(issues, runs, queue = null) {
   const sorted = [...runs].sort((a, b) => String(b.startedAt).localeCompare(String(a.startedAt)));
   const items = queue?.items || [];
   return issues.map((issue) => {
-    const linked = sorted.filter((r) => startedFor(r, issue) || (!r.mock && !r.issue && mentions(r, issue)))
-      .map((r) => ({ runId: r.runId, workflow: r.workflow, status: r.status, startedAt: r.startedAt, mock: !!r.mock, waiting: !!r.waiting }));
-    const at = items.findIndex((q) => q.number === issue.number);
-    const queued = at < 0 ? null : { position: at + 1, workflow: items[at].workflowName || items[at].workflow, mock: !!items[at].mock };
+    const linked = sorted.filter((r) => startedFor(r, issue) || (!r.mock && !runIssues(r).length && mentions(r, issue)))
+      .map((r) => {
+        // a run started for a group: the other issues it implements ("grouped with #a, #b")
+        const others = runIssues(r).filter((a) => !sameIssue(a, issue)).map((a) => a.number);
+        return { runId: r.runId, workflow: r.workflow, status: r.status, startedAt: r.startedAt, mock: !!r.mock, waiting: !!r.waiting, ...(others.length ? { groupedWith: others } : {}) };
+      });
+    const at = items.findIndex((q) => itemIssues(q).some((x) => x.number === issue.number));
+    const others = at < 0 ? [] : itemIssues(items[at]).map((x) => x.number).filter((n) => n !== issue.number);
+    const queued = at < 0 ? null : {
+      position: at + 1, workflow: items[at].workflowName || items[at].workflow, mock: !!items[at].mock, ...(others.length ? { groupedWith: others } : {}),
+    };
     return { ...issue, runs: linked, queued, column: columnOf(issue, linked[0], queued) };
   });
 }
@@ -243,6 +254,9 @@ function linkRuns(issues, runs, queue = null) {
 // Issues assigned to a workflow wait in <workspace>/backlog/<project id>.queue.json until the
 // service starts them while there are free run slots (Settings › Execution › Concurrent runs; one at
 // a time by default): { paused, error, inputs: { <workflow file>: inputs }, items, skipped }.
+// An item is one run: one issue ({ number, url, title, body, knownPullRequests, ... }), or a group
+// sent as a single run (one branch, one PR/MR), which also has `issues`: the same fields per issue,
+// in the order selected; its number/url/title are the first issue's.
 // `skipped` lists the issues taken out right before their start, with the reason (an open PR/MR).
 const queueFile = (dir, projectId) => path.join(dir, `${path.basename(String(projectId))}.queue.json`);
 const emptyQueue = () => ({ paused: false, error: null, inputs: {}, items: [], skipped: [] });
@@ -260,6 +274,15 @@ function writeQueue(dir, projectId, queue) {
 
 const updateQueue = (dir, projectId, fn) => writeQueue(dir, projectId, fn(readQueue(dir, projectId)) || readQueue(dir, projectId));
 
+const issueFields = (i) => ({ number: i.number, url: i.url, title: i.title, body: i.body || '', knownPullRequests: i.knownPullRequests || [] });
+/** The issues of a queue item: its `issues` (a group), or the item itself. */
+const itemIssues = (item) => (Array.isArray(item.issues) && item.issues.length ? item.issues : [issueFields(item)]);
+// An item with these issues: a group while it has two or more, a single issue otherwise.
+function withIssues(item, issues) {
+  const { issues: _old, ...rest } = item;
+  return { ...rest, ...issueFields(issues[0]), ...(issues.length > 1 ? { issues } : {}) };
+}
+
 // addedAt of an assignment: strictly increasing, so nextQueued's "oldest first" across projects
 // never ties (two assignments in the same millisecond would fall back to the folder listing order).
 let lastStamp = 0;
@@ -272,17 +295,18 @@ function queueStamp() {
  * Queues issues for a workflow and remembers the inputs used for it in this project. Issues
  * already queued are skipped. Assigning resumes a paused queue. The open PRs/MRs an issue has when
  * it is assigned were accepted by the user ("assign anyway"): only newer ones skip it later.
- * @param {{ issues: { number, url, title, body, pullRequests? }[], workflow: string, workflowName?: string, inputs?: object, mock?: boolean }} a
+ * `group`: the issues go as one item (one run, one branch, one PR/MR), in the order given.
+ * @param {{ issues: { number, url, title, body, pullRequests? }[], workflow: string, workflowName?: string, inputs?: object, mock?: boolean, group?: boolean }} a
  */
-function enqueue(dir, projectId, { issues, workflow, workflowName = null, inputs = {}, mock = false }) {
+function enqueue(dir, projectId, { issues, workflow, workflowName = null, inputs = {}, mock = false, group = false }) {
   return updateQueue(dir, projectId, (q) => {
-    const have = new Set(q.items.map((x) => x.number));
+    const have = new Set(q.items.flatMap((x) => itemIssues(x).map((i) => i.number)));
     const now = queueStamp();
-    const added = issues.filter((i) => !have.has(i.number)).map((i) => ({
-      number: i.number, url: i.url, title: i.title, body: i.body || '', workflow, workflowName, inputs, mock: !!mock, addedAt: now,
-      knownPullRequests: (i.pullRequests || []).map((p) => p.url),
-    }));
-    const numbers = new Set(added.map((x) => x.number));
+    const fresh = issues.filter((i) => !have.has(i.number))
+      .map((i) => issueFields({ ...i, knownPullRequests: (i.pullRequests || []).map((p) => p.url) }));
+    const base = { workflow, workflowName, inputs, mock: !!mock, addedAt: now };
+    const added = !fresh.length ? [] : group ? [withIssues(base, fresh)] : fresh.map((i) => withIssues(base, [i]));
+    const numbers = new Set(fresh.map((x) => x.number));
     return {
       ...q, paused: false, error: null, inputs: { ...q.inputs, [workflow]: inputs }, items: [...q.items, ...added],
       skipped: (q.skipped || []).filter((s) => !numbers.has(s.number)),
@@ -290,30 +314,49 @@ function enqueue(dir, projectId, { issues, workflow, workflowName = null, inputs
   });
 }
 
-// Takes an issue out of the queue (and out of the skipped list).
-function unqueue(dir, projectId, number) {
-  return updateQueue(dir, projectId, (q) => ({ ...q, items: q.items.filter((x) => x.number !== number), skipped: (q.skipped || []).filter((s) => s.number !== number) }));
+// The queue items without one issue: a group loses that issue (and ends when none is left), or
+// with `whole`, the item holding it is taken out with all its issues.
+function withoutIssue(items, number, whole = false) {
+  return items.flatMap((x) => {
+    const issues = itemIssues(x);
+    if (!issues.some((i) => i.number === number)) return [x];
+    const left = issues.filter((i) => i.number !== number);
+    return whole || !left.length ? [] : [withIssues(x, left)];
+  });
 }
 
-/** Takes a queued issue out right before its start and records why (shown by the queue). */
+/**
+ * Takes an issue out of the queue (and out of the skipped list). An issue of a group leaves the
+ * group, whose other issues stay queued; `cancelGroup` takes the whole group out instead.
+ */
+function unqueue(dir, projectId, number, { cancelGroup = false } = {}) {
+  return updateQueue(dir, projectId, (q) => ({ ...q, items: withoutIssue(q.items, number, cancelGroup), skipped: (q.skipped || []).filter((s) => s.number !== number) }));
+}
+
+/** Takes a queued issue out right before its start and records why (shown by the queue); the rest of its group stays. */
 function skipQueued(dir, projectId, number, reason) {
   return updateQueue(dir, projectId, (q) => {
-    const item = q.items.find((x) => x.number === number);
-    if (!item) return q;
-    const entry = { number, title: item.title, url: item.url, reason, at: new Date().toISOString() };
-    return { ...q, items: q.items.filter((x) => x !== item), skipped: [...(q.skipped || []).filter((s) => s.number !== number), entry].slice(-MAX_SKIPPED) };
+    const issue = q.items.flatMap(itemIssues).find((i) => i.number === number);
+    if (!issue) return q;
+    const entry = { number, title: issue.title, url: issue.url, reason, at: new Date().toISOString() };
+    return { ...q, items: withoutIssue(q.items, number), skipped: [...(q.skipped || []).filter((s) => s.number !== number), entry].slice(-MAX_SKIPPED) };
   });
 }
 
 /**
  * The open PRs/MRs of a queued issue that were not there when it was assigned (checked again right
  * before it starts). A check that fails lets the issue start: the last sync had none new either.
+ * For a group, each PR/MR carries `issue`: the number of the group's issue it refers to.
  */
 async function newPullRequests({ item, platform, repo, exec }) {
   let prs;
   try { prs = await fetchOpenPullRequests({ platform, repo, exec }); } catch { return []; }
-  const known = new Set(item.knownPullRequests || []);
-  return prs.filter((p) => p.issues.includes(item.number) && !known.has(p.url)).map(({ number, title, url, draft }) => ({ number, title, url, draft }));
+  const issues = itemIssues(item);
+  return issues.flatMap((issue) => {
+    const known = new Set(issue.knownPullRequests || []);
+    return prs.filter((p) => p.issues.includes(issue.number) && !known.has(p.url))
+      .map(({ number, title, url, draft }) => ({ number, title, url, draft, ...(issues.length > 1 ? { issue: issue.number } : {}) }));
+  });
 }
 
 function setPaused(dir, projectId, paused, error = null) {
@@ -347,19 +390,33 @@ function pauseAll(dir, reason) {
   }
 }
 
+// The task of a group: every issue (title, URL and body) in the order selected, shipped together.
+function groupTask(issues) {
+  const refs = issues.map((i) => `#${i.number}`).join(', ');
+  return [
+    `Implement these ${issues.length} issues together (${refs}).`,
+    'They ship together in one branch and one PR/MR that closes every one of them. Account for each issue: '
+      + 'say what was done for each one, and if one cannot be done, say which and why (never drop it silently).',
+    ...issues.map((i, n) => `## ${n + 1}. #${i.number} ${i.title}\n\nIssue: ${i.url}\n\n${i.body || ''}`.trim()),
+  ].join('\n\n');
+}
+
 /**
- * The inputs of a run started for a queued issue: the saved inputs, the task (issue title, URL and
- * body), the project folder in the path inputs left empty, and `issue` when the workflow has it.
+ * The inputs of a run started for a queued item: the saved inputs, the task (issue title, URL and
+ * body; every issue of a group, see groupTask), the project folder in the path inputs left empty,
+ * `issue` (the first issue's URL) and `issues` (every URL, in order) when the workflow has them.
  * @param {{ inputs: object }} wf the workflow (its input definitions)
  */
 function runInputs(item, wf, folder) {
   const inputs = { ...item.inputs };
   const defs = wf.inputs || {};
-  if (defs.task) inputs.task = `${item.title}\n\nIssue: ${item.url}\n\n${item.body || ''}`.trim();
+  const issues = itemIssues(item);
+  if (defs.task) inputs.task = issues.length > 1 ? groupTask(issues) : `${item.title}\n\nIssue: ${item.url}\n\n${item.body || ''}`.trim();
   for (const [k, def] of Object.entries(defs)) {
     if (k !== 'task' && (def.type || 'string') === 'string' && /path|dir/i.test(k) && !inputs[k] && folder) inputs[k] = folder;
   }
   if (defs.issue) inputs.issue = item.url;
+  if (defs.issues) inputs.issues = issues.map((i) => i.url);
   return inputs;
 }
 
@@ -367,4 +424,5 @@ module.exports = {
   PLATFORMS, DEFAULT_PLATFORM, parseRepoUrl, platformOfHost, taskProgress, fetchIssues, readBacklog, syncBacklog, linkRuns,
   referencedIssues, fetchOpenPullRequests, attachPullRequests,
   readQueue, enqueue, unqueue, skipQueued, newPullRequests, setPaused, nextQueued, pauseAll, runInputs,
+  itemIssues, runIssues,
 };

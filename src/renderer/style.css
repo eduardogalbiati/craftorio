@@ -945,4 +945,7 @@ body.resizing-dock .term-body { pointer-events: none; }
 .bl-prs { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .bl-busy { border: 1px solid var(--yellow); border-radius: 8px; padding: 8px 10px; margin: 8px 0; display: grid; gap: 6px; }
 .bl-busy ul { margin: 0; padding-left: 18px; }
+.bl-grouping { border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px 8px; margin: 8px 0; display: grid; gap: 4px; }
+.bl-grouping legend { padding: 0 4px; color: var(--muted); }
+.bl-group { color: var(--accent); }
 .bl-skipped { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }

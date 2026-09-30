@@ -145,6 +145,7 @@ inputs:
   repo_path: { type: string, required: true }
   language: { type: string, enum: [js, go], default: js }
   issue: { type: string, default: "" }
+  issues: { type: array, default: [] }
 agents:
   a: { provider: claude, model: m, session: ephemeral }
 steps:
@@ -215,13 +216,61 @@ test('backlog: assigned issues run one at a time, each run records its issue', a
   assert.deepEqual(data.queue.items, []);
   assert.deepEqual([by()[1].column, by()[2].column], ['done', 'done']);
   const list = api['runs:list']().runs;
-  const run2 = list.find((r) => r.issue?.number === 2);
-  assert.deepEqual(run2.issue, { number: 2, url: 'https://github.com/o/r/issues/2', title: 'Issue 2' });
+  const run2 = list.find((r) => r.issues?.[0].number === 2);
+  assert.deepEqual(run2.issues, [{ number: 2, url: 'https://github.com/o/r/issues/2', title: 'Issue 2' }]);
   const started = JSON.parse(fs.readFileSync(path.join(run2.runDir, 'events.jsonl'), 'utf8').split('\n')[0]);
   assert.equal(started.inputs.issue, 'https://github.com/o/r/issues/2');
   assert.equal(started.inputs.language, 'go');
   assert.equal(started.inputs.repo_path, folder);
   assert.match(started.inputs.task, /^Issue 2\n\nIssue: https:\/\/github\.com\/o\/r\/issues\/2/);
+});
+
+test('backlog: issues assigned as one run queue one item, start one run for all of them and move together', async (t) => {
+  const { service, api } = makeService(t);
+  const ws = service.workspace();
+  fs.writeFileSync(path.join(ws.workflows, 'fixture-issue.yaml'), ISSUE_WORKFLOW);
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'service-group-'));
+  t.after(() => fs.rmSync(folder, { recursive: true, force: true }));
+  const p = await api['projects:create']({ name: 'demo', folder });
+  const issue = (number) => ({ number, title: `Issue ${number}`, state: 'open', url: `https://github.com/o/r/issues/${number}`, body: `Body ${number}`, labels: [], assignees: [], tasks: { done: 0, total: 0 } });
+  fs.mkdirSync(ws.backlog, { recursive: true });
+  fs.writeFileSync(path.join(ws.backlog, `${p.id}.json`), JSON.stringify({ projectId: p.id, platform: 'github', repo: 'https://github.com/o/r', issues: [53, 65, 77, 80, 81, 82, 83, 84].map(issue) }));
+  const { gates } = watchRuns(service);
+  const by = () => Object.fromEntries(api['backlog:get']({ projectId: p.id }).issues.map((i) => [i.number, i]));
+
+  api['settings:set']({ backlogMaxGroup: 3 });
+  await assert.rejects(api['backlog:assign']({ projectId: p.id, numbers: [80, 81, 82, 83], workflow: 'fixture-issue.yaml', mock: true, group: true }), /at most 3 issues/);
+  assert.equal(service.isRunning(), false);
+
+  // #84 takes the only run slot, so the group waits in the queue
+  await api['backlog:assign']({ projectId: p.id, numbers: [84], workflow: 'fixture-issue.yaml', mock: true });
+  let data = await api['backlog:assign']({ projectId: p.id, numbers: [65, 53, 77], workflow: 'fixture-issue.yaml', mock: true, group: true });
+  assert.equal(data.queue.items.length, 1);
+  assert.deepEqual(data.queue.items[0].issues.map((i) => i.number), [65, 53, 77]); // in the order selected
+  assert.deepEqual([by()[65].queued, by()[53].queued.groupedWith, by()[77].queued.groupedWith],
+    [{ position: 1, workflow: 'fixture-issue', mock: true, groupedWith: [53, 77] }, [65, 77], [65, 53]]);
+
+  await until(() => gates.size === 1);
+  const first = [...gates.keys()][0];
+  api['approval:resolve']({ runId: first, id: gates.get(first), answer: true });
+  await until(() => gates.size === 2); // the group started after #84 finished: one run
+  const run = api['runs:active']()[0];
+  assert.equal(api['runs:active']().length, 1);
+  assert.deepEqual(run.issues.map((i) => i.number), [65, 53, 77]);
+  assert.deepEqual(run.inputs.issues, [65, 53, 77].map((n) => `https://github.com/o/r/issues/${n}`));
+  assert.equal(run.inputs.issue, 'https://github.com/o/r/issues/65');
+  assert.match(run.inputs.task, /^Implement these 3 issues together \(#65, #53, #77\)\./);
+  assert.match(run.inputs.task, /## 1\. #65 Issue 65\n\nIssue: https:\/\/github\.com\/o\/r\/issues\/65\n\nBody 65[\s\S]*## 2\. #53 Issue 53[\s\S]*## 3\. #77 Issue 77/);
+  assert.deepEqual(api['backlog:get']({ projectId: p.id }).queue.items, []);
+  await until(() => by()[53].column === 'waiting');
+  assert.deepEqual([65, 53, 77].map((n) => [by()[n].column, by()[n].runs[0].runId]), [65, 53, 77].map(() => ['waiting', run.runId]));
+  assert.deepEqual(by()[53].runs[0].groupedWith, [65, 77]);
+
+  api['approval:resolve']({ runId: run.runId, id: gates.get(run.runId), answer: true });
+  await until(() => !service.isRunning());
+  assert.deepEqual([65, 53, 77].map((n) => by()[n].column), ['done', 'done', 'done']);
+  const recorded = api['runs:list']().runs.find((r) => r.runId === run.runId);
+  assert.deepEqual(recorded.issues.map((i) => i.number), [65, 53, 77]);
 });
 
 test('backlog: queues are paused when the workspace opens; a start that fails pauses the queue', async (t) => {
@@ -378,7 +427,7 @@ test('backlog: the dispatcher fills free slots from the queues, oldest first, wi
   const p1 = await project('one', [1, 2]);
   const p2 = await project('two', [7]);
   const { gates } = watchRuns(service);
-  const running = () => api['runs:active']().map((r) => `${r.projectId}#${r.issue.number}`).sort();
+  const running = () => api['runs:active']().map((r) => `${r.projectId}#${r.issues[0].number}`).sort();
 
   let data = await api['backlog:assign']({ projectId: p1.id, numbers: [1, 2], workflow: 'fixture-issue.yaml', mock: true });
   assert.deepEqual(running(), [`${p1.id}#1`]); // one run per project
@@ -387,7 +436,7 @@ test('backlog: the dispatcher fills free slots from the queues, oldest first, wi
   assert.deepEqual(running(), [`${p1.id}#1`, `${p2.id}#7`]); // the other project takes the free slot
 
   await until(() => gates.size === 2);
-  const run1 = api['runs:active']().find((r) => r.issue.number === 1).runId;
+  const run1 = api['runs:active']().find((r) => r.issues[0].number === 1).runId;
   api['approval:resolve']({ runId: run1, id: gates.get(run1), answer: true });
   await until(() => running().includes(`${p1.id}#2`)); // p1's next issue once its run is over
   assert.deepEqual(running(), [`${p1.id}#2`, `${p2.id}#7`]);

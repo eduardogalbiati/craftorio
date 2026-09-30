@@ -202,7 +202,9 @@ function resumeSpec(runDir, fromStep) {
     if (/^worktree\./.test(ev.type) && ev.dir) worktree = { dir: ev.dir, branch: ev.branch || worktree?.branch || null };
     if (ev.type === 'handoff.saved' && ev.agent && ev.note) handoffs[ev.agent] = { text: ev.note, step: ev.step_id, visit: ev.visit, path: ev.path };
   }
-  return { runId: path.basename(runDir), file: started.file, inputs: started.inputs || {}, mock: !!started.mock, projectId: started.project_id || null, issue: started.issue || null, personas: started.personas || null, fromStep, steps, sessions, handoffs, worktree };
+  return { runId: path.basename(runDir), file: started.file, inputs: started.inputs || {}, mock: !!started.mock, projectId: started.project_id || null,
+    // runs recorded before groups have a single `issue`
+    issues: started.issues || (started.issue ? [started.issue] : null), personas: started.personas || null, fromStep, steps, sessions, handoffs, worktree };
 }
 
 // The workflow's supervisor settings (orchestrator.supervisor + providers), from the run's workflow file.

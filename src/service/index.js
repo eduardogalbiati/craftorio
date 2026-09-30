@@ -210,7 +210,7 @@ function createService({ host }) {
   function activeRuns() {
     return [...active.values()].map((r) => ({
       runId: r.runId, workflow: r.wf.metadata?.name || path.basename(r.file), file: path.basename(r.file), mock: r.mock,
-      projectId: r.projectId, issue: r.issue, startedAt: r.startedAt ? new Date(r.startedAt).toISOString() : null,
+      projectId: r.projectId, issues: r.issues, startedAt: r.startedAt ? new Date(r.startedAt).toISOString() : null,
       waiting: r.approvals.size, inputs: r.inputs,
     }));
   }
@@ -357,7 +357,7 @@ function createService({ host }) {
   }
 
   // mockSequences: simulation scenario ({ field: [value per visit] }, invalid_answers), ignored for real runs
-  async function startWorkflowRun({ file, inputs, mock, mockSequences = null, resume = null, projectId: forcedProject = null, issue = null }) {
+  async function startWorkflowRun({ file, inputs, mock, mockSequences = null, resume = null, projectId: forcedProject = null, issues = null }) {
     // simulation-only (automated checks): a real run is refused, never turned into a simulation
     if (!mock) simulation.refuseReal('a real run');
     const slot = { mock: !!mock, projectId: forcedProject };
@@ -391,7 +391,7 @@ function createService({ host }) {
       }
       run = new WorkflowRun({
         file: wfFile.file, inputs, mock, runsDir: ws.runs, skillsDirs: [ws.skills], notices,
-        budget, prices: settings.prices, projectId, issue, resume, mockSequences: mock ? mockSequences : null,
+        budget, prices: settings.prices, projectId, issues, resume, mockSequences: mock ? mockSequences : null,
         // simulation runs never touch git: the agents are mocked and work in the repository folder
         worktreesDir: mock ? null : ws.worktrees,
         // concurrent runs share the monthly budgets
@@ -425,8 +425,8 @@ function createService({ host }) {
       // the next issues waiting in a Backlog queue start once this run is over; a queued issue whose
       // run failed pauses its queue (a failure that repeats would otherwise burn through it)
       if (ev.type === 'workflow.finished') {
-        if (run.issue && run.projectId && ev.status === 'failed' && !run.mock) {
-          try { backlog.setPaused(ws.backlog, run.projectId, true, `#${run.issue.number} failed: resume to start the next issues.`); } catch (e) { console.error('backlog queue:', e); }
+        if (run.issues && run.projectId && ev.status === 'failed' && !run.mock) {
+          try { backlog.setPaused(ws.backlog, run.projectId, true, `${run.issues.map((i) => `#${i.number}`).join(', ')} failed: resume to start the next issues.`); } catch (e) { console.error('backlog queue:', e); }
         }
         setTimeout(() => dispatchQueue().catch((e) => console.error('backlog dispatch:', e)), 1000);
       }
@@ -648,7 +648,7 @@ function createService({ host }) {
     if (!spec.file) throw new Error('The run does not record its workflow file.');
     const first = loadWorkflow(workflowPath(spec.file).file).steps[0].id;
     return startWorkflowRun({
-      file: spec.file, inputs: spec.inputs, mock: spec.mock, projectId: spec.projectId, issue: spec.issue,
+      file: spec.file, inputs: spec.inputs, mock: spec.mock, projectId: spec.projectId, issues: spec.issues,
       resume: { runId: spec.runId, fromStep: step || first, steps: spec.steps, sessions: spec.sessions, handoffs: spec.handoffs, instruction: instruction || null, worktree: spec.worktree },
     });
   }
@@ -699,13 +699,17 @@ function createService({ host }) {
 
   // Queues issues of a project's synced backlog for a workflow and starts the first ones if there
   // are free run slots. Only open issues; the workflow needs a `task` input (the issue goes there).
-  async function assignWorkflow({ projectId, numbers, workflow, inputs, mock }) {
+  // group: the issues go as one run (one branch, one PR/MR), up to the backlogMaxGroup setting; a
+  // backlog is one project's, so a group never mixes projects.
+  async function assignWorkflow({ projectId, numbers, workflow, inputs, mock, group = false }) {
     const project = projects.readProject(ws.projects, path.basename(String(projectId)));
     const data = backlog.readBacklog(ws.backlog, project.id);
     if (!data) throw new Error('Sync the backlog first.');
     // in the order they were selected
     const issues = [...new Set((numbers || []).map(Number))].map((n) => data.issues.find((i) => i.number === n)).filter((i) => i?.state === 'open');
     if (!issues.length) throw new Error('Select at least one open issue.');
+    const maxGroup = workspace.readSettings(ws).backlogMaxGroup || workspace.DEFAULT_SETTINGS.backlogMaxGroup;
+    if (group && issues.length > maxGroup) throw new Error(`One run takes at most ${maxGroup} issues (Settings › General › Backlog); ${issues.length} were selected.`);
     const file = path.basename(String(workflow || ''));
     const wf = loadWorkflow(workflowPath(file).file);
     if (!wf.inputs?.task) throw new Error(`Workflow ${wf.metadata?.name || file} has no task input to receive the issue.`);
@@ -713,7 +717,7 @@ function createService({ host }) {
       simulation.refuseReal('real runs from the Backlog');
       await host.assertCanRun?.({ mock: false });
     }
-    backlog.enqueue(ws.backlog, project.id, { issues, workflow: file, workflowName: wf.metadata?.name || file, inputs: inputs || {}, mock: !!mock });
+    backlog.enqueue(ws.backlog, project.id, { issues, workflow: file, workflowName: wf.metadata?.name || file, inputs: inputs || {}, mock: !!mock, group: !!group });
     await dispatchQueue();
     return withIssueRuns(backlog.readBacklog(ws.backlog, project.id));
   }
@@ -733,22 +737,26 @@ function createService({ host }) {
         try {
           const project = projects.readProject(ws.projects, projectId);
           const wf = loadWorkflow(workflowPath(item.workflow).file);
-          // a PR/MR may have been opened for the issue since it was queued: skip it, don't redo the work
+          // a PR/MR may have been opened for an issue since it was queued: skip it, don't redo the work
+          // (an issue of a group leaves the group, which starts with the others)
           if (!item.mock && project.repo) {
             const platform = backlog.readBacklog(ws.backlog, projectId)?.platform || workspace.readSettings(ws).backlogPlatform || backlog.DEFAULT_PLATFORM;
             const prs = await backlog.newPullRequests({ item, platform, repo: project.repo });
             if (prs.length) {
-              backlog.skipQueued(ws.backlog, projectId, item.number, `open ${prs.map((p) => `${platform === 'gitlab' ? 'MR !' : 'PR #'}${p.number}`).join(', ')} since it was queued`);
+              for (const n of new Set(prs.map((p) => p.issue ?? item.number))) {
+                const mine = prs.filter((p) => (p.issue ?? item.number) === n);
+                backlog.skipQueued(ws.backlog, projectId, n, `open ${mine.map((p) => `${platform === 'gitlab' ? 'MR !' : 'PR #'}${p.number}`).join(', ')} since it was queued`);
+              }
               continue;
             }
           }
           await startWorkflowRun({
             file: item.workflow, inputs: backlog.runInputs(item, wf, project.folder), mock: item.mock,
-            projectId, issue: { number: item.number, url: item.url, title: item.title },
+            projectId, issues: backlog.itemIssues(item).map(({ number, url, title }) => ({ number, url, title })),
           });
-          backlog.unqueue(ws.backlog, projectId, item.number);
+          backlog.unqueue(ws.backlog, projectId, item.number, { cancelGroup: true });
         } catch (e) {
-          backlog.setPaused(ws.backlog, projectId, true, `Could not start #${item.number}: ${e.message}`);
+          backlog.setPaused(ws.backlog, projectId, true, `Could not start ${backlog.itemIssues(item).map((i) => `#${i.number}`).join(', ')}: ${e.message}`);
         }
       }
     } finally {
@@ -883,8 +891,9 @@ function createService({ host }) {
     })),
     // Assign a workflow to issues: they are queued and start while there are free run slots (see dispatchQueue).
     'backlog:assign': (opts) => assignWorkflow(opts),
-    'backlog:unqueue': async ({ projectId, number }) => {
-      backlog.unqueue(ws.backlog, path.basename(String(projectId)), Number(number));
+    // cancelGroup: an issue of a group takes the whole group out (else it only leaves the group)
+    'backlog:unqueue': async ({ projectId, number, cancelGroup }) => {
+      backlog.unqueue(ws.backlog, path.basename(String(projectId)), Number(number), { cancelGroup: !!cancelGroup });
       return withIssueRuns(backlog.readBacklog(ws.backlog, projectId));
     },
     'backlog:pause': async ({ projectId, paused }) => {

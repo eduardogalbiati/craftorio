@@ -3,7 +3,8 @@
 // syncs again in the background each time the screen opens. The platform defaults to
 // Settings › General › Backlog and can be switched here.
 // Selected To do issues can be assigned to a workflow: they are queued and the service runs them
-// one at a time (the run records the issue). Issues link to the runs working on them.
+// one at a time (the run records its issues), as separate runs or, when asked, as one run for all
+// of them (one branch, one PR/MR). Issues link to the runs working on them.
 // Uses app.js globals ($, esc, state, errMsg, dateOf, markdownHtml, showView, openModal,
 // closeModal, devMode, wantsSimulation, openApproval).
 /* global api */
@@ -123,7 +124,7 @@
   }
 
   // ---- assign a workflow -------------------------------------------------------------------
-  const skipInput = (k, def) => k === 'task' || k === 'issue' || def.type === 'run' || ((def.type || 'string') === 'string' && /path|dir/i.test(k));
+  const skipInput = (k, def) => k === 'task' || k === 'issue' || k === 'issues' || def.type === 'run' || ((def.type || 'string') === 'string' && /path|dir/i.test(k));
 
   function renderAssignInputs() {
     const wf = bl.workflows.find((w) => w.file === $b('#assign-workflow').value);
@@ -169,17 +170,28 @@
     $b('#assign-skip-busy').onchange = updateAssignNote;
   }
 
+  // Two or more issues can go as separate runs (default) or as one run: one branch, one PR/MR.
+  const maxGroup = () => state.settings?.backlogMaxGroup || 5;
+  const grouped = () => assignNumbers().length > 1 && document.querySelector('input[name="assign-group"]:checked')?.value === 'group';
+
   function updateAssignNote() {
-    const n = assignNumbers().length;
+    const numbers = assignNumbers();
+    const n = numbers.length;
+    const group = grouped();
+    const runs = group ? 1 : n;
+    const tooMany = group && n > maxGroup();
     const mock = $b('#assign-mock').checked;
-    const plural = n > 1 ? 's' : '';
-    $b('#btn-assign-ok').disabled = !n;
-    $b('#btn-assign-ok').textContent = `${mock ? 'Simulate' : 'Start'} ${n} run${plural}`;
+    const plural = runs > 1 ? 's' : '';
+    $b('#assign-grouping').classList.toggle('hidden', n < 2);
+    $b('#btn-assign-ok').disabled = !n || tooMany;
+    $b('#btn-assign-ok').textContent = `${mock ? 'Simulate' : 'Start'} ${runs} run${plural}`;
     const note = $b('#assign-note');
-    note.className = `small ${mock ? 'muted' : 'warn-text'}`;
-    note.textContent = !n ? 'Nothing to start: every selected issue is skipped.' : mock
-      ? `${n} simulated run${plural}: no CLI is called and nothing is spent.`
-      : `${n} real run${plural}, one at a time, starting now if nothing else is running. They use your CLI subscriptions. Human gates still wait for you.`;
+    note.className = `small ${mock && !tooMany ? 'muted' : 'warn-text'}`;
+    const what = group ? `${n} issues → 1 run, 1 ${bl.data?.platform === 'gitlab' ? 'MR' : 'PR'} closing ${numbers.map((x) => `#${x}`).join(', ')}.` : '';
+    note.textContent = !n ? 'Nothing to start: every selected issue is skipped.'
+      : tooMany ? `One run takes at most ${maxGroup()} issues (Settings › General › Backlog): select fewer or send them as separate runs.`
+        : mock ? `${what ? `${what} ` : ''}${runs} simulated run${plural}: no CLI is called and nothing is spent.`
+          : `${what ? `${what} ` : ''}${runs} real run${plural}${runs > 1 ? ', one at a time,' : ''} starting now if nothing else is running. ${runs > 1 ? 'They use' : 'It uses'} your CLI subscriptions. Human gates still wait for you.`;
   }
 
   async function openAssign() {
@@ -187,13 +199,15 @@
     $b('#assign-error').textContent = '';
     try { bl.workflows = (await api.listWorkflows()).filter((w) => !w.error && w.inputs?.task); } catch (e) { bl.error = errMsg(e); render(); return; }
     if (!bl.workflows.length) { bl.error = 'No workflow has a task input to receive the issues.'; render(); return; }
-    const issues = (bl.data?.issues || []).filter((i) => bl.selected.has(i.number));
+    // in the order selected (the order the runs start, or the order of a group's task)
+    const issues = [...bl.selected].map((n) => (bl.data?.issues || []).find((i) => i.number === n)).filter(Boolean);
     $b('#assign-issues').textContent = issues.map((i) => `#${i.number} ${i.title}`).join(' · ');
     const sel = $b('#assign-workflow');
     sel.innerHTML = bl.workflows.map((w) => `<option value="${esc(w.file)}">${esc(w.name)}</option>`).join('');
     const files = bl.workflows.map((w) => w.file);
     sel.value = [load(WORKFLOW_KEY), 'software-development.yaml', files[0]].find((f) => f && files.includes(f));
     $b('#assign-mock').checked = devMode();
+    document.querySelector('input[name="assign-group"][value="separate"]').checked = true;
     renderAssignBusy();
     renderAssignInputs();
     openModal('#assign-modal');
@@ -209,7 +223,7 @@
     const btn = $b('#btn-assign-ok');
     btn.disabled = true;
     try {
-      const data = await api.assignWorkflow(bl.projectId, numbers, workflow, inputs, wantsSimulation($b('#assign-mock')));
+      const data = await api.assignWorkflow(bl.projectId, numbers, workflow, inputs, wantsSimulation($b('#assign-mock')), grouped());
       save(WORKFLOW_KEY, workflow);
       bl.selected.clear();
       setData(data);
@@ -220,6 +234,32 @@
     } finally {
       btn.disabled = false;
     }
+  }
+
+  // An issue of a queued group: remove it from the group (the others still go as one run) or
+  // cancel the whole group. Resolves 'one', 'all' or null (keep it).
+  function askUnqueue(i) {
+    const others = i.queued.groupedWith.map((n) => `#${n}`).join(', ');
+    $b('#unqueue-message').textContent = `#${i.number} is queued as one run with ${others}. Remove only #${i.number} (the others still go as one run), or cancel the whole group?`;
+    openModal('#unqueue-modal');
+    return new Promise((resolve) => {
+      const done = (v) => { closeModal('#unqueue-modal'); resolve(v); };
+      $b('#btn-unqueue-one').onclick = () => done('one');
+      $b('#btn-unqueue-all').onclick = () => done('all');
+      $b('#btn-unqueue-keep').onclick = () => done(null);
+    });
+  }
+
+  async function removeQueued(number) {
+    const issue = (bl.data?.issues || []).find((i) => i.number === number);
+    let cancelGroup = false;
+    if (issue?.queued?.groupedWith?.length) {
+      const how = await askUnqueue(issue);
+      if (!how) return;
+      cancelGroup = how === 'all';
+    }
+    try { setData(await api.unqueueIssue(bl.projectId, number, cancelGroup)); } catch (err) { bl.error = errMsg(err); }
+    render();
   }
 
   // ---- rendering ---------------------------------------------------------------------------
@@ -240,16 +280,19 @@
   // Open PRs/MRs that refer to the issue, each a link to it.
   const prBadges = (i) => (i.pullRequests || []).map((p) =>
     `<a class="badge bl-pr${p.draft ? ' draft' : ''}" href="${esc(p.url)}" target="_blank" rel="noopener" title="${esc(`Open ${p.draft ? 'draft ' : ''}${prName(p)}: ${p.title}`)}">${esc(prName(p))}</a>`).join('');
+  // The other issues of the same run (a group sent as one run: one branch, one PR/MR).
+  const groupBadge = (others) => (others?.length
+    ? `<span class="badge bl-group" title="One run, one branch and one PR/MR for these issues">grouped with ${esc(others.map((n) => `#${n}`).join(', '))}</span>` : '');
   const checkbox = (i) => (selectable(i) ? `<input type="checkbox" class="bl-check" data-sel="${i.number}" aria-label="Select #${i.number}"${bl.selected.has(i.number) ? ' checked' : ''} />` : '');
   // What the automation is doing with the issue: queued, its latest run, the gate waiting for you.
   function status(i) {
     if (i.queued) {
-      return `<span class="bl-queued"><span class="badge">queued #${i.queued.position}</span><span class="small">${esc(i.queued.workflow)}</span>${i.queued.mock ? '<span class="badge p-mock">simulated</span>' : ''}
+      return `<span class="bl-queued"><span class="badge">queued #${i.queued.position}</span><span class="small">${esc(i.queued.workflow)}</span>${i.queued.mock ? '<span class="badge p-mock">simulated</span>' : ''}${groupBadge(i.queued.groupedWith)}
         <button class="link-btn small" type="button" data-unqueue="${i.number}" title="Take it out of the queue">remove</button></span>`;
     }
     const r = i.runs?.[0];
     if (!r) return '';
-    return `${runLink(r)}${i.column === 'waiting' ? '<button class="btn sm primary" type="button" data-gate>Review approval</button>' : ''}`;
+    return `${runLink(r)}${groupBadge(r.groupedWith)}${i.column === 'waiting' ? '<button class="btn sm primary" type="button" data-gate>Review approval</button>' : ''}`;
   }
 
   function issueRow(i) {
@@ -317,7 +360,7 @@
     const skips = skipped.map((s) => `<span class="bl-skipped small"><span class="warn-text">Skipped #${s.number}: ${esc(s.reason)}</span>
       <button class="link-btn small" type="button" data-unqueue="${s.number}" title="Dismiss">dismiss</button></span>`).join('');
     box.innerHTML = `
-      <span><b>Queue</b> ${mode} ${n ? `${n} issue${n > 1 ? 's' : ''} waiting · next #${q.items[0].number} (${esc(q.items[0].workflowName || q.items[0].workflow)})` : 'empty'}</span>
+      <span><b>Queue</b> ${mode} ${n ? `${n} run${n > 1 ? 's' : ''} waiting · next ${esc((q.items[0].issues || [q.items[0]]).map((x) => `#${x.number}`).join(', '))} (${esc(q.items[0].workflowName || q.items[0].workflow)})` : 'empty'}</span>
       ${q.error ? `<span class="error small">${esc(q.error)}</span>` : ''}
       ${skips}
       <span class="spacer"></span>
@@ -421,11 +464,7 @@
     const gate = e.target.closest('[data-gate]');
     if (gate) { openGate(gate); return; }
     const out = e.target.closest('[data-unqueue]');
-    if (out) {
-      try { setData(await api.unqueueIssue(bl.projectId, Number(out.dataset.unqueue))); } catch (err) { bl.error = errMsg(err); }
-      render();
-      return;
-    }
+    if (out) { await removeQueued(Number(out.dataset.unqueue)); return; }
     if (e.target.closest('a')) return;
     const row = e.target.closest('[data-act="toggle"]');
     if (!row) return;
@@ -435,6 +474,7 @@
   };
   $b('#assign-workflow').onchange = renderAssignInputs;
   $b('#assign-mock').onchange = updateAssignNote;
+  $b('#assign-grouping').onchange = updateAssignNote;
   $b('#assign-form').onsubmit = submitAssign;
   $b('#btn-assign-cancel').onclick = () => closeModal('#assign-modal');
 

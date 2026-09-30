@@ -60,6 +60,13 @@ const firstText = (inputs) => {
   return typeof v === 'string' ? v : null;
 };
 
+// The issues recorded in workflow.started / summary.json: `issues`, or the single `issue` of runs
+// recorded before a run could implement several; null when there are none.
+function issuesOf(rec) {
+  if (Array.isArray(rec?.issues) && rec.issues.length) return rec.issues;
+  return rec?.issue ? [rec.issue] : null;
+}
+
 /** One run folder → RunInfo base (sessions as engine snapshots), or null if it is not a run. */
 function readRun(runsDir, runId) {
   const dir = path.join(runsDir, runId);
@@ -102,7 +109,8 @@ function readRun(runsDir, runId) {
     costUsd: sessions.reduce((a, s) => a + (s.cost_usd || 0), 0),
     tokens: sumTokens(sessions),
     projectId: summary?.project_id || started?.project_id || null,
-    issue: summary?.issue || started?.issue || null,
+    // the issues the run implements (Backlog); runs recorded before groups have one `issue`
+    issues: issuesOf(summary) || issuesOf(started),
     task: firstText(inputs),
     error,
     inputs,

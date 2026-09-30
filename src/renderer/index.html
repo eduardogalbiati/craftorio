@@ -435,6 +435,10 @@
                   <div class="s-label"><b>Default platform</b><span>Where the Backlog screen syncs a project's issues from. It can be changed on the Backlog screen too. GitHub uses the gh CLI and GitLab the glab CLI; Bitbucket sync is not available yet.</span></div>
                   <div class="s-ctrl"><select id="set-backlog-platform" aria-label="Default backlog platform"></select></div>
                 </div>
+                <div class="s-row">
+                  <div class="s-label"><b>Issues per run</b><span>The most issues Assign workflow sends as one run (one branch, one PR/MR that closes all of them).</span></div>
+                  <div class="s-ctrl"><input type="number" id="set-backlog-group" min="2" max="20" aria-label="Most issues in one run" /></div>
+                </div>
               </div>
               <h3 class="s-subtitle">Folders</h3>
               <div id="set-ws-folders" class="s-group"></div>
@@ -1133,11 +1137,28 @@
     </form>
   </div>
 
+  <div id="unqueue-modal" class="modal hidden">
+    <div class="modal-card">
+      <h3>Remove from a grouped run</h3>
+      <p id="unqueue-message" class="muted"></p>
+      <div class="modal-actions">
+        <button type="button" id="btn-unqueue-keep" class="btn ghost">Keep it</button>
+        <button type="button" id="btn-unqueue-one" class="btn">Remove it from the group</button>
+        <button type="button" id="btn-unqueue-all" class="btn danger-solid">Cancel the group</button>
+      </div>
+    </div>
+  </div>
+
   <div id="assign-modal" class="modal hidden">
     <form id="assign-form" class="modal-card">
       <h3 id="assign-title">Assign a workflow</h3>
       <p id="assign-issues" class="muted small"></p>
       <div id="assign-busy" class="bl-busy hidden"></div>
+      <fieldset id="assign-grouping" class="bl-grouping hidden">
+        <legend class="small">Send them as</legend>
+        <label class="check"><input type="radio" name="assign-group" value="separate" checked /><span>Separate runs: one per issue (one branch and one PR/MR each), in the order selected</span></label>
+        <label class="check"><input type="radio" name="assign-group" value="group" /><span>One run for all: one branch and one PR/MR that closes every issue</span></label>
+      </fieldset>
       <div class="field">
         <label for="assign-workflow">Workflow</label>
         <select id="assign-workflow"></select>

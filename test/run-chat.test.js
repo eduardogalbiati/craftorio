@@ -135,6 +135,20 @@ test('run chat: a gate still open when the run ends is closed, not answered', ()
   assert.equal(kinds(model, 'reply').length, 0);
 });
 
+test('run chat: the run and its start message carry every issue; a run recorded with one `issue` shows a list of one', () => {
+  const group = [{ number: 65, url: 'https://github.com/o/r/issues/65', title: 'Checkboxes' }, { number: 53, url: 'https://github.com/o/r/issues/53', title: 'Scrollbars' }];
+  const grouped = chatOf([{ seq: 1, type: 'workflow.started', run_id: 'r1', workflow: 'wf', inputs: {}, issues: group }]);
+  assert.deepEqual(grouped.run.issues, group);
+  assert.deepEqual(kinds(grouped, 'start')[0].issues, group);
+
+  const single = chatOf([{ seq: 1, type: 'workflow.started', run_id: 'r1', workflow: 'wf', inputs: {}, issue: group[0] }]);
+  assert.deepEqual(single.run.issues, [group[0]]);
+  assert.deepEqual(kinds(single, 'start')[0].issues, [group[0]]);
+
+  const none = chatOf([{ seq: 1, type: 'workflow.started', run_id: 'r1', workflow: 'wf', inputs: {} }]);
+  assert.deepEqual(none.run.issues, []);
+});
+
 test('run chat: the orchestrator\'s own checks (wait:) show as lines saying whether the agent is called', () => {
   const model = chatOf([
     { seq: 1, type: 'workflow.started', run_id: 'r1', workflow: 'wf', inputs: {} },

@@ -45,7 +45,7 @@ kind: Workflow
 
 metadata:
   name: software-development
-  version: 0.14.0
+  version: 0.15.0
   description: Implements, reviews, tests, builds, watches CI and the PR/MR, publishes a preview and, once approved, merges and tracks the production deploy. Works with several languages on GitHub or GitLab.
   tags: [dev, review, test, build, ci, pr, deploy, github, gitlab]
   # Dashboard category: plan (Plan & Design), build (Code & Build) or monitor (Monitor & Improve).
@@ -61,6 +61,10 @@ inputs:
     type: string
     default: ""
     description: "URL of the issue this run implements (set by the Backlog screen). The PR/MR closes it."
+  issues:
+    type: array
+    default: []
+    description: "URLs of the issues this run implements together, one branch and one PR/MR (set by the Backlog screen; one per line). The PR/MR closes each one."
   repo_path:
     type: string
     required: true
@@ -266,7 +270,7 @@ agents:
 # Progress shown in the runs list and the Run screen (does not change the graph).
 groups:
   - name: Develop
-    steps: [develop]
+    steps: [develop, issue_not_done]
   - name: Review
     steps: [code_review, human_review]
   - name: Validate
@@ -286,6 +290,17 @@ steps:
     prompt: |
       Task: {{ inputs.task }}
 
+      {% if inputs.issues | length > 1 %}
+      This run implements {{ inputs.issues | length }} issues together, in one branch and one PR/MR:
+      {{ inputs.issues | join(', ') }}.
+      In `issues`, answer one entry per issue (its URL in `issue`): `done` and a `summary` of what
+      you did for it, or `done: false` and why it cannot be done in this run. Never drop an issue
+      silently: the owner decides whether the run goes on without it. Your `summary` lists what
+      was done per issue.
+      {% if steps.issue_not_done.output %}
+      The owner chose to continue without the issues you could not do; leave them out.
+      {% endif %}
+      {% endif %}
       {% if steps.code_review.output and steps.code_review.output.verdict == 'changes_requested' %}
       The reviewer requested these changes (iteration {{ loop.iteration }}):
       {{ steps.code_review.output.findings | to_yaml }}
@@ -312,13 +327,44 @@ steps:
         committed:     { type: boolean }
         commit_sha:    { type: string }
         notes:         { type: string }
+        # a run for several issues (inputs.issues): what was done for each one
+        issues:
+          type: array
+          items:
+            type: object
+            required: [issue, done, summary]
+            properties:
+              issue:   { type: string }
+              done:    { type: boolean }
+              summary: { type: string }
     transitions:
+      # an issue of the group could not be done: the owner decides (once) whether the run goes on without it
+      - when: "output.tests_passed and output.committed and inputs.issues | length > 1 and not steps.issue_not_done.output and (output.issues or []) | rejectattr('done') | list | length"
+        goto: issue_not_done
       - when: "output.tests_passed and output.committed"
         goto: code_review
       - when: "true"
         goto: develop
         max_visits: 3
         on_exhausted: fail
+
+  # A run for several issues where the developer could not do one of them: never dropped silently.
+  - id: issue_not_done
+    type: human_approval
+    message: |
+      The developer could not do every issue of this run:
+      {% for i in steps.develop.output.issues %}{% if not i.done %}
+      - {{ i.issue }}: {{ i.summary }}{% endif %}{% endfor %}
+      The other issues are done on branch `{{ steps.develop.output.branch }}`.
+    choices:
+      - { id: continue, label: "Continue without them (the PR/MR will not close them)" }
+      - { id: stop,     label: "Stop the run as failed (worktree kept to resume)" }
+    transitions:
+      - when: "choice == 'continue'"
+        goto: code_review
+      - when: "choice == 'stop'"
+        goto: end
+        status: failed
 
   - id: code_review
     agent: reviewer
@@ -327,6 +373,12 @@ steps:
       `{{ inputs.base_branch }}` (`git diff {{ inputs.base_branch }}...{{ steps.develop.output.branch }}`).
       Task (the spec for the spec axis): {{ inputs.task }}
       Developer summary: {{ steps.develop.output.summary }}
+      {% if inputs.issues | length > 1 %}
+      This run implements several issues: check the spec axis per issue, and set `issue` (its URL)
+      on the findings about one of them. An issue the change misses or only half does is a blocker,
+      unless the developer reported it as not done:
+      {{ steps.develop.output.issues | to_yaml }}
+      {% endif %}
     output_schema:
       type: object
       required: [verdict, findings]
@@ -343,6 +395,7 @@ steps:
               file:        { type: string }
               line:        { type: integer }
               description: { type: string }
+              issue:       { type: string }
     transitions:
       - when: "output.verdict == 'approved'"
         goto: test
@@ -530,6 +583,12 @@ steps:
       {% endif %}
       Verify the change following the claim-verification skill. Stay read-only: the
       working tree must not change (no files, stash, worktree or checkout).
+      {% if inputs.issues | length > 1 %}
+      This run implements several issues: verify each one the developer did (their report:
+      {{ steps.develop.output.issues | to_json }}). In `issues`, one entry per issue with its own
+      verdict and evidence; `claim` lists each issue with its verdict. The overall `verdict` is
+      not_verified when any issue the run still implements is not_verified.
+      {% endif %}
     output_schema:
       type: object
       required: [verdict, claim, evidence]
@@ -538,6 +597,16 @@ steps:
         claim:    { type: string }
         command:  { type: string }
         evidence: { type: string }
+        # a run for several issues: the verdict per issue
+        issues:
+          type: array
+          items:
+            type: object
+            required: [issue, verdict]
+            properties:
+              issue:    { type: string }
+              verdict:  { type: string, enum: [verified, not_verified, inconclusive] }
+              evidence: { type: string }
     transitions:
       - when: "output.verdict != 'not_verified'"
         goto: ci
@@ -600,7 +669,12 @@ steps:
       1. Make sure the branch is up to date on the remote.
       2. Make sure a PR/MR to the base is open (reuse it if it exists; otherwise create
          one with a short title and this summary: {{ steps.develop.output.summary }}).
-         {% if inputs.issue %}The PR/MR body must also close the issue this run implements,
+         {% if inputs.issues | length > 1 %}This run implements several issues. The PR/MR body lists
+         what was done for each one ({{ steps.develop.output.issues | to_json }}) and closes each
+         issue that was done: one line `Closes #<number>` per issue, with the number from its URL
+         (if the PR/MR already exists without them, edit its body to add them). An issue reported
+         as not done (`done: false`) is named in the body as not done, with why, and not closed.
+         {% elif inputs.issue %}The PR/MR body must also close the issue this run implements,
          {{ inputs.issue }}: add a line `Closes #<number>` with the issue number from that URL
          (if the PR/MR already exists without it, edit its body to add it).{% endif %}
       3. On EVERY visit, before anything else, check the PR/MR mergeability (see the

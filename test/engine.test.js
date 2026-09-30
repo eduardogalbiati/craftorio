@@ -421,14 +421,15 @@ test('the bundled workflows group every step', () => {
 
 // Full software-development flow in mock mode. Gates get `answers[step]` (default: approve /
 // first choice), like --auto-approve.
-async function runSoftwareDevelopment({ mockSequences, answers = {} }) {
+async function runSoftwareDevelopment({ mockSequences, answers = {}, inputs = {}, issues }) {
   const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'));
   const run = new WorkflowRun({
     file: path.join(root, 'workflows', 'software-development.yaml'),
-    inputs: { task: 'Engine test', repo_path: root },
+    inputs: { task: 'Engine test', repo_path: root, ...inputs },
     mock: true,
     runsDir,
     mockSequences,
+    issues,
   });
   const events = [];
   run.on('event', (ev) => {
@@ -512,6 +513,43 @@ test('software-development: rejecting the merge ends the run as cancelled', { ti
   const { finished } = await runSoftwareDevelopment({ mockSequences: { preview_status: ['success'] }, answers: { approve_merge: false } });
   assert.equal(finished.status, 'cancelled');
   assert.match(finished.error, /ended as cancelled at step "approve_merge" \(rejected\)/);
+});
+
+const GROUP = [53, 65, 77].map((n) => ({ number: n, url: `https://github.com/o/r/issues/${n}`, title: `T${n}` }));
+
+test('software-development: a run for several issues records them, and its PR/MR closes each one', { timeout: 120000 }, async () => {
+  const { events, finished, transitions } = await runSoftwareDevelopment({
+    mockSequences: { preview_status: ['success'] }, issues: GROUP, inputs: { issues: GROUP.map((i) => i.url) },
+  });
+  assert.equal(finished.status, 'success', finished.error);
+  const started = events.find((e) => e.type === 'workflow.started');
+  assert.deepEqual(started.issues, GROUP);
+  assert.deepEqual(finished.summary.issues, GROUP);
+  assert.ok(!transitions.includes('develop>issue_not_done'), 'every issue was done');
+  const prompt = (step) => events.find((e) => e.type === 'session.message_sent' && e.step_id === step).prompt;
+  assert.match(prompt('develop'), /This run implements 3 issues together[\s\S]*issues\/53, https:\/\/github\.com\/o\/r\/issues\/65, https:\/\/github\.com\/o\/r\/issues\/77/);
+  assert.match(prompt('code_review'), /check the spec axis per issue/);
+  assert.match(prompt('verify_change'), /verify each one the developer did/);
+  assert.match(prompt('ci'), /one line `Closes #<number>` per issue/);
+});
+
+test('software-development: an issue of the group that cannot be done stops at the owner\'s gate', { timeout: 120000 }, async () => {
+  const group = { issues: GROUP, inputs: { issues: GROUP.map((i) => i.url).join('\n') } }; // a list typed in a form
+  const stopped = await runSoftwareDevelopment({ ...group, mockSequences: { done: [false] }, answers: { issue_not_done: 'stop' } });
+  const gate = stopped.events.find((e) => e.type === 'approval.requested' && e.step_id === 'issue_not_done');
+  assert.deepEqual(gate.choices.map((c) => c.id), ['continue', 'stop']);
+  assert.match(gate.message, /could not do every issue/);
+  assert.equal(stopped.finished.status, 'failed');
+  assert.deepEqual(stopped.events.find((e) => e.type === 'workflow.started').inputs.issues, GROUP.map((i) => i.url));
+
+  // continue without it: asked once, even though later developer turns still report it
+  const went = await runSoftwareDevelopment({ ...group, mockSequences: { done: [false], preview_status: ['success'], verdict: ['changes_requested', 'approved'] } });
+  assert.equal(went.finished.status, 'success', went.finished.error);
+  assert.deepEqual(went.transitions.filter((x) => /issue_not_done/.test(x)), ['develop>issue_not_done', 'issue_not_done>code_review']);
+  assert.ok(went.transitions.filter((x) => x === 'code_review>develop').length >= 1);
+  // a run for one issue never asks
+  const single = await runSoftwareDevelopment({ mockSequences: { done: [false], preview_status: ['success'] }, issues: [GROUP[0]], inputs: { issue: GROUP[0].url } });
+  assert.ok(!single.transitions.includes('develop>issue_not_done'));
 });
 
 // `type: run` inputs (run-retrospective): "latest", a real id, or refused before the run starts.

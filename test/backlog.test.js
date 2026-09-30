@@ -271,6 +271,70 @@ test('the queue: enqueue skips duplicates and remembers inputs, next item across
   assert.equal(backlog.readQueue(dir, 'other').paused, false); // nothing waiting there
 });
 
+test('a group is one queue item; removing an issue leaves the group or cancels it; a skip keeps the rest', async (t) => {
+  const dir = tmp(t);
+  const issue = (number, extra) => ({ number, url: `https://github.com/o/r/issues/${number}`, title: `T${number}`, body: `B${number}`, ...extra });
+  backlog.enqueue(dir, 'p', { issues: [issue(9)], workflow: 'sd.yaml' });
+  let q = backlog.enqueue(dir, 'p', { issues: [issue(65), issue(9), issue(53), issue(77)], workflow: 'sd.yaml', group: true });
+  // #9 was already queued: the group is the other three, in the order given
+  assert.deepEqual(q.items.map((x) => [x.number, (x.issues || []).map((i) => i.number)]), [[9, []], [65, [65, 53, 77]]]);
+  assert.deepEqual(backlog.itemIssues(q.items[1]).map((i) => i.title), ['T65', 'T53', 'T77']);
+  // a group of one is a plain item
+  assert.equal(backlog.enqueue(dir, 'other', { issues: [issue(1)], workflow: 'sd.yaml', group: true }).items[0].issues, undefined);
+
+  q = backlog.unqueue(dir, 'p', 65); // leaves the group: the group goes on with #53 and #77, headed by #53
+  assert.deepEqual(q.items.map((x) => [x.number, x.title, (x.issues || []).map((i) => i.number)]), [[9, 'T9', []], [53, 'T53', [53, 77]]]);
+  q = backlog.unqueue(dir, 'p', 77, { cancelGroup: true }); // the whole group
+  assert.deepEqual(q.items.map((x) => x.number), [9]);
+
+  q = backlog.enqueue(dir, 'p', { issues: [issue(1), issue(2, { pullRequests: [{ url: 'https://github.com/o/r/pull/10' }] }), issue(3)], workflow: 'sd.yaml', group: true });
+  const exec = routedExec({ pr: [
+    { number: 10, title: 'Old (#2)', url: 'https://github.com/o/r/pull/10', body: '' },
+    { number: 11, title: 'New (#3)', url: 'https://github.com/o/r/pull/11', body: '' },
+  ] }).exec;
+  const prs = await backlog.newPullRequests({ item: q.items[1], platform: 'github', repo: 'https://github.com/o/r', exec });
+  assert.deepEqual(prs.map((p) => [p.number, p.issue]), [[11, 3]]); // PR 10 was known when #2 was assigned
+  q = backlog.skipQueued(dir, 'p', 3, 'open PR #11 since it was queued');
+  assert.deepEqual(q.items.map((x) => [x.number, (x.issues || []).map((i) => i.number)]), [[9, []], [1, [1, 2]]]);
+  assert.deepEqual(q.skipped.map((s) => [s.number, s.title]), [[3, 'T3']]);
+});
+
+test('a run started for several issues links to each of them; runs recorded with one `issue` still link', () => {
+  const issue = (number) => ({ number, state: 'open', url: `https://github.com/o/r/issues/${number}` });
+  const ref = (number) => ({ number, url: `https://github.com/o/r/issues/${number}`, title: `T${number}` });
+  const out = backlog.linkRuns([issue(53), issue(65), issue(77), issue(8), issue(9), issue(10)], [
+    { runId: 'group', workflow: 'w', status: 'running', waiting: true, startedAt: '2026-09-02', issues: [ref(53), ref(65), ref(77)], task: 'mentions #8' },
+    { runId: 'old', workflow: 'w', status: 'success', startedAt: '2026-09-01', issue: ref(8) },
+  ], { items: [{ number: 9, url: ref(9).url, workflow: 'w.yaml', issues: [ref(9), ref(10)] }] });
+  const by = Object.fromEntries(out.map((i) => [i.number, i]));
+  assert.deepEqual([53, 65, 77].map((n) => [by[n].column, by[n].runs[0].runId]), [['waiting', 'group'], ['waiting', 'group'], ['waiting', 'group']]);
+  assert.deepEqual(by[65].runs[0].groupedWith, [53, 77]);
+  assert.deepEqual(by[8].runs.map((r) => r.runId), ['old']); // a started-for run's text mentions don't count
+  assert.equal(by[8].runs[0].groupedWith, undefined);
+  assert.equal(by[8].column, 'done');
+  assert.deepEqual([by[9].queued, by[10].queued.groupedWith, by[10].column], [{ position: 1, workflow: 'w.yaml', mock: false, groupedWith: [10] }, [9], 'in_progress']);
+});
+
+test('a queued group becomes one task listing every issue, with `issues` next to `issue`', () => {
+  const ref = (number, body) => ({ number, url: `https://github.com/o/r/issues/${number}`, title: `Fix ${number}`, body });
+  const item = { ...ref(65, 'Checkboxes'), issues: [ref(65, 'Checkboxes'), ref(53, 'Scrollbars'), ref(77, '')], inputs: { language: 'js' } };
+  const wf = { inputs: { task: {}, repo_path: { type: 'string' }, language: {}, issue: {}, issues: { type: 'array' } } };
+  const inputs = backlog.runInputs(item, wf, 'C:/repo');
+  assert.equal(inputs.task, [
+    'Implement these 3 issues together (#65, #53, #77).',
+    'They ship together in one branch and one PR/MR that closes every one of them. Account for each issue: '
+      + 'say what was done for each one, and if one cannot be done, say which and why (never drop it silently).',
+    '## 1. #65 Fix 65\n\nIssue: https://github.com/o/r/issues/65\n\nCheckboxes',
+    '## 2. #53 Fix 53\n\nIssue: https://github.com/o/r/issues/53\n\nScrollbars',
+    '## 3. #77 Fix 77\n\nIssue: https://github.com/o/r/issues/77',
+  ].join('\n\n'));
+  assert.equal(inputs.issue, 'https://github.com/o/r/issues/65');
+  assert.deepEqual(inputs.issues, ['https://github.com/o/r/issues/65', 'https://github.com/o/r/issues/53', 'https://github.com/o/r/issues/77']);
+  assert.deepEqual([inputs.repo_path, inputs.language], ['C:/repo', 'js']);
+  // a single issue: `issues` is a list of one
+  assert.deepEqual(backlog.runInputs(ref(7, 'x'), wf, 'C:/repo').issues, ['https://github.com/o/r/issues/7']);
+});
+
 test('a queued issue becomes the run inputs: task, project folder and issue', () => {
   const item = { number: 7, url: 'https://github.com/o/r/issues/7', title: 'Add X', body: 'Details', inputs: { language: 'go', repo_path: '' } };
   const wf = { inputs: { task: {}, repo_path: { type: 'string' }, language: {}, issue: {}, run_id: { type: 'run' } } };

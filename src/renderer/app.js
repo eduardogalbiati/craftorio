@@ -71,7 +71,11 @@ const isRunLive = (runId) => state.runs.get(runId)?.run?.status === 'running';
 const liveRuns = () => [...state.runs.values()].filter((v) => v.run?.status === 'running');
 const pendingGates = () => [...state.runs.values()].flatMap((v) => [...v.approvals.values()]);
 // "workflow · project · #issue" of a run, for lists, toasts and dialogs
-const runLabel = (r) => [r?.workflow || 'workflow', r?.project, r?.issue ? `#${r.issue.number}` : null].filter(Boolean).join(' · ');
+// The issues a run implements (Backlog; several for a group) and their "#53, #65" label. Runs
+// recorded before groups have a single `issue`.
+const issuesOfRun = (r) => r?.issues || (r?.issue ? [r.issue] : []);
+const issueRefs = (r) => issuesOfRun(r).map((i) => `#${i.number}`).join(', ');
+const runLabel = (r) => [r?.workflow || 'workflow', r?.project, issueRefs(r) || null].filter(Boolean).join(' · ');
 
 // Shows a run on the Run screen and in the top bar.
 function selectRun(runId, { open = true } = {}) {
@@ -193,6 +197,11 @@ async function init() {
     if (el.dataset.setting === 'developerMode') applyDeveloperMode();
   }));
   $('#set-backlog-platform').onchange = async (e) => { state.settings = await api.setSettings({ backlogPlatform: e.target.value }); };
+  $('#set-backlog-group').onchange = async (e) => {
+    const n = Math.floor(Number(e.target.value));
+    state.settings = await api.setSettings({ backlogMaxGroup: Number.isFinite(n) && n >= 2 ? Math.min(n, 20) : 5 });
+    e.target.value = state.settings.backlogMaxGroup;
+  };
   for (const sel of ['#set-cr-enabled', '#set-cr-max', '#set-cr-project', '#set-cr-sims']) $(sel).onchange = saveConcurrency;
 
   api.onEvent(onEvent);
@@ -357,7 +366,7 @@ function renderDashboard() {
   box.classList.toggle('hidden', !list.length);
   box.innerHTML = list.map(({ run: r, approvals }) => `<div class="dash-run-row">
       <span class="status st-${esc(runSessionStatus(r.status))}"><span class="status-dot"></span></span>
-      <span><b>${esc(r.workflow || 'workflow')}</b>${r.project ? ` · ${esc(r.project)}` : ''}${r.issue ? ` · #${esc(r.issue.number)}` : ''} <span class="muted">— ${esc(statusLabel(r))}${approvals.size ? ' · waiting for approval' : ''}</span></span>
+      <span><b>${esc(r.workflow || 'workflow')}</b>${r.project ? ` · ${esc(r.project)}` : ''}${issueRefs(r) ? ` · ${esc(issueRefs(r))}` : ''} <span class="muted">— ${esc(statusLabel(r))}${approvals.size ? ' · waiting for approval' : ''}</span></span>
       <button class="btn sm ghost" data-run="${esc(r.id)}">View run</button></div>`).join('');
   box.querySelectorAll('[data-run]').forEach((b) => (b.onclick = () => selectRun(b.dataset.run)));
 }
@@ -686,7 +695,7 @@ function renderRunList(rl, { prefix, box: boxSel, empty, start, rerender }) {
     // the Run screen shows the selected run: select this one, not whichever run was on screen
     if (b.dataset.runAct === 'view') { if (state.runs.has(r.runId)) selectRun(r.runId); else showView('run'); }
     if (b.dataset.runAct === 'chat') window.openRunChat?.({ runId: r.runId, workflow: r.workflow, running: r.current && r.status === 'running' });
-    if (b.dataset.runAct === 'sup') openSupervisor({ runId: r.runId, workflow: r.workflow, status: r.status, error: r.error, mock: r.mock, issue: r.issue });
+    if (b.dataset.runAct === 'sup') openSupervisor({ runId: r.runId, workflow: r.workflow, status: r.status, error: r.error, mock: r.mock, issues: issuesOfRun(r) });
   }));
   box.querySelectorAll('[data-art]').forEach((b) => (b.onclick = () => {
     const r = rl.runs.find((x) => x.runId === b.closest('.pr-run').dataset.run);
@@ -1055,6 +1064,7 @@ async function renderSettings() {
   const platform = $('#set-backlog-platform');
   platform.innerHTML = Object.entries(window.BACKLOG_PLATFORMS || {}).map(([id, p]) => `<option value="${id}">${esc(p.label)}${p.soon ? ' (sync not available yet)' : ''}</option>`).join('');
   platform.value = state.settings.backlogPlatform || 'github';
+  $('#set-backlog-group').value = state.settings.backlogMaxGroup || 5;
   renderConcurrency();
   if (!document.querySelector('[data-spage="agents"]').classList.contains('hidden')) renderTools();
 }
@@ -1595,7 +1605,7 @@ function runInfo(x) {
   const project = state.projects.find((p) => p.id === (x.project_id || x.projectId)) || state.projects.find((p) => Object.values(inputs).includes(p.folder));
   return {
     id: x.run_id || x.runId, startedAt: Date.parse(x.ts || x.startedAt) || Date.now(), mock: !!x.mock, workflow: x.workflow,
-    version: x.version, inputs, issue: x.issue || null, project: project?.name || null,
+    version: x.version, inputs, issues: issuesOfRun(x), project: project?.name || null,
   };
 }
 
@@ -1863,7 +1873,7 @@ function renderNavRuns() {
   if (!show) { box.innerHTML = ''; return; }
   const html = list.map(({ run: r, approvals }) => `<button type="button" class="nav-run-item st-${runSessionStatus(r.status)}${r.id === state.runId ? ' selected' : ''}" data-run="${esc(r.id)}" title="${esc(`${runLabel(r)} — ${statusLabel(r)}`)}">
       <span class="status-dot"></span>
-      <span class="nav-run-text"><span class="nav-run-wf">${esc(r.workflow || 'workflow')}</span><span class="nav-run-sub">${esc([r.project, r.issue ? `#${r.issue.number}` : null].filter(Boolean).join(' · ') || statusLabel(r))} · ${esc(new Date(r.startedAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }))}</span></span>
+      <span class="nav-run-text"><span class="nav-run-wf">${esc(r.workflow || 'workflow')}</span><span class="nav-run-sub">${esc([r.project, issueRefs(r) || null].filter(Boolean).join(' · ') || statusLabel(r))} · ${esc(new Date(r.startedAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }))}</span></span>
       ${approvals.size ? `<span class="nav-gates" title="Approval waiting">${approvals.size}</span>` : ''}
     </button>`).join('');
   if (box.dataset.html === html) return;
@@ -1890,7 +1900,7 @@ function renderRunBanner() {
   const show = r?.status === 'failed';
   box.classList.toggle('hidden', !show);
   if (!show) return;
-  const key = `${r.id}:${r.issue?.number || ''}:${r.error || ''}`;
+  const key = `${r.id}:${issueRefs(r)}:${r.error || ''}`;
   if (box.dataset.key === key) return;
   box.dataset.key = key;
   box.innerHTML = `<div class="fail-banner-text"><b>The workflow failed: ${esc(runLabel(r))}</b><span class="muted small mono">${esc(r.id)}</span>${r.error ? `<span class="mono small" title="${esc(r.error)}">${esc(r.error)}</span>` : ''}</div>
@@ -2518,7 +2528,7 @@ const SUP_ACTIONS = { retry: 'retry the step', fix_output: 'fix the output', got
 function openSupervisorForCurrent() {
   const r = state.run;
   if (!r) return;
-  openSupervisor({ runId: r.id, workflow: r.workflow, status: r.status, error: r.error, mock: r.mock, issue: r.issue });
+  openSupervisor({ runId: r.id, workflow: r.workflow, status: r.status, error: r.error, mock: r.mock, issues: issuesOfRun(r) });
 }
 
 function openSupervisor(run) {
@@ -2526,7 +2536,7 @@ function openSupervisor(run) {
   if (sup.runId !== run.runId) {
     Object.assign(sup, { runId: run.runId, question: '', loading: false, result: null, error: null, recMsgs: {} });
   }
-  Object.assign(sup, { workflow: run.workflow, status: run.status, runError: run.error, mock: !!run.mock, issue: run.issue || null });
+  Object.assign(sup, { workflow: run.workflow, status: run.status, runError: run.error, mock: !!run.mock, issues: issuesOfRun(run) });
   $('#sup-question').value = sup.question;
   $('#sup-chat-msg').textContent = '';
   $('#sup-drawer').classList.add('open');
@@ -2575,7 +2585,7 @@ async function supervisorChat() {
 
 function renderSupervisor() {
   const sup = state.sup;
-  $('#sup-run').innerHTML = `<span class="mono">${esc(sup.runId || '')}</span>${sup.workflow ? ` · ${esc(sup.workflow)}` : ''}${sup.issue ? ` · <b>#${esc(sup.issue.number)}</b> ${esc(sup.issue.title || '')}` : ''}${sup.status ? ` <span class="pill pill-${esc(sup.status)}">${esc(sup.status)}</span>` : ''}${sup.mock ? ' <span class="badge p-mock">simulated</span>' : ''}`;
+  $('#sup-run').innerHTML = `<span class="mono">${esc(sup.runId || '')}</span>${sup.workflow ? ` · ${esc(sup.workflow)}` : ''}${sup.issues?.length === 1 ? ` · <b>#${esc(sup.issues[0].number)}</b> ${esc(sup.issues[0].title || '')}` : sup.issues?.length ? ` · <b>${esc(issueRefs(sup))}</b>` : ''}${sup.status ? ` <span class="pill pill-${esc(sup.status)}">${esc(sup.status)}</span>` : ''}${sup.mock ? ' <span class="badge p-mock">simulated</span>' : ''}`;
   $('#btn-sup-analyze').disabled = sup.loading;
   $('#btn-sup-analyze').textContent = sup.result ? 'Analyze again' : 'Analyze';
   const box = $('#sup-result');

@@ -84,7 +84,7 @@
   function itemHtml(it) {
     switch (it.kind) {
       case 'start': {
-        const issue = it.issue ? `Issue <a href="${esc(it.issue.url)}" target="_blank" rel="noopener">#${esc(it.issue.number)}</a> ${esc(it.issue.title || '')}` : '';
+        const issue = it.issues.length ? `${it.issues.length > 1 ? 'Issues' : 'Issue'} ${it.issues.map((i) => `<a href="${esc(i.url)}" target="_blank" rel="noopener">#${esc(i.number)}</a> ${esc(i.title || '')}`).join(' · ')}` : '';
         const inputs = Object.entries(it.inputs).filter(([k, v]) => k !== 'task' && v !== '' && v != null);
         return `<div data-item="${it.id}" class="rc-start"><div class="duo-msg user"><div class="duo-bubble">
           <div class="duo-meta"><b>${esc(it.workflow)}</b>${it.version ? `<span class="tag">v${esc(it.version)}</span>` : ''}${it.mock ? '<span class="badge p-mock">simulated</span>' : ''}<span class="time">${clock(it.ts)}</span></div>

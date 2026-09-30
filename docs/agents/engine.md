@@ -101,7 +101,16 @@ same features for users; this is the implementer's summary.
   software-development (0.12.0): the deployer returns `failure_class: code | infra | unknown`; a
   preview `code` failure goes to the developer → `ci` → `pr_babysitter` → `deploy_test` (2
   automatic rounds, then the gate).
-- `WorkflowRun` option `issue: { number, url, title }` (Backlog assignments) is recorded in `workflow.started`/`summary.json` like `projectId` and carried over on resume.
+- `WorkflowRun` option `issues: [{ number, url, title }]` (Backlog assignments; several when a group of
+  issues goes as one run, one issue is a list of one) is recorded in `workflow.started`/`summary.json`
+  like `projectId` and carried over on resume (`resumeSpec`). The old option `issue` is still accepted;
+  runs recorded with `issue` load as `issues: [issue]` (`runs.readRun`, `resumeSpec`, the run chat).
+  The Backlog fills the `issue` (first URL) and `issues` (every URL) inputs when a workflow declares them.
+- Inputs with `type: array` take a list; text from a form becomes one item per line or comma.
+- software-development (0.15.0) for several issues: the developer answers `issues: [{ issue, done, summary }]`;
+  one with `done: false` goes to the `issue_not_done` gate (continue without it / stop), asked once per
+  run; the review sets `issue` on its findings, the verifier answers a verdict per issue, and the CI
+  Pusher's PR/MR body closes each issue that was done.
 
 ## Worktrees and template context
 

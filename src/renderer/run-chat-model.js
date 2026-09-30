@@ -94,14 +94,16 @@
 
   const HANDLERS = {
     'workflow.started'(ev) {
+      // the issues the run implements; runs recorded before groups have a single `issue`
+      const issues = ev.issues || (ev.issue ? [ev.issue] : []);
       Object.assign(this.run, {
         id: ev.run_id, workflow: ev.workflow || ev.file || 'workflow', version: ev.version, mock: !!ev.mock,
-        runDir: ev.run_dir, status: 'running', startedAt: ev.ts, issue: ev.issue || null,
+        runDir: ev.run_dir, status: 'running', startedAt: ev.ts, issues,
       });
       const inputs = ev.inputs || {};
       this.add({
         kind: 'start', ts: ev.ts, workflow: this.run.workflow, version: ev.version, mock: !!ev.mock,
-        task: String(inputs.task || '').trim(), inputs, issue: ev.issue || null, resumedFrom: ev.resumed_from || null,
+        task: String(inputs.task || '').trim(), inputs, issues, resumedFrom: ev.resumed_from || null,
       });
     },
 
