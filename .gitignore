@@ -4,3 +4,5 @@ dist/
 build/
 .env
 .env.*
+# derived docs (npm run docs; rebuilt by prepare/prestart/pretest/prebuild): never committed, never conflicts
+docs/agents/code-map.md

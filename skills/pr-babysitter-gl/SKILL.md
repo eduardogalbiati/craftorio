@@ -2,6 +2,8 @@
 name: pr-babysitter-gl
 description: Watches a GitLab merge request until it is mergeable - checks detailed merge status, conflicts, approvals and unresolved discussions, classifies each comment as actionable or doubtful, and replies with the fixing commit hash (glab CLI). Use to drive a GitLab MR to ready-to-merge.
 uses: [pr-comment-triage]
+summary: "Mergeability signals, threads/discussions, replies"
+used_by: "PR babysitter"
 ---
 
 # MR babysitting: GitLab (glab CLI)

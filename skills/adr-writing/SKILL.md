@@ -1,6 +1,8 @@
 ---
 name: adr-writing
 description: Writes and scores ADRs (Architecture Decision Records) - one decision per record, context and decision drivers, at least two considered options with pros and cons, the chosen option with its reason, consequences and how compliance is confirmed, plus the rubric used to score proposals. Use to write, critique or merge an ADR.
+summary: "ADR (after MADR 4.0): one decision, drivers, real options with pros/cons, consequences, confirmation, rubric"
+used_by: "arena (`document_skill`)"
 ---
 
 # ADR (Architecture Decision Record)

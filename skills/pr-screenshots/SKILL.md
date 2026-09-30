@@ -1,6 +1,8 @@
 ---
 name: pr-screenshots
 description: Shared part of pr-screenshots-gh and pr-screenshots-gl. Publishes the UI screenshots a run captured on its PR/MR as one comment (before/after side by side), stored on a dedicated pr-screenshots branch, with publish.js from this skill's folder.
+summary: "`publish.js`: commits the PNGs to the `pr-screenshots` branch (one folder per PR/MR, closed ones pruned) without touching the checkout, then posts one before/after comment"
+used_by: "via `uses`"
 ---
 
 # PR/MR screenshots

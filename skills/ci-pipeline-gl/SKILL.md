@@ -2,6 +2,8 @@
 name: ci-pipeline-gl
 description: Pushes a branch to GitLab, opens or reuses its merge request, fails fast when it conflicts with the base, checks GitLab CI pipeline status and triages failed jobs down to a root cause (glab CLI). Use when you need to get a branch's CI green on GitLab.
 uses: [ci-failure-triage, pr-description]
+summary: "Push, PR/MR, mergeability (conflicts fail fast), CI status, missing checks, fetching failed logs, retrying flaky jobs"
+used_by: "CI pusher"
 ---
 
 # CI pipeline: GitLab (glab CLI)

@@ -2,6 +2,8 @@
 name: unit-test-writer-python
 description: Writes, updates and runs unit tests for Python with the framework the project already uses (pytest, unittest, pytest-django). Use to add tests for a change or run the suite of a Python project.
 uses: [testing-principles, long-commands]
+summary: "Framework detection, commands, idioms per language"
+used_by: "test writer"
 ---
 
 # Unit tests: Python

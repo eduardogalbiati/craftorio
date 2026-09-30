@@ -2,6 +2,8 @@
 name: unit-test-writer-js
 description: Writes, updates and runs unit tests for JavaScript/TypeScript (Node, browser, React) with the framework the project already uses (node:test, Vitest, Jest, Mocha). Use to add tests for a change or run the suite of a JS/TS project.
 uses: [testing-principles, long-commands]
+summary: "Framework detection, commands, idioms per language"
+used_by: "test writer"
 ---
 
 # Unit tests: JavaScript / TypeScript
@@ -19,7 +21,9 @@ uses: [testing-principles, long-commands]
 - Package manager from the lockfile: `package-lock.json` → npm, `pnpm-lock.yaml` → pnpm, `yarn.lock` → yarn.
 - No framework yet: plain Node → `node:test` + `node:assert/strict`; Vite/TS front end → Vitest.
 - Always non-interactive (`vitest run`, never watch mode; set `CI=true` if needed).
-- While iterating run single files; run the full suite once at the end.
+- While iterating run single files, filtered to the tests you write (`--test-name-pattern`, `-t`,
+  `--grep`), a slow file at most once per round; run the full suite once at the end (see
+  testing-principles: time budget, pre-existing failures).
 - Dependencies first: a fresh checkout (each run has its own worktree) has no `node_modules`.
   When it is missing or the lockfile changed, install with the lockfile's manager
   (`npm ci` · `pnpm install --frozen-lockfile` · `yarn install --frozen-lockfile`) before running tests.

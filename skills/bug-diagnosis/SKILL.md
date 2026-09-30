@@ -1,6 +1,8 @@
 ---
 name: bug-diagnosis
 description: Disciplined loop for fixing a reported failure (failing test, CI error, broken build, production bug) - build a red feedback loop first, rank falsifiable hypotheses, instrument, add a regression test, fix, clean up. Use whenever you are asked to fix something that is broken rather than build something new.
+summary: "Red feedback loop first, ranked hypotheses, regression test, cleanup"
+used_by: "developer"
 ---
 
 # Bug diagnosis

@@ -1,6 +1,8 @@
 ---
 name: pr-comment-triage
 description: Shared rules to classify review comments on a pull/merge request as actionable, doubtful or informational, write durable fix requests, and reply after a fix. Loaded by the pr-babysitter-<platform> skills.
+summary: "Actionable vs doubtful comments, durable fix requests, resume logic, AI marker on replies"
+used_by: "via `uses`"
 ---
 
 # Review comment triage

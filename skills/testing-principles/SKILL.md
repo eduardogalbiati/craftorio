@@ -1,6 +1,8 @@
 ---
 name: testing-principles
 description: Language-agnostic rules for writing unit tests that verify behaviour through public seams, avoid tautological and implementation-coupled tests, and mock only at system boundaries. Loaded by every unit-test-writer-<language> skill.
+summary: "Seams first, no tautological or implementation-coupled tests, mocks only at boundaries, red before green for bug fixes, before/after screenshots of UI changes, each suite run once, pre-existing failures reported instead of chased"
+used_by: "via `uses`"
 ---
 
 # Testing principles
@@ -72,10 +74,39 @@ lists the usual paths; the project's docs may name others), capture the affected
   "before": "<before>.png" }]` (`before` omitted for a new screen; some screenshot commands write
   it for you). Return the same list in your answer. The files are not test files: never commit them.
 - Not a visual change (no UI path in the diff): say so in one line and skip.
+- Screenshots are optional in a test step: at most a before/after of one view per issue of the run,
+  and none when most of your turn's time is already spent (say so in the screenshots note).
+
+## Fit the time budget (run each suite once)
+
+A test turn has a time limit; a killed turn loses its answer and the next attempt pays again.
+
+- While writing, run only the test files you touch, filtered to the tests you are writing (the
+  language skill's "one file / test" command). A slow file (over a minute) runs **at most once per
+  round**; don't rerun it to read a different part of its output: keep the output in a file.
+- Run the full suite **once, at the end**. A second run only after a fix, not to double-check.
+- Never start a full end-to-end or mock run of the application (e.g. a workflow run script) unless
+  the task asks for it: the suite already includes what the project wants run.
+
+## Pre-existing failures: report them, don't chase them
+
+When the suite fails, first find out whether the failure is this change's:
+
+1. Run **only the failing files** on the base commit: a temporary worktree
+   (`git worktree add --detach <temp folder> <base>`, install its dependencies if the runner needs
+   them, run the files, then `git worktree remove --force <temp folder>`). Never use a bare
+   `git stash` (the stash is shared with other worktrees and runs).
+2. A test that **also fails on the base** is pre-existing: list it in `preexisting_failures`
+   (`test`, `file`, `reason` in one line) and move on. It does not make the step fail, and it is not
+   investigated or fixed in this run (no log digging, no reproduction runs), unless the fix is
+   trivial and in files this change already touches. The owner gets the list as a follow-up.
+3. A test that passes on the base and fails on the branch is this change's: report it as usual
+   (production bug vs outdated test).
 
 ## Done when
 
 - every seam you listed has at least one test for the behaviour that changed;
 - a UI change has before/after screenshots, or the reason there are none;
-- the full suite was run with the project's command and the result (pass/fail counts) is reported;
-- every failure is reported as test name, error, and probable cause (production bug vs outdated test).
+- the full suite was run once with the project's command and the result (pass/fail counts) is reported;
+- every failure is reported as test name, error, and probable cause (production bug vs outdated test),
+  and a failure that also fails on the base is listed as pre-existing instead.

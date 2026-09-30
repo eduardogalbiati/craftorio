@@ -1,6 +1,8 @@
 ---
 name: rfc-writing
 description: Writes and scores engineering RFCs (Request for Comments) - a proposal to change a system, API or process put up for review, with motivation, a guide-level and a reference-level explanation, drawbacks, alternatives, prior art, rollout and unresolved questions, plus the rubric used to score proposals. Use to write, critique or merge an RFC.
+summary: "RFC (after the Rust RFC template): motivation, guide- and reference-level explanation, drawbacks, alternatives, prior art, rollout, rubric"
+used_by: "arena (`document_skill`)"
 ---
 
 # RFC (Request for Comments)

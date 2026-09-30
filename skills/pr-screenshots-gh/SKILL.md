@@ -2,6 +2,8 @@
 name: pr-screenshots-gh
 description: Publishes a run's UI screenshots on its GitHub pull request (a comment with before/after images stored on the pr-screenshots branch), with the gh CLI. Use when the test step captured screenshots and the PR exists.
 uses: [pr-screenshots]
+summary: "Screenshots comment on the PR/MR (GitHub `blob/...?raw=true`, GitLab `-/raw/` URLs)"
+used_by: "CI pusher"
 ---
 
 # PR screenshots: GitHub (gh CLI)

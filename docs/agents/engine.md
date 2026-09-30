@@ -175,6 +175,21 @@ same features for users; this is the implementer's summary.
 
 ## Providers
 
+- `timeout` (agent or `defaults`): the limit of one turn, default `30m`; the process is killed
+  when it runs out. It may be a template rendered with the run's context (`turnTimeout`), e.g. the
+  software-development workflows give grouped runs more time:
+  `timeout: "{{ (30 + 10 * ((inputs.issues | length) - 1)) | clamp(30, 60) }}m"` (30m for one
+  issue, +10m per extra issue, at most 60m). `clamp(lo, hi)` is an engine filter. The value used
+  is in `session.message_sent.timeout_ms`.
+- `retry.max_attempts` (+ `backoff`, `initial_delay`): a failed turn (timeout, crash, retryable
+  error) runs again. A killed process writes no handoff note, so the next attempt starts with a
+  `<previous_attempt>` block: the failed attempt's tool calls with the first line of each result
+  (`attemptSummary`, last 60 calls; log kind `attempt_summary`), so it continues instead of
+  re-orienting. The mock's `sequences.timeouts: { step: n }` kills the first n attempts.
+- A step output's `preexisting_failures` (`[{ test, file, reason }]`, the test step of the
+  software-development workflows): tests that also fail on the base. They don't block the step;
+  the engine logs them (kind `preexisting_failures`, warn) and lists them in
+  `summary.preexisting_failures` for the owner (follow-up issues). Mock: `sequences.preexisting_failures: true`.
 - Schema retries: ephemeral and handoff agents answer retries in a fresh session → the engine
   resends the task, the previous answer and the schema (`retryPrompt`).
 - Claude local transcripts repeat each message while streaming: dedupe by message id + request id.

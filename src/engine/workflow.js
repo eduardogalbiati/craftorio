@@ -1,5 +1,17 @@
 // Engine that runs the step graph defined in the YAML.
 // Emits events ('event') that feed the UI and the observability recorder.
+// `loadWorkflow`, `WorkflowRun` (graph walk, transitions, `/goal` + `/loop`, delegation, fan-out
+// `agents: [...]`, `save_as`, `on_error`, schema validation + retries, skills injection with `uses:`,
+// budgets check per turn, decision log `decisions.tsv`, AI supervisor `superviseFailure`, resume from
+// step, per-run worktree lifecycle `setupWorktree`/`finishWorktree`, run outcome from the ending
+// transition's `status`, `mockSequences` to steer the mock per field in tests, gates with their
+// details kept for runs:active (`pendingGates`), `preexisting_failures` reported by a step).
+// Session modes (`persistent` / `ephemeral` / `handoff`), handoff notes (`takeHandoff`, `saveHandoff`,
+// `requestHandoffNote`), `max_context` rotation, per-turn context metrics (`turnLog`,
+// `contextSummary` → `summary.context`). `sendToAgent` builds one turn; `invokeTurn` runs it against
+// the provider (templated `timeout` via `turnTimeout`; a failed attempt's tool calls go to the next
+// one, `attemptSummary`). Exports `render` (nunjucks, autoescape off, filters `to_yaml`, `to_json`,
+// `shuffle(seed)`, `clamp(lo, hi)`), `takeHandoff`, `parseTokens`.
 
 const fs = require('fs');
 const path = require('path');
@@ -60,6 +72,10 @@ tpl.addFilter('pr_url', (url) => {
   if (!ok) throw new Error(`not a pull/merge request URL: ${JSON.stringify(url)}`);
   return u;
 });
+
+// A number kept between bounds, e.g. a timeout that grows with the run's issues:
+//   timeout: "{{ (30 + 10 * ((inputs.issues | length) - 1)) | clamp(30, 60) }}m"
+tpl.addFilter('clamp', (v, lo = -Infinity, hi = Infinity) => Math.min(Math.max(Number(v) || 0, lo), hi));
 
 const render = (s, scope) => (s == null ? '' : tpl.renderString(String(s), scope));
 const evalExpr = (expr, scope) => render(`{% if ${expr} %}1{% else %}0{% endif %}`, scope).trim() === '1';
@@ -337,6 +353,32 @@ function takeHandoff(text) {
   return [(src.slice(0, m.index) + src.slice(m.index + m[0].length)).replace(/\n{3,}/g, '\n\n').trim(), note || null];
 }
 
+// What a failed attempt of a turn did (a process killed at its timeout writes no handoff note), for
+// the next attempt: its tool calls, oldest first (the last ATTEMPT_CALLS), each with the first line
+// of its result. calls: tool call id -> { name, input, result? }.
+const ATTEMPT_CALLS = 60;
+function attemptSummary(calls, err, attempt) {
+  const line = (v, n) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, n);
+  const all = [...calls.values()];
+  const shown = all.slice(-ATTEMPT_CALLS);
+  const rows = shown.map((c) => {
+    const input = c.input || {};
+    const what = line(input.command ?? input.file_path ?? input.path ?? input.pattern ?? JSON.stringify(input), 200);
+    const out = !c.result ? 'no result: still running when the attempt stopped'
+      : `${c.result.is_error ? 'error: ' : ''}${line(String(c.result.output ?? '').split('\n').find((l) => l.trim()) || '(no output)', 160)}`;
+    return `- ${c.name || 'tool'}: ${what} → ${out}`;
+  });
+  return [
+    '<previous_attempt>',
+    `Your previous attempt of this turn (attempt ${attempt}) was stopped: ${line(err?.message, 200)}. What it wrote in the working`,
+    'folder (files, commits) is still there. Continue from where it stopped: do not re-orient from `git status`, do not',
+    're-run a command whose result is below unless something changed since, and keep the tests it already wrote.',
+    `Its tool calls${all.length > shown.length ? ` (the last ${shown.length} of ${all.length})` : ''}:`,
+    ...rows,
+    '</previous_attempt>',
+  ].join('\n');
+}
+
 const kTokens = (n) => (n == null ? '?' : n >= 1000 ? `${Math.round(n / 1000)}k` : String(n));
 
 function newRunId() {
@@ -447,6 +489,7 @@ class WorkflowRun extends EventEmitter {
     this.counters = {};
     this.loops = {};
     this.approvals = new Map();
+    this.preexisting = []; // [{ step, test, file, reason }] (notePreexistingFailures)
     this.abort = new AbortController();
     this.seq = 0;
     this.nSession = 0;
@@ -829,6 +872,7 @@ class WorkflowRun extends EventEmitter {
   // step.finished, the /goal check and the transitions of a step that has its output.
   async finishStep(step, st, output, scope, t0, extra = {}) {
     this.emitEvent('step.finished', { step_id: step.id, visit: st.visits, iteration: st.iteration, output, duration_ms: Date.now() - t0, ...extra });
+    this.notePreexistingFailures(step.id, output);
 
     if (step.goal) {
       const met = evalExpr(step.goal.until, scope);
@@ -1743,8 +1787,34 @@ class WorkflowRun extends EventEmitter {
   // Runs one provider turn in `session` (with the agent's retry policy) and reports it:
   // session.message_sent / .stream / .message_received. The answer comes back without its
   // ```handoff block (res.handoff), with its tool calls (res.tools) and context size (res.context).
+  // A step's output may list `preexisting_failures` ([{ test, file, reason }]): tests that also fail
+  // on the base, so they are not this run's to fix (#101). They don't block the step; the owner gets
+  // them in the run (a warning in the log and the run chat) and in summary.preexisting_failures.
+  notePreexistingFailures(stepId, output) {
+    const list = Array.isArray(output?.preexisting_failures) ? output.preexisting_failures.filter((f) => f && typeof f === 'object') : [];
+    if (!list.length) return;
+    const known = new Set(this.preexisting.map((f) => `${f.file}\n${f.test}`));
+    const fresh = list.filter((f) => !known.has(`${f.file}\n${f.test}`)).map((f) => ({ step: stepId, test: String(f.test ?? ''), file: String(f.file ?? ''), reason: String(f.reason ?? '') }));
+    if (!fresh.length) return;
+    this.preexisting.push(...fresh);
+    this.emitEvent('log', {
+      level: 'warn', kind: 'preexisting_failures', step_id: stepId, failures: fresh,
+      message: `${stepId}: ${fresh.length} test${fresh.length === 1 ? '' : 's'} also failing on the base, not chased in this run (worth a follow-up issue): ${fresh.map((f) => `${f.test || '?'} (${f.file || '?'})`).join(' · ')}`,
+    });
+  }
+
+  // An agent's `timeout` for one turn (default 30m). A template is rendered with the run's context,
+  // so the budget can grow with the run, e.g. with the number of issues of a grouped run (#101).
+  turnTimeout(agent) {
+    const v = typeof agent.timeout === 'string' && agent.timeout.includes('{{') ? render(agent.timeout, this.ctx).trim() : agent.timeout;
+    return parseDuration(v, 30 * 60e3);
+  }
+
   async invokeTurn({ session, agentName, agent, provider, extraArgs, stepId, hint, attempts }, turn, fullPrompt) {
-    this.emitEvent('session.message_sent', { session_id: session.id, turn, step_id: stepId, prompt: fullPrompt });
+    const timeoutMs = this.turnTimeout(agent);
+    this.emitEvent('session.message_sent', { session_id: session.id, turn, step_id: stepId, prompt: fullPrompt, timeout_ms: timeoutMs });
+    // a retry after a failed attempt that did work (a timeout, a crash) starts with what it did
+    let prompt = fullPrompt;
     if (!provider) throw new Error(`Provider "${agent.provider}" is not defined.`);
     if (!this.mock) this.checkBudget(agent.provider);
     await this.contextGate(stepId);
@@ -1764,8 +1834,9 @@ class WorkflowRun extends EventEmitter {
       const calls = new Map();
       const track = (item) => {
         if (item.kind === 'context') { context.start ??= item.tokens; context.peak = Math.max(context.peak || 0, item.tokens); return; }
-        if (item.kind === 'tool_call') calls.set(item.id, item);
+        if (item.kind === 'tool_call') calls.set(item.id, { ...item });
         if (item.kind !== 'tool_result') return;
+        if (calls.has(item.id)) calls.get(item.id).result = item;
         if (!isPermissionDenial(item)) { tools.ran++; tools.streak = 0; return; }
         tools.denials++;
         tools.maxStreak = Math.max(tools.maxStreak, ++tools.streak);
@@ -1799,8 +1870,8 @@ class WorkflowRun extends EventEmitter {
       try {
         const res = await runTurn({
           provider, model: agent.model, effort: agent.effort, providerSessionId: session.providerSessionId,
-          prompt: fullPrompt, cwd: (session.cwd = this.workingDir(agent)), extraArgs,
-          timeoutMs: parseDuration(agent.timeout, 30 * 60e3),
+          prompt, cwd: (session.cwd = this.workingDir(agent)), extraArgs,
+          timeoutMs, attempt: a,
           signal: turnAbort.signal, hint, render,
           onItem: (item) => { track(item); idle.item(item); this.emitEvent('session.stream', { session_id: session.id, turn, item }); },
         });
@@ -1846,6 +1917,15 @@ class WorkflowRun extends EventEmitter {
           break;
         }
         if (a < maxAttempts) {
+          // a killed process writes no handoff note: the next attempt gets the summary of its tool
+          // calls instead of re-orienting from `git status` (issue #101)
+          if (calls.size) {
+            prompt = `${attemptSummary(calls, e, a)}\n\n${fullPrompt}`;
+            this.emitEvent('log', {
+              level: 'info', kind: 'attempt_summary', step_id: stepId, agent: agentName, tool_calls: calls.size,
+              message: `[${agentName}] attempt ${a + 1} starts with the summary of attempt ${a} (${calls.size} tool call${calls.size === 1 ? '' : 's'})`,
+            });
+          }
           this.setStatus(session, 'retrying');
           await sleep(delay, this.abort.signal);
           if (retry.backoff === 'exponential') delay *= 2;
@@ -1920,19 +2000,30 @@ class WorkflowRun extends EventEmitter {
     const choices = step.choices ? step.choices.map((c) => ({ id: c.id, label: render(c.label, this.ctx) })) : null;
     const fb = step.feedback === true ? {} : step.feedback || null;
     const feedback = fb && { label: render(fb.label || 'Anything to add? (optional)', this.ctx), placeholder: render(fb.placeholder || '', this.ctx) };
-    this.emitEvent('approval.requested', { approval_id: id, step_id: step.id, message, choices, feedback });
-    this.setStatus(this.orchestrator, 'waiting');
+    const requestedAt = new Date().toISOString();
     const timeout = parseDuration(step.timeout, null);
 
-    return new Promise((resolve, reject) => {
+    // registered before its event, so runs:active lists it as soon as anyone hears of it
+    const answered = new Promise((resolve, reject) => {
       const onTimeout = step.choices ? step.choices[step.choices.length - 1].id : false;
       const timer = timeout ? setTimeout(() => this.resolveApproval(id, onTimeout, 'timeout'), timeout) : null;
       this.approvals.set(id, {
         stepId: step.id,
+        // what pendingGates() hands the UI, so a reloaded window rebuilds the gate without its event
+        gate: { approval_id: id, step_id: step.id, message, choices, feedback, requested_at: requestedAt },
         resolve: (v) => { clearTimeout(timer); resolve(v); },
         reject: (e) => { clearTimeout(timer); reject(e); },
       });
     });
+    this.emitEvent('approval.requested', { approval_id: id, step_id: step.id, message, choices, feedback });
+    if (this.approvals.has(id)) this.setStatus(this.orchestrator, 'waiting'); // not answered by a listener already
+    return answered;
+  }
+
+  // The gates this run waits at, as the approval.requested events described them (plus requested_at).
+  // The service lists them in runs:active: the UI never relies only on the events it saw live.
+  pendingGates() {
+    return [...this.approvals.values()].map((a) => a.gate).filter(Boolean);
   }
 
   // answer: boolean (approve/reject) or the id of one of the step's choices; feedback: optional text
@@ -2009,6 +2100,8 @@ ${stderr || stdout}`.slice(0, 1500)));
         // `wait:` steps: checks made without an agent turn, agent turns they asked for, steps they finished
         ...(Object.keys(this.probeStats).length ? { probes: this.probeStats } : {}),
         steps: Object.fromEntries(Object.entries(this.ctx.steps).map(([k, v]) => [k, { visits: v.visits, output: v.output }])),
+        // failures that also fail on the base, reported by a step and not chased in this run: follow-up issues for the owner
+        ...(this.preexisting.length ? { preexisting_failures: this.preexisting } : {}),
         // step visits in order with their agents (runs list); this event's own update lands in it
         groups: this.wf.groups, progress: this.trail.steps,
         sessions,
@@ -2017,4 +2110,4 @@ ${stderr || stdout}`.slice(0, 1500)));
   }
 }
 
-module.exports = { WorkflowRun, loadWorkflow, extractJson, validateSchema, evalExpr, render, takeHandoff, parseTokens };
+module.exports = { WorkflowRun, loadWorkflow, extractJson, validateSchema, evalExpr, render, takeHandoff, parseTokens, attemptSummary };

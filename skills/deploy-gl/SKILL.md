@@ -2,6 +2,8 @@
 name: deploy-gl
 description: Publishes a merge request preview (GitLab pipeline with DEPLOY_TARGET=preview, review app or pre-release) and tracks the production pipeline triggered by the merge, diagnosing failed jobs (glab CLI). Use for preview and production deploys on GitLab.
 uses: [ci-failure-triage]
+summary: "Preview and production deploy tracking and cleanup"
+used_by: "deployer"
 ---
 
 # Deploy: GitLab (glab CLI)

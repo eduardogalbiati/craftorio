@@ -1,6 +1,8 @@
-// window.api for the browser: the same methods as src/preload.js, over the engine server's HTTP +
-// WebSocket API (src/server). In the desktop app the preload has already defined window.api and
-// this file does nothing. A test keeps both method lists identical.
+// window.api for the browser: the same methods as src/preload.js, built from the same channel
+// manifest (src/service/manifest.js), fetched from the engine server (GET /api/manifest) and
+// called over its HTTP + WebSocket API (src/server). In the desktop app the preload has already
+// defined window.api and this file does nothing. Nothing here lists channels: only the few methods
+// the browser does its own way (below) are named.
 (() => {
   if (window.api) return;
 
@@ -16,20 +18,40 @@
     return body.result;
   }
 
+  // Synchronous on purpose: the page's scripts use window.api as soon as they run.
+  function fetchManifest() {
+    const xhr = new XMLHttpRequest();
+    xhr.open('GET', '/api/manifest', false);
+    xhr.withCredentials = true;
+    try {
+      xhr.send();
+      return xhr.status === 200 ? JSON.parse(xhr.responseText).result || [] : [];
+    } catch {
+      return [];
+    }
+  }
+
   // Pushed channels (run:event, term:data, term:exit, auth:changed) and fire-and-forget messages.
-  // Reconnects when the connection drops (server restart, network).
+  // Reconnects when the connection drops (server restart, network); events pushed meanwhile are
+  // lost, so a reconnection is announced (onReconnect) for the UI to read the state again.
   const listeners = new Map();
+  const reconnected = new Set();
   const outbox = [];
   let socket = null;
+  let dropped = false;
   function connect() {
     socket = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
-    socket.onopen = () => { while (outbox.length && socket.readyState === WebSocket.OPEN) socket.send(outbox.shift()); };
+    socket.onopen = () => {
+      while (outbox.length && socket.readyState === WebSocket.OPEN) socket.send(outbox.shift());
+      if (dropped) for (const cb of reconnected) cb();
+      dropped = false;
+    };
     socket.onmessage = (m) => {
       let msg;
       try { msg = JSON.parse(m.data); } catch { return; }
       for (const cb of listeners.get(msg.channel) || []) cb(msg.payload);
     };
-    socket.onclose = () => setTimeout(connect, 1500);
+    socket.onclose = () => { dropped = true; setTimeout(connect, 1500); };
   }
   connect();
   const subscribe = (channel) => (cb) => {
@@ -41,90 +63,42 @@
     const msg = JSON.stringify({ channel, arg });
     if (socket?.readyState === WebSocket.OPEN) socket.send(msg); else outbox.push(msg);
   };
-  // Actions on the machine running the app (native dialogs, file explorer, console windows)
-  const desktopOnly = (what) => async () => { throw new Error(`${what} is only available in the desktop app.`); };
 
-  window.api = {
-    listWorkflows: () => call('workflows:list'),
-    restoreWorkflow: (file) => call('workflows:restore', file),
-    loadBuilderWorkflow: (file) => call('builder:load', file),
-    saveBuilderWorkflow: (file, spec) => call('builder:save', { file, spec }),
-    cloneWorkflow: (file) => call('builder:clone', file),
-    checkEnv: () => call('env:check'),
-    envDetails: () => call('env:details'),
-    appInfo: () => call('app:info'),
-    openPath: desktopOnly('Opening folders'),
-    getSettings: () => call('settings:get'),
-    setSettings: (patch) => call('settings:set', patch),
-    listProjects: () => call('projects:list'),
-    createProject: (data) => call('projects:create', data),
-    updateProject: (id, patch) => call('projects:update', { id, patch }),
-    removeProject: (id) => call('projects:remove', id),
-    getBacklog: (projectId) => call('backlog:get', { projectId }),
-    syncBacklog: (projectId, platform) => call('backlog:sync', { projectId, platform }),
-    assignWorkflow: (projectId, numbers, workflow, inputs, mock, group) => call('backlog:assign', { projectId, numbers, workflow, inputs, mock, group }),
-    unqueueIssue: (projectId, number, cancelGroup) => call('backlog:unqueue', { projectId, number, cancelGroup }),
-    pauseQueue: (projectId, paused) => call('backlog:pause', { projectId, paused }),
-    checkLocal: (projectId) => call('backlog:local', { projectId }),
-    pushLocal: (projectId) => call('backlog:push', { projectId }),
-    updateAndPushLocal: (projectId) => call('backlog:update-push', { projectId }),
-    resolvePushConflict: (projectId, files, mock) => call('backlog:resolve-push', { projectId, files, mock }),
-    setAutoPush: (projectId, on) => call('backlog:auto-push', { projectId, on }),
-    listUnpushed: () => call('backlog:unpushed'),
-    listSkills: () => call('skills:list'),
-    createSkill: (data) => call('skills:create', data),
-    saveSkill: (id, data) => call('skills:save', { id, data }),
-    removeSkill: (id) => call('skills:remove', id),
-    listAgents: () => call('agents:list'),
-    createAgent: (data) => call('agents:create', data),
-    saveAgent: (id, data) => call('agents:save', { id, data }),
-    removeAgent: (id) => call('agents:remove', id),
+  // The positional arguments of a method -> the channel's one argument (see `params` in the manifest).
+  function payload(params, args) {
+    if (!params) return undefined;
+    if (typeof params === 'string') return args[0];
+    const out = {};
+    params.forEach((name, i) => {
+      if (name.startsWith('...')) Object.assign(out, args[i]);
+      else out[name] = args[i];
+    });
+    return out;
+  }
+
+  // Desktop-only methods the browser can still do its own way; the others throw.
+  const browser = {
     // no native folder picker in the browser: the path is typed (a folder on the server)
     pickFolder: async () => window.prompt('Folder path on the server:')?.trim() || null,
-    getWorkspace: () => call('workspace:get'),
-    changeWorkspace: desktopOnly('Changing the workspace'),
-    openWorkspace: desktopOnly('Opening the workspace folder'),
-    startRun: (payload) => call('run:start', payload),
-    stopRun: (runId) => call('run:stop', { runId }),
-    listActiveRuns: () => call('runs:active'),
-    resolveApproval: (id, answer, feedback, runId) => call('approval:resolve', { id, answer, feedback, runId }),
-    openRunDir: desktopOnly('Opening the log folder'),
-    getUsage: (scope) => call('usage:get', { scope }),
-    openSessionTerminal: desktopOnly('External terminal windows'),
-    listProjectRuns: (id) => call('projects:runs', { id }),
-    listRuns: () => call('runs:list'),
-    runEvents: (runId, opts = {}) => call('runs:events', { runId, activity: !!opts.activity }),
-    setBudget: (provider, budget, scope) => call('usage:setBudget', { provider, budget, scope }),
-    setPrice: (model, price, scope) => call('usage:setPrice', { model, price, scope }),
-    getActionsUsage: (force) => call('usage:actions', { force }),
-    getAnalytics: (opts) => call('analytics:get', opts),
-    analyzeAnalytics: (opts) => call('analytics:analyze', opts),
-    askSupervisor: (runId, question) => call('supervisor:analyze', { runId, question }),
-    resumeRun: (runId, step, instruction, mock) => call('runs:resume', { runId, step, instruction, mock }),
-    resumeOptions: (runId) => call('runs:resumeOptions', { runId }),
-    listArtifacts: (opts) => call('artifacts:list', opts || {}),
-    readArtifact: (path) => call('artifacts:read', { path }),
-    openArtifact: desktopOnly('Opening files with their app'),
-    listCliSessions: () => call('cliSessions:list'),
-    renameCliSession: (provider, id, title) => call('cliSessions:rename', { provider, id, title }),
-    termOpen: (opts) => call('term:open', opts),
-    termInput: (id, data) => notify('term:input', { id, data }),
-    termResize: (id, cols, rows) => notify('term:resize', { id, cols, rows }),
-    termKill: (id) => call('term:kill', { id }),
-    onTermData: subscribe('term:data'),
-    onTermExit: subscribe('term:exit'),
     clipboardRead: () => navigator.clipboard.readText(),
     clipboardWrite: async (text) => { await navigator.clipboard.writeText(String(text ?? '')); return true; },
-    authState: () => call('auth:state'),
-    authRefresh: () => call('auth:refresh'),
-    signIn: (provider) => call('auth:signIn', provider),
-    cancelSignIn: () => call('auth:cancel'),
-    signOut: () => call('auth:signOut'),
-    onAuthChange: subscribe('auth:changed'),
-    // desktop notifications are shown by the desktop app only; the browser never gets a click
-    setNotifyContext: (ctx) => notify('notify:context', ctx),
-    onNotificationClick: subscribe('notify:open'),
-    platform: 'browser',
-    onEvent: subscribe('run:event'),
   };
+
+  function method(entry) {
+    if (browser[entry.method]) return browser[entry.method];
+    if (entry.desktop) return async () => { throw new Error(`${entry.desktop} is only available in the desktop app.`); };
+    // desktop notifications are shown by the desktop app only; the browser never gets a click
+    if (entry.event) return subscribe(entry.event);
+    if (entry.send) return (...args) => notify(entry.send, payload(entry.params, args));
+    return (...args) => call(entry.channel, payload(entry.params, args));
+  }
+
+  const api = {
+    platform: 'browser',
+    onReconnect: (cb) => { reconnected.add(cb); return () => reconnected.delete(cb); },
+  };
+  for (const entry of fetchManifest()) {
+    if (entry.method) api[entry.method] = method(entry);
+  }
+  window.api = api;
 })();

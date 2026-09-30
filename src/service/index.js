@@ -1,6 +1,8 @@
 // Engine service: everything the UI can ask of the engine, with no dependency on Electron or on a
 // transport. `api` maps a channel name ('projects:list', 'run:start', ...) to a function taking
-// one argument; `notifications` are the fire-and-forget channels (no reply). Pushed data
+// one argument; `notifications` are the fire-and-forget channels (no reply). Both come from one
+// file per area in src/service/channels/ (a new channel is one edit there), and `manifest` is what
+// the clients build `window.api` from (see src/service/manifest.js). Pushed data
 // ('run:event', 'term:data', 'term:exit') is emitted on `events`, and so are desktop notifications
 // ('notify', see src/notifications.js), already filtered by the settings and what the UI shows.
 //
@@ -43,6 +45,7 @@ const { Terminals } = require('../terminals');
 const { followSession } = require('../session-tail');
 const supervisor = require('../supervisor');
 const notifier = require('../notifications');
+const { authChannels, declarations, DESKTOP, loadChannels } = require('./manifest');
 
 const SRC = path.join(__dirname, '..');
 const ROOT = path.join(SRC, '..');
@@ -219,13 +222,18 @@ function createService({ host }) {
     finishedPeers = finishedPeers.filter((f) => f.finishedAt >= oldest); // none left when nothing runs
   }
 
-  // What the UI shows of each run in progress (the Run menu list).
+  // What the UI shows of each run in progress (the Run menu list). `gates` are the gates the run
+  // waits at (approval_id, step_id, message, choices, feedback, requested_at): the sidebar, the
+  // Backlog and a reloaded window all read them here, never only from the events they saw live.
   function activeRuns() {
-    return [...active.values()].map((r) => ({
-      runId: r.runId, workflow: r.wf.metadata?.name || path.basename(r.file), file: path.basename(r.file), mock: r.mock,
-      projectId: r.projectId, issues: r.issues, startedAt: r.startedAt ? new Date(r.startedAt).toISOString() : null,
-      waiting: r.approvals.size, inputs: r.inputs, agent_names: r.agentNames(),
-    }));
+    return [...active.values()].map((r) => {
+      const gates = r.pendingGates();
+      return {
+        runId: r.runId, workflow: r.wf.metadata?.name || path.basename(r.file), file: path.basename(r.file), mock: r.mock,
+        projectId: r.projectId, issues: r.issues, startedAt: r.startedAt ? new Date(r.startedAt).toISOString() : null,
+        status: r.status, waiting: gates.length, gates, inputs: r.inputs, agent_names: r.agentNames(),
+      };
+    });
   }
 
   function listWorkflows() {
@@ -1024,153 +1032,30 @@ function createService({ host }) {
     return usageSnapshot(scope);
   }
 
+  // The channels, one file per area (src/service/channels/*.js, see src/service/manifest.js). They
+  // share the service's state and helpers through ctx; `ws` is read at call time (it can change).
+  const ctx = {
+    get ws() { return ws; },
+    host, active, waiting, terminals, BUNDLED_SKILLS_DIR,
+    setUiContext: (c) => { uiContext = notifier.normalizeContext(c); },
+    activeRuns, analyticsSnapshot, analyzeAnalytics, artifactRuns, assignWorkflow, cloneBuilderWorkflow, dispatchQueue, envDetails, listAllRuns,
+    listCliSessions, listWorkflows, liveRun, loadBuilderWorkflow, openTerminal, projectRuns, pushProject,
+    readArtifact, refreshLocal, renameCliSession, resolvePushConflict, restoreWorkflow, resumeOptions, resumeRun,
+    runFolder, saveBuilderWorkflow, setBudget, setPrice, startWorkflowRun, unpushedProjects, usageSnapshot,
+    withIssueRuns, workflowDirs,
+  };
+  const entries = loadChannels(ctx);
   // Every channel needs an open workspace (checked once here instead of in each handler).
   const withWorkspace = (fn) => (arg) => { workspaceDir(); return fn(arg); };
-
-  const api = Object.fromEntries(Object.entries({
-    'workflows:list': () => listWorkflows(),
-    'workflows:restore': (file) => restoreWorkflow(file),
-    'builder:load': (file) => loadBuilderWorkflow(file),
-    'builder:save': (arg) => saveBuilderWorkflow(arg || {}),
-    'builder:clone': (file) => cloneBuilderWorkflow(file),
-
-    'env:check': () => ({
-      claude: resolveCommand('claude')?.file || null,
-      codex: resolveCommand('codex')?.file || null,
-      grok: resolveCommand('grok')?.file || null,
-    }),
-    'env:details': () => envDetails(),
-    'app:info': () => ({
-      version: host.appVersion,
-      electron: process.versions.electron,
-      node: process.versions.node,
-      workflowsDir: ws.workflows,
-      simulationOnly: simulation.simulationOnly(),
-    }),
-
-    'settings:get': () => workspace.readSettings(ws),
-    'settings:set': (patch) => {
-      const next = workspace.writeSettings(ws, patch);
-      // a higher limit of concurrent runs frees slots for the Backlog queues
-      if (patch && 'concurrentRuns' in patch) dispatchQueue().catch((e) => console.error('backlog dispatch:', e));
-      return next;
-    },
-
-    'projects:list': () => projects.listProjects(ws.projects),
-    'projects:create': (data) => projects.createProject(ws.projects, data, { reposDir: ws.repos }),
-    'projects:update': ({ id, patch }) => projects.updateProject(ws.projects, id, patch),
-    'projects:remove': (id) => projects.removeProject(ws.projects, id),
-    'projects:runs': (opts) => projectRuns(opts),
-
-    // A project's issues: the last sync (instant) and a new sync with gh/glab, each issue with
-    // the runs working on it.
-    'backlog:get': ({ projectId }) => withIssueRuns(backlog.readBacklog(ws.backlog, projectId)),
-    // a sync also checks the local commits not pushed (fetching origin/<base>)
-    'backlog:sync': async ({ projectId, platform }) => {
-      const [data] = await Promise.all([
-        backlog.syncBacklog({
-          dir: ws.backlog,
-          project: projects.readProject(ws.projects, path.basename(String(projectId))),
-          platform: platform || workspace.readSettings(ws).backlogPlatform,
-        }),
-        refreshLocal(projectId).catch((e) => console.error('local status:', e.message)),
-      ]);
-      return withIssueRuns(data);
-    },
-    // Local merges not pushed: check again (fetch), push the base, or rebase it onto origin and push.
-    // Each returns { pushed?, rejected?, conflict?, files?, error?, commits?, issues?, local, backlog }.
-    'backlog:local': async ({ projectId }) => ({ local: await refreshLocal(projectId), backlog: withIssueRuns(backlog.readBacklog(ws.backlog, projectId)) }),
-    'backlog:push': ({ projectId }) => pushProject({ projectId }),
-    'backlog:update-push': ({ projectId }) => pushProject({ projectId, update: true }),
-    // A conflict of Update and push handed to a run of the local workflow (returns { runId, runDir }).
-    'backlog:resolve-push': ({ projectId, files, mock }) => resolvePushConflict({ projectId, files, mock }),
-    'backlog:auto-push': ({ projectId, on }) => projects.updateProject(ws.projects, path.basename(String(projectId)), { autoPush: !!on }),
-    'backlog:unpushed': () => unpushedProjects(),
-    // Assign a workflow to issues: they are queued and start while there are free run slots (see dispatchQueue).
-    'backlog:assign': (opts) => assignWorkflow(opts),
-    // cancelGroup: an issue of a group takes the whole group out (else it only leaves the group)
-    'backlog:unqueue': async ({ projectId, number, cancelGroup }) => {
-      backlog.unqueue(ws.backlog, path.basename(String(projectId)), Number(number), { cancelGroup: !!cancelGroup });
-      return withIssueRuns(backlog.readBacklog(ws.backlog, projectId));
-    },
-    'backlog:pause': async ({ projectId, paused }) => {
-      backlog.setPaused(ws.backlog, path.basename(String(projectId)), !!paused);
-      if (!paused) await dispatchQueue();
-      return withIssueRuns(backlog.readBacklog(ws.backlog, projectId));
-    },
-
-    'skills:list': () => skills.listSkills(ws.skills),
-    'skills:create': (data) => skills.createSkill(ws.skills, data),
-    'skills:save': ({ id, data }) => skills.saveSkill(ws.skills, id, data),
-    // Moves to the trash (recoverable), does not delete permanently.
-    'skills:remove': (id) => host.trashItem(path.join(ws.skills, path.basename(id))),
-
-    // The built-in supervisor is always listed first; only its look can be changed.
-    'agents:list': () => agents.listAgents(ws.agents),
-    'agents:create': (data) => agents.createAgent(ws.agents, data),
-    'agents:save': ({ id, data }) => agents.saveAgent(ws.agents, id, data),
-    // Moves to the trash (recoverable), like skills.
-    'agents:remove': (id) => host.trashItem(agents.agentPathForRemoval(ws.agents, id)),
-
-    'workspace:get': () => ({ ...ws, registry: process.env[workspace.ENV_VAR] ? null : workspace.defaultStore().describe }),
-
-    'run:start': ({ file, inputs, mock, mockSequences }) => startWorkflowRun({ file, inputs, mock, mockSequences }),
-    // runId: the run to stop (without it, the only run in progress)
-    'run:stop': (opts) => {
-      const run = liveRun(opts?.runId);
-      if (!run && !opts?.runId && active.size > 1) throw new Error('Several runs are in progress: say which one to stop.');
-      run?.stop();
-      return !!run;
-    },
-    'runs:active': () => activeRuns(),
-    'runs:list': () => listAllRuns(),
-    // activity: also the agents' tool calls and thinking, compacted (the run chat shows them)
-    'runs:events': ({ runId, activity }) => runs.runEvents(runFolder(runId), { activity: !!activity }),
-    // answer: true/false or the id of a choice; feedback: the optional text typed at the gate.
-    // Gate ids are per run (a1, a2…): runId says which run (without it, the only run waiting on that id).
-    'approval:resolve': ({ runId, id, answer, feedback }) => {
-      const waiting = [...active.values()].filter((r) => r.approvals.has(id));
-      const run = runId ? active.get(String(runId)) : waiting.length === 1 ? waiting[0] : null;
-      return run?.resolveApproval(id, answer, 'user', feedback) ?? false;
-    },
-
-    // Explains any run (running, failed or finished) and recommends actions; the analysis is saved in
-    // the run folder (supervisor/analysis-*.md), so it shows up in Artifacts.
-    'supervisor:analyze': ({ runId, question }) => supervisor.analyzeRun({
-      runDir: runFolder(runId), question, workflowsDir: workflowDirs(), skillsDirs: [ws.skills, BUNDLED_SKILLS_DIR], resolveCommand,
-    }),
-    // resuming needs no supervisor: runs:resume is the channel; supervisor:resume is kept for older clients
-    'runs:resume': (opts) => resumeRun(opts),
-    'runs:resumeOptions': (opts) => resumeOptions(opts),
-    'supervisor:resume': (opts) => resumeRun(opts),
-
-    'artifacts:list': (opts) => artifactRuns(opts || {}),
-    'artifacts:read': (opts) => readArtifact(opts),
-
-    'usage:get': (opts) => usageSnapshot(opts?.scope),
-    'usage:setBudget': (opts) => setBudget(opts),
-    'usage:setPrice': (opts) => setPrice(opts),
-    'usage:actions': (opts) => actionsUsage.getActionsUsage({ includedMinutes: +workspace.readSettings(ws).actionsIncludedMinutes || 0, force: !!opts?.force }),
-
-    'analytics:get': (opts) => analyticsSnapshot(opts || {}),
-    'analytics:analyze': (opts) => analyzeAnalytics(opts || {}),
-
-    'cliSessions:list': () => listCliSessions(),
-    'cliSessions:rename': (opts) => renameCliSession(opts),
-    'term:open': (opts) => openTerminal(opts),
-    'term:kill': ({ id }) => { waiting.close(id); return terminals.kill(id); },
-  }).map(([channel, fn]) => [channel, withWorkspace(fn)]));
-
-  const notifications = {
-    'term:input': ({ id, data }) => { waiting.input(id); terminals.input(id, data); },
-    'term:resize': ({ id, cols, rows }) => terminals.resize(id, cols, rows),
-    // what the window shows: no notification about the run or session the user is looking at
-    'notify:context': (ctx) => { uiContext = notifier.normalizeContext(ctx); },
-  };
+  const api = Object.fromEntries(entries.filter((e) => e.channel).map((e) => [e.channel, withWorkspace(e.fn)]));
+  const notifications = Object.fromEntries(entries.filter((e) => e.send).map((e) => [e.send, e.fn]));
+  // what window.api is built from (src/preload.js, src/renderer/api-http.js), desktop and account included
+  const manifest = declarations([...entries, ...DESKTOP, ...authChannels(null)]);
 
   return {
     api,
     notifications,
+    manifest,
     events,
     workspace: () => ws,
     setWorkspace,

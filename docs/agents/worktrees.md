@@ -24,6 +24,18 @@ actions, or any code that deletes or checks out branches.
   without accepting both.
 - Compare paths with `canonicalPath`/`samePath` (see [windows-gotchas.md](windows-gotchas.md)).
 
+## Fewer merge conflicts between parallel runs (#77)
+
+- Shared tables are generated from per-feature files (`npm run docs`, see the code map's header):
+  the code map is gitignored, the README tables are committed with an out-of-date check. The
+  channels of `window.api` are one file per area (`src/service/channels/`).
+- Shared name lists (`module.exports`, destructured requires) are one item per line, sorted
+  (`npm run lint:lists`, `-- --fix`); new functions go next to related code, not before the same
+  section comment every run uses.
+- Agents' git runs with `rerere.enabled` (the engine sets it through `GIT_CONFIG_*` in the agents'
+  environment, not in the repo's config): a resolution git recorded once is replayed. It is a help,
+  not relied on. No `merge=union` in `.gitattributes`: no append-only line list is left.
+
 ## Follow-ups (not done)
 
 - Confirm with the first real merge that `gh pr merge --repo` leaves local branches alone.

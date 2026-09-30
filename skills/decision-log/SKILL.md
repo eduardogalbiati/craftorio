@@ -1,6 +1,8 @@
 ---
 name: decision-log
 description: Keeps an audit trail of the non-obvious decisions an unattended agent makes - each answer ends with a decisions block that the orchestrator appends to the run's decisions.tsv. Use in long or unattended work where a human reviews the result later.
+summary: "Agents end answers with a ```` ```decisions ```` block; the engine appends it to `<run>/decisions.tsv`"
+used_by: "developer, PR babysitter"
 ---
 
 # Decision log

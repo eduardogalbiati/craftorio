@@ -1,6 +1,8 @@
 ---
 name: test-plan-writing
 description: Writes and scores test plans - scope and test items, risk-based approach, test levels and types, traceability from requirements to test conditions, entry/exit and suspension criteria, environment and data, roles, schedule, risks and reporting, plus the rubric used to score proposals. Use to write, critique or merge a test plan.
+summary: "Test plan (after ISO/IEC/IEEE 29119-3): risk-based approach, traceability to requirements, entry/exit criteria, environment and data, rubric"
+used_by: "arena (`document_skill`)"
 ---
 
 # Test plan

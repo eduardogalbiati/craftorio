@@ -1,6 +1,8 @@
 ---
 name: dependency-audit-policy
 description: Shared rules for building a project and auditing its dependencies - production vs development scope, severity from CVSS when the tool gives none, how to report blockers with a fix, and log redaction. Loaded by every build-audit-<language> skill.
+summary: "Severity from CVSS, how to report blockers with a fix, redaction"
+used_by: "via `uses`"
 ---
 
 # Build and dependency audit: shared rules

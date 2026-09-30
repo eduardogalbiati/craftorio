@@ -15,6 +15,7 @@ Keep **Simulation mode** checked to try a flow without calling the CLIs.
 
 ### Screens
 
+<!-- generated:screens -->
 | Menu | What it has |
 |---|---|
 | Sessions | Every Claude Code, Codex and Grok conversation recorded on this machine (read from `~/.claude/projects`, `~/.codex/sessions`, `~/.grok/sessions`), newest first, with its project, model and folder; filter by provider or search. Clicking one reopens it in its CLI (`claude --resume`, `codex resume`, `grok --resume`) in an embedded terminal, in the session's folder. **New session** starts a CLI with a provider, model, effort and project (or folder). Terminals keep running while you use other screens; sessions created by workflow agents are hidden unless you ask for them |
@@ -27,6 +28,7 @@ Keep **Simulation mode** checked to try a flow without calling the CLIs.
 | Skills | One folder per skill in `<workspace>/skills/<id>/SKILL.md` (Claude Code format) |
 | Usage | Tokens and cost per provider this month and today, monthly budgets (USD and/or tokens), per-model prices for CLIs that do not report cost, recent runs, and the GitHub Actions minutes of the month against the included quota (warning at 80%, see CI/CD). The topbar widget shows this month's total; click it for a per-provider popover |
 | Settings | Workspace, CLI status (Claude Code, Codex, Grok Build, GitHub CLI, GitLab CLI, Git) and run preferences (`<workspace>/settings.json`). **Execution › Concurrent runs**: off by default (one run at a time); on, several workflows run at the same time up to a **maximum** (default 2), with an optional **maximum per project**; simulations count toward the limits only if you say so. Each run has its own git worktree, and the monthly budgets count every run in progress. The **Run** menu item then lists the runs in progress (status, workflow, project/issue): click one to show it on the Run screen and in the top bar (whose **All runs** counter adds them up); a badge counts the human gates waiting across runs, and a gate never pops up over another screen: a toast names its run |
+<!-- /generated:screens -->
 
 The **Start** button at the top (next to Stop) opens the right side panel: pick the workflow,
 the project (its folder becomes `repo_path`/`project_path`) and the input. During and after a
@@ -355,39 +357,42 @@ What is shared by a family lives in a suffix-less skill referenced with `uses:`.
 
 ### Bundled skills
 
+<!-- generated:skills -->
 | Skill | Used by | Content |
 |---|---|---|
-| `code-review` | reviewer | Correctness, spec and standards axes, severities, `rules/` per language (JS/TS, Python, Go, Java/Kotlin, C#, SQL, Shell/CI) and `rules/smells.md` |
-| `unit-test-writer-{js,python,go,java,csharp}` | test writer | Framework detection, commands, idioms per language |
-| `testing-principles` | via `uses` | Seams first, no tautological or implementation-coupled tests, mocks only at boundaries, red before green for bug fixes, before/after screenshots of UI changes |
-| `build-audit-{js,python,go,java,csharp}` | builder | Build and audit commands, production vs development scope per ecosystem |
-| `dependency-audit-policy` | via `uses` | Severity from CVSS, how to report blockers with a fix, redaction |
-| `long-commands` | developer; via `uses` (test writer, builder, verifier) | Suites and builds in the foreground with a sized timeout, never backgrounded and polled for text; full output kept, exit code read |
-| `ci-pipeline-{gh,gl}` | CI pusher | Push, PR/MR, mergeability (conflicts fail fast), CI status, missing checks, fetching failed logs, retrying flaky jobs |
-| `ci-failure-triage` | via `uses` | Classify a failure (code, environment, infrastructure, needs-human) and write a root-cause report |
-| `pr-description` | via `uses` | PR/MR title and body: visual summary, evidence, merge danger |
-| `pr-screenshots-{gh,gl}` | CI pusher | Screenshots comment on the PR/MR (GitHub `blob/...?raw=true`, GitLab `-/raw/` URLs) |
-| `pr-screenshots` | via `uses` | `publish.js`: commits the PNGs to the `pr-screenshots` branch (one folder per PR/MR, closed ones pruned) without touching the checkout, then posts one before/after comment |
-| `issue-creator-{gh,gl}` | backlog planner (#30), any agent that files issues | Search for duplicates, create/comment/edit issues with gh or glab, existing labels only |
-| `issue-writing` | via `uses` | Issue structure: concrete context with evidence, decisions taken, a checklist of verifiable acceptance criteria, related issues |
-| `pr-babysitter-{gh,gl}` | PR babysitter | Mergeability signals, threads/discussions, replies |
-| `pr-comment-triage` | via `uses` | Actionable vs doubtful comments, durable fix requests, resume logic, AI marker on replies |
-| `deploy-{gh,gl}` | deployer | Preview and production deploy tracking and cleanup |
-| `bug-diagnosis` | developer | Red feedback loop first, ranked hypotheses, regression test, cleanup |
-| `merge-conflict-resolver` | developer | Intent tracing per side, hunk-by-hunk resolution, verification |
-| `prd-writing` | arena | PRD structure (user stories, traceable requirements, testing decisions, questions with defaults) and scoring rubric |
-| `design-doc-writing` | arena (`document_skill`) | Design doc (after Google's practice): context, goals/non-goals, design with trade-offs, alternatives, failure modes, cross-cutting concerns, rollout, rubric |
-| `rfc-writing` | arena (`document_skill`) | RFC (after the Rust RFC template): motivation, guide- and reference-level explanation, drawbacks, alternatives, prior art, rollout, rubric |
 | `adr-writing` | arena (`document_skill`) | ADR (after MADR 4.0): one decision, drivers, real options with pros/cons, consequences, confirmation, rubric |
-| `test-plan-writing` | arena (`document_skill`) | Test plan (after ISO/IEC/IEEE 29119-3): risk-based approach, traceability to requirements, entry/exit criteria, environment and data, rubric |
-| `design-sketch` | arena (`document_skill: design-sketch`) | Usage-first design: usage snippets, types and signatures, trade-offs, alternatives, design red-flag screen, rubric |
-| `claim-verification` | verifier | Falsifiable claim, baseline vs treatment with the same command, verified / not_verified / inconclusive |
+| `arena-synthesis` | arena synthesizer | Merge method and the arena appendix |
 | `blast-radius` | multi-model review | Boundary changes, their consumers, and the safety fact proven on an evidence ladder |
-| `review-synthesis` | multi-model review judge | Lead judgment: merge, verify, weigh agreement and nitpicks, act on / consider / noted / dismissed |
+| `bug-diagnosis` | developer | Red feedback loop first, ranked hypotheses, regression test, cleanup |
+| `build-audit-{js,python,go,java,csharp}` | builder | Build and audit commands, production vs development scope per ecosystem |
+| `ci-failure-triage` | via `uses` | Classify a failure (code, environment, infrastructure, needs-human) and write a root-cause report |
+| `ci-pipeline-{gh,gl}` | CI pusher | Push, PR/MR, mergeability (conflicts fail fast), CI status, missing checks, fetching failed logs, retrying flaky jobs |
+| `claim-verification` | verifier | Falsifiable claim, baseline vs treatment with the same command, verified / not_verified / inconclusive |
+| `code-review` | reviewer | Correctness, spec and standards axes, severities, `rules/` per language (JS/TS, Python, Go, Java/Kotlin, C#, SQL, Shell/CI) and `rules/smells.md` |
 | `context-economy` | developer | Maps the code with exploration sub-agents, reads excerpts instead of whole files, writes handoff notes the next fresh session can act on |
 | `decision-log` | developer, PR babysitter | Agents end answers with a ```` ```decisions ```` block; the engine appends it to `<run>/decisions.tsv` |
+| `dependency-audit-policy` | via `uses` | Severity from CVSS, how to report blockers with a fix, redaction |
+| `deploy-{gh,gl}` | deployer | Preview and production deploy tracking and cleanup |
+| `design-doc-writing` | arena (`document_skill`) | Design doc (after Google's practice): context, goals/non-goals, design with trade-offs, alternatives, failure modes, cross-cutting concerns, rollout, rubric |
+| `design-sketch` | arena (`document_skill: design-sketch`) | Usage-first design: usage snippets, types and signatures, trade-offs, alternatives, design red-flag screen, rubric |
+| `issue-creator-{gh,gl}` | backlog planner (#30), any agent that files issues | Search for duplicates, create/comment/edit issues with gh or glab, existing labels only |
+| `issue-writing` | via `uses` | Issue structure: concrete context with evidence, decisions taken, a checklist of verifiable acceptance criteria, related issues |
+| `long-commands` | developer; via `uses` (test writer, builder, verifier) | Suites and builds in the foreground with a sized timeout, never backgrounded and polled for text; full output kept, exit code read |
+| `merge-conflict-resolver` | developer | Intent tracing per side, hunk-by-hunk resolution, verification |
+| `pr-babysitter-{gh,gl}` | PR babysitter | Mergeability signals, threads/discussions, replies |
+| `pr-comment-triage` | via `uses` | Actionable vs doubtful comments, durable fix requests, resume logic, AI marker on replies |
+| `pr-description` | via `uses` | PR/MR title and body: visual summary, evidence, merge danger |
+| `pr-screenshots` | via `uses` | `publish.js`: commits the PNGs to the `pr-screenshots` branch (one folder per PR/MR, closed ones pruned) without touching the checkout, then posts one before/after comment |
+| `pr-screenshots-{gh,gl}` | CI pusher | Screenshots comment on the PR/MR (GitHub `blob/...?raw=true`, GitLab `-/raw/` URLs) |
+| `prd-writing` | arena | PRD structure (user stories, traceable requirements, testing decisions, questions with defaults) and scoring rubric |
+| `review-synthesis` | multi-model review judge | Lead judgment: merge, verify, weigh agreement and nitpicks, act on / consider / noted / dismissed |
+| `rfc-writing` | arena (`document_skill`) | RFC (after the Rust RFC template): motivation, guide- and reference-level explanation, drawbacks, alternatives, prior art, rollout, rubric |
 | `run-retrospective` | run retrospective | Friction, waste, skill gaps and no-ops in a run's logs, turned into proposals with evidence |
-| `arena-synthesis` | arena synthesizer | Merge method and the arena appendix |
+| `run-supervisor` | the AI supervisor (a failed step, or on demand) | Plain-words account of a run, root cause from its logs, a safe recovery (fix the output, retry with an instruction, go to an allowed step, resume, or hand over to a human) |
+| `test-plan-writing` | arena (`document_skill`) | Test plan (after ISO/IEC/IEEE 29119-3): risk-based approach, traceability to requirements, entry/exit criteria, environment and data, rubric |
+| `testing-principles` | via `uses` | Seams first, no tautological or implementation-coupled tests, mocks only at boundaries, red before green for bug fixes, before/after screenshots of UI changes, each suite run once, pre-existing failures reported instead of chased |
+| `unit-test-writer-{js,python,go,java,csharp}` | test writer | Framework detection, commands, idioms per language |
+<!-- /generated:skills -->
 
 `bug-diagnosis`, `merge-conflict-resolver`, `pr-description`, `testing-principles` and parts of
 `code-review` adapt ideas from [mattpocock/skills](https://github.com/mattpocock/skills) (MIT);

@@ -105,7 +105,8 @@ x-tools:
 defaults:
   # the run's own git worktree (orchestrator.worktree), or repo_path when it is not a git repo
   working_dir: "{{ worktree_dir }}"
-  timeout: 30m
+  # one agent turn: 30m, plus 10m per extra issue of a grouped run, at most 60m (#101)
+  timeout: "{{ (30 + 10 * ((inputs.issues | length) - 1)) | clamp(30, 60) }}m"
   # persistent agents: once a turn ends above this context size, the next turn starts a fresh
   # session from the agent's handoff note (runs/<id>/handoffs/)
   max_context: 150k
@@ -159,6 +160,9 @@ agents:
     system_prompt: |
       You are a senior software engineer. Make small, cohesive changes to the production code
       that follow the architecture and conventions of the existing code.
+      Merge-friendly (parallel runs): add new code next to related code, not before a shared
+      section comment; write shared name lists (module.exports, destructured requires) one item
+      per line, sorted; document a file in its header comment or a topic doc, not in an index.
       Tests belong to the test writer, who runs after the code review: never create, edit or
       delete test files (the orchestrator refuses a turn that changes one) and do not run the
       full test suite. To check your change, run a focused existing test or the build. Describe
@@ -458,13 +462,23 @@ steps:
          project already uses). Update the tests the change makes obsolete because of an
          intended behaviour change (not a bug). Commit only test files. Purely visual changes
          may not need a new test — justify it.
-      2. Run the full suite once with the project's test command.
+      2. While writing, run only the test files you touch, each slow one (over a minute) at most
+         once per round, filtered to the tests you are writing (e.g. `--test-name-pattern`). Then
+         run the full suite once, at the end, with the project's test command. Never start a full
+         mock run of a workflow (`scripts/run.js`): the suite already includes one.
       3. If the diff against the local `{{ inputs.base_branch }}` touches the UI, capture the
          affected screens before (base `{{ inputs.base_branch }}`) and after (the branch)
          following the test skill, into `{{ run_dir }}/screenshots` (PNGs + screenshots.json,
-         never committed), and return them in `screenshots`. Not a visual change, or no
-         screenshot command in the project: say why in `screenshots_note`.
+         never committed), and return them in `screenshots`: at most one view per issue. Not a
+         visual change, no screenshot command in the project, or most of your turn already
+         spent (screenshots are optional here): say why in `screenshots_note`.
       {% endif %}
+      If the suite fails, first check whether the same tests fail on the local
+      `{{ inputs.base_branch }}`, following the test skill (pre-existing failures): run only the
+      failing files on a temporary worktree of the base. A test that also fails there is not this
+      run's: list it in `preexisting_failures` (test, file, reason), do not investigate or fix it
+      (unless it is trivial and in files this change touches), and it does not make
+      `tests_status` fail. The owner gets the list as a follow-up.
       If a test fails because of production code, do NOT fix it:
       fill failure_report with test, file, error and probable cause.
     output_schema:
@@ -476,6 +490,16 @@ steps:
         committed:      { type: boolean }
         failure_report: { type: string }
         summary:        { type: string }
+        # tests that also fail on the base: reported, not chased (the engine logs them for the owner)
+        preexisting_failures:
+          type: array
+          items:
+            type: object
+            required: [test, file]
+            properties:
+              test:   { type: string }
+              file:   { type: string }
+              reason: { type: string }
         # UI changes: files in the run folder (Artifacts); this local workflow publishes nothing
         screenshots:
           type: array

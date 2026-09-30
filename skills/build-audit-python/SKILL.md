@@ -2,6 +2,8 @@
 name: build-audit-python
 description: Builds or checks a Python project and audits its dependencies for vulnerabilities, separating production from development (pip-audit, osv-scanner; uv, poetry, pip). Use to check whether a Python project builds and has vulnerable dependencies.
 uses: [dependency-audit-policy, long-commands]
+summary: "Build and audit commands, production vs development scope per ecosystem"
+used_by: "builder"
 ---
 
 # Build and audit: Python

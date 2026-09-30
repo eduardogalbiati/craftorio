@@ -9,6 +9,7 @@ const { spawn } = require('child_process');
 const { app, BrowserWindow, ipcMain, dialog, shell, clipboard, safeStorage, Notification } = require('electron');
 const workspace = require('./workspace');
 const { createService } = require('./service');
+const { authChannels } = require('./service/manifest');
 const { createAuth, fileStorage } = require('./auth');
 const authConfig = require('./auth-config');
 
@@ -54,19 +55,27 @@ const service = createService({
   },
 });
 
-ipcMain.handle('auth:state', () => auth.state());
-ipcMain.handle('auth:refresh', () => auth.refresh());
-ipcMain.handle('auth:signIn', async (_e, provider) => {
-  const s = await auth.signIn(String(provider));
-  if (win && !win.isDestroyed()) { if (win.isMinimized()) win.restore(); win.focus(); }
-  return s;
-});
-ipcMain.handle('auth:cancel', () => auth.cancelSignIn());
-ipcMain.handle('auth:signOut', () => auth.signOut());
+// The account channels (declared in src/service/manifest.js). `auth` is created once the app is
+// ready, so it is read at call time; signing in brings the window forward.
+const account = {
+  state: () => auth.state(),
+  refresh: () => auth.refresh(),
+  async signIn(provider) {
+    const s = await auth.signIn(provider);
+    if (win && !win.isDestroyed()) { if (win.isMinimized()) win.restore(); win.focus(); }
+    return s;
+  },
+  cancelSignIn: () => auth.cancelSignIn(),
+  signOut: () => auth.signOut(),
+};
+for (const { channel, fn } of authChannels(account)) if (channel) ipcMain.handle(channel, (_e, arg) => fn(arg));
 
 // ---- IPC transport ------------------------------------------------------------------
 for (const [channel, fn] of Object.entries(service.api)) ipcMain.handle(channel, (_e, arg) => fn(arg));
 for (const [channel, fn] of Object.entries(service.notifications)) ipcMain.on(channel, (_e, arg) => fn(arg));
+// what the preload builds window.api from, asked once when the window loads (sync: the page's
+// scripts use window.api right away)
+ipcMain.on('api:manifest', (e) => { e.returnValue = service.manifest; });
 for (const channel of ['run:event', 'term:data', 'term:exit']) {
   service.events.on(channel, (payload) => { if (win && !win.isDestroyed()) win.webContents.send(channel, payload); });
 }

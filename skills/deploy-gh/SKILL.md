@@ -2,6 +2,8 @@
 name: deploy-gh
 description: Publishes a pull request preview (GitHub pre-release via a workflow_dispatch workflow) and tracks the production deploy triggered by the merge, diagnosing failed GitHub Actions runs (gh CLI). Use for preview and production deploys on GitHub.
 uses: [ci-failure-triage]
+summary: "Preview and production deploy tracking and cleanup"
+used_by: "deployer"
 ---
 
 # Deploy: GitHub (gh CLI)

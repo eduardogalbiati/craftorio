@@ -1,6 +1,8 @@
 ---
 name: arena-synthesis
 description: Merges independent proposals from several models (AI Arena) into one final document better than any single proposal - scores them, picks a base, grafts the best ideas of the others into it, resolves conflicts with an opinionated decision, and records base, grafts, decisions, rejections and dropouts. Use when you receive several versions of the same document to unify.
+summary: "Merge method and the arena appendix"
+used_by: "arena synthesizer"
 ---
 
 # Arena: proposal synthesis

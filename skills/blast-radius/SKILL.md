@@ -1,6 +1,8 @@
 ---
 name: blast-radius
 description: Finds what a change can break outside its own diff - callers, consumers of changed contracts, config and data, other services - identifies the single most important safety fact and proves it by running code, reporting the evidence level. Use before merging a change, alongside code review.
+summary: "Boundary changes, their consumers, and the safety fact proven on an evidence ladder"
+used_by: "multi-model review"
 ---
 
 # Blast radius

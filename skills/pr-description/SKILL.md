@@ -1,6 +1,8 @@
 ---
 name: pr-description
 description: Writes the title and body of a pull/merge request so a reviewer understands the change fast - a small visual summary, evidence it works, and the merge danger (reversibility and blast radius). Use when opening or updating a PR/MR.
+summary: "PR/MR title and body: visual summary, evidence, merge danger"
+used_by: "via `uses`"
 ---
 
 # PR/MR description

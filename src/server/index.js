@@ -2,6 +2,7 @@
 // app uses over IPC, so the engine can run on a server and the UI can be used from a browser.
 //
 //   POST /api/<channel>   body { "arg": ... }  ->  200 { "result": ... } | 4xx/500 { "error": "..." }
+//   GET  /api/manifest    { "result": [...] }: the channels window.api is built from (src/service/manifest.js)
 //   GET  /ws              WebSocket. The server pushes { "channel", "payload" } (run:event,
 //                         term:data, term:exit, auth:changed); the client sends { "channel", "arg" }
 //                         for the fire-and-forget channels (term:input, term:resize).
@@ -17,6 +18,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { WebSocketServer } = require('ws');
+const { authChannels } = require('../service/manifest');
 
 const ROOT = path.join(__dirname, '..', '..');
 // the only folders served as static files (relative to ROOT)
@@ -77,15 +79,10 @@ function createServer({ service, auth = null, token, root = ROOT }) {
   };
 
   const api = { ...service.api };
-  if (auth) {
-    Object.assign(api, {
-      'auth:state': () => auth.state(),
-      'auth:refresh': () => auth.refresh(),
-      'auth:signIn': (provider) => auth.signIn(String(provider)),
-      'auth:cancel': () => auth.cancelSignIn(),
-      'auth:signOut': () => auth.signOut(),
-    });
-  }
+  if (auth) for (const { channel, fn } of authChannels(auth)) if (channel) api[channel] = fn;
+  // what api-http.js builds window.api from (the service's manifest also declares the desktop-only
+  // and account methods, so the browser has them all)
+  const manifest = service.manifest || [];
 
   async function handleApi(req, res, channel) {
     const fn = Object.hasOwn(api, channel) ? api[channel] : null;
@@ -144,6 +141,7 @@ function createServer({ service, auth = null, token, root = ROOT }) {
         res.writeHead(302, { Location: '/src/renderer/index.html' });
         return res.end();
       }
+      if (url.pathname === '/api/manifest' && req.method === 'GET') return sendJson(res, 200, { result: manifest });
       if (url.pathname.startsWith('/api/')) return await handleApi(req, res, decodeURIComponent(url.pathname.slice(5)));
       return serveStatic(req, res, url.pathname);
     } catch (e) {

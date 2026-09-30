@@ -1,6 +1,8 @@
 ---
 name: code-review
 description: Reviews a diff/branch on three separate axes - correctness (bugs, security, tests), spec (does it do what the task asked) and standards (repo conventions plus market best practices) - applying per-language rules from rules/<language>.md. Use whenever you review code changes.
+summary: "Correctness, spec and standards axes, severities, `rules/` per language (JS/TS, Python, Go, Java/Kotlin, C#, SQL, Shell/CI) and `rules/smells.md`"
+used_by: "reviewer"
 ---
 
 # Code review

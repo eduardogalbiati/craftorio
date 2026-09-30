@@ -2,6 +2,17 @@
 // GitHub, glab for GitLab) and cached in <workspace>/backlog/<project id>.json, so the screen shows
 // the last sync right away (and offline) while a new one runs.
 // Bitbucket is a choice in Settings but has no sync yet (no official CLI).
+// `linkRuns` ties runs to issues (`run.issues` recorded by the engine, `run.issue` for older runs,
+// else task/inputs mentioning the URL or `#n`, mock runs excluded; `groupedWith` = the other issues
+// of the same run or queued group) and picks the kanban column (todo / in_progress / waiting / local
+// / done; done = closed on the platform). Each sync also reads the open PRs/MRs
+// (`fetchOpenPullRequests`, `referencedIssues`) into `issue.pullRequests`. Assigning a workflow
+// queues issues in `<id>.queue.json` (`enqueue`, `group: true` = one item with `issues` for one run,
+// `itemIssues`, `unqueue`, `runInputs` builds one task listing every issue of a group; before a real
+// start `newPullRequests` and `skipQueued`); the service's `dispatchQueue` starts queued issues while
+// there are free run slots (`nextQueued`). Column `local`: an open issue whose latest run merged
+// locally while its commit is not on origin (`readLocal`/`writeLocal`: `<id>.local.json`).
+// Screen: src/renderer/backlog.js; channels: src/service/channels/backlog.js.
 
 const fs = require('fs');
 const path = require('path');

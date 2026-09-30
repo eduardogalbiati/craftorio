@@ -2,6 +2,8 @@
 name: ci-pipeline-gh
 description: Pushes a branch to GitHub, opens or reuses its pull request, fails fast when it conflicts with the base, checks GitHub Actions status and triages failed runs down to a root cause (gh CLI). Use when you need to get a branch's CI green on GitHub.
 uses: [ci-failure-triage, pr-description]
+summary: "Push, PR/MR, mergeability (conflicts fail fast), CI status, missing checks, fetching failed logs, retrying flaky jobs"
+used_by: "CI pusher"
 ---
 
 # CI pipeline: GitHub (gh CLI)

@@ -1,6 +1,8 @@
 ---
 name: merge-conflict-resolver
 description: Resolves merge or rebase conflicts hunk by hunk by tracing the intent of both sides from commits and PR/MR descriptions, preserving both intents, then verifies with typecheck, tests and formatting. Use when a branch must be updated with its base and git reports conflicts.
+summary: "Intent tracing per side, hunk-by-hunk resolution, verification"
+used_by: "developer"
 ---
 
 # Merge conflict resolution

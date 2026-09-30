@@ -2,6 +2,8 @@
 name: pr-babysitter-gh
 description: Watches a GitHub pull request until it is mergeable - checks mergeability, conflicts, reviews and unresolved review threads, classifies each comment as actionable or doubtful, and replies with the fixing commit hash (gh CLI). Use to drive a GitHub PR to ready-to-merge.
 uses: [pr-comment-triage]
+summary: "Mergeability signals, threads/discussions, replies"
+used_by: "PR babysitter"
 ---
 
 # PR babysitting: GitHub (gh CLI)

@@ -2,6 +2,8 @@
 name: build-audit-csharp
 description: Builds a .NET solution and audits NuGet packages for vulnerabilities, separating production projects from test projects (dotnet build, dotnet list package --vulnerable). Use to check whether a C#/.NET project builds and has vulnerable dependencies.
 uses: [dependency-audit-policy, long-commands]
+summary: "Build and audit commands, production vs development scope per ecosystem"
+used_by: "builder"
 ---
 
 # Build and audit: C# / .NET

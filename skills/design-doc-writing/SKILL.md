@@ -1,6 +1,8 @@
 ---
 name: design-doc-writing
 description: Writes and scores software design docs - context and scope, goals and non-goals, the design with its trade-offs (architecture, APIs, data, failure modes), alternatives considered, cross-cutting concerns, rollout and open questions, plus the rubric used to score proposals. Use to write, critique or merge a design doc.
+summary: "Design doc (after Google's practice): context, goals/non-goals, design with trade-offs, alternatives, failure modes, cross-cutting concerns, rollout, rubric"
+used_by: "arena (`document_skill`)"
 ---
 
 # Design doc

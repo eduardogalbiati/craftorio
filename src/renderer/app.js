@@ -1,4 +1,10 @@
 /* global api */
+// The UI shell: navigation, the Run screen (steps, sessions, events, the approval dialog), the
+// dashboard, the start drawer, Projects, Workflows › Runs, Settings, the terminal dock and toasts.
+// Each run the window knows is a view rebuilt from its events (`state.runs`); the runs in progress
+// and the gates they wait at come from the engine (`loadActiveRuns` over runs:active, on load,
+// focus, reconnect and after run events), so the sidebar's "waiting for you" survives a reload.
+// Other screens live in their own files (backlog.js, sessions.js, run-chat.js, duo.js, arena.js…).
 const $ = (sel) => document.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const fmtNum = (n) => (n || 0).toLocaleString('en-US');
@@ -229,20 +235,42 @@ async function init() {
            : `<span class="missing">✗ ${k} not found in PATH (use simulation mode)</span>`).join('');
 }
 
-// Runs already in progress when the window opens (a reload, or the UI in a browser): listed in
-// the Run menu from the start; their details are replayed from their recorded events.
+// The runs in progress and the gates they wait at, from the engine (runs:active): read when the
+// window loads or reloads, when it regains focus, when the browser UI's connection comes back and
+// after run events. The engine is the source of truth for gates: a gate is shown until the engine
+// no longer lists it, never only because its event was seen live (a reload loses those). Runs not
+// seen yet are listed in the Run menu from the start; their details are replayed from their
+// recorded events. A run this window thought was running that the engine no longer has (an app or
+// server restart) shows as interrupted, with no gate.
 async function loadActiveRuns() {
-  let list = [];
-  try { list = (await api.listActiveRuns?.()) || []; } catch { return; }
+  let list = null;
+  try { list = await api.listActiveRuns?.(); } catch { return; }
+  if (!Array.isArray(list)) return;
+  const live = new Set(list.map((a) => a.runId));
   for (const a of list) {
-    if (state.runs.has(a.runId)) continue;
-    const v = newRunView();
-    v.run = { ...runInfo(a), status: 'running' };
-    state.runs.set(a.runId, v);
-    if (!state.runId) state.runId = a.runId;
-    hydrateRun(a.runId);
+    let v = state.runs.get(a.runId);
+    if (!v) {
+      v = newRunView();
+      v.run = { ...runInfo(a), status: 'running' };
+      state.runs.set(a.runId, v);
+      if (!state.runId) state.runId = a.runId;
+      hydrateRun(a.runId);
+    }
+    if (Array.isArray(a.gates)) v.approvals = new Map(a.gates.map((g) => [g.approval_id, { type: 'approval.requested', ...g, run_id: a.runId }]));
+  }
+  for (const [runId, v] of state.runs) {
+    if (live.has(runId) || v.run?.status !== 'running' || hydrating.has(runId)) continue;
+    v.run.status = 'interrupted';
+    v.approvals.clear();
+    if (state.approval?.run_id === runId) closeApproval();
   }
   scheduleRender();
+}
+// after run events: one read for a burst of them
+let activeSyncTimer = null;
+function scheduleActiveSync() {
+  if (activeSyncTimer) return;
+  activeSyncTimer = setTimeout(() => { activeSyncTimer = null; loadActiveRuns(); }, 1000);
 }
 
 // ---------------------------------------------------------------------------
@@ -300,6 +328,10 @@ window.reportNotifyContext = reportNotifyContext;
 
 function initNotifications() {
   window.addEventListener('focus', reportNotifyContext);
+  // gates answered or requested while the window was in the background, or while the browser UI
+  // was disconnected (its events are lost)
+  window.addEventListener('focus', () => loadActiveRuns());
+  api.onReconnect?.(() => loadActiveRuns());
   window.addEventListener('blur', reportNotifyContext);
   document.addEventListener('visibilitychange', reportNotifyContext);
   api.onNotificationClick((target) => {
@@ -375,7 +407,7 @@ function renderDashboard() {
   box.querySelectorAll('[data-run]').forEach((b) => (b.onclick = () => selectRun(b.dataset.run)));
 }
 
-const runSessionStatus = (st) => ({ running: 'active', success: 'success', failed: 'failed', cancelled: 'cancelled' })[st] || 'idle';
+const runSessionStatus = (st) => ({ running: 'active', success: 'success', failed: 'failed', interrupted: 'failed', cancelled: 'cancelled' })[st] || 'idle';
 const statusLabel = (r) => ({ idle: 'idle', running: r?.mock ? 'running (simulation)' : 'running', success: 'completed', failed: 'failed', cancelled: 'cancelled' })[r?.status || 'idle'] || r.status;
 
 // ---------------------------------------------------------------------------
@@ -1633,11 +1665,21 @@ function switchTab(tab) {
 // Opens the oldest gate waiting across runs, on its run (the badge on the Run menu item).
 function openNextGate() {
   const ev = pendingGates()[0];
-  if (!ev) return;
-  selectRun(ev.run_id);
-  openApproval(ev);
+  if (ev) openGateOf(ev.run_id);
 }
 window.openNextGate = openNextGate;
+
+// Opens a run's gate inside the run: its chat asks the question inline (answered with the run's id,
+// so it works after a reload). Without the chat screen, the Run screen's dialog.
+function openGateOf(runId) {
+  const v = state.runs.get(runId);
+  if (!v) return;
+  selectRun(runId, { open: false });
+  if (window.openRunChat) { window.openRunChat({ runId, workflow: v.run?.workflow, running: isRunLive(runId) }); return; }
+  showView('run');
+  openApproval([...v.approvals.values()][0]);
+}
+window.openGateOf = openGateOf;
 
 function getTurn(sess, n) {
   if (!sess.turnLog.has(n)) sess.turnLog.set(n, { n, items: [], prompt: null, result: null, stepId: null, startedAt: null });
@@ -1714,6 +1756,7 @@ function pruneRuns() {
 
 function onEvent(ev) {
   if (ev.type === 'workflow.started' || ev.type === 'workflow.finished') reportNotifyContext();
+  if (!replaying) scheduleActiveSync();
   const v = viewOf(ev);
   if (!replaying && hydrating.has(ev.run_id)) { hydrating.get(ev.run_id).push(ev); return; }
   v.events.push(ev);
@@ -1955,28 +1998,36 @@ function renderHeader() {
 }
 
 // The Run menu item: the runs in progress (and the one shown), each with its status dot,
-// workflow, project/issue and gates waiting; the badge counts the gates across runs.
+// workflow, project/issue and gates waiting; the badge counts the gates across runs. A run waiting
+// at a gate is always listed, in the "waiting for you" state with the gate's step, until the
+// engine no longer lists the gate (loadActiveRuns); clicking it opens the gate in its run.
 function renderNavRuns() {
   const gates = pendingGates().length;
   const badge = $('#nav-run-gates');
   badge.classList.toggle('hidden', !gates);
   badge.textContent = String(gates);
   badge.title = `${gates} approval${gates === 1 ? '' : 's'} waiting: click to review`;
-  // failed runs stay listed: they need attention (resume, supervisor) and are otherwise unreachable here
-  const list = [...state.runs.values()].filter((v) => v.run && (v.run.status === 'running' || v.run.status === 'failed' || v.run.id === state.runId));
+  // failed or interrupted runs stay listed: they need attention (resume, supervisor) and are otherwise unreachable here
+  const list = [...state.runs.values()].filter((v) => v.run && (['running', 'failed', 'interrupted'].includes(v.run.status) || v.run.id === state.runId));
   const box = $('#nav-runs');
-  const show = list.length > 1;
+  const show = list.length > 1 || !!gates;
   box.classList.toggle('hidden', !show);
   if (!show) { box.innerHTML = ''; return; }
-  const html = list.map(({ run: r, approvals }) => `<button type="button" class="nav-run-item st-${runSessionStatus(r.status)}${r.id === state.runId ? ' selected' : ''}" data-run="${esc(r.id)}" title="${esc(`${runLabel(r)} — ${statusLabel(r)}`)}">
+  const html = list.map(({ run: r, approvals }) => {
+    const gate = [...approvals.values()][0];
+    const where = [r.project, issueRefs(r) || null].filter(Boolean).join(' · ');
+    const sub = gate ? `waiting for you · ${gate.step_id}` : `${where || statusLabel(r)} · ${new Date(r.startedAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`;
+    const title = gate ? `${runLabel(r)} — waiting for you at ${gate.step_id}: click to answer` : `${runLabel(r)} — ${statusLabel(r)}`;
+    return `<button type="button" class="nav-run-item st-${gate ? 'waiting' : runSessionStatus(r.status)}${r.id === state.runId ? ' selected' : ''}" data-run="${esc(r.id)}"${gate ? ' data-gate="1"' : ''} title="${esc(title)}">
       <span class="status-dot"></span>
-      <span class="nav-run-text"><span class="nav-run-wf">${esc(r.workflow || 'workflow')}</span><span class="nav-run-sub">${esc([r.project, issueRefs(r) || null].filter(Boolean).join(' · ') || statusLabel(r))} · ${esc(new Date(r.startedAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }))}</span></span>
+      <span class="nav-run-text"><span class="nav-run-wf">${esc(gate && where ? `${r.workflow || 'workflow'} · ${where}` : r.workflow || 'workflow')}</span><span class="nav-run-sub">${esc(sub)}</span></span>
       ${approvals.size ? `<span class="nav-gates" title="Approval waiting">${approvals.size}</span>` : ''}
-    </button>`).join('');
+    </button>`;
+  }).join('');
   if (box.dataset.html === html) return;
   box.dataset.html = html;
   box.innerHTML = html;
-  box.querySelectorAll('[data-run]').forEach((b) => (b.onclick = () => selectRun(b.dataset.run)));
+  box.querySelectorAll('[data-run]').forEach((b) => (b.onclick = () => (b.dataset.gate ? openGateOf(b.dataset.run) : selectRun(b.dataset.run))));
 }
 
 function renderRunSummary() {

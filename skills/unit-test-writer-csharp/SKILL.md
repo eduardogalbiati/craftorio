@@ -2,6 +2,8 @@
 name: unit-test-writer-csharp
 description: Writes, updates and runs unit tests for C#/.NET (xUnit, NUnit or MSTest; Moq/NSubstitute; WebApplicationFactory) with dotnet test. Use to add tests for a change or run the suite of a .NET project.
 uses: [testing-principles, long-commands]
+summary: "Framework detection, commands, idioms per language"
+used_by: "test writer"
 ---
 
 # Unit tests: C# / .NET

@@ -1,6 +1,8 @@
 ---
 name: design-sketch
 description: Writes and scores a usage-first design sketch before code - how callers will use it, the types, signatures and modules, trade-offs, rejected alternatives and a design red-flag screen. Use as the document for an AI Arena on architecture decisions, or before implementing a non-trivial feature.
+summary: "Usage-first design: usage snippets, types and signatures, trade-offs, alternatives, design red-flag screen, rubric"
+used_by: "arena (`document_skill: design-sketch`)"
 ---
 
 # Design sketch

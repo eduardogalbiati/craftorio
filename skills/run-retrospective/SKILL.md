@@ -1,6 +1,8 @@
 ---
 name: run-retrospective
 description: Mines a finished workflow run's logs (events.jsonl, sessions, decisions.tsv, summary.json) for durable lessons - repeated failures, wasted turns, missing or no-op skill instructions - and turns each into a concrete, reviewable proposal for a skill or workflow edit. Use after a run to improve the skills and workflows.
+summary: "Friction, waste, skill gaps and no-ops in a run's logs, turned into proposals with evidence"
+used_by: "run retrospective"
 ---
 
 # Run retrospective

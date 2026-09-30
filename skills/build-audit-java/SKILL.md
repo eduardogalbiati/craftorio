@@ -2,6 +2,8 @@
 name: build-audit-java
 description: Builds a Java/Kotlin project (Maven or Gradle) and audits its dependencies for vulnerabilities, separating production from test scopes (osv-scanner, OWASP Dependency-Check). Use to check whether a JVM project builds and has vulnerable dependencies.
 uses: [dependency-audit-policy, long-commands]
+summary: "Build and audit commands, production vs development scope per ecosystem"
+used_by: "builder"
 ---
 
 # Build and audit: Java / Kotlin

@@ -1,6 +1,8 @@
 ---
 name: context-economy
 description: Keeps an unattended agent's context small - maps the code with exploration sub-agents, reads excerpts instead of whole files, groups edits, and leaves a handoff note that lets the next turn start fresh. Use for agents with long first turns that come back for fixes (e.g. the developer).
+summary: "Maps the code with exploration sub-agents, reads excerpts instead of whole files, writes handoff notes the next fresh session can act on"
+used_by: "developer"
 ---
 
 # Context economy

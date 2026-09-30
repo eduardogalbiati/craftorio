@@ -29,6 +29,9 @@ user-facing doc; the topic docs below are read on demand.
 - **Never start real runs in automated checks**: they run with `MULTIAGENT_SIMULATION_ONLY=1`
   (the engine refuses real runs, real providers and CLI terminals). UI checks go through
   `scripts/smoke.js` (scratch workspace), never a hand-written script that launches `src/main`.
+- **Add, don't edit shared lists**: document a file in its header comment (the code map is built
+  from it) or a topic doc, not here. Shared name lists: one item per line, sorted
+  (`npm run lint:lists`).
 
 ## Commands
 
@@ -38,13 +41,14 @@ npm test                   # unit tests + a full mock run of software-developmen
 npm run run -- --file ai-arena.yaml --mock --auto-approve --input project_path=C:/x --task "..."
 npm run serve -- --port 7300 [--host h] [--workspace dir]   # engine server + UI in a browser
 npm run build              # packaged app in build/ (npm run package → dist/)
+npm run docs               # README tables + docs/agents/code-map.md (generated)
 npx electron scripts/smoke.js <out.png>   # UI smoke test: mock run + screenshot
 npm run screenshot -- --view backlog --mode kanban [--ref origin/main] --out <dir>   # one screen, simulated data
 ```
 
 ## Topic docs (read the one that matches your task)
 
-- [docs/agents/code-map.md](docs/agents/code-map.md): what each file does. Read it to find where to change something.
+- [docs/agents/code-map.md](docs/agents/code-map.md): what each file does, and how to add a channel, screen or skill. Generated (gitignored): run `npm run docs` if it is missing.
 - [docs/agents/engine.md](docs/agents/engine.md): workflow YAML features, sessions and handoff notes, gates, how a run ends, template context. Read before changing the engine or a workflow.
 - [docs/agents/capabilities.md](docs/agents/capabilities.md): what agents may use, isolation per CLI, calling `gh`/`glab`, read-only agents. Read before changing an agent's tools or a read-only skill.
 - [docs/agents/worktrees.md](docs/agents/worktrees.md): per-run git worktrees and branch gotchas. Read before touching worktrees, merges or branches.

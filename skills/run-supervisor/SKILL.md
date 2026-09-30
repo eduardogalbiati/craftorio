@@ -1,6 +1,8 @@
 ---
 name: run-supervisor
 description: Method for the orchestrator's AI supervisor - explains in plain words what happened in a workflow run, finds the root cause of a failure from the run's logs, and chooses a safe recovery (fix the output, retry with an instruction, go to an allowed step, resume from a step, or hand over to a human). Use when a step fails or when someone asks why a run ended the way it did.
+summary: "Plain-words account of a run, root cause from its logs, a safe recovery (fix the output, retry with an instruction, go to an allowed step, resume, or hand over to a human)"
+used_by: "the AI supervisor (a failed step, or on demand)"
 ---
 
 # Run supervisor

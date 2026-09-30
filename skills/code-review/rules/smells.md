@@ -19,3 +19,4 @@ when the smell was introduced or made worse by the diff. Repository standards ov
 | Message chains | `a.b().c().d()` reaching through objects | hide the delegate |
 | Middle man | a class that only forwards calls | remove it |
 | Dead code | unreachable code, unused exports, commented-out blocks | delete |
+| Conflict magnet | a name added to a one-line shared list, or new code always put before the same section comment | one item per line, sorted; place code next to its peers |

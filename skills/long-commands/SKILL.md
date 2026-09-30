@@ -1,6 +1,8 @@
 ---
 name: long-commands
 description: How to run test suites, builds, installs and audits that take minutes - in the foreground with a timeout sized for the project, never backgrounded and polled for a text marker, with the full output kept and the exit code read. Loaded by the developer agent (software-development) and by the unit-test-writer, build-audit and claim-verification skills.
+summary: "Suites and builds in the foreground with a sized timeout, never backgrounded and polled for text; full output kept, exit code read"
+used_by: "developer; via `uses` (test writer, builder, verifier)"
 ---
 
 # Long-running commands (suites, builds, installs, audits)

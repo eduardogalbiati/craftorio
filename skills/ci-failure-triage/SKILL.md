@@ -1,6 +1,8 @@
 ---
 name: ci-failure-triage
 description: Shared method to read a failed CI job log and turn it into a short root-cause report, telling code failures apart from infrastructure or flaky ones. Loaded by the ci-pipeline-<platform> and deploy-<platform> skills.
+summary: "Classify a failure (code, environment, infrastructure, needs-human) and write a root-cause report"
+used_by: "via `uses`"
 ---
 
 # CI failure triage

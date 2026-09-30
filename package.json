@@ -8,12 +8,18 @@
     "node": ">=24"
   },
   "scripts": {
+    "docs": "node scripts/docs.js",
+    "lint:lists": "node scripts/lint-lists.js",
+    "prepare": "node scripts/docs.js --derived",
+    "prestart": "node scripts/docs.js --derived",
     "start": "electron .",
     "run": "node scripts/run.js",
     "serve": "node scripts/serve.js",
+    "pretest": "node scripts/docs.js --derived",
     "test": "node scripts/test.js",
     "screenshot": "electron scripts/screenshot.js",
     "test:engine": "node scripts/run.js --mock --auto-approve --task \"Engine test\"",
+    "prebuild": "node scripts/docs.js --derived",
     "build": "node scripts/package.js build",
     "package": "node scripts/package.js"
   },

@@ -1,6 +1,8 @@
 ---
 name: review-synthesis
 description: Lead judgment over several independent code reviews of the same diff (from different models) plus an optional blast-radius report - merges duplicate findings, weighs agreement, filters nitpicks and taste, verifies each finding against the code, and sorts them into act on / consider / noted / dismissed with a final verdict. Use when you receive multiple reviews to consolidate.
+summary: "Lead judgment: merge, verify, weigh agreement and nitpicks, act on / consider / noted / dismissed"
+used_by: "multi-model review judge"
 ---
 
 # Review synthesis (lead judgment)

@@ -2,6 +2,8 @@
 name: build-audit-js
 description: Builds a JavaScript/TypeScript project and audits its dependencies for vulnerabilities, separating production from development (npm, pnpm, yarn). Use to check whether a JS/TS project builds and has vulnerable dependencies.
 uses: [dependency-audit-policy, long-commands]
+summary: "Build and audit commands, production vs development scope per ecosystem"
+used_by: "builder"
 ---
 
 # Build and audit: JavaScript / TypeScript

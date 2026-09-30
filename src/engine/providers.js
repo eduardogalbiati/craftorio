@@ -263,6 +263,19 @@ parseGrok.flush = flushGrok;
 // ---------------------------------------------------------------------------
 // CLI runner
 // ---------------------------------------------------------------------------
+// Git settings for the agents' own git commands, through GIT_CONFIG_COUNT/KEY_n/VALUE_n (added after
+// any the environment already has), so the repositories' config is never written. rerere: a
+// conflict resolution recorded once is replayed when the same conflict comes back (#77).
+function gitConfigEnv(env, settings) {
+  const start = Number(env.GIT_CONFIG_COUNT) || 0;
+  const out = { GIT_CONFIG_COUNT: String(start + Object.keys(settings).length) };
+  Object.entries(settings).forEach(([key, value], i) => {
+    out[`GIT_CONFIG_KEY_${start + i}`] = key;
+    out[`GIT_CONFIG_VALUE_${start + i}`] = value;
+  });
+  return out;
+}
+
 function runCli(opts, parser) {
   const { provider, model, effort, providerSessionId, prompt, cwd, extraArgs, timeoutMs, signal, onItem, render } = opts;
   // `prompt_file_arg`: CLIs that take the prompt from a file (e.g. grok --prompt-file) instead of stdin
@@ -287,6 +300,7 @@ function runCli(opts, parser) {
 
   const env = { ...process.env };
   delete env.CLAUDECODE; // avoids the "nested session" block if the app is launched from inside Claude Code
+  Object.assign(env, gitConfigEnv(env, { 'rerere.enabled': 'true' }));
 
   if (promptFile) fs.writeFileSync(promptFile, prompt);
 
@@ -404,7 +418,10 @@ function mockValue(s, key, h) {
       if ('state' in o && o.state !== 'needs_human') delete o.question;
       return o;
     }
-    case 'array': return [mockValue(s.items || { type: 'string' }, key, h)];
+    // sequences.preexisting_failures: true: the test writer reports a test that also fails on the base
+    case 'array':
+      if (key === 'preexisting_failures' && !h.sequences?.preexisting_failures) return [];
+      return [mockValue(s.items || { type: 'string' }, key, h)];
     case 'boolean': {
       const seq = h.sequences?.[key];
       return seq && seq.every((v) => typeof v === 'boolean') ? seq[Math.min(h.visit - 1, seq.length - 1)] : true;
@@ -419,7 +436,7 @@ function mockValue(s, key, h) {
 const mockTurns = new Map();
 const MOCK_HANDOFF = '```handoff\n- Goal: simulated goal of this agent\n- State: branch feat/mock-feature, commit abc1234\n- Done: simulated work of this turn\n- Left: nothing blocking\n- Decisions: none\n- Key files: src/auth/login.ts\n- Known problems: none\n```';
 
-async function runMock({ providerSessionId, model, hint, signal, onItem }) {
+async function runMock({ providerSessionId, model, hint, signal, onItem, attempt = 1, timeoutMs }) {
   const sid = providerSessionId || `mock-${Math.random().toString(36).slice(2, 10)}`;
   const scale = +(process.env.MULTIAGENT_MOCK_DELAY_SCALE ?? 1);
   const d = (ms) => sleep(ms * scale * (0.6 + Math.random() * 0.8), signal);
@@ -456,6 +473,11 @@ async function runMock({ providerSessionId, model, hint, signal, onItem }) {
     onItem({ kind: 'tool_call', id: 't1', name: 'Bash', input: { command: slow ? 'until grep -q "duration_ms" out.log; do sleep 5; done' : 'git status' } });
     await (slow ? sleep(slow, signal) : d(500));
     onItem({ kind: 'tool_result', id: 't1', output: 'On branch feat/mock-feature\nnothing to commit, working tree clean' });
+  }
+  // sequences.timeouts: { stepId: n }: the first n attempts of each of that step's turns are killed
+  // at their timeout after their tool call (the engine retries with the attempt's summary)
+  if (hint?.stepId != null && attempt <= (hint?.sequences?.timeouts?.[hint.stepId] || 0)) {
+    throw new Error(`Timed out after ${Math.round((timeoutMs || 0) / 1000)}s`);
   }
   await d(800);
 
@@ -505,4 +527,4 @@ function isRetryable(err) {
   return !/"status":\s*4\d\d|invalid_request|not supported|not found|does not exist/i.test(String(err?.message || err));
 }
 
-module.exports = { parseGrok, runTurn, resolveCommand, refreshWindowsPath, isRetryable, isPermissionDenial, sleep, emptyUsage };
+module.exports = { parseGrok, runTurn, resolveCommand, refreshWindowsPath, isRetryable, isPermissionDenial, sleep, emptyUsage, gitConfigEnv };
