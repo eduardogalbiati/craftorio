@@ -220,25 +220,25 @@ test('issues link to the runs that mention them and land in a kanban column', ()
   assert.deepEqual(by[22].runs.map((r) => r.runId), ['b']);
 });
 
-test('an open issue merged locally stays in Local until its work is pushed; closed on the platform is Done', () => {
+test('an open issue merged locally stays in Local until its work is pushed; only closed on the platform is Done', () => {
   const issue = (number, state = 'open') => ({ number, state, url: `https://github.com/o/r/issues/${number}` });
   const run = (runId, number, localMerge) => ({ runId, workflow: 'local-hero', status: 'success', startedAt: `2026-09-1${runId.length}`, issues: [{ number, url: `https://github.com/o/r/issues/${number}` }], localMerge });
   const merge = (commit) => ({ branch: 'feat/x', base: 'main', commit });
   const runs = [
     run('a', 1, merge('aaa111')), // its commit is among the unpushed ones
     run('bb', 2, merge('old222')), // rebased by an update: found by "Closes #2" in the unpushed commits
-    run('ccc', 3, merge('ccc333')), // pushed: neither its commit nor a "Closes #3" is left
+    run('ccc', 3, merge('ccc333')), // pushed: neither its commit nor a "Closes #3" is left, open until a sync
     run('dddd', 4, merge('ddd444')), // closed on GitHub
-    run('eeeee', 5, null), // a PR workflow: success means done, as before
+    run('eeeee', 5, null), // a PR workflow: its PR isn't merged, the issue is still open
   ];
   const local = { base: 'main', ahead: 2, commits: [{ sha: 'aaa111', subject: 'A', issues: [1] }, { sha: 'new222', subject: 'B', issues: [2] }], issues: [1, 2] };
   const col = (l) => Object.fromEntries(backlog.linkRuns([issue(1), issue(2), issue(3), issue(4, 'closed'), issue(5)], runs, null, l).map((i) => [i.number, i.column]));
-  assert.deepEqual(col(local), { 1: 'local', 2: 'local', 3: 'done', 4: 'done', 5: 'done' });
+  assert.deepEqual(col(local), { 1: 'local', 2: 'local', 3: 'in_progress', 4: 'done', 5: 'in_progress' });
   // never checked, or the check failed: a local merge is assumed not pushed
-  assert.deepEqual(col(null), { 1: 'local', 2: 'local', 3: 'local', 4: 'done', 5: 'done' });
-  assert.deepEqual(col({ error: 'origin/main not found', commits: [], issues: [] }), { 1: 'local', 2: 'local', 3: 'local', 4: 'done', 5: 'done' });
-  // everything pushed
-  assert.deepEqual(col({ base: 'main', ahead: 0, commits: [], issues: [] }), { 1: 'done', 2: 'done', 3: 'done', 4: 'done', 5: 'done' });
+  assert.deepEqual(col(null), { 1: 'local', 2: 'local', 3: 'local', 4: 'done', 5: 'in_progress' });
+  assert.deepEqual(col({ error: 'origin/main not found', commits: [], issues: [] }), { 1: 'local', 2: 'local', 3: 'local', 4: 'done', 5: 'in_progress' });
+  // everything pushed: Done only once the platform closes them
+  assert.deepEqual(col({ base: 'main', ahead: 0, commits: [], issues: [] }), { 1: 'in_progress', 2: 'in_progress', 3: 'in_progress', 4: 'done', 5: 'in_progress' });
   const [one] = backlog.linkRuns([issue(1)], runs, null, local);
   assert.deepEqual(one.runs[0].localMerge, { branch: 'feat/x', base: 'main', commit: 'aaa111' });
 });
@@ -264,7 +264,7 @@ test('a run started for an issue links to it even when simulated; its state pick
   const by = Object.fromEntries(out.map((i) => [i.number, i]));
   assert.equal(by[1].column, 'waiting');
   assert.equal(by[1].runs[0].mock, true);
-  assert.equal(by[2].column, 'done');
+  assert.equal(by[2].column, 'in_progress'); // succeeded, still open on the platform
   assert.equal(by[3].column, 'in_progress');
   assert.deepEqual(by[4].runs, []);
   assert.deepEqual(by[4].queued, { position: 1, workflow: 'software-development', mock: true });
@@ -342,7 +342,7 @@ test('a run started for several issues links to each of them; runs recorded with
   assert.deepEqual(by[65].runs[0].groupedWith, [53, 77]);
   assert.deepEqual(by[8].runs.map((r) => r.runId), ['old']); // a started-for run's text mentions don't count
   assert.equal(by[8].runs[0].groupedWith, undefined);
-  assert.equal(by[8].column, 'done');
+  assert.equal(by[8].column, 'in_progress'); // succeeded, still open
   assert.deepEqual([by[9].queued, by[10].queued.groupedWith, by[10].column], [{ position: 1, workflow: 'w.yaml', mock: false, groupedWith: [10] }, [9], 'in_progress']);
 });
 

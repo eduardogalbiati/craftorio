@@ -224,13 +224,14 @@ function notPushed(issue, run, local) {
 
 // Kanban column from the issue state, its place in the queue, its latest run and the project's
 // local commits not pushed yet (localStatus in src/local-push.js). Done = closed on the platform,
-// or finished by a run whose work is there.
+// only: an open issue whose run succeeded (a PR not merged yet, a push the platform hasn't seen)
+// stays in progress until a sync reports it closed.
 function columnOf(issue, latest, queued, local) {
   if (issue.state === 'closed') return 'done';
   if (queued) return 'in_progress';
   if (!latest) return 'todo';
   if (latest.waiting) return 'waiting';
-  if (latest.status === 'success') return notPushed(issue, latest, local) ? 'local' : 'done';
+  if (latest.status === 'success') return notPushed(issue, latest, local) ? 'local' : 'in_progress';
   if (latest.status === 'cancelled') return 'todo';
   return 'in_progress'; // running, failed, interrupted
 }

@@ -213,8 +213,8 @@ test('backlog: work merged locally shows as not pushed until the Backlog pushes 
   const pushed = await api['backlog:push']({ projectId: p.id });
   assert.deepEqual([pushed.pushed, pushed.issues, pushed.local.ahead], [true, [1], 0]);
   assert.equal(git(origin, 'rev-parse', 'main'), merged);
-  // pushed: no longer "local" (Done here; the platform closes #1 and the next sync agrees)
-  assert.equal(pushed.backlog.issues[0].column, 'done');
+  // pushed: no longer "local"; Done only when a sync reports #1 closed on the platform
+  assert.equal(pushed.backlog.issues[0].column, 'in_progress');
   assert.deepEqual(api['backlog:unpushed'](), []);
 
   // auto-push is a project setting, off by default
@@ -336,7 +336,7 @@ test('backlog: assigned issues run one at a time, each run records its issue', a
 
   data = api['backlog:get']({ projectId: p.id });
   assert.deepEqual(data.queue.items, []);
-  assert.deepEqual([by()[1].column, by()[2].column], ['done', 'done']);
+  assert.deepEqual([by()[1].column, by()[2].column], ['in_progress', 'in_progress']); // succeeded, still open
   const list = api['runs:list']().runs;
   const run2 = list.find((r) => r.issues?.[0].number === 2);
   assert.deepEqual(run2.issues, [{ number: 2, url: 'https://github.com/o/r/issues/2', title: 'Issue 2' }]);
@@ -390,7 +390,7 @@ test('backlog: issues assigned as one run queue one item, start one run for all 
 
   api['approval:resolve']({ runId: run.runId, id: gates.get(run.runId), answer: true });
   await until(() => !service.isRunning());
-  assert.deepEqual([65, 53, 77].map((n) => by()[n].column), ['done', 'done', 'done']);
+  assert.deepEqual([65, 53, 77].map((n) => by()[n].column), ['in_progress', 'in_progress', 'in_progress']); // succeeded, still open
   const recorded = api['runs:list']().runs.find((r) => r.runId === run.runId);
   assert.deepEqual(recorded.issues.map((i) => i.number), [65, 53, 77]);
 });
