@@ -670,9 +670,10 @@ function renderRunList(rl, { prefix, box: boxSel, empty, start, rerender }) {
   box.querySelectorAll('[data-run-act]').forEach((b) => (b.onclick = () => {
     const r = rl.runs.find((x) => x.runId === b.closest('.pr-run').dataset.run);
     if (b.dataset.runAct === 'logs') api.openPath(r.runDir);
-    if (b.dataset.runAct === 'view') showView('run');
+    // the Run screen shows the selected run: select this one, not whichever run was on screen
+    if (b.dataset.runAct === 'view') { if (state.runs.has(r.runId)) selectRun(r.runId); else showView('run'); }
     if (b.dataset.runAct === 'chat') window.openRunChat?.({ runId: r.runId, workflow: r.workflow, running: r.current && r.status === 'running' });
-    if (b.dataset.runAct === 'sup') openSupervisor({ runId: r.runId, workflow: r.workflow, status: r.status, error: r.error, mock: r.mock });
+    if (b.dataset.runAct === 'sup') openSupervisor({ runId: r.runId, workflow: r.workflow, status: r.status, error: r.error, mock: r.mock, issue: r.issue });
   }));
   box.querySelectorAll('[data-art]').forEach((b) => (b.onclick = () => {
     const r = rl.runs.find((x) => x.runId === b.closest('.pr-run').dataset.run);
@@ -734,7 +735,7 @@ function projectRunBody(r, pv) {
       <button class="btn sm ghost" data-run-act="logs">Open logs</button>
       <button class="btn sm ghost sup-btn" data-run-act="sup"><span class="sup-mark">◆</span> Ask the supervisor</button>
       <button class="btn sm" data-run-act="chat" title="${esc(CHAT_TITLES[r.workflow] || 'See the agents, the orchestrator and the human gates as a chat')}">Open chat</button>
-      ${r.current ? '<button class="btn sm" data-run-act="view">View run</button>' : ''}
+      ${r.current || state.runs.has(r.runId) ? '<button class="btn sm" data-run-act="view">View run</button>' : ''}
       <span class="spacer"></span>
       <span class="muted small mono">${esc(r.runId)}</span>
     </div>
@@ -1796,7 +1797,8 @@ function renderNavRuns() {
   badge.classList.toggle('hidden', !gates);
   badge.textContent = String(gates);
   badge.title = `${gates} approval${gates === 1 ? '' : 's'} waiting: click to review`;
-  const list = [...state.runs.values()].filter((v) => v.run && (v.run.status === 'running' || v.run.id === state.runId));
+  // failed runs stay listed: they need attention (resume, supervisor) and are otherwise unreachable here
+  const list = [...state.runs.values()].filter((v) => v.run && (v.run.status === 'running' || v.run.status === 'failed' || v.run.id === state.runId));
   const box = $('#nav-runs');
   const show = list.length > 1;
   box.classList.toggle('hidden', !show);
@@ -1830,10 +1832,10 @@ function renderRunBanner() {
   const show = r?.status === 'failed';
   box.classList.toggle('hidden', !show);
   if (!show) return;
-  const key = `${r.id}:${r.error || ''}`;
+  const key = `${r.id}:${r.issue?.number || ''}:${r.error || ''}`;
   if (box.dataset.key === key) return;
   box.dataset.key = key;
-  box.innerHTML = `<div class="fail-banner-text"><b>The workflow failed</b>${r.error ? `<span class="mono small" title="${esc(r.error)}">${esc(r.error)}</span>` : ''}</div>
+  box.innerHTML = `<div class="fail-banner-text"><b>The workflow failed: ${esc(runLabel(r))}</b><span class="muted small mono">${esc(r.id)}</span>${r.error ? `<span class="mono small" title="${esc(r.error)}">${esc(r.error)}</span>` : ''}</div>
     <button class="btn sm sup-btn solid" id="btn-banner-sup"><span class="sup-mark">◆</span> Ask the supervisor</button>`;
   $('#btn-banner-sup').onclick = () => openSupervisorForCurrent();
 }
@@ -2354,7 +2356,7 @@ const SUP_ACTIONS = { retry: 'retry the step', fix_output: 'fix the output', got
 function openSupervisorForCurrent() {
   const r = state.run;
   if (!r) return;
-  openSupervisor({ runId: r.id, workflow: r.workflow, status: r.status, error: r.error, mock: r.mock });
+  openSupervisor({ runId: r.id, workflow: r.workflow, status: r.status, error: r.error, mock: r.mock, issue: r.issue });
 }
 
 function openSupervisor(run) {
@@ -2362,7 +2364,7 @@ function openSupervisor(run) {
   if (sup.runId !== run.runId) {
     Object.assign(sup, { runId: run.runId, question: '', loading: false, result: null, error: null, recMsgs: {} });
   }
-  Object.assign(sup, { workflow: run.workflow, status: run.status, runError: run.error, mock: !!run.mock });
+  Object.assign(sup, { workflow: run.workflow, status: run.status, runError: run.error, mock: !!run.mock, issue: run.issue || null });
   $('#sup-question').value = sup.question;
   $('#sup-chat-msg').textContent = '';
   $('#sup-drawer').classList.add('open');
@@ -2411,7 +2413,7 @@ async function supervisorChat() {
 
 function renderSupervisor() {
   const sup = state.sup;
-  $('#sup-run').innerHTML = `<span class="mono">${esc(sup.runId || '')}</span>${sup.workflow ? ` · ${esc(sup.workflow)}` : ''}${sup.status ? ` <span class="pill pill-${esc(sup.status)}">${esc(sup.status)}</span>` : ''}${sup.mock ? ' <span class="badge p-mock">simulated</span>' : ''}`;
+  $('#sup-run').innerHTML = `<span class="mono">${esc(sup.runId || '')}</span>${sup.workflow ? ` · ${esc(sup.workflow)}` : ''}${sup.issue ? ` · <b>#${esc(sup.issue.number)}</b> ${esc(sup.issue.title || '')}` : ''}${sup.status ? ` <span class="pill pill-${esc(sup.status)}">${esc(sup.status)}</span>` : ''}${sup.mock ? ' <span class="badge p-mock">simulated</span>' : ''}`;
   $('#btn-sup-analyze').disabled = sup.loading;
   $('#btn-sup-analyze').textContent = sup.result ? 'Analyze again' : 'Analyze';
   const box = $('#sup-result');
