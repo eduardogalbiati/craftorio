@@ -223,7 +223,7 @@ function createService({ host }) {
     return [...active.values()].map((r) => ({
       runId: r.runId, workflow: r.wf.metadata?.name || path.basename(r.file), file: path.basename(r.file), mock: r.mock,
       projectId: r.projectId, issues: r.issues, startedAt: r.startedAt ? new Date(r.startedAt).toISOString() : null,
-      waiting: r.approvals.size, inputs: r.inputs,
+      waiting: r.approvals.size, inputs: r.inputs, agent_names: r.agentNames(),
     }));
   }
 

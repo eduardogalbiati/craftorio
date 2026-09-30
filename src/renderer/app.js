@@ -797,7 +797,7 @@ function projectRunBody(r, pv) {
       <tbody>${[...sessions].sort((a, b) => isOrchSession(b) - isOrchSession(a)).map((s) => {
         const m = pv.msgs.get(`${r.runId}:${s.id}`);
         return `<tr data-session="${esc(s.id)}" data-agent="${esc(s.agent)}">
-          <td><b title="${esc(s.agent)}">${esc(agentLabel(s.agent))}</b> <span class="muted small mono">${esc(s.id)}</span></td>
+          <td><b title="${esc(s.agent)}">${esc(agentLabel(s.agent, r.agentNames))}</b> <span class="muted small mono">${esc(s.id)}</span></td>
           <td><span class="badge p-${esc(s.provider)}">${esc(s.provider)}</span> <span class="mono small">${esc(s.model || '')}</span></td>
           <td><span class="status st-${esc(s.status)}"><span class="status-dot"></span>${esc(s.status)}</span></td>
           <td class="num mono">${fmtNum(s.turns)}</td>
@@ -2142,17 +2142,17 @@ const ENGINE_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" 
 const CHIP_ROBOT_STATE = { running: 'thinking', waiting: 'waiting', failed: 'error', stopped: 'sleeping', done: 'idle' };
 const MAX_CHIPS = 8;
 
-function progressAvatar(a, chip) {
+function progressAvatar(a, chip, names) {
   const tip = a.human
     ? `${a.steps.join(', ')} · You (human gate)${a.durationMs ? ` · ${fmtDur(a.durationMs)}` : ''}`
-    : `${a.steps.join(', ')} · ${agentLabel(a.agent)} (${a.agent})${a.provider ? ` · ${a.provider}${a.model ? `/${a.model}` : ''}` : ''}${a.durationMs ? ` · ${fmtDur(a.durationMs)}` : ''} · ${fmtUsd(a.cost)}`;
+    : `${a.steps.join(', ')} · ${agentLabel(a.agent, names)} (${a.agent})${a.provider ? ` · ${a.provider}${a.model ? `/${a.model}` : ''}` : ''}${a.durationMs ? ` · ${fmtDur(a.durationMs)}` : ''} · ${fmtUsd(a.cost)}`;
   // the last chip's working agents show the run's state; the others rest
   const st = chip.status === 'done' ? 'idle' : CHIP_ROBOT_STATE[chip.status];
   const art = a.human ? PERSON_SVG : a.provider ? robotAvatar(a.provider, a.model, st) : ENGINE_SVG;
   return `<span class="rp-av${a.human ? ' human' : a.provider ? '' : ' engine'}" title="${esc(tip)}">${art}</span>`;
 }
 
-function progressChip(c) {
+function progressChip(c, names) {
   const label = {
     done: '✓',
     running: `${c.current}…`,
@@ -2161,7 +2161,7 @@ function progressChip(c) {
     stopped: `stopped at ${c.current}`,
   }[c.status];
   const agents = c.agents.length ? c.agents : [{ agent: 'orchestrator', steps: c.steps.map((e) => e.step), cost: 0, durationMs: 0 }];
-  const avs = agents.slice(0, 4).map((a) => progressAvatar(a, c)).join('') + (agents.length > 4 ? `<span class="rp-av rp-more" title="${esc(agents.slice(4).map((a) => agentLabel(a.agent)).join(', '))}">+${agents.length - 4}</span>` : '');
+  const avs = agents.slice(0, 4).map((a) => progressAvatar(a, c, names)).join('') + (agents.length > 4 ? `<span class="rp-av rp-more" title="${esc(agents.slice(4).map((a) => agentLabel(a.agent, names)).join(', '))}">+${agents.length - 4}</span>` : '');
   return `<div class="rp-chip st-${c.status}${c.status === 'done' ? ' still' : ''}">
     <div class="rp-avs">${avs}</div>
     <div class="rp-name${c.grouped ? '' : ' mono'}">${esc(c.name)}${c.round > 1 ? ` <span class="rp-round">×${c.round}</span>` : ''}</div>
@@ -2177,7 +2177,7 @@ function runProgressStrip(r) {
   const status = live?.trail ? live.run?.status || r.status : r.status;
   const chips = RunProgress.progressGroups(steps, r.groups || live?.groups, status);
   const skipped = chips.length - MAX_CHIPS;
-  return `<div class="rp-strip">${skipped > 0 ? `<span class="rp-skip" title="${esc(chips.slice(0, skipped).map((c) => c.name).join(' › '))}">+${skipped}</span><span class="rp-sep">›</span>` : ''}${chips.slice(Math.max(0, skipped)).map(progressChip).join('<span class="rp-sep">›</span>')}</div>`;
+  return `<div class="rp-strip">${skipped > 0 ? `<span class="rp-skip" title="${esc(chips.slice(0, skipped).map((c) => c.name).join(' › '))}">+${skipped}</span><span class="rp-sep">›</span>` : ''}${chips.slice(Math.max(0, skipped)).map((c) => progressChip(c, r.agentNames || live?.run?.agentNames)).join('<span class="rp-sep">›</span>')}</div>`;
 }
 
 function renderSessions() {

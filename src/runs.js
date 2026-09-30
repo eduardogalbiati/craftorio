@@ -128,6 +128,8 @@ function readRun(runsDir, runId) {
     sessions,
     // null: recorded before groups existed (the workflow file may have them now)
     groups: summary?.groups || started?.groups || null,
+    // agents from the Agents menu: key → their own name (workflow.started)
+    agentNames: started?.agent_names || null,
     progress,
   };
 }
