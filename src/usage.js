@@ -263,4 +263,4 @@ function preflight(wf, budget, resolveCommand, inputs = {}) {
   return problems;
 }
 
-module.exports = { PROVIDERS, WARN_AT, providerId, sessionCost, totalTokens, computeUsage, budgetBaseline, withPeerUsage, preflight };
+module.exports = { PROVIDERS, WARN_AT, providerId, sessionCost, totalTokens, readRuns, computeUsage, budgetBaseline, withPeerUsage, preflight };

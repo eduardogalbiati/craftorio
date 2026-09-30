@@ -31,6 +31,7 @@ const localPush = require('../local-push');
 const skills = require('../skills');
 const agents = require('../agents');
 const usage = require('../usage');
+const analytics = require('../analytics');
 const actionsUsage = require('../actions-usage');
 const { readLocalUsage } = require('../local-usage');
 const cliSessions = require('../cli-sessions');
@@ -977,6 +978,31 @@ function createService({ host }) {
     return usage.computeUsage({ runsDir: ws.runs, settings: workspace.readSettings(ws), live, installed, scope, local });
   }
 
+  // ---- analytics: tokens and session metrics over a date range ---------------------------
+  // The CLIs' transcripts are read in both scopes: they add tool calls, prompts, files... to run sessions.
+  function analyticsSnapshot({ scope, from, to } = {}) {
+    const within = folderMatcher();
+    const projectList = projects.listProjects(ws.projects);
+    const projectOf = (cwd) => {
+      const p = cwd && projectList.find((x) => [x.folder, ...(x.previousFolders || [])].some((d) => within(cwd, d)));
+      return p ? { id: p.id, name: p.name } : null;
+    };
+    return analytics.computeAnalytics({
+      runsDir: ws.runs, local: readLocalUsage(), settings: workspace.readSettings(ws), projects: projectList, projectOf,
+      scope: scope === 'machine' ? 'machine' : 'orchestrator', from, to,
+    });
+  }
+
+  // The supervisor's report on the range; it calls a real model unless `mock` (the UI asks first).
+  async function analyzeAnalytics({ scope, from, to, question, mock } = {}) {
+    if (!mock) simulation.refuseReal('the supervisor\'s CLI (claude)');
+    const a = analyticsSnapshot({ scope, from, to });
+    return supervisor.analyzeSessions({
+      report: analytics.analyticsReport(a), from: a.from, to: a.to, scope: a.scope, question, mock: !!mock,
+      reportsDir: ws.reports, skillsDirs: [ws.skills, BUNDLED_SKILLS_DIR], resolveCommand,
+    });
+  }
+
   function setBudget({ provider, budget, scope }) {
     if (!usage.PROVIDERS.some((p) => p.id === provider)) throw new Error(`Unknown provider: ${provider}`);
     const budgets = { ...workspace.readSettings(ws).budgets };
@@ -1125,6 +1151,9 @@ function createService({ host }) {
     'usage:setBudget': (opts) => setBudget(opts),
     'usage:setPrice': (opts) => setPrice(opts),
     'usage:actions': (opts) => actionsUsage.getActionsUsage({ includedMinutes: +workspace.readSettings(ws).actionsIncludedMinutes || 0, force: !!opts?.force }),
+
+    'analytics:get': (opts) => analyticsSnapshot(opts || {}),
+    'analytics:analyze': (opts) => analyzeAnalytics(opts || {}),
 
     'cliSessions:list': () => listCliSessions(),
     'cliSessions:rename': (opts) => renameCliSession(opts),

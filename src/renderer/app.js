@@ -263,6 +263,7 @@ function showView(view) {
   if (view === 'agents') window.refreshAgents?.();
   if (view === 'skills') refreshSkills();
   if (view === 'usage') { renderUsage(); loadUsage(); loadActionsUsage(); }
+  if (view === 'analytics') window.refreshAnalytics?.();
   if (view === 'settings') renderSettings();
   if (view === 'run') scheduleRender();
   // gates never pop up over the rest of the app: the Run screen of their run asks them

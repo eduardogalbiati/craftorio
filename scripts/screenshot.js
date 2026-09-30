@@ -4,7 +4,7 @@
 //   npx electron scripts/screenshot.js --view <view> [options]      (or: npm run screenshot -- ...)
 //
 //   --view <name>      dashboard, sessions, projects, project, backlog, artifacts, workflows, agents,
-//                      skills, usage, settings, duo, arena, run-chat, run (default dashboard)
+//                      skills, usage, analytics, settings, duo, arena, run-chat, run (default dashboard)
 //   --tab <name>       settings: general | agents | execution | about; workflows: runs | definitions
 //   --mode <name>      backlog: list | kanban
 //   --run <mock|dir>   run-chat: a simulated software-development run (default) or a copy of a run folder
@@ -32,7 +32,7 @@ const path = require('path');
 const { spawnSync, execFileSync } = require('child_process');
 
 const VIEWS = {
-  dashboard: {}, sessions: {}, projects: {}, project: {}, artifacts: {}, agents: {}, skills: {}, usage: {}, duo: {}, arena: {},
+  dashboard: {}, sessions: {}, projects: {}, project: {}, artifacts: {}, agents: {}, skills: {}, usage: {}, analytics: {}, duo: {}, arena: {},
   backlog: { modes: ['list', 'kanban'] },
   workflows: { tabs: ['runs', 'definitions'] },
   settings: { tabs: ['general', 'agents', 'execution', 'about'] },
@@ -141,6 +141,33 @@ function demoLocalMerge(ws, projectId) {
   }, null, 2));
 }
 
+// Finished (not simulated) runs over the last 30 days with Claude, Codex and Grok sessions, so the
+// Analytics screen has tokens per day, provider, model and project (mock runs are left out of it).
+function demoAnalyticsRuns(ws, projectId) {
+  const models = { claude: ['claude-opus-5-5', 'claude-sonnet-5'], codex: ['gpt-6-luna'], grok: ['grok-5-build'] };
+  const statuses = ['success', 'success', 'success', 'failed', 'success', 'cancelled'];
+  for (let i = 0; i < 18; i++) {
+    const started = new Date(Date.now() - (i * 1.6 + 0.3) * 864e5);
+    const runId = `${started.toISOString().slice(0, 10).replace(/-/g, '')}-1200${String(i).padStart(2, '0')}-demo${String(i).padStart(4, '0')}`;
+    const sessions = ['claude', 'claude', 'codex', i % 3 ? null : 'grok'].filter(Boolean).map((provider, k) => {
+      const scale = 1 + ((i * 7 + k * 3) % 5);
+      return {
+        id: `s${k}`, agent: ['developer', 'reviewer', 'tester', 'researcher'][k], provider, model: models[provider][k % models[provider].length], step_id: 'implement',
+        opened_at: started.toISOString(), closed_at: new Date(started.getTime() + 6e5 * scale).toISOString(),
+        duration_ms: 6e5 * scale, active_ms: 4e5 * scale, idle_ms: 2e5 * scale, turns: 3 * scale,
+        tokens: { input: 4000 * scale, output: 9000 * scale, cache_read: 180000 * scale, cache_write: 12000 * scale, reasoning: 0 },
+        cost_usd: provider === 'codex' ? 0 : +(0.35 * scale).toFixed(2), status: 'success', provider_session_id: `demo-${i}-${k}`,
+      };
+    });
+    fs.mkdirSync(path.join(ws.runs, runId), { recursive: true });
+    fs.writeFileSync(path.join(ws.runs, runId, 'summary.json'), JSON.stringify({
+      run_id: runId, workflow: i % 2 ? 'software-development' : 'ai-arena', project_id: i % 4 ? projectId : null, status: statuses[i % statuses.length], mock: false,
+      started_at: started.toISOString(), finished_at: new Date(started.getTime() + 36e5).toISOString(), duration_ms: 36e5,
+      timing: { waiting_ms: 6e5 }, inputs: {}, sessions,
+    }, null, 2));
+  }
+}
+
 // Simulation: the Backlog's sync answers with the cached demo issues instead of calling gh, and the
 // Usage screen's GitHub Actions minutes are demo data.
 function simulateChannels(ipcMain) {
@@ -149,6 +176,8 @@ function simulateChannels(ipcMain) {
   ipcMain.handle = (channel, fn) => {
     handlers[channel] = fn;
     if (channel === 'usage:actions') return handle(channel, () => demoActionsUsage());
+    // the supervisor's report on the sessions (Analytics) uses the mock provider
+    if (channel === 'analytics:analyze') return handle(channel, (e, arg) => fn(e, { ...arg, mock: true }));
     return handle(channel, channel === 'backlog:sync' ? (e, arg) => handlers['backlog:get'](e, { projectId: arg?.projectId }) : fn);
   };
 }
@@ -233,6 +262,7 @@ function main() {
     fs.mkdirSync(ws.backlog, { recursive: true });
     fs.writeFileSync(path.join(ws.backlog, `${project.id}.json`), JSON.stringify(demoBacklog(project.id, src('backlog').taskProgress), null, 2));
     if (args.view === 'backlog') demoLocalMerge(ws, project.id);
+    if (args.view === 'analytics') demoAnalyticsRuns(ws, project.id);
     let run = null;
     if (VIEWS[args.view].run || ['artifacts', 'workflows', 'project', 'usage', 'dashboard'].includes(args.view)) run = recordRun(project);
     return { project, run };

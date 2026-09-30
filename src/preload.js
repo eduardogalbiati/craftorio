@@ -58,6 +58,9 @@ contextBridge.exposeInMainWorld('api', {
   setPrice: (model, price, scope) => ipcRenderer.invoke('usage:setPrice', { model, price, scope }),
   // GitHub Actions minutes of the month vs the included quota (needs gh's `user` scope)
   getActionsUsage: (force) => ipcRenderer.invoke('usage:actions', { force }),
+  // Analytics: tokens and session metrics of a date range, and the supervisor's report on them
+  getAnalytics: (opts) => ipcRenderer.invoke('analytics:get', opts),
+  analyzeAnalytics: (opts) => ipcRenderer.invoke('analytics:analyze', opts),
   // AI supervisor: analysis of a run
   askSupervisor: (runId, question) => ipcRenderer.invoke('supervisor:analyze', { runId, question }),
   // resume a run from a step (a new run, no supervisor call) and what the dialog offers

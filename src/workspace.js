@@ -105,6 +105,8 @@ function layout(root) {
     worktrees: path.join(root, 'worktrees'),
     // last issue sync of each project (see src/backlog.js)
     backlog: path.join(root, 'backlog'),
+    // the supervisor's reports on the sessions of a date range (Analytics), created on demand
+    reports: path.join(root, 'reports'),
     settings: path.join(root, 'settings.json'),
     // titles the user gave to CLI sessions on the Sessions screen ({ "<provider>:<id>": title })
     sessionTitles: path.join(root, 'session-titles.json'),

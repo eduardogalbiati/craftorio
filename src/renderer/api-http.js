@@ -97,6 +97,8 @@
     setBudget: (provider, budget, scope) => call('usage:setBudget', { provider, budget, scope }),
     setPrice: (model, price, scope) => call('usage:setPrice', { model, price, scope }),
     getActionsUsage: (force) => call('usage:actions', { force }),
+    getAnalytics: (opts) => call('analytics:get', opts),
+    analyzeAnalytics: (opts) => call('analytics:analyze', opts),
     askSupervisor: (runId, question) => call('supervisor:analyze', { runId, question }),
     resumeRun: (runId, step, instruction, mock) => call('runs:resume', { runId, step, instruction, mock }),
     resumeOptions: (runId) => call('runs:resumeOptions', { runId }),

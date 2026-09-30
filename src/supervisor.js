@@ -7,7 +7,9 @@
 //   and when a transition's action or pre-merge check fails (superviseActionError): go back to a
 //   recovery step with an instruction, or escalate to the failure gate with a diagnosis;
 // - by a person, from the UI, for any run (analyzeRun): it explains what happened and recommends
-//   actions such as resuming the run from a step (resumeSpec) with an instruction.
+//   actions such as resuming the run from a step (resumeSpec) with an instruction;
+// - by a person, from Analytics, on the sessions of a date range (analyzeSessions): a report on what
+//   they were used for, their complexity, patterns and suggestions.
 
 const fs = require('fs');
 const path = require('path');
@@ -265,9 +267,11 @@ function supervisorConfig(runDir, workflowsDir) {
   try { wf = readRunWorkflow(workflowsDir, started.file) || {}; } catch { /* workflow file gone */ }
   const orch = wf.orchestrator || {};
   const providerName = orch.supervisor?.provider || orch.provider || 'claude';
-  const provider = wf.providers?.[providerName] || { type: 'claude-code', command: 'claude', args: ['-p', '--output-format', 'stream-json', '--verbose', '--model', '{{ model }}'], skill_args: ['--add-dir', '{{ skill_dir }}'] };
-  return { started, wf, provider, providerName, model: orch.supervisor?.model || orch.model || 'claude-sonnet-5' };
+  const provider = wf.providers?.[providerName] || DEFAULT_PROVIDER;
+  return { started, wf, provider, providerName, model: orch.supervisor?.model || orch.model || DEFAULT_MODEL };
 }
+const DEFAULT_PROVIDER = { type: 'claude-code', command: 'claude', args: ['-p', '--output-format', 'stream-json', '--verbose', '--model', '{{ model }}'], skill_args: ['--add-dir', '{{ skill_dir }}'] };
+const DEFAULT_MODEL = 'claude-sonnet-5';
 
 
 /**
@@ -320,4 +324,80 @@ async function analyzeRun({ runDir, question, workflowsDir, skillsDirs, resolveC
   return { analysis, artifactPath, model, costUsd: cost, steps: (cfg.wf.steps || []).map((x) => x.id) };
 }
 
-module.exports = { analyzeRun, supervisorConfig, DECISION_SCHEMA, IDLE_SCHEMA, ANALYSIS_SCHEMA, actionSchema, decisionPrompt, actionErrorPrompt, idlePrompt, runReport, analysisMarkdown, resumeSpec, skippedGate, withoutGateDecisions, timeline, readEvents };
+// Report on the sessions of a date range (Analytics screen).
+const SESSIONS_REPORT_SCHEMA = {
+  type: 'object',
+  required: ['summary', 'uses', 'complexity', 'patterns', 'suggestions'],
+  properties: {
+    summary: { type: 'string' },
+    uses: { type: 'array', items: { type: 'object', required: ['type', 'share', 'examples'], properties: { type: { type: 'string' }, share: { type: 'string' }, examples: { type: 'string' } } } },
+    complexity: { type: 'string' },
+    patterns: { type: 'array', items: { type: 'string' } },
+    suggestions: { type: 'array', items: { type: 'string' } },
+  },
+};
+
+function sessionsReportMarkdown(r, { from, to, scope, model } = {}) {
+  const list = (xs) => (xs || []).map((x) => `- ${x}`).join('\n');
+  return [
+    `# Sessions report: ${from} to ${to}`,
+    `_${new Date().toISOString()} · ${scope === 'machine' ? 'every CLI session on this machine' : 'orchestrator runs'}${model ? ` · ${model}` : ''}_`,
+    `\n## Summary\n${r.summary}`,
+    r.uses?.length ? `\n## What the sessions were used for\n${r.uses.map((u) => `- **${u.type}** (${u.share}): ${u.examples}`).join('\n')}` : '',
+    `\n## Complexity\n${r.complexity}`,
+    r.patterns?.length ? `\n## Patterns\n${list(r.patterns)}` : '',
+    r.suggestions?.length ? `\n## Suggestions\n${list(r.suggestions)}` : '',
+  ].filter(Boolean).join('\n');
+}
+
+/**
+ * Asks the supervisor to analyze the sessions of a date range (a person's request from Analytics):
+ * what they were used for, complexity, patterns, suggestions. Read-only; no run folder, so it uses the
+ * default supervisor (Claude Code) unless `mock`. The report is saved as <reportsDir>/sessions-<time>.md.
+ * @param report  the text digest of the range (analytics.analyticsReport)
+ * @returns { report, reportPath, markdown, model, costUsd }
+ */
+async function analyzeSessions({ report, from, to, scope, question, reportsDir, skillsDirs, resolveCommand, mock = false, provider: forced, model: forcedModel }) {
+  const { extractJson, validateSchema, render } = require('./engine/workflow');
+  const { runTurn } = require('./engine/providers');
+  const { resolveSkill, skillPrompt } = require('./skills');
+  const skill = resolveSkill(skillsDirs, 'run-supervisor');
+  const schema = SESSIONS_REPORT_SCHEMA;
+  const prompt = [
+    skillPrompt(skill),
+    'A person asks you, the orchestrator\'s supervisor, to analyze the AI coding sessions below (Claude Code, Codex CLI, Grok Build) over a date range.',
+    'Explain what the sessions were used for (types such as coding, debugging, docs writing, research, review, with their share and examples), how complex they were, the patterns you see (cost, cache use, idle time, retries, failed tool calls, interruptions, compactions, projects) and concrete suggestions to use the agents and the workflows better.',
+    'Base every claim on the numbers and prompts below; say when the data is too thin. Do not prescribe code changes to the user\'s projects. Write in English, in Markdown.',
+    question ? `Their question: ${question}` : '',
+    report,
+    `\n---\nAt the end of your response you MUST include a \`\`\`json block with an object that validates against this JSON Schema:\n\`\`\`json\n${JSON.stringify(schema, null, 2)}\n\`\`\``,
+  ].filter(Boolean).join('\n\n');
+  const provider = mock ? { type: 'mock' } : forced || DEFAULT_PROVIDER;
+  const model = mock ? 'simulated' : forcedModel || DEFAULT_MODEL;
+  if (!mock && !resolveCommand(provider.command)) throw new Error(`The supervisor needs ${provider.command}, which is not installed.`);
+  fs.mkdirSync(reportsDir, { recursive: true });
+  const { providerArgs, normalize, dedupeFlags } = require('./engine/capabilities');
+  const readOnly = providerArgs(provider.type, { caps: normalize({ tools: ['read'] }) }).args;
+  const extraArgs = dedupeFlags([...readOnly, ...(provider.skill_args || []).map((x) => render(x, { skill_dir: skill.path }))], provider.args || []);
+  const turn = (text) => runTurn({
+    provider, model, prompt: text, cwd: reportsDir, extraArgs, timeoutMs: 15 * 60e3, render,
+    hint: { stepId: 'supervisor', visit: 1, schema }, onItem: () => {},
+  });
+  let res = await turn(prompt);
+  let cost = res.costUsd || 0;
+  let out;
+  for (let attempt = 0; ; attempt++) {
+    let errs;
+    try { out = extractJson(res.text); errs = validateSchema(out, schema); } catch (e) { errs = [e.message]; }
+    if (!errs.length) break;
+    if (attempt >= 1) throw new Error(`The supervisor's answer did not validate: ${errs.join('; ')}`);
+    res = await turn(`${prompt}\n\n---\nYou already answered:\n<previous_answer>\n${String(res.text).slice(-20000)}\n</previous_answer>\nIt did not validate (${errs.join('; ')}). Reply again with only the corrected \`\`\`json block.`);
+    cost += res.costUsd || 0;
+  }
+  const markdown = sessionsReportMarkdown(out, { from, to, scope, model });
+  const reportPath = path.join(reportsDir, `sessions-${new Date().toISOString().replace(/[:.]/g, '-')}.md`);
+  fs.writeFileSync(reportPath, markdown);
+  return { report: out, reportPath, markdown, model, costUsd: cost };
+}
+
+module.exports = { analyzeRun, analyzeSessions, SESSIONS_REPORT_SCHEMA, sessionsReportMarkdown, supervisorConfig, DECISION_SCHEMA, IDLE_SCHEMA, ANALYSIS_SCHEMA, actionSchema, decisionPrompt, actionErrorPrompt, idlePrompt, runReport, analysisMarkdown, resumeSpec, skippedGate, withoutGateDecisions, timeline, readEvents };
