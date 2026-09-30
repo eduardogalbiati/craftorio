@@ -141,14 +141,43 @@
     updateAssignNote();
   }
 
+  // Selected issues that already have work in flight: an open PR/MR, or a run in progress or waiting.
+  const prName = (p) => `${bl.data?.platform === 'gitlab' ? 'MR !' : 'PR #'}${p.number}`;
+  function inFlight(i) {
+    const why = (i.pullRequests || []).map((p) => `open ${prName(p)}${p.draft ? ' (draft)' : ''}`);
+    const r = i.runs?.[0];
+    if (r && (r.waiting || r.status === 'running')) why.push(`run ${r.waiting ? 'waiting for approval' : 'in progress'} (${r.workflow || 'workflow'})`);
+    return why;
+  }
+  const busySelected = () => (bl.data?.issues || []).filter((i) => bl.selected.has(i.number) && inFlight(i).length);
+  // The issues the assignment sends: without the busy ones unless the user assigns them anyway.
+  function assignNumbers() {
+    const skip = $b('#assign-skip-busy')?.checked ? new Set(busySelected().map((i) => i.number)) : new Set();
+    return [...bl.selected].filter((n) => !skip.has(n));
+  }
+
+  function renderAssignBusy() {
+    const busy = busySelected();
+    const box = $b('#assign-busy');
+    box.classList.toggle('hidden', !busy.length);
+    if (!busy.length) { box.innerHTML = ''; return; }
+    const plural = busy.length > 1;
+    box.innerHTML = `
+      <span class="warn-text small"><b>${busy.length} of the selected issues ${plural ? 'already have' : 'already has'} work in flight.</b> Starting ${plural ? 'them' : 'it'} again may duplicate it.</span>
+      <ul class="small">${busy.map((i) => `<li>#${i.number} ${esc(i.title)}: ${esc(inFlight(i).join(', '))}</li>`).join('')}</ul>
+      <label class="check"><input type="checkbox" id="assign-skip-busy" checked /><span>Skip ${plural ? 'them' : 'it'} (uncheck to assign anyway)</span></label>`;
+    $b('#assign-skip-busy').onchange = updateAssignNote;
+  }
+
   function updateAssignNote() {
-    const n = bl.selected.size;
+    const n = assignNumbers().length;
     const mock = $b('#assign-mock').checked;
     const plural = n > 1 ? 's' : '';
+    $b('#btn-assign-ok').disabled = !n;
     $b('#btn-assign-ok').textContent = `${mock ? 'Simulate' : 'Start'} ${n} run${plural}`;
     const note = $b('#assign-note');
     note.className = `small ${mock ? 'muted' : 'warn-text'}`;
-    note.textContent = mock
+    note.textContent = !n ? 'Nothing to start: every selected issue is skipped.' : mock
       ? `${n} simulated run${plural}: no CLI is called and nothing is spent.`
       : `${n} real run${plural}, one at a time, starting now if nothing else is running. They use your CLI subscriptions. Human gates still wait for you.`;
   }
@@ -165,6 +194,7 @@
     const files = bl.workflows.map((w) => w.file);
     sel.value = [load(WORKFLOW_KEY), 'software-development.yaml', files[0]].find((f) => f && files.includes(f));
     $b('#assign-mock').checked = devMode();
+    renderAssignBusy();
     renderAssignInputs();
     openModal('#assign-modal');
   }
@@ -174,10 +204,12 @@
     const workflow = $b('#assign-workflow').value;
     const inputs = {};
     document.querySelectorAll('#assign-inputs [data-input]').forEach((el) => { if (el.value.trim() !== '') inputs[el.dataset.input] = el.value.trim(); });
+    const numbers = assignNumbers();
+    if (!numbers.length) return;
     const btn = $b('#btn-assign-ok');
     btn.disabled = true;
     try {
-      const data = await api.assignWorkflow(bl.projectId, [...bl.selected], workflow, inputs, devMode() && $b('#assign-mock').checked);
+      const data = await api.assignWorkflow(bl.projectId, numbers, workflow, inputs, devMode() && $b('#assign-mock').checked);
       save(WORKFLOW_KEY, workflow);
       bl.selected.clear();
       setData(data);
@@ -205,6 +237,9 @@
   };
   const runLink = (r) => `<button class="bl-run" type="button" data-run="${esc(r.runId)}" data-workflow="${esc(r.workflow || '')}" title="Open run ${esc(r.runId)} as a chat">
       <span class="pill pill-${esc(r.status)}">${esc(r.waiting ? 'waiting' : r.status)}</span><span>${esc(r.workflow || 'workflow')}</span>${r.mock ? '<span class="badge p-mock">simulated</span>' : ''}</button>`;
+  // Open PRs/MRs that refer to the issue, each a link to it.
+  const prBadges = (i) => (i.pullRequests || []).map((p) =>
+    `<a class="badge bl-pr${p.draft ? ' draft' : ''}" href="${esc(p.url)}" target="_blank" rel="noopener" title="${esc(`Open ${p.draft ? 'draft ' : ''}${prName(p)}: ${p.title}`)}">${esc(prName(p))}</a>`).join('');
   const checkbox = (i) => (selectable(i) ? `<input type="checkbox" class="bl-check" data-sel="${i.number}" aria-label="Select #${i.number}"${bl.selected.has(i.number) ? ' checked' : ''} />` : '');
   // What the automation is doing with the issue: queued, its latest run, the gate waiting for you.
   function status(i) {
@@ -230,7 +265,7 @@
             <div class="bl-title">${esc(i.title)}</div>
             <div class="bl-labels">${labels(i)}</div>
           </div>
-          <span class="bl-status">${status(i)}</span>
+          <span class="bl-status">${prBadges(i)}${status(i)}</span>
           ${tasks(i) || '<span></span>'}
           <span class="pr-meta"><label>Updated</label>${esc(dateOf(i.updatedAt))}</span>
           <span class="pr-chev">${open ? '▾' : '▸'}</span>
@@ -238,6 +273,7 @@
         ${open ? `
         <div class="pr-body">
           <div class="muted small">Opened by ${esc(i.author || 'unknown')} on ${esc(dateOf(i.createdAt))}${i.assignees.length ? ` · assigned to ${esc(i.assignees.join(', '))}` : ''}</div>
+          ${i.pullRequests?.length ? `<div class="bl-prs"><span class="muted small">Open ${bl.data?.platform === 'gitlab' ? 'MRs' : 'PRs'}</span>${i.pullRequests.map((p) => `<span class="small">${prBadges({ pullRequests: [p] })} ${esc(p.title)}</span>`).join('')}</div>` : ''}
           ${i.runs?.length ? `<div class="bl-runs"><span class="muted small">Runs</span>${i.runs.map(runLink).join('')}</div>` : ''}
           <div class="md bl-md">${i.body.trim() ? markdownHtml(i.body) : '<p class="muted">No description.</p>'}</div>
           <div><a class="btn sm ghost" href="${esc(i.url)}" target="_blank" rel="noopener">Open on ${esc(host)}</a></div>
@@ -250,7 +286,7 @@
       <div class="bl-card-head">${checkbox(i)}<span class="bl-num mono">#${i.number}</span><a class="bl-card-title" href="${esc(i.url)}" target="_blank" rel="noopener" title="Open on ${esc(PLATFORMS[bl.data?.platform]?.label || 'the platform')}">${esc(i.title)}</a></div>
       <div class="bl-labels">${labels(i)}</div>
       ${tasks(i)}
-      ${status(i) ? `<div class="bl-card-run">${status(i)}</div>` : ''}
+      ${prBadges(i) || status(i) ? `<div class="bl-card-run">${prBadges(i)}${status(i)}</div>` : ''}
     </div>`;
 
   function renderList(issues) {
@@ -273,12 +309,17 @@
     const box = $b('#bl-queue');
     const q = bl.data?.queue;
     const n = q?.items?.length || 0;
-    box.classList.toggle('hidden', !n && !q?.error);
-    if (!n && !q?.error) { box.innerHTML = ''; return; }
+    const skipped = q?.skipped || [];
+    box.classList.toggle('hidden', !n && !q?.error && !skipped.length);
+    if (!n && !q?.error && !skipped.length) { box.innerHTML = ''; return; }
     const mode = q.paused ? '<span class="badge warn">paused</span>' : '<span class="badge live">active</span>';
+    // issues taken out right before their start, with why (removing one dismisses it)
+    const skips = skipped.map((s) => `<span class="bl-skipped small"><span class="warn-text">Skipped #${s.number}: ${esc(s.reason)}</span>
+      <button class="link-btn small" type="button" data-unqueue="${s.number}" title="Dismiss">dismiss</button></span>`).join('');
     box.innerHTML = `
       <span><b>Queue</b> ${mode} ${n ? `${n} issue${n > 1 ? 's' : ''} waiting · next #${q.items[0].number} (${esc(q.items[0].workflowName || q.items[0].workflow)})` : 'empty'}</span>
       ${q.error ? `<span class="error small">${esc(q.error)}</span>` : ''}
+      ${skips}
       <span class="spacer"></span>
       <button class="btn sm${q.paused ? ' primary' : ' ghost'}" type="button" data-pause="${q.paused ? 'off' : 'on'}">${q.paused ? 'Resume' : 'Pause'}</button>`;
   }
@@ -314,7 +355,8 @@
     filters.innerHTML = FILTERS.map(([f, label]) =>
       `<button class="chip${bl.filter === f ? ' active' : ''}" data-f="${f}">${label} <span class="muted">${count(f)}</span></button>`).join('');
     $b('#bl-synced').textContent = bl.syncing ? 'Syncing…' : bl.data ? `Synced ${dateOf(bl.data.syncedAt)} from ${PLATFORMS[bl.data.platform]?.label || bl.data.platform}` : '';
-    $b('#bl-error').textContent = bl.error || '';
+    const prError = bl.data?.pullRequestsError ? `Open ${bl.data.platform === 'gitlab' ? 'MRs' : 'PRs'} could not be read: ${bl.data.pullRequestsError}` : '';
+    $b('#bl-error').textContent = bl.error || prError;
     renderQueue();
 
     const list = $b('#bl-list');
@@ -354,6 +396,12 @@
     if (f) { bl.filter = f; render(); }
   };
   $b('#bl-queue').onclick = async (e) => {
+    const out = e.target.closest('[data-unqueue]');
+    if (out) {
+      try { setData(await api.unqueueIssue(bl.projectId, Number(out.dataset.unqueue))); } catch (err) { bl.error = errMsg(err); }
+      render();
+      return;
+    }
     const b = e.target.closest('[data-pause]');
     if (!b) return;
     b.disabled = true;

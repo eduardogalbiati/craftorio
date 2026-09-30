@@ -889,6 +889,13 @@ body.resizing-dock .term-body { pointer-events: none; }
 .bl-status { display: flex; align-items: center; gap: 6px; justify-self: end; }
 .bl-queued { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .bl-card-run { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.bl-queue { display: flex; align-items: center; gap: 12px; padding: 8px 12px; margin-bottom: 12px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; }
+.bl-queue { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 8px 12px; margin-bottom: 12px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; }
 .bl-queue .error { margin: 0; }
 #assign-issues { max-height: 90px; overflow: auto; }
+.bl-pr { color: var(--green); text-decoration: none; }
+.bl-pr:hover { text-decoration: underline; }
+.bl-pr.draft { color: var(--muted); }
+.bl-prs { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.bl-busy { border: 1px solid var(--yellow); border-radius: 8px; padding: 8px 10px; margin: 8px 0; display: grid; gap: 6px; }
+.bl-busy ul { margin: 0; padding-left: 18px; }
+.bl-skipped { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }

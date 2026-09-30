@@ -208,6 +208,33 @@ test('backlog: queues are paused when the workspace opens; a start that fails pa
   assert.ok(!service.isRunning());
 });
 
+test('backlog: the dispatcher re-checks for an open PR right before starting a queued issue and skips it', async (t) => {
+  const { service, api } = makeService(t);
+  const ws = service.workspace();
+  const backlog = require('../src/backlog');
+  fs.writeFileSync(path.join(ws.workflows, 'fixture-issue.yaml'), ISSUE_WORKFLOW);
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'service-backlog-recheck-'));
+  t.after(() => fs.rmSync(folder, { recursive: true, force: true }));
+  const p = await api['projects:create']({ name: 'demo', folder });
+  api['projects:update']({ id: p.id, patch: { repo: 'https://github.com/o/r' } });
+  const issue = { number: 1, title: 'Issue 1', state: 'open', url: 'https://github.com/o/r/issues/1', body: 'Do it', labels: [], assignees: [], tasks: { done: 0, total: 0 } };
+  fs.mkdirSync(ws.backlog, { recursive: true });
+  fs.writeFileSync(path.join(ws.backlog, `${p.id}.json`), JSON.stringify({ projectId: p.id, platform: 'github', repo: 'https://github.com/o/r', issues: [issue] }));
+
+  const seen = [];
+  t.mock.method(backlog, 'newPullRequests', async (args) => {
+    seen.push(args.item.number);
+    return [{ number: 9, title: 'Fix (#1)', url: 'https://github.com/o/r/pull/9', draft: false }];
+  });
+  const data = await api['backlog:assign']({ projectId: p.id, numbers: [1], workflow: 'fixture-issue.yaml', mock: false });
+
+  assert.deepEqual(seen, [1]);
+  assert.deepEqual(data.queue.items, []); // taken out instead of started
+  assert.deepEqual(data.queue.skipped.map((s) => [s.number, s.reason]), [[1, 'open PR #9 since it was queued']]);
+  assert.ok(!service.isRunning());
+  assert.deepEqual(api['runs:list']().runs, []);
+});
+
 // ---- concurrent runs (Settings › Execution › Concurrent runs) --------------------------------
 const until = async (fn) => { for (let i = 0; i < 200 && !fn(); i++) await new Promise((r) => setTimeout(r, 50)); assert.ok(fn()); };
 

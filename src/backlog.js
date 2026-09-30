@@ -106,6 +106,72 @@ async function fetchIssues({ platform, repo, exec = execCli }) {
   return normalizeGitlab(JSON.parse(out || '[]'));
 }
 
+// ---- open pull/merge requests ----------------------------------------------------------------
+// An issue already has work in flight when an open PR/MR refers to it: GitHub's closing references,
+// a closing keyword ("Fixes #12") or a link to the issue in the description, or "#12" in the title
+// (this repository's own convention: "Add X (#12)").
+const CLOSING = /\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?|implement(?:s|ed)?)\b[:\s]+((?:[^\s#]*#\d+[,\s]*(?:and\s+)?)+)/gi;
+
+/**
+ * The issue numbers a PR/MR refers to. `issuesUrl` is the repository's issue URL prefix
+ * (https://github.com/o/r/issues/ or https://gitlab.com/g/r/-/issues/).
+ */
+function referencedIssues({ title = '', body = '', closing = [] }, issuesUrl) {
+  const found = new Set(closing);
+  for (const m of String(title).matchAll(/(?:^|[^\w/&!])#(\d+)(?!\d)/g)) found.add(Number(m[1]));
+  for (const m of String(body).matchAll(CLOSING)) {
+    for (const r of m[1].matchAll(/(?:^|[\s,])#(\d+)(?!\d)/g)) found.add(Number(r[1]));
+  }
+  if (issuesUrl) {
+    const esc = issuesUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    for (const m of `${title}\n${body}`.matchAll(new RegExp(`${esc}(\\d+)(?!\\d)`, 'gi'))) found.add(Number(m[1]));
+  }
+  return [...found].sort((a, b) => a - b);
+}
+
+/**
+ * Every open PR (GitHub) or MR (GitLab) of the repository with the issues it refers to:
+ * { number, title, url, draft, issues: number[] }.
+ * @param {{ platform: string, repo: string, exec?: (cli: string, args: string[]) => Promise<string> }} opts
+ */
+async function fetchOpenPullRequests({ platform, repo, exec = execCli }) {
+  const parsed = parseRepoUrl(repo);
+  if (!parsed || !PLATFORMS[platform]?.cli) return [];
+  if (platform === 'github') {
+    const target = parsed.host === 'github.com' ? parsed.path : `${parsed.host}/${parsed.path}`;
+    const args = (fields) => ['pr', 'list', '--repo', target, '--state', 'open', '--limit', String(MAX_ISSUES), '--json', fields];
+    const fields = 'number,title,url,isDraft,body';
+    let out;
+    try {
+      out = await exec('gh', args(`${fields},closingIssuesReferences`));
+    } catch (e) {
+      // older gh versions do not know closingIssuesReferences: the text references still work
+      if (!/closingIssuesReferences/.test(e.message)) throw e;
+      out = await exec('gh', args(fields));
+    }
+    const issuesUrl = `https://${parsed.host}/${parsed.path}/issues/`;
+    return JSON.parse(out || '[]').map((p) => ({
+      number: p.number, title: p.title, url: p.url, draft: !!p.isDraft,
+      issues: referencedIssues({ title: p.title, body: p.body, closing: (p.closingIssuesReferences || []).map((i) => i.number) }, issuesUrl),
+    }));
+  }
+  const target = parsed.host === 'gitlab.com' ? parsed.path : `https://${parsed.host}/${parsed.path}`;
+  const out = await exec('glab', ['mr', 'list', '--repo', target, '--per-page', '100', '--output', 'json']);
+  const issuesUrl = `https://${parsed.host}/${parsed.path}/-/issues/`;
+  return JSON.parse(out || '[]').map((m) => ({
+    number: m.iid, title: m.title, url: m.web_url, draft: !!(m.draft || m.work_in_progress),
+    issues: referencedIssues({ title: m.title, body: m.description }, issuesUrl),
+  }));
+}
+
+/** Adds to each issue the open PRs/MRs that refer to it: pullRequests: { number, title, url, draft }[]. */
+function attachPullRequests(issues, prs) {
+  return issues.map((issue) => ({
+    ...issue,
+    pullRequests: prs.filter((p) => p.issues.includes(issue.number)).map(({ number, title, url, draft }) => ({ number, title, url, draft })),
+  }));
+}
+
 const cacheFile = (dir, projectId) => path.join(dir, `${path.basename(String(projectId))}.json`);
 
 /** The last sync of a project, or null. */
@@ -119,9 +185,15 @@ function readBacklog(dir, projectId) {
  */
 async function syncBacklog({ dir, project, platform, exec }) {
   if (!project.repo) throw new Error('This project has no repository. Add one in Projects to sync its issues.');
-  const issues = await fetchIssues({ platform, repo: project.repo, exec });
+  // the issues are what the screen needs: PRs that cannot be read leave a note, not an error
+  let pullRequestsError = null;
+  const [fetched, prs] = await Promise.all([
+    fetchIssues({ platform, repo: project.repo, exec }),
+    fetchOpenPullRequests({ platform, repo: project.repo, exec }).catch((e) => { pullRequestsError = e.message; return []; }),
+  ]);
+  const issues = attachPullRequests(fetched, prs);
   issues.sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
-  const data = { projectId: project.id, platform, repo: project.repo, syncedAt: new Date().toISOString(), issues };
+  const data = { projectId: project.id, platform, repo: project.repo, syncedAt: new Date().toISOString(), pullRequestsError, issues };
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(cacheFile(dir, project.id), JSON.stringify(data, null, 2));
   return data;
@@ -170,9 +242,11 @@ function linkRuns(issues, runs, queue = null) {
 // ---- queue -----------------------------------------------------------------------------------
 // Issues assigned to a workflow wait in <workspace>/backlog/<project id>.queue.json until the
 // service starts them while there are free run slots (Settings › Execution › Concurrent runs; one at
-// a time by default): { paused, error, inputs: { <workflow file>: inputs }, items }.
+// a time by default): { paused, error, inputs: { <workflow file>: inputs }, items, skipped }.
+// `skipped` lists the issues taken out right before their start, with the reason (an open PR/MR).
 const queueFile = (dir, projectId) => path.join(dir, `${path.basename(String(projectId))}.queue.json`);
-const emptyQueue = () => ({ paused: false, error: null, inputs: {}, items: [] });
+const emptyQueue = () => ({ paused: false, error: null, inputs: {}, items: [], skipped: [] });
+const MAX_SKIPPED = 20;
 
 function readQueue(dir, projectId) {
   try { return { ...emptyQueue(), ...JSON.parse(fs.readFileSync(queueFile(dir, projectId), 'utf8')) }; } catch { return emptyQueue(); }
@@ -196,8 +270,9 @@ function queueStamp() {
 
 /**
  * Queues issues for a workflow and remembers the inputs used for it in this project. Issues
- * already queued are skipped. Assigning resumes a paused queue.
- * @param {{ issues: { number, url, title, body }[], workflow: string, workflowName?: string, inputs?: object, mock?: boolean }} a
+ * already queued are skipped. Assigning resumes a paused queue. The open PRs/MRs an issue has when
+ * it is assigned were accepted by the user ("assign anyway"): only newer ones skip it later.
+ * @param {{ issues: { number, url, title, body, pullRequests? }[], workflow: string, workflowName?: string, inputs?: object, mock?: boolean }} a
  */
 function enqueue(dir, projectId, { issues, workflow, workflowName = null, inputs = {}, mock = false }) {
   return updateQueue(dir, projectId, (q) => {
@@ -205,13 +280,40 @@ function enqueue(dir, projectId, { issues, workflow, workflowName = null, inputs
     const now = queueStamp();
     const added = issues.filter((i) => !have.has(i.number)).map((i) => ({
       number: i.number, url: i.url, title: i.title, body: i.body || '', workflow, workflowName, inputs, mock: !!mock, addedAt: now,
+      knownPullRequests: (i.pullRequests || []).map((p) => p.url),
     }));
-    return { ...q, paused: false, error: null, inputs: { ...q.inputs, [workflow]: inputs }, items: [...q.items, ...added] };
+    const numbers = new Set(added.map((x) => x.number));
+    return {
+      ...q, paused: false, error: null, inputs: { ...q.inputs, [workflow]: inputs }, items: [...q.items, ...added],
+      skipped: (q.skipped || []).filter((s) => !numbers.has(s.number)),
+    };
   });
 }
 
+// Takes an issue out of the queue (and out of the skipped list).
 function unqueue(dir, projectId, number) {
-  return updateQueue(dir, projectId, (q) => ({ ...q, items: q.items.filter((x) => x.number !== number) }));
+  return updateQueue(dir, projectId, (q) => ({ ...q, items: q.items.filter((x) => x.number !== number), skipped: (q.skipped || []).filter((s) => s.number !== number) }));
+}
+
+/** Takes a queued issue out right before its start and records why (shown by the queue). */
+function skipQueued(dir, projectId, number, reason) {
+  return updateQueue(dir, projectId, (q) => {
+    const item = q.items.find((x) => x.number === number);
+    if (!item) return q;
+    const entry = { number, title: item.title, url: item.url, reason, at: new Date().toISOString() };
+    return { ...q, items: q.items.filter((x) => x !== item), skipped: [...(q.skipped || []).filter((s) => s.number !== number), entry].slice(-MAX_SKIPPED) };
+  });
+}
+
+/**
+ * The open PRs/MRs of a queued issue that were not there when it was assigned (checked again right
+ * before it starts). A check that fails lets the issue start: the last sync had none new either.
+ */
+async function newPullRequests({ item, platform, repo, exec }) {
+  let prs;
+  try { prs = await fetchOpenPullRequests({ platform, repo, exec }); } catch { return []; }
+  const known = new Set(item.knownPullRequests || []);
+  return prs.filter((p) => p.issues.includes(item.number) && !known.has(p.url)).map(({ number, title, url, draft }) => ({ number, title, url, draft }));
 }
 
 function setPaused(dir, projectId, paused, error = null) {
@@ -263,5 +365,6 @@ function runInputs(item, wf, folder) {
 
 module.exports = {
   PLATFORMS, DEFAULT_PLATFORM, parseRepoUrl, platformOfHost, taskProgress, fetchIssues, readBacklog, syncBacklog, linkRuns,
-  readQueue, enqueue, unqueue, setPaused, nextQueued, pauseAll, runInputs,
+  referencedIssues, fetchOpenPullRequests, attachPullRequests,
+  readQueue, enqueue, unqueue, skipQueued, newPullRequests, setPaused, nextQueued, pauseAll, runInputs,
 };

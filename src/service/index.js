@@ -651,6 +651,15 @@ function createService({ host }) {
         try {
           const project = projects.readProject(ws.projects, projectId);
           const wf = loadWorkflow(workflowPath(item.workflow).file);
+          // a PR/MR may have been opened for the issue since it was queued: skip it, don't redo the work
+          if (!item.mock && project.repo) {
+            const platform = backlog.readBacklog(ws.backlog, projectId)?.platform || workspace.readSettings(ws).backlogPlatform || backlog.DEFAULT_PLATFORM;
+            const prs = await backlog.newPullRequests({ item, platform, repo: project.repo });
+            if (prs.length) {
+              backlog.skipQueued(ws.backlog, projectId, item.number, `open ${prs.map((p) => `${platform === 'gitlab' ? 'MR !' : 'PR #'}${p.number}`).join(', ')} since it was queued`);
+              continue;
+            }
+          }
           await startWorkflowRun({
             file: item.workflow, inputs: backlog.runInputs(item, wf, project.folder), mock: item.mock,
             projectId, issue: { number: item.number, url: item.url, title: item.title },

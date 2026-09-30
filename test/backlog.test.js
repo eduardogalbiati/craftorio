@@ -98,6 +98,106 @@ test('sync caches the issues per project, newest update first', async (t) => {
   assert.deepEqual(backlog.readBacklog(dir, '../p'), data);
 });
 
+// ---- open PRs/MRs ------------------------------------------------------------------------------
+// A fake CLI runner answering per subcommand ("issue" / "pr" / "mr"); an Error answer rejects.
+function routedExec(answers) {
+  const calls = [];
+  const exec = async (cli, args) => {
+    calls.push([cli, ...args]);
+    const out = typeof answers[args[0]] === 'function' ? answers[args[0]](args) : answers[args[0]];
+    if (out instanceof Error) throw out;
+    return JSON.stringify(out ?? []);
+  };
+  return { exec, calls };
+}
+
+test('a PR refers to issues by closing keyword, link, title "#n" or closing reference', () => {
+  const url = 'https://github.com/o/r/issues/';
+  assert.deepEqual(backlog.referencedIssues({ title: 'Warn before assigning (#35)', body: '' }, url), [35]);
+  assert.deepEqual(backlog.referencedIssues({ title: 'x', body: 'Fixes #12, #13 and #14.\nCloses: #2' }, url), [2, 12, 13, 14]);
+  assert.deepEqual(backlog.referencedIssues({ title: 'x', body: 'See https://github.com/o/r/issues/50 for context' }, url), [50]);
+  assert.deepEqual(backlog.referencedIssues({ title: 'x', body: '', closing: [7] }, url), [7]);
+  // mentions without a keyword, other repositories, MR refs and look-alikes do not count
+  assert.deepEqual(backlog.referencedIssues({
+    title: 'Follow-up of !4 and a/#5, &#6;',
+    body: 'Related to #40. Fixes o/other#41. https://github.com/o/other/issues/42 https://github.com/o/r/pull/43',
+  }, url), []);
+  assert.deepEqual(backlog.referencedIssues({ title: 'Ünïcode ✓ (#9)', body: null }, url), [9]);
+});
+
+test('GitHub open PRs come from gh with the issues they refer to', async () => {
+  const { exec, calls } = routedExec({ pr: [
+    { number: 33, title: 'Concurrent runs (#32)', url: 'https://github.com/o/r/pull/33', isDraft: false, body: '', closingIssuesReferences: [{ number: 30 }] },
+    { number: 34, title: 'WIP', url: 'https://github.com/o/r/pull/34', isDraft: true, body: 'Resolves https://github.com/o/r/issues/31' },
+  ] });
+  const prs = await backlog.fetchOpenPullRequests({ platform: 'github', repo: 'git@github.com:o/r.git', exec });
+  assert.deepEqual(calls[0].slice(0, 7), ['gh', 'pr', 'list', '--repo', 'o/r', '--state', 'open']);
+  assert.deepEqual(prs, [
+    { number: 33, title: 'Concurrent runs (#32)', url: 'https://github.com/o/r/pull/33', draft: false, issues: [30, 32] },
+    { number: 34, title: 'WIP', url: 'https://github.com/o/r/pull/34', draft: true, issues: [31] },
+  ]);
+});
+
+test('an older gh without closing references still reads the PRs; other gh errors surface', async () => {
+  const old = routedExec({ pr: (args) => (args.at(-1).includes('closingIssuesReferences')
+    ? new Error('gh pr list failed: Unknown JSON field: "closingIssuesReferences"')
+    : [{ number: 3, title: 'Fix (#1)', url: 'u3', body: '' }]) });
+  assert.deepEqual((await backlog.fetchOpenPullRequests({ platform: 'github', repo: 'https://github.com/o/r', exec: old.exec })).map((p) => p.issues), [[1]]);
+  assert.equal(old.calls.length, 2);
+  const down = routedExec({ pr: new Error('gh pr list failed: not logged in') });
+  await assert.rejects(backlog.fetchOpenPullRequests({ platform: 'github', repo: 'https://github.com/o/r', exec: down.exec }), /not logged in/);
+});
+
+test('GitLab open MRs come from glab with the issues they refer to', async () => {
+  const { exec, calls } = routedExec({ mr: [
+    { iid: 4, title: 'Draft: login', web_url: 'https://gitlab.corp/g/r/-/merge_requests/4', draft: true, description: 'Closes #7 and https://gitlab.corp/g/r/-/issues/8' },
+  ] });
+  const prs = await backlog.fetchOpenPullRequests({ platform: 'gitlab', repo: 'git@gitlab.corp:g/r.git', exec });
+  assert.deepEqual(calls[0].slice(0, 5), ['glab', 'mr', 'list', '--repo', 'https://gitlab.corp/g/r']);
+  assert.deepEqual(prs, [{ number: 4, title: 'Draft: login', url: 'https://gitlab.corp/g/r/-/merge_requests/4', draft: true, issues: [7, 8] }]);
+});
+
+test('sync shows each issue its open PRs; PRs that cannot be read leave a note, not an error', async (t) => {
+  const dir = tmp(t);
+  const project = { id: 'p', repo: 'https://github.com/o/r' };
+  const issues = [{ ...GH_ISSUE, number: 32 }, { ...GH_ISSUE, number: 35 }];
+  const ok = routedExec({ issue: issues, pr: [{ number: 33, title: 'Concurrent runs (#32)', url: 'https://github.com/o/r/pull/33', isDraft: false, body: '' }] });
+  let data = await backlog.syncBacklog({ dir, project, platform: 'github', exec: ok.exec });
+  const by = () => Object.fromEntries(data.issues.map((i) => [i.number, i.pullRequests]));
+  assert.deepEqual(by(), { 32: [{ number: 33, title: 'Concurrent runs (#32)', url: 'https://github.com/o/r/pull/33', draft: false }], 35: [] });
+  assert.equal(data.pullRequestsError, null);
+
+  const noPrs = routedExec({ issue: issues, pr: new Error('gh pr list failed: HTTP 502') });
+  data = await backlog.syncBacklog({ dir, project, platform: 'github', exec: noPrs.exec });
+  assert.deepEqual(by(), { 32: [], 35: [] });
+  assert.match(data.pullRequestsError, /HTTP 502/);
+});
+
+test('right before a queued issue starts: only PRs opened since it was assigned skip it, and the queue says why', async (t) => {
+  const dir = tmp(t);
+  const pr = (number, issue) => ({ number, title: `PR ${number} (#${issue})`, url: `https://github.com/o/r/pull/${number}`, body: '' });
+  // #1 was assigned anyway with PR 10 open; #2 had none
+  let q = backlog.enqueue(dir, 'p', { workflow: 'sd.yaml', issues: [
+    { number: 1, url: 'i1', title: 'One', pullRequests: [{ number: 10, url: 'https://github.com/o/r/pull/10' }] },
+    { number: 2, url: 'i2', title: 'Two' },
+  ] });
+  const check = (item, answer) => backlog.newPullRequests({ item, platform: 'github', repo: 'https://github.com/o/r', exec: routedExec({ pr: answer }).exec });
+  assert.deepEqual(await check(q.items[0], [pr(10, 1)]), []);
+  assert.deepEqual(await check(q.items[1], [pr(10, 1)]), []);
+  assert.deepEqual((await check(q.items[1], [pr(10, 1), pr(11, 2)])).map((p) => p.number), [11]);
+  assert.deepEqual(await check(q.items[1], new Error('offline')), []); // the check failing lets it start
+
+  q = backlog.skipQueued(dir, 'p', 2, 'open PR #11 since it was queued');
+  assert.deepEqual(q.items.map((x) => x.number), [1]);
+  assert.deepEqual(q.skipped.map((s) => [s.number, s.title, s.reason]), [[2, 'Two', 'open PR #11 since it was queued']]);
+  assert.equal(backlog.nextQueued(dir).item.number, 1);
+  // assigning it again, or dismissing it, clears the note
+  q = backlog.enqueue(dir, 'p', { workflow: 'sd.yaml', issues: [{ number: 2, url: 'i2', title: 'Two' }] });
+  assert.deepEqual(q.skipped, []);
+  backlog.skipQueued(dir, 'p', 2, 'again');
+  assert.deepEqual(backlog.unqueue(dir, 'p', 2).skipped, []);
+});
+
 test('issues link to the runs that mention them and land in a kanban column', () => {
   const issue = (number, state) => ({ number, state, url: `https://github.com/o/r/issues/${number}` });
   const runs = [
@@ -144,7 +244,7 @@ test('a run started for an issue links to it even when simulated; its state pick
 test('the queue: enqueue skips duplicates and remembers inputs, next item across projects, pause', (t) => {
   const dir = tmp(t);
   const issue = (number) => ({ number, url: `u${number}`, title: `T${number}`, body: `B${number}` });
-  assert.deepEqual(backlog.readQueue(dir, 'p'), { paused: false, error: null, inputs: {}, items: [] });
+  assert.deepEqual(backlog.readQueue(dir, 'p'), { paused: false, error: null, inputs: {}, items: [], skipped: [] });
   assert.equal(backlog.nextQueued(dir), null);
 
   backlog.setPaused(dir, 'p', true, 'stopped');
