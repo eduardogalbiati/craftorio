@@ -15,6 +15,7 @@ const crypto = require('crypto');
 const path = require('path');
 const readline = require('readline');
 const { refuseReal } = require('./simulation');
+const { AGENT_ENV } = require('./capabilities');
 
 const emptyUsage = () => ({ input: 0, output: 0, cache_read: 0, cache_write: 0, reasoning: 0 });
 
@@ -301,6 +302,8 @@ function runCli(opts, parser) {
   const env = { ...process.env };
   delete env.CLAUDECODE; // avoids the "nested session" block if the app is launched from inside Claude Code
   Object.assign(env, gitConfigEnv(env, { 'rerere.enabled': 'true' }));
+  // agents' own checks never start real runs, and need no `VAR=value` prefix (refused by allowlists)
+  Object.assign(env, AGENT_ENV);
 
   if (promptFile) fs.writeFileSync(promptFile, prompt);
 

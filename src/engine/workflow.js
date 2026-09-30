@@ -1690,8 +1690,13 @@ class WorkflowRun extends EventEmitter {
     // a fresh session of an agent that already worked in this run (or the run it resumes) starts from its note
     const note = turn === 1 ? this.handoffNotes.get(agentName) : null;
     const parts = [];
-    if (turn === 1 && (agent.system_prompt || agentSkills.length)) {
-      const system = [render(agent.system_prompt, this.ctx).trim(), ...agentSkills.map(skillPrompt)].filter(Boolean).join('\n\n');
+    const caps = capabilities.merge(agent.capabilities, stepCaps);
+    // agents with commands: the folders they may write to, and how to run commands unattended
+    const runDirs = capabilities.runDirs(caps, this.runDir);
+    for (const dir of runDirs) fs.mkdirSync(dir, { recursive: true });
+    const guide = capabilities.commandGuide(caps, this.runDir);
+    if (turn === 1 && (agent.system_prompt || agentSkills.length || guide)) {
+      const system = [render(agent.system_prompt, this.ctx).trim(), guide, ...agentSkills.map(skillPrompt)].filter(Boolean).join('\n\n');
       parts.push(`<system>\n${system}\n</system>`);
     }
     if (note) {
@@ -1704,10 +1709,9 @@ class WorkflowRun extends EventEmitter {
     const provider = this.mock ? { type: 'mock' } : this.wf.providers?.[agent.provider];
     // capabilities + isolation → this CLI's flags (see capabilities.js); cli_args still apply on top
     const providerType = this.wf.providers?.[agent.provider]?.type;
-    const caps = capabilities.merge(agent.capabilities, stepCaps);
     const isolated = agent.isolation !== false;
     const denyEdits = guarded ? this.wf.tests_paths || testPaths.TESTS_PATHS : [];
-    const { args: capArgs, notes } = capabilities.providerArgs(providerType, { caps, isolated, mcpServers: this.wf.mcp_servers || {}, denyEdits });
+    const { args: capArgs, notes } = capabilities.providerArgs(providerType, { caps, isolated, mcpServers: this.wf.mcp_servers || {}, denyEdits, runDir: runDirs.length ? this.runDir : null });
     const capsKey = `${agentName}|${capabilities.describe(caps)}|${guarded}`;
     if (!this.capsLogged.has(capsKey)) {
       this.capsLogged.add(capsKey);

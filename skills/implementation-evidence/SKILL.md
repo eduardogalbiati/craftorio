@@ -73,7 +73,8 @@ show it (a new screen, a new endpoint), capture only "after" and say so.
 - **cli**: run the command exactly as a user would, from the worktree; record the command, exit
   code and the lines that matter.
 - **log**: run the project's simulated/mock mode when it has one (this orchestrator:
-  `npm run run -- --file <workflow> --mock --auto-approve …` with `MULTIAGENT_SIMULATION_ONLY=1`), then
+  `npm run run -- --file <workflow> --mock --auto-approve …`; the run already sets
+  `MULTIAGENT_SIMULATION_ONLY=1` in your environment, never prefix it), then
   quote the log or event lines that show the new behaviour.
 
 ## 5. Answer

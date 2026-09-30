@@ -27,7 +27,8 @@ user-facing doc; the topic docs below are read on demand.
   pull". Commit trailer: `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
 - Real-model calls cost the owner's money: say so and keep them minimal.
 - **Never start real runs in automated checks**: they run with `MULTIAGENT_SIMULATION_ONLY=1`
-  (the engine refuses real runs, real providers and CLI terminals). UI checks go through
+  (the engine refuses real runs, real providers and CLI terminals). Workflow agents already have
+  it in their environment: run `npm test` / `node --test …` without a `VAR=` prefix. UI checks go through
   `scripts/smoke.js` (scratch workspace), never a hand-written script that launches `src/main`.
 - **Add, don't edit shared lists**: document a file in its header comment (the code map is built
   from it) or a topic doc, not here. Shared name lists: one item per line, sorted

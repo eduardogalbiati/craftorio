@@ -48,7 +48,8 @@ and the run cannot recover by itself.
   project has one.
 - UI checks never call real (paid) models: run them through the project's own check scripts
   (`scripts/smoke.js` when it has one), with its simulation-only switch set if it has one
-  (`MULTIAGENT_SIMULATION_ONLY=1`) and a scratch workspace; never a hand-written script that launches
+  (`MULTIAGENT_SIMULATION_ONLY=1`: set in the environment, never as a `VAR=` prefix, which headless
+  CLIs refuse) and a scratch workspace; never a hand-written script that launches
   the app's main process directly.
 - Run them in the **foreground** with a command timeout (`npx electron check.js`). Never start them in
   the background, and never stop them with TaskStop or by killing `npx`: that kills the launcher and
