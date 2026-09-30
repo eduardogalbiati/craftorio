@@ -98,6 +98,20 @@ test('snapshot is null outside a git work tree (nothing to check)', async (t) =>
   assert.deepEqual(await changedTestFiles(null), []);
 });
 
+test('snapshot rejects, instead of returning null, when a .git is present but not a valid repository', async (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'test-paths-badgit-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  fs.mkdirSync(path.join(dir, '.git')); // looks like a repository, but git init never ran
+  await assert.rejects(() => snapshot(dir), /not a git repository/);
+});
+
+test('snapshot rejects when HEAD does not resolve (a repository with no commits yet)', async (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'test-paths-nohead-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  git(dir, 'init', '-q');
+  await assert.rejects(() => snapshot(dir), /Needed a single revision/);
+});
+
 test('loadWorkflow validates edits_tests and tests_paths', (t) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wf-tests-paths-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
@@ -193,4 +207,40 @@ test('edits_tests: true on the step lets that step change tests (e.g. resolving 
   });
   assert.equal(finished.status, 'success', finished.error);
   assert.equal(events.filter((e) => e.type === 'tests.refused').length, 0);
+});
+
+test('edits_tests: false fails the turn with a clear message when the snapshot before it cannot be taken', { timeout: 60000 }, async (t) => {
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'wf-guard-nohead-'));
+  t.after(() => fs.rmSync(repo, { recursive: true, force: true }));
+  git(repo, 'init', '-q'); // a repository with no commits yet: snapshot() cannot resolve HEAD
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wf-guard-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const file = path.join(dir, 'wf.yaml');
+  fs.writeFileSync(file, [
+    'inputs:',
+    '  repo_path: { type: string, required: true }',
+    'providers:',
+    '  claude: { type: claude-code, command: claude }',
+    'defaults:',
+    '  working_dir: "{{ inputs.repo_path }}"',
+    'agents:',
+    '  developer: { provider: claude, model: m, session: handoff, edits_tests: false, capabilities: { tools: [read, edit, write, bash:git] } }',
+    'steps:',
+    '  - id: develop',
+    '    agent: developer',
+    '    prompt: "Implement the feature."',
+    '    output_schema: { type: object, required: [summary], properties: { summary: { type: string } } }',
+    '    transitions:',
+    '      - { when: "true", goto: end }',
+    '',
+  ].join('\n'));
+  const run = new WorkflowRun({ file, inputs: { repo_path: repo }, mock: true, runsDir: path.join(dir, 'runs'), skillsDirs: [] });
+  const events = [];
+  run.on('event', (ev) => events.push(ev));
+  await run.start();
+  const finished = events.find((e) => e.type === 'workflow.finished');
+  assert.equal(finished.status, 'failed');
+  assert.match(finished.error, /Could not snapshot the test files before developer's turn in develop \(edits_tests: false\)/);
+  // the turn itself never ran: an unchecked snapshot must not let the turn through the guard
+  assert.equal(events.filter((e) => e.type === 'session.message_sent' && e.step_id === 'develop').length, 0);
 });
