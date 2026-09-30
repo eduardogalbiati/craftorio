@@ -208,11 +208,9 @@ function removeScratch(dir) {
 
 /** The usage: this file's header comment, without the comment markers. */
 function usage() {
-  const lines = fs.readFileSync(__filename, 'utf8').split(/?
-/);
+  const lines = fs.readFileSync(__filename, 'utf8').split(/\r?\n/);
   const end = lines.findIndex((l) => !l.startsWith('//'));
-  return lines.slice(0, end).map((l) => l.replace(/^// ?/, '')).join('
-');
+  return lines.slice(0, end).map((l) => l.replace(/^\/\/ ?/, '')).join('\n');
 }
 
 // ---- the capture (Electron main process) -----------------------------------------------------

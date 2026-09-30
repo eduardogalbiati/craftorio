@@ -21,7 +21,7 @@ function tmp(t) {
 test('--help prints the header comment: every option, without comment markers', () => {
   const text = usage();
   for (const opt of ['--view', '--tab', '--click', '--ref', '--out', '--name', '--caption', '--before']) assert.match(text, new RegExp(opt));
-  assert.doesNotMatch(text, /^///m);
+  assert.doesNotMatch(text, /^\/\//m);
 });
 
 test('parseArgs names the file after the scenario and checks options against the view', () => {
