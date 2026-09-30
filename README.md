@@ -292,6 +292,8 @@ What is shared by a family lives in a suffix-less skill referenced with `uses:`.
 | `ci-pipeline-{gh,gl}` | CI pusher | Push, PR/MR, mergeability (conflicts fail fast), CI status, missing checks, fetching failed logs, retrying flaky jobs |
 | `ci-failure-triage` | via `uses` | Classify a failure (code, environment, infrastructure, needs-human) and write a root-cause report |
 | `pr-description` | via `uses` | PR/MR title and body: visual summary, evidence, merge danger |
+| `issue-creator-{gh,gl}` | backlog planner (#30), any agent that files issues | Search for duplicates, create/comment/edit issues with gh or glab, existing labels only |
+| `issue-writing` | via `uses` | Issue structure: concrete context with evidence, decisions taken, a checklist of verifiable acceptance criteria, related issues |
 | `pr-babysitter-{gh,gl}` | PR babysitter | Mergeability signals, threads/discussions, replies |
 | `pr-comment-triage` | via `uses` | Actionable vs doubtful comments, durable fix requests, resume logic, AI marker on replies |
 | `deploy-{gh,gl}` | deployer | Preview and production deploy tracking and cleanup |
