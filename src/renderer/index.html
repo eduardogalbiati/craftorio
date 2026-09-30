@@ -1329,7 +1329,7 @@
         <h4>1. Set up a run</h4>
         <ul>
           <li><b>Request</b>: what to write (a PRD, an ADR, a tech spec…).</li>
-          <li><b>Project</b> (optional): the models read its files (<b>read-only</b>) to ground their proposals, and a copy of the final document is saved in its <span class="mono">docs/arena</span> folder. Without a project they work from the request only.</li>
+          <li><b>Project</b> (optional): the models read its files (<b>read-only</b>) to ground their proposals; the final document stays in the run folder (workspace), not in the project. Without a project they work from the request only.</li>
           <li><b>Reference documents</b> (optional): text files (Markdown, plain text, JSON, YAML, CSV…) that every model reads, e.g. an existing PRD to improve, research notes or a spec. Attach them with the button or drop them on the card; up to 200 KB each, 400 KB in total. PDF and Word files must be exported to text first. They show up in the chat and in the <b>Documents</b> panel.</li>
           <li><b>Document</b>: the type of document, i.e. the skill with its structure and scoring rubric: <b>PRD</b>, <b>Design doc</b>, <b>RFC</b>, <b>ADR</b>, <b>Test plan</b> or <b>Design sketch</b>. Your own skills named <span class="mono">*-writing</span> show up too.</li>
           <li><b>Blind peer review</b>: each model scores the others' proposals, anonymized as "Proposal 1, 2…", before the synthesis. Better quality, more turns.</li>

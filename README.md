@@ -232,7 +232,7 @@ template filter), the same in every step, so position and labels do not give the
 Base-and-graft, the verify step and the rationale/anti-hedging instructions adapt ideas from the
 arena skill in [cursor/plugins pstack](https://github.com/cursor/plugins/tree/main/pstack) (MIT).
 
-The final document goes to `<run>/arena/final.md` and, with a project, to `<project>/<save_to>/` (default `docs/arena`).
+The final document goes to `<run>/arena/final.md` in the workspace. A copy goes into the project only when the `save_to` input names a subfolder (e.g. `docs/arena`); it is empty by default.
 Its format comes from the skill in the `document_skill` input (default `prd-writing`): for an ADR,
 tech spec and so on, create a skill with the structure and the rubric and pass its name. The
 contenders are five slots (`contender_1` … `contender_5`) set by the inputs `contender_N_provider`,

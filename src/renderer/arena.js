@@ -158,7 +158,7 @@
       `<option value="${esc(p.id)}"${p.exists ? '' : ' disabled'}${p.id === current && p.exists ? ' selected' : ''}>${esc(p.name)}${p.exists ? '' : ' (folder missing)'}</option>`).join('');
     const hint = () => {
       const p = projects.find((x) => x.id === sel.value);
-      $a('#arena-project-hint').textContent = p ? `${p.folder}: read-only for the models; the final document is copied to docs/arena.` : 'The models read its files (read-only) and a copy of the final document is saved in it.';
+      $a('#arena-project-hint').textContent = p ? `${p.folder}: read-only for the models; the final document stays in the run folder (workspace).` : 'The models read its files (read-only); the final document stays in the run folder (workspace).';
     };
     sel.onchange = hint;
     hint();

@@ -70,8 +70,8 @@ inputs:
     description: "on = each contender writes under a different forced lens (user value, lean MVP, risk first, feasibility, evidence) for more divergent proposals."
   save_to:
     type: string
-    default: docs/arena
-    description: Project subfolder where the final document is copied (it is always kept in arena/final.md in the run folder).
+    default: ""
+    description: Project subfolder where a copy of the final document is saved (e.g. docs/arena). Empty (the default) keeps it only in the run folder, arena/final.md in the workspace.
   # The contenders: `none` leaves a slot out. At least two are needed for the critique.
   contender_1_provider: { type: string, enum: [none, claude, codex, grok], default: claude, description: CLI of contender 1. }
   contender_1_model:    { type: string, default: claude-opus-5-5 }
