@@ -8,6 +8,8 @@ const { WorkflowRun } = require('../src/engine/workflow');
 const supervisor = require('../src/supervisor');
 
 process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.02';
+process.env.MULTIAGENT_SIMULATION_ONLY = '1'; // tests never call real models
+const SKILLS_DIR = path.join(__dirname, '..', 'skills'); // the bundled run-supervisor skill
 
 const WF = `
 apiVersion: multiagent/v1
@@ -206,4 +208,27 @@ test('actionErrorPrompt: gives the error, the engine\'s PR/MR check, the recover
   assert.match(prompt, /## PR\/MR state checked by the engine\nconflict: the PR now conflicts with main/);
   assert.match(prompt, /go back to one of resolve_conflict/);
   assert.match(prompt, /stops at the gate "merge_failed"/);
+});
+
+test('analyzeSessions: mock writes a report on the range and returns it, with model "simulated"', async (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sup-reports-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const result = await supervisor.analyzeSessions({
+    report: '# Sessions from 2026-09-01 to 2026-09-30 (orchestrator runs)\nTotal: 1,000 tokens, $0.50, 3 sessions.',
+    from: '2026-09-01', to: '2026-09-30', scope: 'orchestrator', reportsDir: dir, skillsDirs: [SKILLS_DIR], mock: true,
+  });
+  assert.equal(result.model, 'simulated');
+  assert.deepEqual(Object.keys(result.report).sort(), ['complexity', 'patterns', 'suggestions', 'summary', 'uses'].sort());
+  assert.match(result.markdown, /# Sessions report: 2026-09-01 to 2026-09-30/);
+  assert.match(result.reportPath, /sessions-.*\.md$/);
+  assert.equal(fs.readFileSync(result.reportPath, 'utf8'), result.markdown);
+});
+
+test('analyzeSessions: without mock, under simulation-only, it rejects', async (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sup-reports-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  await assert.rejects(supervisor.analyzeSessions({
+    report: 'x', from: '2026-09-01', to: '2026-09-30', scope: 'orchestrator', reportsDir: dir, skillsDirs: [SKILLS_DIR],
+    resolveCommand: () => true, mock: false,
+  }), /Simulation only/);
 });

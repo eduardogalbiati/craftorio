@@ -121,6 +121,14 @@ test('with simulation only, real runs and CLI terminals are refused', async (t) 
   assert.equal(api['app:info']().simulationOnly, true);
 });
 
+test('analytics: computes a snapshot of the (empty) workspace and refuses a real supervisor call without mock', async (t) => {
+  const { api } = makeService(t);
+  const snapshot = api['analytics:get']({ scope: 'orchestrator' });
+  assert.equal(snapshot.scope, 'orchestrator');
+  assert.equal(snapshot.totals.sessions, 0);
+  await assert.rejects(api['analytics:analyze']({ scope: 'orchestrator', mock: false }), /Simulation only .*supervisor's CLI/);
+});
+
 test('a run starts only if the host allows it (account / free trial)', async (t) => {
   const { service, api } = makeService(t);
   // the account check comes after the simulation-only guard: lift it for this real-run request

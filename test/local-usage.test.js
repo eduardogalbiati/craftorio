@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { readLocalUsage, parseClaude, parseCodex, parseGrok } = require('../src/local-usage');
+const { readLocalUsage, parseClaude, parseCodex, parseGrok, IDLE_GAP_MS } = require('../src/local-usage');
 const usage = require('../src/usage');
 
 const NOW = new Date('2026-09-27T12:00:00Z');
@@ -106,4 +106,172 @@ test('machine scope: all local usage, the orchestrator part matched by session i
   assert.equal(base.claude.usedTokens, 352);
   assert.equal(base.claude.countOutside, true);
   assert.equal(base.codex.usedTokens, 0);
+});
+
+// ---- per-session metrics (Analytics) --------------------------------------------------------
+
+test('parseClaude: per-session metrics from prompts, tool_use blocks, tool results, interrupts and compactions', () => {
+  const t1 = '2026-09-27T09:00:00Z'; // typed prompt
+  const t2 = '2026-09-27T09:01:00Z'; // assistant turn 1 (streamed in two chunks, same message.id)
+  const t3 = new Date(Date.parse(t2) + IDLE_GAP_MS + 5000).toISOString(); // > the idle gap: excluded from active time
+  const t4 = new Date(Date.parse(t3) + 5000).toISOString();
+  const t5 = new Date(Date.parse(t4) + 50000).toISOString(); // assistant turn 2
+  const t6 = new Date(Date.parse(t5) + 5000).toISOString(); // isMeta: not a prompt
+  const t7 = new Date(Date.parse(t6) + 5000).toISOString(); // toolUseResult: not a prompt
+  const sessionId = 'metrics-claude-1';
+  const text = jl(
+    { type: 'system', subtype: 'compact_boundary', sessionId },
+    { type: 'user', sessionId, timestamp: t1, cwd: 'C:\\proj', message: { content: 'Please add tests for the login flow' } },
+    // streamed twice: the tool_use id "t-read" is deduplicated, "t-grep" is only in the second chunk
+    { type: 'assistant', sessionId, timestamp: t2, message: { id: 'm1', model: 'claude-opus-5-5',
+      usage: { input_tokens: 1000, output_tokens: 200, cache_read_input_tokens: 500, cache_creation_input_tokens: 100 },
+      content: [{ type: 'tool_use', id: 't-read', name: 'Read', input: { file_path: 'src/readme-check.js' } }] } },
+    { type: 'assistant', sessionId, timestamp: t2, message: { id: 'm1', model: 'claude-opus-5-5',
+      content: [
+        { type: 'tool_use', id: 't-read', name: 'Read', input: { file_path: 'src/readme-check.js' } },
+        { type: 'tool_use', id: 't-grep', name: 'Grep', input: { pattern: 'TODO' } },
+      ] } },
+    { type: 'user', sessionId, timestamp: t3, message: { content: [
+      { type: 'tool_result', is_error: true, content: "The user doesn't want to proceed with this tool use." },
+      { type: 'tool_result', is_error: true, content: 'Command exited with status 1' },
+    ] } },
+    { type: 'user', sessionId, timestamp: t4, message: { content: '[Request interrupted by user for tool use]' } },
+    { type: 'assistant', sessionId, timestamp: t5, message: { id: 'm2', model: 'claude-opus-5-5',
+      usage: { input_tokens: 2000, output_tokens: 300, cache_read_input_tokens: 800, cache_creation_input_tokens: 50 },
+      content: [
+        { type: 'tool_use', id: 't-edit', name: 'Edit', input: { file_path: 'src/auth.js', old_string: 'a\nb', new_string: 'a\nb\nc' } },
+        { type: 'tool_use', id: 't-write', name: 'Write', input: { file_path: 'src/new-file.js', content: 'x\ny' } },
+        { type: 'tool_use', id: 't-multi', name: 'MultiEdit', input: { file_path: 'src/multi.js', edits: [{ old_string: 'p', new_string: 'p\nq' }, { old_string: 'r\ns\nt', new_string: '' }] } },
+        { type: 'tool_use', id: 't-bash', name: 'Bash', input: { command: 'npm test' } },
+        { type: 'tool_use', id: 't-web', name: 'WebFetch', input: { url: 'https://example.com' } },
+        { type: 'tool_use', id: 't-task', name: 'Task', input: { description: 'run subagent' } },
+        { type: 'tool_use', id: 't-todo', name: 'TodoWrite', input: { todos: [] } },
+      ] } },
+    { type: 'user', sessionId, timestamp: t6, isMeta: true, message: { content: 'This should not count as a prompt.' } },
+    { type: 'user', sessionId, timestamp: t7, toolUseResult: { ok: true }, message: { content: 'This also should not count.' } },
+  );
+  const { sessions } = parseClaude(text);
+  assert.equal(sessions.length, 1);
+  const s = sessions[0];
+  assert.equal(s.userPrompts, 1); // the isMeta and toolUseResult lines are excluded
+  assert.equal(s.firstPrompt, 'Please add tests for the login flow');
+  assert.equal(s.assistantTurns, 2); // m1's two streamed chunks count as one turn
+  assert.deepEqual(s.toolCalls, { read: 2, edit: 3, shell: 1, web: 1, agent: 1, other: 1 });
+  assert.equal(s.failedToolCalls, 2);
+  assert.equal(s.permissionDenials, 1);
+  assert.equal(s.interrupts, 1);
+  assert.equal(s.compactions, 1);
+  assert.equal(s.peakContext, 2850); // max(1000+500+100, 2000+800+50)
+  assert.deepEqual(s.files, ['src/auth.js', 'src/new-file.js', 'src/multi.js']);
+  assert.equal(s.linesAdded, 7); // Edit new_string(3) + Write content(2) + MultiEdit new_string(2)
+  assert.equal(s.linesRemoved, 6); // Edit old_string(2) + MultiEdit old_string(1+3)
+  assert.equal(s.durationMs, Date.parse(t7) - Date.parse(t1));
+  assert.equal(s.activeMs, 60000 + 0 + 5000 + 50000 + 5000 + 5000); // the t2->t3 gap (over IDLE_GAP_MS) is excluded
+  assert.equal(s.sidechain, false);
+  assert.equal(s.cwd, 'C:\\proj');
+});
+
+test('parseCodex: per-session metrics from function/custom tool calls, apply_patch diffs, aborts and compactions', () => {
+  const base = Date.parse('2026-09-27T09:00:00Z');
+  const at = (n) => new Date(base + n * 1000).toISOString();
+  const text = jl(
+    { timestamp: at(0), type: 'session_meta', payload: { id: 'codex-metrics-1', cwd: 'C:\\proj', source: 'exec' } },
+    { timestamp: at(1), type: 'turn_context', payload: { model: 'gpt-6-luna' } },
+    { timestamp: at(2), type: 'event_msg', payload: { type: 'user_message', message: '<environment_context>ignored</environment_context>' } },
+    { timestamp: at(3), type: 'event_msg', payload: { type: 'user_message', message: 'Fix the failing login test' } },
+    { timestamp: at(4), type: 'response_item', payload: { type: 'function_call', name: 'shell', arguments: JSON.stringify({ command: ['bash', '-lc', 'ls'] }) } },
+    { timestamp: at(5), type: 'response_item', payload: { type: 'custom_tool_call', name: 'apply_patch', input: '*** Begin Patch\n*** Update File: src/login.js\n+added line\n-removed line\n*** End Patch' } },
+    { timestamp: at(6), type: 'response_item', payload: { type: 'function_call', name: 'shell', arguments: JSON.stringify({ command: ['bash', '-lc', 'apply_patch <<PATCH\n*** Update File: src/other.js\n+x\n*** End Patch\nPATCH'] }) } },
+    { timestamp: at(7), type: 'response_item', payload: { type: 'function_call_output', output: JSON.stringify({ metadata: { exit_code: 1 }, output: 'error: something failed' }) } },
+    { timestamp: at(8), type: 'response_item', payload: { type: 'function_call_output', output: JSON.stringify({ metadata: { exit_code: 0 }, output: 'ok' }) } },
+    { timestamp: at(9), type: 'event_msg', payload: { type: 'turn_aborted' } },
+    { timestamp: at(10), type: 'compacted', payload: {} },
+    { timestamp: at(11), type: 'event_msg', payload: { type: 'token_count', info: { last_token_usage: { input_tokens: 1500, cached_input_tokens: 200, output_tokens: 100, reasoning_output_tokens: 10 } } } },
+    { timestamp: at(12), type: 'event_msg', payload: { type: 'token_count', info: { last_token_usage: { input_tokens: 900, cached_input_tokens: 100, output_tokens: 50, reasoning_output_tokens: 5 } } } },
+  );
+  const { sessions } = parseCodex(text);
+  assert.equal(sessions.length, 1);
+  const s = sessions[0];
+  assert.equal(s.sessionId, 'codex-metrics-1');
+  assert.equal(s.cwd, 'C:\\proj');
+  assert.equal(s.headless, true);
+  assert.equal(s.model, 'gpt-6-luna');
+  assert.equal(s.userPrompts, 1); // the environment_context message is excluded
+  assert.equal(s.firstPrompt, 'Fix the failing login test');
+  assert.deepEqual(s.toolCalls, { read: 0, edit: 2, shell: 1, web: 0, agent: 0, other: 0 }); // apply_patch (custom_tool_call and inside a shell command) is edit
+  assert.equal(s.failedToolCalls, 1); // only the exit_code: 1 output counts
+  assert.equal(s.permissionDenials, null); // Codex does not record it
+  assert.equal(s.interrupts, 1);
+  assert.equal(s.compactions, 1);
+  assert.equal(s.assistantTurns, 2);
+  assert.equal(s.peakContext, 1500); // max(1500, 900)
+  assert.deepEqual(s.files, ['src/login.js', 'src/other.js']);
+  assert.equal(s.linesAdded, 2);
+  assert.equal(s.linesRemoved, 1);
+  assert.equal(s.sidechain, false);
+});
+
+test('parseGrok: cwd, headless and firstPrompt come from summary.json next to usage.json; missing summary.json does not throw', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'grok-session-'));
+  try {
+    const usagePath = path.join(dir, 'usage.json');
+    const text = JSON.stringify({
+      sessionId: 'grok-metrics-1', session: { primaryModelId: 'grok-5' },
+      turns: [{ startedAt: '2026-09-27T09:00:00Z', endedAt: '2026-09-27T09:05:00Z', inputTokens: 100, cachedReadTokens: 0, outputTokens: 20, reasoningTokens: 0, cacheCreationTokens: 0, costUsdTicks: 1e9 }],
+    });
+    fs.writeFileSync(usagePath, text);
+    fs.writeFileSync(path.join(dir, 'summary.json'), JSON.stringify({ info: { cwd: 'C:\\proj\\grok' }, session_kind: 'headless', session_summary: 'Investigate flaky CI' }));
+    const { sessions } = parseGrok(text, usagePath);
+    assert.equal(sessions.length, 1);
+    const s = sessions[0];
+    assert.equal(s.cwd, 'C:\\proj\\grok');
+    assert.equal(s.headless, true);
+    assert.equal(s.firstPrompt, 'Investigate flaky CI');
+    assert.equal(s.toolCalls, null);
+    assert.equal(s.userPrompts, null);
+    assert.equal(s.files, null);
+    assert.equal(s.assistantTurns, 1);
+    assert.equal(s.peakContext, 100);
+
+    // no summary.json next to this one: cwd/headless/firstPrompt stay unset, nothing throws
+    const dir2 = fs.mkdtempSync(path.join(os.tmpdir(), 'grok-session2-'));
+    try {
+      const usagePath2 = path.join(dir2, 'usage.json');
+      fs.writeFileSync(usagePath2, text);
+      const { sessions: sessions2 } = parseGrok(text, usagePath2);
+      assert.equal(sessions2[0].cwd, null);
+      assert.equal(sessions2[0].headless, false);
+      assert.equal(sessions2[0].firstPrompt, null);
+    } finally { fs.rmSync(dir2, { recursive: true, force: true }); }
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('readLocalUsage: two Claude files with the same session id are merged; a sidechain file adds no active time but its tool calls are added', (t) => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'home-sidechain-'));
+  t.after(() => fs.rmSync(home, { recursive: true, force: true }));
+  const cdir = path.join(home, '.claude', 'projects', 'C--proj');
+  fs.mkdirSync(cdir, { recursive: true });
+  const sessionId = 'shared-session';
+  const main = jl(
+    { type: 'user', sessionId, timestamp: '2026-09-27T09:00:00Z', message: { content: 'Please check the login flow' } },
+    { type: 'assistant', sessionId, timestamp: '2026-09-27T09:01:00Z', message: { id: 'main-m1', model: 'claude-opus-5-5',
+      content: [{ type: 'tool_use', id: 'main-t1', name: 'Read', input: { file_path: 'src/login.js' } }] } },
+  );
+  // a subagent transcript for the same conversation: every line isSidechain
+  const sub = jl(
+    { type: 'user', sessionId, isSidechain: true, timestamp: '2026-09-27T10:00:00Z', message: { content: 'Investigate the auth failure' } },
+    { type: 'assistant', sessionId, isSidechain: true, timestamp: '2026-09-27T10:05:00Z', message: { id: 'sub-m1', model: 'claude-opus-5-5',
+      content: [{ type: 'tool_use', id: 'sub-t1', name: 'Bash', input: { command: 'npm test' } }] } },
+  );
+  fs.writeFileSync(path.join(cdir, 'a-main.jsonl'), main);
+  fs.writeFileSync(path.join(cdir, 'b-sub.jsonl'), sub);
+  const { sessions } = readLocalUsage({ home });
+  const s = sessions.get('claude:shared-session');
+  assert.ok(s);
+  assert.equal(s.sidechain, false);
+  assert.equal(s.userPrompts, 2); // the subagent's own prompt is added
+  assert.equal(s.assistantTurns, 2);
+  assert.deepEqual(s.toolCalls, { read: 1, edit: 0, shell: 1, web: 0, agent: 0, other: 0 }); // the subagent's Bash call is added
+  assert.equal(s.firstPrompt, 'Please check the login flow'); // the subagent's prompt never becomes firstPrompt
+  assert.equal(s.activeMs, 60000); // only the main file's 1-minute gap; the subagent's own time is not added
 });
