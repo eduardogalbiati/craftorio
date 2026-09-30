@@ -7,7 +7,13 @@
 // Days are UTC days, like Usage. A session's metrics are those of the whole session, even when it
 // only partly falls in the range; its tokens and cost are only those in the range.
 
-const { PROVIDERS, providerId, sessionCost, totalTokens, readRuns } = require('./usage');
+const {
+  providerId,
+  PROVIDERS,
+  readRuns,
+  sessionCost,
+  totalTokens,
+} = require('./usage');
 const { TOOL_KINDS } = require('./local-usage');
 
 const DAY = 864e5;
@@ -256,4 +262,12 @@ function analyticsReport(a, { maxSessions = 80 } = {}) {
   ].filter(Boolean).join('\n');
 }
 
-module.exports = { computeAnalytics, dateRange, complexityScore, complexityLevel, sessionIntent, cacheHitRate, analyticsReport };
+module.exports = {
+  analyticsReport,
+  cacheHitRate,
+  complexityLevel,
+  complexityScore,
+  computeAnalytics,
+  dateRange,
+  sessionIntent,
+};

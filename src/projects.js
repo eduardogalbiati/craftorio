@@ -91,4 +91,11 @@ function removeProject(dir, id) {
 }
 
 
-module.exports = { slugify, listProjects, createProject, updateProject, removeProject, readProject };
+module.exports = {
+  createProject,
+  listProjects,
+  readProject,
+  removeProject,
+  slugify,
+  updateProject,
+};

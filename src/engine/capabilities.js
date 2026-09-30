@@ -181,4 +181,13 @@ function describe(caps, type) {
   return [`tools: ${tools.join(', ') || 'none'}`, `web: ${c.web ? 'on' : 'off'}`, `mcp: ${c.mcp.join(', ') || 'none'}`, ...(c.subagents ? [subagents] : [])].join(' · ');
 }
 
-module.exports = { normalize, merge, validate, providerArgs, dedupeFlags, describe, CODEX_FEATURES_OFF, CLAUDE_SUBAGENT_TOOLS };
+module.exports = {
+  CLAUDE_SUBAGENT_TOOLS,
+  CODEX_FEATURES_OFF,
+  dedupeFlags,
+  describe,
+  merge,
+  normalize,
+  providerArgs,
+  validate,
+};

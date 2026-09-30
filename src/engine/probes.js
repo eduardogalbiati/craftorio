@@ -178,4 +178,14 @@ async function runProbe({ probe, target, cwd, signal, quota }) {
   return probe === 'pr_mergeable' ? mergeableState(glMrState(mr), { glStatus: mr.detailed_merge_status }) : glMrState(mr);
 }
 
-module.exports = { PROBES, parseTarget, ghPrState, ghRunState, glMrState, glPipelineState, mergeableState, withQuota, runProbe };
+module.exports = {
+  ghPrState,
+  ghRunState,
+  glMrState,
+  glPipelineState,
+  mergeableState,
+  parseTarget,
+  PROBES,
+  runProbe,
+  withQuota,
+};

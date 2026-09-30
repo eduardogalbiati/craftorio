@@ -187,4 +187,13 @@ class WaitDetector {
   }
 }
 
-module.exports = { runNotice, interruptedNotice, sessionNotice, shouldNotify, normalizeContext, attentionSignal, promptLine, WaitDetector };
+module.exports = {
+  attentionSignal,
+  interruptedNotice,
+  normalizeContext,
+  promptLine,
+  runNotice,
+  sessionNotice,
+  shouldNotify,
+  WaitDetector,
+};

@@ -69,9 +69,9 @@ function declarations(entries) {
 }
 
 module.exports = {
-  CHANNELS_DIR,
-  DESKTOP,
   authChannels,
+  CHANNELS_DIR,
   declarations,
+  DESKTOP,
   loadChannels,
 };

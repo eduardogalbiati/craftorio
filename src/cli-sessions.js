@@ -255,4 +255,13 @@ function cliArgs(provider, { resume, model, effort } = {}) {
   return p.newArgs({ model: checkArg(model, 'model'), effort: checkArg(effort, 'effort') });
 }
 
-module.exports = { CLI_PROVIDERS, providerModels, listCliSessions, findCliSession, cliArgs, parseClaude, parseCodex, parseGrok };
+module.exports = {
+  CLI_PROVIDERS,
+  cliArgs,
+  findCliSession,
+  listCliSessions,
+  parseClaude,
+  parseCodex,
+  parseGrok,
+  providerModels,
+};

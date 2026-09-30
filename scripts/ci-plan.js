@@ -162,4 +162,11 @@ function main([command, ...args]) {
 
 if (require.main === module) process.exitCode = main(process.argv.slice(2));
 
-module.exports = { planOs, alreadyTested, testedStatus, testedStatusBody, isDocsFile, MACOS_LABEL };
+module.exports = {
+  alreadyTested,
+  isDocsFile,
+  MACOS_LABEL,
+  planOs,
+  testedStatus,
+  testedStatusBody,
+};

@@ -6,7 +6,16 @@ const path = require('path');
 const os = require('os');
 const fs = require('fs');
 const { spawn } = require('child_process');
-const { app, BrowserWindow, ipcMain, dialog, shell, clipboard, safeStorage, Notification } = require('electron');
+const {
+  app,
+  BrowserWindow,
+  clipboard,
+  dialog,
+  ipcMain,
+  Notification,
+  safeStorage,
+  shell,
+} = require('electron');
 const workspace = require('./workspace');
 const { createService } = require('./service');
 const { authChannels } = require('./service/manifest');

@@ -527,4 +527,14 @@ function isRetryable(err) {
   return !/"status":\s*4\d\d|invalid_request|not supported|not found|does not exist/i.test(String(err?.message || err));
 }
 
-module.exports = { parseGrok, runTurn, resolveCommand, refreshWindowsPath, isRetryable, isPermissionDenial, sleep, emptyUsage, gitConfigEnv };
+module.exports = {
+  emptyUsage,
+  gitConfigEnv,
+  isPermissionDenial,
+  isRetryable,
+  parseGrok,
+  refreshWindowsPath,
+  resolveCommand,
+  runTurn,
+  sleep,
+};

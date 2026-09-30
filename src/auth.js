@@ -243,4 +243,12 @@ function createAuth({
   };
 }
 
-module.exports = { createAuth, fileStorage, entitlementView, PROVIDERS, CALLBACK_PORT, CALLBACK_PATH, TRIAL_ENDED };
+module.exports = {
+  CALLBACK_PATH,
+  CALLBACK_PORT,
+  createAuth,
+  entitlementView,
+  fileStorage,
+  PROVIDERS,
+  TRIAL_ENDED,
+};

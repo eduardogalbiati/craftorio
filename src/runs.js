@@ -245,4 +245,12 @@ function runEvents(runDir, { activity = false } = {}) {
   return out;
 }
 
-module.exports = { readRun, listRuns, runsForProject, projectOf, runArtifacts, kindOf, runEvents };
+module.exports = {
+  kindOf,
+  listRuns,
+  projectOf,
+  readRun,
+  runArtifacts,
+  runEvents,
+  runsForProject,
+};

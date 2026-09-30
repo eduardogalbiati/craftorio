@@ -12,7 +12,13 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { git, identityArgs, listWorktrees, repoRoot, FETCH_TIMEOUT_MS } = require('./engine/worktree');
+const {
+  FETCH_TIMEOUT_MS,
+  git,
+  identityArgs,
+  listWorktrees,
+  repoRoot,
+} = require('./engine/worktree');
 const { referencedIssues } = require('./backlog');
 
 const PUSH_TIMEOUT_MS = 120e3;
@@ -150,4 +156,11 @@ function conflictTask({ base, files = [], commits = [], issues = [] }) {
   ].filter((l, i, a) => l !== '' || a[i - 1] !== '').join('\n').trim();
 }
 
-module.exports = { localStatus, pushBase, updateAndPush, conflictTask, closedIssues, defaultBase };
+module.exports = {
+  closedIssues,
+  conflictTask,
+  defaultBase,
+  localStatus,
+  pushBase,
+  updateAndPush,
+};

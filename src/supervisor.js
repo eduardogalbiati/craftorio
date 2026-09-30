@@ -400,4 +400,24 @@ async function analyzeSessions({ report, from, to, scope, question, reportsDir, 
   return { report: out, reportPath, markdown, model, costUsd: cost };
 }
 
-module.exports = { analyzeRun, analyzeSessions, SESSIONS_REPORT_SCHEMA, sessionsReportMarkdown, supervisorConfig, DECISION_SCHEMA, IDLE_SCHEMA, ANALYSIS_SCHEMA, actionSchema, decisionPrompt, actionErrorPrompt, idlePrompt, runReport, analysisMarkdown, resumeSpec, skippedGate, withoutGateDecisions, timeline, readEvents };
+module.exports = {
+  actionErrorPrompt,
+  actionSchema,
+  ANALYSIS_SCHEMA,
+  analysisMarkdown,
+  analyzeRun,
+  analyzeSessions,
+  DECISION_SCHEMA,
+  decisionPrompt,
+  IDLE_SCHEMA,
+  idlePrompt,
+  readEvents,
+  resumeSpec,
+  runReport,
+  SESSIONS_REPORT_SCHEMA,
+  sessionsReportMarkdown,
+  skippedGate,
+  supervisorConfig,
+  timeline,
+  withoutGateDecisions,
+};

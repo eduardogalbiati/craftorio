@@ -45,7 +45,12 @@ const { Terminals } = require('../terminals');
 const { followSession } = require('../session-tail');
 const supervisor = require('../supervisor');
 const notifier = require('../notifications');
-const { authChannels, declarations, DESKTOP, loadChannels } = require('./manifest');
+const {
+  authChannels,
+  declarations,
+  DESKTOP,
+  loadChannels,
+} = require('./manifest');
 
 const SRC = path.join(__dirname, '..');
 const ROOT = path.join(SRC, '..');

@@ -138,4 +138,11 @@ async function changedTestFiles(snap, { bases = [] } = {}) {
   return files.filter((f) => now[f] !== before[f]).sort();
 }
 
-module.exports = { TESTS_PATHS, globToRegExp, testMatcher, validateTestsPaths, snapshot, changedTestFiles };
+module.exports = {
+  changedTestFiles,
+  globToRegExp,
+  snapshot,
+  testMatcher,
+  TESTS_PATHS,
+  validateTestsPaths,
+};

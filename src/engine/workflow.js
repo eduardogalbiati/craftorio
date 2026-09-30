@@ -20,11 +20,29 @@ const { EventEmitter } = require('events');
 const { exec } = require('child_process');
 const yaml = require('js-yaml');
 const nunjucks = require('nunjucks');
-const { runTurn, refreshWindowsPath, isRetryable, isPermissionDenial, sleep, emptyUsage } = require('./providers');
+const {
+  emptyUsage,
+  isPermissionDenial,
+  isRetryable,
+  refreshWindowsPath,
+  runTurn,
+  sleep,
+} = require('./providers');
 const { resolveSkill, skillPrompt } = require('../skills');
-const { providerId, sessionCost, totalTokens, WARN_AT } = require('../usage');
+const {
+  providerId,
+  sessionCost,
+  totalTokens,
+  WARN_AT,
+} = require('../usage');
 const supervisor = require('../supervisor');
-const { prepareWorktree, removeWorktree, mergeLocally, currentBranch, git } = require('./worktree');
+const {
+  currentBranch,
+  git,
+  mergeLocally,
+  prepareWorktree,
+  removeWorktree,
+} = require('./worktree');
 const capabilities = require('./capabilities');
 const { stopProcessesIn } = require('./processes');
 const { PROBES, runProbe, parseTarget } = require('./probes');
@@ -2110,4 +2128,14 @@ ${stderr || stdout}`.slice(0, 1500)));
   }
 }
 
-module.exports = { WorkflowRun, loadWorkflow, extractJson, validateSchema, evalExpr, render, takeHandoff, parseTokens, attemptSummary };
+module.exports = {
+  attemptSummary,
+  evalExpr,
+  extractJson,
+  loadWorkflow,
+  parseTokens,
+  render,
+  takeHandoff,
+  validateSchema,
+  WorkflowRun,
+};

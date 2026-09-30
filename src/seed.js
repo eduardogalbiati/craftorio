@@ -106,4 +106,11 @@ function restoreBundled(srcDir, destDir, kind, id) {
   writeManifest(destDir, seeded);
 }
 
-module.exports = { MANIFEST, seedBundle, bundleStatus, restoreBundled, readManifest, copyDir };
+module.exports = {
+  bundleStatus,
+  copyDir,
+  MANIFEST,
+  readManifest,
+  restoreBundled,
+  seedBundle,
+};

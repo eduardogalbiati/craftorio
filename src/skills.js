@@ -125,4 +125,15 @@ const SKILL_KIND = {
 /** Returns the ids that were copied or updated. */
 const seedSkills = (srcDir, destDir) => seedBundle(srcDir, destDir, SKILL_KIND);
 
-module.exports = { parseSkill, serializeSkill, listSkills, readSkill, createSkill, saveSkill, resolveSkill, skillPrompt, seedSkills, SKILL_KIND };
+module.exports = {
+  createSkill,
+  listSkills,
+  parseSkill,
+  readSkill,
+  resolveSkill,
+  saveSkill,
+  seedSkills,
+  serializeSkill,
+  SKILL_KIND,
+  skillPrompt,
+};

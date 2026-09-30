@@ -333,4 +333,14 @@ function readLocalUsage({ home = os.homedir() } = {}) {
   return { records, sessions, plans: { codex: codexPlan(latestPlan) }, found, sources: src };
 }
 
-module.exports = { readLocalUsage, parseClaude, parseCodex, parseGrok, codexPlan, toolKind, mergeMetrics, TOOL_KINDS, IDLE_GAP_MS };
+module.exports = {
+  codexPlan,
+  IDLE_GAP_MS,
+  mergeMetrics,
+  parseClaude,
+  parseCodex,
+  parseGrok,
+  readLocalUsage,
+  TOOL_KINDS,
+  toolKind,
+};

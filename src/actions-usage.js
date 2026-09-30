@@ -89,4 +89,11 @@ async function getActionsUsage({ owner = '', includedMinutes = DEFAULT_INCLUDED_
   return value;
 }
 
-module.exports = { DEFAULT_INCLUDED_MINUTES, SCOPE_HINT, multiplier, summarizeActionsUsage, quotaExhausted, getActionsUsage };
+module.exports = {
+  DEFAULT_INCLUDED_MINUTES,
+  getActionsUsage,
+  multiplier,
+  quotaExhausted,
+  SCOPE_HINT,
+  summarizeActionsUsage,
+};

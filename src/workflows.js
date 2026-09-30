@@ -46,4 +46,12 @@ function resolveWorkflow(file, dirs) {
   throw new Error(`Workflow not found: "${file}" (searched in ${list.join(', ')})`);
 }
 
-module.exports = { BUNDLED_WORKFLOWS_DIR, WORKFLOW_KIND, isWorkflowFile, seedWorkflows, workflowStatus, restoreWorkflow, resolveWorkflow };
+module.exports = {
+  BUNDLED_WORKFLOWS_DIR,
+  isWorkflowFile,
+  resolveWorkflow,
+  restoreWorkflow,
+  seedWorkflows,
+  WORKFLOW_KIND,
+  workflowStatus,
+};
