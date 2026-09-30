@@ -7,7 +7,7 @@ used_by: "via `uses`"
 
 # PR/MR screenshots
 
-The test step captures screenshots of the screens a change touches into a folder of the run
+The evidence step captures screenshots of the screens a change touches into a folder of the run
 (`<run_dir>/screenshots/`) with a `screenshots.json` manifest:
 
 ```json

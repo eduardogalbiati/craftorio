@@ -2,9 +2,11 @@
 # Workflow: Software Development (Feature Workflow Agents)
 # -----------------------------------------------------------------------------
 # BUILD & TEST
-#   develop ─► code_review ─► test ─► build ─► verify_change
-#     ▲            │            │        │           │
-#     └────────────┴────────────┴────────┴───────────┘   (failures go back to the developer via the orchestrator)
+#   develop ─► code_review ─► test ─► build ─► evidence ─► verify_change
+#     ▲            │            │        │                        │
+#     └────────────┴────────────┴────────┴────────────────────────┘   (failures go back to the developer via the orchestrator)
+#   evidence: screenshots / HTTP request+response / CLI output / log lines that show the change
+#   working (local, simulated); it never blocks, the verifier uses it, the CI pusher posts the screenshots.
 #
 # DEPLOY · CI/CD
 #   ci (CI Pusher: /goal CI green + /loop)
@@ -261,6 +263,17 @@ agents:
       asked, by running the same command before and after it. You do not change code and
       you do not run the full test suite (the test writer ran it).
 
+  evidence:
+    provider: claude
+    model: claude-sonnet-5
+    session: ephemeral
+    capabilities: { tools: [read, *toolchains], web: false }
+    skills: [implementation-evidence]
+    system_prompt: |
+      You collect evidence that the change works: UI screenshots, HTTP requests and their
+      responses, CLI output or log lines, local and simulated only. You do not change code, do not
+      commit and do not run the test suite; a capture that fails is reported, never fixed.
+
   # Push, PR/MR and failure triage need no frontier model, and the engine does the polling (wait:).
   ci_pusher:
     provider: claude
@@ -270,7 +283,7 @@ agents:
     skills: ["ci-pipeline-{{ inputs.git_platform }}", "pr-screenshots-{{ inputs.git_platform }}"]
     system_prompt: |
       You are the CI Pusher. You push the branch, make sure a PR/MR is open (with the
-      test step's UI screenshots, when there are any) and watch CI until it passes. When CI fails, you fetch the failure log and summarize the
+      evidence step's UI screenshots, when there are any) and watch CI until it passes. When CI fails, you fetch the failure log and summarize the
       root cause so the orchestrator can hand it to the developer. You do not fix
       code and you do not merge.
 
@@ -305,7 +318,7 @@ groups:
   - name: Review
     steps: [code_review, human_review]
   - name: Validate
-    steps: [test, test_failed, build, build_failed, verify_change, verify_failed]
+    steps: [test, test_failed, build, build_failed, evidence, verify_change, verify_failed]
   - name: PR & CI
     steps: [ci, ci_failed, pr_babysitter, comment_decision]
   - name: Deploy
@@ -507,14 +520,13 @@ steps:
       {% if delegate_result %}
       The developer fixed the production code you reported (it does not touch the tests):
       {{ delegate_result.text }}
-      Run the full suite again and confirm. If the fix changed the UI, capture the "after"
-      screenshots again (same names, same folder) and return the updated list.
+      Run the full suite again and confirm.
       {% elif vars.recheck == 'resolution' %}
       Your tests already passed on this change. Since then `origin/{{ inputs.base_branch }}` moved and the
       developer merged it into the branch, resolving a conflict (commit `{{ steps.resolve_conflict.output.merge_commit }}`):
       {{ steps.resolve_conflict.output.summary }}
       Check out the branch (pull it: the developer pushed) and run the full suite once. Update a
-      test only when the base's change made it obsolete (not a bug); no new screenshots.
+      test only when the base's change made it obsolete (not a bug).
       {% else %}
       1. Check out the branch. You own the tests: the developer did not write or run any.
          Write the tests the change needs, starting from the developer's notes (they are a
@@ -526,13 +538,9 @@ steps:
          once per round, filtered to the tests you are writing (e.g. `--test-name-pattern`). Then
          run the full suite once, at the end, with the project's test command. Never start a full
          mock run of a workflow (`scripts/run.js`): the suite already includes one.
-      3. If the diff against `origin/{{ inputs.base_branch }}` touches the UI, capture the
-         affected screens before (base `origin/{{ inputs.base_branch }}`) and after (the branch)
-         following the test skill, into `{{ run_dir }}/screenshots` (PNGs + screenshots.json,
-         never committed), and return them in `screenshots`: at most one view per issue. Not a
-         visual change, no screenshot command in the project, or most of your turn already
-         spent (screenshots are optional here): say why in `screenshots_note`.
       {% endif %}
+      Screenshots and other evidence of the change are collected after the build (evidence
+      step): capture none.
       If the suite fails, first check whether the same tests fail on
       `origin/{{ inputs.base_branch }}`, following the test skill (pre-existing failures): run
       only the failing files on a temporary worktree of the base. A test that also fails there is
@@ -560,17 +568,6 @@ steps:
               test:   { type: string }
               file:   { type: string }
               reason: { type: string }
-        # UI changes: files in the run folder (Artifacts), published on the PR/MR by the ci step
-        screenshots:
-          type: array
-          items:
-            type: object
-            required: [path, caption]
-            properties:
-              path:    { type: string }
-              caption: { type: string }
-              before:  { type: string }
-        screenshots_note: { type: string }
     transitions:
       # after a merge conflict: the build and the verification already passed on the change; CI
       # builds the merged result, then the PR check, the preview and the owner's approval again
@@ -639,8 +636,11 @@ steps:
         dev_vulnerabilities: { type: string }
         report:              { type: string }
     transitions:
-      - when: "output.build_status == 'success' and output.vulnerabilities.critical == 0 and output.vulnerabilities.high == 0"
+      # after a merge-conflict resolution the evidence is kept: verify_change re-checks the claims
+      - when: "output.build_status == 'success' and output.vulnerabilities.critical == 0 and output.vulnerabilities.high == 0 and vars.recheck == 'resolution'"
         goto: verify_change
+      - when: "output.build_status == 'success' and output.vulnerabilities.critical == 0 and output.vulnerabilities.high == 0"
+        goto: evidence
       # the environment, not the code: a developer round can't change it, a human can
       - when: "output.build_status == 'failed' and output.failure_class == 'infra'"
         goto: build_failed
@@ -670,12 +670,61 @@ steps:
       - { id: stop,     label: "Stop the run as failed (worktree kept to resume)" }
     transitions:
       - when: "choice == 'continue'"
-        goto: verify_change
+        goto: evidence
       - when: "choice == 'retry'"
         goto: build
       - when: "choice == 'stop'"
         goto: end
         status: failed
+
+  # Evidence: shows the change working (UI screenshots, HTTP request/response, CLI output, log
+  # lines), after the tests passed and the build succeeded. It never blocks: the verifier uses it.
+  - id: evidence
+    agent: evidence
+    prompt: |
+      Task: {{ inputs.task }}
+      Change: {{ steps.develop.output.summary }}
+      Files: {{ steps.develop.output.files_changed | join(', ') }}
+      Branch `{{ steps.develop.output.branch }}`, base `{{ inputs.base_branch }}`, run folder `{{ run_dir }}`.
+      {% if inputs.issues | length > 1 %}
+      This run implements several issues ({{ inputs.issues | join(', ') }}): collect evidence per
+      issue and set `issue` (its URL) on each entry.
+      {% endif %}
+      Collect the evidence that the change does what the task asked, following the
+      implementation-evidence skill: pick the kind per issue (UI screenshots before/after into
+      `{{ run_dir }}/screenshots`, HTTP request and response, CLI output, log lines of a simulated
+      run), local and simulated only, and stay read-only on the working tree. Nothing observable,
+      or no way to capture it: say why in `note`.
+    output_schema:
+      type: object
+      required: [evidence]
+      properties:
+        evidence:
+          type: array
+          items:
+            type: object
+            required: [kind, title]
+            properties:
+              issue:   { type: string }
+              kind:    { type: string, enum: [screenshot, http, cli, log] }
+              title:   { type: string }
+              command: { type: string }
+              before:  { type: string }
+              after:   { type: string }
+        # UI changes: files in <run_dir>/screenshots (Artifacts; a PR/MR workflow publishes them)
+        screenshots:
+          type: array
+          items:
+            type: object
+            required: [path, caption]
+            properties:
+              path:    { type: string }
+              caption: { type: string }
+              before:  { type: string }
+        note: { type: string }
+    transitions:
+      - when: "true"
+        goto: verify_change
 
   # Verifier: does the change do what the task asked? Same command on the base and on
   # the branch. inconclusive (nothing observable, e.g. a refactor) does not block.
@@ -689,6 +738,10 @@ steps:
       The developer changed the code after your last verdict:
       {{ delegate_result.text }}
       Run the treatment side again (the baseline did not change).
+      {% endif %}
+      {% if steps.evidence.output and steps.evidence.output.evidence %}
+      Evidence already collected (use it; run your own command only for a claim it does not
+      cover or to compare before and after): {{ steps.evidence.output.evidence | to_json }}
       {% endif %}
       Verify the change following the claim-verification skill. Stay read-only: the
       working tree must not change (no files, stash, worktree or checkout).
@@ -807,8 +860,8 @@ steps:
          - CI cannot run at all for account reasons (GitHub Actions quota or spending limit
            exhausted, billing problem) → ci_status: failed with failure_class: infra and the
            platform's message in failure_log: no code change can fix it
-      {% if steps.test.output.screenshots and not steps.ci.output.screenshots_posted %}
-      5. Once the PR/MR exists, publish the test step's UI screenshots on it following the
+      {% if steps.evidence.output and steps.evidence.output.screenshots and not steps.ci.output.screenshots_posted %}
+      5. Once the PR/MR exists, publish the evidence step's UI screenshots on it following the
          screenshots skill (`--dir {{ run_dir }}/screenshots`), then answer screenshots_posted:
          true. If publishing fails, put the error in screenshots_error and go on: it never
          changes ci_status.

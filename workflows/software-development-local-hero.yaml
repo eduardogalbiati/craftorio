@@ -1,11 +1,13 @@
 # =============================================================================
 # Workflow: Software Development, local hero
 # -----------------------------------------------------------------------------
-#   develop ─► code_review ─► test ─► build ─► verify_change ──merge: local──► end
-#     ▲            │            │        │           │              │ conflict
-#     └────────────┴────────────┴────────┴───────────┘              ▼
-#                  ▲                                          resolve_merge (developer)
-#                  └──────────── code_review ◄─────────────────────┘
+#   develop ─► code_review ─► test ─► build ─► evidence ─► verify_change ──merge: local──► end
+#     ▲            │            │        │                        │              │ conflict
+#     └────────────┴────────────┴────────┴────────────────────────┘              ▼
+#                  ▲                                                       resolve_merge (developer)
+#                  └──────────── code_review ◄──────────────────────────────────┘
+#   evidence: screenshots / HTTP request+response / CLI output / log lines that show the change
+#   working (local, simulated), in the run folder; it never blocks and the verifier uses it.
 #
 # The software-development pipeline without GitHub/GitLab and without a merge approval: no
 # push, no PR/MR, no CI, no preview, no deploy. Each run works in its own git worktree, started
@@ -18,8 +20,8 @@
 #     files included). Then only what the resolution changed is checked again (`vars.recheck ==
 #     'resolution'`): code_review reviews the rebase against the last approved commit (git
 #     range-diff), test runs the tests related to the files the resolution touched plus a smoke
-#     check (the full suite past 5 files), build runs, verify_change re-checks only the claims whose
-#     files were touched, and the merge is attempted right after. A resolution that changes
+#     check (the full suite past 5 files), build runs, evidence is kept, verify_change re-checks only the claims
+#     whose files were touched, and the merge is attempted right after. A resolution that changes
 #     behaviour (`behaviour_changed`) goes through the full review, suite and verification. Merges of
 #     concurrent runs go one at a time. At most 3 rounds; only what the developer can't fix (e.g.
 #     uncommitted changes in the checkout where <base> is checked out: the user's) or running out
@@ -236,13 +238,24 @@ agents:
       asked, by running the same command before and after it. You do not change code and
       you do not run the full test suite (the test writer ran it).
 
+  evidence:
+    provider: claude
+    model: claude-sonnet-5
+    session: ephemeral
+    capabilities: { tools: [read, *toolchains], web: false }
+    skills: [implementation-evidence]
+    system_prompt: |
+      You collect evidence that the change works: UI screenshots, HTTP requests and their
+      responses, CLI output or log lines, local and simulated only. You do not change code, do not
+      commit and do not run the test suite; a capture that fails is reported, never fixed.
+
 groups:
   - name: Develop
     steps: [develop, issue_not_done]
   - name: Review
     steps: [code_review, human_review]
   - name: Validate
-    steps: [test, test_failed, build, build_failed, verify_change, verify_failed]
+    steps: [test, test_failed, build, build_failed, evidence, verify_change, verify_failed]
   - name: Merge
     steps: [resolve_merge, merge_blocked]
 
@@ -437,8 +450,7 @@ steps:
       {% if delegate_result %}
       The developer fixed the production code you reported (it does not touch the tests):
       {{ delegate_result.text }}
-      Run the full suite again and confirm. If the fix changed the UI, capture the "after"
-      screenshots again (same names, same folder) and return the updated list.
+      Run the full suite again and confirm.
       {% elif vars.recheck == 'resolution' and (steps.resolve_merge.output.files_changed or []) | length <= 5 %}
       Your tests already passed on this change. Since then the developer rebased the branch onto
       the local `{{ inputs.base_branch }}` and resolved a conflict, touching only:
@@ -447,14 +459,14 @@ steps:
       Run only the tests related to those files (their own tests and the tests of what uses them),
       plus a fast smoke check of the whole project (the quickest command that loads it: a build,
       a type check, or the test runner on one small file), NOT the full suite. Update a test only
-      when the base's change made it obsolete (not a bug); no new tests, no new screenshots. Say
+      when the base's change made it obsolete (not a bug); no new tests. Say
       which tests you ran in `summary`.
       {% elif vars.recheck == 'resolution' %}
       Your tests already passed on this change. Since then the developer rebased the branch onto
       the local `{{ inputs.base_branch }}` and resolved a conflict that touched many files:
       {{ steps.resolve_merge.output.summary }}
       Run the full suite once. Update a test only when the base's change made it obsolete (not a
-      bug); no new tests, no new screenshots.
+      bug); no new tests.
       {% else %}
       1. Check out the branch. You own the tests: the developer did not write or run any.
          Write the tests the change needs, starting from the developer's notes (they are a
@@ -466,13 +478,9 @@ steps:
          once per round, filtered to the tests you are writing (e.g. `--test-name-pattern`). Then
          run the full suite once, at the end, with the project's test command. Never start a full
          mock run of a workflow (`scripts/run.js`): the suite already includes one.
-      3. If the diff against the local `{{ inputs.base_branch }}` touches the UI, capture the
-         affected screens before (base `{{ inputs.base_branch }}`) and after (the branch)
-         following the test skill, into `{{ run_dir }}/screenshots` (PNGs + screenshots.json,
-         never committed), and return them in `screenshots`: at most one view per issue. Not a
-         visual change, no screenshot command in the project, or most of your turn already
-         spent (screenshots are optional here): say why in `screenshots_note`.
       {% endif %}
+      Screenshots and other evidence of the change are collected after the build (evidence
+      step): capture none.
       If the suite fails, first check whether the same tests fail on the local
       `{{ inputs.base_branch }}`, following the test skill (pre-existing failures): run only the
       failing files on a temporary worktree of the base. A test that also fails there is not this
@@ -500,17 +508,6 @@ steps:
               test:   { type: string }
               file:   { type: string }
               reason: { type: string }
-        # UI changes: files in the run folder (Artifacts); this local workflow publishes nothing
-        screenshots:
-          type: array
-          items:
-            type: object
-            required: [path, caption]
-            properties:
-              path:    { type: string }
-              caption: { type: string }
-              before:  { type: string }
-        screenshots_note: { type: string }
     transitions:
       - when: "output.tests_status == 'pass'"
         goto: build
@@ -575,8 +572,11 @@ steps:
         dev_vulnerabilities: { type: string }
         report:              { type: string }
     transitions:
-      - when: "output.build_status == 'success' and output.vulnerabilities.critical == 0 and output.vulnerabilities.high == 0"
+      # after a merge-conflict resolution the evidence is kept: verify_change re-checks the claims
+      - when: "output.build_status == 'success' and output.vulnerabilities.critical == 0 and output.vulnerabilities.high == 0 and vars.recheck == 'resolution'"
         goto: verify_change
+      - when: "output.build_status == 'success' and output.vulnerabilities.critical == 0 and output.vulnerabilities.high == 0"
+        goto: evidence
       # the environment, not the code: a developer round can't change it, a human can
       - when: "output.build_status == 'failed' and output.failure_class == 'infra'"
         goto: build_failed
@@ -606,12 +606,61 @@ steps:
       - { id: stop,     label: "Stop the run as failed (worktree kept to resume)" }
     transitions:
       - when: "choice == 'continue'"
-        goto: verify_change
+        goto: evidence
       - when: "choice == 'retry'"
         goto: build
       - when: "choice == 'stop'"
         goto: end
         status: failed
+
+  # Evidence: shows the change working (UI screenshots, HTTP request/response, CLI output, log
+  # lines), after the tests passed and the build succeeded. It never blocks: the verifier uses it.
+  - id: evidence
+    agent: evidence
+    prompt: |
+      Task: {{ inputs.task }}
+      Change: {{ steps.develop.output.summary }}
+      Files: {{ steps.develop.output.files_changed | join(', ') }}
+      Branch `{{ steps.develop.output.branch }}`, base `{{ inputs.base_branch }}`, run folder `{{ run_dir }}`.
+      {% if inputs.issues | length > 1 %}
+      This run implements several issues ({{ inputs.issues | join(', ') }}): collect evidence per
+      issue and set `issue` (its URL) on each entry.
+      {% endif %}
+      Collect the evidence that the change does what the task asked, following the
+      implementation-evidence skill: pick the kind per issue (UI screenshots before/after into
+      `{{ run_dir }}/screenshots`, HTTP request and response, CLI output, log lines of a simulated
+      run), local and simulated only, and stay read-only on the working tree. Nothing observable,
+      or no way to capture it: say why in `note`.
+    output_schema:
+      type: object
+      required: [evidence]
+      properties:
+        evidence:
+          type: array
+          items:
+            type: object
+            required: [kind, title]
+            properties:
+              issue:   { type: string }
+              kind:    { type: string, enum: [screenshot, http, cli, log] }
+              title:   { type: string }
+              command: { type: string }
+              before:  { type: string }
+              after:   { type: string }
+        # UI changes: files in <run_dir>/screenshots (Artifacts; a PR/MR workflow publishes them)
+        screenshots:
+          type: array
+          items:
+            type: object
+            required: [path, caption]
+            properties:
+              path:    { type: string }
+              caption: { type: string }
+              before:  { type: string }
+        note: { type: string }
+    transitions:
+      - when: "true"
+        goto: verify_change
 
   # Verifier: does the change do what the task asked? Same command on the base and on
   # the branch. inconclusive (nothing observable, e.g. a refactor) does not block.
@@ -633,6 +682,10 @@ steps:
       ({{ steps.resolve_merge.output.summary }}).
       Re-check only the claims (issues) whose evidence depends on those files, on the rebased
       branch; keep your other verdicts and evidence as they were, and say which you kept.
+      {% endif %}
+      {% if steps.evidence.output and steps.evidence.output.evidence %}
+      Evidence already collected (use it; run your own command only for a claim it does not
+      cover or to compare before and after): {{ steps.evidence.output.evidence | to_json }}
       {% endif %}
       Verify the change following the claim-verification skill. Stay read-only: the
       working tree must not change (no files, stash, worktree or checkout).

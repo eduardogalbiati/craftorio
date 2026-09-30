@@ -56,19 +56,6 @@ and the run cannot recover by itself.
 - The same for servers: start them inside the test (and close them in `after`/`afterAll`), not as a
   separate background command.
 
-## Screenshots of UI changes
-
-UI paths: `src/renderer/**`, `src/ui/**`, `src/components/**`, `app/**`, `pages/**`, `public/**`,
-`*.css`/`*.scss`, `*.html`, `*.jsx`/`*.tsx`/`*.vue`/`*.svelte` (and whatever the project's docs call UI).
-- The command: a `screenshot` script in `package.json` (`npm run screenshot -- <options>`), or the one
-  the project's docs (README, CLAUDE.md, AGENTS.md) describe. Read its usage line (the top of the
-  script) for the screens and options it has.
-- Before = the base without a checkout: use the command's option for a git ref if it has one
-  (`--ref origin/<base>`); without one, capture only "after" and say so.
-- Example (this orchestrator's own repository; the script writes `screenshots.json` itself):
-  1. `npm run screenshot -- --view settings --tab general --ref origin/main --out <run_dir>/screenshots --name settings-before`
-  2. `npm run screenshot -- --view settings --tab general --out <run_dir>/screenshots --name settings-after --caption "Settings > General" --before settings-before.png`
-
 ## Coverage (only when asked)
 
 `npx vitest run --coverage` · `npx jest --coverage` · `node --test --experimental-test-coverage`

@@ -97,10 +97,11 @@ Local build: `npm run build` (writes `build/`) or `npm run package` (writes `dis
 |---|---|---|---|---|
 | Build & Test | Developer | Opus 5.5 | Implements and fixes everything the other agents report, in production code only: it never writes or runs the test suite and says what to test in `test_notes`. Always branches from a freshly fetched `origin/<base_branch>`. Handoff session: each fix round starts fresh from its handoff note | `long-commands`, `bug-diagnosis`, `merge-conflict-resolver`, `context-economy`, `decision-log` |
 | | Code Review | Codex gpt-6-luna | Reviews the diff on correctness, spec and standards; requests changes only for blocker/major | `code-review` |
-| | Test Writer | Sonnet 5 | Owns the tests: writes/updates them (from the developer's `test_notes`) and runs the full suite, the only full run before CI; production-code failures go back to the developer. A UI change gets before/after screenshots (simulation only) in the run's `screenshots/` folder, shown in Artifacts | `unit-test-writer-<language>` |
+| | Test Writer | Sonnet 5 | Owns the tests: writes/updates them (from the developer's `test_notes`) and runs the full suite, the only full run before CI; production-code failures go back to the developer. | `unit-test-writer-<language>` |
+| | Evidence | Sonnet 5 | After the build, collects what shows the change working, picked by the kind of change: UI screenshots before/after (in the run's `screenshots/` folder, shown in Artifacts), HTTP requests with their responses, CLI output or log lines of a simulated run. Local and simulated only; never blocks, the verifier uses it | `implementation-evidence` |
 | | Builder | Sonnet 5 | Build + dependency audit, no test suite; a broken build or a high/critical production vulnerability goes back to the developer | `build-audit-<language>` |
 | | Verifier | Sonnet 5 | Proves the change does what the task asked: same command on the base and on the branch (no full suite); `not_verified` goes back to the developer, `inconclusive` does not block | `claim-verification` |
-| CI/CD | CI Pusher | Sonnet 5 | Push, opens the PR/MR, **/goal** CI green with **/loop**; on failure fetches the log and calls the developer. A PR/MR that conflicts with the base (CI never starts) is reported as failed on the first visit. Posts the test step's screenshots on the PR/MR (one comment, before/after) | `ci-pipeline-<platform>`, `pr-screenshots-<platform>` |
+| CI/CD | CI Pusher | Sonnet 5 | Push, opens the PR/MR, **/goal** CI green with **/loop**; on failure fetches the log and calls the developer. A PR/MR that conflicts with the base (CI never starts) is reported as failed on the first visit. Posts the evidence step's screenshots on the PR/MR (one comment, before/after) | `ci-pipeline-<platform>`, `pr-screenshots-<platform>` |
 | | PR Babysitter | Opus 4.8 | **/goal** PR/MR mergeable with **/loop**; actionable comments → developer (replies with the hash), doubtful ones → human | `pr-babysitter-<platform>`, `decision-log` |
 | | Deployer | Sonnet 5 | Publishes the preview, and after the merge tracks the production deploy. A failure carries `failure_class` (`code`, `infra`, `unknown`): a preview `code` failure goes to the developer, then CI, the PR check and the preview run again (2 rounds at most) | `deploy-<platform>` |
 
@@ -537,7 +538,7 @@ groups:                        # optional; the graph ignores it (transitions sti
   - name: Review
     steps: [code_review, human_review]
   - name: Validate
-    steps: [test, test_failed, build, build_failed, verify_change, verify_failed]
+    steps: [test, test_failed, build, build_failed, evidence, verify_change, verify_failed]
 ```
 
 - Each run in the runs lists (Workflows › Runs, Projects › Project) shows the groups it has

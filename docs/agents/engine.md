@@ -161,7 +161,8 @@ same features for users; this is the implementer's summary.
   `vars.recheck` (`resolution`, or empty when behaviour changed). With `resolution`: `code_review` gets
   `git range-diff <base> <approved> <branch>` (approved = `action_error.head`, else `previous_head`),
   findings outside it non-blocking; `test` runs the related tests + a smoke check (full suite past 5
-  files); `build` unchanged; `verify_change` re-checks only the claims whose files were touched.
+  files); `build` unchanged; `evidence` is skipped (its earlier evidence is kept); `verify_change`
+  re-checks only the claims whose files were touched.
 
 ## Worktrees and template context
 
