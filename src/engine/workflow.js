@@ -1344,7 +1344,8 @@ class WorkflowRun extends EventEmitter {
   // (no new note, no rotation); opts.editsTests: the step's `edits_tests` over the agent's.
   // `edits_tests: false`: the turn may not change test files (tests_paths, src/engine/test-paths.js).
   // The engine checks the checkout after the turn and sends it back with the list of files, at most
-  // twice; after that the turn fails (the supervisor or the step's on_error take over).
+  // twice; after that the turn fails (the supervisor or the step's on_error take over). A check that
+  // cannot run (git error) fails the turn too.
   async sendToAgent(agentName, prompt, opts = {}) {
     const agent = { ...(this.wf.defaults || {}), ...this.wf.agents[agentName] };
     const guarded = !!this.wf.agents[agentName] && (opts.editsTests ?? agent.edits_tests) === false;
@@ -1352,8 +1353,9 @@ class WorkflowRun extends EventEmitter {
     const snap = guarded ? await testPaths.snapshot(dir, this.wf.tests_paths) : null;
     let res = await this.agentTurn(agentName, prompt, { ...opts, guarded });
     for (let attempt = 1; snap; attempt++) {
+      // an unchecked turn fails the step: passing it would let test changes through the guard
       const files = await testPaths.changedTestFiles(snap, { bases: this.baseRefs() })
-        .catch((e) => { this.emitEvent('log', { level: 'warn', message: `[${agentName}] could not check the test files of its turn: ${e.message}` }); return []; });
+        .catch((e) => { throw new Error(`Could not check the test files changed by ${agentName} in ${opts.stepId || 'a delegated turn'} (edits_tests: false): ${e.message}`); });
       if (!files.length) break;
       const stepId = opts.stepId || 'a delegated turn';
       this.emitEvent('tests.refused', { agent: agentName, step_id: opts.stepId || null, files, attempt });
