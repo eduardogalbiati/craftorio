@@ -48,6 +48,10 @@ creates a commit needs its own `-c user.name/email`.
 ## Real CLIs and money
 
 - Never open real CLI terminals or start real runs in automated checks (they cost money).
+- **Workflow agents never prefix it**: the engine starts every agent process with
+  `MULTIAGENT_SIMULATION_ONLY=1` already set (`AGENT_ENV` in `src/engine/capabilities.js`), so
+  `npm test` and `node --test …` run as they are; a `VAR=value` prefix makes Claude Code refuse
+  the command headless (see [capabilities.md](capabilities.md)).
 - **Simulation-only guard**: `MULTIAGENT_SIMULATION_ONLY=1` (`src/engine/simulation.js`) makes real
   runs impossible: `run:start`/`runs:resume` (and its alias `supervisor:resume`)/`backlog:assign` refuse `mock: false` (never
   downgraded to a simulation), CLI terminals (`term:open` cli/cli-new/cli-resume/supervisor, the

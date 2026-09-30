@@ -103,7 +103,7 @@ same features for users; this is the implementer's summary.
 
 - Human gates can ask for free text (`feedback: true | { label, placeholder }`): `output.feedback` and the
   run-wide `feedback` list in templates (`approval:resolve` takes `feedback`). `previous_step` = the step that
-  ran before. The Write & Review chat answers its run's gates inline (the approval dialog stays hidden there).
+  ran before. Gates are answered inside their run: the run chats inline, or the gate card on the Run screen (no dialog).
 - `orchestrator.supervisor: { enabled, max_interventions }` — per step 2, per run 6.
 - Refused tool calls: `isPermissionDenial` (providers.js) spots allowlist refusals in the stream
   ("requires approval"); 5+ in a row in one turn → `log` warn with `kind: permission_denials`

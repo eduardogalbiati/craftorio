@@ -83,9 +83,12 @@ for (const { channel, fn } of authChannels(account)) if (channel) ipcMain.handle
 for (const [channel, fn] of Object.entries(service.api)) ipcMain.handle(channel, (_e, arg) => fn(arg));
 for (const [channel, fn] of Object.entries(service.notifications)) ipcMain.on(channel, (_e, arg) => fn(arg));
 // what the preload builds window.api from, asked once when the window loads (sync: the page's
-// scripts use window.api right away)
-ipcMain.on('api:manifest', (e) => { e.returnValue = service.manifest; });
-for (const channel of ['run:event', 'term:data', 'term:exit']) {
+// scripts use window.api right away); also when the window's code is recorded (#83)
+ipcMain.on('api:manifest', (e) => {
+  service.code.markLoaded();
+  e.returnValue = service.manifest;
+});
+for (const channel of ['run:event', 'supervisor:watch', 'term:data', 'term:exit']) {
   service.events.on(channel, (payload) => { if (win && !win.isDestroyed()) win.webContents.send(channel, payload); });
 }
 
@@ -229,6 +232,20 @@ function openConsole({ title, cwd, file, args, env }) {
 ipcMain.handle('session:terminal', (_e, { sessionId, mode, runId }) => {
   openConsole(service.terminalSpec(runId, sessionId, mode));
   return true;
+});
+
+// Restart after the code changed on disk (#83): the service refuses while runs are in progress
+// unless the user confirmed interrupting them, and pauses the Backlog queues first.
+ipcMain.handle('app:relaunch', (_e, arg) => {
+  const r = service.prepareRestart({ interruptRuns: !!arg?.interruptRuns });
+  setImmediate(() => {
+    // the renderer saved the interrupted runs to list after the restart
+    if (win && !win.isDestroyed()) win.webContents.session.flushStorageData();
+    service.shutdown();
+    app.relaunch();
+    app.exit(0);
+  });
+  return r;
 });
 
 // Windows shows notifications under the app's AppUserModelID (the exe itself in development).

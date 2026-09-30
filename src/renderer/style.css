@@ -204,7 +204,7 @@ body:not(.dev-mode) .dev-only { display: none !important; }
 .dash-icon.monitor { background: rgba(74,222,128,.12); color: var(--green); }
 .dash-count { margin-top: auto; font-size: 11px; font-family: var(--mono); color: var(--accent); }
 .dash-count.none { color: var(--muted); }
-.dash-run {
+.dash-run, .dash-gates {
   margin: 28px auto 0; display: inline-flex; flex-direction: column; align-items: stretch; gap: 8px;
   padding: 10px 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel);
 }
@@ -438,6 +438,9 @@ select:focus, input:focus, textarea:focus { outline: none; border-color: var(--a
 .sc-head .id { font-family: var(--mono); font-size: 11px; color: var(--muted); }
 .sc-head .status { margin-left: auto; font-size: 11px; display: flex; align-items: center; gap: 5px; color: var(--muted); }
 .dash-run-row { display: flex; align-items: center; gap: 12px; }
+.dash-gates { border-color: rgba(250,204,21,.45); }
+.dash-gates + .dash-run { margin-top: 12px; }
+.dash-gates-title { display: flex; align-items: center; gap: 8px; }
 .dash-run-row .btn { margin-left: auto; }
 .kpi-all b { color: var(--muted); }
 input.s-num { width: 90px; }
@@ -833,6 +836,14 @@ body.resizing-dock .term-body { pointer-events: none; }
 .run-summary .sup-btn { margin-top: 12px; }
 #view-run:not(.hidden) { display: flex; flex-direction: column; }
 #view-run .run-layout { flex: 1; min-height: 0; height: auto; }
+/* the code changed on disk (#83): floats below the top bar, never blocks the screen */
+.code-banner {
+  position: fixed; top: 60px; left: 50%; transform: translateX(-50%); z-index: 60; max-width: min(900px, calc(100vw - 32px));
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 10px;
+  background: var(--panel); border: 1px solid rgba(251,191,36,.55); box-shadow: 0 12px 32px rgba(0,0,0,.4);
+}
+.code-banner-run { display: inline-flex; align-items: center; gap: 6px; }
+#confirm-message { white-space: pre-line; }
 .fail-banner {
   flex: none; display: flex; align-items: center; gap: 16px; padding: 10px 16px;
   background: rgba(248,113,113,.1); border-bottom: 1px solid rgba(248,113,113,.35);
@@ -871,17 +882,39 @@ body.resizing-dock .term-body { pointer-events: none; }
 .sup-rec .field { margin-bottom: 0; }
 .sup-rec select, .sup-rec textarea { background: var(--panel); }
 .sup-rec .row .error { min-height: 0; margin: 0; }
+.sup-watch { border: 1px solid rgba(192,132,252,.35); border-radius: 10px; padding: 10px 12px; margin-bottom: 16px; display: grid; gap: 10px; }
+.sup-watch-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.sup-watch-head select { width: auto; padding: 3px 6px; }
+.sup-watch-head #sup-watch-cost { margin-left: auto; }
+.sup-watch-log { display: grid; gap: 8px; max-height: 360px; overflow: auto; }
+.sup-watch-log:empty { display: none; }
+.sup-wmsg { border-radius: 8px; padding: 8px 10px; background: var(--panel-2); border-left: 3px solid var(--purple); }
+.sup-wmsg.user { border-left-color: var(--accent); }
+.sup-wmsg.system { background: none; border-left-color: var(--border); padding: 2px 10px; }
+.sup-wmsg.flag { border-left-color: var(--red); background: rgba(248,113,113,.08); }
+.sup-wmsg.error { color: var(--red); }
+.sup-wmsg-meta { font-size: 11px; color: var(--muted); margin-bottom: 4px; font-family: var(--mono); }
+.sup-watch-ask input { flex: 1; min-width: 0; }
 
 .toast {
   position: fixed; right: 18px; bottom: 18px; z-index: 30; max-width: 380px; display: flex; flex-direction: column; gap: 3px;
   padding: 10px 14px; border-radius: 10px; background: var(--panel); border: 1px solid rgba(192,132,252,.5);
   box-shadow: 0 12px 32px rgba(0,0,0,.45); cursor: pointer; font-size: 12px;
 }
-.toast b { color: var(--purple); }
+.toast b { color: var(--purple); padding-right: 18px; }
+.toast-close { position: absolute; top: 4px; right: 6px; background: none; border: 0; color: var(--muted); font-size: 16px; line-height: 1; cursor: pointer; padding: 2px 4px; }
+.toast-close:hover, .toast-close:focus-visible { color: var(--text); }
 .toast span { color: var(--muted); }
 
+/* a gate waiting in the run shown: asked inline above the steps, never in a dialog over the app */
+.run-gates { flex: none; display: flex; flex-direction: column; gap: 8px; padding: 10px 16px; background: rgba(250,204,21,.06); border-bottom: 1px solid rgba(250,204,21,.35); }
+.run-gate { display: flex; flex-direction: column; gap: 6px; }
+.run-gate + .run-gate { border-top: 1px solid var(--border); padding-top: 8px; }
+.run-gate-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.run-gate-head b { color: var(--yellow); }
 /* long approval messages (e.g. from the supervisor) scroll */
-#approval-message { max-height: 50vh; overflow: auto; white-space: pre-wrap; }
+.run-gate-message { margin: 0; max-height: 30vh; overflow: auto; white-space: pre-wrap; }
+.run-gate-actions { flex-wrap: wrap; gap: 8px; }
 
 /* ---------- account: sign-in screen + topbar chip ---------- */
 .login-screen { position: fixed; inset: 0; z-index: 50; background: var(--bg); display: grid; place-items: center; }
@@ -992,6 +1025,18 @@ body.resizing-dock .term-body { pointer-events: none; }
 .bl-labels { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
 .bl-labels:empty { display: none; }
 .bl-label { --lc: var(--muted); font-size: 10.5px; padding: 0 7px; border-radius: 99px; border: 1px solid var(--lc); color: var(--lc); }
+button.bl-label { font-family: inherit; background: none; cursor: pointer; }
+.bl-label.on { background: color-mix(in srgb, var(--lc) 22%, transparent); }
+.bl-labels-wrap { position: relative; }
+.bl-labels-pop {
+  position: absolute; top: calc(100% + 6px); left: 0; z-index: 20; min-width: 220px; max-height: 340px; overflow: auto;
+  padding: 6px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 12px 32px rgba(0,0,0,.4);
+}
+.bl-label-opt { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 6px; cursor: pointer; }
+.bl-label-opt:hover { background: var(--panel-2); }
+.bl-label-opt .muted { margin-left: auto; }
+.bl-label-active { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.bl-label-active:empty { display: none; }
 .bl-tasks { display: flex; align-items: center; gap: 6px; }
 .bl-bar { flex: 1; height: 5px; border-radius: 3px; background: var(--panel-2); overflow: hidden; }
 .bl-bar > span { display: block; height: 100%; background: var(--green); }

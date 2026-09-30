@@ -1,5 +1,6 @@
 /* Run chat (run-chat.js): any workflow run as a conversation. Builds on duo.css (bubbles, robots, gates). */
-#view-runchat { padding: 0; overflow: hidden; }
+#view-runchat { padding: 0; overflow: hidden; position: relative; }
+.rc-jump { position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%); z-index: 5; box-shadow: 0 6px 18px rgba(0,0,0,.35); }
 #view-runchat:not(.hidden) { display: flex; flex-direction: column; }
 #view-runchat .duo-chat-head { flex-wrap: wrap; }
 .rc-title { display: flex; align-items: baseline; gap: 8px; min-width: 0; }

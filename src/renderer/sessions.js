@@ -24,7 +24,7 @@
     error: null,
     loading: null,
     q: '',
-    tabs: [],           // open terminals: { key, id, kind, provider, sessionId, title, meta, opts, term, fit, pane, exited }
+    tabs: [],           // open terminals: { key, id, kind, provider, sessionId, title, meta, opts, term, fit, pane, exited, pendingTitle }
     active: null,
     seq: 0,
     timer: null,
@@ -54,6 +54,7 @@
           && new Date(x.createdAt).getTime() >= tab.startedAt - 5000 && !taken.has(resumeKey(x.provider, x.id))).pop();
         if (!s) continue;
         Object.assign(tab, { key: resumeKey(s.provider, s.id), kind: 'cli-resume', opts: { provider: s.provider, sessionId: s.id } });
+        if (tab.pendingTitle) applyPendingTitle(tab, s);
       }
       const s = tab.kind === 'cli-resume' && sx.sessions.find((x) => x.provider === tab.opts.provider && x.id === tab.opts.sessionId);
       if (s && s.title !== '(no prompt)') tab.title = s.title;
@@ -114,10 +115,13 @@
     $s('#sx-filters').querySelectorAll('[data-filter]').forEach((b) => (b.onclick = () => { prefs.filter = b.dataset.filter; persist(); renderList(); }));
   }
 
-  // rename: { provider, id } of the recorded session, when there is one to rename
-  function itemHtml({ provider, title, sub, time, open, exited, active, sessionAttr, rename }) {
-    const pencil = rename ? `<button type="button" class="icon-btn sx-item-rename" data-rename-provider="${esc(rename.provider)}" data-rename-id="${esc(rename.id)}" title="Rename" aria-label="Rename">
+  // rename: the pencil's data attributes (a recorded session's provider and id, or an open
+  // terminal's key); close: the key of an open terminal, for the trash can. Both show on hover/focus.
+  function itemHtml({ provider, title, sub, time, open, exited, active, sessionAttr, rename, close }) {
+    const pencil = rename ? `<button type="button" class="icon-btn sx-item-rename" ${rename} title="Rename" aria-label="Rename">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" /></svg></button>` : '';
+    const trash = close ? `<button type="button" class="icon-btn sx-item-close" data-close-tab="${esc(close)}" title="${exited ? 'Close' : 'End session'}" aria-label="${exited ? 'Close' : 'End session'}">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18" /><path d="M8 6V4h8v2" /><path d="M19 6l-1 14H6L5 6" /><path d="M10 11v6" /><path d="M14 11v6" /></svg></button>` : '';
     return `<div class="sx-item ${active ? 'active' : ''}" role="listitem" tabindex="0" ${sessionAttr}>
       ${badge(provider)}
       <span class="sx-item-body">
@@ -125,7 +129,7 @@
         <span class="sx-item-sub muted">${sub}</span>
       </span>
       <span class="sx-item-time muted small">${esc(time || '')}</span>
-      ${pencil}
+      ${pencil || trash ? `<span class="sx-item-actions">${pencil}${trash}</span>` : ''}
     </div>`;
   }
 
@@ -141,7 +145,7 @@
         parts.push(itemHtml({
           provider: t.provider, title: t.title, sub: esc(t.meta), time: t.exited ? 'exited' : '',
           open: true, exited: t.exited, active: t === sx.active, sessionAttr: `data-tab="${esc(t.key)}"`,
-          rename: t.kind === 'cli-resume' ? { provider: t.opts.provider, id: t.opts.sessionId } : null,
+          rename: `data-rename-tab="${esc(t.key)}"`, close: t.key,
         }));
       }
     }
@@ -161,21 +165,27 @@
           provider: s.provider, title: s.title, sub: `${where}${tags ? ` · ${tags}` : ''}`, time: ago(s.updatedAt),
           open: !!tab, exited: tab?.exited, active: tab && tab === sx.active,
           sessionAttr: `data-provider="${esc(s.provider)}" data-id="${esc(s.id)}" title="${esc(s.cwd || '')}"`,
-          rename: { provider: s.provider, id: s.id },
+          rename: `data-rename-provider="${esc(s.provider)}" data-rename-id="${esc(s.id)}"`,
         }));
       }
       if (list.length > 300) parts.push(`<p class="muted small sx-pad">${list.length - 300} older sessions not shown: search to find them.</p>`);
     }
     box.innerHTML = parts.join('');
     const onOpen = (el, fn) => {
-      el.onclick = (e) => { if (!e.target.closest('.sx-item-rename, .sx-title-input')) fn(); };
+      el.onclick = (e) => { if (!e.target.closest('.sx-item-actions, .sx-title-input')) fn(); };
       el.onkeydown = (e) => { if (e.key === 'Enter' && e.target === el) fn(); };
     };
     box.querySelectorAll('[data-tab]').forEach((el) => onOpen(el, () => activate(sx.tabs.find((t) => t.key === el.dataset.tab))));
     box.querySelectorAll('[data-id]').forEach((el) => onOpen(el, () => openSession(el.dataset.provider, el.dataset.id)));
     box.querySelectorAll('.sx-item-rename').forEach((b) => (b.onclick = (e) => {
       e.stopPropagation();
-      editTitle(b.closest('.sx-item').querySelector('.sx-item-text'), b.dataset.renameProvider, b.dataset.renameId);
+      const el = b.closest('.sx-item').querySelector('.sx-item-text');
+      if (b.dataset.renameTab) editTabTitle(el, sx.tabs.find((t) => t.key === b.dataset.renameTab));
+      else editSessionTitle(el, b.dataset.renameProvider, b.dataset.renameId);
+    }));
+    box.querySelectorAll('.sx-item-close').forEach((b) => (b.onclick = (e) => {
+      e.stopPropagation();
+      endTab(sx.tabs.find((t) => t.key === b.dataset.closeTab));
     }));
     const running = sx.tabs.filter((t) => !t.exited).length;
     $s('#nav-sessions-count').textContent = String(running);
@@ -210,9 +220,8 @@
     $s('#sx-term-meta').textContent = t.meta;
     $s('#btn-sx-restart').classList.toggle('hidden', !t.exited);
     $s('#btn-sx-close').textContent = t.exited ? 'Close' : 'End session';
-    const renamable = t.kind === 'cli-resume';
-    $s('#btn-sx-rename').disabled = !renamable;
-    $s('#btn-sx-rename').title = renamable ? 'Rename this session' : 'The CLI records the session after your first message; then it can be renamed.';
+    $s('#btn-sx-rename').disabled = false;
+    $s('#btn-sx-rename').title = t.kind === 'cli-new' ? 'Rename this terminal: the CLI session gets the name once it is recorded (after your first message)' : 'Rename this session';
   }
 
   function activate(tab) {
@@ -284,35 +293,28 @@
   }
 
   // ---- rename ---------------------------------------------------------------------------
-  // Turns a title into an input: Enter or leaving it saves, Esc cancels; empty = the CLI's own title.
-  // The list is not redrawn while a title is being edited.
-  function editTitle(el, provider, id) {
+  // Turns a title into an input: Enter or leaving it saves, Esc cancels; save(title) gets the
+  // trimmed text when it changed. The list is not redrawn while a title is being edited.
+  function editTitle(el, current, save) {
     if (!el || sx.editing) return;
-    const s = (sx.sessions || []).find((x) => x.provider === provider && x.id === id);
-    const tab = sx.tabs.find((t) => t.key === resumeKey(provider, id));
-    const current = s?.title || tab?.title || '';
     const input = document.createElement('input');
     input.className = 'sx-title-input';
     input.value = current;
-    input.placeholder = 'Empty = the CLI\'s title';
+    input.placeholder = 'Empty = the default title';
     input.setAttribute('aria-label', 'Session title');
     el.replaceWith(input);
     sx.editing = true;
     input.focus();
     input.select();
     let done = false;
-    const finish = async (save) => {
+    const finish = async (keep) => {
       if (done) return;
       done = true;
       sx.editing = false;
       const title = input.value.trim();
       input.replaceWith(el); // the header keeps its title element (the list is redrawn anyway)
-      if (save && title !== current) {
-        try {
-          const r = await api.renameCliSession(provider, id, title);
-          if (s) { s.title = r.title || s.title; s.renamed = r.renamed; }
-          if (tab && r.title) tab.title = r.title;
-        } catch (e) { flash(errMsg(e), true); }
+      if (keep && title !== current) {
+        try { await save(title); } catch (e) { flash(errMsg(e), true); }
       }
       renderHead();
       renderList();
@@ -326,38 +328,82 @@
     input.onclick = (e) => e.stopPropagation();
   }
 
-  function renameActive() {
-    const t = sx.active;
-    if (t?.kind !== 'cli-resume') return;
-    editTitle($s('#sx-term-title'), t.opts.provider, t.opts.sessionId);
+  // A recorded CLI session: the name is kept by the app (empty = the CLI's own title).
+  function editSessionTitle(el, provider, id) {
+    const s = (sx.sessions || []).find((x) => x.provider === provider && x.id === id);
+    const tab = sx.tabs.find((t) => t.key === resumeKey(provider, id));
+    editTitle(el, s?.title || tab?.title || '', async (title) => {
+      const r = await api.renameCliSession(provider, id, title);
+      if (s) { s.title = r.title || s.title; s.renamed = r.renamed; }
+      if (tab && r.title) tab.title = r.title;
+    });
   }
+
+  // An open terminal: a recorded session is renamed; a new session the CLI has not recorded yet
+  // gets its tab renamed now and the name given to the session once it is recorded (linkTabs);
+  // any other terminal only gets its tab label. Empty = the tab's first title.
+  function editTabTitle(el, tab) {
+    if (!tab) return;
+    if (tab.kind === 'cli-resume') return editSessionTitle(el, tab.opts.provider, tab.opts.sessionId);
+    tab.baseTitle ??= tab.title;
+    editTitle(el, tab.title, async (title) => {
+      // recorded while the title was being edited
+      if (tab.kind === 'cli-resume') return renameRecorded(tab, title);
+      tab.title = title || tab.baseTitle;
+      if (tab.kind === 'cli-new') tab.pendingTitle = title || null;
+    });
+  }
+
+  async function renameRecorded(tab, title) {
+    const { provider, sessionId: id } = tab.opts;
+    const r = await api.renameCliSession(provider, id, title);
+    const s = (sx.sessions || []).find((x) => x.provider === provider && x.id === id);
+    if (s) { s.title = r.title || s.title; s.renamed = r.renamed; }
+    if (r.title) tab.title = r.title;
+  }
+
+  // The name given to a new session before the CLI recorded it, applied to the recorded session.
+  function applyPendingTitle(tab, s) {
+    const title = tab.pendingTitle;
+    tab.pendingTitle = null;
+    s.title = title; // linkTabs keeps it on the tab meanwhile
+    renameRecorded(tab, title).then(renderList, (e) => flash(errMsg(e), true));
+  }
+
+  function renameActive() {
+    if (sx.active) editTabTitle($s('#sx-term-title'), sx.active);
+  }
+
 
   // ---- end ------------------------------------------------------------------------------
   // Ends the CLI and every process it started (the engine kills the whole process tree) and
   // closes the terminal. The conversation stays recorded: it can be reopened from the list.
-  async function endActive() {
-    const tab = sx.active;
+  // An exited terminal closes without asking. Used by the toolbar and the list's trash can.
+  async function endTab(tab) {
     if (!tab) return;
     if (tab.id && !tab.exited) {
       const ok = await confirmDialog('End session?', `"${tab.title}": the CLI and everything it started are closed. The conversation stays recorded, so you can reopen it from the list.`, 'End session');
-      if (!ok) return;
+      if (!ok || !sx.tabs.includes(tab)) return;
     }
-    closeActive();
+    closeTab(tab);
   }
+  const endActive = () => endTab(sx.active);
 
-  function closeActive() {
-    const tab = sx.active;
+  function closeTab(tab) {
     if (!tab) return;
     if (tab.id && !tab.exited) api.termKill(tab.id).catch(() => {});
     const i = sx.tabs.indexOf(tab);
+    if (i < 0) return;
     sx.tabs.splice(i, 1);
     tab.term.dispose();
     tab.pane.remove();
+    if (sx.active !== tab) { renderList(); return; }
     sx.active = null;
     const next = sx.tabs[i] || sx.tabs[i - 1];
     if (next) activate(next);
     else { renderHead(); renderList(); window.reportNotifyContext?.(); }
   }
+  const closeActive = () => closeTab(sx.active);
 
   function restartActive() {
     const tab = sx.active;

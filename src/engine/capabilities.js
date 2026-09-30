@@ -14,7 +14,9 @@
 // listing and auto-memory. What each CLI can and can't isolate is documented in
 // docs/agents/capabilities.md; the gaps are logged once per agent in the run.
 
-const TOOL_RE = /^(read|edit|write|bash(:.+)?)$/;
+const path = require('path');
+
+const TOOL_RE =/^(read|edit|write|bash(:.+)?)$/;
 const KEYS = ['tools', 'web', 'mcp', 'subagents'];
 
 // Codex features that reach outside the repository (desktop apps, browsers, plugins, memory).
@@ -24,6 +26,45 @@ const CODEX_FEATURES_OFF = ['plugins', 'apps', 'browser_use', 'computer_use', 'i
 // Claude Code's sub-agent tool: named `Agent` by current versions, `Task` by older ones. --tools
 // keeps only the names it knows, so offering just `Task` could leave a newer CLI with no sub-agents.
 const CLAUDE_SUBAGENT_TOOLS = ['Agent', 'Task'];
+
+// Shell utilities an agent with a command allowlist (bash:<command>) also runs without asking, so a
+// pipe or a `;` chain of allowed commands (`npm test; echo "exit=$?"`, `... | tail -3`) is not
+// refused headless, where nobody can approve it. Read-only: any agent with commands gets them.
+// `[` is `test` in its bracket form (`[ -f file ] && ...`).
+const READ_UTILITIES = [
+  '[',
+  'basename',
+  'cat',
+  'cut',
+  'dirname',
+  'echo',
+  'grep',
+  'head',
+  'ls',
+  'printenv',
+  'pwd',
+  'tail',
+  'test',
+  'tr',
+  'wc',
+];
+// Only for agents that write files (these can: sort -o, uniq <in> <out>): Claude Code keeps their
+// writes (mkdir, redirects) inside the working folder and the --add-dir folders (RUN_DIRS).
+const WRITE_UTILITIES = [
+  'mkdir',
+  'mktemp',
+  'sort',
+  'uniq',
+];
+// The engine sets these in every agent's environment (providers.runCli), so no command needs a
+// `VAR=value` prefix; a prefix that still appears is allowed in front of an allowed command.
+const AGENT_ENV = { MULTIAGENT_SIMULATION_ONLY: '1' };
+// Folders of the run every agent with commands may write to (created by the engine, given to
+// Claude Code with --add-dir): logs of long commands, evidence screenshots.
+const RUN_DIRS = [
+  'logs',
+  'screenshots',
+];
 
 // Flags that take no value: never passed twice (clap-based CLIs refuse a repeated flag).
 const BARE_FLAGS = new Set(['--no-subagents', '--disable-web-search', '--always-approve', '--strict-mcp-config', '--no-chrome', '--disable-slash-commands']);
@@ -67,6 +108,38 @@ const bashRules = (caps) => caps.tools.filter((t) => t === 'bash' || t.startsWit
 const writes = (caps) => has(caps, 'edit') || has(caps, 'write');
 const readOnly = (caps) => !writes(caps) && !bashRules(caps).length;
 
+// Claude Code allow rules for the agent's commands: each bash:<command>, the same with an AGENT_ENV
+// prefix, and the utilities above (the write ones only for agents that write files). A bare `bash`
+// already allows everything.
+function claudeBashRules(caps) {
+  const bash = bashRules(caps);
+  if (!bash.length) return [];
+  if (bash.includes('bash')) return ['Bash'];
+  const cmds = bash.map((t) => t.slice(5).trim());
+  const prefixes = Object.entries(AGENT_ENV).map(([k, v]) => `${k}=${v}`);
+  const utilities = [...READ_UTILITIES, ...(writes(caps) ? WRITE_UTILITIES : [])].filter((u) => !cmds.includes(u));
+  return [...cmds, ...prefixes.flatMap((p) => cmds.map((c) => `${p} ${c}`)), ...utilities].map((c) => `Bash(${c}:*)`);
+}
+
+// The run folders (absolute) an agent with commands may write to, for --add-dir; [] otherwise.
+const runDirs = (caps, runDir) => (caps && runDir && bashRules(caps).length ? RUN_DIRS.map((d) => path.join(runDir, d)) : []);
+
+// Told to every agent with commands on its first turn (any CLI): unattended, a command the CLI
+// would ask about is refused, so this says how to run commands that are never asked about.
+function commandGuide(caps, runDir) {
+  if (!caps || !bashRules(caps).length) return '';
+  const [logs, shots] = runDirs(caps, runDir);
+  const env = Object.entries(AGENT_ENV).map(([k, v]) => `${k}=${v}`).join(', ');
+  return [
+    'How to run commands in this unattended run (nobody can approve a command the CLI would ask about: it is refused):',
+    '- Your current folder already is your working folder: run commands directly, never `cd <folder> && ...`. For another folder use the tool\'s own path option (`git -C <dir>`, `npm --prefix <dir>`).',
+    `- ${env} is already set in your environment: never prefix a command with \`VAR=value\`.`,
+    '- Avoid shell expansions the CLI cannot check (`$VAR`, `$(...)`, `$?`): write the value out; the tool already reports each command\'s exit code.',
+    ...(logs ? [`- Write command logs to \`${logs}${path.sep}<name>.log\` and screenshots to \`${shots}\`, never to /tmp, $TEMP or AppData (a gitignored folder of the working folder is fine too).`] : []),
+    '- Pipes and `;` chains are fine when every part is an allowed command or a simple utility (tail, head, grep, ls, cat, echo, wc, printenv; mkdir -p, mktemp and sort when you may write files). When unsure, run one command per call; after a refusal, rephrase it once into an allowed form instead of retrying variants.',
+  ].join('\n');
+}
+
 // TOML inline value (codex -c): JSON strings, numbers, booleans and arrays are valid TOML.
 function toml(v) {
   if (v && typeof v === 'object' && !Array.isArray(v)) {
@@ -90,9 +163,10 @@ const claudePath = (p) => {
  * isolated: keep the user's CLI configuration out. mcpServers: the workflow's mcp_servers.
  * denyEdits: globs of files the agent may not edit (`edits_tests: false` → tests_paths); only
  * Claude's edit tools can refuse them, the engine checks every CLI's turn afterwards anyway.
+ * runDir: the run's folder; its RUN_DIRS go to Claude with --add-dir when the agent has commands.
  * Returns { args, notes }: notes say what this CLI could not enforce (logged once per agent).
  */
-function providerArgs(type, { caps = null, isolated = true, mcpServers = {}, denyEdits = [] } = {}) {
+function providerArgs(type, { caps = null, isolated = true, mcpServers = {}, denyEdits = [], runDir = null } = {}) {
   const args = [];
   const notes = [];
   const mcp = caps ? pick(mcpServers, caps.mcp) : {};
@@ -112,11 +186,8 @@ function providerArgs(type, { caps = null, isolated = true, mcpServers = {}, den
       const allowed = ['Read', 'Glob', 'Grep'];
       if (has(caps, 'edit')) { offered.push('Edit', 'NotebookEdit'); allowed.push('Edit', 'NotebookEdit'); }
       if (has(caps, 'write')) { offered.push('Write'); allowed.push('Write'); }
-      const bash = bashRules(caps);
-      if (bash.length) {
-        offered.push('Bash');
-        allowed.push(...bash.map((t) => (t === 'bash' ? 'Bash' : `Bash(${t.slice(5).trim()}:*)`)));
-      }
+      const bash = claudeBashRules(caps);
+      if (bash.length) { offered.push('Bash'); allowed.push(...bash); }
       if (caps.web) { offered.push('WebSearch', 'WebFetch'); allowed.push('WebSearch', 'WebFetch'); }
       if (caps.subagents) { offered.push(...CLAUDE_SUBAGENT_TOOLS); allowed.push(...CLAUDE_SUBAGENT_TOOLS); }
       allowed.push(...Object.keys(mcp).map((n) => `mcp__${n}`));
@@ -125,6 +196,7 @@ function providerArgs(type, { caps = null, isolated = true, mcpServers = {}, den
       if (writes(caps) && denyEdits.length) args.push('--disallowedTools', denyEdits.map((p) => `Edit(${claudePath(p)})`).join(' '));
       // file edits (and mkdir/redirects) are refused headless without acceptEdits
       if (writes(caps)) args.push('--permission-mode', 'acceptEdits');
+      for (const dir of runDirs(caps, runDir)) args.push('--add-dir', dir);
       break;
     }
     case 'codex-cli': {
@@ -182,12 +254,18 @@ function describe(caps, type) {
 }
 
 module.exports = {
+  AGENT_ENV,
   CLAUDE_SUBAGENT_TOOLS,
   CODEX_FEATURES_OFF,
+  commandGuide,
   dedupeFlags,
   describe,
   merge,
   normalize,
   providerArgs,
+  READ_UTILITIES,
+  RUN_DIRS,
+  runDirs,
   validate,
+  WRITE_UTILITIES,
 };

@@ -206,9 +206,21 @@ function removeScratch(dir) {
   try { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 3 }); } catch { /* temp folder */ }
 }
 
+/** The usage: this file's header comment, without the comment markers. */
+function usage() {
+  const lines = fs.readFileSync(__filename, 'utf8').split(/\r?\n/);
+  const end = lines.findIndex((l) => !l.startsWith('//'));
+  return lines.slice(0, end).map((l) => l.replace(/^\/\/ ?/, '')).join('\n');
+}
+
 // ---- the capture (Electron main process) -----------------------------------------------------
 function main() {
   const { app, nativeTheme, ipcMain } = require('electron');
+  if (process.argv.includes('--help') || process.argv.includes('-h')) {
+    console.log(usage());
+    app.exit(0);
+    return;
+  }
   let args;
   try {
     args = parseArgs(process.argv.slice(2));
@@ -326,7 +338,7 @@ function main() {
         document.querySelector('#mock-toggle').checked = true;
         if (!document.body.classList.contains('dev-mode')) throw new Error('developer mode is off: refusing to start a real run');
         document.querySelector('#btn-start').click();`);
-      const approve = setInterval(() => js(`(document.querySelector('#approval-modal:not(.hidden) #approval-choices:not(.hidden) button') || document.querySelector('#approval-modal:not(.hidden) #btn-approve'))?.click()`).catch(() => {}), 1000);
+      const approve = setInterval(() => js(`document.querySelector('#run-gates:not(.hidden) .run-gate-actions button[data-choice]:not(:disabled), #run-gates:not(.hidden) button[data-answer=\"true\"]:not(:disabled)')?.click()`).catch(() => {}), 1000);
       await pause(args.wait);
       clearInterval(approve);
     } else await click(`.nav-item[data-view="${v}"]`);
@@ -376,4 +388,4 @@ function main() {
 // Electron's main process runs the capture; plain Node (the tests) only imports the helpers.
 if (process.type === 'browser') main();
 
-module.exports = { parseArgs, recordShot, VIEWS };
+module.exports = { parseArgs, recordShot, usage, VIEWS };

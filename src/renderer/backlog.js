@@ -8,8 +8,11 @@
 // Work a local workflow merged into the local base but did not push shows in "Merged locally"; the
 // bar above the list pushes it (and updates from origin first when origin moved); a conflict on
 // the update goes to a run of the local workflow, whose developer resolves it.
+// The list narrows by state, by text and by labels (the rule is in backlog-labels.js: AND across
+// label groups, OR within one); the selected labels are remembered per project and a label chip
+// on an issue toggles its label. Selection and assignment only count the issues shown.
 // Uses app.js globals ($, esc, state, errMsg, dateOf, markdownHtml, showView, openModal,
-// closeModal, devMode, wantsSimulation, openApproval, selectRun).
+// closeModal, devMode, wantsSimulation, openGateOf, openNextGate, selectRun).
 /* global api */
 (() => {
   // Must match PLATFORMS in src/backlog.js (soon = no sync yet).
@@ -18,6 +21,7 @@
   const PROJECT_KEY = 'multiagent.backlogProject';
   const MODE_KEY = 'multiagent.backlogMode';
   const WORKFLOW_KEY = 'multiagent.backlogWorkflow';
+  const LABELS_KEY = 'multiagent.backlogLabels.'; // + project id
   const FILTERS = [['open', 'Open'], ['closed', 'Closed'], ['all', 'All']];
   // 'local': merged into the local base by a local workflow, not pushed yet (shown when there is any)
   const COLUMNS = [['todo', 'To do'], ['in_progress', 'In progress'], ['waiting', 'Waiting for approval'], ['local', 'Merged locally'], ['done', 'Done']];
@@ -28,8 +32,9 @@
   const bl = {
     projects: [], projectId: null, platform: null, data: null, error: null, syncing: false,
     mode: load(MODE_KEY) === 'kanban' ? 'kanban' : 'list', filter: 'open', q: '', expanded: new Set(), seq: 0,
-    selected: new Set(), workflows: [],
+    selected: new Set(), workflows: [], labels: [], labelsOpen: false,
   };
+  const { hasLabel, labelOptions, matchesLabels, pruneLabels, toggleLabel } = window.BacklogLabels;
   const $b = (sel) => document.querySelector(sel);
   const project = () => bl.projects.find((p) => p.id === bl.projectId) || null;
   const visible = () => state.view === 'backlog';
@@ -58,9 +63,11 @@
     bl.error = null;
     bl.expanded.clear();
     bl.selected.clear();
+    bl.labels = loadLabels(id);
+    bl.labelsOpen = false;
     if (id) save(PROJECT_KEY, id);
     if (!id) { render(); return; }
-    try { bl.data = await api.getBacklog(id); } catch (e) { bl.error = errMsg(e); }
+    try { setData(await api.getBacklog(id)); } catch (e) { bl.error = errMsg(e); }
     bl.platform = bl.data?.platform || state.settings.backlogPlatform || 'github';
     render();
     if (project()?.repo && !PLATFORMS[bl.platform]?.soon) sync();
@@ -71,6 +78,20 @@
     // selected issues that left To do (assigned, closed) are dropped from the selection
     const ok = new Set((data?.issues || []).filter(selectable).map((i) => i.number));
     for (const n of [...bl.selected]) if (!ok.has(n)) bl.selected.delete(n);
+    // labels no synced issue has any more leave the filter
+    if (data?.issues) setLabels(pruneLabels(bl.labels, data.issues));
+  }
+
+  function loadLabels(id) {
+    if (!id) return [];
+    try {
+      const v = JSON.parse(load(LABELS_KEY + id) || '[]');
+      return Array.isArray(v) ? v.filter((x) => typeof x === 'string') : [];
+    } catch { return []; }
+  }
+  function setLabels(list) {
+    bl.labels = list;
+    if (bl.projectId) save(LABELS_KEY + bl.projectId, JSON.stringify(list));
   }
 
   async function sync() {
@@ -113,17 +134,17 @@
     if (visible() && busy) reload();
   }, 5000);
 
-  // Opens a run as a chat, live when it is in progress (its Details button leads to
-  // Workflows › Runs).
+  // Opens a run in the remembered run view (Chat or Details, showRun in app.js).
   function openRun(el) {
-    const runId = el.dataset.run;
-    window.openRunChat({ runId, workflow: el.dataset.workflow, running: isRunLive(runId) });
+    window.showRun(el.dataset.run, { workflow: el.dataset.workflow });
   }
 
-  // A waiting card opens the chat of its run, where the gate is answered (or its Run screen).
+  // "Review approval" opens its run, where the gate is answered (the run chat, or the Run screen's
+  // gate card): never a dialog over the Backlog.
   function openGate(el) {
     const run = el.closest('[data-n]')?.querySelector('[data-run]');
-    if (run && isRunLive(run.dataset.run)) openRun(run);
+    if (run && state.runs.has(run.dataset.run)) openGateOf(run.dataset.run);
+    else if (run && isRunLive(run.dataset.run)) openRun(run);
     else openNextGate();
   }
 
@@ -154,11 +175,11 @@
     if (r && (r.waiting || r.status === 'running')) why.push(`run ${r.waiting ? 'waiting for approval' : 'in progress'} (${r.workflow || 'workflow'})`);
     return why;
   }
-  const busySelected = () => (bl.data?.issues || []).filter((i) => bl.selected.has(i.number) && inFlight(i).length);
+  const busySelected = () => (bl.data?.issues || []).filter((i) => bl.selected.has(i.number) && isShown(i) && inFlight(i).length);
   // The issues the assignment sends: without the busy ones unless the user assigns them anyway.
   function assignNumbers() {
     const skip = $b('#assign-skip-busy')?.checked ? new Set(busySelected().map((i) => i.number)) : new Set();
-    return [...bl.selected].filter((n) => !skip.has(n));
+    return shownSelected().filter((n) => !skip.has(n));
   }
 
   function renderAssignBusy() {
@@ -199,12 +220,12 @@
   }
 
   async function openAssign() {
-    if (!bl.selected.size) return;
+    if (!shownSelected().length) return;
     $b('#assign-error').textContent = '';
     try { bl.workflows = (await api.listWorkflows()).filter((w) => !w.error && w.inputs?.task); } catch (e) { bl.error = errMsg(e); render(); return; }
     if (!bl.workflows.length) { bl.error = 'No workflow has a task input to receive the issues.'; render(); return; }
     // in the order selected (the order the runs start, or the order of a group's task)
-    const issues = [...bl.selected].map((n) => (bl.data?.issues || []).find((i) => i.number === n)).filter(Boolean);
+    const issues = shownSelected().map((n) => (bl.data?.issues || []).find((i) => i.number === n)).filter(Boolean);
     $b('#assign-issues').textContent = issues.map((i) => `#${i.number} ${i.title}`).join(' · ');
     const sel = $b('#assign-workflow');
     sel.innerHTML = bl.workflows.map((w) => `<option value="${esc(w.file)}">${esc(w.name)}</option>`).join('');
@@ -269,18 +290,59 @@
 
   // ---- rendering ---------------------------------------------------------------------------
   const matches = (i) => {
+    if (!matchesLabels(i, bl.labels)) return false;
     if (!bl.q) return true;
     const hay = `#${i.number} ${i.title} ${i.labels.map((l) => l.name).join(' ')} ${i.author || ''} ${i.assignees.join(' ')}`.toLowerCase();
     return hay.includes(bl.q.toLowerCase());
   };
+  // The state chips only apply to the list (the kanban shows every state in its columns).
+  const inState = (i) => bl.mode === 'kanban' || bl.filter === 'all' || i.state === bl.filter;
+  const isShown = (i) => inState(i) && matches(i);
+  // Selected issues the filters hide stay selected, but are neither counted nor assigned.
+  function shownSelected() {
+    const shown = new Set((bl.data?.issues || []).filter(isShown).map((i) => i.number));
+    return [...bl.selected].filter((n) => shown.has(n));
+  }
+  const filtering = () => !!bl.q || bl.labels.length > 0;
+  const noMatch = () => `<div class="empty-state"><b>No issues match the filters</b>
+    <p class="muted">${bl.labels.length ? `Labels: ${esc(bl.labels.join(', '))}. ` : ''}${bl.q ? `Search: “${esc(bl.q)}”.` : ''}</p>
+    <button class="btn sm ghost" type="button" data-clear-filters>Clear filters</button></div>`;
 
-  const labels = (i) => i.labels.map((l) => `<span class="bl-label"${l.color ? ` style="--lc:${esc(l.color)}"` : ''}>${esc(l.name)}</span>`).join('');
+  const colorStyle = (color) => (color ? ` style="--lc:${esc(color)}"` : '');
+  // A label chip toggles its label in the filter (`on` while selected).
+  const labelChip = (l) => {
+    const on = hasLabel(bl.labels, l.name);
+    return `<button class="bl-label${on ? ' on' : ''}" type="button" data-label="${esc(l.name)}" title="${on ? 'Remove from the label filter' : 'Filter by this label'}"${colorStyle(l.color)}>${esc(l.name)}</button>`;
+  };
+  const labels = (i) => i.labels.map(labelChip).join('');
+
+  // The label filter: every label of the synced issues, with how many the state filter shows.
+  // Hidden when no issue has a label.
+  function renderLabelFilter(issues) {
+    const options = labelOptions(issues, issues.filter(inState));
+    $b('#bl-labels-wrap').classList.toggle('hidden', !options.length);
+    if (!options.length) bl.labelsOpen = false;
+    const btn = $b('#btn-bl-labels');
+    btn.textContent = bl.labels.length ? `Labels (${bl.labels.length})` : 'Labels';
+    btn.classList.toggle('primary', bl.labels.length > 0);
+    btn.classList.toggle('ghost', !bl.labels.length);
+    btn.setAttribute('aria-expanded', String(bl.labelsOpen));
+    const pop = $b('#bl-labels-pop');
+    pop.classList.toggle('hidden', !bl.labelsOpen);
+    pop.innerHTML = bl.labelsOpen ? options.map((l) => `<label class="bl-label-opt" role="menuitemcheckbox">
+        <input type="checkbox" data-label-opt="${esc(l.name)}"${hasLabel(bl.labels, l.name) ? ' checked' : ''} />
+        <span class="bl-label"${colorStyle(l.color)}>${esc(l.name)}</span><span class="muted small">${l.count}</span></label>`).join('') : '';
+    const color = new Map(options.map((l) => [l.name.toLowerCase(), l.color]));
+    $b('#bl-label-active').innerHTML = bl.labels.length ? `${bl.labels.map((name) =>
+      `<button class="bl-label on" type="button" data-label="${esc(name)}" title="Remove from the label filter"${colorStyle(color.get(name.toLowerCase()))}>${esc(name)} ×</button>`).join('')}
+      <button class="link-btn small" type="button" data-label-clear title="Remove every label from the filter">clear</button>` : '';
+  }
   const tasks = (i) => {
     if (!i.tasks.total) return '';
     const pct = Math.round((i.tasks.done / i.tasks.total) * 100);
     return `<span class="bl-tasks" title="${i.tasks.done} of ${i.tasks.total} tasks done"><span class="bl-bar"><span style="width:${pct}%"></span></span><span class="mono small">${i.tasks.done}/${i.tasks.total}</span></span>`;
   };
-  const runLink = (r) => `<button class="bl-run" type="button" data-run="${esc(r.runId)}" data-workflow="${esc(r.workflow || '')}" title="Open run ${esc(r.runId)} as a chat">
+  const runLink = (r) => `<button class="bl-run" type="button" data-run="${esc(r.runId)}" data-workflow="${esc(r.workflow || '')}" title="Open run ${esc(r.runId)}">
       <span class="pill pill-${esc(r.status)}">${esc(r.waiting ? 'waiting' : r.status)}</span><span>${esc(r.workflow || 'workflow')}</span>${r.mock ? '<span class="badge p-mock">simulated</span>' : ''}</button>`;
   // Open PRs/MRs that refer to the issue, each a link to it.
   const prBadges = (i) => (i.pullRequests || []).map((p) =>
@@ -300,7 +362,9 @@
     const notPushed = i.column === 'local'
       ? `<span class="badge bl-notpushed" title="Merged into the local ${esc(r.localMerge?.base || 'base')}; the issue closes when it is pushed (Push, above)">not pushed</span>` : '';
     const recovered = r.recovery ? `<span class="badge bl-recovered" title="${esc(`Supervisor: ${r.recovery}`)}">sent back after a failed merge</span>` : '';
-    return `${runLink(r)}${notPushed}${recovered}${groupBadge(r.groupedWith)}${i.column === 'waiting' ? '<button class="btn sm primary" type="button" data-gate>Review approval</button>' : ''}`;
+    const watch = r.status === 'running' && isRunLive(r.runId)
+      ? `<button class="btn sm ghost sup-btn" type="button" data-watch="${esc(r.runId)}" data-workflow="${esc(r.workflow || '')}" title="The supervisor follows this run and explains it in a chat (opt-in: it costs tokens)"><span class="sup-mark">◆</span> Watch</button>` : '';
+    return `${runLink(r)}${notPushed}${recovered}${groupBadge(r.groupedWith)}${i.column === 'waiting' ? '<button class="btn sm primary" type="button" data-gate>Review approval</button>' : ''}${watch}`;
   }
 
   function issueRow(i) {
@@ -341,15 +405,15 @@
     </div>`;
 
   function renderList(issues) {
-    const shown = issues.filter((i) => (bl.filter === 'all' || i.state === bl.filter) && matches(i));
-    return shown.length ? shown.map(issueRow).join('') : '<p class="muted">No issues match.</p>';
+    const shown = issues.filter(isShown);
+    return shown.length ? shown.map(issueRow).join('') : filtering() ? noMatch() : '<p class="muted">No issues match.</p>';
   }
 
   function renderKanban(issues) {
-    const shown = issues.filter(matches);
+    const shown = issues.filter(isShown);
     const withLocal = bl.data?.local?.ahead > 0 || issues.some((i) => i.column === 'local');
     const columns = COLUMNS.filter(([col]) => col !== 'local' || withLocal);
-    return `<div class="bl-board${withLocal ? ' with-local' : ''}">${columns.map(([col, title]) => {
+    return `${!shown.length && issues.length && filtering() ? noMatch() : ''}<div class="bl-board${withLocal ? ' with-local' : ''}">${columns.map(([col, title]) => {
       const items = shown.filter((i) => (i.column || (i.state === 'closed' ? 'done' : 'todo')) === col);
       return `<section class="bl-col bl-col-${col}">
         <h3>${title} <span class="muted">${items.length}</span></h3>
@@ -482,7 +546,7 @@
       b.classList.toggle('active', b.dataset.mode === bl.mode);
       b.setAttribute('aria-selected', String(b.dataset.mode === bl.mode));
     });
-    const n = bl.selected.size;
+    const n = shownSelected().length;
     $b('#btn-bl-assign').classList.toggle('hidden', !n);
     $b('#btn-bl-assign').textContent = `Assign workflow… (${n})`;
     $b('#btn-bl-clear').classList.toggle('hidden', !n);
@@ -493,6 +557,7 @@
     filters.classList.toggle('hidden', bl.mode === 'kanban');
     filters.innerHTML = FILTERS.map(([f, label]) =>
       `<button class="chip${bl.filter === f ? ' active' : ''}" data-f="${f}">${label} <span class="muted">${count(f)}</span></button>`).join('');
+    renderLabelFilter(issues);
     $b('#bl-synced').textContent = bl.syncing ? 'Syncing…' : bl.data ? `Synced ${dateOf(bl.data.syncedAt)} from ${PLATFORMS[bl.data.platform]?.label || bl.data.platform}` : '';
     const prError = bl.data?.pullRequestsError ? `Open ${bl.data.platform === 'gitlab' ? 'MRs' : 'PRs'} could not be read: ${bl.data.pullRequestsError}` : '';
     $b('#bl-error').textContent = bl.error || prError;
@@ -531,6 +596,27 @@
     const mode = e.target.closest('[data-mode]')?.dataset.mode;
     if (mode) { bl.mode = mode; save(MODE_KEY, mode); render(); }
   };
+  function clearFilters() {
+    bl.q = '';
+    $b('#bl-search').value = '';
+    setLabels([]);
+    render();
+  }
+  const flipLabel = (name) => { setLabels(toggleLabel(bl.labels, name)); render(); };
+  $b('#btn-bl-labels').onclick = () => { bl.labelsOpen = !bl.labelsOpen; render(); };
+  $b('#bl-labels-pop').onchange = (e) => {
+    const opt = e.target.closest('[data-label-opt]');
+    if (opt) flipLabel(opt.dataset.labelOpt);
+  };
+  $b('#bl-label-active').onclick = (e) => {
+    if (e.target.closest('[data-label-clear]')) { setLabels([]); render(); return; }
+    const chip = e.target.closest('[data-label]');
+    if (chip) flipLabel(chip.dataset.label);
+  };
+  // the label menu closes on a click outside it
+  document.addEventListener('click', (e) => {
+    if (bl.labelsOpen && e.target.isConnected && !e.target.closest('#bl-labels-wrap')) { bl.labelsOpen = false; render(); }
+  });
   $b('#bl-filters').onclick = (e) => {
     const f = e.target.closest('[data-f]')?.dataset.f;
     if (f) { bl.filter = f; render(); }
@@ -580,6 +666,11 @@
       render();
       return;
     }
+    const watch = e.target.closest('[data-watch]');
+    if (watch) { window.watchWithSupervisor({ runId: watch.dataset.watch, workflow: watch.dataset.workflow, status: 'running', mock: !!watch.closest('[data-n]')?.querySelector('.p-mock') }); return; }
+    const label = e.target.closest('[data-label]');
+    if (label) { flipLabel(label.dataset.label); return; }
+    if (e.target.closest('[data-clear-filters]')) { clearFilters(); return; }
     const run = e.target.closest('[data-run]');
     if (run) { openRun(run); return; }
     const gate = e.target.closest('[data-gate]');

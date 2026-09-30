@@ -1,7 +1,9 @@
 // Run chat: any workflow run as a conversation (RunChatModel in run-chat-model.js), live or
 // replayed from its events.jsonl. Agents get their robot (robots.js) by provider and model, fan-out
 // steps sit side by side, human gates are answered inline (never automatically). Opened from the
-// runs lists ("Open chat"), the Backlog and the Run screen's Chat / Details toggle.
+// runs lists ("Open chat"), the Backlog and the Run screen's Chat / Details toggle, and by every
+// way of opening a run while Chat is the remembered run view (showRun in app.js). A run always
+// opens at its latest message; "Jump to latest" shows while scrolled up.
 // Write & Review and AI Arena runs keep their own chat screens (openChatFor routes them).
 (() => {
   const $c = (sel) => document.querySelector(sel);
@@ -154,6 +156,16 @@
     drawTyping();
     drawHead();
     if (stick && chat.live) scroller.scrollTop = scroller.scrollHeight;
+    drawJump();
+  }
+
+  // "Jump to latest" while scrolled up from the last message.
+  const scrolledUp = (s) => s.scrollHeight - s.scrollTop - s.clientHeight >= 240;
+  const drawJump = () => $c('#rc-jump').classList.toggle('hidden', !scrolledUp($c('#rc-scroll')));
+  function toLatest() {
+    const scroller = $c('#rc-scroll');
+    scroller.scrollTop = scroller.scrollHeight;
+    drawJump();
   }
 
   // Who is working right now, below the last message (several at once in a fan-out).
@@ -184,6 +196,7 @@
     $c('#rc-messages').innerHTML = '';
     $c('#rc-typing').innerHTML = '';
     delete $c('#rc-typing').dataset.key;
+    $c('#rc-jump').classList.add('hidden');
   }
 
   const isCurrentRun = (runId) => isRunLive(runId);
@@ -193,10 +206,9 @@
   async function openRun(runId, { running = false, follow = false } = {}) {
     chat.follow = follow;
     reset(runId);
-    // set before showing the view, so a pending gate of this run does not open the dialog
+    // set before showing the view, so a pending gate of this run is asked inline right away
     chat.live = running || isCurrentRun(runId);
     showView('runchat');
-    if (chat.live && state.approval?.run_id === runId) closeApproval(); // answered inline
     drawHead();
     let events = [];
     try {
@@ -214,9 +226,8 @@
     chat.loading = false;
     chat.live = chat.live && chat.model.run.status === 'running';
     draw(ids);
-    // a past run opens at its start; a live one at the latest message
-    const scroller = $c('#rc-scroll');
-    scroller.scrollTop = chat.live ? scroller.scrollHeight : 0;
+    // live or past, a run opens at its latest message (where the outcome is)
+    toLatest();
   }
 
   function onEvent(ev) {
@@ -266,12 +277,20 @@
     });
     $c('#rc-stop').onclick = () => api.stopRun(chat.runId);
     $c('#rc-logs').onclick = () => chat.model.run.runDir && api.openPath(chat.model.run.runDir);
-    // Chat / Details: the Run screen for the run in progress, the runs list for a past one.
+    // Chat / Details: the Run screen for the run in progress, the runs list for a past one. The
+    // choice is remembered: the next run opened shows the same view (setRunView in app.js).
     $c('#rc-details').onclick = () => {
+      setRunView('details');
       if (state.runs.has(chat.runId)) selectRun(chat.runId);
       else showRunInList(chat.runId);
     };
-    $c('#run-mode-chat').onclick = () => state.run && openChatFor({ runId: state.run.id, workflow: state.run.workflow, running: state.run.status === 'running', follow: true });
+    $c('#run-mode-chat').onclick = () => {
+      if (!state.run) return;
+      setRunView('chat');
+      openChatFor({ runId: state.run.id, workflow: state.run.workflow, running: state.run.status === 'running', follow: true });
+    };
+    $c('#rc-scroll').addEventListener('scroll', drawJump, { passive: true });
+    $c('#rc-jump').onclick = toLatest;
     // the supervisor's look is customizable in Agents
     document.addEventListener('robots:changed', (e) => {
       if (e.detail?.name !== 'supervisor' || chat.loading || !chat.runId) return;

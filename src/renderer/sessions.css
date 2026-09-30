@@ -72,12 +72,14 @@
 .sx-provider:disabled { opacity: .45; cursor: not-allowed; }
 #sx-form select, #sx-form input[type="text"] { width: 100%; }
 
-/* rename */
+/* rename (pencil) and close (trash can), shown on hover or keyboard focus */
 .sx-item { position: relative; }
 .sx-item-text { overflow: hidden; text-overflow: ellipsis; }
-.sx-item-rename { position: absolute; right: 6px; bottom: 6px; padding: 3px; background: var(--panel-2); opacity: 0; }
-.sx-item-rename svg { width: 13px; height: 13px; }
-.sx-item:hover .sx-item-rename, .sx-item:focus-within .sx-item-rename { opacity: 1; }
+.sx-item-actions { position: absolute; right: 6px; bottom: 6px; display: flex; gap: 2px; opacity: 0; }
+.sx-item-rename, .sx-item-close { padding: 3px; background: var(--panel-2); }
+.sx-item-rename svg, .sx-item-close svg { width: 13px; height: 13px; }
+.sx-item-close:hover { color: var(--red); }
+.sx-item:hover .sx-item-actions, .sx-item:focus-within .sx-item-actions { opacity: 1; }
 .sx-title-row { display: flex; align-items: center; gap: 4px; min-width: 0; }
 .sx-rename { padding: 2px; flex: none; }
 .sx-rename svg { width: 13px; height: 13px; }

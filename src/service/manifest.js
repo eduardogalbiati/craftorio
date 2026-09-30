@@ -31,6 +31,8 @@ const DESKTOP = [
   { channel: 'artifacts:open', method: 'openArtifact', params: ['path', 'reveal'], desktop: 'Opening files with their app' },
   { channel: 'clipboard:read', method: 'clipboardRead', desktop: 'The clipboard' },
   { channel: 'clipboard:write', method: 'clipboardWrite', params: ['text'], desktop: 'The clipboard' },
+  // restarts the app (the code changed on disk); refuses with runs in progress unless interruptRuns
+  { channel: 'app:relaunch', method: 'relaunchApp', params: ['interruptRuns'], desktop: 'Restarting the app' },
   // a click on a desktop notification ({ runId, workflow } | { terminalId })
   { event: 'notify:open', method: 'onNotificationClick' },
 ];

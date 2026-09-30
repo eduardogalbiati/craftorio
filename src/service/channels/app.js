@@ -26,6 +26,8 @@ module.exports = (ctx) => [
       simulationOnly: simulation.simulationOnly(),
     }),
   },
+  // the code this process started with and the code on disk now (changed: a restart is needed, #83)
+  { channel: 'app:codeVersion', method: 'codeVersion', fn: () => ctx.code.check() },
   { channel: 'settings:get', method: 'getSettings', fn: () => workspace.readSettings(ctx.ws) },
   {
     channel: 'settings:set',

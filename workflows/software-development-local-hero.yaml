@@ -296,6 +296,9 @@ steps:
       Change production code only: the test writer writes and runs the tests after the review.
       In `test_notes`, tell it what should be tested: the behaviours you changed, the edge cases
       and the files (and the existing tests your change makes obsolete, if any).
+      In `evidence_plan`, say per issue how to show the change working, for the evidence step (it
+      does not read the code): the screen and the screenshot options (view, tab, clicks), or the
+      request, command or mock run whose output shows it; `none` and why when nothing is observable.
     output_schema:
       type: object
       required: [branch, summary, files_changed, test_notes, committed]
@@ -305,6 +308,8 @@ steps:
         files_changed: { type: array, items: { type: string } }
         # for the test writer: behaviours, edge cases and files to test
         test_notes:    { type: string }
+        # for the evidence step: per issue, the screen/command/request that shows the change
+        evidence_plan: { type: string }
         committed:     { type: boolean }
         # a review round answered without a production change: back to the reviewer with the answer
         no_change:     { type: boolean }
@@ -626,6 +631,12 @@ steps:
       This run implements several issues ({{ inputs.issues | join(', ') }}): collect evidence per
       issue and set `issue` (its URL) on each entry.
       {% endif %}
+      {% if steps.develop.output.evidence_plan %}
+      The developer's evidence plan (follow it; don't explore the code to find another):
+      {{ steps.develop.output.evidence_plan }}
+      {% endif %}
+      Stay within the skill's budget: no reading code beyond `git diff --stat` and the plan, no
+      tests, no checking docs (the verifier does that), at most 2 captures per issue.
       Collect the evidence that the change does what the task asked, following the
       implementation-evidence skill: pick the kind per issue (UI screenshots before/after into
       `{{ run_dir }}/screenshots`, HTTP request and response, CLI output, log lines of a simulated

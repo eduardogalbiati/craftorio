@@ -69,6 +69,8 @@
       </div>
     </div>
   </header>
+  <!-- the code changed on disk while the app runs (#83), or the runs a restart interrupted -->
+  <div id="code-banner" class="code-banner hidden" role="status"></div>
 
   <div class="shell">
     <!-- ================= Sidebar ================= -->
@@ -215,6 +217,7 @@
               <span class="dash-count" data-count="monitor"></span>
             </button>
           </div>
+          <div id="dash-gates" class="dash-gates hidden"></div>
           <div id="dash-run" class="dash-run hidden"></div>
         </div>
       </section>
@@ -268,6 +271,11 @@
           </div>
           <div id="bl-filters" class="chips"></div>
           <input type="text" id="bl-search" placeholder="Search issues, labels…" aria-label="Search" />
+          <div id="bl-labels-wrap" class="bl-labels-wrap">
+            <button id="btn-bl-labels" class="btn sm ghost" type="button" aria-haspopup="true" title="Filter by labels. Labels of different groups (the prefix before ':') must all match; labels of the same group match any of them, e.g. bug AND (complexity:1 OR complexity:2). Whole names, any case.">Labels</button>
+            <div id="bl-labels-pop" class="bl-labels-pop hidden" role="menu" aria-label="Labels"></div>
+          </div>
+          <span id="bl-label-active" class="bl-label-active"></span>
           <button id="btn-bl-assign" class="btn sm primary hidden" type="button">Assign workflow…</button>
           <button id="btn-bl-clear" class="btn sm ghost hidden" type="button">Clear selection</button>
           <span class="spacer"></span>
@@ -535,6 +543,7 @@
       <!-- ================= Run ================= -->
       <section id="view-run" class="view hidden">
         <div id="run-fail-banner" class="fail-banner hidden"></div>
+        <div id="run-gates" class="run-gates hidden" aria-live="polite"></div>
         <div class="run-modebar">
           <div class="seg sm" role="group" aria-label="Run view">
             <button id="run-mode-chat" type="button" title="Follow this run as a chat">Chat</button>
@@ -591,6 +600,7 @@
           <div id="rc-messages" class="duo-messages rc-messages"></div>
           <div id="rc-typing" class="rc-typing"></div>
         </div>
+        <button id="rc-jump" class="btn sm rc-jump hidden" type="button" title="Scroll to the latest message">Jump to latest ↓</button>
       </section>
 
       <!-- ================= Write & Review (layout preview, simulated) ================= -->
@@ -912,6 +922,21 @@
           <button id="btn-sup-chat" class="btn ghost" title="Open the supervisor's CLI in a terminal tab, primed with this run's report (read-only mode)">Chat in terminal</button>
           <span id="sup-chat-msg" class="small muted"></span>
         </div>
+        <!-- Watch mode: follows a running run and explains it in a chat (opt-in, it costs tokens) -->
+        <section id="sup-watch" class="sup-watch hidden">
+          <div class="sup-watch-head">
+            <label class="switch" title="Watch with the supervisor: an update on each batch of meaningful events (costs tokens)"><input type="checkbox" id="sup-watch-on" /><span></span></label>
+            <b>Watch this run</b>
+            <select id="sup-watch-model" title="The supervisor's model"></select>
+            <div class="seg sm" id="sup-watch-effort" title="Effort"></div>
+            <span id="sup-watch-cost" class="muted small mono"></span>
+          </div>
+          <div id="sup-watch-log" class="sup-watch-log"></div>
+          <div class="row sup-watch-ask">
+            <input id="sup-watch-q" type="text" placeholder="Ask about this run: what is the developer doing now?" />
+            <button id="btn-sup-watch-ask" class="btn sm">Ask</button>
+          </div>
+        </section>
         <div id="sup-result"></div>
       </div>
     </aside>
@@ -951,20 +976,6 @@
   </div>
 
   <!-- ================= Modals ================= -->
-  <div id="approval-modal" class="modal hidden">
-    <div class="modal-card">
-      <h3>Approval required</h3>
-      <p id="approval-step" class="muted small mono"></p>
-      <pre id="approval-message"></pre>
-      <div id="approval-feedback" class="field hidden"><label id="approval-feedback-label" for="approval-feedback-text"></label><textarea id="approval-feedback-text" rows="3"></textarea></div>
-      <div id="approval-choices" class="modal-actions hidden"></div>
-      <div id="approval-binary" class="modal-actions">
-        <button id="btn-reject" class="btn ghost">Reject</button>
-        <button id="btn-approve" class="btn primary">Approve</button>
-      </div>
-    </div>
-  </div>
-
   <div id="sx-modal" class="modal hidden">
     <form id="sx-form" class="modal-card wide">
       <h3>New session</h3>
@@ -1380,6 +1391,7 @@
   <script src="run-chat.js"></script>
   <script src="agents.js"></script>
   <script src="sessions.js"></script>
+  <script src="backlog-labels.js"></script>
   <script src="backlog.js"></script>
   <script src="builder.js"></script>
   <script src="analytics.js"></script>
