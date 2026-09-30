@@ -1025,3 +1025,194 @@ test('localPreview:stop: the Stop button ends the preview without answering the 
   assert.equal(api['runs:active']().find((r) => r.runId === gate.run_id)?.gates.length, 1, 'the gate is still open');
   await resolveAndWait(api, gate.run_id, gate.approval_id, 'approve');
 });
+
+// ---- Backlog roadmap (#106): ordered stages of runs, each after the previous one merged -------
+const roadmapModel = require('../src/roadmap');
+const roadmapIssue = (number) => ({ number, title: `Issue ${number}`, state: 'open', url: `https://github.com/o/r/issues/${number}`, body: 'Do it', labels: [], assignees: [], tasks: { done: 0, total: 0 } });
+
+function roadmapProject(api, ws, t, numbers, name) {
+  return (async () => {
+    const folder = fs.mkdtempSync(path.join(os.tmpdir(), `service-${name}-`));
+    t.after(() => fs.rmSync(folder, { recursive: true, force: true }));
+    const p = await api['projects:create']({ name: 'demo', folder });
+    fs.mkdirSync(ws.backlog, { recursive: true });
+    fs.writeFileSync(path.join(ws.backlog, `${p.id}.json`), JSON.stringify({ projectId: p.id, platform: 'github', repo: 'https://github.com/o/r', issues: numbers.map(roadmapIssue) }));
+    return p;
+  })();
+}
+
+test('roadmap: stage 2 starts only after every stage-1 item succeeds and merges', async (t) => {
+  const { service, api } = makeService(t);
+  const ws = service.workspace();
+  fs.writeFileSync(path.join(ws.workflows, 'fixture-issue.yaml'), ISSUE_WORKFLOW);
+  const p = await roadmapProject(api, ws, t, [1, 2, 3], 'roadmap-order');
+  api['settings:set']({ concurrentRuns: { enabled: true, max: 2, perProject: null, countSimulations: true } });
+  const { gates, finished } = watchRuns(service);
+
+  await api['roadmap:save']({
+    projectId: p.id,
+    stages: [
+      { name: 'Stage one', items: [{ workflow: 'fixture-issue.yaml', number: 1, mock: true }, { workflow: 'fixture-issue.yaml', number: 2, mock: true }] },
+      { name: 'Stage two', items: [{ workflow: 'fixture-issue.yaml', number: 3, mock: true }] },
+    ],
+  });
+  await api['roadmap:start']({ projectId: p.id, simulated: true });
+
+  await until(() => api['runs:active']().length === 2);
+  assert.deepEqual(api['runs:active']().flatMap((r) => r.issues.map((i) => i.number)).sort(), [1, 2]);
+  assert.equal(api['roadmap:get']({ projectId: p.id }).stages[1].items[0].status, 'planned'); // stage 2 has not started
+
+  await until(() => gates.size === 2);
+  for (const [runId, id] of gates) api['approval:resolve']({ runId, id, answer: true });
+  await until(() => finished.size === 2);
+
+  await until(() => api['runs:active']().some((r) => r.issues.some((i) => i.number === 3)));
+  let roadmap = api['roadmap:get']({ projectId: p.id });
+  assert.ok(roadmap.stages[0].items.every((x) => x.status === 'done'));
+  assert.equal(roadmap.stages[1].items[0].status, 'running');
+
+  const runId3 = api['runs:active']()[0].runId;
+  await until(() => gates.has(runId3));
+  api['approval:resolve']({ runId: runId3, id: gates.get(runId3), answer: true });
+  await until(() => api['roadmap:get']({ projectId: p.id }).state === 'done');
+});
+
+test('roadmap: starting for real (not simulated) is refused in simulation-only mode', async (t) => {
+  const { service, api } = makeService(t);
+  const ws = service.workspace();
+  fs.writeFileSync(path.join(ws.workflows, 'fixture-issue.yaml'), ISSUE_WORKFLOW);
+  const p = await roadmapProject(api, ws, t, [1], 'roadmap-real');
+
+  await api['roadmap:save']({ projectId: p.id, stages: [{ items: [{ workflow: 'fixture-issue.yaml', number: 1 }] }] });
+  await assert.rejects(api['roadmap:start']({ projectId: p.id, simulated: false }), /Simulation only/);
+  assert.equal(api['roadmap:get']({ projectId: p.id }).state, 'planned');
+  assert.equal(service.isRunning(), false);
+});
+
+test('roadmap: a stopped run pauses the roadmap; roadmap:item retry restarts it', async (t) => {
+  const { service, api } = makeService(t);
+  const ws = service.workspace();
+  fs.writeFileSync(path.join(ws.workflows, 'fixture-issue.yaml'), ISSUE_WORKFLOW);
+  const p = await roadmapProject(api, ws, t, [1, 2], 'roadmap-fail');
+  const { gates } = watchRuns(service);
+
+  await api['roadmap:save']({
+    projectId: p.id,
+    stages: [{ items: [{ workflow: 'fixture-issue.yaml', number: 1, mock: true }] }, { items: [{ workflow: 'fixture-issue.yaml', number: 2, mock: true }] }],
+  });
+  await api['roadmap:start']({ projectId: p.id, simulated: true });
+  await until(() => api['runs:active']().length === 1);
+  api['run:stop']({ runId: api['runs:active']()[0].runId });
+  await until(() => api['roadmap:get']({ projectId: p.id }).state === 'paused');
+
+  let roadmap = api['roadmap:get']({ projectId: p.id });
+  assert.match(roadmap.error, /#1/);
+  const failedId = roadmap.pausedBy;
+  assert.ok(failedId);
+  assert.equal(roadmap.stages[0].items[0].status, 'failed');
+
+  await api['roadmap:item']({ projectId: p.id, itemId: failedId, action: 'retry' });
+  await until(() => api['runs:active']().length === 1);
+  roadmap = api['roadmap:get']({ projectId: p.id });
+  assert.equal(roadmap.state, 'running');
+  assert.equal(roadmap.stages[0].items[0].status, 'running');
+
+  const active = api['runs:active']()[0];
+  await until(() => gates.has(active.runId));
+  api['approval:resolve']({ runId: active.runId, id: gates.get(active.runId), answer: true });
+});
+
+test('roadmap: a restart continues where it was, from a stage already finished on disk', async (t) => {
+  const { service, api } = makeService(t);
+  const ws = service.workspace();
+  fs.writeFileSync(path.join(ws.workflows, 'fixture-issue.yaml'), ISSUE_WORKFLOW);
+  const p = await roadmapProject(api, ws, t, [1, 2], 'roadmap-restart');
+
+  roadmapModel.saveStages(ws.backlog, p.id, [
+    { items: [{ workflow: 'fixture-issue.yaml', number: 1, mock: true }] },
+    { items: [{ workflow: 'fixture-issue.yaml', number: 2, mock: true }] },
+  ], { issues: [roadmapIssue(1), roadmapIssue(2)] });
+  roadmapModel.setState(ws.backlog, p.id, 'running', { simulated: true });
+  const item1 = roadmapModel.readRoadmap(ws.backlog, p.id).stages[0].items[0];
+  roadmapModel.markStarted(ws.backlog, p.id, item1.id, { runId: 'run-old' });
+  const runDir = path.join(ws.runs, 'run-old');
+  fs.mkdirSync(runDir, { recursive: true });
+  fs.writeFileSync(path.join(runDir, 'summary.json'), JSON.stringify({
+    run_id: 'run-old', workflow: 'fixture-issue', project_id: p.id, status: 'success', mock: true,
+    started_at: '2026-09-30T00:00:00Z', finished_at: '2026-09-30T00:05:00Z',
+    issues: [{ number: 1, url: roadmapIssue(1).url, title: roadmapIssue(1).title }], inputs: {}, sessions: [],
+  }));
+
+  const service2 = createService({ host: { trashItem: async () => {}, appVersion: '9.9.9', isPackaged: false } });
+  // whichever of the two live services (the original, still open, or this fresh one) reacts first
+  // to the roadmap now on disk owns the resulting live run: stop it on both to leave nothing behind
+  t.after(async () => {
+    for (const s of [service, service2]) for (const run of s.api['runs:active']()) { try { s.api['run:stop']({ runId: run.runId }); } catch { /* already ended */ } }
+    await untilTrue(() => service.api['runs:active']().length === 0 && service2.api['runs:active']().length === 0);
+    service2.shutdown();
+  });
+  service2.setWorkspace(ws);
+  await untilTrue(() => roadmapModel.readRoadmap(ws.backlog, p.id).stages[1].items[0].status === 'running');
+  const roadmap = roadmapModel.readRoadmap(ws.backlog, p.id);
+  assert.equal(roadmap.stages[0].items[0].status, 'done');
+  assert.equal(roadmap.stages[1].items[0].status, 'running');
+});
+
+test('roadmap: a Product Owner proposal is added as planned and does not start by itself', async (t) => {
+  const { service, api } = makeService(t);
+  const ws = service.workspace();
+  const p = await roadmapProject(api, ws, t, [1], 'roadmap-propose');
+
+  const data = await api['roadmap:propose']({ projectId: p.id, proposal: { stages: [{ name: 'From the PO', items: [{ workflow: 'fixture-issue.yaml', number: 1 }] }] } });
+  assert.deepEqual(data.dropped, []);
+  assert.equal(data.roadmap.state, 'planned');
+  assert.equal(data.roadmap.stages[0].items[0].status, 'planned');
+  assert.equal(service.isRunning(), false);
+  assert.deepEqual(api['runs:list']().runs, []);
+});
+
+test('roadmap: assigning a planned issue elsewhere removes it from the roadmap', async (t) => {
+  const { service, api } = makeService(t);
+  const ws = service.workspace();
+  fs.writeFileSync(path.join(ws.workflows, 'fixture-issue.yaml'), ISSUE_WORKFLOW);
+  const p = await roadmapProject(api, ws, t, [1, 2], 'roadmap-conflict');
+
+  await api['roadmap:save']({ projectId: p.id, stages: [{ items: [{ workflow: 'fixture-issue.yaml', number: 1 }, { workflow: 'fixture-issue.yaml', number: 2 }] }] });
+  await api['backlog:assign']({ projectId: p.id, numbers: [1], workflow: 'fixture-issue.yaml', mock: true });
+  const roadmap = api['roadmap:get']({ projectId: p.id });
+  assert.deepEqual(roadmap.stages[0].items.map((i) => i.number), [2]);
+});
+
+test('roadmap: backlog:get issues carry their roadmap stage and status', async (t) => {
+  const { service, api } = makeService(t);
+  const ws = service.workspace();
+  const p = await roadmapProject(api, ws, t, [1, 2], 'roadmap-badge');
+
+  await api['roadmap:save']({ projectId: p.id, stages: [{ items: [{ workflow: 'fixture-issue.yaml', number: 1 }] }, { items: [{ workflow: 'fixture-issue.yaml', number: 2 }] }] });
+  const data = api['backlog:get']({ projectId: p.id });
+  const by = Object.fromEntries(data.issues.map((i) => [i.number, i]));
+  assert.deepEqual([by[1].roadmap.stage, by[1].roadmap.status], [1, 'planned']);
+  assert.deepEqual([by[2].roadmap.stage, by[2].roadmap.status], [2, 'planned']);
+});
+
+test('roadmap: reordering stages on save persists the new order', async (t) => {
+  const { service, api } = makeService(t);
+  const ws = service.workspace();
+  const p = await roadmapProject(api, ws, t, [1, 2, 3], 'roadmap-reorder');
+
+  const saved = await api['roadmap:save']({
+    projectId: p.id,
+    stages: [
+      { items: [{ workflow: 'fixture-issue.yaml', number: 1 }] },
+      { items: [{ workflow: 'fixture-issue.yaml', number: 2 }] },
+      { items: [{ workflow: 'fixture-issue.yaml', number: 3 }] },
+    ],
+  });
+  const [s1, s2, s3] = saved.roadmap.stages;
+  const reordered = await api['roadmap:save']({
+    projectId: p.id,
+    stages: [{ id: s3.id, items: s3.items }, { id: s1.id, items: s1.items }, { id: s2.id, items: s2.items }],
+  });
+  assert.deepEqual(reordered.roadmap.stages.map((s) => s.items[0].number), [3, 1, 2]);
+  assert.deepEqual(api['roadmap:get']({ projectId: p.id }).stages.map((s) => s.items[0].number), [3, 1, 2]);
+});

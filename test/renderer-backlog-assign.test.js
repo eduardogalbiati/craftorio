@@ -27,3 +27,10 @@ test('status(): a run the supervisor sent back after a failed merge shows a "sen
   assert.match(status, /title="\$\{esc\(`Supervisor: \$\{r\.recovery\}`\)\}"/);
   assert.match(status, /sent back after a failed merge<\/span>` : ''/);
 });
+
+test('submitAssign: assigning an issue the roadmap already plans asks first, and takes it out of the roadmap', () => {
+  const fn = /async function submitAssign\(e\)[\s\S]*?\n  \}/.exec(src)[0];
+  assert.match(fn, /const inRoadmap = planned\(numbers\);/);
+  assert.match(fn, /if \(inRoadmap\.length && !await confirmDialog\('Already in the roadmap'/);
+  assert.match(fn, /takes \$\{inRoadmap\.length > 1 \? 'them' : 'it'\} out of the roadmap and into the queue/);
+});

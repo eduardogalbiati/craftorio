@@ -24,6 +24,11 @@ test('--help prints the header comment: every option, without comment markers', 
   assert.doesNotMatch(text, /^\/\//m);
 });
 
+test('the backlog view offers a roadmap mode, alongside list and kanban', () => {
+  assert.deepEqual(VIEWS.backlog.modes, ['list', 'kanban', 'roadmap']);
+  assert.equal(parseArgs(['--view', 'backlog', '--mode', 'roadmap']).name, 'backlog-roadmap');
+});
+
 test('parseArgs names the file after the scenario and checks options against the view', () => {
   assert.equal(parseArgs(['--view', 'backlog', '--mode', 'kanban', '--theme', 'light']).name, 'backlog-kanban-light');
   assert.deepEqual(parseArgs(['--view', 'settings', '--tab', 'about', '--size', '1200x800']).size, [1200, 800]);
