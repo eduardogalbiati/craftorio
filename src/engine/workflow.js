@@ -17,7 +17,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { EventEmitter } = require('events');
-const { exec } = require('child_process');
+const { exec, execFileSync } = require('child_process');
 const yaml = require('js-yaml');
 const nunjucks = require('nunjucks');
 const {
@@ -95,6 +95,16 @@ tpl.addFilter('pr_url', (url) => {
 //   timeout: "{{ (30 + 10 * ((inputs.issues | length) - 1)) | clamp(30, 60) }}m"
 tpl.addFilter('clamp', (v, lo = -Infinity, hi = Infinity) => Math.min(Math.max(Number(v) || 0, lo), hi));
 
+// The commits of a folder's checkout since a base ref, one `<sha> <subject>` per line, for a gate's
+// message: `{{ worktree_dir | git_commits('origin/' ~ inputs.base_branch) }}`. Empty without a
+// folder (simulations have no worktree) or when git fails: a message never fails on it.
+tpl.addFilter('git_commits', (dir, base) => {
+  if (!dir || !base || !fs.existsSync(String(dir))) return '';
+  try {
+    return execFileSync('git', ['log', '--oneline', '--no-decorate', '-n', '30', `${base}..HEAD`], { cwd: String(dir), encoding: 'utf8', windowsHide: true, timeout: 10000, stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+  } catch { return ''; }
+});
+
 const render = (s, scope) => (s == null ? '' : tpl.renderString(String(s), scope));
 const evalExpr = (expr, scope) => render(`{% if ${expr} %}1{% else %}0{% endif %}`, scope).trim() === '1';
 
@@ -163,6 +173,8 @@ function loadWorkflow(file) {
       if (w.grace !== undefined && parseDuration(w.grace, null) == null) throw new Error(`Step "${s.id}": wait.grace must be a duration such as 10m.`);
     }
     if (s.choices && s.type !== 'human_approval') throw new Error(`Step "${s.id}": choices is only valid for human_approval.`);
+    if (s.local_preview !== undefined && (s.type !== 'human_approval' || typeof s.local_preview !== 'boolean')) throw new Error(`Step "${s.id}": local_preview must be true or false, on a human_approval step.`);
+    if ((s.choices || []).some((c) => c.feedback_required) && !s.feedback) throw new Error(`Step "${s.id}": a choice with feedback_required needs the step's feedback field.`);
     // a deterministic PR/MR check: `check:` before a gate opens, `precheck:` before a transition's action
     const validateCheck = (c, what) => {
       if (!c || typeof c !== 'object' || !PROBES.includes(c.probe) || !c.target) throw new Error(`Step "${s.id}": ${what} needs a probe (${PROBES.join(', ')}) and a target.`);
@@ -204,6 +216,8 @@ function loadWorkflow(file) {
   }
   const maxCtx = wf.orchestrator?.limits?.max_total_context;
   if (maxCtx != null && !String(maxCtx).includes('{{') && !parseTokens(maxCtx)) throw new Error('orchestrator.limits.max_total_context must be a token count such as 20M.');
+  const lp = wf.orchestrator?.local_preview;
+  if (lp != null && (typeof lp !== 'object' || !String(lp.command || '').trim())) throw new Error('orchestrator.local_preview needs a command (e.g. "npm start").');
   validateGroups(wf.groups, ids);
   return wf;
 }
@@ -434,7 +448,7 @@ class WorkflowRun extends EventEmitter {
   // idleWarnMs: an agent silent this long while a tool call is open gets an `agent_idle` warning (src/engine/idle.js).
   //   Default 5 minutes; 0 disables it.
   // personas: [{ id, name, prompt, skills }] the user's agents (Agents menu), for `persona: random`.
-  constructor({ file, inputs, mock, runsDir, skillsDirs, budget, prices, projectId, issues, issue, resume, worktreesDir, mockSequences, notices, stopProcesses, probe, actionsQuota, peerSessions, idleWarnMs, personas }) {
+  constructor({ file, inputs, mock, runsDir, skillsDirs, budget, prices, projectId, issues, issue, resume, worktreesDir, mockSequences, notices, stopProcesses, probe, actionsQuota, peerSessions, idleWarnMs, personas, localPreview }) {
     super();
     refreshWindowsPath(); // actions (e.g. gh pr merge) need the refreshed PATH
     this.file = file;
@@ -481,6 +495,8 @@ class WorkflowRun extends EventEmitter {
       previous_step: null,
       // run variables set by transitions (`set: { name: value }`), e.g. what the next checks cover
       vars: {},
+      // how to run the worktree locally ({ install, command, url }) or null; gates' messages show it
+      local_preview: null,
       // folder of a skill (workspace first, then bundled), e.g. to run its script in an action
       skill_dir: (name) => resolveSkill(this.skillsDirs, name).path,
     };
@@ -507,6 +523,11 @@ class WorkflowRun extends EventEmitter {
     this.counters = {};
     this.loops = {};
     this.approvals = new Map();
+    // how to run the worktree from a gate with `local_preview: true` (the project's override, else
+    // the workflow's orchestrator.local_preview); null hides Run locally
+    this.localPreview = localPreview || this.wf.orchestrator?.local_preview || null;
+    this.ctx.local_preview = this.localPreview;
+    this.gateWaits = {}; // gate step id -> { waits, wait_ms } (summary.timing.gates): owner time, not agent time
     this.preexisting = []; // [{ step, test, file, reason }] (notePreexistingFailures)
     this.abort = new AbortController();
     this.seq = 0;
@@ -1981,10 +2002,12 @@ class WorkflowRun extends EventEmitter {
 
   // Agent time per step: active (the model working) vs waiting (a tool call running), and the part
   // of the waits with no output past idleWarnMs (stalled). Explains why a slow step was slow.
+  // gate_wait_ms: the time the run waited for the owner at its human gates, apart from agent time.
   timingSummary() {
     const total = { duration_ms: 0, active_ms: 0, waiting_ms: 0, stalled_ms: 0 };
     for (const s of Object.values(this.stepTiming)) for (const k of Object.keys(total)) total[k] += s[k];
-    return { steps: this.stepTiming, ...total };
+    const gateWaitMs = Object.values(this.gateWaits).reduce((a, g) => a + g.wait_ms, 0);
+    return { steps: this.stepTiming, ...total, gates: this.gateWaits, gate_wait_ms: gateWaitMs };
   }
 
   // Per run and per agent: context at the start of each turn, its peak, tokens, and the tokens spent
@@ -2016,14 +2039,23 @@ class WorkflowRun extends EventEmitter {
   // Resolves to { answer, feedback }. `feedback: true | { label, placeholder }` on the step asks the
   // UI for an optional free text next to the choices; it is the gate's `output.feedback`, and every
   // non-empty one is appended to the run-wide `feedback` list the next prompts can include.
+  // A choice with `feedback_required: true` is refused without a text (resolveApproval returns false).
+  // `local_preview: true` on the step offers Run locally (the service runs the worktree, see
+  // src/local-preview.js); it never answers the gate.
   requestApproval(step) {
     const id = `a${++this.nApproval}`;
     const message = step.raw ? String(step.message).trim() : render(step.message, this.ctx).trim();
-    const choices = step.choices ? step.choices.map((c) => ({ id: c.id, label: render(c.label, this.ctx) })) : null;
+    const choices = step.choices ? step.choices.map((c) => ({ id: c.id, label: render(c.label, this.ctx), ...(c.feedback_required ? { feedback_required: true } : {}) })) : null;
     const fb = step.feedback === true ? {} : step.feedback || null;
     const feedback = fb && { label: render(fb.label || 'Anything to add? (optional)', this.ctx), placeholder: render(fb.placeholder || '', this.ctx) };
     const requestedAt = new Date().toISOString();
     const timeout = parseDuration(step.timeout, null);
+    // the folder the run's work is in (its worktree; a simulation works in the repository folder)
+    const workDir = this.ctx.worktree_dir || this.inputs.repo_path || null;
+    const extra = {
+      ...(workDir ? { work_dir: workDir } : {}),
+      ...(step.local_preview && this.localPreview && workDir ? { local_preview: this.localPreview } : {}),
+    };
 
     // registered before its event, so runs:active lists it as soon as anyone hears of it
     const answered = new Promise((resolve, reject) => {
@@ -2032,12 +2064,12 @@ class WorkflowRun extends EventEmitter {
       this.approvals.set(id, {
         stepId: step.id,
         // what pendingGates() hands the UI, so a reloaded window rebuilds the gate without its event
-        gate: { approval_id: id, step_id: step.id, message, choices, feedback, requested_at: requestedAt },
+        gate: { approval_id: id, step_id: step.id, message, choices, feedback, ...extra, requested_at: requestedAt },
         resolve: (v) => { clearTimeout(timer); resolve(v); },
         reject: (e) => { clearTimeout(timer); reject(e); },
       });
     });
-    this.emitEvent('approval.requested', { approval_id: id, step_id: step.id, message, choices, feedback });
+    this.emitEvent('approval.requested', { approval_id: id, step_id: step.id, message, choices, feedback, ...extra });
     if (this.approvals.has(id)) this.setStatus(this.orchestrator, 'waiting'); // not answered by a listener already
     return answered;
   }
@@ -2052,10 +2084,15 @@ class WorkflowRun extends EventEmitter {
   resolveApproval(id, answer, by = 'user', feedback = '') {
     const a = this.approvals.get(id);
     if (!a) return false;
-    this.approvals.delete(id);
     const text = String(feedback ?? '').trim();
+    if (!text && a.gate?.choices?.find((c) => c.id === answer)?.feedback_required) return false;
+    this.approvals.delete(id);
+    const waitMs = Math.max(0, Date.now() - Date.parse(a.gate?.requested_at || Date.now()));
+    const w = (this.gateWaits[a.stepId] ??= { waits: 0, wait_ms: 0 });
+    w.waits++;
+    w.wait_ms += waitMs;
     const data = typeof answer === 'boolean' ? { approved: answer } : { choice: answer };
-    this.emitEvent('approval.resolved', { approval_id: id, ...data, by, ...(text ? { feedback: text } : {}) });
+    this.emitEvent('approval.resolved', { approval_id: id, ...data, by, wait_ms: waitMs, ...(text ? { feedback: text } : {}) });
     if (text) this.ctx.feedback.push({ step: a.stepId, choice: typeof answer === 'boolean' ? String(answer) : answer, text, ts: new Date().toISOString() });
     this.setStatus(this.orchestrator, 'active');
     a.resolve({ answer, feedback: text });

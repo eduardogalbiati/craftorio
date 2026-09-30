@@ -31,6 +31,16 @@
 #   - Commits end with "Closes #<n>" for the run's issues: GitHub closes them when you push <base>.
 # Push whenever you want: `git push origin <base>` from the repository.
 #
+# MODES (input `mode`)
+#   auto (default): develop ─► code_review, as above; nothing waits for the owner.
+#   validated: develop ─► developer_check (human gate) ─► code_review. The owner tries the worktree
+#   (Run locally when a local_preview is set, see below), then approves, asks for changes (back to
+#   develop with the text, then back to the gate) or stops. Only the first implementation and the
+#   owner's own change requests stop there; review fix rounds too with validate_every_round: "true".
+# RUN LOCALLY (gates with `local_preview: true`: developer_check, human_review)
+#   Offered when the project (Projects › Local preview) or `orchestrator.local_preview`
+#   ({ install, command, url }) says how to run the worktree. It never answers the gate.
+#
 # Rules (as in software-development):
 #   - Agents never talk to each other: the engine delegates fixes to the developer.
 #   - Tests belong to the test writer (the only full suite run); the developer changes production
@@ -43,7 +53,7 @@ kind: Workflow
 
 metadata:
   name: software-development-local-hero
-  version: 0.4.0
+  version: 0.5.0
   description: Implements, reviews, tests, builds and verifies a change in its own worktree, then merges it into the local base branch automatically, resolving conflicts on the way. No push, no PR, no CI; push when you want.
   tags: [dev, review, test, build, local, worktree]
   # Dashboard category: plan (Plan & Design), build (Code & Build) or monitor (Monitor & Improve).
@@ -75,6 +85,16 @@ inputs:
   base_branch:
     type: string
     default: main
+  mode:
+    type: string
+    enum: [auto, validated]
+    default: auto
+    description: "auto = straight from the developer to review and tests. validated = the run stops after the developer (developer_check) so you try the change and approve it or ask for changes before any review or test is paid for."
+  validate_every_round:
+    type: string
+    enum: ["false", "true"]
+    default: "false"
+    description: "Validated mode only: \"true\" also stops at developer_check after the developer's review fix rounds, not only after the first implementation and your own change requests."
 
 # -----------------------------------------------------------------------------
 # Final command line = args + capability and isolation flags + agent.cli_args + (resume_args if
@@ -251,7 +271,7 @@ agents:
 
 groups:
   - name: Develop
-    steps: [develop, issue_not_done]
+    steps: [develop, issue_not_done, developer_check]
   - name: Review
     steps: [code_review, human_review]
   - name: Validate
@@ -287,6 +307,11 @@ steps:
       A finding that needs no production change (it asks for tests or screenshots, which the
       test writer owns, or you disagree with it): answer it in `summary` with the reason, make no
       empty commit, and set `no_change: true` when no finding of this round needed a code change.
+      {% endif %}
+      {% if previous_step == 'developer_check' %}
+      The owner tried your change and asks for these changes (change request {{ steps.developer_check.visits }}):
+      {{ steps.developer_check.output.feedback }}
+      Fix them on the same branch with a new commit, and answer each point in `summary`.
       {% endif %}
       {% if not steps.develop.output %}
       Before changing code: create your branch where the worktree starts (the local
@@ -329,6 +354,11 @@ steps:
       # an issue of the group could not be done: the owner decides (once) whether the run goes on without it
       - when: "output.committed and inputs.issues | length > 1 and not steps.issue_not_done.output and (output.issues or []) | rejectattr('done') | list | length"
         goto: issue_not_done
+      # validated mode: the owner tries the first implementation and every round they asked for
+      # (vars.owner_validated is "yes" once they approved; a review fix round goes on without them,
+      # unless validate_every_round)
+      - when: "inputs.mode == 'validated' and output.committed and (vars.owner_validated != 'yes' or inputs.validate_every_round == 'true')"
+        goto: developer_check
       # the review findings needed no production change (e.g. they ask for tests, which the test
       # writer owns): the reviewer gets the answer; a disagreement ends at human_review, never in a loop
       - when: "output.no_change and steps.code_review.output"
@@ -339,6 +369,46 @@ steps:
         goto: develop
         max_visits: 3
         on_exhausted: fail
+
+  # Validated mode (inputs.mode): the owner tries the developer's work before any review or test
+  # token is spent. Ask for changes goes back to the developer with the text, and the run comes
+  # back here; no automatic limit, the owner decides when to stop. A human gate: no timeout, and
+  # neither the supervisor nor a retry ever answers it.
+  - id: developer_check
+    type: human_approval
+    local_preview: true
+    message: |
+      The developer finished {% if previous_step == 'develop' and steps.developer_check.output and steps.developer_check.output.choice == 'changes' %}your change request {{ steps.developer_check.visits - 1 }}{% else %}the implementation{% endif %}. Try it before the review and the tests run.
+      Branch `{{ steps.develop.output.branch }}`{% if worktree_dir %} in the worktree {{ worktree_dir }}{% endif %}.
+      {% if local_preview %}Run locally starts `{{ local_preview.command }}` there.{% else %}To try it: open the worktree and run it as the project's README says (a project's Local preview setting adds Run locally here).{% endif %}
+
+      Summary: {{ steps.develop.output.summary }}
+      {% if steps.develop.output.issues %}
+      Issues:
+      {% for i in steps.develop.output.issues %}- {{ i.issue }}: {% if i.done %}done{% else %}NOT done{% endif %}, {{ i.summary }}
+      {% endfor %}{% endif %}
+      Files changed: {{ steps.develop.output.files_changed | join(', ') }}
+      {% set commits = worktree_dir | git_commits(inputs.base_branch) %}{% if commits %}Commits on the branch:
+      {{ commits }}
+      {% endif %}
+      Diff: `git diff {{ inputs.base_branch }}...{{ steps.develop.output.branch }}`
+      Test notes: {{ steps.develop.output.test_notes }}
+      {% if steps.develop.output.evidence_plan %}Evidence plan: {{ steps.develop.output.evidence_plan }}{% endif %}
+    feedback: { label: "Your change request for the developer (required with \"Ask for changes\")", placeholder: "What to change, point by point" }
+    choices:
+      - { id: approve, label: "Approve: go on to the code review" }
+      - { id: changes, label: "Ask for changes: back to the developer", feedback_required: true }
+      - { id: stop,    label: "Stop the run (worktree kept to resume)" }
+    transitions:
+      - when: "choice == 'approve'"
+        goto: code_review
+        set: { owner_validated: "yes" }
+      - when: "choice == 'changes'"
+        goto: develop
+        set: { owner_validated: "no" }
+      - when: "choice == 'stop'"
+        goto: end
+        status: cancelled
 
   # A run for several issues where the developer could not do one of them: never dropped silently.
   - id: issue_not_done
@@ -352,6 +422,8 @@ steps:
       - { id: continue, label: "Continue without them" }
       - { id: stop,     label: "Stop the run as failed (worktree kept to resume)" }
     transitions:
+      - when: "choice == 'continue' and inputs.mode == 'validated' and vars.owner_validated != 'yes'"
+        goto: developer_check
       - when: "choice == 'continue'"
         goto: code_review
       - when: "choice == 'stop'"
@@ -423,6 +495,7 @@ steps:
 
   - id: human_review
     type: human_approval
+    local_preview: true
     message: |
       The review loop did not converge in 3 iterations.
       Approve: move on to testing anyway. Reject: stop the run (cancelled).

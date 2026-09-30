@@ -28,6 +28,10 @@ if (app.isPackaged && ['remote-debugging-port', 'remote-debugging-pipe'].some((s
   app.exit(1);
 }
 
+// A copy started by Run locally at a gate (src/local-preview.js) keeps its own user data folder,
+// so it never shares the owner's sign-in or window state
+if (!app.isPackaged && process.env.MULTIAGENT_USER_DATA) app.setPath('userData', path.resolve(process.env.MULTIAGENT_USER_DATA));
+
 let win = null;
 
 // ---- account (sign-in and free trial) --------------------------------------------------------

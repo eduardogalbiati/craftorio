@@ -241,6 +241,8 @@
       const gate = this.add({
         kind: 'gate', ts: ev.ts, approvalId: ev.approval_id, stepId: ev.step_id, message: String(ev.message || ''),
         choices: ev.choices || [{ id: true, label: 'Approve' }, { id: false, label: 'Reject' }], feedback: ev.feedback || null,
+        // Run locally ({ install, command, url }) and the folder to open, when the gate offers them
+        localPreview: ev.local_preview || null, workDir: ev.work_dir || null,
         resolved: null, closed: false,
       });
       this.gates.set(ev.approval_id, gate);
@@ -285,6 +287,14 @@
     // `merge: local`: the work is on the local base only; the Backlog's Push sends it to origin
     'worktree.merged'(ev) {
       this.system(ev, 'plain', `Merged locally into ${ev.base}${ev.commit ? ` (${String(ev.commit).slice(0, 8)})` : ''}${ev.rebased ? ', rebased first' : ''}: not pushed yet. Push it from the Backlog.`);
+    },
+
+    // Run locally at a gate: the approval shows the change was tried
+    'local_preview.started'(ev) {
+      this.system(ev, 'plain', `Local preview started at ${ev.step_id}: ${ev.command} in ${ev.dir}${ev.url ? ` (${ev.url})` : ''}${ev.workspace === 'real' ? ', on the real workspace' : ', scratch workspace, simulation only'}`);
+    },
+    'local_preview.stopped'(ev) {
+      this.system(ev, ev.exit_code && !ev.reason ? 'warn' : 'plain', `Local preview stopped${ev.reason ? ` (${ev.reason})` : ev.exit_code != null ? ` (exit ${ev.exit_code})` : ''}`);
     },
 
     'limit.exceeded'(ev) { this.system(ev, 'error', `Limit exceeded: ${ev.limit}`); },

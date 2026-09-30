@@ -104,6 +104,15 @@ same features for users; this is the implementer's summary.
 - Human gates can ask for free text (`feedback: true | { label, placeholder }`): `output.feedback` and the
   run-wide `feedback` list in templates (`approval:resolve` takes `feedback`). `previous_step` = the step that
   ran before. Gates are answered inside their run: the run chats inline, or the gate card on the Run screen (no dialog).
+- A gate choice with `feedback_required: true` (needs the step's `feedback`) is refused without a
+  text: `resolveApproval` returns false and the gate stays open. `local_preview: true` on a gate
+  offers Run locally (see worktrees.md). `approval.resolved` carries `wait_ms`; the summary's
+  `timing.gates` / `timing.gate_wait_ms` hold the owner's time at gates, apart from agent time.
+- Validated mode (`inputs.mode == 'validated'` in both software-development workflows):
+  `develop` → `developer_check` while `vars.owner_validated != 'yes'` (set by the gate's
+  approve/changes transitions) or `inputs.validate_every_round == 'true'`; the developer's
+  prompt shows the change request when `previous_step == 'developer_check'`. Template filter
+  `git_commits(base)` lists a folder's commits for a gate message (empty without a folder).
 - `orchestrator.supervisor: { enabled, max_interventions }` — per step 2, per run 6.
 - Refused tool calls: `isPermissionDenial` (providers.js) spots allowlist refusals in the stream
   ("requires approval"); 5+ in a row in one turn → `log` warn with `kind: permission_denials`

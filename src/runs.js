@@ -114,6 +114,8 @@ function readRun(runsDir, runId) {
     startedAt,
     finishedAt,
     durationMs: summary?.duration_ms ?? (startedAt ? Date.now() - Date.parse(startedAt) : 0),
+    // of durationMs, the time spent waiting for the owner at human gates (not agent time)
+    gateWaitMs: summary?.timing?.gate_wait_ms || 0,
     costUsd: sessions.reduce((a, s) => a + (s.cost_usd || 0), 0),
     tokens: sumTokens(sessions),
     projectId: summary?.project_id || started?.project_id || null,

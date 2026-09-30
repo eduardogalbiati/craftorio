@@ -28,6 +28,7 @@ const capabilities = require('../engine/capabilities');
 const { cleanupWorktrees, canonicalPath } = require('../engine/worktree');
 const workspace = require('../workspace');
 const projects = require('../projects');
+const localPreview = require('../local-preview');
 const backlog = require('../backlog');
 const localPush = require('../local-push');
 const skills = require('../skills');
@@ -418,8 +419,11 @@ function createService({ host }) {
         console.warn(msg);
         notices.push({ level: 'warn', message: msg });
       }
+      const project = projectId ? projects.listProjects(ws.projects).find((p) => p.id === projectId) : null;
       run = new WorkflowRun({
         file: wfFile.file, inputs, mock, runsDir: ws.runs, skillsDirs: [ws.skills], notices,
+        // Run locally at gates: the project's override of the workflow's orchestrator.local_preview
+        localPreview: project?.localPreview?.command ? project.localPreview : null,
         budget, prices: settings.prices, projectId, issues, resume, mockSequences: mock ? mockSequences : null,
         // simulation runs never touch git: the agents are mocked and work in the repository folder
         worktreesDir: mock ? null : ws.worktrees,
@@ -449,6 +453,10 @@ function createService({ host }) {
     run.on('event', (ev) => {
       try { recorder.write(ev); } catch (e) { console.error('recorder:', e); }
       if (ev.type === 'workflow.finished') runEnded(run);
+      // a local preview lives only while its gate is open
+      if (ev.type === 'approval.resolved' || ev.type === 'workflow.finished') {
+        stopLocalPreview({ runId: run.runId, reason: ev.type === 'approval.resolved' ? 'the gate was answered' : 'the run ended' });
+      }
       if (ev.type === 'worktree.merged') afterLocalMerge(run, ev).catch((e) => console.error('after local merge:', e));
       events.emit('run:event', ev);
       if (ev.type === 'workflow.started') markActiveRun(run.runId, runInfo);
@@ -655,9 +663,85 @@ function createService({ host }) {
     return win ? { ...opened, windowsPty: { backend: 'conpty', buildNumber: Number(os.release().split('.')[2]) || undefined } } : opened;
   }
 
+  // A shell in a folder of the workspace or of a project (Open the worktree at a gate)
+  function shellSpec(folder) {
+    const dir = path.resolve(String(folder || ''));
+    const inside = [ws.root, ...projects.listProjects(ws.projects).map((x) => x.folder)].filter(Boolean).some((d) => folderMatcher()(dir, d));
+    if (!inside) throw new Error('The folder is outside the workspace and the projects.');
+    if (!fs.existsSync(dir)) throw new Error(`Folder not found: ${dir}`);
+    const win = process.platform === 'win32';
+    return { title: path.basename(dir), cwd: dir, file: win ? 'cmd.exe' : process.env.SHELL || '/bin/sh', args: [], env: cliEnv() };
+  }
+
+  // Run locally at a gate (#70, src/local-preview.js): one preview per run, in the run's worktree,
+  // stopped when the gate is answered or the run ends. It never answers the gate.
+  const previews = new Map(); // runId -> { id (terminal), stepId, approvalId, title, url, dir, startedAt }
+
+  async function startLocalPreview({ runId, approvalId, realWorkspace = false, cols, rows }) {
+    const run = active.get(String(runId || ''));
+    if (!run) throw new Error('The run is not in progress.');
+    const gate = run.pendingGates().find((g) => g.approval_id === approvalId);
+    if (!gate) throw new Error('The gate is no longer open.');
+    if (!gate.local_preview || !gate.work_dir) throw new Error('This gate does not offer Run locally (no local_preview for the project or the workflow).');
+    // a terminal that went away without reporting its exit does not block the next preview
+    if (previews.has(run.runId) && !terminals.procs.has(previews.get(run.runId).id)) previews.delete(run.runId);
+    if (previews.has(run.runId)) throw new Error('A local preview of this run is already running: stop it first.');
+    const cfg = gate.local_preview;
+    const dir = gate.work_dir;
+    if (!fs.existsSync(dir)) throw new Error(`The run's folder no longer exists: ${dir}`);
+    const port = cfg.url ? localPreview.portOf(cfg.url) : null;
+    if (port && await localPreview.portInUse(port)) throw new Error(`Port ${port} (${cfg.url}) is already in use: stop what listens on it (another local preview?) and try again.`);
+    const root = path.join(ws.localPreviews, run.runId);
+    const target = realWorkspace ? { workspace: ws.root, userData: null } : localPreview.scratchWorkspace(ws, root);
+    const stateFile = path.join(root, 'install.json');
+    const due = localPreview.needsInstall(dir, stateFile);
+    const line = localPreview.commandLine(cfg, due.install);
+    const label = run.issues?.length ? run.issues.map((i) => `#${i.number}`).join(', ') : run.runId;
+    const title = `Local preview · ${label}`;
+    const win = process.platform === 'win32';
+    const spec = {
+      title, cwd: dir, env: localPreview.previewEnv(cliEnv(), target),
+      file: win ? 'cmd.exe' : '/bin/sh', args: win ? `/d /s /c "${line}"` : ['-c', line],
+      onExit: (exitCode) => {
+        const p = previews.get(run.runId);
+        if (!p || p.id !== opened.id) return;
+        // the program ended by itself (or its terminal was closed): the install succeeded when it exits 0
+        previews.delete(run.runId);
+        if (exitCode === 0 && due.install) localPreview.recordInstall(stateFile, due.hash);
+        if (['pending', 'running'].includes(run.status)) run.emitEvent('local_preview.stopped', { step_id: p.stepId, approval_id: p.approvalId, exit_code: exitCode });
+      },
+    };
+    const opened = openProgram(spec, cols, rows);
+    // an install that was not due: the lockfile hash is known now
+    if (!due.install) localPreview.recordInstall(stateFile, due.hash);
+    const info = { id: opened.id, stepId: gate.step_id, approvalId, title, url: cfg.url || null, dir, startedAt: new Date().toISOString() };
+    previews.set(run.runId, info);
+    run.emitEvent('local_preview.started', {
+      step_id: gate.step_id, approval_id: approvalId, command: line, dir, url: cfg.url || null, terminal: opened.id,
+      workspace: realWorkspace ? 'real' : 'scratch', installed: !!(due.install && cfg.install),
+    });
+    return { ...opened, url: cfg.url || null, cwd: dir };
+  }
+
+  // Recorded here rather than on the program's exit: a killed tree does not always report one.
+  function stopLocalPreview({ runId, reason = 'stopped by the owner' }) {
+    const id = String(runId || '');
+    const p = previews.get(id);
+    if (!p) return false;
+    previews.delete(id);
+    terminals.kill(p.id);
+    // a run that ended records nothing after its workflow.finished
+    const run = active.get(id);
+    if (run && ['pending', 'running'].includes(run.status)) run.emitEvent('local_preview.stopped', { step_id: p.stepId, approval_id: p.approvalId, reason });
+    return true;
+  }
+
+  const listLocalPreviews = () => [...previews.entries()].map(([runId, p]) => ({ runId, id: p.id, stepId: p.stepId, approvalId: p.approvalId, title: p.title, url: p.url, dir: p.dir, startedAt: p.startedAt }));
+
   // Embedded terminals (xterm.js in the UI + node-pty here)
   function openTerminal({ kind, runId, sessionId, cols, rows, ...opts }) {
     if (kind === 'supervisor') return openProgram(supervisorChatSpec(runId || liveRun(null)?.runId), cols, rows);
+    if (kind === 'shell') return { ...openProgram(shellSpec(opts.folder), cols, rows), cwd: path.resolve(String(opts.folder)) };
     if (kind === 'cli-resume' || kind === 'cli-new') {
       const spec = cliSessionSpec({ kind, sessionId, ...opts });
       const opened = openProgram(spec, cols, rows);
@@ -1047,9 +1131,9 @@ function createService({ host }) {
     host, active, events, notify, waiting, terminals, BUNDLED_SKILLS_DIR,
     setUiContext: (c) => { uiContext = notifier.normalizeContext(c); },
     activeRuns, analyticsSnapshot, analyzeAnalytics, artifactRuns, assignWorkflow, cloneBuilderWorkflow, code, dispatchQueue, envDetails, listAllRuns,
-    listCliSessions, listWorkflows, liveRun, loadBuilderWorkflow, openTerminal, projectRuns, pushProject,
+    listCliSessions, listLocalPreviews, listWorkflows, liveRun, loadBuilderWorkflow, openTerminal, projectRuns, pushProject,
     readArtifact, refreshLocal, renameCliSession, resolvePushConflict, restoreWorkflow, resumeOptions, resumeRun,
-    runFolder, saveBuilderWorkflow, setBudget, setPrice, startWorkflowRun, unpushedProjects, usageSnapshot,
+    runFolder, saveBuilderWorkflow, setBudget, setPrice, startLocalPreview, startWorkflowRun, stopLocalPreview, unpushedProjects, usageSnapshot,
     withIssueRuns, workflowDirs,
   };
   const entries = loadChannels(ctx);

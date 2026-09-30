@@ -61,7 +61,8 @@ async function createProject(dir, data, { git = execGit, reposDir = null } = {})
     if (!repo && isDir(path.join(folder, '.git'))) repo = await git(['remote', 'get-url', 'origin'], folder).then((s) => s.trim() || null, () => null);
   }
 
-  const project = { name, description: data.description?.trim() || '', folder, repo, createdAt: new Date().toISOString() };
+  const localPreview = cleanLocalPreview(data.localPreview);
+  const project = { name, description: data.description?.trim() || '', folder, repo, ...(localPreview ? { localPreview } : {}), createdAt: new Date().toISOString() };
   fs.writeFileSync(metaFile(dir, id), JSON.stringify(project, null, 2));
   return readProject(dir, id);
 }
@@ -74,6 +75,8 @@ function updateProject(dir, id, patch) {
   if (patch.repo !== undefined) next.repo = String(patch.repo).trim() || null;
   // push the local base after every successful local merge (software-development-local-hero)
   if (patch.autoPush !== undefined) next.autoPush = !!patch.autoPush;
+  // how to run a run's worktree from a gate (Run locally); overrides the workflow's orchestrator.local_preview
+  if (patch.localPreview !== undefined) next.localPreview = cleanLocalPreview(patch.localPreview);
   if (patch.folder !== undefined) {
     const folder = path.resolve(String(patch.folder).trim());
     if (!isDir(folder)) throw new Error(`Folder does not exist: ${folder}`);
@@ -82,6 +85,13 @@ function updateProject(dir, id, patch) {
   }
   fs.writeFileSync(metaFile(dir, id), JSON.stringify(next, null, 2));
   return readProject(dir, id);
+}
+
+// { install, command, url } with empty fields dropped; null without a command (the action is hidden)
+function cleanLocalPreview(v) {
+  const str = (x) => String(x ?? '').trim() || null;
+  const command = str(v?.command);
+  return command ? { install: str(v.install), command, url: str(v.url) } : null;
 }
 
 /** Removes only the project entry; the project folder is not deleted. */

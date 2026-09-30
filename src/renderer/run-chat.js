@@ -82,14 +82,16 @@
     const off = !chat.live || it.resolved || it.closed ? ' disabled' : '';
     const buttons = it.choices.map((c, i) => {
       const chosen = it.resolved && String(c.id) === it.resolved.choice;
-      return `<button type="button" class="btn sm ${!it.resolved && i === 0 ? 'primary' : ''}${chosen ? ' chosen' : ''}" data-approval="${esc(it.approvalId)}" data-choice="${esc(c.id)}"${off}>${esc(c.label)}</button>`;
+      return `<button type="button" class="btn sm ${!it.resolved && i === 0 ? 'primary' : ''}${chosen ? ' chosen' : ''}" data-approval="${esc(it.approvalId)}" data-choice="${esc(c.id)}"${c.feedback_required ? ' data-needs-text="1"' : ''}${off}>${esc(c.label)}</button>`;
     }).join('');
+    // Run locally / Open the worktree (app.js), only while the gate waits in the live run
+    const tools = chat.live && !it.resolved && !it.closed && typeof gateToolsHtml === 'function' ? gateToolsHtml(it) : '';
     const field = it.feedback && !it.resolved && !it.closed ? `<label class="duo-ask-label">${esc(it.feedback.label || 'Instructions (optional)')}</label>
       <textarea class="duo-ask-text" rows="2" placeholder="${esc(it.feedback.placeholder || '')}"${off}></textarea>` : '';
     const state = it.resolved ? '' : it.closed ? '<p class="muted small">The run ended before an answer.</p>' : chat.live ? '' : '<p class="muted small">Waiting for an answer.</p>';
     return `<div class="rc-gate" data-item="${it.id}"><div class="duo-ask" data-gate="${esc(it.approvalId)}">
       <div class="duo-meta"><b>Human gate</b>${stepTag(it.stepId)}<span class="time">${clock(it.ts)}</span></div>
-      <div class="rc-body md">${md(it.message)}</div>${field}<div class="row">${buttons}</div>${state}</div></div>`;
+      <div class="rc-body md">${md(it.message)}</div>${tools}${field}<div class="row">${buttons}</div>${state}</div></div>`;
   }
 
   function groupHtml(it) {
@@ -268,10 +270,12 @@
     if (!$c('#view-runchat')) return;
     $c('#rc-messages').addEventListener('click', (e) => {
       if (e.target.closest('[data-resume]')) { window.openResumeDialog?.(chat.runId); return; }
-      const b = e.target.closest('[data-approval]');
+      if (e.target.closest('[data-gate-tool]')) { if (chat.live) onGateTool(e, chat.runId); return; }
+      const b = e.target.closest('button[data-approval]');
       if (!b || !chat.live || b.disabled) return;
       const v = b.dataset.choice;
       const text = b.closest('.duo-ask')?.querySelector('textarea')?.value || '';
+      if (b.dataset.needsText && !text.trim()) { showToast('Write your request first', `"${b.textContent}" sends the text to the agent.`); b.closest('.duo-ask')?.querySelector('textarea')?.focus(); return; }
       b.closest('.duo-ask').querySelectorAll('button').forEach((x) => { x.disabled = true; });
       api.resolveApproval(b.dataset.approval, v === 'true' ? true : v === 'false' ? false : v, text, chat.runId);
     });

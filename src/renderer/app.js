@@ -570,8 +570,10 @@ function selectWorkflow(file) {
     }
     return `<div class="field">${label}${control}${hint}</div>`;
   };
-  $('#inputs-form').innerHTML = entries.filter(([k]) => k === mainKey).map((e) => field(e, true)).join('');
-  $('#adv-form').innerHTML = entries.filter(([k]) => k !== mainKey).map((e) => field(e, false)).join('');
+  // a workflow's `mode` (e.g. auto | validated) changes how the run goes: shown next to the task, not in Advanced
+  const upfront = (k) => k === 'mode' && k !== mainKey;
+  $('#inputs-form').innerHTML = entries.filter(([k]) => k === mainKey || upfront(k)).map((e) => field(e, e[0] === mainKey)).join('');
+  $('#adv-form').innerHTML = entries.filter(([k]) => k !== mainKey && !upfront(k)).map((e) => field(e, false)).join('');
 
   // a folder input with `required: false` (e.g. writer-reviewer's project_path) makes the project optional
   const needsProject = Object.entries(wf.inputs || {}).some(([k, def]) => isPathInput(k) && def.required !== false);
@@ -941,6 +943,9 @@ function openProjectModal(p, { fromDrawer = false } = {}) {
   $('#pj-description').value = p?.description || '';
   $('#pj-repo').value = p?.repo || '';
   $('#pj-folder').value = p?.folder || '';
+  $('#pj-lp-install').value = p?.localPreview?.install || '';
+  $('#pj-lp-command').value = p?.localPreview?.command || '';
+  $('#pj-lp-url').value = p?.localPreview?.url || '';
   $('#pj-folder').required = !!p;
   $('#pj-folder-hint').classList.toggle('hidden', !!p);
   $('#pj-error').textContent = '';
@@ -950,7 +955,8 @@ function openProjectModal(p, { fromDrawer = false } = {}) {
 
 async function saveProject(e) {
   e.preventDefault();
-  const data = Object.fromEntries(new FormData($('#project-form')));
+  const { lp_install: install, lp_command: command, lp_url: url, ...data } = Object.fromEntries(new FormData($('#project-form')));
+  data.localPreview = { install, command, url };
   const btn = $('#btn-pj-save');
   $('#pj-error').textContent = '';
   btn.disabled = true;
@@ -1063,6 +1069,7 @@ async function refreshWorkflows() {
         <div>
           <h3>${esc(w.name)} ${w.version ? `<span class="muted small">v${esc(w.version)}</span>` : ''}</h3>
           <p class="muted small">${esc(w.error ? `Error: ${w.error}` : w.description || '')}</p>
+          ${Array.isArray(w.inputs?.mode?.enum) ? `<p class="small wf-modes"><b>Modes:</b> ${w.inputs.mode.enum.map((m) => `<span class="badge mono">${esc(m)}${m === w.inputs.mode.default ? ' (default)' : ''}</span>`).join(' ')} <span class="muted">${esc(w.inputs.mode.description || '')}</span></p>` : ''}
           <div class="badges">
             <span class="badge cat-${esc(w.category)}">${esc(CATEGORIES[w.category] || w.category)}</span>
             <span class="badge">${(w.steps || []).length} steps</span>
@@ -1686,27 +1693,73 @@ function renderRunGates() {
   box.dataset.key = key;
   box.innerHTML = gates.map((g) => {
     const buttons = g.choices
-      ? g.choices.map((c, i) => `<button type="button" class="btn sm ${i === 0 ? 'primary' : 'ghost'}" data-choice="${esc(c.id)}">${esc(c.label)}</button>`).join('')
+      ? g.choices.map((c, i) => `<button type="button" class="btn sm ${i === 0 ? 'primary' : 'ghost'}" data-choice="${esc(c.id)}"${c.feedback_required ? ' data-needs-text="1"' : ''}>${esc(c.label)}</button>`).join('')
       : '<button type="button" class="btn sm ghost" data-answer="false">Reject</button><button type="button" class="btn sm primary" data-answer="true">Approve</button>';
     const field = g.feedback ? `<label class="duo-ask-label">${esc(g.feedback.label || 'Instructions (optional)')}</label>
       <textarea class="duo-ask-text run-gate-feedback" rows="3" placeholder="${esc(g.feedback.placeholder || '')}"></textarea>` : '';
     return `<div class="run-gate" data-approval="${esc(g.approval_id)}" data-run="${esc(g.run_id)}">
       <div class="run-gate-head"><b>Approval required</b><span class="muted small mono">${esc(`${v.run ? `${runLabel(v.run)} · ` : ''}step: ${g.step_id}`)}</span></div>
-      <pre class="run-gate-message">${esc(g.message || '')}</pre>${field}<div class="row run-gate-actions">${buttons}</div></div>`;
+      <pre class="run-gate-message">${esc(g.message || '')}</pre>${gateToolsHtml(g)}${field}<div class="row run-gate-actions">${buttons}</div></div>`;
   }).join('');
 }
 
 // A click on a gate card's button answers that gate (true/false or a choice id) with the run's id,
-// so it works for any run in progress; the card goes away with approval.resolved.
+// so it works for any run in progress; the card goes away with approval.resolved. A choice that
+// needs the feedback text (feedback_required) is not sent without one.
 function onRunGateClick(e) {
+  const tool = e.target.closest('[data-gate-tool]');
+  if (tool) { onGateTool(e, tool.closest('.run-gate')?.dataset.run); return; }
   const b = e.target.closest('button[data-answer], button[data-choice]');
   const card = b?.closest('.run-gate');
   if (!card) return;
   const answer = b.dataset.choice !== undefined ? b.dataset.choice : b.dataset.answer === 'true';
+  const text = card.querySelector('.run-gate-feedback');
+  if (b.dataset.needsText && !text?.value.trim()) { showToast('Write your request first', `"${b.textContent}" sends the text to the agent.`); text?.focus(); return; }
   const buttons = card.querySelectorAll('button');
   buttons.forEach((x) => (x.disabled = true));
-  Promise.resolve(api.resolveApproval(card.dataset.approval, answer, card.querySelector('.run-gate-feedback')?.value || '', card.dataset.run))
+  Promise.resolve(api.resolveApproval(card.dataset.approval, answer, text?.value || '', card.dataset.run))
+    .then((ok) => { if (ok === false) { buttons.forEach((x) => (x.disabled = false)); showToast('The gate did not accept the answer', 'It needs a text, or it was already answered.'); } })
     .catch((err) => { buttons.forEach((x) => (x.disabled = false)); showToast('Could not answer the gate', errMsg(err)); });
+}
+
+// What a gate offers besides its answers (Run screen and run chat); none of them answers it:
+// Run locally (#70: `local_preview` on the gate, the project's or workflow's command in the run's
+// worktree, stopped when the gate is answered), the worktree's folder and a terminal there.
+// g: the approval.requested event (local_preview, work_dir) or a run chat gate (localPreview, workDir).
+function gateToolsHtml(g, { disabled = false } = {}) {
+  const lp = g.local_preview || g.localPreview || null;
+  const dir = g.work_dir || g.workDir || null;
+  if (!lp && !dir) return '';
+  const off = disabled ? ' disabled' : '';
+  const how = lp ? `${lp.install ? `${lp.install} (when dependencies are missing or the lockfile changed), then ` : ''}${lp.command}` : '';
+  const run = lp ? `<button type="button" class="btn sm ghost" data-gate-tool="preview" title="${esc(`${how} in ${dir}. Runs in simulation only, on a scratch copy of your workspace.`)}"${off}>▶ Run locally</button>
+    <button type="button" class="btn sm ghost" data-gate-tool="stop" title="Stop this run's local preview"${off}>■ Stop</button>
+    <label class="muted small" title="The copy uses your real workspace (projects, runs, settings) instead of a scratch copy. Still simulation only."><input type="checkbox" data-gate-real${off}> real workspace</label>
+    ${lp.url ? `<a class="small" href="${esc(lp.url)}" target="_blank" rel="noopener">${esc(lp.url)}</a>` : ''}` : '';
+  const open = dir ? `<button type="button" class="btn sm ghost" data-gate-tool="folder" title="${esc(dir)}"${off}>Open the worktree</button>
+    <button type="button" class="btn sm ghost" data-gate-tool="shell" title="A terminal in ${esc(dir)}"${off}>Terminal there</button>` : '';
+  return `<div class="row gate-tools" data-dir="${esc(dir || '')}" data-approval="${esc(g.approval_id || g.approvalId)}">${run}${open}</div>`;
+}
+
+async function onGateTool(e, runId) {
+  const b = e.target.closest('[data-gate-tool]');
+  const box = b?.closest('.gate-tools');
+  if (!box || b.disabled) return;
+  const { dir, approval } = box.dataset;
+  try {
+    if (b.dataset.gateTool === 'folder') await api.openPath(dir);
+    else if (b.dataset.gateTool === 'shell') {
+      await openTerminal({ kind: 'shell', runId, sessionId: dir, label: 'Worktree', open: (cols, rows) => api.termOpen({ kind: 'shell', folder: dir, cols, rows }) });
+    } else if (b.dataset.gateTool === 'stop') {
+      if (!await api.stopLocalPreview(runId)) showToast('No local preview', 'This run has no local preview running.');
+    } else if (b.dataset.gateTool === 'preview') {
+      const real = !!box.querySelector('[data-gate-real]')?.checked;
+      if (real && !(await confirmDialog('Run on your real workspace?', 'The local copy will use your REAL workspace (projects, runs, settings) instead of a scratch copy. It stays in simulation only, but anything it writes lands in your workspace.', 'Run on it'))) return;
+      await openTerminal({ kind: 'preview', runId, sessionId: approval, label: 'Local preview', open: (cols, rows) => api.startLocalPreview(runId, approval, real, cols, rows) });
+    }
+  } catch (err) {
+    showToast('Could not do it', errMsg(err));
+  }
 }
 
 // Brings the Run screen's gate card into view and focuses its first answer.
@@ -1933,12 +1986,22 @@ function onEvent(ev) {
 
     case 'approval.resolved':
       v.approvals.delete(ev.approval_id);
+      // the owner's time at the gates, shown apart from agent time (Details, the Time KPI)
+      if (v.run && ev.wait_ms) v.run.gateWaitMs = (v.run.gateWaitMs || 0) + ev.wait_ms;
       if (ev.choice !== undefined) orch(ev, `human decision: ${ev.choice} (${ev.by})`, 'transition');
       else orch(ev, `approval ${ev.approved ? 'granted' : 'denied'} (${ev.by})`, ev.approved ? 'transition' : 'warn');
       break;
 
     case 'action.executed':
       orch(ev, `$ ${ev.command} ${ev.skipped ? '(not executed — simulation)' : `→ exit ${ev.exit_code}`}`);
+      break;
+
+    case 'local_preview.started':
+      orch(ev, `local preview started at ${ev.step_id}: ${ev.command} in ${ev.dir}`);
+      break;
+
+    case 'local_preview.stopped':
+      orch(ev, `local preview stopped${ev.reason ? ` (${ev.reason})` : ev.exit_code != null ? ` (exit ${ev.exit_code})` : ''}`);
       break;
 
     case 'limit.exceeded':
@@ -2040,6 +2103,7 @@ function renderHeader() {
   renderNavRuns();
   $('#run-id').textContent = r?.id || '';
   $('#kpi-time').textContent = r ? fmtDur((r.finishedAt || Date.now()) - r.startedAt) : '—';
+  $('#kpi-time').title = r?.gateWaitMs ? `Of which ${fmtDur(r.gateWaitMs)} waiting for you at gates` : '';
   $('#kpi-sessions').textContent = String([...state.sessions.keys()].filter((k) => k !== 'orchestrator').length);
   const t = totals();
   $('#kpi-tokens').textContent = `${fmtNum(t.input + t.cache_read)} / ${fmtNum(t.output)}`;
@@ -2102,6 +2166,7 @@ function renderRunSummary() {
   const html = `
     <div class="run-summary-name"><b>${esc(r.workflow || '')}</b>${r.version ? ` <span class="muted small">v${esc(r.version)}</span>` : ''}</div>
     ${r.project ? `<div class="small">Project: <b>${esc(r.project)}</b></div>` : ''}
+    ${r.gateWaitMs ? `<div class="small" title="Time the run waited for your answers at its human gates: no agent works (or costs) meanwhile">Waiting for you at gates: <b>${esc(fmtDur(r.gateWaitMs))}</b></div>` : ''}
     <dl class="kv run-inputs">${inputs.map(([k, v]) => `<dt title="${esc(k)}">${esc(k)}</dt>${inputValueCell(v)}`).join('')}</dl>
     <div class="row">
       <button class="btn sm ghost sup-btn" id="btn-run-sup" title="Ask the AI supervisor to explain this run and suggest how to continue"><span class="sup-mark">◆</span> Ask the supervisor</button>
@@ -3326,12 +3391,15 @@ function xtermTheme() {
 }
 
 // Opens (or focuses) an embedded terminal. Throws with a readable message on failure.
-async function openTerminal({ kind, sessionId, runId, label }) {
+// open(cols, rows): starts it another way than term:open (e.g. a gate's local preview).
+async function openTerminal({ kind, sessionId, runId, label, open }) {
   if (typeof Terminal === 'undefined') throw new Error('The terminal component failed to load.');
   runId = runId || state.run?.id;
   const key = `${kind}:${runId || 'current'}:${sessionId}`;
   const existing = dock.tabs.find((t) => t.key === key);
-  if (existing) { showDock(); activateTab(existing); return existing; }
+  // a finished program started another way (a local preview that stopped) starts again in a fresh tab
+  if (existing && open && existing.exited) closeTab(existing, { kill: false });
+  else if (existing) { showDock(); activateTab(existing); return existing; }
 
   const pane = document.createElement('div');
   pane.className = 'term-pane';
@@ -3345,7 +3413,7 @@ async function openTerminal({ kind, sessionId, runId, label }) {
   activateTab(tab);
 
   try {
-    const res = await api.termOpen({ kind, runId, sessionId, cols: term.cols, rows: term.rows });
+    const res = await (open ? open(term.cols, term.rows) : api.termOpen({ kind, runId, sessionId, cols: term.cols, rows: term.rows }));
     tab.id = res.id;
     if (res.windowsPty) term.options.windowsPty = res.windowsPty;
     if (res.title) tab.title = res.title;

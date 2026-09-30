@@ -12,6 +12,19 @@ actions, or any code that deletes or checks out branches.
   worktrees. `software-development` and `software-development-local-hero` use it (`multi-model-review` reviews the checked-out branch).
 - **Local workflows**: `orchestrator.worktree.remote: false` starts the worktree from the **local** `<base>` without fetching (it may hold local merges never pushed), and `removeWorktree` checks "merged" against the local base. A transition with `merge: local` (validated by `loadWorkflow`; needs `orchestrator.worktree`) calls `mergeLocally`: the run's worktree must be on a branch with everything committed; the branch is rebased onto the local base when it moved (a conflict aborts the rebase, leaves the branch untouched and fails with the files); then the base is fast-forwarded with `merge --ff-only` where it is checked out (refused when that checkout has uncommitted changes to tracked files) or by `update-ref` (compare-and-swap) when it is checked out nowhere. No push, no fetch; simulated runs skip it (`action.executed` skipped). Emits `worktree.merged`. Used by `software-development-local-hero`.
 - Starts without `node_modules`: the language skills install dependencies when missing.
+- **Run locally at a gate (#70)**: a gate with `local_preview: true` (developer_check, human_review,
+  approve_merge) whose run has a config (the project's `localPreview`, else
+  `orchestrator.local_preview: { install, command, url }`) carries `local_preview` and `work_dir`
+  in `approval.requested` / `pendingGates()`. `localPreview:start` (service `startLocalPreview`,
+  helpers in `src/local-preview.js`) runs `install && command` (install only when node_modules is
+  missing or the lockfile hash changed since the run's last preview) in the worktree, in a pty of
+  `src/terminals.js`; one per run; a busy `url` port is refused with a message. Env: always
+  `MULTIAGENT_SIMULATION_ONLY=1`, `MULTIAGENT_WORKSPACE` = a scratch copy under
+  `<workspace>/local-previews/<run>/workspace` (projects, agents, skills, workflows, settings; never
+  runs) and `MULTIAGENT_USER_DATA` (read by `src/main.js`, dev only) unless the owner chose the
+  real workspace. Stopped on `approval.resolved` and `workflow.finished` (and by `terminals.killAll`
+  at quit); it never answers the gate. `local_preview.started` / `local_preview.stopped` events land
+  in the run's history and chat. Mock runs have no worktree: `work_dir` is `repo_path`.
 
 ## Gotchas
 

@@ -915,6 +915,9 @@ body.resizing-dock .term-body { pointer-events: none; }
 /* long approval messages (e.g. from the supervisor) scroll */
 .run-gate-message { margin: 0; max-height: 30vh; overflow: auto; white-space: pre-wrap; }
 .run-gate-actions { flex-wrap: wrap; gap: 8px; }
+/* Run locally / Open the worktree at a gate: they never answer it */
+.gate-tools { flex-wrap: wrap; gap: 8px; align-items: center; margin: 4px 0; }
+.gate-tools label { display: inline-flex; gap: 4px; align-items: center; }
 
 /* ---------- account: sign-in screen + topbar chip ---------- */
 .login-screen { position: fixed; inset: 0; z-index: 50; background: var(--bg); display: grid; place-items: center; }

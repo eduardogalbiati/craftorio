@@ -121,6 +121,47 @@ Human gates: a doubtful PR/MR comment (fix / justify / ignore) and the merge, wh
 the production release. Agents never talk to each other: the orchestrator (engine) hands
 failures to the developer and returns the result to the agent that asked.
 
+**Modes: automatic or validated** (input `mode`, in the Start drawer next to the task, the
+Backlog's **Assign to a workflow** dialog and the Workflows screen; remembered per workflow and
+shown in the run's Details). `auto` (default) goes from the developer straight to the review, as
+above. `validated` stops right after the developer at the `developer_check` gate, before any review
+or test token is spent: its message has the developer's summary, the issues (done / not done), the
+files changed, the commits on the branch, the diff command, the `test_notes` and `evidence_plan`,
+and the worktree path and branch. Try it (**Run locally**, **Open the worktree**, **Terminal
+there**), then:
+- **Approve**: on to `code_review`;
+- **Ask for changes** (needs a text): the developer gets it as your change request, fixes it on the
+  same branch with a new commit, answers each point, and the run comes back to `developer_check`.
+  No automatic limit: you decide when to stop;
+- **Stop**: ends the run (`cancelled`), worktree kept to resume.
+
+Only the first implementation and your own change requests stop there; the reviewer's, the tests',
+the build's and the verifier's fix rounds go on without it, unless `validate_every_round: "true"`.
+It is a human gate: no timeout, no supervisor, no retry ever answers it. The time a run waits for
+you at its gates is recorded apart from agent time (`summary.timing.gate_wait_ms`, the Details
+panel and the Time tooltip).
+
+**Run locally at a gate.** `developer_check`, `human_review` and `approve_merge` (any gate with
+`local_preview: true`) offer **Run locally** when the project (Projects › Edit › Local preview) or
+the workflow says how to run the worktree:
+
+```yaml
+orchestrator:
+  local_preview:
+    install: "npm ci"      # only when dependencies are missing or the lockfile changed
+    command: "npm start"   # or "npm run dev"
+    url: null              # or "http://localhost:5173" (a link at the gate; a busy port is reported)
+```
+
+It runs in the run's worktree in an embedded terminal (the dock, labelled with the run's issues),
+with **■ Stop**, and stops by itself when the gate is answered or the run ends. It never answers the
+gate. The copy runs in simulation only (`MULTIAGENT_SIMULATION_ONLY=1`) on a scratch workspace
+(`<workspace>/local-previews/<run>/`: a copy of your projects, agents, skills, workflows and
+settings, never your runs) with its own user-data folder, so trying this app can't spend on real
+models or touch your workspace; **real workspace** (with a warning) points it at yours instead.
+"Local preview started/stopped" is recorded in the run's history and chat. Without a
+`local_preview` the gate says how to run it from the worktree (the project's README).
+
 Failure gates (a step that ran out of fix rounds, or a failure no commit can fix) only offer what
 can change the outcome:
 
@@ -198,6 +239,7 @@ The same develop → code review → test → build → verify pipeline as `soft
 - Each run still gets its own git worktree, started from your **local** `base_branch` (nothing is fetched, so a run sees the local merges of earlier runs you haven't pushed).
 - **No merge approval**: once `verify_change` passes, the engine merges the run's branch into the local `base_branch` automatically: rebased onto it first if it moved (another run merged meanwhile), fast-forward only (linear history), never pushed. The run's worktree and branch are then removed.
 - **Conflicts are resolved automatically**: a failed merge goes to `resolve_merge`, where the developer rebases onto the local base and resolves the conflicts (skill `merge-conflict-resolver`). Then only what the resolution changed is checked again: the review covers the rebase against the last approved commit (`git range-diff`; findings on untouched code are not blocking), the tests are the ones related to the files the resolution touched plus a smoke check (the full suite when it touched more than 5 files), the build runs, the verifier re-checks only the claims whose files were touched, and the merge is attempted right after. A resolution that changes behaviour (the developer answers `behaviour_changed: true`) goes through the full review, suite and verification. Merges of concurrent runs go one at a time. At most 3 rounds; what the developer can't fix, such as uncommitted changes in the checkout where the base is checked out (your work), stops at the `merge_blocked` gate (retry / stop).
+- **Modes**: the same `mode: auto | validated` as `software-development`. In `auto` nothing waits for you (the run merges locally by itself); in `validated` the run stops at `developer_check` after the developer so you try the change (Run locally, Open the worktree) and approve it or ask for changes before the review and the tests. `human_review` offers Run locally too.
 - **Context limit**: `orchestrator.limits.max_total_context: 20M`. Past 20M tokens of context the run pauses before its next agent turn; choose **Continue** (another 20M) or **Stop**.
 - **Issues close when you push**: commits end with `Closes #<n>` for the run's issues, so GitHub closes them when you push the base branch. Until then the Backlog shows them in **Merged locally** (a "not pushed" badge), not in Done: Done means closed on GitHub/GitLab.
 - **Push from the Backlog**: when the project's local base has commits that `origin/<base>` hasn't (checked with a fetch on every Backlog sync and after every local merge), a bar above the issues says how many and which issues they close. **Push…** lists the commits, then runs `git push origin <base>` in the project's repository (the clone under `<workspace>/repos/`, not your own checkout): never forced, never another branch. The Backlog syncs afterwards, so the closed issues move to Done. The sidebar's Backlog item and the project's page show the count of commits not pushed; the run's chat and its notification say "merged locally, not pushed yet".
