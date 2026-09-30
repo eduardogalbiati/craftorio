@@ -1087,8 +1087,12 @@ function createService({ host }) {
     notifyInterruptedRun,
     // Before a restart (the code changed on disk, #83): refuses while runs are in progress unless
     // the user confirmed interrupting them, and pauses the Backlog queues so nothing starts on the
-    // way out. Returns the runs the restart interrupts (to resume after it).
+    // way out. Returns the runs the restart interrupts (to resume after it). A start still under way
+    // (e.g. cloning its repository) has no run to resume yet: the restart waits until it resolves.
     prepareRestart({ interruptRuns = false } = {}) {
+      if (reserved.size) {
+        throw new Error(`${reserved.size} run${reserved.size > 1 ? 's are' : ' is'} starting: restart when ${reserved.size > 1 ? 'they have' : 'it has'} started, to have ${reserved.size > 1 ? 'them' : 'it'} listed for resume.`);
+      }
       const runs = activeRuns().map((r) => ({ runId: r.runId, workflow: r.workflow }));
       if (runs.length && !interruptRuns) {
         throw new Error(`${runs.length} run${runs.length > 1 ? 's are' : ' is'} in progress: confirm the restart to interrupt ${runs.length > 1 ? 'them' : 'it'} (${runs.map((r) => r.runId).join(', ')}).`);

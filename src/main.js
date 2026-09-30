@@ -83,8 +83,11 @@ for (const { channel, fn } of authChannels(account)) if (channel) ipcMain.handle
 for (const [channel, fn] of Object.entries(service.api)) ipcMain.handle(channel, (_e, arg) => fn(arg));
 for (const [channel, fn] of Object.entries(service.notifications)) ipcMain.on(channel, (_e, arg) => fn(arg));
 // what the preload builds window.api from, asked once when the window loads (sync: the page's
-// scripts use window.api right away)
-ipcMain.on('api:manifest', (e) => { e.returnValue = service.manifest; });
+// scripts use window.api right away); also when the window's code is recorded (#83)
+ipcMain.on('api:manifest', (e) => {
+  service.code.markLoaded();
+  e.returnValue = service.manifest;
+});
 for (const channel of ['run:event', 'supervisor:watch', 'term:data', 'term:exit']) {
   service.events.on(channel, (payload) => { if (win && !win.isDestroyed()) win.webContents.send(channel, payload); });
 }
