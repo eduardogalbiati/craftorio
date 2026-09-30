@@ -27,6 +27,7 @@ const { cleanupWorktrees, canonicalPath } = require('../engine/worktree');
 const workspace = require('../workspace');
 const projects = require('../projects');
 const backlog = require('../backlog');
+const localPush = require('../local-push');
 const skills = require('../skills');
 const agents = require('../agents');
 const usage = require('../usage');
@@ -421,6 +422,7 @@ function createService({ host }) {
     run.on('event', (ev) => {
       try { recorder.write(ev); } catch (e) { console.error('recorder:', e); }
       if (ev.type === 'workflow.finished') runEnded(run);
+      if (ev.type === 'worktree.merged') afterLocalMerge(run, ev).catch((e) => console.error('after local merge:', e));
       events.emit('run:event', ev);
       if (ev.type === 'workflow.started') markActiveRun(run.runId, runInfo);
       if (ev.type === 'workflow.finished') markActiveRun(run.runId, null);
@@ -686,7 +688,7 @@ function createService({ host }) {
   function projectRuns({ id }) {
     const project = projects.listProjects(ws.projects).find((p) => p.id === id);
     if (!project) throw new Error(`Project not found: ${id}`);
-    return { project, runs: runs.runsForProject(runs.listRuns(ws.runs), project).map(runListItem) };
+    return { project, local: backlog.readLocal(ws.backlog, project.id), runs: runs.runsForProject(runs.listRuns(ws.runs), project).map(runListItem) };
   }
 
   // A synced backlog with each issue's runs and place in the queue (computed on every read: runs
@@ -697,7 +699,80 @@ function createService({ host }) {
     const list = project ? runs.runsForProject(runs.listRuns(ws.runs), project) : [];
     const live = list.map((r) => (active.has(r.runId) ? { ...r, status: 'running', waiting: active.get(r.runId).approvals.size > 0 } : r));
     const queue = backlog.readQueue(ws.backlog, data.projectId);
-    return { ...data, queue, issues: backlog.linkRuns(data.issues, live, queue) };
+    const local = backlog.readLocal(ws.backlog, data.projectId);
+    return { ...data, queue, local, autoPush: !!project?.autoPush, issues: backlog.linkRuns(data.issues, live, queue, local) };
+  }
+
+  // ---- local merges not pushed (software-development-local-hero, src/local-push.js) ----
+  // The base a project's local runs merge into: the newest run's `merge: local`, else the
+  // repository's default branch (chosen by localStatus).
+  function projectBase(project) {
+    return runs.runsForProject(runs.listRuns(ws.runs), project).find((r) => r.localMerge?.base)?.localMerge.base || null;
+  }
+  const gitProject = (projectId) => {
+    const project = projects.readProject(ws.projects, path.basename(String(projectId)));
+    if (!project.isGit) throw new Error(`The folder of ${project.name} is not a git repository: ${project.folder || '(none)'}.`);
+    return project;
+  };
+
+  // Checks (fetch: true fetches origin/<base> first) and caches what the project's local base has
+  // that origin has not. A failure is cached too (the Backlog then assumes local merges are not pushed).
+  async function refreshLocal(projectId, { fetch = true, base = null } = {}) {
+    const project = projects.readProject(ws.projects, path.basename(String(projectId)));
+    if (!project.isGit) return null;
+    let status;
+    try {
+      status = await localPush.localStatus({ repo: project.folder, base: base || projectBase(project), fetch });
+    } catch (e) {
+      status = { error: e.message, ahead: 0, behind: 0, commits: [], issues: [], checkedAt: new Date().toISOString() };
+    }
+    return backlog.writeLocal(ws.backlog, project.id, status);
+  }
+
+  // The Backlog after a push: the status just written, and a new sync when there is one to redo
+  // (the issues the push closed move to Done; a sync that fails keeps the cache).
+  async function afterPush(projectId, result) {
+    backlog.writeLocal(ws.backlog, projectId, result.status);
+    const data = backlog.readBacklog(ws.backlog, projectId);
+    if (result.pushed && data) {
+      const project = projects.readProject(ws.projects, projectId);
+      await backlog.syncBacklog({ dir: ws.backlog, project, platform: data.platform }).catch((e) => console.error('backlog sync after push:', e.message));
+    }
+    const { status, ...rest } = result;
+    return { ...rest, local: status, backlog: withIssueRuns(backlog.readBacklog(ws.backlog, projectId)) };
+  }
+
+  async function pushProject({ projectId, update = false, base = null }) {
+    const project = gitProject(projectId);
+    base = base || projectBase(project);
+    const result = update ? await localPush.updateAndPush({ repo: project.folder, base }) : await localPush.pushBase({ repo: project.folder, base });
+    return afterPush(project.id, result);
+  }
+
+  // After a run's `merge: local`: the project's count of commits not pushed, and the push when the
+  // project asks for it (auto-push, off by default). A rejected or failed push only notifies: the
+  // Backlog's Push / Update and push takes it from there.
+  async function afterLocalMerge(run, { base }) {
+    if (!run.projectId || run.mock) return;
+    const project = projects.readProject(ws.projects, run.projectId);
+    if (project.autoPush && project.isGit) {
+      try {
+        const r = await pushProject({ projectId: project.id, base });
+        if (!r.pushed && r.rejected) throw new Error(`origin moved: use Update and push in the Backlog. ${r.error || ''}`);
+      } catch (e) {
+        notify({ kind: 'run', event: 'failed', title: `Auto-push failed: ${project.name}`, body: e.message.slice(0, 180), target: { runId: run.runId, workflow: run.wf.metadata?.name } });
+      }
+      return;
+    }
+    await refreshLocal(project.id, { fetch: false, base });
+  }
+
+  // Projects with local commits not pushed, from the cached checks (sidebar badge; no git here).
+  function unpushedProjects() {
+    return projects.listProjects(ws.projects)
+      .map((p) => ({ projectId: p.id, name: p.name, local: backlog.readLocal(ws.backlog, p.id) }))
+      .filter((x) => x.local?.ahead > 0)
+      .map(({ projectId, name, local }) => ({ projectId, name, base: local.base, ahead: local.ahead, issues: local.issues }));
   }
 
   // Queues issues of a project's synced backlog for a workflow and starts the first ones if there
@@ -887,11 +962,25 @@ function createService({ host }) {
     // A project's issues: the last sync (instant) and a new sync with gh/glab, each issue with
     // the runs working on it.
     'backlog:get': ({ projectId }) => withIssueRuns(backlog.readBacklog(ws.backlog, projectId)),
-    'backlog:sync': async ({ projectId, platform }) => withIssueRuns(await backlog.syncBacklog({
-      dir: ws.backlog,
-      project: projects.readProject(ws.projects, path.basename(String(projectId))),
-      platform: platform || workspace.readSettings(ws).backlogPlatform,
-    })),
+    // a sync also checks the local commits not pushed (fetching origin/<base>)
+    'backlog:sync': async ({ projectId, platform }) => {
+      const [data] = await Promise.all([
+        backlog.syncBacklog({
+          dir: ws.backlog,
+          project: projects.readProject(ws.projects, path.basename(String(projectId))),
+          platform: platform || workspace.readSettings(ws).backlogPlatform,
+        }),
+        refreshLocal(projectId).catch((e) => console.error('local status:', e.message)),
+      ]);
+      return withIssueRuns(data);
+    },
+    // Local merges not pushed: check again (fetch), push the base, or rebase it onto origin and push.
+    // Each returns { pushed?, rejected?, conflict?, files?, error?, commits?, issues?, local, backlog }.
+    'backlog:local': async ({ projectId }) => ({ local: await refreshLocal(projectId), backlog: withIssueRuns(backlog.readBacklog(ws.backlog, projectId)) }),
+    'backlog:push': ({ projectId }) => pushProject({ projectId }),
+    'backlog:update-push': ({ projectId }) => pushProject({ projectId, update: true }),
+    'backlog:auto-push': ({ projectId, on }) => projects.updateProject(ws.projects, path.basename(String(projectId)), { autoPush: !!on }),
+    'backlog:unpushed': () => unpushedProjects(),
     // Assign a workflow to issues: they are queued and start while there are free run slots (see dispatchQueue).
     'backlog:assign': (opts) => assignWorkflow(opts),
     // cancelGroup: an issue of a group takes the whole group out (else it only leaves the group)

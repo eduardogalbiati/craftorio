@@ -23,6 +23,12 @@ contextBridge.exposeInMainWorld('api', {
   assignWorkflow: (projectId, numbers, workflow, inputs, mock, group) => ipcRenderer.invoke('backlog:assign', { projectId, numbers, workflow, inputs, mock, group }),
   unqueueIssue: (projectId, number, cancelGroup) => ipcRenderer.invoke('backlog:unqueue', { projectId, number, cancelGroup }),
   pauseQueue: (projectId, paused) => ipcRenderer.invoke('backlog:pause', { projectId, paused }),
+  // local merges not pushed: check again, push the base, update (pull --rebase) and push, auto-push, every project's count
+  checkLocal: (projectId) => ipcRenderer.invoke('backlog:local', { projectId }),
+  pushLocal: (projectId) => ipcRenderer.invoke('backlog:push', { projectId }),
+  updateAndPushLocal: (projectId) => ipcRenderer.invoke('backlog:update-push', { projectId }),
+  setAutoPush: (projectId, on) => ipcRenderer.invoke('backlog:auto-push', { projectId, on }),
+  listUnpushed: () => ipcRenderer.invoke('backlog:unpushed'),
   listSkills: () => ipcRenderer.invoke('skills:list'),
   createSkill: (data) => ipcRenderer.invoke('skills:create', data),
   saveSkill: (id, data) => ipcRenderer.invoke('skills:save', { id, data }),

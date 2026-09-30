@@ -15,3 +15,9 @@ Read this when planning new work, to avoid redoing a discussion.
 - Idle agents (#46 → #41): the `agent_idle` warning wakes the supervisor (wait / interrupt) only on
   a step's turn, not on delegated turns; there is no UI for the `idleWarningMinutes` setting.
 - Worktree follow-ups: see [worktrees.md](worktrees.md).
+- Local merges not pushed (#89, done): `src/local-push.js` (`localStatus` / `pushBase` /
+  `updateAndPush`), cached per project in `<workspace>/backlog/<id>.local.json`, column `local` in
+  `linkRuns`, auto-push per project (`project.autoPush`). Not done: a push conflict is only reported
+  (files + checkout), not handed to a run's `resolve_merge` or to the supervisor (#41); auto-push is
+  per project, not per workflow; the Update and push rebase runs in the checkout where the base is
+  checked out, so it refuses when that checkout has uncommitted changes.

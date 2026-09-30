@@ -253,6 +253,11 @@
       else if (ev.kind === 'context_rotation') this.system(ev, 'plain', clip(String(ev.message || ''), 400));
     },
 
+    // `merge: local`: the work is on the local base only; the Backlog's Push sends it to origin
+    'worktree.merged'(ev) {
+      this.system(ev, 'plain', `Merged locally into ${ev.base}${ev.commit ? ` (${String(ev.commit).slice(0, 8)})` : ''}${ev.rebased ? ', rebased first' : ''}: not pushed yet. Push it from the Backlog.`);
+    },
+
     'limit.exceeded'(ev) { this.system(ev, 'error', `Limit exceeded: ${ev.limit}`); },
 
     'budget.exceeded'(ev) {

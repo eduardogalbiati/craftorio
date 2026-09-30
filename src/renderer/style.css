@@ -984,6 +984,13 @@ body.resizing-dock .term-body { pointer-events: none; }
 .bl-run:hover { border-color: var(--accent); }
 .bl-runs { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .bl-board { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; align-items: start; }
+.bl-board.with-local { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.bl-col-local h3 { color: var(--orange); }
+.bl-local { border-color: var(--orange); }
+.bl-local .error { margin: 0; }
+.bl-notpushed { color: var(--orange); border-color: var(--orange); }
+.bl-push-commits { max-height: 220px; overflow: auto; margin: 6px 0; padding-left: 18px; }
+.nav-badge.warn { background: var(--orange); color: #1a1a1a; }
 .bl-col { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 10px; }
 .bl-col h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 2px 4px 10px; }
 .bl-col-in_progress h3 { color: var(--accent); }
@@ -1001,7 +1008,10 @@ body.resizing-dock .term-body { pointer-events: none; }
 .bl-issue.selected, .bl-card.selected { border-color: var(--accent); }
 .bl-status { display: flex; align-items: center; gap: 6px; justify-self: end; }
 .bl-queued { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.bl-card-run { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.bl-card-run { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
+/* narrow columns (five with "Merged locally"): the workflow name ellipsizes instead of overflowing the card */
+.bl-card-run .bl-run { max-width: 100%; min-width: 0; }
+.bl-card-run .bl-run > span:not(.pill):not(.badge) { overflow: hidden; text-overflow: ellipsis; }
 .bl-queue { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 8px 12px; margin-bottom: 12px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; }
 .bl-queue .error { margin: 0; }
 #assign-issues { max-height: 90px; overflow: auto; }

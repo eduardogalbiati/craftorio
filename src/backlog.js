@@ -213,25 +213,38 @@ const runIssues = (run) => (Array.isArray(run?.issues) ? run.issues : run?.issue
 const sameIssue = (a, issue) => (a.url ? a.url === issue.url : a.number === issue.number);
 const startedFor = (run, issue) => runIssues(run).some((a) => sameIssue(a, issue));
 
-// Kanban column from the issue state, its place in the queue and its latest run.
-function columnOf(issue, latest, queued) {
+// An open issue whose latest run merged into the local base (`merge: local`) is not done until
+// that work reaches origin: its merge commit, or a commit closing it, is among the commits not
+// pushed yet. Without a known push status (never checked, or the check failed) it counts as not pushed.
+function notPushed(issue, run, local) {
+  if (!run.localMerge) return false;
+  if (!local || local.error) return true;
+  return (local.issues || []).includes(issue.number) || (local.commits || []).some((c) => c.sha === run.localMerge.commit);
+}
+
+// Kanban column from the issue state, its place in the queue, its latest run and the project's
+// local commits not pushed yet (localStatus in src/local-push.js). Done = closed on the platform,
+// or finished by a run whose work is there.
+function columnOf(issue, latest, queued, local) {
   if (issue.state === 'closed') return 'done';
   if (queued) return 'in_progress';
   if (!latest) return 'todo';
   if (latest.waiting) return 'waiting';
-  if (latest.status === 'success') return 'done';
+  if (latest.status === 'success') return notPushed(issue, latest, local) ? 'local' : 'done';
   if (latest.status === 'cancelled') return 'todo';
   return 'in_progress'; // running, failed, interrupted
 }
 
 /**
  * Adds to each issue the project's runs that work on it (newest first), its place in the queue
- * and its column: todo | in_progress | waiting (a run stopped at a human gate) | done.
+ * and its column: todo | in_progress | waiting (a run stopped at a human gate) | local (merged
+ * into the local base, not pushed yet) | done.
  * @param {object[]} issues from fetchIssues
- * @param {{ runId, workflow, status, startedAt, mock?, waiting?, issue?, task?, inputs? }[]} runs the project's runs
+ * @param {{ runId, workflow, status, startedAt, mock?, waiting?, issue?, task?, inputs?, localMerge? }[]} runs the project's runs
  * @param {{ items: object[] } | null} queue the project's queue (readQueue)
+ * @param {{ commits: { sha }[], issues: number[], error? } | null} local the project's commits not pushed (readLocal)
  */
-function linkRuns(issues, runs, queue = null) {
+function linkRuns(issues, runs, queue = null, local = null) {
   const sorted = [...runs].sort((a, b) => String(b.startedAt).localeCompare(String(a.startedAt)));
   const items = queue?.items || [];
   return issues.map((issue) => {
@@ -239,15 +252,33 @@ function linkRuns(issues, runs, queue = null) {
       .map((r) => {
         // a run started for a group: the other issues it implements ("grouped with #a, #b")
         const others = runIssues(r).filter((a) => !sameIssue(a, issue)).map((a) => a.number);
-        return { runId: r.runId, workflow: r.workflow, status: r.status, startedAt: r.startedAt, mock: !!r.mock, waiting: !!r.waiting, ...(others.length ? { groupedWith: others } : {}) };
+        return {
+          runId: r.runId, workflow: r.workflow, status: r.status, startedAt: r.startedAt, mock: !!r.mock, waiting: !!r.waiting,
+          ...(r.localMerge ? { localMerge: r.localMerge } : {}), ...(others.length ? { groupedWith: others } : {}),
+        };
       });
     const at = items.findIndex((q) => itemIssues(q).some((x) => x.number === issue.number));
     const others = at < 0 ? [] : itemIssues(items[at]).map((x) => x.number).filter((n) => n !== issue.number);
     const queued = at < 0 ? null : {
       position: at + 1, workflow: items[at].workflowName || items[at].workflow, mock: !!items[at].mock, ...(others.length ? { groupedWith: others } : {}),
     };
-    return { ...issue, runs: linked, queued, column: columnOf(issue, linked[0], queued) };
+    return { ...issue, runs: linked, queued, column: columnOf(issue, linked[0], queued, local) };
   });
+}
+
+// ---- local commits not pushed ----------------------------------------------------------------
+// The last localStatus (src/local-push.js) of a project, in <workspace>/backlog/<project id>.local.json:
+// read on every Backlog read without touching git, refreshed by a sync, a local merge or a push.
+const localFile = (dir, projectId) => path.join(dir, `${path.basename(String(projectId))}.local.json`);
+
+function readLocal(dir, projectId) {
+  try { return JSON.parse(fs.readFileSync(localFile(dir, projectId), 'utf8')); } catch { return null; }
+}
+
+function writeLocal(dir, projectId, status) {
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(localFile(dir, projectId), JSON.stringify(status, null, 2));
+  return status;
 }
 
 // ---- queue -----------------------------------------------------------------------------------
@@ -424,5 +455,5 @@ module.exports = {
   PLATFORMS, DEFAULT_PLATFORM, parseRepoUrl, platformOfHost, taskProgress, fetchIssues, readBacklog, syncBacklog, linkRuns,
   referencedIssues, fetchOpenPullRequests, attachPullRequests,
   readQueue, enqueue, unqueue, skipQueued, newPullRequests, setPaused, nextQueued, pauseAll, runInputs,
-  itemIssues, runIssues, execCli,
+  itemIssues, runIssues, execCli, readLocal, writeLocal,
 };

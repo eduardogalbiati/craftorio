@@ -5,6 +5,8 @@
 // Selected To do issues can be assigned to a workflow: they are queued and the service runs them
 // one at a time (the run records its issues), as separate runs or, when asked, as one run for all
 // of them (one branch, one PR/MR). Issues link to the runs working on them.
+// Work a local workflow merged into the local base but did not push shows in "Merged locally"; the
+// bar above the list pushes it (and updates from origin first when origin moved).
 // Uses app.js globals ($, esc, state, errMsg, dateOf, markdownHtml, showView, openModal,
 // closeModal, wantsSimulation, openApproval).
 /* global api */
@@ -16,7 +18,8 @@
   const MODE_KEY = 'multiagent.backlogMode';
   const WORKFLOW_KEY = 'multiagent.backlogWorkflow';
   const FILTERS = [['open', 'Open'], ['closed', 'Closed'], ['all', 'All']];
-  const COLUMNS = [['todo', 'To do'], ['in_progress', 'In progress'], ['waiting', 'Waiting for approval'], ['done', 'Done']];
+  // 'local': merged into the local base by a local workflow, not pushed yet (shown when there is any)
+  const COLUMNS = [['todo', 'To do'], ['in_progress', 'In progress'], ['waiting', 'Waiting for approval'], ['local', 'Merged locally'], ['done', 'Done']];
 
   const load = (key) => { try { return localStorage.getItem(key); } catch { return null; } };
   const save = (key, v) => { try { localStorage.setItem(key, v); } catch { /* storage unavailable */ } };
@@ -293,7 +296,9 @@
     }
     const r = i.runs?.[0];
     if (!r) return '';
-    return `${runLink(r)}${groupBadge(r.groupedWith)}${i.column === 'waiting' ? '<button class="btn sm primary" type="button" data-gate>Review approval</button>' : ''}`;
+    const notPushed = i.column === 'local'
+      ? `<span class="badge bl-notpushed" title="Merged into the local ${esc(r.localMerge?.base || 'base')}; the issue closes when it is pushed (Push, above)">not pushed</span>` : '';
+    return `${runLink(r)}${notPushed}${groupBadge(r.groupedWith)}${i.column === 'waiting' ? '<button class="btn sm primary" type="button" data-gate>Review approval</button>' : ''}`;
   }
 
   function issueRow(i) {
@@ -340,7 +345,9 @@
 
   function renderKanban(issues) {
     const shown = issues.filter(matches);
-    return `<div class="bl-board">${COLUMNS.map(([col, title]) => {
+    const withLocal = bl.data?.local?.ahead > 0 || issues.some((i) => i.column === 'local');
+    const columns = COLUMNS.filter(([col]) => col !== 'local' || withLocal);
+    return `<div class="bl-board${withLocal ? ' with-local' : ''}">${columns.map(([col, title]) => {
       const items = shown.filter((i) => (i.column || (i.state === 'closed' ? 'done' : 'todo')) === col);
       return `<section class="bl-col bl-col-${col}">
         <h3>${title} <span class="muted">${items.length}</span></h3>
@@ -366,6 +373,71 @@
       ${skips}
       <span class="spacer"></span>
       <button class="btn sm${q.paused ? ' primary' : ' ghost'}" type="button" data-pause="${q.paused ? 'off' : 'on'}">${q.paused ? 'Resume' : 'Pause'}</button>`;
+  }
+
+  // ---- local merges not pushed (software-development-local-hero) ---------------------------
+  // The project's local <base> has commits origin/<base> has not: what they close, Push, auto-push.
+  const issueRefs = (numbers) => numbers.map((n) => `#${n}`).join(', ');
+  function renderLocal() {
+    const box = $b('#bl-local');
+    const l = bl.data?.local;
+    const localIssues = (bl.data?.issues || []).filter((i) => i.column === 'local');
+    const show = l && (l.ahead > 0 || (l.error && localIssues.length));
+    box.classList.toggle('hidden', !show);
+    if (!show) { box.innerHTML = ''; return; }
+    const commits = `${l.ahead} commit${l.ahead === 1 ? '' : 's'}`;
+    box.innerHTML = l.ahead > 0 ? `
+      <span><b>Not pushed</b> ${commits} on the local ${esc(l.base)}${l.issues?.length ? ` · closes ${esc(issueRefs(l.issues))} when pushed` : ''}</span>
+      ${l.behind > 0 ? `<span class="warn-text small">origin/${esc(l.base)} has ${l.behind} new commit${l.behind === 1 ? '' : 's'}: the push updates first</span>` : ''}
+      ${l.fetchError ? `<span class="warn-text small" title="${esc(l.fetchError)}">origin not reached: last known state</span>` : ''}
+      <span class="spacer"></span>
+      <label class="check small" title="Push the local ${esc(l.base)} after every successful local merge"><input type="checkbox" data-autopush${bl.data?.autoPush ? ' checked' : ''} /><span>Auto-push</span></label>
+      <button class="btn sm primary" type="button" data-push>Push…</button>`
+      : `<span><b>Push status unknown</b> <span class="error small">${esc(l.error)}</span></span><span class="spacer"></span>
+      <button class="btn sm ghost" type="button" data-check>Check again</button>`;
+  }
+
+  // What the push sends (the commits and the issues they close), then the push; a rejected push
+  // (origin moved) offers Update and push; a conflict shows the files and leaves the base as it was.
+  function openPush() {
+    const l = bl.data?.local;
+    if (!l?.ahead) return;
+    const p = project();
+    $b('#push-title').textContent = `Push ${l.ahead} commit${l.ahead === 1 ? '' : 's'} to origin/${l.base}`;
+    $b('#push-message').textContent = `git push origin ${l.base} in ${l.repo || p?.folder || 'the project\'s repository'} (never forced).${l.issues?.length ? ` GitHub/GitLab closes ${issueRefs(l.issues)}.` : ''}`;
+    $b('#push-commits').innerHTML = (l.commits || []).map((c) => `<li><span class="mono">${esc(c.sha.slice(0, 8))}</span> ${esc(c.subject)}${c.issues.length ? ` <span class="muted">(closes ${esc(issueRefs(c.issues))})</span>` : ''}</li>`).join('');
+    $b('#push-error').textContent = '';
+    // origin already moved (last fetch): straight to Update and push
+    $b('#btn-push-update').classList.toggle('hidden', !(l.behind > 0));
+    $b('#btn-push-ok').classList.toggle('hidden', l.behind > 0);
+    openModal('#push-modal');
+  }
+
+  async function doPush(update) {
+    const btns = [$b('#btn-push-ok'), $b('#btn-push-update')];
+    btns.forEach((b) => { b.disabled = true; });
+    $b('#push-error').textContent = update ? 'Updating from origin, then pushing…' : 'Pushing…';
+    try {
+      const r = update ? await api.updateAndPushLocal(bl.projectId) : await api.pushLocal(bl.projectId);
+      if (r.backlog) setData(r.backlog);
+      else if (bl.data) bl.data.local = r.local;
+      window.refreshUnpushed?.();
+      if (r.pushed || (!r.rejected && !r.conflict && !r.local?.ahead)) { closeModal('#push-modal'); render(); return; }
+      if (r.conflict) {
+        $b('#push-error').textContent = `${r.error} Conflicting files: ${r.files.join(', ')}. Resolve it by hand in ${r.checkout || 'the repository'} (git pull --rebase origin ${bl.data?.local?.base || ''}) or let a run bring the branch up to date, then push again.`;
+        $b('#btn-push-update').classList.add('hidden');
+        $b('#btn-push-ok').classList.add('hidden');
+      } else if (r.rejected) {
+        $b('#push-error').textContent = `The push was rejected: origin moved since the last sync. Update and push rebases the local commits onto it first. (${r.error || ''})`;
+        $b('#btn-push-ok').classList.add('hidden');
+        $b('#btn-push-update').classList.remove('hidden');
+      }
+      render();
+    } catch (err) {
+      $b('#push-error').textContent = errMsg(err);
+    } finally {
+      btns.forEach((b) => { b.disabled = false; });
+    }
   }
 
   function render() {
@@ -401,6 +473,7 @@
     $b('#bl-synced').textContent = bl.syncing ? 'Syncing…' : bl.data ? `Synced ${dateOf(bl.data.syncedAt)} from ${PLATFORMS[bl.data.platform]?.label || bl.data.platform}` : '';
     const prError = bl.data?.pullRequestsError ? `Open ${bl.data.platform === 'gitlab' ? 'MRs' : 'PRs'} could not be read: ${bl.data.pullRequestsError}` : '';
     $b('#bl-error').textContent = bl.error || prError;
+    renderLocal();
     renderQueue();
 
     const list = $b('#bl-list');
@@ -452,6 +525,29 @@
     try { setData(await api.pauseQueue(bl.projectId, b.dataset.pause === 'on')); } catch (err) { bl.error = errMsg(err); }
     render();
   };
+  $b('#bl-local').onclick = async (e) => {
+    if (e.target.closest('[data-push]')) { openPush(); return; }
+    const auto = e.target.closest('[data-autopush]');
+    if (auto) {
+      try {
+        await api.setAutoPush(bl.projectId, auto.checked);
+        if (bl.data) bl.data.autoPush = auto.checked;
+      } catch (err) { bl.error = errMsg(err); render(); }
+      return;
+    }
+    const check = e.target.closest('[data-check]');
+    if (!check) return;
+    check.disabled = true;
+    try {
+      const r = await api.checkLocal(bl.projectId);
+      if (r.backlog) setData(r.backlog);
+      window.refreshUnpushed?.();
+    } catch (err) { bl.error = errMsg(err); }
+    render();
+  };
+  $b('#btn-push-ok').onclick = () => doPush(false);
+  $b('#btn-push-update').onclick = () => doPush(true);
+  $b('#btn-push-cancel').onclick = () => closeModal('#push-modal');
   $b('#bl-list').onclick = async (e) => {
     const check = e.target.closest('[data-sel]');
     if (check) {

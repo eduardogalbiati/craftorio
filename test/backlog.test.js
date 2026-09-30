@@ -220,6 +220,37 @@ test('issues link to the runs that mention them and land in a kanban column', ()
   assert.deepEqual(by[22].runs.map((r) => r.runId), ['b']);
 });
 
+test('an open issue merged locally stays in Local until its work is pushed; closed on the platform is Done', () => {
+  const issue = (number, state = 'open') => ({ number, state, url: `https://github.com/o/r/issues/${number}` });
+  const run = (runId, number, localMerge) => ({ runId, workflow: 'local-hero', status: 'success', startedAt: `2026-09-1${runId.length}`, issues: [{ number, url: `https://github.com/o/r/issues/${number}` }], localMerge });
+  const merge = (commit) => ({ branch: 'feat/x', base: 'main', commit });
+  const runs = [
+    run('a', 1, merge('aaa111')), // its commit is among the unpushed ones
+    run('bb', 2, merge('old222')), // rebased by an update: found by "Closes #2" in the unpushed commits
+    run('ccc', 3, merge('ccc333')), // pushed: neither its commit nor a "Closes #3" is left
+    run('dddd', 4, merge('ddd444')), // closed on GitHub
+    run('eeeee', 5, null), // a PR workflow: success means done, as before
+  ];
+  const local = { base: 'main', ahead: 2, commits: [{ sha: 'aaa111', subject: 'A', issues: [1] }, { sha: 'new222', subject: 'B', issues: [2] }], issues: [1, 2] };
+  const col = (l) => Object.fromEntries(backlog.linkRuns([issue(1), issue(2), issue(3), issue(4, 'closed'), issue(5)], runs, null, l).map((i) => [i.number, i.column]));
+  assert.deepEqual(col(local), { 1: 'local', 2: 'local', 3: 'done', 4: 'done', 5: 'done' });
+  // never checked, or the check failed: a local merge is assumed not pushed
+  assert.deepEqual(col(null), { 1: 'local', 2: 'local', 3: 'local', 4: 'done', 5: 'done' });
+  assert.deepEqual(col({ error: 'origin/main not found', commits: [], issues: [] }), { 1: 'local', 2: 'local', 3: 'local', 4: 'done', 5: 'done' });
+  // everything pushed
+  assert.deepEqual(col({ base: 'main', ahead: 0, commits: [], issues: [] }), { 1: 'done', 2: 'done', 3: 'done', 4: 'done', 5: 'done' });
+  const [one] = backlog.linkRuns([issue(1)], runs, null, local);
+  assert.deepEqual(one.runs[0].localMerge, { branch: 'feat/x', base: 'main', commit: 'aaa111' });
+});
+
+test('the push status of a project is cached next to its backlog', (t) => {
+  const dir = tmp(t);
+  assert.equal(backlog.readLocal(dir, 'p'), null);
+  backlog.writeLocal(dir, 'p', { base: 'main', ahead: 1, commits: [], issues: [7] });
+  assert.deepEqual(backlog.readLocal(dir, 'p'), { base: 'main', ahead: 1, commits: [], issues: [7] });
+  assert.equal(backlog.readBacklog(dir, 'p'), null); // its own file, not the synced issues
+});
+
 test('a run started for an issue links to it even when simulated; its state picks the column', () => {
   const issue = (number) => ({ number, state: 'open', url: `https://github.com/o/r/issues/${number}` });
   const run = (runId, number, extra) => ({ runId, workflow: 'w', startedAt: `2026-09-0${runId.length}`, issue: { number, url: `https://github.com/o/r/issues/${number}` }, ...extra });

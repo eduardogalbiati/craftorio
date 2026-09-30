@@ -72,6 +72,8 @@ function updateProject(dir, id, patch) {
   if (patch.name !== undefined) next.name = String(patch.name).trim() || cur.name;
   if (patch.description !== undefined) next.description = String(patch.description).trim();
   if (patch.repo !== undefined) next.repo = String(patch.repo).trim() || null;
+  // push the local base after every successful local merge (software-development-local-hero)
+  if (patch.autoPush !== undefined) next.autoPush = !!patch.autoPush;
   if (patch.folder !== undefined) {
     const folder = path.resolve(String(patch.folder).trim());
     if (!isDir(folder)) throw new Error(`Folder does not exist: ${folder}`);

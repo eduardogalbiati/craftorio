@@ -30,7 +30,8 @@ function runNotice(ev, run = {}) {
       return notice('waiting', `Waiting for you: ${workflow}`, ev.message || `Approval needed at ${ev.step_id}`);
     case 'workflow.finished': {
       const label = STATUS_LABEL[ev.status] || ev.status;
-      return notice(ev.status === 'success' ? 'succeeded' : label, `Run ${label}: ${workflow}`, ev.status === 'success' ? '' : ev.error);
+      const ok = ev.status === 'success' ? (ev.summary?.local_merge ? `Merged locally into ${ev.summary.local_merge.base}, not pushed yet.` : '') : ev.error;
+      return notice(ev.status === 'success' ? 'succeeded' : label, `Run ${label}: ${workflow}`, ok);
     }
     default:
       return null;

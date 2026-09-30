@@ -120,6 +120,27 @@ function demoActionsUsage() {
   return { login: 'demo-user', ...summarizeActionsUsage({ usageItems: [item('Actions Linux', 353, 0.008), item('Actions Windows', 560, 0.016), item('Actions macOS', 35, 0.08)] }, { includedMinutes: 2000, now }) };
 }
 
+// A local-hero run that merged #11 into the local main, not pushed yet (the Backlog's "Merged
+// locally" column and Push bar): its summary and the project's cached push status.
+function demoLocalMerge(ws, projectId) {
+  const runId = '20260118-120000-demo0011';
+  const commit = 'b7e4c2a91f0d3e5a6c8b9d0e1f2a3b4c5d6e7f80';
+  fs.mkdirSync(path.join(ws.runs, runId), { recursive: true });
+  fs.writeFileSync(path.join(ws.runs, runId, 'summary.json'), JSON.stringify({
+    run_id: runId, workflow: 'software-development-local-hero', project_id: projectId, status: 'success', mock: false,
+    started_at: '2026-01-18T12:00:00.000Z', finished_at: '2026-01-18T12:40:00.000Z', duration_ms: 2400000,
+    issues: [{ number: 11, url: `${DEMO_REPO}/issues/11`, title: DEMO_ISSUES[1].title }], inputs: {}, sessions: [],
+    local_merge: { branch: 'fix/workspace-rename', base: 'main', commit },
+  }, null, 2));
+  fs.writeFileSync(path.join(ws.backlog, `${projectId}.local.json`), JSON.stringify({
+    base: 'main', ahead: 2, behind: 0, fetchError: null, error: null, checkedAt: new Date().toISOString(), issues: [11],
+    commits: [
+      { sha: commit, subject: 'Survive a renamed workspace folder', issues: [11] },
+      { sha: 'a1c3e5f7092b4d6f8a0c2e4f6b8d0f1a3c5e7b9d', subject: 'Test the rename with a scratch workspace', issues: [] },
+    ],
+  }, null, 2));
+}
+
 // Simulation: the Backlog's sync answers with the cached demo issues instead of calling gh, and the
 // Usage screen's GitHub Actions minutes are demo data.
 function simulateChannels(ipcMain) {
@@ -211,6 +232,7 @@ function main() {
     workspace.writeSettings(ws, { developerMode: true, lastWorkflow: 'software-development.yaml', lastProject: project.id });
     fs.mkdirSync(ws.backlog, { recursive: true });
     fs.writeFileSync(path.join(ws.backlog, `${project.id}.json`), JSON.stringify(demoBacklog(project.id, src('backlog').taskProgress), null, 2));
+    if (args.view === 'backlog') demoLocalMerge(ws, project.id);
     let run = null;
     if (VIEWS[args.view].run || ['artifacts', 'workflows', 'project', 'usage', 'dashboard'].includes(args.view)) run = recordRun(project);
     return { project, run };

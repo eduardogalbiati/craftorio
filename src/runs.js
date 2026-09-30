@@ -11,12 +11,13 @@ const { trailOf } = require('./renderer/run-progress-model');
 
 const SESSION_EVENTS = new Set(['session.opened', 'session.message_received', 'session.closed']);
 
-// What a run without a (complete) summary.json needs from its events.jsonl: its sessions and
-// its step trail (progress by group), cached by mtime+size so an unchanged file is read once.
-const derived = new Map(); // events.jsonl path → { key, sessions, progress }
+// What a run without a (complete) summary.json needs from its events.jsonl: its sessions, its
+// step trail (progress by group) and its local merge (runs recorded before summary.local_merge),
+// cached by mtime+size so an unchanged file is read once.
+const derived = new Map(); // events.jsonl path → { key, sessions, progress, localMerge }
 function fromEvents(file) {
   let st;
-  try { st = fs.statSync(file); } catch { return { sessions: [], progress: [] }; }
+  try { st = fs.statSync(file); } catch { return { sessions: [], progress: [], localMerge: null }; }
   const key = `${st.mtimeMs}:${st.size}`;
   const hit = derived.get(file);
   if (hit?.key === key) return hit;
@@ -26,7 +27,9 @@ function fromEvents(file) {
     if (SESSION_EVENTS.has(ev.type) && ev.session) byId.set(ev.session_id, { ...ev.session, status: ev.type === 'session.closed' ? ev.status : ev.session.status });
     else if (ev.type === 'session.status' && byId.has(ev.session_id)) byId.get(ev.session_id).status = ev.status;
   }
-  const out = { key, sessions: [...byId.values()], progress: trailOf(events) };
+  const merged = events.findLast((e) => e.type === 'worktree.merged');
+  const localMerge = merged ? { branch: merged.branch, base: merged.base, commit: merged.commit } : null;
+  const out = { key, sessions: [...byId.values()], progress: trailOf(events), localMerge };
   derived.set(file, out);
   return out;
 }
@@ -94,6 +97,9 @@ function readRun(runsDir, runId) {
     const last = readEvents(path.join(dir, 'events.jsonl')).reverse().find((e) => e.type === 'workflow.finished');
     error = last?.error || null;
   }
+  // what a `merge: local` put on the local base (summaries before local_merge: from the events)
+  const localMerge = summary && summary.local_merge !== undefined ? summary.local_merge
+    : summary?.status === 'success' && summary.worktree?.repo ? fromEvents(path.join(dir, 'events.jsonl')).localMerge : null;
   const inputs = summary?.inputs || started?.inputs || {};
   const startedAt = summary?.started_at || started?.ts || null;
   return {
@@ -112,6 +118,7 @@ function readRun(runsDir, runId) {
     // the issues the run implements (Backlog); runs recorded before groups have one `issue`
     issues: issuesOf(summary) || issuesOf(started),
     task: firstText(inputs),
+    localMerge,
     error,
     inputs,
     runDir: dir,

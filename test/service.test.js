@@ -171,6 +171,58 @@ test('backlog: with simulation only, a real assignment is refused and nothing is
   assert.deepEqual(api['runs:list']().runs, []);
 });
 
+test('backlog: work merged locally shows as not pushed until the Backlog pushes it', async (t) => {
+  const { service, api } = makeService(t);
+  const ws = service.workspace();
+  const { execFileSync } = require('child_process');
+  const git = (cwd, ...args) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'init.defaultBranch=main', ...args], { cwd, stdio: ['ignore', 'pipe', 'pipe'] }).toString().trim();
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'service-push-'));
+  t.after(() => fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 3 }));
+  const origin = path.join(tmp, 'origin.git');
+  const folder = path.join(tmp, 'repo');
+  git(tmp, 'init', '-q', '--bare', origin);
+  git(tmp, 'clone', '-q', origin, folder);
+  git(folder, 'checkout', '-q', '-b', 'main');
+  git(folder, 'commit', '-q', '--allow-empty', '-m', 'init');
+  git(folder, 'push', '-q', '-u', 'origin', 'main');
+  git(folder, 'commit', '-q', '--allow-empty', '-m', 'Add the feature\n\nCloses #1');
+  const merged = git(folder, 'rev-parse', 'HEAD');
+
+  const p = await api['projects:create']({ name: 'local', folder });
+  // a local-hero run that merged #1 into the local main, and the last sync (Bitbucket: the sync
+  // after the push stops before calling any CLI, the cache stays)
+  const runDir = path.join(ws.runs, 'run-local');
+  fs.mkdirSync(runDir, { recursive: true });
+  fs.writeFileSync(path.join(runDir, 'summary.json'), JSON.stringify({
+    run_id: 'run-local', workflow: 'software-development-local-hero', project_id: p.id, status: 'success', started_at: '2026-09-29T10:00:00Z',
+    issues: [{ number: 1, url: 'https://bitbucket.org/o/r/issues/1' }], inputs: {}, sessions: [], worktree: { repo: folder },
+    local_merge: { branch: 'feat/one', base: 'main', commit: merged },
+  }));
+  fs.mkdirSync(ws.backlog, { recursive: true });
+  const issue = { number: 1, title: 'One', state: 'open', url: 'https://bitbucket.org/o/r/issues/1', body: '', labels: [], assignees: [], tasks: { done: 0, total: 0 } };
+  fs.writeFileSync(path.join(ws.backlog, `${p.id}.json`), JSON.stringify({ projectId: p.id, platform: 'bitbucket', repo: 'https://bitbucket.org/o/r', issues: [issue] }));
+
+  // never checked yet: assumed not pushed
+  assert.equal(api['backlog:get']({ projectId: p.id }).issues[0].column, 'local');
+  const checked = await api['backlog:local']({ projectId: p.id });
+  assert.deepEqual([checked.local.ahead, checked.local.base, checked.local.issues], [1, 'main', [1]]);
+  assert.equal(checked.backlog.issues[0].column, 'local');
+  assert.deepEqual(api['backlog:unpushed'](), [{ projectId: p.id, name: 'local', base: 'main', ahead: 1, issues: [1] }]);
+  assert.equal(api['projects:runs']({ id: p.id }).local.ahead, 1);
+
+  const pushed = await api['backlog:push']({ projectId: p.id });
+  assert.deepEqual([pushed.pushed, pushed.issues, pushed.local.ahead], [true, [1], 0]);
+  assert.equal(git(origin, 'rev-parse', 'main'), merged);
+  // pushed: no longer "local" (Done here; the platform closes #1 and the next sync agrees)
+  assert.equal(pushed.backlog.issues[0].column, 'done');
+  assert.deepEqual(api['backlog:unpushed'](), []);
+
+  // auto-push is a project setting, off by default
+  assert.equal(api['backlog:get']({ projectId: p.id }).autoPush, false);
+  api['backlog:auto-push']({ projectId: p.id, on: true });
+  assert.equal(api['backlog:get']({ projectId: p.id }).autoPush, true);
+});
+
 test('backlog: assigned issues run one at a time, each run records its issue', async (t) => {
   const { service, api } = makeService(t);
   const ws = service.workspace();

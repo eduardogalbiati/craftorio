@@ -88,6 +88,7 @@
       <button class="nav-item" data-view="backlog">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 6 1.5 1.5L8 5" /><path d="m4 12 1.5 1.5L8 11" /><path d="m4 18 1.5 1.5L8 17" /><path d="M11 6h9M11 12h9M11 18h9" /></svg>
         <span>Backlog</span>
+        <span id="nav-backlog-unpushed" class="nav-badge warn hidden"></span>
       </button>
       <button class="nav-item" data-view="artifacts">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><polyline points="14 3 14 8 19 8" /><line x1="9" y1="13" x2="15" y2="13" /><line x1="9" y1="17" x2="13" y2="17" /></svg>
@@ -267,6 +268,7 @@
           <span class="spacer"></span>
           <span id="bl-synced" class="muted small"></span>
         </div>
+        <div id="bl-local" class="bl-queue bl-local hidden"></div>
         <div id="bl-queue" class="bl-queue hidden"></div>
         <p id="bl-error" class="error small"></p>
         <div id="bl-list" class="pr-list"></div>
@@ -1145,6 +1147,20 @@
         <button type="button" id="btn-unqueue-keep" class="btn ghost">Keep it</button>
         <button type="button" id="btn-unqueue-one" class="btn">Remove it from the group</button>
         <button type="button" id="btn-unqueue-all" class="btn danger-solid">Cancel the group</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="push-modal" class="modal hidden">
+    <div class="modal-card">
+      <h3 id="push-title">Push the local merges</h3>
+      <p id="push-message" class="muted small"></p>
+      <ul id="push-commits" class="bl-push-commits small"></ul>
+      <p id="push-error" class="error small"></p>
+      <div class="modal-actions">
+        <button type="button" id="btn-push-cancel" class="btn ghost">Cancel</button>
+        <button type="button" id="btn-push-update" class="btn hidden">Update and push</button>
+        <button type="button" id="btn-push-ok" class="btn primary">Push</button>
       </div>
     </div>
   </div>

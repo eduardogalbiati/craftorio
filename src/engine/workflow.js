@@ -1795,6 +1795,8 @@ ${stderr || stdout}`.slice(0, 1500)));
         run_id: this.runId, workflow: this.wf.metadata?.name, project_id: this.projectId, issues: this.issues || undefined, status,
         started_at: new Date(this.startedAt).toISOString(), finished_at: new Date().toISOString(),
         duration_ms: Date.now() - this.startedAt, inputs: this.inputs, mock: this.mock, worktree: this.worktreeSummary(),
+        // `merge: local`: what landed on the local base, not pushed (Backlog: "Local" column, Push)
+        local_merge: this.ctx.local_merge ? { branch: this.ctx.local_merge.branch, base: this.ctx.local_merge.base, commit: this.ctx.local_merge.commit } : null,
         tokens, cost_usd: +sessions.reduce((a, s) => a + s.cost_usd, 0).toFixed(6),
         context: this.contextSummary(),
         timing: this.timingSummary(),

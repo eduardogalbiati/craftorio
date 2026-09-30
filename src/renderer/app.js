@@ -104,6 +104,7 @@ async function init() {
     showView(b.dataset.view);
   }));
   document.querySelectorAll('.dash-card').forEach((b) => (b.onclick = () => openDrawer({ category: b.dataset.category })));
+  refreshUnpushed();
 
   // right drawer
   $('#btn-drawer-close').onclick = closeDrawer;
@@ -541,6 +542,19 @@ async function stopRun() {
 // ---------------------------------------------------------------------------
 // Projects
 // ---------------------------------------------------------------------------
+// Sidebar: commits merged locally (local workflows) and not pushed yet, over every project, from
+// the service's last checks (no git call here). The Backlog pushes them.
+async function refreshUnpushed() {
+  let list = [];
+  try { list = await api.listUnpushed(); } catch { /* no workspace yet */ }
+  const total = list.reduce((a, x) => a + x.ahead, 0);
+  const badge = $('#nav-backlog-unpushed');
+  badge.textContent = String(total);
+  badge.classList.toggle('hidden', !total);
+  badge.title = list.map((x) => `${x.name}: ${x.ahead} commit${x.ahead === 1 ? '' : 's'} not pushed on ${x.base}`).join('\n');
+}
+window.refreshUnpushed = refreshUnpushed;
+
 async function refreshProjects() {
   state.projects = await api.listProjects();
   const box = $('#projects-list');
@@ -612,7 +626,7 @@ function loadProjectRuns() {
   pvLoading = (async () => {
     try {
       const res = await api.listProjectRuns(pv.id);
-      if (state.pv === pv) { pv.project = res.project || pv.project; pv.runs = res.runs || []; pv.error = null; }
+      if (state.pv === pv) { pv.project = res.project || pv.project; pv.local = res.local || null; pv.runs = res.runs || []; pv.error = null; }
     } catch (e) {
       if (state.pv === pv) pv.error = errMsg(e);
     }
@@ -641,6 +655,7 @@ function renderProjectView() {
       <dl class="kv">
         <dt>folder</dt><dd class="${p && !p.exists ? 'warn-text' : ''}">${esc(p?.folder || '—')}${p && !p.exists ? ' (not found)' : ''}</dd>
         <dt>repository</dt><dd>${esc(p?.repo || '—')}</dd>
+        ${pv.local?.ahead > 0 ? `<dt>not pushed</dt><dd class="warn-text">${pv.local.ahead} commit${pv.local.ahead === 1 ? '' : 's'} on the local ${esc(pv.local.base)}${pv.local.issues?.length ? ` (closes ${esc(pv.local.issues.map((n) => `#${n}`).join(', '))})` : ''}: push from the Backlog</dd>` : ''}
       </dl>
     </div>
     <div class="row">
@@ -1824,6 +1839,8 @@ function onEvent(ev) {
   if (v.trail?.apply(ev)) renderRunListsSoon();
   if (PROJECT_REFRESH_EVENTS.has(ev.type)) { loadProjectRunsThrottled(); loadWorkflowRunsThrottled(); }
   if (ev.type === 'workflow.finished' || ev.type === 'file.saved') loadArtifactsThrottled();
+  // the service re-checks the project's commits not pushed right after a local merge
+  if (ev.type === 'worktree.merged' || ev.type === 'workflow.finished') setTimeout(refreshUnpushed, 1500);
   scheduleRender();
 }
 
