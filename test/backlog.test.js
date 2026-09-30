@@ -243,6 +243,17 @@ test('an open issue merged locally stays in Local until its work is pushed; only
   assert.deepEqual(one.runs[0].localMerge, { branch: 'feat/x', base: 'main', commit: 'aaa111' });
 });
 
+test('a run the supervisor sent back after a failed merge carries its recovery record onto the issue card', () => {
+  const issue = (number) => ({ number, state: 'open', url: `https://github.com/o/r/issues/${number}` });
+  const runs = [
+    { runId: 'a', workflow: 'software-development', status: 'waiting', startedAt: '2026-09-30', issues: [{ number: 1, url: 'https://github.com/o/r/issues/1' }], recovery: 'went back to resolve_conflict at 00:10 UTC because PR #64 conflicted with main after the #35 merge' },
+    { runId: 'b', workflow: 'software-development', status: 'success', startedAt: '2026-09-29', issues: [{ number: 2, url: 'https://github.com/o/r/issues/2' }] },
+  ];
+  const by = Object.fromEntries(backlog.linkRuns([issue(1), issue(2)], runs).map((i) => [i.number, i]));
+  assert.match(by[1].runs[0].recovery, /^went back to resolve_conflict/);
+  assert.ok(!('recovery' in by[2].runs[0]));
+});
+
 test('the push status of a project is cached next to its backlog', (t) => {
   const dir = tmp(t);
   assert.equal(backlog.readLocal(dir, 'p'), null);

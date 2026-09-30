@@ -20,3 +20,10 @@ test('updateAssignNote: the real-run note drops the "one at a time" / ordering c
   // still switches the submit button text between Simulate and Start
   assert.match(note, /\$b\('#btn-assign-ok'\)\.textContent = `\$\{mock \? 'Simulate' : 'Start'\}/);
 });
+
+test('status(): a run the supervisor sent back after a failed merge shows a "sent back" badge with its record', () => {
+  const status = /function status\(i\)[\s\S]*?\n  \}/.exec(src)[0];
+  assert.match(status, /const recovered = r\.recovery \? `<span class="badge bl-recovered"/);
+  assert.match(status, /title="\$\{esc\(`Supervisor: \$\{r\.recovery\}`\)\}"/);
+  assert.match(status, /sent back after a failed merge<\/span>` : ''/);
+});

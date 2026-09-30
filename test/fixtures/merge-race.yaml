@@ -1,0 +1,68 @@
+# Test fixture: a `check:`/`precheck:` gate with a recovery step, the shape `approve_merge` /
+# `resolve_conflict` / `merge_failed` share in workflows/software-development.yaml, stripped down
+# to exercise the engine's merge-queue and gate-withdrawal mechanics on their own (#69).
+apiVersion: multiagent/v1
+kind: Workflow
+metadata:
+  name: fixture-merge-race
+inputs:
+  pr_url: { type: string, required: true }
+orchestrator:
+  supervisor: { enabled: true, max_interventions: 2 }
+agents:
+  a: { provider: claude, model: mock-model, session: handoff }
+steps:
+  - id: gate
+    type: human_approval
+    check:
+      probe: pr_mergeable
+      target: "{{ inputs.pr_url }}"
+      on_fail: resolve
+      recover: [resolve]
+    message: "Merge {{ inputs.pr_url }}? ({{ check.state }}: {{ check.detail }})"
+    transitions:
+      - when: "approved"
+        precheck: true
+        on_error: resolve
+        recover: [resolve]
+        action: "true"
+        goto: end
+      - when: "rejected"
+        goto: end
+        status: cancelled
+
+  - id: resolve
+    agent: a
+    prompt: |
+      {{ inputs.pr_url }} could not be merged: {{ action_error.message if action_error else 'unknown error' }}
+      {% if action_error and action_error.check %}State: {{ action_error.check.state }} ({{ action_error.check.detail }}){% endif %}
+      {% if action_error and action_error.supervisor %}Supervisor: {{ action_error.supervisor.explanation }}{% endif %}
+      Resolve it and answer.
+    output_schema:
+      type: object
+      required: [resolved, blocked, summary]
+      properties:
+        resolved: { type: boolean }
+        blocked:  { type: boolean }
+        summary:  { type: string }
+    transitions:
+      - when: "output.blocked"
+        goto: end
+        status: failed
+      - when: "output.resolved"
+        goto: gate
+        max_visits: 2
+        on_exhausted: blocked
+
+  # Only a person gets the run past 2 recovery rounds that still could not merge (mirrors
+  # merge_failed / merge_blocked in the bundled workflows): the round limit never ends the run
+  # by itself.
+  - id: blocked
+    type: human_approval
+    message: "{{ inputs.pr_url }} still cannot be merged after 2 recovery rounds."
+    transitions:
+      - when: "approved"
+        goto: resolve
+      - when: "rejected"
+        goto: end
+        status: failed

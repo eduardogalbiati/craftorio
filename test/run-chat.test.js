@@ -162,6 +162,42 @@ test('run chat: the orchestrator\'s own checks (wait:) show as lines saying whet
   ]);
 });
 
+test('run chat: a `check:`/`precheck:` merge probe shows when it runs, not just poll/output/agent', () => {
+  const model = chatOf([
+    { seq: 1, type: 'workflow.started', run_id: 'r1', workflow: 'wf', inputs: {} },
+    { seq: 2, type: 'step.probe', run_id: 'r1', step_id: 'approve_merge', probe: 'pr_mergeable', state: 'passed', detail: 'mergeable', action: 'check' },
+    { seq: 3, type: 'step.probe', run_id: 'r1', step_id: 'approve_merge', probe: 'pr_mergeable', state: 'passed', detail: 'mergeable', action: 'precheck' },
+  ]);
+  const lines = kinds(model, 'system').map((it) => it.text).filter((x) => /Orchestrator check/.test(x));
+  assert.deepEqual(lines, [
+    'Orchestrator check (pr_mergeable) on approve_merge: mergeable · before asking for approval',
+    'Orchestrator check (pr_mergeable) on approve_merge: mergeable · right before the merge',
+  ]);
+});
+
+test('run chat: an approval withdrawn by the engine\'s check shows why, not as a human decision', () => {
+  const model = chatOf([
+    { seq: 1, type: 'workflow.started', run_id: 'r1', workflow: 'wf', inputs: {} },
+    { seq: 2, type: 'approval.requested', approval_id: 'a1', step_id: 'approve_merge', message: 'Merge?', choices: null },
+    { seq: 3, type: 'approval.resolved', approval_id: 'a1', withdrawn: true, by: 'check', reason: 'conflict: the PR now conflicts with main' },
+  ]);
+  const [gate] = kinds(model, 'gate');
+  assert.deepEqual(gate.resolved, { choice: 'withdrawn', label: 'Withdrawn before anyone answered: conflict: the PR now conflicts with main' });
+});
+
+test('run chat: a supervisor recovery from a failed merge shows its record ("went back to..."), not the raw explanation', () => {
+  const model = chatOf([
+    { seq: 1, type: 'workflow.started', run_id: 'r1', workflow: 'wf', inputs: {} },
+    { seq: 2, type: 'supervisor.started', step_id: 'approve_merge', kind: 'action_error', error: 'not mergeable' },
+    {
+      seq: 3, type: 'supervisor.decision', step_id: 'approve_merge', kind: 'action_error', action: 'goto', goto: 'resolve_conflict',
+      explanation: 'the PR conflicts with main after another merge', record: 'went back to resolve_conflict at 00:10 UTC because the PR conflicts with main after another merge',
+    },
+  ]);
+  const [d] = kinds(model, 'supervisor');
+  assert.equal(d.explanation, 'went back to resolve_conflict at 00:10 UTC because the PR conflicts with main after another merge');
+});
+
 test('run chat: events seen twice (replay, then live) are applied once', () => {
   const model = new RunChatModel();
   const started = { seq: 1, type: 'workflow.started', run_id: 'r1', workflow: 'wf', inputs: {} };

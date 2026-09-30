@@ -168,3 +168,25 @@ test('resumeSpec carries the issues over; a run recorded with one `issue` resume
   started({ issue: ref(7) });
   assert.deepEqual(supervisor.resumeSpec(dir, 'x').issues, [ref(7)]);
 });
+
+test('actionSchema: goto is limited to the transition\'s own recovery steps', () => {
+  const schema = supervisor.actionSchema(['resolve_conflict']);
+  assert.deepEqual(schema.properties.goto.enum, ['resolve_conflict']);
+  assert.deepEqual(schema.properties.action.enum, ['goto', 'escalate']);
+  assert.deepEqual(schema.required, ['explanation', 'action']);
+});
+
+test('actionErrorPrompt: gives the error, the engine\'s PR/MR check, the recovery options and the failure gate', () => {
+  const wf = { metadata: { name: 'software-development', description: 'Ships a change.' } };
+  const step = { id: 'approve_merge' };
+  const check = { state: 'conflict', detail: 'the PR now conflicts with main' };
+  const prompt = supervisor.actionErrorPrompt({
+    wf, step, error: 'not mergeable: conflict', check, recover: ['resolve_conflict'], gate: 'merge_failed', events: [], handoffs: [],
+  });
+  assert.match(prompt, /workflow "software-development"/);
+  assert.match(prompt, /step "approve_merge"/);
+  assert.match(prompt, /## Error\nnot mergeable: conflict/);
+  assert.match(prompt, /## PR\/MR state checked by the engine\nconflict: the PR now conflicts with main/);
+  assert.match(prompt, /go back to one of resolve_conflict/);
+  assert.match(prompt, /stops at the gate "merge_failed"/);
+});
