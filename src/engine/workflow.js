@@ -115,8 +115,11 @@ function loadWorkflow(file) {
       if (!isLooping(s) || s.agents || s.type === 'human_approval') throw new Error(`Step "${s.id}": wait is only valid on a single-agent step with a loop.`);
       if (!PROBES.includes(w.probe)) throw new Error(`Step "${s.id}": wait.probe must be one of ${PROBES.join(', ')}.`);
       if (!w.target) throw new Error(`Step "${s.id}": wait requires "target" (the PR/MR or CI run URL).`);
-      if (w.output !== undefined && (w.probe === 'pr_changes' || !w.output || typeof w.output !== 'object' || Array.isArray(w.output))) {
-        throw new Error(`Step "${s.id}": wait.output must be a map of output fields, and only applies to the pr_checks and workflow_run probes.`);
+      for (const key of ['output', 'infra_output']) {
+        const v = w[key];
+        if (v !== undefined && (w.probe === 'pr_changes' || !v || typeof v !== 'object' || Array.isArray(v))) {
+          throw new Error(`Step "${s.id}": wait.${key} must be a map of output fields, and only applies to the pr_checks and workflow_run probes.`);
+        }
       }
       if (w.grace !== undefined && parseDuration(w.grace, null) == null) throw new Error(`Step "${s.id}": wait.grace must be a duration such as 10m.`);
     }
@@ -324,12 +327,14 @@ class WorkflowRun extends EventEmitter {
   //   worktree (src/engine/processes.js). Default: the real one, none for simulations (mock agents start nothing).
   // probe: ({ probe, target, cwd, signal, stepId, baseline }) => Promise<{ state, detail, fingerprint? }>, the
   //   check of a `wait:` step (src/engine/probes.js). Default: the real one; simulations use MOCK_PROBES.
+  // actionsQuota: (owner) => Promise<string | null>, the message when that GitHub account's Actions quota is
+  //   exhausted (src/actions-usage.js), passed to the probe as `quota`: pr_checks then reports `quota_exhausted`.
   // peerSessions: () => [{ provider, model, tokens, costUsd }], the sessions of the other runs in progress (and of
   //   those that finished after `budget` was computed): the per-turn budget check counts them too (concurrent runs).
   // idleWarnMs: an agent silent this long while a tool call is open gets an `agent_idle` warning (src/engine/idle.js).
   //   Default 5 minutes; 0 disables it.
   // personas: [{ id, name, prompt, skills }] the user's agents (Agents menu), for `persona: random`.
-  constructor({ file, inputs, mock, runsDir, skillsDirs, budget, prices, projectId, issues, issue, resume, worktreesDir, mockSequences, notices, stopProcesses, probe, peerSessions, idleWarnMs, personas }) {
+  constructor({ file, inputs, mock, runsDir, skillsDirs, budget, prices, projectId, issues, issue, resume, worktreesDir, mockSequences, notices, stopProcesses, probe, actionsQuota, peerSessions, idleWarnMs, personas }) {
     super();
     refreshWindowsPath(); // actions (e.g. gh pr merge) need the refreshed PATH
     this.file = file;
@@ -346,6 +351,7 @@ class WorkflowRun extends EventEmitter {
     this.worktree = null; // see setupWorktree
     this.stopProcesses = stopProcesses === undefined ? (this.mock ? null : stopProcessesIn) : stopProcesses;
     this.probe = probe || (this.mock ? (args) => this.mockProbe(args) : runProbe);
+    this.actionsQuota = actionsQuota || null;
     this.probeStats = {}; // step -> { polls, agent_calls, completed, errors } (summary.probes)
     this.mockProbeCalls = {};
     this.budget = budget || {};
@@ -829,7 +835,7 @@ class WorkflowRun extends EventEmitter {
     let r;
     try {
       if (!target) throw new Error(`${w.probe}: no target yet (${w.target} is empty)`);
-      r = await this.probe({ probe: w.probe, target, cwd: this.ctx.worktree_dir || undefined, signal: this.abort.signal, stepId: step.id });
+      r = await this.probe({ probe: w.probe, target, cwd: this.ctx.worktree_dir || undefined, signal: this.abort.signal, stepId: step.id, quota: this.actionsQuota });
     } catch (e) {
       if (this.abort.signal.aborted) throw new Error('Cancelled');
       r = { state: 'error', detail: `the check could not run (${e.message})` };
@@ -843,17 +849,21 @@ class WorkflowRun extends EventEmitter {
     }
     let action = 'agent';
     let output = null;
+    // the agent's last output with the given fields over it (templates see `probe`: { state, detail })
+    const finishWith = (key) => {
+      const scope = { ...this.ctx, output: st.output, probe: { state, detail: r.detail || state } };
+      const out = { ...st.output, ...Object.fromEntries(Object.entries(w[key]).map(([k, v]) => [k, typeof v === 'string' ? render(v, scope) : v])) };
+      const errs = validateSchema(out, step.output_schema);
+      if (!errs.length) return out;
+      this.emitEvent('log', { level: 'warn', message: `${step.id}: wait.${key} does not match the output schema (${errs.join('; ')}); calling the agent` });
+      return null;
+    };
     if (state === 'pending' || state === 'unchanged') action = 'poll';
     else if (state === 'none') action = Date.now() - (st.lastAgentAt || 0) < parseDuration(w.grace ?? DEFAULT_WAIT_GRACE, 600000) ? 'poll' : 'agent';
-    else if (state === 'passed' && w.output) {
-      const scope = { ...this.ctx, output: st.output };
-      output = { ...st.output, ...Object.fromEntries(Object.entries(w.output).map(([k, v]) => [k, typeof v === 'string' ? render(v, scope) : v])) };
-      const errs = validateSchema(output, step.output_schema);
-      if (errs.length) {
-        this.emitEvent('log', { level: 'warn', message: `${step.id}: wait.output does not match the output schema (${errs.join('; ')}); calling the agent` });
-        output = null;
-      } else action = 'output';
-    }
+    else if (state === 'passed' && w.output) output = finishWith('output');
+    // CI cannot run at all (the Actions quota ran out): no agent turn or fix round helps
+    else if (state === 'quota_exhausted' && w.infra_output) output = finishWith('infra_output');
+    if (output) action = 'output';
     if (state === 'none' && action === 'agent') r.detail = `${r.detail}, ${w.grace ?? DEFAULT_WAIT_GRACE} after your last turn`;
     st.probePolls = (st.probePolls || 0) + 1;
     this.emitEvent('step.probe', {
@@ -869,7 +879,7 @@ class WorkflowRun extends EventEmitter {
     }
     if (action === 'output') {
       stats.completed++;
-      this.logDecisions('orchestrator', step.id, [['wait', `finished ${step.id} without an agent turn`, `${w.probe}: ${r.detail}`, target, JSON.stringify(w.output)]]);
+      this.logDecisions('orchestrator', step.id, [['wait', `finished ${step.id} without an agent turn`, `${w.probe}: ${r.detail}`, target, JSON.stringify(state === 'passed' ? w.output : w.infra_output)]]);
       st.output = output;
       return this.finishStep(step, st, output, { ...this.ctx, output, iteration: st.iteration }, t0, { probe: w.probe });
     }

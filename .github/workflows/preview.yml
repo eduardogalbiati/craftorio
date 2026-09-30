@@ -1,6 +1,8 @@
 # Test environment: publishes a PR's test build as a GitHub pre-release
 # (tag preview-pr-<n>). Triggered by the Deployer before the merge:
 #   gh workflow run preview.yml --ref <pr-branch> -f pr_number=<n>
+# Built once per PR head: a pre-release already built from the same commit is kept (-f rebuild=true
+# forces a new build), and the tests are skipped when CI passed on that PR head (its ci/tested status).
 name: Preview
 
 on:
@@ -10,9 +12,15 @@ on:
         description: PR number
         required: true
         type: number
+      rebuild:
+        description: Build even if the pre-release already has this commit
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: write
+  statuses: read   # scripts/ci-plan.js: the ci/tested status CI left on this PR head
 
 concurrency:
   group: preview-${{ inputs.pr_number }}
@@ -21,24 +29,49 @@ concurrency:
 jobs:
   preview:
     runs-on: windows-latest
+    timeout-minutes: 30   # a hung job must not eat the quota
     env:
       PR_NUMBER: ${{ inputs.pr_number }}
     steps:
+      - name: Reuse the pre-release of this commit
+        id: reuse
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TARGET=$(gh release view "preview-pr-${PR_NUMBER}" --repo "$GITHUB_REPOSITORY" --json targetCommitish -q .targetCommitish 2>/dev/null || true)
+          if [ "${{ inputs.rebuild }}" != "true" ] && [ "$TARGET" = "$GITHUB_SHA" ]; then
+            echo "preview-pr-${PR_NUMBER} is already built from ${GITHUB_SHA::7}: kept"
+            echo "built=true" >> "$GITHUB_OUTPUT"
+          fi
       - uses: actions/checkout@v5
+        if: steps.reuse.outputs.built != 'true'
+      - id: plan
+        if: steps.reuse.outputs.built != 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/ci-plan.js tested "$GITHUB_SHA"
       - uses: actions/setup-node@v5
+        if: steps.reuse.outputs.built != 'true'
         with:
           node-version: 24
           cache: npm
       - run: npm ci
+        if: steps.reuse.outputs.built != 'true'
       - run: npm test
+        if: steps.reuse.outputs.built != 'true' && steps.plan.outputs.tested != 'true'
         env:
           MULTIAGENT_SIMULATION_ONLY: "1"   # automated checks never call real models
       - name: Package app (win32 x64)
+        if: steps.reuse.outputs.built != 'true'
         run: npm run package
       - name: Compress
+        if: steps.reuse.outputs.built != 'true'
         shell: pwsh
         run: Compress-Archive -Path dist/MultiagentOrchestrator-win32-x64/* -DestinationPath MultiagentOrchestrator-win32-x64-preview.zip
       - name: Publish pre-release
+        if: steps.reuse.outputs.built != 'true'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}

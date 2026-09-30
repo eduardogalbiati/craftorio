@@ -657,6 +657,9 @@ steps:
       target: "{{ steps.ci.output.pr_url }}"
       # over the agent's last answer (pr_url, pr_number); an older failure_log no longer applies
       output: { ci_status: success, failure_log: "" }
+      # GitHub Actions quota exhausted (Usage › GitHub Actions): no check starts before the month
+      # resets and no fix round helps, so the step goes straight to the ci_failed gate
+      infra_output: { ci_status: failed, failure_class: infra, failure_log: "{{ probe.detail }}" }
       grace: 10m
     prompt: |
       Branch: `{{ steps.develop.output.branch }}` → base `{{ inputs.base_branch }}`.
@@ -692,6 +695,9 @@ steps:
            probable root cause (file/line). For infrastructure/flaky failures, follow the
            skill (retry once) and answer pending.
          - everything passed → ci_status: success
+         - CI cannot run at all for account reasons (GitHub Actions quota or spending limit
+           exhausted, billing problem) → ci_status: failed with failure_class: infra and the
+           platform's message in failure_log: no code change can fix it
       {% if steps.test.output.screenshots and not steps.ci.output.screenshots_posted %}
       5. Once the PR/MR exists, publish the test step's UI screenshots on it following the
          screenshots skill (`--dir {{ run_dir }}/screenshots`), then answer screenshots_posted:
@@ -709,6 +715,7 @@ steps:
         pr_number:   { type: integer }
         ci_status:   { type: string, enum: [pending, failed, success] }
         failure_log: { type: string }
+        failure_class: { type: string, enum: [code, infra, unknown] }
         screenshots_posted: { type: boolean }
         screenshots_error:  { type: string }
     transitions:
@@ -716,6 +723,8 @@ steps:
         goto: pr_babysitter
       - when: "output.ci_status == 'pending'"
         goto: ci
+      - when: "output.ci_status == 'failed' and output.failure_class == 'infra'"
+        goto: ci_failed
       - when: "output.ci_status == 'failed'"
         delegate:
           agent: developer
@@ -728,14 +737,17 @@ steps:
         max_visits: 5
         on_exhausted: ci_failed
 
-  # Reached when CI stays red after 5 rounds of fixes, or no result within the /loop limit.
+  # Reached when CI stays red after 5 rounds of fixes, no result within the /loop limit, or right
+  # away when CI cannot run at all (infra: the Actions quota ran out).
   # Re-checking the same commit only helps when something outside the code changed (a stuck or
   # flaky pipeline re-run, a runner back online), so the gate also offers a fix round.
   - id: ci_failed
     type: human_approval
     message: |
-      CI on {{ steps.ci.output.pr_url }} did not pass within the limit (status: {{ steps.ci.output.ci_status }}).
-      Last error: {{ steps.ci.output.failure_log or '(none reported)' }}
+      {% if steps.ci.output.failure_class == 'infra' %}CI on {{ steps.ci.output.pr_url }} cannot run (class: infra, no fix round was spent):
+      {{ steps.ci.output.failure_log }}
+      Raise the spending limit or wait for the reset, then check CI again.{% else %}CI on {{ steps.ci.output.pr_url }} did not pass within the limit (status: {{ steps.ci.output.ci_status }}).
+      Last error: {{ steps.ci.output.failure_log or '(none reported)' }}{% endif %}
     choices:
       - { id: fix,     label: "Send the failure to the developer (one more fix round, then CI again)" }
       - { id: recheck, label: "Check CI again without code changes (stuck or flaky pipeline, re-run by you)" }

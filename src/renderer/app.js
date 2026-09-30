@@ -44,6 +44,7 @@ const state = {
   pendingProject: null, // project to preselect in the panel on open
   usage: null,        // last api.getUsage() result
   usageError: null,
+  actionsUsage: null, // last api.getActionsUsage() result (GitHub Actions minutes)
   art: { runs: null, error: null, projectId: "", q: "", showSim: false, sel: null, doc: null, mode: "rendered", reveal: null },
   sup: { runId: null, question: '', loading: false, result: null, error: null, recMsgs: {} }, // supervisor panel
   pv: null,           // project detail view: { id, project, runs, error, filter, showSim, expanded, msgs }
@@ -181,7 +182,7 @@ async function init() {
   document.addEventListener('mousedown', (e) => {
     if (!$('#usage-pop').classList.contains('hidden') && !e.target.closest('.usage-wrap')) closeUsagePopover();
   });
-  $('#btn-usage-refresh').onclick = loadUsage;
+  $('#btn-usage-refresh').onclick = () => { loadUsage(); loadActionsUsage(true); };
   document.querySelectorAll('[data-scope]').forEach((b) => (b.onclick = () => setUsageScope(b.dataset.scope)));
   renderScopeToggles();
   $('#budget-form').onsubmit = saveBudget;
@@ -259,7 +260,7 @@ function showView(view) {
   if (view === 'workflows') showWorkflowsTab(state.workflowsTab);
   if (view === 'agents') window.refreshAgents?.();
   if (view === 'skills') refreshSkills();
-  if (view === 'usage') { renderUsage(); loadUsage(); }
+  if (view === 'usage') { renderUsage(); loadUsage(); loadActionsUsage(); }
   if (view === 'settings') renderSettings();
   if (view === 'run') scheduleRender();
   // gates never pop up over the rest of the app: the Run screen of their run asks them
@@ -1303,7 +1304,7 @@ function renderUsage() {
     return;
   }
   $('#usage-month').textContent = monthLabel(u.month);
-  $('#usage-cards').innerHTML = (u.providers || []).map((p) => providerCard(p, u)).join('');
+  $('#usage-cards').innerHTML = (u.providers || []).map((p) => providerCard(p, u)).join('') + actionsCard();
   $('#usage-cards').querySelectorAll('[data-budget]').forEach((b) => (b.onclick = () => openBudgetModal(b.dataset.budget)));
   // Don't wipe prices the user is typing.
   if (!$('#usage-prices').contains(document.activeElement)) renderPrices();
@@ -1387,6 +1388,55 @@ function providerCard(p, u) {
         <span class="spacer"></span>
         <button class="btn sm ghost" data-budget="${esc(p.id)}">Edit budget</button>
       </div>
+    </div>`;
+}
+
+// GitHub Actions minutes of the month (private repos: Windows counts x2, macOS x10). When the quota
+// runs out, Actions stop until the month resets: warn at 80%.
+let actionsLoading = null;
+function loadActionsUsage(force = false) {
+  if (actionsLoading) return actionsLoading;
+  actionsLoading = (async () => {
+    try { state.actionsUsage = await api.getActionsUsage(force); } catch (e) { state.actionsUsage = { error: errMsg(e) }; }
+    actionsLoading = null;
+    if (state.view === 'usage') renderUsage();
+  })();
+  return actionsLoading;
+}
+
+const ACTIONS_STATUS_TEXT = { ok: 'Within quota', warn: 'Near quota', over: 'Quota exhausted' };
+function actionsCard() {
+  const a = state.actionsUsage;
+  const fmtMin = (n) => Math.round(Number(n) || 0).toLocaleString('en-US');
+  const head = (status) => `<div class="card-head">
+      <span class="card-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><polyline points="12 7 12 12 15 14" /></svg></span>
+      <b class="card-title">GitHub Actions</b>
+      <span class="spacer"></span>
+      ${status ? `<span class="u-status st-${esc(status)}"><span class="u-dot st-${esc(status)}"></span>${esc(ACTIONS_STATUS_TEXT[status] || status)}</span>` : ''}
+    </div>`;
+  if (!a) return `<div class="card usage-card" data-provider="actions">${head()}<p class="muted small">Loading…</p></div>`;
+  if (a.error) {
+    return `<div class="card usage-card" data-provider="actions">${head()}
+      <p class="muted small u-note">Actions minutes unavailable: ${esc(a.error)}.</p>
+      ${a.hint ? `<div class="u-install"><span class="muted small">Allow gh to read billing usage (optional)</span><code>${esc(a.hint)}</code></div>` : ''}
+    </div>`;
+  }
+  const note = a.status === 'over'
+    ? `<p class="warn-text small u-note">Quota exhausted: Actions stop until ${esc(a.resetsOn)} unless the spending limit allows more. The CI step reports it and waits at its gate.</p>`
+    : a.status === 'warn' ? `<p class="warn-text small u-note">Over 80% of the included minutes: CI, previews and deploys stop when they run out (resets ${esc(a.resetsOn)}).</p>` : '';
+  return `<div class="card usage-card" data-provider="actions">${head(a.status)}
+      <div class="u-stats">
+        <div class="u-stat"><label>Quota minutes</label><b>${fmtMin(a.usedMinutes)}</b></div>
+        <div class="u-stat"><label>Runner minutes</label><b>${fmtMin(a.realMinutes)}</b></div>
+        <div class="u-stat"><label>Usage value</label><b>${fmtUsd(a.grossUsd)}</b></div>
+      </div>
+      <div class="u-meters">${meterHtml('Included minutes', a.pct, fmtMin(a.usedMinutes), fmtMin(a.includedMinutes))}</div>
+      ${note}
+      ${(a.skus || []).length ? `<table class="u-table compact">
+        <thead><tr><th>Runner</th><th class="num">Minutes</th><th class="num">Quota minutes</th></tr></thead>
+        <tbody>${a.skus.map((s) => `<tr><td class="mono">${esc(s.sku)}</td><td class="num mono">${fmtMin(s.minutes)}</td><td class="num mono">${fmtMin(s.minutes * s.multiplier)} (×${s.multiplier})</td></tr>`).join('')}</tbody>
+      </table>` : '<p class="muted small">No Actions minutes this month.</p>'}
+      <div class="card-actions"><span class="muted small">Account ${esc(a.login || '')} · resets ${esc(a.resetsOn)} · included minutes: <span class="mono">actionsIncludedMinutes</span> in settings.json.</span></div>
     </div>`;
 }
 

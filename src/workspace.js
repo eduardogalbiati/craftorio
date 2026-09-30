@@ -139,6 +139,8 @@ const DEFAULT_SETTINGS = {
   budgets: {},
   // USD per 1M tokens, for CLIs that do not report cost: { model: { input, output, cache_read } }
   prices: {},
+  // GitHub Actions quota minutes included per month (GitHub Free: 2,000), see src/actions-usage.js
+  actionsIncludedMinutes: 2000,
 };
 
 function readSettings(ws) {

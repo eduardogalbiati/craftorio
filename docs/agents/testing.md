@@ -7,9 +7,13 @@ Read this before writing or changing tests, and before any check that could star
 - `npm test` = node:test unit tests (`test/*.test.js`) + a full mock run of software-development.
 - Node 24's test reporter is "spec", not TAP: look for `ℹ pass N` / `✖`, not `# pass`.
 - `npm test` must pass on Windows, Linux and macOS: `ci.yml` runs a matrix (checks `test (<os>)`)
-  plus a combined `test` check that is green only when all three are. `preview.yml`/`deploy.yml`
-  run on `windows-latest` and also run `npm test`. Tests that pass locally can still fail on
-  another OS: CI is the judge.
+  plus a combined `test` check that is green only when every planned OS is. PRs run Ubuntu +
+  Windows; macOS only for platform-sensitive paths or the `ci:macos` label, weekly and on manual
+  runs (`scripts/ci-plan.js`, Actions minutes: macOS counts ×10). `preview.yml`/`deploy.yml` run
+  on `windows-latest` and skip `npm test` when CI already passed on the same code (the `ci/tested`
+  status CI records on the PR head, with the tree it tested: pending at the start of each run, then
+  its result, so only the latest run counts). Tests that pass
+  locally can still fail on another OS: CI is the judge.
 - The Electron part of `test/screenshot.test.js` (every view of `scripts/screenshot.js` opens and
   quits by itself, ~1 min, ~25 windows) only runs with `MULTIAGENT_UI_TESTS=1`: CI's Windows job
   has a step for it (after `node node_modules/electron/install.js`; the matrix sets

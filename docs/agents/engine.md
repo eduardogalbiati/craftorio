@@ -81,13 +81,17 @@ same features for users; this is the implementer's summary.
   `orchestrator` row in `decisions.tsv`. Blocked = no tool call ran, or calls were refused and the
   enum/number/boolean fields of the answer (`decisionKey`) repeat. A delegation resets the count.
   Simulate with `mockSequences.permission_denials: { step: n }`.
-- `wait: { probe, target, output?, grace? }` on a single-agent `/loop` step (`loadWorkflow`
+- `wait: { probe, target, output?, infra_output?, grace? }` on a single-agent `/loop` step (`loadWorkflow`
   validates it): when the step loops back to itself without a delegation or supervisor note,
   `pollStep` runs the probe (`src/engine/probes.js`, `gh`/`glab`, no tokens) instead of the agent.
   `pending`/`unchanged` (and `none` within `grace`, default 10m after the agent's last turn) →
   `loopWait` again (never counted as blocked); `passed` + `output` → the agent's last output with
   `output` over it, validated, then `finishStep` (goal + transitions, `step.finished` with `probe`,
-  an `orchestrator` row in `decisions.tsv`); anything else, or a probe error (`probe_error` warn) →
+  an `orchestrator` row in `decisions.tsv`); `quota_exhausted` (pr_checks on github.com with no
+  check or failed checks, when the `actionsQuota` constructor option says the owner's Actions
+  minutes ran out) + `infra_output` → the same, with `infra_output` (its templates see
+  `probe.detail`; `software-development` routes it to `ci_failed` as `failure_class: infra`);
+  anything else, or a probe error (`probe_error` warn) →
   the agent turn, whose prompt says why (`st.probeNews`). `pr_changes` compares a fingerprint
   taken right after each agent turn (`afterAgentTurn`). Probe polls do not count as visits
   (mock sequences stay per agent visit). Events `step.probe`; `summary.probes`. The `probe`

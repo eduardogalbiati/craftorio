@@ -30,6 +30,7 @@ const backlog = require('../backlog');
 const skills = require('../skills');
 const agents = require('../agents');
 const usage = require('../usage');
+const actionsUsage = require('../actions-usage');
 const { readLocalUsage } = require('../local-usage');
 const cliSessions = require('../cli-sessions');
 const { trustFolder } = require('../cli-trust');
@@ -399,6 +400,8 @@ function createService({ host }) {
         idleWarnMs: settings.idleWarningMinutes != null && Number.isFinite(+settings.idleWarningMinutes) ?+settings.idleWarningMinutes * 60e3 : undefined,
         // `persona: random` agents become one of the user's agents (Agents menu)
         personas: agents.listAgents(ws.agents).filter((a) => !a.system && !a.error),
+        // CI waiting on a PR whose account ran out of Actions minutes reports it instead of waiting
+        actionsQuota: async (owner) => actionsUsage.quotaExhausted(await actionsUsage.getActionsUsage({ owner, includedMinutes: +settings.actionsIncludedMinutes || 0 })),
       });
       if (!mock) {
         // the runs in progress have not written their usage to disk yet
@@ -950,6 +953,7 @@ function createService({ host }) {
     'usage:get': (opts) => usageSnapshot(opts?.scope),
     'usage:setBudget': (opts) => setBudget(opts),
     'usage:setPrice': (opts) => setPrice(opts),
+    'usage:actions': (opts) => actionsUsage.getActionsUsage({ includedMinutes: +workspace.readSettings(ws).actionsIncludedMinutes || 0, force: !!opts?.force }),
 
     'cliSessions:list': () => listCliSessions(),
     'cliSessions:rename': (opts) => renameCliSession(opts),

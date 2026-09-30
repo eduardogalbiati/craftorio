@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { parseTarget, ghPrState, ghRunState, glMrState, glPipelineState, runProbe } = require('../src/engine/probes');
+const { parseTarget, ghPrState, ghRunState, glMrState, glPipelineState, withQuota, runProbe } = require('../src/engine/probes');
 const { WorkflowRun, loadWorkflow } = require('../src/engine/workflow');
 
 process.env.MULTIAGENT_MOCK_DELAY_SCALE = process.env.MULTIAGENT_MOCK_DELAY_SCALE || '0.05';
@@ -76,6 +76,30 @@ test('runProbe refuses a target that is not a URL of the right kind (no CLI is s
   await assert.rejects(runProbe({ probe: 'nope', target: 'https://github.com/acme/app/pull/1' }), /unknown probe/);
 });
 
+test('withQuota: a GitHub PR with no check started, or failed checks, reports an exhausted Actions quota', async () => {
+  const gh = parseTarget('https://github.com/acme/app/pull/42');
+  const owners = [];
+  const exhausted = async (owner) => { owners.push(owner); return 'GitHub Actions quota exhausted until 2026-10-01'; };
+  for (const state of ['none', 'failed']) {
+    assert.deepEqual(await withQuota({ state, detail: 'x', head: 'abc' }, gh, exhausted),
+      { state: 'quota_exhausted', detail: 'GitHub Actions quota exhausted until 2026-10-01', head: 'abc' }, state);
+  }
+  assert.deepEqual(owners, ['acme', 'acme']);
+});
+
+test('withQuota: running or green checks, other hosts and an unknown quota change nothing', async () => {
+  const gh = parseTarget('https://github.com/acme/app/pull/42');
+  const exhausted = async () => 'GitHub Actions quota exhausted until 2026-10-01';
+  for (const state of ['pending', 'passed', 'conflict', 'merged']) {
+    assert.equal((await withQuota({ state, detail: 'x' }, gh, exhausted)).state, state);
+  }
+  assert.equal((await withQuota({ state: 'none' }, parseTarget('https://ghe.example.com/acme/app/pull/1'), exhausted)).state, 'none');
+  assert.equal((await withQuota({ state: 'none' }, parseTarget('https://gitlab.com/acme/app/-/merge_requests/1'), exhausted)).state, 'none');
+  assert.equal((await withQuota({ state: 'none' }, gh, async () => null)).state, 'none');
+  assert.equal((await withQuota({ state: 'none' }, gh, async () => { throw new Error('no scope'); })).state, 'none');
+  assert.equal((await withQuota({ state: 'none' }, gh, undefined)).state, 'none');
+});
+
 test('loadWorkflow validates wait:', () => {
   const tmp = path.join(os.tmpdir(), `wf-wait-${process.pid}.yaml`);
   const write = (wait, loop = 'loop: { interval: 1s }') => fs.writeFileSync(tmp, `agents: { a: { provider: claude, model: m } }\nsteps:\n  - id: s1\n    agent: a\n    ${loop}\n    wait: ${wait}\n`);
@@ -88,6 +112,8 @@ test('loadWorkflow validates wait:', () => {
     assert.throws(() => loadWorkflow(tmp), /requires "target"/);
     write('{ probe: pr_changes, target: "x", output: { a: 1 } }');
     assert.throws(() => loadWorkflow(tmp), /wait.output must be a map/);
+    write('{ probe: pr_changes, target: "x", infra_output: { a: 1 } }');
+    assert.throws(() => loadWorkflow(tmp), /wait.infra_output must be a map/);
     write('{ probe: pr_checks, target: "x", grace: soon }');
     assert.throws(() => loadWorkflow(tmp), /wait.grace must be a duration/);
     write('{ probe: pr_checks, target: "x", output: { ci_status: success }, grace: 10m }');
@@ -189,4 +215,43 @@ test('wait: a check that cannot run, or no check after the grace period, calls t
   assert.match(turns('ci')[2].prompt, /no check registered on the head commit yet, 0s after your last turn/);
   assert.equal(turns('ci').length, 3);
   assert.equal(finished.summary.probes.ci.errors, 1);
+});
+
+test('wait: an exhausted Actions quota finishes CI as an infra failure and goes to the gate', { timeout: 60000 }, async (t) => {
+  const detail = 'GitHub Actions quota exhausted until 2026-10-01 (2,010 of 2,000 minutes used): no check will start before then';
+  const ci = sequence([{ state: 'none', detail: 'no check registered on the head commit yet' }, { state: 'quota_exhausted', detail }]);
+  const { events, turns, finished } = await runWait(t, {
+    mockSequences: { ci_status: ['pending'] },
+    probe: (a) => (a.probe === 'pr_checks' ? ci() : { state: 'pending' }),
+  });
+  // the gate was rejected by the test: the run ends failed there, after one agent turn and no fix round
+  assert.equal(finished.status, 'failed');
+  assert.equal(turns('ci').length, 1);
+  assert.equal(turns('dev').length, 0);
+  const probes = events.filter((e) => e.type === 'step.probe');
+  assert.deepEqual(probes.map((e) => `${e.state}:${e.action}`), ['none:poll', 'quota_exhausted:output']);
+  const done = events.find((e) => e.type === 'step.finished' && e.step_id === 'ci' && e.probe);
+  assert.equal(done.output.ci_status, 'failed');
+  assert.equal(done.output.failure_class, 'infra');
+  assert.equal(done.output.failure_log, detail);
+  assert.equal(done.output.pr_url, 'https://github.com/acme/app/pull/42');
+  assert.ok(events.some((e) => e.type === 'step.transition' && e.from === 'ci' && e.to === 'stuck'));
+});
+
+test('wait: the Actions quota check reaches the probe', { timeout: 60000 }, async (t) => {
+  const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'));
+  t.after(() => fs.rmSync(runsDir, { recursive: true, force: true }));
+  const actionsQuota = async () => null;
+  const seen = [];
+  const run = new WorkflowRun({
+    file: path.join(__dirname, 'fixtures', 'wait.yaml'), inputs: {}, mock: true, runsDir, actionsQuota,
+    mockSequences: { ci_status: ['pending'], state: ['ready'] },
+    probe: async (a) => {
+      if (a.probe !== 'pr_checks') return { state: 'pending' };
+      seen.push(a.quota);
+      return { state: 'passed', detail: 'ok' };
+    },
+  });
+  await run.start();
+  assert.ok(seen.length && seen.every((q) => q === actionsQuota));
 });

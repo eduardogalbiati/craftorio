@@ -9,6 +9,8 @@ on:
 
 permissions:
   contents: write
+  statuses: read        # scripts/ci-plan.js: the ci/tested status CI left on the PR head
+  pull-requests: read   # scripts/ci-plan.js: the PR merged as this commit
 
 concurrency:
   group: deploy
@@ -17,14 +19,23 @@ concurrency:
 jobs:
   release:
     runs-on: windows-latest
+    timeout-minutes: 30   # a hung job must not eat the quota
     steps:
       - uses: actions/checkout@v5
+      # The PR's CI already tested this code when the merge kept the tree CI tested (main unchanged since):
+      # do not repeat `npm test` (Windows minutes count x2).
+      - id: plan
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/ci-plan.js tested "${{ github.sha }}" --merged
       - uses: actions/setup-node@v5
         with:
           node-version: 24
           cache: npm
       - run: npm ci
       - run: npm test
+        if: steps.plan.outputs.tested != 'true'
         env:
           MULTIAGENT_SIMULATION_ONLY: "1"   # automated checks never call real models
       - name: Package app (win32 x64)

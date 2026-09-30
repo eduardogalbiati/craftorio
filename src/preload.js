@@ -49,6 +49,8 @@ contextBridge.exposeInMainWorld('api', {
   runEvents: (runId, opts = {}) => ipcRenderer.invoke('runs:events', { runId, activity: !!opts.activity }),
   setBudget: (provider, budget, scope) => ipcRenderer.invoke('usage:setBudget', { provider, budget, scope }),
   setPrice: (model, price, scope) => ipcRenderer.invoke('usage:setPrice', { model, price, scope }),
+  // GitHub Actions minutes of the month vs the included quota (needs gh's `user` scope)
+  getActionsUsage: (force) => ipcRenderer.invoke('usage:actions', { force }),
   // AI supervisor: analysis of a run and resume from a step (a new run)
   askSupervisor: (runId, question) => ipcRenderer.invoke('supervisor:analyze', { runId, question }),
   resumeRun: (runId, step, instruction) => ipcRenderer.invoke('supervisor:resume', { runId, step, instruction }),

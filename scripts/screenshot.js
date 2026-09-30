@@ -111,12 +111,23 @@ function demoBacklog(projectId, taskProgress) {
   return { projectId, platform: 'github', repo: DEMO_REPO, syncedAt: new Date().toISOString(), issues };
 }
 
-// Simulation: the Backlog's sync answers with the cached demo issues instead of calling gh.
+// Demo GitHub Actions minutes (Usage): near the quota, as in the month that motivated the monitor.
+function demoActionsUsage() {
+  const now = new Date();
+  const date = now.toISOString().slice(0, 10);
+  const item = (sku, quantity, price) => ({ date, product: 'actions', sku, unitType: 'minutes', quantity, grossAmount: quantity * price, netAmount: 0 });
+  const { summarizeActionsUsage } = require('../src/actions-usage'); // only apps that have the channel ask
+  return { login: 'demo-user', ...summarizeActionsUsage({ usageItems: [item('Actions Linux', 353, 0.008), item('Actions Windows', 560, 0.016), item('Actions macOS', 35, 0.08)] }, { includedMinutes: 2000, now }) };
+}
+
+// Simulation: the Backlog's sync answers with the cached demo issues instead of calling gh, and the
+// Usage screen's GitHub Actions minutes are demo data.
 function simulateChannels(ipcMain) {
   const handle = ipcMain.handle.bind(ipcMain);
   const handlers = {};
   ipcMain.handle = (channel, fn) => {
     handlers[channel] = fn;
+    if (channel === 'usage:actions') return handle(channel, () => demoActionsUsage());
     return handle(channel, channel === 'backlog:sync' ? (e, arg) => handlers['backlog:get'](e, { projectId: arg?.projectId }) : fn);
   };
 }

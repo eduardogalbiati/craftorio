@@ -4,6 +4,7 @@
 // A probe reads the state of a pull/merge request or a CI run with `gh` / `glab` and returns
 // { state, detail, fingerprint? }:
 //   pr_checks     pending | none (no check registered) | passed | failed | conflict | merged | closed
+//                 | quota_exhausted (GitHub Actions minutes ran out: no check will start this month)
 //   pr_changes    open | merged | closed, with a fingerprint of what the agent reacts to (head commit,
 //                 mergeability, review decision, comments and reviews, check results)
 //   workflow_run  pending | passed | failed
@@ -124,9 +125,19 @@ function run(cmd, args, { cwd, signal, timeout = 60000 }) {
 
 const GH_PR_FIELDS = 'state,mergeable,mergeStateStatus,headRefOid,statusCheckRollup';
 
-// { probe, target, cwd, signal } → { state, detail, fingerprint? }. Throws when the target is not a
-// URL this probe can read or the CLI fails; the engine then calls the agent, as without `wait`.
-async function runProbe({ probe, target, cwd, signal }) {
+// pr_checks on github.com with no check started, or failed checks: when the owner's Actions quota is
+// exhausted (`quota(owner)` answers the message), none will run before the month resets, so the
+// state becomes `quota_exhausted`. A quota that cannot be read changes nothing.
+async function withQuota(result, t, quota) {
+  if (!quota || t.platform !== 'gh' || t.host !== 'github.com' || !['none', 'failed'].includes(result.state)) return result;
+  let message = null;
+  try { message = await quota(t.repo.split('/')[0]); } catch { /* unknown quota */ }
+  return message ? { ...result, state: 'quota_exhausted', detail: message } : result;
+}
+
+// { probe, target, cwd, signal, quota? } → { state, detail, fingerprint? }. Throws when the target is
+// not a URL this probe can read or the CLI fails; the engine then calls the agent, as without `wait`.
+async function runProbe({ probe, target, cwd, signal, quota }) {
   if (!PROBES.includes(probe)) throw new Error(`unknown probe "${probe}"`);
   const t = parseTarget(target);
   const wantsPr = probe !== 'workflow_run';
@@ -136,7 +147,8 @@ async function runProbe({ probe, target, cwd, signal }) {
     const repo = `${t.host}/${t.repo}`;
     if (t.kind === 'run') return ghRunState(await run('gh', ['run', 'view', String(t.id), '--repo', repo, '--json', 'status,conclusion,url,name'], opts));
     const fields = probe === 'pr_changes' ? `${GH_PR_FIELDS},reviewDecision,comments,reviews` : GH_PR_FIELDS;
-    return ghPrState(await run('gh', ['pr', 'view', String(t.id), '--repo', repo, '--json', fields], opts));
+    const state = ghPrState(await run('gh', ['pr', 'view', String(t.id), '--repo', repo, '--json', fields], opts));
+    return probe === 'pr_checks' ? withQuota(state, t, quota) : state;
   }
   const repo = `https://${t.host}/${t.repo}`;
   if (t.kind === 'run') {
@@ -145,4 +157,4 @@ async function runProbe({ probe, target, cwd, signal }) {
   return glMrState(await run('glab', ['mr', 'view', String(t.id), '--repo', repo, '--output', 'json'], opts));
 }
 
-module.exports = { PROBES, parseTarget, ghPrState, ghRunState, glMrState, glPipelineState, runProbe };
+module.exports = { PROBES, parseTarget, ghPrState, ghRunState, glMrState, glPipelineState, withQuota, runProbe };

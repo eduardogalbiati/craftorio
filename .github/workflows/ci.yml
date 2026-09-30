@@ -1,20 +1,61 @@
 name: CI
 
+# Actions minutes are a monthly quota (private repo: Windows counts x2, macOS x10), so CI runs only
+# what a change needs (scripts/ci-plan.js): PRs on ubuntu + windows, macOS when a platform-sensitive
+# path changes or the PR has the `ci:macos` label (applies from the next push, or re-run it), weekly
+# on main, and on manual runs. Docs-only PRs run no tests.
 on:
   pull_request:
     branches: [main]
+  schedule:
+    - cron: "0 6 * * 1"   # Mondays: the macOS pass on main
   workflow_dispatch:
 
+# A new push to a PR cancels the run of the previous commit.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+  statuses: write   # `plan` and `test` record ci/tested on the PR head (scripts/ci-plan.js)
+
 jobs:
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      os: ${{ steps.plan.outputs.os }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          sparse-checkout: scripts/ci-plan.js
+          sparse-checkout-cone-mode: false
+      # A new run (a push or a re-run of the same commit) first clears an older success, so preview
+      # and deploy never skip tests on a commit whose latest CI run has not passed.
+      - name: Mark the PR head as being tested
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/ci-plan.js report "${{ github.event.pull_request.head.sha }}" "${{ github.sha }}" pending
+      - id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/ci-plan.js os
+
   # `npm test` must pass on every OS the app or its tests run on: paths (8.3 names, symlinks),
   # git and shells differ. The preview build runs on Windows; this catches it before the merge.
   platform:
     name: test (${{ matrix.os }})
+    needs: plan
+    if: needs.plan.outputs.os != '[]'
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: ${{ fromJSON(needs.plan.outputs.os) }}
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 25   # a hung job must not eat the quota
     defaults:
       run:
         shell: bash   # Git Bash on Windows: the same scripts on every OS
@@ -45,13 +86,32 @@ jobs:
         if: runner.os == 'Linux'   # same lockfile everywhere: once is enough
         run: npm audit --omit=dev --audit-level=high
 
-  # Stable check name for branch protection and the PR babysitter: green only when every OS is.
+  # Stable check name for branch protection and the PR babysitter: green only when every planned OS
+  # is (a docs-only PR plans none and is green without tests, so it can still merge).
   test:
-    needs: platform
+    needs: [plan, platform]
     if: always()
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
-      - name: All platforms passed
+      - uses: actions/checkout@v5
+        if: github.event_name == 'pull_request'
+        with:
+          sparse-checkout: scripts/ci-plan.js
+          sparse-checkout-cone-mode: false
+      - name: All planned platforms passed
+        id: verdict
         run: |
-          echo "platform matrix: ${{ needs.platform.result }}"
+          echo "plan: ${{ needs.plan.result }} ${{ needs.plan.outputs.os }}, platform matrix: ${{ needs.platform.result }}"
+          test "${{ needs.plan.result }}" = "success"
+          if [ '${{ needs.plan.outputs.os }}' = '[]' ]; then echo "docs only: no tests needed"; exit 0; fi
           test "${{ needs.platform.result }}" = "success"
+      # Checks of a pull_request run belong to GitHub's synthetic merge commit: preview.yml and
+      # deploy.yml look for this status on the PR head instead, to skip the tests CI already ran.
+      # Written whatever the verdict (the `plan` job marked it pending), so a failing re-run of the
+      # same commit replaces an older success.
+      - name: Record the result on the PR head
+        if: always() && github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/ci-plan.js report "${{ github.event.pull_request.head.sha }}" "${{ github.sha }}" "${{ steps.verdict.outcome == 'success' && 'success' || 'failure' }}"

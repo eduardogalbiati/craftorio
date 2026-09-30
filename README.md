@@ -25,7 +25,7 @@ Keep **Simulation mode** checked to try a flow without calling the CLIs.
 | Workflows | Three sub-items in the menu (clicking Workflows opens **Runs**). **Runs**: every run, live or finished (**Open chat** replays one). **Definitions**: the YAMLs in `<workspace>/workflows/` with their steps, agents/models, skills, `/goal`, `/loop`, parallel steps and branches. **Builder**: draw a workflow instead of writing YAML (see [Visual builder](#visual-builder)). Each definition is marked **default** (untouched copy of a workflow bundled with the app), **modified** (a default you edited; **Restore default** moves your copy to the trash and restores the bundled one, and **newer default** means the app ships a newer version than the one you edited) or **custom** (created by you) |
 | Agents | Reusable agents in `<workspace>/agents/<id>.json`: a robot look (main color, shell, visor, glow, eyes, emblem; live preview of the animated states), a prompt with what the agent is for and the skills it always gets. The built-in **Supervisor** is always listed: its prompt and skills are fixed, only its look can be changed (it shows wherever the supervisor appears, e.g. Write & Review). The visual builder imports them into desks, or picks one at random when a run starts |
 | Skills | One folder per skill in `<workspace>/skills/<id>/SKILL.md` (Claude Code format) |
-| Usage | Tokens and cost per provider this month and today, monthly budgets (USD and/or tokens), per-model prices for CLIs that do not report cost, recent runs. The topbar widget shows this month's total; click it for a per-provider popover |
+| Usage | Tokens and cost per provider this month and today, monthly budgets (USD and/or tokens), per-model prices for CLIs that do not report cost, recent runs, and the GitHub Actions minutes of the month against the included quota (warning at 80%, see CI/CD). The topbar widget shows this month's total; click it for a per-provider popover |
 | Settings | Workspace, CLI status (Claude Code, Codex, Grok Build, GitHub CLI, GitLab CLI, Git) and run preferences (`<workspace>/settings.json`). **Execution › Concurrent runs**: off by default (one run at a time); on, several workflows run at the same time up to a **maximum** (default 2), with an optional **maximum per project**; simulations count toward the limits only if you say so. Each run has its own git worktree, and the monthly budgets count every run in progress. The **Run** menu item then lists the runs in progress (status, workflow, project/issue): click one to show it on the Run screen and in the top bar (whose **All runs** counter adds them up); a badge counts the human gates waiting across runs, and a gate never pops up over another screen: a toast names its run |
 
 The **Start** button at the top (next to Stop) opens the right side panel: pick the workflow,
@@ -530,12 +530,36 @@ Enabled in `software-development`. The other bundled workflows only read a folde
 
 ## CI/CD
 
-- `.github/workflows/ci.yml`: on every PR runs a syntax check and `npm test` on Ubuntu, Windows
-  and macOS (checks `test (<os>)`), plus a production `npm audit`. The `test` check is green only
-  when all three are: use that name in branch protection.
+- `.github/workflows/ci.yml`: on every PR runs a syntax check and `npm test` on Ubuntu and Windows
+  (checks `test (<os>)`), plus a production `npm audit`. macOS runs too when the PR touches a
+  platform-sensitive path (worktrees, processes, terminals, packaging, dependencies, CI) or has the
+  `ci:macos` label (from the next push), every Monday on `main`, and on manual runs. A docs-only PR
+  (`.md` files other than `CLAUDE.md`, `docs/agents/` and `skills/`, which the tests read) runs no
+  tests. A new push to a PR cancels the previous run. The `test` check is green only when every
+  planned OS is: use that name in branch protection. Each run records a `ci/tested` commit status
+  on the PR head (a PR's checks belong to GitHub's merge commit, not the head): pending when it
+  starts, then success or failure, so only the latest run counts. The
+  plan lives in `scripts/ci-plan.js`.
 - `.github/workflows/preview.yml`: test environment. Triggered by the Deployer, publishes the
-  pre-release `preview-pr-<n>` from the PR branch.
-- `.github/workflows/deploy.yml`: production. Every push to `main` tests, packages and publishes a release.
+  pre-release `preview-pr-<n>` from the PR branch. It keeps a pre-release already built from the
+  same commit (`-f rebuild=true` forces it) and skips `npm test` when the PR head has `ci/tested`.
+- `.github/workflows/deploy.yml`: production. Every push to `main` packages and publishes a release;
+  it runs `npm test` only when the merged commit's tree is not the one the PR's CI tested (`main`
+  moved after CI ran).
+
+The repository is private: Actions minutes are a monthly quota where Windows counts ×2 and macOS
+×10; every job has a `timeout-minutes`. A self-hosted runner on the owner's Windows machine would
+make the Windows jobs free (`runs-on: self-hosted`); only for a private repository, since a
+self-hosted runner executes the code of every workflow run on that machine.
+
+**Actions quota in the app.** The Usage screen has a **GitHub Actions** card: this month's quota
+minutes (multipliers applied) against the included ones (`actionsIncludedMinutes` in
+`settings.json`, 2,000 by default for GitHub Free), per runner, with a warning at 80%. It reads
+`gh api users/<login>/settings/billing/usage`, which needs gh's `user` scope
+(`gh auth refresh -s user`, optional: without it the card says so). When the quota is exhausted,
+the `ci` step of `software-development` does not wait for checks that never start: it finishes as
+`failed` with `failure_class: infra` and "GitHub Actions quota exhausted until <date>", and goes
+straight to the `ci_failed` gate (no fix round).
 
 The CI/CD agents use the GitHub CLI (`gh`) or the GitLab CLI (`glab`), which must be
 authenticated (`gh auth login` / `glab auth login`).
@@ -782,6 +806,7 @@ src/workflows.js         workflows: seeding, origin status, lookup (workspace, t
 src/workflow-builder.js  visual builder: spec <-> workflow YAML, what the builder can't draw
 src/usage.js             token/cost usage per provider and scope, budgets and the pre-run CLI check
 src/local-usage.js       readers of the CLIs' own local usage logs (Claude Code, Codex, Grok)
+src/actions-usage.js     GitHub Actions minutes of the month vs the included quota (Usage, CI step)
 src/engine/workflow.js   engine that runs the YAML graph
 src/engine/providers.js  claude / codex / grok / mock adapters
 src/engine/capabilities.js  agent capabilities and isolation → each CLI's flags

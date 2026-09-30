@@ -90,6 +90,7 @@
     runEvents: (runId, opts = {}) => call('runs:events', { runId, activity: !!opts.activity }),
     setBudget: (provider, budget, scope) => call('usage:setBudget', { provider, budget, scope }),
     setPrice: (model, price, scope) => call('usage:setPrice', { model, price, scope }),
+    getActionsUsage: (force) => call('usage:actions', { force }),
     askSupervisor: (runId, question) => call('supervisor:analyze', { runId, question }),
     resumeRun: (runId, step, instruction) => call('supervisor:resume', { runId, step, instruction }),
     listArtifacts: (opts) => call('artifacts:list', opts || {}),
