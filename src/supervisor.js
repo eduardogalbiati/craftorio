@@ -9,7 +9,9 @@
 // - by a person, from the UI, for any run (analyzeRun): it explains what happened and recommends
 //   actions such as resuming the run from a step (resumeSpec) with an instruction;
 // - by a person, from Analytics, on the sessions of a date range (analyzeSessions): a report on what
-//   they were used for, their complexity, patterns and suggestions.
+//   they were used for, their complexity, patterns and suggestions;
+// - by a person who watches a running run (src/supervisor-watch.js): updates in a chat on each batch
+//   of meaningful events (timelineLine), and answers in the same conversation.
 
 const fs = require('fs');
 const path = require('path');
@@ -419,5 +421,6 @@ module.exports = {
   skippedGate,
   supervisorConfig,
   timeline,
+  timelineLine,
   withoutGateDecisions,
 };

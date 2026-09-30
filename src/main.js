@@ -85,7 +85,7 @@ for (const [channel, fn] of Object.entries(service.notifications)) ipcMain.on(ch
 // what the preload builds window.api from, asked once when the window loads (sync: the page's
 // scripts use window.api right away)
 ipcMain.on('api:manifest', (e) => { e.returnValue = service.manifest; });
-for (const channel of ['run:event', 'term:data', 'term:exit']) {
+for (const channel of ['run:event', 'supervisor:watch', 'term:data', 'term:exit']) {
   service.events.on(channel, (payload) => { if (win && !win.isDestroyed()) win.webContents.send(channel, payload); });
 }
 

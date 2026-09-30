@@ -912,6 +912,21 @@
           <button id="btn-sup-chat" class="btn ghost" title="Open the supervisor's CLI in a terminal tab, primed with this run's report (read-only mode)">Chat in terminal</button>
           <span id="sup-chat-msg" class="small muted"></span>
         </div>
+        <!-- Watch mode: follows a running run and explains it in a chat (opt-in, it costs tokens) -->
+        <section id="sup-watch" class="sup-watch hidden">
+          <div class="sup-watch-head">
+            <label class="switch" title="Watch with the supervisor: an update on each batch of meaningful events (costs tokens)"><input type="checkbox" id="sup-watch-on" /><span></span></label>
+            <b>Watch this run</b>
+            <select id="sup-watch-model" title="The supervisor's model"></select>
+            <div class="seg sm" id="sup-watch-effort" title="Effort"></div>
+            <span id="sup-watch-cost" class="muted small mono"></span>
+          </div>
+          <div id="sup-watch-log" class="sup-watch-log"></div>
+          <div class="row sup-watch-ask">
+            <input id="sup-watch-q" type="text" placeholder="Ask about this run: what is the developer doing now?" />
+            <button id="btn-sup-watch-ask" class="btn sm">Ask</button>
+          </div>
+        </section>
         <div id="sup-result"></div>
       </div>
     </aside>

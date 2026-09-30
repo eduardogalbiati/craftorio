@@ -4,7 +4,7 @@
 //   POST /api/<channel>   body { "arg": ... }  ->  200 { "result": ... } | 4xx/500 { "error": "..." }
 //   GET  /api/manifest    { "result": [...] }: the channels window.api is built from (src/service/manifest.js)
 //   GET  /ws              WebSocket. The server pushes { "channel", "payload" } (run:event,
-//                         term:data, term:exit, auth:changed); the client sends { "channel", "arg" }
+//                         supervisor:watch, term:data, term:exit, auth:changed); the client sends { "channel", "arg" }
 //                         for the fire-and-forget channels (term:input, term:resize).
 //   GET  /                the UI (src/renderer + src/renderer/api-http.js) and the few libraries
 //                         it loads from node_modules.
@@ -29,7 +29,7 @@ const TYPES = {
 };
 const COOKIE = 'multiagent_token';
 const MAX_BODY = 5 * 1024 * 1024;
-const PUSHED = ['run:event', 'term:data', 'term:exit'];
+const PUSHED = ['run:event', 'supervisor:watch', 'term:data', 'term:exit'];
 
 class HttpError extends Error {
   constructor(status, message) { super(message); this.status = status; }

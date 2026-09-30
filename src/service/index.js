@@ -3,7 +3,7 @@
 // one argument; `notifications` are the fire-and-forget channels (no reply). Both come from one
 // file per area in src/service/channels/ (a new channel is one edit there), and `manifest` is what
 // the clients build `window.api` from (see src/service/manifest.js). Pushed data
-// ('run:event', 'term:data', 'term:exit') is emitted on `events`, and so are desktop notifications
+// ('run:event', 'supervisor:watch', 'term:data', 'term:exit') is emitted on `events`, and so are desktop notifications
 // ('notify', see src/notifications.js), already filtered by the settings and what the UI shows.
 //
 // Today src/main.js exposes it over Electron IPC; the same object can be exposed over HTTP +
@@ -1041,7 +1041,7 @@ function createService({ host }) {
   // share the service's state and helpers through ctx; `ws` is read at call time (it can change).
   const ctx = {
     get ws() { return ws; },
-    host, active, waiting, terminals, BUNDLED_SKILLS_DIR,
+    host, active, events, notify, waiting, terminals, BUNDLED_SKILLS_DIR,
     setUiContext: (c) => { uiContext = notifier.normalizeContext(c); },
     activeRuns, analyticsSnapshot, analyzeAnalytics, artifactRuns, assignWorkflow, cloneBuilderWorkflow, dispatchQueue, envDetails, listAllRuns,
     listCliSessions, listWorkflows, liveRun, loadBuilderWorkflow, openTerminal, projectRuns, pushProject,
