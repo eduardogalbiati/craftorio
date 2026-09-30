@@ -38,6 +38,7 @@ const actionsUsage = require('../actions-usage');
 const { readLocalUsage } = require('../local-usage');
 const cliSessions = require('../cli-sessions');
 const { trustFolder } = require('../cli-trust');
+const { createCodeVersion } = require('../code-version');
 const runs = require('../runs');
 const workflows = require('../workflows');
 const builder = require('../workflow-builder');
@@ -106,6 +107,8 @@ function cliReason(sess, providers, running) {
 
 function createService({ host }) {
   const events = new EventEmitter();
+  // the code this process started with, to tell a window it runs newer code (#83)
+  const code = createCodeVersion({ appVersion: host.appVersion, isPackaged: host.isPackaged });
   let ws = null; // { root, runs, repos, projects, skills, workflows, worktrees, settings } (see src/workspace.js)
   // Runs in progress, by run id (several with Settings › Execution › Concurrent runs). A run leaves
   // the map when it finishes; from then on it is read from its folder.
@@ -1043,7 +1046,7 @@ function createService({ host }) {
     get ws() { return ws; },
     host, active, events, notify, waiting, terminals, BUNDLED_SKILLS_DIR,
     setUiContext: (c) => { uiContext = notifier.normalizeContext(c); },
-    activeRuns, analyticsSnapshot, analyzeAnalytics, artifactRuns, assignWorkflow, cloneBuilderWorkflow, dispatchQueue, envDetails, listAllRuns,
+    activeRuns, analyticsSnapshot, analyzeAnalytics, artifactRuns, assignWorkflow, cloneBuilderWorkflow, code, dispatchQueue, envDetails, listAllRuns,
     listCliSessions, listWorkflows, liveRun, loadBuilderWorkflow, openTerminal, projectRuns, pushProject,
     readArtifact, refreshLocal, renameCliSession, resolvePushConflict, restoreWorkflow, resumeOptions, resumeRun,
     runFolder, saveBuilderWorkflow, setBudget, setPrice, startWorkflowRun, unpushedProjects, usageSnapshot,
@@ -1082,6 +1085,17 @@ function createService({ host }) {
     }),
     // the runs the app had in progress when it last closed, as notifications (call at startup)
     notifyInterruptedRun,
+    // Before a restart (the code changed on disk, #83): refuses while runs are in progress unless
+    // the user confirmed interrupting them, and pauses the Backlog queues so nothing starts on the
+    // way out. Returns the runs the restart interrupts (to resume after it).
+    prepareRestart({ interruptRuns = false } = {}) {
+      const runs = activeRuns().map((r) => ({ runId: r.runId, workflow: r.workflow }));
+      if (runs.length && !interruptRuns) {
+        throw new Error(`${runs.length} run${runs.length > 1 ? 's are' : ' is'} in progress: confirm the restart to interrupt ${runs.length > 1 ? 'them' : 'it'} (${runs.map((r) => r.runId).join(', ')}).`);
+      }
+      if (ws) backlog.pauseAll(ws.backlog, 'Paused for the app restart: resume to start the queued issues.');
+      return { interrupted: runs };
+    },
     shutdown() {
       waiting.closeAll();
       terminals.killAll();

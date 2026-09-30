@@ -17,4 +17,15 @@ the workspace folder.
   `worktrees/` (one git worktree per run, `<run_id>`), `backlog/` (issue sync per project), `projects/` (`<id>.json`),
   `skills/`, `agents/` (`<id>.json`), `settings.json`. The owner's project `multiagent-orchestrator`
   points at `repos/eduardogalbiati-multiagent-orchestrator` (SSH remote; the repo is private).
+- **Developing while runs are active**: pulling or merging changes `src/` under the running app.
+  Ctrl+R reloads only the window (renderer + preload); the main process (or the `npm run serve`
+  server) keeps the code it started with, so new channels are missing. The process records its
+  code version at startup (`src/code-version.js`: app version + a hash of `src/` without
+  `renderer/` and `preload.js`; the packaged app uses its version only) and the window compares it
+  with the code on disk (`app:codeVersion`) when it loads and gets the focus. On a difference a
+  banner offers **Restart** (`app:relaunch`): it lists the runs in progress with their step,
+  refuses without that confirmation, pauses the Backlog queues and relaunches; after the restart
+  the interrupted runs are listed with Resume. A missing channel shows "This feature needs an app
+  restart" instead of the IPC error. So: pull, then restart. With the browser UI, restart the server
+  and reload the page.
 - The owner uses **subscription plans** (Claude, ChatGPT free for Codex, SuperGrok), not API keys.

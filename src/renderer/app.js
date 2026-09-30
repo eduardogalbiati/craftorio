@@ -19,7 +19,16 @@ const timeOf = (iso) => new Date(iso).toLocaleTimeString('en-US');
 const dateOf = (iso) => new Date(iso).toLocaleString('en-US', { dateStyle: 'short', timeStyle: 'short' });
 const LS_KEY = 'multiagent.inputs';
 const USAGE_SCOPE_KEY = 'multiagent.usageScope';
-const errMsg = (e) => String(e.message || e).replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
+const RUN_VIEW_KEY = 'multiagent.runView';
+// A channel or method the running main process (or server) doesn't have: the code on disk is newer
+// than the process (#83). The error says so and the restart banner shows.
+const NEEDS_RESTART = 'This feature needs an app restart (the app was updated while running).';
+const missingChannel = (msg) => /No handler registered for '|Unknown channel: |\bapi\.\w+ is not a function/.test(msg);
+const errMsg = (e) => {
+  const msg = String(e?.message || e);
+  if (missingChannel(msg)) { window.showCodeBanner?.(); return NEEDS_RESTART; }
+  return msg.replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
+};
 
 const CATEGORIES = {
   plan: 'Plan & Design',
@@ -55,6 +64,8 @@ const state = {
   pv: null,           // project detail view: { id, project, runs, error, filter, showSim, expanded, msgs }
   wr: { runs: null, error: null, filter: 'all', showSim: false, expanded: new Set(), msgs: new Map() }, // Workflows > Runs
   usageScope: (() => { try { return localStorage.getItem(USAGE_SCOPE_KEY) === 'machine' ? 'machine' : 'orchestrator'; } catch { return 'orchestrator'; } })(),
+  // how runs open: 'details' (the Run screen) or 'chat' (the run chat), the last one the owner picked
+  runView: (() => { try { return localStorage.getItem(RUN_VIEW_KEY) === 'chat' ? 'chat' : 'details'; } catch { return 'details'; } })(),
 };
 
 // What the window knows of one run, rebuilt from its events.
@@ -83,13 +94,37 @@ const issuesOfRun = (r) => r?.issues || (r?.issue ? [r.issue] : []);
 const issueRefs = (r) => issuesOfRun(r).map((i) => `#${i.number}`).join(', ');
 const runLabel = (r) => [r?.workflow || 'workflow', r?.project, issueRefs(r) || null].filter(Boolean).join(' · ');
 
-// Shows a run on the Run screen and in the top bar.
+// Shows a run in the top bar and, with `open`, opens it in the remembered run view (showRun).
 function selectRun(runId, { open = true } = {}) {
   if (!state.runs.has(runId)) return;
   state.runId = runId;
-  if (open) showView('run');
+  if (open) showRun(runId);
   scheduleRender();
 }
+
+// The Chat / Details choice, global and saved per window: set by the toggles and "Open chat".
+function setRunView(view) {
+  state.runView = view === 'chat' ? 'chat' : 'details';
+  try { localStorage.setItem(RUN_VIEW_KEY, state.runView); } catch { /* storage unavailable */ }
+}
+
+// Opens a run the way runs were last looked at: its chat (Write & Review and AI Arena runs their
+// own chat screens), or its Run screen, or Workflows › Runs for a past run this window does not
+// follow. `running`: a run just started (resumed) whose first event may not be here yet.
+function showRun(runId, { workflow, running } = {}) {
+  const v = state.runs.get(runId);
+  if (v) state.runId = runId;
+  const live = running ?? isRunLive(runId);
+  if (state.runView === 'chat' && window.openRunChat) {
+    window.openRunChat({ runId, workflow: workflow || v?.run?.workflow, running: live });
+  } else if (v || live) {
+    showView('run');
+  } else {
+    showRunInList(runId);
+  }
+  scheduleRender();
+}
+window.showRun = showRun;
 
 // ---------------------------------------------------------------------------
 // Initialization
@@ -99,13 +134,15 @@ async function init() {
   $('#btn-stop').onclick = stopRun;
   $('#btn-open-dir').onclick = () => api.openRunDir(state.run?.id);
   $('#btn-quick-start').onclick = () => openDrawer();
-  $('#run-meta').onclick = () => state.run && showView('run');
+  $('#run-meta').onclick = () => state.run && selectRun(state.run.id);
   $('#nav-run-gates').onclick = (e) => { e.stopPropagation(); openNextGate(); };
 
   // navigation
   document.querySelectorAll('.nav-item').forEach((b) => (b.onclick = () => {
     // Workflows opens on Runs; Definitions and Builder are its sub-items
     if (b.dataset.view === 'workflows') state.workflowsTab = 'runs';
+    // the Run item opens the run shown in the top bar in the remembered view
+    if (b.dataset.view === 'run' && state.runs.has(state.runId)) { selectRun(state.runId); return; }
     showView(b.dataset.view);
   }));
   document.querySelectorAll('.dash-card').forEach((b) => (b.onclick = () => openDrawer({ category: b.dataset.category })));
@@ -234,6 +271,7 @@ async function init() {
   [state.workflows, state.projects, state.skills] = await Promise.all([api.listWorkflows(), api.listProjects(), api.listSkills()]);
   renderWorkspacePaths();
   await loadActiveRuns();
+  initCodeBanner();
   renderDashboard();
 
   const env = await api.checkEnv();
@@ -341,8 +379,7 @@ function initNotifications() {
   api.onNotificationClick((target) => {
     if (target?.terminalId) { window.SessionsView?.focusTerminal(target.terminalId); return; }
     if (!target?.runId) return;
-    const running = isRunLive(target.runId);
-    window.openRunChat?.({ runId: target.runId, workflow: target.workflow, running });
+    showRun(target.runId, { workflow: target.workflow });
   });
   reportNotifyContext();
 }
@@ -759,8 +796,9 @@ function renderRunList(rl, { prefix, box: boxSel, empty, start, rerender }) {
     const r = rl.runs.find((x) => x.runId === b.closest('.pr-run').dataset.run);
     if (b.dataset.runAct === 'logs') api.openPath(r.runDir);
     // the Run screen shows the selected run: select this one, not whichever run was on screen
-    if (b.dataset.runAct === 'view') { if (state.runs.has(r.runId)) selectRun(r.runId); else showView('run'); }
-    if (b.dataset.runAct === 'chat') window.openRunChat?.({ runId: r.runId, workflow: r.workflow, running: r.current && r.status === 'running' });
+    if (b.dataset.runAct === 'view') showRun(r.runId, { workflow: r.workflow });
+    // "Open chat" switches to the chat explicitly, and the chat becomes the remembered view
+    if (b.dataset.runAct === 'chat') { setRunView('chat'); window.openRunChat?.({ runId: r.runId, workflow: r.workflow, running: r.current && r.status === 'running' }); }
     if (b.dataset.runAct === 'sup' || b.dataset.runAct === 'watch') {
       openSupervisor({ runId: r.runId, workflow: r.workflow, status: r.status, error: r.error, mock: r.mock, issues: issuesOfRun(r) }, { watch: b.dataset.runAct === 'watch' });
     }
@@ -1698,13 +1736,14 @@ function openNextGate() {
 }
 window.openNextGate = openNextGate;
 
-// Opens a run's gate inside the run: its chat asks the question inline (answered with the run's id,
-// so it works after a reload). Without the chat screen, the Run screen's gate card.
+// Opens a run's gate inside the run, in the remembered run view: its chat asks the question inline
+// (answered with the run's id, so it works after a reload); Details (or no chat screen), the Run
+// screen's gate card.
 function openGateOf(runId) {
   const v = state.runs.get(runId);
   if (!v) return;
   selectRun(runId, { open: false });
-  if (window.openRunChat) { window.openRunChat({ runId, workflow: v.run?.workflow, running: isRunLive(runId) }); return; }
+  if (state.runView === 'chat' && window.openRunChat) { window.openRunChat({ runId, workflow: v.run?.workflow, running: isRunLive(runId) }); return; }
   showView('run');
   focusRunGate();
 }
@@ -2986,10 +3025,10 @@ async function runRecommendation(i) {
   if (btn) btn.disabled = true;
   sup.recMsgs[i] = { text: 'Starting…', error: false };
   try {
-    await api.resumeRun(sup.runId, step, instruction || undefined);
+    const { runId } = await api.resumeRun(sup.runId, step, instruction || undefined);
     sup.recMsgs = {};
     closeSupervisor();
-    showView('run');
+    showRun(runId, { running: true });
   } catch (e) {
     sup.recMsgs[i] = { text: errMsg(e), error: true };
     renderSupervisor();
@@ -3066,9 +3105,9 @@ async function openResumeDialog(runId) {
     msg.className = 'small muted';
     msg.textContent = 'Starting…';
     try {
-      await api.resumeRun(o.runId, sel.value, $('#resume-ins').value.trim() || undefined, o.mock || wantsSimulation(box));
+      const { runId } = await api.resumeRun(o.runId, sel.value, $('#resume-ins').value.trim() || undefined, o.mock || wantsSimulation(box));
       closeModal('#resume-modal');
-      showView('run');
+      showRun(runId, { running: true });
     } catch (e) {
       msg.className = 'small error';
       msg.textContent = errMsg(e);
@@ -3077,6 +3116,101 @@ async function openResumeDialog(runId) {
   };
 }
 window.openResumeDialog = openResumeDialog;
+
+// ---------------------------------------------------------------------------
+// The code changed on disk while the app runs (#83): a pull or a merge updated src/ and a reload
+// (Ctrl+R) runs the new UI against the old main process (or server), where new channels are
+// missing. Checked when the window loads and gets the focus; a banner offers a safe restart.
+// ---------------------------------------------------------------------------
+const RESTART_KEY = 'multiagent.restartInterrupted';
+const codeState = { running: null, changed: false, reload: false };
+
+async function checkCodeVersion() {
+  let v = null;
+  try {
+    // a main process older than this check has no such channel: it is older than the page
+    v = typeof api.codeVersion === 'function' ? await api.codeVersion() : { changed: true };
+  } catch (e) {
+    v = missingChannel(String(e?.message || e)) ? { changed: true } : null;
+  }
+  if (!v) return;
+  // the browser UI: the server restarted with other code than the page loaded
+  if (codeState.running && v.running && v.running !== codeState.running) codeState.reload = true;
+  codeState.running = codeState.running || v.running || null;
+  if (v.changed || codeState.reload) showCodeBanner();
+}
+
+const runningStepsOf = (runId) => [...(state.runs.get(runId)?.steps.values() || [])].filter((s) => s.status === 'running').map((s) => s.id).join(', ');
+
+async function showCodeBanner() {
+  codeState.changed = true;
+  let runs = [];
+  try { runs = await api.listActiveRuns(); } catch { /* the count is left out */ }
+  const n = runs.length;
+  const inProgress = n ? ` (${n} run${n > 1 ? 's' : ''} in progress will be interrupted and can be resumed)` : '';
+  const desktop = api.platform !== 'browser' && typeof api.relaunchApp === 'function';
+  const text = codeState.reload ? 'The server restarted with other code. Reload the page to use it.'
+    : desktop ? `The app's code changed on disk. Restart to use it${inProgress}.`
+      : api.platform === 'browser' ? `The app's code changed on disk. Restart the server (npm run serve) and reload the page to use it${inProgress}.`
+        : `The app's code changed on disk. Close and open the app to use it${inProgress}.`;
+  const el = $('#code-banner');
+  el.innerHTML = `<span>${esc(text)}</span>
+    ${codeState.reload ? '<button class="btn sm primary" type="button" data-code="reload">Reload</button>' : desktop ? '<button class="btn sm primary" type="button" data-code="restart">Restart</button>' : ''}
+    <button class="btn sm ghost" type="button" data-code="dismiss" title="Hide until the next check">Later</button>`;
+  el.classList.remove('hidden');
+}
+window.showCodeBanner = showCodeBanner;
+
+// Warns with the runs in progress (and the step each is on), then restarts: main refuses again if
+// a run started meanwhile and the user did not confirm it.
+async function restartApp() {
+  let runs = [];
+  try { runs = await api.listActiveRuns(); } catch { /* main still refuses with runs in progress */ }
+  if (runs.length) {
+    const lines = runs.map((r) => `• ${r.workflow} (${r.runId}): ${r.waiting ? 'waiting for approval' : runningStepsOf(r.runId) || 'in progress'}`);
+    const ok = await confirmDialog('Restart and interrupt runs?',
+      `${runs.length} run${runs.length > 1 ? 's' : ''} in progress will be interrupted:\n${lines.join('\n')}\n\nThe Backlog queues are paused. After the restart the interrupted runs are listed with Resume.`, 'Restart');
+    if (!ok) return;
+  }
+  try { localStorage.setItem(RESTART_KEY, JSON.stringify(runs.map((r) => ({ runId: r.runId, workflow: r.workflow })))); } catch { /* storage unavailable */ }
+  try {
+    await api.relaunchApp(runs.length > 0);
+  } catch (e) {
+    try { localStorage.removeItem(RESTART_KEY); } catch { /* storage unavailable */ }
+    showToast('Restart refused', errMsg(e));
+  }
+}
+
+// After a restart: the runs it interrupted, each with Resume (a new run from a step, #74-#76).
+function showRestartInterrupted() {
+  let list = [];
+  try {
+    list = JSON.parse(localStorage.getItem(RESTART_KEY) || '[]');
+    localStorage.removeItem(RESTART_KEY);
+  } catch { return; }
+  if (!Array.isArray(list) || !list.length) return;
+  const el = $('#code-banner');
+  el.innerHTML = `<span>The restart interrupted ${list.length} run${list.length > 1 ? 's' : ''}:</span>
+    ${list.map((r) => `<span class="code-banner-run"><span class="mono small">${esc(r.workflow || 'workflow')} ${esc(r.runId)}</span>
+      <button class="btn sm primary" type="button" data-code="resume" data-run="${esc(r.runId)}">Resume…</button></span>`).join('')}
+    <button class="btn sm ghost" type="button" data-code="dismiss">Dismiss</button>`;
+  el.classList.remove('hidden');
+}
+
+function initCodeBanner() {
+  $('#code-banner').onclick = (e) => {
+    const b = e.target.closest('[data-code]');
+    if (!b) return;
+    if (b.dataset.code === 'restart') restartApp();
+    if (b.dataset.code === 'reload') location.reload();
+    if (b.dataset.code === 'resume') openResumeDialog(b.dataset.run);
+    if (b.dataset.code === 'dismiss') $('#code-banner').classList.add('hidden');
+  };
+  showRestartInterrupted();
+  checkCodeVersion();
+  window.addEventListener('focus', checkCodeVersion);
+  api.onReconnect?.(checkCodeVersion);
+}
 
 let toastTimer = null;
 // runId: the run it is about (a click shows it); gate: an approval.requested event to open.
@@ -3093,7 +3227,7 @@ function showToast(title, detail, runId = null, gate = null) {
     // a gate still waiting opens inside its run (its chat, or the Run screen's gate card)
     if (gate && state.runs.get(gate.run_id)?.approvals.has(gate.approval_id)) return openGateOf(gate.run_id);
     if (runId && state.runs.has(runId)) selectRun(runId);
-    else if (state.run) showView('run');
+    else if (state.run) selectRun(state.run.id);
   };
 }
 

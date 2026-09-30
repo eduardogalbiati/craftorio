@@ -19,6 +19,14 @@ Read this before changing anything in `src/renderer/`.
   Nothing a run raises may cover the screen: dialogs are for the user's own clicks.
 - Write & Review and AI Arena keep their own chat screens; every other run uses the run chat
   (`run-chat-model.js` is pure and unit-tested, `run-chat.js` draws it).
+- **How a run is opened**: one global run view, `state.runView` (`'details' | 'chat'`, saved in
+  localStorage `multiagent.runView`). Every way of opening a run (sidebar Run menu, toasts,
+  notifications, "View run", Backlog run links, the gate badge, a resume) goes through
+  `selectRun(runId)` / `showRun(runId, { workflow, running })` in `app.js`, which open that run's
+  chat (Write & Review and AI Arena: their own screens) or its Run screen. Only the explicit
+  switches change the choice (`setRunView`): the Run screen's Chat button, the chat's Details
+  button and "Open chat". A chat always opens at its latest message ("Jump to latest" while
+  scrolled up).
 - Check changes by looking at screenshots: `npm run screenshot -- --view <view> [--tab|--mode|--click]
   --out <dir>` opens one screen with demo data and quits by itself (`--ref origin/main` for the
   "before"; usage at the top of `scripts/screenshot.js`). A new view or

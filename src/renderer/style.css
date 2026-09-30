@@ -836,6 +836,14 @@ body.resizing-dock .term-body { pointer-events: none; }
 .run-summary .sup-btn { margin-top: 12px; }
 #view-run:not(.hidden) { display: flex; flex-direction: column; }
 #view-run .run-layout { flex: 1; min-height: 0; height: auto; }
+/* the code changed on disk (#83): floats below the top bar, never blocks the screen */
+.code-banner {
+  position: fixed; top: 60px; left: 50%; transform: translateX(-50%); z-index: 60; max-width: min(900px, calc(100vw - 32px));
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 10px;
+  background: var(--panel); border: 1px solid rgba(251,191,36,.55); box-shadow: 0 12px 32px rgba(0,0,0,.4);
+}
+.code-banner-run { display: inline-flex; align-items: center; gap: 6px; }
+#confirm-message { white-space: pre-line; }
 .fail-banner {
   flex: none; display: flex; align-items: center; gap: 16px; padding: 10px 16px;
   background: rgba(248,113,113,.1); border-bottom: 1px solid rgba(248,113,113,.35);
@@ -1017,6 +1025,18 @@ body.resizing-dock .term-body { pointer-events: none; }
 .bl-labels { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
 .bl-labels:empty { display: none; }
 .bl-label { --lc: var(--muted); font-size: 10.5px; padding: 0 7px; border-radius: 99px; border: 1px solid var(--lc); color: var(--lc); }
+button.bl-label { font-family: inherit; background: none; cursor: pointer; }
+.bl-label.on { background: color-mix(in srgb, var(--lc) 22%, transparent); }
+.bl-labels-wrap { position: relative; }
+.bl-labels-pop {
+  position: absolute; top: calc(100% + 6px); left: 0; z-index: 20; min-width: 220px; max-height: 340px; overflow: auto;
+  padding: 6px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 12px 32px rgba(0,0,0,.4);
+}
+.bl-label-opt { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 6px; cursor: pointer; }
+.bl-label-opt:hover { background: var(--panel-2); }
+.bl-label-opt .muted { margin-left: auto; }
+.bl-label-active { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.bl-label-active:empty { display: none; }
 .bl-tasks { display: flex; align-items: center; gap: 6px; }
 .bl-bar { flex: 1; height: 5px; border-radius: 3px; background: var(--panel-2); overflow: hidden; }
 .bl-bar > span { display: block; height: 100%; background: var(--green); }

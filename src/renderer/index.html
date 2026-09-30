@@ -69,6 +69,8 @@
       </div>
     </div>
   </header>
+  <!-- the code changed on disk while the app runs (#83), or the runs a restart interrupted -->
+  <div id="code-banner" class="code-banner hidden" role="status"></div>
 
   <div class="shell">
     <!-- ================= Sidebar ================= -->
@@ -269,6 +271,11 @@
           </div>
           <div id="bl-filters" class="chips"></div>
           <input type="text" id="bl-search" placeholder="Search issues, labels…" aria-label="Search" />
+          <div id="bl-labels-wrap" class="bl-labels-wrap">
+            <button id="btn-bl-labels" class="btn sm ghost" type="button" aria-haspopup="true" title="Filter by labels. Labels of different groups (the prefix before ':') must all match; labels of the same group match any of them, e.g. bug AND (complexity:1 OR complexity:2). Whole names, any case.">Labels</button>
+            <div id="bl-labels-pop" class="bl-labels-pop hidden" role="menu" aria-label="Labels"></div>
+          </div>
+          <span id="bl-label-active" class="bl-label-active"></span>
           <button id="btn-bl-assign" class="btn sm primary hidden" type="button">Assign workflow…</button>
           <button id="btn-bl-clear" class="btn sm ghost hidden" type="button">Clear selection</button>
           <span class="spacer"></span>
@@ -593,6 +600,7 @@
           <div id="rc-messages" class="duo-messages rc-messages"></div>
           <div id="rc-typing" class="rc-typing"></div>
         </div>
+        <button id="rc-jump" class="btn sm rc-jump hidden" type="button" title="Scroll to the latest message">Jump to latest ↓</button>
       </section>
 
       <!-- ================= Write & Review (layout preview, simulated) ================= -->
@@ -1383,6 +1391,7 @@
   <script src="run-chat.js"></script>
   <script src="agents.js"></script>
   <script src="sessions.js"></script>
+  <script src="backlog-labels.js"></script>
   <script src="backlog.js"></script>
   <script src="builder.js"></script>
   <script src="analytics.js"></script>
