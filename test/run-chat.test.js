@@ -49,6 +49,104 @@ const kinds = (model, kind) => model.items.filter((it) => it.kind === kind);
 
 const FANOUT = path.join(__dirname, 'fixtures', 'fanout.yaml');
 
+test('RunChatModel#sideOf: alternates left, right, left… for each new agent and keeps it; the orchestrator and the supervisor have none', () => {
+  const model = new RunChatModel();
+  assert.equal(model.sideOf('developer'), 'left');
+  assert.equal(model.sideOf('reviewer'), 'right');
+  assert.equal(model.sideOf('developer'), 'left'); // still its first side, not re-alternated
+  assert.equal(model.sideOf('tester'), 'left');
+  assert.equal(model.sideOf('orchestrator'), null);
+  assert.equal(model.sideOf('supervisor'), null);
+  assert.equal(model.sideOf('_supervisor'), null);
+  assert.equal(model.sideOf(''), null);
+});
+
+test('run chat: each agent gets a side the first time it speaks and keeps it all run; system lines use no side', () => {
+  const model = chatOf([
+    { seq: 1, type: 'workflow.started', run_id: 'r1', workflow: 'wf', inputs: {} },
+    { seq: 2, type: 'session.opened', session_id: 's1', session: { agent: 'developer', provider: 'claude', model: 'claude-opus-5-5' } },
+    { seq: 3, type: 'session.message_sent', session_id: 's1', turn: 1, step_id: 'develop' },
+    { seq: 4, type: 'session.message_received', session_id: 's1', turn: 1, step_id: 'develop', text: 'Done 1' },
+    { seq: 5, type: 'step.transition', from: 'develop', to: 'review' },
+    { seq: 6, type: 'session.opened', session_id: 's2', session: { agent: 'reviewer', provider: 'claude', model: 'claude-opus-5-5' } },
+    { seq: 7, type: 'session.message_sent', session_id: 's2', turn: 1, step_id: 'review' },
+    { seq: 8, type: 'session.message_received', session_id: 's2', turn: 1, step_id: 'review', text: 'Done 2' },
+    { seq: 9, type: 'step.transition', from: 'review', to: 'develop' },
+    { seq: 10, type: 'session.message_sent', session_id: 's1', turn: 2, step_id: 'develop' },
+    { seq: 11, type: 'session.message_received', session_id: 's1', turn: 2, step_id: 'develop', text: 'Done again' },
+  ]);
+  const turns = kinds(model, 'turn');
+  assert.deepEqual(turns.map((t) => [t.agent, t.side]), [
+    ['developer', 'left'],
+    ['reviewer', 'right'],
+    ['developer', 'left'], // same side on its second turn
+  ]);
+  assert.ok(kinds(model, 'system').every((s) => s.side === undefined));
+});
+
+test('run chat: a fan-out\'s agents get their side in the step\'s own order, whichever answers first', () => {
+  const model = chatOf([
+    { seq: 1, type: 'workflow.started', run_id: 'r1', workflow: 'wf', inputs: {} },
+    { seq: 2, type: 'step.started', step_id: 'compete', visit: 1, agent: 'b · a' },
+    { seq: 3, type: 'session.opened', session_id: 's-a', session: { agent: 'a', provider: 'mock', model: 'model-a' } },
+    { seq: 4, type: 'session.opened', session_id: 's-b', session: { agent: 'b', provider: 'mock', model: 'model-b' } },
+    // a answers before b, although the step declares b first
+    { seq: 5, type: 'session.message_sent', session_id: 's-a', turn: 1, step_id: 'compete' },
+    { seq: 6, type: 'session.message_received', session_id: 's-a', turn: 1, step_id: 'compete', text: 'A done' },
+    { seq: 7, type: 'session.message_sent', session_id: 's-b', turn: 1, step_id: 'compete' },
+    { seq: 8, type: 'session.message_received', session_id: 's-b', turn: 1, step_id: 'compete', text: 'B done' },
+  ]);
+  const turns = kinds(model, 'turn');
+  assert.equal(turns.find((t) => t.agent === 'b').side, 'left');
+  assert.equal(turns.find((t) => t.agent === 'a').side, 'right');
+});
+
+test('run chat: a human gate reply keeps its own style, with no side', () => {
+  const model = chatOf([
+    { seq: 1, type: 'workflow.started', run_id: 'r1', workflow: 'wf', inputs: {} },
+    { seq: 2, type: 'approval.requested', approval_id: 'g1', step_id: 'approve_merge', message: 'Merge?' },
+    { seq: 3, type: 'approval.resolved', approval_id: 'g1', choice: true, by: 'user' },
+  ]);
+  const [reply] = kinds(model, 'reply');
+  assert.equal('side' in reply, false);
+});
+
+test('run chat: a run replayed from disk gets the same agent sides as the live run', { timeout: 30000 }, async (t) => {
+  const skills = fs.mkdtempSync(path.join(os.tmpdir(), 'skills-'));
+  t.after(() => fs.rmSync(skills, { recursive: true, force: true }));
+  fs.mkdirSync(path.join(skills, 'demo'));
+  fs.writeFileSync(path.join(skills, 'demo', 'SKILL.md'), '---\nname: demo\ndescription: x\n---\nWrite well.\n');
+  let replay;
+  const live = chatOf(await mockRun(FANOUT, {
+    skillsDirs: [skills], onRecorded: (runDir) => { replay = chatOf(runEvents(runDir, { activity: true })); },
+  }));
+  const sides = (model) => kinds(model, 'turn').map((t) => [t.agent, t.side]).sort();
+  assert.deepEqual(sides(replay), sides(live));
+  assert.ok(sides(live).length > 0);
+});
+
+test('run chat: a turn carries the hover card data recorded on the run (provider, model, effort, session mode)', () => {
+  const model = chatOf([
+    { seq: 1, type: 'workflow.started', run_id: 'r1', workflow: 'wf', inputs: {} },
+    { seq: 2, type: 'session.opened', session_id: 's1', session: { agent: 'developer', provider: 'claude', model: 'claude-opus-5-5', effort: 'high', mode: 'persistent' } },
+    { seq: 3, type: 'session.message_sent', session_id: 's1', turn: 1, step_id: 'develop' },
+    { seq: 4, type: 'session.message_received', session_id: 's1', turn: 1, step_id: 'develop', text: 'Done.' },
+  ]);
+  const [turn] = kinds(model, 'turn');
+  assert.deepEqual([turn.provider, turn.model, turn.effort, turn.mode], ['claude', 'claude-opus-5-5', 'high', 'persistent']);
+});
+
+test('run chat: a turn without a recorded effort or session mode carries null, not "undefined"', () => {
+  const model = chatOf([
+    { seq: 1, type: 'workflow.started', run_id: 'r1', workflow: 'wf', inputs: {} },
+    { seq: 2, type: 'session.opened', session_id: 's1', session: { agent: 'developer', provider: 'claude', model: 'claude-opus-5-5' } },
+    { seq: 3, type: 'session.message_sent', session_id: 's1', turn: 1, step_id: 'develop' },
+    { seq: 4, type: 'session.message_received', session_id: 's1', turn: 1, step_id: 'develop', text: 'Done.' },
+  ]);
+  const [turn] = kinds(model, 'turn');
+  assert.deepEqual([turn.effort, turn.mode], [null, null]);
+});
+
 test('run chat: a fan-out step groups its parallel answers, then the next agent answers on its own', { timeout: 30000 }, async (t) => {
   const skills = fs.mkdtempSync(path.join(os.tmpdir(), 'skills-'));
   t.after(() => fs.rmSync(skills, { recursive: true, force: true }));
