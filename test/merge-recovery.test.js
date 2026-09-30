@@ -376,7 +376,7 @@ test('local-hero: a resolution that changes behaviour goes through the full revi
   });
   assert.equal(finished.status, 'success', finished.error);
   assert.deepEqual(sinceMerge(transitions), [
-    'verify_change>resolve_merge', 'resolve_merge>code_review', 'code_review>test', 'test>build', 'build>verify_change', 'verify_change>end',
+    'verify_change>resolve_merge', 'resolve_merge>code_review', 'code_review>test', 'test>build', 'build>evidence', 'evidence>verify_change', 'verify_change>end',
   ]);
   const fullReview = prompt('code_review').at(-1);
   assert.doesNotMatch(fullReview, /Review the RESOLUTION of a merge conflict/);

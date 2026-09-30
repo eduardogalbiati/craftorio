@@ -501,7 +501,7 @@ test('software-development: an infra build failure skips the fix rounds; "retry"
   assert.deepEqual(gate.choices.map((c) => c.id), ['continue', 'retry', 'stop']);
   assert.match(gate.message, /because of the environment, not the code/);
   assert.ok(!events.some((e) => e.type === 'log' && e.message === 'build delegated to developer'), 'no developer round for an infra failure');
-  assert.deepEqual(transitions.filter((x) => /build_failed|^build>/.test(x)), ['build>build_failed', 'build_failed>build', 'build>verify_change']);
+  assert.deepEqual(transitions.filter((x) => /build_failed|^build>/.test(x)), ['build>build_failed', 'build_failed>build', 'build>evidence']);
 });
 
 test('software-development: a code build failure still goes to the developer first', { timeout: 120000 }, async () => {
