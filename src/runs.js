@@ -7,8 +7,29 @@
 
 const fs = require('fs');
 const path = require('path');
+const { trailOf } = require('./renderer/run-progress-model');
 
 const SESSION_EVENTS = new Set(['session.opened', 'session.message_received', 'session.closed']);
+
+// What a run without a (complete) summary.json needs from its events.jsonl: its sessions and
+// its step trail (progress by group), cached by mtime+size so an unchanged file is read once.
+const derived = new Map(); // events.jsonl path → { key, sessions, progress }
+function fromEvents(file) {
+  let st;
+  try { st = fs.statSync(file); } catch { return { sessions: [], progress: [] }; }
+  const key = `${st.mtimeMs}:${st.size}`;
+  const hit = derived.get(file);
+  if (hit?.key === key) return hit;
+  const events = readEvents(file).filter((e) => e.type !== 'session.stream');
+  const byId = new Map();
+  for (const ev of events) {
+    if (SESSION_EVENTS.has(ev.type) && ev.session) byId.set(ev.session_id, { ...ev.session, status: ev.type === 'session.closed' ? ev.status : ev.session.status });
+    else if (ev.type === 'session.status' && byId.has(ev.session_id)) byId.get(ev.session_id).status = ev.status;
+  }
+  const out = { key, sessions: [...byId.values()], progress: trailOf(events) };
+  derived.set(file, out);
+  return out;
+}
 
 function readEvents(file) {
   try {
@@ -51,17 +72,15 @@ function readRun(runsDir, runId) {
   let status;
   let finishedAt = null;
   let error = null;
+  let progress;
   if (summary) {
     sessions = summary.sessions || [];
     status = summary.status;
     finishedAt = summary.finished_at;
+    // runs recorded before summary.progress existed
+    progress = summary.progress || fromEvents(path.join(dir, 'events.jsonl')).progress;
   } else {
-    const byId = new Map();
-    for (const ev of readEvents(path.join(dir, 'events.jsonl'))) {
-      if (SESSION_EVENTS.has(ev.type) && ev.session) byId.set(ev.session_id, { ...ev.session, status: ev.type === 'session.closed' ? ev.status : ev.session.status });
-      else if (ev.type === 'session.status' && byId.has(ev.session_id)) byId.get(ev.session_id).status = ev.status;
-    }
-    sessions = [...byId.values()];
+    ({ sessions, progress } = fromEvents(path.join(dir, 'events.jsonl')));
     status = 'interrupted';
   }
   if (summary && summary.status !== 'success') {
@@ -89,6 +108,9 @@ function readRun(runsDir, runId) {
     inputs,
     runDir: dir,
     sessions,
+    // null: recorded before groups existed (the workflow file may have them now)
+    groups: summary?.groups || started?.groups || null,
+    progress,
   };
 }
 

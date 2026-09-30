@@ -434,11 +434,12 @@ function createService({ host }) {
   }
 
   // Provider config of a run's workflow: the live one, or the workflow file named in its events.
-  function runProviders(runId, file) {
+  function runWorkflow(runId, file) {
     const live = active.get(runId);
-    if (live) return live.wf.providers || {};
-    try { return loadWorkflow(workflowPath(file).file).providers || {}; } catch { return {}; }
+    if (live) return live.wf;
+    try { return loadWorkflow(workflowPath(file).file); } catch { return {}; }
   }
+  const runProviders = (runId, file) => runWorkflow(runId, file).providers || {};
 
   // Everything needed to open a session: from the run in progress, or from the run folder on disk.
   function findSession(runId, sessionId) {
@@ -657,13 +658,18 @@ function createService({ host }) {
     const live = current ? [...run.sessions.values()].map((x) => sessionView(run.snapshot(x), false)) : null;
     // the orchestrator first: its live log is the run's timeline
     const sessions = (live || r.sessions.map((x) => sessionView(x, false))).sort((a, b) => (b.agent === 'orchestrator') - (a.agent === 'orchestrator'));
-    const providers = runProviders(current ? r.runId : 'disk', r.file);
+    const wf = runWorkflow(current ? r.runId : 'disk', r.file);
+    const providers = wf.providers || {};
     const { inputs, ...info } = r;
     return {
       ...info,
       artifacts: runs.runArtifacts(r.runDir),
       status: current ? 'running' : r.status,
       current,
+      // runs recorded before `groups:` take the workflow's current ones
+      groups: r.groups || wf.groups || [],
+      // a run in progress: the engine's own trail, not events.jsonl
+      progress: current ? run.trail.steps : r.progress,
       costUsd: current ? sessions.reduce((a, x) => a + (x.costUsd || 0), 0) : r.costUsd,
       sessions: sessions.map((x) => {
         const why = cliReason(x, providers, current);

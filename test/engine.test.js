@@ -335,6 +335,37 @@ test('loadWorkflow validates a transition status (end outcome)', () => {
   }
 });
 
+test('loadWorkflow validates groups: known steps, one group per step, unique names', () => {
+  const tmp = path.join(os.tmpdir(), `wf-groups-${process.pid}.yaml`);
+  const write = (groups) => fs.writeFileSync(tmp, `agents: { a: { provider: claude, model: m } }\n${groups}steps:\n  - id: s1\n    agent: a\n  - id: s2\n    agent: a\n`);
+  try {
+    write('');
+    assert.equal(loadWorkflow(tmp).groups, undefined);
+    write('groups:\n  - { name: Build, steps: [s1, s2] }\n');
+    assert.deepEqual(loadWorkflow(tmp).groups, [{ name: 'Build', steps: ['s1', 's2'] }]);
+    write('groups:\n  - { name: Build, steps: [s1, nope] }\n');
+    assert.throws(() => loadWorkflow(tmp), /Group "Build" references unknown step "nope"/);
+    write('groups:\n  - { name: Build, steps: [s1] }\n  - { name: Test, steps: [s2, s1] }\n');
+    assert.throws(() => loadWorkflow(tmp), /Step "s1" is in two groups: "Build" and "Test"/);
+    write('groups:\n  - { name: Build, steps: [s1] }\n  - { name: Build, steps: [s2] }\n');
+    assert.throws(() => loadWorkflow(tmp), /Group "Build" is defined twice/);
+    write('groups:\n  - { name: Build, steps: [] }\n');
+    assert.throws(() => loadWorkflow(tmp), /non-empty list/);
+    write('groups: { Build: [s1] }\n');
+    assert.throws(() => loadWorkflow(tmp), /groups must be a list/);
+  } finally {
+    fs.unlinkSync(tmp);
+  }
+});
+
+test('the bundled workflows group every step', () => {
+  for (const f of ['software-development.yaml', 'ai-arena.yaml', 'writer-reviewer.yaml', 'multi-model-review.yaml', 'run-retrospective.yaml']) {
+    const wf = loadWorkflow(path.join(root, 'workflows', f));
+    assert.ok(wf.groups?.length, `${f} has groups`);
+    assert.deepEqual(wf.groups.flatMap((g) => g.steps).sort(), wf.steps.map((s) => s.id).sort(), f);
+  }
+});
+
 // Full software-development flow in mock mode. Gates get `answers[step]` (default: approve /
 // first choice), like --auto-approve.
 async function runSoftwareDevelopment({ mockSequences, answers = {} }) {

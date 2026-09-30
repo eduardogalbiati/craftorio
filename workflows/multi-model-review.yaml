@@ -133,6 +133,15 @@ agents:
       You are the lead judge. You did not review this change before; you read the diff
       yourself and decide which findings stand, following the review-synthesis skill.
 
+# Progress shown in the runs list and the Run screen (does not change the graph).
+groups:
+  - name: Reviews
+    steps: [review]
+  - name: Blast radius
+    steps: [blast_radius]
+  - name: Verdict
+    steps: [judge]
+
 # -----------------------------------------------------------------------------
 steps:
 

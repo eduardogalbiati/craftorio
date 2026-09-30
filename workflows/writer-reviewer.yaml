@@ -185,6 +185,15 @@ agents:
       user, who decides what happens next. You never edit the document. The user's decisions
       (e.g. points to leave open) take precedence over the goal.
 
+# Progress shown in the runs list and the Run screen (does not change the graph).
+groups:
+  - name: Write
+    steps: [write]
+  - name: Review
+    steps: [review, out_of_rounds]
+  - name: Sign-off
+    steps: [signoff, decide]
+
 # -----------------------------------------------------------------------------
 steps:
 

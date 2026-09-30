@@ -9,6 +9,9 @@ same features for users; this is the implementer's summary.
   names can be templates (`"unit-test-writer-{{ inputs.language }}"`).
 - `agents: [a, b]` on a step = parallel fan-out → `{ results, succeeded, failed }`, `min_success`.
 - `save_as` (string or list, relative to the run folder; `{ path, content }` saves one field), `on_error: <step>`.
+- `groups: [{ name, steps }]` (optional, top level): progress views only, the graph ignores it;
+  `validateGroups` in `loadWorkflow`. Recorded in `workflow.started` and `summary.groups`, with
+  `summary.progress` = the engine's `StepTrail` (`src/renderer/run-progress-model.js`).
 - Inputs with `type: run` take another run's id: empty/`latest` → the most recent run of another
   workflow; an id with no `runs/<id>/events.jsonl` is refused when the run is created (the UI shows
   it before anything starts). Used by `run-retrospective`.

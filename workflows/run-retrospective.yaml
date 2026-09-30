@@ -75,6 +75,11 @@ agents:
       You analyze a finished multi-agent workflow run and propose improvements. You read
       logs, skills and workflow files; you never modify anything.
 
+# Progress shown in the runs list and the Run screen (does not change the graph).
+groups:
+  - name: Analysis
+    steps: [analyze]
+
 # -----------------------------------------------------------------------------
 steps:
 

@@ -262,6 +262,19 @@ agents:
       merge, which a human approves, you track the production deploy triggered by the
       push to {{ inputs.base_branch }}. On failures, you diagnose from the failed job log.
 
+# Progress shown in the runs list and the Run screen (does not change the graph).
+groups:
+  - name: Develop
+    steps: [develop]
+  - name: Review
+    steps: [code_review, human_review]
+  - name: Validate
+    steps: [test, test_failed, build, build_failed, verify_change, verify_failed]
+  - name: PR & CI
+    steps: [ci, ci_failed, pr_babysitter, comment_decision]
+  - name: Deploy
+    steps: [deploy_test, preview_failed, approve_merge, deploy_prod, deploy_failed]
+
 # -----------------------------------------------------------------------------
 steps:
 

@@ -16,6 +16,7 @@ const { prepareWorktree, removeWorktree, currentBranch } = require('./worktree')
 const capabilities = require('./capabilities');
 const { stopProcessesIn } = require('./processes');
 const { PROBES, runProbe } = require('./probes');
+const { StepTrail } = require('../renderer/run-progress-model');
 
 // Skills bundled with the app (skills/ folder at the root). Workspace skills take precedence.
 const BUNDLED_SKILLS = path.join(__dirname, '..', '..', 'skills');
@@ -116,7 +117,27 @@ function loadWorkflow(file) {
       }
     }
   }
+  validateGroups(wf.groups, ids);
   return wf;
+}
+
+// `groups:` names sets of steps for progress views (runs list, Run screen); the graph ignores it.
+function validateGroups(groups, ids) {
+  if (groups === undefined) return;
+  if (!Array.isArray(groups)) throw new Error('groups must be a list of { name, steps }.');
+  const names = new Set();
+  const owner = new Map();
+  for (const g of groups) {
+    if (!g || typeof g.name !== 'string' || !g.name.trim()) throw new Error('Every group needs a name.');
+    if (names.has(g.name)) throw new Error(`Group "${g.name}" is defined twice.`);
+    names.add(g.name);
+    if (!Array.isArray(g.steps) || !g.steps.length) throw new Error(`Group "${g.name}": steps must be a non-empty list of step ids.`);
+    for (const s of g.steps) {
+      if (!ids.has(s)) throw new Error(`Group "${g.name}" references unknown step "${s}".`);
+      if (owner.has(s)) throw new Error(`Step "${s}" is in two groups: "${owner.get(s)}" and "${g.name}".`);
+      owner.set(s, g.name);
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -335,6 +356,7 @@ class WorkflowRun extends EventEmitter {
       if (resume.instruction) this.ctx.steps[resume.fromStep].supervisorNote = resume.instruction;
     }
     this.recent = []; // last events, for the supervisor's timeline
+    this.trail = new StepTrail(); // step visits with their agents, for the progress views (summary.progress)
     this.setupSupervisor();
 
     this.sessions = new Map();      // local id -> session
@@ -442,7 +464,7 @@ class WorkflowRun extends EventEmitter {
 
   emitEvent(type, data = {}) {
     const ev = { seq: ++this.seq, ts: new Date().toISOString(), run_id: this.runId, type, ...data };
-    if (type !== 'session.stream') { this.recent.push(ev); if (this.recent.length > 300) this.recent.shift(); }
+    if (type !== 'session.stream') { this.recent.push(ev); if (this.recent.length > 300) this.recent.shift(); this.trail.apply(ev); }
     this.emit('event', ev);
     return ev;
   }
@@ -503,6 +525,7 @@ class WorkflowRun extends EventEmitter {
       resumed_from: this.resume ? { run_id: this.resume.runId, step: this.resume.fromStep } : undefined,
       personas: Object.keys(this.personas).length ? this.personas : undefined,
       steps: this.wf.steps.map((s) => ({ id: s.id, type: s.type || 'agent', agent: stepAgentLabel(s) })),
+      groups: this.wf.groups,
     });
     for (const n of this.notices) this.emitEvent('log', { level: n.level || 'info', message: n.message });
     this.orchestrator = this.openSession({
@@ -1524,6 +1547,8 @@ ${stderr || stdout}`.slice(0, 1500)));
         // `wait:` steps: checks made without an agent turn, agent turns they asked for, steps they finished
         ...(Object.keys(this.probeStats).length ? { probes: this.probeStats } : {}),
         steps: Object.fromEntries(Object.entries(this.ctx.steps).map(([k, v]) => [k, { visits: v.visits, output: v.output }])),
+        // step visits in order with their agents (runs list); this event's own update lands in it
+        groups: this.wf.groups, progress: this.trail.steps,
         sessions,
       },
     });

@@ -55,7 +55,12 @@ const state = {
 //   run: { id, status, startedAt, finishedAt, mock, workflow, project, issue, inputs }
 //   sessions: id -> { ...snapshot, turnLog: Map, localOpenedAt }; steps: id -> { id, type, agent, visits, status }
 //   approvals: approval id -> approval.requested event (gates waiting)
-const newRunView = () => ({ run: null, sessions: new Map(), steps: new Map(), orchLog: [], events: [], selected: null, openDetails: new Set(), approvals: new Map() });
+//   trail: RunProgress.StepTrail from workflow.started on (null for a run picked up mid-way),
+//   groups: the workflow's `groups:`, openGroups: group name -> open, as toggled in the sidebar
+const newRunView = () => ({
+  run: null, sessions: new Map(), steps: new Map(), orchLog: [], events: [], selected: null, openDetails: new Set(), approvals: new Map(),
+  trail: null, groups: [], openGroups: new Map(), allSteps: false,
+});
 const NO_RUN = newRunView();
 const selectedView = () => state.runs.get(state.runId) || NO_RUN;
 for (const key of ['run', 'sessions', 'steps', 'orchLog', 'events', 'openDetails']) {
@@ -213,7 +218,7 @@ async function init() {
 }
 
 // Runs already in progress when the window opens (a reload, or the UI in a browser): listed in
-// the Run menu from the start; their details fill in from their next events.
+// the Run menu from the start; their details are replayed from their recorded events.
 async function loadActiveRuns() {
   let list = [];
   try { list = (await api.listActiveRuns?.()) || []; } catch { return; }
@@ -223,6 +228,7 @@ async function loadActiveRuns() {
     v.run = { ...runInfo(a), status: 'running' };
     state.runs.set(a.runId, v);
     if (!state.runId) state.runId = a.runId;
+    hydrateRun(a.runId);
   }
   scheduleRender();
 }
@@ -715,6 +721,7 @@ function runListRow(r, pv) {
         <span class="pr-meta"><label>tokens</label>${fmtTok(r.tokens?.total)}</span>
         <span class="pr-meta"><label>cost</label>${fmtUsd(r.costUsd)}</span>
         <span class="pr-chev" aria-hidden="true">${open ? '▾' : '▸'}</span>
+        ${runProgressStrip(r)}
       </div>
       ${open ? projectRunBody(r, pv) : ''}
     </div>`;
@@ -1537,7 +1544,7 @@ function getTurn(sess, n) {
 }
 
 // The view of an event's run. A run that started before this window opened (or reconnected) is
-// picked up from its next event: its earlier events are in its chat and on disk.
+// picked up from its next event, and rebuilt from its events.jsonl (hydrateRun).
 function viewOf(ev) {
   let v = state.runs.get(ev.run_id);
   if (!v) {
@@ -1551,9 +1558,35 @@ function viewOf(ev) {
         if (a && v.run) Object.assign(v.run, runInfo(a), { status: v.run.status });
         scheduleRender();
       }).catch(() => {});
+      hydrateRun(ev.run_id);
     }
   }
   return v;
+}
+
+// Runs picked up mid-way: their steps, sessions, trail and gates so far are replayed from the
+// recorded events; the live events that come in while the file is read wait in `hydrating`.
+const hydrating = new Map(); // run id -> live events held back
+let replaying = false;       // no toasts, dialogs or Run screen switches for past events
+async function hydrateRun(runId) {
+  if (hydrating.has(runId)) return;
+  hydrating.set(runId, []);
+  let recorded = [];
+  try { recorded = (await api.runEvents?.(runId)) || []; } catch { /* the live events only */ }
+  const live = hydrating.get(runId);
+  hydrating.delete(runId);
+  const v = state.runs.get(runId);
+  if (!v) return;
+  const replay = RunProgress.hydrationEvents(recorded, live);
+  if (replay.length > live.length) {
+    const { run } = v;
+    Object.assign(v, newRunView());
+    v.run = run; // runs:active details until workflow.started is replayed
+  }
+  replaying = true;
+  try { for (const ev of replay) onEvent(ev); } finally { replaying = false; }
+  // a gate waiting since before this window opened is asked like a new one
+  if (state.view === 'run' && state.runId === runId && $('#approval-modal').classList.contains('hidden')) openApproval();
 }
 
 // Workflow, project and issue of a run, from workflow.started or from runs:active.
@@ -1577,6 +1610,7 @@ function pruneRuns() {
 function onEvent(ev) {
   if (ev.type === 'workflow.started' || ev.type === 'workflow.finished') reportNotifyContext();
   const v = viewOf(ev);
+  if (!replaying && hydrating.has(ev.run_id)) { hydrating.get(ev.run_id).push(ev); return; }
   v.events.push(ev);
   const sess = ev.session_id ? v.sessions.get(ev.session_id) : null;
 
@@ -1585,8 +1619,10 @@ function onEvent(ev) {
       v.run = { ...runInfo(ev), status: 'running' };
       v.events = [ev];
       v.steps = new Map((ev.steps || []).map((s) => [s.id, { ...s, visits: 0, status: 'pending' }]));
+      v.trail = new RunProgress.StepTrail();
+      v.groups = ev.groups || [];
       // a new run takes the Run screen only from a run that is over
-      if (!isRunLive(state.runId) || state.runId === ev.run_id) state.runId = ev.run_id;
+      if (!replaying && (!isRunLive(state.runId) || state.runId === ev.run_id)) state.runId = ev.run_id;
       orch(ev, `workflow "${ev.workflow}" started ${ev.mock ? '(simulation)' : ''}`);
       pruneRuns();
       break;
@@ -1601,7 +1637,7 @@ function onEvent(ev) {
       if (state.approval?.run_id === ev.run_id) closeApproval();
       // the Run screen moves on to a run still in progress when the one it showed ends elsewhere
       if (state.runId === ev.run_id && state.view !== 'run' && liveRuns().length) state.runId = liveRuns()[0].run.id;
-      if (liveRuns().length) showToast(`${runLabel(v.run)}: ${statusLabel(v.run)}`, ev.error, ev.run_id);
+      if (liveRuns().length && !replaying) showToast(`${runLabel(v.run)}: ${statusLabel(v.run)}`, ev.error, ev.run_id);
       loadUsage();
       break;
 
@@ -1674,6 +1710,7 @@ function onEvent(ev) {
       orch(ev, `? approval requested at ${ev.step_id}`, 'warn');
       // asked right away only on the Run screen of this run; elsewhere a badge and a toast say it waits
       const shown = state.view === 'run' && state.runId === ev.run_id;
+      if (replaying) break; // hydrateRun asks the gates still waiting once the replay is over
       if (shown) openApproval(ev);
       else if (!window.duoShowsRun?.(ev.run_id) && !window.arenaShowsRun?.(ev.run_id) && !window.runChatShowsRun?.(ev.run_id)) {
         showToast(`Approval waiting: ${runLabel(v.run)}`, `Step ${ev.step_id}. Click to review it.`, ev.run_id, ev);
@@ -1719,10 +1756,12 @@ function onEvent(ev) {
     case 'supervisor.decision': {
       const target = ev.action === 'goto' && ev.goto ? ` ${ev.goto}` : '';
       orch(ev, `◆ supervisor → ${ev.action}${target}${ev.cause_class ? ` [${ev.cause_class}]` : ''} — ${ev.explanation || ''}${ev.note ? ` (${ev.note})` : ''}`, 'supervisor');
-      showToast(`◆ Supervisor on "${ev.step_id}"${liveRuns().length > 1 ? ` (${runLabel(v.run)})` : ''}: ${SUP_ACTIONS[ev.action] || ev.action}`, ev.explanation, ev.run_id);
+      if (!replaying) showToast(`◆ Supervisor on "${ev.step_id}"${liveRuns().length > 1 ? ` (${runLabel(v.run)})` : ''}: ${SUP_ACTIONS[ev.action] || ev.action}`, ev.explanation, ev.run_id);
       break;
     }
   }
+  // the run's row in the runs lists follows its steps from here, without a reload
+  if (v.trail?.apply(ev)) renderRunListsSoon();
   if (PROJECT_REFRESH_EVENTS.has(ev.type)) { loadProjectRunsThrottled(); loadWorkflowRunsThrottled(); }
   if (ev.type === 'workflow.finished' || ev.type === 'file.saved') loadArtifactsThrottled();
   scheduleRender();
@@ -1859,13 +1898,116 @@ function renderRunBanner() {
   $('#btn-banner-sup').onclick = () => openSupervisorForCurrent();
 }
 
+// The Run screen's steps: only those that ran, one collapsible section per workflow group (the
+// current step's group open), a step in no group on its own; "Show all steps" adds the others.
 function renderSteps() {
-  $('#steps').innerHTML = [...state.steps.values()].map((s) => `
+  const v = selectedView();
+  const all = [...v.steps.values()];
+  const shown = v.allSteps ? all : all.filter((s) => s.visits > 0);
+  const groupOf = new Map(v.groups.flatMap((g) => g.steps.map((id) => [id, g.name])));
+  const current = v.trail?.steps.at(-1)?.step || all.find((s) => s.status === 'running' || s.status === 'waiting')?.id;
+  const item = (s) => `
     <li class="${s.status}">
       <span class="dot"></span>
       <span>${esc(s.id)}<br><span class="kind">${s.type === 'human_approval' ? 'human approval' : esc(s.agent)}</span></span>
       <span class="visits">${s.visits ? '×' + s.visits : ''}</span>
-    </li>`).join('');
+    </li>`;
+  // in the workflow's step order: a group where its first shown step is
+  const sections = [];
+  const byGroup = new Map();
+  for (const s of shown) {
+    const name = groupOf.get(s.id);
+    if (name == null) { sections.push({ steps: [s] }); continue; }
+    if (!byGroup.has(name)) { byGroup.set(name, { name, steps: [] }); sections.push(byGroup.get(name)); }
+    byGroup.get(name).steps.push(s);
+  }
+  const html = sections.map((sec) => {
+    if (sec.name == null) return `<ol class="steps">${item(sec.steps[0])}</ol>`;
+    const open = v.openGroups.get(sec.name) ?? sec.steps.some((s) => s.id === current);
+    const st = sec.steps.some((s) => s.status === 'running') ? 'running' : sec.steps.some((s) => s.status === 'waiting') ? 'waiting' : sec.steps.some((s) => s.visits) ? 'done' : 'pending';
+    return `<details class="step-group ${st}" data-group="${esc(sec.name)}" ${open ? 'open' : ''}>
+      <summary><span class="dot"></span><b>${esc(sec.name)}</b><span class="muted small">${sec.steps.filter((s) => s.visits).length}/${sec.steps.length}</span></summary>
+      <ol class="steps">${sec.steps.map(item).join('')}</ol>
+    </details>`;
+  }).join('');
+  const hidden = all.length - all.filter((s) => s.visits > 0).length;
+  const toggle = hidden ? `<button type="button" class="link-btn small" data-all-steps>${v.allSteps ? 'Hide the steps that did not run' : `Show all steps (${hidden} not run)`}</button>` : '';
+  const box = $('#steps');
+  const out = (html || '<p class="muted small">No step has run yet.</p>') + toggle;
+  if (box.dataset.html === out) return;
+  box.dataset.html = out;
+  box.innerHTML = out;
+  box.querySelectorAll('.step-group > summary').forEach((sum) => (sum.onclick = () => {
+    v.openGroups.set(sum.parentElement.dataset.group, !sum.parentElement.open);
+  }));
+  const btn = box.querySelector('[data-all-steps]');
+  if (btn) btn.onclick = () => { v.allSteps = !v.allSteps; renderSteps(); };
+}
+
+// ---------------------------------------------------------------------------
+// Run progress in the runs lists: the groups a run visited, with their agents' avatars
+// ---------------------------------------------------------------------------
+let runListsFrame = 0;
+function renderRunListsSoon() {
+  if (runListsFrame) return;
+  runListsFrame = requestAnimationFrame(() => {
+    runListsFrame = 0;
+    if (workflowRunsVisible() && state.wr.runs) renderWorkflowRuns();
+    if (state.view === 'project' && state.pv?.runs) renderProjectView();
+  });
+}
+
+// Robot SVGs are large: one per provider/model/state, reused.
+const avatarCache = new Map();
+function robotAvatar(provider, model, st) {
+  const key = `${provider}|${model}|${st}`;
+  if (!avatarCache.has(key)) {
+    const variant = window.Robots ? Robots.variantFor(window.RunChatModel?.providerType(provider, model) || provider, model || '') : null;
+    avatarCache.set(key, variant ? Robots.svg(variant, st, { bubble: false, plaque: '' }) : '');
+  }
+  return avatarCache.get(key);
+}
+const PERSON_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8.5" r="4" fill="currentColor"/><path d="M4.5 21c0-4.2 3.4-7 7.5-7s7.5 2.8 7.5 7z" fill="currentColor"/></svg>';
+const ENGINE_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M4.9 19.1l2.8-2.8M16.3 7.7l2.8-2.8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+const CHIP_ROBOT_STATE = { running: 'thinking', waiting: 'waiting', failed: 'error', stopped: 'sleeping', done: 'idle' };
+const MAX_CHIPS = 8;
+
+function progressAvatar(a, chip) {
+  const tip = a.human
+    ? `${a.steps.join(', ')} · You (human gate)${a.durationMs ? ` · ${fmtDur(a.durationMs)}` : ''}`
+    : `${a.steps.join(', ')} · ${a.agent}${a.provider ? ` · ${a.provider}${a.model ? `/${a.model}` : ''}` : ''}${a.durationMs ? ` · ${fmtDur(a.durationMs)}` : ''} · ${fmtUsd(a.cost)}`;
+  // the last chip's working agents show the run's state; the others rest
+  const st = chip.status === 'done' ? 'idle' : CHIP_ROBOT_STATE[chip.status];
+  const art = a.human ? PERSON_SVG : a.provider ? robotAvatar(a.provider, a.model, st) : ENGINE_SVG;
+  return `<span class="rp-av${a.human ? ' human' : a.provider ? '' : ' engine'}" title="${esc(tip)}">${art}</span>`;
+}
+
+function progressChip(c) {
+  const label = {
+    done: '✓',
+    running: `${c.current}…`,
+    waiting: 'waiting for you',
+    failed: `✕ ${c.current}`,
+    stopped: `stopped at ${c.current}`,
+  }[c.status];
+  const agents = c.agents.length ? c.agents : [{ agent: 'orchestrator', steps: c.steps.map((e) => e.step), cost: 0, durationMs: 0 }];
+  const avs = agents.slice(0, 4).map((a) => progressAvatar(a, c)).join('') + (agents.length > 4 ? `<span class="rp-av rp-more" title="${esc(agents.slice(4).map((a) => a.agent).join(', '))}">+${agents.length - 4}</span>` : '');
+  return `<div class="rp-chip st-${c.status}${c.status === 'done' ? ' still' : ''}">
+    <div class="rp-avs">${avs}</div>
+    <div class="rp-name${c.grouped ? '' : ' mono'}">${esc(c.name)}${c.round > 1 ? ` <span class="rp-round">×${c.round}</span>` : ''}</div>
+    <div class="rp-state" title="${esc(c.steps.map((e) => e.step).join(' › '))}">${esc(label)}</div>
+  </div>`;
+}
+
+// The progress strip of a run's row: the live trail for a run this window follows from its start.
+function runProgressStrip(r) {
+  const live = r.current ? state.runs.get(r.runId) : null;
+  const steps = live?.trail ? live.trail.steps : r.progress;
+  if (!steps?.length) return '';
+  const status = live?.trail ? live.run?.status || r.status : r.status;
+  const chips = RunProgress.progressGroups(steps, r.groups || live?.groups, status);
+  const skipped = chips.length - MAX_CHIPS;
+  return `<div class="rp-strip">${skipped > 0 ? `<span class="rp-skip" title="${esc(chips.slice(0, skipped).map((c) => c.name).join(' › '))}">+${skipped}</span><span class="rp-sep">›</span>` : ''}${chips.slice(Math.max(0, skipped)).map(progressChip).join('<span class="rp-sep">›</span>')}</div>`;
 }
 
 function renderSessions() {

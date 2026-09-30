@@ -218,6 +218,19 @@ agents:
     system_prompt: |
       You verify an arena's final document. You check it, you do not rewrite it.
 
+# Progress shown in the runs list and the Run screen (does not change the graph).
+groups:
+  - name: Proposals
+    steps: [compete]
+  - name: Critique
+    steps: [critique]
+  - name: Synthesis
+    steps: [synthesize]
+  - name: Verify
+    steps: [verify]
+  - name: Review
+    steps: [review]
+
 # -----------------------------------------------------------------------------
 # Proposals are anonymized as "Proposal N" in an order shuffled per run
 # (`| shuffle(run_id)`), the same order in every step, revealed only at `review`.
