@@ -241,7 +241,7 @@ function columnOf(issue, latest, queued, local) {
  * and its column: todo | in_progress | waiting (a run stopped at a human gate) | local (merged
  * into the local base, not pushed yet) | done.
  * @param {object[]} issues from fetchIssues
- * @param {{ runId, workflow, status, startedAt, mock?, waiting?, issue?, task?, inputs?, localMerge? }[]} runs the project's runs
+ * @param {{ runId, workflow, status, startedAt, mock?, waiting?, issue?, task?, inputs?, localMerge?, recovery? }[]} runs the project's runs
  * @param {{ items: object[] } | null} queue the project's queue (readQueue)
  * @param {{ commits: { sha }[], issues: number[], error? } | null} local the project's commits not pushed (readLocal)
  */
@@ -256,6 +256,8 @@ function linkRuns(issues, runs, queue = null, local = null) {
         return {
           runId: r.runId, workflow: r.workflow, status: r.status, startedAt: r.startedAt, mock: !!r.mock, waiting: !!r.waiting,
           ...(r.localMerge ? { localMerge: r.localMerge } : {}), ...(others.length ? { groupedWith: others } : {}),
+          // the supervisor sent the run back after a failed merge (runs.js fromEvents)
+          ...(r.recovery ? { recovery: r.recovery } : {}),
         };
       });
     const at = items.findIndex((q) => itemIssues(q).some((x) => x.number === issue.number));

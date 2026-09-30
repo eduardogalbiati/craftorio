@@ -14,10 +14,10 @@ const SESSION_EVENTS = new Set(['session.opened', 'session.message_received', 's
 // What a run without a (complete) summary.json needs from its events.jsonl: its sessions, its
 // step trail (progress by group) and its local merge (runs recorded before summary.local_merge),
 // cached by mtime+size so an unchanged file is read once.
-const derived = new Map(); // events.jsonl path → { key, sessions, progress, localMerge }
+const derived = new Map(); // events.jsonl path → { key, sessions, progress, localMerge, recovery }
 function fromEvents(file) {
   let st;
-  try { st = fs.statSync(file); } catch { return { sessions: [], progress: [], localMerge: null }; }
+  try { st = fs.statSync(file); } catch { return { sessions: [], progress: [], localMerge: null, recovery: null }; }
   const key = `${st.mtimeMs}:${st.size}`;
   const hit = derived.get(file);
   if (hit?.key === key) return hit;
@@ -29,7 +29,9 @@ function fromEvents(file) {
   }
   const merged = events.findLast((e) => e.type === 'worktree.merged');
   const localMerge = merged ? { branch: merged.branch, base: merged.base, commit: merged.commit } : null;
-  const out = { key, sessions: [...byId.values()], progress: trailOf(events), localMerge };
+  // the supervisor's latest recovery from a failed merge/action ("went back to develop at 00:10 because ...")
+  const recovery = events.findLast((e) => e.type === 'supervisor.decision' && e.kind === 'action_error')?.record || null;
+  const out = { key, sessions: [...byId.values()], progress: trailOf(events), localMerge, recovery };
   derived.set(file, out);
   return out;
 }
@@ -119,6 +121,7 @@ function readRun(runsDir, runId) {
     issues: issuesOf(summary) || issuesOf(started),
     task: firstText(inputs),
     localMerge,
+    recovery: fromEvents(path.join(dir, 'events.jsonl')).recovery,
     error,
     inputs,
     runDir: dir,

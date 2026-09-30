@@ -202,7 +202,10 @@
 
     // `wait:` the engine checked the PR/MR or CI run itself, without an agent turn
     'step.probe'(ev) {
-      const then = { poll: 'no agent turn', output: 'step finished by the orchestrator', agent: `calling ${ev.step_id}'s agent` }[ev.action] || ev.action;
+      const then = {
+        poll: 'no agent turn', output: 'step finished by the orchestrator', agent: `calling ${ev.step_id}'s agent`,
+        check: 'before asking for approval', precheck: 'right before the merge',
+      }[ev.action] || ev.action;
       this.system(ev, ev.action === 'agent' ? 'transition' : 'loop', `Orchestrator check (${ev.probe}) on ${ev.step_id}: ${clip(String(ev.detail || ev.state), 200)} · ${then}`);
     },
 
@@ -221,8 +224,9 @@
 
     'approval.resolved'(ev) {
       const gate = this.gates.get(ev.approval_id);
-      const choice = String(ev.choice ?? ev.approved);
-      const label = gate?.choices.find((c) => String(c.id) === choice)?.label || choice;
+      // withdrawn: the PR/MR stopped being mergeable while the gate was open (the engine's check)
+      const choice = ev.withdrawn ? 'withdrawn' : String(ev.choice ?? ev.approved);
+      const label = ev.withdrawn ? `Withdrawn before anyone answered: ${ev.reason || 'the check failed'}` : gate?.choices.find((c) => String(c.id) === choice)?.label || choice;
       if (gate) {
         gate.resolved = { choice, label };
         this.touch(gate);
@@ -239,7 +243,8 @@
       this.active.delete(`supervisor:${ev.step_id}`);
       this.add({
         kind: 'supervisor', ts: ev.ts, stepId: ev.step_id, action: ev.action, goto: ev.goto || null,
-        explanation: String(ev.explanation || ''), instruction: String(ev.instruction || ''), causeClass: ev.cause_class || null,
+        // a failed merge/action: the record says where the run went back to, when and why
+        explanation: String(ev.record || ev.explanation || ''), instruction: String(ev.instruction || ''), causeClass: ev.cause_class || null,
       });
     },
 

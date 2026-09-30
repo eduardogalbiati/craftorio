@@ -299,7 +299,8 @@
     if (!r) return '';
     const notPushed = i.column === 'local'
       ? `<span class="badge bl-notpushed" title="Merged into the local ${esc(r.localMerge?.base || 'base')}; the issue closes when it is pushed (Push, above)">not pushed</span>` : '';
-    return `${runLink(r)}${notPushed}${groupBadge(r.groupedWith)}${i.column === 'waiting' ? '<button class="btn sm primary" type="button" data-gate>Review approval</button>' : ''}`;
+    const recovered = r.recovery ? `<span class="badge bl-recovered" title="${esc(`Supervisor: ${r.recovery}`)}">sent back after a failed merge</span>` : '';
+    return `${runLink(r)}${notPushed}${recovered}${groupBadge(r.groupedWith)}${i.column === 'waiting' ? '<button class="btn sm primary" type="button" data-gate>Review approval</button>' : ''}`;
   }
 
   function issueRow(i) {

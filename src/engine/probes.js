@@ -8,12 +8,15 @@
 //   pr_changes    open | merged | closed, with a fingerprint of what the agent reacts to (head commit,
 //                 mergeability, review decision, comments and reviews, check results)
 //   workflow_run  pending | passed | failed
+//   pr_mergeable  passed (open, no conflict, checks green or none) | conflict | failed | pending
+//                 | blocked (branch protection: a required review or check) | behind | merged | closed:
+//                 the check right before a merge (`check:` on a gate, `precheck:` on a transition)
 // The engine decides what each state means (poll again, finish the step, or call the agent).
 
 const { execFile } = require('child_process');
 const { resolveCommand } = require('./providers');
 
-const PROBES = ['pr_checks', 'pr_changes', 'workflow_run'];
+const PROBES = ['pr_checks', 'pr_changes', 'workflow_run', 'pr_mergeable'];
 
 // URL (agent output) → { platform, host, repo, kind: 'pr' | 'run', id }, or null.
 // GitHub: https://host/owner/repo/pull/12, https://host/owner/repo/actions/runs/123[/job/4]
@@ -66,6 +69,21 @@ function ghPrState(pr) {
   else if (n.pending) [state, detail] = ['pending', `${n.pending} of ${checks.length} checks still running`];
   else [state, detail] = ['passed', `all ${checks.length} checks passed`];
   return { state, detail, fingerprint, head: pr.headRefOid || null };
+}
+
+// pr_mergeable: the PR/MR state (ghPrState / glMrState) plus what only blocks the merge itself.
+// GitHub: mergeStateStatus BLOCKED (required review or check) / BEHIND (base protection wants it
+// up to date) / UNKNOWN (GitHub is still computing it: pending). GitLab: detailed_merge_status.
+function mergeableState(r, { mergeState, glStatus } = {}) {
+  if (['merged', 'closed', 'conflict', 'failed', 'pending'].includes(r.state)) return { state: r.state, detail: r.detail, head: r.head };
+  const ms = String(mergeState || '').toUpperCase();
+  const gl = String(glStatus || '').toLowerCase();
+  if (ms === 'BEHIND' || gl === 'need_rebase') return { state: 'behind', detail: 'the branch is behind its base and the base requires it up to date', head: r.head };
+  if (ms === 'BLOCKED' || ['not_approved', 'discussions_not_resolved', 'blocked_status', 'requested_changes'].includes(gl)) {
+    return { state: 'blocked', detail: `the merge is blocked by the base's protection (${ms || gl})`, head: r.head };
+  }
+  if (ms === 'UNKNOWN' || ['checking', 'unchecked', 'preparing'].includes(gl)) return { state: 'pending', detail: 'the mergeability is still being computed', head: r.head };
+  return { state: 'passed', detail: r.state === 'none' ? 'mergeable, no check registered' : `mergeable, ${r.detail}`, head: r.head };
 }
 
 // `gh run view --json status,conclusion,url,name`
@@ -147,14 +165,17 @@ async function runProbe({ probe, target, cwd, signal, quota }) {
     const repo = `${t.host}/${t.repo}`;
     if (t.kind === 'run') return ghRunState(await run('gh', ['run', 'view', String(t.id), '--repo', repo, '--json', 'status,conclusion,url,name'], opts));
     const fields = probe === 'pr_changes' ? `${GH_PR_FIELDS},reviewDecision,comments,reviews` : GH_PR_FIELDS;
-    const state = ghPrState(await run('gh', ['pr', 'view', String(t.id), '--repo', repo, '--json', fields], opts));
+    const pr = await run('gh', ['pr', 'view', String(t.id), '--repo', repo, '--json', fields], opts);
+    const state = ghPrState(pr);
+    if (probe === 'pr_mergeable') return mergeableState(state, { mergeState: pr.mergeStateStatus });
     return probe === 'pr_checks' ? withQuota(state, t, quota) : state;
   }
   const repo = `https://${t.host}/${t.repo}`;
   if (t.kind === 'run') {
     return glPipelineState(await run('glab', ['api', `projects/${encodeURIComponent(t.repo)}/pipelines/${t.id}`, '--hostname', t.host], opts));
   }
-  return glMrState(await run('glab', ['mr', 'view', String(t.id), '--repo', repo, '--output', 'json'], opts));
+  const mr = await run('glab', ['mr', 'view', String(t.id), '--repo', repo, '--output', 'json'], opts);
+  return probe === 'pr_mergeable' ? mergeableState(glMrState(mr), { glStatus: mr.detailed_merge_status }) : glMrState(mr);
 }
 
-module.exports = { PROBES, parseTarget, ghPrState, ghRunState, glMrState, glPipelineState, withQuota, runProbe };
+module.exports = { PROBES, parseTarget, ghPrState, ghRunState, glMrState, glPipelineState, mergeableState, withQuota, runProbe };

@@ -4,6 +4,8 @@
 // - by the engine, when a step fails during a run (src/engine/workflow.js, superviseFailure):
 //   it explains the failure and picks a recovery the engine validates; and when an agent is silent
 //   while a command waits (superviseIdle): keep waiting, or interrupt the turn and retry the step;
+//   and when a transition's action or pre-merge check fails (superviseActionError): go back to a
+//   recovery step with an instruction, or escalate to the failure gate with a diagnosis;
 // - by a person, from the UI, for any run (analyzeRun): it explains what happened and recommends
 //   actions such as resuming the run from a step (resumeSpec) with an instruction.
 
@@ -36,6 +38,21 @@ const IDLE_SCHEMA = {
     instruction: { type: 'string' },
   },
 };
+
+// Decision on a failed transition action (a merge, a deploy command) or a pre-merge check, when the
+// transition names recovery steps (`recover:`). `goto` first: the mock's default, the known conflict case.
+// `goto` is limited to those steps; `escalate` sends the run to the transition's failure gate.
+const actionSchema = (recover) => ({
+  type: 'object',
+  required: ['explanation', 'action'],
+  properties: {
+    explanation: { type: 'string' },
+    cause_class: { type: 'string', enum: ['conflict', 'not_ready', 'environment', 'unknown'] },
+    action: { type: 'string', enum: ['goto', 'escalate'] },
+    goto: { type: 'string', enum: recover },
+    instruction: { type: 'string' },
+  },
+});
 
 // Analysis asked for by a person.
 const ANALYSIS_SCHEMA = {
@@ -79,9 +96,9 @@ function timelineLine(ev) {
     case 'step.finished': return `${t} ✓ ${ev.step_id}${ev.error ? ' FAILED' : ''}: ${clip(JSON.stringify(ev.output), 400)}`;
     case 'step.transition': return `${t} → ${ev.to} [${ev.when}]`;
     case 'approval.requested': return `${t} ? human approval at ${ev.step_id}: ${clip(ev.message, 200)}`;
-    case 'approval.resolved': return `${t}   human decided: ${ev.choice ?? (ev.approved ? 'approved' : 'rejected')}`;
+    case 'approval.resolved': return ev.withdrawn ? `${t}   approval withdrawn by the engine's check: ${ev.reason}` : `${t}   human decided: ${ev.choice ?? (ev.approved ? 'approved' : 'rejected')}`;
     case 'log': return ev.level === 'info' ? null : `${t} [${ev.level}] ${clip(ev.message, 500)}`;
-    case 'supervisor.decision': return `${t} supervisor on ${ev.step_id}: ${ev.action}${ev.goto ? ` → ${ev.goto}` : ''} — ${clip(ev.explanation, 300)}`;
+    case 'supervisor.decision': return `${t} supervisor on ${ev.step_id}: ${ev.action}${ev.goto ? ` → ${ev.goto}` : ''} — ${clip(ev.record || ev.explanation, 300)}`;
     case 'budget.exceeded': return `${t} budget exceeded for ${ev.provider}`;
     case 'workflow.finished': return `${t} ■ ${ev.status}${ev.error ? `: ${ev.error}` : ''}`;
     default: return null;
@@ -108,6 +125,22 @@ function decisionPrompt({ wf, step, error, answer, allowed, events, previous, ha
     `- goto: continue at one of these steps: ${allowed.length ? allowed.join(', ') : '(none)'}.`,
     '- ask_human: stop and ask the person (explain what they need to decide or change).',
     '- fail: end the run.',
+    'Explain in the language of the workflow\'s task, for the person running it.',
+  ].filter(Boolean).join('\n');
+}
+
+/** Prompt for a decision on a failed transition action or pre-merge check (engine-side). */
+function actionErrorPrompt({ wf, step, error, check, recover, gate, events, handoffs }) {
+  return [
+    `The action of a transition of the workflow "${wf.metadata?.name}" failed (step "${step.id}"). Decide where the run goes, following the run-supervisor skill.`,
+    wf.metadata?.description ? `Workflow: ${wf.metadata.description}` : '',
+    `\n## Error\n${clip(error, 3000)}`,
+    check ? `\n## PR/MR state checked by the engine\n${check.state}: ${check.detail}` : '',
+    handoffs?.length ? `\n## The agents' handoff notes (their own summary of where they are, latest turn)\n${handoffs.map((h) => `### ${h.agent} (step ${h.step}, visit ${h.visit})\n${clip(h.text, 3000)}`).join('\n\n')}` : '',
+    `\n## Recent timeline\n${timeline(events, 40) || '(empty)'}`,
+    `\n## Your options (the engine validates them)`,
+    `- goto: a case you recognize that the workflow's agents can fix (e.g. the PR/MR conflicts with its base because another change was merged meanwhile): go back to one of ${recover.join(', ')}; \`instruction\` is added to that step's prompt. Give the evidence (the error text, the PR/MR state), never a code fix. The change goes through its checks and the human approval again.`,
+    `- escalate: an unknown case, or one no agent can fix (permissions, the platform down): the run stops at the gate "${gate}", where the person sees your \`explanation\` as the diagnosis.`,
     'Explain in the language of the workflow\'s task, for the person running it.',
   ].filter(Boolean).join('\n');
 }
@@ -269,4 +302,4 @@ async function analyzeRun({ runDir, question, workflowsDir, skillsDirs, resolveC
   return { analysis, artifactPath, model, costUsd: cost, steps: (cfg.wf.steps || []).map((x) => x.id) };
 }
 
-module.exports = { analyzeRun, supervisorConfig, DECISION_SCHEMA, IDLE_SCHEMA, ANALYSIS_SCHEMA, decisionPrompt, idlePrompt, runReport, analysisMarkdown, resumeSpec, timeline, readEvents };
+module.exports = { analyzeRun, supervisorConfig, DECISION_SCHEMA, IDLE_SCHEMA, ANALYSIS_SCHEMA, actionSchema, decisionPrompt, actionErrorPrompt, idlePrompt, runReport, analysisMarkdown, resumeSpec, timeline, readEvents };

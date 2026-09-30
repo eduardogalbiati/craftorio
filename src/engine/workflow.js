@@ -12,10 +12,11 @@ const { runTurn, refreshWindowsPath, isRetryable, isPermissionDenial, sleep, emp
 const { resolveSkill, skillPrompt } = require('../skills');
 const { providerId, sessionCost, totalTokens, WARN_AT } = require('../usage');
 const supervisor = require('../supervisor');
-const { prepareWorktree, removeWorktree, mergeLocally, currentBranch } = require('./worktree');
+const { prepareWorktree, removeWorktree, mergeLocally, currentBranch, git } = require('./worktree');
 const capabilities = require('./capabilities');
 const { stopProcessesIn } = require('./processes');
-const { PROBES, runProbe } = require('./probes');
+const { PROBES, runProbe, parseTarget } = require('./probes');
+const mergeQueue = require('./merge-queue');
 const { IdleWatch } = require('./idle');
 const testPaths = require('./test-paths');
 const { StepTrail } = require('../renderer/run-progress-model');
@@ -128,7 +129,32 @@ function loadWorkflow(file) {
       if (w.grace !== undefined && parseDuration(w.grace, null) == null) throw new Error(`Step "${s.id}": wait.grace must be a duration such as 10m.`);
     }
     if (s.choices && s.type !== 'human_approval') throw new Error(`Step "${s.id}": choices is only valid for human_approval.`);
+    // a deterministic PR/MR check: `check:` before a gate opens, `precheck:` before a transition's action
+    const validateCheck = (c, what) => {
+      if (!c || typeof c !== 'object' || !PROBES.includes(c.probe) || !c.target) throw new Error(`Step "${s.id}": ${what} needs a probe (${PROBES.join(', ')}) and a target.`);
+    };
+    // `recover:` steps the supervisor may send the run back to after a failed action or check
+    const validateRecover = (recover, failTo, what) => {
+      if (recover === undefined) return;
+      if (!Array.isArray(recover) || !recover.length) throw new Error(`Step "${s.id}": ${what}.recover must be a non-empty list of steps.`);
+      if (!failTo) throw new Error(`Step "${s.id}": ${what}.recover needs a failure route (on_error / on_fail) for when the supervisor does not recover.`);
+      for (const r of recover) {
+        const target = wf.steps.find((x) => x.id === r);
+        if (!target || target.type === 'human_approval') throw new Error(`Step "${s.id}": ${what}.recover must list agent steps ("${r}" is not one).`);
+      }
+    };
+    if (s.check !== undefined) {
+      if (s.type !== 'human_approval') throw new Error(`Step "${s.id}": check is only valid for human_approval.`);
+      validateCheck(s.check, 'check');
+      if (s.check.on_fail && !ids.has(s.check.on_fail)) throw new Error(`Step "${s.id}" points to unknown step "${s.check.on_fail}".`);
+      validateRecover(s.check.recover, s.check.on_fail, 'check');
+    }
     for (const t of s.transitions || []) {
+      if (t.precheck !== undefined) {
+        if (t.precheck === true) { if (!s.check) throw new Error(`Step "${s.id}": precheck: true reuses the step's check, which it does not have.`); } else validateCheck(t.precheck, 'precheck');
+      }
+      validateRecover(t.recover, t.on_error, 'transition');
+      if (t.set !== undefined && (!t.set || typeof t.set !== 'object' || Array.isArray(t.set))) throw new Error(`Step "${s.id}": transition set must be a map of run variables.`);
       for (const target of [t.goto, t.on_exhausted, t.on_error, t.loop?.on_exhausted, s.goal?.on_exhausted, s.loop?.on_exhausted, s.on_error].filter(Boolean)) {
         if (!ids.has(target) && target !== 'end' && target !== 'fail') throw new Error(`Step "${s.id}" points to unknown step "${target}".`);
       }
@@ -215,6 +241,7 @@ const PROBE_WHAT = {
   pr_checks: 'the PR/MR checks and mergeability',
   pr_changes: 'the PR/MR (new commits, comments, reviews, checks, mergeability)',
   workflow_run: 'the CI run',
+  pr_mergeable: 'whether the PR/MR can be merged',
 };
 // A PR/MR with no check registered yet is polled this long after the agent's last turn (the push),
 // then the agent is called to find out why (`wait.grace`).
@@ -225,6 +252,9 @@ const MOCK_PROBES = {
   pr_checks: ['pending', 'failed', 'pending', 'passed'],
   pr_changes: ['unchanged', 'changed'],
   workflow_run: ['pending', 'passed'],
+  // the check right before a merge (`check:` / `precheck:`): mergeable; a conflict is simulated with
+  // mockSequences.probes: { '<step>:check': [...], '<step>:precheck': [...] }
+  pr_mergeable: ['passed'],
 };
 
 // Instructions in the style of Claude Code's /goal and /loop. The engine is what actually
@@ -382,6 +412,8 @@ class WorkflowRun extends EventEmitter {
       feedback: [],
       // the step that ran before the current one (null for the first)
       previous_step: null,
+      // run variables set by transitions (`set: { name: value }`), e.g. what the next checks cover
+      vars: {},
       // folder of a skill (workspace first, then bundled), e.g. to run its script in an action
       skill_dir: (name) => resolveSkill(this.skillsDirs, name).path,
     };
@@ -726,7 +758,9 @@ class WorkflowRun extends EventEmitter {
 
     let output, scope;
     if (step.type === 'human_approval') {
-      const { answer, feedback } = await this.requestApproval(step);
+      const gate = await this.openGate(step, t0);
+      if (gate.recover) return gate.recover;
+      const { answer, feedback } = gate;
       if (step.choices) {
         output = { choice: answer, feedback };
         scope = { ...this.ctx, output, choice: answer, feedback };
@@ -792,19 +826,30 @@ class WorkflowRun extends EventEmitter {
       if (!evalExpr(t.when, scope)) continue;
       // an action that renders empty (a conditional one whose condition is false) runs nothing
       const action = t.action ? render(t.action, scope).trim() : '';
-      try {
+      // `precheck:` the PR/MR is checked right before the action (`true` = the gate's own `check:`)
+      const precheck = t.precheck === true ? step.check : t.precheck || null;
+      const act = async () => {
+        if (precheck) await this.runCheck(precheck, `${step.id}:precheck`, scope, { failIfNot: true });
         if (action) await this.runAction(action);
         // `merge: local`: the engine merges the run's branch into the local base (no push, no PR)
         if (t.merge === 'local') await this.mergeWorktreeLocally();
+      };
+      try {
+        // a merge (checked, or local) waits for the other runs' merges into the same repository
+        if (precheck || t.merge === 'local') {
+          const key = this.mergeKey(precheck, scope);
+          await mergeQueue.serialize(key, act);
+          mergeQueue.notifyMerged({ key, runId: this.runId });
+        } else await act();
       } catch (e) {
-        // `on_error: <step>` on the transition: a failed action or merge goes there (the error is
-        // in the template context as `action_error`) instead of ending the run
+        // `on_error: <step>` on the transition: a failed check, action or merge goes there (the error
+        // is in the template context as `action_error`) instead of ending the run; with `recover:`
+        // the supervisor decides first whether to go back to one of those steps
         if (!t.on_error || this.abort.signal.aborted) throw e;
-        this.ctx.action_error = { step: step.id, message: e.message };
-        this.emitEvent('log', { level: 'warn', message: `${step.id}: ${e.message} → ${t.on_error}` });
-        this.emitEvent('step.transition', { from: step.id, to: t.on_error, when: 'on_error' });
-        return t.on_error;
+        return this.recoverFromActionError(step, { on_error: t.on_error, recover: t.recover }, e);
       }
+      // `set:` run variables for the next steps' templates (`vars.<name>`)
+      for (const [k, v] of Object.entries(t.set || {})) this.ctx.vars[k] = typeof v === 'string' ? render(v, scope).trim() : v;
       // limits first: once max_visits / loop.max_iterations is reached the flow goes to
       // on_exhausted and the delegation is skipped (nothing would check that fix any more)
       let target = this.applyCounters(step, t);
@@ -913,6 +958,139 @@ class WorkflowRun extends EventEmitter {
     const n = (this.mockProbeCalls[stepId] = (this.mockProbeCalls[stepId] || 0) + 1);
     const state = seq[Math.min(n - 1, seq.length - 1)];
     return Promise.resolve({ state, detail: `(simulated) ${probe}: ${state}` });
+  }
+
+  // ---- merge checks and the recovery route of a failed action (#69) ------------------------------
+  // `check:` / `precheck:` { probe, target }: one deterministic probe (no agent, no tokens). Its
+  // result is `check` in the template context ({ state, detail, target, checked_at }); a probe that
+  // cannot run is state `error`. failIfNot: anything but `passed` throws (with `check` on the error).
+  async runCheck(c, step, kind, scope, { failIfNot = false } = {}) {
+    const target = render(c.target, scope).trim();
+    let r;
+    try {
+      if (!target) throw new Error(`${c.probe}: no target (${c.target} is empty)`);
+      r = await this.probe({ probe: c.probe, target, cwd: this.ctx.worktree_dir || undefined, signal: this.abort.signal, stepId: `${step.id}:${kind}` });
+    } catch (e) {
+      r = { state: 'error', detail: e.message };
+    }
+    const check = { state: r.state, detail: r.detail || r.state, target, checked_at: new Date().toISOString() };
+    this.ctx.check = check;
+    this.emitEvent('step.probe', { step_id: step.id, probe: c.probe, target, state: check.state, detail: check.detail, action: kind });
+    if (failIfNot && check.state !== 'passed') {
+      throw Object.assign(new Error(`${target} cannot be merged right now (${check.state}): ${check.detail}. The merge was not attempted.`), { check });
+    }
+    return check;
+  }
+
+  // The merge queue's key: the PR/MR's repository, else the run's local repository.
+  mergeKey(c, scope) {
+    const t = c && parseTarget(render(c.target, scope).trim());
+    if (t) return `${t.host}/${t.repo}`.toLowerCase();
+    return this.worktree?.repo ? path.resolve(this.worktree.repo).toLowerCase() : 'default';
+  }
+
+  // A gate with `check:` (approve_merge): the PR/MR is checked right before the gate opens (its
+  // message shows `check`), and again each time another run merges into the same repository while
+  // it is open. With `check.on_fail`, a PR/MR that is not mergeable never reaches the person: the
+  // gate is not opened (or is withdrawn) and the run takes the recovery route (recoverFromActionError).
+  // A check that could not run (`error`) opens the gate anyway; the approved merge checks again.
+  // Resolves to the approval ({ answer, feedback }) or { recover: <next step> }.
+  async openGate(step, t0) {
+    const c = step.check;
+    if (!c) return this.requestApproval(step);
+    const failed = (r) => !!c.on_fail && !['passed', 'error'].includes(r.state);
+    const first = await this.runCheck(c, step, 'check', this.ctx);
+    if (failed(first)) return { recover: await this.gateCheckFailed(step, first, t0) };
+    const pending = this.requestApproval(step);
+    const id = `a${this.nApproval}`;
+    const key = this.mergeKey(c, this.ctx);
+    const off = mergeQueue.onMerged(async (m) => {
+      if (m.runId === this.runId || m.key !== key || !this.approvals.has(id)) return;
+      try {
+        const again = await this.runCheck(c, step, 'check', this.ctx);
+        if (failed(again)) this.withdrawApproval(id, again);
+      } catch (e) {
+        this.emitEvent('log', { level: 'warn', message: `${step.id}: could not check the PR/MR again after another merge: ${e.message}` });
+      }
+    });
+    try {
+      const res = await pending;
+      return res.withdrawn ? { recover: await this.gateCheckFailed(step, res.withdrawn, t0) } : res;
+    } finally {
+      off();
+    }
+  }
+
+  async gateCheckFailed(step, check, t0) {
+    const st = this.ctx.steps[step.id];
+    st.output = { check, opened: false };
+    this.emitEvent('step.finished', { step_id: step.id, visit: st.visits, iteration: st.iteration, output: st.output, duration_ms: Date.now() - t0, error: true });
+    const e = Object.assign(new Error(`${check.target} cannot be merged (${check.state}): ${check.detail}. The approval was not asked.`), { check });
+    return this.recoverFromActionError(step, { on_error: step.check.on_fail, recover: step.check.recover }, e);
+  }
+
+  // An open gate whose PR/MR stopped being mergeable (another run merged): nobody approves it.
+  withdrawApproval(id, check) {
+    const a = this.approvals.get(id);
+    if (!a) return;
+    this.approvals.delete(id);
+    this.emitEvent('approval.resolved', { approval_id: id, withdrawn: true, by: 'check', reason: `${check.state}: ${check.detail}` });
+    this.setStatus(this.orchestrator, 'active');
+    a.resolve({ withdrawn: check });
+  }
+
+  // A failed transition action / merge / check with an error route. `action_error` in the template
+  // context: { step, message, at, check?, head?, supervisor?, diagnosis? }. With `recover:`, the
+  // supervisor decides first (superviseActionError): back to one of those steps, with its record in
+  // `action_error.supervisor`, or the failure route (`on_error` / `check.on_fail`, a gate) with its
+  // diagnosis. Without a supervisor (or interventions left) the failure route is taken.
+  async recoverFromActionError(step, route, e) {
+    const err = { step: step.id, message: e.message, at: new Date().toISOString(), ...(e.check ? { check: e.check } : {}) };
+    // the branch head the failure left (a failed local merge leaves the branch as it was): the last
+    // checked commit, so the next review can cover only what the resolution changes
+    if (this.worktree && !this.mock) {
+      const head = await git(['rev-parse', 'HEAD'], this.worktree.dir).catch(() => null);
+      if (head) err.head = head;
+    }
+    this.ctx.action_error = err;
+    let target = route.on_error;
+    const d = route.recover?.length ? await this.superviseActionError(step, route, e) : null;
+    if (d?.action === 'goto') {
+      target = d.goto;
+      err.supervisor = { goto: d.goto, explanation: d.explanation, instruction: d.instruction || '', record: d.record };
+    } else if (d) {
+      err.diagnosis = d.explanation;
+    }
+    this.emitEvent('log', { level: 'warn', message: `${step.id}: ${e.message} → ${target}` });
+    this.emitEvent('step.transition', { from: step.id, to: target, when: d?.action === 'goto' ? 'supervisor: goto' : 'on_error' });
+    return target;
+  }
+
+  async superviseActionError(step, route, e) {
+    const cfg = this.supervisorCfg;
+    if (!cfg) return null;
+    if (this.supervisorUsed >= cfg.total) {
+      this.emitEvent('log', { level: 'warn', message: `Supervisor: no more interventions allowed; ${step.id} goes to ${route.on_error}.` });
+      return null;
+    }
+    this.supervisorUsed++;
+    const st = this.ctx.steps[step.id];
+    st.actionChecks = (st.actionChecks || 0) + 1;
+    this.emitEvent('supervisor.started', { step_id: step.id, kind: 'action_error', error: e.message });
+    const handoffs = [...this.handoffNotes.entries()].map(([agent, n]) => ({ agent, ...n }));
+    const prompt = supervisor.actionErrorPrompt({ wf: this.wf, step, error: e.message, check: e.check, recover: route.recover, gate: route.on_error, events: this.recent, handoffs });
+    const d = await this.askSupervisor(step, prompt, supervisor.actionSchema(route.recover), st.actionChecks);
+    if (!d) return null;
+    const back = d.action === 'goto' && route.recover.includes(d.goto);
+    const at = new Date().toISOString().slice(11, 16);
+    const record = back ? `went back to ${d.goto} at ${at} UTC because ${d.explanation}` : `stopped at ${route.on_error} at ${at} UTC: ${d.explanation}`;
+    this.emitEvent('supervisor.decision', {
+      step_id: step.id, kind: 'action_error', action: back ? 'goto' : 'escalate', goto: back ? d.goto : route.on_error,
+      cause_class: d.cause_class || null, explanation: d.explanation, instruction: d.instruction || null, record,
+      ...(d.action === 'goto' && !back ? { note: `"${d.goto}" is not a recovery step` } : {}),
+    });
+    this.logDecisions('supervisor', step.id, [['recover', record, d.explanation, e.check ? `${e.check.state}: ${e.check.detail}` : e.message.slice(0, 300), back ? `goto ${d.goto}` : `gate ${route.on_error}`]]);
+    return { ...d, action: back ? 'goto' : 'escalate', record };
   }
 
   applyCounters(step, t) {
