@@ -267,6 +267,9 @@ steps:
       The reviewer requested these changes (iteration {{ loop.iteration }}):
       {{ steps.code_review.output.findings | to_yaml }}
       Fix the blocking items, make a new commit and answer each one.
+      A finding that needs no production change (it asks for tests or screenshots, which the
+      test writer owns, or you disagree with it): answer it in `summary` with the reason, make no
+      empty commit, and set `no_change: true` when no finding of this round needed a code change.
       {% endif %}
       {% if not steps.develop.output %}
       Before changing code: create your branch where the worktree starts (the local
@@ -286,6 +289,8 @@ steps:
         # for the test writer: behaviours, edge cases and files to test
         test_notes:    { type: string }
         committed:     { type: boolean }
+        # a review round answered without a production change: back to the reviewer with the answer
+        no_change:     { type: boolean }
         commit_sha:    { type: string }
         notes:         { type: string }
         # a run for several issues (inputs.issues): what was done for each one
@@ -302,6 +307,10 @@ steps:
       # an issue of the group could not be done: the owner decides (once) whether the run goes on without it
       - when: "output.committed and inputs.issues | length > 1 and not steps.issue_not_done.output and (output.issues or []) | rejectattr('done') | list | length"
         goto: issue_not_done
+      # the review findings needed no production change (e.g. they ask for tests, which the test
+      # writer owns): the reviewer gets the answer; a disagreement ends at human_review, never in a loop
+      - when: "output.no_change and steps.code_review.output"
+        goto: code_review
       - when: "output.committed"
         goto: code_review
       - when: "true"
@@ -357,11 +366,17 @@ steps:
       unless the developer reported it as not done:
       {{ steps.develop.output.issues | to_yaml }}
       {% endif %}
+      Tests are not part of this review: the test writer writes and runs them in the next step,
+      after your approval, and the developer never edits test files. A missing test, coverage or
+      screenshot, even when the task asks for it, is never a finding here: list it in
+      `for_test_writer` instead; it does not change the verdict.
     output_schema:
       type: object
       required: [verdict, findings]
       properties:
         verdict: { type: string, enum: [approved, changes_requested] }
+        # what the test writer should cover (tests the task asks for); never a finding
+        for_test_writer: { type: string }
         findings:
           type: array
           items:
@@ -409,6 +424,10 @@ steps:
       {% if steps.develop.output.test_notes %}
       What the developer says should be tested:
       {{ steps.develop.output.test_notes }}
+      {% endif %}
+      {% if steps.code_review.output and steps.code_review.output.for_test_writer %}
+      What the reviewer says should be tested:
+      {{ steps.code_review.output.for_test_writer }}
       {% endif %}
 
       {% if delegate_result %}
