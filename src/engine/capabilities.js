@@ -30,7 +30,9 @@ const CLAUDE_SUBAGENT_TOOLS = ['Agent', 'Task'];
 // Shell utilities an agent with a command allowlist (bash:<command>) also runs without asking, so a
 // pipe or a `;` chain of allowed commands (`npm test; echo "exit=$?"`, `... | tail -3`) is not
 // refused headless, where nobody can approve it. Read-only: any agent with commands gets them.
+// `[` is `test` in its bracket form (`[ -f file ] && ...`).
 const READ_UTILITIES = [
+  '[',
   'basename',
   'cat',
   'cut',
