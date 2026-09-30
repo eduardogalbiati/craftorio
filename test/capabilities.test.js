@@ -9,17 +9,67 @@ const { WorkflowRun, loadWorkflow } = require('../src/engine/workflow');
 const argAfter = (args, flag) => args[args.indexOf(flag) + 1];
 const TOOLCHAINS = ['bash:git', 'bash:npm'];
 
+// The read-only shell utilities every agent with a bash:<command> capability also gets (#96): no
+// refusal for a pipe or a `;` chain made of allowed commands, whatever the agent's own toolchain.
+const READ_BASH = ['[', 'basename', 'cat', 'cut', 'dirname', 'echo', 'grep', 'head', 'ls', 'printenv', 'pwd', 'tail', 'test', 'tr', 'wc'].map((u) => `Bash(${u}:*)`);
+const WRITE_BASH = ['mkdir', 'mktemp', 'sort', 'uniq'].map((u) => `Bash(${u}:*)`);
+
 test('claude: capabilities become --tools (offered), --allowedTools (approved) and acceptEdits for writers', () => {
   const { args } = caps.providerArgs('claude-code', { caps: caps.normalize({ tools: ['read', 'edit', 'write', TOOLCHAINS], subagents: true }) });
   assert.equal(argAfter(args, '--tools'), 'Read,Glob,Grep,Edit,NotebookEdit,Write,Bash,Agent,Task');
-  assert.equal(argAfter(args, '--allowedTools'), 'Read Glob Grep Edit NotebookEdit Write Bash(git:*) Bash(npm:*) Agent Task');
+  assert.equal(argAfter(args, '--allowedTools'), [
+    'Read Glob Grep Edit NotebookEdit Write Bash(git:*) Bash(npm:*)',
+    'Bash(MULTIAGENT_SIMULATION_ONLY=1 git:*) Bash(MULTIAGENT_SIMULATION_ONLY=1 npm:*)',
+    ...READ_BASH, ...WRITE_BASH, 'Agent Task',
+  ].join(' '));
   assert.equal(argAfter(args, '--permission-mode'), 'acceptEdits');
   assert.ok(!args.join(' ').includes('WebSearch'), 'no web tools unless web: true');
 
   const ro = caps.providerArgs('claude-code', { caps: caps.normalize({ tools: ['read', 'bash:git diff'], web: true }) }).args;
   assert.equal(argAfter(ro, '--tools'), 'Read,Glob,Grep,Bash,WebSearch,WebFetch');
-  assert.equal(argAfter(ro, '--allowedTools'), 'Read Glob Grep Bash(git diff:*) WebSearch WebFetch');
+  assert.equal(argAfter(ro, '--allowedTools'), [
+    'Read Glob Grep Bash(git diff:*) Bash(MULTIAGENT_SIMULATION_ONLY=1 git diff:*)', ...READ_BASH, 'WebSearch WebFetch',
+  ].join(' '));
   assert.ok(!ro.includes('--permission-mode'), 'read-only agents never get acceptEdits');
+});
+
+test('claude: every agent with bash:<command> also gets the read-only utilities (pipes, `;` chains); only writers get the write ones too', () => {
+  const readOnly = caps.providerArgs('claude-code', { caps: caps.normalize({ tools: ['read', 'bash:git'] }) }).args;
+  const allowedRo = argAfter(readOnly, '--allowedTools');
+  for (const rule of READ_BASH) assert.ok(allowedRo.includes(rule), rule);
+  assert.match(allowedRo, /Bash\(\[:\*\)/, 'the bracket form of test ([ -f file ] && ...)');
+  assert.match(allowedRo, /Bash\(test:\*\)/);
+  for (const rule of WRITE_BASH) assert.ok(!allowedRo.includes(rule), `${rule} would let a read-only agent write`);
+
+  const writer = caps.providerArgs('claude-code', { caps: caps.normalize({ tools: ['read', 'write', 'bash:npm'] }) }).args;
+  const allowedRw = argAfter(writer, '--allowedTools');
+  for (const rule of [...READ_BASH, ...WRITE_BASH]) assert.ok(allowedRw.includes(rule), rule);
+  assert.ok(allowedRw.includes('Bash(MULTIAGENT_SIMULATION_ONLY=1 npm:*)'), 'a still-prefixed command is allowed too, so the engine setting the var does not by itself refuse it');
+
+  // a utility the agent already declared as its own command is listed once, not duplicated
+  const withGrep = argAfter(caps.providerArgs('claude-code', { caps: caps.normalize({ tools: ['read', 'bash:grep'] }) }).args, '--allowedTools');
+  assert.equal(withGrep.split('Bash(grep:*)').length - 1, 1);
+});
+
+test('a bare `bash` capability keeps allowing everything: no need for the fixed utility list', () => {
+  const { args } = caps.providerArgs('claude-code', { caps: caps.normalize({ tools: ['read', 'bash'] }) });
+  assert.equal(argAfter(args, '--allowedTools'), 'Read Glob Grep Bash');
+});
+
+test('runDirs/commandGuide: an agent with commands gets a logs and a screenshots folder under the run, and no other agent does', () => {
+  const withBash = caps.normalize({ tools: ['read', 'bash:git'] });
+  const noBash = caps.normalize({ tools: ['read'] });
+  assert.deepEqual(caps.runDirs(withBash, 'C:/run'), [path.join('C:/run', 'logs'), path.join('C:/run', 'screenshots')]);
+  assert.deepEqual(caps.runDirs(noBash, 'C:/run'), []);
+  assert.deepEqual(caps.runDirs(withBash, null), [], 'no run folder yet: nothing to offer');
+  assert.equal(caps.commandGuide(noBash, 'C:/run'), '', 'nothing to tell an agent with no commands');
+
+  const guide = caps.commandGuide(withBash, 'C:/run');
+  assert.match(guide, /never `cd <folder> && \.\.\.`/, 'the current folder already is the working folder');
+  assert.match(guide, /MULTIAGENT_SIMULATION_ONLY=1 is already set in your environment: never prefix/, 'the engine sets it, not the agent');
+  assert.ok(guide.includes(`Write command logs to \`${path.join('C:/run', 'logs')}`), 'the log folder, never /tmp, $TEMP or AppData');
+  assert.match(guide, /never to \/tmp, \$TEMP or AppData/);
+  assert.match(guide, /rephrase it once into an allowed form instead of retrying variants/);
 });
 
 test('edits_tests: false → Claude refuses edits to the test paths; the other CLIs note that they cannot', () => {
@@ -137,8 +187,12 @@ test('a real turn gets the capability and isolation flags, and its context is me
   const spawn = events.find((e) => e.type === 'session.stream' && e.item.kind === 'spawn').item;
   assert.ok(spawn.args.includes('--strict-mcp-config'));
   assert.equal(argAfter(spawn.args, '--tools'), 'Read,Glob,Grep,Bash');
-  assert.equal(argAfter(spawn.args, '--allowedTools'), 'Read Glob Grep Bash(gh:*)');
+  assert.equal(argAfter(spawn.args, '--allowedTools'), ['Read Glob Grep Bash(gh:*) Bash(MULTIAGENT_SIMULATION_ONLY=1 gh:*)', ...READ_BASH].join(' '));
   assert.ok(spawn.args.includes('--verbose'), 'cli_args still apply on top');
+  // the run's logs and screenshots folders exist and are offered to the CLI with --add-dir (#96)
+  const runDirArgs = spawn.args.filter((a, i) => spawn.args[i - 1] === '--add-dir');
+  assert.ok(runDirArgs.some((d) => d.endsWith(`${path.sep}logs`) && fs.existsSync(d)), runDirArgs.join(', '));
+  assert.ok(runDirArgs.some((d) => d.endsWith(`${path.sep}screenshots`) && fs.existsSync(d)), runDirArgs.join(', '));
   const log = events.find((e) => e.type === 'log' && e.kind === 'capabilities');
   assert.match(log.message, /dev \(claude-code, isolated\): tools: read, bash: gh/);
 
@@ -146,6 +200,9 @@ test('a real turn gets the capability and isolation flags, and its context is me
   // conversation's per request (a sub-agent's request does not count)
   const received = events.find((e) => e.type === 'session.message_received');
   assert.ok(!received.text.includes('```handoff'));
+  // the engine sets MULTIAGENT_SIMULATION_ONLY in the child's own environment: the agent needs no
+  // `VAR=value` prefix, even though this test deleted it from the *parent* process to lift the guard
+  assert.match(received.text, /MULTIAGENT_SIMULATION_ONLY: 1/);
   assert.deepEqual(received.context, { start: 31000, peak: 41500 });
   assert.equal(received.handoff, '- Goal: fake');
   assert.ok(fs.existsSync(path.join(run.runDir, 'handoffs', 'work-v1-dev.md')));
