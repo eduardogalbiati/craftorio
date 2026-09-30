@@ -1065,6 +1065,8 @@ function createService({ host }) {
     notifications,
     manifest,
     events,
+    // the code version (#83): main.js calls code.markLoaded() when a window loads
+    code,
     workspace: () => ws,
     setWorkspace,
     isRunning,
