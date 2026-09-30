@@ -6,9 +6,10 @@
 // one at a time (the run records its issues), as separate runs or, when asked, as one run for all
 // of them (one branch, one PR/MR). Issues link to the runs working on them.
 // Work a local workflow merged into the local base but did not push shows in "Merged locally"; the
-// bar above the list pushes it (and updates from origin first when origin moved).
+// bar above the list pushes it (and updates from origin first when origin moved); a conflict on
+// the update goes to a run of the local workflow, whose developer resolves it.
 // Uses app.js globals ($, esc, state, errMsg, dateOf, markdownHtml, showView, openModal,
-// closeModal, wantsSimulation, openApproval).
+// closeModal, devMode, wantsSimulation, openApproval, selectRun).
 /* global api */
 (() => {
   // Must match PLATFORMS in src/backlog.js (soon = no sync yet).
@@ -407,6 +408,9 @@
     $b('#push-message').textContent = `git push origin ${l.base} in ${l.repo || p?.folder || 'the project\'s repository'} (never forced).${l.issues?.length ? ` GitHub/GitLab closes ${issueRefs(l.issues)}.` : ''}`;
     $b('#push-commits').innerHTML = (l.commits || []).map((c) => `<li><span class="mono">${esc(c.sha.slice(0, 8))}</span> ${esc(c.subject)}${c.issues.length ? ` <span class="muted">(closes ${esc(issueRefs(c.issues))})</span>` : ''}</li>`).join('');
     $b('#push-error').textContent = '';
+    bl.conflictFiles = null;
+    $b('#btn-push-resolve').classList.add('hidden');
+    $b('#push-resolve-mock-wrap').classList.add('hidden');
     // origin already moved (last fetch): straight to Update and push
     $b('#btn-push-update').classList.toggle('hidden', !(l.behind > 0));
     $b('#btn-push-ok').classList.toggle('hidden', l.behind > 0);
@@ -424,9 +428,13 @@
       window.refreshUnpushed?.();
       if (r.pushed || (!r.rejected && !r.conflict && !r.local?.ahead)) { closeModal('#push-modal'); render(); return; }
       if (r.conflict) {
-        $b('#push-error').textContent = `${r.error} Conflicting files: ${r.files.join(', ')}. Resolve it by hand in ${r.checkout || 'the repository'} (git pull --rebase origin ${bl.data?.local?.base || ''}) or let a run bring the branch up to date, then push again.`;
+        // handed to a run of the local workflow (its developer resolves it, as in resolve_merge)
+        $b('#push-error').textContent = `${r.error} Resolve in a run starts the local workflow: its developer merges origin/${bl.data?.local?.base || ''} into the local commits and resolves ${r.files.join(', ')}; once reviewed, tested and merged locally, push again.`;
+        bl.conflictFiles = r.files;
         $b('#btn-push-update').classList.add('hidden');
         $b('#btn-push-ok').classList.add('hidden');
+        $b('#btn-push-resolve').classList.remove('hidden');
+        $b('#push-resolve-mock-wrap').classList.toggle('hidden', !devMode());
       } else if (r.rejected) {
         $b('#push-error').textContent = `The push was rejected: origin moved since the last sync. Update and push rebases the local commits onto it first. (${r.error || ''})`;
         $b('#btn-push-ok').classList.add('hidden');
@@ -437,6 +445,20 @@
       $b('#push-error').textContent = errMsg(err);
     } finally {
       btns.forEach((b) => { b.disabled = false; });
+    }
+  }
+
+  async function resolveInRun() {
+    const btn = $b('#btn-push-resolve');
+    btn.disabled = true;
+    try {
+      const { runId } = await api.resolvePushConflict(bl.projectId, bl.conflictFiles || [], wantsSimulation($b('#push-resolve-mock')));
+      closeModal('#push-modal');
+      selectRun(runId);
+    } catch (err) {
+      $b('#push-error').textContent = errMsg(err);
+    } finally {
+      btn.disabled = false;
     }
   }
 
@@ -547,6 +569,7 @@
   };
   $b('#btn-push-ok').onclick = () => doPush(false);
   $b('#btn-push-update').onclick = () => doPush(true);
+  $b('#btn-push-resolve').onclick = resolveInRun;
   $b('#btn-push-cancel').onclick = () => closeModal('#push-modal');
   $b('#bl-list').onclick = async (e) => {
     const check = e.target.closest('[data-sel]');

@@ -126,4 +126,28 @@ async function updateAndPush({ repo, base = null }) {
   return pushBase({ repo: root, base });
 }
 
-module.exports = { localStatus, pushBase, updateAndPush, closedIssues, defaultBase };
+/**
+ * The task of the run a push conflict is handed to (a local workflow: its developer resolves it,
+ * then review, tests, build and verification, then its local merge). The run's branch starts at
+ * the local <base>, so merging the already-fetched origin/<base> into it (a merge, not a rebase)
+ * keeps every local commit as it is: the local merge fast-forwards <base> and the next push is a
+ * fast-forward too.
+ * @param {{ base: string, files?: string[], commits?: { sha, subject }[], issues?: number[] }} o
+ */
+function conflictTask({ base, files = [], commits = [], issues = [] }) {
+  return [
+    `Bring the local ${base} up to date with origin/${base}, so it can be pushed.`,
+    '',
+    `The push was rejected (origin/${base} moved) and \`git pull --rebase origin ${base}\` conflicted${files.length ? ` in: ${files.join(', ')}` : ''}. The update was undone: the local ${base} still has every local commit.`,
+    '',
+    `Your branch starts at the local ${base}. origin/${base} is already fetched: do not fetch, pull or push.`,
+    `1. \`git merge origin/${base}\` on your branch (a merge, not a rebase: the local commits must stay as they are).`,
+    '2. Resolve every conflict following the merge-conflict-resolver skill: keep the intent of both sides, never drop the other change.',
+    '3. Commit the merge, run the project\'s test suite and fix what the merge broke.',
+    '',
+    commits.length ? `Local commits waiting to be pushed:\n${commits.map((c) => `- ${String(c.sha).slice(0, 8)} ${c.subject}`).join('\n')}` : '',
+    issues.length ? `\nThey close ${issues.map((n) => `#${n}`).join(', ')} once pushed; this run closes nothing itself (no "Closes" line needed).` : '',
+  ].filter((l, i, a) => l !== '' || a[i - 1] !== '').join('\n').trim();
+}
+
+module.exports = { localStatus, pushBase, updateAndPush, conflictTask, closedIssues, defaultBase };

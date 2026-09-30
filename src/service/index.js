@@ -749,6 +749,30 @@ function createService({ host }) {
     return afterPush(project.id, result);
   }
 
+  // A push conflict (Update and push found the local base conflicting with origin) handed to a run
+  // of the local workflow that merged there last (software-development-local-hero when none): its
+  // developer merges origin/<base> into the run's branch and resolves the conflict, the change is
+  // reviewed, tested, built and verified, then merged locally; Push takes it from there.
+  async function resolvePushConflict({ projectId, files = [], mock = false }) {
+    const project = gitProject(projectId);
+    const last = runs.runsForProject(runs.listRuns(ws.runs), project).find((r) => r.localMerge?.base && r.file);
+    const base = last?.localMerge.base || projectBase(project);
+    const status = await localPush.localStatus({ repo: project.folder, base, fetch: false });
+    if (status.error) throw new Error(status.error);
+    if (!status.behind) throw new Error(`The local ${status.base} already has every commit of origin/${status.base}: push it.`);
+    const file = last ? path.basename(last.file) : 'software-development-local-hero.yaml';
+    const wf = loadWorkflow(workflowPath(file).file);
+    if (!wf.inputs?.task) throw new Error(`Workflow ${wf.metadata?.name || file} has no task input to receive the conflict.`);
+    const inputs = { task: localPush.conflictTask({ ...status, files: (files || []).map(String) }) };
+    for (const [k, def] of Object.entries(wf.inputs)) {
+      if (k === 'task') continue;
+      if (/^base(_branch)?$/.test(k)) inputs[k] = status.base;
+      else if ((def.type || 'string') === 'string' && /path|dir/i.test(k)) inputs[k] = project.folder;
+      else if (k === 'language' && last?.inputs?.language) inputs[k] = last.inputs.language;
+    }
+    return startWorkflowRun({ file, inputs, mock: !!mock, projectId: project.id });
+  }
+
   // After a run's `merge: local`: the project's count of commits not pushed, and the push when the
   // project asks for it (auto-push, off by default). A rejected or failed push only notifies: the
   // Backlog's Push / Update and push takes it from there.
@@ -979,6 +1003,8 @@ function createService({ host }) {
     'backlog:local': async ({ projectId }) => ({ local: await refreshLocal(projectId), backlog: withIssueRuns(backlog.readBacklog(ws.backlog, projectId)) }),
     'backlog:push': ({ projectId }) => pushProject({ projectId }),
     'backlog:update-push': ({ projectId }) => pushProject({ projectId, update: true }),
+    // A conflict of Update and push handed to a run of the local workflow (returns { runId, runDir }).
+    'backlog:resolve-push': ({ projectId, files, mock }) => resolvePushConflict({ projectId, files, mock }),
     'backlog:auto-push': ({ projectId, on }) => projects.updateProject(ws.projects, path.basename(String(projectId)), { autoPush: !!on }),
     'backlog:unpushed': () => unpushedProjects(),
     // Assign a workflow to issues: they are queued and start while there are free run slots (see dispatchQueue).

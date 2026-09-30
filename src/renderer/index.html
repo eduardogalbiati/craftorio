@@ -1158,7 +1158,9 @@
       <ul id="push-commits" class="bl-push-commits small"></ul>
       <p id="push-error" class="error small"></p>
       <div class="modal-actions">
+        <label id="push-resolve-mock-wrap" class="check small hidden" title="Developer mode: the run is simulated, no CLI is called"><input type="checkbox" id="push-resolve-mock" /><span>Simulate</span></label>
         <button type="button" id="btn-push-cancel" class="btn ghost">Cancel</button>
+        <button type="button" id="btn-push-resolve" class="btn primary hidden" title="Start a run of the local workflow: its developer merges origin into the local commits and resolves the conflict">Resolve in a run</button>
         <button type="button" id="btn-push-update" class="btn hidden">Update and push</button>
         <button type="button" id="btn-push-ok" class="btn primary">Push</button>
       </div>

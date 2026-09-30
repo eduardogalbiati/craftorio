@@ -68,6 +68,7 @@
     checkLocal: (projectId) => call('backlog:local', { projectId }),
     pushLocal: (projectId) => call('backlog:push', { projectId }),
     updateAndPushLocal: (projectId) => call('backlog:update-push', { projectId }),
+    resolvePushConflict: (projectId, files, mock) => call('backlog:resolve-push', { projectId, files, mock }),
     setAutoPush: (projectId, on) => call('backlog:auto-push', { projectId, on }),
     listUnpushed: () => call('backlog:unpushed'),
     listSkills: () => call('skills:list'),

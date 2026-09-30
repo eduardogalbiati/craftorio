@@ -223,6 +223,76 @@ test('backlog: work merged locally shows as not pushed until the Backlog pushes 
   assert.equal(api['backlog:get']({ projectId: p.id }).autoPush, true);
 });
 
+test('backlog: a push conflict is handed to a run of the local workflow that merged there last', async (t) => {
+  const { service, api } = makeService(t);
+  const ws = service.workspace();
+  const { execFileSync } = require('child_process');
+  const git = (cwd, ...args) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'init.defaultBranch=main', '-c', 'core.autocrlf=false', ...args], { cwd, stdio: ['ignore', 'pipe', 'pipe'] }).toString().trim();
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'service-resolve-'));
+  t.after(() => fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 3 }));
+  const origin = path.join(tmp, 'origin.git');
+  const folder = path.join(tmp, 'repo');
+  const other = path.join(tmp, 'other');
+  const change = (cwd, text, msg) => { fs.writeFileSync(path.join(cwd, 'a.txt'), text); git(cwd, 'commit', '-q', '-am', msg); };
+  git(tmp, 'init', '-q', '--bare', origin);
+  git(tmp, 'clone', '-q', origin, folder);
+  git(folder, 'checkout', '-q', '-b', 'main');
+  fs.writeFileSync(path.join(folder, 'a.txt'), 'a\n');
+  git(folder, 'add', 'a.txt');
+  git(folder, 'commit', '-q', '-m', 'init');
+  git(folder, 'push', '-q', '-u', 'origin', 'main');
+  git(tmp, 'clone', '-q', '-b', 'main', origin, other);
+  change(folder, 'mine\n', 'Change a\n\nCloses #1');
+  const mine = git(folder, 'rev-parse', 'HEAD');
+  change(other, 'theirs\n', 'their a');
+  git(other, 'push', '-q', 'origin', 'main');
+
+  fs.writeFileSync(path.join(ws.workflows, 'fixture-local.yaml'), `apiVersion: multiagent/v1
+kind: Workflow
+metadata:
+  name: fixture-local
+inputs:
+  task: { type: string, required: true }
+  repo_path: { type: string, required: true }
+  language: { type: string, default: js }
+  base_branch: { type: string, default: main }
+agents:
+  a: { provider: claude, model: m, session: ephemeral }
+steps:
+  - id: work
+    agent: a
+    prompt: "{{ inputs.task }}"
+`);
+  const p = await api['projects:create']({ name: 'local', folder });
+  // the local run that merged #1 (its workflow and language are reused)
+  const runDir = path.join(ws.runs, 'run-local');
+  fs.mkdirSync(runDir, { recursive: true });
+  fs.writeFileSync(path.join(runDir, 'events.jsonl'), `${JSON.stringify({ type: 'workflow.started', file: path.join(ws.workflows, 'fixture-local.yaml'), inputs: { language: 'go' } })}\n`);
+  fs.writeFileSync(path.join(runDir, 'summary.json'), JSON.stringify({
+    run_id: 'run-local', workflow: 'fixture-local', project_id: p.id, status: 'success', started_at: '2026-09-29T10:00:00Z',
+    inputs: { language: 'go' }, sessions: [], worktree: { repo: folder }, local_merge: { branch: 'feat/one', base: 'main', commit: mine },
+  }));
+
+  // nothing to resolve before the update found origin moved
+  await assert.rejects(api['backlog:resolve-push']({ projectId: p.id, files: ['a.txt'], mock: true }), /already has every commit of origin\/main/);
+  const u = await api['backlog:update-push']({ projectId: p.id });
+  assert.deepEqual([u.conflict, u.files], [true, ['a.txt']]);
+  assert.equal(git(folder, 'rev-parse', 'main'), mine);
+
+  const finished = [];
+  service.events.on('run:event', (ev) => { if (ev.type === 'workflow.finished') finished.push(ev); });
+  const started = await api['backlog:resolve-push']({ projectId: p.id, files: ['a.txt'], mock: true });
+  for (let i = 0; i < 200 && !finished.length; i++) await new Promise((r) => setTimeout(r, 50));
+  assert.equal(finished.length, 1);
+  const first = JSON.parse(fs.readFileSync(path.join(started.runDir, 'events.jsonl'), 'utf8').split('\n')[0]);
+  assert.equal(path.basename(first.file), 'fixture-local.yaml');
+  assert.deepEqual([first.inputs.repo_path, first.inputs.base_branch, first.inputs.language], [folder, 'main', 'go']);
+  assert.match(first.inputs.task, /git merge origin\/main/);
+  assert.match(first.inputs.task, /conflicted in: a\.txt/);
+  assert.equal(api['runs:list']().runs.find((r) => r.runId === started.runId).projectId, p.id);
+  assert.equal(git(folder, 'rev-parse', 'main'), mine); // a simulated run touches no git
+});
+
 test('backlog: assigned issues run one at a time, each run records its issue', async (t) => {
   const { service, api } = makeService(t);
   const ws = service.workspace();

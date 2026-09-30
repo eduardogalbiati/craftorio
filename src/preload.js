@@ -27,6 +27,7 @@ contextBridge.exposeInMainWorld('api', {
   checkLocal: (projectId) => ipcRenderer.invoke('backlog:local', { projectId }),
   pushLocal: (projectId) => ipcRenderer.invoke('backlog:push', { projectId }),
   updateAndPushLocal: (projectId) => ipcRenderer.invoke('backlog:update-push', { projectId }),
+  resolvePushConflict: (projectId, files, mock) => ipcRenderer.invoke('backlog:resolve-push', { projectId, files, mock }),
   setAutoPush: (projectId, on) => ipcRenderer.invoke('backlog:auto-push', { projectId, on }),
   listUnpushed: () => ipcRenderer.invoke('backlog:unpushed'),
   listSkills: () => ipcRenderer.invoke('skills:list'),

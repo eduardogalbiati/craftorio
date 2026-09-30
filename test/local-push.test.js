@@ -7,7 +7,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
-const { localStatus, pushBase, updateAndPush, closedIssues } = require('../src/local-push');
+const { localStatus, pushBase, updateAndPush, conflictTask, closedIssues } = require('../src/local-push');
 
 // No user git config (identity, hooks, aliases), as on CI.
 const emptyConfig = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'gitcfg-')), 'config');
@@ -142,6 +142,42 @@ test('updateAndPush: a conflict stops with the files and keeps every local commi
   assert.equal(git(f.repo, 'status', '--porcelain'), ''); // no rebase left in progress
   assert.equal(originHead(f), theirs);
   assert.deepEqual([u.status.ahead, u.status.behind, u.status.issues], [1, 1, [5]]);
+});
+
+test('conflictTask: merging origin into a branch of the local base, as it says, keeps the local commits and makes the push go', async (t) => {
+  const f = fixture(t);
+  const mine = commit(f.repo, 'a.txt', 'mine\n', 'Change a\n\nCloses #5');
+  commit(f.other, 'a.txt', 'theirs\n', 'their a');
+  git(f.other, 'push', '-q', 'origin', 'main');
+  const u = await updateAndPush({ repo: f.repo, base: 'main' });
+  const task = conflictTask({ ...u.status, files: u.files });
+  assert.match(task, /^Bring the local main up to date with origin\/main/);
+  assert.match(task, /conflicted in: a\.txt/);
+  assert.match(task, /`git merge origin\/main` on your branch \(a merge, not a rebase/);
+  assert.match(task, /do not fetch, pull or push/);
+  assert.match(task, new RegExp(`- ${mine.slice(0, 8)} Change a`));
+  assert.match(task, /They close #5 once pushed/);
+
+  // what the run does: a branch from the local main, the merge resolved, the local merge (fast-forward)
+  git(f.repo, 'checkout', '-q', '-b', 'fix/push');
+  assert.throws(() => git(f.repo, 'merge', '-q', 'origin/main'));
+  fs.writeFileSync(path.join(f.repo, 'a.txt'), 'mine and theirs\n');
+  git(f.repo, 'commit', '-q', '-am', 'Merge origin/main');
+  git(f.repo, 'checkout', '-q', 'main');
+  git(f.repo, 'merge', '-q', '--ff-only', 'fix/push');
+
+  const p = await pushBase({ repo: f.repo, base: 'main' });
+  assert.equal(p.pushed, true);
+  assert.deepEqual(p.issues, [5]);
+  git(f.origin, 'merge-base', '--is-ancestor', mine, 'refs/heads/main'); // the local commit went as it was
+  assert.equal(p.status.ahead, 0);
+});
+
+test('conflictTask: without files, commits or issues it still says what to do', () => {
+  const task = conflictTask({ base: 'develop' });
+  assert.match(task, /origin\/develop moved\) and `git pull --rebase origin develop` conflicted\. /);
+  assert.doesNotMatch(task, /Local commits|They close/);
+  assert.doesNotMatch(task, /\n\n\n/);
 });
 
 test('updateAndPush: refuses uncommitted changes where the base is checked out', async (t) => {
