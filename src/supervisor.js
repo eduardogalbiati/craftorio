@@ -240,6 +240,24 @@ function resumeSpec(runDir, fromStep) {
     issues: started.issues || (started.issue ? [started.issue] : null), personas: started.personas || null, fromStep, steps, sessions, handoffs, worktree };
 }
 
+/**
+ * The human gate a resume from `fromStep` would go past on the previous run's decision: the last
+ * human_approval step before it (in the workflow's order) that the previous run decided (approved
+ * or rejected). null = none. A resume never reuses a gate's decision: it starts at the gate instead.
+ */
+function skippedGate(wf, fromStep, steps) {
+  const at = (wf.steps || []).findIndex((s) => s.id === fromStep);
+  if (at < 0) return null;
+  return wf.steps.slice(0, at).filter((s) => s.type === 'human_approval' && steps?.[s.id]).map((s) => s.id).pop() || null;
+}
+
+// The previous outputs a resumed run starts from, without any gate's decision: a gate reached
+// again asks again, and no template reads an old approval as a current one.
+function withoutGateDecisions(wf, steps) {
+  const gates = new Set((wf.steps || []).filter((s) => s.type === 'human_approval').map((s) => s.id));
+  return Object.fromEntries(Object.entries(steps || {}).filter(([id]) => !gates.has(id)));
+}
+
 // The workflow's supervisor settings (orchestrator.supervisor + providers), from the run's workflow file.
 function supervisorConfig(runDir, workflowsDir) {
   const started = readEvents(runDir).find((e) => e.type === 'workflow.started') || {};
@@ -302,4 +320,4 @@ async function analyzeRun({ runDir, question, workflowsDir, skillsDirs, resolveC
   return { analysis, artifactPath, model, costUsd: cost, steps: (cfg.wf.steps || []).map((x) => x.id) };
 }
 
-module.exports = { analyzeRun, supervisorConfig, DECISION_SCHEMA, IDLE_SCHEMA, ANALYSIS_SCHEMA, actionSchema, decisionPrompt, actionErrorPrompt, idlePrompt, runReport, analysisMarkdown, resumeSpec, timeline, readEvents };
+module.exports = { analyzeRun, supervisorConfig, DECISION_SCHEMA, IDLE_SCHEMA, ANALYSIS_SCHEMA, actionSchema, decisionPrompt, actionErrorPrompt, idlePrompt, runReport, analysisMarkdown, resumeSpec, skippedGate, withoutGateDecisions, timeline, readEvents };

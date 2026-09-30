@@ -106,7 +106,8 @@
         ${SUP_WHAT[it.action] ? `<p class="muted small">${SUP_WHAT[it.action]}</p>` : ''}</div></div>`;
       case 'end': {
         const ok = it.status === 'success';
-        return `<div class="duo-note ${ok ? 'done' : 'failed'}" data-item="${it.id}"><span><b>${ok ? 'Done' : esc(it.status)}</b>${!ok && it.error ? ` · ${esc(it.error.slice(0, 240))}` : ''} · $${(it.cost || 0).toFixed(2)} · ${fmtSecs(it.durationMs)}</span></div>`;
+        return `<div class="duo-note ${ok ? 'done' : 'failed'}" data-item="${it.id}"><span><b>${ok ? 'Done' : esc(it.status)}</b>${!ok && it.error ? ` · ${esc(it.error.slice(0, 240))}` : ''} · $${(it.cost || 0).toFixed(2)} · ${fmtSecs(it.durationMs)}</span>
+          <button type="button" class="link-btn small" data-resume title="Start a new run from a step of this one, keeping the previous outputs (no supervisor call)">Resume from step…</button></div>`;
       }
       default: return '';
     }
@@ -236,6 +237,7 @@
   function init() {
     if (!$c('#view-runchat')) return;
     $c('#rc-messages').addEventListener('click', (e) => {
+      if (e.target.closest('[data-resume]')) { window.openResumeDialog?.(chat.runId); return; }
       const b = e.target.closest('[data-approval]');
       if (!b || !chat.live || b.disabled) return;
       const v = b.dataset.choice;

@@ -58,9 +58,11 @@ contextBridge.exposeInMainWorld('api', {
   setPrice: (model, price, scope) => ipcRenderer.invoke('usage:setPrice', { model, price, scope }),
   // GitHub Actions minutes of the month vs the included quota (needs gh's `user` scope)
   getActionsUsage: (force) => ipcRenderer.invoke('usage:actions', { force }),
-  // AI supervisor: analysis of a run and resume from a step (a new run)
+  // AI supervisor: analysis of a run
   askSupervisor: (runId, question) => ipcRenderer.invoke('supervisor:analyze', { runId, question }),
-  resumeRun: (runId, step, instruction) => ipcRenderer.invoke('supervisor:resume', { runId, step, instruction }),
+  // resume a run from a step (a new run, no supervisor call) and what the dialog offers
+  resumeRun: (runId, step, instruction, mock) => ipcRenderer.invoke('runs:resume', { runId, step, instruction, mock }),
+  resumeOptions: (runId) => ipcRenderer.invoke('runs:resumeOptions', { runId }),
   // documents and files produced by runs
   listArtifacts: (opts) => ipcRenderer.invoke('artifacts:list', opts || {}),
   readArtifact: (path) => ipcRenderer.invoke('artifacts:read', { path }),

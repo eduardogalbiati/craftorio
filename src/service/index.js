@@ -65,12 +65,22 @@ function runTool(file, args, shellMode) {
 }
 
 // A session in the same shape whether it comes from the live engine or from a run on disk.
+// tokens: the breakdown plus `total` (as on the Usage screen), or null when the session has none.
 function sessionView(x, live) {
   return {
     id: x.id, agent: x.agent, provider: x.provider, model: x.model, status: x.status,
     providerSessionId: live ? x.providerSessionId : x.provider_session_id || null,
     cwd: x.cwd || null, turns: x.turns || 0, costUsd: live ? x.costUsd : x.cost_usd || 0,
+    tokens: tokensView(x.tokens),
   };
+}
+
+function tokensView(t) {
+  if (!t || typeof t !== 'object') return null;
+  const n = (v) => (Number.isFinite(+v) ? +v : 0);
+  const out = { input: n(t.input), output: n(t.output), cache_read: n(t.cache_read), cache_write: n(t.cache_write), reasoning: n(t.reasoning) };
+  out.total = usage.totalTokens(out);
+  return out;
 }
 
 // Why "Open in CLI" is not possible for a session ('' = possible).
@@ -646,16 +656,59 @@ function createService({ host }) {
     return openProgram(spec, cols, rows);
   }
 
-  // Continues a run from a step: a new run with the previous outputs, agent conversations and an instruction.
-  function resumeRun({ runId, step, instruction }) {
+  const runIsLive = (runId) => ['pending', 'running'].includes(active.get(runId)?.status);
+
+  // Continues a run from a step: a new run with the previous outputs, agent conversations and an
+  // instruction. Called by the owner directly (Resume from step…) and by the supervisor's
+  // recommendations; no LLM call. It never goes past a human gate on an earlier decision: a step
+  // after a gate the previous run decided is refused, and every gate reached again asks again.
+  // mock: true resumes as a simulation (a simulated run always resumes as one).
+  function resumeRun({ runId, step, instruction, mock }) {
     const runDir = runFolder(runId);
+    if (runIsLive(path.basename(runDir))) throw new Error('The run is still active: wait for it to end (or stop it) before resuming it.');
     const spec = supervisor.resumeSpec(runDir, step);
     if (!spec.file) throw new Error('The run does not record its workflow file.');
-    const first = loadWorkflow(workflowPath(spec.file).file).steps[0].id;
+    const wf = loadWorkflow(workflowPath(spec.file).file);
+    const fromStep = step || wf.steps[0].id;
+    if (!wf.steps.some((s) => s.id === fromStep)) throw new Error(`Cannot resume: step "${fromStep}" does not exist in the current version of the workflow.`);
+    const gate = supervisor.skippedGate(wf, fromStep, spec.steps);
+    if (gate) throw new Error(`Cannot resume from "${fromStep}": it would go past the human gate "${gate}" on the previous run's decision. Resume from "${gate}" instead: it asks again.`);
     return startWorkflowRun({
-      file: spec.file, inputs: spec.inputs, mock: spec.mock, projectId: spec.projectId, issues: spec.issues,
-      resume: { runId: spec.runId, fromStep: step || first, steps: spec.steps, sessions: spec.sessions, handoffs: spec.handoffs, instruction: instruction || null, worktree: spec.worktree },
+      file: spec.file, inputs: spec.inputs, mock: spec.mock || mock === true, projectId: spec.projectId, issues: spec.issues,
+      resume: { runId: spec.runId, fromStep, steps: supervisor.withoutGateDecisions(wf, spec.steps), sessions: spec.sessions, handoffs: spec.handoffs, instruction: instruction || null, worktree: spec.worktree },
     });
+  }
+
+  // What the Resume from step… dialog shows: the workflow's steps in order (reached, where the run
+  // stopped, the steps a decided gate keeps out of reach), the suggested step and what is kept.
+  function resumeOptions({ runId }) {
+    const runDir = runFolder(runId);
+    const id = path.basename(runDir);
+    const spec = supervisor.resumeSpec(runDir, null);
+    if (!spec.file) throw new Error('The run does not record its workflow file.');
+    let wf;
+    try { wf = loadWorkflow(workflowPath(spec.file).file); } catch (e) { throw new Error(`The run's workflow (${spec.file}) cannot be loaded: ${e.message}`); }
+    const visits = {};
+    let stoppedAt = null;
+    let failedStep = null;
+    for (const ev of supervisor.readEvents(runDir)) {
+      if (ev.type === 'step.started') { visits[ev.step_id] = (visits[ev.step_id] || 0) + 1; stoppedAt = ev.step_id; }
+      if (ev.type === 'step.finished' && ev.error) failedStep = ev.step_id;
+    }
+    const status = runIsLive(id) ? 'running' : runs.readRun(ws.runs, id)?.status || 'interrupted';
+    const steps = wf.steps.map((s) => ({
+      id: s.id, type: s.type || 'agent', gate: s.type === 'human_approval', visits: visits[s.id] || 0,
+      blockedBy: supervisor.skippedGate(wf, s.id, spec.steps),
+    }));
+    const exists = (x) => steps.some((s) => s.id === x && !s.blockedBy);
+    const suggested = [status === 'failed' ? failedStep : null, stoppedAt, failedStep].find(exists) || steps.find((s) => !s.blockedBy)?.id || null;
+    const wt = spec.worktree;
+    return {
+      runId: id, workflow: wf.metadata?.name || spec.file, file: spec.file, status, active: status === 'running', mock: spec.mock,
+      steps, stoppedAt, failedStep, suggested,
+      worktree: wt ? { dir: wt.dir, branch: wt.branch, exists: fs.existsSync(wt.dir) } : null,
+      sessions: Object.keys(spec.sessions), handoffs: Object.keys(spec.handoffs),
+    };
   }
 
   // ---- run lists (Projects > Project and Workflows > Runs) ------------------------------
@@ -1060,6 +1113,9 @@ function createService({ host }) {
     'supervisor:analyze': ({ runId, question }) => supervisor.analyzeRun({
       runDir: runFolder(runId), question, workflowsDir: workflowDirs(), skillsDirs: [ws.skills, BUNDLED_SKILLS_DIR], resolveCommand,
     }),
+    // resuming needs no supervisor: runs:resume is the channel; supervisor:resume is kept for older clients
+    'runs:resume': (opts) => resumeRun(opts),
+    'runs:resumeOptions': (opts) => resumeOptions(opts),
     'supervisor:resume': (opts) => resumeRun(opts),
 
     'artifacts:list': (opts) => artifactRuns(opts || {}),

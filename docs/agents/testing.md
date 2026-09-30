@@ -49,7 +49,7 @@ creates a commit needs its own `-c user.name/email`.
 
 - Never open real CLI terminals or start real runs in automated checks (they cost money).
 - **Simulation-only guard**: `MULTIAGENT_SIMULATION_ONLY=1` (`src/engine/simulation.js`) makes real
-  runs impossible: `run:start`/`supervisor:resume`/`backlog:assign` refuse `mock: false` (never
+  runs impossible: `run:start`/`runs:resume` (and its alias `supervisor:resume`)/`backlog:assign` refuse `mock: false` (never
   downgraded to a simulation), CLI terminals (`term:open` cli/cli-new/cli-resume/supervisor, the
   external console) are refused, and `providers.runTurn` refuses every non-mock provider. The UI
   shows a "Simulation only" badge and behaves as Developer mode. It is set by `scripts/test.js`

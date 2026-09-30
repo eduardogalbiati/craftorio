@@ -6,7 +6,7 @@
 //         tools: [read, edit, write, bash:git, bash:npm]   # bash = any command
 //         web: false                                        # WebSearch / WebFetch
 //         mcp: []                                           # names from the workflow's mcp_servers
-//         subagents: false                                  # the CLI's own sub-agents (Claude's Task)
+//         subagents: false                                  # the CLI's own sub-agents (Claude's Agent/Task)
 //
 // A step can override them (`steps[].capabilities`, merged key by key over the agent's).
 // Isolation (on unless `isolation: false` on the agent or in `defaults`) keeps the user's personal
@@ -20,6 +20,10 @@ const KEYS = ['tools', 'web', 'mcp', 'subagents'];
 // Codex features that reach outside the repository (desktop apps, browsers, plugins, memory).
 // `codex features list` keeps removed names as "removed", so these stay valid flags.
 const CODEX_FEATURES_OFF = ['plugins', 'apps', 'browser_use', 'computer_use', 'in_app_browser', 'image_generation', 'memories'];
+
+// Claude Code's sub-agent tool: named `Agent` by current versions, `Task` by older ones. --tools
+// keeps only the names it knows, so offering just `Task` could leave a newer CLI with no sub-agents.
+const CLAUDE_SUBAGENT_TOOLS = ['Agent', 'Task'];
 
 // Flags that take no value: never passed twice (clap-based CLIs refuse a repeated flag).
 const BARE_FLAGS = new Set(['--no-subagents', '--disable-web-search', '--always-approve', '--strict-mcp-config', '--no-chrome', '--disable-slash-commands']);
@@ -114,7 +118,7 @@ function providerArgs(type, { caps = null, isolated = true, mcpServers = {}, den
         allowed.push(...bash.map((t) => (t === 'bash' ? 'Bash' : `Bash(${t.slice(5).trim()}:*)`)));
       }
       if (caps.web) { offered.push('WebSearch', 'WebFetch'); allowed.push('WebSearch', 'WebFetch'); }
-      if (caps.subagents) { offered.push('Task'); allowed.push('Task'); }
+      if (caps.subagents) { offered.push(...CLAUDE_SUBAGENT_TOOLS); allowed.push(...CLAUDE_SUBAGENT_TOOLS); }
       allowed.push(...Object.keys(mcp).map((n) => `mcp__${n}`));
       args.push('--tools', offered.join(','), '--allowedTools', allowed.join(' '));
       // deny rules win over allow rules; Edit(...) covers every built-in tool that edits files
@@ -165,13 +169,16 @@ function dedupeFlags(args, already = []) {
   });
 }
 
-// One line for the Workflows screen and the run log.
-function describe(caps) {
+// One line for the Workflows screen and the run log. With the provider type (the run log), it
+// also says which tool offers the sub-agents, so a log shows whether the agent could start one.
+function describe(caps, type) {
   if (!caps) return 'cli_args only';
   const c = normalize(caps);
   const bash = bashRules(c).map((t) => (t === 'bash' ? '*' : t.slice(5)));
   const tools = [...c.tools.filter((t) => !t.startsWith('bash')), ...(bash.length ? [`bash: ${bash.join(' ')}`] : [])];
-  return [`tools: ${tools.join(', ') || 'none'}`, `web: ${c.web ? 'on' : 'off'}`, `mcp: ${c.mcp.join(', ') || 'none'}`, ...(c.subagents ? ['subagents'] : [])].join(' · ');
+  const subagents = type === 'claude-code' ? `subagents: ${CLAUDE_SUBAGENT_TOOLS.join('/')} tool offered`
+    : type === 'codex-cli' ? 'subagents: not offered by Codex' : 'subagents';
+  return [`tools: ${tools.join(', ') || 'none'}`, `web: ${c.web ? 'on' : 'off'}`, `mcp: ${c.mcp.join(', ') || 'none'}`, ...(c.subagents ? [subagents] : [])].join(' · ');
 }
 
-module.exports = { normalize, merge, validate, providerArgs, dedupeFlags, describe, CODEX_FEATURES_OFF };
+module.exports = { normalize, merge, validate, providerArgs, dedupeFlags, describe, CODEX_FEATURES_OFF, CLAUDE_SUBAGENT_TOOLS };

@@ -317,7 +317,13 @@ const HANDOFF_INSTRUCTIONS = [
   '- Key files: path (what matters there)',
   '- Known problems: blockers, flaky things, what did not work',
   'The code is in git: point to files and commits instead of pasting code. The orchestrator removes this block from your answer.',
+  'Write the note in English, whatever language the project instructions or the conversation use.',
 ].join('\n');
+
+// Ends the prompt of a step with an output schema: project instructions (e.g. a CLAUDE.md asking for
+// another chat language) must not turn the final message into prose the engine cannot parse.
+const OUTPUT_LANGUAGE = 'Your final message must end with that JSON object, written in English (string values included), '
+  + 'whatever language the project instructions or the conversation use. A summary in prose does not replace it.';
 
 const HANDOFF_ONLY = 'Write only your ```handoff block now, following the format asked before (Goal, State, Done, Left, Decisions, Key files, Known problems; at most 250 words). Nothing else.';
 
@@ -1216,7 +1222,8 @@ class WorkflowRun extends EventEmitter {
     if (extra) prompt += '\n\n---\n' + extra;
     if (schema) {
       prompt += '\n\n---\nAt the end of your response you MUST include a ```json block with an object that validates against this JSON Schema:\n```json\n'
-        + JSON.stringify(schema, null, 2) + '\n```';
+        + JSON.stringify(schema, null, 2) + '\n```\n'
+        + OUTPUT_LANGUAGE;
     }
     const hint = { stepId: step.id, visit, schema, agent: agentName, sequences: this.mockSequences };
     const opts = { stepId: step.id, hint, skills, capabilities: step.capabilities, editsTests: step.edits_tests };
@@ -1391,7 +1398,7 @@ class WorkflowRun extends EventEmitter {
   // answer, so those go along too (otherwise it answers "{}" or describes the errors).
   retryPrompt(agentName, prompt, previous, schema, errs) {
     const fix = `Your last response did not validate against the JSON Schema:\n- ${errs.join('\n- ')}\n`
-      + `Reply again with only a \`\`\`json block that validates against this schema, keeping the content of your answer:\n`
+      + `Reply again with only a \`\`\`json block that validates against this schema, keeping the content of your answer, in English:\n`
       + `\`\`\`json\n${JSON.stringify(schema, null, 2)}\n\`\`\``;
     const def = { ...(this.wf.defaults || {}), ...this.wf.agents[agentName] };
     if ((def.session || 'persistent') === 'persistent') return fix;
@@ -1631,7 +1638,7 @@ class WorkflowRun extends EventEmitter {
       this.capsLogged.add(capsKey);
       this.emitEvent('log', {
         level: 'info', kind: 'capabilities', agent: agentName,
-        message: `capabilities: ${agentName} (${providerType || agent.provider}, ${isolated ? 'isolated' : 'not isolated'}): ${capabilities.describe(caps)}${guarded ? ' · test files: not editable' : ''}${notes.length ? ` · not enforced: ${notes.join('; ')}` : ''}`,
+        message: `capabilities: ${agentName} (${providerType || agent.provider}, ${isolated ? 'isolated' : 'not isolated'}): ${capabilities.describe(caps, providerType || agent.provider)}${guarded ? ' · test files: not editable' : ''}${notes.length ? ` · not enforced: ${notes.join('; ')}` : ''}`,
       });
     }
     // The provider's `skill_args` grants read access to each skill's folder, which lives

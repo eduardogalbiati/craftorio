@@ -21,7 +21,8 @@ Do not log routine steps (ran the tests, read a file) or anything obvious from t
 ## How to log
 
 End your answer with one block (before any required JSON block), one line per decision,
-five fields separated by ` | `:
+five fields separated by ` | `, written in English whatever language the project instructions
+or the conversation use:
 
 ```decisions
 phase | decision | why | evidence | result

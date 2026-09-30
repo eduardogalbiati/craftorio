@@ -1204,6 +1204,24 @@
     </div>
   </div>
 
+  <!-- Resume from step…: a new run from a step of a finished run (no supervisor call) -->
+  <div id="resume-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="resume-title">
+    <div class="modal-card resume-card">
+      <h3 id="resume-title">Resume from step</h3>
+      <div id="resume-run" class="muted small"></div>
+      <div id="resume-body"></div>
+      <label class="check dev-only">
+        <input type="checkbox" id="resume-mock" />
+        <span>Simulation mode <small class="muted">(does not call the CLIs)</small></span>
+      </label>
+      <p id="resume-msg" class="small"></p>
+      <div class="modal-actions">
+        <button id="btn-resume-no" class="btn ghost">Cancel</button>
+        <button id="btn-resume-yes" class="btn primary">Resume from this step</button>
+      </div>
+    </div>
+  </div>
+
   <div id="duo-help" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="duo-help-title">
     <div class="modal-card duo-help-card">
       <div class="duo-help-head">

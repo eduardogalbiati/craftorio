@@ -209,6 +209,7 @@ async function init() {
   api.onEvent(onEvent);
   initNotifications();
   initTerminalDock();
+  initFullTextPopover();
   setInterval(renderTicking, 1000);
   loadUsage();
 
@@ -322,7 +323,7 @@ function wantsSimulation(box) {
 }
 function applyDeveloperMode() {
   document.body.classList.toggle('dev-mode', devMode());
-  for (const sel of ['#mock-toggle', '#duo-mock', '#arena-mock']) {
+  for (const sel of ['#mock-toggle', '#duo-mock', '#arena-mock', '#resume-mock']) {
     const box = $(sel);
     if (!box) continue;
     box.checked = devMode();
@@ -712,6 +713,7 @@ function renderRunList(rl, { prefix, box: boxSel, empty, start, rerender }) {
     if (b.dataset.runAct === 'view') { if (state.runs.has(r.runId)) selectRun(r.runId); else showView('run'); }
     if (b.dataset.runAct === 'chat') window.openRunChat?.({ runId: r.runId, workflow: r.workflow, running: r.current && r.status === 'running' });
     if (b.dataset.runAct === 'sup') openSupervisor({ runId: r.runId, workflow: r.workflow, status: r.status, error: r.error, mock: r.mock, issues: issuesOfRun(r) });
+    if (b.dataset.runAct === 'resume') openResumeDialog(r.runId);
   }));
   box.querySelectorAll('[data-art]').forEach((b) => (b.onclick = () => {
     const r = rl.runs.find((x) => x.runId === b.closest('.pr-run').dataset.run);
@@ -773,6 +775,7 @@ function projectRunBody(r, pv) {
     <div class="row">
       <button class="btn sm ghost" data-run-act="logs">Open logs</button>
       <button class="btn sm ghost sup-btn" data-run-act="sup"><span class="sup-mark">◆</span> Ask the supervisor</button>
+      ${canResume(r) ? '<button class="btn sm ghost" data-run-act="resume" title="Start a new run from a step of this one, keeping the previous outputs (no supervisor call)">Resume from step…</button>' : ''}
       <button class="btn sm" data-run-act="chat" title="${esc(CHAT_TITLES[r.workflow] || 'See the agents, the orchestrator and the human gates as a chat')}">Open chat</button>
       ${r.current || state.runs.has(r.runId) ? '<button class="btn sm" data-run-act="view">View run</button>' : ''}
       <span class="spacer"></span>
@@ -790,7 +793,7 @@ function projectRunBody(r, pv) {
         </button>`).join('')}</div>
     </div>` : ''}
     ${sessions.length ? `<table class="u-table pr-sessions">
-      <thead><tr><th>Agent</th><th>Provider · model</th><th>Status</th><th class="num">Turns</th><th class="num">Cost</th><th></th></tr></thead>
+      <thead><tr><th>Agent</th><th>Provider · model</th><th>Status</th><th class="num">Turns</th><th class="num">Tokens</th><th class="num">Cost</th><th></th></tr></thead>
       <tbody>${[...sessions].sort((a, b) => isOrchSession(b) - isOrchSession(a)).map((s) => {
         const m = pv.msgs.get(`${r.runId}:${s.id}`);
         return `<tr data-session="${esc(s.id)}" data-agent="${esc(s.agent)}">
@@ -798,7 +801,8 @@ function projectRunBody(r, pv) {
           <td><span class="badge p-${esc(s.provider)}">${esc(s.provider)}</span> <span class="mono small">${esc(s.model || '')}</span></td>
           <td><span class="status st-${esc(s.status)}"><span class="status-dot"></span>${esc(s.status)}</span></td>
           <td class="num mono">${fmtNum(s.turns)}</td>
-          <td class="num mono">${fmtUsd(s.costUsd)}</td>
+          ${tokensCell(s.tokens)}
+          ${sessionCostCell(s)}
           <td class="pr-term">
             <span class="small ${m?.error ? 'error' : 'muted'}" data-term-msg>${esc(m?.text || '')}</span>
             ${termButtons('live', isOrchSession(s) ? 'Follow the orchestrator log in a terminal' : '')}
@@ -806,8 +810,29 @@ function projectRunBody(r, pv) {
           </td>
         </tr>`;
       }).join('')}</tbody>
+      ${sessionsTotalRow(sessions)}
     </table>` : '<p class="muted small">No agent sessions in this run.</p>'}
   </div>`;
+}
+
+// A session's tokens (sessionView: input + output + cache read + cache write, as on the Usage
+// screen): the compact total, the exact breakdown on hover; — when the session has none (the engine).
+const TOKEN_PARTS = [['input', 'Input'], ['output', 'Output'], ['cache_read', 'Cache read'], ['cache_write', 'Cache write'], ['reasoning', 'Reasoning (counted in output)']];
+function tokensCell(t) {
+  if (!t?.total) return '<td class="num mono muted">—</td>';
+  const tip = TOKEN_PARTS.map(([k, label]) => `${label}: ${fmtNum(t[k])}`).join('\n');
+  return `<td class="num mono" title="${esc(tip)}">${fmtTok(t.total)}</td>`;
+}
+// Tokens with no cost: a model with no price (Codex, unpriced models), not a free session.
+function sessionCostCell(s) {
+  if (!s.costUsd && s.tokens?.total && s.provider !== 'mock') return '<td class="num mono muted" title="No price for this model: see Usage › Prices">—</td>';
+  return `<td class="num mono">${fmtUsd(s.costUsd)}</td>`;
+}
+function sessionsTotalRow(sessions) {
+  const sum = (f) => sessions.reduce((a, s) => a + (f(s) || 0), 0);
+  const tokens = Object.fromEntries([...TOKEN_PARTS.map(([k]) => [k, sum((s) => s.tokens?.[k])]), ['total', sum((s) => s.tokens?.total)]]);
+  return `<tfoot><tr class="pr-total"><td colspan="3">Total</td><td class="num mono">${fmtNum(sum((s) => s.turns))}</td>
+    ${tokensCell(tokens)}<td class="num mono">${fmtUsd(sum((s) => s.costUsd))}</td><td></td></tr></tfoot>`;
 }
 
 function runTaskBlock(r) {
@@ -1952,13 +1977,77 @@ function renderNavRuns() {
 function renderRunSummary() {
   const r = state.run;
   if (!r) return;
-  const inputs = Object.entries(r.inputs || {}).filter(([, v]) => v !== undefined && v !== '');
-  $('#run-summary').innerHTML = `
+  const inputs = Object.entries(r.inputs || {}).filter(([, v]) => v !== undefined && v !== null && v !== '' && !(Array.isArray(v) && !v.length));
+  const html = `
     <div class="run-summary-name"><b>${esc(r.workflow || '')}</b>${r.version ? ` <span class="muted small">v${esc(r.version)}</span>` : ''}</div>
     ${r.project ? `<div class="small">Project: <b>${esc(r.project)}</b></div>` : ''}
-    <dl class="kv">${inputs.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(String(v).length > 160 ? String(v).slice(0, 160) + '…' : v)}</dd>`).join('')}</dl>
-    <button class="btn sm ghost sup-btn" id="btn-run-sup" title="Ask the AI supervisor to explain this run and suggest how to continue"><span class="sup-mark">◆</span> Ask the supervisor</button>`;
+    <dl class="kv run-inputs">${inputs.map(([k, v]) => `<dt title="${esc(k)}">${esc(k)}</dt>${inputValueCell(v)}`).join('')}</dl>
+    <div class="row">
+      <button class="btn sm ghost sup-btn" id="btn-run-sup" title="Ask the AI supervisor to explain this run and suggest how to continue"><span class="sup-mark">◆</span> Ask the supervisor</button>
+      ${canResume(r) ? '<button class="btn sm ghost" id="btn-run-resume" title="Start a new run from a step of this one, keeping the previous outputs (no supervisor call)">Resume from step…</button>' : ''}
+    </div>`;
+  // rendered on every event: rebuilt only when it changes, so a hover popover over an input stays open
+  const box = $('#run-summary');
+  if (box._html === html) return;
+  box._html = html;
+  box.innerHTML = html;
   $('#btn-run-sup').onclick = () => openSupervisorForCurrent();
+  if ($('#btn-run-resume')) $('#btn-run-resume').onclick = () => openResumeDialog(r.id);
+}
+
+// A run input in the Details panel: one line cut with an ellipsis (paths keep their end), the full
+// text on hover (a scrollable popover for long values). Arrays read as a list (issue URLs as #N).
+const ISSUE_URL_RE = /\/(?:issues|pull|merge_requests|-\/issues)\/(\d+)\/?$/;
+function inputText(v) {
+  if (Array.isArray(v)) {
+    const items = v.map((x) => (x && typeof x === 'object' ? JSON.stringify(x) : String(x)));
+    const refs = items.map((x) => ISSUE_URL_RE.exec(x)?.[1]);
+    return { line: refs.every(Boolean) ? refs.map((n) => `#${n}`).join(', ') : items.join(', '), full: items.join('\n') };
+  }
+  if (v && typeof v === 'object') return { line: JSON.stringify(v), full: JSON.stringify(v, null, 2) };
+  const s = String(v);
+  return { line: s.replace(/\s*\n\s*/g, ' ⏎ '), full: s };
+}
+const looksLikePath = (s) => !/\n/.test(s) && /^(?:[a-zA-Z]:[\\/]|\\\\|\/|~[\\/])/.test(s);
+function inputValueCell(v) {
+  const { line, full } = inputText(v);
+  const long = full.length > 200 || full.includes('\n');
+  const text = looksLikePath(line) ? `<span class="kv-path"><bdi>${esc(line)}</bdi></span>` : esc(line);
+  return long ? `<dd class="kv-line" data-full="${esc(full)}">${text}</dd>` : `<dd class="kv-line" title="${esc(full)}">${text}</dd>`;
+}
+
+// One floating popover for elements with data-full (long run inputs): scrollable, stays open while
+// the mouse moves into it, so a task of thousands of characters stays readable.
+function initFullTextPopover() {
+  const pop = document.createElement('div');
+  pop.className = 'full-pop hidden';
+  document.body.appendChild(pop);
+  let owner = null;
+  let timer = null;
+  const hide = () => { clearTimeout(timer); timer = setTimeout(() => { pop.classList.add('hidden'); owner = null; }, 200); };
+  document.addEventListener('mouseover', (e) => {
+    const el = e.target.closest?.('[data-full]');
+    if (el || pop.contains(e.target)) clearTimeout(timer);
+    if (!el || el === owner) return;
+    owner = el;
+    pop.textContent = el.dataset.full;
+    pop.classList.remove('hidden');
+    const b = el.getBoundingClientRect();
+    const w = Math.min(560, window.innerWidth - 24);
+    pop.style.width = `${w}px`;
+    pop.style.left = `${Math.max(12, Math.min(b.left, window.innerWidth - w - 12))}px`;
+    const below = window.innerHeight - b.bottom - 12;
+    pop.style.maxHeight = `${Math.max(below, b.top - 12, 120)}px`;
+    if (below >= Math.min(pop.scrollHeight, 240) || below >= b.top) { pop.style.top = `${b.bottom + 4}px`; pop.style.bottom = ''; }
+    else { pop.style.top = ''; pop.style.bottom = `${window.innerHeight - b.top + 4}px`; }
+  });
+  document.addEventListener('mouseout', (e) => {
+    const from = e.target.closest?.('[data-full]') || (pop.contains(e.target) ? pop : null);
+    if (!from) return;
+    const to = e.relatedTarget;
+    if (to && (pop.contains(to) || to.closest?.('[data-full]') === owner)) return;
+    hide();
+  });
 }
 
 function renderRunBanner() {
@@ -2692,10 +2781,7 @@ function recCard(r, i, steps) {
   let ctrl = '';
   if (r.action === 'resume') {
     const pre = steps.includes(r.step) ? r.step : steps[0];
-    ctrl = `<div class="field"><label for="rec-step-${i}">Resume from step</label>
-        <select id="rec-step-${i}">${steps.map((s) => `<option ${s === pre ? 'selected' : ''}>${esc(s)}</option>`).join('')}</select></div>
-      <div class="field"><label for="rec-ins-${i}">Instruction for the agents</label>
-        <textarea id="rec-ins-${i}" rows="4">${esc(r.instruction || '')}</textarea></div>
+    ctrl = `${resumeFields(`rec-${i}`, steps.map((s) => ({ id: s })), pre, r.instruction || '')}
       <div class="row"><button class="btn sm primary" data-rec="${i}">Resume from this step</button>${msg}</div>`;
   } else if (r.action === 'rerun') {
     ctrl = `${r.instruction ? `<p class="small muted sup-ins">${esc(r.instruction)}</p>` : ''}<div class="row"><button class="btn sm" data-rec="${i}">Run again</button>${msg}</div>`;
@@ -2712,8 +2798,8 @@ async function runRecommendation(i) {
   const r = res?.analysis?.recommendations?.[i];
   if (!r) return;
   const steps = res.steps || [];
-  const step = r.action === 'resume' ? $(`#rec-step-${i}`).value : steps[0];
-  const instruction = r.action === 'resume' ? $(`#rec-ins-${i}`).value.trim() : r.instruction || '';
+  const step = r.action === 'resume' ? $(`#rec-${i}-step`).value : steps[0];
+  const instruction = r.action === 'resume' ? $(`#rec-${i}-ins`).value.trim() : r.instruction || '';
   const btn = document.querySelector(`[data-rec="${i}"]`);
   if (btn) btn.disabled = true;
   sup.recMsgs[i] = { text: 'Starting…', error: false };
@@ -2727,6 +2813,88 @@ async function runRecommendation(i) {
     renderSupervisor();
   }
 }
+
+// ---------------------------------------------------------------------------
+// Resume from step…: the owner restarts a finished, failed, cancelled or interrupted run from any
+// step, with no supervisor analysis (runs:resume, the channel the recommendations use too). The
+// service refuses a step past a human gate the run decided; every gate reached again asks again.
+const canResume = (r) => !!r && !r.current && !['running', 'pending', 'waiting'].includes(r.status);
+
+// The step select and the instruction, shared by the dialog and the supervisor's resume card.
+// options: [{ id, label?, disabled? }]
+function resumeFields(id, options, pre, instruction = '') {
+  return `<div class="field"><label for="${id}-step">Resume from step</label>
+      <select id="${id}-step">${options.map((o) => `<option value="${esc(o.id)}"${o.id === pre ? ' selected' : ''}${o.disabled ? ' disabled' : ''}>${esc(o.label || o.id)}</option>`).join('')}</select></div>
+    <div class="field"><label for="${id}-ins">Instruction for the agents <span class="muted small">(optional)</span></label>
+      <textarea id="${id}-ins" rows="4" placeholder="e.g. The app was restarted: go on with the same task.">${esc(instruction)}</textarea></div>`;
+}
+
+function resumeStepLabel(o, s) {
+  const where = s.id === o.stoppedAt ? (o.status === 'failed' && s.id === o.failedStep ? 'failed here' : 'stopped here')
+    : s.id === o.failedStep ? 'failed' : s.visits ? 'reached' : '';
+  return [s.id, s.gate ? 'human gate' : '', where, s.blockedBy ? `after the decided gate ${s.blockedBy}` : ''].filter(Boolean).join(' · ');
+}
+
+// What the resume keeps and what runs again, for the chosen step.
+function resumeEffects(o, stepId) {
+  const at = o.steps.findIndex((s) => s.id === stepId);
+  if (at < 0) return '';
+  const before = o.steps.slice(0, at).filter((s) => s.visits && !s.gate).map((s) => s.id);
+  const again = o.steps.slice(at).filter((s) => s.visits).map((s) => s.id);
+  const gates = o.steps.slice(at).filter((s) => s.gate && (s.visits || s.id === stepId)).map((s) => s.id);
+  const wt = o.worktree;
+  const kept = [
+    before.length ? `the outputs of ${before.map((s) => `<b>${esc(s)}</b>`).join(', ')}` : 'no earlier outputs (it starts at the beginning)',
+    o.sessions.length || o.handoffs.length ? `the agents' sessions and handoff notes (${esc([...new Set([...o.sessions, ...o.handoffs])].join(', '))})` : '',
+    wt ? (wt.exists ? `the worktree and branch <span class="mono">${esc(wt.branch || '')}</span> <span class="muted mono">${esc(wt.dir)}</span>` : 'not the worktree: it was removed, so the run starts a new one from the base') : '',
+  ].filter(Boolean);
+  return `<div><b>Kept:</b> ${kept.join('; ')}.</div>
+    <div><b>Runs again:</b> <b>${esc(stepId)}</b> and the steps its transitions lead to${again.length > 1 ? ` (reached before: ${again.slice(1).map(esc).join(', ')})` : ''}.</div>
+    <div><b>Human gates ask again</b> when the run reaches them${gates.length ? ` (${gates.map(esc).join(', ')}${o.steps[at].gate ? '; this step is one' : ''})` : ''}: none is treated as already approved.</div>`;
+}
+
+async function openResumeDialog(runId) {
+  const body = $('#resume-body');
+  const msg = $('#resume-msg');
+  const yes = $('#btn-resume-yes');
+  const box = $('#resume-mock');
+  $('#resume-run').innerHTML = `<span class="mono">${esc(runId)}</span>`;
+  body.innerHTML = '<div class="sup-loading"><span class="spinner"></span><span>Reading the run…</span></div>';
+  msg.textContent = '';
+  msg.className = 'small';
+  yes.disabled = true;
+  $('#btn-resume-no').onclick = () => closeModal('#resume-modal');
+  openModal('#resume-modal');
+  let o;
+  try { o = await api.resumeOptions(runId); } catch (e) { body.innerHTML = `<p class="error small">${esc(errMsg(e))}</p>`; return; }
+  $('#resume-run').innerHTML = `<span class="mono">${esc(o.runId)}</span> · ${esc(o.workflow || '')} <span class="pill pill-${esc(o.status)}">${esc(o.status)}</span>${o.mock ? ' <span class="badge p-mock">simulated</span>' : ''}`;
+  if (o.active) { body.innerHTML = '<p class="error small">The run is still active: it can be resumed once it ends.</p>'; return; }
+  body.innerHTML = `${resumeFields('resume', o.steps.map((s) => ({ id: s.id, label: resumeStepLabel(o, s), disabled: !!s.blockedBy })), o.suggested)}
+    <div id="resume-effects" class="resume-effects small"></div>`;
+  const sel = $('#resume-step');
+  const effects = () => { $('#resume-effects').innerHTML = resumeEffects(o, sel.value); };
+  sel.onchange = effects;
+  effects();
+  // a simulated run resumes as one; simulation-only (automated checks) never resumes a real run
+  box.checked = o.mock || devMode();
+  box.disabled = o.mock || !!state.simulationOnly;
+  yes.disabled = !o.suggested;
+  yes.onclick = async () => {
+    yes.disabled = true;
+    msg.className = 'small muted';
+    msg.textContent = 'Starting…';
+    try {
+      await api.resumeRun(o.runId, sel.value, $('#resume-ins').value.trim() || undefined, o.mock || wantsSimulation(box));
+      closeModal('#resume-modal');
+      showView('run');
+    } catch (e) {
+      msg.className = 'small error';
+      msg.textContent = errMsg(e);
+      yes.disabled = false;
+    }
+  };
+}
+window.openResumeDialog = openResumeDialog;
 
 let toastTimer = null;
 // runId: the run it is about (a click shows it); gate: an approval.requested event to open.

@@ -163,6 +163,10 @@ agents:
       delete test files (the orchestrator refuses a turn that changes one) and do not run the
       full test suite. To check your change, run a focused existing test or the build. Describe
       what should be tested (behaviours, edge cases, files) in `test_notes` when asked.
+      Keep your context small (context-economy): on a task that touches more than about three
+      files, start one exploration sub-agent before your first edit and have it report the
+      files, functions and line numbers to change; then read only the files you will edit, and
+      group several changes to a file in one edit. On a fix turn, read only what the findings name.
       Work on your own branch and commit your changes there. This run has its own git
       worktree (the current folder), which starts detached at the LOCAL {{ inputs.base_branch }}:
       this workflow works locally, and the local {{ inputs.base_branch }} holds earlier local

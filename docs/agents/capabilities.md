@@ -14,7 +14,7 @@ agents:
       tools: [read, edit, write, bash:git, bash:npm]   # bash = any command; lists may nest (anchors)
       web: false             # WebSearch / WebFetch (default false)
       mcp: []                # names from mcp_servers (default none)
-      subagents: false       # the CLI's own sub-agents, e.g. Claude's Task (default false)
+      subagents: false       # the CLI's own sub-agents, e.g. Claude's Agent/Task (default false)
     isolation: true          # default; false = the user's own CLI setup is loaded too
 steps:
   - id: publish
@@ -37,7 +37,7 @@ from the bundled workflows: it was documentation only. The run log gets one
 | Writes | `--permission-mode acceptEdits` with `edit`/`write` | workspace-write sandbox (no network for commands) | not restricted (`--always-approve`) |
 | Commands | allowlist per command | **not enforceable** (the sandbox limits writes, not which command runs) | not restricted |
 | Web | `WebSearch`/`WebFetch` offered only with `web: true` | `-c web_search="disabled"` unless `web: true` | `--disable-web-search` unless `web: true` |
-| Sub-agents | `Task` only with `subagents: true` | n/a | `--no-subagents` unless `subagents: true` |
+| Sub-agents | `Agent` and `Task` (the tool's current and older name; `--tools` drops names the CLI doesn't know) only with `subagents: true`; the `capabilities:` log line says `subagents: Agent/Task tool offered` | n/a (the log line says `subagents: not offered by Codex`) | `--no-subagents` unless `subagents: true` |
 | MCP | `--mcp-config` with the declared servers + `mcp__<name>` allowed | declared servers only | not passed (noted in the log) |
 | Test files (`edits_tests: false`) | `--disallowedTools "Edit(<glob>) …"` over `tests_paths` (a bare name gets `**/`); Bash can still write them | not refused (noted) | not refused (noted) |
 

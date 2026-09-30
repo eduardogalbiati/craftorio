@@ -167,6 +167,23 @@ body:not(.dev-mode) .dev-only { display: none !important; }
 .run-summary .kv { grid-template-columns: auto 1fr; }
 .run-summary .kv dd { word-break: break-word; overflow-wrap: anywhere; }
 .run-summary-name { margin-bottom: 4px; }
+/* run inputs: one line each, the full text on hover (title, or .full-pop for long values) */
+.run-summary .kv.run-inputs { grid-template-columns: minmax(0, max-content) minmax(0, 1fr); }
+.run-summary .run-inputs dt,
+.run-summary .run-inputs dd.kv-line { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; word-break: normal; overflow-wrap: normal; }
+.run-summary .run-inputs dt { max-width: 14ch; }
+.run-summary .run-inputs dd[data-full] { cursor: help; }
+/* a path keeps its end (the folder name): the ellipsis goes at the start */
+.kv-path { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; }
+.kv-path bdi { direction: ltr; unicode-bidi: isolate; }
+.run-summary > .row { margin-top: 8px; gap: 6px; flex-wrap: wrap; }
+.full-pop { position: fixed; z-index: 1000; overflow: auto; padding: 10px 12px; background: var(--panel); border: 1px solid var(--border);
+  border-radius: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, .35); font-family: var(--mono); font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.resume-card { width: 560px; }
+.resume-card #resume-run { margin-bottom: 12px; }
+.resume-card .field select { width: 100%; }
+.resume-effects { display: grid; gap: 4px; margin-top: 8px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; color: var(--muted); }
+.resume-effects b { color: var(--text); }
 
 /* ---------- dashboard ---------- */
 .dash { max-width: 980px; margin: 0 auto; padding-top: 8vh; text-align: center; }
@@ -649,6 +666,8 @@ details[open] > summary .label::after { content: " ▾"; }
 .pr-fulltask pre { margin: 6px 0 0; white-space: pre-wrap; font-family: var(--mono); font-size: 12px; background: var(--panel-2); padding: 8px 10px; border-radius: 8px; max-height: 200px; overflow: auto; }
 .pr-sessions { border: 1px solid var(--border); border-radius: 8px; border-collapse: separate; border-spacing: 0; }
 .pr-sessions .status { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; }
+.pr-sessions td[title] { cursor: help; }
+.pr-sessions tfoot td { border-top: 1px solid var(--border); font-weight: 600; color: var(--muted); }
 .pr-term { text-align: right; white-space: nowrap; }
 .pr-term .btn { margin-left: 4px; }
 .pr-term [data-term-msg] { margin-right: 6px; white-space: normal; }
