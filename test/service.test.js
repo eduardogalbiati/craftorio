@@ -25,13 +25,24 @@ steps:
 `;
 
 // The engine service with a temporary workspace and a host that records what it was asked to do.
+// Cleanup order matters: a run left open at a gate (e.g. by openGateFixture below) is still
+// writing to the workspace, so this single hook stops every run still active first, then shuts
+// the service down and only then removes the workspace directory. node:test runs t.after hooks
+// in the order they were added, so registering this before any test-specific hook (which may
+// also try to stop the same run, harmlessly, once it is already gone) keeps rmSync last.
 function makeService(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'service-ws-'));
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   process.env.MULTIAGENT_SIMULATION_ONLY = '1'; // tests never call real models
   const trashed = [];
   const service = createService({ host: { trashItem: async (p) => { trashed.push(p); }, appVersion: '9.9.9', isPackaged: false } });
-  t.after(() => service.shutdown());
+  t.after(async () => {
+    for (const run of service.api['runs:active']()) {
+      try { service.api['run:stop']({ runId: run.runId }); } catch { /* already ended */ }
+    }
+    await untilTrue(() => service.api['runs:active']().length === 0);
+    service.shutdown();
+  });
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   service.setWorkspace(setupWorkspace(dir, { persist: false }));
   fs.writeFileSync(path.join(service.workspace().workflows, 'fixture-service.yaml'), WORKFLOW);
   return { service, api: service.api, trashed };
