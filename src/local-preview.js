@@ -7,8 +7,9 @@
 // - whether `install` must run first: dependencies missing, or the lockfile changed since the last
 //   preview of that run;
 // - the port of `url` already in use (reported instead of failing silently);
-// - the safe default for this app: the copy runs on a scratch workspace (projects, agents, skills,
-//   workflows and settings copied, never the runs) with its own user-data folder and in simulation
+// - the safe default for this app: the copy runs on a scratch workspace (agents, skills, workflows
+//   and settings copied, project entries pointing to empty scratch folders, never the runs or the
+//   real project folders) with its own user-data folder and in simulation
 //   only, so trying it can't spend on real models or touch the owner's workspace.
 
 const fs = require('fs');
@@ -28,8 +29,12 @@ const LOCKFILES = [
   'yarn.lock',
 ];
 
-// What the scratch workspace copies from the real one (never runs/, repos/, worktrees/)
-const COPIED = ['agents', 'projects', 'settings.json', 'skills', 'workflows'];
+// What the scratch workspace copies from the real one (never runs/, repos/, worktrees/); projects
+// are copied apart (scratchProjects)
+const COPIED = ['agents', 'settings.json', 'skills', 'workflows'];
+
+// A git remote (https, ssh, scp-like); anything else is a local path and is dropped
+const isRemote = (repo) => /^([a-z][a-z0-9+.-]*:\/\/|[^@\s/\\]+@[^:\s]+:)/i.test(String(repo || ''));
 
 function resolveConfig(project, wf) {
   const own = project?.localPreview;
@@ -85,14 +90,32 @@ function portInUse(port, host = '127.0.0.1') {
   });
 }
 
-// <root>/workspace: a copy of the owner's projects, agents, skills, workflows and settings;
-// <root>/user-data: the app's own data folder (sign-in, window state) for the copy.
+// The project entries only (<id>.json), each pointing to an empty folder of its own in the scratch
+// workspace instead of the owner's real one, so the copy can't read or write the real projects.
+// Their contents are not copied (repositories can be large): a copy starts from an empty folder.
+function scratchProjects(from, to) {
+  if (!fs.existsSync(from)) return;
+  fs.mkdirSync(to, { recursive: true });
+  for (const f of fs.readdirSync(from).filter((n) => n.endsWith('.json'))) {
+    let p;
+    try { p = JSON.parse(fs.readFileSync(path.join(from, f), 'utf8')); } catch { continue; }
+    const folder = path.resolve(to, f.slice(0, -5));
+    fs.mkdirSync(folder, { recursive: true });
+    const { previousFolders, ...rest } = p;
+    fs.writeFileSync(path.join(to, f), JSON.stringify({ ...rest, folder, repo: isRemote(p.repo) ? p.repo : null }, null, 2));
+  }
+}
+
+// <root>/workspace: a copy of the owner's agents, skills, workflows and settings, and of the project
+// entries pointing to scratch folders; <root>/user-data: the app's own data folder (sign-in, window
+// state) for the copy.
 function scratchWorkspace(ws, root) {
   const dir = path.join(root, 'workspace');
   for (const name of COPIED) {
     const from = path.join(ws.root, name);
     if (fs.existsSync(from)) fs.cpSync(from, path.join(dir, name), { recursive: true, force: true });
   }
+  scratchProjects(path.join(ws.root, 'projects'), path.join(dir, 'projects'));
   fs.mkdirSync(path.join(dir, 'runs'), { recursive: true });
   const userData = path.join(root, 'user-data');
   fs.mkdirSync(userData, { recursive: true });
@@ -122,5 +145,6 @@ module.exports = {
   previewEnv,
   recordInstall,
   resolveConfig,
+  scratchProjects,
   scratchWorkspace,
 };
