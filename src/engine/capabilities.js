@@ -74,12 +74,21 @@ function toml(v) {
 
 const pick = (servers, names) => Object.fromEntries(names.map((n) => [n, servers[n]]));
 
+// A tests_paths glob as a Claude Code permission path: gitignore-style, relative to the working
+// folder; a bare name ("*.test.*") matches at any depth.
+const claudePath = (p) => {
+  const s = String(p).trim().replace(/\\/g, '/').replace(/^\.\//, '');
+  return s.includes('/') ? s : `**/${s}`;
+};
+
 /**
  * Flags for one turn. caps: normalized capabilities or null (the agent's cli_args only).
  * isolated: keep the user's CLI configuration out. mcpServers: the workflow's mcp_servers.
+ * denyEdits: globs of files the agent may not edit (`edits_tests: false` → tests_paths); only
+ * Claude's edit tools can refuse them, the engine checks every CLI's turn afterwards anyway.
  * Returns { args, notes }: notes say what this CLI could not enforce (logged once per agent).
  */
-function providerArgs(type, { caps = null, isolated = true, mcpServers = {} } = {}) {
+function providerArgs(type, { caps = null, isolated = true, mcpServers = {}, denyEdits = [] } = {}) {
   const args = [];
   const notes = [];
   const mcp = caps ? pick(mcpServers, caps.mcp) : {};
@@ -108,6 +117,8 @@ function providerArgs(type, { caps = null, isolated = true, mcpServers = {} } = 
       if (caps.subagents) { offered.push('Task'); allowed.push('Task'); }
       allowed.push(...Object.keys(mcp).map((n) => `mcp__${n}`));
       args.push('--tools', offered.join(','), '--allowedTools', allowed.join(' '));
+      // deny rules win over allow rules; Edit(...) covers every built-in tool that edits files
+      if (writes(caps) && denyEdits.length) args.push('--disallowedTools', denyEdits.map((p) => `Edit(${claudePath(p)})`).join(' '));
       // file edits (and mkdir/redirects) are refused headless without acceptEdits
       if (writes(caps)) args.push('--permission-mode', 'acceptEdits');
       break;
@@ -138,6 +149,7 @@ function providerArgs(type, { caps = null, isolated = true, mcpServers = {} } = 
     default:
       break;
   }
+  if (denyEdits.length && type !== 'claude-code' && (!caps || !readOnly(caps))) notes.push('test paths (edits_tests: false) are not refused by the tools: the engine checks the turn\'s changes');
   return { args, notes };
 }
 

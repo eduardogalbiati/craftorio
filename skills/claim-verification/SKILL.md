@@ -48,7 +48,8 @@ The cheapest command that observes the claim directly, run by you, deterministic
 a focused existing test (`npx vitest run <path> -t "<name>"`, `python -m pytest <file>::<test>`),
 a one-liner calling the public function, the CLI with an input passed as an argument, a
 benchmark one-liner with a fixed seed and several repetitions.
-Existing tests passing is supporting evidence, not proof of the claim.
+Existing tests passing is supporting evidence, not proof of the claim. Never run the whole test
+suite: it is slow, it is the test writer's job, and it does not compare base and branch.
 
 ## 3. Baseline vs treatment
 

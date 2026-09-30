@@ -14,8 +14,8 @@
 # the run's branch into the local <base> automatically (`merge: local`): rebased onto it first
 # when it moved, fast-forward only (linear history), never pushed.
 #   - A merge that fails (usually a conflict with another run merged meanwhile) goes to
-#     resolve_merge: the developer rebases onto the local <base>, resolves the conflicts, runs the
-#     suite, and the change goes through review, tests, build and verification again before the
+#     resolve_merge: the developer rebases onto the local <base> and resolves the conflicts (test
+#     files included), and the change goes through review, tests, build and verification again before the
 #     next merge attempt (at most 3 rounds). Only what the developer can't fix (e.g. uncommitted
 #     changes in the checkout where <base> is checked out: the user's) stops at merge_blocked.
 #   - orchestrator.limits.max_total_context: past 20M tokens of context the run pauses before its
@@ -25,7 +25,9 @@
 #
 # Rules (as in software-development):
 #   - Agents never talk to each other: the engine delegates fixes to the developer.
-#   - `language` picks unit-test-writer-<language> and build-audit-<language>.
+#   - Tests belong to the test writer (the only full suite run); the developer changes production
+#     code only (`edits_tests: false`, enforced by the engine) and says what to test (`test_notes`).
+#   - `language` picks unit-test-writer-<language> (test writer) and build-audit-<language> (builder).
 # =============================================================================
 
 apiVersion: multiagent/v1
@@ -33,7 +35,7 @@ kind: Workflow
 
 metadata:
   name: software-development-local-hero
-  version: 0.2.0
+  version: 0.3.0
   description: Implements, reviews, tests, builds and verifies a change in its own worktree, then merges it into the local base branch automatically, resolving conflicts on the way. No push, no PR, no CI; push when you want.
   tags: [dev, review, test, build, local, worktree]
   # Dashboard category: plan (Plan & Design), build (Code & Build) or monitor (Monitor & Improve).
@@ -143,12 +145,18 @@ agents:
     session: handoff
     # subagents: exploration sub-agents map the code, so the main context stays small
     capabilities: { tools: [read, edit, write, *toolchains], web: false, subagents: true }
-    # bug-diagnosis: fixes delegated after failures; merge-conflict-resolver: "update the branch with the base";
-    # long-commands: suites and builds in the foreground (explicit, not only through the test writer's `uses`)
-    skills: ["unit-test-writer-{{ inputs.language }}", long-commands, bug-diagnosis, merge-conflict-resolver, context-economy, decision-log]
+    # tests belong to the test writer: a turn that changes a test file (tests_paths) is sent back
+    edits_tests: false
+    # bug-diagnosis: fixes delegated after failures; merge-conflict-resolver: resolve_merge;
+    # long-commands: installs, builds and focused checks in the foreground
+    skills: [long-commands, bug-diagnosis, merge-conflict-resolver, context-economy, decision-log]
     system_prompt: |
-      You are a senior software engineer. Make small, tested, cohesive changes that
-      follow the architecture and conventions of the existing code.
+      You are a senior software engineer. Make small, cohesive changes to the production code
+      that follow the architecture and conventions of the existing code.
+      Tests belong to the test writer, who runs after the code review: never create, edit or
+      delete test files (the orchestrator refuses a turn that changes one) and do not run the
+      full test suite. To check your change, run a focused existing test or the build. Describe
+      what should be tested (behaviours, edge cases, files) in `test_notes` when asked.
       Work on your own branch and commit your changes there. This run has its own git
       worktree (the current folder), which starts detached at the LOCAL {{ inputs.base_branch }}:
       this workflow works locally, and the local {{ inputs.base_branch }} holds earlier local
@@ -157,7 +165,7 @@ agents:
       orchestrator merges your branch into the local {{ inputs.base_branch }} after approval.
       A fresh worktree has no installed dependencies: install them
       when they are missing or the lockfile changed (e.g. `npm ci` when node_modules is missing
-      or package-lock.json differs from the previous HEAD). Run the project's tests the way the test skill describes.
+      or package-lock.json differs from the previous HEAD).
       {% if inputs.issue or (inputs.issues | length) %}End every commit message with one line per issue this run implements,
       `Closes #<number>` (the numbers from: {{ inputs.issue }}{% for u in inputs.issues %} {{ u }}{% endfor %}):
       GitHub closes them when the local {{ inputs.base_branch }} is pushed.
@@ -183,10 +191,11 @@ agents:
     capabilities: { tools: [read, edit, write, *toolchains], web: false }
     skills: ["unit-test-writer-{{ inputs.language }}"]
     system_prompt: |
-      You are the test writer. You write and update tests and run the suite, following
-      the test skill for this language. You do NOT fix production code: when a test
-      fails because of a bug in the code, describe the failure precisely (test, file,
-      error, probable cause) so the orchestrator can hand it to the developer.
+      You are the test writer, the only agent of this workflow that writes tests. You write
+      and update them (including tests an intended behaviour change makes obsolete) and run
+      the full suite, following the test skill for this language. You do NOT fix production
+      code: when a test fails because of a bug in the code, describe the failure precisely
+      (test, file, error, probable cause) so the orchestrator can hand it to the developer.
       Commit test files only.
 
   builder:
@@ -198,7 +207,7 @@ agents:
     system_prompt: |
       You are the builder. You build the application and check its dependencies for
       vulnerabilities, following the build skill for this language. You do not change
-      code. Vulnerability policy:
+      code and you do not run the test suite (the test writer ran it). Vulnerability policy:
       - blocks: any critical; high in production dependencies
       - report only: moderate/low, and anything in development-only dependencies
 
@@ -210,7 +219,8 @@ agents:
     skills: [claim-verification]
     system_prompt: |
       You are the verifier. You prove or disprove that the change does what the task
-      asked, by running the same command before and after it. You do not change code.
+      asked, by running the same command before and after it. You do not change code and
+      you do not run the full test suite (the test writer ran it).
 
 groups:
   - name: Develop
@@ -253,14 +263,18 @@ steps:
       {{ inputs.base_branch }}): `git switch -c <branch>`, then make sure dependencies are
       installed for that base.
       {% endif %}
+      Change production code only: the test writer writes and runs the tests after the review.
+      In `test_notes`, tell it what should be tested: the behaviours you changed, the edge cases
+      and the files (and the existing tests your change makes obsolete, if any).
     output_schema:
       type: object
-      required: [branch, summary, files_changed, tests_passed, committed]
+      required: [branch, summary, files_changed, test_notes, committed]
       properties:
         branch:        { type: string }
         summary:       { type: string }
         files_changed: { type: array, items: { type: string } }
-        tests_passed:  { type: boolean }
+        # for the test writer: behaviours, edge cases and files to test
+        test_notes:    { type: string }
         committed:     { type: boolean }
         commit_sha:    { type: string }
         notes:         { type: string }
@@ -276,9 +290,9 @@ steps:
               summary: { type: string }
     transitions:
       # an issue of the group could not be done: the owner decides (once) whether the run goes on without it
-      - when: "output.tests_passed and output.committed and inputs.issues | length > 1 and not steps.issue_not_done.output and (output.issues or []) | rejectattr('done') | list | length"
+      - when: "output.committed and inputs.issues | length > 1 and not steps.issue_not_done.output and (output.issues or []) | rejectattr('done') | list | length"
         goto: issue_not_done
-      - when: "output.tests_passed and output.committed"
+      - when: "output.committed"
         goto: code_review
       - when: "true"
         goto: develop
@@ -355,8 +369,9 @@ steps:
         goto: end
         status: cancelled
 
-  # Test writer: writes/updates tests and runs the suite. On failure the
-  # orchestrator hands it to the developer and tells the test writer when it is fixed.
+  # Test writer: owns the tests (writes/updates them) and runs the full suite, the only full run
+  # of this workflow. On a production-code failure the orchestrator hands it to the developer and
+  # tells the test writer when it is fixed.
   - id: test
     agent: test_writer
     prompt: |
@@ -364,18 +379,24 @@ steps:
       Original task: {{ inputs.task }}
       Change made: {{ steps.develop.output.summary }}
       Files: {{ steps.develop.output.files_changed | join(', ') }}
+      {% if steps.develop.output.test_notes %}
+      What the developer says should be tested:
+      {{ steps.develop.output.test_notes }}
+      {% endif %}
 
       {% if delegate_result %}
-      The developer applied the fix you asked for:
+      The developer fixed the production code you reported (it does not touch the tests):
       {{ delegate_result.text }}
       Run the full suite again and confirm. If the fix changed the UI, capture the "after"
       screenshots again (same names, same folder) and return the updated list.
       {% else %}
-      1. Check out the branch. Decide whether the change needs new or updated tests.
-         If so, write them following the test skill (the framework and folder the
-         project already uses) and commit only them. Purely visual changes may not
-         need a new test — justify it.
-      2. Run the full suite with the project's test command.
+      1. Check out the branch. You own the tests: the developer did not write or run any.
+         Write the tests the change needs, starting from the developer's notes (they are a
+         starting point, not a limit), following the test skill (the framework and folder the
+         project already uses). Update the tests the change makes obsolete because of an
+         intended behaviour change (not a bug). Commit only test files. Purely visual changes
+         may not need a new test — justify it.
+      2. Run the full suite once with the project's test command.
       3. If the diff against the local `{{ inputs.base_branch }}` touches the UI, capture the
          affected screens before (base `{{ inputs.base_branch }}`) and after (the branch)
          following the test skill, into `{{ run_dir }}/screenshots` (PNGs + screenshots.json,
@@ -411,10 +432,11 @@ steps:
         delegate:
           agent: developer
           prompt: |
-            The test writer found failures on branch `{{ steps.develop.output.branch }}`:
+            The test writer found failures caused by the production code on branch `{{ steps.develop.output.branch }}`:
             {{ output.failure_report }}
-            Fix the production code (do not change the tests without justifying it), run
-            the test suite, commit and report the commit hash.
+            Fix the production code only: never change the tests (if you think a test is wrong,
+            say why in your answer; the test writer owns it). Run only the failing tests, not the
+            full suite (the test writer runs it next), commit and report the commit hash.
         goto: test
         max_visits: 3
         on_exhausted: test_failed
@@ -478,7 +500,7 @@ steps:
           prompt: |
             The builder blocked branch `{{ steps.develop.output.branch }}`:
             {{ output.report }}
-            Fix it (build failure or vulnerable dependency), run the test suite,
+            Fix it (build failure or vulnerable dependency), check it with a focused test or the build (not the full suite),
             commit and report the commit hash.
         goto: build
         max_visits: 3
@@ -557,7 +579,7 @@ steps:
             Claim: {{ output.claim }}
             Command: {{ output.command }}
             Observed: {{ output.evidence }}
-            Fix it, run the test suite, commit and report the commit hash.
+            Fix it, check it with a focused test or the build (not the full suite), commit and report the commit hash.
         goto: verify_change
         max_visits: 2
         on_exhausted: verify_failed
@@ -585,6 +607,8 @@ steps:
   # reviewed, tested, built and verified again before the next merge attempt.
   - id: resolve_merge
     agent: developer
+    # a rebase replays the test writer's commits: resolving their conflicts is part of the job
+    edits_tests: true
     prompt: |
       Merging branch `{{ steps.develop.output.branch }}` into the local `{{ inputs.base_branch }}` failed:
       {{ action_error.message if action_error else 'unknown error' }}
@@ -592,8 +616,9 @@ steps:
       If it is a conflict with the local {{ inputs.base_branch }} (another run merged into it meanwhile):
       on your branch run `git rebase {{ inputs.base_branch }}`, resolve every conflict following the
       merge-conflict-resolver skill (keep the intent of both sides; never drop the other change),
-      `git rebase --continue`, then run the project's test suite and make sure everything is
-      committed. Never fetch, pull or push.
+      `git rebase --continue` and make sure everything is committed. Resolve conflicts in test files
+      too, but write no new tests and do not run the full suite: the change goes through review
+      and the test writer's suite again. Never fetch, pull or push.
       If it is anything you can't fix on your branch (for example uncommitted changes in the
       checkout where {{ inputs.base_branch }} is checked out: that is the user's work, don't touch it),
       change nothing and answer blocked: true with the reason.
@@ -605,11 +630,10 @@ steps:
         blocked:       { type: boolean }
         summary:       { type: string }
         files_changed: { type: array, items: { type: string } }
-        tests_passed:  { type: boolean }
     transitions:
       - when: "output.blocked"
         goto: merge_blocked
-      - when: "output.resolved and output.tests_passed"
+      - when: "output.resolved"
         goto: code_review
         max_visits: 3
         on_exhausted: merge_blocked

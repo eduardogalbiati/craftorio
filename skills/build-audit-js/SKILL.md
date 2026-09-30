@@ -13,6 +13,8 @@ From the lockfile: `package-lock.json` → npm · `pnpm-lock.yaml` → pnpm · `
 
 ## Build
 
+No test suite here (`npm test` and the like): the test writer already ran it, and CI runs it on every platform.
+
 1. Clean install: `npm ci` · `pnpm install --frozen-lockfile` · `yarn install --frozen-lockfile` (Berry: `yarn install --immutable`).
 2. If `package.json` has `scripts.build`, run it (`npm run build`).
 3. No build script: TS project → `npx tsc --noEmit`; plain JS → build is OK, say so in the report.

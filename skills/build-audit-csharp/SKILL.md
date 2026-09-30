@@ -8,6 +8,8 @@ uses: [dependency-audit-policy, long-commands]
 
 ## Build
 
+No test suite here (`dotnet test`): the test writer already ran it, and CI runs it on every platform.
+
 1. `dotnet restore` (with `--locked-mode` when `packages.lock.json` exists).
 2. `dotnet build -c Release --no-restore`. Compilation errors are `build_status: failed`;
    warnings only block when the project sets `TreatWarningsAsErrors`.

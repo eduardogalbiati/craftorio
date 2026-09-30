@@ -31,9 +31,14 @@
 #   - `wait:` on a /loop step: between the agent's turns the engine checks the PR/MR or the CI
 #     run itself with gh/glab (no model call) and calls the agent only on news: a failure, a
 #     conflict, a change on the PR/MR, an unknown state. CI all green finishes `ci` directly.
+#   - Tests belong to the test writer: it writes and updates them and runs the full suite, once
+#     per round. The developer changes production code only and says what to test (`test_notes`);
+#     `edits_tests: false` makes the engine refuse any of its turns that changes a test file
+#     (`tests_paths`, default: the usual test folders and file names of every language). The
+#     builder and the verifier do not run the full suite; CI runs it on every platform.
 #
 # Language and platform:
-#   - `language` picks unit-test-writer-<language> and build-audit-<language>.
+#   - `language` picks unit-test-writer-<language> (test writer) and build-audit-<language> (builder).
 #   - `git_platform` picks ci-pipeline-<platform>, pr-babysitter-<platform> and
 #     deploy-<platform> (gh = GitHub/gh CLI, gl = GitLab/glab CLI).
 #   The YAML keeps the contract (who, when, output schema, transitions); the skills
@@ -45,7 +50,7 @@ kind: Workflow
 
 metadata:
   name: software-development
-  version: 0.15.0
+  version: 0.16.0
   description: Implements, reviews, tests, builds, watches CI and the PR/MR, publishes a preview and, once approved, merges and tracks the production deploy. Works with several languages on GitHub or GitLab.
   tags: [dev, review, test, build, ci, pr, deploy, github, gitlab]
   # Dashboard category: plan (Plan & Design), build (Code & Build) or monitor (Monitor & Improve).
@@ -164,12 +169,18 @@ agents:
     session: handoff
     # subagents: exploration sub-agents map the code, so the main context stays small
     capabilities: { tools: [read, edit, write, *toolchains], web: false, subagents: true }
+    # tests belong to the test writer: a turn that changes a test file (tests_paths) is sent back
+    edits_tests: false
     # bug-diagnosis: fixes delegated after failures; merge-conflict-resolver: "update the branch with the base";
-    # long-commands: suites and builds in the foreground (explicit, not only through the test writer's `uses`)
-    skills: ["unit-test-writer-{{ inputs.language }}", long-commands, bug-diagnosis, merge-conflict-resolver, context-economy, decision-log]
+    # long-commands: installs, builds and focused checks in the foreground
+    skills: [long-commands, bug-diagnosis, merge-conflict-resolver, context-economy, decision-log]
     system_prompt: |
-      You are a senior software engineer. Make small, tested, cohesive changes that
-      follow the architecture and conventions of the existing code.
+      You are a senior software engineer. Make small, cohesive changes to the production code
+      that follow the architecture and conventions of the existing code.
+      Tests belong to the test writer, who runs after the code review: never create, edit or
+      delete test files (the orchestrator refuses a turn that changes one) and do not run the
+      full test suite. To check your change, run a focused existing test or the build. Describe
+      what should be tested (behaviours, edge cases, files) in `test_notes` when asked.
       Work on your own branch and commit your changes there. This run has its own git
       worktree (the current folder), which starts detached at origin/{{ inputs.base_branch }};
       the local {{ inputs.base_branch }} of the repository may be stale, so always start a new
@@ -177,7 +188,7 @@ agents:
       `git switch --no-track -c <branch> origin/{{ inputs.base_branch }}` (never from the local
       {{ inputs.base_branch }}). A fresh worktree has no installed dependencies: install them
       when they are missing or the lockfile changed (e.g. `npm ci` when node_modules is missing
-      or package-lock.json differs from the previous HEAD). Run the project's tests the way the test skill describes.
+      or package-lock.json differs from the previous HEAD).
       Only `git push` when the orchestrator explicitly asks. When you finish a
       requested fix, report the commit hash.
 
@@ -201,10 +212,11 @@ agents:
     capabilities: { tools: [read, edit, write, *toolchains], web: false }
     skills: ["unit-test-writer-{{ inputs.language }}"]
     system_prompt: |
-      You are the test writer. You write and update tests and run the suite, following
-      the test skill for this language. You do NOT fix production code: when a test
-      fails because of a bug in the code, describe the failure precisely (test, file,
-      error, probable cause) so the orchestrator can hand it to the developer.
+      You are the test writer, the only agent of this workflow that writes tests. You write
+      and update them (including tests an intended behaviour change makes obsolete) and run
+      the full suite, following the test skill for this language. You do NOT fix production
+      code: when a test fails because of a bug in the code, describe the failure precisely
+      (test, file, error, probable cause) so the orchestrator can hand it to the developer.
       Commit test files only.
 
   builder:
@@ -216,7 +228,8 @@ agents:
     system_prompt: |
       You are the builder. You build the application and check its dependencies for
       vulnerabilities, following the build skill for this language. You do not change
-      code. Vulnerability policy:
+      code and you do not run the test suite (the test writer ran it; CI runs it on every
+      platform). Vulnerability policy:
       - blocks: any critical; high in production dependencies
       - report only: moderate/low, and anything in development-only dependencies
 
@@ -228,7 +241,8 @@ agents:
     skills: [claim-verification]
     system_prompt: |
       You are the verifier. You prove or disprove that the change does what the task
-      asked, by running the same command before and after it. You do not change code.
+      asked, by running the same command before and after it. You do not change code and
+      you do not run the full test suite (the test writer ran it).
 
   # Push, PR/MR and failure triage need no frontier model, and the engine does the polling (wait:).
   ci_pusher:
@@ -316,14 +330,18 @@ steps:
       `origin/{{ inputs.base_branch }}` (not the local {{ inputs.base_branch }}, which may be
       behind), then make sure dependencies are installed for that base.
       {% endif %}
+      Change production code only: the test writer writes and runs the tests after the review.
+      In `test_notes`, tell it what should be tested: the behaviours you changed, the edge cases
+      and the files (and the existing tests your change makes obsolete, if any).
     output_schema:
       type: object
-      required: [branch, summary, files_changed, tests_passed, committed]
+      required: [branch, summary, files_changed, test_notes, committed]
       properties:
         branch:        { type: string }
         summary:       { type: string }
         files_changed: { type: array, items: { type: string } }
-        tests_passed:  { type: boolean }
+        # for the test writer: behaviours, edge cases and files to test
+        test_notes:    { type: string }
         committed:     { type: boolean }
         commit_sha:    { type: string }
         notes:         { type: string }
@@ -339,9 +357,9 @@ steps:
               summary: { type: string }
     transitions:
       # an issue of the group could not be done: the owner decides (once) whether the run goes on without it
-      - when: "output.tests_passed and output.committed and inputs.issues | length > 1 and not steps.issue_not_done.output and (output.issues or []) | rejectattr('done') | list | length"
+      - when: "output.committed and inputs.issues | length > 1 and not steps.issue_not_done.output and (output.issues or []) | rejectattr('done') | list | length"
         goto: issue_not_done
-      - when: "output.tests_passed and output.committed"
+      - when: "output.committed"
         goto: code_review
       - when: "true"
         goto: develop
@@ -418,8 +436,9 @@ steps:
         goto: end
         status: cancelled
 
-  # Test writer: writes/updates tests and runs the suite. On failure the
-  # orchestrator hands it to the developer and tells the test writer when it is fixed.
+  # Test writer: owns the tests (writes/updates them) and runs the full suite, the only full run
+  # before CI. On a production-code failure the orchestrator hands it to the developer and tells
+  # the test writer when it is fixed.
   - id: test
     agent: test_writer
     prompt: |
@@ -427,18 +446,24 @@ steps:
       Original task: {{ inputs.task }}
       Change made: {{ steps.develop.output.summary }}
       Files: {{ steps.develop.output.files_changed | join(', ') }}
+      {% if steps.develop.output.test_notes %}
+      What the developer says should be tested:
+      {{ steps.develop.output.test_notes }}
+      {% endif %}
 
       {% if delegate_result %}
-      The developer applied the fix you asked for:
+      The developer fixed the production code you reported (it does not touch the tests):
       {{ delegate_result.text }}
       Run the full suite again and confirm. If the fix changed the UI, capture the "after"
       screenshots again (same names, same folder) and return the updated list.
       {% else %}
-      1. Check out the branch. Decide whether the change needs new or updated tests.
-         If so, write them following the test skill (the framework and folder the
-         project already uses) and commit only them. Purely visual changes may not
-         need a new test — justify it.
-      2. Run the full suite with the project's test command.
+      1. Check out the branch. You own the tests: the developer did not write or run any.
+         Write the tests the change needs, starting from the developer's notes (they are a
+         starting point, not a limit), following the test skill (the framework and folder the
+         project already uses). Update the tests the change makes obsolete because of an
+         intended behaviour change (not a bug). Commit only test files. Purely visual changes
+         may not need a new test — justify it.
+      2. Run the full suite once with the project's test command.
       3. If the diff against `origin/{{ inputs.base_branch }}` touches the UI, capture the
          affected screens before (base `origin/{{ inputs.base_branch }}`) and after (the branch)
          following the test skill, into `{{ run_dir }}/screenshots` (PNGs + screenshots.json,
@@ -474,10 +499,11 @@ steps:
         delegate:
           agent: developer
           prompt: |
-            The test writer found failures on branch `{{ steps.develop.output.branch }}`:
+            The test writer found failures caused by the production code on branch `{{ steps.develop.output.branch }}`:
             {{ output.failure_report }}
-            Fix the production code (do not change the tests without justifying it), run
-            the test suite, commit and report the commit hash.
+            Fix the production code only: never change the tests (if you think a test is wrong,
+            say why in your answer; the test writer owns it). Run only the failing tests, not the
+            full suite (the test writer runs it next), commit and report the commit hash.
         goto: test
         max_visits: 3
         on_exhausted: test_failed
@@ -541,7 +567,7 @@ steps:
           prompt: |
             The builder blocked branch `{{ steps.develop.output.branch }}`:
             {{ output.report }}
-            Fix it (build failure or vulnerable dependency), run the test suite,
+            Fix it (build failure or vulnerable dependency), check it with a focused test or the build (not the full suite),
             commit and report the commit hash.
         goto: build
         max_visits: 3
@@ -618,7 +644,7 @@ steps:
             Claim: {{ output.claim }}
             Command: {{ output.command }}
             Observed: {{ output.evidence }}
-            Fix it, run the test suite, commit and report the commit hash.
+            Fix it, check it with a focused test or the build (not the full suite), commit and report the commit hash.
         goto: verify_change
         max_visits: 2
         on_exhausted: verify_failed
@@ -731,7 +757,7 @@ steps:
           prompt: |
             CI on PR/MR #{{ output.pr_number }} failed:
             {{ output.failure_log }}
-            Fix it on branch `{{ steps.develop.output.branch }}`, run the test suite,
+            Fix it on branch `{{ steps.develop.output.branch }}`, check it with a focused test or the build (not the full suite),
             commit, then `git push`, and report the commit hash.
         goto: ci
         max_visits: 5
@@ -759,7 +785,7 @@ steps:
           prompt: |
             CI on PR/MR #{{ steps.ci.output.pr_number }} is still failing. A human asked for one more fix round:
             {{ steps.ci.output.failure_log }}
-            Fix it on branch `{{ steps.develop.output.branch }}`, run the test suite,
+            Fix it on branch `{{ steps.develop.output.branch }}`, check it with a focused test or the build (not the full suite),
             commit, then `git push`, and report the commit hash.
         goto: ci
       - when: "choice == 'recheck'"
@@ -819,7 +845,7 @@ steps:
           prompt: |
             Fix request on PR/MR #{{ steps.ci.output.pr_number }}:
             {{ output.fix_request }}
-            Fix it on branch `{{ steps.develop.output.branch }}`, run the test suite,
+            Fix it on branch `{{ steps.develop.output.branch }}`, check it with a focused test or the build (not the full suite),
             commit, then `git push`, and report the commit hash.
         goto: pr_babysitter
         max_visits: 5
@@ -858,7 +884,7 @@ steps:
           prompt: |
             The human decided to address this comment on PR/MR #{{ steps.ci.output.pr_number }}:
             {{ steps.pr_babysitter.output.question }}
-            Fix it on branch `{{ steps.develop.output.branch }}`, run the test suite,
+            Fix it on branch `{{ steps.develop.output.branch }}`, check it with a focused test or the build (not the full suite),
             commit, then `git push`, and report the commit hash.
         goto: pr_babysitter
       - when: "choice == 'justify'"
@@ -933,7 +959,7 @@ steps:
             {{ output.error_summary }}
             Run: {{ output.run_url }}
             Fix it on branch `{{ steps.develop.output.branch }}` (it may be platform specific: the
-            preview can build on another OS than CI), run the test suite, commit, then `git push`,
+            preview can build on another OS than CI), check it with a focused test or the build (not the full suite), commit, then `git push`,
             and report the commit hash.
         goto: ci
         max_visits: 2
@@ -964,7 +990,7 @@ steps:
             The preview build of PR/MR #{{ steps.ci.output.pr_number }} failed and a human asked you to fix it:
             {{ steps.deploy_test.output.error_summary }}
             Run: {{ steps.deploy_test.output.run_url }}
-            Fix it on branch `{{ steps.develop.output.branch }}`, run the test suite, commit,
+            Fix it on branch `{{ steps.develop.output.branch }}`, check it with a focused test or the build (not the full suite), commit,
             then `git push`, and report the commit hash.
         goto: ci
       - when: "choice == 'stop'"

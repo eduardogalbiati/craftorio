@@ -27,6 +27,13 @@ same features for users; this is the implementer's summary.
   (missing ones left out with a warn). Recorded as `personas` in `workflow.started`; `resumeSpec` keeps the pick.
   Written by the visual builder's "random agent" desk.
 - `capabilities` (agent, overridable per step) and `isolation: false`: see [capabilities.md](capabilities.md).
+- `edits_tests: false` (agent or `defaults`, overridable per step, e.g. `resolve_merge: true`) + workflow-level
+  `tests_paths` (globs; default `TESTS_PATHS` in `src/engine/test-paths.js`): `sendToAgent` snapshots the
+  working dir before every turn of that agent (steps and delegations) and, after it, lists the test files the
+  turn changed (new non-merge commits not on `refs/heads/<base>` / `origin/<base>`, uncommitted and new
+  untracked files, only those still different from the snapshot). Any → `tests.refused` event + warn, the turn
+  is sent back with the list (`testsRefusedPrompt`), twice at most, then it throws (supervisor / `on_error`).
+  Not a git work tree → no check. Claude also gets `--disallowedTools Edit(<glob>)`.
 - `providers.<p>.skill_args` (claude `--add-dir {{ skill_dir }}`), `prompt_file_arg` (grok).
 
 ## Sessions and handoff notes

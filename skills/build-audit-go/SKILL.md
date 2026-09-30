@@ -8,6 +8,8 @@ uses: [dependency-audit-policy, long-commands]
 
 ## Build
 
+No test suite here (`go test ./...`): the test writer already ran it, and CI runs it on every platform.
+
 1. `go mod download` and `go mod verify`.
 2. `go build ./...` and `go vet ./...`. Any error is `build_status: failed`.
 3. `go mod tidy -diff` (Go ≥ 1.23): a difference is a finding to report, not a blocker on its own.

@@ -13,6 +13,8 @@ uses: [dependency-audit-policy, long-commands]
 
 ## Build
 
+No test suite here (`pytest` and the like): the test writer already ran it, and CI runs it on every platform.
+
 1. Install the dependencies (above). A resolution/installation failure is `build_status: failed`.
 2. Package with `[build-system]` in `pyproject.toml`: `python -m build` (or `uv build`).
 3. Application without packaging: `python -m compileall -q <src>` for syntax errors and, if the project configures one, the type checker (`mypy`/`pyright`). Django: `python manage.py check --deploy`.

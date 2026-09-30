@@ -22,6 +22,19 @@ test('claude: capabilities become --tools (offered), --allowedTools (approved) a
   assert.ok(!ro.includes('--permission-mode'), 'read-only agents never get acceptEdits');
 });
 
+test('edits_tests: false → Claude refuses edits to the test paths; the other CLIs note that they cannot', () => {
+  const writer = caps.normalize({ tools: ['read', 'edit', 'write', TOOLCHAINS] });
+  const denyEdits = ['**/test/**', '*.test.*'];
+  const claude = caps.providerArgs('claude-code', { caps: writer, denyEdits });
+  assert.equal(argAfter(claude.args, '--disallowedTools'), 'Edit(**/test/**) Edit(**/*.test.*)');
+  assert.deepEqual(claude.notes, []);
+  assert.ok(!caps.providerArgs('claude-code', { caps: writer }).args.includes('--disallowedTools'), 'no rules without edits_tests: false');
+  const readOnly = caps.normalize({ tools: ['read'] });
+  assert.ok(!caps.providerArgs('claude-code', { caps: readOnly, denyEdits }).args.includes('--disallowedTools'), 'nothing to refuse to a read-only agent');
+  assert.match(caps.providerArgs('codex-cli', { caps: writer, denyEdits }).notes.join(), /test paths .* not refused by the tools/);
+  assert.match(caps.providerArgs('grok-cli', { caps: writer, denyEdits }).notes.join(), /test paths .* not refused by the tools/);
+});
+
 test('claude: isolated by default (no user MCP servers, settings, Chrome, skill listing or auto-memory)', () => {
   const { args } = caps.providerArgs('claude-code', { caps: null });
   assert.deepEqual(args, ['--strict-mcp-config', '--no-chrome', '--setting-sources', 'project,local', '--disable-slash-commands', '--settings', '{"autoMemoryEnabled":false}']);

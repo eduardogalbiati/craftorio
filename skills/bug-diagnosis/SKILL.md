@@ -47,6 +47,12 @@ remove. Read values, do not guess them.
 3. Make the smallest fix that addresses the root cause, not the symptom.
 4. Run the regression test, then the full suite.
 
+**When tests are not yours** (your role says another agent writes them, e.g. the developer of a
+workflow with a test writer): never create or edit a test, not even a regression test (skip
+option 2 of step 1). Make the fix, show the feedback-loop command red before and green after it,
+and describe the regression test to write (seam, input, expected value) in your answer, in
+`test_notes` when it has one. Skip the full suite: the test writer runs it.
+
 ## 6. Clean up
 
 Remove every `[DBG-` line (grep for it), temporary scripts and fixtures you do not keep.
@@ -56,10 +62,11 @@ Replace secrets in anything you quote with `<REDACTED>`.
 
 - root cause in one sentence, with file and function;
 - the feedback-loop command and its before/after result;
-- the regression test added;
+- the regression test added (or, when tests are not yours, the one to write);
 - assumptions made.
 
 ## Done when
 
 The regression test failed before the fix and passes after it, the full suite passes, and no
-debug instrumentation is left.
+debug instrumentation is left. When tests are not yours: the feedback-loop command failed before
+the fix and passes after it, and the regression test to write is described.

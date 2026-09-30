@@ -39,6 +39,12 @@ from the bundled workflows: it was documentation only. The run log gets one
 | Web | `WebSearch`/`WebFetch` offered only with `web: true` | `-c web_search="disabled"` unless `web: true` | `--disable-web-search` unless `web: true` |
 | Sub-agents | `Task` only with `subagents: true` | n/a | `--no-subagents` unless `subagents: true` |
 | MCP | `--mcp-config` with the declared servers + `mcp__<name>` allowed | declared servers only | not passed (noted in the log) |
+| Test files (`edits_tests: false`) | `--disallowedTools "Edit(<glob>) …"` over `tests_paths` (a bare name gets `**/`); Bash can still write them | not refused (noted) | not refused (noted) |
+
+Whatever the CLI, the engine checks the turn's changes afterwards and sends a turn that touched
+test files back (see `edits_tests` in [engine.md](engine.md)). The `Edit(...)` deny rules were
+not tried against a real Claude CLI yet (real calls cost money): if one is refused, the engine
+check still holds.
 
 `--bare` would isolate Claude further but only accepts API keys (no OAuth/subscription), so it is
 not used. Measured on this repo (first request of a Claude agent, Haiku, "reply OK"): **41.1k

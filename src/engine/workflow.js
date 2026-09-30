@@ -17,6 +17,7 @@ const capabilities = require('./capabilities');
 const { stopProcessesIn } = require('./processes');
 const { PROBES, runProbe } = require('./probes');
 const { IdleWatch } = require('./idle');
+const testPaths = require('./test-paths');
 const { StepTrail } = require('../renderer/run-progress-model');
 
 // Skills bundled with the app (skills/ folder at the root). Workspace skills take precedence.
@@ -98,11 +99,14 @@ function loadWorkflow(file) {
     if (a.session !== undefined && !SESSION_MODES.includes(a.session)) throw new Error(`${name}: session must be one of ${SESSION_MODES.join(', ')}.`);
     if (a.max_context !== undefined && !String(a.max_context).includes('{{') && !parseTokens(a.max_context)) throw new Error(`${name}: max_context must be a token count such as 150k.`);
     if (a.persona !== undefined && a.persona !== 'random') throw new Error(`${name}: persona must be "random".`);
+    if (a.edits_tests !== undefined && typeof a.edits_tests !== 'boolean') throw new Error(`${name}: edits_tests must be true or false.`);
     capabilities.validate(a.capabilities, name, mcpServers);
   }
+  testPaths.validateTestsPaths(wf.tests_paths);
   const ids = new Set(wf.steps.map((s) => s.id));
   for (const s of wf.steps) {
     capabilities.validate(s.capabilities, `Step "${s.id}"`, mcpServers);
+    if (s.edits_tests !== undefined && typeof s.edits_tests !== 'boolean') throw new Error(`Step "${s.id}": edits_tests must be true or false.`);
     if (s.type !== 'human_approval') {
       // `agents: [...]` = fan-out: the same prompt goes to several agents in parallel
       if (s.agents && (!Array.isArray(s.agents) || !s.agents.length)) throw new Error(`Step "${s.id}": agents must be a non-empty list.`);
@@ -1029,7 +1033,7 @@ class WorkflowRun extends EventEmitter {
         + JSON.stringify(schema, null, 2) + '\n```';
     }
     const hint = { stepId: step.id, visit, schema, agent: agentName, sequences: this.mockSequences };
-    const opts = { stepId: step.id, hint, skills, capabilities: step.capabilities };
+    const opts = { stepId: step.id, hint, skills, capabilities: step.capabilities, editsTests: step.edits_tests };
     const countTools = (r) => {
       if (r.turnRec) st.turnRecs?.push(r.turnRec);
       if (!r.tools || !st.tools) return;
@@ -1337,8 +1341,49 @@ class WorkflowRun extends EventEmitter {
   // - handoff: a fresh session per turn that starts from the agent's latest handoff note.
   // Persistent and handoff agents end each turn with a handoff note (runs/<id>/handoffs/).
   // opts.capabilities: the step's capabilities over the agent's; opts.retry: a schema retry
-  // (no new note, no rotation).
-  async sendToAgent(agentName, prompt, { stepId, hint, skills: stepSkills = [], capabilities: stepCaps, retry = false } = {}) {
+  // (no new note, no rotation); opts.editsTests: the step's `edits_tests` over the agent's.
+  // `edits_tests: false`: the turn may not change test files (tests_paths, src/engine/test-paths.js).
+  // The engine checks the checkout after the turn and sends it back with the list of files, at most
+  // twice; after that the turn fails (the supervisor or the step's on_error take over).
+  async sendToAgent(agentName, prompt, opts = {}) {
+    const agent = { ...(this.wf.defaults || {}), ...this.wf.agents[agentName] };
+    const guarded = !!this.wf.agents[agentName] && (opts.editsTests ?? agent.edits_tests) === false;
+    const dir = guarded ? this.workingDir(agent) : null;
+    const snap = guarded ? await testPaths.snapshot(dir, this.wf.tests_paths) : null;
+    let res = await this.agentTurn(agentName, prompt, { ...opts, guarded });
+    for (let attempt = 1; snap; attempt++) {
+      const files = await testPaths.changedTestFiles(snap, { bases: this.baseRefs() })
+        .catch((e) => { this.emitEvent('log', { level: 'warn', message: `[${agentName}] could not check the test files of its turn: ${e.message}` }); return []; });
+      if (!files.length) break;
+      const stepId = opts.stepId || 'a delegated turn';
+      this.emitEvent('tests.refused', { agent: agentName, step_id: opts.stepId || null, files, attempt });
+      this.emitEvent('log', { level: 'warn', kind: 'tests_refused', agent: agentName, message: `[${agentName}] changed test files in ${stepId}, which it may not edit (edits_tests: false): ${files.join(', ')}` });
+      if (attempt > 2) throw new Error(`${agentName} changed test files in ${stepId} and did not put them back: ${files.join(', ')}. Only the test writer edits tests.`);
+      res = await this.agentTurn(agentName, this.testsRefusedPrompt(agentName, prompt, res.text, files, snap.head), { ...opts, guarded, retry: true });
+    }
+    return res;
+  }
+
+  // The run's base branch, local and remote: commits reachable from it are not the agent's.
+  baseRefs() {
+    const base = this.worktree?.base || render(this.wf.orchestrator?.worktree?.base || '', this.ctx).trim();
+    return base ? [`refs/heads/${base}`, `refs/remotes/origin/${base}`] : [];
+  }
+
+  // A turn refused because it changed test files. As in retryPrompt, a handoff or ephemeral agent
+  // answers in a fresh session, so the task and its previous answer go along.
+  testsRefusedPrompt(agentName, prompt, previous, files, head) {
+    const fix = 'The orchestrator refused your last turn: it changed test files, and you never create, edit or delete tests'
+      + ' (only the test writer does):\n' + files.map((f) => `- ${f}`).join('\n') + '\n'
+      + `Put them back as they were before your turn (\`git checkout ${head} -- <file>\` for a changed or deleted file, \`git rm\` for a new one)`
+      + ' and commit, keeping your production changes. Describe what should be tested in your answer instead (in `test_notes` when the answer has it).'
+      + ' Then answer again in full, in the format you were asked for.';
+    const def = { ...(this.wf.defaults || {}), ...this.wf.agents[agentName] };
+    if ((def.session || 'persistent') === 'persistent') return fix;
+    return `${prompt}\n\n---\nYou already answered this task:\n<previous_answer>\n${String(previous).slice(-20000)}\n</previous_answer>\n\n${fix}`;
+  }
+
+  async agentTurn(agentName, prompt, { stepId, hint, skills: stepSkills = [], capabilities: stepCaps, retry = false, guarded = false } = {}) {
     const def = this.wf.agents[agentName];
     if (!def) throw new Error(`Unknown agent: ${agentName}`);
     const agent = { ...(this.wf.defaults || {}), ...def };
@@ -1390,13 +1435,14 @@ class WorkflowRun extends EventEmitter {
     const providerType = this.wf.providers?.[agent.provider]?.type;
     const caps = capabilities.merge(agent.capabilities, stepCaps);
     const isolated = agent.isolation !== false;
-    const { args: capArgs, notes } = capabilities.providerArgs(providerType, { caps, isolated, mcpServers: this.wf.mcp_servers || {} });
-    const capsKey = `${agentName}|${capabilities.describe(caps)}`;
+    const denyEdits = guarded ? this.wf.tests_paths || testPaths.TESTS_PATHS : [];
+    const { args: capArgs, notes } = capabilities.providerArgs(providerType, { caps, isolated, mcpServers: this.wf.mcp_servers || {}, denyEdits });
+    const capsKey = `${agentName}|${capabilities.describe(caps)}|${guarded}`;
     if (!this.capsLogged.has(capsKey)) {
       this.capsLogged.add(capsKey);
       this.emitEvent('log', {
         level: 'info', kind: 'capabilities', agent: agentName,
-        message: `capabilities: ${agentName} (${providerType || agent.provider}, ${isolated ? 'isolated' : 'not isolated'}): ${capabilities.describe(caps)}${notes.length ? ` · not enforced: ${notes.join('; ')}` : ''}`,
+        message: `capabilities: ${agentName} (${providerType || agent.provider}, ${isolated ? 'isolated' : 'not isolated'}): ${capabilities.describe(caps)}${guarded ? ' · test files: not editable' : ''}${notes.length ? ` · not enforced: ${notes.join('; ')}` : ''}`,
       });
     }
     // The provider's `skill_args` grants read access to each skill's folder, which lives

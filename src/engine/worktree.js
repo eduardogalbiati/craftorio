@@ -301,4 +301,4 @@ async function cleanupWorktrees({ worktreesDir, runsDir, active = [], maxAgeDays
   return removed;
 }
 
-module.exports = { prepareWorktree, removeWorktree, mergeLocally, cleanupWorktrees, listWorktrees, isMerged, repoRoot, currentBranch, samePath, canonicalPath };
+module.exports = { git, prepareWorktree,removeWorktree, mergeLocally, cleanupWorktrees, listWorktrees, isMerged, repoRoot, currentBranch, samePath, canonicalPath };
