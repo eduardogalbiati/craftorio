@@ -106,7 +106,8 @@ same features for users; this is the implementer's summary.
   ran before. Gates are answered inside their run: the run chats inline, or the gate card on the Run screen (no dialog).
 - A gate choice with `feedback_required: true` (needs the step's `feedback`) is refused without a
   text: `resolveApproval` returns false and the gate stays open. `local_preview: true` on a gate
-  offers Run locally (see worktrees.md). `approval.resolved` carries `wait_ms`; the summary's
+  offers Run locally (see worktrees.md); `diff_base: <ref>` (a template) offers Show the diff
+  (`git diff <ref>...HEAD` in the worktree, read-only terminal). `approval.resolved` carries `wait_ms`; the summary's
   `timing.gates` / `timing.gate_wait_ms` hold the owner's time at gates, apart from agent time.
 - Validated mode (`inputs.mode == 'validated'` in both software-development workflows):
   `develop` → `developer_check` while `vars.owner_validated != 'yes'` (set by the gate's

@@ -377,6 +377,7 @@ steps:
   - id: developer_check
     type: human_approval
     local_preview: true
+    diff_base: "{{ inputs.base_branch }}"
     message: |
       The developer finished {% if previous_step == 'develop' and steps.developer_check.output and steps.developer_check.output.choice == 'changes' %}your change request {{ steps.developer_check.visits - 1 }}{% else %}the implementation{% endif %}. Try it before the review and the tests run.
       Branch `{{ steps.develop.output.branch }}`{% if worktree_dir %} in the worktree {{ worktree_dir }}{% endif %}.
@@ -391,7 +392,7 @@ steps:
       {% set commits = worktree_dir | git_commits(inputs.base_branch) %}{% if commits %}Commits on the branch:
       {{ commits }}
       {% endif %}
-      Diff: `git diff {{ inputs.base_branch }}...{{ steps.develop.output.branch }}`
+      {% if worktree_dir %}Diff: Show the diff opens the branch's changes since `{{ inputs.base_branch }}` here.{% endif %}
       Test notes: {{ steps.develop.output.test_notes }}
       {% if steps.develop.output.evidence_plan %}Evidence plan: {{ steps.develop.output.evidence_plan }}{% endif %}
     feedback: { label: "Your change request for the developer (required with \"Ask for changes\")", placeholder: "What to change, point by point" }

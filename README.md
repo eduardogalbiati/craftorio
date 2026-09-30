@@ -161,6 +161,8 @@ settings, never your runs) with its own user-data folder, so trying this app can
 models or touch your workspace; **real workspace** (with a warning) points it at yours instead.
 "Local preview started/stopped" is recorded in the run's history and chat. Without a
 `local_preview` the gate says how to run it from the worktree (the project's README).
+`developer_check` also offers **Show the diff**: the branch's changes since the base branch, in an
+embedded terminal.
 
 Failure gates (a step that ran out of fix rounds, or a failure no commit can fix) only offer what
 can change the outcome:

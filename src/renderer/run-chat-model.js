@@ -241,8 +241,8 @@
       const gate = this.add({
         kind: 'gate', ts: ev.ts, approvalId: ev.approval_id, stepId: ev.step_id, message: String(ev.message || ''),
         choices: ev.choices || [{ id: true, label: 'Approve' }, { id: false, label: 'Reject' }], feedback: ev.feedback || null,
-        // Run locally ({ install, command, url }) and the folder to open, when the gate offers them
-        localPreview: ev.local_preview || null, workDir: ev.work_dir || null,
+        // Run locally ({ install, command, url }), the folder to open and the diff's base ref, when the gate offers them
+        localPreview: ev.local_preview || null, workDir: ev.work_dir || null, diffBase: ev.diff_base || null,
         resolved: null, closed: false,
       });
       this.gates.set(ev.approval_id, gate);

@@ -673,6 +673,20 @@ function createService({ host }) {
     return { title: path.basename(dir), cwd: dir, file: win ? 'cmd.exe' : process.env.SHELL || '/bin/sh', args: [], env: cliEnv() };
   }
 
+  // Show the diff at a gate with `diff_base` (developer_check): the worktree's changes since that
+  // ref, read-only. The ref and the folder come from the open gate, never from the caller.
+  function gateDiffSpec({ runId, approvalId }) {
+    const run = active.get(String(runId || ''));
+    const gate = run?.pendingGates().find((g) => g.approval_id === approvalId);
+    if (!gate) throw new Error('The gate is no longer open.');
+    if (!gate.diff_base || !gate.work_dir) throw new Error('This gate does not offer a diff.');
+    if (gate.diff_base.startsWith('-')) throw new Error(`Not a ref: ${gate.diff_base}`);
+    return {
+      title: `Diff ${gate.diff_base}...HEAD`, cwd: gate.work_dir, file: 'git', env: cliEnv(),
+      args: ['--no-pager', 'diff', '--color=always', '--stat', '--patch', `${gate.diff_base}...HEAD`, '--'],
+    };
+  }
+
   // Run locally at a gate (#70, src/local-preview.js): one preview per run, in the run's worktree,
   // stopped when the gate is answered or the run ends. It never answers the gate.
   const previews = new Map(); // runId -> { id (terminal), stepId, approvalId, title, url, dir, startedAt }
@@ -742,6 +756,10 @@ function createService({ host }) {
   function openTerminal({ kind, runId, sessionId, cols, rows, ...opts }) {
     if (kind === 'supervisor') return openProgram(supervisorChatSpec(runId || liveRun(null)?.runId), cols, rows);
     if (kind === 'shell') return { ...openProgram(shellSpec(opts.folder), cols, rows), cwd: path.resolve(String(opts.folder)) };
+    if (kind === 'diff') {
+      const spec = gateDiffSpec({ runId, approvalId: opts.approvalId });
+      return { ...openProgram(spec, cols, rows), cwd: spec.cwd };
+    }
     if (kind === 'cli-resume' || kind === 'cli-new') {
       const spec = cliSessionSpec({ kind, sessionId, ...opts });
       const opened = openProgram(spec, cols, rows);

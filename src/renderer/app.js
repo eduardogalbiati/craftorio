@@ -1724,11 +1724,13 @@ function onRunGateClick(e) {
 
 // What a gate offers besides its answers (Run screen and run chat); none of them answers it:
 // Run locally (#70: `local_preview` on the gate, the project's or workflow's command in the run's
-// worktree, stopped when the gate is answered), the worktree's folder and a terminal there.
-// g: the approval.requested event (local_preview, work_dir) or a run chat gate (localPreview, workDir).
+// worktree, stopped when the gate is answered), the worktree's folder, a terminal there and its diff
+// (`diff_base` on the gate).
+// g: the approval.requested event (local_preview, work_dir, diff_base) or a run chat gate (localPreview, workDir, diffBase).
 function gateToolsHtml(g, { disabled = false } = {}) {
   const lp = g.local_preview || g.localPreview || null;
   const dir = g.work_dir || g.workDir || null;
+  const base = dir ? g.diff_base || g.diffBase || null : null;
   if (!lp && !dir) return '';
   const off = disabled ? ' disabled' : '';
   const how = lp ? `${lp.install ? `${lp.install} (when dependencies are missing or the lockfile changed), then ` : ''}${lp.command}` : '';
@@ -1738,7 +1740,8 @@ function gateToolsHtml(g, { disabled = false } = {}) {
     ${lp.url ? `<a class="small" href="${esc(lp.url)}" target="_blank" rel="noopener">${esc(lp.url)}</a>` : ''}` : '';
   const open = dir ? `<button type="button" class="btn sm ghost" data-gate-tool="folder" title="${esc(dir)}"${off}>Open the worktree</button>
     <button type="button" class="btn sm ghost" data-gate-tool="shell" title="A terminal in ${esc(dir)}"${off}>Terminal there</button>` : '';
-  return `<div class="row gate-tools" data-dir="${esc(dir || '')}" data-approval="${esc(g.approval_id || g.approvalId)}">${run}${open}</div>`;
+  const diff = base ? `<button type="button" class="btn sm ghost" data-gate-tool="diff" title="${esc(`The branch's changes since ${base} (git diff ${base}...HEAD in the worktree)`)}"${off}>Show the diff</button>` : '';
+  return `<div class="row gate-tools" data-dir="${esc(dir || '')}" data-approval="${esc(g.approval_id || g.approvalId)}">${run}${diff}${open}</div>`;
 }
 
 async function onGateTool(e, runId) {
@@ -1750,6 +1753,8 @@ async function onGateTool(e, runId) {
     if (b.dataset.gateTool === 'folder') await api.openPath(dir);
     else if (b.dataset.gateTool === 'shell') {
       await openTerminal({ kind: 'shell', runId, sessionId: dir, label: 'Worktree', open: (cols, rows) => api.termOpen({ kind: 'shell', folder: dir, cols, rows }) });
+    } else if (b.dataset.gateTool === 'diff') {
+      await openTerminal({ kind: 'diff', runId, sessionId: `diff-${approval}`, label: 'Diff', open: (cols, rows) => api.termOpen({ kind: 'diff', runId, approvalId: approval, cols, rows }) });
     } else if (b.dataset.gateTool === 'stop') {
       if (!await api.stopLocalPreview(runId)) showToast('No local preview', 'This run has no local preview running.');
     } else if (b.dataset.gateTool === 'preview') {

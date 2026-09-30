@@ -174,6 +174,7 @@ function loadWorkflow(file) {
     }
     if (s.choices && s.type !== 'human_approval') throw new Error(`Step "${s.id}": choices is only valid for human_approval.`);
     if (s.local_preview !== undefined && (s.type !== 'human_approval' || typeof s.local_preview !== 'boolean')) throw new Error(`Step "${s.id}": local_preview must be true or false, on a human_approval step.`);
+    if (s.diff_base !== undefined && (s.type !== 'human_approval' || typeof s.diff_base !== 'string' || !s.diff_base.trim())) throw new Error(`Step "${s.id}": diff_base must be a ref (e.g. "origin/{{ inputs.base_branch }}"), on a human_approval step.`);
     if ((s.choices || []).some((c) => c.feedback_required) && !s.feedback) throw new Error(`Step "${s.id}": a choice with feedback_required needs the step's feedback field.`);
     // a deterministic PR/MR check: `check:` before a gate opens, `precheck:` before a transition's action
     const validateCheck = (c, what) => {
@@ -2041,7 +2042,8 @@ class WorkflowRun extends EventEmitter {
   // non-empty one is appended to the run-wide `feedback` list the next prompts can include.
   // A choice with `feedback_required: true` is refused without a text (resolveApproval returns false).
   // `local_preview: true` on the step offers Run locally (the service runs the worktree, see
-  // src/local-preview.js); it never answers the gate.
+  // src/local-preview.js); it never answers the gate. `diff_base: <ref>` offers Show the diff (the
+  // worktree's changes since that ref, in an embedded terminal).
   requestApproval(step) {
     const id = `a${++this.nApproval}`;
     const message = step.raw ? String(step.message).trim() : render(step.message, this.ctx).trim();
@@ -2055,6 +2057,7 @@ class WorkflowRun extends EventEmitter {
     const extra = {
       ...(workDir ? { work_dir: workDir } : {}),
       ...(step.local_preview && this.localPreview && workDir ? { local_preview: this.localPreview } : {}),
+      ...(step.diff_base && workDir ? { diff_base: render(step.diff_base, this.ctx).trim() } : {}),
     };
 
     // registered before its event, so runs:active lists it as soon as anyone hears of it
