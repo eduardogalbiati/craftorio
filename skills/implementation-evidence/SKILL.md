@@ -15,9 +15,10 @@ uses what you collect to prove each claim. You run unattended: never ask, record
 
 ## 1. Pick the kind of evidence per issue
 
-Read the task (each issue of the run) and the diff against the base
-(`git diff <base>...<branch> --stat`, then the files). For each issue, pick what shows its
-behaviour best, usually one piece and at most three:
+Start from the developer's **evidence plan** (in your prompt: per issue, the screen, request or
+command that shows the change) and `git diff <base>...<branch> --stat`. Read a file only when the
+plan leaves out how to reach the screen or run the command. No plan: pick from the task and the
+diff stat. For each issue, pick what shows its behaviour best, usually one piece and at most two:
 
 | The change touches | Evidence |
 |---|---|
@@ -30,7 +31,21 @@ behaviour best, usually one piece and at most three:
 Before = the base, after = the branch, with the **same** command or scenario. When the base can't
 show it (a new screen, a new endpoint), capture only "after" and say so.
 
-## 2. Rules for every kind
+## 2. Budget
+
+Every tool call re-reads your whole context, so exploring is what makes this step expensive.
+
+- **Don't re-discover the change**: no reading source files, tests or docs beyond the plan and the
+  diff stat (one targeted `grep` to find a selector or a route is fine).
+- **Don't verify**: no unit tests, no test suite, no checking that docs or skills were updated.
+  The tests already passed; the verifier checks each claim after you.
+- **At most 2 captures per issue** (before + after), no trial captures (e.g. to `/tmp`) and no
+  re-captures to improve framing. A capture that fails once: one corrected retry, then `note`.
+- **Look at each PNG at most once**, only to check it shows the intended screen (images are
+  expensive to read).
+- **One command per call**, in the worktree (you are already there: no `cd`).
+
+## 3. Rules for every kind
 
 - **Local and simulated only.** Never call external services, never sign in, never start real
   workflow runs or paid model calls, never use real credentials. Servers you need are started
@@ -48,11 +63,12 @@ show it (a new screen, a new endpoint), capture only "after" and say so.
   and return what you have, with the rest in `note`. Never retry a failing capture in a loop.
 - **Never blocks**: a capture that fails is reported (`note`), not fixed. You don't fix code.
 
-## 3. Screenshots (UI)
+## 4. Screenshots (UI)
 
 - Use the project's own screenshot command: a `screenshot` script in `package.json`
   (`npm run screenshot -- <options>`) or the one the project's docs (README, CLAUDE.md, AGENTS.md)
-  describe; read its usage line for screens and options. Never write your own browser or
+  describe; its `--help` (or the usage at the top of the script) lists screens and options. Never
+  write your own browser or
   desktop-app script. No such command: skip screenshots and say so.
 - Simulated data only; run captures in the foreground, one at a time; the command must stop by itself.
 - Only the screens the change affects, the same scenario before and after, at most one view per
@@ -61,11 +77,17 @@ show it (a new screen, a new endpoint), capture only "after" and say so.
   `[{ "path": "<after>.png", "caption": "<screen>", "before": "<before>.png" }]` (`before` omitted
   for a new screen; some commands write the manifest themselves). Return the same list in
   `screenshots`: a PR/MR workflow publishes it on the PR/MR.
-- Example (this orchestrator's own repository; the script writes `screenshots.json` itself):
+- This orchestrator's own repository: `npx electron scripts/screenshot.js --view <view> [options]`
+  (`--help` for all of them). Views: dashboard, sessions, projects, project, backlog, artifacts,
+  workflows, agents, skills, usage, analytics, settings, duo, arena, run-chat, run. Options:
+  `--tab`, `--mode`, `--click <css>` (repeatable), `--ref <git ref>` ("before" without a
+  checkout), `--out`, `--name`, `--caption` (short plain text), `--before`, `--wait`. The `run` view
+  shows a simulated run and waits 20 s by itself.
+- Example (the script writes `screenshots.json` itself):
   1. `npm run screenshot -- --view settings --tab general --ref <base> --out <run_dir>/screenshots --name settings-before`
   2. `npm run screenshot -- --view settings --tab general --out <run_dir>/screenshots --name settings-after --caption "Settings > General" --before settings-before.png`
 
-## 4. HTTP, CLI and logs
+## 5. HTTP, CLI and logs
 
 - **http**: start the server locally, send the request with the project's own client or a plain
   `node -e`/`curl` call against `localhost`, record method, path, status and the body excerpt.
@@ -77,7 +99,7 @@ show it (a new screen, a new endpoint), capture only "after" and say so.
   `MULTIAGENT_SIMULATION_ONLY=1` in your environment, never prefix it), then
   quote the log or event lines that show the new behaviour.
 
-## 5. Answer
+## 6. Answer
 
 One entry per piece of evidence in `evidence`: `issue` (its URL when the run has several),
 `kind` (`screenshot` | `http` | `cli` | `log`), `title` (what it shows, one line), `command`

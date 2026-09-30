@@ -206,9 +206,23 @@ function removeScratch(dir) {
   try { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 3 }); } catch { /* temp folder */ }
 }
 
+/** The usage: this file's header comment, without the comment markers. */
+function usage() {
+  const lines = fs.readFileSync(__filename, 'utf8').split(/?
+/);
+  const end = lines.findIndex((l) => !l.startsWith('//'));
+  return lines.slice(0, end).map((l) => l.replace(/^// ?/, '')).join('
+');
+}
+
 // ---- the capture (Electron main process) -----------------------------------------------------
 function main() {
   const { app, nativeTheme, ipcMain } = require('electron');
+  if (process.argv.includes('--help') || process.argv.includes('-h')) {
+    console.log(usage());
+    app.exit(0);
+    return;
+  }
   let args;
   try {
     args = parseArgs(process.argv.slice(2));
@@ -376,4 +390,4 @@ function main() {
 // Electron's main process runs the capture; plain Node (the tests) only imports the helpers.
 if (process.type === 'browser') main();
 
-module.exports = { parseArgs, recordShot, VIEWS };
+module.exports = { parseArgs, recordShot, usage, VIEWS };
