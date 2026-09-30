@@ -388,6 +388,7 @@ class WorkflowRun extends EventEmitter {
     this.actionsQuota = actionsQuota || null;
     this.probeStats = {}; // step -> { polls, agent_calls, completed, errors } (summary.probes)
     this.mockProbeCalls = {};
+    this.mockActionCalls = {}; // step -> transition actions/merges run (mockSequences.action_errors)
     this.budget = budget || {};
     this.prices = prices || {};
     this.budgetWarned = new Set();
@@ -829,7 +830,14 @@ class WorkflowRun extends EventEmitter {
       // `precheck:` the PR/MR is checked right before the action (`true` = the gate's own `check:`)
       const precheck = t.precheck === true ? step.check : t.precheck || null;
       const act = async () => {
-        if (precheck) await this.runCheck(precheck, `${step.id}:precheck`, scope, { failIfNot: true });
+        if (precheck) await this.runCheck(precheck, step, 'precheck', scope, { failIfNot: true });
+        // simulation: mockSequences.action_errors: { step: n } fails the first n actions/merges of that step
+        if (this.mock && (action || t.merge === 'local')) {
+          const n = (this.mockActionCalls[step.id] = (this.mockActionCalls[step.id] || 0) + 1);
+          if (n <= (this.mockSequences?.action_errors?.[step.id] || 0)) {
+            throw new Error(`(simulated) ${t.merge === 'local' ? 'local merge: the branch conflicts with the local base in src/simulated.js' : `action failed: ${action}`}`);
+          }
+        }
         if (action) await this.runAction(action);
         // `merge: local`: the engine merges the run's branch into the local base (no push, no PR)
         if (t.merge === 'local') await this.mergeWorktreeLocally();

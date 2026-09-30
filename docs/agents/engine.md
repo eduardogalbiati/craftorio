@@ -9,7 +9,13 @@ same features for users; this is the implementer's summary.
   names can be templates (`"unit-test-writer-{{ inputs.language }}"`).
 - `agents: [a, b]` on a step = parallel fan-out → `{ results, succeeded, failed }`, `min_success`.
 - `save_as` (string or list, relative to the run folder; `{ path, content }` saves one field), `on_error: <step>`.
-- A **transition** can also take `on_error: <step>`: when its `action` or `merge: local` fails, the run goes there instead of failing, with the error in the template context as `action_error` (`{ step, message }`).
+- A **transition** can also take `on_error: <step>`: when its `action`, `merge: local` or `precheck` fails, the run goes there instead of failing, with the error in the template context as `action_error` (`{ step, message, at, check?, head?, supervisor?, diagnosis? }`; `head` = the worktree's HEAD after the failure, which a failed local merge leaves as it was: the last checked commit). `recoverFromActionError` in workflow.js.
+  - `recover: [steps]` (needs `on_error`; agent steps only): the supervisor decides first (`superviseActionError`, `supervisor.actionSchema(recover)`: `goto` one of them | `escalate`; `goto` first = the mock's default). `goto` → that step, `action_error.supervisor = { goto, explanation, instruction, record }` (the step's prompt includes it); `escalate`, an invalid goto, no supervisor or no `max_total` left → `on_error` with `action_error.diagnosis`. Event `supervisor.decision` with `kind: action_error` and `record` ("went back to X at HH:MM UTC because …"), a `supervisor` row in `decisions.tsv`; `runs.js` exposes the latest record as `recovery` (Backlog card badge).
+  - `precheck: { probe, target }` (or `true` = the step's `check`): `runCheck` runs the probe right before the action; anything but `passed` throws (the merge is not attempted). `pr_mergeable` (probes.js `mergeableState`): passed | conflict | failed | pending | blocked | behind | merged | closed; a probe that cannot run = `error`.
+  - A transition with `precheck` or `merge: local` runs check + action + merge inside `merge-queue.js` `serialize(key)` (key = the PR/MR's `host/repo`, else the worktree's repo): one merge at a time per repository across the process's runs; then `notifyMerged`.
+  - `set: { name: value }` (values rendered against the step's scope) → run variables `vars.<name>` (not restored on resume). software-development and local-hero use `vars.recheck == 'resolution'` to scope code_review/test/verify after a conflict.
+  - Simulation: `mockSequences.action_errors: { step: n }` fails the first n actions/merges of that step; probe states per check with `mockSequences.probes: { '<step>:check': [...], '<step>:precheck': [...] }` (default `pr_mergeable: ['passed']`).
+- A **human gate** can take `check: { probe, target, on_fail?, recover? }` (`openGate`): the probe runs right before it opens (`check` in the message's template context: `{ state, detail, target, checked_at }`), and again on every `merged` notification of another run for the same key while it is open. Not `passed`/`error` with `on_fail` → the gate is not opened / is withdrawn (`approval.resolved` with `withdrawn: true, by: 'check', reason`) and the run takes `recoverFromActionError` with `{ on_error: on_fail, recover }`. Nothing ever approves a gate for the person.
 - `orchestrator.limits.max_total_context` (e.g. `20M`): the context the run's agents read (input + cache, summed over every turn). Past it, `contextGate` pauses the run before the next agent turn with a `<step>:context_limit` gate (choices `continue` = allow another block of the same size, `stop` = cancel; the worktree is kept). A turn is never cut; `limit.exceeded` is emitted with `paused: true`.
 - `groups: [{ name, steps }]` (optional, top level): progress views only, the graph ignores it;
   `validateGroups` in `loadWorkflow`. Recorded in `workflow.started` and `summary.groups`, with
@@ -124,6 +130,20 @@ same features for users; this is the implementer's summary.
   one with `done: false` goes to the `issue_not_done` gate (continue without it / stop), asked once per
   run; the review sets `issue` on its findings, the verifier answers a verdict per issue, and the CI
   Pusher's PR/MR body closes each issue that was done.
+- software-development (0.17.0), merge conflicts (#69): `approve_merge` has `check` (pr_mergeable,
+  `on_fail: merge_failed`, `recover: [resolve_conflict]`) and its approved transition `precheck: true`
+  with the same routes. `resolve_conflict` (developer, `edits_tests: true`, merges `origin/<base>`,
+  pushes; `merge_commit`, `behaviour_changed`) → `code_review` with `set: { recheck: resolution }`
+  (review of `git show --remerge-diff <merge_commit>`), `max_visits: 2` → `merge_failed`; `test` then
+  runs the full suite and goes straight to `ci` (build and verify already passed), then
+  `pr_babysitter` → `deploy_test` (a fresh entry always triggers a new preview: `previous_step`) →
+  `approve_merge` again. `deploy_failed` → develop resets `recheck`.
+- local-hero (0.4.0), scoped re-check after a conflict (#99): `resolve_merge` answers `previous_head`,
+  `head`, `files_changed` (the resolved files only) and `behaviour_changed`; its transition sets
+  `vars.recheck` (`resolution`, or empty when behaviour changed). With `resolution`: `code_review` gets
+  `git range-diff <base> <approved> <branch>` (approved = `action_error.head`, else `previous_head`),
+  findings outside it non-blocking; `test` runs the related tests + a smoke check (full suite past 5
+  files); `build` unchanged; `verify_change` re-checks only the claims whose files were touched.
 
 ## Worktrees and template context
 

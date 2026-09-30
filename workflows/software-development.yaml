@@ -14,6 +14,15 @@
 #   A preview that fails because of the code goes back to the developer and then
 #   through ci ─► pr_babysitter ─► deploy_test again (new commit, new CI, new preview).
 #
+# MERGE CONFLICT (another change merged into the base after the PR/MR was checked)
+#   The engine checks the PR/MR itself (pr_mergeable, no model call) right before approve_merge
+#   opens, again whenever another run merges into the same repository while it is open, and again
+#   right before the merge; merges of concurrent runs go one at a time. Not mergeable → the run
+#   supervisor decides first: a conflict goes to
+#   resolve_conflict (developer merges origin/<base>, resolves, pushes) ─► code_review (of the
+#   resolution only) ─► test (full suite) ─► ci ─► pr_babysitter ─► deploy_test ─► approve_merge
+#   (the owner approves again: the code changed). 2 rounds; anything else → merge_failed gate.
+#
 # Failure gates (human): they only offer what can change the outcome. Retrying
 # something that cannot change (the same commit, the same failed run) is not offered as
 # the way out of a code failure; stopping ends the run as `failed` (worktree kept, so it
@@ -50,7 +59,7 @@ kind: Workflow
 
 metadata:
   name: software-development
-  version: 0.16.0
+  version: 0.17.0
   description: Implements, reviews, tests, builds, watches CI and the PR/MR, publishes a preview and, once approved, merges and tracks the production deploy. Works with several languages on GitHub or GitLab.
   tags: [dev, review, test, build, ci, pr, deploy, github, gitlab]
   # Dashboard category: plan (Plan & Design), build (Code & Build) or monitor (Monitor & Improve).
@@ -292,7 +301,7 @@ groups:
   - name: PR & CI
     steps: [ci, ci_failed, pr_babysitter, comment_decision]
   - name: Deploy
-    steps: [deploy_test, preview_failed, approve_merge, deploy_prod, deploy_failed]
+    steps: [deploy_test, preview_failed, approve_merge, resolve_conflict, merge_failed, deploy_prod, deploy_failed]
 
 # -----------------------------------------------------------------------------
 steps:
@@ -384,14 +393,31 @@ steps:
         goto: end
         status: failed
 
+  # After a merge conflict (vars.recheck == 'resolution', set by resolve_conflict) the review covers
+  # the resolution only: the change itself was already reviewed and approved.
   - id: code_review
     agent: reviewer
     prompt: |
+      {% if vars.recheck == 'resolution' %}
+      Review the RESOLUTION of a merge conflict on branch `{{ steps.develop.output.branch }}`, not the
+      whole change: the change was already reviewed and approved, then `origin/{{ inputs.base_branch }}`
+      moved and the developer merged it into the branch in commit `{{ steps.resolve_conflict.output.merge_commit }}`.
+      - `git show --remerge-diff {{ steps.resolve_conflict.output.merge_commit }}`: the conflict hunks and
+        what the resolution kept or dropped from each side;
+      - `git log --oneline {{ steps.resolve_conflict.output.merge_commit }}..{{ steps.develop.output.branch }}`:
+        any commit made after it (review those too).
+      Check that the intent of both sides survived, that nothing was dropped or invented, and that
+      the result still builds on what the base now has. Findings on code the resolution did not
+      touch are not blocking: report them as minor or nit at most.
+      Task (for context): {{ inputs.task }}
+      Developer: {{ steps.resolve_conflict.output.summary }}
+      {% else %}
       Review the changes on branch `{{ steps.develop.output.branch }}` against
       `{{ inputs.base_branch }}` (`git diff {{ inputs.base_branch }}...{{ steps.develop.output.branch }}`).
       Task (the spec for the spec axis): {{ inputs.task }}
       Developer summary: {{ steps.develop.output.summary }}
-      {% if inputs.issues | length > 1 %}
+      {% endif %}
+      {% if inputs.issues | length > 1 and vars.recheck != 'resolution' %}
       This run implements several issues: check the spec axis per issue, and set `issue` (its URL)
       on the findings about one of them. An issue the change misses or only half does is a blocker,
       unless the developer reported it as not done:
@@ -456,6 +482,12 @@ steps:
       {{ delegate_result.text }}
       Run the full suite again and confirm. If the fix changed the UI, capture the "after"
       screenshots again (same names, same folder) and return the updated list.
+      {% elif vars.recheck == 'resolution' %}
+      Your tests already passed on this change. Since then `origin/{{ inputs.base_branch }}` moved and the
+      developer merged it into the branch, resolving a conflict (commit `{{ steps.resolve_conflict.output.merge_commit }}`):
+      {{ steps.resolve_conflict.output.summary }}
+      Check out the branch (pull it: the developer pushed) and run the full suite once. Update a
+      test only when the base's change made it obsolete (not a bug); no new screenshots.
       {% else %}
       1. Check out the branch. You own the tests: the developer did not write or run any.
          Write the tests the change needs, starting from the developer's notes (they are a
@@ -493,6 +525,10 @@ steps:
               before:  { type: string }
         screenshots_note: { type: string }
     transitions:
+      # after a merge conflict: the build and the verification already passed on the change; CI
+      # builds the merged result, then the PR check, the preview and the owner's approval again
+      - when: "output.tests_status == 'pass' and vars.recheck == 'resolution'"
+        goto: ci
       - when: "output.tests_status == 'pass'"
         goto: build
       - when: "output.tests_status == 'fail'"
@@ -924,7 +960,7 @@ steps:
       target: "{{ steps.deploy_test.output.run_url }}"
     prompt: |
       PR/MR #{{ steps.ci.output.pr_number }}, branch `{{ steps.develop.output.branch }}`.
-      {% if not steps.deploy_test.output or steps.deploy_test.output.preview_status == 'failed' %}
+      {% if previous_step != 'deploy_test' or not steps.deploy_test.output or steps.deploy_test.output.preview_status == 'failed' %}
       Trigger the preview publication following the "Preview" section of the deploy skill
       (GitHub preview workflow: `{{ inputs.preview_workflow }}`), from the current head of the branch.
       {% else %}
@@ -998,11 +1034,24 @@ steps:
         status: failed
 
   # Human gate: test the preview and approve the merge (= production)
+  # `check:` the engine checks the PR/MR itself (no model call) right before the gate opens, and
+  # again whenever another run merges into the same repository while it is open; `precheck: true`
+  # checks it once more right before the merge, and merges of concurrent runs go one at a time. A
+  # PR/MR that is not mergeable is never merged nor offered for approval: the supervisor decides
+  # first (a conflict → resolve_conflict, with its record in the run chat, decisions.tsv and the
+  # Backlog card); anything else, or no interventions left → merge_failed.
   - id: approve_merge
     type: human_approval
+    check:
+      probe: pr_mergeable
+      target: "{{ steps.ci.output.pr_url }}"
+      on_fail: merge_failed
+      recover: [resolve_conflict]
     message: |
       Preview published: {{ steps.deploy_test.output.release_url }}
-      {{ steps.ci.output.pr_url }}: CI green and mergeable.
+      {{ steps.ci.output.pr_url }}: {% if check.state == 'passed' %}CI green and mergeable ({{ check.detail }}){% else %}the state could not be checked ({{ check.detail }}){% endif %}, checked at {{ check.checked_at }}, right before this approval. It is checked again when you approve.
+      {% if steps.resolve_conflict.output and steps.resolve_conflict.output.resolved %}The branch changed after your last approval: a merge conflict with {{ inputs.base_branch }} was resolved ({{ steps.resolve_conflict.output.summary }}), reviewed and tested again.
+      {% endif %}
       Approve the merge into {{ inputs.base_branch }}? This produces the production release.
     # The action runs in the run's worktree, where the PR branch is checked out. `--repo` makes gh
     # merge and delete the remote branch server side only: without it gh would also check out the
@@ -1013,11 +1062,94 @@ steps:
     # Once merged, the PR/MR's screenshots leave the pr-screenshots branch (best effort, exits 0).
     transitions:
       - when: "approved"
-        action: "{% if inputs.git_platform == 'gl' %}glab mr merge {{ steps.ci.output.pr_number }} --squash --remove-source-branch --yes{% else %}gh pr merge {{ steps.ci.output.pr_number }} --repo {{ steps.ci.output.pr_url | github_repo }} --squash --delete-branch{% endif %}{% if steps.ci.output.screenshots_posted %} && node \"{{ skill_dir('pr-screenshots') }}/publish.js\" --cleanup --platform {{ inputs.git_platform }} --pr-url {{ steps.ci.output.pr_url | pr_url }}{% endif %}"
+        precheck: true
+        on_error: merge_failed
+        recover: [resolve_conflict]
+        action: &merge_action "{% if inputs.git_platform == 'gl' %}glab mr merge {{ steps.ci.output.pr_number }} --squash --remove-source-branch --yes{% else %}gh pr merge {{ steps.ci.output.pr_number }} --repo {{ steps.ci.output.pr_url | github_repo }} --squash --delete-branch{% endif %}{% if steps.ci.output.screenshots_posted %} && node \"{{ skill_dir('pr-screenshots') }}/publish.js\" --cleanup --platform {{ inputs.git_platform }} --pr-url {{ steps.ci.output.pr_url | pr_url }}{% endif %}"
         goto: deploy_prod
       - when: "rejected"
         goto: end
         status: cancelled
+
+  # Reached from approve_merge when the supervisor recognizes a merge conflict (`action_error`: the
+  # error, the PR/MR state the engine checked, the supervisor's record and instruction) or from the
+  # merge_failed gate. The resolution then goes through its own review, the full suite, CI, the PR
+  # check, a new preview and the owner's approval again (never merged automatically). 2 rounds.
+  - id: resolve_conflict
+    agent: developer
+    # a merge brings the base's test files: resolving their conflicts is part of the job
+    edits_tests: true
+    prompt: |
+      PR/MR #{{ steps.ci.output.pr_number }} ({{ steps.ci.output.pr_url }}) was not merged into `{{ inputs.base_branch }}`:
+      {{ action_error.message if action_error else 'the owner sent it to you from the merge_failed gate' }}
+      {% if action_error and action_error.check %}State checked by the orchestrator at {{ action_error.check.checked_at }}: {{ action_error.check.state }} ({{ action_error.check.detail }}).{% endif %}
+      {% if action_error and action_error.supervisor %}The run supervisor sent it back to you: {{ action_error.supervisor.explanation }}
+      {{ action_error.supervisor.instruction }}{% endif %}
+      {% if steps.merge_failed.output and steps.merge_failed.output.feedback %}The owner says: {{ steps.merge_failed.output.feedback }}{% endif %}
+
+      On branch `{{ steps.develop.output.branch }}`: `git fetch origin`, then `git merge origin/{{ inputs.base_branch }}`
+      (a merge commit, never a rebase: the branch is already pushed), and resolve every conflict
+      following the merge-conflict-resolver skill (keep the intent of both sides; never drop the
+      other change). Run only the tests related to the files you resolved (not the full suite: the
+      test writer runs it next), commit the merge and `git push` (never force-push).
+      Answer `merge_commit` (the hash of the merge commit), `files_changed` (the files the resolution
+      touched) and `behaviour_changed`: true when the resolution does more than combine both sides
+      (e.g. you had to adapt the change's logic to what the base now does), so the change is
+      reviewed in full again.
+      If the PR/MR does not conflict (e.g. a required review or check is missing) or it is anything
+      you can't fix on the branch, change nothing and answer blocked: true with the reason.
+    output_schema:
+      type: object
+      required: [resolved, blocked, summary]
+      properties:
+        resolved:          { type: boolean }
+        blocked:           { type: boolean }
+        summary:           { type: string }
+        merge_commit:      { type: string }
+        files_changed:     { type: array, items: { type: string } }
+        behaviour_changed: { type: boolean }
+    transitions:
+      - when: "output.blocked"
+        goto: merge_failed
+      # `recheck: resolution`: code_review covers the merge commit only and test goes on to ci; a
+      # resolution that changes behaviour goes through the whole pipeline again
+      - when: "output.resolved"
+        set: { recheck: "{{ '' if output.behaviour_changed else 'resolution' }}" }
+        goto: code_review
+        max_visits: 2
+        on_exhausted: merge_failed
+      - when: "true"
+        goto: merge_failed
+
+  # Only a person gets the run past a merge that failed for another reason (permissions, a required
+  # review, the platform), a blocked developer, or 2 resolution rounds.
+  - id: merge_failed
+    type: human_approval
+    message: |
+      {{ steps.ci.output.pr_url }} was not merged into {{ inputs.base_branch }}:
+      {{ action_error.message if action_error else '(no error recorded)' }}
+      {% if action_error and action_error.check %}State checked at {{ action_error.check.checked_at }}: {{ action_error.check.state }} ({{ action_error.check.detail }}).
+      {% endif %}{% if action_error and action_error.diagnosis %}Supervisor: {{ action_error.diagnosis }}
+      {% endif %}{% if steps.resolve_conflict.output %}Developer (last resolution): {{ steps.resolve_conflict.output.summary }}
+      {% endif %}
+    feedback: { label: "Instruction for the developer (optional, with \"Resolve\")" }
+    choices:
+      - { id: retry,   label: "Merge now (checked right before; you approve the PR/MR's current head)" }
+      - { id: resolve, label: "Send it to the developer to resolve (then review, tests, CI, preview and your approval again)" }
+      - { id: stop,    label: "Stop the run as failed (worktree kept to resume)" }
+    transitions:
+      - when: "choice == 'retry'"
+        precheck:
+          probe: pr_mergeable
+          target: "{{ steps.ci.output.pr_url }}"
+        on_error: merge_failed
+        action: *merge_action
+        goto: deploy_prod
+      - when: "choice == 'resolve'"
+        goto: resolve_conflict
+      - when: "choice == 'stop'"
+        goto: end
+        status: failed
 
   # Deployer (after the merge): tracks the automatic production deploy.
   - id: deploy_prod
@@ -1071,7 +1203,9 @@ steps:
       - { id: recheck, label: "Track the deploy again (after you re-ran it yourself)" }
       - { id: stop,    label: "Stop the run as failed" }
     transitions:
+      # a new change from the base: reviewed and checked in full
       - when: "choice == 'fix'"
+        set: { recheck: "" }
         goto: develop
       - when: "choice == 'recheck'"
         goto: deploy_prod

@@ -15,9 +15,15 @@
 # when it moved, fast-forward only (linear history), never pushed.
 #   - A merge that fails (usually a conflict with another run merged meanwhile) goes to
 #     resolve_merge: the developer rebases onto the local <base> and resolves the conflicts (test
-#     files included), and the change goes through review, tests, build and verification again before the
-#     next merge attempt (at most 3 rounds). Only what the developer can't fix (e.g. uncommitted
-#     changes in the checkout where <base> is checked out: the user's) stops at merge_blocked.
+#     files included). Then only what the resolution changed is checked again (`vars.recheck ==
+#     'resolution'`): code_review reviews the rebase against the last approved commit (git
+#     range-diff), test runs the tests related to the files the resolution touched plus a smoke
+#     check (the full suite past 5 files), build runs, verify_change re-checks only the claims whose
+#     files were touched, and the merge is attempted right after. A resolution that changes
+#     behaviour (`behaviour_changed`) goes through the full review, suite and verification. Merges of
+#     concurrent runs go one at a time. At most 3 rounds; only what the developer can't fix (e.g.
+#     uncommitted changes in the checkout where <base> is checked out: the user's) or running out
+#     of rounds stops at merge_blocked.
 #   - orchestrator.limits.max_total_context: past 20M tokens of context the run pauses before its
 #     next agent turn; Continue allows another 20M, Stop ends it (worktree kept).
 #   - Commits end with "Closes #<n>" for the run's issues: GitHub closes them when you push <base>.
@@ -35,7 +41,7 @@ kind: Workflow
 
 metadata:
   name: software-development-local-hero
-  version: 0.3.0
+  version: 0.4.0
   description: Implements, reviews, tests, builds and verifies a change in its own worktree, then merges it into the local base branch automatically, resolving conflicts on the way. No push, no PR, no CI; push when you want.
   tags: [dev, review, test, build, local, worktree]
   # Dashboard category: plan (Plan & Design), build (Code & Build) or monitor (Monitor & Improve).
@@ -317,14 +323,31 @@ steps:
         goto: end
         status: failed
 
+  # After a merge conflict (vars.recheck == 'resolution', set by resolve_merge) the review covers
+  # the resolution only: the rebase compared with the commit that was last approved.
   - id: code_review
     agent: reviewer
     prompt: |
+      {% if vars.recheck == 'resolution' %}
+      {% set approved = (action_error.head if action_error and action_error.head else '') or steps.resolve_merge.output.previous_head %}
+      Review the RESOLUTION of a merge conflict on branch `{{ steps.develop.output.branch }}`, not the
+      whole change: the change was already reviewed, tested and verified at commit `{{ approved }}`,
+      then the local `{{ inputs.base_branch }}` moved and the developer rebased the branch onto it
+      (now `{{ steps.resolve_merge.output.head }}`).
+      `git range-diff {{ inputs.base_branch }} {{ approved }} {{ steps.develop.output.branch }}` compares the
+      approved commits with the rebased ones, leaving out what came from `{{ inputs.base_branch }}`:
+      review only what differs (the conflict hunks, what the resolution kept or dropped from each
+      side, and any commit after the rebase). Findings on code the resolution did not change are not
+      blocking: report them as minor or nit at most.
+      Task (for context): {{ inputs.task }}
+      Developer: {{ steps.resolve_merge.output.summary }}
+      {% else %}
       Review the changes on branch `{{ steps.develop.output.branch }}` against
       `{{ inputs.base_branch }}` (`git diff {{ inputs.base_branch }}...{{ steps.develop.output.branch }}`).
       Task (the spec for the spec axis): {{ inputs.task }}
       Developer summary: {{ steps.develop.output.summary }}
-      {% if inputs.issues | length > 1 %}
+      {% endif %}
+      {% if inputs.issues | length > 1 and vars.recheck != 'resolution' %}
       This run implements several issues: check the spec axis per issue, and set `issue` (its URL)
       on the findings about one of them. An issue the change misses or only half does is a blocker,
       unless the developer reported it as not done:
@@ -389,6 +412,22 @@ steps:
       {{ delegate_result.text }}
       Run the full suite again and confirm. If the fix changed the UI, capture the "after"
       screenshots again (same names, same folder) and return the updated list.
+      {% elif vars.recheck == 'resolution' and (steps.resolve_merge.output.files_changed or []) | length <= 5 %}
+      Your tests already passed on this change. Since then the developer rebased the branch onto
+      the local `{{ inputs.base_branch }}` and resolved a conflict, touching only:
+      {{ (steps.resolve_merge.output.files_changed or []) | join(', ') or '(no file listed: see the summary)' }}
+      ({{ steps.resolve_merge.output.summary }})
+      Run only the tests related to those files (their own tests and the tests of what uses them),
+      plus a fast smoke check of the whole project (the quickest command that loads it: a build,
+      a type check, or the test runner on one small file), NOT the full suite. Update a test only
+      when the base's change made it obsolete (not a bug); no new tests, no new screenshots. Say
+      which tests you ran in `summary`.
+      {% elif vars.recheck == 'resolution' %}
+      Your tests already passed on this change. Since then the developer rebased the branch onto
+      the local `{{ inputs.base_branch }}` and resolved a conflict that touched many files:
+      {{ steps.resolve_merge.output.summary }}
+      Run the full suite once. Update a test only when the base's change made it obsolete (not a
+      bug); no new tests, no new screenshots.
       {% else %}
       1. Check out the branch. You own the tests: the developer did not write or run any.
          Write the tests the change needs, starting from the developer's notes (they are a
@@ -540,6 +579,14 @@ steps:
       {{ delegate_result.text }}
       Run the treatment side again (the baseline did not change).
       {% endif %}
+      {% if vars.recheck == 'resolution' and not delegate_result and steps.verify_change.output %}
+      You already verified this change: {{ steps.verify_change.output | to_json }}
+      Since then the developer rebased the branch onto the local `{{ inputs.base_branch }}` and
+      resolved a conflict, touching only: {{ (steps.resolve_merge.output.files_changed or []) | join(', ') or '(no file listed)' }}
+      ({{ steps.resolve_merge.output.summary }}).
+      Re-check only the claims (issues) whose evidence depends on those files, on the rebased
+      branch; keep your other verdicts and evidence as they were, and say which you kept.
+      {% endif %}
       Verify the change following the claim-verification skill. Stay read-only: the
       working tree must not change (no files, stash, worktree or checkout).
       {% if inputs.issues | length > 1 %}
@@ -603,8 +650,9 @@ steps:
   # ============================ LOCAL MERGE ==================================
 
   # The merge itself is automatic (merge: local on verify_change). When it fails, the error is
-  # in `action_error` and the developer resolves it on the run's branch; the change is then
-  # reviewed, tested, built and verified again before the next merge attempt.
+  # in `action_error` (with `head`: the branch's commit that was last checked, which a failed merge
+  # leaves as it was) and the developer resolves it on the run's branch; then only what the
+  # resolution changed is reviewed, tested and verified (the build runs) before the next attempt.
   - id: resolve_merge
     agent: developer
     # a rebase replays the test writer's commits: resolving their conflicts is part of the job
@@ -614,11 +662,17 @@ steps:
       {{ action_error.message if action_error else 'unknown error' }}
 
       If it is a conflict with the local {{ inputs.base_branch }} (another run merged into it meanwhile):
-      on your branch run `git rebase {{ inputs.base_branch }}`, resolve every conflict following the
+      first note the branch's current commit (`git rev-parse HEAD`{% if action_error and action_error.head %}, should be `{{ action_error.head }}`{% endif %}):
+      it is the one that was reviewed, tested and verified; answer it as `previous_head`. Then on your
+      branch run `git rebase {{ inputs.base_branch }}`, resolve every conflict following the
       merge-conflict-resolver skill (keep the intent of both sides; never drop the other change),
-      `git rebase --continue` and make sure everything is committed. Resolve conflicts in test files
-      too, but write no new tests and do not run the full suite: the change goes through review
-      and the test writer's suite again. Never fetch, pull or push.
+      `git rebase --continue` and make sure everything is committed; answer the new commit as `head`.
+      Resolve conflicts in test files too, but write no new tests and do not run the full suite: only
+      what the resolution changed is reviewed and tested again. Never fetch, pull or push.
+      In `files_changed`, list only the files where you resolved a conflict (not every file of the
+      change). Answer `behaviour_changed: true` when the resolution does more than combine both
+      sides (e.g. you had to adapt the change's logic to what the base now does): the change is
+      then reviewed, tested and verified in full again.
       If it is anything you can't fix on your branch (for example uncommitted changes in the
       checkout where {{ inputs.base_branch }} is checked out: that is the user's work, don't touch it),
       change nothing and answer blocked: true with the reason.
@@ -626,14 +680,20 @@ steps:
       type: object
       required: [resolved, blocked, summary]
       properties:
-        resolved:      { type: boolean }
-        blocked:       { type: boolean }
-        summary:       { type: string }
-        files_changed: { type: array, items: { type: string } }
+        resolved:          { type: boolean }
+        blocked:           { type: boolean }
+        summary:           { type: string }
+        # the files the resolution touched: what the scoped checks cover
+        files_changed:     { type: array, items: { type: string } }
+        previous_head:     { type: string }
+        head:              { type: string }
+        behaviour_changed: { type: boolean }
     transitions:
       - when: "output.blocked"
         goto: merge_blocked
+      # `recheck: resolution`: code_review, test and verify_change cover only what the resolution changed
       - when: "output.resolved"
+        set: { recheck: "{{ '' if output.behaviour_changed else 'resolution' }}" }
         goto: code_review
         max_visits: 3
         on_exhausted: merge_blocked

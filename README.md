@@ -127,11 +127,27 @@ can change the outcome:
 | `build_failed` (also reached at once by an `infra` build failure, e.g. a file locked by a running process) | continue to verification anyway / build again (after fixing the environment) / stop (`failed`) |
 | `ci_failed` | one more fix round by the developer / check CI again (stuck or flaky pipeline) / stop (`failed`) |
 | `preview_failed` | publish the same commit again (infrastructure) / send it to the developer (then CI, PR check, preview) / stop (`failed`) |
+| `merge_failed` (a merge that failed for another reason than a conflict, a blocked developer, or 2 conflict rounds) | merge now (checked right before) / send it to the developer to resolve / stop (`failed`) |
 | `deploy_failed` (after the merge) | new development cycle / track the deploy again (after re-running it yourself) / stop (`failed`) |
 | `human_review`, `approve_merge` | rejecting ends the run as `cancelled` |
 
 Once a fix loop reaches its limit the engine goes to the gate without asking for yet another fix,
 and a gate never re-runs the same failed thing as the only way forward.
+
+**Merge conflicts at the approval.** With several runs at once, a PR/MR that was clean when checked
+can conflict by the time you approve it. The engine checks the PR/MR itself (`gh pr view` /
+`glab mr view`, no model call) right before `approve_merge` opens (the message says "CI green and
+mergeable, checked at …"), again whenever another run merges into the same repository while the
+gate is open, and once more right before the merge; merges of concurrent runs go one at a time. A
+PR/MR that is not mergeable is never merged and never offered for approval: the run supervisor
+decides first. A conflict sends the run back to `resolve_conflict` (the developer merges
+`origin/<base>` into the branch and resolves it, skill `merge-conflict-resolver`), then
+`code_review` of the resolution only (the merge commit, not the whole change), the full suite, CI,
+the PR check, a new preview and `approve_merge` again: the code changed after your first "yes", so
+you approve again. The supervisor's record ("went back to resolve_conflict at 00:10 UTC because
+PR #64 conflicted with main after the #35 merge") shows in the run chat, `decisions.tsv` and the
+Backlog card. Anything else, 2 rounds, or no supervisor interventions left → the `merge_failed` gate,
+with the supervisor's diagnosis.
 
 `/goal` and `/loop` are declared per step in the YAML (`goal.until`, `loop.interval`,
 `loop.max_duration`). The engine repeats the step until the goal is met and injects the /goal
@@ -178,7 +194,7 @@ The same develop → code review → test → build → verify pipeline as `soft
 
 - Each run still gets its own git worktree, started from your **local** `base_branch` (nothing is fetched, so a run sees the local merges of earlier runs you haven't pushed).
 - **No merge approval**: once `verify_change` passes, the engine merges the run's branch into the local `base_branch` automatically: rebased onto it first if it moved (another run merged meanwhile), fast-forward only (linear history), never pushed. The run's worktree and branch are then removed.
-- **Conflicts are resolved automatically**: a failed merge goes to `resolve_merge`, where the developer rebases onto the local base and resolves the conflicts (skill `merge-conflict-resolver`), and the change goes through code review, tests, build and verification again before the next attempt (at most 3 rounds). Only what the developer can't fix, such as uncommitted changes in the checkout where the base is checked out (your work), stops at the `merge_blocked` gate (retry / stop).
+- **Conflicts are resolved automatically**: a failed merge goes to `resolve_merge`, where the developer rebases onto the local base and resolves the conflicts (skill `merge-conflict-resolver`). Then only what the resolution changed is checked again: the review covers the rebase against the last approved commit (`git range-diff`; findings on untouched code are not blocking), the tests are the ones related to the files the resolution touched plus a smoke check (the full suite when it touched more than 5 files), the build runs, the verifier re-checks only the claims whose files were touched, and the merge is attempted right after. A resolution that changes behaviour (the developer answers `behaviour_changed: true`) goes through the full review, suite and verification. Merges of concurrent runs go one at a time. At most 3 rounds; what the developer can't fix, such as uncommitted changes in the checkout where the base is checked out (your work), stops at the `merge_blocked` gate (retry / stop).
 - **Context limit**: `orchestrator.limits.max_total_context: 20M`. Past 20M tokens of context the run pauses before its next agent turn; choose **Continue** (another 20M) or **Stop**.
 - **Issues close when you push**: commits end with `Closes #<n>` for the run's issues, so GitHub closes them when you push the base branch. Until then the Backlog shows them in **Merged locally** (a "not pushed" badge), not in Done: Done means closed on GitHub/GitLab.
 - **Push from the Backlog**: when the project's local base has commits that `origin/<base>` hasn't (checked with a fetch on every Backlog sync and after every local merge), a bar above the issues says how many and which issues they close. **Push…** lists the commits, then runs `git push origin <base>` in the project's repository (the clone under `<workspace>/repos/`, not your own checkout): never forced, never another branch. The Backlog syncs afterwards, so the closed issues move to Done. The sidebar's Backlog item and the project's page show the count of commits not pushed; the run's chat and its notification say "merged locally, not pushed yet".
@@ -404,6 +420,11 @@ orchestrator:
   - `fail`: fall back to `on_error`, or end the run.
   It shows up as a `supervisor` session, and its decisions in the orchestrator log
   (`supervisor.decision` events).
+- **When a transition's action fails** (a merge, a deploy command, or the engine's check right
+  before a merge), on a transition with `on_error` and `recover: [steps]`: the supervisor gets the
+  error and the PR/MR state and either sends the run back to one of those steps with an instruction
+  (a known case, e.g. a conflict), recorded with where, when and why, or escalates to the `on_error`
+  gate with its diagnosis. An action failure never ends the run without one or the other.
 - **On demand**, "Ask the supervisor" on any run (Run view, orchestrator, project view): it reads
   the run (timeline, every attempt of the failing step, artifacts), explains what happened and the
   root cause, and recommends actions: **resume** from a step (a new run that reuses the previous
@@ -436,6 +457,29 @@ run: its output becomes `{ error }` and the flow continues at that step (the are
 so a verifier failure still reaches the human review with the document). When an answer does not
 validate, the engine asks again with the schema; ephemeral agents also get the task and their
 previous answer back, since their retry runs in a fresh session.
+
+A transition can also take `on_error: <step>`: when its `action` (or `merge: local`) fails, the run
+goes there with the error in `action_error`, instead of failing. Merges can be guarded:
+
+```yaml
+- id: approve_merge
+  type: human_approval
+  check:                        # checked right before the gate opens, and after other runs' merges
+    probe: pr_mergeable
+    target: "{{ steps.ci.output.pr_url }}"
+    on_fail: merge_failed       # not mergeable: the gate is not opened (or is withdrawn)
+    recover: [resolve_conflict] # ...and the supervisor may send the run back there first
+  transitions:
+    - when: "approved"
+      precheck: true            # the check again, right before the action (one merge at a time)
+      action: "gh pr merge ..."
+      on_error: merge_failed
+      recover: [resolve_conflict]
+      goto: deploy_prod
+```
+
+`set: { name: value }` on a transition sets a run variable (`vars.name` in templates), e.g. the
+local-hero workflow's `vars.recheck == 'resolution'` scopes the checks after a conflict.
 
 ### Transitions: limits and how a run ends
 
