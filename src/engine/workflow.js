@@ -1344,13 +1344,14 @@ class WorkflowRun extends EventEmitter {
   // (no new note, no rotation); opts.editsTests: the step's `edits_tests` over the agent's.
   // `edits_tests: false`: the turn may not change test files (tests_paths, src/engine/test-paths.js).
   // The engine checks the checkout after the turn and sends it back with the list of files, at most
-  // twice; after that the turn fails (the supervisor or the step's on_error take over). A check that
-  // cannot run (git error) fails the turn too.
+  // twice; after that the turn fails (the supervisor or the step's on_error take over). A snapshot or
+  // a check that cannot run (git error) fails the turn too; only a folder outside git is unchecked.
   async sendToAgent(agentName, prompt, opts = {}) {
     const agent = { ...(this.wf.defaults || {}), ...this.wf.agents[agentName] };
     const guarded = !!this.wf.agents[agentName] && (opts.editsTests ?? agent.edits_tests) === false;
     const dir = guarded ? this.workingDir(agent) : null;
-    const snap = guarded ? await testPaths.snapshot(dir, this.wf.tests_paths) : null;
+    const snap = guarded ? await testPaths.snapshot(dir, this.wf.tests_paths)
+      .catch((e) => { throw new Error(`Could not snapshot the test files before ${agentName}'s turn in ${opts.stepId || 'a delegated turn'} (edits_tests: false): ${e.message}`); }) : null;
     let res = await this.agentTurn(agentName, prompt, { ...opts, guarded });
     for (let attempt = 1; snap; attempt++) {
       // an unchecked turn fails the step: passing it would let test changes through the guard

@@ -96,17 +96,28 @@ async function commitBlobs(root, commit, files) {
   return out;
 }
 
+// true when `dir` or a parent has a `.git` (folder or worktree file); git's own error text is localized
+function insideGit(dir) {
+  for (let d = path.resolve(dir); ; d = path.dirname(d)) {
+    if (fs.existsSync(path.join(d, '.git'))) return true;
+    if (path.dirname(d) === d) return false;
+  }
+}
+
 // State of the checkout before a turn, or null when `dir` is not a git work tree: HEAD, and the
 // content of the test files that already had local changes (the user's, or an earlier turn's).
+// Any other git error rejects: without a snapshot the turn could not be checked.
 async function snapshot(dir, patterns = TESTS_PATHS) {
+  let root;
   try {
-    const root = await git(['rev-parse', '--show-toplevel'], dir);
-    const head = await git(['rev-parse', '--verify', 'HEAD'], root);
-    const isTest = testMatcher(patterns);
-    return { root, head, patterns, dirty: await workingBlobs(root, (await localChanges(root)).filter(isTest)) };
-  } catch {
-    return null;
+    root = await git(['rev-parse', '--show-toplevel'], dir);
+  } catch (e) {
+    if (!insideGit(dir)) return null;
+    throw e;
   }
+  const head = await git(['rev-parse', '--verify', 'HEAD'], root);
+  const isTest = testMatcher(patterns);
+  return { root, head, patterns, dirty: await workingBlobs(root, (await localChanges(root)).filter(isTest)) };
 }
 
 // Test files the turn changed since `snap` (sorted). `bases`: refs whose commits are not the
