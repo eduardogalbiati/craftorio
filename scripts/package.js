@@ -35,7 +35,7 @@ async function hardenExe(exe) {
     // terminalSpec in src/main.js), and node can't read app.asar.
     asar: { unpack: '{**/node_modules/node-pty/**,**/src/session-tail.js}' },
     // .claude/ may contain worktrees from other sessions (with their own node_modules)
-    ignore: [/^\/(runs|dist|build|scripts|test|supabase|\.github|\.claude)(\/|$)/],
+    ignore: [/^\/(runs|dist|build|scripts|test|supabase|site|\.github|\.claude)(\/|$)/],
     // Hardening: turn the packaged exe into "just this app", not a general Node/Electron runtime
     afterComplete: [({ buildPath }) => hardenExe(path.join(buildPath, 'MultiagentOrchestrator.exe'))],
   });

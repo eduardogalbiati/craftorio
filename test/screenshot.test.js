@@ -32,6 +32,37 @@ test('parseArgs names the file after the scenario and checks options against the
   assert.throws(() => parseArgs(['--real']), /Unknown argument: --real/);
 });
 
+test('parseArgs: --record slows the simulated agents down and gives the encoding time', () => {
+  const still = parseArgs(['--view', 'arena']);
+  assert.equal(still.mockSpeed, 0.02);
+  assert.equal(still.timeout, 90000);
+  const rec = parseArgs(['--view', 'arena', '--start', '--record', '20', '--task', 'A PRD']);
+  assert.deepEqual([rec.start, rec.record, rec.fps, rec.mockSpeed, rec.timeout, rec.task], [true, 20, 10, 0.35, 130000, 'A PRD']);
+  assert.equal(parseArgs(['--view', 'duo', '--record', '5', '--mock-speed', '1', '--timeout', '1000']).mockSpeed, 1);
+  assert.equal(parseArgs(['--view', 'duo', '--record', '5', '--timeout', '1000']).timeout, 1000);
+  assert.throws(() => parseArgs(['--view', 'backlog', '--start']), /--start applies to arena, duo/);
+  assert.throws(() => parseArgs(['--view', 'arena', '--goal', 'x']), /--goal applies to duo/);
+  assert.throws(() => parseArgs(['--record', '0']), /--record takes a positive number/);
+  assert.throws(() => parseArgs(['--fps', '60']), /--fps takes at most 30/);
+});
+
+test('parseArgs reads --steps and refuses an action it cannot play', (t) => {
+  const dir = tmp(t);
+  const file = (name, steps) => { const f = path.join(dir, name); fs.writeFileSync(f, JSON.stringify(steps)); return f; };
+  const steps = [{ click: '#a' }, { type: '#b', text: 'hi', cps: 5 }, { select: '#c', value: 'codex' }, { wait: 100 }, { scroll: '#d' }];
+  assert.deepEqual(parseArgs(['--steps', file('ok.json', steps)]).steps, steps);
+  assert.throws(() => parseArgs(['--steps', file('obj.json', { click: '#a' })]), /a JSON list of actions/);
+  assert.throws(() => parseArgs(['--steps', file('two.json', [{ click: '#a', wait: 1 }])]), /each action has one of click, type, select, wait, scroll/);
+  assert.throws(() => parseArgs(['--steps', file('hover.json', [{ hover: '#a' }])]), /each action has one of/);
+  assert.throws(() => parseArgs(['--steps', file('type.json', [{ type: '#a' }])]), /"type" needs "text"/);
+  assert.throws(() => parseArgs(['--steps', file('select.json', [{ select: '#a' }])]), /"select" needs "value"/);
+});
+
+test('the site recordings are valid --steps files', () => {
+  const dir = path.join(root, 'site', 'recordings');
+  for (const f of fs.readdirSync(dir)) assert.ok(parseArgs(['--steps', path.join(dir, f)]).steps.length, f);
+});
+
 test('recordShot adds a shot to screenshots.json and replaces the one with the same file', (t) => {
   const dir = tmp(t);
   recordShot(dir, { path: 'settings-after.png', caption: 'Settings', before: 'settings-before.png' });
@@ -109,6 +140,14 @@ test('exits with an error after its hard timeout', { skip, timeout: 120000 }, as
   const r = await shoot(['--view', 'dashboard', '--wait', '600000', '--timeout', '8000', '--out', tmp(t)], 60000);
   assert.equal(r.code, 1);
   assert.match(r.out, /timed out after 8000 ms/);
+});
+
+test('--record --start saves a WebM of a live simulated Arena and its last frame as a PNG', { skip, timeout: 180000 }, async (t) => {
+  const out = tmp(t);
+  const r = await shoot(['--view', 'arena', '--start', '--record', '3', '--fps', '5', '--out', out], 150000);
+  assert.equal(r.code, 0, r.out);
+  assert.ok(fs.readFileSync(path.join(out, 'arena.webm')).subarray(0, 4).equals(Buffer.from([0x1a, 0x45, 0xdf, 0xa3])), 'an EBML (WebM) file');
+  assert.ok(isPng(path.join(out, 'arena.png')));
 });
 
 test('refuses an unknown view without opening the app', { skip, timeout: 60000 }, async () => {

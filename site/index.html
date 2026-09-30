@@ -1,0 +1,408 @@
+<!doctype html>
+<!--
+  Waitlist landing page. Static: index.html + styles.css + main.js, no build step.
+  Copy is in Brazilian Portuguese (first market: Brazil). The product name appears as
+  "Multiagent Orchestrator" while the rename is open: search for it to replace it.
+  Sign-ups go to Supabase (public.join_waitlist, supabase/migrations/20260930000000_waitlist.sql).
+-->
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Multiagent Orchestrator · Lista de espera</title>
+  <meta name="description" content="Orquestre Claude Code, Codex e Grok num fluxo determinístico de desenvolvimento. IA que entrega no seu repositório: revisada, testada e aprovada por você. Entre na lista de espera do beta.">
+  <meta property="og:title" content="IA que entrega no seu repositório, revisada, testada e aprovada por você">
+  <meta property="og:description" content="Várias IAs, as assinaturas que você já paga, um orquestrador determinístico e workflows de engenharia prontos. Entre na lista de espera do beta.">
+  <meta property="og:type" content="website">
+  <meta name="theme-color" content="#07070d">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%237c5cff'/%3E%3Cstop offset='1' stop-color='%2322d3ee'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='8' fill='url(%23g)'/%3E%3Ccircle cx='10' cy='11' r='3' fill='%23fff'/%3E%3Ccircle cx='22' cy='11' r='3' fill='%23fff'/%3E%3Ccircle cx='16' cy='22' r='3' fill='%23fff'/%3E%3Cpath d='M10 11 16 22 22 11' stroke='%23fff' stroke-width='1.6' fill='none'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="glow glow-a" aria-hidden="true"></div>
+  <div class="glow glow-b" aria-hidden="true"></div>
+
+  <header class="nav">
+    <div class="wrap nav-inner">
+      <a class="brand" href="#top" aria-label="Início">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <span>Multiagent Orchestrator</span>
+      </a>
+      <nav class="nav-links" aria-label="Seções">
+        <a href="#beneficios">Benefícios</a>
+        <a href="#recursos">Recursos</a>
+        <a href="#como-funciona">Como funciona</a>
+        <a href="#faq">FAQ</a>
+      </nav>
+      <a class="btn btn-sm" href="#lista">Entrar na lista</a>
+    </div>
+  </header>
+
+  <main id="top">
+    <!-- HERO -->
+    <section class="hero">
+      <div class="wrap hero-grid">
+        <div class="hero-copy">
+          <p class="eyebrow"><span class="dot"></span> Beta fechado · vagas limitadas</p>
+          <h1>IA que entrega no seu repositório.<br><span class="grad">Revisada, testada e aprovada por você.</span></h1>
+          <p class="lead">Coloque Claude Code, Codex e Grok para trabalhar juntos num fluxo de engenharia de verdade: um implementa, outro revisa, outro testa. Um orquestrador determinístico conduz cada passo e para nos portões onde só você decide.</p>
+          <div class="hero-cta">
+            <a class="btn btn-lg" href="#lista">Quero acesso antecipado <span aria-hidden="true">→</span></a>
+            <a class="btn btn-ghost btn-lg" href="#recursos">Ver o que ele faz</a>
+          </div>
+          <ul class="hero-points">
+            <li>Usa as assinaturas de IA que você já paga</li>
+            <li>Desktop para Windows · GitHub e GitLab</li>
+          </ul>
+        </div>
+
+        <!-- Live run mock: main.js walks the steps -->
+        <div class="run-card" aria-label="Exemplo de execução de um workflow">
+          <div class="run-head">
+            <span class="win-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+            <span class="run-title">software-development</span>
+            <span class="run-status" id="run-status">em execução</span>
+          </div>
+          <ol class="steps" id="steps">
+            <li data-agent="claude"><span class="step-id">develop</span><span class="chip chip-claude">Claude Code</span><span class="step-state"></span></li>
+            <li data-agent="codex"><span class="step-id">code_review</span><span class="chip chip-codex">Codex</span><span class="step-state"></span></li>
+            <li data-agent="grok"><span class="step-id">test</span><span class="chip chip-grok">Grok</span><span class="step-state"></span></li>
+            <li data-agent="claude"><span class="step-id">build</span><span class="chip chip-claude">Claude Code</span><span class="step-state"></span></li>
+            <li data-agent="codex"><span class="step-id">ci · pr</span><span class="chip chip-codex">Codex</span><span class="step-state"></span></li>
+            <li data-agent="human" class="gate"><span class="step-id">approve_merge</span><span class="chip chip-human">Você</span><span class="step-state"></span></li>
+          </ol>
+          <div class="run-log" aria-live="off">
+            <span class="prompt">engine ›</span> <span id="run-log">iniciando o workflow…</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="wrap works-with">
+        <span>Funciona com as CLIs que você já usa</span>
+        <ul>
+          <li><span class="pdot pdot-claude"></span>Claude Code</li>
+          <li><span class="pdot pdot-codex"></span>Codex CLI</li>
+          <li><span class="pdot pdot-grok"></span>Grok Build</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- BENEFITS: three pillars, then the supporting benefits -->
+    <section class="section" id="beneficios">
+      <div class="wrap">
+        <p class="kicker">Benefícios</p>
+        <h2>Os outros fazem a IA criar rápido.<br><span class="grad">Nós fazemos a IA entregar certo.</span></h2>
+
+        <div class="benefits">
+          <article class="benefit">
+            <div class="b-icon" aria-hidden="true">
+              <svg viewBox="0 0 48 48"><rect x="6" y="8" width="14" height="10" rx="3"/><rect x="28" y="8" width="14" height="10" rx="3"/><rect x="17" y="30" width="14" height="10" rx="3"/><path d="M20 13h8M13 18v6h11v6M35 18v6H24"/></svg>
+            </div>
+            <h3>Contexto otimizado</h3>
+            <p class="b-sub">Orquestrador determinístico</p>
+            <p>Quem decide o próximo passo é o motor, não um modelo. Cada agente começa limpo e recebe só a tarefa e a nota de passagem do passo anterior. Sem uma conversa gigante carregando tudo, sem tokens queimados para "decidir o que fazer".</p>
+            <ul class="ticks">
+              <li>Transições, loops e limites definidos no YAML</li>
+              <li>Sessão nova com nota de passagem quando o contexto enche</li>
+            </ul>
+          </article>
+
+          <article class="benefit">
+            <div class="b-icon" aria-hidden="true">
+              <svg viewBox="0 0 48 48"><circle cx="14" cy="16" r="6"/><circle cx="34" cy="16" r="6"/><circle cx="24" cy="34" r="6"/><path d="M14 16h20M14 16l10 18M34 16 24 34"/></svg>
+            </div>
+            <h3>Modelo certo pra tarefa certa</h3>
+            <p class="b-sub">Claude, Codex e Grok no mesmo fluxo</p>
+            <p>Cada passo escolhe a CLI, o modelo e o esforço que fazem sentido: o modelo mais forte para implementar, um de outra família para revisar, um rápido para tarefas mecânicas. Você paga pelo raciocínio só onde ele faz diferença.</p>
+            <ul class="ticks">
+              <li>CLI, modelo e esforço configuráveis por passo</li>
+              <li>Quem escreve não é quem revisa</li>
+            </ul>
+          </article>
+
+          <article class="benefit">
+            <div class="b-icon" aria-hidden="true">
+              <svg viewBox="0 0 48 48"><path d="M24 5 40 11v12c0 10-7 17-16 20C15 40 8 33 8 23V11z"/><path d="m17 24 5 5 10-11"/></svg>
+            </div>
+            <h3>Qualidade garantida</h3>
+            <p class="b-sub">Passos de validação em todo o fluxo</p>
+            <p>Revisão de código, testes escritos por um agente dedicado, build, CI e preview antes do merge. Cada saída é validada contra um formato definido, e o que falha volta para quem implementou, com as evidências.</p>
+            <ul class="ticks">
+              <li>Quem implementa não escreve os próprios testes</li>
+              <li>Loops de correção com limite de rodadas</li>
+            </ul>
+          </article>
+        </div>
+
+        <h3 class="more-title">E ainda:</h3>
+        <div class="perks">
+          <div class="perk"><span class="perk-i" aria-hidden="true">∑</span><div><b>Some os limites das suas assinaturas</b><p>Bateu o limite de uma IA? O trabalho segue nas outras que você já paga, sem chave de API nova.</p></div></div>
+          <div class="perk"><span class="perk-i" aria-hidden="true">◎</span><div><b>Você no controle</b><p>Portões de aprovação humana que nenhuma automação atravessa, nem o supervisor de IA.</p></div></div>
+          <div class="perk"><span class="perk-i" aria-hidden="true">$</span><div><b>Custo sob controle</b><p>Tokens e custo por sessão, orçamento mensal por CLI e bloqueio ao atingir o limite.</p></div></div>
+          <div class="perk"><span class="perk-i" aria-hidden="true">⑂</span><div><b>Paralelo e isolado</b><p>Cada execução no seu próprio worktree git: várias issues ao mesmo tempo, sem uma pisar na outra.</p></div></div>
+          <div class="perk"><span class="perk-i" aria-hidden="true">↺</span><div><b>Retome de qualquer passo</b><p>Uma execução parou? Volte do passo que quiser, sem refazer o que já deu certo.</p></div></div>
+          <div class="perk"><span class="perk-i" aria-hidden="true">✚</span><div><b>Supervisor que destrava</b><p>Quando um passo falha, o supervisor diagnostica e manda a correção para o agente certo. Ele só entra quando precisa.</p></div></div>
+          <div class="perk"><span class="perk-i" aria-hidden="true">⌂</span><div><b>Local e privado</b><p>O motor roda na sua máquina, no seu repositório. Tudo fica registrado no seu workspace.</p></div></div>
+          <div class="perk"><span class="perk-i" aria-hidden="true">{ }</span><div><b>Sem aprisionamento</b><p>Workflows em YAML e skills em Markdown: legíveis, versionáveis e seus.</p></div></div>
+          <div class="perk"><span class="perk-i" aria-hidden="true">⌥</span><div><b>GitHub e GitLab, 5 linguagens</b><p>JavaScript/TypeScript, Python, Go, Java e C#, com CI, PR/MR e deploy.</p></div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- FEATURES: scroll story. Each step's text scrolls by while the app frame stays pinned and
+         plays that step's recording (scripts/screenshot.js --record: simulated runs, no model calls).
+         Below 980px, main.js moves each media into its step. -->
+    <section class="section section-alt" id="recursos">
+      <div class="wrap">
+        <p class="kicker">Recursos</p>
+        <h2>Veja as IAs trabalhando juntas, de verdade.</h2>
+        <p class="lead story-lead">Gravações do app rodando em modo simulação. Role a página para ver cada módulo.</p>
+
+        <div class="story">
+          <div class="story-steps">
+            <article class="story-step" data-step="0">
+              <span class="tag tag-violet">Arena de IA</span>
+              <h3>Até cinco modelos disputam a mesma tarefa. Você fica com o melhor de cada um.</h3>
+              <p>O mesmo pedido vai em paralelo para os modelos que você escolher, e nenhum vê o trabalho do outro. Depois eles avaliam as propostas uns dos outros às cegas, um agente sintetiza a versão final a partir da melhor base, e um modelo de outra família verifica o resultado.</p>
+              <ul class="ticks">
+                <li>PRDs, ADRs, specs técnicas, planos de teste</li>
+                <li>Crítica anônima entre modelos: "Proposta 1, 2, 3"</li>
+                <li>Você vê quem escreveu cada proposta e dá a palavra final</li>
+              </ul>
+              <div class="story-slot"></div>
+            </article>
+
+            <article class="story-step" data-step="1">
+              <span class="tag tag-cyan">Write &amp; Review</span>
+              <h3>Um escreve, outro revisa e dá nota. Só passa quando atinge o seu padrão.</h3>
+              <p>Você descreve o documento e o critério de "bom o suficiente". O redator produz, o revisor dá nota de 0 a 10 contra o seu objetivo e devolve o que corrigir. O motor repete até passar da nota mínima ou acabarem as rodadas. No fim, a decisão é sua.</p>
+              <ul class="ticks">
+                <li>Nota mínima e número de rodadas configuráveis</li>
+                <li>Todo rascunho fica salvo, versão por versão</li>
+                <li>Suas instruções entram nos próximos prompts de todos</li>
+              </ul>
+              <div class="story-slot"></div>
+            </article>
+
+            <article class="story-step" data-step="2">
+              <span class="tag tag-lime">Workflows</span>
+              <h3>Da issue ao merge, com o processo de um time sênior.</h3>
+              <p>Implementar, revisar, testar, fazer build, acompanhar o CI e o PR, publicar um preview e, com a sua aprovação, fazer o merge. Cada agente numa sessão própria, com modelo, tokens e custo à vista. O motor determinístico registra cada decisão, sem gastar IA para escolher o próximo passo.</p>
+              <ul class="ticks">
+                <li>Cada execução num worktree git isolado</li>
+                <li>JavaScript, Python, Go, Java e C#, no GitHub ou GitLab</li>
+                <li>Personalize passos, agentes e skills em YAML, ou crie os seus</li>
+              </ul>
+              <div class="story-slot"></div>
+            </article>
+
+            <article class="story-step" data-step="3">
+              <span class="tag tag-violet">Criação de workflow</span>
+              <h3>Monte o seu processo mesa a mesa, sem escrever código.</h3>
+              <p>No Builder, cada passo é uma mesa com um agente: o que ele faz, quem ele é, a CLI, o modelo, o esforço e se pode editar o projeto. Entre as mesas, portões de aprovação humana ou checagens feitas por outra IA. Salve e o workflow vira YAML, pronto para rodar.</p>
+              <ul class="ticks">
+                <li>Portões humanos ou de IA, com volta para o passo certo se reprovar</li>
+                <li>Parta do zero ou clone um workflow pronto</li>
+                <li>Skills com o know-how de engenharia em cada mesa</li>
+              </ul>
+              <div class="story-slot"></div>
+            </article>
+
+            <article class="story-step" data-step="4">
+              <span class="tag tag-cyan">Criação de agentes</span>
+              <h3>Crie especialistas que você reaproveita em qualquer workflow.</h3>
+              <p>Dê nome, um prompt com quem o agente é e as skills que ele sempre recebe. Escolha o visual do seu robô e pronto: ele aparece para ser importado em qualquer mesa, ou sorteado entre os seus agentes a cada execução.</p>
+              <ul class="ticks">
+                <li>Prompt e skills reutilizáveis, versionados no seu workspace</li>
+                <li>Um visual próprio para reconhecer cada agente nas execuções</li>
+              </ul>
+              <div class="story-slot"></div>
+            </article>
+
+            <article class="story-step" data-step="5">
+              <span class="tag tag-amber">Backlog</span>
+              <h3>Suas issues viram fila de execução.</h3>
+              <p>O backlog do GitHub ou GitLab aparece num kanban. Escolha as issues, dispare o workflow e acompanhe cada uma até o merge, com o andamento das tarefas e o estado de cada execução.</p>
+              <ul class="ticks">
+                <li>Várias issues numa mesma execução, num único PR</li>
+                <li>Merge local ou via PR, você escolhe</li>
+              </ul>
+              <div class="story-slot"></div>
+            </article>
+
+            <article class="story-step" data-step="6">
+              <span class="tag tag-lime">Analytics</span>
+              <h3>Saiba quanto cada IA custa e rende, sessão por sessão.</h3>
+              <p>Tokens por dia empilhados por provedor, custo e taxa de acerto do cache, uso por modelo e por projeto, e métricas de cada sessão: tempo ativo, chamadas de ferramentas, falhas e complexidade. Escolha o período e, se quiser, peça ao supervisor um relatório com padrões e sugestões.</p>
+              <ul class="ticks">
+                <li>Só o orquestrador ou tudo o que as CLIs fizeram na sua máquina</li>
+                <li>Orçamento mensal por CLI, com bloqueio ao atingir o limite</li>
+              </ul>
+              <div class="story-slot"></div>
+            </article>
+          </div>
+
+          <div class="story-stage">
+            <figure class="shot-frame">
+              <div class="shot-bar" aria-hidden="true"><span class="win-dots"><i></i><i></i><i></i></span><span class="shot-label" id="story-label">Arena de IA</span></div>
+              <div class="shot-stage">
+                <video class="story-media active" data-step="0" muted playsinline loop preload="auto" poster="img/arena.png" aria-label="Arena de IA rodando: quatro modelos escrevem em paralelo, se avaliam às cegas e a síntese espera a sua decisão"><source src="img/arena.webm" type="video/webm"></video>
+                <video class="story-media" data-step="1" muted playsinline loop preload="none" poster="img/write-review.png" aria-label="Write & Review rodando: o redator entrega versões, o revisor dá nota até aprovar e o supervisor pergunta o que fazer"><source src="img/write-review.webm" type="video/webm"></video>
+                <video class="story-media" data-step="2" muted playsinline loop preload="none" poster="img/workflow-run.png" aria-label="Workflow de desenvolvimento rodando: passos, sessões de cada agente com tokens e custo, e o log do motor"><source src="img/workflow-run.webm" type="video/webm"></video>
+                <video class="story-media" data-step="3" muted playsinline loop preload="none" poster="img/workflow-builder.png" aria-label="Builder: um workflow é montado com uma mesa de desenvolvimento, uma de revisão com outro modelo e um portão de aprovação humana"><source src="img/workflow-builder.webm" type="video/webm"></video>
+                <video class="story-media" data-step="4" muted playsinline loop preload="none" poster="img/agent-create.png" aria-label="Criação de um agente: nome, prompt, visual do robô e skills, e ele aparece na lista de agentes"><source src="img/agent-create.webm" type="video/webm"></video>
+                <img class="story-media" data-step="5" src="img/backlog.png" width="1400" height="900" loading="lazy" alt="Backlog em kanban com as issues do GitHub e o andamento de cada execução">
+                <video class="story-media" data-step="6" muted playsinline loop preload="none" poster="img/analytics.png" aria-label="Analytics: tokens por dia por provedor, custo, uso por modelo e por projeto, e a tabela de sessões"><source src="img/analytics.webm" type="video/webm"></video>
+              </div>
+            </figure>
+            <ol class="story-dots" aria-hidden="true"><li class="active"></li><li></li><li></li><li></li><li></li><li></li><li></li></ol>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- HOW IT WORKS -->
+    <section class="section" id="como-funciona">
+      <div class="wrap">
+        <p class="kicker">Como funciona</p>
+        <h2>Você define o padrão. As IAs fazem o trabalho. Você aprova.</h2>
+        <ol class="how">
+          <li>
+            <span class="how-n">01</span>
+            <h3>Conecte suas CLIs</h3>
+            <p>Claude Code, Codex e Grok Build, logados com as suas contas. Nada de chave de API nova.</p>
+          </li>
+          <li>
+            <span class="how-n">02</span>
+            <h3>Escolha um workflow</h3>
+            <p>Desenvolvimento de software, Arena, Write &amp; Review, revisão multi-modelo, ou um seu.</p>
+          </li>
+          <li>
+            <span class="how-n">03</span>
+            <h3>O motor conduz</h3>
+            <p>Cada passo com o agente certo, contexto mínimo e saídas validadas. Falhou? O supervisor destrava.</p>
+          </li>
+          <li>
+            <span class="how-n">04</span>
+            <h3>Você decide</h3>
+            <p>Nos portões de aprovação, só você avança. O resultado chega como PR pronto para merge.</p>
+          </li>
+        </ol>
+
+        <div class="facts">
+          <div><b>3</b><span>CLIs de IA suportadas</span></div>
+          <div><b>até 5</b><span>modelos por Arena</span></div>
+          <div><b>0</b><span>chamadas de IA para decidir o próximo passo</span></div>
+          <div><b>100%</b><span>dos merges aprovados por um humano</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- WAITLIST -->
+    <section class="section waitlist" id="lista">
+      <div class="wrap waitlist-grid">
+        <div class="waitlist-copy">
+          <p class="kicker">Lista de espera</p>
+          <h2>Seja dos primeiros a colocar um time de IAs no seu repositório.</h2>
+          <p class="lead">Quem entra na lista recebe o convite do beta antes de todo mundo e as novidades do produto em primeira mão.</p>
+          <ul class="ticks ticks-lg">
+            <li>Acesso antecipado ao beta para Windows</li>
+            <li>Novidades e bastidores do desenvolvimento</li>
+            <li>Canal direto para influenciar o roadmap</li>
+          </ul>
+        </div>
+
+        <form class="form" id="waitlist-form" novalidate>
+          <div class="field">
+            <label for="f-name">Nome</label>
+            <input id="f-name" name="name" type="text" autocomplete="name" placeholder="Como podemos te chamar?" required minlength="2" maxlength="120">
+            <small class="err" data-for="name"></small>
+          </div>
+          <div class="field">
+            <label for="f-email">Email</label>
+            <input id="f-email" name="email" type="email" autocomplete="email" inputmode="email" placeholder="voce@empresa.com" required maxlength="254">
+            <small class="err" data-for="email"></small>
+          </div>
+          <div class="field">
+            <label for="f-phone">Telefone / WhatsApp</label>
+            <input id="f-phone" name="phone" type="tel" autocomplete="tel" inputmode="tel" placeholder="(11) 91234-5678" required maxlength="24">
+            <small class="hint">Outro país? Comece com + e o código, ex.: +351…</small>
+            <small class="err" data-for="phone"></small>
+          </div>
+          <!-- honeypot: people never see it, bots fill it -->
+          <div class="hp" aria-hidden="true">
+            <label for="f-company">Empresa</label>
+            <input id="f-company" name="company" type="text" tabindex="-1" autocomplete="off">
+          </div>
+          <label class="consent">
+            <input type="checkbox" name="consent" required>
+            <span>Aceito receber novidades por email e WhatsApp. Posso sair da lista quando quiser.</span>
+          </label>
+          <small class="err" data-for="consent"></small>
+          <button class="btn btn-lg btn-block" type="submit" id="submit">
+            <span class="btn-label">Entrar na lista de espera</span>
+          </button>
+          <p class="form-msg" id="form-msg" role="status" aria-live="polite"></p>
+          <p class="privacy">Usamos seus dados só para falar sobre o produto. Nada de spam, nada de repasse a terceiros.</p>
+        </form>
+
+        <div class="success" id="success" hidden>
+          <div class="success-icon" aria-hidden="true">✓</div>
+          <h3>Você está na lista!</h3>
+          <p>Assim que o beta abrir, você recebe o convite no seu email. Enquanto isso, conta para aquele colega que vive trocando de IA quando o limite acaba.</p>
+          <button class="btn btn-ghost" type="button" id="share">Copiar link da página</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- FAQ -->
+    <section class="section" id="faq">
+      <div class="wrap faq-wrap">
+        <p class="kicker">Perguntas frequentes</p>
+        <h2>Antes de você perguntar</h2>
+        <div class="faq">
+          <details>
+            <summary>Preciso pagar por mais uma IA?</summary>
+            <p>Não. Os agentes rodam nas CLIs que você já usa (Claude Code, Codex CLI e Grok Build), com as suas próprias contas e assinaturas. O orquestrador distribui o trabalho entre elas.</p>
+          </details>
+          <details>
+            <summary>Meu código sai da minha máquina?</summary>
+            <p>O motor roda no seu computador e trabalha no seu repositório, em worktrees git isolados. O código só vai para onde as suas CLIs de IA e o seu GitHub ou GitLab já levam hoje.</p>
+          </details>
+          <details>
+            <summary>A IA pode fazer merge sozinha?</summary>
+            <p>Não. Os workflows têm portões de aprovação humana e nenhuma automação os atravessa, nem mesmo o supervisor de IA. O merge só acontece quando você aprova.</p>
+          </details>
+          <details>
+            <summary>Em quais plataformas funciona?</summary>
+            <p>O beta é um app desktop para Windows, com GitHub e GitLab. Os workflows cobrem JavaScript/TypeScript, Python, Go, Java e C#.</p>
+          </details>
+          <details>
+            <summary>Quanto vai custar?</summary>
+            <p>Haverá um plano gratuito e um plano Pro. Quem está na lista de espera recebe o convite do beta primeiro e fica sabendo dos planos antes do lançamento.</p>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <section class="final-cta">
+      <div class="wrap">
+        <h2>Pare de trocar de aba quando o limite acaba.<br><span class="grad">Coloque todas as suas IAs no mesmo time.</span></h2>
+        <a class="btn btn-lg" href="#lista">Entrar na lista de espera <span aria-hidden="true">→</span></a>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="wrap footer-inner">
+      <span class="brand"><span class="brand-mark" aria-hidden="true"></span> Multiagent Orchestrator</span>
+      <span class="muted">© 2026 · Feito no Brasil</span>
+    </div>
+  </footer>
+
+  <script src="main.js"></script>
+</body>
+</html>

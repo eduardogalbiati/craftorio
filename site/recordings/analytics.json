@@ -1,0 +1,13 @@
+[
+  { "wait": 2200 },
+  { "click": "#view-analytics [data-an-days=\"7\"]" },
+  { "wait": 1800 },
+  { "click": "#view-analytics [data-an-days=\"30\"]" },
+  { "wait": 1800 },
+  { "scroll": "#view-analytics .an-grid" },
+  { "wait": 2800 },
+  { "scroll": "#view-analytics table" },
+  { "wait": 2800 },
+  { "scroll": "#view-analytics .an-totals" },
+  { "wait": 1500 }
+]

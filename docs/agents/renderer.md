@@ -20,7 +20,11 @@ Read this before changing anything in `src/renderer/`.
 - Check changes by looking at screenshots: `npm run screenshot -- --view <view> [--tab|--mode|--click]
   --out <dir>` opens one screen with demo data and quits by itself (`--ref origin/main` for the
   "before"; usage at the top of `scripts/screenshot.js`). A new view or
-  tab goes into its `VIEWS` table, so `test/screenshot.test.js` opens it too. `scripts/smoke.js`
+  tab goes into its `VIEWS` table, so `test/screenshot.test.js` opens it too. `--record <s>` saves a
+  VP9 WebM of the screen instead (Chromium's MediaRecorder, no ffmpeg), `--start` runs a live
+  simulated Arena or Write & Review and `--steps <file.json>` plays clicks and typing during the
+  recording. The site's feature videos are made this way (`site/recordings/*.json`; the Usage view
+  gets demo runs, since it ignores simulated ones). `scripts/smoke.js`
   runs a whole mock run from the Start panel. Never open real CLI terminals or start real runs in
   those checks.
 - Artifacts previews images (`kind: image`, read as a data URL; the CSP allows `img-src data:`).

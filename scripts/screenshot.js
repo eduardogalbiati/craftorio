@@ -17,7 +17,19 @@
 //   --caption <text>   adds/replaces this shot in <out>/screenshots.json ({ path, caption, before })
 //   --before <file>    with --caption: the "before" PNG of the same screen, in <out>
 //   --wait <ms>        extra time before the capture (default 1500; run: 20000)
-//   --timeout <ms>     hard limit: the app exits with code 1 after it (default 90000)
+//   --timeout <ms>     hard limit: the app exits with code 1 after it (default 90000, plus 2x --record)
+//   --start            arena, duo: starts a simulated run from the setup (--task, --goal) and shows it live
+//   --task <text>      the request of the simulated run (arena: task, duo: prompt, run: task)
+//   --goal <text>      duo: the goal the reviewer scores against
+//   --record <s>       records <s> seconds of the view as <name>.webm (VP9) instead of a PNG; the last
+//                      frame is saved as <name>.png (the video's poster)
+//   --fps <n>          frames per second of the recording (default 10)
+//   --video-scale <x>  size of the video relative to the window, 0.25-1 (default 1)
+//   --bitrate <kbps>   target bitrate of the video (default 2500)
+//   --steps <file>     a JSON list of actions (click, type, select, wait, scroll) played during the
+//                      recording, or before the capture without --record (see readSteps)
+//   --mock-speed <x>   scale of the simulated agents' delays (default 0.02; with --record 0.35, so
+//                      the run unfolds at a watchable pace)
 //
 // Always a scratch workspace in the temp folder, removed at the end: simulated runs only
 // (MULTIAGENT_AUTH=off, developer mode on), no sign-in, and HOME/USERPROFILE/APPDATA/GH_CONFIG_DIR
@@ -32,21 +44,56 @@ const path = require('path');
 const { spawnSync, execFileSync } = require('child_process');
 
 const VIEWS = {
-  dashboard: {}, sessions: {}, projects: {}, project: {}, artifacts: {}, agents: {}, skills: {}, usage: {}, analytics: {}, duo: {}, arena: {},
+  dashboard: {}, sessions: {}, projects: {}, project: {}, artifacts: {}, agents: {}, skills: {}, usage: {}, analytics: {},
   backlog: { modes: ['list', 'kanban'] },
   workflows: { tabs: ['runs', 'definitions'] },
+  arena: { start: true }, duo: { start: true },
   settings: { tabs: ['general', 'agents', 'execution', 'about'] },
   'run-chat': { run: true },
   run: { live: true },
 };
 const THEMES = ['dark', 'light', 'system'];
+// what the simulated runs are asked when --task/--goal are not given
+const DEFAULT_TASK = {
+  run: 'Add a /health endpoint',
+  arena: 'Write a PRD for an appointment-booking app for small clinics',
+  duo: 'A one-page PRD for offline mode in the mobile app',
+  goal: 'Clear scope, acceptance criteria, risks and success metrics',
+};
+// --start: fills the setup of the view and starts a simulated run (developer mode only)
+const START = {
+  arena: { fields: { '#arena-task': 'task' }, mock: '#arena-mock', button: '#arena-run' },
+  duo: { fields: { '#duo-prompt': 'task', '#duo-goal': 'goal' }, mock: '#duo-mock', button: '#duo-run' },
+};
+
+// --steps: what a person would do on the screen, played in order (during the recording with
+// --record, else before the capture). One action per entry:
+//   { "click": css }                  clicks the element (waits up to 10 s for it)
+//   { "type": css, "text": s, "cps": n }  types into an input/textarea letter by letter (default 18/s)
+//   { "select": css, "value": v }     picks an option of a <select>
+//   { "wait": ms }                    pauses
+//   { "scroll": css }                 scrolls the element into view, smoothly
+const STEP_ACTIONS = ['click', 'type', 'select', 'wait', 'scroll'];
+function readSteps(file) {
+  const steps = JSON.parse(fs.readFileSync(file, 'utf8'));
+  if (!Array.isArray(steps)) throw new Error(`--steps ${file}: a JSON list of actions`);
+  for (const s of steps) {
+    const act = STEP_ACTIONS.filter((k) => k in s);
+    if (act.length !== 1) throw new Error(`--steps ${file}: each action has one of ${STEP_ACTIONS.join(', ')}: ${JSON.stringify(s)}`);
+    if (act[0] === 'type' && typeof s.text !== 'string') throw new Error(`--steps ${file}: "type" needs "text": ${JSON.stringify(s)}`);
+    if (act[0] === 'select' && s.value == null) throw new Error(`--steps ${file}: "select" needs "value": ${JSON.stringify(s)}`);
+  }
+  return steps;
+}
 
 function parseArgs(argv) {
-  const a = { view: 'dashboard', tab: null, mode: null, run: 'mock', workflow: 'software-development.yaml', clicks: [], theme: null, size: [1400, 900], ref: null, out: null, name: null, caption: null, before: null, wait: null, timeout: 90000 };
+  const a = { view: 'dashboard', tab: null, mode: null, run: 'mock', workflow: 'software-development.yaml', clicks: [], theme: null, size: [1400, 900], ref: null, out: null, name: null, caption: null, before: null, wait: null, timeout: null,
+    start: false, task: null, goal: null, record: null, fps: 10, mockSpeed: null, steps: null, videoScale: 1, bitrate: 2500 };
   for (let i = 0; i < argv.length; i++) {
     const k = argv[i];
     const next = () => { const v = argv[++i]; if (v === undefined) throw new Error(`${k} needs a value`); return v; };
     const ms = () => { const v = Number(next()); if (!Number.isFinite(v) || v < 0) throw new Error(`${k} takes milliseconds`); return v; };
+    const positive = () => { const v = Number(next()); if (!Number.isFinite(v) || v <= 0) throw new Error(`${k} takes a positive number`); return v; };
     if (k === '--view') a.view = next();
     else if (k === '--tab') a.tab = next();
     else if (k === '--mode') a.mode = next();
@@ -65,10 +112,25 @@ function parseArgs(argv) {
     else if (k === '--before') a.before = next();
     else if (k === '--wait') a.wait = ms();
     else if (k === '--timeout') a.timeout = ms();
+    else if (k === '--start') a.start = true;
+    else if (k === '--task') a.task = next();
+    else if (k === '--goal') a.goal = next();
+    else if (k === '--record') a.record = positive();
+    else if (k === '--fps') a.fps = positive();
+    else if (k === '--mock-speed') a.mockSpeed = positive();
+    else if (k === '--steps') a.steps = readSteps(next());
+    else if (k === '--video-scale') a.videoScale = positive();
+    else if (k === '--bitrate') a.bitrate = positive();
     else throw new Error(`Unknown argument: ${k}`);
   }
   const v = VIEWS[a.view];
   if (!v) throw new Error(`Unknown view: ${a.view}. Views: ${Object.keys(VIEWS).join(', ')}`);
+  if (a.start && !v.start) throw new Error(`--start applies to ${Object.keys(VIEWS).filter((n) => VIEWS[n].start).join(', ')}`);
+  if (a.goal && a.view !== 'duo') throw new Error('--goal applies to duo');
+  if (a.fps > 30) throw new Error('--fps takes at most 30');
+  if (a.videoScale < 0.25 || a.videoScale > 1) throw new Error('--video-scale takes 0.25 to 1');
+  a.mockSpeed ??= a.record ? 0.35 : 0.02;
+  a.timeout ??= 90000 + (a.record ? 2000 * a.record : 0); // recording, then encoding in real time
   if (a.tab && !v.tabs?.includes(a.tab)) throw new Error(`--tab ${a.tab} does not apply to ${a.view}${v.tabs ? ` (tabs: ${v.tabs.join(', ')})` : ''}`);
   if (a.mode && !v.modes?.includes(a.mode)) throw new Error(`--mode ${a.mode} does not apply to ${a.view}${v.modes ? ` (modes: ${v.modes.join(', ')})` : ''}`);
   if (a.theme && !THEMES.includes(a.theme)) throw new Error(`--theme takes ${THEMES.join(' | ')}`);
@@ -139,6 +201,39 @@ function demoLocalMerge(ws, projectId) {
       { sha: 'a1c3e5f7092b4d6f8a0c2e4f6b8d0f1a3c5e7b9d', subject: 'Test the rename with a scratch workspace', issues: [] },
     ],
   }, null, 2));
+}
+
+// The Usage screen ignores simulated runs, so it gets finished (not simulated) demo runs of this
+// month spread over the three CLIs, plus monthly budgets for its meters. Nothing here ran.
+function demoUsage(ws, workspace) {
+  const MODELS = [
+    ['claude', 'claude-opus-5-5', 1], ['claude', 'claude-sonnet-5-5', 0.35],
+    ['codex', 'gpt-6-luna', 0.6], ['grok', 'grok-4.7', 0.4],
+  ];
+  const WORKFLOWS = ['software-development', 'ai-arena', 'writer-reviewer', 'multi-model-review', 'software-development-local-hero'];
+  const now = Date.now();
+  const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).getTime();
+  let seed = 7;
+  const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; }; // same demo every time
+  for (let n = 0; n < 16; n++) {
+    const started = new Date(n < 3 ? now - (n + 1) * 3600000 : monthStart + rnd() * (now - monthStart)).toISOString();
+    const sessions = MODELS.filter(() => rnd() > 0.3).map(([provider, model, price]) => {
+      const input = Math.round(40000 + rnd() * 260000);
+      const output = Math.round(input * (0.08 + rnd() * 0.1));
+      return {
+        provider, model, turns: 1 + Math.floor(rnd() * 6),
+        tokens: { input, output, cache_read: Math.round(input * 2.5), cache_write: Math.round(input * 0.3), reasoning: Math.round(output * 0.4) },
+        cost_usd: +((input * 3 + output * 15) / 1e6 * price).toFixed(4),
+      };
+    });
+    const runId = `${started.slice(0, 10).replace(/-/g, '')}-${String(n).padStart(6, '0')}-demo${String(n).padStart(4, '0')}`;
+    fs.mkdirSync(path.join(ws.runs, runId), { recursive: true });
+    fs.writeFileSync(path.join(ws.runs, runId, 'summary.json'), JSON.stringify({
+      run_id: runId, workflow: WORKFLOWS[n % WORKFLOWS.length], status: n % 7 === 3 ? 'failed' : 'success', mock: false,
+      started_at: started, finished_at: started, inputs: {}, sessions,
+    }, null, 2));
+  }
+  workspace.writeSettings(ws, { budgets: { claude: { monthlyUsd: 120 }, codex: { monthlyUsd: 60 }, grok: { monthlyUsd: 40, monthlyTokens: 30000000 } } });
 }
 
 // Finished (not simulated) runs over the last 30 days with Claude, Codex and Grok sessions, so the
@@ -236,7 +331,7 @@ function main() {
   Object.assign(process.env, {
     MULTIAGENT_AUTH: 'off',
     MULTIAGENT_WORKSPACE: wsDir,
-    MULTIAGENT_MOCK_DELAY_SCALE: '0.02',
+    MULTIAGENT_MOCK_DELAY_SCALE: String(args.mockSpeed),
     HOME: home, USERPROFILE: home, APPDATA: path.join(home, 'AppData'),
     GH_CONFIG_DIR: path.join(home, 'gh'), GLAB_CONFIG_DIR: path.join(home, 'glab'),
   });
@@ -262,6 +357,7 @@ function main() {
     fs.mkdirSync(ws.backlog, { recursive: true });
     fs.writeFileSync(path.join(ws.backlog, `${project.id}.json`), JSON.stringify(demoBacklog(project.id, src('backlog').taskProgress), null, 2));
     if (args.view === 'backlog') demoLocalMerge(ws, project.id);
+    if (args.view === 'usage') demoUsage(ws, workspace);
     if (args.view === 'analytics') demoAnalyticsRuns(ws, project.id);
     let run = null;
     if (VIEWS[args.view].run || ['artifacts', 'workflows', 'project', 'usage', 'dashboard'].includes(args.view)) run = recordRun(project);
@@ -278,7 +374,7 @@ function main() {
       fs.cpSync(from, to, { recursive: true });
       return readRun(to);
     }
-    const r = spawnSync(process.execPath, [path.join(appDir, 'scripts', 'run.js'), '--mock', '--auto-approve', '--file', args.workflow, '--repo', project.folder, '--task', 'Add a /health endpoint'], {
+    const r = spawnSync(process.execPath, [path.join(appDir, 'scripts', 'run.js'), '--mock', '--auto-approve', '--file', args.workflow, '--repo', project.folder, '--task', args.task || DEFAULT_TASK.run], {
       cwd: appDir, env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }, encoding: 'utf8', timeout: Math.max(1000, args.timeout - 20000), windowsHide: true,
     });
     const dirs = fs.readdirSync(ws.runs).map((d) => path.join(ws.runs, d)).filter((d) => fs.existsSync(path.join(d, 'events.jsonl')));
@@ -291,7 +387,9 @@ function main() {
     return { runId: summary.run_id || path.basename(dir), workflow: summary.workflow || null };
   }
 
+  let encoding = false;
   app.on('browser-window-created', (_e, win) => {
+    if (encoding) return;
     win.setMinimumSize(400, 300);
     win.setContentSize(...args.size);
     win.webContents.on('console-message', (ev) => { if (ev.level === 'error') console.log(`[renderer:error] ${ev.message}`); });
@@ -311,6 +409,7 @@ function main() {
       el.click();`);
     await pause(1500); // the app's first load (account, settings, workflows)
     const v = args.view;
+    let approve = null;
     if (v === 'project') await js(`openProjectView(${JSON.stringify(project.id)})`);
     else if (v === 'run-chat') {
       if (!run) throw new Error('no run to show');
@@ -322,14 +421,25 @@ function main() {
         document.querySelector('#btn-quick-start').click();
         await new Promise((r) => setTimeout(r, 500));
         document.querySelector('#project-select').value = ${JSON.stringify(project.id)};
-        document.querySelector('#in-task').value = 'Add a /health endpoint';
+        document.querySelector('#in-task').value = ${JSON.stringify(args.task || DEFAULT_TASK.run)};
         document.querySelector('#mock-toggle').checked = true;
         if (!document.body.classList.contains('dev-mode')) throw new Error('developer mode is off: refusing to start a real run');
         document.querySelector('#btn-start').click();`);
-      const approve = setInterval(() => js(`(document.querySelector('#approval-modal:not(.hidden) #approval-choices:not(.hidden) button') || document.querySelector('#approval-modal:not(.hidden) #btn-approve'))?.click()`).catch(() => {}), 1000);
-      await pause(args.wait);
-      clearInterval(approve);
+      approve = setInterval(() => js(`(document.querySelector('#approval-modal:not(.hidden) #approval-choices:not(.hidden) button') || document.querySelector('#approval-modal:not(.hidden) #btn-approve'))?.click()`).catch(() => {}), 1000);
+      // with --record, the recording is the wait
+      if (!args.record) { await pause(args.wait); clearInterval(approve); }
     } else await click(`.nav-item[data-view="${v}"]`);
+    if (args.start) {
+      const s = START[v];
+      const text = { task: args.task || DEFAULT_TASK[v], goal: args.goal || DEFAULT_TASK.goal };
+      await js(`
+        if (!document.body.classList.contains('dev-mode')) throw new Error('developer mode is off: refusing to start a real run');
+        for (const [sel, key] of Object.entries(${JSON.stringify(s.fields)})) document.querySelector(sel).value = ${JSON.stringify(text)}[key];
+        const mock = document.querySelector(${JSON.stringify(s.mock)});
+        if (!mock.checked) mock.click();
+        if (!mock.checked) throw new Error('the simulation checkbox did not turn on: refusing to start a real run');
+        document.querySelector(${JSON.stringify(s.button)}).click();`);
+    }
     await pause(500);
     if (args.tab && v === 'settings') await click(`.settings-tab[data-stab="${args.tab}"]`);
     if (args.tab && v === 'workflows') await click(`[data-wtab="${args.tab}"]`);
@@ -337,12 +447,56 @@ function main() {
     // the demo runs are simulated, which Artifacts hides by default
     if (v === 'artifacts') await js(`const c = document.querySelector('#art-show-sim'); if (c && !c.checked) c.click();`);
     for (const sel of args.clicks) { await click(sel); await pause(500); }
-    if (v !== 'run') await pause(args.wait);
-
     const out = path.resolve(args.out || path.join(repo, 'runs', 'screenshots'));
     fs.mkdirSync(out, { recursive: true });
+    // one action of --steps, in the page
+    const act = (s) => js(`
+      const s = ${JSON.stringify(s)};
+      const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+      const find = async (sel) => {
+        for (let i = 0; i < 100 && !document.querySelector(sel); i++) await wait(100);
+        const el = document.querySelector(sel);
+        if (!el) throw new Error('--steps: nothing matches ' + sel);
+        return el;
+      };
+      if ('wait' in s) await wait(s.wait);
+      else if ('click' in s) (await find(s.click)).click();
+      else if ('scroll' in s) (await find(s.scroll)).scrollIntoView({ behavior: 'smooth', block: 'center' });
+      else if ('select' in s) {
+        const el = await find(s.select);
+        el.value = s.value;
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+      } else if ('type' in s) {
+        const el = await find(s.type);
+        el.focus();
+        el.value = '';
+        for (const ch of s.text) {
+          el.value += ch;
+          el.dispatchEvent(new Event('input', { bubbles: true }));
+          await wait(1000 / (s.cps || 18));
+        }
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+      }`);
+    const playSteps = async () => { for (const s of args.steps || []) await act(s); };
+
+    let png = null;
+    if (args.record) {
+      // the steps play while the frames are taken, after a short still lead-in
+      const played = pause(800).then(playSteps);
+      const frames = await recordFrames(win);
+      await played;
+      png = (await grab(win)).toPNG(); // the poster: the screen as the video ends
+      clearInterval(approve);
+      const video = path.join(out, `${args.name}.webm`);
+      fs.writeFileSync(video, await encodeWebm(frames));
+      console.log(`video: ${video} (${frames.length} frames)`);
+    } else {
+      await playSteps();
+      if (v !== 'run') await pause(args.wait);
+    }
+
     const file = path.join(out, `${args.name}.png`);
-    fs.writeFileSync(file, (await grab(win)).toPNG());
+    fs.writeFileSync(file, png || (await grab(win)).toPNG());
     console.log(`screenshot: ${file}`);
     if (args.caption) {
       if (args.before && !fs.existsSync(path.join(out, args.before))) throw new Error(`--before ${args.before} is not in ${out}`);
@@ -352,6 +506,67 @@ function main() {
     win.destroy();
     cleanup();
     app.exit(0);
+  }
+
+  // --record: frames of the window at --fps for --record seconds, as JPEGs with their time
+  async function recordFrames(win) {
+    const frames = [];
+    const step = 1000 / args.fps;
+    const t0 = Date.now();
+    while (Date.now() - t0 < args.record * 1000) {
+      const at = Date.now();
+      const img = await grab(win);
+      frames.push({ at: at - t0, size: img.getSize(), jpeg: img.toJPEG(90) });
+      await new Promise((r) => setTimeout(r, Math.max(0, step - (Date.now() - at))));
+    }
+    return frames;
+  }
+
+  // Encodes the frames as a VP9 WebM with Chromium's MediaRecorder (no ffmpeg needed): a hidden
+  // window draws them on a canvas at their recorded times, and the canvas stream is recorded.
+  async function encodeWebm(frames) {
+    const { BrowserWindow } = require('electron');
+    // even sizes: VP9 encoders round odd ones
+    const even = (n) => Math.round((n * args.videoScale) / 2) * 2;
+    const width = even(frames[0].size.width), height = even(frames[0].size.height);
+    encoding = true; // browser-window-created must leave this window alone
+    const enc = new BrowserWindow({ show: false, width, height, webPreferences: { backgroundThrottling: false } });
+    encoding = false;
+    try {
+      await enc.loadURL('about:blank');
+      const run = (code) => enc.webContents.executeJavaScript(`(async () => { ${code} })()`);
+      await run(`
+        const canvas = Object.assign(document.createElement('canvas'), { width: ${width}, height: ${height} });
+        document.body.append(canvas);
+        const stream = canvas.captureStream(0);
+        const rec = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp9', videoBitsPerSecond: ${Math.round(args.bitrate * 1000)} });
+        const chunks = [];
+        rec.ondataavailable = (e) => chunks.push(e.data);
+        rec.start();
+        const ctx = canvas.getContext('2d');
+        ctx.imageSmoothingQuality = 'high'; // text stays legible when scaled down
+        window.enc = { ctx, track: stream.getVideoTracks()[0], rec, chunks };`);
+      const t0 = Date.now();
+      for (const f of [...frames, frames[frames.length - 1]]) { // the last frame twice: it gets its full duration
+        await new Promise((r) => setTimeout(r, Math.max(0, f.at - (Date.now() - t0))));
+        await run(`
+          const img = new Image();
+          img.src = 'data:image/jpeg;base64,${f.jpeg.toString('base64')}';
+          await img.decode();
+          enc.ctx.drawImage(img, 0, 0, ${width}, ${height});
+          enc.track.requestFrame();`);
+      }
+      await new Promise((r) => setTimeout(r, 1000 / args.fps));
+      const b64 = await run(`
+        await new Promise((r) => { enc.rec.onstop = r; enc.rec.stop(); });
+        const bytes = new Uint8Array(await new Blob(enc.chunks, { type: 'video/webm' }).arrayBuffer());
+        let s = '';
+        for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+        return btoa(s);`);
+      return Buffer.from(b64, 'base64');
+    } finally {
+      enc.destroy();
+    }
   }
 
   // capturePage fails now and then with Chromium's UnknownVizError while the compositor is busy

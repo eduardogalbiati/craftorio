@@ -31,7 +31,8 @@ const FOLDERS = [
   ['skills/', 'The bundled skills, one folder each (`SKILL.md` + support files, seeded into `<workspace>/skills/`); the README table is generated from their frontmatter.'],
   ['docs/screens/', 'One fragment per screen (`menu`, `order`, text): the README\'s screens table.'],
   ['docs/agents/', 'These topic docs, indexed by `CLAUDE.md` (`test/claude-md.test.js` keeps the index small and its links valid).'],
-  ['supabase/migrations/', '`accounts` table and `entitlement()` (trial and plan). Applied by pasting into the Supabase SQL editor.'],
+  ['supabase/migrations/', '`accounts` table and `entitlement()` (trial and plan); `waitlist` table (RLS, no policies) written only through `join_waitlist()` (anon may execute; duplicate emails ignored). Applied by pasting into the Supabase SQL editor.'],
+  ['site/', 'Waitlist landing page (Portuguese copy, first market Brazil): static `index.html` + `styles.css` + `main.js`, no build; the form calls `join_waitlist` with the publishable key. `img/` holds the feature videos recorded with `scripts/screenshot.js --record` from the step files in `recordings/`. Not packaged into the app.'],
 ];
 
 const posix = (p) => p.split(path.sep).join('/');
