@@ -110,6 +110,39 @@ test('onRunGateClick: a click outside any gate button answers nothing', () => {
   assert.deepEqual(calls, []);
 });
 
+function loadGateToolsHtml() {
+  const esc = /const esc = \(s\) => [^\n]+/.exec(src)[0];
+  const gateToolsHtml = /function gateToolsHtml\(g, \{ disabled = false \} = \{\}\) \{[\s\S]*?\n\}/.exec(src)[0];
+  assert.ok(gateToolsHtml, 'gateToolsHtml not found in app.js: the source moved');
+  const sandbox = {};
+  vm.createContext(sandbox);
+  vm.runInContext(`${esc}\n${gateToolsHtml}\nthis.gateToolsHtml = gateToolsHtml;`, sandbox);
+  return sandbox.gateToolsHtml;
+}
+
+test('gateToolsHtml: Show the diff only with a diff_base and a work dir; Run locally only with local_preview; neither without either', () => {
+  const gateToolsHtml = loadGateToolsHtml();
+  assert.equal(gateToolsHtml({ approval_id: 'a1' }), '', 'nothing to offer: no row at all');
+
+  const diffOnly = gateToolsHtml({ approval_id: 'a1', work_dir: '/wt', diff_base: 'origin/main' });
+  assert.match(diffOnly, /data-gate-tool="diff"/);
+  assert.doesNotMatch(diffOnly, /data-gate-tool="preview"/);
+  assert.match(diffOnly, /data-gate-tool="folder"/, 'a work dir also offers Open the worktree / Terminal there');
+
+  // no diff_base: no Show the diff button, even with a work dir
+  const noDiffBase = gateToolsHtml({ approval_id: 'a1', work_dir: '/wt' });
+  assert.doesNotMatch(noDiffBase, /data-gate-tool="diff"/);
+
+  const previewOnly = gateToolsHtml({ approval_id: 'a1', local_preview: { command: 'npm start' }, work_dir: '/wt' });
+  assert.match(previewOnly, /data-gate-tool="preview"/);
+  assert.match(previewOnly, /data-gate-tool="stop"/);
+
+  // the run chat's own event shape (camelCase) works the same way
+  const camel = gateToolsHtml({ approvalId: 'a1', workDir: '/wt', diffBase: 'origin/main', localPreview: { command: 'npm start' } });
+  assert.match(camel, /data-gate-tool="diff"/);
+  assert.match(camel, /data-gate-tool="preview"/);
+});
+
 test('onRunGateClick: a refused answer re-enables the buttons and tells the user, but never re-opens a blocking dialog', async () => {
   const { sandbox, helpers, toasts } = loadHelpers();
   sandbox.api.resolveApproval = async () => { throw new Error('offline'); };

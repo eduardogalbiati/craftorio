@@ -233,6 +233,27 @@ test('run chat: a gate still open when the run ends is closed, not answered', ()
   assert.equal(kinds(model, 'reply').length, 0);
 });
 
+test('run chat: a gate\'s Run locally / diff tools (local_preview, work_dir, diff_base) are kept on the gate item, none of them when the event has none', () => {
+  const withTools = chatOf([
+    { seq: 1, type: 'workflow.started', run_id: 'r1', workflow: 'wf', inputs: {} },
+    {
+      seq: 2, type: 'approval.requested', run_id: 'r1', approval_id: 'g1', step_id: 'developer_check', message: 'Try it',
+      local_preview: { command: 'npm start' }, work_dir: 'C:\\work\\wt', diff_base: 'origin/main',
+    },
+  ]);
+  const [gate] = kinds(withTools, 'gate');
+  assert.deepEqual(gate.localPreview, { command: 'npm start' });
+  assert.equal(gate.workDir, 'C:\\work\\wt');
+  assert.equal(gate.diffBase, 'origin/main');
+
+  const withoutTools = chatOf([
+    { seq: 1, type: 'workflow.started', run_id: 'r1', workflow: 'wf', inputs: {} },
+    { seq: 2, type: 'approval.requested', run_id: 'r1', approval_id: 'g2', step_id: 'human_review', message: 'Merge?' },
+  ]);
+  const [gate2] = kinds(withoutTools, 'gate');
+  assert.deepEqual([gate2.localPreview, gate2.workDir, gate2.diffBase], [null, null, null]);
+});
+
 test('run chat: the run and its start message carry every issue; a run recorded with one `issue` shows a list of one', () => {
   const group = [{ number: 65, url: 'https://github.com/o/r/issues/65', title: 'Checkboxes' }, { number: 53, url: 'https://github.com/o/r/issues/53', title: 'Scrollbars' }];
   const grouped = chatOf([{ seq: 1, type: 'workflow.started', run_id: 'r1', workflow: 'wf', inputs: {}, issues: group }]);

@@ -391,6 +391,90 @@ test('loadWorkflow validates a transition status (end outcome)', () => {
   }
 });
 
+test('loadWorkflow validates local_preview and diff_base: human_approval steps only, diff_base must be a non-empty ref', () => {
+  const onAgentStep = (field) => `agents: { a: { provider: claude, model: m } }\nsteps:\n  - id: s1\n    agent: a\n    prompt: "do it"\n    ${field}\n`;
+  const onGate = (field) => `agents: { a: { provider: claude, model: m } }\nsteps:\n  - id: g\n    type: human_approval\n    message: "ok?"\n    ${field}\n`;
+  const tmp = path.join(os.tmpdir(), `wf-gate-${process.pid}.yaml`);
+  const write = (text) => fs.writeFileSync(tmp, text);
+  try {
+    write(onAgentStep('local_preview: true'));
+    assert.throws(() => loadWorkflow(tmp), /local_preview must be true or false, on a human_approval step/);
+    write(onAgentStep('diff_base: "origin/main"'));
+    assert.throws(() => loadWorkflow(tmp), /diff_base must be a ref \(e\.g\. "origin\/\{\{ inputs\.base_branch \}\}"\), on a human_approval step/);
+
+    write(onGate('local_preview: "yes"'));
+    assert.throws(() => loadWorkflow(tmp), /local_preview must be true or false/);
+    write(onGate('diff_base: 3'));
+    assert.throws(() => loadWorkflow(tmp), /diff_base must be a ref/);
+    write(onGate('diff_base: "   "'));
+    assert.throws(() => loadWorkflow(tmp), /diff_base must be a ref/);
+
+    write(onGate('diff_base: "origin/{{ inputs.base_branch }}"\n    local_preview: true'));
+    assert.doesNotThrow(() => loadWorkflow(tmp));
+  } finally {
+    fs.unlinkSync(tmp);
+  }
+});
+
+test('a human_approval gate carries diff_base and work_dir only when the run has a work dir', { timeout: 30000 }, async (t) => {
+  const yaml = `apiVersion: multiagent/v1
+kind: Workflow
+metadata: { name: gate-diff }
+agents:
+  a: { provider: claude, model: m }
+steps:
+  - id: gate
+    type: human_approval
+    diff_base: "origin/main"
+    message: "ok?"
+`;
+  const { file } = tempWorkflow(t, yaml);
+  const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'));
+  t.after(() => fs.rmSync(runsDir, { recursive: true, force: true }));
+  const run = new WorkflowRun({ file, inputs: {}, mock: true, runsDir }); // no repo_path, no orchestrator.worktree: no work dir
+  const events = [];
+  run.on('event', (ev) => {
+    events.push(ev);
+    if (ev.type === 'approval.requested') setImmediate(() => run.resolveApproval(ev.approval_id, true));
+  });
+  await run.start();
+  const gate = events.find((e) => e.type === 'approval.requested');
+  assert.equal('diff_base' in gate, false);
+  assert.equal('work_dir' in gate, false);
+});
+
+test('a run records the time spent waiting at a human gate separately from agent time (summary.timing.gate_wait_ms)', { timeout: 30000 }, async (t) => {
+  const yaml = `apiVersion: multiagent/v1
+kind: Workflow
+metadata: { name: gate-timing }
+agents:
+  a: { provider: claude, model: m, session: ephemeral }
+steps:
+  - id: work
+    agent: a
+    prompt: "do it"
+  - id: gate
+    type: human_approval
+    message: "ok?"
+`;
+  const { file } = tempWorkflow(t, yaml);
+  const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'));
+  t.after(() => fs.rmSync(runsDir, { recursive: true, force: true }));
+  const run = new WorkflowRun({ file, inputs: {}, mock: true, runsDir });
+  const events = [];
+  run.on('event', (ev) => {
+    events.push(ev);
+    if (ev.type === 'approval.requested') setTimeout(() => run.resolveApproval(ev.approval_id, true), 80);
+  });
+  await run.start();
+  const finished = events.find((e) => e.type === 'workflow.finished');
+  assert.equal(finished.status, 'success', finished.error);
+  const { timing } = finished.summary;
+  assert.ok(timing.gate_wait_ms >= 60, `waited ${timing.gate_wait_ms}ms at the gate`);
+  assert.deepEqual(timing.gates.gate, { waits: 1, wait_ms: timing.gate_wait_ms });
+  assert.ok(timing.duration_ms >= timing.gate_wait_ms);
+});
+
 test('loadWorkflow validates groups: known steps, one group per step, unique names', () => {
   const tmp = path.join(os.tmpdir(), `wf-groups-${process.pid}.yaml`);
   const write = (groups) => fs.writeFileSync(tmp, `agents: { a: { provider: claude, model: m } }\n${groups}steps:\n  - id: s1\n    agent: a\n  - id: s2\n    agent: a\n`);
@@ -423,8 +507,9 @@ test('the bundled workflows group every step', () => {
 });
 
 // Full software-development flow in mock mode. Gates get `answers[step]` (default: approve /
-// first choice), like --auto-approve.
-async function runSoftwareDevelopment({ mockSequences, answers = {}, inputs = {}, issues }) {
+// first choice), like --auto-approve. `answers[step]` (and `feedback[step]`) may be a list, one
+// per visit to that gate (shifted as it is visited again; the last one repeats past the end).
+async function runSoftwareDevelopment({ mockSequences, answers = {}, feedback = {}, inputs = {}, issues }) {
   const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'));
   const run = new WorkflowRun({
     file: path.join(root, 'workflows', 'software-development.yaml'),
@@ -438,8 +523,11 @@ async function runSoftwareDevelopment({ mockSequences, answers = {}, inputs = {}
   run.on('event', (ev) => {
     events.push(ev);
     if (ev.type === 'approval.requested') {
-      const answer = ev.step_id in answers ? answers[ev.step_id] : ev.choices ? ev.choices[0].id : true;
-      setImmediate(() => run.resolveApproval(ev.approval_id, answer));
+      const a = answers[ev.step_id];
+      const answer = Array.isArray(a) ? a.shift() ?? (ev.choices ? ev.choices[0].id : true) : a ?? (ev.choices ? ev.choices[0].id : true);
+      const f = feedback[ev.step_id];
+      const text = Array.isArray(f) ? f.shift() : f;
+      setImmediate(() => run.resolveApproval(ev.approval_id, answer, 'user', text));
     }
   });
   await run.start();
@@ -553,6 +641,79 @@ test('software-development: an issue of the group that cannot be done stops at t
   // a run for one issue never asks
   const single = await runSoftwareDevelopment({ mockSequences: { done: [false], preview_status: ['success'] }, issues: [GROUP[0]], inputs: { issue: GROUP[0].url } });
   assert.ok(!single.transitions.includes('develop>issue_not_done'));
+});
+
+// ---- #104: validated mode (mode input, developer_check gate) ------------------------------
+
+test('software-development: validated mode stops at developer_check with the diff and worktree details; auto mode (the default) skips it', { timeout: 120000 }, async () => {
+  const validated = await runSoftwareDevelopment({ inputs: { mode: 'validated' }, mockSequences: { preview_status: ['success'] } });
+  assert.equal(validated.finished.status, 'success', validated.finished.error);
+  // recorded on the run (Details): workflow.started carries every input, mode included
+  assert.equal(validated.events.find((e) => e.type === 'workflow.started').inputs.mode, 'validated');
+  const gate = validated.events.find((e) => e.type === 'approval.requested' && e.step_id === 'developer_check');
+  assert.ok(gate, validated.transitions.join(' '));
+  assert.equal(gate.diff_base, 'origin/main');
+  assert.equal(gate.work_dir, root);
+  assert.deepEqual(gate.choices.map((c) => c.id), ['approve', 'changes', 'stop']);
+  assert.match(gate.message, /Try it before the review and the tests run/);
+  assert.match(gate.message, /Files changed:/);
+  assert.match(gate.feedback.label, /Your change request for the developer/);
+  assert.deepEqual(validated.transitions.filter((x) => /developer_check/.test(x)), ['develop>developer_check', 'developer_check>code_review']);
+
+  const auto = await runSoftwareDevelopment({ mockSequences: { preview_status: ['success'] } }); // mode defaults to "auto"
+  assert.equal(auto.finished.status, 'success', auto.finished.error);
+  assert.ok(!auto.events.some((e) => e.type === 'approval.requested' && e.step_id === 'developer_check'));
+  assert.ok(auto.transitions.includes('develop>code_review'));
+});
+
+test('software-development: validated mode — Ask for changes sends the feedback to the developer and reopens developer_check; Approve then moves on to code_review', { timeout: 120000 }, async () => {
+  const { events, finished, transitions } = await runSoftwareDevelopment({
+    inputs: { mode: 'validated' },
+    mockSequences: { preview_status: ['success'], verdict: ['approved'] },
+    answers: { developer_check: ['changes', 'approve'] },
+    feedback: { developer_check: ['Use snake_case for the new function.'] },
+  });
+  assert.equal(finished.status, 'success', finished.error);
+  assert.deepEqual(transitions.filter((x) => /developer_check|^develop>/.test(x)), [
+    'develop>developer_check', 'developer_check>develop', 'develop>developer_check', 'developer_check>code_review',
+  ]);
+  const gates = events.filter((e) => e.type === 'approval.requested' && e.step_id === 'developer_check');
+  assert.equal(gates.length, 2);
+  assert.match(gates[1].message, /your change request 1/);
+  const resolved = events.filter((e) => e.type === 'approval.resolved' && e.feedback);
+  assert.equal(resolved[0].feedback, 'Use snake_case for the new function.');
+  const developPrompts = events.filter((e) => e.type === 'session.message_sent' && e.step_id === 'develop').map((e) => e.prompt);
+  assert.match(developPrompts[1], /The owner tried your change and asks for these changes \(change request 1\):/);
+  assert.match(developPrompts[1], /Use snake_case for the new function\./);
+});
+
+test('software-development: validated mode — a review fix round does not reopen developer_check; validate_every_round makes it stop again', { timeout: 120000 }, async () => {
+  const once = await runSoftwareDevelopment({
+    inputs: { mode: 'validated' },
+    mockSequences: { preview_status: ['success'], verdict: ['changes_requested', 'approved'] },
+  });
+  assert.equal(once.finished.status, 'success', once.finished.error);
+  assert.deepEqual(once.transitions.filter((x) => /developer_check/.test(x)), ['develop>developer_check', 'developer_check>code_review']);
+  assert.ok(once.transitions.includes('code_review>develop'));
+  assert.equal(once.transitions.filter((x) => x === 'develop>code_review').length, 1, once.transitions.join(' '));
+
+  const every = await runSoftwareDevelopment({
+    inputs: { mode: 'validated', validate_every_round: 'true' },
+    mockSequences: { preview_status: ['success'], verdict: ['changes_requested', 'approved'] },
+  });
+  assert.equal(every.finished.status, 'success', every.finished.error);
+  assert.deepEqual(every.transitions.filter((x) => /developer_check/.test(x)), [
+    'develop>developer_check', 'developer_check>code_review', 'develop>developer_check', 'developer_check>code_review',
+  ]);
+});
+
+test('software-development: validated mode — Stop ends the run as cancelled, the worktree kept to resume', { timeout: 120000 }, async () => {
+  const { finished, transitions } = await runSoftwareDevelopment({
+    inputs: { mode: 'validated' }, mockSequences: { preview_status: ['success'] }, answers: { developer_check: 'stop' },
+  });
+  assert.equal(finished.status, 'cancelled');
+  assert.match(finished.error, /ended as cancelled at step "developer_check"/);
+  assert.ok(!transitions.includes('developer_check>code_review'));
 });
 
 // `type: run` inputs (run-retrospective): "latest", a real id, or refused before the run starts.
@@ -891,6 +1052,30 @@ test('local hero workflow: a simulated run merges right after verify_change and 
   // no gate on the way to the merge; in simulation the merge is skipped, never run
   assert.ok(!events.some((e) => e.type === 'approval.requested' && ['verify_change', 'resolve_merge', 'merge_blocked'].includes(e.step_id)));
   assert.ok(events.some((e) => e.type === 'action.executed' && e.command === 'merge: local' && e.skipped));
+});
+
+test('local hero workflow: validated mode stops at developer_check with a local diff_base (no origin/ prefix); auto mode skips it', { timeout: 120000 }, async () => {
+  const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'));
+  const run = new WorkflowRun({
+    file: path.join(root, 'workflows', 'software-development-local-hero.yaml'),
+    inputs: { task: 'Engine test', repo_path: root, mode: 'validated' },
+    mock: true, runsDir,
+  });
+  const events = [];
+  run.on('event', (ev) => {
+    events.push(ev);
+    if (ev.type === 'approval.requested') setImmediate(() => run.resolveApproval(ev.approval_id, ev.choices ? ev.choices[0].id : true));
+  });
+  await run.start();
+  fs.rmSync(runsDir, { recursive: true, force: true });
+  const finished = events.find((e) => e.type === 'workflow.finished');
+  assert.equal(finished.status, 'success', finished.error);
+  const gate = events.find((e) => e.type === 'approval.requested' && e.step_id === 'developer_check');
+  assert.ok(gate);
+  assert.equal(gate.diff_base, 'main');
+  assert.equal(gate.work_dir, root);
+  const transitions = events.filter((e) => e.type === 'step.transition').map((e) => `${e.from}>${e.to}`);
+  assert.deepEqual(transitions.filter((x) => /developer_check/.test(x)), ['develop>developer_check', 'developer_check>code_review']);
 });
 
 // A small workflow file in a temp folder; returns its path.

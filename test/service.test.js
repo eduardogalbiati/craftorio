@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { execFileSync } = require('child_process');
 const { setupWorkspace } = require('../src/workspace');
 const { createService } = require('../src/service');
 const backlog = require('../src/backlog');
@@ -859,4 +860,157 @@ test('prepareRestart with no runs in progress needs no confirmation and still pa
 
   assert.deepEqual(service.prepareRestart(), { interrupted: [] });
   assert.equal(backlog.readQueue(ws.backlog, p.id).paused, true);
+});
+
+// ---- #104 / #70: Show the diff and Run locally at a human_approval gate (developer_check) -------
+
+// A human_approval gate with local_preview and diff_base, its work_dir taken straight from
+// inputs.repo_path (no orchestrator.worktree needed for these tests).
+const GATE_WORKFLOW = `apiVersion: multiagent/v1
+kind: Workflow
+metadata:
+  name: gate-fixture
+inputs:
+  repo_path: { type: string, required: true }
+  base_ref: { type: string, default: "" }
+orchestrator:
+  local_preview: { command: "git --version" }
+agents:
+  a: { provider: claude, model: m, session: ephemeral }
+steps:
+  - id: gate
+    type: human_approval
+    local_preview: true
+    diff_base: "{{ inputs.base_ref }}"
+    message: "Try it?"
+    choices:
+      - { id: approve, label: Approve }
+      - { id: stop, label: Stop }
+`;
+
+// A throwaway repository with two commits: `base` is the first one, HEAD (a.txt gains a line) is the second.
+function gitRepo(t) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'svc-git-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const cfgDir = fs.mkdtempSync(path.join(os.tmpdir(), 'svc-gitcfg-'));
+  t.after(() => fs.rmSync(cfgDir, { recursive: true, force: true }));
+  const cfg = path.join(cfgDir, 'config');
+  fs.writeFileSync(cfg, '');
+  const env = { ...process.env, GIT_CONFIG_GLOBAL: cfg, GIT_CONFIG_NOSYSTEM: '1' };
+  const git = (...args) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'init.defaultBranch=main', ...args], { cwd: dir, env, stdio: ['ignore', 'pipe', 'pipe'] }).toString().trim();
+  git('init', '-q');
+  fs.writeFileSync(path.join(dir, 'a.txt'), 'one\n');
+  git('add', '.');
+  git('commit', '-q', '-m', 'first');
+  const base = git('rev-parse', 'HEAD');
+  fs.writeFileSync(path.join(dir, 'a.txt'), 'one\ntwo\n');
+  git('add', '.');
+  git('commit', '-q', '-m', 'second');
+  return { dir, base };
+}
+
+// Runs GATE_WORKFLOW in mock mode and resolves with its `approval.requested` event. Whatever the
+// test does with it, the run is stopped and awaited before the next test's workspace is removed
+// (the recorder would otherwise still be writing to it, see #37 process cleanup).
+async function openGateFixture(t, service, api, repo) {
+  const gateP = new Promise((resolve) => {
+    const onEv = (ev) => { if (ev.type === 'approval.requested') { service.events.off('run:event', onEv); resolve(ev); } };
+    service.events.on('run:event', onEv);
+  });
+  const { runId } = await api['run:start']({ file: 'gate-fixture.yaml', inputs: { repo_path: repo.dir, base_ref: repo.base }, mock: true });
+  t.after(async () => {
+    try { api['run:stop']({ runId }); } catch { /* already ended */ }
+    await untilTrue(() => !api['runs:active']().some((r) => r.runId === runId));
+  });
+  return gateP;
+}
+
+// Resolves a still-open gate and waits for the run to leave runs:active (see finishPendingRun below).
+async function resolveAndWait(api, runId, approvalId, answer) {
+  api['approval:resolve']({ runId, id: approvalId, answer });
+  await untilTrue(() => !api['runs:active']().some((r) => r.runId === runId));
+}
+
+test('term:open kind diff: refuses without an open gate, and one that does not offer a diff', async (t) => {
+  const { service, api } = makeService(t);
+  assert.throws(() => api['term:open']({ kind: 'diff', runId: 'nope', approvalId: 'a1' }), /The gate is no longer open\./);
+
+  const gateP = new Promise((resolve) => service.events.on('run:event', (ev) => { if (ev.type === 'approval.requested') resolve(ev); }));
+  const { runId } = await api['run:start']({ file: 'fixture-service.yaml', inputs: {}, mock: true }); // its "review" gate has no diff_base
+  const gate = await gateP;
+  assert.throws(() => api['term:open']({ kind: 'diff', runId, approvalId: gate.approval_id }), /This gate does not offer a diff\./);
+
+  assert.equal(api['approval:resolve']({ runId, id: gate.approval_id, answer: true }), true);
+  assert.throws(() => api['term:open']({ kind: 'diff', runId, approvalId: gate.approval_id }), /The gate is no longer open\./);
+  await untilTrue(() => !api['runs:active']().some((r) => r.runId === runId));
+});
+
+test('term:open kind diff: streams the branch\'s changes since diff_base, read-only, in the gate\'s work_dir', async (t) => {
+  const { service, api } = makeService(t);
+  fs.writeFileSync(path.join(service.workspace().workflows, 'gate-fixture.yaml'), GATE_WORKFLOW);
+  const repo = gitRepo(t);
+  const gate = await openGateFixture(t, service, api, repo);
+  assert.equal(gate.diff_base, repo.base);
+  assert.equal(gate.work_dir, repo.dir);
+
+  const out = [];
+  service.events.on('term:data', (p) => out.push(p));
+  const opened = api['term:open']({ kind: 'diff', runId: gate.run_id, approvalId: gate.approval_id });
+  assert.equal(opened.cwd, repo.dir);
+  await untilTrue(() => out.some((p) => p.id === opened.id && /two/.test(p.data)));
+  const data = out.filter((p) => p.id === opened.id).map((p) => p.data).join('');
+  assert.match(data, /a\.txt/);
+  // a diff, never a rejected answer: Show the diff must not resolve the gate
+  assert.equal(api['runs:active']().find((r) => r.runId === gate.run_id)?.gates.length, 1);
+});
+
+test('term:open kind diff: refuses a diff_base starting with "-" (git would read it as an option, not a ref)', async (t) => {
+  const { service, api } = makeService(t);
+  fs.writeFileSync(path.join(service.workspace().workflows, 'gate-fixture.yaml'), GATE_WORKFLOW);
+  const repo = gitRepo(t);
+  const gate = await openGateFixture(t, service, api, { dir: repo.dir, base: '--upload-pack=evil' });
+  assert.equal(gate.diff_base, '--upload-pack=evil');
+  assert.throws(() => api['term:open']({ kind: 'diff', runId: gate.run_id, approvalId: gate.approval_id }), /Not a ref: --upload-pack=evil/);
+});
+
+test('localPreview:start: offered only when the gate sets local_preview, runs in its work_dir, and never answers the gate', async (t) => {
+  const { service, api } = makeService(t);
+  fs.writeFileSync(path.join(service.workspace().workflows, 'gate-fixture.yaml'), GATE_WORKFLOW);
+  const repo = gitRepo(t);
+
+  // fixture-service.yaml's "review" gate has no local_preview
+  const plainGateP = new Promise((resolve) => service.events.on('run:event', (ev) => { if (ev.type === 'approval.requested') resolve(ev); }));
+  const { runId: plainRunId } = await api['run:start']({ file: 'fixture-service.yaml', inputs: {}, mock: true });
+  const plainGate = await plainGateP;
+  await assert.rejects(api['localPreview:start']({ runId: plainRunId, approvalId: plainGate.approval_id }), /This gate does not offer Run locally/);
+  await resolveAndWait(api, plainRunId, plainGate.approval_id, true); // only one run at a time by default
+
+  const gate = await openGateFixture(t, service, api, repo);
+  assert.deepEqual(gate.local_preview, { command: 'git --version' });
+
+  const events = [];
+  service.events.on('run:event', (ev) => events.push(ev));
+  const preview = await api['localPreview:start']({ runId: gate.run_id, approvalId: gate.approval_id });
+  assert.equal(preview.cwd, repo.dir);
+  assert.deepEqual(api['localPreview:list']().map((p) => p.runId), [gate.run_id]);
+  assert.ok(events.some((e) => e.type === 'local_preview.started' && e.dir === repo.dir), 'recorded in the run');
+  // never answers the gate
+  assert.equal(api['runs:active']().find((r) => r.runId === gate.run_id)?.gates.length, 1);
+
+  // stopped when the gate is answered
+  await resolveAndWait(api, gate.run_id, gate.approval_id, 'approve');
+  assert.deepEqual(api['localPreview:list'](), []);
+});
+
+test('localPreview:stop: the Stop button ends the preview without answering the gate', async (t) => {
+  const { service, api } = makeService(t);
+  fs.writeFileSync(path.join(service.workspace().workflows, 'gate-fixture.yaml'), GATE_WORKFLOW);
+  const repo = gitRepo(t);
+  const gate = await openGateFixture(t, service, api, repo);
+  await api['localPreview:start']({ runId: gate.run_id, approvalId: gate.approval_id });
+  assert.equal(api['localPreview:stop']({ runId: gate.run_id }), true);
+  assert.deepEqual(api['localPreview:list'](), []);
+  assert.equal(api['localPreview:stop']({ runId: gate.run_id }), false, 'nothing left to stop');
+  assert.equal(api['runs:active']().find((r) => r.runId === gate.run_id)?.gates.length, 1, 'the gate is still open');
+  await resolveAndWait(api, gate.run_id, gate.approval_id, 'approve');
 });
