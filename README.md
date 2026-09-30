@@ -22,8 +22,8 @@ Keep **Simulation mode** checked to try a flow without calling the CLIs.
 | Projects | Projects in `<workspace>/projects/<id>.json`. Every project has a folder and optionally a git repository. With a repository and no folder, it is cloned into `<workspace>/repos/<owner>-<repo>`; without either, the folder is `<workspace>/projects/<id>/`. Clicking a project shows every workflow run in it (status, cost, task), and for each run its sessions, with **Live terminal** / **Open in CLI** to watch or resume any of them. Runs are linked by the project id they were started with (older ones by the project's current or previous folders) |
 | Backlog | A project's issues, synced from its git platform: **GitHub** (gh CLI) or **GitLab** (glab CLI); Bitbucket is listed but has no sync yet. The default platform is in Settings › General › Backlog and can be switched on the screen. The last sync is kept in `<workspace>/backlog/<project id>.json` (shown instantly, a new sync runs each time the screen opens). **List** view (open/closed filters, labels, task-list progress, the issue rendered as Markdown) or **Kanban**: **To do**, **In progress** (queued, running, failed), **Waiting for approval** (its run is at a human gate; **Review approval** opens it) and **Done** (closed, or its run succeeded). Select To do issues and **Assign workflow…** (workflows with a `task` input; their other inputs are asked once and remembered per project; simulation in developer mode): they wait in the project's queue (`<workspace>/backlog/<id>.queue.json`) and start in the order selected: **one at a time**, or as many as the free slots allow with Settings › Execution › **Concurrent runs** (the oldest first across projects, within the limit per project). Each run records its issue; `software-development` gets it as the `issue` input and its PR/MR closes it. The queue can be paused; it is paused when the app starts, when a start fails (budget, missing CLI) and when a queued issue's run fails. Each sync also reads the open PRs/MRs that refer to an issue (a closing keyword or a link to it in the description, `#<number>` in the title, GitHub's closing references) and shows them as badges linking to them; **Assign workflow…** warns about selected issues that already have one (or a run in progress or waiting) and skips them unless you assign them anyway; right before a queued issue starts, the queue checks again and skips it (saying why) if a PR/MR was opened for it since it was queued. Runs started by hand are linked when their task or a text input mentions the issue URL or `#<number>` |
 | Artifacts | Every file a run produced (documents, proposals, reviews, reports), grouped by run and filterable by project. The viewer renders Markdown (tables, table of contents; sanitized with DOMPurify), pretty-prints JSON and shows TSV/CSV as tables. Also listed per run in the project view |
-| Workflows | The YAMLs in `<workspace>/workflows/` with their steps, agents/models, skills, `/goal`, `/loop`, parallel steps and branches. Each one is marked **default** (untouched copy of a workflow bundled with the app), **modified** (a default you edited; **Restore default** moves your copy to the trash and restores the bundled one, and **newer default** means the app ships a newer version than the one you edited) or **custom** (created by you) |
-| Agents | Reusable agents in `<workspace>/agents/<id>.json`: a robot look (main color, shell, visor, glow, eyes, emblem; live preview of the animated states), a prompt with what the agent is for and the skills it always gets. The built-in **Supervisor** is always listed: its prompt and skills are fixed, only its look can be changed (it shows wherever the supervisor appears, e.g. Write & Review). Workflows don't pick these agents yet |
+| Workflows | Three sub-items in the menu (clicking Workflows opens **Runs**). **Runs**: every run, live or finished (**Open chat** replays one). **Definitions**: the YAMLs in `<workspace>/workflows/` with their steps, agents/models, skills, `/goal`, `/loop`, parallel steps and branches. **Builder**: draw a workflow instead of writing YAML (see [Visual builder](#visual-builder)). Each definition is marked **default** (untouched copy of a workflow bundled with the app), **modified** (a default you edited; **Restore default** moves your copy to the trash and restores the bundled one, and **newer default** means the app ships a newer version than the one you edited) or **custom** (created by you) |
+| Agents | Reusable agents in `<workspace>/agents/<id>.json`: a robot look (main color, shell, visor, glow, eyes, emblem; live preview of the animated states), a prompt with what the agent is for and the skills it always gets. The built-in **Supervisor** is always listed: its prompt and skills are fixed, only its look can be changed (it shows wherever the supervisor appears, e.g. Write & Review). The visual builder imports them into desks, or picks one at random when a run starts |
 | Skills | One folder per skill in `<workspace>/skills/<id>/SKILL.md` (Claude Code format) |
 | Usage | Tokens and cost per provider this month and today, monthly budgets (USD and/or tokens), per-model prices for CLIs that do not report cost, recent runs. The topbar widget shows this month's total; click it for a per-provider popover |
 | Settings | Workspace, CLI status (Claude Code, Codex, Grok Build, GitHub CLI, GitLab CLI, Git) and run preferences (`<workspace>/settings.json`). **Execution › Concurrent runs**: off by default (one run at a time); on, several workflows run at the same time up to a **maximum** (default 2), with an optional **maximum per project**; simulations count toward the limits only if you say so. Each run has its own git worktree, and the monthly budgets count every run in progress. The **Run** menu item then lists the runs in progress (status, workflow, project/issue): click one to show it on the Run screen and in the top bar (whose **All runs** counter adds them up); a badge counts the human gates waiting across runs, and a gate never pops up over another screen: a toast names its run |
@@ -240,6 +240,40 @@ an id with no run folder is refused before the run starts), reads that run's `ev
 `decisions.tsv` and `summary.json` with the `run-retrospective` skill, and proposes
 evidence-backed edits to skills and workflows (`retrospective.md`, also copied into the analyzed
 run's folder). It only proposes; a human applies.
+
+## Visual builder
+
+Workflows › **Builder** draws a workflow as a vertical flow of **desks**, each with an agent seated at it
+(the same isometric robots as the rest of the app), plus **approval gates**; **+ Desk** / **+ Approval gate** after each arrow insert one right there. Per desk you set:
+
+- what the agent does in the step (its prompt for the step); by default the desk also gets the
+  run's task, the previous desk's answer and the notes typed at the gates;
+- the agent: **Custom** (a prompt saying who it is, and skills), **Import an agent** (a list of the Agents menu's cards, in a modal) from the
+  Agents menu (its look, prompt and skills, still editable) or **Random agent** (one of your
+  agents, picked when the run starts; the pick is logged and kept on resume);
+- the skills, checked in a list;
+- the CLI, model and effort (**default** = the CLI's own, no effort flag), and whether it may only
+  read the project folder or also edit files and run commands.
+
+A gate is approved by **a person** (amber arch, a person with a clipboard) or by **an AI agent**
+(violet arch with a scanner beam and the agent's robot). A person's gate waits for them; if
+rejected it stops the run (cancelled) or sends the work back to an earlier desk with the notes.
+An AI check is an agent step (its own CLI, model, effort and prompt, or an imported agent) that
+reads the previous desk's answer against your criteria and answers `approved` + `notes`; if
+rejected it stops the run (failed) or sends the work back with its notes, up to a number of
+rounds (then the run fails). **Save** writes a regular YAML to
+`<workspace>/workflows/<name>.yaml` (the engine runs it unchanged; the builder's own data sits
+in `x-builder`), **Run** saves and opens the start panel. The workflows it makes take a `task`
+and an optional `project_path` (the folder the agents work in; empty = the run folder).
+**Send to builder** (Definitions) shows any workflow in the builder:
+- the workflows bundled with the app are **read-only**: **Clone** makes your own copy
+  (`<name>-copy.yaml`, comments kept);
+- your workflows that use what the builder doesn't draw (loops, parallel steps, output schemas,
+  other inputs) show them as badges; their agents (CLI, model, effort, prompt, skills, look) and
+  the step prompts can be changed, the steps themselves are edited as YAML, and everything else
+  in the file is kept;
+- workflows made with the builder are fully editable. Hand edits to `providers`, `defaults`,
+  `orchestrator` and `observability` are kept when the builder saves again.
 
 ## Skills
 
@@ -700,6 +734,7 @@ src/seed.js              seeding of bundled defaults into the workspace (.seeded
 src/skills.js            skills: CRUD, lookup, seeding and prompt block
 src/agents.js            agents: CRUD, appearance validation, the built-in supervisor
 src/workflows.js         workflows: seeding, origin status, lookup (workspace, then bundled)
+src/workflow-builder.js  visual builder: spec <-> workflow YAML, what the builder can't draw
 src/usage.js             token/cost usage per provider and scope, budgets and the pre-run CLI check
 src/local-usage.js       readers of the CLIs' own local usage logs (Claude Code, Codex, Grok)
 src/engine/workflow.js   engine that runs the YAML graph

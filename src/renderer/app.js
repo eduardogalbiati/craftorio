@@ -40,7 +40,7 @@ const state = {
   runId: null,
   approval: null,     // the gate shown in the approval dialog (approval.requested event)
   tab: 'detail',
-  workflowsTab: 'runs', // 'runs' | 'definitions'
+  workflowsTab: 'runs', // 'runs' | 'definitions' | 'builder' (sub-items of Workflows in the sidebar)
   pendingProject: null, // project to preselect in the panel on open
   usage: null,        // last api.getUsage() result
   usageError: null,
@@ -88,7 +88,11 @@ async function init() {
   $('#nav-run-gates').onclick = (e) => { e.stopPropagation(); openNextGate(); };
 
   // navigation
-  document.querySelectorAll('.nav-item').forEach((b) => (b.onclick = () => showView(b.dataset.view)));
+  document.querySelectorAll('.nav-item').forEach((b) => (b.onclick = () => {
+    // Workflows opens on Runs; Definitions and Builder are its sub-items
+    if (b.dataset.view === 'workflows') state.workflowsTab = 'runs';
+    showView(b.dataset.view);
+  }));
   document.querySelectorAll('.dash-card').forEach((b) => (b.onclick = () => openDrawer({ category: b.dataset.category })));
 
   // right drawer
@@ -106,6 +110,8 @@ async function init() {
     if (!$('#project-modal').classList.contains('hidden')) return closeModal('#project-modal');
     if (!$('#skill-modal').classList.contains('hidden')) return closeModal('#skill-modal');
     if (!$('#agent-modal').classList.contains('hidden')) return closeModal('#agent-modal');
+    if (!$('#wb-skills-modal').classList.contains('hidden')) return $('#btn-wb-skills-cancel').click();
+    if (!$('#wb-agents-modal').classList.contains('hidden')) return $('#btn-wb-agents-cancel').click();
     if (!$('#drawer').classList.contains('open')) return;
     closeDrawer();
   });
@@ -147,7 +153,7 @@ async function init() {
 
   // workflows
   $('#btn-workflows-folder').onclick = () => api.openPath(state.ws.workflows);
-  document.querySelectorAll('[data-wtab]').forEach((b) => (b.onclick = () => showWorkflowsTab(b.dataset.wtab)));
+  document.querySelectorAll('[data-wtab]').forEach((b) => (b.onclick = () => { state.workflowsTab = b.dataset.wtab; showView('workflows'); }));
   $('#btn-workflow-runs-refresh').onclick = () => loadWorkflowRuns();
   $('#workflow-show-sim').onchange = (e) => { state.wr.showSim = e.target.checked; renderWorkflowRuns(); };
 
@@ -228,6 +234,7 @@ function showView(view) {
   state.view = view;
   document.querySelectorAll('.view').forEach((v) => v.classList.toggle('hidden', v.id !== `view-${view}`));
   document.querySelectorAll('.nav-item').forEach((b) => b.classList.toggle('active', b.dataset.view === (view === 'project' ? 'projects' : view)));
+  $('#nav-workflows-sub').classList.toggle('hidden', view !== 'workflows');
   if (view === 'sessions') window.SessionsView?.show();
   if (view === 'dashboard') renderDashboard();
   if (view === 'projects') refreshProjects();
@@ -819,16 +826,26 @@ async function saveProject(e) {
 // ---------------------------------------------------------------------------
 // Workflows
 // ---------------------------------------------------------------------------
+const WORKFLOW_PAGES = {
+  runs: 'Every run, live or finished.',
+  definitions: 'Workflows are YAML files in the workflows folder.',
+  builder: 'Draw a workflow: desks in a line, each with an agent, and approval gates. Saved as YAML in the workflows folder.',
+};
 function showWorkflowsTab(tab) {
+  if (!WORKFLOW_PAGES[tab]) tab = 'runs';
   state.workflowsTab = tab;
+  if (state.view !== 'workflows') return showView('workflows');
   document.querySelectorAll('[data-wtab]').forEach((b) => {
     const on = b.dataset.wtab === tab;
     b.classList.toggle('active', on);
-    b.setAttribute('aria-selected', String(on));
+    b.setAttribute('aria-current', on ? 'page' : 'false');
   });
   document.querySelectorAll('[data-wpage]').forEach((p) => p.classList.toggle('hidden', p.dataset.wpage !== tab));
+  $('#workflows-page-title').textContent = { runs: 'Runs', definitions: 'Definitions', builder: 'Builder' }[tab];
+  $('#workflows-page-hint').textContent = WORKFLOW_PAGES[tab];
   if (tab === 'definitions') refreshWorkflows();
   if (tab === 'runs') { renderWorkflowRuns(); loadWorkflowRuns(); }
+  if (tab === 'builder') window.showBuilder?.();
 }
 
 const workflowRunsVisible = () => state.view === 'workflows' && state.workflowsTab === 'runs';
@@ -909,6 +926,7 @@ async function refreshWorkflows() {
         </div>
         <div class="row">
           ${w.restorable ? '<button class="btn ghost sm" data-restore title="Move your edited copy to the trash and use the default bundled with the app">Restore default</button>' : ''}
+          <button class="btn ghost sm" data-builder ${w.error ? 'disabled' : ''} title="${esc(w.origin !== 'custom' ? 'See it in the visual builder (read-only: clone it to change it)' : w.builder ? 'Edit it in the visual builder' : 'See it in the visual builder: its agents and prompts can be changed there, its steps stay as they are')}">Send to builder</button>
           <button class="btn primary sm" data-run ${w.error ? 'disabled' : ''}>Run</button>
         </div>
       </div>
@@ -916,6 +934,7 @@ async function refreshWorkflows() {
     </article>`;
   }).join('');
   box.querySelectorAll('[data-run]').forEach((b) => (b.onclick = () => openDrawer({ workflow: b.closest('.wf-card').dataset.file })));
+  box.querySelectorAll('[data-builder]').forEach((b) => (b.onclick = () => window.openInBuilder?.(b.closest('.wf-card').dataset.file)));
   box.querySelectorAll('[data-restore]').forEach((b) => (b.onclick = async () => {
     const file = b.closest('.wf-card').dataset.file;
     if (!(await confirmDialog('Restore default', `Move your edited "${file}" to the trash and restore the default bundled with the app?`, 'Restore'))) return;

@@ -17,6 +17,10 @@ same features for users; this is the implementer's summary.
   `max_visits` / `loop.max_iterations` accept templates. `agents.<name>.enabled` (bool or template)
   drops an agent from the run (`dropDisabledAgents`: removed from fan-outs, `min_success` capped;
   a single-agent step on it throws). ai-arena's five contender slots use it (`provider: none`).
+- `persona: random` (agent): one of the user's agents (Agents menu, `personas` option from the service)
+  is picked when the run starts; its prompt goes before the agent's `system_prompt`, its skills are added
+  (missing ones left out with a warn). Recorded as `personas` in `workflow.started`; `resumeSpec` keeps the pick.
+  Written by the visual builder's "random agent" desk.
 - `capabilities` (agent, overridable per step) and `isolation: false`: see [capabilities.md](capabilities.md).
 - `providers.<p>.skill_args` (claude `--add-dir {{ skill_dir }}`), `prompt_file_arg` (grok).
 

@@ -37,6 +37,35 @@
     if (sup && window.Robots) Robots.define(SUPERVISOR, sup.appearance, 'Supervisor');
   }
 
+  // One agent card: avatar, name, description and skills. Shared with the builder's agent picker
+  // (window.AgentCards). `actions`: the Agents screen's footer (Edit / Remove); `selected` marks
+  // the current pick.
+  function agentCard(a, { skillIds = new Set((state.skills || []).map((s) => s.id)), actions = false, selected = false } = {}) {
+    return `
+      <div class="card clickable agent-card${selected ? ' selected' : ''}" data-id="${esc(a.id)}" tabindex="0">
+        <div class="agent-card-body">
+          <span class="agent-avatar" aria-hidden="true">${Robots.svg(variantOf(a), 'idle', { bubble: false, plaque: '' })}</span>
+          <div class="agent-card-text">
+            <div class="card-head">
+              <b class="card-title">${esc(a.name)}</b>
+              ${a.system ? '<span class="badge">system</span>' : ''}${selected ? '<span class="badge">selected</span>' : ''}
+            </div>
+            <p class="muted small clamp">${esc(a.error ? `Error: ${a.error}` : a.description || (a.prompt ? a.prompt.slice(0, 160) : 'No description.'))}</p>
+            <div class="agent-skills">${(a.skills || []).slice(0, 4).map((s) =>
+              `<span class="agent-skill mono${a.system || skillIds.has(s) ? '' : ' missing'}" title="${a.system || skillIds.has(s) ? 'Skill' : 'This skill is not in the workspace'}">${esc(s)}</span>`).join('')}${
+              a.skills?.length > 4 ? `<span class="muted small">+${a.skills.length - 4}</span>` : ''}</div>
+          </div>
+        </div>
+        ${actions ? `<div class="card-actions">
+          <span class="muted small">${a.system ? 'Look only' : a.updatedAt ? `updated ${esc(dateOf(a.updatedAt))}` : ''}</span>
+          <span class="spacer"></span>
+          <button class="btn sm ghost" data-act="edit">${a.system ? 'Customize' : 'Edit'}</button>
+          ${a.system ? '' : '<button class="btn sm ghost danger" data-act="remove">Remove</button>'}
+        </div>` : ''}
+      </div>`;
+  }
+  window.AgentCards = { card: agentCard };
+
   async function refreshAgents() {
     const box = $a('#agents-list');
     try {
@@ -48,28 +77,7 @@
     applySupervisorLook();
     const skillIds = new Set(state.skills.map((s) => s.id));
     const custom = agents.filter((a) => !a.system);
-    box.innerHTML = agents.map((a) => `
-      <div class="card clickable agent-card" data-id="${esc(a.id)}">
-        <div class="agent-card-body">
-          <span class="agent-avatar" aria-hidden="true">${Robots.svg(variantOf(a), 'idle', { bubble: false, plaque: '' })}</span>
-          <div class="agent-card-text">
-            <div class="card-head">
-              <b class="card-title">${esc(a.name)}</b>
-              ${a.system ? '<span class="badge">system</span>' : ''}
-            </div>
-            <p class="muted small clamp">${esc(a.error ? `Error: ${a.error}` : a.description || (a.prompt ? a.prompt.slice(0, 160) : 'No description.'))}</p>
-            <div class="agent-skills">${(a.skills || []).slice(0, 4).map((s) =>
-              `<span class="agent-skill mono${a.system || skillIds.has(s) ? '' : ' missing'}" title="${a.system || skillIds.has(s) ? 'Skill' : 'This skill is not in the workspace'}">${esc(s)}</span>`).join('')}${
-              a.skills?.length > 4 ? `<span class="muted small">+${a.skills.length - 4}</span>` : ''}</div>
-          </div>
-        </div>
-        <div class="card-actions">
-          <span class="muted small">${a.system ? 'Look only' : a.updatedAt ? `updated ${esc(dateOf(a.updatedAt))}` : ''}</span>
-          <span class="spacer"></span>
-          <button class="btn sm ghost" data-act="edit">${a.system ? 'Customize' : 'Edit'}</button>
-          ${a.system ? '' : '<button class="btn sm ghost danger" data-act="remove">Remove</button>'}
-        </div>
-      </div>`).join('') + (custom.length ? '' : `
+    box.innerHTML = agents.map((a) => agentCard(a, { skillIds, actions: true })).join('') + (custom.length ? '' : `
       <div class="card agent-empty">
         <b>Create your first agent</b>
         <p class="muted small">Give it a look, a prompt that says what it is for and the skills it needs. Workflows will be able to use it later.</p>

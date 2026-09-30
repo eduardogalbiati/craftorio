@@ -35,6 +35,7 @@ const cliSessions = require('../cli-sessions');
 const { trustFolder } = require('../cli-trust');
 const runs = require('../runs');
 const workflows = require('../workflows');
+const builder = require('../workflow-builder');
 const { Terminals } = require('../terminals');
 const { followSession } = require('../session-tail');
 const supervisor = require('../supervisor');
@@ -225,9 +226,13 @@ function createService({ host }) {
         const origin = { origin: st.origin, updateAvailable: st.updateAvailable, restorable: st.restorable, bundledVersion: st.updateAvailable ? bundledVersion(file) : null };
         try {
           const wf = loadWorkflow(path.join(ws.workflows, file));
+          // the visual builder opens it only when it draws everything the workflow uses
+          const drawn = builder.fromWorkflow(wf).problems;
           return {
             file,
             ...origin,
+            builder: !drawn.length,
+            builderProblems: drawn,
             name: wf.metadata?.name || file,
             version: wf.metadata?.version,
             description: wf.metadata?.description,
@@ -256,6 +261,64 @@ function createService({ host }) {
           return { file, ...origin, name: file, error: e.message, steps: [] };
         }
       });
+  }
+
+  // Visual builder (Workflows > Builder): a workflow as the builder's spec, and back to YAML.
+  // mode: 'full' (drawn by the builder: everything editable), 'fixed' (uses what the builder doesn't
+  // draw: agents and prompts editable, the steps stay as they are) or 'readonly' (bundled with the
+  // app: clone it to change it).
+  const isBundled = (name) => (workflows.workflowStatus(BUNDLED_WORKFLOWS_DIR, ws.workflows)[name]?.origin || 'custom') !== 'custom';
+  function loadBuilderWorkflow(file) {
+    const name = path.basename(String(file || ''));
+    const doc = loadWorkflow(path.join(ws.workflows, name));
+    const drawn = builder.fromWorkflow(doc);
+    const fixed = drawn.problems.length > 0;
+    const mode = isBundled(name) ? 'readonly' : fixed ? 'fixed' : 'full';
+    return { file: name, mode, problems: drawn.problems, spec: fixed ? builder.describeWorkflow(doc) : drawn.spec };
+  }
+
+  // A new workflow gets a file named after it (never overwriting one); an edited one keeps its file
+  // and what the builder doesn't touch (providers, defaults, orchestrator, observability; for a
+  // fixed spec, everything but the agents and the prompts).
+  function saveBuilderWorkflow({ file, spec }) {
+    const name = file ? path.basename(String(file)) : builder.fileNameFor(spec?.name);
+    if (!workflows.isWorkflowFile(name)) throw new Error(`Not a workflow file: ${name}`);
+    const dest = path.join(ws.workflows, name);
+    if (!file && fs.existsSync(dest)) throw new Error(`A workflow file named ${name} already exists: pick another name.`);
+    if (file && isBundled(name)) throw new Error(`"${name}" is bundled with the app: clone it to change it.`);
+    const exists = file && fs.existsSync(dest);
+    const base = exists ? loadWorkflow(dest) : null;
+    let text;
+    if (spec?.fixed) {
+      if (!base) throw new Error(`Workflow not found: ${name}`);
+      text = builder.patchWorkflow(base, spec, builder.leadingComments(fs.readFileSync(dest, 'utf8')));
+    } else {
+      text = builder.toYaml(spec, base);
+    }
+    fs.mkdirSync(ws.workflows, { recursive: true });
+    // checked by the engine's own loader before it replaces anything
+    const tmp = `${dest}.tmp-${process.pid}`;
+    fs.writeFileSync(tmp, text);
+    try { loadWorkflow(tmp); } catch (e) { fs.rmSync(tmp, { force: true }); throw e; }
+    fs.renameSync(tmp, dest);
+    return { file: name };
+  }
+
+  // A copy of any workflow as the user's own (custom): "<name>-copy", comments kept.
+  function cloneBuilderWorkflow(file) {
+    const name = path.basename(String(file || ''));
+    const src = path.join(ws.workflows, name);
+    const doc = loadWorkflow(src);
+    const base = String(doc.metadata?.name || name.replace(/\.ya?ml$/i, ''));
+    let n = 1, copyName, dest;
+    do {
+      copyName = `${base}-copy${n > 1 ? `-${n}` : ''}`;
+      dest = path.join(ws.workflows, builder.fileNameFor(copyName));
+      n++;
+    } while (fs.existsSync(dest));
+    fs.writeFileSync(dest, builder.cloneText(fs.readFileSync(src, 'utf8'), copyName));
+    try { loadWorkflow(dest); } catch (e) { fs.rmSync(dest, { force: true }); throw e; }
+    return { file: path.basename(dest) };
   }
 
   // Replaces the user's edited copy of a bundled workflow with the default; the edited copy goes to
@@ -332,6 +395,8 @@ function createService({ host }) {
         worktreesDir: mock ? null : ws.worktrees,
         // concurrent runs share the monthly budgets
         peerSessions: () => peerSessions(run),
+        // `persona: random` agents become one of the user's agents (Agents menu)
+        personas: agents.listAgents(ws.agents).filter((a) => !a.system && !a.error),
       });
       if (!mock) {
         // the runs in progress have not written their usage to disk yet
@@ -766,6 +831,9 @@ function createService({ host }) {
   const api = Object.fromEntries(Object.entries({
     'workflows:list': () => listWorkflows(),
     'workflows:restore': (file) => restoreWorkflow(file),
+    'builder:load': (file) => loadBuilderWorkflow(file),
+    'builder:save': (arg) => saveBuilderWorkflow(arg || {}),
+    'builder:clone': (file) => cloneBuilderWorkflow(file),
 
     'env:check': () => ({
       claude: resolveCommand('claude')?.file || null,

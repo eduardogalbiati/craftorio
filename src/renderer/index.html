@@ -10,6 +10,7 @@
   <link rel="stylesheet" href="arena.css" />
   <link rel="stylesheet" href="run-chat.css" />
   <link rel="stylesheet" href="sessions.css" />
+  <link rel="stylesheet" href="builder.css" />
 </head>
 <body>
   <header class="topbar">
@@ -96,6 +97,11 @@
         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="6" r="2.5" /><circle cx="18" cy="12" r="2.5" /><circle cx="6" cy="18" r="2.5" /><path d="M8.5 6H12a3 3 0 0 1 3 3v.5M8.5 18H12a3 3 0 0 0 3-3v-.5" /></svg>
         <span>Workflows</span>
       </button>
+      <div class="nav-sub hidden" id="nav-workflows-sub" role="group" aria-label="Workflows">
+        <button class="nav-subitem" data-wtab="runs">Runs</button>
+        <button class="nav-subitem" data-wtab="definitions">Definitions</button>
+        <button class="nav-subitem" data-wtab="builder">Builder</button>
+      </div>
       <button class="nav-item" data-view="agents">
         <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="8" width="16" height="12" rx="3" /><path d="M12 8V4" /><circle cx="12" cy="3.5" r="1" /><circle cx="9" cy="14" r="1.2" /><circle cx="15" cy="14" r="1.2" /><path d="M2 13v3M22 13v3" /></svg>
         <span>Agents</span>
@@ -296,16 +302,12 @@
       <section id="view-workflows" class="view hidden">
         <div class="page-head">
           <div>
-            <h1>Workflows</h1>
-            <p class="muted small">Defined as YAML in <span id="workflows-dir" class="mono"></span>. Defaults bundled with the app are copied there; your edits are kept on app updates.</p>
+            <h1>Workflows <span class="muted">›</span> <span id="workflows-page-title">Runs</span></h1>
+            <p class="muted small"><span id="workflows-page-hint"></span> Folder: <span id="workflows-dir" class="mono"></span> (defaults bundled with the app are copied there; your edits are kept on app updates).</p>
           </div>
           <div class="row">
             <button id="btn-workflows-folder" class="btn ghost">Open folder</button>
           </div>
-        </div>
-        <div class="tabs page-tabs" role="tablist">
-          <button class="tab active" data-wtab="runs" role="tab" aria-selected="true">Runs</button>
-          <button class="tab" data-wtab="definitions" role="tab" aria-selected="false">Definitions</button>
         </div>
         <div data-wpage="runs">
           <div class="pr-toolbar">
@@ -319,6 +321,32 @@
         </div>
         <div data-wpage="definitions" class="hidden">
           <div id="workflows-list" class="wf-list"></div>
+        </div>
+        <div data-wpage="builder" class="hidden">
+          <div id="wb" class="wb">
+            <div class="wb-bar">
+              <input type="text" id="wb-name" class="wb-name" placeholder="Workflow name" aria-label="Workflow name" spellcheck="false" />
+              <select id="wb-category" aria-label="Category"></select>
+              <span class="spacer"></span>
+              <select id="wb-open" aria-label="Open a workflow in the builder"></select>
+              <button id="wb-new" class="btn ghost sm" type="button">New</button>
+              <button id="wb-clone" class="btn ghost sm hidden" type="button" title="Make your own copy of this workflow (custom), which you can change">Clone</button>
+              <button id="wb-save" class="btn sm" type="button">Save</button>
+              <button id="wb-run" class="btn primary sm" type="button" title="Save and open the start panel">Run</button>
+            </div>
+            <textarea id="wb-description" class="wb-description" rows="2" placeholder="What it does (shown when you start it)" aria-label="Description"></textarea>
+            <p id="wb-banner" class="wb-banner small hidden"></p>
+            <div class="wb-meta muted small"><span class="mono" id="wb-file"></span><span id="wb-dirty" class="badge warn hidden">unsaved</span>
+              <span class="spacer"></span>
+              <button id="wb-add-desk" class="btn ghost sm" type="button" title="Add an agent desk after the selected one">+ Desk</button>
+              <button id="wb-add-gate" class="btn ghost sm" type="button" title="Add an approval gate after the selected desk">+ Approval gate</button>
+            </div>
+            <div class="wb-main">
+              <div id="wb-canvas" class="wb-canvas" aria-label="Steps, in order"></div>
+              <aside id="wb-panel" class="wb-panel"></aside>
+            </div>
+            <p id="wb-error" class="error small wb-error"></p>
+          </div>
         </div>
       </section>
 
@@ -1001,6 +1029,33 @@
     </form>
   </div>
 
+  <!-- Workflows > Builder: the skills of a desk -->
+  <div id="wb-skills-modal" class="modal hidden">
+    <div class="modal-card wide" role="dialog" aria-labelledby="wb-skills-title">
+      <h3 id="wb-skills-title">Skills of this agent <span id="wb-skill-count" class="muted small"></span></h3>
+      <input type="text" id="wb-skill-search" placeholder="Filter skills" aria-label="Filter skills" />
+      <div id="wb-skill-list" class="ag-skills wb-skill-list"></div>
+      <div class="modal-actions">
+        <button type="button" id="btn-wb-skills-cancel" class="btn ghost">Cancel</button>
+        <button type="button" id="btn-wb-skills-ok" class="btn primary">Apply</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Workflows > Builder: import an agent (Agents menu) into a desk -->
+  <div id="wb-agents-modal" class="modal hidden">
+    <div class="modal-card wb-agents-card" role="dialog" aria-labelledby="wb-agents-title">
+      <h3 id="wb-agents-title">Import an agent</h3>
+      <p class="muted small">Its look, prompt and skills go to the desk; you can still adjust them there.</p>
+      <div id="wb-agents-list" class="card-grid agents-grid wb-agents-list"></div>
+      <div class="modal-actions">
+        <button type="button" id="btn-wb-agents-manage" class="btn ghost">Manage agents</button>
+        <span class="spacer"></span>
+        <button type="button" id="btn-wb-agents-cancel" class="btn ghost">Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <div id="agent-modal" class="modal hidden">
     <form id="agent-form" class="modal-card agent-editor">
       <aside class="ag-preview">
@@ -1243,5 +1298,6 @@
   <script src="agents.js"></script>
   <script src="sessions.js"></script>
   <script src="backlog.js"></script>
+  <script src="builder.js"></script>
 </body>
 </html>

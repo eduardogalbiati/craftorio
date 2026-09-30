@@ -47,6 +47,9 @@
   window.api = {
     listWorkflows: () => call('workflows:list'),
     restoreWorkflow: (file) => call('workflows:restore', file),
+    loadBuilderWorkflow: (file) => call('builder:load', file),
+    saveBuilderWorkflow: (file, spec) => call('builder:save', { file, spec }),
+    cloneWorkflow: (file) => call('builder:clone', file),
     checkEnv: () => call('env:check'),
     envDetails: () => call('env:details'),
     appInfo: () => call('app:info'),

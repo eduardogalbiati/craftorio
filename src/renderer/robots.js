@@ -9,7 +9,10 @@
   const f = (n) => +(+n).toFixed(2);
   let BB;
   const resetBB = () => (BB = { x0: 1e9, y0: 1e9, x1: -1e9, y1: -1e9 });
+  // offset of everything drawn (a robot seated on a chair is the same robot, moved)
+  let OFF = { x: 0, y: 0, z: 0 };
   function P(x, y, z) {
+    x += OFF.x; y += OFF.y; z += OFF.z;
     const X = (x - y) * C, Y = (x + y) * S - z;
     BB.x0 = Math.min(BB.x0, X); BB.x1 = Math.max(BB.x1, X);
     BB.y0 = Math.min(BB.y0, Y); BB.y1 = Math.max(BB.y1, Y);
@@ -127,10 +130,11 @@
     const ol = v.outline;
     let s = '';
     const base = box(0, 0, 0, 150, 190, 16, v.base, { outline: ol });
-    s += base.svg;
+    // a robot seated at a desk has no base (v.noBase)
+    if (!v.noBase) s += base.svg;
     // A mirrored robot counter-flips its text and emblems so they still read the right way.
     const unflip = v.mirror ? 'scale(-1,1)' : '';
-    if (v.name)
+    if (v.name && !v.noBase)
       s += `<text transform="${base.L}${v.mirror ? ' translate(150,0) scale(-1,1)' : ''}" x="75" y="12" font-family="Arial Black,Arial,sans-serif" font-weight="900" font-size="10" fill="${lighten(v.base, .55)}" text-anchor="middle" letter-spacing="2">${v.name.toUpperCase()}</text>`;
     const o = { outline: ol, shade: v.shade };
     s += box(48, 78, 16, 22, 22, 28, v.limb, o).svg;
@@ -341,5 +345,126 @@ ${flip(v.overlay || '')}
       .join(' ').replace(/^GPT (\d)/, 'GPT-$1');
   }
 
-  window.Robots = { svg, variantFor, plaqueFor, fromAppearance, define, emblem, VARIANTS, STATES, EYE_STYLES, EMBLEMS };
+  // ---------- workflow builder: a desk with a chair, and an approval gate ----------
+  const escText = (t) => String(t ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  // Text on a box face (its L transform), centered, shrunk to fit.
+  function faceText(tf, W, y, text, size, fill, weight = 800) {
+    const t = String(text || '').trim();
+    if (!t) return '';
+    const fit = t.length * size * 0.6 > W - 24 ? ` textLength="${W - 24}" lengthAdjust="spacingAndGlyphs"` : '';
+    return `<text transform="${tf}" x="${W / 2}" y="${y}" font-family="Arial,Helvetica,sans-serif" font-weight="${weight}" font-size="${size}" fill="${fill}" text-anchor="middle"${fit}>${escText(t)}</text>`;
+  }
+  function scene(inner, id, extraDefs = '') {
+    const pad = 12, w = BB.x1 - BB.x0 + pad * 2, h = BB.y1 - BB.y0 + pad * 2;
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${f(BB.x0 - pad)} ${f(BB.y0 - pad)} ${f(w)} ${f(h)}" aria-hidden="true" focusable="false">` +
+      `<defs><filter id="glow-${id}" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="2.5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>${extraDefs}</defs>${inner}</svg>`;
+  }
+
+  // A step of the visual builder: the agent (a variant, or null for an empty desk) seated on a chair
+  // behind a desk, in the robots' isometric style. `label` and `sub` are written on the desk's
+  // front panel (e.g. the step id and the model).
+  function desk(variant, opts = {}) {
+    const id = `dk${++uid}`;
+    resetBB();
+    const wood = opts.desk || '#8B6A4E', chair = opts.chair || '#2E3340', ol = '#1A1410', cOl = '#12141A';
+    const o = { outline: ol, shade: 0.22 }, co = { outline: cOl, shade: 0.25 };
+    let s = '';
+    // chair: back (behind the robot), post and seat
+    s += box(10, -26, 44, 130, 16, 150, chair, co).svg;
+    s += box(62, 70, 0, 26, 26, 40, darken(chair, .2), co).svg;
+    s += box(0, 10, 40, 150, 170, 14, chair, co).svg;
+    if (variant) {
+      const v = { ...(typeof variant === 'object' ? variant : VARIANTS[variant] || VARIANTS.vanilla), ...STATES.idle, motion: '', plaque: '', noBase: true };
+      delete v.name; // the brand name on the base is hidden by the desk anyway
+      OFF = { x: 0, y: 0, z: 40 };
+      s += visorBot(v, id);
+      OFF = { x: 0, y: 0, z: 0 };
+    }
+    // desk: back legs, top and front panel (it hides the robot's lower body)
+    const x0 = -60, x1 = 210, y0 = 150, D = 110, top = 150;
+    s += box(x0 + 8, y0 + 6, 0, 16, 16, top - 12, darken(wood, .15), o).svg;
+    s += box(x1 - 24, y0 + 6, 0, 16, 16, top - 12, darken(wood, .15), o).svg;
+    s += box(x1 - 24, y0 + D - 22, 0, 16, 16, top - 12, darken(wood, .15), o).svg;
+    const panel = box(x0 + 6, y0 + D - 20, 18, x1 - x0 - 12, 12, top - 30, darken(wood, .05), o);
+    s += panel.svg;
+    const slab = box(x0, y0, top - 12, x1 - x0, D, 14, wood, { ...o, gloss: true, glossOp: .18 });
+    s += slab.svg;
+    // a laptop on the desk, its screen towards the agent: we see the keyboard and the back of the lid
+    s += box(x0 + 110, y0 + 24, top + 2, 84, 56, 5, '#C9CED8', { outline: cOl }).svg;
+    const lid = box(x0 + 110, y0 + 80, top + 2, 84, 5, 46, '#9AA1AE', { outline: cOl });
+    s += lid.svg;
+    s += `<circle transform="${lid.L}" cx="42" cy="20" r="6" fill="#C9CED8" opacity=".8"/>`;
+    // papers
+    s += box(x0 + 22, y0 + 40, top + 2, 56, 44, 6, '#F4F1EA', { outline: '#6B6358', shade: .1 }).svg;
+    const PW = x1 - x0 - 12, PH = top - 30;
+    s += faceText(panel.L, PW, PH * 0.45, opts.label, 30, lighten(wood, .82));
+    s += faceText(panel.L, PW, PH * 0.45 + 32, opts.sub, 20, lighten(wood, .55), 700);
+    return scene(s, id);
+  }
+
+  // A person standing, facing the viewer, holding a clipboard with a check mark (the human approver).
+  function person(x0, y0, z0) {
+    const skin = '#F1C9A5', shirt = '#4F7CC9', pants = '#2E3A55', hair = '#3A2A22', ol = '#1A1A22';
+    const o = { outline: ol, shade: .22 };
+    let s = '';
+    s += box(x0 + 8, y0 + 8, z0, 18, 18, 80, pants, o).svg;
+    s += box(x0 + 34, y0 + 8, z0, 18, 18, 80, pants, o).svg;
+    s += box(x0 - 14, y0 + 8, z0 + 92, 14, 18, 64, shirt, o).svg;
+    s += box(x0, y0, z0 + 80, 60, 34, 78, shirt, { ...o, gloss: true, glossOp: .15 }).svg;
+    s += box(x0 + 60, y0 + 8, z0 + 92, 14, 18, 64, shirt, o).svg;
+    const head = box(x0 + 10, y0 + 2, z0 + 158, 40, 34, 40, skin, o);
+    s += head.svg;
+    s += box(x0 + 8, y0, z0 + 192, 44, 38, 12, hair, o).svg;
+    s += `<g transform="${head.L}"><circle cx="13" cy="18" r="2.8" fill="${ol}"/><circle cx="27" cy="18" r="2.8" fill="${ol}"/>` +
+      `<path d="M13 27 Q20 32 27 27" fill="none" stroke="${ol}" stroke-width="2.2" stroke-linecap="round"/></g>`;
+    // the clipboard, held in front of the chest
+    const board = box(x0 + 12, y0 + 34, z0 + 96, 36, 4, 46, '#F4F1EA', { outline: '#6B6358', shade: .1 });
+    s += board.svg;
+    s += `<path transform="${board.L}" d="M9 24 L16 32 L28 13" fill="none" stroke="#2F9E5B" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>`;
+    return s;
+  }
+
+  // An approval gate, same style as the desks. `reviewer: 'human'` (default): an amber arch with a
+  // barrier and a person holding a clipboard; `reviewer: 'ai'`: a violet arch with a scanner beam
+  // and the reviewing agent's robot (`robot`: a variant, see fromAppearance).
+  function gate(opts = {}) {
+    const id = `gt${++uid}`;
+    resetBB();
+    const ai = opts.reviewer === 'ai';
+    const col = ai ? '#8B7CF6' : '#E0A93B', ol = ai ? '#1E1640' : '#2A1E08', o = { outline: ol, shade: .22 };
+    let s = '';
+    s += box(-230, 60, 0, 490, 170, 12, '#3A3F4D', { outline: '#12141A', shade: .25 }).svg;
+    if (ai) {
+      const v = { ...(typeof opts.robot === 'object' && opts.robot ? opts.robot : VARIANTS[opts.robot] || VARIANTS.vanilla), ...STATES.idle, motion: '', plaque: '', noBase: true };
+      delete v.name;
+      OFF = { x: -215, y: 70, z: 12 };
+      s += visorBot(v, id);
+      OFF = { x: 0, y: 0, z: 0 };
+    } else {
+      s += person(-170, 150, 12);
+    }
+    s += box(-10, 100, 12, 30, 30, 230, col, o).svg;
+    if (ai) {
+      // the scanner: a faint light curtain between the posts and a glowing beam across
+      const plane = [P(20, 115, 22), P(190, 115, 22), P(190, 115, 232), P(20, 115, 232)];
+      s += `<polygon points="${pts(plane)}" fill="#6EE7FF" opacity=".13"/>`;
+    }
+    s += box(190, 100, 12, 30, 30, 230, col, o).svg;
+    const beam = box(-24, 94, 242, 258, 42, 40, darken(col, .05), { ...o, gloss: true, glossOp: .2 });
+    s += beam.svg;
+    if (ai) {
+      const a = P(20, 115, 128), b = P(190, 115, 128);
+      s += `<line x1="${f(a[0])}" y1="${f(a[1])}" x2="${f(b[0])}" y2="${f(b[1])}" stroke="#6EE7FF" stroke-width="7" stroke-linecap="round" filter="url(#glow-${id})"/>`;
+      s += `<line x1="${f(a[0])}" y1="${f(a[1])}" x2="${f(b[0])}" y2="${f(b[1])}" stroke="#E8FCFF" stroke-width="2.5" stroke-linecap="round"/>`;
+    } else {
+      // the barrier across, striped
+      const bar = box(20, 108, 90, 170, 14, 20, '#F4F1EA', { outline: ol, shade: .15 });
+      s += bar.svg;
+      s += `<g fill="#D9483B">${[0, 1, 2, 3].map((i) => `<rect transform="${bar.L}" x="${12 + i * 42}" y="2" width="20" height="16"/>`).join('')}</g>`;
+    }
+    s += faceText(beam.L, 258, 29, opts.label || (ai ? 'AI CHECK' : 'HUMAN'), 24, ai ? '#F4F1FF' : '#2A1E08');
+    return scene(s, id);
+  }
+
+  window.Robots = { svg, variantFor, plaqueFor, fromAppearance, define, emblem, desk, gate, VARIANTS, STATES, EYE_STYLES, EMBLEMS };
 })();

@@ -82,6 +82,7 @@ function loadWorkflow(file) {
   for (const [name, a] of [['defaults', wf.defaults || {}], ...Object.entries(wf.agents).map(([n, a]) => [`Agent "${n}"`, a || {}])]) {
     if (a.session !== undefined && !SESSION_MODES.includes(a.session)) throw new Error(`${name}: session must be one of ${SESSION_MODES.join(', ')}.`);
     if (a.max_context !== undefined && !String(a.max_context).includes('{{') && !parseTokens(a.max_context)) throw new Error(`${name}: max_context must be a token count such as 150k.`);
+    if (a.persona !== undefined && a.persona !== 'random') throw new Error(`${name}: persona must be "random".`);
     capabilities.validate(a.capabilities, name, mcpServers);
   }
   const ids = new Set(wf.steps.map((s) => s.id));
@@ -281,7 +282,8 @@ class WorkflowRun extends EventEmitter {
   //   check of a `wait:` step (src/engine/probes.js). Default: the real one; simulations use MOCK_PROBES.
   // peerSessions: () => [{ provider, model, tokens, costUsd }], the sessions of the other runs in progress (and of
   //   those that finished after `budget` was computed): the per-turn budget check counts them too (concurrent runs).
-  constructor({ file, inputs, mock, runsDir, skillsDirs, budget, prices, projectId, issue, resume, worktreesDir, mockSequences, notices, stopProcesses, probe, peerSessions }) {
+  // personas: [{ id, name, prompt, skills }] the user's agents (Agents menu), for `persona: random`.
+  constructor({ file, inputs, mock, runsDir, skillsDirs, budget, prices, projectId, issue, resume, worktreesDir, mockSequences, notices, stopProcesses, probe, peerSessions, personas }) {
     super();
     refreshWindowsPath(); // actions (e.g. gh pr merge) need the refreshed PATH
     this.file = file;
@@ -314,6 +316,7 @@ class WorkflowRun extends EventEmitter {
       }
     }
     this.dropDisabledAgents();
+    this.pickPersonas(personas || [], resume?.personas);
     this.ctx = {
       inputs: this.inputs, steps: {}, loop: { iteration: 0 }, run_id: this.runId, run_dir: this.runDir, runs_dir: runsDir, workflows_dir: path.dirname(path.resolve(file)),
       agents: Object.fromEntries(Object.entries(this.wf.agents).map(([k, a]) => [k, { provider: a.provider, model: a.model }])),
@@ -383,6 +386,31 @@ class WorkflowRun extends EventEmitter {
       s.agents = s.agents.filter((n) => this.wf.agents[n]);
       if (!s.agents.length) throw new Error(`Step "${s.id}": every agent of the fan-out is disabled for this run.`);
       if (s.min_success > s.agents.length) s.min_success = s.agents.length;
+    }
+  }
+
+  // `persona: random` (the builder's "random agent" desk): the agent becomes one of the user's
+  // agents, picked when the run starts; its prompt goes before the agent's own system prompt and its
+  // skills are added. A resumed run keeps the previous pick. Recorded as `personas` in
+  // workflow.started: { <agent>: { id, name } }.
+  pickPersonas(personas, previous) {
+    this.personas = {};
+    for (const [name, a] of Object.entries(this.wf.agents)) {
+      if (a.persona !== 'random') continue;
+      const pool = personas.filter((p) => p && p.prompt);
+      const p = pool.find((x) => x.id === previous?.[name]?.id) || pool[Math.floor(Math.random() * pool.length)];
+      if (!p) {
+        this.notices.push({ level: 'warn', message: `${name}: no agent in the Agents menu to pick at random; it runs with its own prompt.` });
+        continue;
+      }
+      a.system_prompt = [p.prompt, a.system_prompt].filter(Boolean).join('\n\n');
+      // an agent may list skills that no longer exist (the Agents screen keeps them): left out here
+      const found = (p.skills || []).filter((k) => { try { return !!resolveSkill(this.skillsDirs, k); } catch { return false; } });
+      const missing = (p.skills || []).filter((k) => !found.includes(k));
+      if (missing.length) this.notices.push({ level: 'warn', message: `${name}: skills of "${p.name}" not found, left out: ${missing.join(', ')}.` });
+      a.skills = [...new Set([...(a.skills || []), ...found])];
+      this.personas[name] = { id: p.id, name: p.name };
+      this.notices.push({ level: 'info', message: `${name}: random agent "${p.name}".` });
     }
   }
 
@@ -473,6 +501,7 @@ class WorkflowRun extends EventEmitter {
       issue: this.issue || undefined,
       file: path.basename(this.file), inputs: this.inputs, mock: this.mock, run_dir: this.runDir,
       resumed_from: this.resume ? { run_id: this.resume.runId, step: this.resume.fromStep } : undefined,
+      personas: Object.keys(this.personas).length ? this.personas : undefined,
       steps: this.wf.steps.map((s) => ({ id: s.id, type: s.type || 'agent', agent: stepAgentLabel(s) })),
     });
     for (const n of this.notices) this.emitEvent('log', { level: n.level || 'info', message: n.message });
