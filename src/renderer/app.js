@@ -797,7 +797,7 @@ function projectRunBody(r, pv) {
       <tbody>${[...sessions].sort((a, b) => isOrchSession(b) - isOrchSession(a)).map((s) => {
         const m = pv.msgs.get(`${r.runId}:${s.id}`);
         return `<tr data-session="${esc(s.id)}" data-agent="${esc(s.agent)}">
-          <td><b>${esc(s.agent)}</b> <span class="muted small mono">${esc(s.id)}</span></td>
+          <td><b title="${esc(s.agent)}">${esc(agentLabel(s.agent))}</b> <span class="muted small mono">${esc(s.id)}</span></td>
           <td><span class="badge p-${esc(s.provider)}">${esc(s.provider)}</span> <span class="mono small">${esc(s.model || '')}</span></td>
           <td><span class="status st-${esc(s.status)}"><span class="status-dot"></span>${esc(s.status)}</span></td>
           <td class="num mono">${fmtNum(s.turns)}</td>
@@ -1696,8 +1696,12 @@ function runInfo(x) {
   return {
     id: x.run_id || x.runId, startedAt: Date.parse(x.ts || x.startedAt) || Date.now(), mock: !!x.mock, workflow: x.workflow,
     version: x.version, inputs, issues: issuesOfRun(x), project: project?.name || null,
+    agentNames: x.agent_names || null, // agents from the Agents menu: key → their own name
   };
 }
+
+// An agent's readable name (display-name.js); the slug stays in tooltips.
+const agentLabel = (slug, names) => (window.displayName ? displayName(slug, names) : String(slug || ''));
 
 // Finished runs that are not shown are forgotten (their chat and files keep everything).
 function pruneRuns() {
@@ -2075,7 +2079,7 @@ function renderSteps() {
   const item = (s) => `
     <li class="${s.status}">
       <span class="dot"></span>
-      <span>${esc(s.id)}<br><span class="kind">${s.type === 'human_approval' ? 'human approval' : esc(s.agent)}</span></span>
+      <span>${esc(s.id)}<br><span class="kind"${s.agent ? ` title="${esc(s.agent)}"` : ''}>${s.type === 'human_approval' ? 'human approval' : esc(agentLabel(s.agent, v.run?.agentNames))}</span></span>
       <span class="visits">${s.visits ? '×' + s.visits : ''}</span>
     </li>`;
   // in the workflow's step order: a group where its first shown step is
@@ -2141,7 +2145,7 @@ const MAX_CHIPS = 8;
 function progressAvatar(a, chip) {
   const tip = a.human
     ? `${a.steps.join(', ')} · You (human gate)${a.durationMs ? ` · ${fmtDur(a.durationMs)}` : ''}`
-    : `${a.steps.join(', ')} · ${a.agent}${a.provider ? ` · ${a.provider}${a.model ? `/${a.model}` : ''}` : ''}${a.durationMs ? ` · ${fmtDur(a.durationMs)}` : ''} · ${fmtUsd(a.cost)}`;
+    : `${a.steps.join(', ')} · ${agentLabel(a.agent)} (${a.agent})${a.provider ? ` · ${a.provider}${a.model ? `/${a.model}` : ''}` : ''}${a.durationMs ? ` · ${fmtDur(a.durationMs)}` : ''} · ${fmtUsd(a.cost)}`;
   // the last chip's working agents show the run's state; the others rest
   const st = chip.status === 'done' ? 'idle' : CHIP_ROBOT_STATE[chip.status];
   const art = a.human ? PERSON_SVG : a.provider ? robotAvatar(a.provider, a.model, st) : ENGINE_SVG;
@@ -2157,7 +2161,7 @@ function progressChip(c) {
     stopped: `stopped at ${c.current}`,
   }[c.status];
   const agents = c.agents.length ? c.agents : [{ agent: 'orchestrator', steps: c.steps.map((e) => e.step), cost: 0, durationMs: 0 }];
-  const avs = agents.slice(0, 4).map((a) => progressAvatar(a, c)).join('') + (agents.length > 4 ? `<span class="rp-av rp-more" title="${esc(agents.slice(4).map((a) => a.agent).join(', '))}">+${agents.length - 4}</span>` : '');
+  const avs = agents.slice(0, 4).map((a) => progressAvatar(a, c)).join('') + (agents.length > 4 ? `<span class="rp-av rp-more" title="${esc(agents.slice(4).map((a) => agentLabel(a.agent)).join(', '))}">+${agents.length - 4}</span>` : '');
   return `<div class="rp-chip st-${c.status}${c.status === 'done' ? ' still' : ''}">
     <div class="rp-avs">${avs}</div>
     <div class="rp-name${c.grouped ? '' : ' mono'}">${esc(c.name)}${c.round > 1 ? ` <span class="rp-round">×${c.round}</span>` : ''}</div>
@@ -2186,7 +2190,7 @@ function renderSessions() {
     return `
     <div class="session-card ${isOrch ? '' : 'child'} ${state.selected === s.id ? 'selected' : ''}" data-id="${esc(s.id)}">
       <div class="sc-head">
-        <span class="name">${esc(s.agent)}</span>
+        <span class="name" title="${esc(s.agent)}">${esc(agentLabel(s.agent, selectedView()?.run?.agentNames))}</span>
         <span class="id">${esc(s.id)}</span>
         <span class="status st-${esc(s.status)}"><span class="status-dot"></span>${esc(s.status)}</span>
       </div>
@@ -2240,7 +2244,7 @@ function renderDetail() {
 
   let html = `
     <div class="detail-head">
-      <h3>${esc(s.agent)} <span class="badge p-${esc(s.provider)}">${esc(s.provider)}</span> <span class="badge">${esc(s.model)}</span></h3>
+      <h3 title="${esc(s.agent)}">${esc(agentLabel(s.agent, selectedView()?.run?.agentNames))} <span class="muted small mono">${esc(s.agent)}</span> <span class="badge p-${esc(s.provider)}">${esc(s.provider)}</span> <span class="badge">${esc(s.model)}</span></h3>
       <div class="detail-actions">
         ${termButtons('live', s.id === 'orchestrator' ? 'Follow the orchestrator log (steps, transitions, sessions, approvals) in a terminal' : 'Follow this session live in a terminal')}
         ${s.id === 'orchestrator' ? '' : termButtons('cli', '', cliBlocked(s))}

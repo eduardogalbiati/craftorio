@@ -23,12 +23,31 @@
     return Math.round((h % 1000) * 137.508) % 360; // golden angle: close names get distant hues
   }
   const colorStyle = (agent) => (isSupervisor(agent) ? '' : ` style="--rc-agent:hsl(${hueOf(agent)} 70% 64%)"`);
+  const nameOf = (agent) => (isSupervisor(agent) ? 'Supervisor' : chat.model.nameOf(agent));
+  // Robots face the centre of the screen (as in Write & Review and AI Arena): one on the left
+  // looks right (mirrored), one on the right looks left. The supervisor sits on the left.
   function robot(who, st = 'idle', opts = {}) {
-    if (isSupervisor(who.agent)) return Robots.svg('supervisor', st, opts);
+    const mirror = isSupervisor(who.agent) || who.side !== 'right';
+    if (isSupervisor(who.agent)) return Robots.svg('supervisor', st, { mirror, ...opts });
     const variant = Robots.variantFor(providerType(who.provider, who.model), who.model || '');
-    return Robots.svg(variant, st, { plaque: who.model ? Robots.plaqueFor(who.model) : undefined, ...opts });
+    return Robots.svg(variant, st, { plaque: who.model ? Robots.plaqueFor(who.model) : undefined, mirror, ...opts });
   }
   const avatar = (who) => `<span class="duo-robot still" aria-hidden="true">${robot(who, 'idle', { bubble: false })}</span>`;
+
+  // The hover card of an agent: provider, model and effort as recorded in the run, its session mode and turn.
+  const PROVIDERS = { 'claude-code': 'Claude', 'codex-cli': 'Codex', 'grok-cli': 'Grok', 'gemini-cli': 'Gemini' };
+  const MODES = { persistent: 'persistent session', ephemeral: 'new session every turn', handoff: 'new session with a handoff note' };
+  function cardLines(who) {
+    const provider = `${PROVIDERS[providerType(who.provider, who.model)] || who.provider || 'Unknown provider'}${who.provider === 'mock' ? ' (simulated)' : ''}`;
+    const first = [provider, who.model ? Robots.plaqueFor(who.model) : '', who.effort ? `effort ${who.effort}` : ''].filter(Boolean).join(' · ');
+    const second = [MODES[who.mode] || '', who.turn ? `turn ${who.turn}` : ''].filter(Boolean).join(' · ');
+    return [first, second].filter(Boolean);
+  }
+  function agentAvatar(who) {
+    const lines = cardLines(who);
+    return `<span class="rc-who" tabindex="0" aria-label="${esc(`${nameOf(who.agent)}: ${lines.join(', ')}`)}">${avatar(who)}</span>
+      <span class="rc-card" role="tooltip">${lines.map((l) => `<span>${esc(l)}</span>`).join('')}<span class="mono muted">${esc(who.agent)}</span></span>`;
+  }
   const stepTag = (stepId, visit, sub) => `<span class="rc-step" title="Step">${esc(stepId)}${sub ? ` · ${esc(sub)}` : ''}${visit > 1 ? ` · visit ${visit}` : ''}</span>`;
 
   // ---------------------------------------------------------------- items → HTML
@@ -52,8 +71,8 @@
     // context window: at the first request of the turn → its largest request (a fresh session starts small)
     const ctx = it.context?.peak ? ` · context ${it.fresh ? 'fresh ' : ''}${fmtK(it.context.start)} → ${fmtK(it.context.peak)}` : '';
     const foot = it.durationMs ? `${fmtK(it.tokensIn)} in / ${fmtK(it.tokensOut)} out${ctx} · $${it.cost.toFixed(2)} · ${fmtSecs(it.durationMs)}` : '';
-    return `<div class="rc-msg" data-item="${it.id}"${colorStyle(it.agent)}>${avatar(it)}<div class="duo-bubble">
-      <div class="duo-meta"><b>${esc(it.agent)}</b>${it.model ? `<span class="tag">${esc(it.model)}</span>` : ''}${stepTag(it.stepId, it.visit, it.sub)}<span class="time">${clock(it.ts)}</span></div>
+    return `<div class="rc-msg rc-${it.side === 'right' ? 'right' : 'left'}" data-item="${it.id}"${colorStyle(it.agent)}>${agentAvatar(it)}<div class="duo-bubble">
+      <div class="duo-meta"><b class="rc-name" title="${esc(it.agent)}">${esc(nameOf(it.agent))}</b>${it.model ? `<span class="tag">${esc(it.model)}</span>` : ''}${stepTag(it.stepId, it.visit, it.sub)}<span class="time">${clock(it.ts)}</span></div>
       <div class="rc-body md">${body}</div>${extras.join('')}${foot ? `<div class="duo-foot">${esc(foot)}</div>` : ''}</div></div>`;
   }
 
@@ -76,7 +95,7 @@
       : it.error ? '<span class="pill pill-failed">failed</span>'
         : it.failed?.length ? `<span class="pill pill-warn">${it.failed.length} failed</span>` : '<span class="pill pill-success">done</span>';
     return `<div class="rc-group" data-item="${it.id}"><div class="rc-group-head">
-      <span>Parallel · ${stepTag(it.stepId, it.visit)} · ${it.agents.map((a) => `<b${colorStyle(a)}>${esc(a)}</b>`).join(', ')}</span>${state}</div>
+      <span>Parallel · ${stepTag(it.stepId, it.visit)} · ${it.agents.map((a) => `<b${colorStyle(a)} title="${esc(a)}">${esc(nameOf(a))}</b>`).join(', ')}</span>${state}</div>
       <div class="rc-group-body"></div></div>`;
   }
 
@@ -144,8 +163,8 @@
     const key = active.map((a) => `${a.agent}:${a.state}`).join('|');
     if (el.dataset.key === key) return;
     el.dataset.key = key;
-    el.innerHTML = active.map((a) => `<div class="duo-typing"${colorStyle(a.agent)}><span class="duo-robot" aria-hidden="true">${robot(a, a.state)}</span>
-      <span class="duo-dots"><i></i><i></i><i></i></span><span><b>${esc(isSupervisor(a.agent) ? 'Supervisor' : a.agent)}</b> ${DOING[a.state] || DOING.thinking}… <span class="muted">(${esc(a.stepId)})</span></span></div>`).join('');
+    el.innerHTML = active.map((a) => `<div class="duo-typing${a.side === 'right' ? ' rc-right' : ''}"${colorStyle(a.agent)} title="${esc([a.agent, ...(isSupervisor(a.agent) ? [] : cardLines(a))].join('\n'))}"><span class="duo-robot" aria-hidden="true">${robot(a, a.state)}</span>
+      <span class="duo-dots"><i></i><i></i><i></i></span><span><b>${esc(nameOf(a.agent))}</b> ${DOING[a.state] || DOING.thinking}… <span class="muted">(${esc(a.stepId)})</span></span></div>`).join('');
   }
 
   function drawHead() {

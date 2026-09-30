@@ -39,6 +39,11 @@
     return { prose: prose.trim(), json, decisions };
   }
 
+  const displayName = typeof module === 'object' && module.exports ? require('./display-name.js').displayName : root.displayName;
+  // what the run chat shows about a session's agent (the hover card): recorded in the events,
+  // so a replayed run shows what was actually used
+  const sessionInfo = (s) => ({ agent: s.agent, provider: s.provider, model: s.model, effort: s.effort || null, mode: s.mode || null });
+
   const clip = (s, n = MAX_TEXT) => (s.length > n ? `${s.slice(0, n)}…` : s);
   const brief = (v) => clip(typeof v === 'string' ? v : JSON.stringify(v ?? ''), 600);
 
@@ -55,7 +60,22 @@
       this.visits = {}; // step id → visits so far
       this.groups = new Map(); // fan-out step running → its group item
       this.gates = new Map(); // approval id → gate item
+      this.sides = new Map(); // agent → 'left' | 'right', given when it first speaks
       this.touched = [];
+    }
+
+    // Each agent gets a side the first time it speaks, alternating left, right, left… in order
+    // of appearance, and keeps it for the whole run. Built from the events only, so a replay
+    // gives the same sides as the live run. The orchestrator and the supervisor have none.
+    sideOf(agent) {
+      if (!agent || agent === 'orchestrator' || /^_?supervisor$/.test(agent)) return null;
+      if (!this.sides.has(agent)) this.sides.set(agent, this.sides.size % 2 ? 'right' : 'left');
+      return this.sides.get(agent);
+    }
+
+    // The readable name of an agent (display-name.js), with the Agents menu's names of this run.
+    nameOf(agent) {
+      return displayName(agent, this.run.agentNames);
     }
 
     add(item) {
@@ -99,6 +119,8 @@
       Object.assign(this.run, {
         id: ev.run_id, workflow: ev.workflow || ev.file || 'workflow', version: ev.version, mock: !!ev.mock,
         runDir: ev.run_dir, status: 'running', startedAt: ev.ts, issues,
+        // agents from the Agents menu show their own name (runs recorded before agent_names: the personas)
+        agentNames: { ...Object.fromEntries(Object.entries(ev.personas || {}).map(([k, p]) => [k, p?.name]).filter(([, n]) => n)), ...(ev.agent_names || {}) },
       });
       const inputs = ev.inputs || {};
       this.add({
@@ -109,14 +131,14 @@
 
     'session.opened'(ev) {
       const s = ev.session || {};
-      this.sessions.set(ev.session_id, { agent: s.agent, provider: s.provider, model: s.model });
+      this.sessions.set(ev.session_id, sessionInfo(s));
     },
 
     'session.message_sent'(ev) {
       const s = this.sessions.get(ev.session_id) || {};
       this.turns.set(`${ev.session_id}:${ev.turn}`, { stepId: ev.step_id, activity: [] });
       if (s.agent === 'orchestrator' || subStep(ev.step_id) === 'supervisor') return;
-      this.active.set(ev.session_id, { ...s, stepId: baseStep(ev.step_id), state: 'thinking' });
+      this.active.set(ev.session_id, { ...s, stepId: baseStep(ev.step_id), state: 'thinking', turn: ev.turn, side: this.sideOf(s.agent) });
     },
 
     // Tool calls and thinking are kept per turn (shown collapsed under the answer); they also
@@ -141,7 +163,8 @@
     },
 
     'session.message_received'(ev) {
-      const s = { ...this.sessions.get(ev.session_id), ...(ev.session ? { agent: ev.session.agent, provider: ev.session.provider, model: ev.session.model } : {}) };
+      const known = this.sessions.get(ev.session_id) || {};
+      const s = ev.session ? { ...known, ...sessionInfo({ ...known, ...ev.session }) } : known;
       this.sessions.set(ev.session_id, s);
       this.active.delete(ev.session_id);
       this.run.cost += ev.cost_usd || 0;
@@ -154,7 +177,7 @@
       const group = !sub ? this.groups.get(stepId) : null;
       this.add({
         kind: 'turn', ts: ev.ts, sessionId: ev.session_id, turn: ev.turn, agent: s.agent || '?', provider: s.provider,
-        model: s.model || '', stepId, sub, visit: this.visits[stepId] || 1, text: String(ev.text || ''), activity: t.activity,
+        model: s.model || '', effort: s.effort || null, mode: s.mode || null, side: this.sideOf(s.agent || '?'), stepId, sub, visit: this.visits[stepId] || 1, text: String(ev.text || ''), activity: t.activity,
         tokensIn: (u.input || 0) + (u.cache_read || 0) + (u.cache_write || 0), tokensOut: u.output || 0,
         cost: ev.cost_usd || 0, durationMs: ev.duration_ms || 0, parent: group?.id,
         // the engine takes the ```handoff block out of the answer; context = { start, peak } tokens
@@ -170,6 +193,7 @@
       this.visits[ev.step_id] = ev.visit || 1;
       const agents = String(ev.agent || '').split(' · ').filter(Boolean);
       if (agents.length > 1) {
+        for (const a of agents) this.sideOf(a); // a fan-out's agents get their sides in the step's order
         this.groups.set(ev.step_id, this.add({ kind: 'group', ts: ev.ts, stepId: ev.step_id, visit: ev.visit || 1, agents, done: false }));
       }
     },

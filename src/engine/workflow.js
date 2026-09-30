@@ -550,10 +550,10 @@ class WorkflowRun extends EventEmitter {
   }
 
   // ---- sessions -------------------------------------------------------------
-  openSession({ agent, provider, model, parentId, stepId, mode = null }) {
+  openSession({ agent, provider, model, effort = null, parentId, stepId, mode = null }) {
     const s = {
       id: agent === 'orchestrator' ? 'orchestrator' : `s${++this.nSession}`,
-      agent, provider, model, parentId, stepId, mode,
+      agent, provider, model, effort, parentId, stepId, mode,
       openedAt: Date.now(), closedAt: null,
       turns: 0, activeMs: 0, tokens: emptyUsage(), costUsd: 0,
       status: 'idle', providerSessionId: null,
@@ -575,10 +575,22 @@ class WorkflowRun extends EventEmitter {
     this.emitEvent('session.closed', { session_id: s.id, status, session: this.snapshot(s) });
   }
 
+  // The name of an agent imported from the Agents menu (or picked by `persona: random`), for
+  // the UI; an agent written in the YAML has none and shows its key.
+  agentNames() {
+    const looks = this.wf['x-builder']?.agents || {};
+    const names = {};
+    for (const k of Object.keys(this.wf.agents)) {
+      const name = this.personas[k]?.name || looks[k]?.agent_name;
+      if (name) names[k] = String(name);
+    }
+    return Object.keys(names).length ? names : undefined;
+  }
+
   snapshot(s) {
     const duration = (s.closedAt || Date.now()) - s.openedAt;
     return {
-      id: s.id, agent: s.agent, provider: s.provider, model: s.model,
+      id: s.id, agent: s.agent, provider: s.provider, model: s.model, effort: s.effort || null,
       parent_id: s.parentId, step_id: s.stepId,
       opened_at: new Date(s.openedAt).toISOString(),
       closed_at: s.closedAt ? new Date(s.closedAt).toISOString() : null,
@@ -604,6 +616,7 @@ class WorkflowRun extends EventEmitter {
       file: path.basename(this.file), inputs: this.inputs, mock: this.mock, run_dir: this.runDir,
       resumed_from: this.resume ? { run_id: this.resume.runId, step: this.resume.fromStep } : undefined,
       personas: Object.keys(this.personas).length ? this.personas : undefined,
+      agent_names: this.agentNames(),
       steps: this.wf.steps.map((s) => ({ id: s.id, type: s.type || 'agent', agent: stepAgentLabel(s) })),
       groups: this.wf.groups,
     });
@@ -1598,7 +1611,7 @@ class WorkflowRun extends EventEmitter {
     let session = persistent ? this.sessions.get(this.agentSessions.get(agentName)) : null;
     if (!session) {
       session = this.openSession({
-        agent: agentName, provider: this.mock ? 'mock' : agent.provider, model: agent.model,
+        agent: agentName, provider: this.mock ? 'mock' : agent.provider, model: agent.model, effort: agent.effort || null,
         parentId: this.orchestrator.id, stepId, mode,
       });
       if (persistent) this.agentSessions.set(agentName, session.id);

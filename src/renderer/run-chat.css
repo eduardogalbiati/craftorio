@@ -12,11 +12,21 @@
 /* Run screen: Chat / Details */
 .run-modebar { display: flex; align-items: center; gap: 10px; padding: 8px 16px 0; }
 
-/* agent turns: every agent on the left, in its own colour */
-.rc-msg { --rc-agent: var(--accent); display: flex; gap: 10px; align-items: flex-start; max-width: 88%; align-self: flex-start; animation: duo-in .25s ease-out; }
+/* agent turns: each agent on its side (alternating in order of appearance), in its own colour */
+.rc-msg { --rc-agent: var(--accent); position: relative; display: flex; gap: 10px; align-items: flex-start; max-width: 88%; align-self: flex-start; animation: duo-in .25s ease-out; }
 .rc-msg .duo-bubble { border-left: 3px solid var(--rc-agent); border-top-left-radius: 4px; flex: 1; }
+.rc-msg.rc-right { align-self: flex-end; flex-direction: row-reverse; }
+.rc-msg.rc-right .duo-bubble { border-left: 1px solid var(--border); border-right: 3px solid var(--rc-agent); border-top-left-radius: 14px; border-top-right-radius: 4px; }
 .rc-msg .duo-meta b { color: var(--rc-agent); }
 .rc-msg .duo-robot { margin-top: 2px; }
+
+/* the agent's hover card (provider, model, effort, session): hover or focus the robot, or hover its name */
+.rc-who { flex: none; display: block; border-radius: 10px; outline: none; }
+.rc-who:focus-visible { box-shadow: 0 0 0 2px var(--rc-agent); }
+.rc-msg .rc-name { cursor: default; }
+.rc-card { display: none; position: absolute; top: 50px; left: 0; z-index: 5; flex-direction: column; gap: 2px; padding: 7px 10px; border-radius: 8px; background: var(--panel-2); border: 1px solid var(--rc-agent); font-size: 11.5px; white-space: nowrap; box-shadow: 0 4px 14px rgba(0, 0, 0, .35); pointer-events: none; }
+.rc-msg.rc-right .rc-card { left: auto; right: 0; }
+.rc-msg:has(> .rc-who:hover, > .rc-who:focus-visible, .rc-name:hover) > .rc-card { display: flex; }
 .duo-meta { flex-wrap: wrap; }
 .rc-step { font-size: 10px; font-family: var(--mono); padding: 1px 7px; border-radius: 99px; background: var(--panel-2); border: 1px solid var(--border); color: var(--muted); }
 .rc-body.md { max-width: none; font-size: 13px; line-height: 1.55; max-height: 520px; overflow: auto; }
@@ -71,3 +81,4 @@
 .rc-typing { display: flex; flex-wrap: wrap; gap: 4px 24px; padding: 0 24px 20px; }
 .rc-typing .duo-typing b { color: var(--rc-agent, var(--supervisor)); }
 .rc-typing .duo-robot { width: 88px; height: 88px; }
+.rc-typing .duo-typing.rc-right { margin-left: auto; flex-direction: row-reverse; }
