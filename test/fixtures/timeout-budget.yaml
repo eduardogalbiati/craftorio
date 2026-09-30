@@ -1,0 +1,28 @@
+# Test fixture (#101): defaults.timeout applies to an agent with none of its own; an agent's own
+# plain timeout wins over defaults; an agent that explicitly sets timeout: null falls back to the
+# engine's own default (30m), not the workflow's defaults.timeout.
+apiVersion: multiagent/v1
+kind: Workflow
+metadata:
+  name: fixture-timeout-budget
+defaults:
+  timeout: 45m
+agents:
+  inherits_default:
+    provider: claude
+    model: mock-model
+    session: ephemeral
+  own_timeout:
+    provider: claude
+    model: mock-model
+    session: ephemeral
+    timeout: 20m
+  no_timeout:
+    provider: claude
+    model: mock-model
+    session: ephemeral
+    timeout: null
+steps:
+  - id: work
+    agent: inherits_default
+    prompt: "work"

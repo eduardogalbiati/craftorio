@@ -1,0 +1,29 @@
+# Test fixture (#101): a step that reports preexisting_failures passes and the run continues; the
+# same failure reported again by a later step is not listed twice (notePreexistingFailures).
+apiVersion: multiagent/v1
+kind: Workflow
+metadata:
+  name: fixture-preexisting-failures
+agents:
+  test_writer: { provider: claude, model: mock-model, session: ephemeral }
+steps:
+  - id: test
+    agent: test_writer
+    prompt: "run the suite"
+    output_schema: &test_output
+      type: object
+      required: [tests_status]
+      properties:
+        tests_status: { type: string, enum: [pass, fail] }
+        preexisting_failures:
+          type: array
+          items:
+            type: object
+            properties:
+              test: { type: string }
+              file: { type: string }
+              reason: { type: string }
+  - id: test_again
+    agent: test_writer
+    prompt: "run the suite again"
+    output_schema: *test_output

@@ -1,0 +1,16 @@
+# Test fixture (#101): an agent that gets 2 attempts per turn, for mockSequences.timeouts (the 1st
+# attempt is killed at its timeout; the 2nd starts with attemptSummary of the 1st).
+apiVersion: multiagent/v1
+kind: Workflow
+metadata:
+  name: fixture-attempt-timeout
+agents:
+  a:
+    provider: claude
+    model: mock-model
+    session: ephemeral
+    retry: { max_attempts: 2, initial_delay: 10ms }
+steps:
+  - id: work
+    agent: a
+    prompt: "do the work"

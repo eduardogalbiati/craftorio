@@ -95,6 +95,31 @@ test('runs a mock workflow, pushes its events and resolves the human gate', asyn
   assert.equal(api['runs:list']().runs[0].runId, runId);
 });
 
+// #75: a run parked at a human gate is never only known from the events a client happened to see
+// live; runs:active is the source of truth, so a reloaded window (or one that opened after the gate
+// was requested) rebuilds it from a fresh read.
+test('runs:active lists the gates a run waits at, for a client that saw none of the events live', async (t) => {
+  const { api } = makeService(t);
+  const until = async (fn) => { for (let i = 0; i < 200 && !fn(); i++) await new Promise((r) => setTimeout(r, 20)); assert.ok(fn()); };
+
+  const { runId } = await api['run:start']({ file: 'fixture-service.yaml', inputs: {}, mock: true });
+  await until(() => api['runs:active']().some((r) => r.runId === runId && r.waiting > 0));
+
+  // a fresh client (e.g. a reloaded window): everything it knows about the gate comes from this call
+  const active = api['runs:active']().find((r) => r.runId === runId);
+  assert.equal(active.waiting, 1);
+  assert.equal(active.gates.length, 1);
+  const [gate] = active.gates;
+  assert.equal(gate.step_id, 'review');
+  assert.equal(gate.message, 'Accept the work?');
+  assert.equal(gate.choices, null);
+  assert.ok(gate.approval_id);
+  assert.ok(gate.requested_at);
+
+  assert.equal(api['approval:resolve']({ runId, id: gate.approval_id, answer: true }), true);
+  await until(() => !api['runs:active']().some((r) => r.runId === runId));
+});
+
 test('the workspace cannot change while a run is in progress', async (t) => {
   const { service, api } = makeService(t);
   // lets the run finish before the temporary workspace is removed

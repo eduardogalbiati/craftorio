@@ -4,9 +4,13 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
+const { main: generateDocs } = require('../scripts/docs.js');
 
 const root = path.join(__dirname, '..');
 const MAX_BYTES = 5 * 1024;
+// docs/agents/code-map.md is generated and gitignored (#77): run the generator here too, so this
+// file passes on a fresh checkout even when run outside `npm test` (whose `pretest` hook does it).
+generateDocs(['--derived'], root);
 const index = fs.readFileSync(path.join(root, 'CLAUDE.md'), 'utf8');
 const links = [...index.matchAll(/\]\(([^)#\s]+\.md)\)/g)].map((m) => m[1]);
 

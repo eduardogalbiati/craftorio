@@ -191,17 +191,72 @@ test('the auth channels are served and account changes are pushed', async (t) =>
   assert.equal((await pushed).user.email, 'google@example.com');
 });
 
-test('the browser client offers exactly the preload methods, on channels the server knows', async (t) => {
-  const methods = (file) => {
-    const src = fs.readFileSync(path.join(__dirname, '..', 'src', file), 'utf8').replace(/\r\n/g, '\n');
-    return [...src.matchAll(/^ {2,4}(\w+):/gm)].map((m) => m[1]).filter((m) => m !== 'method' && m !== 'credentials' && m !== 'headers' && m !== 'body').sort();
-  };
-  assert.deepEqual(methods('renderer/api-http.js'), methods('preload.js'));
+// #77: window.api (desktop and browser) is built at runtime from the channel manifest
+// (src/service/manifest.js), not from a hand-listed method per file: nothing here parses source
+// text for method names any more.
 
-  const { server } = await start(t, { auth: { state() {}, refresh() {}, signIn() {}, cancelSignIn() {}, signOut() {}, onChange: () => () => {} } });
-  const known = new Set(server.channels());
-  const client = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'api-http.js'), 'utf8');
-  const used = [...client.matchAll(/call\('([^']+)'/g)].map((m) => m[1]);
-  assert.ok(used.length > 30);
-  assert.deepEqual(used.filter((c) => !known.has(c)), []);
+// src/preload.js requires 'electron' at load and calls contextBridge.exposeInMainWorld once: stub
+// both so the module can run under plain Node, and capture what it exposed.
+function loadPreloadApi(manifest) {
+  const electronPath = require.resolve('electron');
+  const preloadPath = require.resolve('../src/preload.js');
+  let exposed = null;
+  require.cache[electronPath] = {
+    id: electronPath, filename: electronPath, loaded: true,
+    exports: {
+      contextBridge: { exposeInMainWorld: (_name, api) => { exposed = api; } },
+      ipcRenderer: { sendSync: (channel) => (channel === 'api:manifest' ? manifest : undefined) },
+    },
+  };
+  delete require.cache[preloadPath];
+  try {
+    require(preloadPath);
+  } finally {
+    delete require.cache[preloadPath];
+    delete require.cache[electronPath];
+  }
+  return exposed;
+}
+
+// src/renderer/api-http.js is a browser IIFE (window, fetch, XMLHttpRequest, WebSocket): run it in
+// a small vm sandbox with just enough of those to build window.api from a stubbed manifest fetch.
+function loadApiHttpApi(manifest) {
+  const vm = require('vm');
+  const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'api-http.js'), 'utf8');
+  function FakeXHR() {}
+  FakeXHR.prototype.open = function open() {};
+  FakeXHR.prototype.send = function send() { this.status = 200; this.responseText = JSON.stringify({ result: manifest }); };
+  function FakeWebSocket() { this.readyState = 0; }
+  FakeWebSocket.OPEN = 1;
+  const sandbox = {
+    window: {}, navigator: { clipboard: {} }, location: { protocol: 'http:', host: 'sandbox.invalid' },
+    XMLHttpRequest: FakeXHR, WebSocket: FakeWebSocket, fetch: async () => ({ ok: true, json: async () => ({ result: null }) }),
+    setTimeout, clearTimeout, console,
+  };
+  vm.createContext(sandbox);
+  vm.runInContext(src, sandbox);
+  return sandbox.window.api;
+}
+
+test('GET /api/manifest lists every channel, and the desktop and browser clients build the exact same methods from it', async (t) => {
+  const { base, service } = await start(t, { auth: { state() {}, refresh() {}, signIn() {}, cancelSignIn() {}, signOut() {}, onChange: () => () => {} } });
+  const res = await request(base, { path: '/api/manifest', headers: bearer });
+  assert.equal(res.status, 200);
+  const manifest = res.json.result;
+  const named = new Set(manifest.map((e) => e.channel || e.send || e.event));
+  for (const c of [...Object.keys(service.api), ...Object.keys(service.notifications), 'auth:signIn']) assert.ok(named.has(c), c);
+
+  const preload = loadPreloadApi(manifest);
+  const browser = loadApiHttpApi(manifest);
+  const methodsOf = (api, extra) => Object.keys(api).filter((k) => !extra.includes(k)).sort();
+  const preloadMethods = methodsOf(preload, ['platform']);
+  const browserMethods = methodsOf(browser, ['platform', 'onReconnect']);
+  assert.ok(preloadMethods.length > 30);
+  assert.deepEqual(preloadMethods, browserMethods);
+});
+
+test('a channel manifest declaring the same channel twice is refused', () => {
+  const { declarations } = require('../src/service/manifest');
+  assert.throws(() => declarations([{ channel: 'x:y', method: 'a' }, { channel: 'x:y', method: 'b' }]), /x:y is declared twice/);
+  assert.throws(() => declarations([{ channel: 'a:b', method: 'same' }, { channel: 'c:d', method: 'same' }]), /method same is declared twice/);
 });
