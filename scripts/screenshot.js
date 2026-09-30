@@ -6,7 +6,7 @@
 //   --view <name>      dashboard, sessions, projects, project, backlog, artifacts, workflows, agents,
 //                      skills, usage, analytics, settings, duo, arena, run-chat, run (default dashboard)
 //   --tab <name>       settings: general | agents | execution | about; workflows: runs | definitions
-//   --mode <name>      backlog: list | kanban
+//   --mode <name>      backlog: list | kanban | roadmap
 //   --run <mock|dir>   run-chat: a simulated software-development run (default) or a copy of a run folder
 //   --workflow <file>  the workflow of the simulated run (default software-development.yaml)
 //   --click <css>      clicks this element once the view is open (repeatable, in order)
@@ -33,7 +33,7 @@ const { spawnSync, execFileSync } = require('child_process');
 
 const VIEWS = {
   dashboard: {}, sessions: {}, projects: {}, project: {}, artifacts: {}, agents: {}, skills: {}, usage: {}, analytics: {}, duo: {}, arena: {},
-  backlog: { modes: ['list', 'kanban'] },
+  backlog: { modes: ['list', 'kanban', 'roadmap'] },
   workflows: { tabs: ['runs', 'definitions'] },
   settings: { tabs: ['general', 'agents', 'execution', 'about'] },
   'run-chat': { run: true },
@@ -137,6 +137,27 @@ function demoLocalMerge(ws, projectId) {
     commits: [
       { sha: commit, subject: 'Survive a renamed workspace folder', issues: [11] },
       { sha: 'a1c3e5f7092b4d6f8a0c2e4f6b8d0f1a3c5e7b9d', subject: 'Test the rename with a scratch workspace', issues: [] },
+    ],
+  }, null, 2));
+}
+
+// A roadmap (Backlog › Roadmap, src/roadmap.js): stage 1 done (the local-hero run of #11), then a
+// group of two issues, then one issue; planned, so nothing starts.
+function demoRoadmap(ws, projectId) {
+  const issue = (n) => {
+    const i = DEMO_ISSUES.find((x) => x.number === n);
+    return { number: n, url: `${DEMO_REPO}/issues/${n}`, title: i.title, body: i.body, knownPullRequests: [] };
+  };
+  const item = (id, workflow, numbers, extra = {}) => ({
+    id, workflow, workflowName: workflow.replace(/\.yaml$/, ''), inputs: { language: 'js' }, mock: false,
+    ...issue(numbers[0]), ...(numbers.length > 1 ? { issues: numbers.map(issue) } : {}), status: 'planned', runId: null, runs: [], error: null, ...extra,
+  });
+  fs.writeFileSync(path.join(ws.backlog, `${projectId}.roadmap.json`), JSON.stringify({
+    state: 'planned', simulated: false, error: null, pausedBy: null, updatedAt: new Date().toISOString(),
+    stages: [
+      { id: 'stage-1', name: 'Stability first', note: 'The rename crash blocks the rest.', items: [item('item-1', 'software-development-local-hero.yaml', [11], { status: 'done', runId: '20260118-120000-demo0011', runs: ['20260118-120000-demo0011'] })] },
+      { id: 'stage-2', name: 'Reports and health', note: 'Both touch the server: one run, no conflict.', items: [item('item-2', 'software-development-local-hero.yaml', [12, 9])] },
+      { id: 'stage-3', name: '', note: '', items: [item('item-3', 'software-development.yaml', [10])] },
     ],
   }, null, 2));
 }
@@ -274,6 +295,7 @@ function main() {
     fs.mkdirSync(ws.backlog, { recursive: true });
     fs.writeFileSync(path.join(ws.backlog, `${project.id}.json`), JSON.stringify(demoBacklog(project.id, src('backlog').taskProgress), null, 2));
     if (args.view === 'backlog') demoLocalMerge(ws, project.id);
+    if (args.view === 'backlog') demoRoadmap(ws, project.id);
     if (args.view === 'analytics') demoAnalyticsRuns(ws, project.id);
     let run = null;
     if (VIEWS[args.view].run || ['artifacts', 'workflows', 'project', 'usage', 'dashboard'].includes(args.view)) run = recordRun(project);

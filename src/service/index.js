@@ -30,6 +30,7 @@ const workspace = require('../workspace');
 const projects = require('../projects');
 const localPreview = require('../local-preview');
 const backlog = require('../backlog');
+const roadmaps = require('../roadmap');
 const localPush = require('../local-push');
 const skills = require('../skills');
 const agents = require('../agents');
@@ -176,6 +177,9 @@ function createService({ host }) {
     seedDefaults();
     // queued issues never start on their own after a restart or a workspace change
     try { backlog.pauseAll(ws.backlog, 'Paused when the app started: resume to start the queued issues.'); } catch (e) { console.error('backlog queues:', e); }
+    // a started roadmap continues where it was: its runs that ended meanwhile settle their stage
+    // (an interrupted one pauses it), the next stage starts when the current one is over
+    setTimeout(() => dispatchRoadmaps().catch((e) => console.error('roadmap dispatch:', e)), 0);
     return ws;
   }
 
@@ -468,9 +472,14 @@ function createService({ host }) {
         if (run.issues && run.projectId && ev.status === 'failed' && !run.mock) {
           try { backlog.setPaused(ws.backlog, run.projectId, true, `${run.issues.map((i) => `#${i.number}`).join(', ')} failed: resume to start the next issues.`); } catch (e) { console.error('backlog queue:', e); }
         }
-        setTimeout(() => dispatchQueue().catch((e) => console.error('backlog dispatch:', e)), 1000);
+        // a roadmap's next items first (its stage may be over), then the plain queue
+        setTimeout(() => dispatchRoadmaps().catch((e) => console.error('roadmap dispatch:', e)).then(() => dispatchQueue()).catch((e) => console.error('backlog dispatch:', e)), 1000);
       }
     });
+    // a failed roadmap item's run resumed from a step (#100): the new run takes its place
+    if (resume?.runId && run.projectId) {
+      try { roadmaps.adoptResumed(ws.backlog, run.projectId, resume.runId, run.runId); } catch (e) { console.error('roadmap resume:', e); }
+    }
     run.start();
     return { runId: run.runId, runDir: run.runDir };
   }
@@ -875,7 +884,23 @@ function createService({ host }) {
     const live = list.map((r) => (active.has(r.runId) ? { ...r, status: 'running', waiting: active.get(r.runId).approvals.size > 0 } : r));
     const queue = backlog.readQueue(ws.backlog, data.projectId);
     const local = backlog.readLocal(ws.backlog, data.projectId);
-    return { ...data, queue, local, autoPush: !!project?.autoPush, issues: backlog.linkRuns(data.issues, live, queue, local) };
+    // the roadmap, each item with its run's live state, and each issue's stage ("Roadmap: stage 2")
+    const roadmap = roadmapView(data.projectId, live);
+    const stages = roadmaps.issueStages(roadmap);
+    const issues = backlog.linkRuns(data.issues, live, queue, local).map((i) => (stages.has(i.number) ? { ...i, roadmap: stages.get(i.number) } : i));
+    return { ...data, queue, local, roadmap, autoPush: !!project?.autoPush, issues };
+  }
+
+  // A project's roadmap for the screen: each running item with `waiting` (at a human gate).
+  function roadmapView(projectId, list = []) {
+    const roadmap = roadmaps.readRoadmap(ws.backlog, projectId);
+    const byId = new Map(list.map((r) => [r.runId, r]));
+    return {
+      ...roadmap,
+      stages: roadmap.stages.map((s) => ({
+        ...s, items: s.items.map((x) => (x.status === 'running' && byId.get(x.runId)?.waiting ? { ...x, waiting: true } : x)),
+      })),
+    };
   }
 
   // ---- local merges not pushed (software-development-local-hero, src/local-push.js) ----
@@ -995,6 +1020,8 @@ function createService({ host }) {
       await host.assertCanRun?.({ mock: false });
     }
     backlog.enqueue(ws.backlog, project.id, { issues, workflow: file, workflowName: wf.metadata?.name || file, inputs: inputs || {}, mock: !!mock, group: !!group });
+    // an issue belongs to one plan: assigned here (the screen asked first), it leaves the roadmap's items not started
+    roadmaps.dropIssues(ws.backlog, project.id, issues.map((i) => i.number));
     await dispatchQueue();
     return withIssueRuns(backlog.readBacklog(ws.backlog, project.id));
   }
@@ -1039,6 +1066,86 @@ function createService({ host }) {
     } finally {
       dispatching = false;
     }
+  }
+
+  // ---- roadmaps (src/roadmap.js) ----------------------------------------------------------
+  // Settles each started roadmap from its runs (roadmaps.advance) and starts the current stage's
+  // items while there are free run slots. Called after every run and when a workspace opens; a call
+  // while one is going runs again right after it (a run that ends meanwhile is never missed).
+  let roadmapBusy = false;
+  let roadmapAgain = false;
+  async function dispatchRoadmaps() {
+    if (!ws) return;
+    if (roadmapBusy) { roadmapAgain = true; return; }
+    roadmapBusy = true;
+    try {
+      do {
+        roadmapAgain = false;
+        for (const projectId of roadmaps.roadmapProjects(ws.backlog)) {
+          try { await advanceRoadmap(projectId); } catch (e) { console.error('roadmap:', projectId, e); }
+        }
+      } while (roadmapAgain);
+    } finally {
+      roadmapBusy = false;
+    }
+  }
+
+  // The state of a roadmap item's run: live (a gate keeps it open), else what it recorded; merged =
+  // a local merge, a PR/MR merge action, or a simulation that succeeded (simulations never merge).
+  function roadmapRun(runId) {
+    const live = runId && active.get(runId);
+    if (live) return { status: 'running', waiting: live.approvals.size > 0 };
+    const r = runId ? runs.readRun(ws.runs, runId) : null;
+    if (!r) return null;
+    return { status: r.status, error: r.error, merged: r.status === 'success' && (r.mock || !!r.localMerge || roadmaps.mergedPullRequest(r.runDir)) };
+  }
+
+  async function advanceRoadmap(projectId) {
+    const before = roadmaps.readRoadmap(ws.backlog, projectId);
+    if (before.state !== 'running') return;
+    const closed = new Set((backlog.readBacklog(ws.backlog, projectId)?.issues || []).filter((i) => i.state === 'closed').map((i) => i.number));
+    const mockOf = (item) => !!item.mock || !!before.simulated;
+    const { roadmap, start } = roadmaps.advance(before, {
+      runOf: roadmapRun, closed: (n) => closed.has(n), canStart: (item) => !slotProblem({ mock: mockOf(item), projectId }),
+    });
+    roadmaps.updateRoadmap(ws.backlog, projectId, (cur) => (cur.updatedAt === before.updatedAt ? roadmap : null));
+    if (roadmap.state === 'paused' && before.state === 'running') {
+      notify({ kind: 'run', event: 'failed', title: 'Roadmap paused', body: String(roadmap.error || '').slice(0, 180) });
+    }
+    if (roadmap.state === 'done' && before.state === 'running') notify({ kind: 'run', event: 'succeeded', title: 'Roadmap finished', body: `Every stage of ${projectId} is done.` });
+    for (const item of start) {
+      // a slot may have been taken by the previous start
+      if (slotProblem({ mock: mockOf(item), projectId })) break;
+      try {
+        const project = projects.readProject(ws.projects, projectId);
+        const wf = loadWorkflow(workflowPath(item.workflow).file);
+        // a closed issue of a group is left out; the others start
+        const open = backlog.itemIssues(item).filter((i) => !closed.has(i.number));
+        const run = { ...item, ...open[0], ...(open.length > 1 ? { issues: open } : { issues: undefined }) };
+        const started = await startWorkflowRun({
+          file: item.workflow, inputs: backlog.runInputs(run, wf, project.folder), mock: mockOf(item),
+          projectId, issues: open.map(({ number, url, title }) => ({ number, url, title })),
+        });
+        roadmaps.markStarted(ws.backlog, projectId, item.id, { runId: started.runId });
+      } catch (e) {
+        roadmaps.markStarted(ws.backlog, projectId, item.id, { error: e.message });
+        notify({ kind: 'run', event: 'failed', title: 'Roadmap paused', body: `Could not start an item: ${e.message}`.slice(0, 180) });
+        break;
+      }
+    }
+  }
+
+  // Start: a roadmap with real items is refused in simulation-only mode (automated checks), like assignments.
+  async function startRoadmap({ projectId, simulated = false }) {
+    const id = path.basename(String(projectId));
+    const r = roadmaps.readRoadmap(ws.backlog, id);
+    if (!simulated && r.stages.some((s) => s.items.some((x) => !x.mock && !['done', 'skipped'].includes(x.status)))) {
+      simulation.refuseReal('real runs from a roadmap');
+      await host.assertCanRun?.({ mock: false });
+    }
+    roadmaps.setState(ws.backlog, id, 'running', { simulated: !!simulated });
+    await dispatchRoadmaps();
+    return withIssueRuns(backlog.readBacklog(ws.backlog, id));
   }
 
   // Every run, with the project it belongs to.
@@ -1151,10 +1258,10 @@ function createService({ host }) {
     get ws() { return ws; },
     host, active, events, notify, waiting, terminals, BUNDLED_SKILLS_DIR,
     setUiContext: (c) => { uiContext = notifier.normalizeContext(c); },
-    activeRuns, analyticsSnapshot, analyzeAnalytics, artifactRuns, assignWorkflow, cloneBuilderWorkflow, code, dispatchQueue, envDetails, listAllRuns,
+    activeRuns, analyticsSnapshot, analyzeAnalytics, artifactRuns, assignWorkflow, cloneBuilderWorkflow, code, dispatchQueue, dispatchRoadmaps, envDetails, listAllRuns,
     listCliSessions, listLocalPreviews, listWorkflows, liveRun, loadBuilderWorkflow, openTerminal, projectRuns, pushProject,
     readArtifact, refreshLocal, renameCliSession, resolvePushConflict, restoreWorkflow, resumeOptions, resumeRun,
-    runFolder, saveBuilderWorkflow, setBudget, setPrice, startLocalPreview, startWorkflowRun, stopLocalPreview, unpushedProjects, usageSnapshot,
+    runFolder, saveBuilderWorkflow, setBudget, setPrice, startLocalPreview, startRoadmap, startWorkflowRun, stopLocalPreview, unpushedProjects, usageSnapshot,
     withIssueRuns, workflowDirs,
   };
   const entries = loadChannels(ctx);

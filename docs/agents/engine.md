@@ -153,6 +153,12 @@ same features for users; this is the implementer's summary.
   like `projectId` and carried over on resume (`resumeSpec`). The old option `issue` is still accepted;
   runs recorded with `issue` load as `issues: [issue]` (`runs.readRun`, `resumeSpec`, the run chat).
   The Backlog fills the `issue` (first URL) and `issues` (every URL) inputs when a workflow declares them.
+- Backlog dispatch (service, not the engine): `dispatchQueue` starts the plain queue's items whenever a
+  slot is free; `dispatchRoadmaps` (src/roadmap.js `advance`) runs a started roadmap stage by stage,
+  first after every `workflow.finished` (before the queue) and when a workspace opens. An item is done when
+  its run succeeded and merged: `summary.local_merge`, an `action.executed` with `gh pr merge`/`glab mr merge`
+  and exit 0 (`mergedPullRequest`), or `mock`. Any other end pauses the roadmap (`pausedBy`); a resumed run
+  (`resume.runId` = the item's run) takes the item's place (`adoptResumed`).
 - Inputs with `type: array` take a list; text from a form becomes one item per line or comma.
 - software-development (0.15.0) for several issues: the developer answers `issues: [{ issue, done, summary }]`;
   one with `done: false` goes to the `issue_not_done` gate (continue without it / stop), asked once per

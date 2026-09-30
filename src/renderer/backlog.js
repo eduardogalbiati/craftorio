@@ -11,8 +11,10 @@
 // The list narrows by state, by text and by labels (the rule is in backlog-labels.js: AND across
 // label groups, OR within one); the selected labels are remembered per project and a label chip
 // on an issue toggles its label. Selection and assignment only count the issues shown.
+// The third mode, Roadmap, is backlog-roadmap.js (ordered stages of runs); the assign dialog's
+// "Add to roadmap" plans the selection as a new stage, and assigning an issue the roadmap plans asks first.
 // Uses app.js globals ($, esc, state, errMsg, dateOf, markdownHtml, showView, openModal,
-// closeModal, devMode, wantsSimulation, openGateOf, openNextGate, selectRun).
+// closeModal, devMode, wantsSimulation, openGateOf, openNextGate, selectRun, confirmDialog).
 /* global api */
 (() => {
   // Must match PLATFORMS in src/backlog.js (soon = no sync yet).
@@ -31,7 +33,7 @@
 
   const bl = {
     projects: [], projectId: null, platform: null, data: null, error: null, syncing: false,
-    mode: load(MODE_KEY) === 'kanban' ? 'kanban' : 'list', filter: 'open', q: '', expanded: new Set(), seq: 0,
+    mode: ['kanban', 'roadmap'].includes(load(MODE_KEY)) ? load(MODE_KEY) : 'list', filter: 'open', q: '', expanded: new Set(), seq: 0,
     selected: new Set(), workflows: [], labels: [], labelsOpen: false,
   };
   const { hasLabel, labelOptions, matchesLabels, pruneLabels, toggleLabel } = window.BacklogLabels;
@@ -239,6 +241,8 @@
     openModal('#assign-modal');
   }
 
+  // Selected issues the roadmap already plans (not started): assigning them takes them out of it.
+  const planned = (numbers) => (bl.data?.issues || []).filter((i) => numbers.includes(i.number) && ['planned', 'failed'].includes(i.roadmap?.status));
   async function submitAssign(e) {
     e.preventDefault();
     const workflow = $b('#assign-workflow').value;
@@ -246,6 +250,8 @@
     document.querySelectorAll('#assign-inputs [data-input]').forEach((el) => { if (el.value.trim() !== '') inputs[el.dataset.input] = el.value.trim(); });
     const numbers = assignNumbers();
     if (!numbers.length) return;
+    const inRoadmap = planned(numbers);
+    if (inRoadmap.length && !await confirmDialog('Already in the roadmap', `${inRoadmap.map((i) => `#${i.number} (stage ${i.roadmap.stage})`).join(', ')} ${inRoadmap.length > 1 ? 'are' : 'is'} planned in the roadmap. Assigning takes ${inRoadmap.length > 1 ? 'them' : 'it'} out of the roadmap and into the queue.`, 'Assign anyway')) return;
     const btn = $b('#btn-assign-ok');
     btn.disabled = true;
     try {
@@ -261,6 +267,36 @@
       btn.disabled = false;
     }
   }
+
+  // The dialog's issues, workflow and inputs as a new stage at the end of the roadmap (planned: the
+  // roadmap's Start runs it after the stages before it).
+  async function addToRoadmap() {
+    const workflow = $b('#assign-workflow').value;
+    const inputs = {};
+    document.querySelectorAll('#assign-inputs [data-input]').forEach((el) => { if (el.value.trim() !== '') inputs[el.dataset.input] = el.value.trim(); });
+    const numbers = assignNumbers();
+    if (!numbers.length) return;
+    const issues = numbers.map((n) => (bl.data?.issues || []).find((i) => i.number === n)).filter(Boolean);
+    const btn = $b('#btn-assign-roadmap');
+    btn.disabled = true;
+    try {
+      const wf = bl.workflows.find((w) => w.file === workflow);
+      await window.BacklogRoadmap.addStage(roadmapCtx(), bl.data, {
+        issues, workflow, workflowName: wf?.name || workflow, inputs, mock: wantsSimulation($b('#assign-mock')), group: grouped(),
+      });
+      save(WORKFLOW_KEY, workflow);
+      bl.selected.clear();
+      bl.mode = 'roadmap';
+      save(MODE_KEY, bl.mode);
+      closeModal('#assign-modal');
+      render();
+    } catch (err) {
+      $b('#assign-error').textContent = errMsg(err);
+    } finally {
+      btn.disabled = false;
+    }
+  }
+  const roadmapCtx = () => ({ projectId: bl.projectId, setData, render, setError: (msg) => { bl.error = msg; } });
 
   // An issue of a queued group: remove it from the group (the others still go as one run) or
   // cancel the whole group. Resolves 'one', 'all' or null (keep it).
@@ -353,18 +389,20 @@
   const checkbox = (i) => (selectable(i) ? `<input type="checkbox" class="bl-check" data-sel="${i.number}" aria-label="Select #${i.number}"${bl.selected.has(i.number) ? ' checked' : ''} />` : '');
   // What the automation is doing with the issue: queued, its latest run, the gate waiting for you.
   function status(i) {
+    // its place in the roadmap ("Roadmap: stage 2", backlog-roadmap.js)
+    const rm = window.BacklogRoadmap.badge(i);
     if (i.queued) {
-      return `<span class="bl-queued"><span class="badge">queued #${i.queued.position}</span><span class="small">${esc(i.queued.workflow)}</span>${i.queued.mock ? '<span class="badge p-mock">simulated</span>' : ''}${groupBadge(i.queued.groupedWith)}
+      return `${rm}<span class="bl-queued"><span class="badge">queued #${i.queued.position}</span><span class="small">${esc(i.queued.workflow)}</span>${i.queued.mock ? '<span class="badge p-mock">simulated</span>' : ''}${groupBadge(i.queued.groupedWith)}
         <button class="link-btn small" type="button" data-unqueue="${i.number}" title="Take it out of the queue">remove</button></span>`;
     }
     const r = i.runs?.[0];
-    if (!r) return '';
+    if (!r) return rm;
     const notPushed = i.column === 'local'
       ? `<span class="badge bl-notpushed" title="Merged into the local ${esc(r.localMerge?.base || 'base')}; the issue closes when it is pushed (Push, above)">not pushed</span>` : '';
     const recovered = r.recovery ? `<span class="badge bl-recovered" title="${esc(`Supervisor: ${r.recovery}`)}">sent back after a failed merge</span>` : '';
     const watch = r.status === 'running' && isRunLive(r.runId)
       ? `<button class="btn sm ghost sup-btn" type="button" data-watch="${esc(r.runId)}" data-workflow="${esc(r.workflow || '')}" title="The supervisor follows this run and explains it in a chat (opt-in: it costs tokens)"><span class="sup-mark">◆</span> Watch</button>` : '';
-    return `${runLink(r)}${notPushed}${recovered}${groupBadge(r.groupedWith)}${i.column === 'waiting' ? '<button class="btn sm primary" type="button" data-gate>Review approval</button>' : ''}${watch}`;
+    return `${rm}${runLink(r)}${notPushed}${recovered}${groupBadge(r.groupedWith)}${i.column === 'waiting' ? '<button class="btn sm primary" type="button" data-gate>Review approval</button>' : ''}${watch}`;
   }
 
   function issueRow(i) {
@@ -554,7 +592,7 @@
     const issues = bl.data?.issues || [];
     const count = (f) => issues.filter((i) => f === 'all' || i.state === f).length;
     const filters = $b('#bl-filters');
-    filters.classList.toggle('hidden', bl.mode === 'kanban');
+    filters.classList.toggle('hidden', bl.mode !== 'list');
     filters.innerHTML = FILTERS.map(([f, label]) =>
       `<button class="chip${bl.filter === f ? ' active' : ''}" data-f="${f}">${label} <span class="muted">${count(f)}</span></button>`).join('');
     renderLabelFilter(issues);
@@ -574,7 +612,7 @@
     } else if (!bl.data) {
       list.innerHTML = bl.syncing ? '<p class="muted">Loading issues…</p>' : '<p class="muted">Not synced yet.</p>';
     } else {
-      list.innerHTML = bl.mode === 'kanban' ? renderKanban(issues) : renderList(issues);
+      list.innerHTML = bl.mode === 'roadmap' ? window.BacklogRoadmap.html(bl.data) : bl.mode === 'kanban' ? renderKanban(issues) : renderList(issues);
     }
   }
 
@@ -658,7 +696,13 @@
   $b('#btn-push-update').onclick = () => doPush(true);
   $b('#btn-push-resolve').onclick = resolveInRun;
   $b('#btn-push-cancel').onclick = () => closeModal('#push-modal');
+  // Roadmap mode: its buttons, fields and drags (backlog-roadmap.js); its run links open the run below
+  $b('#bl-list').addEventListener('change', (e) => { if (bl.mode === 'roadmap') window.BacklogRoadmap.onChange(e, roadmapCtx(), bl.data); });
+  $b('#bl-list').addEventListener('dragstart', (e) => { if (bl.mode === 'roadmap') window.BacklogRoadmap.onDragStart(e); });
+  $b('#bl-list').addEventListener('dragover', (e) => { if (bl.mode === 'roadmap') window.BacklogRoadmap.onDragOver(e); });
+  $b('#bl-list').addEventListener('drop', (e) => { if (bl.mode === 'roadmap') window.BacklogRoadmap.onDrop(e, roadmapCtx(), bl.data); });
   $b('#bl-list').onclick = async (e) => {
+    if (bl.mode === 'roadmap' && await window.BacklogRoadmap.onClick(e, roadmapCtx(), bl.data)) return;
     const check = e.target.closest('[data-sel]');
     if (check) {
       const n = Number(check.dataset.sel);
@@ -688,6 +732,7 @@
   $b('#assign-mock').onchange = updateAssignNote;
   $b('#assign-grouping').onchange = updateAssignNote;
   $b('#assign-form').onsubmit = submitAssign;
+  $b('#btn-assign-roadmap').onclick = addToRoadmap;
   $b('#btn-assign-cancel').onclick = () => closeModal('#assign-modal');
 
   window.refreshBacklog = refreshBacklog;
