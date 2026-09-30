@@ -215,6 +215,7 @@
               <span class="dash-count" data-count="monitor"></span>
             </button>
           </div>
+          <div id="dash-gates" class="dash-gates hidden"></div>
           <div id="dash-run" class="dash-run hidden"></div>
         </div>
       </section>
@@ -535,6 +536,7 @@
       <!-- ================= Run ================= -->
       <section id="view-run" class="view hidden">
         <div id="run-fail-banner" class="fail-banner hidden"></div>
+        <div id="run-gates" class="run-gates hidden" aria-live="polite"></div>
         <div class="run-modebar">
           <div class="seg sm" role="group" aria-label="Run view">
             <button id="run-mode-chat" type="button" title="Follow this run as a chat">Chat</button>
@@ -966,20 +968,6 @@
   </div>
 
   <!-- ================= Modals ================= -->
-  <div id="approval-modal" class="modal hidden">
-    <div class="modal-card">
-      <h3>Approval required</h3>
-      <p id="approval-step" class="muted small mono"></p>
-      <pre id="approval-message"></pre>
-      <div id="approval-feedback" class="field hidden"><label id="approval-feedback-label" for="approval-feedback-text"></label><textarea id="approval-feedback-text" rows="3"></textarea></div>
-      <div id="approval-choices" class="modal-actions hidden"></div>
-      <div id="approval-binary" class="modal-actions">
-        <button id="btn-reject" class="btn ghost">Reject</button>
-        <button id="btn-approve" class="btn primary">Approve</button>
-      </div>
-    </div>
-  </div>
-
   <div id="sx-modal" class="modal hidden">
     <form id="sx-form" class="modal-card wide">
       <h3>New session</h3>

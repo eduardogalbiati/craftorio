@@ -9,7 +9,7 @@
 // bar above the list pushes it (and updates from origin first when origin moved); a conflict on
 // the update goes to a run of the local workflow, whose developer resolves it.
 // Uses app.js globals ($, esc, state, errMsg, dateOf, markdownHtml, showView, openModal,
-// closeModal, devMode, wantsSimulation, openApproval, selectRun).
+// closeModal, devMode, wantsSimulation, openGateOf, openNextGate, selectRun).
 /* global api */
 (() => {
   // Must match PLATFORMS in src/backlog.js (soon = no sync yet).
@@ -120,10 +120,12 @@
     window.openRunChat({ runId, workflow: el.dataset.workflow, running: isRunLive(runId) });
   }
 
-  // A waiting card opens the chat of its run, where the gate is answered (or its Run screen).
+  // "Review approval" opens its run, where the gate is answered (the run chat, or the Run screen's
+  // gate card): never a dialog over the Backlog.
   function openGate(el) {
     const run = el.closest('[data-n]')?.querySelector('[data-run]');
-    if (run && isRunLive(run.dataset.run)) openRun(run);
+    if (run && state.runs.has(run.dataset.run)) openGateOf(run.dataset.run);
+    else if (run && isRunLive(run.dataset.run)) openRun(run);
     else openNextGate();
   }
 

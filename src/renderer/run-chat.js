@@ -193,10 +193,9 @@
   async function openRun(runId, { running = false, follow = false } = {}) {
     chat.follow = follow;
     reset(runId);
-    // set before showing the view, so a pending gate of this run does not open the dialog
+    // set before showing the view, so a pending gate of this run is asked inline right away
     chat.live = running || isCurrentRun(runId);
     showView('runchat');
-    if (chat.live && state.approval?.run_id === runId) closeApproval(); // answered inline
     drawHead();
     let events = [];
     try {

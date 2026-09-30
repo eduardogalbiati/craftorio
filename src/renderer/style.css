@@ -204,7 +204,7 @@ body:not(.dev-mode) .dev-only { display: none !important; }
 .dash-icon.monitor { background: rgba(74,222,128,.12); color: var(--green); }
 .dash-count { margin-top: auto; font-size: 11px; font-family: var(--mono); color: var(--accent); }
 .dash-count.none { color: var(--muted); }
-.dash-run {
+.dash-run, .dash-gates {
   margin: 28px auto 0; display: inline-flex; flex-direction: column; align-items: stretch; gap: 8px;
   padding: 10px 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel);
 }
@@ -438,6 +438,9 @@ select:focus, input:focus, textarea:focus { outline: none; border-color: var(--a
 .sc-head .id { font-family: var(--mono); font-size: 11px; color: var(--muted); }
 .sc-head .status { margin-left: auto; font-size: 11px; display: flex; align-items: center; gap: 5px; color: var(--muted); }
 .dash-run-row { display: flex; align-items: center; gap: 12px; }
+.dash-gates { border-color: rgba(250,204,21,.45); }
+.dash-gates + .dash-run { margin-top: 12px; }
+.dash-gates-title { display: flex; align-items: center; gap: 8px; }
 .dash-run-row .btn { margin-left: auto; }
 .kpi-all b { color: var(--muted); }
 input.s-num { width: 90px; }
@@ -890,11 +893,20 @@ body.resizing-dock .term-body { pointer-events: none; }
   padding: 10px 14px; border-radius: 10px; background: var(--panel); border: 1px solid rgba(192,132,252,.5);
   box-shadow: 0 12px 32px rgba(0,0,0,.45); cursor: pointer; font-size: 12px;
 }
-.toast b { color: var(--purple); }
+.toast b { color: var(--purple); padding-right: 18px; }
+.toast-close { position: absolute; top: 4px; right: 6px; background: none; border: 0; color: var(--muted); font-size: 16px; line-height: 1; cursor: pointer; padding: 2px 4px; }
+.toast-close:hover, .toast-close:focus-visible { color: var(--text); }
 .toast span { color: var(--muted); }
 
+/* a gate waiting in the run shown: asked inline above the steps, never in a dialog over the app */
+.run-gates { flex: none; display: flex; flex-direction: column; gap: 8px; padding: 10px 16px; background: rgba(250,204,21,.06); border-bottom: 1px solid rgba(250,204,21,.35); }
+.run-gate { display: flex; flex-direction: column; gap: 6px; }
+.run-gate + .run-gate { border-top: 1px solid var(--border); padding-top: 8px; }
+.run-gate-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.run-gate-head b { color: var(--yellow); }
 /* long approval messages (e.g. from the supervisor) scroll */
-#approval-message { max-height: 50vh; overflow: auto; white-space: pre-wrap; }
+.run-gate-message { margin: 0; max-height: 30vh; overflow: auto; white-space: pre-wrap; }
+.run-gate-actions { flex-wrap: wrap; gap: 8px; }
 
 /* ---------- account: sign-in screen + topbar chip ---------- */
 .login-screen { position: fixed; inset: 0; z-index: 50; background: var(--bg); display: grid; place-items: center; }

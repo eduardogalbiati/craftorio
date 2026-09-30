@@ -1,5 +1,5 @@
 /* global api */
-// The UI shell: navigation, the Run screen (steps, sessions, events, the approval dialog), the
+// The UI shell: navigation, the Run screen (steps, sessions, events, the gate card), the
 // dashboard, the start drawer, Projects, Workflows › Runs, Settings, the terminal dock and toasts.
 // Each run the window knows is a view rebuilt from its events (`state.runs`); the runs in progress
 // and the gates they wait at come from the engine (`loadActiveRuns` over runs:active, on load,
@@ -44,7 +44,6 @@ const state = {
   // steps, orchLog, events, selected and openDetails read the selected run (defined below).
   runs: new Map(),
   runId: null,
-  approval: null,     // the gate shown in the approval dialog (approval.requested event)
   tab: 'detail',
   workflowsTab: 'runs', // 'runs' | 'definitions' | 'builder' (sub-items of Workflows in the sidebar)
   pendingProject: null, // project to preselect in the panel on open
@@ -134,8 +133,7 @@ async function init() {
   });
 
   // run
-  $('#btn-approve').onclick = () => resolveApproval(true);
-  $('#btn-reject').onclick = () => resolveApproval(false);
+  $('#run-gates').onclick = onRunGateClick;
   document.querySelectorAll('.tab[data-tab]').forEach((t) => (t.onclick = () => switchTab(t.dataset.tab)));
   $('#tab-detail').addEventListener('toggle', (e) => {
     const key = e.target.dataset?.key;
@@ -271,7 +269,6 @@ async function loadActiveRuns() {
     if (live.has(runId) || v.run?.status !== 'running' || hydrating.has(runId)) continue;
     v.run.status = 'interrupted';
     v.approvals.clear();
-    if (state.approval?.run_id === runId) closeApproval();
   }
   scheduleRender();
 }
@@ -303,8 +300,6 @@ function showView(view) {
   if (view === 'analytics') window.refreshAnalytics?.();
   if (view === 'settings') renderSettings();
   if (view === 'run') scheduleRender();
-  // gates never pop up over the rest of the app: the Run screen of their run asks them
-  if (view === 'run' && $('#approval-modal').classList.contains('hidden')) openApproval();
   reportNotifyContext();
 }
 
@@ -414,6 +409,18 @@ function renderDashboard() {
       <span><b>${esc(r.workflow || 'workflow')}</b>${r.project ? ` · ${esc(r.project)}` : ''}${issueRefs(r) ? ` · ${esc(issueRefs(r))}` : ''} <span class="muted">— ${esc(statusLabel(r))}${approvals.size ? ' · waiting for approval' : ''}</span></span>
       <button class="btn sm ghost" data-run="${esc(r.id)}">View run</button></div>`).join('');
   box.querySelectorAll('[data-run]').forEach((b) => (b.onclick = () => selectRun(b.dataset.run)));
+  // pending approvals: every gate waiting across runs, each one opening its run (answered there)
+  const gates = pendingGates();
+  const gbox = $('#dash-gates');
+  gbox.classList.toggle('hidden', !gates.length);
+  gbox.innerHTML = gates.length ? `<div class="dash-gates-title"><b>Waiting for your approval</b> <span class="nav-gates">${gates.length}</span></div>${gates.map((g) => {
+    const r = state.runs.get(g.run_id)?.run;
+    return `<div class="dash-run-row">
+      <span class="status st-waiting"><span class="status-dot"></span></span>
+      <span><b>${esc(r?.workflow || 'workflow')}</b>${r?.project ? ` · ${esc(r.project)}` : ''}${issueRefs(r) ? ` · ${esc(issueRefs(r))}` : ''} <span class="muted">— step ${esc(g.step_id)}</span></span>
+      <button class="btn sm primary" data-gate-run="${esc(g.run_id)}">Open run</button></div>`;
+  }).join('')}` : '';
+  gbox.querySelectorAll('[data-gate-run]').forEach((b) => (b.onclick = () => openGateOf(b.dataset.gateRun)));
 }
 
 const runSessionStatus = (st) => ({ running: 'active', success: 'success', failed: 'failed', interrupted: 'failed', cancelled: 'cancelled' })[st] || 'idle';
@@ -1628,39 +1635,49 @@ function runsTableHtml(u) {
   </table>`;
 }
 
-// answer: true/false or a choice id
-function resolveApproval(answer) {
-  const ev = state.approval;
-  if (!ev) return;
-  api.resolveApproval(ev.approval_id, answer, $('#approval-feedback-text').value, ev.run_id);
-  closeApproval();
+// The gates waiting in the run the Run screen shows, asked inline above its steps (never in a
+// dialog over the app): which run and step they belong to, the message, the choices and the
+// optional feedback field. Rebuilt only when the gates change, so a feedback being typed stays.
+function renderRunGates() {
+  const v = selectedView();
+  const box = $('#run-gates');
+  const gates = [...v.approvals.values()];
+  box.classList.toggle('hidden', !gates.length);
+  const key = `${gates.map((g) => `${g.run_id}:${g.approval_id}`).join('|')}:${runLabel(v.run)}`;
+  if (box.dataset.key === key) return;
+  box.dataset.key = key;
+  box.innerHTML = gates.map((g) => {
+    const buttons = g.choices
+      ? g.choices.map((c, i) => `<button type="button" class="btn sm ${i === 0 ? 'primary' : 'ghost'}" data-choice="${esc(c.id)}">${esc(c.label)}</button>`).join('')
+      : '<button type="button" class="btn sm ghost" data-answer="false">Reject</button><button type="button" class="btn sm primary" data-answer="true">Approve</button>';
+    const field = g.feedback ? `<label class="duo-ask-label">${esc(g.feedback.label || 'Instructions (optional)')}</label>
+      <textarea class="duo-ask-text run-gate-feedback" rows="3" placeholder="${esc(g.feedback.placeholder || '')}"></textarea>` : '';
+    return `<div class="run-gate" data-approval="${esc(g.approval_id)}" data-run="${esc(g.run_id)}">
+      <div class="run-gate-head"><b>Approval required</b><span class="muted small mono">${esc(`${v.run ? `${runLabel(v.run)} · ` : ''}step: ${g.step_id}`)}</span></div>
+      <pre class="run-gate-message">${esc(g.message || '')}</pre>${field}<div class="row run-gate-actions">${buttons}</div></div>`;
+  }).join('');
 }
 
-// Opens the approval dialog for a gate: `ev`, or the oldest gate waiting in the selected run.
-// Gates never open it by themselves elsewhere in the app (a badge and a toast say they wait).
-function openApproval(ev = null) {
-  ev = ev || [...selectedView().approvals.values()][0];
-  // the run chats (Write & Review, AI Arena, any run) ask the question inline for the run they show
-  if (!ev || window.duoShowsRun?.(ev.run_id) || window.arenaShowsRun?.(ev.run_id) || window.runChatShowsRun?.(ev.run_id)) return;
-  state.approval = ev;
-  const r = state.runs.get(ev.run_id)?.run;
-  $('#approval-step').textContent = `${r ? `${runLabel(r)} · ` : ''}step: ${ev.step_id}`;
-  $('#approval-message').textContent = ev.message;
-  $('#approval-binary').classList.toggle('hidden', !!ev.choices);
-  $('#approval-choices').classList.toggle('hidden', !ev.choices);
-  $('#approval-choices').innerHTML = (ev.choices || []).map((c, i) =>
-    `<button class="btn ${i === 0 ? 'primary' : 'ghost'}" data-choice="${esc(c.id)}">${esc(c.label)}</button>`).join('');
-  $('#approval-choices').querySelectorAll('[data-choice]').forEach((b) => (b.onclick = () => resolveApproval(b.dataset.choice)));
-  $('#approval-feedback').classList.toggle('hidden', !ev.feedback);
-  $('#approval-feedback-label').textContent = ev.feedback?.label || '';
-  $('#approval-feedback-text').placeholder = ev.feedback?.placeholder || '';
-  $('#approval-feedback-text').value = '';
-  $('#approval-modal').classList.remove('hidden');
+// A click on a gate card's button answers that gate (true/false or a choice id) with the run's id,
+// so it works for any run in progress; the card goes away with approval.resolved.
+function onRunGateClick(e) {
+  const b = e.target.closest('button[data-answer], button[data-choice]');
+  const card = b?.closest('.run-gate');
+  if (!card) return;
+  const answer = b.dataset.choice !== undefined ? b.dataset.choice : b.dataset.answer === 'true';
+  const buttons = card.querySelectorAll('button');
+  buttons.forEach((x) => (x.disabled = true));
+  Promise.resolve(api.resolveApproval(card.dataset.approval, answer, card.querySelector('.run-gate-feedback')?.value || '', card.dataset.run))
+    .catch((err) => { buttons.forEach((x) => (x.disabled = false)); showToast('Could not answer the gate', errMsg(err)); });
 }
 
-function closeApproval() {
-  state.approval = null;
-  $('#approval-modal').classList.add('hidden');
+// Brings the Run screen's gate card into view and focuses its first answer.
+function focusRunGate() {
+  requestAnimationFrame(() => {
+    const card = $('#run-gates .run-gate');
+    card?.scrollIntoView({ block: 'nearest' });
+    card?.querySelector('.run-gate-actions button')?.focus();
+  });
 }
 
 function switchTab(tab) {
@@ -1682,14 +1699,14 @@ function openNextGate() {
 window.openNextGate = openNextGate;
 
 // Opens a run's gate inside the run: its chat asks the question inline (answered with the run's id,
-// so it works after a reload). Without the chat screen, the Run screen's dialog.
+// so it works after a reload). Without the chat screen, the Run screen's gate card.
 function openGateOf(runId) {
   const v = state.runs.get(runId);
   if (!v) return;
   selectRun(runId, { open: false });
   if (window.openRunChat) { window.openRunChat({ runId, workflow: v.run?.workflow, running: isRunLive(runId) }); return; }
   showView('run');
-  openApproval([...v.approvals.values()][0]);
+  focusRunGate();
 }
 window.openGateOf = openGateOf;
 
@@ -1740,8 +1757,6 @@ async function hydrateRun(runId) {
   }
   replaying = true;
   try { for (const ev of replay) onEvent(ev); } finally { replaying = false; }
-  // a gate waiting since before this window opened is asked like a new one
-  if (state.view === 'run' && state.runId === runId && $('#approval-modal').classList.contains('hidden')) openApproval();
 }
 
 // Workflow, project and issue of a run, from workflow.started or from runs:active.
@@ -1794,7 +1809,6 @@ function onEvent(ev) {
       v.steps.forEach((s) => { if (s.status !== 'pending') s.status = 'done'; });
       v.approvals.clear();
       orch(ev, `workflow finished: ${ev.status}${ev.error ? ' — ' + ev.error : ''}`, ev.status === 'success' ? 'transition' : 'error');
-      if (state.approval?.run_id === ev.run_id) closeApproval();
       // the Run screen moves on to a run still in progress when the one it showed ends elsewhere
       if (state.runId === ev.run_id && state.view !== 'run' && liveRuns().length) state.runId = liveRuns()[0].run.id;
       if (liveRuns().length && !replaying) showToast(`${runLabel(v.run)}: ${statusLabel(v.run)}`, ev.error, ev.run_id);
@@ -1868,19 +1882,18 @@ function onEvent(ev) {
     case 'approval.requested': {
       v.approvals.set(ev.approval_id, ev);
       orch(ev, `? approval requested at ${ev.step_id}`, 'warn');
-      // asked right away only on the Run screen of this run; elsewhere a badge and a toast say it waits
+      // asked inside its run (the Run screen's gate card, the run chats); elsewhere a badge, a toast
+      // and the pending approvals list say it waits: nothing covers the screen
       const shown = state.view === 'run' && state.runId === ev.run_id;
-      if (replaying) break; // hydrateRun asks the gates still waiting once the replay is over
-      if (shown) openApproval(ev);
-      else if (!window.duoShowsRun?.(ev.run_id) && !window.arenaShowsRun?.(ev.run_id) && !window.runChatShowsRun?.(ev.run_id)) {
-        showToast(`Approval waiting: ${runLabel(v.run)}`, `Step ${ev.step_id}. Click to review it.`, ev.run_id, ev);
+      if (replaying || shown) break;
+      if (!window.duoShowsRun?.(ev.run_id) && !window.arenaShowsRun?.(ev.run_id) && !window.runChatShowsRun?.(ev.run_id)) {
+        showToast(`Approval waiting: ${runLabel(v.run)}`, `Step ${ev.step_id}. Click to open its run.`, ev.run_id, ev);
       }
       break;
     }
 
     case 'approval.resolved':
       v.approvals.delete(ev.approval_id);
-      if (state.approval?.approval_id === ev.approval_id && state.approval.run_id === ev.run_id) closeApproval();
       if (ev.choice !== undefined) orch(ev, `human decision: ${ev.choice} (${ev.by})`, 'transition');
       else orch(ev, `approval ${ev.approved ? 'granted' : 'denied'} (${ev.by})`, ev.approved ? 'transition' : 'warn');
       break;
@@ -1949,6 +1962,7 @@ function render() {
   renderHeader();
   if (state.view !== 'run') return;
   renderRunBanner();
+  renderRunGates();
   renderRunSummary();
   renderSteps();
   renderSessions();
@@ -3066,17 +3080,20 @@ window.openResumeDialog = openResumeDialog;
 
 let toastTimer = null;
 // runId: the run it is about (a click shows it); gate: an approval.requested event to open.
+// Never blocks anything: it hides by itself and its × dismisses it.
 function showToast(title, detail, runId = null, gate = null) {
   const el = $('#toast');
-  el.innerHTML = `<b>${esc(title)}</b>${detail ? `<span>${esc(String(detail).slice(0, 220))}</span>` : ''}`;
+  el.innerHTML = `<button type="button" class="toast-close" aria-label="Dismiss" title="Dismiss">×</button><b>${esc(title)}</b>${detail ? `<span>${esc(String(detail).slice(0, 220))}</span>` : ''}`;
   el.classList.remove('hidden');
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => el.classList.add('hidden'), gate ? 15000 : 7000);
-  el.onclick = () => {
+  el.onclick = (e) => {
     el.classList.add('hidden');
+    if (e.target.closest('.toast-close')) return; // dismissed only
+    // a gate still waiting opens inside its run (its chat, or the Run screen's gate card)
+    if (gate && state.runs.get(gate.run_id)?.approvals.has(gate.approval_id)) return openGateOf(gate.run_id);
     if (runId && state.runs.has(runId)) selectRun(runId);
     else if (state.run) showView('run');
-    if (gate && state.runs.get(gate.run_id)?.approvals.has(gate.approval_id)) openApproval(gate);
   };
 }
 

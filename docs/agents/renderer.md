@@ -13,8 +13,10 @@ Read this before changing anything in `src/renderer/`.
 - Several runs can be in progress: `state.runs` (run id → view: run, sessions, steps, log, gates) and
   `state.runId` (the one the Run screen and the top bar show); `state.run`, `state.sessions`… read the
   selected one. Route anything run-specific by `ev.run_id` and pass the `runId` to `stopRun`,
-  `resolveApproval` and the terminals. Gates open the approval dialog only on their run's Run screen
-  (elsewhere: the Run badge and a toast).
+  `resolveApproval` and the terminals. There is no approval dialog: a gate is answered inside its run
+  (the run chats, or the gate card on its Run screen, `renderRunGates`); elsewhere the Run badge, a
+  dismissable toast, the dashboard's pending approvals list and a desktop notification say it waits.
+  Nothing a run raises may cover the screen: dialogs are for the user's own clicks.
 - Write & Review and AI Arena keep their own chat screens; every other run uses the run chat
   (`run-chat-model.js` is pure and unit-tested, `run-chat.js` draws it).
 - Check changes by looking at screenshots: `npm run screenshot -- --view <view> [--tab|--mode|--click]
