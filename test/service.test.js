@@ -5,6 +5,7 @@ const os = require('os');
 const path = require('path');
 const { setupWorkspace } = require('../src/workspace');
 const { createService } = require('../src/service');
+const backlog = require('../src/backlog');
 
 // A mock run with one agent turn and a human gate, written into the workspace's workflows.
 const WORKFLOW = `apiVersion: multiagent/v1
@@ -794,4 +795,68 @@ test('a session with no tokens shows null; non-numeric token values never become
   const sessions = api['runs:list']().runs.find((r) => r.runId === runId).sessions;
   assert.equal(sessions.find((s) => s.agent === 'orchestrator').tokens, null);
   assert.deepEqual(sessions.find((s) => s.agent === 'a').tokens, { input: 12, output: 0, cache_read: 0, cache_write: 0, reasoning: 5, total: 12 });
+});
+
+// #83: the restart banner and the safe-restart refusals.
+test('app:codeVersion reports this process\'s own version, unchanged right after start', async (t) => {
+  const { api } = makeService(t);
+  const v = api['app:codeVersion']();
+  assert.deepEqual(Object.keys(v).sort(), ['changed', 'disk', 'loaded', 'running'].sort());
+  assert.equal(v.changed, false);
+  assert.equal(v.disk, v.running);
+});
+
+async function untilTrue(fn) { for (let i = 0; i < 200 && !fn(); i++) await new Promise((r) => setTimeout(r, 20)); assert.ok(fn()); }
+
+// Resolves the fixture workflow's human gate and waits for the run to leave runs:active, so no
+// mock step keeps writing to the workspace after the test (and its t.after cleanup) is done.
+async function finishPendingRun(api, runId) {
+  await untilTrue(() => (api['runs:active']().find((r) => r.runId === runId)?.gates || []).length > 0);
+  const [gate] = api['runs:active']().find((r) => r.runId === runId).gates;
+  api['approval:resolve']({ runId, id: gate.approval_id, answer: true });
+  await untilTrue(() => !api['runs:active']().some((r) => r.runId === runId));
+}
+
+test('prepareRestart refuses while a run start is still reserved (e.g. cloning its repository)', async (t) => {
+  const { service: base } = makeService(t);
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  const service = createService({ host: { trashItem: async () => {}, appVersion: '0', isPackaged: false, assertCanRun: async () => { await gate; } } });
+  t.after(() => service.shutdown());
+  service.setWorkspace(base.workspace());
+  const starting = service.api['run:start']({ file: 'fixture-service.yaml', inputs: {}, mock: true });
+  assert.throws(() => service.prepareRestart({ interruptRuns: true }), /starting/);
+  release();
+  const { runId } = await starting;
+  await finishPendingRun(service.api, runId);
+});
+
+test('prepareRestart refuses with active runs unless confirmed; once confirmed it pauses the Backlog queues', async (t) => {
+  const { service, api } = makeService(t);
+  const ws = service.workspace();
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'service-restart-'));
+  t.after(() => fs.rmSync(folder, { recursive: true, force: true }));
+  const p = await api['projects:create']({ name: 'demo', folder });
+  backlog.enqueue(ws.backlog, p.id, { issues: [{ number: 1, url: 'u1', title: 'T1', body: 'B1' }], workflow: 'fixture-service.yaml' });
+
+  const { runId } = await api['run:start']({ file: 'fixture-service.yaml', inputs: {}, mock: true });
+  assert.throws(() => service.prepareRestart(), /1 run is in progress.*confirm the restart/s);
+  assert.equal(backlog.readQueue(ws.backlog, p.id).paused, false, 'refused: nothing paused yet');
+
+  const result = service.prepareRestart({ interruptRuns: true });
+  assert.deepEqual(result, { interrupted: [{ runId, workflow: 'fixture-service' }] });
+  assert.equal(backlog.readQueue(ws.backlog, p.id).paused, true);
+  await finishPendingRun(api, runId);
+});
+
+test('prepareRestart with no runs in progress needs no confirmation and still pauses queued Backlog work', async (t) => {
+  const { service, api } = makeService(t);
+  const ws = service.workspace();
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'service-restart-idle-'));
+  t.after(() => fs.rmSync(folder, { recursive: true, force: true }));
+  const p = await api['projects:create']({ name: 'demo', folder });
+  backlog.enqueue(ws.backlog, p.id, { issues: [{ number: 1, url: 'u1', title: 'T1', body: 'B1' }], workflow: 'fixture-service.yaml' });
+
+  assert.deepEqual(service.prepareRestart(), { interrupted: [] });
+  assert.equal(backlog.readQueue(ws.backlog, p.id).paused, true);
 });

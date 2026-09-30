@@ -72,3 +72,28 @@ test('cardLines(): a simulated session says so next to its provider', () => {
 test('turnHtml: a message on the right gets the rc-right class', () => {
   assert.match(src, /rc-\$\{it\.side === 'right' \? 'right' : 'left'\}/);
 });
+
+// #80: a run's chat always opens scrolled to its latest message, live or past (it used to open a
+// past run at the start: "scroller.scrollTop = chat.live ? scroller.scrollHeight : 0").
+test('openRun(): every run opens scrolled to its latest message, not only a live one', () => {
+  const openRun = /async function openRun\(runId, \{[\s\S]*?\n  \}/.exec(src)[0];
+  assert.match(openRun, /toLatest\(\);/);
+  assert.doesNotMatch(openRun, /scroller\.scrollTop = chat\.live \? scroller\.scrollHeight : 0/);
+});
+
+// #80: the Chat / Details toggle becomes the remembered run view for every later way of opening a run.
+test('Details and "Chat" switch explicitly and become the remembered run view', () => {
+  assert.match(src, /\$c\('#rc-details'\)\.onclick = \(\) => \{\s*setRunView\('details'\);/);
+  assert.match(src, /setRunView\('chat'\);\s*openChatFor\(/);
+});
+
+// #80: "Jump to latest" appears once the reader has scrolled far enough up from the last message.
+test('scrolledUp(): true once more than 240px of messages are below the visible area', () => {
+  const scrolledUp = /const scrolledUp = \(s\) => [^\n]+;/.exec(src)[0];
+  const sandbox = {};
+  vm.createContext(sandbox);
+  vm.runInContext(`${scrolledUp}\nthis.scrolledUp = scrolledUp;`, sandbox);
+  assert.equal(sandbox.scrolledUp({ scrollHeight: 1000, scrollTop: 760, clientHeight: 200 }), false); // 40px below
+  assert.equal(sandbox.scrolledUp({ scrollHeight: 1000, scrollTop: 500, clientHeight: 200 }), true); // 300px below
+  assert.equal(sandbox.scrolledUp({ scrollHeight: 1000, scrollTop: 800, clientHeight: 200 }), false); // at the bottom
+});
