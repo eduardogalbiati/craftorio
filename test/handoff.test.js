@@ -55,6 +55,7 @@ test('handoff sessions: every turn is a fresh session that starts from the agent
     assert.match(p, /\(step develop, visit \d\)/);
   }
   assert.ok(prompts.every((p) => p.includes('write a ```handoff block')), 'every turn asks for a note');
+  assert.ok(prompts.every((p) => p.includes('Write the note in English')), 'the note is asked for in English, whatever the project or the conversation use');
 
   // the answers come back without the note; the notes are files in the run, one per turn
   for (const e of events.filter((x) => x.type === 'session.message_received')) assert.ok(!e.text.includes('```handoff'));

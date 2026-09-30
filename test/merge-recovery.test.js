@@ -191,7 +191,9 @@ test('check: a conflict found before the gate opens never asks for approval; the
 });
 
 test('check.on_fail without recover escalates straight to the gate, with no supervisor call', { timeout: 30000 }, async (t) => {
-  const yaml = fs.readFileSync(FIXTURE, 'utf8').replace('      on_fail: resolve\n      recover: [resolve]\n', '      on_fail: resolve\n');
+  // the fixture is CRLF in the working tree (docs/agents/windows-gotchas.md): normalize before the
+  // literal replace, or it silently no-ops and leaves `recover:` in place.
+  const yaml = fs.readFileSync(FIXTURE, 'utf8').replace(/\r\n/g, '\n').replace('      on_fail: resolve\n      recover: [resolve]\n', '      on_fail: resolve\n');
   const file = path.join(os.tmpdir(), `merge-race-noRecover-${process.pid}.yaml`);
   fs.writeFileSync(file, yaml);
   t.after(() => fs.unlinkSync(file));

@@ -169,6 +169,23 @@ test('resumeSpec carries the issues over; a run recorded with one `issue` resume
   assert.deepEqual(supervisor.resumeSpec(dir, 'x').issues, [ref(7)]);
 });
 
+test('skippedGate: the last human gate before fromStep that the previous run decided, or null', () => {
+  const wf = { steps: [{ id: 'plan' }, { id: 'approve', type: 'human_approval' }, { id: 'work' }, { id: 'approve2', type: 'human_approval' }, { id: 'ship' }] };
+  assert.equal(supervisor.skippedGate(wf, 'plan', {}), null, 'nothing before the first step');
+  assert.equal(supervisor.skippedGate(wf, 'work', {}), null, 'the gate before it was never decided');
+  assert.equal(supervisor.skippedGate(wf, 'work', { approve: { output: {}, visits: 1 } }), 'approve');
+  assert.equal(supervisor.skippedGate(wf, 'approve', { approve: { output: {}, visits: 1 } }), null, 'the gate itself: only earlier gates count, and there are none');
+  assert.equal(supervisor.skippedGate(wf, 'ship', { approve: { visits: 1 }, approve2: { visits: 1 } }), 'approve2', 'the latest decided gate before it');
+  assert.equal(supervisor.skippedGate(wf, 'nope', {}), null, 'not a step of this workflow');
+});
+
+test('withoutGateDecisions drops only the human_approval steps\' outputs', () => {
+  const wf = { steps: [{ id: 'plan' }, { id: 'approve', type: 'human_approval' }, { id: 'work' }] };
+  const steps = { plan: { output: { x: 1 }, visits: 1 }, approve: { output: { approved: true }, visits: 1 }, work: { output: { y: 2 }, visits: 1 } };
+  assert.deepEqual(supervisor.withoutGateDecisions(wf, steps), { plan: steps.plan, work: steps.work });
+  assert.deepEqual(supervisor.withoutGateDecisions(wf, {}), {});
+});
+
 test('actionSchema: goto is limited to the transition\'s own recovery steps', () => {
   const schema = supervisor.actionSchema(['resolve_conflict']);
   assert.deepEqual(schema.properties.goto.enum, ['resolve_conflict']);

@@ -58,6 +58,12 @@ test('computeUsage counts unpriced tokens and includes the live run once', (t) =
   assert.equal(u.runs[0].status, 'running');
 });
 
+test('totalTokens sums input, output, cache read and cache write; reasoning is already counted in output', () => {
+  assert.equal(usage.totalTokens({ input: 202, output: 78524, cache_read: 14422800, cache_write: 209122, reasoning: 9000 }), 14710648);
+  assert.equal(usage.totalTokens({}), 0);
+  assert.equal(usage.totalTokens(), 0);
+});
+
 test('engine blocks a turn when the provider budget is exhausted and warns at 80%', () => {
   const run = new WorkflowRun({
     file: path.join(__dirname, 'fixtures', 'fanout.yaml'), inputs: {}, mock: true, runsDir: os.tmpdir(),

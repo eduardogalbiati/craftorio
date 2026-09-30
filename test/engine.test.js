@@ -86,6 +86,8 @@ test('/goal + /loop: repeats the step, delegates the failure and passes on the r
   // the iteration after the failure receives the result of the delegation to dev
   assert.match(prompts[2], /DELEGATE:dev/);
   assert.doesNotMatch(prompts[3], /DELEGATE/);
+  // a step with an output_schema ends by requiring English, whatever the project's own instructions say
+  assert.match(prompts[0], /written in English[\s\S]*whatever language the project instructions or the conversation use/);
 
   const resolved = events.find((e) => e.type === 'approval.resolved');
   assert.equal(resolved.choice, 'proceed');
@@ -365,6 +367,7 @@ test('schema retries resend the schema, and the task plus previous answer for ep
   assert.match(p, /ORIGINAL TASK/);
   assert.match(p, /<previous_answer>\nPREVIOUS ANSWER\n<\/previous_answer>/);
   assert.match(p, /"required": \[\s*"verdict"\s*\]/);
+  assert.match(p, /in English/);
   run.wf.agents.a.session = 'persistent';
   const q = run.retryPrompt('a', 'ORIGINAL TASK', 'PREVIOUS ANSWER', schema, ['x']);
   assert.doesNotMatch(q, /ORIGINAL TASK|PREVIOUS ANSWER/); // the session already has them

@@ -11,8 +11,8 @@ const TOOLCHAINS = ['bash:git', 'bash:npm'];
 
 test('claude: capabilities become --tools (offered), --allowedTools (approved) and acceptEdits for writers', () => {
   const { args } = caps.providerArgs('claude-code', { caps: caps.normalize({ tools: ['read', 'edit', 'write', TOOLCHAINS], subagents: true }) });
-  assert.equal(argAfter(args, '--tools'), 'Read,Glob,Grep,Edit,NotebookEdit,Write,Bash,Task');
-  assert.equal(argAfter(args, '--allowedTools'), 'Read Glob Grep Edit NotebookEdit Write Bash(git:*) Bash(npm:*) Task');
+  assert.equal(argAfter(args, '--tools'), 'Read,Glob,Grep,Edit,NotebookEdit,Write,Bash,Agent,Task');
+  assert.equal(argAfter(args, '--allowedTools'), 'Read Glob Grep Edit NotebookEdit Write Bash(git:*) Bash(npm:*) Agent Task');
   assert.equal(argAfter(args, '--permission-mode'), 'acceptEdits');
   assert.ok(!args.join(' ').includes('WebSearch'), 'no web tools unless web: true');
 
@@ -83,6 +83,14 @@ test('step capabilities override the agent\'s key by key; describe() summarizes 
   assert.equal(caps.merge(null, null), null);
   assert.equal(caps.describe({ tools: ['read', 'edit', ['bash:git', 'bash:gh']] }), 'tools: read, edit, bash: git gh · web: off · mcp: none');
   assert.equal(caps.describe(null), 'cli_args only');
+});
+
+test('describe(caps, type): the run log names the tool that offers sub-agents, per provider', () => {
+  const withSubagents = { tools: ['read'], subagents: true };
+  assert.match(caps.describe(withSubagents, 'claude-code'), /subagents: Agent\/Task tool offered$/);
+  assert.match(caps.describe(withSubagents, 'codex-cli'), /subagents: not offered by Codex$/);
+  assert.match(caps.describe(withSubagents), /· subagents$/, 'no provider type: the generic word');
+  assert.doesNotMatch(caps.describe({ tools: ['read'] }, 'claude-code'), /subagents/, 'subagents: false leaves it out entirely');
 });
 
 test('loadWorkflow rejects unknown capabilities, tools, MCP servers and session modes', (t) => {

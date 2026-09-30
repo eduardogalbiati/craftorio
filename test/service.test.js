@@ -585,3 +585,180 @@ test('artifacts: a run screenshot is read as an image data URL, a text file as t
   assert.equal(text.image, null);
   assert.equal(text.text, '[]');
 });
+
+// ---- Resume from step… (#100): runs:resume, no supervisor call, gates never skipped --------
+const RESUME_WORKFLOW = `apiVersion: multiagent/v1
+kind: Workflow
+metadata:
+  name: fixture-resume
+agents:
+  a: { provider: claude, model: m, session: ephemeral }
+steps:
+  - id: plan
+    agent: a
+    prompt: "plan the work"
+  - id: approve
+    type: human_approval
+    message: "Proceed?"
+  - id: work
+    agent: a
+    prompt: "do the work"
+`;
+
+function makeResumeService(t) {
+  const { service, api } = makeService(t);
+  fs.writeFileSync(path.join(service.workspace().workflows, 'fixture-resume.yaml'), RESUME_WORKFLOW);
+  return { service, api };
+}
+
+// Starts a run through the given channel, auto-approves every gate it meets, and resolves with
+// its start info ({ runId, runDir }) plus every event and the workflow.finished event.
+function runToEnd(service, api, channel, opts) {
+  const events = [];
+  const finished = new Promise((resolve) => {
+    const onEvent = (ev) => {
+      events.push(ev);
+      if (ev.type === 'approval.requested') setImmediate(() => api['approval:resolve']({ id: ev.approval_id, answer: true }));
+      if (ev.type === 'workflow.finished') { service.events.off('run:event', onEvent); resolve(ev); }
+    };
+    service.events.on('run:event', onEvent);
+  });
+  return api[channel](opts).then(async (started) => ({ ...started, events, end: await finished }));
+}
+
+test('runs:resume restarts a run from a step with no supervisor call; supervisor:resume is the same channel', async (t) => {
+  const { service, api } = makeResumeService(t);
+  const first = await runToEnd(service, api, 'run:start', { file: 'fixture-resume.yaml', inputs: {}, mock: true });
+  assert.equal(first.end.status, 'success');
+
+  const resumed = await runToEnd(service, api, 'runs:resume', { runId: first.runId, step: 'plan' });
+  assert.equal(resumed.end.status, 'success');
+  assert.deepEqual(resumed.events.find((e) => e.type === 'workflow.started').resumed_from, { run_id: first.runId, step: 'plan' });
+  assert.ok(!resumed.events.some((e) => e.type === 'session.opened' && e.session.agent === 'supervisor'), 'no supervisor session: no LLM call, no cost');
+
+  const alias = await runToEnd(service, api, 'supervisor:resume', { runId: first.runId, step: 'plan' });
+  assert.equal(alias.end.status, 'success');
+  assert.deepEqual(alias.events.find((e) => e.type === 'workflow.started').resumed_from, { run_id: first.runId, step: 'plan' });
+});
+
+test('runs:resume refuses to go past a human gate the previous run already decided', async (t) => {
+  const { service, api } = makeResumeService(t);
+  const first = await runToEnd(service, api, 'run:start', { file: 'fixture-resume.yaml', inputs: {}, mock: true });
+  assert.throws(() => api['runs:resume']({ runId: first.runId, step: 'work' }), /go past the human gate "approve"/);
+});
+
+test('runs:resume from the gate itself asks it again, never auto-approved', async (t) => {
+  const { service, api } = makeResumeService(t);
+  const first = await runToEnd(service, api, 'run:start', { file: 'fixture-resume.yaml', inputs: {}, mock: true });
+  const resumed = await runToEnd(service, api, 'runs:resume', { runId: first.runId, step: 'approve' });
+  assert.equal(resumed.events.find((e) => e.type === 'approval.requested').step_id, 'approve', 'the gate is asked again, not skipped as already approved');
+  assert.equal(resumed.end.status, 'success');
+});
+
+test('runs:resume refuses a step that does not exist in the current version of the workflow', async (t) => {
+  const { service, api } = makeResumeService(t);
+  const first = await runToEnd(service, api, 'run:start', { file: 'fixture-resume.yaml', inputs: {}, mock: true });
+  assert.throws(() => api['runs:resume']({ runId: first.runId, step: 'nope' }), /does not exist in the current version/);
+});
+
+test('runs:resume refuses to resume a run that is still active', async (t) => {
+  const { service, api } = makeResumeService(t);
+  const finished = new Promise((resolve) => {
+    const onEvent = (ev) => {
+      if (ev.type === 'approval.requested') assert.throws(() => api['runs:resume']({ runId: ev.run_id, step: 'plan' }), /still active/);
+      if (ev.type === 'approval.requested') setImmediate(() => api['approval:resolve']({ runId: ev.run_id, id: ev.approval_id, answer: true }));
+      if (ev.type === 'workflow.finished') { service.events.off('run:event', onEvent); resolve(); }
+    };
+    service.events.on('run:event', onEvent);
+  });
+  await api['run:start']({ file: 'fixture-resume.yaml', inputs: {}, mock: true });
+  await finished;
+});
+
+test('a simulated run always resumes as one; simulation-only refuses to resume a real run as real', async (t) => {
+  const { service, api } = makeResumeService(t);
+  const ws = service.workspace();
+
+  // a real run this environment never actually started (simulation-only forbids it): fabricated
+  // the way a run folder from a previous session would look, to resume it in this test.
+  const fakeId = '20260101-000000-fakereal1';
+  const dir = path.join(ws.runs, fakeId);
+  fs.mkdirSync(dir, { recursive: true });
+  const ev = (o) => `${JSON.stringify({ ts: '2026-01-01T00:00:00Z', ...o })}\n`;
+  fs.writeFileSync(path.join(dir, 'events.jsonl'),
+    ev({ type: 'workflow.started', workflow: 'fixture-resume', file: 'fixture-resume.yaml', inputs: {}, mock: false })
+    + ev({ type: 'step.finished', step_id: 'plan', visit: 1, output: {} }));
+  await assert.rejects(api['runs:resume']({ runId: fakeId, step: 'plan', mock: false }), /Simulation only/);
+
+  const first = await runToEnd(service, api, 'run:start', { file: 'fixture-resume.yaml', inputs: {}, mock: true });
+  const resumed = await runToEnd(service, api, 'runs:resume', { runId: first.runId, step: 'plan', mock: false });
+  assert.equal(resumed.events.find((e) => e.type === 'workflow.started').mock, true, 'a mock run stays mock however it is resumed');
+});
+
+test('runs:resumeOptions lists the workflow steps in order, the gate, what is blocked, and a suggested step', async (t) => {
+  const { service, api } = makeResumeService(t);
+  const first = await runToEnd(service, api, 'run:start', { file: 'fixture-resume.yaml', inputs: {}, mock: true });
+  const o = await api['runs:resumeOptions']({ runId: first.runId });
+
+  assert.equal(o.runId, first.runId);
+  assert.equal(o.status, 'success');
+  assert.equal(o.active, false);
+  assert.equal(o.mock, true);
+  assert.deepEqual(o.steps.map((s) => s.id), ['plan', 'approve', 'work']);
+  assert.deepEqual(o.steps.map((s) => s.gate), [false, true, false]);
+  assert.ok(o.steps.every((s) => s.visits === 1), 'every step of this linear workflow ran once');
+  assert.equal(o.steps.find((s) => s.id === 'plan').blockedBy, null);
+  assert.equal(o.steps.find((s) => s.id === 'approve').blockedBy, null, 'the gate itself is never blocked: it asks again');
+  assert.equal(o.steps.find((s) => s.id === 'work').blockedBy, 'approve');
+  assert.equal(o.stoppedAt, 'work');
+  assert.equal(o.failedStep, null);
+  // 'work' is reached but blocked by the decided gate: the earliest unblocked step is suggested
+  assert.equal(o.suggested, 'plan');
+  assert.equal(o.worktree, null, 'a mock run never touches git');
+});
+
+// ---- Tokens per session (#93): sessionView carries tokens for a live run and a recorded one -----
+test('the agents table carries each session\'s tokens, live while the run goes and from disk once recorded', async (t) => {
+  const { service, api } = makeResumeService(t);
+  let live;
+  const finished = new Promise((resolve) => {
+    service.events.on('run:event', (ev) => {
+      if (ev.type === 'session.message_received' && ev.session.agent === 'a' && !live) {
+        live = api['runs:list']().runs.find((r) => r.status === 'running')?.sessions.find((s) => s.agent === 'a');
+      }
+      if (ev.type === 'approval.requested') setImmediate(() => api['approval:resolve']({ id: ev.approval_id, answer: true }));
+      if (ev.type === 'workflow.finished') resolve();
+    });
+  });
+  const { runId } = await api['run:start']({ file: 'fixture-resume.yaml', inputs: {}, mock: true });
+  await finished;
+
+  assert.ok(live?.tokens, 'a live session already carries its tokens');
+  assert.equal(live.tokens.total, live.tokens.input + live.tokens.output + live.tokens.cache_read + live.tokens.cache_write, 'reasoning is not counted twice');
+
+  const recorded = api['runs:list']().runs.find((r) => r.runId === runId).sessions.find((s) => s.agent === 'a');
+  assert.ok(recorded.tokens.total > 0, 'the finished run still carries the tokens, read back from disk');
+  assert.deepEqual(Object.keys(recorded.tokens).sort(), ['cache_read', 'cache_write', 'input', 'output', 'reasoning', 'total'].sort());
+});
+
+test('a session with no tokens shows null; non-numeric token values never become NaN', async (t) => {
+  const { api, service } = makeResumeService(t);
+  const ws = service.workspace();
+  const runId = '20260101-000000-tokens0001';
+  const dir = path.join(ws.runs, runId);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'events.jsonl'), '');
+  fs.writeFileSync(path.join(dir, 'summary.json'), JSON.stringify({
+    run_id: runId, workflow: 'fixture-resume', file: 'fixture-resume.yaml', status: 'success', mock: true,
+    started_at: '2026-01-01T00:00:00Z', finished_at: '2026-01-01T00:05:00Z', inputs: {},
+    sessions: [
+      { id: 's1', agent: 'orchestrator', provider: 'mock', model: 'm', status: 'closed', turns: 0, cost_usd: 0 }, // no tokens field
+      { id: 's2', agent: 'a', provider: 'mock', model: 'm', status: 'closed', turns: 1, cost_usd: 0,
+        tokens: { input: '12', output: null, cache_read: undefined, cache_write: NaN, reasoning: 5 } },
+    ],
+  }));
+
+  const sessions = api['runs:list']().runs.find((r) => r.runId === runId).sessions;
+  assert.equal(sessions.find((s) => s.agent === 'orchestrator').tokens, null);
+  assert.deepEqual(sessions.find((s) => s.agent === 'a').tokens, { input: 12, output: 0, cache_read: 0, cache_write: 0, reasoning: 5, total: 12 });
+});
