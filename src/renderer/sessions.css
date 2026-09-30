@@ -15,7 +15,7 @@
 .sx-search:focus { outline: none; border-color: var(--accent); }
 .sx-filters { margin: 0; }
 .sx-toggle { display: flex; align-items: center; gap: 6px; cursor: pointer; }
-.sx-list { flex: 1; min-height: 0; overflow: auto; margin: 0 -12px 0 -16px; padding: 0 8px 16px; scrollbar-width: thin; }
+.sx-list { flex: 1; min-height: 0; overflow: auto; margin: 0 -12px 0 -16px; padding: 0 8px 16px; scrollbar-gutter: stable; }
 .sx-group { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; padding: 12px 8px 4px; }
 .sx-pad { padding: 8px; }
 

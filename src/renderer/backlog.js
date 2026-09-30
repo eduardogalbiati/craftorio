@@ -6,7 +6,7 @@
 // one at a time (the run records its issues), as separate runs or, when asked, as one run for all
 // of them (one branch, one PR/MR). Issues link to the runs working on them.
 // Uses app.js globals ($, esc, state, errMsg, dateOf, markdownHtml, showView, openModal,
-// closeModal, devMode, wantsSimulation, openApproval).
+// closeModal, wantsSimulation, openApproval).
 /* global api */
 (() => {
   // Must match PLATFORMS in src/backlog.js (soon = no sync yet).
@@ -186,12 +186,12 @@
     $b('#btn-assign-ok').disabled = !n || tooMany;
     $b('#btn-assign-ok').textContent = `${mock ? 'Simulate' : 'Start'} ${runs} run${plural}`;
     const note = $b('#assign-note');
-    note.className = `small ${mock && !tooMany ? 'muted' : 'warn-text'}`;
+    note.className = `small ${n && !tooMany ? 'muted' : 'warn-text'}`;
     const what = group ? `${n} issues → 1 run, 1 ${bl.data?.platform === 'gitlab' ? 'MR' : 'PR'} closing ${numbers.map((x) => `#${x}`).join(', ')}.` : '';
     note.textContent = !n ? 'Nothing to start: every selected issue is skipped.'
       : tooMany ? `One run takes at most ${maxGroup()} issues (Settings › General › Backlog): select fewer or send them as separate runs.`
         : mock ? `${what ? `${what} ` : ''}${runs} simulated run${plural}: no CLI is called and nothing is spent.`
-          : `${what ? `${what} ` : ''}${runs} real run${plural}${runs > 1 ? ', one at a time,' : ''} starting now if nothing else is running. ${runs > 1 ? 'They use' : 'It uses'} your CLI subscriptions. Human gates still wait for you.`;
+          : `${what ? `${what} ` : ''}${runs} real run${plural}: ${runs > 1 ? 'they use' : 'it uses'} your CLI subscriptions. Human gates still wait for you.`;
   }
 
   async function openAssign() {
@@ -206,7 +206,8 @@
     sel.innerHTML = bl.workflows.map((w) => `<option value="${esc(w.file)}">${esc(w.name)}</option>`).join('');
     const files = bl.workflows.map((w) => w.file);
     sel.value = [load(WORKFLOW_KEY), 'software-development.yaml', files[0]].find((f) => f && files.includes(f));
-    $b('#assign-mock').checked = devMode();
+    // real runs by default: Simulation is opt-in (checked only where real runs are refused anyway)
+    $b('#assign-mock').checked = !!state.simulationOnly;
     document.querySelector('input[name="assign-group"][value="separate"]').checked = true;
     renderAssignBusy();
     renderAssignInputs();

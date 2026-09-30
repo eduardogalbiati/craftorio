@@ -37,7 +37,7 @@
 .duo-brief { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 18px 18px 6px; }
 .duo-brief textarea { width: 100%; font-size: 13px; }
 .duo-rules { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; padding: 4px 0 12px; font-size: 12px; font-weight: 600; }
-.duo-rules input {
+.duo-rules input:not([type=checkbox]):not([type=radio]) {
   width: 60px; margin: 0 4px; background: var(--panel-2); color: var(--text);
   border: 1px solid var(--border); border-radius: 8px; padding: 4px 8px; font: inherit;
 }

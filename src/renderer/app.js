@@ -2764,6 +2764,10 @@ function xtermTheme() {
     cursor: accent,
     cursorAccent: v('--bg', '#0e1014'),
     selectionBackground: sel,
+    // xterm draws its own scrollbar: the same colours as the app's (style.css :root)
+    scrollbarSliderBackground: v('--scrollbar-thumb', 'rgba(138,145,163,0.3)'),
+    scrollbarSliderHoverBackground: v('--scrollbar-thumb-hover', 'rgba(138,145,163,0.5)'),
+    scrollbarSliderActiveBackground: v('--scrollbar-thumb-active', 'rgba(138,145,163,0.7)'),
   };
 }
 
