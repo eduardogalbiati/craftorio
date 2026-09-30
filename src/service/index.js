@@ -21,6 +21,7 @@ const { EventEmitter } = require('events');
 const { WorkflowRun, loadWorkflow } = require('../engine/workflow');
 const { Recorder } = require('../engine/recorder');
 const { resolveCommand } = require('../engine/providers');
+const simulation = require('../engine/simulation');
 const capabilities = require('../engine/capabilities');
 const { cleanupWorktrees, canonicalPath } = require('../engine/worktree');
 const workspace = require('../workspace');
@@ -293,6 +294,8 @@ function createService({ host }) {
 
   // mockSequences: simulation scenario ({ field: [value per visit] }, invalid_answers), ignored for real runs
   async function startWorkflowRun({ file, inputs, mock, mockSequences = null, resume = null, projectId: forcedProject = null, issue = null }) {
+    // simulation-only (automated checks): a real run is refused, never turned into a simulation
+    if (!mock) simulation.refuseReal('a real run');
     const slot = { mock: !!mock, projectId: forcedProject };
     const busy = slotProblem(slot);
     if (busy) throw new Error(busy);
@@ -393,6 +396,7 @@ function createService({ host }) {
     const found = findSession(runId, sessionId);
     if (!found) throw new Error('Session not found.');
     const { run, sess } = found;
+    if (mode !== 'live') simulation.refuseReal(`the ${sess.provider} CLI`);
     const env = { ...process.env };
     delete env.CLAUDECODE;
     if (mode === 'live') {
@@ -429,6 +433,7 @@ function createService({ host }) {
   function supervisorChatSpec(runId) {
     const runDir = runFolder(runId);
     const cfg = supervisor.supervisorConfig(runDir, workflowDirs());
+    simulation.refuseReal(`the supervisor's CLI (${cfg.provider.command || 'claude'})`);
     const skill = skills.resolveSkill([ws.skills, BUNDLED_SKILLS_DIR], 'run-supervisor');
     const ctxFile = path.join(runDir, 'supervisor', 'context.md');
     fs.mkdirSync(path.dirname(ctxFile), { recursive: true });
@@ -506,6 +511,7 @@ function createService({ host }) {
   function cliSessionSpec({ kind, provider, sessionId, model, effort, projectId, folder }) {
     const p = cliSessions.CLI_PROVIDERS[provider];
     if (!p) throw new Error(`Unknown provider: ${provider}`);
+    simulation.refuseReal(`the ${p.command} CLI`);
     const cmd = resolveCommand(p.command);
     if (!cmd) throw new Error(`${p.name} (${p.command}) is not installed.`);
     if (kind === 'cli-resume') {
@@ -630,7 +636,10 @@ function createService({ host }) {
     const file = path.basename(String(workflow || ''));
     const wf = loadWorkflow(workflowPath(file).file);
     if (!wf.inputs?.task) throw new Error(`Workflow ${wf.metadata?.name || file} has no task input to receive the issue.`);
-    if (!mock) await host.assertCanRun?.({ mock: false });
+    if (!mock) {
+      simulation.refuseReal('real runs from the Backlog');
+      await host.assertCanRun?.({ mock: false });
+    }
     backlog.enqueue(ws.backlog, project.id, { issues, workflow: file, workflowName: wf.metadata?.name || file, inputs: inputs || {}, mock: !!mock });
     await dispatchQueue();
     return withIssueRuns(backlog.readBacklog(ws.backlog, project.id));
@@ -769,6 +778,7 @@ function createService({ host }) {
       electron: process.versions.electron,
       node: process.versions.node,
       workflowsDir: ws.workflows,
+      simulationOnly: simulation.simulationOnly(),
     }),
 
     'settings:get': () => workspace.readSettings(ws),

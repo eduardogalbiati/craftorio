@@ -14,6 +14,7 @@ const os = require('os');
 const crypto = require('crypto');
 const path = require('path');
 const readline = require('readline');
+const { refuseReal } = require('./simulation');
 
 const emptyUsage = () => ({ input: 0, output: 0, cache_read: 0, cache_write: 0, reasoning: 0 });
 
@@ -478,6 +479,7 @@ async function runMock({ providerSessionId, model, hint, signal, onItem }) {
 
 // ---------------------------------------------------------------------------
 async function runTurn(opts) {
+  if (opts.provider.type !== 'mock') refuseReal(`the ${opts.provider.type} provider`);
   switch (opts.provider.type) {
     case 'mock': return runMock(opts);
     case 'claude-code': return runCli(opts, parseClaude);

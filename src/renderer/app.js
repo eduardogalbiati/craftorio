@@ -192,6 +192,8 @@ async function init() {
 
   state.ws = await api.getWorkspace();
   state.settings = await api.getSettings();
+  state.simulationOnly = !!(await api.appInfo()).simulationOnly;
+  $('#sim-only-badge').classList.toggle('hidden', !state.simulationOnly);
   applyDeveloperMode();
   [state.workflows, state.projects, state.skills] = await Promise.all([api.listWorkflows(), api.listProjects(), api.listSkills()]);
   renderWorkspacePaths();
@@ -284,8 +286,16 @@ function initNotifications() {
 }
 
 // Developer mode (Settings › Execution): the Simulation checkboxes (.dev-only) are shown and checked
-// by default; without it they are hidden and every run is real.
-const devMode = () => !!state.settings.developerMode;
+// by default; without it they are hidden and every run is real. Simulation only (automated checks,
+// MULTIAGENT_SIMULATION_ONLY) behaves as developer mode: the engine refuses real runs anyway.
+const devMode = () => !!state.settings.developerMode || !!state.simulationOnly;
+// Whether a start is simulated, from its Simulation checkbox. Checked while it can't apply (developer
+// mode off) fails instead of silently starting a real run.
+function wantsSimulation(box) {
+  if (!box?.checked) return false;
+  if (!devMode()) throw new Error('Simulation is checked but Developer mode is off (Settings › Execution): turn it on or uncheck Simulation.');
+  return true;
+}
 function applyDeveloperMode() {
   document.body.classList.toggle('dev-mode', devMode());
   for (const sel of ['#mock-toggle', '#duo-mock', '#arena-mock']) {
@@ -483,7 +493,7 @@ async function startRun() {
 
   $('#btn-start').disabled = true;
   try {
-    const { runId } = await api.startRun({ file: wf.file, inputs, mock: devMode() && $('#mock-toggle').checked });
+    const { runId } = await api.startRun({ file: wf.file, inputs, mock: wantsSimulation($('#mock-toggle')) });
     state.settings = await api.setSettings({ lastWorkflow: wf.file, lastProject: project?.id || null });
     const view = state.runs.get(runId);
     if (view?.run && project) view.run.project = project.name;

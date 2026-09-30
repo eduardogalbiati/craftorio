@@ -92,6 +92,10 @@ test('loadWorkflow rejects unknown capabilities, tools, MCP servers and session 
 test('a real turn gets the capability and isolation flags, and its context is measured per request', { timeout: 30000 }, async (t) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'caps-run-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  // the "CLI" is node + a fake that calls no model: lift the simulation-only guard for this test
+  const guard = process.env.MULTIAGENT_SIMULATION_ONLY;
+  delete process.env.MULTIAGENT_SIMULATION_ONLY;
+  t.after(() => { if (guard !== undefined) process.env.MULTIAGENT_SIMULATION_ONLY = guard; });
   const fake = path.join(__dirname, 'fixtures', 'fake-claude.js').replace(/\\/g, '/');
   const file = path.join(dir, 'wf.yaml');
   fs.writeFileSync(file, [

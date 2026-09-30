@@ -42,6 +42,10 @@ and the run cannot recover by itself.
 - Electron UI checks quit on their own: the script calls `app.quit()` when done **and** after a hard
   timeout (`setTimeout(() => app.exit(1), 60000)`), on errors too, as `scripts/smoke.js` does when the
   project has one.
+- UI checks never call real (paid) models: run them through the project's own check scripts
+  (`scripts/smoke.js` when it has one), with its simulation-only switch set if it has one
+  (`MULTIAGENT_SIMULATION_ONLY=1`) and a scratch workspace; never a hand-written script that launches
+  the app's main process directly.
 - Run them in the **foreground** with a command timeout (`npx electron check.js`). Never start them in
   the background, and never stop them with TaskStop or by killing `npx`: that kills the launcher and
   leaves `electron.exe` running.

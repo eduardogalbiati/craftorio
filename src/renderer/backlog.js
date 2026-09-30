@@ -5,7 +5,7 @@
 // Selected To do issues can be assigned to a workflow: they are queued and the service runs them
 // one at a time (the run records the issue). Issues link to the runs working on them.
 // Uses app.js globals ($, esc, state, errMsg, dateOf, markdownHtml, showView, openModal,
-// closeModal, devMode, openApproval).
+// closeModal, devMode, wantsSimulation, openApproval).
 /* global api */
 (() => {
   // Must match PLATFORMS in src/backlog.js (soon = no sync yet).
@@ -209,7 +209,7 @@
     const btn = $b('#btn-assign-ok');
     btn.disabled = true;
     try {
-      const data = await api.assignWorkflow(bl.projectId, numbers, workflow, inputs, devMode() && $b('#assign-mock').checked);
+      const data = await api.assignWorkflow(bl.projectId, numbers, workflow, inputs, wantsSimulation($b('#assign-mock')));
       save(WORKFLOW_KEY, workflow);
       bl.selected.clear();
       setData(data);

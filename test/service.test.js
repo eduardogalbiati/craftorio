@@ -26,6 +26,7 @@ steps:
 function makeService(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'service-ws-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  process.env.MULTIAGENT_SIMULATION_ONLY = '1'; // tests never call real models
   const trashed = [];
   const service = createService({ host: { trashItem: async (p) => { trashed.push(p); }, appVersion: '9.9.9', isPackaged: false } });
   t.after(() => service.shutdown());
@@ -106,8 +107,25 @@ test('the workspace cannot change while a run is in progress', async (t) => {
   await finished;
 });
 
+test('with simulation only, real runs and CLI terminals are refused', async (t) => {
+  const { service, api } = makeService(t);
+  const asked = [];
+  const host = createService({ host: { trashItem: async () => {}, appVersion: '0', isPackaged: false, assertCanRun: async (o) => { asked.push(o); } } });
+  t.after(() => host.shutdown());
+  host.setWorkspace(service.workspace());
+  await assert.rejects(host.api['run:start']({ file: 'fixture-service.yaml', inputs: {}, mock: false }), /Simulation only .*refusing to start a real run/);
+  assert.throws(() => host.api['term:open']({ kind: 'cli-new', provider: 'claude' }), /Simulation only .*claude CLI/);
+  assert.deepEqual(asked, []); // refused before the account check: nothing real was attempted
+  assert.equal(host.isRunning(), false);
+  assert.deepEqual(api['runs:list']().runs, []);
+  assert.equal(api['app:info']().simulationOnly, true);
+});
+
 test('a run starts only if the host allows it (account / free trial)', async (t) => {
   const { service, api } = makeService(t);
+  // the account check comes after the simulation-only guard: lift it for this real-run request
+  delete process.env.MULTIAGENT_SIMULATION_ONLY;
+  t.after(() => { process.env.MULTIAGENT_SIMULATION_ONLY = '1'; });
   const asked = [];
   const blocked = createService({ host: { trashItem: async () => {}, appVersion: '0', isPackaged: false, assertCanRun: async (o) => { asked.push(o); throw new Error('Your 7-day free trial has ended.'); } } });
   blocked.setWorkspace(service.workspace());
@@ -137,6 +155,20 @@ steps:
     type: human_approval
     message: "Accept the work?"
 `;
+
+test('backlog: with simulation only, a real assignment is refused and nothing is queued', async (t) => {
+  const { service, api } = makeService(t);
+  const ws = service.workspace();
+  fs.writeFileSync(path.join(ws.workflows, 'fixture-issue.yaml'), ISSUE_WORKFLOW);
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'service-backlog-'));
+  t.after(() => fs.rmSync(folder, { recursive: true, force: true }));
+  const p = await api['projects:create']({ name: 'demo', folder });
+  fs.mkdirSync(ws.backlog, { recursive: true });
+  fs.writeFileSync(path.join(ws.backlog, `${p.id}.json`), JSON.stringify({ projectId: p.id, platform: 'github', repo: 'https://github.com/o/r', issues: [{ number: 1, title: 'Issue 1', state: 'open', url: 'https://github.com/o/r/issues/1', body: '', labels: [], assignees: [], tasks: { done: 0, total: 0 } }] }));
+  await assert.rejects(api['backlog:assign']({ projectId: p.id, numbers: [1], workflow: 'fixture-issue.yaml', mock: false }), /Simulation only .*real runs from the Backlog/);
+  assert.equal(fs.existsSync(path.join(ws.backlog, `${p.id}.queue.json`)), false);
+  assert.deepEqual(api['runs:list']().runs, []);
+});
 
 test('backlog: assigned issues run one at a time, each run records its issue', async (t) => {
   const { service, api } = makeService(t);
@@ -221,8 +253,13 @@ test('backlog: the dispatcher re-checks for an open PR right before starting a q
   fs.mkdirSync(ws.backlog, { recursive: true });
   fs.writeFileSync(path.join(ws.backlog, `${p.id}.json`), JSON.stringify({ projectId: p.id, platform: 'github', repo: 'https://github.com/o/r', issues: [issue] }));
 
+  // only real queue items are re-checked: lift the simulation-only guard for the Backlog's check
+  // and restore it before the dispatcher could start anything, so a regression can't call a model
+  delete process.env.MULTIAGENT_SIMULATION_ONLY;
+  t.after(() => { process.env.MULTIAGENT_SIMULATION_ONLY = '1'; });
   const seen = [];
   t.mock.method(backlog, 'newPullRequests', async (args) => {
+    process.env.MULTIAGENT_SIMULATION_ONLY = '1';
     seen.push(args.item.number);
     return [{ number: 9, title: 'Fix (#1)', url: 'https://github.com/o/r/pull/9', draft: false }];
   });

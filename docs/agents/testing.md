@@ -39,6 +39,18 @@ creates a commit needs its own `-c user.name/email`.
 ## Real CLIs and money
 
 - Never open real CLI terminals or start real runs in automated checks (they cost money).
+- **Simulation-only guard**: `MULTIAGENT_SIMULATION_ONLY=1` (`src/engine/simulation.js`) makes real
+  runs impossible: `run:start`/`supervisor:resume`/`backlog:assign` refuse `mock: false` (never
+  downgraded to a simulation), CLI terminals (`term:open` cli/cli-new/cli-resume/supervisor, the
+  external console) are refused, and `providers.runTurn` refuses every non-mock provider. The UI
+  shows a "Simulation only" badge and behaves as Developer mode. It is set by `scripts/test.js`
+  (`npm test`), `scripts/smoke.js` (which also uses a scratch temporary workspace and fails unless
+  every session was `mock`), the CI workflows and the tests' `makeService`/server helpers. A test
+  that drives a real provider type at a fake CLI (`fake-claude.js`) lifts it for its duration.
+- UI checks run through `scripts/smoke.js` (or a script built the same way), never through a
+  hand-written script that launches `src/main` directly.
+- In the UI, a checked Simulation box that can't apply (Developer mode off) fails the start with a
+  message (`wantsSimulation` in app.js); it never silently starts a real run.
 - Real-model calls cost the owner's money: say so and keep them minimal (one call to validate).
 - In automated checks that go through `resolveCommand`, put a fake **`.exe`** first on PATH (it
   prefers any `.exe` over a `.cmd`) or a real CLI starts.

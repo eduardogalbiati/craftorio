@@ -20,6 +20,7 @@ jobs:
         shell: bash   # Git Bash on Windows: the same scripts on every OS
     env:
       ELECTRON_SKIP_BINARY_DOWNLOAD: "1"   # the tests do not open the UI
+      MULTIAGENT_SIMULATION_ONLY: "1"      # automated checks never call real models
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5

@@ -124,8 +124,9 @@
     const inputs = readSetup();
     if (!inputs.task) { err.textContent = 'Write the request first.'; return; }
     if (setup.contenders.length < MIN) { err.textContent = `Pick at least ${MIN} models.`; return; }
-    // simulation only in developer mode (the checkbox is hidden otherwise)
-    const mock = document.body.classList.contains('dev-mode') && $a('#arena-mock').checked;
+    // simulation only in developer mode (the checkbox is hidden otherwise); checked without it fails
+    let mock;
+    try { mock = wantsSimulation($a('#arena-mock')); } catch (e) { err.textContent = e.message; return; }
     const scenario = $a('#arena-scenario').value;
     try {
       localStorage.setItem(LS, JSON.stringify({

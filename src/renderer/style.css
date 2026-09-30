@@ -41,6 +41,10 @@ body:not(.dev-mode) .dev-only { display: none !important; }
 }
 .brand { font-weight: 700; font-size: 15px; }
 .brand span { color: var(--accent); }
+.sim-only-badge {
+  padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; text-transform: uppercase; white-space: nowrap;
+  color: var(--orange); border: 1px solid currentColor;
+}
 .run-meta { display: flex; align-items: center; gap: 8px; }
 .kpis { display: flex; gap: 22px; margin-left: auto; }
 .kpi label { display: block; font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }

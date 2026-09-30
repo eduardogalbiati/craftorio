@@ -25,6 +25,7 @@ steps:
 // A server on a random port over a temporary workspace.
 async function start(t, { auth = null } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'server-ws-'));
+  process.env.MULTIAGENT_SIMULATION_ONLY = '1'; // tests never call real models
   const service = createService({ host: { trashItem: async () => {}, appVersion: '1.2.3', isPackaged: false } });
   service.setWorkspace(setupWorkspace(dir, { persist: false }));
   fs.writeFileSync(path.join(service.workspace().workflows, 'fixture-server.yaml'), WORKFLOW);

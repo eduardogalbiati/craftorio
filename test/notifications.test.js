@@ -157,6 +157,7 @@ steps:
 function makeService(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'notify-ws-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  process.env.MULTIAGENT_SIMULATION_ONLY = '1'; // tests never call real models
   const service = createService({ host: { trashItem: async () => {}, appVersion: '0', isPackaged: false } });
   t.after(() => service.shutdown());
   service.setWorkspace(setupWorkspace(dir, { persist: false }));

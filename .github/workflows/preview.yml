@@ -31,6 +31,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
+        env:
+          MULTIAGENT_SIMULATION_ONLY: "1"   # automated checks never call real models
       - name: Package app (win32 x64)
         run: npm run package
       - name: Compress

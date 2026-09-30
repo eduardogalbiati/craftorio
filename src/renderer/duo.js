@@ -96,8 +96,9 @@
     err.textContent = '';
     const inputs = readSetup();
     if (!inputs.prompt || !inputs.goal) { err.textContent = 'Write the prompt and the goal first.'; return; }
-    // simulation only in developer mode (the checkbox is hidden otherwise)
-    const mock = document.body.classList.contains('dev-mode') && $d('#duo-mock').checked;
+    // simulation only in developer mode (the checkbox is hidden otherwise); checked without it fails
+    let mock;
+    try { mock = wantsSimulation($d('#duo-mock')); } catch (e) { err.textContent = e.message; return; }
     const scenario = $d('#duo-scenario').value;
     try { localStorage.setItem(LS, JSON.stringify({ writer: config.writer, reviewer: config.reviewer, prompt: inputs.prompt, goal: inputs.goal, threshold: inputs.threshold, max_rounds: inputs.max_rounds, scenario, project: $d('#duo-project').value })); } catch { /* ignore */ }
     $d('#duo-run').disabled = true;

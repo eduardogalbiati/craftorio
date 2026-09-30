@@ -7,6 +7,9 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
+// Automated checks never call real models: the engine refuses real runs and real providers.
+process.env.MULTIAGENT_SIMULATION_ONLY = '1';
+
 const root = path.join(__dirname, '..');
 const run = (args, env = {}) => spawnSync(process.execPath, args, { cwd: root, stdio: 'inherit', env: { ...process.env, ...env } }).status;
 
