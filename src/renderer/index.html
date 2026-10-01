@@ -12,6 +12,7 @@
   <link rel="stylesheet" href="sessions.css" />
   <link rel="stylesheet" href="builder.css" />
   <link rel="stylesheet" href="analytics.css" />
+  <link rel="stylesheet" href="notification-center.css" />
   <link rel="stylesheet" href="views/settings/settings.css" />
   <link rel="stylesheet" href="views/usage/usage.css" />
   <link rel="stylesheet" href="views/supervisor/supervisor.css" />
@@ -135,6 +136,11 @@
       </button>
 
       <div class="nav-spacer"></div>
+      <button id="nav-notifications" class="nav-item" type="button" title="Notifications" aria-haspopup="true" aria-expanded="false" aria-controls="notification-center">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" /><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0" /></svg>
+        <span>Notifications</span>
+        <span id="nav-notifications-count" class="nav-badge hidden"></span>
+      </button>
       <button id="nav-run" class="nav-item nav-run hidden" data-view="run" title="The run shown in the top bar">
         <span id="nav-run-dot" class="status-dot"></span>
         <span>Run</span>
@@ -858,6 +864,14 @@
   </div>
 
   <div id="toast" class="toast hidden" role="status"></div>
+  <div id="notification-center" class="notification-center hidden" role="dialog" aria-label="Notifications">
+    <div class="nc-head">
+      <b>Notifications</b>
+      <button id="nc-read-all" class="btn sm ghost" type="button">Mark all read</button>
+      <button id="nc-close" class="icon-btn" type="button" aria-label="Close" title="Close">×</button>
+    </div>
+    <div id="nc-list" class="nc-list"></div>
+  </div>
 
   <!-- ================= Terminal dock ================= -->
   <section id="term-dock" class="term-dock hidden" aria-label="Terminals">
@@ -1341,6 +1355,7 @@
   <script src="backlog-po.js"></script>
   <script src="builder.js"></script>
   <script src="analytics.js"></script>
+  <script src="notification-center.js"></script>
   <script src="views/settings/settings.js"></script>
   <script src="views/usage/usage.js"></script>
   <script src="views/supervisor/supervisor.js"></script>

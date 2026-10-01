@@ -7,11 +7,15 @@
 //
 // Each run also has a display title and the PR it opened (#84, src/run-pr.js): the owner's title is
 // in runs/<id>/meta.json, and a resumed run inherits both from the run it resumes.
+//
+// With the service's index open (src/store.js) listRuns reads unchanged runs from it (`indexRun`,
+// `rebuildIndex`, `runSummaries` for Usage and Analytics); deleting index.db loses nothing.
 
 const fs = require('fs');
 const path = require('path');
 const { trailOf } = require('./renderer/run-progress-model');
 const { defaultTitle, prOfEvents, readMeta } = require('./run-pr');
+const { storeFor } = require('./store');
 
 const SESSION_EVENTS = new Set(['session.opened', 'session.message_received', 'session.closed']);
 
@@ -181,11 +185,69 @@ function readRun(runsDir, runId) {
   };
 }
 
+// ---- the run index (src/store.js, #76) ---------------------------------------------------------
+// With the service's index open, a listing reads each run from its row and only stats its files:
+// a run whose files changed since it was indexed (signature below), or that has no row, is read
+// again and its row replaced; rows of deleted folders go. The files stay the source of truth.
+const SIG_FILES = ['events.jsonl', 'summary.json', 'meta.json', 'issue-saves.json'];
+function runSignature(dir) {
+  return SIG_FILES.map((f) => {
+    try { const st = fs.statSync(path.join(dir, f)); return `${st.mtimeMs}:${st.size}`; } catch { return '-'; }
+  }).join('|');
+}
+
+const readSummaryText = (dir) => { try { return fs.readFileSync(path.join(dir, 'summary.json'), 'utf8'); } catch { return null; } };
+
+// Reads one run folder into the index; returns its RunInfo (null when it is not a run).
+function indexRunIn(store, runsDir, runId) {
+  const dir = path.join(runsDir, runId);
+  const sig = runSignature(dir);
+  const info = readRun(runsDir, runId);
+  if (info) store.putRun(info, sig, readSummaryText(dir));
+  return info;
+}
+
+/** Re-reads one run into the index (the service calls it as the run's events are written). */
+function indexRun(runsDir, runId) {
+  const store = storeFor(runsDir);
+  return store ? indexRunIn(store, runsDir, path.basename(String(runId))) : readRun(runsDir, runId);
+}
+
+/** Empties the runs cache and rebuilds it from runs/ (Settings › Rebuild index); returns the count. */
+function rebuildIndex(runsDir) {
+  const store = storeFor(runsDir);
+  if (!store) return 0;
+  store.clearRuns();
+  return listRuns(runsDir).length;
+}
+
 function listRuns(runsDir) {
   let ids = [];
   try { ids = fs.readdirSync(runsDir); } catch { return []; }
-  return ids.map((id) => readRun(runsDir, id)).filter(Boolean)
-    .sort((a, b) => String(b.startedAt).localeCompare(String(a.startedAt)));
+  const store = storeFor(runsDir);
+  let list;
+  if (!store) list = ids.map((id) => readRun(runsDir, id));
+  else {
+    const rows = store.runEntries();
+    list = store.transaction(() => ids.map((id) => {
+      const row = rows.get(id);
+      if (!row?.info || row.sig !== runSignature(path.join(runsDir, id))) return indexRunIn(store, runsDir, id);
+      // a run without an end keeps aging while its files stay the same (it died with the app)
+      return row.info.finishedAt || !row.info.startedAt ? row.info : { ...row.info, durationMs: Date.now() - Date.parse(row.info.startedAt) };
+    }));
+    const present = new Set(ids);
+    const gone = [...rows.keys()].filter((id) => !present.has(id));
+    if (gone.length) store.deleteRuns(gone);
+  }
+  return list.filter(Boolean).sort((a, b) => String(b.startedAt).localeCompare(String(a.startedAt)));
+}
+
+/** summary.json of every finished run (`mock: false`: real runs only), from the index when it is open. */
+function runSummaries(runsDir, { mock } = {}) {
+  const store = storeFor(runsDir);
+  if (!store) return null;
+  listRuns(runsDir); // brings the index up to date (stats only for unchanged runs)
+  return store.runSummaries({ mock });
 }
 
 const normPath = (p) => {
@@ -293,13 +355,16 @@ function runEvents(runDir, { activity = false } = {}) {
 }
 
 module.exports = {
+  indexRun,
   kindOf,
   listRuns,
   projectOf,
   readRun,
+  rebuildIndex,
   runArtifacts,
   runEvents,
   runPr,
   runsForProject,
+  runSummaries,
   runTitle,
 };

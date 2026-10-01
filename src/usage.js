@@ -1,7 +1,8 @@
 // Token and cost usage per provider, and monthly budgets.
 //
 // Two scopes:
-// - orchestrator: the runs' summary.json files (<workspace>/runs/*/summary.json; mock runs
+// - orchestrator: the runs' summary.json files (<workspace>/runs/*/summary.json, through the run
+//   index when it is open: src/store.js; mock runs
 //   are ignored) plus the sessions of the run in progress;
 // - machine: everything the CLIs recorded on this machine (src/local-usage.js), including use
 //   outside the orchestrator. The orchestrator's part is found by provider session id. Cost is what the CLI reported
@@ -11,6 +12,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { runSummaries } = require('./runs');
 
 const PROVIDERS = [
   { id: 'claude', type: 'claude-code', command: 'claude', name: 'Claude Code', costReported: true, installHint: 'irm https://claude.ai/install.ps1 | iex   (then run `claude` once to log in)' },
@@ -51,7 +53,10 @@ function addSession(tot, session, prices) {
   else tot.costUsd += cost;
 }
 
+// From the run index when the service has it open (src/store.js), else the summary.json files.
 function readRuns(runsDir) {
+  const indexed = runSummaries(runsDir, { mock: false });
+  if (indexed) return indexed;
   let dirs = [];
   try { dirs = fs.readdirSync(runsDir); } catch { return []; }
   const runs = [];

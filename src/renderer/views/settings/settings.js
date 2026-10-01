@@ -1,5 +1,6 @@
 /* global api */
-// Settings screen: General (workspace folder, backlog defaults, voice input), Agents & CLIs (installed CLIs and
+// Settings screen: General (workspace folder, backlog defaults, voice input, the workspace index and
+// its Rebuild index, src/store.js), Agents & CLIs (installed CLIs and
 // their sign-in), Execution (developer mode, notifications, concurrent runs) and About. Registers
 // itself with registerView (view-registry.js); uses app.js globals ($, esc, errMsg, state,
 // applyDeveloperMode, renderHeader, renderWorkspacePaths) and window.BACKLOG_PLATFORMS (backlog.js).
@@ -29,8 +30,10 @@ async function renderSettings() {
   platform.innerHTML = Object.entries(window.BACKLOG_PLATFORMS || {}).map(([id, p]) => `<option value="${id}">${esc(p.label)}${p.soon ? ' (sync not available yet)' : ''}</option>`).join('');
   platform.value = state.settings.backlogPlatform || 'github';
   $('#set-backlog-group').value = state.settings.backlogMaxGroup || 5;
+  $('#set-notif-retention').value = state.settings.notificationRetentionDays ?? 30;
   renderConcurrency();
   renderVoice();
+  renderIndexStatus();
   if (!document.querySelector('[data-spage="agents"]').classList.contains('hidden')) renderTools();
 }
 
@@ -95,6 +98,29 @@ async function downloadVoiceModel() {
     btn.textContent = 'Download';
     $('#set-voice-model-info').textContent = errMsg(e);
   }
+}
+
+// Settings › General › Index: where index.db is, how many runs it holds, and Rebuild index.
+async function renderIndexStatus(note = '') {
+  const el = $('#set-index-status');
+  try {
+    const st = await api.indexStatus();
+    $('#set-index-path').textContent = st.path;
+    el.textContent = note || (st.open ? `${st.runs} run${st.runs === 1 ? '' : 's'} indexed.` : `Not available: ${st.error || 'unknown error'}. Everything still works from the files.`);
+    $('#btn-index-rebuild').disabled = !st.open;
+  } catch (e) { el.textContent = errMsg(e); }
+}
+
+async function rebuildIndex() {
+  const btn = $('#btn-index-rebuild');
+  btn.disabled = true;
+  $('#set-index-status').textContent = 'Rebuilding from runs/…';
+  try {
+    const r = await api.rebuildIndex();
+    await renderIndexStatus(`Rebuilt: ${r.runs} run${r.runs === 1 ? '' : 's'} read from runs/.`);
+  } catch (e) {
+    $('#set-index-status').textContent = errMsg(e);
+  } finally { btn.disabled = false; }
 }
 
 async function renderTools() {
@@ -184,6 +210,13 @@ registerView({
               </div>
               <h3 class="s-subtitle">Folders</h3>
               <div id="set-ws-folders" class="s-group"></div>
+              <h3 class="s-subtitle">Index</h3>
+              <div class="s-group">
+                <div class="s-row">
+                  <div class="s-label"><b>index.db</b><span>A SQLite index next to the files: the runs list cache, the Backlog queues, the gates waiting for you and the notifications. The files stay the source of truth: rebuilding reads every run again from runs/. <span id="set-index-status"></span></span><code id="set-index-path"></code></div>
+                  <div class="s-ctrl"><button id="btn-index-rebuild" class="btn sm">Rebuild index</button></div>
+                </div>
+              </div>
             </div>
 
             <div class="settings-page hidden" data-spage="agents">
@@ -217,6 +250,10 @@ registerView({
                 <div class="s-row">
                   <div class="s-label"><b>Notify when a session waits for you</b><span>A desktop notification when a CLI in a Sessions terminal stops and waits for your answer (a question, a permission prompt, the end of its turn). Not shown while this window is focused on that terminal.</span></div>
                   <label class="switch"><input type="checkbox" data-setting="notifySessions" /><span></span></label>
+                </div>
+                <div class="s-row">
+                  <div class="s-label"><b>Keep notifications</b><span>Days the notification center (the bell in the sidebar) keeps notifications; older ones are deleted. 0: keep them all.</span></div>
+                  <div class="s-ctrl"><input type="number" id="set-notif-retention" min="0" max="3650" step="1" class="s-num" aria-label="Days to keep notifications" /></div>
                 </div>
               </div>
               <h3 class="s-subtitle">Concurrent runs</h3>
@@ -269,6 +306,12 @@ registerView({
     $('#set-voice-model').onchange = async (e) => { state.settings = await api.setSettings({ voiceModel: e.target.value }); renderVoice(); };
     $('#set-voice-language').onchange = async (e) => { state.settings = await api.setSettings({ voiceLanguage: e.target.value }); };
     $('#btn-voice-download').onclick = downloadVoiceModel;
+    $('#btn-index-rebuild').onclick = rebuildIndex;
+    $('#set-notif-retention').onchange = async (e) => {
+      const n = Math.floor(Number(e.target.value));
+      state.settings = await api.setSettings({ notificationRetentionDays: Number.isFinite(n) && n >= 0 ? Math.min(n, 3650) : 30 });
+      e.target.value = state.settings.notificationRetentionDays;
+    };
     for (const sel of ['#set-cr-enabled', '#set-cr-max', '#set-cr-project', '#set-cr-sims']) $(sel).onchange = saveConcurrency;
   },
   show: renderSettings,

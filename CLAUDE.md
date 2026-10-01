@@ -53,6 +53,7 @@ npm run screenshot -- --view backlog --mode kanban [--ref origin/main] --out <di
 - [docs/agents/engine.md](docs/agents/engine.md): workflow YAML features, sessions and handoff notes, gates, how a run ends, template context. Read before changing the engine or a workflow.
 - [docs/agents/capabilities.md](docs/agents/capabilities.md): what agents may use, isolation per CLI, calling `gh`/`glab`, read-only agents. Read before changing an agent's tools or a read-only skill.
 - [docs/agents/worktrees.md](docs/agents/worktrees.md): per-run git worktrees and branch gotchas. Read before touching worktrees, merges or branches.
+- [docs/agents/storage.md](docs/agents/storage.md): files vs the SQLite index (index.db). Read before touching runs, queues, gates or notifications.
 - [docs/agents/testing.md](docs/agents/testing.md): CI matrix, machine-independent tests, the mock provider, real CLIs. Read before writing tests.
 - [docs/agents/windows-gotchas.md](docs/agents/windows-gotchas.md): line endings, paths, node-pty, the packaged exe, EBUSY. Read before scripted edits, path code, terminals or packaging.
 - [docs/agents/environment.md](docs/agents/environment.md): Node/npm/Electron versions, installed CLIs, workspace layout. Read before installing or upgrading.

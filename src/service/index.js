@@ -5,6 +5,8 @@
 // the clients build `window.api` from (see src/service/manifest.js). Pushed data
 // ('run:event', 'run:meta', 'supervisor:watch', 'term:data', 'term:exit') is emitted on `events`, and so are desktop notifications
 // ('notify', see src/notifications.js), already filtered by the settings and what the UI shows.
+// The service owns the workspace's SQLite index (src/store.js, #76): it writes the run index, the
+// pending gates and every notification as the engine emits, and pushes 'notifications:changed'.
 //
 // Today src/main.js exposes it over Electron IPC; the same object can be exposed over HTTP +
 // WebSocket so the engine runs on a server and the UI connects to it.
@@ -51,6 +53,7 @@ const { Terminals } = require('../terminals');
 const { followSession } = require('../session-tail');
 const supervisor = require('../supervisor');
 const notifier = require('../notifications');
+const { openStore } = require('../store');
 const {
   authChannels,
   declarations,
@@ -158,10 +161,65 @@ function createService({ host }) {
   // ---- desktop notifications ----------------------------------------------------------------
   // uiContext: what the window shows ({ focused, runId, terminalId }), reported by the UI.
   let uiContext = notifier.normalizeContext(null);
-  function notify(notice) {
+  // Every notice is a row of the notification center (whatever the settings say about showing it on
+  // the desktop); `extra`: { projectId, issue } of its run. The desktop notice carries the row's id
+  // in its target, so a click on it marks it read.
+  function notify(notice, extra = {}) {
+    if (!notice) return;
     let settings = {};
     try { if (ws) settings = workspace.readSettings(ws); } catch { /* defaults */ }
-    if (notifier.shouldNotify(notice, { settings, context: uiContext })) events.emit('notify', notice);
+    let shown = notice;
+    if (store) {
+      try {
+        const row = store.addNotification({
+          type: `${notice.kind}.${notice.event}`, kind: notice.kind, runId: notice.target?.runId || null,
+          projectId: extra.projectId || null, issue: extra.issue || null, title: notice.title, body: notice.body, target: notice.target || null,
+        });
+        store.pruneNotifications(settings.notificationRetentionDays ?? workspace.DEFAULT_SETTINGS.notificationRetentionDays);
+        shown = { ...notice, target: { ...notice.target, notificationId: row.id } };
+        events.emit('notifications:changed', { unread: store.unreadCount(), latest: row });
+      } catch (e) { console.error('notification center:', e.message); }
+    }
+    if (notifier.shouldNotify(notice, { settings, context: uiContext })) events.emit('notify', shown);
+  }
+
+  // ---- the workspace's index (src/store.js) ----------------------------------------------------
+  // Opened with the workspace; without it (node:sqlite missing, a locked or broken file) everything
+  // still works on the plain files, the notification center and the gate history excepted.
+  let store = null;
+  let storeError = null;
+  function openIndex() {
+    try { store?.close(); } catch { /* already closed */ }
+    store = null;
+    storeError = null;
+    try { store = openStore(ws); } catch (e) { storeError = e.message; console.error('index.db:', e.message); return; }
+    // gates still open from the last time are of runs that did not survive: interrupted, never phantom gates
+    try {
+      for (const g of store.interruptGates([...active.keys()])) {
+        notify({
+          kind: 'run', event: 'gate_interrupted', title: `Gate interrupted: ${g.stepId || g.approvalId}`,
+          body: `${g.message ? `${String(g.message).slice(0, 180)}\n` : ''}The app closed while run ${g.runId} waited here. Resume it from the run screen.`,
+          target: { runId: g.runId },
+        });
+      }
+    } catch (e) { console.error('index.db gates:', e.message); }
+    // the run index catches up with runs/ (a new or rebuilt index reads every run once)
+    setTimeout(() => { try { if (ws) runs.listRuns(ws.runs); } catch (e) { console.error('run index:', e.message); } }, 0);
+  }
+  // What the engine emitted, written to the index: the run's row, its gates.
+  function indexEvent(run, ev) {
+    if (!store) return;
+    try {
+      if (ev.type === 'approval.requested') {
+        const gate = run.pendingGates().find((g) => g.approval_id === ev.approval_id);
+        if (gate) store.openGate(run.runId, gate); // answered by a listener already: no gate to keep
+      } else if (ev.type === 'approval.resolved') store.closeGate(run.runId, ev.approval_id, ev.withdrawn ? 'withdrawn' : 'resolved');
+      else if (ev.type === 'workflow.finished') store.closeRunGates(run.runId, 'closed');
+      // summary.json is written with workflow.finished; workflow.started reaches events.jsonl through a
+      // stream, so its row is read a moment later (a listing in between indexes it anyway)
+      if (ev.type === 'workflow.finished') runs.indexRun(ws.runs, run.runId);
+      if (ev.type === 'workflow.started') setTimeout(() => { try { if (store) runs.indexRun(ws.runs, run.runId); } catch { /* the next listing */ } }, 1000);
+    } catch (e) { console.error('index.db:', e.message); }
   }
   // CLIs in Sessions terminals that stop and wait for the user
   const waiting = new notifier.WaitDetector({ onWaiting: (id, info, message) => notify(notifier.sessionNotice(id, info, message)) });
@@ -208,6 +266,7 @@ function createService({ host }) {
     if (isRunning()) throw new Error('Cannot change the workspace while workflows are running.');
     ws = next;
     seedDefaults();
+    openIndex();
     // queued issues never start on their own after a restart or a workspace change
     try { backlog.pauseAll(ws.backlog, 'Paused when the app started: resume to start the queued issues.'); } catch (e) { console.error('backlog queues:', e); }
     // a started roadmap continues where it was: its runs that ended meanwhile settle their stage
@@ -271,9 +330,11 @@ function createService({ host }) {
   // What the UI shows of each run in progress (the Run menu list). `gates` are the gates the run
   // waits at (approval_id, step_id, message, choices, feedback, requested_at): the sidebar, the
   // Backlog and a reloaded window all read them here, never only from the events they saw live.
+  // With the index open the gates come from its table (written as the engine emits them).
   function activeRuns() {
     return [...active.values()].map((r) => {
-      const gates = r.pendingGates();
+      let gates = r.pendingGates();
+      try { if (store) gates = store.openGates(r.runId); } catch (e) { console.error('index.db gates:', e.message); }
       return {
         runId: r.runId, workflow: r.wf.metadata?.name || path.basename(r.file), file: path.basename(r.file), mock: r.mock,
         projectId: r.projectId, issues: r.issues, startedAt: r.startedAt ? new Date(r.startedAt).toISOString() : null,
@@ -494,6 +555,7 @@ function createService({ host }) {
     run.pr = resume?.runId ? runs.runPr(ws.runs, resume.runId) : null;
     run.on('event', (ev) => {
       try { recorder.write(ev); } catch (e) { console.error('recorder:', e); }
+      indexEvent(run, ev);
       const pr = ev.type === 'step.finished' ? runPr.prOfOutput(ev.output) : null;
       if (pr) run.pr = pr;
       if (run.pr) refreshLivePr(run, pr || ev.type === 'workflow.finished' ? 0 : 15000).catch((e) => console.error('run PR:', e.message));
@@ -506,7 +568,7 @@ function createService({ host }) {
       events.emit('run:event', ev);
       if (ev.type === 'workflow.started') markActiveRun(run.runId, runInfo);
       if (ev.type === 'workflow.finished') markActiveRun(run.runId, null);
-      notify(notifier.runNotice(ev, runInfo));
+      notify(notifier.runNotice(ev, runInfo), { projectId: run.projectId, issue: run.issues?.map((i) => `#${i.number}`).join(', ') || null });
       // the next issues waiting in a Backlog queue start once this run is over; a queued issue whose
       // run failed pauses its queue (a failure that repeats would otherwise burn through it)
       if (ev.type === 'workflow.finished') {
@@ -1122,7 +1184,8 @@ function createService({ host }) {
     dispatching = true;
     try {
       for (;;) {
-        const next = backlog.nextQueued(ws.backlog, (projectId, item) => !slotProblem({ mock: !!item.mock, projectId }));
+        // claimed atomically (with the index): another dispatcher on this workspace never takes it too
+        const next = backlog.claimQueued(ws.backlog, (projectId, item) => !slotProblem({ mock: !!item.mock, projectId }));
         if (!next) return;
         const { projectId, item } = next;
         try {
@@ -1148,6 +1211,7 @@ function createService({ host }) {
           backlog.unqueue(ws.backlog, projectId, item.number, { cancelGroup: true });
         } catch (e) {
           backlog.setPaused(ws.backlog, projectId, true, `Could not start ${backlog.itemIssues(item).map((i) => `#${i.number}`).join(', ')}: ${e.message}`);
+          backlog.releaseQueued(ws.backlog, projectId, item.number);
         }
       }
     } finally {
@@ -1343,6 +1407,9 @@ function createService({ host }) {
   // share the service's state and helpers through ctx; `ws` is read at call time (it can change).
   const ctx = {
     get ws() { return ws; },
+    // the workspace's index (src/store.js), null when it could not be opened (storeError says why)
+    get store() { return store; },
+    get storeError() { return storeError; },
     host, active, events, notify, waiting, terminals, BUNDLED_SKILLS_DIR,
     setUiContext: (c) => { uiContext = notifier.normalizeContext(c); },
     activeRuns, analyticsSnapshot, analyzeAnalytics, artifactRuns, assignWorkflow, cloneBuilderWorkflow, code, dispatchQueue, dispatchRoadmaps, envDetails, listAllRuns,
@@ -1406,6 +1473,9 @@ function createService({ host }) {
       waiting.closeAll();
       terminals.killAll();
       for (const run of active.values()) run.stop();
+      // what the stopped runs write afterwards goes to the files only (the next listing indexes it)
+      try { store?.close(); } catch { /* already closed */ }
+      store = null;
     },
   };
 }

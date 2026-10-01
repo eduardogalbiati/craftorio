@@ -940,7 +940,18 @@ Everything the app produces lives in a local workspace folder:
   agents/    user-defined agents (one .json per agent; supervisor.json = the supervisor's look, product-owner.json = the Product Owner's look, model and effort)
   workflows/ workflow definitions (one .yaml per workflow)
   settings.json  app preferences, budgets and prices
+  index.db   SQLite index next to the files: runs cache, Backlog queues, pending gates, notifications
 ```
+
+- **The files are the source of truth; `index.db` is an index next to them** (built into Node, no
+  extra dependency). It caches the run list (Workflows › Runs, Projects, Usage and Analytics read it
+  instead of every run folder), keeps the Backlog queues in transactions (two dispatchers never start
+  the same issue; `backlog/<id>.queue.json` stays as a readable snapshot), records the gates waiting
+  for you (after a restart, gates of runs that did not survive show as interrupted) and every
+  notification (the bell in the sidebar: history, unread count, mark as read; kept for
+  **Settings › Execution › Keep notifications** days). Deleting it loses no run and no queued issue (only the notification history): the app rebuilds it
+  at the next start, and **Settings › General › Index › Rebuild index** reads every run again.
+  Details: `docs/agents/storage.md`.
 
 - **Bundled defaults.** The app folder (read-only `app.asar` in the packaged app) only holds the
   default skills and workflows; the app and `scripts/run.js` copy them into `skills/` and

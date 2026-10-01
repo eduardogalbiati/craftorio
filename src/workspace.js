@@ -116,6 +116,8 @@ function layout(root) {
     sessionTitles: path.join(root, 'session-titles.json'),
     // the run the app has in progress, removed when it ends: found at the next start, the run died with the app
     activeRun: path.join(root, 'active-run.json'),
+    // SQLite index next to the files: runs cache, Backlog queues, pending gates, notifications (src/store.js)
+    index: path.join(root, 'index.db'),
   };
 }
 
@@ -130,6 +132,8 @@ const DEFAULT_SETTINGS = {
   // desktop notifications (see src/notifications.js): run status changes, CLI sessions waiting for you
   notifyRuns: true,
   notifySessions: true,
+  // days the notification center keeps notifications (src/store.js); older ones are deleted
+  notificationRetentionDays: 30,
   lastProject: null,
   lastWorkflow: null,
   // where the Backlog screen syncs issues from by default: github | gitlab | bitbucket

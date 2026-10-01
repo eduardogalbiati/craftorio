@@ -8,10 +8,10 @@
 // / done; done = closed on the platform). Simulated (mock) runs and queue items are listed but never
 // move the column: it comes from the newest real run and the real queue items. Each sync also reads the open PRs/MRs
 // (`fetchOpenPullRequests`, `referencedIssues`) into `issue.pullRequests`. Assigning a workflow
-// queues issues in `<id>.queue.json` (`enqueue`, `group: true` = one item with `issues` for one run,
+// queues issues (the index's queue tables, src/store.js, snapshotted to `<id>.queue.json`) (`enqueue`, `group: true` = one item with `issues` for one run,
 // `itemIssues`, `unqueue`, `runInputs` builds one task listing every issue of a group; before a real
 // start `newPullRequests` and `skipQueued`); the service's `dispatchQueue` starts queued issues while
-// there are free run slots (`nextQueued`). Column `local`: an open issue whose latest run merged
+// there are free run slots (`claimQueued`: atomic with the index). Column `local`: an open issue whose latest run merged
 // locally while its commit is not on origin (`readLocal`/`writeLocal`: `<id>.local.json`).
 // Write & Review runs started from an issue (`enrich` on the linked run) never move its column; their
 // accepted document can be saved back to the issue (`saveRunToIssue`: replace the description or comment).
@@ -23,6 +23,7 @@ const fs = require('fs');
 const path = require('path');
 const { execFile } = require('child_process');
 const { resolveCommand } = require('./engine/providers');
+const { storeFor } = require('./store');
 
 const PLATFORMS = {
   github: { label: 'GitHub', cli: 'gh', host: 'github.com' },
@@ -320,21 +321,40 @@ function writeLocal(dir, projectId, status) {
 // sent as a single run (one branch, one PR/MR), which also has `issues`: the same fields per issue,
 // in the order selected; its number/url/title are the first issue's.
 // `skipped` lists the issues taken out right before their start, with the reason (an open PR/MR).
+// With the service's index open (src/store.js, #76) the queue lives in its tables: each change is
+// one transaction and the file is only a readable snapshot written under that lock; without it
+// (scripts, unit tests) the file is the queue.
 const queueFile = (dir, projectId) => path.join(dir, `${path.basename(String(projectId))}.queue.json`);
 const emptyQueue = () => ({ paused: false, error: null, inputs: {}, items: [], skipped: [] });
 const MAX_SKIPPED = 20;
 
 function readQueue(dir, projectId) {
+  const store = storeFor(dir);
+  if (store) return { ...emptyQueue(), ...(store.readQueue(path.basename(String(projectId))) || {}) };
   try { return { ...emptyQueue(), ...JSON.parse(fs.readFileSync(queueFile(dir, projectId), 'utf8')) }; } catch { return emptyQueue(); }
 }
 
-function writeQueue(dir, projectId, queue) {
+function writeQueueFile(dir, projectId, queue) {
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(queueFile(dir, projectId), JSON.stringify(queue, null, 2));
   return queue;
 }
 
-const updateQueue = (dir, projectId, fn) => writeQueue(dir, projectId, fn(readQueue(dir, projectId)) || readQueue(dir, projectId));
+function writeQueue(dir, projectId, queue) {
+  const store = storeFor(dir);
+  if (!store) return writeQueueFile(dir, projectId, queue);
+  return store.transaction(() => {
+    store.writeQueue(path.basename(String(projectId)), queue);
+    return writeQueueFile(dir, projectId, queue);
+  });
+}
+
+// read, change and write in one transaction (with the index): a concurrent change waits for it
+function updateQueue(dir, projectId, fn) {
+  const apply = () => writeQueue(dir, projectId, fn(readQueue(dir, projectId)) || readQueue(dir, projectId));
+  const store = storeFor(dir);
+  return store ? store.transaction(apply) : apply();
+}
 
 const issueFields = (i) => ({ number: i.number, url: i.url, title: i.title, body: i.body || '', knownPullRequests: i.knownPullRequests || [] });
 /** The issues of a queue item: its `issues` (a group), or the item itself. */
@@ -425,30 +445,56 @@ function setPaused(dir, projectId, paused, error = null) {
   return updateQueue(dir, projectId, (q) => ({ ...q, paused: !!paused, error: paused ? error : null }));
 }
 
-// Project ids with a queue file.
+// Project ids with a queue (rows of the index, else queue files).
 function queuedProjects(dir) {
+  const store = storeFor(dir);
+  if (store) return store.queuedProjects();
   try { return fs.readdirSync(dir).filter((f) => f.endsWith('.queue.json')).map((f) => f.slice(0, -'.queue.json'.length)); } catch { return []; }
 }
 
 /**
  * The next item to start: the oldest one across the projects whose queue is not paused, among
  * those `canStart(projectId, item)` accepts (a project at its limit of concurrent runs waits).
+ * Items another dispatcher claimed (claimQueued, being started) are passed over.
  */
 function nextQueued(dir, canStart = () => true) {
+  const store = storeFor(dir);
   const heads = queuedProjects(dir)
     .map((projectId) => ({ projectId, q: readQueue(dir, projectId) }))
     .filter(({ q }) => !q.paused && q.items.length)
-    .map(({ projectId, q }) => ({ projectId, item: q.items[0] }))
-    .filter(({ projectId, item }) => canStart(projectId, item));
+    .map(({ projectId, q }) => {
+      const claimed = store ? store.claimedNumbers(projectId) : new Set();
+      return { projectId, item: q.items.find((x) => !claimed.has(x.number)) };
+    })
+    .filter(({ projectId, item }) => item && canStart(projectId, item));
   heads.sort((a, b) => String(a.item.addedAt).localeCompare(String(b.item.addedAt)));
   return heads[0] || null;
+}
+
+/**
+ * nextQueued, taken atomically: with the index, the item is claimed in the same transaction, so two
+ * dispatchers (two windows' services, or a server and the app on one workspace) never take the same
+ * issue. The claim ends when the item leaves the queue (unqueue after its start) or releaseQueued.
+ */
+function claimQueued(dir, canStart = () => true) {
+  const store = storeFor(dir);
+  if (!store) return nextQueued(dir, canStart);
+  return store.transaction(() => {
+    const next = nextQueued(dir, canStart);
+    if (next) store.claim(next.projectId, next.item.number);
+    return next;
+  });
+}
+
+/** Ends a dispatcher's claim on an item that did not start (it stays queued). */
+function releaseQueued(dir, projectId, number) {
+  storeFor(dir)?.release(path.basename(String(projectId)), number);
 }
 
 /** Pauses every queue with items waiting (the app restarted: nothing starts without the user). */
 function pauseAll(dir, reason) {
   for (const projectId of queuedProjects(dir)) {
-    const q = readQueue(dir, projectId);
-    if (q.items.length && !q.paused) writeQueue(dir, projectId, { ...q, paused: true, error: reason });
+    updateQueue(dir, projectId, (q) => (q.items.length && !q.paused ? { ...q, paused: true, error: reason } : q));
   }
 }
 
@@ -639,11 +685,13 @@ module.exports = {
   referencedIssues, fetchOpenPullRequests, attachPullRequests,
   readQueue, enqueue, unqueue, skipQueued, newPullRequests, setPaused, nextQueued, pauseAll, runInputs,
   itemIssues, runIssues, execCli, readLocal, writeLocal,
+  claimQueued,
   fetchIssue,
   filedToQueue,
   issueSaveBody,
   issueSaveCommand,
   readIssueSaves,
+  releaseQueued,
   saveRunToIssue,
   updateCachedIssue,
 };
