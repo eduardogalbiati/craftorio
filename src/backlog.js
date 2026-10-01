@@ -13,6 +13,8 @@
 // start `newPullRequests` and `skipQueued`); the service's `dispatchQueue` starts queued issues while
 // there are free run slots (`nextQueued`). Column `local`: an open issue whose latest run merged
 // locally while its commit is not on origin (`readLocal`/`writeLocal`: `<id>.local.json`).
+// Write & Review runs started from an issue (`enrich` on the linked run) never move its column; their
+// accepted document can be saved back to the issue (`saveRunToIssue`: replace the description or comment).
 // Screen: src/renderer/backlog.js; channels: src/service/channels/backlog.js.
 
 const fs = require('fs');
@@ -27,6 +29,8 @@ const PLATFORMS = {
 };
 const DEFAULT_PLATFORM = 'github';
 const MAX_ISSUES = 300;
+// the workflow of Write & Review: its runs enrich an issue's text, they do not implement it
+const ENRICH_WORKFLOW = 'writer-reviewer';
 
 /**
  * https://host/owner/repo(.git), ssh://git@host/owner/repo.git, git@host:owner/repo.git
@@ -273,6 +277,8 @@ function linkRuns(issues, runs, queue = null, local = null) {
           // its display title and the PR it opened (#84)
           ...(r.title ? { title: r.title, customTitle: r.customTitle || null } : {}),
           ...(r.pr ? { pr: r.pr } : {}),
+          // a Write & Review run enriching the issue's text (#103): shown on the card, never moves the column
+          ...(r.workflow === ENRICH_WORKFLOW ? { enrich: true } : {}),
         };
       });
     const at = items.findIndex((q) => itemIssues(q).some((x) => x.number === issue.number));
@@ -282,7 +288,7 @@ function linkRuns(issues, runs, queue = null, local = null) {
     };
     // simulations stay in the issue's history (and keep their queued badge) but never decide its column
     const realQueued = items.some((q) => !q.mock && itemIssues(q).some((x) => x.number === issue.number));
-    return { ...issue, runs: linked, queued, column: columnOf(issue, linked.find((r) => !r.mock), realQueued, local) };
+    return { ...issue, runs: linked, queued, column: columnOf(issue, linked.find((r) => !r.mock && !r.enrich), realQueued, local) };
   });
 }
 
@@ -441,6 +447,125 @@ function pauseAll(dir, reason) {
   }
 }
 
+// ---- save a document to its issue ------------------------------------------------------------
+// A Write & Review run started from an issue ("Enrich in Write & Review", run.issues) can save its
+// accepted document (document.md) back to that issue, on the owner's confirmation only: `replace`
+// makes the document the new description and keeps the original at the end in a collapsed
+// <details> block; `comment` adds it as a comment and leaves the description as it is. A preview
+// never calls the CLI. Each save is recorded in the run folder: issue-save.md (the text sent) and
+// issue-saves.json ([{ number, url, mode, at, platform, commentUrl? }]), shown in Details and Artifacts.
+const SAVE_MODES = ['replace', 'comment'];
+const ORIGINAL_SUMMARY = '<details><summary>Original description</summary>';
+const ORIGINAL_BLOCK = /\n*<details><summary>Original description<\/summary>\n\n([\s\S]*)\n\n<\/details>\s*$/;
+
+// The --repo value of gh/glab for a repository URL (same rules as fetchIssues).
+function cliTarget(platform, repo) {
+  const p = PLATFORMS[platform];
+  if (!p?.cli) throw new Error(`Saving to an issue needs GitHub or GitLab (the backlog's platform is ${p?.label || platform || 'not set'}).`);
+  const parsed = parseRepoUrl(repo);
+  if (!parsed) throw new Error(`The project's repository is not a recognizable git URL: ${repo || '(none)'}`);
+  if (platform === 'github') return parsed.host === 'github.com' ? parsed.path : `${parsed.host}/${parsed.path}`;
+  return parsed.host === 'gitlab.com' ? parsed.path : `https://${parsed.host}/${parsed.path}`;
+}
+
+/**
+ * The text sent to the issue. `replace`: the document, then the original description in a collapsed
+ * block (a description saved before keeps its first original, so saving again never nests blocks);
+ * `comment`: the document only.
+ */
+function issueSaveBody({ mode, document, original = '' }) {
+  const doc = String(document || '').replace(/\r\n/g, '\n').trim();
+  if (mode === 'comment') return `${doc}\n`;
+  const current = String(original || '').replace(/\r\n/g, '\n').trim();
+  const kept = (current.match(ORIGINAL_BLOCK)?.[1] ?? current).trim();
+  return kept ? `${doc}\n\n${ORIGINAL_SUMMARY}\n\n${kept}\n\n</details>\n` : `${doc}\n`;
+}
+
+/**
+ * The CLI call that saves `text` to issue `number`: gh reads it from `file` (--body-file), glab
+ * takes it as an argument. { cli, args, display } (display: the command as shown in the preview).
+ */
+function issueSaveCommand({ platform, repo, number, mode, file, text }) {
+  if (!SAVE_MODES.includes(mode)) throw new Error(`Unknown save mode: ${mode} (replace or comment).`);
+  const target = cliTarget(platform, repo);
+  const n = String(Number(number));
+  let cli;
+  let args;
+  if (platform === 'github') {
+    cli = 'gh';
+    args = ['issue', mode === 'replace' ? 'edit' : 'comment', n, '--repo', target, '--body-file', file];
+  } else {
+    cli = 'glab';
+    args = mode === 'replace' ? ['issue', 'update', n, '--repo', target, '--description', text] : ['issue', 'note', n, '--repo', target, '--message', text];
+  }
+  const shown = args.map((a) => (a === text ? '<document>' : /\s/.test(a) ? `"${a}"` : a));
+  return { cli, args, display: `${cli} ${shown.join(' ')}` };
+}
+
+/** One issue, read again from the platform (same shape as fetchIssues). */
+async function fetchIssue({ platform, repo, number, exec = execCli }) {
+  const target = cliTarget(platform, repo);
+  const n = String(Number(number));
+  if (platform === 'github') {
+    const out = await exec('gh', ['issue', 'view', n, '--repo', target, '--json', 'number,title,state,labels,url,author,assignees,body,createdAt,updatedAt']);
+    return normalizeGithub([JSON.parse(out)])[0];
+  }
+  const out = await exec('glab', ['issue', 'view', n, '--repo', target, '--output', 'json']);
+  return normalizeGitlab([JSON.parse(out)])[0];
+}
+
+/** Replaces one issue in a project's cache (its pull requests are kept); returns the cache, or null without one. */
+function updateCachedIssue(dir, projectId, issue) {
+  const data = readBacklog(dir, projectId);
+  if (!data) return null;
+  data.issues = (data.issues || []).map((i) => (i.number === issue.number ? { ...i, ...issue, pullRequests: i.pullRequests || [] } : i));
+  fs.writeFileSync(cacheFile(dir, projectId), JSON.stringify(data, null, 2));
+  return data;
+}
+
+const savesFile = (runDir) => path.join(runDir, 'issue-saves.json');
+/** The saves of a run to its issue (issue-saves.json), oldest first. */
+function readIssueSaves(runDir) {
+  try { return JSON.parse(fs.readFileSync(savesFile(runDir), 'utf8')); } catch { return []; }
+}
+
+/**
+ * Preview or save the accepted document of a run to its issue.
+ * run: { runDir, status, mock, issues }; platform/repo: the project's backlog; cached: the issue as
+ * last synced (its body is the original shown by a preview). `preview` (or a simulated run) never
+ * calls the CLI; a save reads the issue again first, so the description kept is the current one,
+ * then reads it once more into the cache (`dir`, `projectId`).
+ * Returns { preview, mode, issue: { number, url, title }, command, body, saved?, refreshError? }.
+ */
+async function saveRunToIssue({ run, mode = 'replace', preview = false, platform, repo, cached = null, dir = null, projectId = null, exec = execCli }) {
+  const issue = runIssues(run)[0];
+  if (!issue) throw new Error('This run was not started from an issue.');
+  if (run.status !== 'success') throw new Error('Only an accepted document can be saved to its issue.');
+  let document;
+  try { document = fs.readFileSync(path.join(run.runDir, 'document.md'), 'utf8'); } catch { throw new Error('The run has no document.md to save.'); }
+  if (!document.trim()) throw new Error('The run\'s document.md is empty.');
+  const file = path.join(run.runDir, 'issue-save.md');
+  const dryRun = preview || !!run.mock;
+  let original = cached?.body || '';
+  if (!dryRun && mode === 'replace') original = (await fetchIssue({ platform, repo, number: issue.number, exec })).body;
+  const body = issueSaveBody({ mode, document, original });
+  const command = issueSaveCommand({ platform, repo, number: issue.number, mode, file, text: body });
+  const out = { preview: dryRun, mode, issue: { number: issue.number, url: issue.url, title: issue.title || cached?.title || '' }, command: command.display, body };
+  if (dryRun) return out;
+
+  fs.writeFileSync(file, body);
+  const stdout = String(await exec(command.cli, command.args) || '');
+  const commentUrl = mode === 'comment' ? stdout.match(/https?:\/\/\S+/)?.[0] || null : null;
+  const saved = { number: issue.number, url: issue.url, mode, platform, at: new Date().toISOString(), ...(commentUrl ? { commentUrl } : {}) };
+  fs.writeFileSync(savesFile(run.runDir), JSON.stringify([...readIssueSaves(run.runDir), saved], null, 2));
+  out.saved = saved;
+  // the Backlog shows the new body, task progress and labels without a full sync
+  if (dir && projectId) {
+    try { updateCachedIssue(dir, projectId, await fetchIssue({ platform, repo, number: issue.number, exec })); } catch (e) { out.refreshError = e.message; }
+  }
+  return out;
+}
+
 // The task of a group: every issue (title, URL and body) in the order selected, shipped together.
 function groupTask(issues) {
   const refs = issues.map((i) => `#${i.number}`).join(', ');
@@ -476,4 +601,10 @@ module.exports = {
   referencedIssues, fetchOpenPullRequests, attachPullRequests,
   readQueue, enqueue, unqueue, skipQueued, newPullRequests, setPaused, nextQueued, pauseAll, runInputs,
   itemIssues, runIssues, execCli, readLocal, writeLocal,
+  fetchIssue,
+  issueSaveBody,
+  issueSaveCommand,
+  readIssueSaves,
+  saveRunToIssue,
+  updateCachedIssue,
 };

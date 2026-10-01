@@ -1,9 +1,12 @@
 // Backlog screen: a project's issues (the last sync, instant, and a new sync with gh/glab, each
-// issue with the runs working on it), the assignment queue and the local merges not pushed.
+// issue with the runs working on it), the assignment queue and the local merges not pushed, and
+// saving a Write & Review document back to its issue.
 
 const path = require('path');
 const backlog = require('../../backlog');
+const simulation = require('../../engine/simulation');
 const projects = require('../../projects');
+const runs = require('../../runs');
 const workspace = require('../../workspace');
 
 module.exports = (ctx) => {
@@ -58,6 +61,32 @@ module.exports = (ctx) => {
       method: 'assignWorkflow',
       params: ['projectId', 'numbers', 'workflow', 'inputs', 'mock', 'group'],
       fn: (opts) => ctx.assignWorkflow(opts),
+    },
+    // Save to issue (#103): a Write & Review run started from an issue saves its accepted document
+    // back to it (mode: replace | comment). The owner confirms in the screen; agents never call this.
+    // `preview`, a simulated run or simulation-only never call gh/glab. Returns saveRunToIssue's result
+    // plus the backlog after a save (the issue read again).
+    {
+      channel: 'backlog:save-doc',
+      method: 'saveDocToIssue',
+      params: ['runId', 'mode', 'preview'],
+      fn: async ({ runId, mode, preview }) => {
+        const run = runs.readRun(ctx.ws.runs, path.basename(String(runId)));
+        if (!run) throw new Error(`Run not found: ${runId}`);
+        if (ctx.active.has(run.runId)) throw new Error('The run is still in progress: save its document once it is accepted.');
+        if (!preview && !run.mock) simulation.refuseReal('a save to GitHub/GitLab');
+        const data = run.projectId ? backlog.readBacklog(ctx.ws.backlog, run.projectId) : null;
+        const proj = run.projectId ? projects.listProjects(ctx.ws.projects).find((p) => p.id === run.projectId) : null;
+        const number = backlog.runIssues(run)[0]?.number;
+        const res = await backlog.saveRunToIssue({
+          run, mode, preview: !!preview,
+          platform: data?.platform || workspace.readSettings(ctx.ws).backlogPlatform || backlog.DEFAULT_PLATFORM,
+          repo: data?.repo || proj?.repo,
+          cached: (data?.issues || []).find((i) => i.number === number) || null,
+          dir: ctx.ws.backlog, projectId: run.projectId,
+        });
+        return { ...res, backlog: res.saved && data ? current(run.projectId) : null };
+      },
     },
     // cancelGroup: an issue of a group takes the whole group out (else it only leaves the group)
     {

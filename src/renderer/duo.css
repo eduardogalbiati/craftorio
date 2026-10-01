@@ -245,6 +245,14 @@
 .duo-project .row { gap: 12px; }
 .duo-project select { width: 320px; flex: none; }
 .duo-project .small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+/* Document type, the issue being enriched and Save to issue (#103) */
+.duo-skill .row { gap: 12px; }
+.duo-skill select { width: 320px; flex: none; }
+.duo-issue { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 12px; border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 8px; font-size: 13px; }
+.duo-issue a, #duo-save-issue a { color: var(--accent); }
+.duo-save-card { width: min(760px, 92vw); }
+.duo-save-preview { max-height: 46vh; overflow: auto; border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; margin-top: 8px; }
+.duo-save-row span { display: inline-flex; align-items: center; gap: 8px; }
 
 /* ---------- help ("?") ---------- */
 .duo-help-btn {

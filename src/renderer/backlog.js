@@ -147,6 +147,18 @@
     window.showRun(el.dataset.run, { workflow: el.dataset.workflow });
   }
 
+  // "Enrich in Write & Review" (#103): the Write & Review screen prefilled with the issue (an enriched
+  // issue by default), in this project, read-only; the owner edits and starts it.
+  function enrichIssue(number) {
+    const issue = bl.data?.issues?.find((i) => i.number === number);
+    if (!issue) return;
+    window.openDuoForIssue({
+      projectId: bl.projectId,
+      platform: bl.data.platform,
+      issue: { number: issue.number, title: issue.title, url: issue.url, body: issue.body || '', labels: issue.labels || [] },
+    });
+  }
+
   // "Review approval" opens its run, where the gate is answered (the run chat, or the Run screen's
   // gate card): never a dialog over the Backlog.
   function openGate(el) {
@@ -450,15 +462,27 @@
       return `${rm}<span class="bl-queued"><span class="badge">queued #${i.queued.position}</span><span class="small">${esc(i.queued.workflow)}</span>${i.queued.mock ? '<span class="badge p-mock">simulated</span>' : ''}${groupBadge(i.queued.groupedWith)}
         <button class="link-btn small" type="button" data-unqueue="${i.number}" title="Take it out of the queue">remove</button></span>`;
     }
-    const r = i.runs?.[0];
-    if (!r) return rm;
+    const e = enriching(i);
+    const r = i.runs?.find((x) => !x.enrich);
+    if (!r) return rm + e;
     const notPushed = i.column === 'local'
       ? `<span class="badge bl-notpushed" title="Merged into the local ${esc(r.localMerge?.base || 'base')}; the issue closes when it is pushed (Push, above)">not pushed</span>` : '';
     const recovered = r.recovery ? `<span class="badge bl-recovered" title="${esc(`Supervisor: ${r.recovery}`)}">sent back after a failed merge</span>` : '';
     const watch = r.status === 'running' && isRunLive(r.runId)
       ? `<button class="btn sm ghost sup-btn" type="button" data-watch="${esc(r.runId)}" data-workflow="${esc(r.workflow || '')}" title="The supervisor follows this run and explains it in a chat (opt-in: it costs tokens)"><span class="sup-mark">◆</span> Watch</button>` : '';
-    return `${rm}${runLink(r)}${notPushed}${recovered}${groupBadge(r.groupedWith)}${r.waiting ? '<button class="btn sm primary" type="button" data-gate>Review approval</button>' : ''}${watch}`;
+    return `${rm}${runLink(r)}${notPushed}${recovered}${groupBadge(r.groupedWith)}${r.waiting ? '<button class="btn sm primary" type="button" data-gate>Review approval</button>' : ''}${watch}${e}`;
   }
+  // Its latest Write & Review run (#103): "being enriched" while it runs or waits, "enriched" once
+  // accepted; a link to the run (the Write & Review chat, with Save to issue).
+  function enriching(i) {
+    const r = i.runs?.find((x) => x.enrich);
+    if (!r || ['failed', 'cancelled', 'interrupted'].includes(r.status)) return '';
+    const label = r.status === 'success' ? 'enriched' : 'being enriched';
+    return `<button class="badge bl-enrich" type="button" data-run="${esc(r.runId)}" data-workflow="${esc(r.workflow || '')}" title="${esc(`Write & Review run ${r.runId}${r.mock ? ' (simulated)' : ''}: open it`)}">${label}${r.mock ? ' · simulated' : ''}</button>`;
+  }
+  // Opens Write & Review prefilled with the issue (nothing starts by itself).
+  const enrichBtn = (i, cls = 'link-btn small') => (i.state === 'open'
+    ? `<button class="${cls}" type="button" data-enrich="${i.number}" title="Enrich this issue in Write & Review (e.g. into a fuller issue or an RFC), then save the result back to it">Enrich in Write &amp; Review</button>` : '');
 
   function issueRow(i) {
     const open = bl.expanded.has(i.number);
@@ -473,7 +497,7 @@
             <div class="bl-title">${esc(i.title)}</div>
             <div class="bl-labels">${labels(i)}</div>
           </div>
-          <span class="bl-status">${prBadges(i)}${status(i)}</span>
+          <span class="bl-status">${prBadges(i)}${status(i)}${enrichBtn(i)}</span>
           ${tasks(i) || '<span></span>'}
           <span class="pr-meta"><label>Updated</label>${esc(dateOf(i.updatedAt))}</span>
           <span class="pr-chev">${open ? '▾' : '▸'}</span>
@@ -484,7 +508,7 @@
           ${i.pullRequests?.length ? `<div class="bl-prs"><span class="muted small">Open ${bl.data?.platform === 'gitlab' ? 'MRs' : 'PRs'}</span>${i.pullRequests.map((p) => `<span class="small">${prBadges({ pullRequests: [p] })} ${esc(p.title)}</span>`).join('')}</div>` : ''}
           ${i.runs?.length ? `<div class="bl-runs"><span class="muted small">Runs</span>${i.runs.map(runLink).join('')}</div>` : ''}
           <div class="md bl-md">${i.body.trim() ? markdownHtml(i.body) : '<p class="muted">No description.</p>'}</div>
-          <div><a class="btn sm ghost" href="${esc(i.url)}" target="_blank" rel="noopener">Open on ${esc(host)}</a></div>
+          <div class="row"><a class="btn sm ghost" href="${esc(i.url)}" target="_blank" rel="noopener">Open on ${esc(host)}</a>${enrichBtn(i, 'btn sm ghost')}</div>
         </div>` : ''}
       </div>`;
   }
@@ -495,6 +519,7 @@
       <div class="bl-labels">${labels(i)}</div>
       ${tasks(i)}
       ${prBadges(i) || status(i) ? `<div class="bl-card-run">${prBadges(i)}${status(i)}</div>` : ''}
+      ${enrichBtn(i) ? `<div class="bl-card-actions">${enrichBtn(i)}</div>` : ''}
     </div>`;
 
   function renderList(issues) {
@@ -776,6 +801,8 @@
     if (gate) { openGate(gate); return; }
     const out = e.target.closest('[data-unqueue]');
     if (out) { await removeQueued(Number(out.dataset.unqueue)); return; }
+    const enrich = e.target.closest('[data-enrich]');
+    if (enrich) { enrichIssue(Number(enrich.dataset.enrich)); return; }
     if (e.target.closest('a')) return;
     const row = e.target.closest('[data-act="toggle"]');
     if (!row) return;

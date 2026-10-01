@@ -9,7 +9,14 @@ module.exports = (ctx) => [
     channel: 'run:start',
     method: 'startRun',
     params: 'payload',
-    fn: ({ file, inputs, mock, mockSequences }) => ctx.startWorkflowRun({ file, inputs, mock, mockSequences }),
+    // projectId/issues: a run started from a Backlog issue (Write & Review's "Enrich"), recorded in workflow.started
+    fn: ({ file, inputs, mock, mockSequences, projectId, issues }) => ctx.startWorkflowRun({
+      file, inputs, mock, mockSequences,
+      projectId: projectId || undefined,
+      issues: Array.isArray(issues) && issues.length
+        ? issues.map((i) => ({ number: Number(i.number), url: String(i.url || ''), title: String(i.title || '') }))
+        : undefined,
+    }),
   },
   // runId: the run to stop (without it, the only run in progress)
   {

@@ -1,6 +1,10 @@
 // Write & Review: runs the writer-reviewer workflow and shows it as a chat between the writer,
 // the reviewer and the platform's supervisor. The chat is rebuilt from the run's events, live
 // (run:event) or from a past run's events.jsonl (Workflows › Runs › "Open chat").
+// The document type is the workflow's `document_skill` (duo-issue.js). From a Backlog issue
+// (window.openDuoForIssue) the setup is prefilled and the run records the issue; once accepted,
+// "Save to issue" (window.openDuoSaveToIssue, also in Run Details) previews and, on the owner's
+// click, saves the document to it (backlog:save-doc).
 (() => {
   const $d = (sel) => document.querySelector(sel);
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -86,6 +90,7 @@
       threshold: +$d('#duo-threshold').value || 8,
       max_rounds: Math.max(1, Math.round(+$d('#duo-rounds').value || 5)),
       project_path: projects.find((p) => p.id === $d('#duo-project').value)?.folder || '',
+      document_skill: $d('#duo-skill').value || '',
     };
     for (const role of ['writer', 'reviewer']) {
       const c = config[role];
@@ -103,11 +108,16 @@
     let mock;
     try { mock = wantsSimulation($d('#duo-mock')); } catch (e) { err.textContent = e.message; return; }
     const scenario = $d('#duo-scenario').value;
-    try { localStorage.setItem(LS, JSON.stringify({ writer: config.writer, reviewer: config.reviewer, prompt: inputs.prompt, goal: inputs.goal, threshold: inputs.threshold, max_rounds: inputs.max_rounds, scenario, project: $d('#duo-project').value })); } catch { /* ignore */ }
+    // a prompt prefilled from an issue is not kept as the next default
+    const own = fromIssue ? { prompt: saved.prompt, goal: saved.goal, project: saved.project } : { prompt: inputs.prompt, goal: inputs.goal, project: $d('#duo-project').value };
+    try { localStorage.setItem(LS, JSON.stringify({ writer: config.writer, reviewer: config.reviewer, ...own, threshold: inputs.threshold, max_rounds: inputs.max_rounds, scenario, skill: fromIssue ? saved.skill : inputs.document_skill })); } catch { /* ignore */ }
     $d('#duo-run').disabled = true;
     try {
       starting = true; // the run's first events may arrive before startRun resolves
-      const { runId } = await api.startRun({ file: FILE, inputs, mock, mockSequences: mock ? SCENARIOS[scenario]?.seq : null });
+      // started from a Backlog issue: the run records it (workflow.started `issues`) and can save to it
+      const forIssue = fromIssue
+        ? { projectId: fromIssue.projectId, issues: [{ number: fromIssue.issue.number, url: fromIssue.issue.url, title: fromIssue.issue.title }] } : {};
+      const { runId } = await api.startRun({ file: FILE, inputs, mock, mockSequences: mock ? SCENARIOS[scenario]?.seq : null, ...forIssue });
       bindLive(runId);
     } catch (e) {
       starting = false;
@@ -134,11 +144,67 @@
     hint();
   }
 
+  // ---------------------------------------------------------------- from a Backlog issue (#103)
+  // "Enrich in Write & Review" fills the setup with the issue (DuoIssue.enrichInputs): an enriched
+  // issue by default, in the Backlog's project. Nothing starts by itself; the owner can edit it all.
+  let fromIssue = null; // { projectId, platform, issue: { number, title, url, body, labels } }
+  const { DOC_TYPES, DEFAULT_ISSUE_SKILL } = window.DuoIssue;
+  const docLabel = (skill) => DOC_TYPES.find((t) => t.skill === (skill || ''))?.label || skill;
+
+  function fillSkills(skill) {
+    const sel = $d('#duo-skill');
+    const known = DOC_TYPES.some((t) => t.skill === skill);
+    sel.innerHTML = DOC_TYPES.map((t) => `<option value="${esc(t.skill)}"${t.skill === skill ? ' selected' : ''}>${esc(t.label)}${t.skill ? ` (${esc(t.skill)})` : ''}</option>`).join('')
+      + (skill && !known ? `<option value="${esc(skill)}" selected>${esc(skill)}</option>` : '');
+  }
+
+  function renderIssueBanner() {
+    const box = $d('#duo-issue');
+    box.classList.toggle('hidden', !fromIssue);
+    if (!fromIssue) { box.innerHTML = ''; return; }
+    const i = fromIssue.issue;
+    box.innerHTML = `<span>Enriching issue <a href="${esc(i.url)}" target="_blank" rel="noopener">#${esc(i.number)}</a> <b>${esc(i.title)}</b>: once you accept the document, you can save it back to the issue.</span>
+      <button type="button" class="link-btn small" id="duo-issue-clear" title="Write a document that is not about this issue">not about this issue</button>`;
+    $d('#duo-issue-clear').onclick = () => { fromIssue = null; renderIssueBanner(); };
+  }
+
+  // A new document type: the prompt and the goal follow it while the owner has not edited them.
+  function onSkillChange() {
+    if (!fromIssue) return;
+    const skill = $d('#duo-skill').value;
+    const before = window.DuoIssue.enrichInputs(fromIssue.issue, fromIssue.skill);
+    const next = window.DuoIssue.enrichInputs(fromIssue.issue, skill);
+    if ($d('#duo-prompt').value.trim() === before.prompt.trim()) $d('#duo-prompt').value = next.prompt;
+    if ($d('#duo-goal').value.trim() === before.goal.trim() && next.goal) $d('#duo-goal').value = next.goal;
+    fromIssue.skill = skill;
+  }
+
+  async function openForIssue({ projectId, platform, issue, skill = DEFAULT_ISSUE_SKILL }) {
+    if (typeof showView === 'function') showView('duo');
+    $d('#duo-chat').classList.add('hidden');
+    $d('#duo-setup').classList.remove('hidden');
+    fromIssue = { projectId, platform, issue, skill };
+    const inputs = window.DuoIssue.enrichInputs(issue, skill);
+    fillSkills(skill);
+    $d('#duo-prompt').value = inputs.prompt;
+    $d('#duo-goal').value = inputs.goal;
+    $d('#duo-error').textContent = '';
+    renderIssueBanner();
+    await loadProjects();
+    const sel = $d('#duo-project');
+    if ([...sel.options].some((o) => o.value === projectId && !o.disabled)) { sel.value = projectId; sel.onchange(); }
+    const prompt = $d('#duo-prompt');
+    prompt.focus();
+    prompt.setSelectionRange(0, 0);
+    prompt.scrollTop = 0;
+  }
+  window.openDuoForIssue = openForIssue;
+
   // ---------------------------------------------------------------- chat state
   const chat = { runId: null, live: false, running: false };
   function resetChat(runId, live) {
     Object.assign(chat, {
-      runId, live, running: live, seq: 0, runDir: null, mock: false,
+      runId, live, running: live, seq: 0, runDir: null, mock: false, issue: null, docSkill: '',
       threshold: 8, maxRounds: 5, round: 0, scores: [], docs: [], docView: -1,
       interventions: 0, usage: {}, sessions: new Map(), openStep: null, typing: null, cost: 0,
     });
@@ -274,16 +340,20 @@
       reviewer: { provider: BY_KEY[i.reviewer_provider] || 'codex-cli', model: i.reviewer_model || '', effort: i.reviewer_effort || '' },
       supervisor: { internal: true },
     };
-    Object.assign(chat, { threshold: +i.threshold || 8, maxRounds: +i.max_rounds || 5, runDir: ev.run_dir, mock: !!ev.mock });
+    // the issue it enriches (started from the Backlog): its accepted document can be saved to it
+    const issue = (Array.isArray(ev.issues) ? ev.issues : ev.issue ? [ev.issue] : [])[0] || null;
+    Object.assign(chat, { threshold: +i.threshold || 8, maxRounds: +i.max_rounds || 5, runDir: ev.run_dir, mock: !!ev.mock, issue, docSkill: i.document_skill || '' });
     ['writer', 'reviewer', 'supervisor'].forEach((role) => setCast(role, 'idle'));
     $d('#duo-round').textContent = `0/${chat.maxRounds}`;
     $d('#duo-chat-title').innerHTML = `<span style="color:var(--writer)">${esc(roles.writer.model)}</span> <span class="muted">⇄</span> <span style="color:var(--reviewer)">${esc(roles.reviewer.model)}</span>`;
     addToChat(`<div class="duo-msg user"><div class="duo-bubble">
       <div class="duo-meta"><b>You</b><span class="time">${clock(ev.ts)}</span></div>
+      ${issue ? `<p><b>Issue</b> <a href="${esc(issue.url)}" target="_blank" rel="noopener">#${esc(issue.number)}</a> ${esc(issue.title || '')}</p>` : ''}
+      ${chat.docSkill ? `<p><b>Document</b> ${esc(docLabel(chat.docSkill))} <span class="mono small">${esc(chat.docSkill)}</span></p>` : ''}
       <p><b>Prompt</b> <span class="duo-msg-text">${esc(i.prompt)}</span></p>
       <p><b>Goal</b> <span class="duo-msg-text">${esc(i.goal)}</span></p></div></div>`);
     const project = i.project_path ? (projects.find((p) => p.folder === i.project_path)?.name || i.project_path) : '';
-    note(`Run started${ev.mock ? ' · <b>simulation</b>' : ''}${project ? ` · project <b>${esc(project)}</b> (read-only)` : ''} · approve at ${chat.threshold}/10 · max ${chat.maxRounds} rounds`);
+    note(`Run started${ev.mock ? ' · <b>simulation</b>' : ''}${issue ? ` · about issue <b>#${esc(issue.number)}</b>` : ''}${project ? ` · project <b>${esc(project)}</b> (read-only)` : ''} · approve at ${chat.threshold}/10 · max ${chat.maxRounds} rounds`);
     addCheck('ok', `Run started${ev.mock ? ' (simulation, no model calls)' : ''}`);
     $d('#duo-chat-status').textContent = 'running';
   }
@@ -441,6 +511,11 @@
       setSuperPill('success', 'done');
       addCheck('ok', 'Run finished');
       $d('#duo-chat-status').textContent = 'Finished';
+      // accepted and about an issue: Save to issue, now or later (a replayed run keeps it)
+      if (chat.issue) {
+        note(`<button type="button" class="btn sm primary" data-save-issue title="Preview it, then confirm: it changes the issue on ${chat.mock ? 'the platform (simulated run: preview only)' : 'GitHub/GitLab'}">Save to issue #${esc(chat.issue.number)}…</button>
+          <span class="muted small">${chat.mock ? 'simulated run: preview only, nothing is sent' : 'replace its description or add it as a comment; you confirm first'}</span>`, 'done duo-save-row');
+      }
     } else {
       note(`<b>${esc(ev.status)}</b> · ${esc(String(ev.error || '').slice(0, 220))} · ${cost} · ${dur}`, 'failed');
       setSuperPill(ev.status === 'cancelled' ? 'cancelled' : 'failed', ev.status);
@@ -494,6 +569,74 @@
   // the run this screen shows (live or replayed), for desktop notifications
   window.duoShownRunId = () => (!$d('#view-duo').classList.contains('hidden') && !$d('#duo-chat').classList.contains('hidden') ? chat.runId : null);
 
+  // ---------------------------------------------------------------- Save to issue (#103)
+  // The accepted document back to its issue (backlog:save-doc): a preview first (never calls the
+  // CLI), then the owner's click saves it. A simulated run only previews. Replace is the default for
+  // an enriched issue (or a free-form document), a comment for the other document types (an RFC…).
+  const saveMode = () => document.querySelector('input[name="duo-save-mode"]:checked')?.value || 'replace';
+  const cleanError = (e) => String(e?.message || e).replace(/^Error invoking remote method '[^']+': (Error: )?/, '');
+  let saveRun = null; // { runId, issue, mock }
+
+  async function previewSave() {
+    const { runId } = saveRun;
+    $d('#duo-save-error').textContent = '';
+    $d('#duo-save-preview').innerHTML = '<p class="muted">Loading the preview…</p>';
+    try {
+      const p = await api.saveDocToIssue(runId, saveMode(), true);
+      if (saveRun?.runId !== runId) return;
+      $d('#duo-save-command').textContent = p.command;
+      $d('#duo-save-preview').innerHTML = md(p.body);
+    } catch (e) {
+      $d('#duo-save-preview').innerHTML = '';
+      $d('#duo-save-error').textContent = cleanError(e);
+    }
+  }
+
+  // target: { runId, issue: { number, url, title }, mock, docSkill } (the chat's run, or one from Run Details)
+  function openSave(target = chat.issue ? { runId: chat.runId, issue: chat.issue, mock: chat.mock, docSkill: chat.docSkill } : null) {
+    if (!target?.issue) return;
+    const { issue, mock, docSkill } = target;
+    saveRun = { runId: target.runId, issue, mock: !!mock };
+    const def = !docSkill || docSkill === DEFAULT_ISSUE_SKILL ? 'replace' : 'comment';
+    document.querySelectorAll('input[name="duo-save-mode"]').forEach((r) => { r.checked = r.value === def; });
+    $d('#duo-save-title').textContent = `Save to issue #${issue.number}`;
+    $d('#duo-save-issue').innerHTML = `<a href="${esc(issue.url)}" target="_blank" rel="noopener">#${esc(issue.number)}</a> ${esc(issue.title || '')}`;
+    $d('#duo-save-note').textContent = mock
+      ? 'Simulated run: this is only a preview, nothing is sent to GitHub/GitLab.'
+      : 'Saving changes the issue on GitHub/GitLab with the platform CLI. The document also stays in the run folder.';
+    $d('#btn-duo-save-ok').classList.toggle('hidden', !!mock);
+    $d('#btn-duo-save-ok').disabled = false;
+    $d('#btn-duo-save-ok').textContent = `Save to issue #${issue.number}`;
+    $d('#duo-save-command').textContent = '';
+    $d('#duo-save-modal').classList.remove('hidden');
+    previewSave();
+  }
+  window.openDuoSaveToIssue = openSave;
+  const closeSave = () => { $d('#duo-save-modal').classList.add('hidden'); saveRun = null; };
+
+  async function confirmSave() {
+    if (!saveRun || saveRun.mock) return;
+    const { runId, issue } = saveRun;
+    const ok = $d('#btn-duo-save-ok');
+    ok.disabled = true;
+    $d('#duo-save-error').textContent = '';
+    try {
+      const r = await api.saveDocToIssue(runId, saveMode(), false);
+      closeSave();
+      if (chat.runId === runId) {
+        const where = r.saved?.commentUrl || issue.url;
+        note(`Saved to issue <a href="${esc(where)}" target="_blank" rel="noopener">#${esc(issue.number)}</a> · ${r.mode === 'comment' ? 'as a comment' : 'description replaced (the original is kept at the end)'}${r.refreshError ? ` · the Backlog could not read it again: ${esc(r.refreshError)}` : ''}`, 'done');
+        addCheck('ok', `Saved to issue #${issue.number} (${r.mode})`);
+      }
+      // the Backlog shows the new body, task progress and labels
+      if (typeof window.refreshBacklog === 'function' && !$d('#view-backlog')?.classList.contains('hidden')) window.refreshBacklog();
+    } catch (e) {
+      // the CLI's message (no auth, issue closed or deleted, network); the document stays in the run folder
+      $d('#duo-save-error').textContent = `${cleanError(e)} The document is still in the run folder (document.md).`;
+      ok.disabled = false;
+    }
+  }
+
   // ---------------------------------------------------------------- help ("?")
   // The guide shows the robots of the current setup in a few of their states.
   function openHelp() {
@@ -541,7 +684,14 @@
       $d('#duo-setup').classList.remove('hidden');
     };
     $d('#duo-edit-workflow').onclick = () => typeof showView === 'function' && showView('workflows');
+    fillSkills(saved.skill || '');
+    $d('#duo-skill').onchange = onSkillChange;
+    document.querySelectorAll('input[name="duo-save-mode"]').forEach((r) => (r.onchange = previewSave));
+    $d('#btn-duo-save-cancel').onclick = closeSave;
+    $d('#btn-duo-save-ok').onclick = confirmSave;
+    $d('#duo-save-modal').addEventListener('click', (e) => { if (e.target.id === 'duo-save-modal') closeSave(); });
     $d('#duo-messages').addEventListener('click', (e) => {
+      if (e.target.closest('[data-save-issue]')) { openSave(); return; }
       const card = e.target.closest('.duo-doc-card');
       if (card) { chat.docView = +card.dataset.v; renderDoc(); }
       const b = e.target.closest('[data-approval]');

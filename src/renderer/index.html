@@ -485,6 +485,15 @@
           </div>
 
           <div class="duo-brief">
+            <!-- prefilled from a Backlog issue ("Enrich in Write & Review", duo.js openDuoForIssue) -->
+            <div id="duo-issue" class="duo-issue hidden"></div>
+            <div class="field duo-skill">
+              <label for="duo-skill">Document type <span class="muted">(optional)</span></label>
+              <div class="row">
+                <select id="duo-skill"></select>
+                <span class="muted small">The writer and the reviewer load this skill: its structure and its rubric.</span>
+              </div>
+            </div>
             <div class="field">
               <label for="duo-prompt">Prompt <span class="req">*</span></label>
               <textarea id="duo-prompt" rows="3" placeholder="What should be written? E.g. a PRD for offline mode in the mobile app, a blog post, a migration plan...">Write a one-page PRD for adding offline mode to our mobile note-taking app: problem, users, scope, non-goals, rollout and success metrics.</textarea>
@@ -1160,6 +1169,27 @@
     </div>
   </div>
 
+  <!-- Save to issue (Write & Review, #103): the accepted document back to its issue, on confirmation -->
+  <div id="duo-save-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="duo-save-title">
+    <div class="modal-card duo-save-card">
+      <h3 id="duo-save-title">Save to issue</h3>
+      <p id="duo-save-issue" class="muted small"></p>
+      <fieldset class="bl-grouping">
+        <legend class="small">How</legend>
+        <label class="check"><input type="radio" name="duo-save-mode" value="replace" checked /><span>Replace the description: the document becomes the issue's body, the original is kept at the end in a collapsed "Original description" block</span></label>
+        <label class="check"><input type="radio" name="duo-save-mode" value="comment" /><span>Add as a comment: the issue's description stays as it is</span></label>
+      </fieldset>
+      <div class="small muted">Command: <span id="duo-save-command" class="mono"></span></div>
+      <div id="duo-save-preview" class="md duo-save-preview"></div>
+      <p id="duo-save-note" class="small"></p>
+      <p id="duo-save-error" class="error small"></p>
+      <div class="modal-actions">
+        <button type="button" id="btn-duo-save-cancel" class="btn ghost">Cancel</button>
+        <button type="button" id="btn-duo-save-ok" class="btn primary">Save to issue</button>
+      </div>
+    </div>
+  </div>
+
   <div id="duo-help" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="duo-help-title">
     <div class="modal-card duo-help-card">
       <div class="duo-help-head">
@@ -1289,6 +1319,7 @@
   <script src="view-registry.js"></script>
   <script src="app.js"></script>
   <script src="robots.js"></script>
+  <script src="duo-issue.js"></script>
   <script src="duo.js"></script>
   <script src="arena-shuffle.js"></script>
   <script src="arena.js"></script>

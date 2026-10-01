@@ -23,7 +23,8 @@
 // (MULTIAGENT_AUTH=off, developer mode on), no sign-in, and HOME/USERPROFILE/APPDATA/GH_CONFIG_DIR
 // point inside it, so the screens never show this machine's CLI sessions, usage or accounts. Demo
 // data: a project `demo-app` with a few issues (the Backlog's sync never calls gh) and, for the
-// views that list runs, one simulated run.
+// views that list runs, one simulated run; backlog and duo also get an accepted Write & Review run
+// on issue #12, whose Save to issue only previews (backlog:save-doc is forced to preview).
 // Prints `screenshot: <path>` and exits 0, or exits 1 with the error.
 
 const fs = require('fs');
@@ -162,6 +163,32 @@ function demoRoadmap(ws, projectId) {
   }, null, 2));
 }
 
+// An accepted, simulated Write & Review run that enriched #12 (#103): the Backlog card shows
+// "enriched", its chat (click the badge) has Save to issue, whose preview is all a screenshot does.
+const DEMO_ENRICH_RUN = '20260119-090000-demo0012';
+function demoEnrichRun(ws, projectId) {
+  const dir = path.join(ws.runs, DEMO_ENRICH_RUN);
+  const i = DEMO_ISSUES[0];
+  const issues = [{ number: i.number, url: `${DEMO_REPO}/issues/${i.number}`, title: i.title }];
+  const document = `# Export a run report as Markdown\n\n## Context\nOwners copy run results by hand into PR descriptions and notes.\n\n## Decisions\n- One Markdown file per run, written into the run folder.\n\n## Acceptance criteria\n- [ ] An Export button in Run Details writes report.md\n- [ ] The report lists steps, agents, costs and the final answer\n- [ ] Tests cover a run with a failed step\n`;
+  const inputs = { prompt: `Enrich issue #12 into a complete issue.\nIssue #12: ${i.title}`, goal: 'A complete issue someone else can implement without asking.', document_skill: 'issue-writing', project_path: '', threshold: 8, max_rounds: 5, writer_provider: 'claude', writer_model: 'claude-opus-5-5', writer_effort: 'high', reviewer_provider: 'codex', reviewer_model: 'gpt-6-luna', reviewer_effort: 'high' };
+  const at = (m) => new Date(Date.UTC(2026, 0, 19, 9, m)).toISOString();
+  const base = { run_id: DEMO_ENRICH_RUN };
+  const summary = { run_id: DEMO_ENRICH_RUN, workflow: 'writer-reviewer', project_id: projectId, issues, status: 'success', mock: true, started_at: at(0), finished_at: at(6), duration_ms: 360000, inputs, sessions: [] };
+  const events = [
+    { ...base, seq: 1, ts: at(0), type: 'workflow.started', workflow: 'writer-reviewer', file: 'writer-reviewer.yaml', project_id: projectId, issues, inputs, mock: true, run_dir: dir },
+    { ...base, seq: 2, ts: at(1), type: 'step.started', step_id: 'write', visit: 1 },
+    { ...base, seq: 3, ts: at(2), type: 'step.finished', step_id: 'write', output: { message: 'First complete version of the issue.', document } },
+    { ...base, seq: 4, ts: at(3), type: 'step.finished', step_id: 'review', output: { score: 9, summary: 'Complete and verifiable.', notes: [] } },
+    { ...base, seq: 5, ts: at(4), type: 'step.finished', step_id: 'signoff', output: { ready: true, summary: 'Ready: every part of the goal is met. Accept it.', checks: [{ item: 'Verifiable acceptance criteria', ok: true }] } },
+    { ...base, seq: 6, ts: at(6), type: 'workflow.finished', status: 'success', summary },
+  ];
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'document.md'), document);
+  fs.writeFileSync(path.join(dir, 'events.jsonl'), events.map((e) => JSON.stringify(e)).join('\n') + '\n');
+  fs.writeFileSync(path.join(dir, 'summary.json'), JSON.stringify(summary, null, 2));
+}
+
 // Finished (not simulated) runs over the last 30 days with Claude, Codex and Grok sessions, so the
 // Analytics screen has tokens per day, provider, model and project (mock runs are left out of it).
 function demoAnalyticsRuns(ws, projectId) {
@@ -201,6 +228,8 @@ function simulateChannels(ipcMain) {
     if (channel === 'analytics:analyze') return handle(channel, (e, arg) => fn(e, { ...arg, mock: true }));
     // the Backlog's Product Owner answers from its simulated self (no model call)
     if (channel === 'po:ask') return handle(channel, (e, arg) => fn(e, { ...arg, mock: true }));
+    // Save to issue (Write & Review) only previews: never calls gh/glab
+    if (channel === 'backlog:save-doc') return handle(channel, (e, arg) => fn(e, { ...arg, preview: true }));
     return handle(channel, channel === 'backlog:sync' ? (e, arg) => handlers['backlog:get'](e, { projectId: arg?.projectId }) : fn);
   };
 }
@@ -298,6 +327,7 @@ function main() {
     fs.writeFileSync(path.join(ws.backlog, `${project.id}.json`), JSON.stringify(demoBacklog(project.id, src('backlog').taskProgress), null, 2));
     if (args.view === 'backlog') demoLocalMerge(ws, project.id);
     if (args.view === 'backlog') demoRoadmap(ws, project.id);
+    if (['backlog', 'duo'].includes(args.view)) demoEnrichRun(ws, project.id);
     if (args.view === 'analytics') demoAnalyticsRuns(ws, project.id);
     let run = null;
     if (VIEWS[args.view].run || ['artifacts', 'workflows', 'project', 'usage', 'dashboard'].includes(args.view)) run = recordRun(project);

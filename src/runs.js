@@ -15,6 +15,11 @@ const { defaultTitle, prOfEvents, readMeta } = require('./run-pr');
 
 const SESSION_EVENTS = new Set(['session.opened', 'session.message_received', 'session.closed']);
 
+// The saves of a run's document to its issue (written by backlog.saveRunToIssue), oldest first.
+function readIssueSaves(dir) {
+  try { return JSON.parse(fs.readFileSync(path.join(dir, 'issue-saves.json'), 'utf8')); } catch { return []; }
+}
+
 // What a run without a (complete) summary.json needs from its events.jsonl: its sessions, its
 // step trail (progress by group) and its local merge (runs recorded before summary.local_merge),
 // cached by mtime+size so an unchanged file is read once.
@@ -161,6 +166,8 @@ function readRun(runsDir, runId) {
     // { number, url } of the PR the run (or the run it resumes) opened; the state is added by the service
     pr: runPr(runsDir, runId),
     localMerge,
+    // where the owner saved the run's document to its issue ([{ number, url, mode, at, platform, commentUrl? }], #103)
+    issueSaves: readIssueSaves(dir),
     recovery: fromEvents(path.join(dir, 'events.jsonl')).recovery,
     error,
     inputs,
