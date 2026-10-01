@@ -1741,6 +1741,58 @@ test('roadmap: Retry on an item whose run is still alive is refused, naming the 
   api['run:stop']({ runId });
 });
 
+test('roadmap: Run this stage (scope) starts only that stage\'s items; once it is done the roadmap pauses as "Stage N done" leaving the others planned, and Start afterwards resumes from stage 1', async (t) => {
+  const { service, api } = makeService(t);
+  const ws = service.workspace();
+  fs.writeFileSync(path.join(ws.workflows, 'fixture-issue.yaml'), ISSUE_WORKFLOW);
+  const p = await roadmapProject(api, ws, t, [1, 2, 3], 'roadmap-scope');
+  const { gates, finished } = watchRuns(service);
+  const notified = [];
+  service.events.on('notify', (n) => notified.push(n));
+
+  await api['roadmap:save']({
+    projectId: p.id,
+    stages: [
+      { name: 'Stage one', items: [{ workflow: 'fixture-issue.yaml', number: 1, mock: true }] },
+      { name: 'Stage two', items: [{ workflow: 'fixture-issue.yaml', number: 2, mock: true }] },
+      { name: 'Stage three', items: [{ workflow: 'fixture-issue.yaml', number: 3, mock: true }] },
+    ],
+  });
+  const stage2 = api['roadmap:get']({ projectId: p.id }).stages[1].id;
+  await api['roadmap:start']({ projectId: p.id, simulated: true, stage: stage2 });
+
+  await until(() => api['runs:active']().length === 1);
+  assert.deepEqual(api['runs:active']()[0].issues.map((i) => i.number), [2]); // only stage 2 started
+  let roadmap = api['roadmap:get']({ projectId: p.id });
+  assert.deepEqual(roadmap.scope, { stage: stage2 });
+  assert.equal(roadmap.stages[0].items[0].status, 'planned');
+  assert.equal(roadmap.stages[2].items[0].status, 'planned');
+
+  const runId2 = api['runs:active']()[0].runId;
+  await until(() => gates.has(runId2));
+  api['approval:resolve']({ runId: runId2, id: gates.get(runId2), answer: true });
+  await until(() => finished.has(runId2));
+
+  await until(() => api['roadmap:get']({ projectId: p.id }).state === 'paused');
+  roadmap = api['roadmap:get']({ projectId: p.id });
+  assert.equal(roadmap.scope, null);
+  assert.equal(roadmap.pausedBy, null);
+  assert.match(roadmap.error, /Stage two done/);
+  assert.equal(roadmap.stages[0].items[0].status, 'planned'); // stage 1: still planned
+  assert.equal(roadmap.stages[1].items[0].status, 'done');
+  assert.equal(roadmap.stages[2].items[0].status, 'planned'); // stage 3: still planned
+  assert.ok(notified.some((n) => n.title === 'Roadmap stage done'), 'notified the stage-only pause, not a failure');
+  assert.ok(!notified.some((n) => n.title === 'Roadmap paused'));
+
+  // Start (no stage) afterwards runs the whole roadmap, from its first unfinished stage
+  await api['roadmap:start']({ projectId: p.id, simulated: true });
+  await until(() => api['runs:active']().length === 1);
+  assert.deepEqual(api['runs:active']()[0].issues.map((i) => i.number), [1]);
+  const runId1 = api['runs:active']()[0].runId;
+  await until(() => gates.has(runId1));
+  api['approval:resolve']({ runId: runId1, id: gates.get(runId1), answer: true });
+});
+
 test('roadmap: a restart continues where it was, from a stage already finished on disk', async (t) => {
   const { service, api } = makeService(t);
   const ws = service.workspace();

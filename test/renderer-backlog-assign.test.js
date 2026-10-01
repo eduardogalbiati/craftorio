@@ -55,3 +55,19 @@ test('assignGroup: a proposed group selects its To do issues, clears filters tha
   assert.match(fn, /await openAssign\(\{ workflow, inputs, group: numbers\.length > 1 \}\);/);
   assert.match(fn, /return skipped;/);
 });
+
+test('roadmapGroup: a proposed group (and its Product Owner answer\'s origin, #140) is forwarded to BacklogRoadmap.addStage as a new stage', () => {
+  const fn = /async function roadmapGroup\(\{ issues, workflow, inputs, reason, modeReason, origin \}\)[\s\S]*?\n  \}/.exec(src)[0];
+  assert.match(fn, /const skipped = issues\.filter\(\(n\) => !list\.some\(\(i\) => i\.number === n\)\);/);
+  assert.match(fn, /if \(!list\.length\) return skipped;/);
+  assert.match(fn, /await window\.BacklogRoadmap\.addStage\(roadmapCtx\(\), bl\.data, \{\s*issues: list, workflow, workflowName: wf\?\.name \|\| workflow, inputs: inputs \|\| \{\}, mock: !!state\.simulationOnly, group: list\.length > 1, reason, modeReason, origin,/);
+  assert.match(fn, /return skipped;/);
+});
+
+test('openStage (the Product Owner drawer\'s badge, #140): switches to the Roadmap and scrolls to, then flashes, that stage\'s section', () => {
+  const fn = /function openStage\(n\)[\s\S]*?\n  \}/.exec(src)[0];
+  assert.match(fn, /showRoadmap\(\);/);
+  assert.match(fn, /document\.querySelector\(`#bl-list \.rm-stage\[data-stage="\$\{Number\(n\) - 1\}"\]`\)/);
+  assert.match(fn, /el\.scrollIntoView\(\{ block: 'start', behavior: 'smooth' \}\);/);
+  assert.match(fn, /el\.classList\.add\('flash'\);/);
+});

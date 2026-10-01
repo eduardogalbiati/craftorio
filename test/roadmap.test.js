@@ -107,6 +107,46 @@ test('saveStages throws when an issue is in two unfinished roadmap items', (t) =
   ]), /is in two roadmap items/);
 });
 
+// ---- origin (#140: a roadmap item remembers the Product Owner answer it was added from) ---------
+
+test('saveStages keeps origin from the raw item, adding no key when it is empty', (t) => {
+  const dir = tmp(t);
+  const withOrigin = roadmaps.saveStages(dir, 'proj', [
+    { items: [{ workflow: 'a.yaml', number: 1, origin: '2026-01-01T00:00:00.000Z' }, { workflow: 'a.yaml', number: 2 }] },
+  ]);
+  const [withIt, withoutIt] = withOrigin.stages[0].items;
+  assert.equal(withIt.origin, '2026-01-01T00:00:00.000Z');
+  assert.equal('origin' in withoutIt, false);
+});
+
+test('saveStages keeps origin from the previous item with the same id when the UI omits it (a re-save)', (t) => {
+  const dir = tmp(t);
+  const first = roadmaps.saveStages(dir, 'proj', [
+    { items: [{ workflow: 'a.yaml', number: 1, origin: '2026-01-01T00:00:00.000Z' }] },
+  ]);
+  const item1 = first.stages[0].items[0];
+  const resaved = roadmaps.saveStages(dir, 'proj', [
+    { id: first.stages[0].id, items: [{ id: item1.id, workflow: 'a.yaml', number: 1 }] },
+  ]);
+  assert.equal(resaved.stages[0].items[0].origin, '2026-01-01T00:00:00.000Z');
+});
+
+test('propose(add) keeps origin on its new items', (t) => {
+  const dir = tmp(t);
+  const { roadmap } = roadmaps.propose(dir, 'proj', { stages: [{ name: 'Next', items: [{ workflow: 'w.yaml', issues: [1], origin: 'ts-1' }] }] });
+  assert.equal(roadmap.stages[0].items[0].origin, 'ts-1');
+});
+
+test('issueStages exposes each item\'s origin on its issues, null when the item has none', (t) => {
+  const dir = tmp(t);
+  roadmaps.writeRoadmap(dir, 'proj', mkRoadmap([
+    { id: 's1', items: [mkItem('i1', 1, { origin: 'ts-1' }), mkItem('i2', 2)] },
+  ]));
+  const stages = roadmaps.issueStages(roadmaps.readRoadmap(dir, 'proj'));
+  assert.equal(stages.get(1).origin, 'ts-1');
+  assert.equal(stages.get(2).origin, null);
+});
+
 // ---- advance (pure sequencing) ------------------------------------------------------------
 
 test('advance on a running roadmap returns only the first stage\'s planned items', () => {
@@ -192,6 +232,99 @@ test('advance does nothing to a roadmap that is planned or paused', () => {
     assert.deepEqual(start, []);
     assert.equal(after.state, state);
   }
+});
+
+// ---- Run this stage (#141: `scope: { stage: <id> }`) --------------------------------------
+
+test('setState with a stage id scopes the run to that stage; refuses a stage not in the roadmap or with nothing left to plan', (t) => {
+  const dir = tmp(t);
+  roadmaps.writeRoadmap(dir, 'proj', mkRoadmap(
+    [{ id: 's1', items: [mkItem('i1', 1)] }, { id: 's2', items: [mkItem('i2', 2, { status: 'done' })] }],
+    { state: 'planned' },
+  ));
+  const after = roadmaps.setState(dir, 'proj', 'running', { stage: 's1' });
+  assert.deepEqual(after.scope, { stage: 's1' });
+  assert.equal(after.state, 'running');
+
+  assert.throws(() => roadmaps.setState(dir, 'proj', 'running', { stage: 'missing' }), /no longer in the roadmap/);
+  assert.throws(() => roadmaps.setState(dir, 'proj', 'running', { stage: 's2' }), /done or skipped/);
+});
+
+test('setState: pausing keeps the scope, starting the whole roadmap or stopping clears it', (t) => {
+  const dir = tmp(t);
+  roadmaps.writeRoadmap(dir, 'proj', mkRoadmap([{ id: 's1', items: [mkItem('i1', 1)] }], { state: 'running', scope: { stage: 's1' } }));
+  const paused = roadmaps.setState(dir, 'proj', 'paused');
+  assert.deepEqual(paused.scope, { stage: 's1' });
+
+  roadmaps.writeRoadmap(dir, 'proj', mkRoadmap([{ id: 's1', items: [mkItem('i1', 1)] }], { state: 'running', scope: { stage: 's1' } }));
+  const stopped = roadmaps.setState(dir, 'proj', 'planned');
+  assert.equal(stopped.scope, null);
+
+  roadmaps.writeRoadmap(dir, 'proj', mkRoadmap([{ id: 's1', items: [mkItem('i1', 1)] }], { state: 'running', scope: { stage: 's1' } }));
+  const restarted = roadmaps.setState(dir, 'proj', 'running');
+  assert.equal(restarted.scope, null);
+});
+
+test('advance on a scoped roadmap only returns the scoped stage\'s planned items, leaving the others\' status untouched', () => {
+  const roadmap = mkRoadmap([
+    { id: 's1', items: [mkItem('i1', 1)] },
+    { id: 's2', items: [mkItem('i2', 2)] },
+    { id: 's3', items: [mkItem('i3', 3)] },
+  ], { scope: { stage: 's2' } });
+  const { roadmap: after, start } = roadmaps.advance(roadmap, { runOf: () => null });
+  assert.deepEqual(start.map((x) => x.id), ['i2']);
+  assert.equal(after.stages[0].items[0].status, 'planned');
+  assert.equal(after.stages[2].items[0].status, 'planned');
+  assert.deepEqual(after.scope, { stage: 's2' });
+  assert.equal(after.state, 'running');
+});
+
+test('a scoped stage finishing pauses the roadmap as "Stage N done", clears the scope, and leaves the other stages planned', () => {
+  const roadmap = mkRoadmap([
+    { id: 's1', items: [mkItem('i1', 1)] },
+    { id: 's2', items: [mkItem('i2', 2, { status: 'running', runId: 'r2' })] },
+    { id: 's3', items: [mkItem('i3', 3)] },
+  ], { scope: { stage: 's2' } });
+  const { roadmap: after, start } = roadmaps.advance(roadmap, { runOf: () => ({ status: 'success', merged: true }) });
+  assert.deepEqual(start, []);
+  assert.equal(after.state, 'paused');
+  assert.equal(after.scope, null);
+  assert.equal(after.pausedBy, null);
+  assert.match(after.error, /Stage 2 done/);
+  assert.equal(after.stages[1].items[0].status, 'done');
+  assert.equal(after.stages[0].items[0].status, 'planned');
+  assert.equal(after.stages[2].items[0].status, 'planned');
+});
+
+test('a scoped stage that is also the roadmap\'s only unfinished stage finishes the whole roadmap instead of just pausing it', () => {
+  const roadmap = mkRoadmap([
+    { id: 's1', items: [mkItem('i1', 1, { status: 'done' })] },
+    { id: 's2', items: [mkItem('i2', 2, { status: 'running', runId: 'r2' })] },
+  ], { scope: { stage: 's2' } });
+  const { roadmap: after } = roadmaps.advance(roadmap, { runOf: () => ({ status: 'success', merged: true }) });
+  assert.equal(after.state, 'done');
+  assert.equal(after.scope, null);
+});
+
+test('a failure in a scoped stage pauses the roadmap as usual (pausedBy, error), keeping the scope so the owner is still working on that stage', () => {
+  const roadmap = mkRoadmap([
+    { id: 's1', items: [mkItem('i1', 1)] },
+    { id: 's2', items: [mkItem('i2', 2, { status: 'running', runId: 'r2' })] },
+  ], { scope: { stage: 's2' } });
+  const { roadmap: after } = roadmaps.advance(roadmap, { runOf: () => ({ status: 'failed', error: 'boom' }) });
+  assert.equal(after.state, 'paused');
+  assert.equal(after.pausedBy, 'i2');
+  assert.match(after.error, /#2/);
+  assert.deepEqual(after.scope, { stage: 's2' });
+});
+
+test('advance pauses a roadmap scoped to a stage no longer in it, clearing the scope so Start runs the whole roadmap', () => {
+  const roadmap = mkRoadmap([{ id: 's1', items: [mkItem('i1', 1)] }], { scope: { stage: 'gone' } });
+  const { roadmap: after, start } = roadmaps.advance(roadmap, { runOf: () => null });
+  assert.deepEqual(start, []);
+  assert.equal(after.state, 'paused');
+  assert.equal(after.scope, null);
+  assert.match(after.error, /no longer in the roadmap/);
 });
 
 // ---- statuses derived from the runs, whatever the roadmap state (#112) --------------------

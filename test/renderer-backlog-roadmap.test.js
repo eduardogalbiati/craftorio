@@ -13,27 +13,32 @@ const vm = require('vm');
 const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'backlog-roadmap.js'), 'utf8');
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
-function loadRoadmap({ listWorkflows } = {}) {
+function loadRoadmap({ listWorkflows, confirmDialog, querySelector, devMode } = {}) {
   const savedCalls = [];
+  const startCalls = [];
   const sandbox = {
     esc,
     state: {},
     errMsg: (e) => String(e?.message || e),
-    devMode: () => false,
-    confirmDialog: async () => true,
-    document: { querySelector: () => null },
+    devMode: devMode || (() => false),
+    confirmDialog: confirmDialog || (async () => true),
+    document: { querySelector: querySelector || (() => null) },
     api: {
       listWorkflows: listWorkflows || (async () => []),
       saveRoadmap: async (projectId, stages) => {
         savedCalls.push({ projectId, stages });
         return { roadmap: { state: 'planned', stages } };
       },
+      startRoadmap: async (projectId, simulated, stage) => {
+        startCalls.push({ projectId, simulated, stage });
+        return { roadmap: { state: 'running', stages: [] } };
+      },
     },
   };
   sandbox.window = sandbox;
   vm.createContext(sandbox);
   vm.runInContext(src, sandbox);
-  return { BacklogRoadmap: sandbox.window.BacklogRoadmap, savedCalls };
+  return { BacklogRoadmap: sandbox.window.BacklogRoadmap, savedCalls, startCalls };
 }
 
 const settle = () => new Promise((r) => setTimeout(r, 0));
@@ -102,6 +107,25 @@ function addNoteButtonTarget(stage) {
     if (sel === '[data-stage]') return box; // a stage-level control: no [data-item]
     return null;
   };
+  return btn;
+}
+
+// Run this stage (#141): a stage-level control, like add-note's target.
+function runStageButtonTarget(stage) {
+  const box = { dataset: { stage: String(stage) } };
+  const btn = {};
+  btn.closest = (sel) => {
+    if (sel === '[data-rm-run-stage]') return btn;
+    if (sel === '[data-stage]') return box;
+    return null;
+  };
+  return btn;
+}
+
+function startButtonTarget() {
+  const btn = {};
+  btn.closest = (sel) => (sel === '[data-rm]' ? btn : null);
+  btn.dataset = { rm: 'start' };
   return btn;
 }
 
@@ -323,4 +347,102 @@ test('html: reason and modeReason render inside details.rm-reason', () => {
   assert.match(html, /<details class="rm-reason small">/);
   assert.match(html, /Groups the UI fixes together/);
   assert.match(html, /Validated: the owner can try it in the app/);
+});
+
+// ---- Run this stage (#141) ----------------------------------------------------------------
+
+// A three-stage roadmap: `over` patches the roadmap (state, scope); each stage's item status is set by `statuses`.
+function threeStageData(statuses, over = {}) {
+  const ids = ['st1', 'st2', 'st3'];
+  return {
+    roadmap: {
+      state: 'planned', scope: null,
+      stages: ids.map((id, n) => ({ id, name: `Stage ${n + 1}`, note: '', items: [{ id: `it${n + 1}`, status: statuses[n], workflow: 'w.yaml', mock: false, issues: [{ number: n + 1, title: `#${n + 1}`, url: 'u' }] }] })),
+      ...over,
+    },
+    issues: [],
+  };
+}
+
+test('html: Run this stage is enabled only when the roadmap is not running and the stage has a planned item', () => {
+  const { BacklogRoadmap } = loadRoadmap();
+  const planned = BacklogRoadmap.html(threeStageData(['planned', 'planned', 'planned']), () => {});
+  assert.equal((planned.match(/data-rm-run-stage title="Run only this stage/g) || []).length, 3);
+  assert.doesNotMatch(planned, /data-rm-run-stage[^>]*disabled/);
+
+  const done = BacklogRoadmap.html(threeStageData(['done', 'planned', 'planned']), () => {});
+  assert.match(done, /data-rm-run-stage title="No planned item in this stage" disabled/);
+
+  const running = BacklogRoadmap.html(threeStageData(['planned', 'planned', 'planned'], { state: 'running' }), () => {});
+  assert.match(running, /data-rm-run-stage title="The roadmap is running: pause or stop it first" disabled/g);
+  assert.equal((running.match(/data-rm-run-stage[^>]*disabled/g) || []).length, 3);
+});
+
+test('html: the stage run on its own is highlighted (running or paused), the bar names it, and the other stages keep their plain badge', () => {
+  const { BacklogRoadmap } = loadRoadmap();
+  const running = BacklogRoadmap.html(threeStageData(['done', 'running', 'planned'], { state: 'running', scope: { stage: 'st2' } }), () => {});
+  assert.match(running, /<section class="rm-stage current scoped" data-stage="1"[^>]*>[\s\S]*?<span class="badge live">Running this stage only<\/span>/);
+  assert.match(running, /<b>Roadmap<\/b> <span class="badge live">running · stage 2 only<\/span>/);
+  // stage 1 (done) and stage 3 (planned, not scoped, not current) keep their own plain badges
+  assert.match(running, /<section class="rm-stage finished" data-stage="0"[^>]*>[\s\S]*?<span class="badge">done<\/span>/);
+  assert.doesNotMatch(running, /data-stage="2"[^>]*>[\s\S]{0,400}badge live/);
+
+  const paused = BacklogRoadmap.html(threeStageData(['done', 'failed', 'planned'], { state: 'paused', scope: { stage: 'st2' } }), () => {});
+  assert.match(paused, /<span class="badge warn">This stage only · paused<\/span>/);
+});
+
+test('onClick [data-rm-run-stage]: running a stage while an earlier one is still planned asks to confirm first, naming it; declining starts nothing', async () => {
+  const confirms = [];
+  const { BacklogRoadmap, startCalls } = loadRoadmap({ confirmDialog: async (title, body) => { confirms.push({ title, body }); return false; } });
+  const data = threeStageData(['planned', 'planned', 'planned']);
+  const ctx = makeCtx();
+  const handled = await BacklogRoadmap.onClick({ target: runStageButtonTarget(1) }, ctx, data);
+  assert.equal(handled, true);
+  assert.equal(confirms.length, 1);
+  assert.equal(confirms[0].title, 'Run stage 2 out of order');
+  assert.match(confirms[0].body, /Stage 1 is not done/);
+  assert.equal(startCalls.length, 0);
+});
+
+test('onClick [data-rm-run-stage]: confirmed (and no earlier stage pending) starts only that stage, with the simulated checkbox and real-run confirmation', async () => {
+  const confirms = [];
+  const { BacklogRoadmap, startCalls } = loadRoadmap({ confirmDialog: async (title, body) => { confirms.push({ title, body }); return true; } });
+  const data = threeStageData(['done', 'planned', 'planned']); // stage 1 already done: running stage 2 is in order
+  const ctx = makeCtx('proj-x');
+  await BacklogRoadmap.onClick({ target: runStageButtonTarget(1) }, ctx, data);
+  assert.equal(confirms.length, 1); // only the real-run confirmation; no out-of-order one
+  assert.equal(confirms[0].title, 'Run stage 2');
+  assert.deepEqual(startCalls, [{ projectId: 'proj-x', simulated: false, stage: 'st2' }]);
+});
+
+test('onClick [data-rm-run-stage]: every item of the stage simulated (mock) skips the real-run confirmation', async () => {
+  const confirms = [];
+  const { BacklogRoadmap, startCalls } = loadRoadmap({ confirmDialog: async (title) => { confirms.push(title); return true; } });
+  const data = threeStageData(['done', 'planned', 'planned']);
+  data.roadmap.stages[1].items[0].mock = true;
+  const ctx = makeCtx();
+  await BacklogRoadmap.onClick({ target: runStageButtonTarget(1) }, ctx, data);
+  assert.equal(confirms.length, 0);
+  assert.equal(startCalls[0].simulated, false); // the item's own mock, not the Simulated checkbox, made it unreal
+  assert.equal(startCalls[0].stage, 'st2');
+});
+
+test('onClick [data-rm=start]: resuming a paused, scoped roadmap passes that stage\'s id; a plain Start/Resume passes none', async () => {
+  const { BacklogRoadmap, startCalls } = loadRoadmap();
+  const ctx = makeCtx('proj-y');
+
+  const scoped = threeStageData(['done', 'failed', 'planned'], { state: 'paused', scope: { stage: 'st2' } });
+  await BacklogRoadmap.onClick({ target: startButtonTarget() }, ctx, scoped);
+  assert.equal(startCalls[0].stage, 'st2');
+
+  const plain = threeStageData(['planned', 'planned', 'planned'], { state: 'planned' });
+  await BacklogRoadmap.onClick({ target: startButtonTarget() }, ctx, plain);
+  assert.equal(startCalls[1].stage, null);
+});
+
+test('addStage (Product Owner, #140): a new stage\'s item carries the origin it was added with', async () => {
+  const { BacklogRoadmap, savedCalls } = loadRoadmap();
+  const ctx = makeCtx('proj-z');
+  await BacklogRoadmap.addStage(ctx, { roadmap: { stages: [] } }, { issues: [1, 2], workflow: 'w.yaml', inputs: {}, mock: true, group: true, origin: 'ts-1' });
+  assert.equal(savedCalls[0].stages[0].items[0].origin, 'ts-1');
 });
