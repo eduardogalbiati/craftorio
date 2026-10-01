@@ -1,5 +1,6 @@
 // The view registry: a screen in `src/renderer/views/<view>/` registers itself, so adding one only
-// adds files (its folder, plus its <script>/<link> lines in index.html). Loaded before app.js.
+// adds files (its folder; `npm run docs` lists its <script>/<link> lines in index.html).
+// load: early (registerView exists before app.js and the views)
 //   registerView({ id, nav: { label, icon, order, title }, markup, modals, mount, show })
 // `markup` is the screen's whole `<section id="view-<id>" class="view hidden">`, added to the content
 // container; `modals` its own dialogs, added to the body; `nav` a sidebar entry, placed before the

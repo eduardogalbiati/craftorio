@@ -2,6 +2,7 @@
 // else the issue or the task's first line, as src/run-pr.js computes it) and the PR it opened, a
 // pull-request glyph coloured by the PR state with its number as a link. Pure (no DOM): app.js,
 // run-chat.js and backlog.js draw with it, and it loads in node for tests.
+// load: early (app.js draws its run lists with it)
 (function (root) {
   // state (src/run-pr.js) → words for the tooltip; null: not read yet
   const PR_STATES = {

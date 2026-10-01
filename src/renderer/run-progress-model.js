@@ -7,6 +7,7 @@
 //   order, a return to a group counted (×N), the last one with the run's state.
 // hydrationEvents merges a run's recorded and live events for a window that opened mid-run.
 // Browser: window.RunProgress; Node: module.exports.
+// load: early (app.js draws its run lists with it)
 (function (root) {
   const baseStep = (id) => String(id || '').split(':')[0];
   const subStep = (id) => String(id || '').split(':')[1] || null;

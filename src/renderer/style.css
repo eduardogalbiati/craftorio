@@ -1,3 +1,5 @@
+/* The base styles: every other stylesheet builds on them and overrides some of their rules.
+   load: early */
 :root {
   --bg: #0e1014;
   --panel: #151820;

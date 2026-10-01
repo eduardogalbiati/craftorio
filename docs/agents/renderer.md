@@ -21,9 +21,20 @@ Read this before changing anything in `src/renderer/`.
   entries need no wiring. View scripts load after `app.js` and use its globals (`$`, `esc`, `state`,
   `api`, `errMsg`, `openModal`…); keep app-wide pieces (top-bar widgets, `loadUsage`, shared tables)
   in `app.js`, and shared tokens and components (buttons, badges, `.s-group`/`.s-row`, `.switch`,
-  tables, scrollbars, checkboxes) in `style.css`. **Adding a screen**: create its folder, add its
-  `<link>` and `<script>` lines to `index.html`, a `VIEWS` entry in `scripts/screenshot.js` and a
-  `docs/screens/<view>.md` fragment; `index.html`'s nav, `showView` and `init()` stay untouched.
+  tables, scrollbars, checkboxes) in `style.css`. **Adding a screen**: create its folder, a `VIEWS`
+  entry in `scripts/screenshot.js` and a `docs/screens/<view>.md` fragment, then run `npm run docs`;
+  `index.html` stays untouched by hand (its nav, `showView`, `init()` and its file lists).
+- **How the files are loaded** (#152): `index.html`'s `<link>`/`<script>` lines for `src/renderer/*`
+  and `src/renderer/views/*/*` sit between `<!-- generated:styles -->` / `<!-- generated:scripts -->`
+  markers, written by `npm run docs` (`scripts/docs.js`); `node scripts/docs.js --check` (CI) fails
+  when they are stale. A new module or stylesheet is a new file plus `npm run docs`. Order, per list:
+  the files whose header comment has a `load: early` line (`api-http.js`, `view-registry.js`…,
+  `style.css`), then `app.js`, then the other top-level files, then the views, each group sorted by
+  path (`x-part.js` sorts before `x.js`). A file that needs another one as it loads (top-level code,
+  not a function called later) says so in its header: `load: after duo.js robots.js (why)`; a CSS
+  file that overrides another's rules too (`arena.css`: `load: after duo.css`). The vendor files
+  (`node_modules`) stay hand-kept outside the markers. The CSP and the packaged app are unchanged:
+  the page still lists plain files.
 - Several runs can be in progress: `state.runs` (run id → view: run, sessions, steps, log, gates) and
   `state.runId` (the one the Run screen and the top bar show); `state.run`, `state.sessions`… read the
   selected one. Route anything run-specific by `ev.run_id` and pass the `runId` to `stopRun`,

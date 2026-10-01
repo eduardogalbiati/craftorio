@@ -6,6 +6,7 @@
 // "Duplicate as my agent". Their saved looks are shared through window.AgentLooks.
 // Storage and validation are in src/agents.js. Uses app.js globals ($, esc, state, openModal,
 // closeModal, confirmDialog, errMsg, dateOf, showToast, showWorkflowDefinition) and window.Robots (robots.js).
+// load: after robots.js (the agents' robots)
 /* global api, Robots */
 (() => {
   const SUPERVISOR = 'supervisor';

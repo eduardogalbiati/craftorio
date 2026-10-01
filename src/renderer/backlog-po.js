@@ -22,6 +22,7 @@
 // Developer or simulated mode asks the simulated Product Owner (no model call) and only previews a filing.
 // Uses app.js globals ($, esc, state, errMsg, devMode, fmtCost, fmtSize, markdownHtml, confirmDialog)
 // and window.Robots (robots.js).
+// load: after robots.js (the button's robot is drawn as it loads)
 /* global api, Robots */
 (() => {
   const QUESTIONS = [

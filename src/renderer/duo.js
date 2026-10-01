@@ -5,6 +5,7 @@
 // (window.openDuoForIssue) the setup is prefilled and the run records the issue; once accepted,
 // "Save to issue" (window.openDuoSaveToIssue, also in Run Details) previews and, on the owner's
 // click, saves the document to it (backlog:save-doc).
+// load: after duo-issue.js robots.js (window.DuoIssue as it loads, window.Robots in its init)
 (() => {
   const $d = (sel) => document.querySelector(sel);
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));

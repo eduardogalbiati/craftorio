@@ -3,6 +3,7 @@
 // called over its HTTP + WebSocket API (src/server). In the desktop app the preload has already
 // defined window.api and this file does nothing. Nothing here lists channels: only the few methods
 // the browser does its own way (below) are named.
+// load: early (app.js calls window.api as it loads)
 (() => {
   if (window.api) return;
 

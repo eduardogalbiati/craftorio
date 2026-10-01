@@ -2,6 +2,7 @@
 // between the contenders, the synthesizer, the verifier and the platform's supervisor. Like Write &
 // Review (duo.js), the chat is rebuilt from the run's events, live (run:event) or from a past run's
 // events.jsonl (Workflows › Runs › "Open chat"). Styles: duo.css + arena.css.
+// load: after duo.js robots.js (window.ChatModels as it loads, window.Robots in its init)
 (() => {
   const $a = (sel) => document.querySelector(sel);
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
