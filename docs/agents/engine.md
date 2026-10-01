@@ -130,7 +130,11 @@ same features for users; this is the implementer's summary.
   (output `by: 'supervisor'`), `user_action` / `escalate` → the gate opens with its diagnosis
   under the message and in `approval.requested.supervisor`. Over its limits the gate opens with
   its last diagnosis. Stalls (`checkStalls` after an agent step, `watchSlowStep` while it runs):
-  same `decisionKey` N visits in a row (not /loop iterations), 5+ refused calls in a row, a visit
+  same `repeatKey` N visits in a row (not /loop iterations; #121: the decision fields plus the
+  findings and, for an author step, `commit_sha` (else the worktree head), `summary`, `notes`,
+  `files_changed`; a step's `stall: { same_output_fields: [...] }` replaces that list, as `develop`
+  does; the findings of the step it came from are part of the key, so a fix round answering new
+  review findings never repeats), 5+ refused calls in a row, a visit
   `slow_factor`× the median of its earlier visits (min 10 min), a blocked /loop. Each is a `log`
   warn `kind: stall` (blocked loops keep their `loop_blocked` warn); `superviseStall` decides
   `continue` / `retry` / `resume` / `user_action` (a raw gate: retry, continue, stop), except when

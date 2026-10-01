@@ -21,6 +21,10 @@ const fs = require('fs');
 const path = require('path');
 const yaml = require('js-yaml');
 
+// The app is English-only (#94, #121): the supervisor's words reach the person and decisions.tsv, and
+// its instructions reach the agents, so the language is pinned instead of following the task's.
+const WRITE_ENGLISH = 'Write your explanation, record, recommendation and instructions in English (the app\'s language), whatever language the task, the workflow or the person\'s messages use.';
+
 // Decision taken during a run. `retry` first: it is the mock provider's default.
 const DECISION_SCHEMA = {
   type: 'object',
@@ -157,7 +161,7 @@ function decisionPrompt({ wf, step, error, answer, allowed, events, previous, ha
     `- goto: continue at one of these steps: ${allowed.length ? allowed.join(', ') : '(none)'}.`,
     '- ask_human: stop and ask the person (explain what they need to decide or change).',
     '- fail: end the run.',
-    'Explain in the language of the workflow\'s task, for the person running it.',
+    WRITE_ENGLISH,
   ].filter(Boolean).join('\n');
 }
 
@@ -173,7 +177,7 @@ function actionErrorPrompt({ wf, step, error, check, recover, gate, events, hand
     `\n## Your options (the engine validates them)`,
     `- goto: a case you recognize that the workflow's agents can fix (e.g. the PR/MR conflicts with its base because another change was merged meanwhile): go back to one of ${recover.join(', ')}; \`instruction\` is added to that step's prompt. Give the evidence (the error text, the PR/MR state), never a code fix. The change goes through its checks and the human approval again.`,
     `- escalate: an unknown case, or one no agent can fix (permissions, the platform down): the run stops at the gate "${gate}", where the person sees your \`explanation\` as the diagnosis.`,
-    'Explain in the language of the workflow\'s task, for the person running it.',
+    WRITE_ENGLISH,
   ].filter(Boolean).join('\n');
 }
 
@@ -189,7 +193,7 @@ function idlePrompt({ wf, step, agent, idle, events, handoffs }) {
     `\n## Your options`,
     '- wait: the command can plausibly still finish (a long build or test suite in the foreground prints nothing until it ends).',
     '- interrupt: the wait cannot end on its own (polling for a text that may never appear, a background job with no exit check, an interactive prompt); the engine stops this turn and runs the step again with `instruction` added to the agent\'s prompt. Describe the evidence and what to do instead (e.g. run the command in the foreground with a timeout and read its exit code); never prescribe a code fix.',
-    'Explain in the language of the workflow\'s task, for the person running it.',
+    WRITE_ENGLISH,
   ].filter(Boolean).join('\n');
 }
 
@@ -229,7 +233,7 @@ function onCallPrompt({ wf, step, gate, signals, retryStep, steps, history, prev
       ? '- user_action: only the person can unblock it (a process to stop, a permission to grant, a login): put the exact command or step in `user_action`; the person is told while the step keeps running.'
       : '- user_action: the fix is outside the run\'s permissions (a process to stop, a permission to grant, a login): put the exact command or step the person must take in `user_action`; the person is asked with it.',
     'Rules: never prescribe a code fix and never edit code; a problem in the code goes back to the workflow\'s agents (retry/resume) with the evidence and your hypotheses in `instruction`. A problem in how an agent works (refused commands, a wrong tool, a wait that never ends) gets a concrete instruction (e.g. call `gh` directly in the Bash tool).',
-    'Explain in the language of the workflow\'s task, for the person running it.',
+    WRITE_ENGLISH,
   ].filter(Boolean).join('\n');
 }
 
@@ -361,7 +365,7 @@ async function analyzeRun({ runDir, question, workflowsDir, skillsDirs, resolveC
     'A person asks you, the run supervisor, about this workflow run. Explain what happened and recommend what to do next.',
     question ? `Their question: ${question}` : 'They want to know what happened and, if something went wrong, how to fix it.',
     'Recommendations can be: resume (continue the run from a step, reusing the previous outputs and agent conversations, with an instruction for that step), rerun (start again from the first step with the same inputs), or none (something the person must do, e.g. change an input or the workflow).',
-    'Write the summary and root cause in Markdown, in the language of the task.',
+    `Write the summary and root cause in Markdown. ${WRITE_ENGLISH}`,
     runReport(runDir, { workflowsDir }),
     `\n---\nAt the end of your response you MUST include a \`\`\`json block with an object that validates against this JSON Schema:\n\`\`\`json\n${JSON.stringify(schema, null, 2)}\n\`\`\``,
   ].join('\n\n');

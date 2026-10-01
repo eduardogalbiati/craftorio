@@ -206,6 +206,15 @@ function loadWorkflow(file) {
       if (s.check.on_fail && !ids.has(s.check.on_fail)) throw new Error(`Step "${s.id}" points to unknown step "${s.check.on_fail}".`);
       validateRecover(s.check.recover, s.check.on_fail, 'check');
     }
+    if (s.stall !== undefined) {
+      const fields = s.stall?.same_output_fields;
+      if (!s.stall || typeof s.stall !== 'object' || !Array.isArray(fields) || !fields.length || fields.some((f) => typeof f !== 'string' || !f)) {
+        throw new Error(`Step "${s.id}": stall.same_output_fields must be a non-empty list of output field names.`);
+      }
+      const props = s.output_schema?.properties;
+      const unknown = props && fields.find((f) => !(f in props));
+      if (unknown) throw new Error(`Step "${s.id}": stall.same_output_fields names "${unknown}", which is not in its output_schema.`);
+    }
     for (const t of s.transitions || []) {
       if (t.precheck !== undefined) {
         if (t.precheck === true) { if (!s.check) throw new Error(`Step "${s.id}": precheck: true reuses the step's check, which it does not have.`); } else validateCheck(t.precheck, 'precheck');
@@ -379,6 +388,42 @@ function decisionKey(output, schema) {
   if (!props || !output || typeof output !== 'object') return JSON.stringify(output ?? null);
   const keys = Object.keys(props).filter((k) => props[k].enum || ['boolean', 'integer', 'number'].includes(props[k].type));
   return JSON.stringify(keys.length ? keys.map((k) => output[k] ?? null) : output);
+}
+
+// Output fields that show an author's progress (#121): a new commit, summary or set of changed files is
+// never "the same answer", even when the decision fields (committed: true) are.
+const PROGRESS_FIELDS = ['commit_sha', 'files_changed', 'notes', 'summary'];
+
+// A list of findings by what identifies each one (its enum, boolean and number fields, and its file),
+// not by its description, which an LLM rewords on every call.
+function findingsKey(findings, itemSchema) {
+  if (!Array.isArray(findings)) return findings ?? null;
+  const props = itemSchema?.properties;
+  if (!props) return findings;
+  const keys = Object.keys(props).filter((k) => k === 'file' || props[k].enum || ['boolean', 'integer', 'number'].includes(props[k].type));
+  return keys.length ? findings.map((f) => (f && typeof f === 'object' ? keys.map((k) => f[k] ?? null) : f)) : findings;
+}
+
+// What `same_output` compares between visits of a step: the fields of `stall.same_output_fields` when
+// the step declares them; otherwise its decision fields plus its findings and, for an author step, its
+// progress fields (with the worktree's head when it reports no commit_sha). `answered`: the findings of
+// the step it came from (a review), so a fix round answering new findings never repeats the last one.
+function repeatKey(step, output, { head, answered } = {}) {
+  const props = step.output_schema?.properties || {};
+  const value = (k) => {
+    if (k === 'commit_sha') return output?.commit_sha || head?.() || null;
+    if (k === 'findings') return findingsKey(output?.findings, props.findings?.items);
+    return output?.[k] ?? null;
+  };
+  let fields = step.stall?.same_output_fields;
+  if (!fields) {
+    const progress = PROGRESS_FIELDS.filter((k) => props[k]);
+    if (progress.length && !progress.includes('commit_sha')) progress.unshift('commit_sha');
+    fields = [...progress, ...(props.findings ? ['findings'] : [])];
+  }
+  const own = step.stall?.same_output_fields ? [] : [decisionKey(output, step.output_schema)];
+  if (!fields.length && answered == null) return own[0];
+  return JSON.stringify([...own, ...fields.map(value), ...(answered == null ? [] : [{ answered }])]);
 }
 
 const stepAgentLabel = (s) => (s.agents ? s.agents.join(' · ') : s.agent || null);
@@ -994,7 +1039,11 @@ class WorkflowRun extends EventEmitter {
     // a /loop iteration repeats its answer by design (polling); a fix round (goto itself) counts
     const same = Number(cfg.same_output ?? STALL_SAME_OUTPUT);
     if (!(again && isLooping(step)) && same) {
-      const key = decisionKey(output, step.output_schema);
+      // the findings a fix round answers: those of the step it came from (e.g. code_review)
+      const from = this.ctx.previous_step !== step.id && this.wf.steps.find((s) => s.id === this.ctx.previous_step);
+      const findings = from ? this.ctx.steps[from.id]?.output?.findings : null;
+      const answered = findings == null ? null : findingsKey(findings, from.output_schema?.properties?.findings?.items);
+      const key = repeatKey(step, output, { head: () => this.worktreeHead(), answered });
       st.repeat = st.repeat?.key === key ? { key, count: st.repeat.count + 1 } : { key, count: 1 };
       if (st.repeat.count % same === 0) signals.push({ kind: 'same_output', detail: `the same answer ${st.repeat.count} visits in a row: ${key.slice(0, 200)}` });
     }
@@ -2582,6 +2631,7 @@ module.exports = {
   loadWorkflow,
   parseTokens,
   render,
+  repeatKey,
   takeHandoff,
   validateSchema,
   WorkflowRun,

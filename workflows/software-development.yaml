@@ -428,6 +428,9 @@ steps:
       impossible in this run, each with the reason: the owner then decides whether the run goes on
       without them.
       {% endif %}
+    # a fix round with a new commit, summary or set of files is progress, not "the same answer" (#121)
+    stall:
+      same_output_fields: [commit_sha, summary, files_changed]
     output_schema:
       type: object
       required: [branch, summary, files_changed, test_notes, committed, left_out]
