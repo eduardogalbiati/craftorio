@@ -529,6 +529,9 @@ function createService({ host }) {
         console.warn(msg);
         notices.push({ level: 'warn', message: msg });
       }
+      // automation (queue, roadmap) cannot ask: the run says which earlier run holds the same work (#112)
+      const kept = resume ? null : keptWorkForIssues(issues);
+      if (kept) notices.push({ level: 'warn', message: kept.message });
       const project = projectId ? projects.listProjects(ws.projects).find((p) => p.id === projectId) : null;
       run = new WorkflowRun({
         file: wfFile.file, inputs, mock, runsDir: ws.runs, skillsDirs: [ws.skills], notices,
@@ -1024,6 +1027,27 @@ function createService({ host }) {
     return 0;
   }
 
+  // The newest ended run of one of these issues whose kept worktree still has commits, or null
+  // (#112: starting the same issues again would redo that work; resuming that run keeps it).
+  // { runId, commits, issues, message }
+  function keptWorkForIssues(issues) {
+    const numbers = new Set((issues || []).map((i) => Number(i?.number ?? i)).filter(Boolean));
+    if (!numbers.size || !ws) return null;
+    const ended = runs.listRuns(ws.runs)
+      .filter((r) => r.status !== 'running' && !runAlive(r.runId) && (r.issues || []).some((i) => numbers.has(Number(i.number))))
+      .sort((a, b) => String(b.runId).localeCompare(String(a.runId)));
+    for (const r of ended) {
+      const commits = runWorktreeCommits(r.runId);
+      if (!commits) continue;
+      const names = r.issues.filter((i) => numbers.has(Number(i.number))).map((i) => `#${i.number}`).join(', ');
+      return {
+        runId: r.runId, commits, issues: r.issues,
+        message: `Run ${r.runId} (${r.status}) still has ${commits} commit(s) in its worktree for ${names}. Resuming that run keeps its work; a new run starts it again from scratch.`,
+      };
+    }
+    return null;
+  }
+
   // Whether the owner may confirm, at resume, the decision a run took at a human gate (#112): only
   // a positive decision, and only while the branch is still at the commit approved there (a
   // simulation has no branch: nothing can have changed). { ok, approvedCommit, currentCommit, reason }
@@ -1217,9 +1241,10 @@ function createService({ host }) {
     return { ...data, queue, local, roadmap, autoPush: !!project?.autoPush, issues };
   }
 
-  // A project's roadmap for the screen: each running item with `waiting` (at a human gate).
+  // A project's roadmap for the screen: item statuses derived from their runs (#112), each running
+  // item with `waiting` (at a human gate).
   function roadmapView(projectId, list = []) {
-    const roadmap = roadmaps.readRoadmap(ws.backlog, projectId);
+    const roadmap = roadmaps.withStatus(roadmaps.readRoadmap(ws.backlog, path.basename(String(projectId))), roadmapRun);
     const byId = new Map(list.map((r) => [r.runId, r]));
     return {
       ...roadmap,
@@ -1349,7 +1374,7 @@ function createService({ host }) {
     }
     backlog.enqueue(ws.backlog, project.id, { issues, workflow: file, workflowName: wf.metadata?.name || file, inputs: inputs || {}, mock: !!mock, group: !!group });
     // an issue belongs to one plan: assigned here (the screen asked first), it leaves the roadmap's items not started
-    roadmaps.dropIssues(ws.backlog, project.id, issues.map((i) => i.number));
+    roadmaps.dropIssues(ws.backlog, project.id, issues.map((i) => i.number), { alive: runAlive });
     await dispatchQueue();
     return withIssueRuns(backlog.readBacklog(ws.backlog, project.id));
   }
@@ -1455,7 +1480,8 @@ function createService({ host }) {
     const { roadmap, start } = roadmaps.advance(before, {
       runOf: roadmapRun, closed: (n) => closed.has(n), canStart: (item) => !slotProblem({ mock: mockOf(item), projectId }),
     });
-    const changed = JSON.stringify({ ...roadmap, updatedAt: null }) !== JSON.stringify({ ...before, updatedAt: null });
+    // derived statuses are not stored (roadmaps.persisted): only a stored change is written
+    const changed = JSON.stringify({ ...roadmaps.persisted(roadmap), updatedAt: null }) !== JSON.stringify({ ...before, updatedAt: null });
     if (changed) roadmaps.updateRoadmap(ws.backlog, projectId, (cur) => (cur.updatedAt === before.updatedAt ? roadmap : null));
     if (roadmap.state === 'paused' && before.state === 'running') {
       notify({ kind: 'run', event: 'failed', title: 'Roadmap paused', body: String(roadmap.error || '').slice(0, 180) });
@@ -1627,10 +1653,10 @@ function createService({ host }) {
     get storeError() { return storeError; },
     host, active, events, notify, waiting, terminals, BUNDLED_SKILLS_DIR,
     setUiContext: (c) => { uiContext = notifier.normalizeContext(c); },
-    activeRuns, analyticsSnapshot, analyzeAnalytics, artifactRuns, assignWorkflow, cloneBuilderWorkflow, code, dispatchQueue, dispatchRoadmaps, envDetails, gateChanges, listAllRuns,
+    activeRuns, analyticsSnapshot, analyzeAnalytics, artifactRuns, assignWorkflow, cloneBuilderWorkflow, code, dispatchQueue, dispatchRoadmaps, envDetails, gateChanges, keptWorkForIssues, listAllRuns,
     listCliSessions, listLocalPreviews, listWorkflows, liveRun, loadBuilderWorkflow, openTerminal, projectRuns, pushProject,
     readArtifact, refreshLocal, renameCliSession, resolvePushConflict, restoreWorkflow, resumeOptions, resumeRun,
-    runAlive, runAppInfo, runFolder, runPrState, runWorktreeCommits, saveBuilderWorkflow, saveLocalPreview, setBudget, setPrice, setRunTitle, startLocalPreview, startRoadmap, startWorkflowRun, stopLocalPreview, suggestLocalPreview, unpushedProjects, usageSnapshot,
+    roadmapView, runAlive, runAppInfo, runFolder, runPrState, runWorktreeCommits, saveBuilderWorkflow, saveLocalPreview, setBudget, setPrice, setRunTitle, startLocalPreview, startRoadmap, startWorkflowRun, stopLocalPreview, suggestLocalPreview, unpushedProjects, usageSnapshot,
     withIssueRuns, workflowDirs,
   };
   const entries = loadChannels(ctx);

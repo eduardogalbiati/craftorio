@@ -11,7 +11,7 @@ module.exports = (ctx) => {
   const current = (projectId) => ctx.withIssueRuns(backlog.readBacklog(ctx.ws.backlog, project(projectId)));
   const synced = (projectId) => backlog.readBacklog(ctx.ws.backlog, project(projectId))?.issues || [];
   return [
-    { channel: 'roadmap:get', method: 'getRoadmap', params: ['projectId'], fn: ({ projectId }) => roadmaps.readRoadmap(ctx.ws.backlog, project(projectId)) },
+    { channel: 'roadmap:get', method: 'getRoadmap', params: ['projectId'], fn: ({ projectId }) => ctx.roadmapView(project(projectId)) },
     // the edited stages ([{ id?, name, note, items: [{ id?, workflow, inputs, mock, issues }] }]); runs are kept by item id
     {
       channel: 'roadmap:save',
@@ -29,7 +29,7 @@ module.exports = (ctx) => {
       method: 'proposeRoadmap',
       params: ['projectId', 'proposal', 'replace'],
       fn: ({ projectId, proposal, replace }) => {
-        const { dropped } = roadmaps.propose(ctx.ws.backlog, project(projectId), proposal, { replace: !!replace, issues: synced(projectId) });
+        const { dropped } = roadmaps.propose(ctx.ws.backlog, project(projectId), proposal, { replace: !!replace, issues: synced(projectId), alive: ctx.runAlive });
         return { ...current(projectId), dropped };
       },
     },

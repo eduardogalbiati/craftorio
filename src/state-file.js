@@ -22,16 +22,28 @@ function writeJsonSafe(file, data, { validate } = {}) {
   const tmp = `${file}.${process.pid}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
   try { fs.copyFileSync(file, `${file}.bak`); } catch { /* first write */ }
-  try {
-    fs.renameSync(tmp, file);
-  } catch (e) {
-    // Windows: a reader holding the file open (EPERM/EBUSY); the copy keeps the old one on failure
-    let copied = true;
-    try { fs.copyFileSync(tmp, file); } catch { copied = false; }
-    try { fs.unlinkSync(tmp); } catch { /* gone */ }
-    if (!copied) throw e;
-  }
+  renameWithRetry(tmp, file);
   return data;
+}
+
+// Windows: a reader holding the file open makes the rename fail with EPERM/EBUSY/EACCES for a
+// moment. Retry the rename only (never copy over the file: a crash mid-copy would leave half a
+// file); when it keeps failing, drop the temp file and throw, the old file stays whole.
+function renameWithRetry(tmp, file, attempts = 10) {
+  for (let i = 1; ; i++) {
+    try {
+      fs.renameSync(tmp, file);
+      return;
+    } catch (e) {
+      const busy = ['EPERM', 'EBUSY', 'EACCES'].includes(e.code);
+      if (!busy || i >= attempts) {
+        try { fs.unlinkSync(tmp); } catch { /* gone */ }
+        console.error(`[state-file] Could not replace ${path.basename(file)}: ${e.message}`);
+        throw e;
+      }
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 20 * i);
+    }
+  }
 }
 
 module.exports = {
