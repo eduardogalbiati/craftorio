@@ -169,10 +169,12 @@ steps:
 
 function makeService(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'notify-ws-'));
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   process.env.MULTIAGENT_SIMULATION_ONLY = '1'; // tests never call real models
   const service = createService({ host: { trashItem: async () => {}, appVersion: '0', isPackaged: false } });
+  // shutdown first (closes the index.db handle): rmSync right after would otherwise find it still
+  // open and fail with EPERM on Windows. node:test runs t.after hooks in registration order.
   t.after(() => service.shutdown());
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   service.setWorkspace(setupWorkspace(dir, { persist: false }));
   fs.writeFileSync(path.join(service.workspace().workflows, 'fixture-notify.yaml'), WORKFLOW);
   const shown = [];

@@ -249,7 +249,6 @@ test('with simulation only, real runs and CLI terminals are refused', async (t) 
   const { service, api } = makeService(t);
   const asked = [];
   const host = createService({ host: { trashItem: async () => {}, appVersion: '0', isPackaged: false, assertCanRun: async (o) => { asked.push(o); } } });
-  t.after(() => host.shutdown());
   host.setWorkspace(service.workspace());
   await assert.rejects(host.api['run:start']({ file: 'fixture-service.yaml', inputs: {}, mock: false }), /Simulation only .*refusing to start a real run/);
   assert.throws(() => host.api['term:open']({ kind: 'cli-new', provider: 'claude' }), /Simulation only .*claude CLI/);
@@ -257,6 +256,9 @@ test('with simulation only, real runs and CLI terminals are refused', async (t) 
   assert.equal(host.isRunning(), false);
   assert.deepEqual(api['runs:list']().runs, []);
   assert.equal(api['app:info']().simulationOnly, true);
+  // shares the index with `service`'s workspace: close it here, before makeService's own
+  // teardown (registered earlier) removes the workspace folder.
+  host.shutdown();
 });
 
 test('analytics: computes a snapshot of the (empty) workspace and refuses a real supervisor call without mock', async (t) => {
@@ -279,6 +281,9 @@ test('a run starts only if the host allows it (account / free trial)', async (t)
   assert.deepEqual(asked, [{ mock: false }]);
   assert.equal(blocked.isRunning(), false);
   assert.deepEqual(api['runs:list']().runs, []);
+  // shares the index with `service`'s workspace: close it here, before makeService's own
+  // teardown (registered earlier) removes the workspace folder.
+  blocked.shutdown();
 });
 
 // A workflow that takes an issue: one agent turn, then a human gate.
@@ -362,6 +367,8 @@ test('backlog: work merged locally shows as not pushed until the Backlog pushes 
   // pushed: no longer "local"; Done only when a sync reports #1 closed on the platform
   assert.equal(pushed.backlog.issues[0].column, 'in_progress');
   assert.deepEqual(api['backlog:unpushed'](), []);
+  // a push that succeeds is never a conflict notice
+  assert.deepEqual(api['notifications:list']({}).items.filter((n) => n.type === 'run.conflict'), []);
 
   // auto-push is a project setting, off by default
   assert.equal(api['backlog:get']({ projectId: p.id }).autoPush, false);
@@ -421,9 +428,19 @@ steps:
 
   // nothing to resolve before the update found origin moved
   await assert.rejects(api['backlog:resolve-push']({ projectId: p.id, files: ['a.txt'], mock: true }), /already has every commit of origin\/main/);
+  const changed = [];
+  service.events.on('notifications:changed', (n) => changed.push(n));
   const u = await api['backlog:update-push']({ projectId: p.id });
   assert.deepEqual([u.conflict, u.files], [true, ['a.txt']]);
   assert.equal(git(folder, 'rev-parse', 'main'), mine);
+  // the conflict (#69) is also a row of the notification center, whoever asked for the push
+  assert.equal(changed.length, 1);
+  const [conflict] = api['notifications:list']({}).items;
+  assert.equal(conflict.type, 'run.conflict');
+  assert.equal(conflict.projectId, p.id);
+  assert.deepEqual(conflict.target, { view: 'backlog', projectId: p.id });
+  assert.match(conflict.title, /Merge conflict: local/);
+  assert.match(conflict.body, /Local main conflicts with origin in a\.txt/);
 
   const finished = [];
   service.events.on('run:event', (ev) => { if (ev.type === 'workflow.finished') finished.push(ev); });
@@ -1032,13 +1049,15 @@ test('prepareRestart refuses while a run start is still reserved (e.g. cloning i
   let release;
   const gate = new Promise((resolve) => { release = resolve; });
   const service = createService({ host: { trashItem: async () => {}, appVersion: '0', isPackaged: false, assertCanRun: async () => { await gate; } } });
-  t.after(() => service.shutdown());
   service.setWorkspace(base.workspace());
   const starting = service.api['run:start']({ file: 'fixture-service.yaml', inputs: {}, mock: true });
   assert.throws(() => service.prepareRestart({ interruptRuns: true }), /starting/);
   release();
   const { runId } = await starting;
   await finishPendingRun(service.api, runId);
+  // shares the index with `base`'s workspace: close it here, before makeService's own teardown
+  // (registered earlier) removes the workspace folder.
+  service.shutdown();
 });
 
 test('prepareRestart refuses with active runs unless confirmed; once confirmed it pauses the Backlog queues', async (t) => {
@@ -1342,18 +1361,19 @@ test('roadmap: a restart continues where it was, from a stage already finished o
   }));
 
   const service2 = createService({ host: { trashItem: async () => {}, appVersion: '9.9.9', isPackaged: false } });
-  // whichever of the two live services (the original, still open, or this fresh one) reacts first
-  // to the roadmap now on disk owns the resulting live run: stop it on both to leave nothing behind
-  t.after(async () => {
-    for (const s of [service, service2]) for (const run of s.api['runs:active']()) { try { s.api['run:stop']({ runId: run.runId }); } catch { /* already ended */ } }
-    await untilTrue(() => service.api['runs:active']().length === 0 && service2.api['runs:active']().length === 0);
-    service2.shutdown();
-  });
   service2.setWorkspace(ws);
   await untilTrue(() => roadmapModel.readRoadmap(ws.backlog, p.id).stages[1].items[0].status === 'running');
   const roadmap = roadmapModel.readRoadmap(ws.backlog, p.id);
   assert.equal(roadmap.stages[0].items[0].status, 'done');
   assert.equal(roadmap.stages[1].items[0].status, 'running');
+
+  // whichever of the two live services (the original, still open, or this fresh one) reacted first
+  // to the roadmap now on disk owns the resulting live run: stop it on both to leave nothing behind,
+  // then close service2 here (it shares the index with `service`'s workspace) before makeService's
+  // own teardown (registered earlier) removes the workspace folder.
+  for (const s of [service, service2]) for (const run of s.api['runs:active']()) { try { s.api['run:stop']({ runId: run.runId }); } catch { /* already ended */ } }
+  await untilTrue(() => service.api['runs:active']().length === 0 && service2.api['runs:active']().length === 0);
+  service2.shutdown();
 });
 
 test('roadmap: a Product Owner proposal is added as planned and does not start by itself', async (t) => {
