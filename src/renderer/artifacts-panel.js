@@ -106,7 +106,7 @@
       const reported = x.changesReported || null;
       const label = reported === 'simulated' ? 'simulated' : 'reported by the developer';
       out.push(`<div class="ap-group"><div class="ap-group-head">Changed files${list.length ? ` <span class="muted">${list.length}</span>` : ''}${reported ? ` <span class="badge" title="No git diff for this run: the files the developer step reported">${label}</span>` : ''}</div>
-        ${typeof x.changes === 'string' ? `<p class="muted small ap-pad">${esc(x.changes)}</p>` : !list.length ? '<p class="muted small ap-pad">No changes against the base.</p>'
+        ${typeof x.changes === 'string' ? `<p class="muted small ap-pad">${esc(x.changes)}</p>` : !list.length ? `<p class="muted small ap-pad">${reported ? 'The developer reported no changed files.' : 'No changes against the base.'}</p>`
     : list.map((c) => {
       const main = `<span class="ap-file-main"><span class="ap-file-name mono">${esc(baseOf(c.file))}</span><span class="ap-file-sub muted mono">${esc(dirOf(c.file) === slash(c.file) ? '' : dirOf(c.file))}</span></span>`;
       if (reported) return `<div class="ap-file ap-change ap-reported" title="${esc(c.file)}">${main}<span class="ap-file-size muted">${label}</span></div>`;

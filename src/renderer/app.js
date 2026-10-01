@@ -1602,7 +1602,7 @@ function mountGateSides(root) {
         .map((f) => String(typeof f === 'object' && f ? f.file || f.path || '' : f)).filter(Boolean);
       const simulated = !!state.runs.get(runId)?.run?.mock;
       const showReported = () => panel.setExtras({ ...panel.extras, changes: reported.map((file) => ({ file, added: null, deleted: null })), changesReported: simulated ? 'simulated' : 'reported' });
-      if (simulated && reported.length) showReported();
+      if (simulated) showReported(); // even empty: git's diff of the folder is not the simulation's
       else {
         Promise.resolve(api.gateChanges(runId, approval))
           .then((list) => panel.setExtras({ ...panel.extras, changes: list || [] }))
