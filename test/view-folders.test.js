@@ -1,0 +1,58 @@
+// src/renderer/views/<view>/: one folder per screen, registering itself with registerView instead of
+// index.html listing its markup and nav entry (#78, slice 1: Settings and Usage). A generic check
+// (any view folder registers under its own folder name and is loaded by index.html) plus a check that
+// the move left no duplicate markup behind in index.html, so this stays a pure move.
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('fs');
+const path = require('path');
+
+const rendererDir = path.join(__dirname, '..', 'src', 'renderer');
+const indexHtml = fs.readFileSync(path.join(rendererDir, 'index.html'), 'utf8');
+const viewIds = fs.readdirSync(path.join(rendererDir, 'views'), { withFileTypes: true })
+  .filter((d) => d.isDirectory()).map((d) => d.name);
+
+test('views/: Settings and Usage have moved into their own folders', () => {
+  assert.deepEqual(viewIds.sort(), ['settings', 'usage']);
+});
+
+for (const id of viewIds) {
+  test(`views/${id}/${id}.js: registers itself with registerView under id "${id}"`, () => {
+    const file = path.join(rendererDir, 'views', id, `${id}.js`);
+    assert.ok(fs.existsSync(file), `${file} is missing`);
+    const src = fs.readFileSync(file, 'utf8');
+    const call = /registerView\(\{[\s\S]*?\n\}\);/.exec(src);
+    assert.ok(call, `no registerView({ ... }) call in ${file}`);
+    assert.match(call[0], new RegExp(`id:\\s*'${id}'`), `registerView's id does not match the folder name "${id}"`);
+  });
+
+  test(`index.html: loads views/${id}/${id}.js, after view-registry.js and before it is used`, () => {
+    assert.match(indexHtml, new RegExp(`<script src="views/${id}/${id}\\.js"></script>`));
+    const registryAt = indexHtml.indexOf('<script src="view-registry.js"></script>');
+    const viewAt = indexHtml.indexOf(`<script src="views/${id}/${id}.js"></script>`);
+    assert.ok(registryAt >= 0 && registryAt < viewAt, 'view-registry.js must load before the view that calls registerView');
+  });
+
+  test(`index.html: links views/${id}/${id}.css when the view has one`, () => {
+    const hasCss = fs.existsSync(path.join(rendererDir, 'views', id, `${id}.css`));
+    if (!hasCss) return;
+    assert.match(indexHtml, new RegExp(`<link rel="stylesheet" href="views/${id}/${id}\\.css" />`));
+  });
+}
+
+test('index.html: no longer holds the Settings screen inline (moved into views/settings/settings.js)', () => {
+  assert.doesNotMatch(indexHtml, /id="view-settings"/);
+  assert.doesNotMatch(indexHtml, /class="settings-tab/);
+  assert.doesNotMatch(indexHtml, /id="set-ws-path"/);
+});
+
+test('index.html: no longer holds the Usage screen or its budget dialog inline (moved into views/usage/usage.js)', () => {
+  assert.doesNotMatch(indexHtml, /id="view-usage"/);
+  assert.doesNotMatch(indexHtml, /id="budget-modal"/);
+  assert.doesNotMatch(indexHtml, /id="usage-cards"/);
+});
+
+test('index.html: the Usage top-bar popover (app-wide, not part of the view) is still there', () => {
+  // the popover lives in the shell (app.js/index.html), only the Usage screen itself moved
+  assert.match(indexHtml, /id="usage-pop-month"/);
+});

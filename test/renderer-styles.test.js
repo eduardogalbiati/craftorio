@@ -7,8 +7,14 @@ const fs = require('fs');
 const path = require('path');
 
 const dir = path.join(__dirname, '..', 'src', 'renderer');
-const sheets = fs.readdirSync(dir).filter((f) => f.endsWith('.css'))
-  .map((f) => ({ file: f, css: fs.readFileSync(path.join(dir, f), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '') }));
+// Top-level stylesheets and each screen's own CSS in views/<view>/<view>.css (#78).
+function cssFiles(base, sub = '') {
+  return fs.readdirSync(path.join(base, sub), { withFileTypes: true }).flatMap((e) => {
+    if (e.isDirectory()) return cssFiles(base, path.join(sub, e.name));
+    return e.name.endsWith('.css') ? [path.join(sub, e.name)] : [];
+  });
+}
+const sheets = cssFiles(dir).map((f) => ({ file: f, css: fs.readFileSync(path.join(dir, f), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '') }));
 const style = sheets.find((s) => s.file === 'style.css').css;
 const root = /:root\s*\{([^}]*)\}/.exec(style)[1];
 
