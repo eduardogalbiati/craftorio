@@ -268,7 +268,7 @@ async function mergeLocally({ repo, dir, base, log = () => {} }) {
 }
 
 // The run's scratch workspace (<run>/scratch, #120) goes with its worktree; the run's logs/ and
-// screenshots/ (the evidence) stay. A folder still locked (a program left running) is left for the
+// evidence/ (its screenshots, #146) stay. A folder still locked (a program left running) is left for the
 // next cleanup. true when it was removed.
 function removeScratch(runDir) {
   const dir = path.join(runDir, 'scratch');

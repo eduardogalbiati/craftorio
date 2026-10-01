@@ -48,8 +48,10 @@ screen; they are skipped for changes without UI. You run unattended: record a de
 
 ## 3. Evidence: capture the states, then review them
 
-- Capture what the plan lists (the default view before and after, plus each listed state "after"
-  only), with the project's screenshot command and its click option. Look at each PNG once.
+- Capture what the plan lists (the default view original and modified, plus each listed state
+  modified only), with the project's screenshot command and its click option, into your round
+  folder (`evidence_dir`) as `<issue>-<screen>-<state>.original.png` / `.modified.png`. Look at
+  each PNG once.
 - Review every UI screenshot against section 1 and return `ui_findings`, one per problem:
   - `element`: what you look at ("the item's mode", "the Edit form's language field");
   - `problem`: what is wrong, concretely ("free-text box for an enum", "label widths differ, the

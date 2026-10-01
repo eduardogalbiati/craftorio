@@ -3000,8 +3000,13 @@ function renderArtifactViewer() {
   if (d.error) { body.innerHTML = `<div class="art-empty"><p class="error">${esc(d.error)}</p></div>`; return; }
   const notice = d.truncated ? '<div class="art-notice">This file is larger than 5 MB: only the first 5 MB are shown.</div>' : '';
   if (meta.kind === 'image' && d.image) {
-    body.innerHTML = `<div class="art-image"><img src="${esc(d.image)}" alt="${esc(name)}" /></div>`;
-    body.querySelector('.art-image img').oncontextmenu = (e) => ArtifactMenu.open(e, { path: d.path, name, image: true });
+    body.innerHTML = `<div class="art-image"><img ${ImageViewer.THUMB} src="${esc(d.image)}" alt="${esc(name)}" /></div>`;
+    const img = body.querySelector('.art-image img');
+    img.oncontextmenu = (e) => ArtifactMenu.open(e, { path: d.path, name, image: true });
+    // the shared viewer (#145), with the screenshot's original/modified pair when it has one (#146)
+    const runId = (a.runs || []).find((r) => r.artifacts.some((f) => f.path === d.path))?.runId || null;
+    img.onclick = () => ArtifactsPanel.openImage({ runId, file: d.path, src: d.image, title: name });
+    img.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); img.click(); } };
     return;
   }
   if (d.binary || d.text == null || meta.kind === 'other') {

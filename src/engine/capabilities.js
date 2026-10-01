@@ -60,11 +60,12 @@ const WRITE_UTILITIES = [
 // `VAR=value` prefix; a prefix that still appears is allowed in front of an allowed command.
 const AGENT_ENV = { MULTIAGENT_SIMULATION_ONLY: '1' };
 // Folders of the run every agent with commands may write to (created by the engine, given to
-// Claude Code with --add-dir): logs of long commands, the run's scratch workspace (#120), evidence screenshots.
+// Claude Code with --add-dir): evidence screenshots (evidence/<step>/round-<n>, #146, src/evidence.js),
+// logs of long commands, the run's scratch workspace (#120).
 const RUN_DIRS = [
+  'evidence',
   'logs',
   'scratch',
-  'screenshots',
 ];
 
 // The environment of an agent of a run: AGENT_ENV, plus the run's scratch workspace (#120) when it
@@ -135,11 +136,13 @@ const runDirs = (caps, runDir) => (caps && runDir && bashRules(caps).length ? RU
 
 // Told to every agent with commands on its first turn (any CLI): unattended, a command the CLI
 // would ask about is refused, so this says how to run commands that are never asked about.
-// agentVars: the agent's environment (agentEnv).
-function commandGuide(caps, runDir, agentVars = AGENT_ENV) {
+// agentVars: the agent's environment (agentEnv); shotsDir: the folder of this step's round
+// (<run_dir>/evidence/<step>/round-<n>), else the evidence folder.
+function commandGuide(caps, runDir, agentVars = AGENT_ENV, shotsDir = null) {
   if (!caps || !bashRules(caps).length) return '';
   const dirs = runDirs(caps, runDir);
-  const [logs, shots] = ['logs', 'screenshots'].map((d) => dirs[RUN_DIRS.indexOf(d)]);
+  const [logs, evidence] = ['logs', 'evidence'].map((d) => dirs[RUN_DIRS.indexOf(d)]);
+  const shots = shotsDir || evidence;
   const env = Object.entries(agentVars).map(([k, v]) => `${k}=${v}`).join(', ');
   return [
     'How to run commands in this unattended run (nobody can approve a command the CLI would ask about: it is refused):',
@@ -147,7 +150,7 @@ function commandGuide(caps, runDir, agentVars = AGENT_ENV) {
     `- ${env} ${Object.keys(agentVars).length > 1 ? 'are' : 'is'} already set in your environment: never prefix a command with \`VAR=value\`.`,
     ...(agentVars.MULTIAGENT_WORKSPACE ? [`- Simulated runs, screenshots and app checks you start go to this run's scratch workspace \`${agentVars.MULTIAGENT_WORKSPACE}\`: never pass a path under the owner's workspace (its runs/ folder).`] : []),
     '- Avoid shell expansions the CLI cannot check (`$VAR`, `$(...)`, `$?`): write the value out; the tool already reports each command\'s exit code.',
-    ...(logs ? [`- Write command logs to \`${logs}${path.sep}<name>.log\` and screenshots to \`${shots}\`, never to /tmp, $TEMP or AppData (a gitignored folder of the working folder is fine too).`] : []),
+    ...(logs ? [`- Write command logs to \`${logs}${path.sep}<name>.log\` and screenshots to \`${shots}\` (as \`<issue>-<screen>-<state>.original.png\` / \`.modified.png\`), never to /tmp, $TEMP or AppData (a gitignored folder of the working folder is fine too).`] : []),
     '- Pipes and `;` chains are fine when every part is an allowed command or a simple utility (tail, head, grep, ls, cat, echo, wc, printenv; mkdir -p, mktemp and sort when you may write files). When unsure, run one command per call; after a refusal, rephrase it once into an allowed form instead of retrying variants.',
   ].join('\n');
 }

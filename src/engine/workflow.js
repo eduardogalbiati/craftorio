@@ -46,6 +46,7 @@ const {
   removeWorktree,
 } = require('./worktree');
 const capabilities = require('./capabilities');
+const evidence = require('../evidence');
 const { scratchWorkspace } = require('../local-preview');
 const { stopProcessesIn } = require('./processes');
 const { PROBES, runProbe, parseTarget } = require('./probes');
@@ -1277,6 +1278,7 @@ class WorkflowRun extends EventEmitter {
   async finishStep(step, st, output, scope, t0, extra = {}) {
     this.emitEvent('step.finished', { step_id: step.id, visit: st.visits, iteration: st.iteration, output, duration_ms: Date.now() - t0, ...extra });
     this.notePreexistingFailures(step.id, output);
+    this.recordEvidence(step, st, output);
 
     if (step.goal) {
       const met = evalExpr(step.goal.until, scope);
@@ -1701,7 +1703,8 @@ class WorkflowRun extends EventEmitter {
   async runAgentStep(step, st, agentName) {
     const visit = st.visits;
     const schema = step.output_schema;
-    const scope = { ...this.ctx, iteration: st.iteration, delegate_result: st.delegate_result, agent: agentName };
+    // evidence_dir: where this visit's screenshots go (#146), <run_dir>/evidence/<step>/round-<visit>
+    const scope = { ...this.ctx, iteration: st.iteration, delegate_result: st.delegate_result, agent: agentName, evidence_dir: evidence.roundDir(this.runDir, step.id, visit) };
     let prompt = render(step.prompt, scope).trim();
     if (st.supervisorNote) {
       prompt += `\n\n---\nNote from the run supervisor (a previous attempt of this step failed):\n${st.supervisorNote}`;
@@ -2127,7 +2130,8 @@ class WorkflowRun extends EventEmitter {
     const runDirs = capabilities.runDirs(caps, this.runDir);
     for (const dir of runDirs) fs.mkdirSync(dir, { recursive: true });
     const agentEnv = capabilities.agentEnv(this.scratchWorkspace());
-    const guide = capabilities.commandGuide(caps, this.runDir, agentEnv);
+    const shotsDir = hint?.visit ? evidence.roundDir(this.runDir, stepId, hint.visit) : null;
+    const guide = capabilities.commandGuide(caps, this.runDir, agentEnv, shotsDir);
     if (turn === 1 && (agent.system_prompt || agentSkills.length || guide)) {
       const system = [render(agent.system_prompt, this.ctx).trim(), guide, ...agentSkills.map(skillPrompt)].filter(Boolean).join('\n\n');
       parts.push(`<system>\n${system}\n</system>`);
@@ -2529,6 +2533,37 @@ class WorkflowRun extends EventEmitter {
     try {
       return execFileSync('git', ['rev-parse', 'HEAD'], { cwd: this.worktree.workDir || this.worktree.dir, encoding: 'utf8', windowsHide: true, timeout: 10000 }).trim() || null;
     } catch { return null; }
+  }
+
+  // The branch checked out in the run's worktree, or null (none, or a detached HEAD).
+  worktreeBranch() {
+    if (!this.worktree) return null;
+    try {
+      const b = execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: this.worktree.workDir || this.worktree.dir, encoding: 'utf8', windowsHide: true, timeout: 10000 }).trim();
+      return b && b !== 'HEAD' ? b : null;
+    } catch { return null; }
+  }
+
+  // Rebuilds <run_dir>/evidence/manifest.json after a step (#146, src/evidence.js): a new image
+  // gets the worktree's commit (modified) or the base's (original); a step output's `screenshots:
+  // [{ path, caption }]` (a file of the step's round folder, or a path under the run folder) gives
+  // the captions. Nothing to do while the run has no evidence folder.
+  recordEvidence(step, st, output) {
+    if (!this.runDir || !fs.existsSync(evidence.evidenceRoot(this.runDir))) return;
+    try {
+      const captions = {};
+      for (const s of Array.isArray(output?.screenshots) ? output.screenshots : []) {
+        if (!s || typeof s.path !== 'string' || !s.caption) continue;
+        const rel = path.isAbsolute(s.path) ? path.relative(this.runDir, s.path) : s.path;
+        const p = rel.split(/[\\/]/).join('/');
+        captions[p.includes('/') ? p : `evidence/${step.id}/round-${st.visits}/${p}`] = { caption: String(s.caption) };
+      }
+      evidence.writeManifest(this.runDir, {
+        captions, commit: this.worktreeHead(), baseCommit: this.worktree?.commit || null, base: this.worktree?.base || null, branch: this.worktreeBranch(),
+      });
+    } catch (e) {
+      this.emitEvent('log', { level: 'warn', message: `evidence manifest: ${e.message}` });
+    }
   }
 
   // answer: boolean (approve/reject) or the id of one of the step's choices; feedback: optional text;

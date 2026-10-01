@@ -18,10 +18,13 @@
 //   --context <css>    then right-clicks this element (repeatable): e.g. an artifact's copy menu
 //   --theme <t>        dark | light | system: the theme Electron reports (prefers-color-scheme)
 //   --size <WxH>       window content size (default 1400x900)
-//   --ref <git ref>    captures the app as it is at this ref (e.g. origin/main, for "before" shots)
+//   --ref <git ref>    captures the app as it is at this ref (e.g. main, for the "original" shots)
 //   --out <dir>        output folder (default runs/screenshots); --name <file> without .png
-//   --caption <text>   adds/replaces this shot in <out>/screenshots.json ({ path, caption, before })
-//   --before <file>    with --caption: the "before" PNG of the same screen, in <out>
+//                      (run evidence: --out <run_dir>/evidence/<step>/round-<n> --name <issue>-<screen>-<state>)
+//   --side <s>         original | modified: saves <name>.<side>.png, the two images of a pair
+//                      (default original with --ref, modified with --caption, else no suffix)
+//   --caption <text>   records this shot with its caption and commit in <run_dir>/evidence/manifest.json
+//                      (src/evidence.js): needs --out <run_dir>/evidence/<step>/round-<n>
 //   --wait <ms>        extra time before the capture (default 1500; run: 20000)
 //   --timeout <ms>     hard limit: the app exits with code 1 after it (default 90000)
 //
@@ -30,13 +33,18 @@
 // point inside it, so the screens never show this machine's CLI sessions, usage or accounts. Demo
 // data: a project `demo-app` with a few issues (the Backlog's sync never calls gh) and, for the
 // views that list runs, one simulated run; backlog and duo also get an accepted Write & Review run
-// on issue #12, whose Save to issue only previews (backlog:save-doc is forced to preview).
+// on issue #12, whose Save to issue only previews (backlog:save-doc is forced to preview). The
+// simulated run of artifacts, and the live run of `run --stop-at`, get demo screenshots (two
+// rounds, an original/modified pair) for the Artifacts panel and the image viewer, e.g.
+// `--view run --input mode=validated --stop-at developer_check --click ".run-gate-side [data-iv-thumb]"`
+// opens the viewer (then `--click '.iv [data-iv-zoom="in"]'` zooms).
 // Prints `screenshot: <path>` and exits 0, or exits 1 with the error.
 
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync, execFileSync } = require('child_process');
+const evidence = require('../src/evidence');
 
 const VIEWS = {
   dashboard: {}, sessions: {}, projects: {}, project: {}, artifacts: {}, agents: {}, skills: {}, usage: {}, analytics: {}, duo: {}, arena: {},
@@ -50,7 +58,7 @@ const VIEWS = {
 const THEMES = ['dark', 'light', 'system'];
 
 function parseArgs(argv) {
-  const a = { view: 'dashboard', tab: null, mode: null, run: 'mock', workflow: 'software-development.yaml', clicks: [], contexts: [], inputs: {}, stopAt: null, theme: null, size: [1400, 900], ref: null, out: null, name: null, caption: null, before: null, wait: null, timeout: 90000 };
+  const a = { view: 'dashboard', tab: null, mode: null, run: 'mock', workflow: 'software-development.yaml', clicks: [], contexts: [], inputs: {}, stopAt: null, theme: null, size: [1400, 900], ref: null, out: null, name: null, side: null, caption: null, wait: null, timeout: 90000 };
   for (let i = 0; i < argv.length; i++) {
     const k = argv[i];
     const next = () => { const v = argv[++i]; if (v === undefined) throw new Error(`${k} needs a value`); return v; };
@@ -77,7 +85,7 @@ function parseArgs(argv) {
     else if (k === '--out') a.out = next();
     else if (k === '--name') a.name = next();
     else if (k === '--caption') a.caption = next();
-    else if (k === '--before') a.before = next();
+    else if (k === '--side') a.side = next();
     else if (k === '--wait') a.wait = ms();
     else if (k === '--timeout') a.timeout = ms();
     else throw new Error(`Unknown argument: ${k}`);
@@ -91,21 +99,26 @@ function parseArgs(argv) {
   a.wait ??= v.live ? 20000 : 1500;
   a.name ??= [a.view, a.tab, a.mode, a.theme].filter(Boolean).join('-');
   if (!/^[\w.-]+$/.test(a.name)) throw new Error(`--name must be a plain file name: ${a.name}`);
-  if (a.before && !a.caption) throw new Error('--before needs --caption');
+  if (a.side && !SIDES.includes(a.side)) throw new Error(`--side takes ${SIDES.join(' | ')}`);
+  if (a.caption && !(a.out && runOfRound(path.resolve(a.out)))) throw new Error('--caption needs --out <run_dir>/evidence/<step>/round-<n>');
+  a.side ??= a.ref ? 'original' : a.caption ? 'modified' : null;
   return a;
 }
 
-/** Adds or replaces (same path) a shot in <dir>/screenshots.json; returns the list. */
-function recordShot(dir, { path: file, caption, before }) {
-  const manifest = path.join(dir, 'screenshots.json');
-  let list = [];
-  try { list = JSON.parse(fs.readFileSync(manifest, 'utf8')); } catch { /* first shot */ }
-  if (!Array.isArray(list)) list = [];
-  const entry = { path: file, caption, ...(before ? { before } : {}) };
-  const at = list.findIndex((s) => s.path === file);
-  if (at < 0) list.push(entry); else list[at] = entry;
-  fs.writeFileSync(manifest, `${JSON.stringify(list, null, 2)}\n`);
-  return list;
+const SIDES = ['original', 'modified'];
+const fileName = (a) => `${a.name}${a.side ? `.${a.side}` : ''}.png`;
+// <run_dir>/evidence/<step>/round-<n> → <run_dir>, else null
+function runOfRound(dir) {
+  const runDir = path.resolve(dir, '..', '..', '..');
+  return evidence.roundOf(runDir, path.resolve(dir)) ? runDir : null;
+}
+
+/** Records a shot of a round folder (its caption and commit) in the run's evidence manifest; returns the manifest. */
+function recordShot(dir, { file, caption, commit = null }) {
+  const runDir = runOfRound(dir);
+  if (!runDir) throw new Error(`Not a round folder of a run's evidence (<run_dir>/evidence/<step>/round-<n>): ${dir}`);
+  const rel = path.relative(runDir, path.resolve(dir, path.basename(file))).split(path.sep).join('/');
+  return evidence.writeManifest(runDir, { captions: { [rel]: { caption, commit } } });
 }
 
 // ---- simulated data ------------------------------------------------------------------------
@@ -304,7 +317,12 @@ function simulateChannels(ipcMain) {
   };
 }
 
-// The app tree at a git ref, for "before" screenshots: an index of its own (the repository's index
+// The commit checked out in the repository (the "modified" shots), or null.
+function gitHead(repo) {
+  try { return execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim() || null; } catch { return null; }
+}
+
+// The app tree at a git ref, for the "original" screenshots: an index of its own (the repository's index
 // and working tree are untouched) and the current node_modules through a junction.
 function extractRef(repo, ref, dest) {
   const git = (args, env = {}) => execFileSync('git', args, { cwd: repo, env: { ...process.env, ...env }, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
@@ -378,9 +396,10 @@ function main() {
   if (args.theme) nativeTheme.themeSource = args.theme;
 
   let appDir = repo;
+  let sha = null; // the commit captured with --ref (the manifest records it)
   if (args.ref) {
     appDir = path.join(scratch, 'app');
-    const sha = extractRef(repo, args.ref, appDir);
+    sha = extractRef(repo, args.ref, appDir);
     console.log(`app at ${args.ref} (${sha.slice(0, 12)})`);
   }
   const src = (m) => require(path.join(appDir, 'src', m));
@@ -424,14 +443,46 @@ function main() {
     const r = spawnSync(process.execPath, [path.join(appDir, 'scripts', 'run.js'), '--mock', '--auto-approve', '--file', args.workflow, '--repo', project.folder, '--task', 'Add a /health endpoint'], {
       cwd: appDir, env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }, encoding: 'utf8', timeout: Math.max(1000, args.timeout - 20000), windowsHide: true,
     });
-    const dirs = fs.readdirSync(ws.runs).map((d) => path.join(ws.runs, d)).filter((d) => fs.existsSync(path.join(d, 'events.jsonl')));
+    const dirs = runDirs();
     if (!dirs.length) throw new Error(`the simulated run did not start: ${(r.stderr || r.error?.message || '').trim().slice(-500)}`);
-    return readRun(dirs[0]);
+    return { ...readRun(dirs[0]), simulated: true };
   }
   function readRun(dir) {
     let summary = {};
     try { summary = JSON.parse(fs.readFileSync(path.join(dir, 'summary.json'), 'utf8')); } catch { /* interrupted run */ }
-    return { runId: summary.run_id || path.basename(dir), workflow: summary.workflow || null };
+    return { runId: summary.run_id || path.basename(dir), workflow: summary.workflow || null, dir };
+  }
+  // the scratch workspace's run folders, newest first
+  function runDirs() {
+    return fs.readdirSync(ws.runs).map((d) => path.join(ws.runs, d)).filter((d) => fs.existsSync(path.join(d, 'events.jsonl')))
+      .sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs);
+  }
+
+  // Demo screenshots of a simulated run (#146, #145): captures of this window saved as two rounds
+  // (developer round 1 in History, evidence round 1 the final set) with original/modified pairs, a
+  // modified-only state and a small image (opens at 100% in the viewer), then the manifest.
+  async function demoEvidence(win, runDir) {
+    const shot = await grab(win);
+    const { width, height } = shot.getSize();
+    const save = (step, round, name, img) => {
+      const dir = evidence.roundDir(runDir, step, round);
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, name), img.toPNG());
+    };
+    save('developer', 1, '146-artifacts-panel-default.modified.png', shot.crop({ x: 0, y: 0, width: Math.round(width * 0.8), height: Math.round(height * 0.8) }));
+    await new Promise((r) => setTimeout(r, 50)); // the final round captures last
+    save('evidence', 1, '146-artifacts-panel-default.original.png', shot.crop({ x: 0, y: 0, width: Math.round(width * 0.8), height: Math.round(height * 0.8) }));
+    save('evidence', 1, '146-artifacts-panel-default.modified.png', shot);
+    save('evidence', 1, '145-image-viewer-small.modified.png', shot.crop({ x: 0, y: 0, width: 320, height: 200 }));
+    const rel = (step, name) => `evidence/${step}/round-1/${name}`;
+    evidence.writeManifest(runDir, {
+      base: 'main', branch: 'feat/demo-evidence', commit: '3f9c2ab71d0e', baseCommit: 'a17b0c4e9f21',
+      captions: {
+        [rel('developer', '146-artifacts-panel-default.modified.png')]: { caption: 'Artifacts panel (first try)' },
+        [rel('evidence', '146-artifacts-panel-default.modified.png')]: { caption: 'Artifacts panel with the run\'s screenshots' },
+        [rel('evidence', '145-image-viewer-small.modified.png')]: { caption: 'A small image (opens at 100%)' },
+      },
+    });
   }
 
   app.on('browser-window-created', (_e, win) => {
@@ -498,12 +549,21 @@ function main() {
             shown = await js(`return [...document.querySelectorAll('#run-gates .run-gate-head')].some((h) => h.textContent.includes(${JSON.stringify(`step: ${args.stopAt}`)}))`);
           }
           if (!shown) throw new Error(`the run never waited at ${args.stopAt}`);
+          // demo screenshots in the live run, for its gate's Artifacts panel and the viewer
+          const live = runDirs()[0];
+          if (live) {
+            await demoEvidence(win, live);
+            await js(`ArtifactsPanel.refreshRun(${JSON.stringify(path.basename(live))})`);
+          }
           await pause(2500); // the gate's Artifacts panel and changed files load
         } else await pause(args.wait);
       } finally {
         clearInterval(approve);
       }
-    } else await click(`.nav-item[data-view="${v}"]`);
+    } else {
+      if (v === 'artifacts' && run?.simulated) await demoEvidence(win, run.dir);
+      await click(`.nav-item[data-view="${v}"]`);
+    }
     await pause(500);
     if (args.tab && v === 'settings') await click(`.settings-tab[data-stab="${args.tab}"]`);
     if (args.tab && v === 'workflows') await click(`[data-wtab="${args.tab}"]`);
@@ -516,13 +576,12 @@ function main() {
 
     const out = path.resolve(args.out || path.join(repo, 'runs', 'screenshots'));
     fs.mkdirSync(out, { recursive: true });
-    const file = path.join(out, `${args.name}.png`);
+    const file = path.join(out, fileName(args));
     fs.writeFileSync(file, (await grab(win)).toPNG());
     console.log(`screenshot: ${file}`);
     if (args.caption) {
-      if (args.before && !fs.existsSync(path.join(out, args.before))) throw new Error(`--before ${args.before} is not in ${out}`);
-      recordShot(out, { path: path.basename(file), caption: args.caption, before: args.before });
-      console.log(`manifest: ${path.join(out, 'screenshots.json')}`);
+      recordShot(out, { file, caption: args.caption, commit: sha || gitHead(repo) });
+      console.log(`manifest: ${evidence.manifestPath(runOfRound(out))}`);
     }
     win.destroy();
     cleanup();
@@ -552,6 +611,7 @@ function main() {
 if (process.type === 'browser') main();
 
 module.exports = {
+  fileName,
   parseArgs,
   recordShot,
   usage,

@@ -46,7 +46,7 @@ actions, or any code that deletes or checks out branches.
   worktree write there, never to the owner's runs, roadmap, queue or backlog. Removed with the
   worktree (`finishWorktree` on success, `cleanupWorktrees` for orphans, `removeScratch` in
   `src/engine/worktree.js`); a failed or cancelled run keeps it while its worktree is kept. The
-  evidence agents keep lives in `runs/<id>/logs` and `runs/<id>/screenshots`, which stay. Without
+  evidence agents keep lives in `runs/<id>/logs` and `runs/<id>/evidence`, which stay. Without
   the variable, `resolveWorkspace` under `MULTIAGENT_SIMULATION_ONLY=1` falls back to
   `<os tmp>/multiagent-simulation/workspace`, never the registered workspace.
 - **One app per workspace (#112)**: `src/main.js` takes Electron's single-instance lock (the owner's

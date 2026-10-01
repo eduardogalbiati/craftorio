@@ -46,6 +46,7 @@ const cliSessions = require('../cli-sessions');
 const { trustFolder } = require('../cli-trust');
 const { createCodeVersion } = require('../code-version');
 const runs = require('../runs');
+const evidence = require('../evidence');
 const runOwner = require('../run-owner');
 const runPr = require('../run-pr');
 const workflows = require('../workflows');
@@ -1630,6 +1631,16 @@ function createService({ host }) {
     return { ...found, truncated, binary, image, text: binary ? null : buf.subarray(0, MAX_ARTIFACT_BYTES).toString('utf8') };
   }
 
+  // A run's screenshots (#146): its evidence manifest (rebuilt from the evidence folder, or the
+  // legacy screenshots/ set), each image with `file`, its absolute path for artifacts:read. null: none.
+  function runEvidence({ runId } = {}) {
+    const r = runId ? runs.listRuns(ws.runs).find((x) => x.runId === runId) : null;
+    const m = r ? evidence.readEvidence(r.runDir) : null;
+    if (!m) return null;
+    const file = (rel) => (rel ? path.join(r.runDir, ...rel.split('/')) : null);
+    return { ...m, runId, images: m.images.map((x) => ({ ...x, file: file(x.path), pair_file: file(x.pair) })) };
+  }
+
   // ---- usage and budgets ------------------------------------------------------------
   function usageSnapshot(scope = 'orchestrator') {
     const live = [...active.values()].filter((r) => r.status === 'running' && !r.mock).map((r) => ({
@@ -1698,7 +1709,7 @@ function createService({ host }) {
     activeRuns, allowKeptWork, analyticsSnapshot, analyzeAnalytics, artifactRuns, assignWorkflow, cloneBuilderWorkflow, code, dispatchQueue, dispatchRoadmaps, envDetails, gateChanges, keptWorkForIssues, listAllRuns,
     listCliSessions, listLocalPreviews, listWorkflows, liveRun, loadBuilderWorkflow, openTerminal, projectRuns, pushProject,
     readArtifact, refreshLocal, renameCliSession, resolvePushConflict, restoreWorkflow, resumeOptions, resumeRun,
-    roadmapView, runAlive, runAppInfo, runFolder, runPrState, runWorktreeCommits, saveBuilderWorkflow, saveLocalPreview, setBudget, setPrice, setRunTitle, startLocalPreview, startRoadmap, startWorkflowRun, stopLocalPreview, suggestLocalPreview, unpushedProjects, usageSnapshot,
+    roadmapView, runAlive, runAppInfo, runEvidence, runFolder, runPrState, runWorktreeCommits, saveBuilderWorkflow, saveLocalPreview, setBudget, setPrice, setRunTitle, startLocalPreview, startRoadmap, startWorkflowRun, stopLocalPreview, suggestLocalPreview, unpushedProjects, usageSnapshot,
     withIssueRuns, workflowDirs,
   };
   const entries = loadChannels(ctx);

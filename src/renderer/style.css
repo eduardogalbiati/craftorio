@@ -1010,7 +1010,34 @@ span.po-applied { cursor: default; }
 .ap-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .ap-pair figure { margin: 0; }
 .ap-pair img { max-width: 100%; border: 1px solid var(--border); border-radius: 4px; }
+.ap-pair figcaption { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ap-reported { cursor: default; }
+/* The run's screenshots (#146): the final set by issue, original/modified pairs, then History */
+.ap-shot { padding: 6px; border: 1px solid var(--border); border-radius: 6px; margin-bottom: 6px; background: var(--panel); }
+.ap-shot-head { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; min-width: 0; }
+.ap-shot-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.ap-shot .ap-pair.single { grid-template-columns: 1fr; }
+.ap-shot img:not([src]) { min-height: 60px; width: 100%; background: var(--panel-2); }
+.ap-sub-head { font-size: 11px; font-weight: 600; color: var(--muted); margin: 6px 0 4px; }
+.ap-history > summary { cursor: pointer; list-style: revert; }
+/* Clickable artifact images (image-viewer.js, #145) */
+[data-iv-thumb] { cursor: pointer; }
+[data-iv-thumb]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.art-image img[data-iv-thumb] { cursor: pointer; }
+/* Image viewer (#145): almost full screen, above every screen and below the copy menu */
+.iv { position: fixed; inset: 0; z-index: 1000; display: flex; flex-direction: column; background: rgba(0,0,0,.85); color: #eee; }
+.iv-bar { display: flex; align-items: center; gap: 12px; padding: 8px 14px; background: rgba(0,0,0,.55); }
+.iv-title { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.iv-title b, .iv-caption { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.iv-zoom { display: flex; align-items: center; gap: 4px; }
+.iv-pct { min-width: 44px; text-align: center; }
+.iv .btn.ghost { color: #eee; }
+.iv-stage { position: relative; flex: 1; margin: 12px 24px 24px; overflow: hidden; }
+.iv-img { position: absolute; left: 0; top: 0; transform-origin: 0 0; max-width: none; cursor: zoom-in; user-select: none; touch-action: none; box-shadow: 0 8px 32px rgba(0,0,0,.5); background: var(--panel); }
+.iv-zoomed .iv-img { cursor: grab; }
+.iv-grabbing .iv-img { cursor: grabbing; }
+.iv-msg { position: absolute; inset: 0; display: grid; place-items: center; margin: 0; font-size: 15px; color: #ccc; }
+.iv-failed .iv-zoom { opacity: .5; }
 /* Artifact copy menu (artifact-menu.js, #114): right-click on an artifact or an open image */
 .ctx-menu { position: fixed; z-index: 1100; min-width: 180px; display: flex; flex-direction: column; padding: 4px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 12px 32px rgba(0,0,0,.4); }
 .ctx-item { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 6px 10px; text-align: left; font: inherit; font-size: 13px; color: var(--text); background: none; border: 0; border-radius: 6px; cursor: pointer; }

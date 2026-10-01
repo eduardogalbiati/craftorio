@@ -62,19 +62,31 @@ Read this before changing anything in `src/renderer/`.
   scrolled up).
 - Check changes by looking at screenshots: `npm run screenshot -- --view <view> [--tab|--mode|--click]
   --out <dir>` opens one screen with demo data and quits by itself (`--ref origin/main` for the
-  "before"; usage at the top of `scripts/screenshot.js`). A new view or
+  "original"; usage at the top of `scripts/screenshot.js`). A new view or
   tab goes into its `VIEWS` table, so `test/screenshot.test.js` opens it too. `scripts/smoke.js`
   runs a whole mock run from the Start panel. Never open real CLI terminals or start real runs in
   those checks.
 - Artifacts previews images (`kind: image`, read as a data URL; the CSP allows `img-src data:`).
+- **Artifact images open in the shared viewer** (#145, `image-viewer.js`, math in
+  `image-viewer-model.js`): `ImageViewer.open({ title, images: [{ src | file, label, caption }],
+  index })`, almost full screen, fitted (never upscaled), click / wheel / + − Fit 100% zoom up to
+  400%, drag to pan when zoomed, tabs or ← / → between the two images of an original/modified
+  pair, Esc or a click outside closes, right-click keeps the copy menu. Every artifact image must
+  use it: give the thumbnail `ImageViewer.THUMB` (hand cursor, "Click to enlarge", focusable,
+  Enter opens) and open it on click; no per-screen viewer. Users today: the Artifacts panel and
+  the Artifacts screen (`ArtifactsPanel.openImage`). The chat renders no images.
 - **The Run screen's tabs** (#109): the Details panel has Session, Events and Artifacts
   (`switchTab`, `#tab-artifacts`, with a count on the tab). The Artifacts tab and the approval
   gate's side panel are one component, `artifacts-panel.js` (`ArtifactsPanel.mount(root, { runId,
   flat, extras })`): the run's files from `artifacts:list { runId }` grouped by kind (newest first
-  in a group; `flat` for the gate), a preview in place (markdown, images, a before/after pair from
-  the folder's `screenshots.json`, TSV as a table, JSON, text) and "Open in Artifacts"
+  in a group; `flat` for the gate), a preview in place (markdown, images with their original/modified
+  pair from the evidence manifest, TSV as a table, JSON, text) and "Open in Artifacts"
   (`openArtifactsAt`). `onEvent` calls `ArtifactsPanel.refreshRun(runId)` on the events that add a
-  file (`ARTIFACT_EVENTS`), so a running run's list follows without a reload.
+  file (`ARTIFACT_EVENTS`), so a running run's list follows without a reload. Above the files, the
+  run's **Screenshots** (#146, `artifacts:evidence`): the final set by issue, each pair side by side
+  ("Original (main)" / "Modified (<branch> @<sha>)") with its caption, older rounds in a collapsed
+  History, "No screenshots in this run" without any. `npm run screenshot -- --view run --input
+  mode=validated --stop-at developer_check` (and `--view artifacts`) add demo screenshots in two rounds.
 - **The gate layout** (#108): a gate whose step has `local_preview: true` (the engine adds
   `run_app: true` to it, configured or not) has two columns, `.run-gate-wide`: on the left a short
   summary (`gateBriefHtml`: the developer's summary and one line per issue, the full message under

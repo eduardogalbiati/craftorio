@@ -3,16 +3,22 @@
 // screen's Artifacts tab (#109) and the approval gate's side panel (#108):
 // - grouped by kind (documents, screenshots and evidence, handoff notes, decisions, other files),
 //   newest first in a group; `flat: true` lists them newest first without groups (the gate);
-// - a click previews the file without leaving the screen: markdown rendered, images (a before/after
-//   pair side by side when the folder's screenshots.json pairs them), TSV as a table, JSON and text
-//   as text; "Open in Artifacts" goes to the full screen at that file (openArtifactsAt in app.js);
+// - the run's screenshots first (#146, artifacts:evidence → src/evidence.js): the final set by issue,
+//   each original/modified pair side by side ("Original (main)", "Modified (<branch> @<sha>)") with
+//   its caption, older rounds and steps in a collapsed History; "No screenshots in this run"; a
+//   legacy run (screenshots/ + screenshots.json) shows as one set;
+// - a click previews the file without leaving the screen: markdown rendered, images (with their pair
+//   when the evidence manifest has one), TSV as a table, JSON and text as text; "Open in Artifacts"
+//   goes to the full screen at that file (openArtifactsAt in app.js);
+// - every image opens on click (or Enter) in the shared image viewer (image-viewer.js, #145);
+//   ArtifactsPanel.openImage does the same for the Artifacts screen;
 // - right-click (or Shift+F10) on a file or an open image: the copy menu (artifact-menu.js, #114);
 // - extras (the gate): changed files (a click opens that file's diff) and notes (the developer's
 //   test_notes / evidence_plan), shown above the files;
 // - live: ArtifactsPanel.refreshRun(runId) reloads every mounted panel of that run (app.js calls
 //   it on file.saved, handoff.saved, decision.logged, step.finished, workflow.finished).
 // Uses app.js's helpers (esc, api, artKindIcon, fmtSize, markdownHtml, renderJsonText,
-// renderDelimited, errMsg, openArtifactsAt, dateOf).
+// renderDelimited, errMsg, openArtifactsAt, dateOf) and ImageViewer.
 (() => {
   const GROUPS = [
     ['documents', 'Documents'],
@@ -22,7 +28,8 @@
     ['other', 'Other files'],
   ];
   const panels = new Set();
-  const lists = new Map(); // runId -> { run, files, at } (the last listing)
+  const lists = new Map(); // runId -> { run, files, evidence, at } (the last listing)
+  const thumbs = new Map(); // <file>|<captured_at> -> data URL (screenshots, read once)
   const slash = (p) => String(p || '').replace(/\\/g, '/');
   const dirOf = (p) => slash(p).replace(/\/[^/]*$/, '');
   const baseOf = (p) => slash(p).split('/').pop();
@@ -38,8 +45,11 @@
   const newest = (a, b) => String(b.mtime || '').localeCompare(String(a.mtime || ''));
 
   async function fetchList(runId) {
-    const [r] = (await api.listArtifacts({ runId })) || [];
-    const entry = { run: r || null, files: r?.artifacts || [], at: Date.now() };
+    const [[r] = [], evidence] = await Promise.all([
+      api.listArtifacts({ runId }).then((x) => x || []),
+      api.runEvidence ? api.runEvidence(runId).catch(() => null) : null,
+    ]);
+    const entry = { run: r || null, files: r?.artifacts || [], evidence: evidence || null, at: Date.now() };
     lists.set(runId, entry);
     return entry;
   }
@@ -47,13 +57,13 @@
   function mount(root, opts = {}) {
     const p = {
       root, runId: null, flat: !!opts.flat, extras: opts.extras || null, onCount: opts.onCount || null,
-      files: null, run: null, error: null, sel: null, doc: null, seq: 0,
+      files: null, run: null, evidence: undefined, error: null, sel: null, doc: null, seq: 0, historyOpen: false,
       setRun(runId) {
         if (runId === p.runId) return;
         p.runId = runId || null;
-        p.sel = null; p.doc = null; p.files = null; p.run = null;
+        p.sel = null; p.doc = null; p.files = null; p.run = null; p.evidence = undefined; p.historyOpen = false;
         const cached = runId && lists.get(runId);
-        if (cached) { p.files = cached.files; p.run = cached.run; }
+        if (cached) { p.files = cached.files; p.run = cached.run; p.evidence = cached.evidence; }
         p.onCount?.(p.count());
         p.render();
         if (runId) p.load();
@@ -66,7 +76,7 @@
         try {
           const entry = await fetchList(runId);
           if (runId !== p.runId) return;
-          p.files = entry.files; p.run = entry.run; p.error = null;
+          p.files = entry.files; p.run = entry.run; p.evidence = entry.evidence; p.error = null;
         } catch (e) {
           if (runId !== p.runId) return;
           p.error = errMsg(e);
@@ -75,13 +85,17 @@
         p.onCount?.(p.count());
         if (!p.sel) p.render();
       },
-      render() { root.innerHTML = p.sel ? previewHtml(p) : listHtml(p); if (p.sel) paintPreview(p); },
+      render() { root.innerHTML = p.sel ? previewHtml(p) : listHtml(p); if (p.sel) paintPreview(p); else paintThumbs(p); },
       select(sel) { p.sel = sel; p.doc = null; p.render(); if (sel.path) readInto(p, sel); },
       destroy() { panels.delete(p); root.innerHTML = ''; },
     };
     root.classList.add('ap');
     root.addEventListener('click', (e) => onClick(p, e));
     root.addEventListener('contextmenu', (e) => onContextMenu(p, e));
+    // a focused image opens with Enter (or Space), like a click
+    root.addEventListener('keydown', (e) => {
+      if ((e.key === 'Enter' || e.key === ' ') && e.target.matches?.('[data-iv-thumb]')) { e.preventDefault(); onClick(p, { target: e.target }); }
+    });
     panels.add(p);
     if (opts.runId) p.setRun(opts.runId);
     return p;
@@ -131,12 +145,120 @@
     if (!p.files.length) {
       return `${head}${extras}${error}<div class="ap-empty"><b>No artifacts yet</b><p class="muted small">Handoff notes, the decision log, documents the steps save and the evidence step's screenshots appear here as the run produces them.</p></div>`;
     }
-    if (p.flat) return `${head}${extras}${error}<div class="ap-group">${extras ? '<div class="ap-group-head">Run files</div>' : ''}${[...p.files].sort(newest).map(fileHtml).join('')}</div>`;
+    const shots = shotsHtml(p);
+    if (p.flat) return `${head}${extras}${error}${shots}<div class="ap-group">${extras || shots ? '<div class="ap-group-head">Run files</div>' : ''}${[...p.files].sort(newest).map(fileHtml).join('')}</div>`;
     const groups = GROUPS.map(([id, label]) => {
       const files = p.files.filter((f) => groupOf(f) === id).sort(newest);
       return files.length ? `<div class="ap-group" data-group="${id}"><div class="ap-group-head">${esc(label)} <span class="muted">${files.length}</span></div>${files.map(fileHtml).join('')}</div>` : '';
     }).join('');
-    return `${head}${extras}${error}${groups}`;
+    return `${head}${extras}${error}${shots}${groups}`;
+  }
+
+  // ---------------------------------------------------------------- screenshots (#146)
+  const SIDES = ['original', 'modified'];
+  const tkey = (x) => `${x.file}|${x.captured_at || ''}`;
+  const shortRef = (r) => String(r || '').replace(/^origin\//, '');
+  const imageOf = (ev, file) => (ev?.images || []).find((x) => slash(x.file) === slash(file)) || null;
+
+  // "Original (main)" / "Modified (<branch> @<short sha>)", the parts the manifest knows
+  function sideLabel(ev, x) {
+    if (x.side === 'original') return ev?.base ? `Original (${shortRef(ev.base)})` : 'Original';
+    const ref = [ev?.branch, x.commit ? `@${String(x.commit).slice(0, 7)}` : ''].filter(Boolean).join(' ');
+    return ref ? `Modified (${ref})` : 'Modified';
+  }
+
+  // An image with its pair: { key, issue, caption, sides: { original?, modified? } }
+  function shotOf(ev, x) {
+    const pair = x.pair_file ? imageOf(ev, x.pair_file) : null;
+    const sides = { [x.side]: x };
+    if (pair && !sides[pair.side]) sides[pair.side] = pair;
+    return { key: x.key, issue: x.issue, caption: x.caption || pair?.caption || '', sides };
+  }
+
+  // The final set, one shot per name (an original kept from an earlier round included)
+  function finalShots(ev) {
+    const shots = new Map();
+    for (const x of (ev?.images || []).filter((i) => i.final)) {
+      const s = shots.get(x.key);
+      if (!s) shots.set(x.key, shotOf(ev, x));
+      else s.sides[x.side] = x;
+    }
+    return [...shots.values()];
+  }
+
+  function shotCardHtml(ev, s) {
+    const sides = SIDES.map((k) => s.sides[k]).filter(Boolean);
+    const fig = (x) => {
+      const src = thumbs.get(tkey(x));
+      return `<figure><figcaption class="muted small" title="${esc(x.path)}">${esc(sideLabel(ev, x))}</figcaption><img ${ImageViewer.THUMB} alt="${esc(`${s.caption || s.key}: ${sideLabel(ev, x)}`)}" data-ap-img="${esc(x.file)}" data-ap-shot="${esc(tkey(x))}"${src ? ` src="${esc(src)}"` : ''} /></figure>`;
+    };
+    const only = sides.length === 1 ? `<span class="badge">${sides[0].side} only</span>` : '';
+    return `<div class="ap-shot"><div class="ap-shot-head"><b class="ap-shot-title" title="${esc(s.key)}">${esc(s.caption || s.key)}</b>${only}</div>
+      <div class="ap-pair${sides.length === 1 ? ' single' : ''}">${sides.map(fig).join('')}</div></div>`;
+  }
+
+  function shotsHtml(p) {
+    if (p.evidence === undefined) return ''; // not loaded yet
+    const ev = p.evidence;
+    if (!ev?.images?.length) return '<div class="ap-group ap-shots"><div class="ap-group-head">Screenshots</div><p class="muted small ap-pad">No screenshots in this run.</p></div>';
+    const shots = finalShots(ev);
+    const issues = [...new Set(shots.map((s) => s.issue || ''))];
+    const where = ev.legacy ? 'recorded before evidence rounds' : ev.final ? `${ev.final.step} · round ${ev.final.round}` : '';
+    const body = issues.map((iss) => {
+      const head = issues.length > 1 || iss ? `<div class="ap-sub-head">${iss ? `Issue #${esc(iss)}` : 'Other screens'}</div>` : '';
+      return `${head}${shots.filter((s) => (s.issue || '') === iss).map((s) => shotCardHtml(ev, s)).join('')}`;
+    }).join('');
+    return `<div class="ap-group ap-shots"><div class="ap-group-head">Screenshots <span class="badge">final</span> <span class="muted" title="The last round that captured">${esc(where)}</span></div>${body}${historyHtml(p, ev)}</div>`;
+  }
+
+  // Older rounds and steps, newest first, each image opening in the viewer with its pair
+  function historyHtml(p, ev) {
+    const old = ev.images.filter((x) => !x.final);
+    if (!old.length) return '';
+    const rounds = (ev.rounds || []).filter((r) => !r.final).reverse();
+    const item = (x) => `<button type="button" class="ap-file" data-ap-hist="${esc(x.file)}" data-ap-img="${esc(x.file)}" title="${esc(x.path)}">${artKindIcon('image')}
+      <span class="ap-file-main"><span class="ap-file-name">${esc(x.caption || x.key)}</span><span class="ap-file-sub muted">${esc(x.key)}</span></span><span class="badge">${esc(x.side)}</span></button>`;
+    const groups = rounds.map((r) => {
+      const list = old.filter((x) => x.step === r.step && x.round === r.round);
+      return list.length ? `<div class="ap-sub-head">${esc(r.step)} · round ${r.round}</div>${list.map(item).join('')}` : '';
+    }).join('');
+    return `<details class="ap-history"${p.historyOpen ? ' open' : ''}><summary class="ap-group-head" data-ap-history>History <span class="muted">${old.length}</span></summary>${groups}</details>`;
+  }
+
+  // Reads the screenshots shown without their image yet (once per file and capture)
+  async function paintThumbs(p) {
+    for (const el of p.root.querySelectorAll('img[data-ap-shot]:not([src])')) {
+      const key = el.dataset.apShot;
+      let src = thumbs.get(key);
+      if (!src) {
+        try { src = (await api.readArtifact(el.dataset.apImg))?.image || null; } catch { src = null; }
+        if (src) thumbs.set(key, src);
+      }
+      if (!el.isConnected) continue;
+      if (src) el.src = src;
+      else el.alt = 'Could not load the image';
+    }
+  }
+
+  // Opens an image in the viewer: with its pair when the evidence manifest has one
+  function openInViewer(ev, file, src = null, title = '') {
+    const x = imageOf(ev, file);
+    if (!x) { ImageViewer.open({ title: title || baseOf(file), images: [{ file, src, label: '', caption: '' }] }); return; }
+    const s = shotOf(ev, x);
+    const list = SIDES.map((k) => s.sides[k]).filter(Boolean);
+    if (src && !thumbs.has(tkey(x))) thumbs.set(tkey(x), src);
+    ImageViewer.open({
+      title: s.caption || s.key,
+      index: list.indexOf(x),
+      images: list.map((i) => ({ file: i.file, src: thumbs.get(tkey(i)) || null, label: sideLabel(ev, i), caption: `${i.step} · round ${i.round}` })),
+    });
+  }
+
+  // The Artifacts screen's image (app.js): the run's manifest gives its pair
+  async function openImage({ runId, file, src = null, title = '' }) {
+    let ev = runId ? lists.get(runId)?.evidence : null;
+    if (runId && !ev && api.runEvidence) ev = await api.runEvidence(runId).catch(() => null);
+    openInViewer(ev, file, src, title);
   }
 
   // ---------------------------------------------------------------- preview
@@ -154,26 +276,12 @@
     const seq = ++p.seq;
     let doc;
     try { doc = await api.readArtifact(sel.path); } catch (e) { doc = { error: errMsg(e) }; }
-    // an image the folder's screenshots.json pairs with another: both, side by side
-    if (doc.image) doc.pair = await pairOf(p, sel.path).catch(() => null);
+    // a screenshot of the evidence manifest: shown with its pair, side by side
+    const shot = doc.image ? imageOf(p.evidence, sel.path) : null;
+    if (shot) { doc.shot = shot; thumbs.set(tkey(shot), doc.image); }
     if (seq !== p.seq || p.sel !== sel) return;
     p.doc = doc;
     paintPreview(p);
-  }
-
-  async function pairOf(p, file) {
-    const dir = dirOf(file);
-    const manifest = (p.files || []).find((f) => f.name === 'screenshots.json' && dirOf(f.path) === dir);
-    if (!manifest) return null;
-    const list = JSON.parse((await api.readArtifact(manifest.path)).text || '[]');
-    const name = baseOf(file);
-    const shot = (Array.isArray(list) ? list : []).find((s) => s && s.before && (baseOf(s.path) === name || baseOf(s.before) === name));
-    if (!shot) return null;
-    const pathOf = (rel) => (p.files || []).find((f) => dirOf(f.path) === dir && f.name === baseOf(rel))?.path;
-    const [after, before] = [pathOf(shot.path), pathOf(shot.before)];
-    if (!after || !before) return null;
-    const read = async (x) => (x === file ? null : (await api.readArtifact(x)).image);
-    return { caption: shot.caption || '', before: (await read(before)) || null, after: (await read(after)) || null, beforePath: before, afterPath: after };
   }
 
   function paintPreview(p) {
@@ -186,13 +294,12 @@
     if (d.error) { body.innerHTML = `<p class="error small ap-pad">${esc(d.error)}</p>`; return; }
     const meta = (p.files || []).find((f) => f.path === s.path) || d;
     const notice = d.truncated ? '<div class="art-notice">This file is larger than 5 MB: only the first 5 MB are shown.</div>' : '';
-    if (d.image && d.pair) {
-      const img = (src, which, file) => `<figure><figcaption class="muted small">${which}</figcaption><img src="${esc(src || d.image)}" alt="${esc(which)}" data-ap-img="${esc(file)}" /></figure>`;
-      const mine = (x) => (x === s.path ? d.image : null);
-      body.innerHTML = `<div class="ap-pair">${img(mine(d.pair.beforePath) || d.pair.before, 'Before', d.pair.beforePath)}${img(mine(d.pair.afterPath) || d.pair.after, 'After', d.pair.afterPath)}</div>${d.pair.caption ? `<p class="muted small ap-pad">${esc(d.pair.caption)}</p>` : ''}`;
+    if (d.image && d.shot) {
+      body.innerHTML = shotCardHtml(p.evidence, shotOf(p.evidence, d.shot));
+      paintThumbs(p);
       return;
     }
-    if (d.image) { body.innerHTML = `<div class="art-image"><img src="${esc(d.image)}" alt="${esc(meta.name || '')}" data-ap-img="${esc(s.path)}" /></div>`; return; }
+    if (d.image) { body.innerHTML = `<div class="art-image"><img ${ImageViewer.THUMB} src="${esc(d.image)}" alt="${esc(meta.name || '')}" data-ap-img="${esc(s.path)}" /></div>`; return; }
     if (d.binary || d.text == null || meta.kind === 'other') { body.innerHTML = `${notice}<p class="muted small ap-pad">Preview not available for this file: open it in Artifacts.</p>`; return; }
     if (meta.kind === 'markdown') { body.innerHTML = `${notice}<article class="md">${markdownHtml(d.text)}</article>`; return; }
     if (meta.kind === 'json') { body.innerHTML = `${notice}<pre class="art-code json">${renderJsonText(d.text, /\.jsonl$/i.test(s.path))}</pre>`; return; }
@@ -203,6 +310,11 @@
   // ---------------------------------------------------------------- clicks
   function onClick(p, e) {
     const t = e.target;
+    const thumb = t.closest('[data-iv-thumb]');
+    if (thumb) { openInViewer(p.evidence, thumb.dataset.apImg, thumb.getAttribute('src'), thumb.getAttribute('alt') || ''); return; }
+    const hist = t.closest('[data-ap-hist]');
+    if (hist) { openInViewer(p.evidence, hist.dataset.apHist); return; }
+    if (t.closest('[data-ap-history]')) { p.historyOpen = !t.closest('details')?.open; return; }
     const file = t.closest('[data-ap-file]');
     if (file) { p.select({ path: file.dataset.apFile }); return; }
     const note = t.closest('[data-ap-note]');
@@ -241,5 +353,5 @@
     }, Math.max(300, 1500 - (Date.now() - last))));
   }
 
-  window.ArtifactsPanel = { groupOf, mount, refreshRun };
+  window.ArtifactsPanel = { groupOf, mount, openImage, refreshRun };
 })();

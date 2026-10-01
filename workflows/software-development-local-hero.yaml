@@ -801,10 +801,10 @@ steps:
       tests, no checking docs (the verifier does that), at most 2 captures per issue (plus the
       interaction states the plan lists for a UI change, at most 4 more).
       Collect the evidence that the change does what the task asked, following the
-      implementation-evidence skill: pick the kind per issue (UI screenshots before/after into
-      `{{ run_dir }}/screenshots`, HTTP request and response, CLI output, log lines of a simulated
-      run), local and simulated only, and stay read-only on the working tree. Nothing observable,
-      or no way to capture it: say why in `note`.
+      implementation-evidence skill: pick the kind per issue (UI screenshots original/modified into
+      `{{ evidence_dir }}` as `<issue>-<screen>-<state>.original.png` / `.modified.png`, HTTP
+      request and response, CLI output, log lines of a simulated run), local and simulated only,
+      and stay read-only on the working tree. Nothing observable, or no way to capture it: say why in `note`.
       UI screenshots: review them against the ui-conventions skill and list each problem in
       `ui_findings` (`blocking` when it makes the screen hard to read or use); an empty list when
       there is none or the change has no UI.{% if vars.ui_review_returned == 'yes' %} This is the
@@ -823,9 +823,11 @@ steps:
               kind:    { type: string, enum: [screenshot, http, cli, log] }
               title:   { type: string }
               command: { type: string }
-              before:  { type: string }
-              after:   { type: string }
-        # UI changes: files in <run_dir>/screenshots (Artifacts; a PR/MR workflow publishes them)
+              original: { type: string }
+              modified: { type: string }
+        # UI changes: the captions of the images of this round (<run_dir>/evidence/<step>/round-<n>/);
+        # the engine indexes them in <run_dir>/evidence/manifest.json, whose final set the gate, the
+        # verifier and a PR/MR workflow use
         screenshots:
           type: array
           items:
@@ -834,7 +836,6 @@ steps:
             properties:
               path:    { type: string }
               caption: { type: string }
-              before:  { type: string }
         note: { type: string }
         # the visual review of the UI screenshots (ui-conventions skill; #111)
         ui_findings:
@@ -881,8 +882,10 @@ steps:
       {% endif %}
       {% if steps.evidence.output and steps.evidence.output.evidence %}
       Evidence already collected (use it; run your own command only for a claim it does not
-      cover or to compare before and after): {{ steps.evidence.output.evidence | to_json }}
+      cover or to compare original and modified): {{ steps.evidence.output.evidence | to_json }}
       {% endif %}
+      The run's screenshots are indexed in `{{ run_dir }}/evidence/manifest.json`: use its final set
+      (images with `final: true`; a `modified` image's `pair` is its original), not older rounds.
       Verify the change following the claim-verification skill. Stay read-only: the
       working tree must not change (no files, stash, worktree or checkout).
       {% if inputs.issues | length > 1 %}

@@ -35,7 +35,7 @@ from the bundled workflows: it was documentation only. The run log gets one
 | Isolation | `--strict-mcp-config` (only `--mcp-config`), `--no-chrome`, `--setting-sources project,local` (no user settings: plugins, hooks, permission rules), `--disable-slash-commands` (no skill listing; the engine injects the workflow's skills), `--settings {"autoMemoryEnabled":false}` | `-c mcp_servers={…declared}`, `--disable plugins apps browser_use computer_use in_app_browser image_generation memories` | none from the command line: user MCP servers, skills and memory still load (`grok inspect` shows them) |
 | Tools | `--tools` (only these built-ins are offered: fewer definitions in context) + `--allowedTools` (`Bash(git:*)` per `bash:git`) | `-s read-only`, or `workspace-write` when `edit`/`write` | read-only sets: `--tools read_file,list_dir,grep[,web_search,web_fetch]` |
 | Writes | `--permission-mode acceptEdits` with `edit`/`write` | workspace-write sandbox (no network for commands) | not restricted (`--always-approve`) |
-| Commands | allowlist per command (`Bash(npm:*)`), plus the same with the `AGENT_ENV` prefix and the shell utilities (below); `--add-dir <run_dir>/logs` and `<run_dir>/screenshots` | **not enforceable** (the sandbox limits writes, not which command runs) | not restricted |
+| Commands | allowlist per command (`Bash(npm:*)`), plus the same with the `AGENT_ENV` prefix and the shell utilities (below); `--add-dir <run_dir>/evidence`, `<run_dir>/logs` and `<run_dir>/scratch` | **not enforceable** (the sandbox limits writes, not which command runs) | not restricted |
 | Web | `WebSearch`/`WebFetch` offered only with `web: true` | `-c web_search="disabled"` unless `web: true` | `--disable-web-search` unless `web: true` |
 | Sub-agents | `Agent` and `Task` (the tool's current and older name; `--tools` drops names the CLI doesn't know) only with `subagents: true`; the `capabilities:` log line says `subagents: Agent/Task tool offered` | n/a (the log line says `subagents: not offered by Codex`) | `--no-subagents` unless `subagents: true` |
 | MCP | `--mcp-config` with the declared servers + `mcp__<name>` allowed | declared servers only | not passed (noted in the log) |
@@ -72,7 +72,9 @@ trip per refusal (136 of 2,437 tool calls in 7 real runs, #96). The engine remov
   screenshot`, the app, engine scripts) resolve to it with no flag. Without it, simulation only
   never resolves to the registered workspace (`resolveWorkspace` → OS temp).
 - **`cd` into the worktree** and **writes outside it**: the engine creates `<run_dir>/logs`,
-  `<run_dir>/scratch` and `<run_dir>/screenshots` (`RUN_DIRS`) for agents with commands, passes them with `--add-dir`, and adds a short
+  `<run_dir>/scratch` and `<run_dir>/evidence` (`RUN_DIRS`; screenshots go to the step's round
+  folder `evidence/<step>/round-<n>`, see engine.md) for agents with commands, passes them with
+  `--add-dir`, and adds a short
   "How to run commands" block to the agent's first turn (`commandGuide`, any CLI): run commands in
   the current folder, `git -C`/`npm --prefix` for another one, logs in `<run_dir>/logs`, never
   `/tmp`/`$TEMP`/AppData, one command per call when unsure, one rephrase after a refusal.
