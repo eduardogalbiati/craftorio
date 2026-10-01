@@ -532,7 +532,8 @@ steps:
       # nothing committed yet: the developer commits the rest first
       - when: "choice == 'continue' and not (steps.develop.output.committed or steps.develop.output.no_change)"
         goto: develop
-        set: &accepted_gaps { accepted_gaps: "{{ vars.accepted_gaps }}{% for g in steps.develop.output.left_out %}{{ g.requirement }}; {% endfor %}" }
+        # the separator goes before each entry: the engine trims a set: value, so a trailing one is lost
+        set: &accepted_gaps { accepted_gaps: "{{ vars.accepted_gaps }}{% for g in steps.develop.output.left_out %}{% if vars.accepted_gaps or not loop.first %} {% endif %}{{ g.requirement }};{% endfor %}" }
       - when: "choice == 'continue' and inputs.issues | length > 1 and not steps.issue_not_done.output and (steps.develop.output.issues or []) | rejectattr('done') | list | length"
         goto: issue_not_done
         set: *accepted_gaps
