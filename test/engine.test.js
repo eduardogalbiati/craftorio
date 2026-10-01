@@ -1136,10 +1136,10 @@ test('document skills for the arena exist and have a structure and a rubric', ()
 
 // ---- software-development-local-hero: local worktree, automatic local merge, no CI/PR --------
 
-test('local hero workflow: no CI/PR/deploy, a local worktree, an automatic merge with a resolution path, a 20M context limit', () => {
+test('local hero workflow: no CI/PR/deploy, a local worktree, an automatic merge with a resolution path, a 40M context limit', () => {
   const wf = loadWorkflow(path.join(root, 'workflows', 'software-development-local-hero.yaml'));
   assert.equal(wf.orchestrator.worktree.remote, false);
-  assert.equal(wf.orchestrator.limits.max_total_context, '20M');
+  assert.equal(wf.orchestrator.limits.max_total_context, '40M');
   const ids = wf.steps.map((s) => s.id);
   for (const gone of ['ci', 'pr_babysitter', 'deploy_test', 'approve_merge', 'deploy_prod', 'approve_local_merge']) assert.ok(!ids.includes(gone), gone);
   assert.ok(!Object.keys(wf.agents).some((a) => ['ci_pusher', 'pr_babysitter', 'deployer'].includes(a)));

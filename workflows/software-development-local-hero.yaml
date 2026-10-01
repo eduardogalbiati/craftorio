@@ -31,8 +31,8 @@
 #     concurrent runs go one at a time. At most 3 rounds; only what the developer can't fix (e.g.
 #     uncommitted changes in the checkout where <base> is checked out: the user's) or running out
 #     of rounds stops at merge_blocked.
-#   - orchestrator.limits.max_total_context: past 20M tokens of context the run pauses before its
-#     next agent turn; Continue allows another 20M, Stop ends it (worktree kept).
+#   - orchestrator.limits.max_total_context: past 40M tokens of context the run pauses before its
+#     next agent turn; Continue allows another 40M, Stop ends it (worktree kept).
 #   - Commits end with "Closes #<n>" for the run's issues: GitHub closes them when you push <base>.
 # Push whenever you want: `git push origin <base>` from the repository.
 #
@@ -58,7 +58,7 @@ kind: Workflow
 
 metadata:
   name: software-development-local-hero
-  version: 0.6.0
+  version: 0.6.1
   description: Implements, reviews, tests, builds and verifies a change in its own worktree, then merges it into the local base branch automatically, resolving conflicts on the way. No push, no PR, no CI; push when you want.
   tags: [dev, review, test, build, local, worktree]
   # Dashboard category: plan (Plan & Design), build (Code & Build) or monitor (Monitor & Improve).
@@ -166,8 +166,8 @@ orchestrator:
     max_total_duration: 8h
     max_total_cost_usd: 60
     # context the agents read (input + cache), summed over every turn: past it the run pauses
-    # before the next agent turn until you choose Continue (another 20M) or Stop
-    max_total_context: 20M
+    # before the next agent turn until you choose Continue (another 40M) or Stop
+    max_total_context: 40M
 
 # -----------------------------------------------------------------------------
 # Agents. `capabilities` is what each agent may use; the engine turns it into each CLI's flags
