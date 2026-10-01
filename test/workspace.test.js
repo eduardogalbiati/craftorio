@@ -61,6 +61,9 @@ test('setupWorkspace creates runs/ and repos/ and saves the path', (t) => {
   assert.ok(fs.statSync(ws.runs).isDirectory());
   assert.ok(fs.statSync(ws.repos).isDirectory());
   assert.equal(store.value, ws.root);
+  // the app-wide Supervisor chat (#28, src/supervisor-chat.js): created on demand, not up front
+  assert.equal(ws.supervisor, path.join(ws.root, 'supervisor'));
+  assert.equal(fs.existsSync(ws.supervisor), false);
 });
 
 test('fileStore persists the path as JSON', (t) => {

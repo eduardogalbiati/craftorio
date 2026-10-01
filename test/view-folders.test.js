@@ -12,8 +12,8 @@ const indexHtml = fs.readFileSync(path.join(rendererDir, 'index.html'), 'utf8');
 const viewIds = fs.readdirSync(path.join(rendererDir, 'views'), { withFileTypes: true })
   .filter((d) => d.isDirectory()).map((d) => d.name);
 
-test('views/: Settings and Usage have moved into their own folders', () => {
-  assert.deepEqual(viewIds.sort(), ['settings', 'usage']);
+test('views/: Settings, Usage and Supervisor have moved into their own folders', () => {
+  assert.deepEqual(viewIds.sort(), ['settings', 'supervisor', 'usage']);
 });
 
 for (const id of viewIds) {
@@ -21,7 +21,9 @@ for (const id of viewIds) {
     const file = path.join(rendererDir, 'views', id, `${id}.js`);
     assert.ok(fs.existsSync(file), `${file} is missing`);
     const src = fs.readFileSync(file, 'utf8');
-    const call = /registerView\(\{[\s\S]*?\n\}\);/.exec(src);
+    // the call's own indentation, whatever it is (top-level, or one level into an IIFE like
+    // views/supervisor/supervisor.js), so its closing "});" is told apart from a nested one
+    const call = /^([ \t]*)registerView\(\{[\s\S]*?\n\1\}\);/m.exec(src);
     assert.ok(call, `no registerView({ ... }) call in ${file}`);
     assert.match(call[0], new RegExp(`id:\\s*'${id}'`), `registerView's id does not match the folder name "${id}"`);
   });
