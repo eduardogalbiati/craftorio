@@ -4,7 +4,8 @@
 //   npx electron scripts/screenshot.js --view <view> [options]      (or: npm run screenshot -- ...)
 //
 //   --view <name>      dashboard, sessions, projects, project, backlog, artifacts, workflows, agents,
-//                      skills, usage, analytics, settings, duo, arena, run-chat, run (default dashboard)
+//                      skills, usage, analytics, supervisor, settings, duo, arena, run-chat, run
+//                      (default dashboard)
 //   --tab <name>       settings: general | agents | execution | about; workflows: runs | definitions
 //   --mode <name>      backlog: list | kanban | roadmap
 //   --run <mock|dir>   run-chat: a simulated software-development run (default) or a copy of a run folder
@@ -34,6 +35,7 @@ const { spawnSync, execFileSync } = require('child_process');
 
 const VIEWS = {
   dashboard: {}, sessions: {}, projects: {}, project: {}, artifacts: {}, agents: {}, skills: {}, usage: {}, analytics: {}, duo: {}, arena: {},
+  supervisor: {},
   backlog: { modes: ['list', 'kanban', 'roadmap'] },
   workflows: { tabs: ['runs', 'definitions'] },
   settings: { tabs: ['general', 'agents', 'execution', 'about'] },
@@ -228,6 +230,8 @@ function simulateChannels(ipcMain) {
     if (channel === 'analytics:analyze') return handle(channel, (e, arg) => fn(e, { ...arg, mock: true }));
     // the Backlog's Product Owner answers from its simulated self (no model call)
     if (channel === 'po:ask') return handle(channel, (e, arg) => fn(e, { ...arg, mock: true }));
+    // the app-wide Supervisor chat too (#28)
+    if (channel === 'supervisor:chat') return handle(channel, (e, arg) => fn(e, { ...arg, mock: true }));
     // Save to issue (Write & Review) only previews: never calls gh/glab
     if (channel === 'backlog:save-doc') return handle(channel, (e, arg) => fn(e, { ...arg, preview: true }));
     return handle(channel, channel === 'backlog:sync' ? (e, arg) => handlers['backlog:get'](e, { projectId: arg?.projectId }) : fn);

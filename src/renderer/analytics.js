@@ -215,4 +215,9 @@
   }
 
   window.refreshAnalytics = () => { wire(); render(); load(); };
+  // what the Supervisor is told about this screen (supervisor-chat.js)
+  window.analyticsContext = () => {
+    const r = range();
+    return `range ${r.from} to ${r.to}, ${ax.scope === 'machine' ? 'every CLI session on this machine' : 'the orchestrator\'s runs'}`;
+  };
 })();

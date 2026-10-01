@@ -457,4 +457,11 @@
     showWorkflowsTab('builder');
     await open(file);
   };
+
+  // What the Supervisor is told about this screen (supervisor-chat.js).
+  window.builderContext = () => {
+    const desk = b.spec?.steps?.[b.sel];
+    const what = b.file ? `editing workflow ${b.file}${b.spec?.name ? ` ("${b.spec.name}")` : ''}` : 'drawing a new workflow';
+    return [what, `mode ${b.mode}`, desk ? `desk ${desk.id} selected` : '', b.dirty ? 'unsaved changes' : ''].filter(Boolean).join(', ');
+  };
 })();

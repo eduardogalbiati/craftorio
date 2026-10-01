@@ -109,6 +109,8 @@ function layout(root) {
     backlog: path.join(root, 'backlog'),
     // the supervisor's reports on the sessions of a date range (Analytics), created on demand
     reports: path.join(root, 'reports'),
+    // the app-wide Supervisor chat (src/supervisor-chat.js), created on demand
+    supervisor: path.join(root, 'supervisor'),
     settings: path.join(root, 'settings.json'),
     // titles the user gave to CLI sessions on the Sessions screen ({ "<provider>:<id>": title })
     sessionTitles: path.join(root, 'session-titles.json'),
