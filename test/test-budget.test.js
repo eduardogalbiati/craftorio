@@ -89,14 +89,14 @@ test('a step reporting preexisting_failures passes, the run continues, and a dup
 test('attemptSummary lists a killed attempt\'s tool calls (with results, or "still running" for none) and the error', () => {
   const calls = new Map([
     ['t1', { name: 'Bash', input: { command: 'npm test' }, result: { output: 'Tests: 42 passed', is_error: false } }],
-    ['t2', { name: 'Bash', input: { command: 'node --test test/service.test.js' } }], // killed mid-flight: no result
+    ['t2', { name: 'Bash', input: { command: 'node --test test/service/runs.test.js' } }], // killed mid-flight: no result
   ]);
   const err = new Error('Timed out after 1800s');
   const summary = attemptSummary(calls, err, 1);
   assert.match(summary, /^<previous_attempt>/);
   assert.match(summary, /attempt 1.*Timed out after 1800s/s);
   assert.match(summary, /Bash: npm test → Tests: 42 passed/);
-  assert.match(summary, /Bash: node --test test\/service\.test\.js → no result: still running when the attempt stopped/);
+  assert.match(summary, /Bash: node --test test\/service\/runs\.test\.js → no result: still running when the attempt stopped/);
   assert.match(summary, /do not re-orient from `git status`/);
 });
 

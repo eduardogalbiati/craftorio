@@ -1,6 +1,6 @@
 // The supervisor's read-only tools over the service (#28, src/supervisor-tools.js): workflows,
 // projects, runs, skills, agents and usage, served to the supervisor's MCP session. ctx is built
-// from a real service on a scratch workspace (as test/service.test.js does), wired the same way
+// from a real service on a scratch workspace (as test/service/*.test.js does), wired the same way
 // src/service/channels/supervisor.js wires it, since ctx itself is internal to src/service/index.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
