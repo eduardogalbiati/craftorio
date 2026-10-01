@@ -67,6 +67,28 @@ Read this before changing anything in `src/renderer/`.
   runs a whole mock run from the Start panel. Never open real CLI terminals or start real runs in
   those checks.
 - Artifacts previews images (`kind: image`, read as a data URL; the CSP allows `img-src data:`).
+- **The Run screen's tabs** (#109): the Details panel has Session, Events and Artifacts
+  (`switchTab`, `#tab-artifacts`, with a count on the tab). The Artifacts tab and the approval
+  gate's side panel are one component, `artifacts-panel.js` (`ArtifactsPanel.mount(root, { runId,
+  flat, extras })`): the run's files from `artifacts:list { runId }` grouped by kind (newest first
+  in a group; `flat` for the gate), a preview in place (markdown, images, a before/after pair from
+  the folder's `screenshots.json`, TSV as a table, JSON, text) and "Open in Artifacts"
+  (`openArtifactsAt`). `onEvent` calls `ArtifactsPanel.refreshRun(runId)` on the events that add a
+  file (`ARTIFACT_EVENTS`), so a running run's list follows without a reload.
+- **The gate layout** (#108): a gate whose step has `local_preview: true` (the engine adds
+  `run_app: true` to it, configured or not) has two columns, `.run-gate-wide`: on the left a short
+  summary (`gateBriefHtml`: the developer's summary and one line per issue, the full message under
+  "Full message"), the tools (`gateToolsHtml`: Run App, Show the diff, the worktree) and the
+  choices; on the right its Artifacts panel (`gateSideHtml` / `mountGateSides`: the run's files
+  newest first, the changed files from `gate:changes`, each opening its diff, and the developer's
+  test notes and evidence plan). Stacked under 1100 px. The Run screen and the run chat use the same
+  helpers; the sidebar card only links to the run (no room). **Run App** asks `localPreview:info`:
+  with a config it starts the preview (`localPreview:start`), without one it opens a setup
+  prefilled from the worktree (`suggestConfig` in `src/local-preview.js`) that saves the project's
+  `localPreview`. Its state (running / stopped / failed, Stop, Terminal, Open URL, the port-in-use
+  error) is painted by `paintGateApps` from the run view's `preview` (local_preview events).
+  `npm run screenshot -- --view run --workflow software-development-local-hero.yaml --input
+  mode=validated --stop-at developer_check` captures it.
 - Test changes with a temporary Electron script (see `scripts/smoke.js`:
   `npx electron scripts/smoke.js <out.png>` runs a mock run and takes a screenshot) and look at
   the screenshots. Never open real CLI terminals or start real runs in those checks. In a fresh

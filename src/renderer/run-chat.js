@@ -86,14 +86,20 @@
       const chosen = it.resolved && String(c.id) === it.resolved.choice;
       return `<button type="button" class="btn sm ${!it.resolved && i === 0 ? 'primary' : ''}${chosen ? ' chosen' : ''}" data-approval="${esc(it.approvalId)}" data-choice="${esc(c.id)}"${c.feedback_required ? ' data-needs-text="1"' : ''}${off}>${esc(c.label)}</button>`;
     }).join('');
-    // Run locally / Open the worktree (app.js), only while the gate waits in the live run
-    const tools = chat.live && !it.resolved && !it.closed && typeof gateToolsHtml === 'function' ? gateToolsHtml(it) : '';
+    // Run App / Open the worktree (app.js), only while the gate waits in the live run
+    const open = chat.live && !it.resolved && !it.closed;
+    const tools = open && typeof gateToolsHtml === 'function' ? gateToolsHtml(it, { runId: chat.runId }) : '';
     const field = it.feedback && !it.resolved && !it.closed ? `<label class="duo-ask-label">${esc(it.feedback.label || 'Instructions (optional)')}</label>
       <textarea class="duo-ask-text" rows="2" placeholder="${esc(it.feedback.placeholder || '')}"${off}></textarea>` : '';
     const state = it.resolved ? '' : it.closed ? '<p class="muted small">The run ended before an answer.</p>' : chat.live ? '' : '<p class="muted small">Waiting for an answer.</p>';
-    return `<div class="rc-gate" data-item="${it.id}"><div class="duo-ask" data-gate="${esc(it.approvalId)}">
-      <div class="duo-meta"><b>Human gate</b>${stepTag(it.stepId)}<span class="time">${clock(it.ts)}</span></div>
-      <div class="rc-body md">${md(it.message)}</div>${tools}${field}<div class="row">${buttons}</div>${state}</div></div>`;
+    // a gate that tries the change (#108): a short summary and the run's Artifacts panel on the right
+    const full = `<div class="rc-body md">${md(it.message)}</div>`;
+    const brief = open ? window.gateBriefHtml?.(chat.runId, it, full) : '';
+    const side = open && typeof gateSideHtml === 'function' ? gateSideHtml(it, chat.runId) : '';
+    const main = `<div class="duo-meta"><b>Human gate</b>${stepTag(it.stepId)}<span class="time">${clock(it.ts)}</span></div>
+      ${brief || full}${tools}${field}<div class="row">${buttons}</div>${state}`;
+    return `<div class="rc-gate" data-item="${it.id}"><div class="duo-ask${side ? ' run-gate-wide' : ''}" data-gate="${esc(it.approvalId)}">
+      ${side ? `<div class="run-gate-main">${main}</div>${side}` : main}</div></div>`;
   }
 
   function groupHtml(it) {
@@ -157,6 +163,9 @@
       const parent = it.parent && box.querySelector(`[data-item="${it.parent}"] .rc-group-body`);
       (parent || box).insertAdjacentHTML('beforeend', html);
     }
+    // a gate's Artifacts panel and Run App state (app.js)
+    window.mountGateSides?.(box);
+    window.paintGateApps?.();
     drawTyping();
     drawHead();
     if (stick && chat.live) scroller.scrollTop = scroller.scrollHeight;

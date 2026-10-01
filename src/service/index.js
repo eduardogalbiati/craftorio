@@ -788,35 +788,84 @@ function createService({ host }) {
 
   // Show the diff at a gate with `diff_base` (developer_check): the worktree's changes since that
   // ref, read-only. The ref and the folder come from the open gate, never from the caller.
-  function gateDiffSpec({ runId, approvalId }) {
+  // file: only that file's diff (a changed file clicked in the gate's Artifacts panel, #108).
+  function openDiffGate({ runId, approvalId }) {
     const run = active.get(String(runId || ''));
     const gate = run?.pendingGates().find((g) => g.approval_id === approvalId);
     if (!gate) throw new Error('The gate is no longer open.');
     if (!gate.diff_base || !gate.work_dir) throw new Error('This gate does not offer a diff.');
     if (gate.diff_base.startsWith('-')) throw new Error(`Not a ref: ${gate.diff_base}`);
+    return gate;
+  }
+
+  function gateDiffSpec({ runId, approvalId, file }) {
+    const gate = openDiffGate({ runId, approvalId });
     // ConPTY does not look a bare command name up in PATH
     const git = resolveCommand('git');
     if (!git) throw new Error('git is not installed.');
+    const only = file ? [String(file)] : [];
     return {
-      title: `Diff ${gate.diff_base}...HEAD`, cwd: gate.work_dir, file: git.file, env: cliEnv(),
-      args: ['--no-pager', 'diff', '--color=always', '--stat', '--patch', `${gate.diff_base}...HEAD`, '--'],
+      title: `Diff ${gate.diff_base}...HEAD${file ? ` · ${path.basename(String(file))}` : ''}`, cwd: gate.work_dir, file: git.file, env: cliEnv(),
+      args: ['--no-pager', 'diff', '--color=always', '--stat', '--patch', `${gate.diff_base}...HEAD`, '--', ...only],
     };
+  }
+
+  // The files a gate with `diff_base` changed (git diff --numstat), for its Artifacts panel (#108):
+  // [{ file, added, deleted }] (null counts for binary files).
+  async function gateChanges({ runId, approvalId }) {
+    const gate = openDiffGate({ runId, approvalId });
+    const git = resolveCommand('git');
+    if (!git) throw new Error('git is not installed.');
+    const { ok, out } = await runTool(git.file, ['-C', gate.work_dir, '--no-pager', 'diff', '--numstat', `${gate.diff_base}...HEAD`, '--']);
+    if (!ok) throw new Error(/not a git repository/i.test(out) ? 'the run\'s folder is not a git repository (a simulation works in the project folder).' : `git diff failed: ${out.split('\n')[0]}`);
+    return out.split(/\r?\n/).filter(Boolean).map((l) => {
+      const [added, deleted, ...rest] = l.split('\t');
+      return { file: rest.join('\t'), added: added === '-' ? null : +added, deleted: deleted === '-' ? null : +deleted };
+    }).filter((c) => c.file);
   }
 
   // Run locally at a gate (#70, src/local-preview.js): one preview per run, in the run's worktree,
   // stopped when the gate is answered or the run ends. It never answers the gate.
   const previews = new Map(); // runId -> { id (terminal), stepId, approvalId, title, url, dir, startedAt }
 
-  async function startLocalPreview({ runId, approvalId, realWorkspace = false, cols, rows }) {
+  // Run App (#108): the config a gate runs, read now (a Local preview saved while the gate waits
+  // applies at once): the project's, else the workflow's, else the one the gate was opened with.
+  function gateRunConfig(run, gate) {
+    const project = run.projectId ? projects.listProjects(ws.projects).find((p) => p.id === run.projectId) : null;
+    return { project, config: localPreview.resolveConfig(project, run.wf) || (gate.local_preview?.command ? gate.local_preview : null) };
+  }
+
+  function openRunAppGate({ runId, approvalId }) {
     const run = active.get(String(runId || ''));
     if (!run) throw new Error('The run is not in progress.');
     const gate = run.pendingGates().find((g) => g.approval_id === approvalId);
     if (!gate) throw new Error('The gate is no longer open.');
-    if (!gate.local_preview || !gate.work_dir) throw new Error('This gate does not offer Run locally (no local_preview for the project or the workflow).');
+    if (!(gate.run_app || gate.local_preview) || !gate.work_dir) throw new Error('This gate does not offer Run locally (Run App): no local_preview on the step.');
+    return { run, gate };
+  }
+
+  // What the gate's Run App button runs, and when nothing is configured, a setup prefilled from
+  // the worktree (package.json scripts, the README, a known framework).
+  function runAppInfo({ runId, approvalId }) {
+    const { run, gate } = openRunAppGate({ runId, approvalId });
+    const { project, config } = gateRunConfig(run, gate);
+    const source = project?.localPreview?.command ? 'project' : config ? 'workflow' : null;
+    return {
+      config, source, dir: gate.work_dir,
+      project: project ? { id: project.id, name: project.name } : null,
+      suggestion: config ? null : localPreview.suggestConfig(gate.work_dir),
+      running: previews.has(run.runId) && terminals.procs.has(previews.get(run.runId).id),
+    };
+  }
+
+  // config: a one-off command from the gate's setup when the run has no project to save it to.
+  async function startLocalPreview({ runId, approvalId, realWorkspace = false, cols, rows, config = null }) {
+    const { run, gate } = openRunAppGate({ runId, approvalId });
     // a terminal that went away without reporting its exit does not block the next preview
     if (previews.has(run.runId) && !terminals.procs.has(previews.get(run.runId).id)) previews.delete(run.runId);
     if (previews.has(run.runId)) throw new Error('A local preview of this run is already running: stop it first.');
-    const cfg = gate.local_preview;
+    const cfg = gateRunConfig(run, gate).config || (config?.command ? { install: config.install || null, command: String(config.command), url: config.url || null } : null);
+    if (!cfg) throw new Error('No command to run: set the project\'s Local preview (Run App opens its setup).');
     const dir = gate.work_dir;
     if (!fs.existsSync(dir)) throw new Error(`The run's folder no longer exists: ${dir}`);
     const port = cfg.url ? localPreview.portOf(cfg.url) : null;
@@ -873,7 +922,7 @@ function createService({ host }) {
     if (kind === 'supervisor') return openProgram(supervisorChatSpec(runId || liveRun(null)?.runId), cols, rows);
     if (kind === 'shell') return { ...openProgram(shellSpec(opts.folder), cols, rows), cwd: path.resolve(String(opts.folder)) };
     if (kind === 'diff') {
-      const spec = gateDiffSpec({ runId, approvalId: opts.approvalId });
+      const spec = gateDiffSpec({ runId, approvalId: opts.approvalId, file: opts.file });
       return { ...openProgram(spec, cols, rows), cwd: spec.cwd };
     }
     if (kind === 'cli-resume' || kind === 'cli-new') {
@@ -1414,10 +1463,10 @@ function createService({ host }) {
     get storeError() { return storeError; },
     host, active, events, notify, waiting, terminals, BUNDLED_SKILLS_DIR,
     setUiContext: (c) => { uiContext = notifier.normalizeContext(c); },
-    activeRuns, analyticsSnapshot, analyzeAnalytics, artifactRuns, assignWorkflow, cloneBuilderWorkflow, code, dispatchQueue, dispatchRoadmaps, envDetails, listAllRuns,
+    activeRuns, analyticsSnapshot, analyzeAnalytics, artifactRuns, assignWorkflow, cloneBuilderWorkflow, code, dispatchQueue, dispatchRoadmaps, envDetails, gateChanges, listAllRuns,
     listCliSessions, listLocalPreviews, listWorkflows, liveRun, loadBuilderWorkflow, openTerminal, projectRuns, pushProject,
     readArtifact, refreshLocal, renameCliSession, resolvePushConflict, restoreWorkflow, resumeOptions, resumeRun,
-    runFolder, runPrState, saveBuilderWorkflow, setBudget, setPrice, setRunTitle, startLocalPreview, startRoadmap, startWorkflowRun, stopLocalPreview, unpushedProjects, usageSnapshot,
+    runAppInfo, runFolder, runPrState, saveBuilderWorkflow, setBudget, setPrice, setRunTitle, startLocalPreview, startRoadmap, startWorkflowRun, stopLocalPreview, unpushedProjects, usageSnapshot,
     withIssueRuns, workflowDirs,
   };
   const entries = loadChannels(ctx);

@@ -2413,6 +2413,8 @@ class WorkflowRun extends EventEmitter {
     const workDir = this.ctx.worktree_dir || this.inputs.repo_path || null;
     const extra = {
       ...(workDir ? { work_dir: workDir } : {}),
+      // run_app: the gate offers Run App even without a config (its setup saves the project's, #108)
+      ...(step.local_preview && workDir ? { run_app: true } : {}),
       ...(step.local_preview && this.localPreview && workDir ? { local_preview: this.localPreview } : {}),
       ...(step.diff_base && workDir ? { diff_base: render(step.diff_base, this.ctx).trim() } : {}),
       ...(diagnosis ? { supervisor: diagnosis } : {}),

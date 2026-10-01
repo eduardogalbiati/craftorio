@@ -1504,6 +1504,9 @@ function runsTableHtml(u) {
 // The gates waiting in the run the Run screen shows, asked inline above its steps (never in a
 // dialog over the app): which run and step they belong to, the message, the choices and the
 // optional feedback field. Rebuilt only when the gates change, so a feedback being typed stays.
+// A gate with `local_preview: true` (developer_check, human_review, approve_merge) has two columns
+// (#108): the message, Run App and the choices on the left, the run's Artifacts panel on the right
+// (stacked below on a narrow window, style.css).
 function renderRunGates() {
   const v = selectedView();
   const box = $('#run-gates');
@@ -1518,11 +1521,72 @@ function renderRunGates() {
       : '<button type="button" class="btn sm ghost" data-answer="false">Reject</button><button type="button" class="btn sm primary" data-answer="true">Approve</button>';
     const field = g.feedback ? `<label class="duo-ask-label">${esc(g.feedback.label || 'Instructions (optional)')}</label>
       <textarea class="duo-ask-text run-gate-feedback" rows="3" placeholder="${esc(g.feedback.placeholder || '')}"></textarea>` : '';
-    return `<div class="run-gate" data-approval="${esc(g.approval_id)}" data-run="${esc(g.run_id)}">
-      <div class="run-gate-head"><b>Approval required</b><span class="muted small mono">${esc(`${v.run ? `${runLabel(v.run)} · ` : ''}step: ${g.step_id}`)}</span></div>
-      <pre class="run-gate-message">${esc(g.message || '')}</pre>${gateToolsHtml(g)}${field}<div class="row run-gate-actions">${buttons}</div></div>`;
+    const message = `<pre class="run-gate-message">${esc(g.message || '')}</pre>`;
+    const main = `<div class="run-gate-head"><b>Approval required</b><span class="muted small mono">${esc(`${v.run ? `${runLabel(v.run)} · ` : ''}step: ${g.step_id}`)}</span></div>
+      ${gateBriefHtml(g.run_id, g, message) || message}${gateToolsHtml(g)}${field}<div class="row run-gate-actions">${buttons}</div>`;
+    const side = gateSideHtml(g);
+    return `<div class="run-gate${side ? ' run-gate-wide' : ''}" data-approval="${esc(g.approval_id)}" data-run="${esc(g.run_id)}">${side ? `<div class="run-gate-main">${main}</div>${side}` : main}</div>`;
   }).join('');
+  mountGateSides(box);
+  paintGateApps();
 }
+
+// The gates that try the change (`local_preview: true` on the step) get Run App and the side panel.
+const gateTriesChange = (g) => !!(g.run_app || g.runApp || g.local_preview || g.localPreview) && !!(g.work_dir || g.workDir);
+
+// The right column of such a gate: an Artifacts panel (artifacts-panel.js) mounted by mountGateSides.
+function gateSideHtml(g, runId = g.run_id) {
+  if (!gateTriesChange(g)) return '';
+  return `<aside class="run-gate-side" data-gate-side="${esc(g.approval_id || g.approvalId)}" data-run="${esc(runId || '')}" data-diff="${g.diff_base || g.diffBase ? '1' : ''}"></aside>`;
+}
+
+// The latest step output of a live run that matches (the developer's: summary, issues, test_notes…).
+function lastOutput(runId, match) {
+  const evs = state.runs.get(runId)?.events || [];
+  for (let i = evs.length - 1; i >= 0; i--) {
+    const o = evs[i].type === 'step.finished' ? evs[i].output : null;
+    if (o && typeof o === 'object' && match(o)) return o;
+  }
+  return null;
+}
+
+// Mounts the Artifacts panel of every gate side in root: the run's files newest first, and at a
+// gate with diff_base the changed files (each opens its diff) and the developer's notes.
+function mountGateSides(root) {
+  if (!window.ArtifactsPanel) return;
+  root.querySelectorAll('[data-gate-side]').forEach((el) => {
+    if (el.classList.contains('ap')) return; // already mounted
+    const { gateSide: approval, run: runId, diff } = el.dataset;
+    const dev = lastOutput(runId, (o) => o.test_notes || o.evidence_plan);
+    const notes = [['Test notes', dev?.test_notes], ['Evidence plan', dev?.evidence_plan]]
+      .filter(([, t]) => t).map(([title, t]) => ({ title, text: typeof t === 'string' ? t : JSON.stringify(t, null, 2) }));
+    const onChange = (file) => openTerminal({ kind: 'diff', runId, sessionId: `diff-${approval}-${file}`, label: `Diff ${file.split('/').pop()}`, open: (cols, rows) => api.termOpen({ kind: 'diff', runId, approvalId: approval, file, cols, rows }) })
+      .catch((e) => showToast('Could not show the diff', errMsg(e)));
+    const panel = ArtifactsPanel.mount(el, { runId, flat: true, extras: { notes, changes: diff ? 'Loading…' : null, onChange } });
+    if (diff) {
+      Promise.resolve(api.gateChanges(runId, approval))
+        .then((list) => panel.setExtras({ ...panel.extras, changes: list || [] }))
+        .catch((e) => panel.setExtras({ ...panel.extras, changes: `Could not list them: ${errMsg(e)}` }));
+    }
+  });
+}
+window.mountGateSides = mountGateSides;
+
+// A short list instead of the gate's long message (#108): the developer's summary in one sentence
+// and one line per issue (done / not done + one sentence), the full message expandable.
+// fullHtml: the message as the screen shows it. '' when there is no such output to summarise.
+function gateBriefHtml(runId, g, fullHtml) {
+  if (!gateTriesChange(g)) return '';
+  const out = lastOutput(runId, (o) => Array.isArray(o.issues) || (o.summary && o.files_changed));
+  if (!out) return '';
+  const first = (s) => String(s || '').trim().split(/(?<=[.!?])\s+|\n/)[0];
+  const ref = (u) => { const m = /\/(?:issues|pull|merge_requests)\/(\d+)/.exec(String(u)); return m ? `#${m[1]}` : String(u); };
+  const issues = (out.issues || []).map((i) => `<li class="${i.done ? 'ok' : 'not'}"><span class="gate-issue-state">${i.done ? '✔ done' : '✖ not done'}</span>
+    <b title="${esc(i.issue)}">${esc(ref(i.issue))}</b> ${esc(first(i.summary))}</li>`).join('');
+  return `<div class="run-gate-brief">${out.summary ? `<p>${esc(first(out.summary))}</p>` : ''}${issues ? `<ul class="gate-issues">${issues}</ul>` : ''}
+    <details class="run-gate-full"><summary class="small">Full message</summary>${fullHtml}</details></div>`;
+}
+window.gateBriefHtml = gateBriefHtml;
 
 // A click on a gate card's button answers that gate (true/false or a choice id) with the run's id,
 // so it works for any run in progress; the card goes away with approval.resolved. A choice that
@@ -1547,22 +1611,92 @@ function onRunGateClick(e) {
 // Run locally (#70: `local_preview` on the gate, the project's or workflow's command in the run's
 // worktree, stopped when the gate is answered), the worktree's folder, a terminal there and its diff
 // (`diff_base` on the gate).
-// g: the approval.requested event (local_preview, work_dir, diff_base) or a run chat gate (localPreview, workDir, diffBase).
-function gateToolsHtml(g, { disabled = false } = {}) {
+// g: the approval.requested event (local_preview, run_app, work_dir, diff_base) or a run chat gate (localPreview, runApp, workDir, diffBase).
+// Run App (#108) shows on every gate with `local_preview: true`, configured or not: without a
+// config it opens a setup prefilled from the worktree. Its state (running / stopped / failed),
+// Stop, the terminal toggle and Open URL are painted by paintGateApps from the run's events.
+function gateToolsHtml(g, { disabled = false, runId = g.run_id || g.runId || '' } = {}) {
   const lp = g.local_preview || g.localPreview || null;
   const dir = g.work_dir || g.workDir || null;
   const base = dir ? g.diff_base || g.diffBase || null : null;
   if (!lp && !dir) return '';
   const off = disabled ? ' disabled' : '';
   const how = lp ? `${lp.install ? `${lp.install} (when dependencies are missing or the lockfile changed), then ` : ''}${lp.command}` : '';
-  const run = lp ? `<button type="button" class="btn sm ghost" data-gate-tool="preview" title="${esc(`${how} in ${dir}. Runs in simulation only, on a scratch copy of your workspace.`)}"${off}>▶ Run locally</button>
-    <button type="button" class="btn sm ghost" data-gate-tool="stop" title="Stop this run's local preview"${off}>■ Stop</button>
-    <label class="muted small" title="The copy uses your real workspace (projects, runs, settings) instead of a scratch copy. Still simulation only."><input type="checkbox" data-gate-real${off}> real workspace</label>
-    ${lp.url ? `<a class="small" href="${esc(lp.url)}" target="_blank" rel="noopener">${esc(lp.url)}</a>` : ''}` : '';
+  const runApp = !!lp || (!!(g.run_app || g.runApp) && !!dir);
+  const run = runApp ? `<button type="button" class="btn sm" data-gate-tool="preview" title="${esc(lp ? `${how} in ${dir}. Runs in simulation only, on a scratch copy of your workspace.` : 'Nothing configured yet: proposes a command from the worktree and saves it as the project\'s Local preview.')}"${off}>${esc(runAppLabel(lp))}</button>
+    <span class="gate-app-state" data-gate-app-state></span>
+    <button type="button" class="btn sm ghost hidden" data-gate-tool="stop" title="Stop this run's app"${off}>■ Stop</button>
+    <button type="button" class="btn sm ghost hidden" data-gate-tool="app-term" title="Show or hide the app's terminal"${off}>Terminal</button>
+    <a class="small${lp?.url ? '' : ' hidden'}" data-gate-app-url href="${esc(lp?.url || '#')}" target="_blank" rel="noopener">Open ${esc(lp?.url || 'URL')}</a>
+    <label class="muted small" title="The copy uses your real workspace (projects, runs, settings) instead of a scratch copy. Still simulation only."><input type="checkbox" data-gate-real${off}> real workspace</label>` : '';
   const open = dir ? `<button type="button" class="btn sm ghost" data-gate-tool="folder" title="${esc(dir)}"${off}>Open the worktree</button>
     <button type="button" class="btn sm ghost" data-gate-tool="shell" title="A terminal in ${esc(dir)}"${off}>Terminal there</button>` : '';
   const diff = base ? `<button type="button" class="btn sm ghost" data-gate-tool="diff" title="${esc(`The branch's changes since ${base} (git diff ${base}...HEAD in the worktree)`)}"${off}>Show the diff</button>` : '';
-  return `<div class="row gate-tools" data-dir="${esc(dir || '')}" data-approval="${esc(g.approval_id || g.approvalId)}">${run}${diff}${open}</div>`;
+  const more = runApp ? '<div class="gate-app-error error small hidden" data-gate-app-error></div><div class="gate-app-setup hidden" data-gate-setup></div>' : '';
+  return `<div class="row gate-tools" data-dir="${esc(dir || '')}" data-approval="${esc(g.approval_id || g.approvalId)}" data-run="${esc(runId)}">${run}${diff}${open}${more}</div>`;
+}
+
+const runAppLabel = (lp) => (lp?.command ? `▶ Run App: ${lp.command}` : '▶ Run App…');
+
+// Run App's state on every gate shown (Run screen, run chat): the run view's `preview`, kept from
+// local_preview.started / .stopped and from a start that failed (e.g. the port already in use).
+function paintGateApps() {
+  document.querySelectorAll('.gate-tools[data-run]').forEach((box) => {
+    const st = box.querySelector('[data-gate-app-state]');
+    if (!st) return;
+    const p = state.runs.get(box.dataset.run)?.preview || null;
+    const status = p && (!p.approval || p.approval === box.dataset.approval) ? p.status : null;
+    st.className = `gate-app-state${status ? ` st-${status}` : ''}`;
+    st.textContent = { running: '● running', stopped: '○ stopped', failed: '● failed' }[status] || '';
+    st.title = p?.command || '';
+    box.querySelector('[data-gate-tool="stop"]')?.classList.toggle('hidden', status !== 'running');
+    box.querySelector('[data-gate-tool="app-term"]')?.classList.toggle('hidden', !status || !dock.tabs.some((t) => t.key === `preview:${box.dataset.run}:${box.dataset.approval}`));
+    const link = box.querySelector('[data-gate-app-url]');
+    if (link && p?.url && status) { link.href = p.url; link.textContent = `Open ${p.url}`; link.classList.remove('hidden'); }
+    const err = box.querySelector('[data-gate-app-error]');
+    if (err) { err.textContent = status === 'failed' ? p.error || '' : ''; err.classList.toggle('hidden', !(status === 'failed' && p.error)); }
+  });
+}
+window.paintGateApps = paintGateApps;
+
+function setRunPreview(runId, preview) {
+  const v = state.runs.get(runId);
+  if (v) v.preview = preview;
+  paintGateApps();
+}
+
+// Run App's setup when nothing is configured: install / command / URL prefilled from the worktree
+// (localPreview:info → suggestConfig in src/local-preview.js), saved as the project's Local preview.
+function runAppSetupHtml(info) {
+  const s = info.suggestion || {};
+  const input = (k, label, ph) => `<label class="small">${label}<input data-setup="${k}" value="${esc(s[k] || '')}" placeholder="${esc(ph)}" spellcheck="false"></label>`;
+  return `<div class="muted small">${s.from ? `Suggested from ${esc(s.from)}.` : 'Nothing found in the worktree: write how to run it.'}
+    ${info.project ? `Saved as the Local preview of <b>${esc(info.project.name)}</b> (Projects), so the next gates run it in one click.` : 'This run has no project: it runs this time only.'}
+    It runs in simulation only, on a scratch copy of your workspace.</div>
+    ${input('install', 'Install (when dependencies are missing or the lockfile changed)', 'npm ci (optional)')}
+    ${input('command', 'Command', 'npm start')}
+    ${input('url', 'URL (optional)', 'http://localhost:3000')}
+    <div class="row"><button type="button" class="btn sm primary" data-gate-tool="app-save">${info.project ? 'Save and run' : 'Run'}</button><button type="button" class="btn sm ghost" data-gate-tool="app-cancel">Cancel</button></div>`;
+}
+
+async function startRunApp(box, runId, approval, config = null) {
+  const real = !!box.querySelector('[data-gate-real]')?.checked;
+  if (real && !(await confirmDialog('Run on your real workspace?', 'The local copy will use your REAL workspace (projects, runs, settings) instead of a scratch copy. It stays in simulation only, but anything it writes lands in your workspace.', 'Run on it'))) return;
+  try {
+    await openTerminal({ kind: 'preview', runId, sessionId: approval, label: 'Run App', open: (cols, rows) => api.startLocalPreview(runId, approval, real, cols, rows, config) });
+  } catch (err) {
+    setRunPreview(runId, { status: 'failed', approval, error: errMsg(err) });
+    throw err;
+  }
+  paintGateApps();
+}
+
+function toggleGateTerminal(runId, approval) {
+  const tab = dock.tabs.find((t) => t.key === `preview:${runId}:${approval}`);
+  if (!tab) { showToast('No terminal', 'Run App has not started here yet.'); return; }
+  const shown = !$('#term-dock').classList.contains('hidden') && !dock.collapsed && dock.active === tab;
+  if (shown) setDockCollapsed(true);
+  else { showDock(); activateTab(tab); }
 }
 
 async function onGateTool(e, runId) {
@@ -1570,6 +1704,7 @@ async function onGateTool(e, runId) {
   const box = b?.closest('.gate-tools');
   if (!box || b.disabled) return;
   const { dir, approval } = box.dataset;
+  const setup = box.querySelector('[data-gate-setup]');
   try {
     if (b.dataset.gateTool === 'folder') await api.openPath(dir);
     else if (b.dataset.gateTool === 'shell') {
@@ -1578,10 +1713,31 @@ async function onGateTool(e, runId) {
       await openTerminal({ kind: 'diff', runId, sessionId: `diff-${approval}`, label: 'Diff', open: (cols, rows) => api.termOpen({ kind: 'diff', runId, approvalId: approval, cols, rows }) });
     } else if (b.dataset.gateTool === 'stop') {
       if (!await api.stopLocalPreview(runId)) showToast('No local preview', 'This run has no local preview running.');
+    } else if (b.dataset.gateTool === 'app-term') {
+      toggleGateTerminal(runId, approval);
+    } else if (b.dataset.gateTool === 'app-cancel') {
+      setup?.classList.add('hidden');
+    } else if (b.dataset.gateTool === 'app-save') {
+      const val = (k) => setup.querySelector(`[data-setup="${k}"]`)?.value.trim() || '';
+      const cfg = { install: val('install') || null, command: val('command'), url: val('url') || null };
+      if (!cfg.command) { showToast('Write the command first', 'Run App runs that command in the worktree.'); setup.querySelector('[data-setup="command"]')?.focus(); return; }
+      if (setup.dataset.project) await api.updateProject(setup.dataset.project, { localPreview: cfg });
+      setup.classList.add('hidden');
+      const run = box.querySelector('[data-gate-tool="preview"]');
+      if (run) run.textContent = runAppLabel(cfg);
+      // saved: the service reads the project's config; no project: this time only
+      await startRunApp(box, runId, approval, setup.dataset.project ? null : cfg);
     } else if (b.dataset.gateTool === 'preview') {
-      const real = !!box.querySelector('[data-gate-real]')?.checked;
-      if (real && !(await confirmDialog('Run on your real workspace?', 'The local copy will use your REAL workspace (projects, runs, settings) instead of a scratch copy. It stays in simulation only, but anything it writes lands in your workspace.', 'Run on it'))) return;
-      await openTerminal({ kind: 'preview', runId, sessionId: approval, label: 'Local preview', open: (cols, rows) => api.startLocalPreview(runId, approval, real, cols, rows) });
+      const info = await api.localPreviewInfo(runId, approval);
+      if (!info?.config) {
+        setup.innerHTML = runAppSetupHtml(info || {});
+        setup.dataset.project = info?.project?.id || '';
+        setup.classList.remove('hidden');
+        setup.querySelector('[data-setup="command"]')?.focus();
+        return;
+      }
+      b.textContent = runAppLabel(info.config);
+      await startRunApp(box, runId, approval);
     }
   } catch (err) {
     showToast('Could not do it', errMsg(err));
@@ -1602,8 +1758,25 @@ function switchTab(tab) {
   document.querySelectorAll('.tab[data-tab]').forEach((t) => t.classList.toggle('active', t.dataset.tab === tab));
   $('#tab-detail').classList.toggle('hidden', tab !== 'detail');
   $('#tab-events').classList.toggle('hidden', tab !== 'events');
+  $('#tab-artifacts').classList.toggle('hidden', tab !== 'artifacts');
   scheduleRender();
 }
+
+// The Run screen's Artifacts tab (#109): the shared panel (artifacts-panel.js), mounted on first
+// use (the component loads after app.js); its count goes on the tab.
+let runArtPanel = null;
+function runArtifactsPanel() {
+  if (!runArtPanel && window.ArtifactsPanel) {
+    runArtPanel = ArtifactsPanel.mount($('#tab-artifacts'), {
+      onCount: (n) => { const c = $('#tab-artifacts-count'); c.textContent = String(n); c.classList.toggle('hidden', !n); },
+    });
+  }
+  return runArtPanel;
+}
+
+// What adds a file to a run's artifacts (handoff notes, the decision log, saved documents,
+// screenshots of the evidence step): its panels reload.
+const ARTIFACT_EVENTS = new Set(['decision.logged', 'file.saved', 'handoff.saved', 'step.finished', 'workflow.finished']);
 
 // ---------------------------------------------------------------------------
 // Engine events
@@ -1847,12 +2020,17 @@ function onEvent(ev) {
       break;
 
     case 'local_preview.started':
+      v.preview = { status: 'running', approval: ev.approval_id, url: ev.url || null, command: ev.command };
       orch(ev, `local preview started at ${ev.step_id}: ${ev.command} in ${ev.dir}`);
       break;
 
-    case 'local_preview.stopped':
+    case 'local_preview.stopped': {
+      // exited by itself with an error: failed; stopped by the owner, the gate or the run: stopped
+      const failed = !ev.reason && ev.exit_code != null && ev.exit_code !== 0;
+      v.preview = { ...(v.preview || {}), status: failed ? 'failed' : 'stopped', approval: ev.approval_id, error: failed ? `The app exited with code ${ev.exit_code}: see its terminal.` : null };
       orch(ev, `local preview stopped${ev.reason ? ` (${ev.reason})` : ev.exit_code != null ? ` (exit ${ev.exit_code})` : ''}`);
       break;
+    }
 
     case 'limit.exceeded':
       orch(ev, `limit exceeded: ${ev.limit}`, 'error');
@@ -1891,6 +2069,8 @@ function onEvent(ev) {
   if (replaying) return;
   if (PROJECT_REFRESH_EVENTS.has(ev.type)) { loadProjectRunsThrottled(); loadWorkflowRunsThrottled(); }
   if (ev.type === 'workflow.finished' || ev.type === 'file.saved') loadArtifactsThrottled();
+  if (ARTIFACT_EVENTS.has(ev.type)) window.ArtifactsPanel?.refreshRun(ev.run_id);
+  if (ev.type.startsWith('local_preview.')) paintGateApps();
   // the service re-checks the project's commits not pushed right after a local merge
   if (ev.type === 'worktree.merged' || ev.type === 'workflow.finished') setTimeout(refreshUnpushed, 1500);
   scheduleRender();
@@ -1920,8 +2100,10 @@ function render() {
   renderRunSummary();
   renderSteps();
   renderSessions();
+  // the tab's count follows the selected run even while another tab shows
+  runArtifactsPanel()?.setRun(state.runId);
   if (state.tab === 'detail') renderDetail();
-  else renderEvents();
+  else if (state.tab === 'events') renderEvents();
 }
 
 function renderTicking() {

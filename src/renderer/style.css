@@ -931,6 +931,58 @@ body.resizing-dock .term-body { pointer-events: none; }
 .run-gate-head b { color: var(--yellow); }
 /* long approval messages (e.g. from the supervisor) scroll */
 .run-gate-message { margin: 0; max-height: 30vh; overflow: auto; white-space: pre-wrap; }
+/* a gate that tries the change (#108): message, Run App and choices on the left, the run's
+   Artifacts panel on the right; stacked on a narrow window (also the run chat's .duo-ask) */
+.run-gate-wide { display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 380px); gap: 14px; align-items: start; }
+.run-gate-main { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.run-gate-side { max-height: 42vh; overflow: auto; border-left: 1px solid var(--border); padding-left: 12px; }
+@media (max-width: 1100px) {
+  .run-gate-wide { grid-template-columns: minmax(0, 1fr); }
+  .run-gate-side { border-left: none; padding-left: 0; border-top: 1px solid var(--border); padding-top: 8px; max-height: 36vh; }
+}
+.run-gate-brief p { margin: 0 0 4px; }
+.gate-issues { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 2px; }
+.gate-issues li { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gate-issue-state { font-size: 12px; font-weight: 600; margin-right: 4px; }
+.gate-issues li.ok .gate-issue-state { color: var(--green); }
+.gate-issues li.not .gate-issue-state { color: var(--red); }
+.run-gate-full summary { cursor: pointer; color: var(--muted); }
+.run-gate-full .run-gate-message, .run-gate-full .rc-body { margin-top: 4px; }
+/* Run App's state on the gate */
+.gate-tools { flex-wrap: wrap; align-items: center; }
+.gate-app-state { font-size: 12px; color: var(--muted); }
+.gate-app-state.st-running { color: var(--green); }
+.gate-app-state.st-failed { color: var(--red); }
+.gate-app-error, .gate-app-setup { flex-basis: 100%; }
+.gate-app-setup { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel-2); }
+.gate-app-setup.hidden, .gate-app-error.hidden { display: none; }
+.gate-app-setup label { display: flex; flex-direction: column; align-items: stretch; gap: 2px; text-align: left; color: var(--muted); }
+.gate-app-setup input { width: 100%; box-sizing: border-box; font-family: var(--mono); font-size: 12px; padding: 5px 8px; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 6px; }
+
+/* Artifacts panel (artifacts-panel.js): the Run screen's Artifacts tab and a gate's side panel */
+.tab-count { margin-left: 4px; padding: 0 6px; border-radius: 9px; background: var(--panel-2); color: var(--muted); font-size: 11px; font-weight: 600; }
+.ap-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.ap-group { display: flex; flex-direction: column; margin-bottom: 10px; }
+.ap-group-head { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 2px 0 4px; }
+.ap-file { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; background: none; border: 1px solid transparent; border-radius: 6px; padding: 5px 6px; color: inherit; font: inherit; cursor: pointer; }
+.ap-file:hover { background: var(--panel-2); border-color: var(--border); }
+.ap-file.missing { opacity: .6; }
+.ap-file-main { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.ap-file-name, .ap-file-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ap-file-sub { font-size: 11px; }
+.ap-file-size { font-size: 11px; flex: none; }
+.ap-add { color: var(--green); }
+.ap-del { color: var(--red); }
+.ap-pad { padding: 4px 6px; margin: 0; }
+.ap-empty { padding: 16px 6px; }
+.ap-empty p { margin: 4px 0 0; }
+.ap-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.ap-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ap-body .md { font-size: 13px; }
+.ap-body .art-image img { max-width: 100%; }
+.ap-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.ap-pair figure { margin: 0; }
+.ap-pair img { max-width: 100%; border: 1px solid var(--border); border-radius: 4px; }
 .run-gate-actions { flex-wrap: wrap; gap: 8px; }
 /* Run locally / Open the worktree at a gate: they never answer it */
 .gate-tools { flex-wrap: wrap; gap: 8px; align-items: center; margin: 4px 0; }

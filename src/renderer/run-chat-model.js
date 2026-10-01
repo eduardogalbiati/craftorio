@@ -243,6 +243,8 @@
         choices: ev.choices || [{ id: true, label: 'Approve' }, { id: false, label: 'Reject' }], feedback: ev.feedback || null,
         // Run locally ({ install, command, url }), the folder to open and the diff's base ref, when the gate offers them
         localPreview: ev.local_preview || null, workDir: ev.work_dir || null, diffBase: ev.diff_base || null,
+        // Run App without a config (#108): the step has local_preview: true
+        runApp: !!ev.run_app,
         resolved: null, closed: false,
       });
       this.gates.set(ev.approval_id, gate);

@@ -10,6 +10,10 @@
 //   --mode <name>      backlog: list | kanban | roadmap
 //   --run <mock|dir>   run-chat: a simulated software-development run (default) or a copy of a run folder
 //   --workflow <file>  the workflow of the simulated run (default software-development.yaml)
+//   --input <k=v>      run: a workflow input of the Start panel (repeatable), e.g. mode=validated
+//   --stop-at <step>   run: approves every gate but this step's and captures once it waits there
+//                      (e.g. --input mode=validated --stop-at developer_check: the two-column gate
+//                      with Run App and its Artifacts panel)
 //   --click <css>      clicks this element once the view is open (repeatable, in order)
 //   --theme <t>        dark | light | system: the theme Electron reports (prefers-color-scheme)
 //   --size <WxH>       window content size (default 1400x900)
@@ -45,7 +49,7 @@ const VIEWS = {
 const THEMES = ['dark', 'light', 'system'];
 
 function parseArgs(argv) {
-  const a = { view: 'dashboard', tab: null, mode: null, run: 'mock', workflow: 'software-development.yaml', clicks: [], theme: null, size: [1400, 900], ref: null, out: null, name: null, caption: null, before: null, wait: null, timeout: 90000 };
+  const a = { view: 'dashboard', tab: null, mode: null, run: 'mock', workflow: 'software-development.yaml', clicks: [], inputs: {}, stopAt: null, theme: null, size: [1400, 900], ref: null, out: null, name: null, caption: null, before: null, wait: null, timeout: 90000 };
   for (let i = 0; i < argv.length; i++) {
     const k = argv[i];
     const next = () => { const v = argv[++i]; if (v === undefined) throw new Error(`${k} needs a value`); return v; };
@@ -56,6 +60,12 @@ function parseArgs(argv) {
     else if (k === '--run') a.run = next();
     else if (k === '--workflow') a.workflow = next();
     else if (k === '--click') a.clicks.push(next());
+    else if (k === '--stop-at') a.stopAt = next();
+    else if (k === '--input') {
+      const m = /^([\w-]+)=(.*)$/s.exec(next());
+      if (!m) throw new Error('--input takes key=value');
+      a.inputs[m[1]] = m[2];
+    }
     else if (k === '--theme') a.theme = next();
     else if (k === '--size') {
       const m = /^(\d+)x(\d+)$/i.exec(next());
@@ -75,6 +85,7 @@ function parseArgs(argv) {
   if (a.tab && !v.tabs?.includes(a.tab)) throw new Error(`--tab ${a.tab} does not apply to ${a.view}${v.tabs ? ` (tabs: ${v.tabs.join(', ')})` : ''}`);
   if (a.mode && !v.modes?.includes(a.mode)) throw new Error(`--mode ${a.mode} does not apply to ${a.view}${v.modes ? ` (modes: ${v.modes.join(', ')})` : ''}`);
   if (a.theme && !THEMES.includes(a.theme)) throw new Error(`--theme takes ${THEMES.join(' | ')}`);
+  if ((a.stopAt || Object.keys(a.inputs).length) && a.view !== 'run') throw new Error('--stop-at and --input apply to --view run');
   a.wait ??= v.live ? 20000 : 1500;
   a.name ??= [a.view, a.tab, a.mode, a.theme].filter(Boolean).join('-');
   if (!/^[\w.-]+$/.test(a.name)) throw new Error(`--name must be a plain file name: ${a.name}`);
@@ -340,6 +351,11 @@ function main() {
     if (args.view === 'backlog') demoRoadmap(ws, project.id);
     if (['backlog', 'duo'].includes(args.view)) demoEnrichRun(ws, project.id);
     if (args.view === 'analytics') demoAnalyticsRuns(ws, project.id);
+    // Run App's setup at a gate is prefilled from the worktree's package.json (#108)
+    if (args.view === 'run' && project.folder) {
+      fs.mkdirSync(project.folder, { recursive: true });
+      fs.writeFileSync(path.join(project.folder, 'package.json'), JSON.stringify({ name: 'demo-app', private: true, scripts: { start: 'node server.js' } }, null, 2));
+    }
     let run = null;
     if (VIEWS[args.view].run || ['artifacts', 'workflows', 'project', 'usage', 'dashboard'].includes(args.view)) run = recordRun(project);
     return { project, run };
@@ -400,12 +416,34 @@ function main() {
         await new Promise((r) => setTimeout(r, 500));
         document.querySelector('#project-select').value = ${JSON.stringify(project.id)};
         document.querySelector('#in-task').value = 'Add a /health endpoint';
+        for (const [k, val] of Object.entries(${JSON.stringify(args.inputs)})) {
+          const el = document.getElementById('in-' + k);
+          if (!el) throw new Error('the workflow has no input ' + k);
+          el.value = val;
+        }
         document.querySelector('#mock-toggle').checked = true;
         if (!document.body.classList.contains('dev-mode')) throw new Error('developer mode is off: refusing to start a real run');
         document.querySelector('#btn-start').click();`);
-      const approve = setInterval(() => js(`document.querySelector('#run-gates:not(.hidden) .run-gate-actions button[data-choice]:not(:disabled), #run-gates:not(.hidden) button[data-answer=\"true\"]:not(:disabled)')?.click()`).catch(() => {}), 1000);
-      await pause(args.wait);
-      clearInterval(approve);
+      // --stop-at: that step's gate stays open and the capture happens once it shows
+      const approve = setInterval(() => js(`
+        for (const card of document.querySelectorAll('#run-gates:not(.hidden) .run-gate')) {
+          if (${JSON.stringify(args.stopAt || '')} && card.querySelector('.run-gate-head')?.textContent.includes(${JSON.stringify(`step: ${args.stopAt}`)})) continue;
+          card.querySelector('.run-gate-actions button[data-choice]:not(:disabled), .run-gate-actions button[data-answer="true"]:not(:disabled)')?.click();
+          break;
+        }`).catch(() => {}), 1000);
+      try {
+        if (args.stopAt) {
+          let shown = false;
+          for (const end = Date.now() + Math.max(args.wait, 45000); !shown && Date.now() < end;) {
+            await pause(1000);
+            shown = await js(`return [...document.querySelectorAll('#run-gates .run-gate-head')].some((h) => h.textContent.includes(${JSON.stringify(`step: ${args.stopAt}`)}))`);
+          }
+          if (!shown) throw new Error(`the run never waited at ${args.stopAt}`);
+          await pause(2500); // the gate's Artifacts panel and changed files load
+        } else await pause(args.wait);
+      } finally {
+        clearInterval(approve);
+      }
     } else await click(`.nav-item[data-view="${v}"]`);
     await pause(500);
     if (args.tab && v === 'settings') await click(`.settings-tab[data-stab="${args.tab}"]`);

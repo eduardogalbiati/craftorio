@@ -137,6 +137,52 @@ function commandLine(config, install) {
   return install && config.install ? `${config.install} && ${config.command}` : config.command;
 }
 
+// Default dev-server URLs of known JS frameworks (a dependency of package.json)
+const FRAMEWORK_URLS = [
+  ['next', 'http://localhost:3000'],
+  ['nuxt', 'http://localhost:3000'],
+  ['@angular/core', 'http://localhost:4200'],
+  ['react-scripts', 'http://localhost:3000'],
+  ['@sveltejs/kit', 'http://localhost:5173'],
+  ['vite', 'http://localhost:5173'],
+];
+
+// A run command found in the README's code blocks (`npm start`, `python manage.py runserver`…)
+const README_RUN = /^\s*(?:\$\s*)?((?:npm (?:start|run (?:dev|start|serve))|yarn (?:start|dev)|pnpm (?:start|dev)|python3? (?:manage\.py runserver|-m \S+|app\.py|main\.py)|flask run|uvicorn \S+|go run \S+|dotnet run|cargo run|mvn spring-boot:run|\.\/gradlew bootRun)[^\r\n]*)$/m;
+
+const readText = (file) => { try { return fs.readFileSync(file, 'utf8'); } catch { return null; } };
+
+// Run App's setup, prefilled from the worktree when no Local preview is configured (#108):
+// package.json's `start`/`dev` script (with `npm ci` when there is a lockfile), else the README's
+// run instructions, else a known project kind. { install, command, url, from } or null.
+function suggestConfig(dir) {
+  if (!dir) return null;
+  let pkg = null;
+  try { pkg = JSON.parse(readText(path.join(dir, 'package.json')) || 'null'); } catch { /* not JSON */ }
+  const scripts = pkg?.scripts || {};
+  const has = (f) => fs.existsSync(path.join(dir, f));
+  if (pkg && (scripts.start || scripts.dev)) {
+    const pm = has('pnpm-lock.yaml') ? 'pnpm' : has('yarn.lock') ? 'yarn' : 'npm';
+    const install = pm === 'pnpm' ? 'pnpm install --frozen-lockfile' : pm === 'yarn' ? 'yarn install --frozen-lockfile'
+      : has('package-lock.json') || has('npm-shrinkwrap.json') ? 'npm ci' : 'npm install';
+    const script = scripts.start ? 'start' : 'dev';
+    const command = pm === 'npm' ? (script === 'start' ? 'npm start' : 'npm run dev') : `${pm} ${script}`;
+    const deps = { ...pkg.dependencies, ...pkg.devDependencies };
+    // an Electron app opens its own window: no URL
+    const url = deps.electron ? null : (FRAMEWORK_URLS.find(([name]) => deps[name]) || [])[1] || null;
+    return { install, command, url, from: `package.json (scripts.${script})` };
+  }
+  const readme = ['README.md', 'readme.md', 'README'].map((f) => readText(path.join(dir, f))).find((t) => t != null);
+  const blocks = readme ? [...readme.matchAll(/```[^\n]*\n([\s\S]*?)```/g)].map((m) => m[1]).join('\n') : '';
+  const fromReadme = blocks.match(README_RUN)?.[1]?.trim();
+  if (fromReadme) return { install: null, command: fromReadme, url: null, from: 'README' };
+  if (has('manage.py')) return { install: has('requirements.txt') ? 'pip install -r requirements.txt' : null, command: 'python manage.py runserver', url: 'http://localhost:8000', from: 'Django (manage.py)' };
+  if (has('go.mod')) return { install: null, command: 'go run .', url: null, from: 'Go (go.mod)' };
+  if (has('Cargo.toml')) return { install: null, command: 'cargo run', url: null, from: 'Rust (Cargo.toml)' };
+  if (fs.readdirSync(dir).some((f) => f.endsWith('.csproj'))) return { install: null, command: 'dotnet run', url: null, from: '.NET (*.csproj)' };
+  return null;
+}
+
 module.exports = {
   commandLine,
   needsInstall,
@@ -147,4 +193,5 @@ module.exports = {
   resolveConfig,
   scratchProjects,
   scratchWorkspace,
+  suggestConfig,
 };
