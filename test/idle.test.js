@@ -5,7 +5,7 @@ const os = require('os');
 const path = require('path');
 const { IdleWatch } = require('../src/engine/idle');
 const { WorkflowRun } = require('../src/engine/workflow');
-const { RunChatModel } = require('../src/renderer/run-chat-model.js');
+const { RunChatModel } = require('../src/renderer/views/runchat/run-chat-model.js');
 
 process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.05';
 const FIXTURE = path.join(__dirname, 'fixtures', 'handoff.yaml');

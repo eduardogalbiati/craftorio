@@ -1,7 +1,9 @@
 // src/renderer/app.js: human gates answered inside their run, never in an app-wide modal (#38).
-// It runs only inside the Electron renderer (document, window.api), so the pure/interaction
-// helpers are pulled out of the source and evaluated in a sandbox, the way
-// test/renderer-run-summary.test.js checks app.js as a seam.
+// renderRunGates/onRunGateClick live in views/run/run.js, what a gate offers in gate-panel.js
+// (#154); app.js keeps pendingGates, showToast and the rest of the gate state. It runs only
+// inside the Electron renderer (document, window.api), so the pure/interaction helpers are pulled
+// out of the source and evaluated in a sandbox, the way test/renderer-run-summary.test.js checks
+// app.js as a seam.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
@@ -9,18 +11,20 @@ const path = require('path');
 const vm = require('vm');
 
 const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'app.js'), 'utf8');
+const gateSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'gate-panel.js'), 'utf8');
+const runSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'views', 'run', 'run.js'), 'utf8');
 const html = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'index.html'), 'utf8');
 
 test('no app-wide approval modal: the gate is answered inside its run, never in a dialog over the app', () => {
   assert.doesNotMatch(html, /id="approval-modal"/);
   assert.doesNotMatch(src, /function openApproval|function closeApproval|function resolveApproval|state\.approval\b/);
-  // the Run screen has its own gate area instead
-  assert.match(html, /id="run-gates"/);
-  assert.match(src, /function renderRunGates\(\)/);
+  // the Run screen has its own gate area instead (views/run/run.js's markup, #154)
+  assert.match(runSrc, /id="run-gates"/);
+  assert.match(runSrc, /function renderRunGates\(\)/);
 });
 
 test('renderRunGates: the gate card names the run (workflow/project/issue via runLabel) and the step, and offers Approve/Reject or its choices', () => {
-  const renderRunGates = /function renderRunGates\(\) \{[\s\S]*?\n\}/.exec(src)[0];
+  const renderRunGates = /function renderRunGates\(\) \{[\s\S]*?\n\}/.exec(runSrc)[0];
   assert.match(renderRunGates, /runLabel\(v\.run\)/);
   assert.match(renderRunGates, /step: \$\{g\.step_id\}/);
   assert.match(renderRunGates, /data-answer="false">Reject/);
@@ -39,10 +43,11 @@ test('showToast: dismissable (a close button) and never blocks: a gate still wai
 function loadHelpers() {
   const esc = /const esc = \(s\) => [^\n]+/.exec(src)[0];
   const pendingGates = /const pendingGates = [^\n]+/.exec(src)[0];
-  const onRunGateClick = /function onRunGateClick\(e\) \{[\s\S]*?\n\}/.exec(src)[0];
-  for (const [name, code] of Object.entries({ esc, pendingGates, onRunGateClick })) {
+  const onRunGateClick = /function onRunGateClick\(e\) \{[\s\S]*?\n\}/.exec(runSrc)[0];
+  for (const [name, code] of Object.entries({ esc, pendingGates })) {
     assert.ok(code, `${name} not found in app.js: the source moved`);
   }
+  assert.ok(onRunGateClick, 'onRunGateClick not found in views/run/run.js: the source moved');
   const calls = [];
   const toasts = [];
   const sandbox = {
@@ -126,10 +131,10 @@ test('onRunGateClick: a click outside any gate button answers nothing', () => {
 
 function loadGateToolsHtml() {
   const esc = /const esc = \(s\) => [^\n]+/.exec(src)[0];
-  const gateToolsHtml = /function gateToolsHtml\(g, \{ disabled = false, runId = g\.run_id \|\| g\.runId \|\| '' \} = \{\}\) \{[\s\S]*?\n\}/.exec(src)[0];
-  const runAppLabel = /const runAppLabel = [^\n]+/.exec(src)[0];
+  const gateToolsHtml = /function gateToolsHtml\(g, \{ disabled = false, runId = g\.run_id \|\| g\.runId \|\| '' \} = \{\}\) \{[\s\S]*?\n\}/.exec(gateSrc)[0];
+  const runAppLabel = /const runAppLabel = [^\n]+/.exec(gateSrc)[0];
   for (const [name, code] of Object.entries({ gateToolsHtml, runAppLabel })) {
-    assert.ok(code, `${name} not found in app.js: the source moved`);
+    assert.ok(code, `${name} not found in gate-panel.js: the source moved`);
   }
   const sandbox = {};
   vm.createContext(sandbox);
@@ -181,12 +186,12 @@ test('onRunGateClick: a refused answer re-enables the buttons and tells the user
 
 function loadGateBrief() {
   const esc = /const esc = \(s\) => [^\n]+/.exec(src)[0];
-  const gateTriesChange = /const gateTriesChange = [^\n]+/.exec(src)[0];
-  const gateSideHtml = /function gateSideHtml\(g, runId = g\.run_id\) \{[\s\S]*?\n\}/.exec(src)[0];
-  const lastOutput = /function lastOutput\(runId, match\) \{[\s\S]*?\n\}/.exec(src)[0];
-  const gateBriefHtml = /function gateBriefHtml\(runId, g, fullHtml\) \{[\s\S]*?\n\}/.exec(src)[0];
+  const gateTriesChange = /const gateTriesChange = [^\n]+/.exec(gateSrc)[0];
+  const gateSideHtml = /function gateSideHtml\(g, runId = g\.run_id\) \{[\s\S]*?\n\}/.exec(gateSrc)[0];
+  const lastOutput = /function lastOutput\(runId, match\) \{[\s\S]*?\n\}/.exec(gateSrc)[0];
+  const gateBriefHtml = /function gateBriefHtml\(runId, g, fullHtml\) \{[\s\S]*?\n\}/.exec(gateSrc)[0];
   for (const [name, code] of Object.entries({ gateTriesChange, gateSideHtml, lastOutput, gateBriefHtml })) {
-    assert.ok(code, `${name} not found in app.js: the source moved`);
+    assert.ok(code, `${name} not found in gate-panel.js: the source moved`);
   }
   const sandbox = { state: { runs: new Map() } };
   vm.createContext(sandbox);
@@ -238,8 +243,8 @@ test('gateBriefHtml: one line per issue (done/not done, the issue number from it
 });
 
 function loadPaintGateApps() {
-  const paintGateApps = /function paintGateApps\(\) \{[\s\S]*?\n\}/.exec(src)[0];
-  assert.ok(paintGateApps, 'paintGateApps not found in app.js: the source moved');
+  const paintGateApps = /function paintGateApps\(\) \{[\s\S]*?\n\}/.exec(gateSrc)[0];
+  assert.ok(paintGateApps, 'paintGateApps not found in gate-panel.js: the source moved');
   const boxes = [];
   const fakeBox = (dataset, parts) => {
     const box = {
@@ -303,10 +308,10 @@ function fakeSide({ approval = 'a1', run = 'r1', diff = '1' } = {}) {
 const plain = (v) => JSON.parse(JSON.stringify(v));
 
 function loadMountGateSides() {
-  const lastOutput = /function lastOutput\(runId, match\) \{[\s\S]*?\n\}/.exec(src)[0];
-  const mountGateSides = /function mountGateSides\(root\) \{[\s\S]*?\n\}/.exec(src)[0];
+  const lastOutput = /function lastOutput\(runId, match\) \{[\s\S]*?\n\}/.exec(gateSrc)[0];
+  const mountGateSides = /function mountGateSides\(root\) \{[\s\S]*?\n\}/.exec(gateSrc)[0];
   for (const [name, code] of Object.entries({ lastOutput, mountGateSides })) {
-    assert.ok(code, `${name} not found in app.js: the source moved`);
+    assert.ok(code, `${name} not found in gate-panel.js: the source moved`);
   }
   const mounted = []; // every ArtifactsPanel.mount({ el, opts }) call
   const artifactsPanel = {
@@ -394,12 +399,12 @@ test('mountGateSides: a real run whose diff fails with nothing reported shows th
 
 function loadRunAppHtml() {
   const esc = /const esc = \(s\) => [^\n]+/.exec(src)[0];
-  const runAppCommandHtml = /const runAppCommandHtml = [^\n]+/.exec(src)[0];
-  const runAppConfirmHtml = /function runAppConfirmHtml\(info, cfg\) \{[\s\S]*?\n\}/.exec(src)[0];
-  const runAppInstallHtml = /function runAppInstallHtml\(info\) \{[\s\S]*?\n\}/.exec(src)[0];
-  const runAppSetupHtml = /function runAppSetupHtml\(info, cfg = \{\}\) \{[\s\S]*?\n\}/.exec(src)[0];
+  const runAppCommandHtml = /const runAppCommandHtml = [^\n]+/.exec(gateSrc)[0];
+  const runAppConfirmHtml = /function runAppConfirmHtml\(info, cfg\) \{[\s\S]*?\n\}/.exec(gateSrc)[0];
+  const runAppInstallHtml = /function runAppInstallHtml\(info\) \{[\s\S]*?\n\}/.exec(gateSrc)[0];
+  const runAppSetupHtml = /function runAppSetupHtml\(info, cfg = \{\}\) \{[\s\S]*?\n\}/.exec(gateSrc)[0];
   for (const [name, code] of Object.entries({ esc, runAppCommandHtml, runAppConfirmHtml, runAppInstallHtml, runAppSetupHtml })) {
-    assert.ok(code, `${name} not found in app.js: the source moved`);
+    assert.ok(code, `${name} not found in app.js or gate-panel.js: the source moved`);
   }
   const sandbox = {};
   vm.createContext(sandbox);
@@ -514,8 +519,8 @@ test('runAppConfirmHtml: a detected command with no project config yet offers "S
 // ---- #125: "Accept and save to issue #n" on the decide/out_of_rounds gate ----------------------
 
 function loadGateChoices() {
-  const gateChoices = /function gateChoices\(gate\) \{[\s\S]*?\n\}/.exec(src)[0];
-  assert.ok(gateChoices, 'gateChoices not found in app.js: the source moved');
+  const gateChoices = /function gateChoices\(gate\) \{[\s\S]*?\n\}/.exec(gateSrc)[0];
+  assert.ok(gateChoices, 'gateChoices not found in gate-panel.js: the source moved');
   const sandbox = {};
   vm.createContext(sandbox);
   vm.runInContext(`${gateChoices}\nthis.gateChoices = gateChoices;`, sandbox);

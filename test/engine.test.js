@@ -1189,7 +1189,7 @@ test('ai-arena simulation: 3 contenders compete, critique, the synthesis is veri
 });
 
 test('the renderer shuffle (arena-shuffle.js) gives the same order as the engine filter', () => {
-  const { shuffle, sha256Word } = require('../src/renderer/arena-shuffle.js');
+  const { shuffle, sha256Word } = require('../src/renderer/views/arena/arena-shuffle.js');
   const crypto = require('crypto');
   for (const seed of ['', 'abc', '20260929-150045-d112f7dc', 'ção ✓'.repeat(40)]) {
     assert.equal(sha256Word(seed), crypto.createHash('sha256').update(seed).digest().readUInt32BE(0), seed);

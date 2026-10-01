@@ -1,7 +1,7 @@
-// src/renderer/duo-issue.js: prefilling Write & Review from a Backlog issue (#103). Pure, no DOM.
+// src/renderer/views/duo/duo-issue.js: prefilling Write & Review from a Backlog issue (#103). Pure, no DOM.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const DuoIssue = require('../src/renderer/duo-issue');
+const DuoIssue = require('../src/renderer/views/duo/duo-issue');
 
 const ISSUE = {
   number: 29, title: 'Backlog screen', url: 'https://github.com/o/r/issues/29',

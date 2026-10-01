@@ -1,9 +1,9 @@
-// src/renderer/app.js: the Start workflow drawer (#127 the main field is never remembered, #128
-// "Start and create another" keeps the drawer open, #132 no green CLI checkmarks) and the pending-
-// start guard (a run update's renderHeader() must not re-enable the buttons while a start is in
-// flight). It runs only inside the Electron renderer (document, window.api), so the relevant
-// functions are pulled out of the source and evaluated in a sandbox with a minimal fake DOM, the
-// way test/renderer-run-gates.test.js checks app.js as a seam.
+// src/renderer/start-drawer.js (#154, moved out of app.js): the Start workflow drawer (#127 the
+// main field is never remembered, #128 "Start and create another" keeps the drawer open, #132 no
+// green CLI checkmarks) and the pending-start guard (a run update's renderHeader() must not
+// re-enable the buttons while a start is in flight). It runs only inside the Electron renderer
+// (document, window.api), so the relevant functions are pulled out of the source and evaluated in
+// a sandbox with a minimal fake DOM, the way test/renderer-run-gates.test.js checks app.js as a seam.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
@@ -11,6 +11,7 @@ const path = require('path');
 const vm = require('vm');
 
 const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'app.js'), 'utf8');
+const drawerSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'start-drawer.js'), 'utf8');
 const style = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'style.css'), 'utf8');
 
 function makeEl() {
@@ -65,8 +66,8 @@ function loadStartDrawer({ workflows = [], projects = [], settings = {}, runs = 
   };
   const code = {};
   for (const [name, re] of Object.entries(defs)) {
-    const m = re.exec(src);
-    assert.ok(m, `${name} not found in app.js: the source moved`);
+    const m = re.exec(name === 'esc' ? src : drawerSrc);
+    assert.ok(m, `${name} not found in ${name === 'esc' ? 'app.js' : 'start-drawer.js'}: the source moved`);
     code[name] = m[0];
   }
 
@@ -149,7 +150,7 @@ test('selectWorkflow: the main field ignores a previous save (even one from befo
 });
 
 test('openDrawer: an explicit inputs prefill is applied after the workflow is selected, so it can still set the main field', () => {
-  const openDrawer = /async function openDrawer\(\{[\s\S]*?\n\}/.exec(src)[0];
+  const openDrawer = /async function openDrawer\(\{[\s\S]*?\n\}/.exec(drawerSrc)[0];
   const renderCallIndex = openDrawer.indexOf('renderWorkflowOptions(');
   const prefillIndex = openDrawer.indexOf('if (inputs &&');
   assert.ok(renderCallIndex >= 0 && prefillIndex >= 0, 'openDrawer no longer renders the workflow or prefills inputs: the source moved');

@@ -1,17 +1,17 @@
 // src/renderer/views/artifacts/artifacts.js: the Artifacts screen's run groups and the Collapse
-// all / Expand all toggle (#126); ART_KIND/artKindIcon/fmtSize stay shared in app.js (also used by
-// artifacts-panel.js). It runs only inside the Electron renderer, so the relevant functions are
-// pulled out of the source and evaluated in a sandbox, the way test/renderer-run-gates.test.js
-// checks app.js as a seam. A minimal fake DOM stands in for #art-list and #art-toggle-all: enough
-// to read back the toggle button's label/aria state and the run groups' open/closed markup, not a
-// full parser.
+// all / Expand all toggle (#126); ART_KIND/artKindIcon/fmtSize are shared in artifact-render.js
+// (also used by artifacts-panel.js), moved out of app.js by #154. It runs only inside the
+// Electron renderer, so the relevant functions are pulled out of the source and evaluated in a
+// sandbox, the way test/renderer-run-gates.test.js checks app.js as a seam. A minimal fake DOM
+// stands in for #art-list and #art-toggle-all: enough to read back the toggle button's label/aria
+// state and the run groups' open/closed markup, not a full parser.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 
-const appSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'app.js'), 'utf8');
+const renderSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'artifact-render.js'), 'utf8');
 const artifactsSrc = fs.readFileSync(
   path.join(__dirname, '..', 'src', 'renderer', 'views', 'artifacts', 'artifacts.js'), 'utf8',
 );
@@ -53,9 +53,9 @@ function load({ runs = [], q = '', projectId = '', showSim = false, developerMod
     "const esc = (s) => String(s ?? '').replace(/[&<>\"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', \"'\": '&#39;' })[c]);",
     "const dateOf = (iso) => new Date(iso).toLocaleString('en-US', { dateStyle: 'short', timeStyle: 'short' });",
     "const devMode = () => !!state.settings.developerMode || !!state.simulationOnly;",
-    extract('ART_KIND', /const ART_KIND = \{[^\n]+\};/, appSrc),
-    extract('artKindIcon', /const artKindIcon = [^\n]+/, appSrc),
-    extract('fmtSize', /function fmtSize\(n\) \{[\s\S]*?\n\}/, appSrc),
+    extract('ART_KIND', /const ART_KIND = \{[^\n]+\};/, renderSrc),
+    extract('artKindIcon', /const artKindIcon = [^\n]+/, renderSrc),
+    extract('fmtSize', /function fmtSize\(n\) \{[\s\S]*?\n\}/, renderSrc),
     extract('artShowSim', /const artShowSim = [^\n]+/),
     extract('artifactRunsFiltered', /function artifactRunsFiltered\(\) \{[\s\S]*?\n\}/),
     extract('renderArtifactList', /function renderArtifactList\(\) \{[\s\S]*?\n\}/),

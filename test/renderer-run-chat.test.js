@@ -1,14 +1,14 @@
-// src/renderer/run-chat.js: it runs only inside the Electron renderer (document, window.Robots),
-// so the pure `robot()` and `cardLines()` helpers are pulled out of the source and evaluated in a
-// sandbox, the way test/renderer-run-summary.test.js checks app.js as a seam.
+// src/renderer/views/runchat/runchat.js: it runs only inside the Electron renderer (document,
+// window.Robots), so the pure `robot()` and `cardLines()` helpers are pulled out of the source and
+// evaluated in a sandbox, the way test/renderer-run-summary.test.js checks app.js as a seam.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const { providerType } = require('../src/renderer/run-chat-model.js');
+const { providerType } = require('../src/renderer/views/runchat/run-chat-model.js');
 
-const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'run-chat.js'), 'utf8');
+const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'views', 'runchat', 'runchat.js'), 'utf8');
 
 function loadHelpers() {
   const isSupervisor = /const isSupervisor = [^\n]+/.exec(src)[0];
@@ -17,7 +17,7 @@ function loadHelpers() {
   const modesMap = /const MODES = \{[^\n]+\};/.exec(src)[0];
   const cardLines = /function cardLines\(who\) \{[\s\S]*?\n  \}/.exec(src)[0];
   for (const [name, code] of Object.entries({ isSupervisor, robot, providersMap, modesMap, cardLines })) {
-    assert.ok(code, `${name} not found in run-chat.js: the source moved`);
+    assert.ok(code, `${name} not found in runchat.js: the source moved`);
   }
   const sandbox = {
     providerType,

@@ -1,5 +1,6 @@
 // src/renderer/artifacts-panel.js (#108/#109): one component for the Run screen's Artifacts tab and
-// the approval gate's side panel. It runs only inside the Electron renderer (window.api, the DOM,
+// the approval gate's side panel. The Run screen's markup and switchTab moved into
+// views/run/run.js by #154. It runs only inside the Electron renderer (window.api, the DOM,
 // app.js's helpers), so it is evaluated whole in a sandbox with those stubbed, a fake `root` element
 // standing in for the DOM (classList/innerHTML/querySelector only, no real parsing), the way
 // test/renderer-run-gates.test.js checks app.js as a seam.
@@ -12,15 +13,16 @@ const vm = require('vm');
 const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'artifacts-panel.js'), 'utf8');
 const html = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'index.html'), 'utf8');
 const appSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'app.js'), 'utf8');
+const runSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'views', 'run', 'run.js'), 'utf8');
 
 test('the Run screen has an Artifacts tab next to Session and Events, with a count badge', () => {
-  assert.match(html, /<button class="tab" data-tab="artifacts"[^>]*>Artifacts <span id="tab-artifacts-count"/);
-  assert.match(html, /id="tab-artifacts" class="tab-body hidden"/);
+  assert.match(runSrc, /<button class="tab" data-tab="artifacts"[^>]*>Artifacts <span id="tab-artifacts-count"/);
+  assert.match(runSrc, /id="tab-artifacts" class="tab-body hidden"/);
   assert.match(html, /<script src="artifacts-panel\.js"><\/script>/);
 });
 
 test('switchTab toggles #tab-artifacts like the other two tabs', () => {
-  const switchTab = /function switchTab\(tab\) \{[\s\S]*?\n\}/.exec(appSrc)[0];
+  const switchTab = /function switchTab\(tab\) \{[\s\S]*?\n\}/.exec(runSrc)[0];
   assert.match(switchTab, /\$\('#tab-artifacts'\)\.classList\.toggle\('hidden', tab !== 'artifacts'\)/);
 });
 

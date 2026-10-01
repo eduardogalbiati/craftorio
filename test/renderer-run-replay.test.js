@@ -12,6 +12,7 @@ const RunProgress = require('../src/renderer/run-progress-model');
 const RunBadges = require('../src/renderer/run-badges');
 
 const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'app.js'), 'utf8');
+const supSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'supervisor-drawer.js'), 'utf8');
 
 const PATTERNS = {
   fmtDur: /function fmtDur\(ms\) \{[\s\S]*?\n\}/,
@@ -41,8 +42,8 @@ const PATTERNS = {
 function loadHelpers({ api = {}, view = 'dashboard' } = {}) {
   const code = {};
   for (const [name, re] of Object.entries(PATTERNS)) {
-    const m = re.exec(src);
-    assert.ok(m, `${name} not found in app.js: the source moved`);
+    const m = re.exec(name === 'SUP_ACTIONS' ? supSrc : src);
+    assert.ok(m, `${name} not found in ${name === 'SUP_ACTIONS' ? 'supervisor-drawer.js' : 'app.js'}: the source moved`);
     code[name] = m[0];
   }
   const calls = { showToast: [], loadUsage: 0, loadUsageThrottled: 0, loadActiveRuns: 0, showView: [], showRunInList: [] };

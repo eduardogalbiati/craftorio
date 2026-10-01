@@ -112,12 +112,19 @@ test('rendererAssets on the real src/renderer/: load-order guarantees the app de
   // view-registry.js and api-http.js are read as app.js loads
   assert.ok(at(scripts, 'view-registry.js') < at(scripts, 'app.js'));
   assert.ok(at(scripts, 'api-http.js') < at(scripts, 'app.js'));
-  // duo.js's window.ChatModels is read by arena.js and views/workflows/builder.js as they load
-  assert.ok(at(scripts, 'duo.js') < at(scripts, 'arena.js'));
-  assert.ok(at(scripts, 'duo.js') < at(scripts, 'views/workflows/builder.js'));
+  // chat-models.js's window.ChatModels (a top-level file) is read by every chat screen as it loads
+  assert.ok(at(scripts, 'chat-models.js') < at(scripts, 'views/duo/duo.js'));
+  assert.ok(at(scripts, 'chat-models.js') < at(scripts, 'views/arena/arena.js'));
+  assert.ok(at(scripts, 'chat-models.js') < at(scripts, 'views/workflows/builder.js'));
+  // views/duo/duo-issue.js's window.DuoIssue is read by duo.js as it loads
+  assert.ok(at(scripts, 'views/duo/duo-issue.js') < at(scripts, 'views/duo/duo.js'));
+  // the run chat's own model and the Run screen's renderRunGates/gate-panel pieces are read by
+  // runchat.js as it loads (#154)
+  assert.ok(at(scripts, 'views/runchat/run-chat-model.js') < at(scripts, 'views/runchat/runchat.js'));
+  assert.ok(at(scripts, 'views/run/run.js') < at(scripts, 'views/runchat/runchat.js'));
   // robots.js's window.Robots is read by duo.js, views/agents/agents.js and
   // views/backlog/backlog-po.js as they load
-  assert.ok(at(scripts, 'robots.js') < at(scripts, 'duo.js'));
+  assert.ok(at(scripts, 'robots.js') < at(scripts, 'views/duo/duo.js'));
   assert.ok(at(scripts, 'robots.js') < at(scripts, 'views/agents/agents.js'));
   assert.ok(at(scripts, 'robots.js') < at(scripts, 'views/backlog/backlog-po.js'));
   // every views/ script loads after every top-level one
@@ -126,8 +133,9 @@ test('rendererAssets on the real src/renderer/: load-order guarantees the app de
   assert.ok(scripts.slice(firstView).every((f) => f.startsWith('views/')));
 
   assert.equal(styles[0], 'style.css');
-  assert.ok(at(styles, 'duo.css') < at(styles, 'arena.css'));
-  assert.ok(at(styles, 'duo.css') < at(styles, 'run-chat.css'));
+  // chat.css (the shared chat look, formerly duo.css, #154) precedes every screen that uses it
+  assert.ok(at(styles, 'chat.css') < at(styles, 'views/arena/arena.css'));
+  assert.ok(at(styles, 'chat.css') < at(styles, 'views/runchat/runchat.css'));
 });
 
 test('loadRule: "load: early" with no file names marks a file early, with no dependency', () => {

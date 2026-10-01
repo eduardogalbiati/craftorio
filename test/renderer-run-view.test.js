@@ -9,6 +9,7 @@ const path = require('path');
 const vm = require('vm');
 
 const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'app.js'), 'utf8');
+const runSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'views', 'run', 'run.js'), 'utf8');
 
 function loadHelpers({ runs = new Map(), runView = 'details' } = {}) {
   const runViewKey = /const RUN_VIEW_KEY = [^\n]+;/.exec(src)[0];
@@ -103,6 +104,29 @@ test('showRun: a past run this window is not tracking opens in Details, rebuilt 
   assert.deepEqual(calls.openPastRun, ['old-run']);
   assert.deepEqual(calls.showRunInList, []);
   assert.deepEqual(calls.showView, []);
+});
+
+// #154: render() draws the Run screen (renderRunScreen, views/run/run.js) only while it shows;
+// every other screen renders itself from its own events/state, not from app.js's render().
+test('render(): calls renderRunScreen() only while state.view is "run"', () => {
+  const render = /function render\(\) \{[\s\S]*?\n\}/.exec(src)[0];
+  assert.match(render, /renderHeader\(\);/);
+  assert.match(render, /if \(state\.view === 'run'\) renderRunScreen\(\);/);
+});
+
+// #154: scheduling the Run screen's render used to be app.js's showView special-casing
+// `view === 'run'`; now it is views/run/run.js's own registerView show() hook, called the same
+// way every other screen's is (viewRegistry.get(view)?.show?.()).
+test("views/run/run.js: registerView's show() schedules a render", () => {
+  let registered = null;
+  let calls = 0;
+  const sandbox = { registerView: (def) => { registered = def; }, scheduleRender: () => { calls += 1; }, window: {}, document: {} };
+  vm.createContext(sandbox);
+  vm.runInContext(runSrc, sandbox);
+  assert.equal(registered?.id, 'run');
+  assert.equal(typeof registered.show, 'function');
+  registered.show();
+  assert.equal(calls, 1);
 });
 
 test('selectRun: opening honours the remembered view; not opening only updates the top bar', () => {
