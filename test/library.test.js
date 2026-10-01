@@ -29,6 +29,20 @@ test('settings: defaults, merge and dropping unknown keys', (t) => {
   assert.equal('junk' in readSettings(ws), false);
 });
 
+// #82: voice input (src/speech.js) defaults to whisper-cli, the "small" model and Portuguese (the
+// owner dictates in Portuguese); an unrelated settings patch keeps them.
+test('settings: voice input defaults (whisper-cli, small, pt), kept by an unrelated patch', (t) => {
+  const ws = setupWorkspace(path.join(tmp(t), 'w'), { store: memStore() });
+  assert.deepEqual(
+    { voiceCommand: DEFAULT_SETTINGS.voiceCommand, voiceModel: DEFAULT_SETTINGS.voiceModel, voiceLanguage: DEFAULT_SETTINGS.voiceLanguage },
+    { voiceCommand: 'whisper-cli', voiceModel: 'small', voiceLanguage: 'pt' },
+  );
+  const s = writeSettings(ws, { developerMode: true });
+  assert.equal(s.voiceCommand, 'whisper-cli');
+  assert.equal(s.voiceModel, 'small');
+  assert.equal(s.voiceLanguage, 'pt');
+});
+
 test('slugify strips accents and special characters', () => {
   assert.equal(projects.slugify('Café Déjà Vu!'), 'cafe-deja-vu');
   assert.equal(projects.slugify('***'), 'project');
