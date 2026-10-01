@@ -371,8 +371,8 @@ test('backlog: assigned issues run one at a time, each run records its issue', a
   await until(() => gates.length === 1);
   data = api['backlog:get']({ projectId: p.id });
   const by = () => Object.fromEntries(data.issues.map((i) => [i.number, i]));
-  assert.equal(by()[2].column, 'waiting');
-  assert.equal(by()[1].column, 'in_progress');
+  assert.equal(by()[2].column, 'todo'); // simulated: waiting at a gate, but never moves the column
+  assert.equal(by()[1].column, 'todo'); // simulated: queued, but never moves the column
   assert.equal(by()[1].queued.position, 1);
   assert.equal(by()[3].column, 'done');
 
@@ -383,7 +383,7 @@ test('backlog: assigned issues run one at a time, each run records its issue', a
 
   data = api['backlog:get']({ projectId: p.id });
   assert.deepEqual(data.queue.items, []);
-  assert.deepEqual([by()[1].column, by()[2].column], ['in_progress', 'in_progress']); // succeeded, still open
+  assert.deepEqual([by()[1].column, by()[2].column], ['todo', 'todo']); // simulated: succeeded, but still just todo
   const list = api['runs:list']().runs;
   const run2 = list.find((r) => r.issues?.[0].number === 2);
   assert.deepEqual(run2.issues, [{ number: 2, url: 'https://github.com/o/r/issues/2', title: 'Issue 2' }]);
@@ -431,13 +431,14 @@ test('backlog: issues assigned as one run queue one item, start one run for all 
   assert.match(run.inputs.task, /^Implement these 3 issues together \(#65, #53, #77\)\./);
   assert.match(run.inputs.task, /## 1\. #65 Issue 65\n\nIssue: https:\/\/github\.com\/o\/r\/issues\/65\n\nBody 65[\s\S]*## 2\. #53 Issue 53[\s\S]*## 3\. #77 Issue 77/);
   assert.deepEqual(api['backlog:get']({ projectId: p.id }).queue.items, []);
-  await until(() => by()[53].column === 'waiting');
-  assert.deepEqual([65, 53, 77].map((n) => [by()[n].column, by()[n].runs[0].runId]), [65, 53, 77].map(() => ['waiting', run.runId]));
+  await until(() => by()[53].runs[0]?.waiting === true);
+  // simulated: waiting at a gate shows in the history but never moves the column
+  assert.deepEqual([65, 53, 77].map((n) => [by()[n].column, by()[n].runs[0].runId, by()[n].runs[0].waiting]), [65, 53, 77].map(() => ['todo', run.runId, true]));
   assert.deepEqual(by()[53].runs[0].groupedWith, [65, 77]);
 
   api['approval:resolve']({ runId: run.runId, id: gates.get(run.runId), answer: true });
   await until(() => !service.isRunning());
-  assert.deepEqual([65, 53, 77].map((n) => by()[n].column), ['in_progress', 'in_progress', 'in_progress']); // succeeded, still open
+  assert.deepEqual([65, 53, 77].map((n) => by()[n].column), ['todo', 'todo', 'todo']); // simulated: succeeded, but still just todo
   const recorded = api['runs:list']().runs.find((r) => r.runId === run.runId);
   assert.deepEqual(recorded.issues.map((i) => i.number), [65, 53, 77]);
 });

@@ -262,7 +262,7 @@ test('the push status of a project is cached next to its backlog', (t) => {
   assert.equal(backlog.readBacklog(dir, 'p'), null); // its own file, not the synced issues
 });
 
-test('a run started for an issue links to it even when simulated; its state picks the column', () => {
+test('a run started for an issue links to it even when simulated; only a real one picks the column', () => {
   const issue = (number) => ({ number, state: 'open', url: `https://github.com/o/r/issues/${number}` });
   const run = (runId, number, extra) => ({ runId, workflow: 'w', startedAt: `2026-09-0${runId.length}`, issue: { number, url: `https://github.com/o/r/issues/${number}` }, ...extra });
   const out = backlog.linkRuns([issue(1), issue(2), issue(3), issue(4), issue(5)], [
@@ -273,14 +273,59 @@ test('a run started for an issue links to it even when simulated; its state pick
     run('d', 5, { status: 'running', task: 'Also see #4' }),
   ], { items: [{ number: 4, workflow: 'software-development.yaml', workflowName: 'software-development', mock: true }] });
   const by = Object.fromEntries(out.map((i) => [i.number, i]));
-  assert.equal(by[1].column, 'waiting');
-  assert.equal(by[1].runs[0].mock, true);
+  assert.equal(by[1].column, 'todo'); // its only run is a simulation
+  assert.equal(by[1].runs[0].mock, true); // but it still shows in the issue's history
   assert.equal(by[2].column, 'in_progress'); // succeeded, still open on the platform
   assert.equal(by[3].column, 'in_progress');
   assert.deepEqual(by[4].runs, []);
-  assert.deepEqual(by[4].queued, { position: 1, workflow: 'software-development', mock: true });
-  assert.equal(by[4].column, 'in_progress');
+  assert.deepEqual(by[4].queued, { position: 1, workflow: 'software-development', mock: true }); // still shows the queued badge
+  assert.equal(by[4].column, 'todo'); // a simulated queue item doesn't move it either
   assert.equal(by[5].column, 'in_progress');
+});
+
+test('a simulated run never decides an issue\'s column, whatever its status', () => {
+  const issue = (number, state = 'open') => ({ number, state, url: `https://github.com/o/r/issues/${number}` });
+  const run = (runId, number, extra) => ({ runId, workflow: 'w', startedAt: `2026-09-0${runId.length}`, mock: true, issue: { number, url: `https://github.com/o/r/issues/${number}` }, ...extra });
+  const runs = [
+    run('a', 1, { status: 'success' }),
+    run('bb', 2, { status: 'failed' }),
+    run('ccc', 3, { status: 'interrupted' }),
+    run('dddd', 4, { status: 'running', waiting: true }), // stopped at a human gate
+    run('eeeee', 5, { status: 'success' }),
+  ];
+  const out = backlog.linkRuns([issue(1), issue(2), issue(3), issue(4), issue(5, 'closed')], runs);
+  const by = Object.fromEntries(out.map((i) => [i.number, i]));
+  assert.equal(by[1].column, 'todo');
+  assert.equal(by[2].column, 'todo');
+  assert.equal(by[3].column, 'todo');
+  assert.equal(by[4].column, 'todo');
+  assert.equal(by[5].column, 'done'); // closed on the platform, simulation or not
+  for (const n of [1, 2, 3, 4, 5]) assert.equal(by[n].runs[0].mock, true); // kept in the history
+});
+
+test('a real run decides the column even when a newer simulated run is linked', () => {
+  const issue = { number: 1, state: 'open', url: 'https://github.com/o/r/issues/1' };
+  const runs = [
+    { runId: 'a', workflow: 'w', status: 'running', waiting: true, startedAt: '2026-09-01', issue: { number: 1, url: issue.url } }, // real, older, waiting at a gate
+    { runId: 'bb', workflow: 'w', status: 'success', startedAt: '2026-09-02', mock: true, issue: { number: 1, url: issue.url } }, // simulated, newer, success
+  ];
+  const [out] = backlog.linkRuns([issue], runs);
+  assert.equal(out.column, 'waiting'); // the real (older) run decides, not the newer simulation
+  assert.deepEqual(out.runs.map((r) => r.runId), ['bb', 'a']); // the history still lists both, newest first
+});
+
+test('a queued simulation leaves the column as it would be without it; a real queue item moves it', () => {
+  const issue = (number) => ({ number, state: 'open', url: `https://github.com/o/r/issues/${number}` });
+  const queue = { items: [
+    { number: 1, workflow: 'w.yaml', workflowName: 'w', mock: true },
+    { number: 2, workflow: 'w.yaml', workflowName: 'w', mock: false },
+  ] };
+  const out = backlog.linkRuns([issue(1), issue(2)], [], queue);
+  const by = Object.fromEntries(out.map((i) => [i.number, i]));
+  assert.equal(by[1].column, 'todo');
+  assert.deepEqual(by[1].queued, { position: 1, workflow: 'w', mock: true }); // still shows the queued badge
+  assert.equal(by[2].column, 'in_progress');
+  assert.deepEqual(by[2].queued, { position: 2, workflow: 'w', mock: false });
 });
 
 test('the queue: enqueue skips duplicates and remembers inputs, next item across projects, pause', (t) => {
