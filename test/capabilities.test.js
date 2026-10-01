@@ -56,10 +56,10 @@ test('a bare `bash` capability keeps allowing everything: no need for the fixed 
   assert.equal(argAfter(args, '--allowedTools'), 'Read Glob Grep Bash');
 });
 
-test('runDirs/commandGuide: an agent with commands gets a logs and a screenshots folder under the run, and no other agent does', () => {
+test('runDirs/commandGuide: an agent with commands gets a logs, a scratch and a screenshots folder under the run, and no other agent does', () => {
   const withBash = caps.normalize({ tools: ['read', 'bash:git'] });
   const noBash = caps.normalize({ tools: ['read'] });
-  assert.deepEqual(caps.runDirs(withBash, 'C:/run'), [path.join('C:/run', 'logs'), path.join('C:/run', 'screenshots')]);
+  assert.deepEqual(caps.runDirs(withBash, 'C:/run'), [path.join('C:/run', 'logs'), path.join('C:/run', 'scratch'), path.join('C:/run', 'screenshots')]);
   assert.deepEqual(caps.runDirs(noBash, 'C:/run'), []);
   assert.deepEqual(caps.runDirs(withBash, null), [], 'no run folder yet: nothing to offer');
   assert.equal(caps.commandGuide(noBash, 'C:/run'), '', 'nothing to tell an agent with no commands');
@@ -70,6 +70,34 @@ test('runDirs/commandGuide: an agent with commands gets a logs and a screenshots
   assert.ok(guide.includes(`Write command logs to \`${path.join('C:/run', 'logs')}`), 'the log folder, never /tmp, $TEMP or AppData');
   assert.match(guide, /never to \/tmp, \$TEMP or AppData/);
   assert.match(guide, /rephrase it once into an allowed form instead of retrying variants/);
+  assert.doesNotMatch(guide, /scratch workspace/, 'no MULTIAGENT_WORKSPACE (a run with no worktree): nothing to say about it');
+});
+
+test('agentEnv: the agent\'s environment is AGENT_ENV alone, unless the run has a scratch workspace (#120)', () => {
+  assert.deepEqual(caps.agentEnv(), { MULTIAGENT_SIMULATION_ONLY: '1' });
+  assert.deepEqual(caps.agentEnv(null), { MULTIAGENT_SIMULATION_ONLY: '1' });
+  assert.deepEqual(caps.agentEnv({ workspace: 'C:/run/scratch/workspace', userData: 'C:/run/scratch/user-data' }), {
+    MULTIAGENT_SIMULATION_ONLY: '1',
+    MULTIAGENT_USER_DATA: 'C:/run/scratch/user-data',
+    MULTIAGENT_WORKSPACE: 'C:/run/scratch/workspace',
+  });
+});
+
+test('commandGuide: an agent given a scratch workspace is told every one of its own variables (plural wording) and where its own checks must write', () => {
+  const withBash = caps.normalize({ tools: ['read', 'bash:npm'] });
+  const env = caps.agentEnv({ workspace: 'C:/run/scratch/workspace', userData: 'C:/run/scratch/user-data' });
+  const guide = caps.commandGuide(withBash, 'C:/run', env);
+  assert.match(guide, /MULTIAGENT_SIMULATION_ONLY=1, MULTIAGENT_USER_DATA=C:\/run\/scratch\/user-data, MULTIAGENT_WORKSPACE=C:\/run\/scratch\/workspace are already set/, 'plural: more than one variable');
+  assert.match(guide, /this run's scratch workspace `C:\/run\/scratch\/workspace`: never pass a path under the owner's workspace/);
+});
+
+test('claudeBashRules: a command is allowed prefixed by any one of the agent\'s own environment variables, not only MULTIAGENT_SIMULATION_ONLY', () => {
+  const c = caps.normalize({ tools: ['read', 'bash:npm'] });
+  const env = caps.agentEnv({ workspace: 'C:/run/scratch/workspace', userData: 'C:/run/scratch/user-data' });
+  const allowed = argAfter(caps.providerArgs('claude-code', { caps: c, env }).args, '--allowedTools');
+  assert.match(allowed, /Bash\(MULTIAGENT_SIMULATION_ONLY=1 npm:\*\)/);
+  assert.match(allowed, /Bash\(MULTIAGENT_WORKSPACE=C:\/run\/scratch\/workspace npm:\*\)/);
+  assert.match(allowed, /Bash\(MULTIAGENT_USER_DATA=C:\/run\/scratch\/user-data npm:\*\)/);
 });
 
 test('edits_tests: false → Claude refuses edits to the test paths; the other CLIs note that they cannot', () => {
@@ -189,9 +217,10 @@ test('a real turn gets the capability and isolation flags, and its context is me
   assert.equal(argAfter(spawn.args, '--tools'), 'Read,Glob,Grep,Bash');
   assert.equal(argAfter(spawn.args, '--allowedTools'), ['Read Glob Grep Bash(gh:*) Bash(MULTIAGENT_SIMULATION_ONLY=1 gh:*)', ...READ_BASH].join(' '));
   assert.ok(spawn.args.includes('--verbose'), 'cli_args still apply on top');
-  // the run's logs and screenshots folders exist and are offered to the CLI with --add-dir (#96)
+  // the run's logs, scratch and screenshots folders exist and are offered to the CLI with --add-dir (#96, #120)
   const runDirArgs = spawn.args.filter((a, i) => spawn.args[i - 1] === '--add-dir');
   assert.ok(runDirArgs.some((d) => d.endsWith(`${path.sep}logs`) && fs.existsSync(d)), runDirArgs.join(', '));
+  assert.ok(runDirArgs.some((d) => d.endsWith(`${path.sep}scratch`) && fs.existsSync(d)), runDirArgs.join(', '));
   assert.ok(runDirArgs.some((d) => d.endsWith(`${path.sep}screenshots`) && fs.existsSync(d)), runDirArgs.join(', '));
   const log = events.find((e) => e.type === 'log' && e.kind === 'capabilities');
   assert.match(log.message, /dev \(claude-code, isolated\): tools: read, bash: gh/);
@@ -203,6 +232,8 @@ test('a real turn gets the capability and isolation flags, and its context is me
   // the engine sets MULTIAGENT_SIMULATION_ONLY in the child's own environment: the agent needs no
   // `VAR=value` prefix, even though this test deleted it from the *parent* process to lift the guard
   assert.match(received.text, /MULTIAGENT_SIMULATION_ONLY: 1/);
+  // no worktree in this run (no orchestrator.worktree, no worktreesDir): no scratch workspace either
+  assert.match(received.text, /MULTIAGENT_WORKSPACE: undefined/);
   assert.deepEqual(received.context, { start: 31000, peak: 41500 });
   assert.equal(received.handoff, '- Goal: fake');
   assert.ok(fs.existsSync(path.join(run.runDir, 'handoffs', 'work-v1-dev.md')));
