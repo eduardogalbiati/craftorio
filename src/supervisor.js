@@ -6,6 +6,10 @@
 //   while a command waits (superviseIdle): keep waiting, or interrupt the turn and retry the step;
 //   and when a transition's action or pre-merge check fails (superviseActionError): go back to a
 //   recovery step with an instruction, or escalate to the failure gate with a diagnosis;
+//   and on call (superviseEscalation / superviseStall, onCallPrompt): before an escalation gate
+//   (`kind: escalation`) asks the person about a problem, and on a stall the engine detected (the same
+//   output N times, refused tool calls, a slow step): retry or resume a step with an instruction, route
+//   the gate, ask the person for an action only they can take, or escalate with a diagnosis;
 // - by a person, from the UI, for any run (analyzeRun): it explains what happened and recommends
 //   actions such as resuming the run from a step (resumeSpec) with an instruction;
 // - by a person, from Analytics, on the sessions of a date range (analyzeSessions): a report on what
@@ -57,6 +61,28 @@ const actionSchema = (recover) => ({
     instruction: { type: 'string' },
   },
 });
+
+// Decision of the supervisor on call (#41), before a person is asked about a problem: at an
+// escalation gate (`kind: escalation`) or on a stall the engine detected. The first action is the
+// mock's default and the safe one: `escalate` shows the gate with the diagnosis, `continue` lets the
+// run go on as planned. `step` is limited to the agent steps the run already went through, `route`
+// to the gate's own answers.
+const onCallSchema = ({ actions, steps = [], routes = [] }) => ({
+  type: 'object',
+  required: ['explanation', 'action'],
+  properties: {
+    explanation: { type: 'string' },
+    cause_class: { type: 'string', enum: ['environment', 'permissions', 'instruction', 'capability', 'code', 'workflow', 'unknown'] },
+    action: { type: 'string', enum: actions },
+    instruction: { type: 'string' },
+    step: steps.length ? { type: 'string', enum: steps } : { type: 'string' },
+    ...(routes.length ? { route: { type: 'string', enum: routes } } : {}),
+    user_action: { type: 'string' },
+    recommendation: { type: 'string' },
+  },
+});
+const ESCALATION_ACTIONS = ['escalate', 'retry', 'resume', 'route', 'user_action'];
+const STALL_ACTIONS = ['continue', 'retry', 'resume', 'user_action'];
 
 // Analysis asked for by a person.
 const ANALYSIS_SCHEMA = {
@@ -161,6 +187,38 @@ function idlePrompt({ wf, step, agent, idle, events, handoffs }) {
     `\n## Your options`,
     '- wait: the command can plausibly still finish (a long build or test suite in the foreground prints nothing until it ends).',
     '- interrupt: the wait cannot end on its own (polling for a text that may never appear, a background job with no exit check, an interactive prompt); the engine stops this turn and runs the step again with `instruction` added to the agent\'s prompt. Describe the evidence and what to do instead (e.g. run the command in the foreground with a timeout and read its exit code); never prescribe a code fix.',
+    'Explain in the language of the workflow\'s task, for the person running it.',
+  ].filter(Boolean).join('\n');
+}
+
+/**
+ * Prompt for the supervisor on call (engine-side): the run would stop to ask the person about a
+ * problem (an escalation gate) or the engine detected a stall (`signals`). It tries to solve it first.
+ * history: [{ step, visits, output }] of the steps the run went through.
+ */
+function onCallPrompt({ wf, step, gate, signals, retryStep, steps, history, previous, events, handoffs, limits }) {
+  const routes = gate?.routes || [];
+  return [
+    gate
+      ? `The workflow "${wf.metadata?.name}" reached the escalation gate "${step.id}": it would stop and ask the person about a problem. You are the supervisor on call: try to solve it first, following the run-supervisor skill. The person is only asked when you cannot, and then with your diagnosis.`
+      : `The engine detected that the step "${step.id}" of the workflow "${wf.metadata?.name}" may be stuck. You are the supervisor on call: decide whether the run goes on as planned or how to unblock it, following the run-supervisor skill.`,
+    wf.metadata?.description ? `Workflow: ${wf.metadata.description}` : '',
+    gate ? `\n## What the gate would ask the person\n${clip(gate.message, 4000)}\n\nThe gate's answers and where they lead:\n${gate.transitions || '(none)'}` : '',
+    signals?.length ? `\n## Stall signals (deterministic, from the engine)\n${signals.map((s) => `- ${s.step}: ${s.kind}: ${s.detail}`).join('\n')}` : '',
+    history?.length ? `\n## Step history (visits and latest output)\n${history.map((h) => `- ${h.step} (${h.visits} visit${h.visits === 1 ? '' : 's'}): ${clip(JSON.stringify(h.output), 500)}`).join('\n')}` : '',
+    previous?.length ? `\n## Your previous interventions here\n${previous.map((p, i) => `${i + 1}. ${p.action}: ${p.explanation}`).join('\n')}` : '',
+    handoffs?.length ? `\n## The agents' handoff notes (their own summary of where they are, latest turn)\n${handoffs.map((h) => `### ${h.agent} (step ${h.step}, visit ${h.visit})\n${clip(h.text, 3000)}`).join('\n\n')}` : '',
+    `\n## Recent timeline\n${timeline(events, 60) || '(empty)'}`,
+    limits ? `\n## Your limits\n${limits}` : '',
+    '\n## Your options (the engine validates them)',
+    gate
+      ? '- escalate: you cannot solve it; the gate opens for the person with your `explanation` as the diagnosis and your `recommendation`.'
+      : '- continue: nothing is stuck (e.g. the same answer is expected); the run goes on as planned.',
+    retryStep ? `- retry: run "${retryStep}" again; \`instruction\` is added to its agent's prompt.` : '',
+    `- resume: continue at one of these steps: ${steps.length ? steps.join(', ') : '(none)'}; \`step\` names it and \`instruction\` is added to its agent's prompt.`,
+    gate && routes.length ? `- route: answer the gate yourself with \`route\` (one of ${routes.join(', ')}), only when the evidence shows that answer is what the problem calls for (e.g. the failure is not caused by the run's change).` : '',
+    '- user_action: the fix is outside the run\'s permissions (a process to stop, a permission to grant, a login): put the exact command or step the person must take in `user_action`; the person is asked with it.',
+    'Rules: never prescribe a code fix and never edit code; a problem in the code goes back to the workflow\'s agents (retry/resume) with the evidence and your hypotheses in `instruction`. A problem in how an agent works (refused commands, a wrong tool, a wait that never ends) gets a concrete instruction (e.g. call `gh` directly in the Bash tool).',
     'Explain in the language of the workflow\'s task, for the person running it.',
   ].filter(Boolean).join('\n');
 }
@@ -411,14 +469,18 @@ module.exports = {
   analyzeSessions,
   DECISION_SCHEMA,
   decisionPrompt,
+  ESCALATION_ACTIONS,
   IDLE_SCHEMA,
   idlePrompt,
+  onCallPrompt,
+  onCallSchema,
   readEvents,
   resumeSpec,
   runReport,
   SESSIONS_REPORT_SCHEMA,
   sessionsReportMarkdown,
   skippedGate,
+  STALL_ACTIONS,
   supervisorConfig,
   timeline,
   timelineLine,

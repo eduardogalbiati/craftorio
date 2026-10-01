@@ -115,6 +115,22 @@ same features for users; this is the implementer's summary.
   prompt shows the change request when `previous_step == 'developer_check'`. Template filter
   `git_commits(base)` lists a folder's commits for a gate message (empty without a folder).
 - `orchestrator.supervisor: { enabled, max_interventions }` — per step 2, per run 6.
+- Supervisor on call (#41): `orchestrator.supervisor.on_call` (default true), `max_cost_usd`
+  (default 5, the supervisor sessions' cost per run), `effort`, `model` (default Opus 5.5 on
+  Claude), `stall: { same_output: 3, slow_factor: 3 }` (0 = off). A gate's `kind` is `decision`
+  (default: the person's choice, never answered by the supervisor) or `escalation` (failure gates,
+  `on_exhausted` targets; not with `check:`). Before an escalation gate opens, `superviseEscalation`
+  asks it (`onCallPrompt`, `onCallSchema`): `retry` the step before the gate / `resume` an agent
+  step already visited (instruction → `supervisorNote`), `route` one of the gate's answers
+  (output `by: 'supervisor'`), `user_action` / `escalate` → the gate opens with its diagnosis
+  under the message and in `approval.requested.supervisor`. Over its limits the gate opens with
+  its last diagnosis. Stalls (`checkStalls` after an agent step, `watchSlowStep` while it runs):
+  same `decisionKey` N visits in a row (not /loop iterations), 5+ refused calls in a row, a visit
+  `slow_factor`× the median of its earlier visits (min 10 min), a blocked /loop. Each is a `log`
+  warn `kind: stall` (blocked loops keep their `loop_blocked` warn); `superviseStall` decides
+  `continue` / `retry` / `resume` / `user_action` (a raw gate: retry, continue, stop), except when
+  the next step is `end`/`fail` or an escalation gate. Every intervention: `supervisor.decision`
+  (`kind: escalation | stall`) and a `supervisor` row in `decisions.tsv`.
 - Refused tool calls: `isPermissionDenial` (providers.js) spots allowlist refusals in the stream
   ("requires approval"); 5+ in a row in one turn → `log` warn with `kind: permission_denials`
   (supervisor timeline, run chat). A `/loop` stops after `loop.max_blocked` (default 3, 0 = off)

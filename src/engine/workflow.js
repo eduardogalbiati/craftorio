@@ -2,7 +2,8 @@
 // Emits events ('event') that feed the UI and the observability recorder.
 // `loadWorkflow`, `WorkflowRun` (graph walk, transitions, `/goal` + `/loop`, delegation, fan-out
 // `agents: [...]`, `save_as`, `on_error`, schema validation + retries, skills injection with `uses:`,
-// budgets check per turn, decision log `decisions.tsv`, AI supervisor `superviseFailure`, resume from
+// budgets check per turn, decision log `decisions.tsv`, AI supervisor `superviseFailure` and on call
+// (gates `kind: escalation` → `superviseEscalation`, stall signals `checkStalls` → `superviseStall`), resume from
 // step, per-run worktree lifecycle `setupWorktree`/`finishWorktree`, run outcome from the ending
 // transition's `status`, `mockSequences` to steer the mock per field in tests, gates with their
 // details kept for runs:active (`pendingGates`), `preexisting_failures` reported by a step).
@@ -176,6 +177,12 @@ function loadWorkflow(file) {
     if (s.local_preview !== undefined && (s.type !== 'human_approval' || typeof s.local_preview !== 'boolean')) throw new Error(`Step "${s.id}": local_preview must be true or false, on a human_approval step.`);
     if (s.diff_base !== undefined && (s.type !== 'human_approval' || typeof s.diff_base !== 'string' || !s.diff_base.trim())) throw new Error(`Step "${s.id}": diff_base must be a ref (e.g. "origin/{{ inputs.base_branch }}"), on a human_approval step.`);
     if ((s.choices || []).some((c) => c.feedback_required) && !s.feedback) throw new Error(`Step "${s.id}": a choice with feedback_required needs the step's feedback field.`);
+    // `kind: escalation`: a gate about a problem (a failure, an exhausted loop), where the supervisor on
+    // call tries first; `decision` (default): a choice only the person makes, never answered by it
+    if (s.kind !== undefined) {
+      if (s.type !== 'human_approval' || !GATE_KINDS.includes(s.kind)) throw new Error(`Step "${s.id}": kind must be one of ${GATE_KINDS.join(', ')}, on a human_approval step.`);
+      if (s.kind === 'escalation' && s.check) throw new Error(`Step "${s.id}": a gate with check (a merge) is a decision, not an escalation.`);
+    }
     // a deterministic PR/MR check: `check:` before a gate opens, `precheck:` before a transition's action
     const validateCheck = (c, what) => {
       if (!c || typeof c !== 'object' || !PROBES.includes(c.probe) || !c.target) throw new Error(`Step "${s.id}": ${what} needs a probe (${PROBES.join(', ')}) and a target.`);
@@ -219,6 +226,13 @@ function loadWorkflow(file) {
   if (maxCtx != null && !String(maxCtx).includes('{{') && !parseTokens(maxCtx)) throw new Error('orchestrator.limits.max_total_context must be a token count such as 20M.');
   const lp = wf.orchestrator?.local_preview;
   if (lp != null && (typeof lp !== 'object' || !String(lp.command || '').trim())) throw new Error('orchestrator.local_preview needs a command (e.g. "npm start").');
+  const sup = wf.orchestrator?.supervisor || {};
+  if (sup.on_call !== undefined && typeof sup.on_call !== 'boolean') throw new Error('orchestrator.supervisor.on_call must be true or false.');
+  const isAmount = (v) => typeof v === 'number' && v >= 0;
+  if (sup.max_cost_usd !== undefined && !isAmount(sup.max_cost_usd)) throw new Error('orchestrator.supervisor.max_cost_usd must be a number of US$ (0 or more).');
+  for (const k of ['same_output', 'slow_factor']) {
+    if (sup.stall?.[k] !== undefined && !isAmount(sup.stall[k])) throw new Error(`orchestrator.supervisor.stall.${k} must be a number (0 = off).`);
+  }
   validateGroups(wf.groups, ids);
   return wf;
 }
@@ -336,6 +350,22 @@ const DEFAULT_MAX_BLOCKED = 3;
 const maxBlocked = (step) => loopConfig(step).max_blocked ?? DEFAULT_MAX_BLOCKED;
 // Consecutive refused tool calls in one turn that are worth a warning (agent fighting its allowlist).
 const DENIAL_WARN = 5;
+// Human gates (#41): `decision` (default) is a choice only the person makes (scope, merge, publish);
+// `escalation` is a problem the supervisor on call tries to solve before the person is asked.
+const GATE_KINDS = ['decision', 'escalation'];
+// Stall signals of an agent step (orchestrator.supervisor.stall, 0 = off): the same decision this many
+// visits in a row, and a visit this many times longer than the step's usual one (its earlier visits in
+// the run), past STALL_SLOW_MIN_MS. With the supervisor on call, a stall wakes it.
+const STALL_SAME_OUTPUT = 3;
+const STALL_SLOW_FACTOR = 3;
+const STALL_SLOW_MIN_MS = 10 * 60e3;
+// What the supervisor may spend per run (orchestrator.supervisor.max_cost_usd) before the person is asked.
+const SUPERVISOR_MAX_COST_USD = 5;
+const median = (xs) => {
+  if (!xs?.length) return 0;
+  const s = [...xs].sort((a, b) => a - b);
+  return s[Math.floor(s.length / 2)];
+};
 // Silence with a command waiting that is worth a warning (an agent polling for text that never shows up).
 const IDLE_WARN_MS = 5 * 60e3;
 
@@ -530,6 +560,7 @@ class WorkflowRun extends EventEmitter {
     this.ctx.local_preview = this.localPreview;
     this.gateWaits = {}; // gate step id -> { waits, wait_ms } (summary.timing.gates): owner time, not agent time
     this.preexisting = []; // [{ step, test, file, reason }] (notePreexistingFailures)
+    this.stalls = []; // last stall signals [{ step, kind, detail, ts }] (recordStall), for the supervisor on call
     this.abort = new AbortController();
     this.seq = 0;
     this.nSession = 0;
@@ -861,18 +892,25 @@ class WorkflowRun extends EventEmitter {
 
     let output, scope;
     if (step.type === 'human_approval') {
-      const gate = await this.openGate(step, t0);
+      // `kind: escalation`: the supervisor on call tries to solve the problem before the person is
+      // asked; when it cannot, the gate opens with its diagnosis
+      const oc = step.kind === 'escalation' ? await this.superviseEscalation(step, st, t0) : null;
+      if (oc?.goto) return oc.goto;
+      const routed = oc?.route !== undefined;
+      const gate = routed ? { answer: oc.route, feedback: '' } : await this.openGate(step, t0, oc?.diagnosis);
       if (gate.recover) return gate.recover;
       const { answer, feedback } = gate;
+      const by = routed ? { by: 'supervisor' } : {};
       if (step.choices) {
-        output = { choice: answer, feedback };
+        output = { choice: answer, feedback, ...by };
         scope = { ...this.ctx, output, choice: answer, feedback };
       } else {
-        output = { approved: answer, feedback };
+        output = { approved: answer, feedback, ...by };
         scope = { ...this.ctx, output, approved: answer, rejected: !answer, feedback };
       }
       st.output = output;
     } else {
+      const slow = this.watchSlowStep(step, st);
       try {
         output = step.agents ? await this.runFanOut(step, st) : await this.runAgentStep(step, st, step.agent);
       } catch (e) {
@@ -889,6 +927,7 @@ class WorkflowRun extends EventEmitter {
           return r.goto;
         }
       } finally {
+        clearTimeout(slow);
         await this.stopWorktreeProcesses(`step ${step.id}`);
       }
       if (output === undefined) {
@@ -906,7 +945,200 @@ class WorkflowRun extends EventEmitter {
       scope = { ...this.ctx, output, iteration: st.iteration };
       if (step.wait) await this.afterAgentTurn(step, st);
     }
-    return this.finishStep(step, st, output, scope, t0);
+    const next = await this.finishStep(step, st, output, scope, t0);
+    return step.type === 'human_approval' ? next : this.checkStalls(step, st, output, t0, next, again);
+  }
+
+  // ---- stall detection and the supervisor on call (#41) ---------------------------------------
+  // Stall signals of an agent step's visit (deterministic, no tokens): the same decision N visits in a
+  // row, refused tool calls in a row, a visit far longer than the step's usual one (watchSlowStep). Each
+  // is a `log` warning of kind `stall`; with the supervisor on call, it decides whether the run goes on
+  // to `next` (superviseStall). Not when the run ends there or reaches an escalation gate, where the
+  // supervisor is called anyway (with these signals).
+  async checkStalls(step, st, output, t0, next, again) {
+    const cfg = this.wf.orchestrator?.supervisor?.stall || {};
+    const signals = [];
+    // a /loop iteration repeats its answer by design (polling); a fix round (goto itself) counts
+    const same = Number(cfg.same_output ?? STALL_SAME_OUTPUT);
+    if (!(again && isLooping(step)) && same) {
+      const key = decisionKey(output, step.output_schema);
+      st.repeat = st.repeat?.key === key ? { key, count: st.repeat.count + 1 } : { key, count: 1 };
+      if (st.repeat.count % same === 0) signals.push({ kind: 'same_output', detail: `the same answer ${st.repeat.count} visits in a row: ${key.slice(0, 200)}` });
+    }
+    const tools = st.tools || {};
+    if ((tools.maxStreak || 0) >= DENIAL_WARN) {
+      signals.push({ kind: 'permission_denials', detail: `${tools.denials} tool calls refused in this visit (${tools.maxStreak} in a row), e.g. ${(tools.denied || []).slice(-2).join(' · ')}` });
+    }
+    for (const s of signals) this.recordStall(step.id, s);
+    if (st.slow) signals.push(st.slow); // already reported while the step ran
+    st.slow = null;
+    (st.durations ??= []).push(Date.now() - t0);
+    if (!signals.length || next === 'end' || next === 'fail' || !this.supervisorCfg?.onCall) return next;
+    if (this.wf.steps.find((s) => s.id === next)?.kind === 'escalation') return next;
+    return (await this.superviseStall(step, st, signals, next)) || next;
+  }
+
+  // A visit running `slow_factor` times longer than the step's usual one (the median of its earlier
+  // visits in this run) is reported while it runs; checkStalls hands it to the supervisor at the end.
+  watchSlowStep(step, st) {
+    const factor = Number(this.wf.orchestrator?.supervisor?.stall?.slow_factor ?? STALL_SLOW_FACTOR);
+    const usual = median(st.durations);
+    if (!factor || !usual) return null;
+    const after = Math.max(usual * factor, STALL_SLOW_MIN_MS);
+    const timer = setTimeout(() => {
+      st.slow = { kind: 'slow_step', detail: `running for ${Math.round(after / 6e4)} min, ${factor}× its usual ${Math.round(usual / 6e3) / 10} min` };
+      this.recordStall(step.id, st.slow);
+    }, after);
+    timer.unref?.();
+    return timer;
+  }
+
+  // quiet: already reported by its own warning (a blocked /loop)
+  recordStall(stepId, s, { quiet = false } = {}) {
+    this.stalls.push({ step: stepId, ...s, ts: new Date().toISOString() });
+    if (this.stalls.length > 20) this.stalls.shift();
+    if (!quiet) this.emitEvent('log', { level: 'warn', kind: 'stall', stall: s.kind, step_id: stepId, message: `${stepId} may be stuck (${s.kind}): ${s.detail}` });
+  }
+
+  // Why the supervisor on call is not called on this step (null: it is): off, or a limit reached.
+  onCallBlocked(st) {
+    const cfg = this.supervisorCfg;
+    if (!cfg?.onCall) return 'off';
+    if ((st.onCall?.length || 0) >= cfg.perStep) return `its ${cfg.perStep} interventions on this step are used`;
+    if (this.supervisorUsed >= cfg.total) return `its ${cfg.total} interventions in this run are used`;
+    if (cfg.maxCost != null && this.supervisorCost() >= cfg.maxCost) return `its cost cap for this run (US$ ${cfg.maxCost}) is reached`;
+    return null;
+  }
+
+  supervisorCost() {
+    return [...this.sessions.values()].filter((s) => s.agent === this.supervisorCfg?.agent).reduce((a, s) => a + (s.costUsd || 0), 0);
+  }
+
+  // The agent steps the run went through: where the supervisor may resume it.
+  resumableSteps() {
+    return this.wf.steps.filter((s) => s.type !== 'human_approval' && this.ctx.steps[s.id]?.visits > 0).map((s) => s.id);
+  }
+
+  async askOnCall(step, st, { kind, gate, signals, retryStep, steps, actions }) {
+    const cfg = this.supervisorCfg;
+    this.supervisorUsed++;
+    st.onCall ??= [];
+    this.emitEvent('supervisor.started', {
+      step_id: step.id, kind, error: gate ? 'escalation gate: the run would ask you about a problem' : `stall: ${signals.map((s) => `${s.kind} (${s.detail})`).join('; ')}`,
+    });
+    const handoffs = [...this.handoffNotes.entries()].map(([agent, n]) => ({ agent, ...n }));
+    const history = this.wf.steps.filter((s) => this.ctx.steps[s.id]?.visits > 0).map((s) => ({ step: s.id, visits: this.ctx.steps[s.id].visits, output: this.ctx.steps[s.id].output }));
+    const limits = `Interventions left after this one: ${cfg.perStep - st.onCall.length - 1} on this step, ${cfg.total - this.supervisorUsed} in this run.`
+      + (cfg.maxCost != null ? ` Your cost in this run so far: US$ ${this.supervisorCost().toFixed(2)} of US$ ${cfg.maxCost}.` : '');
+    const prompt = supervisor.onCallPrompt({ wf: this.wf, step, gate, signals, retryStep, steps, history, previous: st.onCall, events: this.recent, handoffs, limits });
+    const d = await this.askSupervisor(step, prompt, supervisor.onCallSchema({ actions, steps, routes: gate?.routes }), st.onCall.length + 1);
+    if (d) st.onCall.push({ action: d.action, explanation: d.explanation });
+    return d;
+  }
+
+  // Every on-call intervention: an event (run chat, watch mode, timeline) and a decision-log row.
+  onCallDecided(step, kind, d, action, { goto = null, route = null, note = null, evidence = '' } = {}) {
+    this.emitEvent('supervisor.decision', {
+      step_id: step.id, kind, action, goto, cause_class: d.cause_class || null, explanation: d.explanation, instruction: d.instruction || null,
+      ...(route != null ? { route } : {}), ...(d.recommendation ? { recommendation: d.recommendation } : {}),
+      ...(d.user_action ? { user_action: d.user_action } : {}), ...(note ? { note } : {}),
+    });
+    const asked = action === 'escalate' || action === 'user_action';
+    this.logDecisions('supervisor', step.id, [[
+      kind === 'escalation' ? 'on-call' : 'stall', `${action}${goto ? ` → ${goto}` : ''}${route != null ? ` → ${route}` : ''}`, d.explanation,
+      evidence, note || (asked ? 'asked the person' : 'applied'),
+    ]]);
+  }
+
+  // Back to an agent step with the supervisor's instruction; false when the step is not allowed.
+  onCallGoto(from, d, target, allowed) {
+    if (!target || !allowed.includes(target)) return false;
+    this.ctx.steps[target].supervisorNote = d.instruction || `The supervisor on call sent the run back here: ${d.explanation}`;
+    this.emitEvent('step.transition', { from: from.id, to: target, when: `supervisor on call: ${d.action}` });
+    return true;
+  }
+
+  // An escalation gate: the supervisor retries or resumes an agent step, routes the gate itself, or
+  // returns its diagnosis for the gate (escalate, an action only the person can take, an invalid
+  // choice, or no decision). Over its limits, the gate opens with its last diagnosis on this gate.
+  async superviseEscalation(step, st, t0) {
+    const blocked = this.onCallBlocked(st);
+    if (blocked) {
+      if (blocked === 'off') return null;
+      this.emitEvent('log', { level: 'warn', message: `Supervisor on call: not called at ${step.id} (${blocked}); asking you.` });
+      return st.lastDiagnosis ? { diagnosis: { ...st.lastDiagnosis, note: `not called again: ${blocked}` } } : null;
+    }
+    const routes = step.choices ? step.choices.filter((c) => !c.feedback_required).map((c) => c.id) : ['approved', 'rejected'];
+    const transitions = (step.transitions || []).map((t) => `- ${t.when} → ${t.goto}${t.status ? ` (the run ends as ${t.status})` : ''}${t.delegate ? ` (${t.delegate.agent} acts first)` : ''}`).join('\n');
+    const steps = this.resumableSteps();
+    const prev = this.ctx.previous_step;
+    const retryStep = steps.includes(prev) ? prev : null;
+    const gate = { message: render(step.message, this.ctx).trim(), routes, transitions };
+    const d = await this.askOnCall(step, st, { kind: 'escalation', gate, signals: this.stalls.slice(-10), retryStep, steps, actions: supervisor.ESCALATION_ACTIONS });
+    if (!d) return null;
+    st.lastDiagnosis = { explanation: d.explanation, recommendation: d.recommendation || null, user_action: d.user_action || null };
+    const evidence = gate.message.slice(0, 300);
+    if (d.action === 'retry' || d.action === 'resume') {
+      const target = d.action === 'retry' ? retryStep : d.step;
+      if (target && steps.includes(target)) {
+        st.output = { supervisor: { action: d.action, goto: target, explanation: d.explanation } };
+        this.onCallDecided(step, 'escalation', d, d.action, { goto: target, evidence });
+        this.emitEvent('step.finished', { step_id: step.id, visit: st.visits, iteration: st.iteration, output: st.output, duration_ms: Date.now() - t0 });
+        this.onCallGoto(step, d, target, steps);
+        return { goto: target };
+      }
+      this.onCallDecided(step, 'escalation', d, 'escalate', { evidence, note: `"${target}" is not a step the run can go back to` });
+      return { diagnosis: st.lastDiagnosis };
+    }
+    if (d.action === 'route') {
+      if (routes.includes(d.route)) {
+        this.onCallDecided(step, 'escalation', d, 'route', { route: d.route, evidence });
+        return { route: step.choices ? d.route : d.route === 'approved' };
+      }
+      this.onCallDecided(step, 'escalation', d, 'escalate', { evidence, note: `"${d.route}" is not an answer of this gate` });
+      return { diagnosis: st.lastDiagnosis };
+    }
+    this.onCallDecided(step, 'escalation', d, d.action === 'user_action' ? 'user_action' : 'escalate', { evidence });
+    return { diagnosis: st.lastDiagnosis };
+  }
+
+  // A stall on an agent step: the run goes on to `next` (continue), the step runs again or the run
+  // resumes from an earlier agent step with an instruction, or the person is asked for an action only
+  // they can take. Returns the step to go to instead of `next`, or null.
+  async superviseStall(step, st, signals, next) {
+    const blocked = this.onCallBlocked(st);
+    if (blocked) {
+      this.emitEvent('log', { level: 'warn', message: `Supervisor on call: not called on the stall of ${step.id} (${blocked}); the run goes on to ${next}.` });
+      return null;
+    }
+    const steps = this.resumableSteps();
+    const d = await this.askOnCall(step, st, { kind: 'stall', signals, retryStep: step.id, steps, actions: supervisor.STALL_ACTIONS });
+    if (!d) return null;
+    const evidence = signals.map((s) => `${s.kind}: ${s.detail}`).join('; ').slice(0, 300);
+    if (d.action === 'retry' || d.action === 'resume') {
+      const target = d.action === 'retry' ? step.id : d.step;
+      if (this.onCallGoto(step, d, target, steps)) {
+        this.onCallDecided(step, 'stall', d, d.action, { goto: target, evidence });
+        return target;
+      }
+      this.onCallDecided(step, 'stall', d, 'continue', { evidence, note: `"${target}" is not a step the run can go back to` });
+      return null;
+    }
+    if (d.action !== 'user_action') {
+      this.onCallDecided(step, 'stall', d, 'continue', { goto: next, evidence });
+      return null;
+    }
+    this.onCallDecided(step, 'stall', d, 'user_action', { evidence });
+    const { answer, feedback } = await this.requestApproval({
+      id: step.id, raw: true,
+      message: `The step "${step.id}" seems stuck and the supervisor on call needs an action only you can take.\n\n${d.explanation}\n\nWhat to do:\n${d.user_action || d.recommendation || '(no action given)'}`,
+      choices: [{ id: 'retry', label: 'Done: run the step again' }, { id: 'continue', label: `Continue to ${next}` }, { id: 'stop', label: 'Stop the run' }],
+      feedback: { label: 'Your instruction for the new attempt (optional)' },
+    });
+    if (answer === 'stop') throw new Error(`Stopped at ${step.id} by the user, at the supervisor's request.`);
+    if (answer !== 'retry') return null;
+    this.onCallGoto(step, { ...d, instruction: feedback || d.instruction }, step.id, [step.id]);
+    return step.id;
   }
 
   // step.finished, the /goal check and the transitions of a step that has its output.
@@ -1106,13 +1338,13 @@ class WorkflowRun extends EventEmitter {
   // gate is not opened (or is withdrawn) and the run takes the recovery route (recoverFromActionError).
   // A check that could not run (`error`) opens the gate anyway; the approved merge checks again.
   // Resolves to the approval ({ answer, feedback }) or { recover: <next step> }.
-  async openGate(step, t0) {
+  async openGate(step, t0, diagnosis = null) {
     const c = step.check;
-    if (!c) return this.requestApproval(step);
+    if (!c) return this.requestApproval(step, diagnosis);
     const failed = (r) => !!c.on_fail && !['passed', 'error'].includes(r.state);
     const first = await this.runCheck(c, step, 'check', this.ctx);
     if (failed(first)) return { recover: await this.gateCheckFailed(step, first, t0) };
-    const pending = this.requestApproval(step);
+    const pending = this.requestApproval(step, diagnosis);
     const id = `a${this.nApproval}`;
     const key = this.mergeKey(c, this.ctx);
     const off = mergeQueue.onMerged(async (m) => {
@@ -1242,6 +1474,7 @@ class WorkflowRun extends EventEmitter {
     const stop = probed ? null : this.checkBlocked(step, st, output);
     if (stop) {
       this.emitEvent('log', { level: 'warn', kind: 'loop_blocked', step_id: step.id, message: `/loop of ${step.id} stopped: ${stop} → ${exhausted}` });
+      this.recordStall(step.id, { kind: 'loop_blocked', detail: stop }, { quiet: true });
       this.logDecisions('orchestrator', step.id, [[
         'loop', `stopped the /loop of ${step.id} → ${exhausted}`,
         `${stop}; polling again (every ${cfg.interval || '1m'}, up to ${cfg.max_duration || 'no limit'}) could not change anything`,
@@ -1329,6 +1562,7 @@ class WorkflowRun extends EventEmitter {
       if (!r.tools || !st.tools) return;
       st.tools.ran += r.tools.ran;
       st.tools.denials += r.tools.denials;
+      st.tools.maxStreak = Math.max(st.tools.maxStreak || 0, r.tools.maxStreak || 0);
       st.tools.denied.push(...r.tools.denied);
     };
     let res = await this.sendToAgent(agentName, prompt, opts);
@@ -1369,14 +1603,21 @@ class WorkflowRun extends EventEmitter {
     if (!cfg || cfg.enabled === false) { this.supervisorCfg = null; return; }
     const providerName = cfg.provider || orch.provider || 'claude';
     const name = this.wf.agents.supervisor ? '_supervisor' : 'supervisor';
+    // Opus 5.5 by default on Claude, unless the workflow names a model
+    const model = cfg.model || orch.model || (providerName === 'claude' ? 'claude-opus-5-5' : undefined);
     // read-only on the run folder: it works on the workflow, never on the user's code
     this.wf.agents[name] = {
-      provider: providerName, model: cfg.model || orch.model, session: 'ephemeral', working_dir: '{{ run_dir }}',
+      provider: providerName, model, ...(cfg.effort ? { effort: cfg.effort } : {}), session: 'ephemeral', working_dir: '{{ run_dir }}',
       skills: ['run-supervisor'], capabilities: { tools: ['read'], web: false }, timeout: cfg.timeout || '10m',
       system_prompt: 'You are the run supervisor of this workflow engine.',
     };
-    this.ctx.agents[name] = { provider: providerName, model: cfg.model || orch.model };
-    this.supervisorCfg = { agent: name, perStep: cfg.max_interventions ?? 2, total: cfg.max_total ?? 6 };
+    this.ctx.agents[name] = { provider: providerName, model };
+    // onCall (#41, `on_call: false` turns it off): escalation gates and stalls call it before the person;
+    // maxCost: what it may spend per run (max_cost_usd), with max_interventions / max_total
+    this.supervisorCfg = {
+      agent: name, perStep: cfg.max_interventions ?? 2, total: cfg.max_total ?? 6,
+      onCall: cfg.on_call !== false, maxCost: cfg.max_cost_usd ?? SUPERVISOR_MAX_COST_USD,
+    };
     this.supervisorUsed = 0;
   }
 
@@ -1398,10 +1639,13 @@ class WorkflowRun extends EventEmitter {
     const decision = await this.askSupervisor(step, prompt, supervisor.DECISION_SCHEMA, st.interventions.length + 1);
     if (!decision) return null;
     st.interventions.push({ action: decision.action, explanation: decision.explanation });
-    const emit = (action, extra = {}) => this.emitEvent('supervisor.decision', {
-      step_id: step.id, action, cause_class: decision.cause_class || null, explanation: decision.explanation,
-      instruction: decision.instruction || null, goto: decision.goto || null, ...extra,
-    });
+    const emit = (action, extra = {}) => {
+      this.emitEvent('supervisor.decision', {
+        step_id: step.id, action, cause_class: decision.cause_class || null, explanation: decision.explanation,
+        instruction: decision.instruction || null, goto: decision.goto || null, ...extra,
+      });
+      this.logDecisions('supervisor', step.id, [['failure', `${action}${action === 'goto' ? ` → ${decision.goto}` : ''}`, decision.explanation, err.message.slice(0, 300), extra.note || 'applied']]);
+    };
     const retry = (instruction) => { st.supervisorNote = instruction || decision.instruction || 'Your previous attempt failed; read the error and try again.'; return { goto: step.id, decision }; };
 
     switch (decision.action) {
@@ -2044,9 +2288,16 @@ class WorkflowRun extends EventEmitter {
   // `local_preview: true` on the step offers Run locally (the service runs the worktree, see
   // src/local-preview.js); it never answers the gate. `diff_base: <ref>` offers Show the diff (the
   // worktree's changes since that ref, in an embedded terminal).
-  requestApproval(step) {
+  // diagnosis: the supervisor on call could not solve the problem of an escalation gate
+  // ({ explanation, recommendation, user_action, note }): it goes under the message and in `supervisor`.
+  requestApproval(step, diagnosis = null) {
     const id = `a${++this.nApproval}`;
-    const message = step.raw ? String(step.message).trim() : render(step.message, this.ctx).trim();
+    let message = step.raw ? String(step.message).trim() : render(step.message, this.ctx).trim();
+    if (diagnosis) {
+      message += `\n\n---\nSupervisor on call${diagnosis.note ? ` (${diagnosis.note})` : ''}: ${diagnosis.explanation}`
+        + `${diagnosis.recommendation ? `\nRecommendation: ${diagnosis.recommendation}` : ''}`
+        + `${diagnosis.user_action ? `\nAction only you can take: ${diagnosis.user_action}` : ''}`;
+    }
     const choices = step.choices ? step.choices.map((c) => ({ id: c.id, label: render(c.label, this.ctx), ...(c.feedback_required ? { feedback_required: true } : {}) })) : null;
     const fb = step.feedback === true ? {} : step.feedback || null;
     const feedback = fb && { label: render(fb.label || 'Anything to add? (optional)', this.ctx), placeholder: render(fb.placeholder || '', this.ctx) };
@@ -2058,6 +2309,7 @@ class WorkflowRun extends EventEmitter {
       ...(workDir ? { work_dir: workDir } : {}),
       ...(step.local_preview && this.localPreview && workDir ? { local_preview: this.localPreview } : {}),
       ...(step.diff_base && workDir ? { diff_base: render(step.diff_base, this.ctx).trim() } : {}),
+      ...(diagnosis ? { supervisor: diagnosis } : {}),
     };
 
     // registered before its event, so runs:active lists it as soon as anyone hears of it

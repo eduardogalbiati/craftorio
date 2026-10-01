@@ -151,11 +151,15 @@ orchestrator:
     repo: "{{ inputs.repo_path }}"
     base: "{{ inputs.base_branch }}"
     remote: false
-  # AI supervisor: called only when a step fails; explains it and picks a recovery the engine
+  # AI supervisor: called when a step fails; explains it and picks a recovery the engine
   # validates (fix the output, retry with an instruction, an allowed goto, or ask a human).
+  # On call: gates with kind: escalation and stalls (the same answer 3 visits in a row, refused
+  # tool calls, a slow step) call it before you are asked; decision gates never do.
   supervisor:
     enabled: true
+    on_call: true
     max_interventions: 2   # per step
+    max_cost_usd: 5        # what the supervisor may spend in one run
   limits:
     max_total_duration: 8h
     max_total_cost_usd: 60
@@ -671,6 +675,7 @@ steps:
 
   - id: test_failed
     type: human_approval
+    kind: escalation   # the supervisor on call tries first
     message: |
       Tests are still failing after 3 rounds of fixes:
       {{ steps.test.output.failure_report }}
@@ -740,6 +745,7 @@ steps:
   # Reached by an infra failure (at once) or a build still blocked after 3 fix rounds.
   - id: build_failed
     type: human_approval
+    kind: escalation   # the supervisor on call tries first
     message: |
       {% if steps.build.output.build_status == 'failed' and steps.build.output.failure_class == 'infra' %}The build failed because of the environment, not the code (no fix round was spent):{% else %}The build is still blocked after 3 rounds of fixes:{% endif %}
       {{ steps.build.output.report }}
@@ -884,6 +890,7 @@ steps:
 
   - id: verify_failed
     type: human_approval
+    kind: escalation   # the supervisor on call tries first
     message: |
       The change still does not do what the task asked after 2 rounds of fixes.
       Claim: {{ steps.verify_change.output.claim }}
@@ -954,6 +961,7 @@ steps:
   # Only when the automation can't go on: the developer is blocked, or 3 resolution rounds ran out.
   - id: merge_blocked
     type: human_approval
+    kind: escalation   # the supervisor on call tries first
     message: |
       Branch `{{ steps.develop.output.branch }}` could not be merged into the local `{{ inputs.base_branch }}`:
       {{ action_error.message if action_error else '' }}

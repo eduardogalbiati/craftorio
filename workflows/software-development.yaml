@@ -182,11 +182,15 @@ orchestrator:
   worktree:
     repo: "{{ inputs.repo_path }}"
     base: "{{ inputs.base_branch }}"
-  # AI supervisor: called only when a step fails; explains it and picks a recovery the engine
+  # AI supervisor: called when a step fails; explains it and picks a recovery the engine
   # validates (fix the output, retry with an instruction, an allowed goto, or ask a human).
+  # On call: gates with kind: escalation and stalls (the same answer 3 visits in a row, refused
+  # tool calls, a slow step) call it before you are asked; decision gates never do.
   supervisor:
     enabled: true
+    on_call: true
     max_interventions: 2   # per step
+    max_cost_usd: 5        # what the supervisor may spend in one run
   limits:
     max_total_duration: 8h
     max_total_cost_usd: 60
@@ -736,6 +740,7 @@ steps:
 
   - id: test_failed
     type: human_approval
+    kind: escalation   # the supervisor on call tries first
     message: |
       Tests are still failing after 3 rounds of fixes:
       {{ steps.test.output.failure_report }}
@@ -805,6 +810,7 @@ steps:
   # Reached by an infra failure (at once) or a build still blocked after 3 fix rounds.
   - id: build_failed
     type: human_approval
+    kind: escalation   # the supervisor on call tries first
     message: |
       {% if steps.build.output.build_status == 'failed' and steps.build.output.failure_class == 'infra' %}The build failed because of the environment, not the code (no fix round was spent):{% else %}The build is still blocked after 3 rounds of fixes:{% endif %}
       {{ steps.build.output.report }}
@@ -939,6 +945,7 @@ steps:
 
   - id: verify_failed
     type: human_approval
+    kind: escalation   # the supervisor on call tries first
     message: |
       The change still does not do what the task asked after 2 rounds of fixes.
       Claim: {{ steps.verify_change.output.claim }}
@@ -1057,6 +1064,7 @@ steps:
   # flaky pipeline re-run, a runner back online), so the gate also offers a fix round.
   - id: ci_failed
     type: human_approval
+    kind: escalation   # the supervisor on call tries first
     message: |
       {% if steps.ci.output.failure_class == 'infra' %}CI on {{ steps.ci.output.pr_url }} cannot run (class: infra, no fix round was spent):
       {{ steps.ci.output.failure_log }}
@@ -1258,6 +1266,7 @@ steps:
   # Reached by an infra/unknown failure, a code failure after 2 fix rounds, or no result in 45m.
   - id: preview_failed
     type: human_approval
+    kind: escalation   # the supervisor on call tries first
     message: |
       The preview of {{ steps.ci.output.pr_url }} did not publish (status: {{ steps.deploy_test.output.preview_status }}, class: {{ steps.deploy_test.output.failure_class or 'unknown' }}).
       {{ steps.deploy_test.output.error_summary or '(no error summary)' }}
@@ -1380,6 +1389,7 @@ steps:
   # review, the platform), a blocked developer, or 2 resolution rounds.
   - id: merge_failed
     type: human_approval
+    kind: escalation   # the supervisor on call tries first
     message: |
       {{ steps.ci.output.pr_url }} was not merged into {{ inputs.base_branch }}:
       {{ action_error.message if action_error else '(no error recorded)' }}
@@ -1448,6 +1458,7 @@ steps:
   # re-runs a production deploy, so checking again only helps after a person re-ran it.
   - id: deploy_failed
     type: human_approval
+    kind: escalation   # the supervisor on call tries first
     message: |
       The production deploy did not succeed (status: {{ steps.deploy_prod.output.deploy_status }}, class: {{ steps.deploy_prod.output.failure_class or 'unknown' }}).
       {{ steps.deploy_prod.output.error_summary or '(no error summary)' }}

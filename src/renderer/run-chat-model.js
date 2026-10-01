@@ -270,7 +270,9 @@
       this.add({
         kind: 'supervisor', ts: ev.ts, stepId: ev.step_id, action: ev.action, goto: ev.goto || null,
         // a failed merge/action: the record says where the run went back to, when and why
-        explanation: String(ev.record || ev.explanation || ''), instruction: String(ev.instruction || ''), causeClass: ev.cause_class || null,
+        // on call (#41): the action only the person can take goes with it
+        explanation: `${ev.record || ev.explanation || ''}${ev.user_action ? `\nAction only you can take: ${ev.user_action}` : ''}`,
+        instruction: String(ev.instruction || ''), causeClass: ev.cause_class || null,
       });
     },
 
