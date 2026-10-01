@@ -561,6 +561,8 @@ class WorkflowRun extends EventEmitter {
     this.gateWaits = {}; // gate step id -> { waits, wait_ms } (summary.timing.gates): owner time, not agent time
     this.preexisting = []; // [{ step, test, file, reason }] (notePreexistingFailures)
     this.stalls = []; // last stall signals [{ step, kind, detail, ts }] (recordStall), for the supervisor on call
+    this.liveTurns = new Map(); // step id -> Set of stop(decision) of its running turns (a slow step's interrupt)
+    this.exhausted = null; // { from, target, detail, refund } of the last transition to an on_exhausted target (noteExhausted)
     this.abort = new AbortController();
     this.seq = 0;
     this.nSession = 0;
@@ -890,12 +892,16 @@ class WorkflowRun extends EventEmitter {
     st.turnRecs = []; // this visit's turn records (turnLog), marked as waste when the visit was blocked
     this.emitEvent('step.started', { step_id: step.id, visit: st.visits, iteration: st.iteration, step_type: step.type || 'agent', agent: stepAgentLabel(step) });
 
+    // a loop that ran out and sent the run here (finishStep handles the targets that are not gates)
+    const exhausted = this.exhausted?.target === step.id ? this.exhausted : null;
+    this.exhausted = null;
     let output, scope;
     if (step.type === 'human_approval') {
-      // `kind: escalation`: the supervisor on call tries to solve the problem before the person is
-      // asked; when it cannot, the gate opens with its diagnosis
-      const oc = step.kind === 'escalation' ? await this.superviseEscalation(step, st, t0) : null;
-      if (oc?.goto) return oc.goto;
+      // `kind: escalation`, or any gate an exhausted loop leads to: the supervisor on call tries to
+      // solve the problem before the person is asked; when it cannot, the gate opens with its
+      // diagnosis. A decision gate stays the person's: the supervisor may only send the run back.
+      const oc = step.kind === 'escalation' || exhausted ? await this.superviseEscalation(step, st, t0, { decision: step.kind !== 'escalation' }) : null;
+      if (oc?.goto) { exhausted?.refund(); return oc.goto; }
       const routed = oc?.route !== undefined;
       const gate = routed ? { answer: oc.route, feedback: '' } : await this.openGate(step, t0, oc?.diagnosis);
       if (gate.recover) return gate.recover;
@@ -927,7 +933,7 @@ class WorkflowRun extends EventEmitter {
           return r.goto;
         }
       } finally {
-        clearTimeout(slow);
+        slow?.stop();
         await this.stopWorktreeProcesses(`step ${step.id}`);
       }
       if (output === undefined) {
@@ -970,27 +976,75 @@ class WorkflowRun extends EventEmitter {
       signals.push({ kind: 'permission_denials', detail: `${tools.denials} tool calls refused in this visit (${tools.maxStreak} in a row), e.g. ${(tools.denied || []).slice(-2).join(' · ')}` });
     }
     for (const s of signals) this.recordStall(step.id, s);
-    if (st.slow) signals.push(st.slow); // already reported while the step ran
+    // already reported while the step ran; not again when the supervisor decided on it then
+    if (st.slow && !st.slow.handled) signals.push(st.slow);
     st.slow = null;
     (st.durations ??= []).push(Date.now() - t0);
     if (!signals.length || next === 'end' || next === 'fail' || !this.supervisorCfg?.onCall) return next;
     if (this.wf.steps.find((s) => s.id === next)?.kind === 'escalation') return next;
+    // an exhausted loop: the supervisor was called on it (finishStep) or is called at the gate (runStep)
+    if (st.exhaustedVisit === st.visits || this.exhausted?.target === next) return next;
     return (await this.superviseStall(step, st, signals, next)) || next;
   }
 
   // A visit running `slow_factor` times longer than the step's usual one (the median of its earlier
-  // visits in this run) is reported while it runs; checkStalls hands it to the supervisor at the end.
+  // visits in this run) is reported while it runs and wakes the supervisor on call right away
+  // (superviseSlow): the step keeps running, or its turn is stopped and the step runs again. After a
+  // `wait`, it is checked again when the visit has run twice as long. stop(): the visit ended.
   watchSlowStep(step, st) {
     const factor = Number(this.wf.orchestrator?.supervisor?.stall?.slow_factor ?? STALL_SLOW_FACTOR);
     const usual = median(st.durations);
     if (!factor || !usual) return null;
-    const after = Math.max(usual * factor, STALL_SLOW_MIN_MS);
-    const timer = setTimeout(() => {
-      st.slow = { kind: 'slow_step', detail: `running for ${Math.round(after / 6e4)} min, ${factor}× its usual ${Math.round(usual / 6e3) / 10} min` };
-      this.recordStall(step.id, st.slow);
-    }, after);
-    timer.unref?.();
-    return timer;
+    const t0 = Date.now();
+    let timer = null;
+    let stopped = false;
+    const arm = (after) => {
+      timer = setTimeout(async () => {
+        const ran = Date.now() - t0;
+        st.slow = { kind: 'slow_step', detail: `running for ${Math.round(ran / 6e4)} min, ${factor}× its usual ${Math.round(usual / 6e3) / 10} min or more` };
+        this.recordStall(step.id, st.slow);
+        const again = await this.superviseSlow(step, st).catch((e) => {
+          this.emitEvent('log', { level: 'error', message: `Supervisor could not decide on the slow step ${step.id}: ${e.message}` });
+          return false;
+        });
+        if (again && !stopped) arm(ran);
+      }, after);
+      timer.unref?.();
+    };
+    arm(Math.max(usual * factor, STALL_SLOW_MIN_MS));
+    return { stop: () => { stopped = true; clearTimeout(timer); } };
+  }
+
+  // The supervisor on call on a step still running far longer than usual: `wait` (true: check again
+  // later), `interrupt` its running turns (the step runs again with the instruction, idleRetry), or
+  // `user_action` (the person is told what to do while the step keeps running). Parallel steps are
+  // not interrupted (their turns' errors do not come back as one), only diagnosed.
+  async superviseSlow(step, st) {
+    if (!this.supervisorCfg?.onCall) return false;
+    const blocked = this.onCallBlocked(st);
+    if (blocked) {
+      this.emitEvent('log', { level: 'warn', message: `Supervisor on call: not called on the slow step ${step.id} (${blocked}); it keeps running.` });
+      return false;
+    }
+    const signal = st.slow;
+    const d = await this.askOnCall(step, st, { kind: 'slow', signals: [{ step: step.id, ...signal }], steps: [], actions: supervisor.SLOW_ACTIONS, running: true });
+    if (!d || st.slow !== signal) return false; // no decision, or the visit ended meanwhile
+    signal.handled = true;
+    const evidence = `${signal.kind}: ${signal.detail}`;
+    if (d.action === 'interrupt') {
+      const turns = step.agents ? [] : [...(this.liveTurns.get(step.id) || [])];
+      const stopped = turns.filter((stop) => stop(d)).length > 0;
+      this.onCallDecided(step, 'stall', d, stopped ? 'interrupt' : 'wait', {
+        goto: stopped ? step.id : null, evidence,
+        ...(stopped ? {} : { note: step.agents ? 'not interrupted: a parallel step is not interrupted' : 'not interrupted: no turn of the step was running' }),
+      });
+      return !stopped;
+    }
+    this.onCallDecided(step, 'stall', d, d.action === 'user_action' ? 'user_action' : 'wait', { evidence });
+    if (d.action === 'user_action') {
+      this.emitEvent('log', { level: 'warn', kind: 'user_action', step_id: step.id, message: `The supervisor on call needs you while ${step.id} keeps running: ${d.user_action || d.recommendation || d.explanation}` });
+    }
+    return true;
   }
 
   // quiet: already reported by its own warning (a blocked /loop)
@@ -1019,7 +1073,7 @@ class WorkflowRun extends EventEmitter {
     return this.wf.steps.filter((s) => s.type !== 'human_approval' && this.ctx.steps[s.id]?.visits > 0).map((s) => s.id);
   }
 
-  async askOnCall(step, st, { kind, gate, signals, retryStep, steps, actions }) {
+  async askOnCall(step, st, { kind, gate, signals, retryStep, steps, actions, running = false }) {
     const cfg = this.supervisorCfg;
     this.supervisorUsed++;
     st.onCall ??= [];
@@ -1030,7 +1084,7 @@ class WorkflowRun extends EventEmitter {
     const history = this.wf.steps.filter((s) => this.ctx.steps[s.id]?.visits > 0).map((s) => ({ step: s.id, visits: this.ctx.steps[s.id].visits, output: this.ctx.steps[s.id].output }));
     const limits = `Interventions left after this one: ${cfg.perStep - st.onCall.length - 1} on this step, ${cfg.total - this.supervisorUsed} in this run.`
       + (cfg.maxCost != null ? ` Your cost in this run so far: US$ ${this.supervisorCost().toFixed(2)} of US$ ${cfg.maxCost}.` : '');
-    const prompt = supervisor.onCallPrompt({ wf: this.wf, step, gate, signals, retryStep, steps, history, previous: st.onCall, events: this.recent, handoffs, limits });
+    const prompt = supervisor.onCallPrompt({ wf: this.wf, step, gate, signals, retryStep, steps, history, previous: st.onCall, events: this.recent, handoffs, limits, running });
     const d = await this.askSupervisor(step, prompt, supervisor.onCallSchema({ actions, steps, routes: gate?.routes }), st.onCall.length + 1);
     if (d) st.onCall.push({ action: d.action, explanation: d.explanation });
     return d;
@@ -1061,20 +1115,22 @@ class WorkflowRun extends EventEmitter {
   // An escalation gate: the supervisor retries or resumes an agent step, routes the gate itself, or
   // returns its diagnosis for the gate (escalate, an action only the person can take, an invalid
   // choice, or no decision). Over its limits, the gate opens with its last diagnosis on this gate.
-  async superviseEscalation(step, st, t0) {
+  // decision: a decision gate an exhausted loop led to: the supervisor never answers it (no `route`).
+  async superviseEscalation(step, st, t0, { decision = false } = {}) {
     const blocked = this.onCallBlocked(st);
     if (blocked) {
       if (blocked === 'off') return null;
       this.emitEvent('log', { level: 'warn', message: `Supervisor on call: not called at ${step.id} (${blocked}); asking you.` });
       return st.lastDiagnosis ? { diagnosis: { ...st.lastDiagnosis, note: `not called again: ${blocked}` } } : null;
     }
-    const routes = step.choices ? step.choices.filter((c) => !c.feedback_required).map((c) => c.id) : ['approved', 'rejected'];
+    const routes = decision ? [] : step.choices ? step.choices.filter((c) => !c.feedback_required).map((c) => c.id) : ['approved', 'rejected'];
     const transitions = (step.transitions || []).map((t) => `- ${t.when} → ${t.goto}${t.status ? ` (the run ends as ${t.status})` : ''}${t.delegate ? ` (${t.delegate.agent} acts first)` : ''}`).join('\n');
     const steps = this.resumableSteps();
     const prev = this.ctx.previous_step;
     const retryStep = steps.includes(prev) ? prev : null;
-    const gate = { message: render(step.message, this.ctx).trim(), routes, transitions };
-    const d = await this.askOnCall(step, st, { kind: 'escalation', gate, signals: this.stalls.slice(-10), retryStep, steps, actions: supervisor.ESCALATION_ACTIONS });
+    const gate = { message: render(step.message, this.ctx).trim(), routes, transitions, decision };
+    const actions = decision ? supervisor.ESCALATION_ACTIONS.filter((a) => a !== 'route') : supervisor.ESCALATION_ACTIONS;
+    const d = await this.askOnCall(step, st, { kind: 'escalation', gate, signals: this.stalls.slice(-10), retryStep, steps, actions });
     if (!d) return null;
     st.lastDiagnosis = { explanation: d.explanation, recommendation: d.recommendation || null, user_action: d.user_action || null };
     const evidence = gate.message.slice(0, 300);
@@ -1205,6 +1261,10 @@ class WorkflowRun extends EventEmitter {
       }
       if (delegated) st.blocked = null; // another agent acted: the next check is a fresh start
       if (target === step.id && isLooping(step)) target = await this.loopWait(step, output, { probed: !!extra.probe });
+      // a loop ran out: the supervisor on call first (a gate target: when the gate runs, runStep)
+      if (this.exhausted?.target === target && this.wf.steps.find((s) => s.id === target)?.type !== 'human_approval') {
+        target = await this.superviseExhausted(step, st, target);
+      }
       // the delegation result goes to the next step (e.g. babysitter replies on the PR with the hash)
       if (delegated && this.ctx.steps[target]) this.ctx.steps[target].delegate_result = delegated;
       const ends = target === 'end' && t.status && t.status !== 'success';
@@ -1265,7 +1325,8 @@ class WorkflowRun extends EventEmitter {
 
     if (action === 'poll') {
       stats.polls++;
-      const next = await this.loopWait(step, st.output, { probed: true });
+      let next = await this.loopWait(step, st.output, { probed: true });
+      if (this.exhausted?.target === next && this.wf.steps.find((s) => s.id === next)?.type !== 'human_approval') next = await this.superviseExhausted(step, st, next);
       if (next !== step.id) this.emitEvent('step.transition', { from: step.id, to: next, when: `/loop limit (${loopConfig(step).max_duration})` });
       return next;
     }
@@ -1446,6 +1507,7 @@ class WorkflowRun extends EventEmitter {
       if (this.counters[key] > limit(t.max_visits)) {
         target = t.on_exhausted || 'fail';
         this.emitEvent('log', { level: 'warn', message: `max_visits (${t.max_visits}) reached at ${key} → ${target}` });
+        this.noteExhausted(step, target, `max_visits (${t.max_visits}) reached at ${key}`, () => { this.counters[key]--; });
       }
     }
     if (t.loop) {
@@ -1454,6 +1516,7 @@ class WorkflowRun extends EventEmitter {
       if (this.loops[name] > limit(t.loop.max_iterations)) {
         target = t.loop.on_exhausted || 'fail';
         this.emitEvent('log', { level: 'warn', message: `loop "${name}" reached ${t.loop.max_iterations} iterations → ${target}` });
+        this.noteExhausted(step, target, `loop "${name}" reached ${t.loop.max_iterations} iterations`, () => { this.loops[name]--; });
       } else {
         this.ctx.loop = { name, iteration: this.loops[name] };
       }
@@ -1461,20 +1524,45 @@ class WorkflowRun extends EventEmitter {
     return target;
   }
 
+  // A transition goes to an on_exhausted target: the supervisor on call is asked before the run goes
+  // there (superviseExhausted, or superviseEscalation at a gate). refund(): one more round, when it
+  // sends the run back to the agents.
+  noteExhausted(step, target, detail, refund) {
+    this.exhausted = { from: step.id, target, detail, refund };
+    this.recordStall(step.id, { kind: 'loop_exhausted', detail: `${detail} → ${target}` }, { quiet: true });
+  }
+
+  // A loop ran out towards a step, `end` or `fail`: the supervisor on call decides whether the run
+  // goes there (continue) or back to the agents with an instruction (retry/resume, one more round).
+  async superviseExhausted(step, st, target) {
+    const ex = this.exhausted;
+    this.exhausted = null;
+    if (!this.supervisorCfg?.onCall) return target;
+    st.exhaustedVisit = st.visits; // checkStalls does not call it again on this visit
+    const next = await this.superviseStall(step, st, [{ step: step.id, kind: 'loop_exhausted', detail: `${ex.detail} → ${target}` }], target);
+    if (!next) return target;
+    ex.refund();
+    return next;
+  }
+
   // probed: the iteration was the engine's own check (`wait:`), not an agent turn, so it cannot be "blocked"
   async loopWait(step, output, { probed = false } = {}) {
     const st = this.ctx.steps[step.id];
     const cfg = loopConfig(step);
     const exhausted = step.goal?.on_exhausted || cfg.on_exhausted || 'fail';
+    // the supervisor sent the run back to the /loop: a fresh start (duration, blocked check)
+    const refund = () => { st.loopStartedAt = Date.now(); st.blocked = null; };
     const maxDur = parseDuration(cfg.max_duration, null);
     if (maxDur && Date.now() - st.loopStartedAt > maxDur) {
       this.emitEvent('log', { level: 'warn', message: `/loop of ${step.id} exceeded ${cfg.max_duration} without meeting the /goal → ${exhausted}` });
+      this.noteExhausted(step, exhausted, `/loop exceeded ${cfg.max_duration} without meeting the /goal`, refund);
       return exhausted;
     }
     const stop = probed ? null : this.checkBlocked(step, st, output);
     if (stop) {
       this.emitEvent('log', { level: 'warn', kind: 'loop_blocked', step_id: step.id, message: `/loop of ${step.id} stopped: ${stop} → ${exhausted}` });
       this.recordStall(step.id, { kind: 'loop_blocked', detail: stop }, { quiet: true });
+      this.noteExhausted(step, exhausted, `/loop stopped: ${stop}`, refund);
       this.logDecisions('orchestrator', step.id, [[
         'loop', `stopped the /loop of ${step.id} → ${exhausted}`,
         `${stop}; polling again (every ${cfg.interval || '1m'}, up to ${cfg.max_duration || 'no limit'}) could not change anything`,
@@ -1720,7 +1808,9 @@ class WorkflowRun extends EventEmitter {
   // A turn the supervisor interrupted: the step runs again with its instruction (no second supervisor call).
   idleRetry(step, st, e) {
     st.supervisorNote = e.idleInterrupt.instruction
-      || `Your previous attempt was stopped after waiting with no output on: ${e.idleInterrupt.command}. Run long commands in the foreground with a timeout and read their exit code.`;
+      || (e.idleInterrupt.command
+        ? `Your previous attempt was stopped after waiting with no output on: ${e.idleInterrupt.command}. Run long commands in the foreground with a timeout and read their exit code.`
+        : 'Your previous attempt was stopped because it ran far longer than this step usually takes. Check what you were waiting on, and run long commands in the foreground with a timeout.');
     return { goto: step.id, decision: { action: 'retry', explanation: e.message } };
   }
 
@@ -2144,6 +2234,15 @@ class WorkflowRun extends EventEmitter {
         turnAbort.abort();
         return true;
       };
+      // the supervisor on call stopping a step that runs far longer than usual (superviseSlow)
+      const live = stepId && this.ctx.steps[stepId] ? this.liveTurns.get(stepId) || this.liveTurns.set(stepId, new Set()).get(stepId) : null;
+      const stopSlow = (decision) => {
+        if (timed) return false;
+        interrupted = { ...decision, slow: true };
+        turnAbort.abort();
+        return true;
+      };
+      live?.add(stopSlow);
       const idle = new IdleWatch({ idleMs: this.idleWarnMs });
       const idleTimer = this.idleWarnMs > 0 && setInterval(() => this.warnIdle(idle, { session, agentName, stepId, turn, interrupt }), Math.min(30e3, Math.max(50, this.idleWarnMs / 4)));
       idleTimer?.unref?.();
@@ -2151,6 +2250,7 @@ class WorkflowRun extends EventEmitter {
       const timing = () => {
         if (timed) return timed;
         this.abort.signal.removeEventListener('abort', cancel);
+        live?.delete(stopSlow);
         clearInterval(idleTimer);
         this.addStepTiming(stepId, (timed = idle.finish()));
         return timed;
@@ -2192,6 +2292,12 @@ class WorkflowRun extends EventEmitter {
         session.activeMs += Date.now() - t0;
         lastErr = e;
         if (this.abort.signal.aborted) break;
+        if (interrupted?.slow) {
+          lastErr = Object.assign(new Error(`[${agentName}] turn interrupted by the supervisor on call: ${stepId} ran far longer than usual`),
+            { idleInterrupt: { instruction: interrupted.instruction || null, command: null } });
+          this.emitEvent('log', { level: 'warn', kind: 'agent_interrupted', step_id: stepId, agent: agentName, message: lastErr.message });
+          break;
+        }
         if (interrupted) {
           const stall = idle.lastStall;
           lastErr = Object.assign(new Error(`[${agentName}] turn interrupted by the supervisor: no output while waiting on ${stall?.tool || 'a tool'}: ${stall?.command || '?'}`),

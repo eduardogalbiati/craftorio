@@ -129,8 +129,16 @@ same features for users; this is the implementer's summary.
   `slow_factor`× the median of its earlier visits (min 10 min), a blocked /loop. Each is a `log`
   warn `kind: stall` (blocked loops keep their `loop_blocked` warn); `superviseStall` decides
   `continue` / `retry` / `resume` / `user_action` (a raw gate: retry, continue, stop), except when
-  the next step is `end`/`fail` or an escalation gate. Every intervention: `supervisor.decision`
-  (`kind: escalation | stall`) and a `supervisor` row in `decisions.tsv`.
+  the next step is `end`/`fail` or an escalation gate. A slow visit wakes it at the threshold
+  (`superviseSlow`, `SLOW_ACTIONS`): `wait` (checked again at twice the run time), `interrupt`
+  (stops the step's running turns via `liveTurns`, the step runs again with the instruction;
+  not on parallel steps) or `user_action` (a warn `kind: user_action`, the step keeps running).
+  Exhausted loops (`noteExhausted` in `applyCounters`/`loopWait`): before an `on_exhausted`
+  target that is a step, `end` or `fail`, `superviseExhausted` (stall signal `loop_exhausted`);
+  at any gate target, `superviseEscalation`, where a decision gate gets no `route` (only
+  retry/resume/user_action/escalate). Sending the run back grants one more round (`refund`).
+  Every intervention: `supervisor.decision` (`kind: escalation | stall`) and a `supervisor` row
+  in `decisions.tsv`.
 - Refused tool calls: `isPermissionDenial` (providers.js) spots allowlist refusals in the stream
   ("requires approval"); 5+ in a row in one turn → `log` warn with `kind: permission_denials`
   (supervisor timeline, run chat). A `/loop` stops after `loop.max_blocked` (default 3, 0 = off)

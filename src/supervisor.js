@@ -83,6 +83,8 @@ const onCallSchema = ({ actions, steps = [], routes = [] }) => ({
 });
 const ESCALATION_ACTIONS = ['escalate', 'retry', 'resume', 'route', 'user_action'];
 const STALL_ACTIONS = ['continue', 'retry', 'resume', 'user_action'];
+// A step still running far longer than usual: it keeps running, or its turn is stopped and run again.
+const SLOW_ACTIONS = ['wait', 'interrupt', 'user_action'];
 
 // Analysis asked for by a person.
 const ANALYSIS_SCHEMA = {
@@ -195,29 +197,37 @@ function idlePrompt({ wf, step, agent, idle, events, handoffs }) {
  * Prompt for the supervisor on call (engine-side): the run would stop to ask the person about a
  * problem (an escalation gate) or the engine detected a stall (`signals`). It tries to solve it first.
  * history: [{ step, visits, output }] of the steps the run went through.
+ * gate.decision: a decision gate reached because a loop ran out (no `route`: only the person answers it).
+ * running: the step is still running (a slow step): wait, interrupt its turn, or ask the person.
  */
-function onCallPrompt({ wf, step, gate, signals, retryStep, steps, history, previous, events, handoffs, limits }) {
+function onCallPrompt({ wf, step, gate, signals, retryStep, steps, history, previous, events, handoffs, limits, running }) {
   const routes = gate?.routes || [];
+  let intro = `The engine detected that the step "${step.id}" of the workflow "${wf.metadata?.name}" may be stuck. You are the supervisor on call: decide whether the run goes on as planned or how to unblock it, following the run-supervisor skill.`;
+  if (gate?.decision) intro = `The workflow "${wf.metadata?.name}" reached the human gate "${step.id}" because a loop ran out of iterations. It is a decision gate: only the person answers it, but you are the supervisor on call: if the evidence shows the agents can still solve the problem, send the run back to them first, following the run-supervisor skill. Otherwise the gate opens for the person with your diagnosis.`;
+  else if (gate) intro = `The workflow "${wf.metadata?.name}" reached the escalation gate "${step.id}": it would stop and ask the person about a problem. You are the supervisor on call: try to solve it first, following the run-supervisor skill. The person is only asked when you cannot, and then with your diagnosis.`;
+  else if (running) intro = `The step "${step.id}" of the workflow "${wf.metadata?.name}" is still running, far longer than its usual duration. You are the supervisor on call: decide whether it keeps running or its turn is stopped, following the run-supervisor skill.`;
+  let first = '- continue: nothing is stuck (e.g. the same answer is expected); the run goes on as planned.';
+  if (gate) first = '- escalate: you cannot solve it; the gate opens for the person with your `explanation` as the diagnosis and your `recommendation`.';
+  else if (running) first = '- wait: the step can plausibly still finish (a long build, a large change); it keeps running and you may be asked again later.';
   return [
-    gate
-      ? `The workflow "${wf.metadata?.name}" reached the escalation gate "${step.id}": it would stop and ask the person about a problem. You are the supervisor on call: try to solve it first, following the run-supervisor skill. The person is only asked when you cannot, and then with your diagnosis.`
-      : `The engine detected that the step "${step.id}" of the workflow "${wf.metadata?.name}" may be stuck. You are the supervisor on call: decide whether the run goes on as planned or how to unblock it, following the run-supervisor skill.`,
+    intro,
     wf.metadata?.description ? `Workflow: ${wf.metadata.description}` : '',
     gate ? `\n## What the gate would ask the person\n${clip(gate.message, 4000)}\n\nThe gate's answers and where they lead:\n${gate.transitions || '(none)'}` : '',
-    signals?.length ? `\n## Stall signals (deterministic, from the engine)\n${signals.map((s) => `- ${s.step}: ${s.kind}: ${s.detail}`).join('\n')}` : '',
+    signals?.length ? `\n## Stall signals (deterministic, from the engine)\n${signals.map((s) => `- ${s.step || step.id}: ${s.kind}: ${s.detail}`).join('\n')}` : '',
     history?.length ? `\n## Step history (visits and latest output)\n${history.map((h) => `- ${h.step} (${h.visits} visit${h.visits === 1 ? '' : 's'}): ${clip(JSON.stringify(h.output), 500)}`).join('\n')}` : '',
     previous?.length ? `\n## Your previous interventions here\n${previous.map((p, i) => `${i + 1}. ${p.action}: ${p.explanation}`).join('\n')}` : '',
     handoffs?.length ? `\n## The agents' handoff notes (their own summary of where they are, latest turn)\n${handoffs.map((h) => `### ${h.agent} (step ${h.step}, visit ${h.visit})\n${clip(h.text, 3000)}`).join('\n\n')}` : '',
     `\n## Recent timeline\n${timeline(events, 60) || '(empty)'}`,
     limits ? `\n## Your limits\n${limits}` : '',
     '\n## Your options (the engine validates them)',
-    gate
-      ? '- escalate: you cannot solve it; the gate opens for the person with your `explanation` as the diagnosis and your `recommendation`.'
-      : '- continue: nothing is stuck (e.g. the same answer is expected); the run goes on as planned.',
-    retryStep ? `- retry: run "${retryStep}" again; \`instruction\` is added to its agent's prompt.` : '',
-    `- resume: continue at one of these steps: ${steps.length ? steps.join(', ') : '(none)'}; \`step\` names it and \`instruction\` is added to its agent's prompt.`,
+    first,
+    running ? '- interrupt: the step cannot end on its own (a hung process, a wait that never ends, an agent going in circles); the engine stops its running turn and runs the step again with `instruction` added to its agent\'s prompt.' : '',
+    retryStep && !running ? `- retry: run "${retryStep}" again; \`instruction\` is added to its agent's prompt.` : '',
+    running ? '' : `- resume: continue at one of these steps: ${steps.length ? steps.join(', ') : '(none)'}; \`step\` names it and \`instruction\` is added to its agent's prompt.`,
     gate && routes.length ? `- route: answer the gate yourself with \`route\` (one of ${routes.join(', ')}), only when the evidence shows that answer is what the problem calls for (e.g. the failure is not caused by the run's change).` : '',
-    '- user_action: the fix is outside the run\'s permissions (a process to stop, a permission to grant, a login): put the exact command or step the person must take in `user_action`; the person is asked with it.',
+    running
+      ? '- user_action: only the person can unblock it (a process to stop, a permission to grant, a login): put the exact command or step in `user_action`; the person is told while the step keeps running.'
+      : '- user_action: the fix is outside the run\'s permissions (a process to stop, a permission to grant, a login): put the exact command or step the person must take in `user_action`; the person is asked with it.',
     'Rules: never prescribe a code fix and never edit code; a problem in the code goes back to the workflow\'s agents (retry/resume) with the evidence and your hypotheses in `instruction`. A problem in how an agent works (refused commands, a wrong tool, a wait that never ends) gets a concrete instruction (e.g. call `gh` directly in the Bash tool).',
     'Explain in the language of the workflow\'s task, for the person running it.',
   ].filter(Boolean).join('\n');
@@ -480,6 +490,7 @@ module.exports = {
   SESSIONS_REPORT_SCHEMA,
   sessionsReportMarkdown,
   skippedGate,
+  SLOW_ACTIONS,
   STALL_ACTIONS,
   supervisorConfig,
   timeline,

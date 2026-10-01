@@ -66,7 +66,11 @@ calls, a step far slower than usual). Try to solve it first:
 - `user_action` when the fix is outside the run's permissions: write the exact command or setting
   the person must change.
 - `escalate` (gate) or `continue` (stall) otherwise; your `explanation` and `recommendation` are
-  what the person reads. You are never called on a decision gate (scope, merge, publish).
+  what the person reads. You never answer a decision gate (scope, merge, publish): when an
+  exhausted loop leads to one, you may only send the run back to the agents or escalate.
+- A step still running far longer than usual: `wait` when it can plausibly finish, `interrupt`
+  (with an `instruction`) when it cannot end on its own, `user_action` when only the person can
+  unblock it (e.g. stop an orphaned process); the step keeps running meanwhile.
 
 ## Explain for a person
 
