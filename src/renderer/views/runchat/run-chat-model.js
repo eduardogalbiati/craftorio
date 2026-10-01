@@ -39,7 +39,7 @@
     return { prose: prose.trim(), json, decisions };
   }
 
-  const displayName = typeof module === 'object' && module.exports ? require('./display-name.js').displayName : root.displayName;
+  const displayName = typeof module === 'object' && module.exports ? require('../../display-name.js').displayName : root.displayName;
   // what the run chat shows about a session's agent (the hover card): recorded in the events,
   // so a replayed run shows what was actually used
   const sessionInfo = (s) => ({ agent: s.agent, provider: s.provider, model: s.model, effort: s.effort || null, mode: s.mode || null });
