@@ -932,6 +932,22 @@ span.po-applied { cursor: default; }
 .po-draft-actions { flex-wrap: wrap; gap: 6px; margin-top: 4px; }
 .po-questions { font-weight: 600; }
 #po-note { margin: 0; }
+/* Split what is too big (#124) and epics (#138): backlog-po-proposals.js */
+.po-split-title { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.po-children { margin: 0; padding-left: 18px; display: grid; gap: 6px; }
+.po-child-head { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.po-child-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.po-tasks { margin: 2px 0 0; padding-left: 14px; list-style: none; display: grid; gap: 1px; }
+.po-tasks li { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.po-edit { border: 1px solid var(--border); border-radius: 8px; background: var(--panel-2); padding: 10px; display: grid; gap: 8px; }
+.po-edit .field { margin-bottom: 0; }
+.po-edit-child { display: grid; gap: 4px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+.po-edit-child input[type="text"] { width: 100%; }
+.po-edit-num { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); }
+.po-edit-num input { width: 52px; }
+.po-edit-tasks { display: grid; gap: 4px; max-height: 260px; overflow: auto; }
+.po-edit-task { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; }
+.po-edit-task > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .toast {
   position: fixed; right: 18px; bottom: 18px; z-index: 30; max-width: 380px; display: flex; flex-direction: column; gap: 3px;
@@ -1239,6 +1255,24 @@ button.bl-label { font-family: inherit; background: none; cursor: pointer; }
 .bl-enrich { cursor: pointer; border: 1px solid var(--accent); color: var(--accent); background: transparent; }
 .bl-card-actions { display: flex; justify-content: flex-end; }
 .bl-skipped { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+/* Epics (#138): the card badge, the filter, the Epics view (backlog.js renderEpics) */
+.bl-epic { border: 1px solid #8B5CF6; color: #A78BFA; background: transparent; cursor: pointer; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: inherit; font-size: 11px; }
+.bl-epic.on { background: rgba(139, 92, 246, 0.18); }
+#bl-epic { width: auto; flex: none; max-width: 220px; }
+#bl-epic.active { border-color: #8B5CF6; }
+.bl-epics { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 10px; }
+.bl-epic-card { border: 1px solid var(--border); border-left: 3px solid #8B5CF6; border-radius: 10px; padding: 8px 12px; background: var(--panel); display: grid; gap: 6px; align-content: start; }
+.bl-epic-card.bl-epic-none { border-left-color: var(--border); }
+.bl-epic-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.bl-epic-title { font-weight: 700; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); text-decoration: none; }
+.bl-epic-members { margin: 0; padding: 0; list-style: none; display: grid; gap: 3px; font-size: 13px; }
+.bl-epic-member { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.bl-epic-member-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); text-decoration: none; }
+.bl-epic-member-title:hover { text-decoration: underline; }
+.bl-epics-bar { margin-bottom: 10px; }
+.bl-epic-head .bl-tasks { width: 110px; flex-shrink: 0; }
+.bl-epic-member > .badge, .bl-epic-member > span { flex-shrink: 0; white-space: nowrap; }
+.rm-by-epic { margin-right: 6px; }
 /* Backlog › Roadmap (backlog-roadmap.js) */
 .bl-roadmap { color: var(--accent); }
 .rm { display: grid; gap: 10px; }

@@ -6,6 +6,9 @@
 // stores a pasted or dropped file; po:file files the draft on the owner's click (create, append to
 // an existing issue's body, or comment), then syncs the backlog; po:discard drops it. `preview`
 // and MULTIAGENT_SIMULATION_ONLY only preview: never gh/glab.
+// po:file's `epic`: a new issue joins its draft's epic (#138). po:split files a proposed split of an
+// issue too big for one run (#124); po:epic creates an epic or places issues in one (#138). Both
+// run only on the owner's click, preview like po:file, and sync the backlog after a real write.
 
 const path = require('path');
 const agents = require('../../agents');
@@ -20,6 +23,24 @@ const { resolveCommand } = require('../../engine/providers');
 
 module.exports = (ctx) => {
   const project = (projectId) => path.basename(String(projectId));
+  // The synced backlog, its platform and the project: what every write to the platform needs.
+  const target = (projectId) => {
+    const id = project(projectId);
+    const data = backlog.readBacklog(ctx.ws.backlog, id);
+    if (!data) throw new Error('Sync the backlog first: the Product Owner writes to the synced repository.');
+    const p = projects.readProject(ctx.ws.projects, id);
+    const platform = data.platform || workspace.readSettings(ctx.ws).backlogPlatform || backlog.DEFAULT_PLATFORM;
+    return { id, data, p, platform, repo: data.repo || p?.repo };
+  };
+  // After a real write the Backlog shows the new or updated issues right away.
+  const resync = async (res, { id, p, platform }) => {
+    if (res.preview) return res;
+    try {
+      return { ...res, backlog: ctx.withIssueRuns(await backlog.syncBacklog({ dir: ctx.ws.backlog, project: p, platform })) };
+    } catch (e) {
+      return { ...res, syncError: e.message, backlog: ctx.withIssueRuns(backlog.readBacklog(ctx.ws.backlog, id)) };
+    }
+  };
   return [
     {
       channel: 'po:ask',
@@ -70,32 +91,48 @@ module.exports = (ctx) => {
     {
       channel: 'po:file',
       method: 'fileProductOwnerDraft',
-      params: ['projectId', 'at', 'action', 'number', 'preview'],
-      fn: async ({ projectId, at, action, number, preview }) => {
-        const id = project(projectId);
-        const data = backlog.readBacklog(ctx.ws.backlog, id);
-        if (!data) throw new Error('Sync the backlog first: the Product Owner files to the synced repository.');
-        const p = projects.readProject(ctx.ws.projects, id);
-        const platform = data.platform || workspace.readSettings(ctx.ws).backlogPlatform || backlog.DEFAULT_PLATFORM;
+      params: ['projectId', 'at', 'action', 'number', 'preview', 'epic'],
+      fn: async ({ projectId, at, action, number, preview, epic }) => {
+        const t = target(projectId);
         const res = await productOwner.fileDraft({
           backlogDir: ctx.ws.backlog,
-          projectId: id,
+          projectId: t.id,
           runsDir: ctx.ws.runs,
           at,
           action,
           number,
           preview: !!preview || simulation.simulationOnly(),
-          platform,
-          repo: data.repo || p?.repo,
-          cached: (data.issues || []).find((i) => i.number === Number(number)) || null,
+          platform: t.platform,
+          repo: t.repo,
+          cached: (t.data.issues || []).find((i) => i.number === Number(number)) || null,
+          placeEpic: !!epic,
+          epicList: t.data.epics || [],
         });
-        if (res.preview) return res;
-        // the Backlog shows the new or updated issue right away
-        try {
-          return { ...res, backlog: ctx.withIssueRuns(await backlog.syncBacklog({ dir: ctx.ws.backlog, project: p, platform })) };
-        } catch (e) {
-          return { ...res, syncError: e.message, backlog: ctx.withIssueRuns(backlog.readBacklog(ctx.ws.backlog, id)) };
-        }
+        return resync(res, t);
+      },
+    },
+    {
+      channel: 'po:split',
+      method: 'splitProductOwnerIssue',
+      params: ['projectId', 'at', 'split', 'preview'],
+      fn: async ({ projectId, at, split, preview }) => {
+        const t = target(projectId);
+        const res = await productOwner.applySplit({
+          backlogDir: ctx.ws.backlog, projectId: t.id, runsDir: ctx.ws.runs, at, split, preview: !!preview || simulation.simulationOnly(), platform: t.platform, repo: t.repo, data: t.data,
+        });
+        return resync(res, t);
+      },
+    },
+    {
+      channel: 'po:epic',
+      method: 'applyProductOwnerEpic',
+      params: ['projectId', 'at', 'key', 'epic', 'issues', 'preview'],
+      fn: async ({ projectId, at, key, epic, issues, preview }) => {
+        const t = target(projectId);
+        const res = await productOwner.applyEpicProposal({
+          backlogDir: ctx.ws.backlog, projectId: t.id, runsDir: ctx.ws.runs, at, key, epic, issues, preview: !!preview || simulation.simulationOnly(), platform: t.platform, repo: t.repo, data: t.data,
+        });
+        return resync(res, t);
       },
     },
     { channel: 'po:history', method: 'productOwnerHistory', params: ['projectId'], fn: ({ projectId }) => productOwner.readConversation(ctx.ws.backlog, project(projectId)) },

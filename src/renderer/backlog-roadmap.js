@@ -12,6 +12,8 @@
 // roadmap pauses; out of order after a confirmation). A Product Owner proposal (#105, JSON) is added or replaces the
 // roadmap as planned; the plain queue's items can be moved in. Every edit saves the whole list of
 // stages (api.saveRoadmap); the service keeps each item's runs by id.
+// "Group by epic" (#138, shown when the backlog has epics) lists the items under their issues' epics,
+// each with its stage and the epic's items done.
 // Rendered into #bl-list by backlog.js (mode 'roadmap'), which passes `ctx`
 // ({ projectId, setData, render, setError }). Uses app.js globals (esc, state, errMsg, devMode, confirmDialog).
 /* global api */
@@ -55,6 +57,9 @@
   let editing = null; // the item whose Edit form is open
   let adding = false; // its "add input" name + value pair is shown
   let noteEditing = null; // the stage whose note is being edited
+  // #138: the items grouped by their issues' epics instead of by stage (remembered)
+  const BY_EPIC_KEY = 'multiagent.roadmapByEpic';
+  let byEpic = (() => { try { return localStorage.getItem(BY_EPIC_KEY) === '1'; } catch { return false; } })();
 
   /** The badge of an issue card: its place in the roadmap ("Roadmap: stage 2"). */
   function badge(i) {
@@ -237,10 +242,35 @@
         <textarea id="rm-proposal" rows="5" class="mono small" spellcheck="false"></textarea>
         <div class="modal-actions"><button class="btn sm ghost" type="button" data-rm="replace">Replace the roadmap</button><button class="btn sm primary" type="button" data-rm="propose">Add to roadmap</button></div>
       </details>`;
-    const stages = r.stages.length
-      ? r.stages.map((s, n) => stageHtml(s, n, r.stages.length, current, byNumber, scoped, r)).join('')
-      : '<div class="empty-state"><b>No roadmap yet</b><p class="muted">Select issues, Assign workflow…, then Add to roadmap: each addition is a stage that starts when the previous one has finished and merged.</p></div>';
-    return `<div class="rm">${bar}${queued}${stages}${importBox}</div>`;
+    const epics = data?.epics || [];
+    const grouped = byEpic && epics.length > 0 && r.stages.length > 0;
+    const toggle = epics.length && r.stages.length ? `<label class="check small rm-by-epic" title="Show the roadmap's items under their issues' epics (the stages keep their order)"><input type="checkbox" data-rm-by-epic${grouped ? ' checked' : ''} /><span>Group by epic</span></label>` : '';
+    const stages = !r.stages.length
+      ? '<div class="empty-state"><b>No roadmap yet</b><p class="muted">Select issues, Assign workflow…, then Add to roadmap: each addition is a stage that starts when the previous one has finished and merged.</p></div>'
+      : grouped ? byEpicHtml(r, epics, byNumber)
+        : r.stages.map((s, n) => stageHtml(s, n, r.stages.length, current, byNumber, scoped, r)).join('');
+    return `<div class="rm">${bar.replace('<span class="spacer"></span>', `<span class="spacer"></span>${toggle}`)}${queued}${stages}${importBox}</div>`;
+  }
+
+  // #138: the items under their issues' epics (an item of issues in two epics shows under both; "No
+  // epic" last), each with its stage; editing stays in the stage view.
+  function byEpicHtml(r, epics, byNumber) {
+    const sections = [...epics.map((e) => ({ id: e.id, title: e.title })), { id: '', title: 'No epic' }].map((e) => {
+      const rows = [];
+      r.stages.forEach((stage, s) => stage.items.forEach((x, n) => {
+        const ids = new Set(refs(x).map((i) => byNumber.get(i.number)?.epic || ''));
+        if (ids.has(e.id)) rows.push(itemHtml(x, s, n, byNumber).replace('<div class="rm-meta">', `<div class="rm-meta"><span class="badge" title="Its stage in the roadmap">stage ${s + 1}</span>`));
+      }));
+      if (!rows.length) return '';
+      const items = r.stages.flatMap((st) => st.items).filter((x) => refs(x).some((i) => (byNumber.get(i.number)?.epic || '') === e.id));
+      const done = items.filter((x) => x.status === 'done').length;
+      return `<section class="rm-stage rm-epic">
+          <div class="rm-stage-head"><b title="${esc(e.title)}">${esc(e.title)}</b>${e.id ? ` <span class="badge bl-epic" title="Epic ${esc(e.id)}">${esc(e.id)}</span>` : ''}
+            <span class="spacer"></span><span class="muted small">${done} of ${items.length} item${items.length === 1 ? '' : 's'} done</span></div>
+          <div class="rm-items">${rows.join('')}</div>
+        </section>`;
+    }).join('');
+    return sections;
   }
 
   // ---- edits: a copy of the stages, changed, then saved whole ------------------------------
@@ -415,6 +445,12 @@
   async function onChange(e, ctx, data) {
     const r = data?.roadmap;
     const el = e.target;
+    if (el.matches('[data-rm-by-epic]')) {
+      byEpic = el.checked;
+      try { localStorage.setItem(BY_EPIC_KEY, byEpic ? '1' : ''); } catch { /* storage unavailable */ }
+      ctx.render();
+      return true;
+    }
     if (!r || !el.closest('.rm-stage')) return false;
     const stages = clone(r.stages);
     const { s } = locate(stages, el);

@@ -54,6 +54,13 @@ module.exports = (ctx) => {
       params: ['projectId', 'on'],
       fn: ({ projectId, on }) => projects.updateProject(ctx.ws.projects, project(projectId), { autoPush: !!on }),
     },
+    // #138: a new issue the Product Owner registers joins the epic it clearly matches (no extra click)
+    {
+      channel: 'backlog:auto-epic',
+      method: 'setAutoEpic',
+      params: ['projectId', 'on'],
+      fn: ({ projectId, on }) => projects.updateProject(ctx.ws.projects, project(projectId), { autoEpic: !!on }),
+    },
     { channel: 'backlog:unpushed', method: 'listUnpushed', fn: () => ctx.unpushedProjects() },
     // Assign a workflow to issues: they are queued and start while there are free run slots (see dispatchQueue).
     {

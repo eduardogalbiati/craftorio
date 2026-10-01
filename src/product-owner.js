@@ -28,10 +28,20 @@
 // staging folder <workspace>/backlog/<projectId>.po/attachments/ when sent) and filed/ (every text
 // sent to the platform). Clearing the conversation keeps these folders. A preview (simulated) never
 // calls gh/glab.
+//
+// Splitting (#124, src/po-split.js): the plan answer's `splits` propose 2-4 child issues for each
+// issue too big for one run; `applySplit` files them on the owner's click (the owner may move tasks
+// or merge children first) and updates the parent. Epics (#138, src/epics.js): the answer's `epics`
+// places issues in existing epics and proposes new ones (and epics to merge or split); `applyEpic`
+// writes one of them on the owner's click. A registered issue's draft may name its epic: it joins it
+// when the owner keeps "Place in epic" (on by default with the project's autoEpic option). Both are
+// recorded in the conversation (`split`, `epicApplied`), so the drawer shows what was applied.
 
 const fs = require('fs');
 const path = require('path');
 const backlog = require('./backlog');
+const epics = require('./epics');
+const poSplit = require('./po-split');
 const { readEvents } = require('./supervisor');
 
 const MAX_REPORT = 60000;
@@ -85,6 +95,43 @@ const ANSWER_SCHEMA = {
       type: 'array',
       items: { type: 'object', required: ['issue', 'reason'], properties: { issue: { type: 'integer' }, reason: { type: 'string' } } },
     },
+    // #124: issues too big for one run, each split into 2-4 children (tasks: the parent's task numbers)
+    splits: {
+      type: 'array',
+      items: {
+        type: 'object',
+        required: ['issue', 'reasons', 'parent', 'children'],
+        properties: {
+          issue: { type: 'integer' },
+          reasons: { type: 'array', items: { type: 'string' } },
+          parent: { type: 'string', enum: ['umbrella', 'close'] },
+          children: {
+            type: 'array',
+            items: {
+              type: 'object',
+              required: ['title', 'tasks', 'complexity', 'stage'],
+              properties: {
+                title: { type: 'string' },
+                tasks: { type: 'array', items: { type: 'integer' } },
+                complexity: { type: 'integer' },
+                stage: { type: 'integer' },
+                reason: { type: 'string' },
+              },
+            },
+          },
+        },
+      },
+    },
+    // #138: issues to place in epics (`epic`: an id from the report's Epics), epics to create, merge or split
+    epics: {
+      type: 'object',
+      properties: {
+        place: { type: 'array', items: { type: 'object', required: ['issue', 'epic'], properties: { issue: { type: 'integer' }, epic: { type: 'string' }, reason: { type: 'string' } } } },
+        create: { type: 'array', items: { type: 'object', required: ['title', 'goal', 'issues'], properties: { title: { type: 'string' }, goal: { type: 'string' }, issues: { type: 'array', items: { type: 'integer' } } } } },
+        merge: { type: 'array', items: { type: 'object', required: ['epics', 'reason'], properties: { epics: { type: 'array', items: { type: 'string' } }, reason: { type: 'string' } } } },
+        split: { type: 'array', items: { type: 'object', required: ['epic', 'reason'], properties: { epic: { type: 'string' }, reason: { type: 'string' } } } },
+      },
+    },
   },
 };
 
@@ -93,6 +140,8 @@ const RULES = [
   'Propose groups of issues to implement in one run (same files, same feature, one reuses the other), pairs or sets that must not run in parallel (overlapping files, a repo-wide refactor or reformat), the order to run the groups in (`stage`: 1 first; groups of one stage may run in parallel), and the issues too vague to implement that should be enriched first.',
   'Use only issue numbers and workflow files listed in the report. Suggest the workflow inputs that matter (for example `mode`). Leave a list empty when the question is not about it.',
   'When the workflow has a `mode` input, set it on every group and say why in `mode_reason`: `validated` for a change the owner can try in the app (a screen, a dialog, a visible behaviour), `auto` for the engine, refactors, docs and tests.',
+  'Split what is too big (`splits`): for an issue the report marks with split signals, propose 2-4 child issues. Each child has a title, the numbers of the parent\'s tasks it takes (every task in exactly one child, none dropped or invented), its complexity and its `stage` (children of one stage can run together). Say whether the parent becomes an umbrella linking its children or is closed in favour of them. Never split an issue without signals.',
+  'Epics (`epics`): place each issue without an epic in an existing epic of its theme (`place`, the epic\'s id from the report); propose a new epic (a title, a one-paragraph goal, its member issues) when several issues share a theme and no epic exists; name epics to merge or split. Prefer grouping issues of the same epic in one run when they touch the same code.',
   'You never edit issues, never start runs and never answer a human gate: the owner applies a proposal with a click. Do not prescribe code changes.',
   'Write in English. The summary is Markdown, short, and answers the question.',
 ].join('\n');
@@ -122,6 +171,19 @@ function conflictsOf(runDir) {
   return { count: messages.length, files: [...files].slice(0, 10), messages: messages.slice(0, 3) };
 }
 
+// Whether a run hit the context limit (the engine's "context limit: ..." logs) or a test step ran out
+// of time (a timeout on a step whose id names tests): a split signal for issues of its size (#124).
+function limitsOf(runDir) {
+  let hitContext = false;
+  let hitTestTime = false;
+  for (const e of readEvents(runDir)) {
+    const msg = String(e.message || e.error || '');
+    if (e.type === 'log' && /^context limit/i.test(msg)) hitContext = true;
+    if (/test/i.test(String(e.stepId || e.step || '')) && /timed? ?out|time budget|ran far longer/i.test(msg)) hitTestTime = true;
+  }
+  return { hitContext, hitTestTime };
+}
+
 /**
  * The project's finished runs, newest first (at most HISTORY_RUNS, simulated runs left out): issues,
  * complexity, agent time (without gate waits), cost, tokens, merge conflicts and the files they hit.
@@ -144,6 +206,7 @@ function runHistory(runs, issues) {
         costUsd: r.costUsd || 0,
         tokens: r.tokens?.total || 0,
         conflicts: r.runDir ? conflictsOf(r.runDir) : { count: 0, files: [], messages: [] },
+        ...(r.runDir ? limitsOf(r.runDir) : { hitContext: false, hitTestTime: false }),
       };
     });
 }
@@ -180,8 +243,9 @@ function sizeGroup(numbers, issues, history) {
  * Keeps an answer to what exists (issue numbers of the backlog, workflow files) and adds each
  * group's size. Groups left with no issue are dropped.
  */
-function normalizeAnswer(answer, { issues, history, workflows }) {
+function normalizeAnswer(answer, { issues, history, workflows, epics: epicList = [] }) {
   const numbers = new Set((issues || []).map((i) => i.number));
+  const byNumber = new Map((issues || []).map((i) => [i.number, i]));
   const files = (workflows || []).map((w) => w.file);
   const fallback = files.includes('software-development.yaml') ? 'software-development.yaml' : files[0] || '';
   const keep = (list) => [...new Set((list || []).map(Number).filter((n) => numbers.has(n)))];
@@ -206,6 +270,42 @@ function normalizeAnswer(answer, { issues, history, workflows }) {
     groups,
     conflicts: (answer.conflicts || []).map((c) => ({ issues: keep(c.issues), reason: String(c.reason || ''), files: (c.files || []).map(String).slice(0, 20) })).filter((c) => c.issues.length > 1),
     enrich: (answer.enrich || []).filter((e) => numbers.has(Number(e.issue))).map((e) => ({ issue: Number(e.issue), reason: String(e.reason || ''), link: ENRICH_ISSUE })),
+    splits: normalizeSplits(answer.splits, byNumber, history),
+    epics: normalizeEpics(answer.epics, byNumber, epicList),
+  };
+}
+
+// One proposal per issue, kept to the split rules (po-split normalizeSplit): an issue without split signals is never split.
+function normalizeSplits(list, byNumber, history) {
+  const out = [];
+  for (const s of list || []) {
+    const issue = byNumber.get(Number(s?.issue));
+    if (!issue || out.some((x) => x.issue === issue.number)) continue;
+    const split = poSplit.normalizeSplit(s, issue, { complexity: complexityOf(issue), history });
+    if (split) out.push(split);
+  }
+  return out;
+}
+
+// The epics section kept to what exists: open issues, known epics, a new epic with at least two members.
+function normalizeEpics(raw, byNumber, epicList) {
+  const ids = new Map((epicList || []).map((e) => [e.id, e]));
+  const open = (n) => byNumber.get(Number(n))?.state === 'open' && !byNumber.get(Number(n))?.isEpic;
+  const nums = (list) => [...new Set((list || []).map(Number).filter(open))];
+  const place = [];
+  for (const p of raw?.place || []) {
+    const n = Number(p?.issue);
+    const e = ids.get(String(p?.epic || '').trim());
+    if (!open(n) || !e || byNumber.get(n).epic === e.id || place.some((x) => x.issue === n)) continue;
+    place.push({ issue: n, epic: e.id, epicTitle: e.title, reason: String(p.reason || '') });
+  }
+  return {
+    place,
+    create: (raw?.create || []).map((c) => ({ title: String(c?.title || '').trim(), goal: String(c?.goal || '').trim(), issues: nums(c?.issues) }))
+      .filter((c) => c.title && c.issues.length >= 2),
+    merge: (raw?.merge || []).map((m) => ({ epics: [...new Set((m?.epics || []).map(String).filter((id) => ids.has(id)))], reason: String(m?.reason || '') }))
+      .filter((m) => m.epics.length >= 2),
+    split: (raw?.split || []).filter((s) => ids.has(String(s?.epic))).map((s) => ({ epic: String(s.epic), reason: String(s.reason || '') })),
   };
 }
 
@@ -224,12 +324,17 @@ function backlogReport({ data, activeRuns = [], history = [], workflows = [], qu
     const labels = (i.labels || []).map((l) => l.name).join(', ');
     const prs = (i.pullRequests || []).map((p) => `#${p.number}${p.draft ? ' (draft)' : ''}`).join(', ');
     const runs = (i.runs || []).slice(0, 3).map((r) => `${r.runId} ${r.status}`).join(', ');
+    // #124: an issue too big for one run gets its signals and its numbered tasks (a split names them by number)
+    const signals = plannable(i) ? poSplit.splitSignals(i, { complexity: complexityOf(i), history }) : [];
+    const tasks = signals.length ? poSplit.parentTasks(i.body).slice(0, 60) : [];
     return [
-      `### #${i.number} ${i.title}`,
-      `column: ${i.column || 'todo'}${labels ? ` · labels: ${labels}` : ''}${prs ? ` · open PRs: ${prs}` : ''}${i.queued ? ' · queued' : ''}${i.roadmap ? ` · roadmap stage ${i.roadmap.stage} (${i.roadmap.status})` : ''}${runs ? ` · runs: ${runs}` : ''}`,
+      `### #${i.number} ${i.title}${i.isEpic ? ' (epic)' : ''}`,
+      `column: ${i.column || 'todo'}${labels ? ` · labels: ${labels}` : ''}${i.epic ? ` · epic ${i.epic}` : ''}${i.tasks?.total ? ` · ${i.tasks.total} tasks` : ''}${prs ? ` · open PRs: ${prs}` : ''}${i.queued ? ' · queued' : ''}${i.roadmap ? ` · roadmap stage ${i.roadmap.stage} (${i.roadmap.status})` : ''}${runs ? ` · runs: ${runs}` : ''}`,
       clip(i.body, named.has(i.number) ? BODY_NAMED : BODY_CLIP) || '(no description)',
+      ...(signals.length ? [`Split signals: ${signals.join(' ')}`, `Tasks:\n${tasks.map((t) => `${t.n}. ${clip(t.text, 160)}`).join('\n')}`] : []),
     ].join('\n');
   };
+  const epicList = data?.epics || [];
   const local = data?.local;
   const queue = data?.queue?.items || [];
   const stages = data?.roadmap?.stages || [];
@@ -239,6 +344,7 @@ function backlogReport({ data, activeRuns = [], history = [], workflows = [], qu
     `## Queue\n${queue.map((q) => `- ${(q.issues || [q]).map((i) => `#${i.number}`).join(' + ')} → ${q.workflowName || q.workflow}`).join('\n') || '(empty)'}`,
     `## Runs in progress\n${activeRuns.map((r) => `- ${r.runId} ${r.workflow || ''} ${r.status}${r.waiting || r.gates?.length ? ' (waiting at a gate)' : ''}${r.issues?.length ? ` issues ${r.issues.map((i) => `#${i.number ?? i}`).join(', ')}` : ''}`).join('\n') || '(none)'}`,
     `## Merged locally, not pushed\n${local && !local.error ? `${local.ahead || 0} commits ahead${local.issues?.length ? `, issues ${local.issues.map((n) => `#${n}`).join(', ')}` : ''}` : '(unknown or none)'}`,
+    `## Epics (id: title · members · open/closed)\n${epicList.map((e) => `- ${e.id}: ${e.title}${e.state === 'open' ? '' : ' (closed)'} · ${e.members.map((n) => `#${n}`).join(', ') || 'no members'} · ${e.progress?.open ?? 0} open, ${e.progress?.closed ?? 0} closed`).join('\n') || '(none)'}${data?.epicsError ? `\n(${data.epicsError})` : ''}`,
     `## Roadmap\n${stages.map((s, n) => `- stage ${n + 1}${s.name ? ` ${s.name}` : ''}: ${s.items.map((x) => `${(x.issues || []).map((i) => `#${i.number ?? i}`).join(' + ')} ${x.status}`).join('; ')}`).join('\n') || '(empty)'}`,
     `## Finished runs (newest first; agent time without gate waits)\n${history.map((h) => `- ${h.runId} ${h.workflow || ''} ${h.status} · issues ${h.issues.map((n) => `#${n}`).join(', ') || '-'} · complexity ${h.complexity ?? '?'} · ${h.agentMinutes} min · $${h.costUsd.toFixed(2)} · ${Math.round(h.tokens / 1e3)}k tokens${h.conflicts.count ? ` · ${h.conflicts.count} merge conflict(s)${h.conflicts.files.length ? ` in ${h.conflicts.files.join(', ')}` : ''}` : ''}`).join('\n') || '(none)'}`,
   ];
@@ -261,7 +367,8 @@ function backlogReport({ data, activeRuns = [], history = [], workflows = [], qu
  */
 function mockAnswer({ data, question = '' }) {
   const todo = (data?.issues || []).filter(plannable);
-  const topic = (i) => (i.labels || []).map((l) => l.name).find((n) => !/^complexity/i.test(n) && !/^(bug|enhancement|feature)$/i.test(n)) || null;
+  // issues of one epic group first (#138), then a shared label
+  const topic = (i) => (i.epic ? `epic ${i.epic}` : null) || (i.labels || []).map((l) => l.name).find((n) => !/^complexity/i.test(n) && !/^(bug|enhancement|feature)$/i.test(n)) || null;
   const refactor = todo.filter((i) => /refactor|reformat|rename|move files|lint/i.test(i.title));
   const others = todo.filter((i) => !refactor.includes(i));
   const groups = [];
@@ -276,15 +383,20 @@ function mockAnswer({ data, question = '' }) {
     workflow: 'software-development.yaml',
     inputs: {},
     reason: g.refactor ? 'A repo-wide change: alone in its own stage, before the others.'
-      : g.issues.length > 1 ? `Same area (label ${g.topic}): likely the same files.` : 'On its own: no other issue shares its area.',
+      : g.issues.length > 1 ? `Same area (${/^epic /.test(g.topic) ? g.topic : `label ${g.topic}`}): likely the same files.` : 'On its own: no other issue shares its area.',
     files: [],
     stage,
   });
+  const splits = todo.map((i) => poSplit.proposeSplit(i, { complexity: complexityOf(i) })).filter(Boolean);
+  const epicPlan = mockEpics(data);
   return {
     summary: [
       `**Simulated answer** (developer or simulated mode: no model was called)${question ? ` to: “${clip(question, 120)}”` : ''}.`,
-      `${todo.length} issues to do: ${groups.length + refactor.length} proposed run${groups.length + refactor.length === 1 ? '' : 's'}, grouped by shared label; repo-wide changes first and alone, then stages of at most two runs.`,
+      `${todo.length} issues to do: ${groups.length + refactor.length} proposed run${groups.length + refactor.length === 1 ? '' : 's'}, grouped by epic, else by shared label; repo-wide changes first and alone, then stages of at most two runs.`,
+      `${splits.length ? `${splits.length} issue${splits.length > 1 ? 's are' : ' is'} too big for one run: see the proposed splits.` : 'No issue is too big for one run.'} ${epicPlan.place.length + epicPlan.create.length ? `Epics: ${epicPlan.place.length} issue${epicPlan.place.length === 1 ? '' : 's'} to place, ${epicPlan.create.length} epic${epicPlan.create.length === 1 ? '' : 's'} to create.` : ''}`.trim(),
     ].join('\n\n'),
+    splits,
+    epics: epicPlan,
     groups: [
       ...refactor.map((i, n) => group({ issues: [i.number], refactor: true }, n + 1)),
       ...groups.map((g, n) => group(g, refactor.length + Math.floor(n / 2) + 1)),
@@ -292,6 +404,35 @@ function mockAnswer({ data, question = '' }) {
     conflicts: refactor.flatMap((r) => others.slice(0, 2).map((o) => ({ issues: [r.number, o.number], reason: `#${r.number} looks like a repo-wide change: run it alone, with no other run open.`, files: [] }))),
     enrich: todo.filter((i) => String(i.body || '').trim().length < 120).map((i) => ({ issue: i.number, reason: 'The description is too short to implement without guessing.' })),
   };
+}
+
+// The simulated epics section: an open issue without an epic joins the epic whose members share its
+// theme (its `area:` label, else its first topic label); themes of two or more issues without an epic become new epics.
+function mockEpics(data) {
+  const issues = (data?.issues || []).filter((i) => i.state === 'open' && !i.isEpic);
+  const theme = (i) => {
+    const names = (i.labels || []).map((l) => l.name).filter((n) => !/^(complexity|impact|epic)\b/i.test(n) && !/^(bug|enhancement|feature|documentation)$/i.test(n));
+    return names.find((n) => /^area[:/]/i.test(n)) || names[0] || null;
+  };
+  const place = [];
+  const loose = issues.filter((i) => !i.epic);
+  for (const e of data?.epics || []) {
+    const themes = new Set(issues.filter((i) => i.epic === e.id).map(theme).filter(Boolean));
+    for (const i of loose) {
+      if (theme(i) && themes.has(theme(i)) && !place.some((p) => p.issue === i.number)) place.push({ issue: i.number, epic: e.id, reason: `Shares the theme ${theme(i)} with the epic's members (simulated).` });
+    }
+  }
+  const byTheme = new Map();
+  for (const i of loose.filter((x) => !place.some((p) => p.issue === x.number))) {
+    const t = theme(i);
+    if (!t) continue;
+    if (!byTheme.has(t)) byTheme.set(t, []);
+    byTheme.get(t).push(i.number);
+  }
+  const title = (t) => { const s = t.replace(/^area[:/]\s*/i, '').replace(/[-_]+/g, ' ').trim(); return s.charAt(0).toUpperCase() + s.slice(1); };
+  const create = [...byTheme].filter(([, ns]) => ns.length >= 2)
+    .map(([t, ns]) => ({ title: title(t), goal: `The open issues about ${title(t).toLowerCase()} (label ${t}), tracked together (simulated).`, issues: ns }));
+  return { place, create, merge: [], split: [] };
 }
 
 // ---- the conversation ---------------------------------------------------------------------------
@@ -348,6 +489,8 @@ const ISSUE_SCHEMA = {
         body: { type: 'string' },
         labels: { type: 'array', items: { type: 'string' } },
         related: { type: 'array', items: { type: 'integer' } },
+        // #138: the id of the existing epic it clearly belongs to ("" when none is clear)
+        epic: { type: 'string' },
       },
     },
     duplicates: {
@@ -370,6 +513,7 @@ const ISSUE_RULES = [
   'Write the draft with the issue-writing skill: a specific title; a context grounded in the evidence; "Decision (owner): ..." for every decision the owner stated; tasks as verifiable acceptance criteria (for a UI change, UI criteria: the controls, the states, what leads); "Related: #n". Add a short "Triage" section: impact and complexity with their reasons, the estimated files (marked as an estimate) and the grouping advice. Labels: `impact:<n>`, `complexity:<n>`, the kind, `area:<...>`.',
   `The owner is here. When the request is ambiguous in a way that changes the issue, ask at most ${MAX_QUESTIONS} short questions in the whole thread (in \`questions\`) and leave the draft's title empty; otherwise draft at once and list your assumptions in \`assumptions\`. Each new message of the owner refines the current draft: always return the whole draft again.`,
   'When the owner asks to add to an existing issue ("add this to #110"), or an open issue already covers the request (`relation: duplicate`), set `existing_issue` to its number and write in `addition` only the new part (a short context and the new tasks as a checklist), keeping what the issue already says; otherwise 0 and "".',
+  'Epic: when the new issue clearly belongs to an existing epic of the report\'s Epics section, set `draft.epic` to its id; otherwise "" (and, when several issues share its theme with no epic, say so in `reply`).',
   'Language: answer the owner (`reply`, `questions`) in the language the owner writes in. The issue itself (title, body, labels, addition) is in English, the repository\'s language.',
   'You never file, edit or comment on issues and never start runs: the owner files the draft with a click. Do not prescribe code fixes beyond what the issue needs.',
 ].join('\n');
@@ -450,8 +594,9 @@ function moveAttachments(where, thread, files) {
 }
 
 /** Keeps an issue answer to what exists (issue numbers of the backlog); a draft without a title is none. maxQuestions: what the thread has left. */
-function normalizeIssueAnswer(raw, { issues, maxQuestions = MAX_QUESTIONS }) {
+function normalizeIssueAnswer(raw, { issues, maxQuestions = MAX_QUESTIONS, epics: epicList = [] }) {
   const known = new Map((issues || []).map((i) => [i.number, i]));
+  const epic = (epicList || []).find((e) => e.id === String(raw?.draft?.epic || '').trim());
   const d = raw?.draft || {};
   const title = String(d.title || '').trim();
   const existing = Number(raw?.existing_issue) || 0;
@@ -464,6 +609,7 @@ function normalizeIssueAnswer(raw, { issues, maxQuestions = MAX_QUESTIONS }) {
       body: String(d.body || '').trim(),
       labels: [...new Set(strings(d.labels))],
       related: [...new Set((d.related || []).map(Number).filter((n) => known.has(n)))],
+      ...(epic ? { epic: epic.id, epicTitle: epic.title } : {}),
     } : null,
     duplicates: (raw?.duplicates || []).filter((x) => known.has(Number(x.number))).map((x) => {
       const i = known.get(Number(x.number));
@@ -521,6 +667,8 @@ function mockIssueAnswer({ data, question = '', previous = [] }) {
   const first = said[0].split(/(?<=[.!?])\s/)[0];
   const title = clip(first.charAt(0).toUpperCase() + first.slice(1), 80).replace(/[.!?]$/, '');
   const known = target && issues.some((i) => i.number === target) ? target : 0;
+  // the epic most of the overlapping issues belong to (#138)
+  const epic = close.map((i) => i.epic).find(Boolean) || '';
   return {
     reply: `**Simulated draft** (no model was called, no code was read). ${known ? `I would add this to #${known}: review the addition below.` : 'Review it below, or tell me what to change.'}`,
     questions: [],
@@ -534,6 +682,7 @@ function mockIssueAnswer({ data, question = '', previous = [] }) {
       ].join('\n'),
       labels: ['enhancement', 'impact:3', 'complexity:2'],
       related: close.map((i) => i.number),
+      epic,
     },
     duplicates: close.map((i) => ({ number: i.number, relation: 'overlaps', reason: 'Shares words with the request (simulated).' })),
     existing_issue: known,
@@ -553,9 +702,10 @@ const createBody = (draft) => (draft.related.length && !/^Related:/im.test(draft
  * 'comment' (a comment on `number`). `number` defaults to the draft's existing issue; the text added
  * is the draft's addition for that issue, else the whole draft. `preview` never calls the CLI.
  * The text sent is kept in the thread's folder (runsDir) under filed/.
+ * placeEpic (#138): a new issue joins the draft's epic (`epicList`: the cache's epics) once filed.
  * Returns { preview, action, command, body, filed, message, messages, skippedLabels? }.
  */
-async function fileDraft({ backlogDir, projectId, runsDir, at, action, number, preview, platform, repo, cached = null, exec = backlog.execCli }) {
+async function fileDraft({ backlogDir, projectId, runsDir, at, action, number, preview, platform, repo, cached = null, placeEpic = false, epicList = [], exec = backlog.execCli }) {
   if (!FILE_ACTIONS.includes(action)) throw new Error(`Unknown action: ${action} (${FILE_ACTIONS.join(', ')}).`);
   const messages = readConversation(backlogDir, projectId);
   const open = currentDraft(messages);
@@ -590,9 +740,10 @@ async function fileDraft({ backlogDir, projectId, runsDir, at, action, number, p
     command = backlog.issueSaveCommand({ platform, repo, number: target, mode: action === 'comment' ? 'comment' : 'replace', file, text: body });
   }
   const out = { preview: !!preview, action, command: command.display, body };
+  const epic = action === 'create' && placeEpic && issue.draft?.epic ? (epicList || []).find((e) => e.id === issue.draft.epic) : null;
   if (preview) {
-    const filed = { action, number: target, preview: true, draft: at, command: command.display };
-    const message = recordIssueMessage(where, { role: 'po', mode: 'issue', thread, text: `**Preview** (simulated): nothing was filed. The app would run \`${command.display}\`.`, filed });
+    const filed = { action, number: target, preview: true, draft: at, command: command.display, ...(epic ? { epic: epic.id } : {}) };
+    const message = recordIssueMessage(where, { role: 'po', mode: 'issue', thread, text: `**Preview** (simulated): nothing was filed. The app would run \`${command.display}\`${epic ? `, then place the issue in the epic ${epic.id} ${epic.title}` : ''}.`, filed });
     return { ...out, filed, message, messages: readConversation(backlogDir, projectId) };
   }
   // gh reads the body from it; for glab it is the record of what was sent
@@ -606,6 +757,13 @@ async function fileDraft({ backlogDir, projectId, runsDir, at, action, number, p
     const n = Number(url?.match(/\/(\d+)\/?$/)?.[1]) || null;
     filed = { action, number: n, url, title: issue.draft.title, draft: at, labels: issue.draft.labels.filter((l) => !skippedLabels.includes(l)) };
     text = `Filed ${n ? `[#${n}](${url})` : url || 'the issue'}: ${issue.draft.title}.${skippedLabels.length ? ` Labels the repository does not have were left out: ${skippedLabels.join(', ')}.` : ''}`;
+    if (epic && n) {
+      try {
+        await epics.applyEpic({ platform, repo, epic: { id: epic.id }, issues: [n], epics: epicList, dir, exec });
+        filed.epic = epic.id;
+        text += ` Placed in the epic ${epic.id} ${epic.title}.`;
+      } catch (e) { text += ` It could not be placed in the epic ${epic.id}: ${e.message}`; }
+    }
   } else {
     const issueUrl = cached?.url || null;
     filed = { action, number: target, url: action === 'comment' ? url || issueUrl : issueUrl, draft: at };
@@ -625,6 +783,67 @@ function discardDraft(backlogDir, projectId, at, runsDir) {
   if (!open || open.message.ts !== at) throw new Error('This draft was filed, discarded or revised since.');
   recordIssueMessage({ backlogDir, projectId, runsDir }, { role: 'po', mode: 'issue', thread: threadOf(messages, projectId), text: 'Draft discarded: nothing was filed.', discarded: at });
   return readConversation(backlogDir, projectId);
+}
+
+// ---- applying a plan answer's splits (#124) and epics (#138), on the owner's click ---------------------
+// The answer message (its ts: `at`) a split or an epic belongs to, and whether it was applied already.
+function planAnswer(messages, at) {
+  const m = messages.find((x) => x.ts === at && x.role === 'po' && x.answer);
+  if (!m) throw new Error('That answer is no longer in the conversation.');
+  return m;
+}
+// Each apply keeps the texts it sent in its own folder of the runs folder, like an issue thread.
+const applyDir = (where, kind) => path.join(threadDir(where, `po-${path.basename(String(where.projectId))}-${kind}-${new Date().toISOString().replace(/[-:]/g, '').replace('T', '-').slice(0, 15)}`), 'filed');
+
+/**
+ * Files a proposed split (the owner may have moved tasks or merged children: `split` is the edited
+ * proposal { issue, parent, children }) and records it in the conversation. data: the synced backlog.
+ * Returns fileSplit's result plus { message, messages }.
+ */
+async function applySplit({ backlogDir, projectId, runsDir, at, split, preview, platform, repo, data, exec = backlog.execCli }) {
+  const messages = readConversation(backlogDir, projectId);
+  const answer = planAnswer(messages, at);
+  const number = Number(split?.issue);
+  if (!(answer.answer.splits || []).some((s) => s.issue === number)) throw new Error(`That answer proposes no split of #${number}.`);
+  if (messages.some((m) => m.split && m.split.at === at && m.split.issue === number && !m.split.preview)) throw new Error(`#${number} was already split from this answer.`);
+  const parent = (data?.issues || []).find((i) => i.number === number);
+  const checked = poSplit.checkSplit(split, parent);
+  const res = await poSplit.fileSplit({
+    platform, repo, parent, split: checked, dir: applyDir({ backlogDir, projectId, runsDir }, `split-${number}`), preview, epicList: data?.epics || [], exec,
+  });
+  const refs = res.children.map((c) => (c.number ? `[#${c.number}](${c.url})` : c.title)).join(', ');
+  const text = preview
+    ? `**Preview** (simulated): nothing was filed. Splitting #${number} would run:\n${res.commands.map((c) => `- \`${c}\``).join('\n')}`
+    : `Split #${number} into ${refs}. ${checked.parent === 'close' ? `#${number} was closed with a comment linking them.` : `#${number} is now an umbrella with a task list linking them.`}${res.skippedLabels ? ` Labels the repository does not have were left out: ${res.skippedLabels.join(', ')}.` : ''}${res.epicError ? ` The children could not join the parent's epic: ${res.epicError}` : ''}`;
+  const message = appendMessage(backlogDir, projectId, {
+    role: 'po', text, split: { at, issue: number, parent: checked.parent, children: res.children, ...(preview ? { preview: true } : {}) },
+  });
+  return { ...res, message, messages: readConversation(backlogDir, projectId) };
+}
+
+/**
+ * Creates an epic or places issues in one, from an answer's epics section, and records it.
+ * key: which proposal ('create:<n>' or 'place:<epic id>'); epic: { id } or { title, goal }; issues: the members.
+ * Returns applyEpic's result plus { message, messages }.
+ */
+async function applyEpicProposal({ backlogDir, projectId, runsDir, at, key, epic, issues, preview, platform, repo, data, exec = backlog.execCli }) {
+  const messages = readConversation(backlogDir, projectId);
+  planAnswer(messages, at);
+  if (messages.some((m) => m.epicApplied && m.epicApplied.at === at && m.epicApplied.key === key && !m.epicApplied.preview)) throw new Error('This epic proposal was already applied.');
+  const known = new Set((data?.issues || []).filter((i) => i.state === 'open').map((i) => i.number));
+  const members = (issues || []).map(Number).filter((n) => known.has(n));
+  if (!members.length && epic?.id) throw new Error('Pick the issues to place in the epic.');
+  const res = await epics.applyEpic({
+    platform, repo, epic, issues: members, epics: data?.epics || [], dir: applyDir({ backlogDir, projectId, runsDir }, 'epic'), preview, exec,
+  });
+  const ref = res.epic.url ? `[${res.epic.id}](${res.epic.url})` : res.epic.id;
+  const text = preview
+    ? `**Preview** (simulated): nothing was written. The app would run:\n${res.commands.map((c) => `- \`${c}\``).join('\n')}`
+    : `${epic?.id ? 'Placed' : `Created the epic ${ref} ${res.epic.title} and placed`} ${res.linked.map((n) => `#${n}`).join(', ') || 'no issue'}${epic?.id ? ` in the epic ${ref} ${res.epic.title}` : ' in it'}.`;
+  const message = appendMessage(backlogDir, projectId, {
+    role: 'po', text, epicApplied: { at, key, epic: res.epic, linked: res.linked, ...(preview ? { preview: true } : {}) },
+  });
+  return { ...res, message, messages: readConversation(backlogDir, projectId) };
 }
 
 // ---- usage: every real call, for the monthly budgets ------------------------------------------------
@@ -703,14 +922,14 @@ async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns,
   }
   let message;
   if (issueMode) {
-    const issue = normalizeIssueAnswer(raw, { issues: data?.issues, maxQuestions: questionsLeft });
+    const issue = normalizeIssueAnswer(raw, { issues: data?.issues, maxQuestions: questionsLeft, epics: data?.epics });
     message = recordIssueMessage(where, { role: 'po', ...tag, text: issue.reply, issue, model, costUsd, ...(invalid ? { invalid } : {}) });
     // the turn's whole answer (code evidence, triage) next to the thread
     const dir = path.join(threadDir(where, thread), 'analysis');
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, `${message.ts.replace(/[:.]/g, '-')}.md`), `${String(analysis || '').trim()}\n\n\`\`\`json\n${JSON.stringify(raw, null, 2)}\n\`\`\`\n`);
   } else {
-    const answer = normalizeAnswer(raw, { issues: data?.issues, history, workflows });
+    const answer = normalizeAnswer(raw, { issues: data?.issues, history, workflows, epics: data?.epics });
     message = appendMessage(backlogDir, projectId, {
       role: 'po', text: answer.summary, answer, model, costUsd, ...(invalid ? { invalid } : {}),
     });
@@ -756,7 +975,7 @@ async function callAgent({ mode = 'plan', question, report, previous, attachment
     const prose = String(res.text || '').replace(/```json[\s\S]*$/, '').trim() || 'The answer could not be read.';
     const fallback = issueMode
       ? { reply: prose, questions: [], draft: { title: '', body: '', labels: [], related: [] }, duplicates: [], existing_issue: 0, addition: '', assumptions: [] }
-      : { summary: prose, groups: [], conflicts: [], enrich: [] };
+      : { summary: prose, groups: [], conflicts: [], enrich: [], splits: [], epics: {} };
     return { raw: fallback, costUsd: res.costUsd || 0, tokens: res.usage, model: agent.model, invalid: errs.join('; '), text: res.text || '' };
   }
   return { raw, costUsd: res.costUsd || 0, tokens: res.usage, model: agent.model, invalid: null, text: res.text || '' };
@@ -764,6 +983,8 @@ async function callAgent({ mode = 'plan', question, report, previous, attachment
 
 module.exports = {
   ANSWER_SCHEMA,
+  applyEpicProposal,
+  applySplit,
   ask,
   backlogReport,
   clearConversation,

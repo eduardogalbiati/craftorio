@@ -17,6 +17,11 @@
 // The third mode, Roadmap, is backlog-roadmap.js (ordered stages of runs); the assign dialog's
 // "Add to roadmap" plans the selection as a new stage, and assigning an issue the roadmap plans asks first.
 // The Product Owner's drawer (backlog-po.js) applies a proposed group through window.BacklogActions.
+// Epics (#138): each card shows its epic as a badge (a click filters by it); the epic select narrows
+// the list and the kanban to one epic or to "No epic" (rule in backlog-epics.js, AND with the labels
+// and the search); the fourth mode, Epics, lists the epics with their progress (closed, done in the
+// roadmap) and members, the "Auto-place new issues" option (project.autoEpic) and "Organize into
+// epics…", which asks the Product Owner (window.BacklogPO).
 // Uses app.js globals ($, esc, state, errMsg, dateOf, markdownHtml, showView, openModal,
 // closeModal, devMode, wantsSimulation, openGateOf, openNextGate, selectRun, confirmDialog).
 /* global api */
@@ -31,6 +36,8 @@
   const SORT_KEY = 'multiagent.backlogSort';
   const SORTS = ['complexity', 'impact', 'updated'];
   const ISSUE_TRACKER = 'issue-tracker.yaml';
+  // the one-off seed of #138: the Product Owner proposes epics for the open issues (same text as its chip)
+  const ORGANIZE = 'Organize the open issues into epics';
   const FILTERS = [['open', 'Open'], ['closed', 'Closed'], ['all', 'All']];
   // 'local': merged into the local base by a local workflow, not pushed yet (shown when there is any)
   const COLUMNS = [['todo', 'To do'], ['in_progress', 'In progress'], ['waiting', 'Waiting for approval'], ['local', 'Merged locally'], ['done', 'Done']];
@@ -40,8 +47,8 @@
 
   const bl = {
     projects: [], projectId: null, platform: null, data: null, error: null, syncing: false,
-    mode: ['kanban', 'roadmap'].includes(load(MODE_KEY)) ? load(MODE_KEY) : 'list', filter: 'open', q: '', expanded: new Set(), seq: 0,
-    selected: new Set(), workflows: [], labels: [], labelsOpen: false,
+    mode: ['kanban', 'roadmap', 'epics'].includes(load(MODE_KEY)) ? load(MODE_KEY) : 'list', filter: 'open', q: '', expanded: new Set(), seq: 0,
+    selected: new Set(), workflows: [], labels: [], labelsOpen: false, epic: '',
     sort: SORTS.includes(load(SORT_KEY)) ? load(SORT_KEY) : 'updated',
   };
   const {
@@ -53,6 +60,13 @@
     toggleLabel,
     triageScores,
   } = window.BacklogLabels;
+  const {
+    epicOptions,
+    epicProgress,
+    matchesEpic,
+    NONE: NO_EPIC,
+    pruneEpic,
+  } = window.BacklogEpics;
   const $b = (sel) => document.querySelector(sel);
   const project = () => bl.projects.find((p) => p.id === bl.projectId) || null;
   const visible = () => state.view === 'backlog';
@@ -83,6 +97,7 @@
     bl.selected.clear();
     bl.labels = loadLabels(id);
     bl.labelsOpen = false;
+    bl.epic = '';
     if (id) save(PROJECT_KEY, id);
     if (!id) { render(); return; }
     try { setData(await api.getBacklog(id)); } catch (e) { bl.error = errMsg(e); }
@@ -98,6 +113,7 @@
     for (const n of [...bl.selected]) if (!ok.has(n)) bl.selected.delete(n);
     // labels no synced issue has any more leave the filter
     if (data?.issues) setLabels(pruneLabels(bl.labels, data.issues));
+    bl.epic = pruneEpic(bl.epic, data?.epics);
     // the cards' run titles and PRs, shared with the other run lists (app.js); the latest run of
     // each card has its PR state read when the service has not yet
     const runs = (data?.issues || []).flatMap((i) => i.runs || []);
@@ -426,7 +442,7 @@
 
   // ---- rendering ---------------------------------------------------------------------------
   const matches = (i) => {
-    if (!matchesLabels(i, bl.labels)) return false;
+    if (!matchesLabels(i, bl.labels) || !matchesEpic(i, bl.epic)) return false;
     if (!bl.q) return true;
     const hay = `#${i.number} ${i.title} ${i.labels.map((l) => l.name).join(' ')} ${i.author || ''} ${i.assignees.join(' ')}`.toLowerCase();
     return hay.includes(bl.q.toLowerCase());
@@ -439,9 +455,10 @@
     const shown = new Set((bl.data?.issues || []).filter(isShown).map((i) => i.number));
     return [...bl.selected].filter((n) => shown.has(n));
   }
-  const filtering = () => !!bl.q || bl.labels.length > 0;
+  const filtering = () => !!bl.q || bl.labels.length > 0 || !!bl.epic;
+  const epicById = (id) => (bl.data?.epics || []).find((e) => e.id === id) || null;
   const noMatch = () => `<div class="empty-state"><b>No issues match the filters</b>
-    <p class="muted">${bl.labels.length ? `Labels: ${esc(bl.labels.join(', '))}. ` : ''}${bl.q ? `Search: “${esc(bl.q)}”.` : ''}</p>
+    <p class="muted">${bl.epic ? `Epic: ${esc(bl.epic === NO_EPIC ? 'No epic' : epicById(bl.epic)?.title || bl.epic)}. ` : ''}${bl.labels.length ? `Labels: ${esc(bl.labels.join(', '))}. ` : ''}${bl.q ? `Search: “${esc(bl.q)}”.` : ''}</p>
     <button class="btn sm ghost" type="button" data-clear-filters>Clear filters</button></div>`;
 
   const colorStyle = (color) => (color ? ` style="--lc:${esc(color)}"` : '');
@@ -457,6 +474,69 @@
     return [['impact', 'I', 'Impact'], ['complexity', 'C', 'Complexity']].filter(([k]) => s[k] != null)
       .map(([k, short, name]) => `<span class="badge bl-triage bl-${k} lvl-${s[k]}" title="${name} ${s[k]}/5 (issue triage)">${short}${s[k]}</span>`).join('');
   };
+  // Its epic (#138) as a small badge that filters by it (an epic issue already shows its `epic` label).
+  const epicBadge = (i) => {
+    const e = i.epic && epicById(i.epic);
+    return e ? `<button class="badge bl-epic${bl.epic === e.id ? ' on' : ''}" type="button" data-epic-filter="${esc(e.id)}" title="${esc(`Epic ${e.id}: ${e.title}. Show only its issues`)}">${esc(e.title)}</button>` : '';
+  };
+
+  // The epic filter (#138): every epic with how many issues the other filters show, then "No epic".
+  // Hidden when the backlog has no epic, and in the Roadmap and Epics views.
+  function renderEpicFilter(issues) {
+    const sel = $b('#bl-epic');
+    const epics = bl.data?.epics || [];
+    sel.classList.toggle('hidden', !epics.length || bl.mode === 'roadmap' || bl.mode === 'epics');
+    if (!epics.length) return;
+    const shown = issues.filter((i) => inState(i) && matchesLabels(i, bl.labels));
+    sel.innerHTML = `<option value="">All epics</option>${epicOptions(epics, shown).map((o) => `<option value="${esc(o.id)}">${esc(o.title)} (${o.count})</option>`).join('')}`;
+    sel.value = bl.epic;
+    sel.classList.toggle('active', !!bl.epic);
+  }
+
+  // The Epics view (#138): each epic with its progress and members, then the issues in no epic.
+  function renderEpics(issues) {
+    const epics = bl.data?.epics || [];
+    const platform = bl.data?.platform === 'gitlab' ? 'GitLab: a group epic, or an issue labelled epic whose members carry epic::<name>' : 'GitHub: an issue labelled epic, whose sub-issues are its members';
+    const bar = `<div class="bl-queue bl-epics-bar">
+        <span><b>Epics</b> <span class="muted small">${epics.length} · ${esc(platform)}</span></span>
+        ${bl.data?.epicsError ? `<span class="warn-text small" title="${esc(bl.data.epicsError)}">members could not be read: last known</span>` : ''}
+        <span class="spacer"></span>
+        <label class="check small" title="A new issue the Product Owner registers joins the existing epic it clearly matches, with no extra click. Creating an epic always asks."><input type="checkbox" data-auto-epic${bl.data?.autoEpic ? ' checked' : ''} /><span>Auto-place new issues</span></label>
+        <button class="btn sm ghost" type="button" data-organize title="Ask the Product Owner to propose epics for the open issues: nothing is created until you apply a proposal">Organize into epics…</button>
+      </div>`;
+    if (!epics.length) {
+      return `${bar}<div class="empty-state"><b>No epics yet</b><p class="muted">An epic groups the issues of one theme. Ask the Product Owner to organize the open issues into epics: you review each proposal and apply it with a click.</p>
+        <button class="btn sm primary" type="button" data-organize>Organize into epics…</button></div>`;
+    }
+    const byNumber = new Map(issues.map((i) => [i.number, i]));
+    const member = (n) => {
+      const i = byNumber.get(n);
+      if (!i) return `<li class="bl-epic-member muted"><span class="bl-num mono">#${n}</span> not synced</li>`;
+      return `<li class="bl-epic-member" title="${esc(`#${i.number} ${i.title}`)}"><span class="bl-state ${i.state}"></span><span class="bl-num mono">#${i.number}</span><a class="bl-epic-member-title" href="${esc(i.url)}" target="_blank" rel="noopener">${esc(i.title)}</a>${window.BacklogRoadmap.badge(i)}</li>`;
+    };
+    const cards = epics.map((e) => {
+      const p = epicProgress(e, issues);
+      const pct = p.total ? Math.round((p.done / p.total) * 100) : 0;
+      return `<section class="bl-epic-card" data-epic="${esc(e.id)}">
+        <div class="bl-epic-head">
+          <span class="bl-state ${e.state}"></span>
+          ${e.url ? `<a class="bl-epic-title" href="${esc(e.url)}" target="_blank" rel="noopener" title="${esc(`${e.id} ${e.title}`)}">${esc(e.title)}</a>` : `<b class="bl-epic-title" title="${esc(e.title)}">${esc(e.title)}</b>`}
+          <span class="badge" title="${e.kind === 'group' ? 'A GitLab group epic' : 'The epic issue'}">${esc(e.id)}</span>
+          <span class="spacer"></span>
+          <span class="bl-tasks" title="${p.done} of ${p.total} members done (closed, or done in the roadmap)"><span class="bl-bar"><span style="width:${pct}%"></span></span><span class="mono small">${p.done}/${p.total}</span></span>
+        </div>
+        <div class="small muted">${p.open} open · ${p.closed} closed · ${p.roadmapDone} done in the roadmap${p.inRoadmap > p.roadmapDone ? ` · ${p.inRoadmap - p.roadmapDone} planned` : ''}</div>
+        ${e.members.length ? `<ul class="bl-epic-members">${e.members.map(member).join('')}</ul>` : '<p class="muted small">No members yet.</p>'}
+        ${e.members.length ? `<button class="link-btn small" type="button" data-epic-filter="${esc(e.id)}">Show its issues in the list</button>` : ''}
+      </section>`;
+    }).join('');
+    const loose = issues.filter((i) => i.state === 'open' && matchesEpic(i, NO_EPIC));
+    const none = `<section class="bl-epic-card bl-epic-none">
+        <div class="bl-epic-head"><b class="bl-epic-title">No epic</b><span class="spacer"></span><span class="muted small">${loose.length} open issue${loose.length === 1 ? '' : 's'}</span></div>
+        ${loose.length ? `<button class="link-btn small" type="button" data-epic-filter="${NO_EPIC}">Show them in the list</button>` : '<p class="muted small">Every open issue is in an epic.</p>'}
+      </section>`;
+    return `${bar}<div class="bl-epics">${cards}${none}</div>`;
+  }
 
   // The label filter: every label of the synced issues, with how many the state filter shows.
   // Hidden when no issue has a label.
@@ -535,7 +615,7 @@
           <span class="bl-num mono">#${i.number}</span>
           <div class="bl-main">
             <div class="bl-title">${esc(i.title)}</div>
-            <div class="bl-labels">${triage(i)}${labels(i)}</div>
+            <div class="bl-labels">${epicBadge(i)}${triage(i)}${labels(i)}</div>
           </div>
           <span class="bl-status">${prBadges(i)}${status(i)}${enrichBtn(i)}</span>
           ${tasks(i) || '<span></span>'}
@@ -556,7 +636,7 @@
   const card = (i) => `
     <div class="bl-card${bl.selected.has(i.number) ? ' selected' : ''}" data-n="${i.number}">
       <div class="bl-card-head">${checkbox(i)}<span class="bl-num mono">#${i.number}</span><a class="bl-card-title" href="${esc(i.url)}" target="_blank" rel="noopener" title="Open on ${esc(PLATFORMS[bl.data?.platform]?.label || 'the platform')}">${esc(i.title)}</a></div>
-      <div class="bl-labels">${triage(i)}${labels(i)}</div>
+      <div class="bl-labels">${epicBadge(i)}${triage(i)}${labels(i)}</div>
       ${tasks(i)}
       ${prBadges(i) || status(i) ? `<div class="bl-card-run">${prBadges(i)}${status(i)}</div>` : ''}
       ${enrichBtn(i) ? `<div class="bl-card-actions">${enrichBtn(i)}</div>` : ''}
@@ -701,7 +781,7 @@
     btn.textContent = bl.syncing ? 'Syncing…' : 'Sync';
     $b('#btn-bl-new-issue').disabled = !p?.repo || !!PLATFORMS[bl.platform]?.soon;
     $b('#bl-sort').value = bl.sort;
-    $b('#bl-sort').classList.toggle('hidden', bl.mode === 'roadmap');
+    $b('#bl-sort').classList.toggle('hidden', bl.mode === 'roadmap' || bl.mode === 'epics');
 
     document.querySelectorAll('#bl-mode [data-mode]').forEach((b) => {
       b.classList.toggle('active', b.dataset.mode === bl.mode);
@@ -719,6 +799,7 @@
     filters.innerHTML = FILTERS.map(([f, label]) =>
       `<button class="chip${bl.filter === f ? ' active' : ''}" data-f="${f}">${label} <span class="muted">${count(f)}</span></button>`).join('');
     renderLabelFilter(issues);
+    renderEpicFilter(issues);
     $b('#bl-synced').textContent = bl.syncing ? 'Syncing…' : bl.data ? `Synced ${dateOf(bl.data.syncedAt)} from ${PLATFORMS[bl.data.platform]?.label || bl.data.platform}` : '';
     const prError = bl.data?.pullRequestsError ? `Open ${bl.data.platform === 'gitlab' ? 'MRs' : 'PRs'} could not be read: ${bl.data.pullRequestsError}` : '';
     $b('#bl-error').textContent = bl.error || prError;
@@ -735,7 +816,7 @@
     } else if (!bl.data) {
       list.innerHTML = bl.syncing ? '<p class="muted">Loading issues…</p>' : '<p class="muted">Not synced yet.</p>';
     } else {
-      list.innerHTML = bl.mode === 'roadmap' ? window.BacklogRoadmap.html(bl.data, render) : bl.mode === 'kanban' ? renderKanban(issues) : renderList(issues);
+      list.innerHTML = bl.mode === 'roadmap' ? window.BacklogRoadmap.html(bl.data, render) : bl.mode === 'epics' ? renderEpics(issues) : bl.mode === 'kanban' ? renderKanban(issues) : renderList(issues);
     }
   }
 
@@ -763,6 +844,14 @@
     bl.q = '';
     $b('#bl-search').value = '';
     setLabels([]);
+    bl.epic = '';
+    render();
+  }
+  $b('#bl-epic').onchange = (e) => { bl.epic = e.target.value; render(); };
+  // an epic's badge or "Show its issues": that epic in the list (the Epics view switches to the list)
+  function filterEpic(id) {
+    bl.epic = bl.epic === id && bl.mode !== 'epics' ? '' : id;
+    if (bl.mode === 'epics') { bl.mode = 'list'; save(MODE_KEY, 'list'); }
     render();
   }
   const flipLabel = (name) => { setLabels(toggleLabel(bl.labels, name)); render(); };
@@ -839,6 +928,17 @@
     if (watch) { window.watchWithSupervisor({ runId: watch.dataset.watch, workflow: watch.dataset.workflow, status: 'running', mock: !!watch.closest('[data-n]')?.querySelector('.p-mock') }); return; }
     const label = e.target.closest('[data-label]');
     if (label) { flipLabel(label.dataset.label); return; }
+    const epic = e.target.closest('[data-epic-filter]');
+    if (epic) { filterEpic(epic.dataset.epicFilter); return; }
+    const auto = e.target.closest('[data-auto-epic]');
+    if (auto) {
+      try {
+        await api.setAutoEpic(bl.projectId, auto.checked);
+        if (bl.data) bl.data.autoEpic = auto.checked;
+      } catch (err) { bl.error = errMsg(err); render(); }
+      return;
+    }
+    if (e.target.closest('[data-organize]')) { window.BacklogPO?.ask(ORGANIZE); return; }
     if (e.target.closest('[data-clear-filters]')) { clearFilters(); return; }
     const run = e.target.closest('[data-run]');
     if (run) { openRun(run); return; }

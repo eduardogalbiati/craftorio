@@ -15,6 +15,10 @@
 // rendered, close issues). The latest draft is filed only on the owner's click: Create, Create +
 // roadmap, Create + assign…, Add to #n / Comment on #n, or Discard; Revise is a new message. After a
 // filing the Backlog shows the synced issues (BacklogActions.showData).
+// A draft that names its epic (#138) shows "Place in epic" (checked when the project's Auto-place option
+// is on): Create then places the new issue in it. The plan answer's splits (#124) and epics (#138) are
+// drawn and applied by backlog-po-proposals.js; window.BacklogPO.ask opens the drawer and asks (the
+// Epics view's "Organize into epics…").
 // Developer or simulated mode asks the simulated Product Owner (no model call) and only previews a filing.
 // Uses app.js globals ($, esc, state, errMsg, devMode, fmtCost, fmtSize, markdownHtml, confirmDialog)
 // and window.Robots (robots.js).
@@ -25,12 +29,14 @@
     'What should not run together?',
     'Build a roadmap',
     'Which issues are too big or unclear?',
+    'Which issues are too big to run as one?',
+    'Organize the open issues into epics',
   ];
   const REGISTER = 'Register an issue';
   // the workflow a filed issue is planned or assigned with (the assign dialog lets the owner change it)
   const DEFAULT_WORKFLOW = 'software-development.yaml';
   const MAX_CANDIDATES = 3;
-  const po = { open: false, busy: false, projectId: null, messages: [], pending: null, error: null, notes: {}, mode: 'plan', files: [] };
+  const po = { open: false, busy: false, projectId: null, messages: [], pending: null, error: null, notes: {}, mode: 'plan', files: [], placeEpic: {} };
   const $p = (sel) => document.querySelector(sel);
   const actions = () => window.BacklogActions;
   const issueOf = (n) => (actions()?.data()?.issues || []).find((i) => i.number === n);
@@ -46,6 +52,7 @@
     if (!projectId) return;
     // attachments not sent yet belong to the other project's conversation
     if (po.projectId !== projectId) po.files = [];
+    if (po.projectId !== projectId) po.placeEpic = {};
     if (po.projectId !== projectId) Object.assign(po, { projectId, messages: [], pending: null, error: null, notes: {} });
     po.open = true;
     $p('#po-drawer').classList.add('open');
@@ -215,8 +222,17 @@
       parts.push(`<div class="po-sec"><div class="sup-h">Enrich first</div><ul class="po-list">${a.enrich.map((e) =>
         `<li>${issueRef(e.issue)} ${esc(e.reason)} <a class="small" href="${esc(e.link)}" target="_blank" rel="noopener" title="Enrich an issue (#103)">how to enrich (#103)</a></li>`).join('')}</ul></div>`);
     }
+    // #124 / #138: issues too big for one run, and the epics section
+    const msg = po.messages[m];
+    if (msg) parts.push(window.BacklogPoProposals.splitsHtml(proposalsCtx(), msg), window.BacklogPoProposals.epicsHtml(proposalsCtx(), msg));
     return parts.join('');
   }
+  const proposalsCtx = () => ({
+    messages: po.messages, projectId: po.projectId, busy: po.busy, issueRef, issueOf, render, setMessages: (list) => { po.messages = list; },
+  });
+
+  // #138: whether Create places the draft in its epic; the project's Auto-place option is the default
+  const placeEpic = (m) => (m in po.placeEpic ? po.placeEpic[m] : !!actions()?.data()?.autoEpic);
 
   // The draft the owner can still file: the latest one, unless filed (not a preview) or discarded since
   // (the same rule as currentDraft in src/product-owner.js).
@@ -258,6 +274,8 @@
         <div class="po-draft-title" title="${esc(d.title)}">${esc(d.title)}</div>
         <div class="po-draft-meta">${d.labels.map((l) => `<span class="badge">${esc(l)}</span>`).join('')}
           ${d.related.length ? `<span class="muted small">Related</span> ${d.related.map(issueRef).join('')}` : ''}</div>
+        ${d.epic ? `<div class="po-draft-meta"><span class="muted small">Epic</span> <span class="badge bl-epic" title="Epic ${esc(d.epic)}">${esc(d.epicTitle || d.epic)}</span>
+          ${m === openDraftIndex() ? `<label class="check small" title="Create also places the new issue in this epic"><input type="checkbox" data-po-epic${placeEpic(m) ? ' checked' : ''} /><span>Place in epic</span></label>` : ''}</div>` : ''}
         <div class="md md-compact po-draft-body">${markdownHtml(d.body)}</div>
       </div></div>`);
     }
@@ -404,7 +422,7 @@
     po.notes[key] = null;
     render();
     try {
-      const out = await api.fileProductOwnerDraft(po.projectId, msg.ts, action, n, simulated);
+      const out = await api.fileProductOwnerDraft(po.projectId, msg.ts, action, n, simulated, action === 'create' && !!x.draft?.epic && placeEpic(m));
       po.messages = out.messages;
       if (out.backlog) actions().showData(out.backlog);
       if (out.syncError) po.notes[key] = { text: `Filed, but the backlog sync failed: ${out.syncError}`, error: true };
@@ -465,11 +483,17 @@
     if (stage) { close(); actions().openStage(Number(stage.dataset.poStage)); return; }
     const run = e.target.closest('[data-po-run]');
     if (run) { close(); window.showRun(run.dataset.poRun); return; }
+    // a split's or an epic's buttons (#124, #138)
+    if (window.BacklogPoProposals.onClick(e, proposalsCtx())) return;
+    const epic = e.target.closest('[data-po-epic]');
+    if (epic) { po.placeEpic[Number(epic.closest('[data-msg]').dataset.msg)] = epic.checked; return; }
     const b = e.target.closest('[data-po-act]');
     if (!b) return;
     if (DRAFT_ACTS.includes(b.dataset.poAct)) fileDraft(b.dataset.poAct, b);
     else apply(b.dataset.poAct, b);
   };
+  $p('#po-log').addEventListener('input', (e) => window.BacklogPoProposals.onInput(e, proposalsCtx()));
+  $p('#po-log').addEventListener('change', (e) => window.BacklogPoProposals.onInput(e, proposalsCtx()));
   $p('#btn-po-clear').onclick = async () => {
     if (!await confirmDialog('Clear the conversation', 'The Product Owner forgets this project\'s questions and answers (and the files attached to them).', 'Clear')) return;
     try { po.messages = await api.clearProductOwner(po.projectId); po.notes = {}; po.files = []; } catch (e) { po.error = errMsg(e); }
@@ -489,5 +513,13 @@
     render();
     log.scrollTop = top;
   });
+  // the Epics view's "Organize into epics…" (#138): open the drawer and ask, as a plan question
+  window.BacklogPO = {
+    ask: async (question) => {
+      await open();
+      if (po.mode !== 'plan') setMode('plan');
+      ask(question);
+    },
+  };
   renderButton();
 })();

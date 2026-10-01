@@ -7,7 +7,7 @@
 //                      skills, usage, analytics, supervisor, settings, duo, arena, run-chat, run
 //                      (default dashboard)
 //   --tab <name>       settings: general | agents | execution | about; workflows: runs | definitions
-//   --mode <name>      backlog: list | kanban | roadmap
+//   --mode <name>      backlog: list | kanban | roadmap | epics
 //   --run <mock|dir>   run-chat: a simulated software-development run (default) or a copy of a run folder
 //   --workflow <file>  the workflow of the simulated run (default software-development.yaml)
 //   --input <k=v>      run: a workflow input of the Start panel (repeatable), e.g. mode=validated
@@ -49,7 +49,7 @@ const evidence = require('../src/evidence');
 const VIEWS = {
   dashboard: {}, sessions: {}, projects: {}, project: {}, artifacts: {}, agents: {}, skills: {}, usage: {}, analytics: {}, duo: {}, arena: {},
   supervisor: {},
-  backlog: { modes: ['list', 'kanban', 'roadmap'] },
+  backlog: { modes: ['list', 'kanban', 'roadmap', 'epics'] },
   workflows: { tabs: ['runs', 'definitions'] },
   settings: { tabs: ['general', 'agents', 'execution', 'about'] },
   'run-chat': { run: true },
@@ -123,7 +123,19 @@ function recordShot(dir, { file, caption, commit = null }) {
 
 // ---- simulated data ------------------------------------------------------------------------
 const DEMO_REPO = 'https://github.com/example/demo-app';
+// #124: an issue too big for one run (complexity 5, 12 tasks in two areas of the code): the Product
+// Owner's plan answer proposes its split. #138: two epics (#14, #13), members with `epic`, #9 in none.
+const BIG_TASKS = [
+  'One app per workspace: a lock file in `src/workspace.js`', 'A second app opens read-only, with a banner', 'Run owners recorded in `src/runs.js`',
+  'Only the owner resumes a run', 'Queue claims survive a restart (`src/store.js`)', 'Roadmap writes are atomic (`src/roadmap.js`)',
+  'Resume dialog lists the steps (`src/renderer/run.js`)', 'Duplicate runs are flagged on the card (`src/renderer/backlog.js`)', 'Safe-write notice in the run header (`src/renderer/run.js`)',
+  'Roadmap status derived from runs, shown in `src/renderer/backlog-roadmap.js`', 'Docs: run safety in the README', 'Tests',
+];
 const DEMO_ISSUES = [
+  { number: 16, title: 'Keyboard focus is lost after closing a dialog', state: 'open', labels: [{ name: 'ui', color: '#c5def5' }, { name: 'complexity:1', color: '#ededed' }], body: '- [ ] Focus returns to the control that opened the dialog\n- [ ] Tests' },
+  { number: 15, title: 'Run safety: one app per workspace, run owners, safe writes and a resume dialog that lists the steps', state: 'open', labels: [{ name: 'enhancement', color: '#a2eeef' }, { name: 'complexity:5', color: '#5319e7' }, { name: 'impact:5', color: '#d93f0b' }], body: ['## Context', '', 'Two apps on one workspace overwrite each other\'s runs and queue.', '', 'Decision (owner): one app per workspace; every write is safe.', '', '## Tasks', '', ...BIG_TASKS.map((t) => `- [ ] ${t}`)].join('\n') },
+  { number: 14, title: 'Workspace safety and recovery', state: 'open', labels: [{ name: 'epic', color: '#5319e7' }], body: 'Runs, queues and roadmaps survive crashes, renames and a second app.' },
+  { number: 13, title: 'Run reports', state: 'open', labels: [{ name: 'epic', color: '#5319e7' }], body: 'Everything a run produces, shared outside the app.' },
   { number: 12, title: 'Export a run report as Markdown', state: 'open', labels: [{ name: 'enhancement', color: '#a2eeef' }, { name: 'server', color: '#fbca04' }, { name: 'complexity:2', color: '#ededed' }, { name: 'impact:3', color: '#d93f0b' }], body: '- [x] Report layout\n- [ ] Export button\n- [ ] Tests' },
   { number: 11, title: 'Crash when the workspace folder is renamed', state: 'open', labels: [{ name: 'bug', color: '#d73a4a' }, { name: 'impact:5', color: '#d93f0b' }, { name: 'complexity:4', color: '#5319e7' }], body: 'Steps to reproduce: rename the folder while the app is open.' },
   { number: 10, title: 'Dark scrollbars in the terminal dock', state: 'open', labels: [{ name: 'ui', color: '#c5def5' }, { name: 'complexity:1', color: '#ededed' }, { name: 'impact:1', color: '#d93f0b' }], body: '' },
@@ -136,9 +148,20 @@ function demoBacklog(projectId, taskProgress) {
   const issues = DEMO_ISSUES.map((i, n) => ({
     ...i, url: `${DEMO_REPO}/issues/${i.number}`, author: 'octocat', assignees: [],
     tasks: taskProgress(i.body), createdAt: day(n + 3), updatedAt: day(n),
+    ...(DEMO_EPICS.find((e) => e.members.includes(i.number)) ? { epic: DEMO_EPICS.find((e) => e.members.includes(i.number)).id } : {}),
+    ...(i.labels.some((l) => l.name === 'epic') ? { isEpic: true } : {}),
   }));
-  return { projectId, platform: 'github', repo: DEMO_REPO, syncedAt: new Date().toISOString(), issues };
+  const epics = DEMO_EPICS.map((e) => {
+    const members = e.members.map((m) => issues.find((i) => i.number === m));
+    const closed = members.filter((i) => i.state !== 'open').length;
+    return { ...e, url: `${DEMO_REPO}/issues/${e.number}`, state: 'open', progress: { open: members.length - closed, closed, total: members.length } };
+  });
+  return { projectId, platform: 'github', repo: DEMO_REPO, syncedAt: new Date().toISOString(), issues, epics, epicsError: null };
 }
+const DEMO_EPICS = [
+  { id: '#14', number: 14, kind: 'issue', title: 'Workspace safety and recovery', members: [11, 8] },
+  { id: '#13', number: 13, kind: 'issue', title: 'Run reports', members: [12] },
+];
 
 // Demo GitHub Actions minutes (Usage): near the quota, as in the month that motivated the monitor.
 function demoActionsUsage() {
@@ -158,7 +181,7 @@ function demoLocalMerge(ws, projectId) {
   fs.writeFileSync(path.join(ws.runs, runId, 'summary.json'), JSON.stringify({
     run_id: runId, workflow: 'software-development-local-hero', project_id: projectId, status: 'success', mock: false,
     started_at: '2026-01-18T12:00:00.000Z', finished_at: '2026-01-18T12:40:00.000Z', duration_ms: 2400000,
-    issues: [{ number: 11, url: `${DEMO_REPO}/issues/11`, title: DEMO_ISSUES[1].title }], inputs: {}, sessions: [],
+    issues: [{ number: 11, url: `${DEMO_REPO}/issues/11`, title: DEMO_ISSUES.find((x) => x.number === 11).title }], inputs: {}, sessions: [],
     local_merge: { branch: 'fix/workspace-rename', base: 'main', commit },
   }, null, 2));
   fs.writeFileSync(path.join(ws.backlog, `${projectId}.local.json`), JSON.stringify({
@@ -186,13 +209,16 @@ function demoPoConversation(ws, projectId) {
     '## Triage', '', 'Impact 3 (sharing reports), complexity 2 (one renderer, estimate: `src/report.js`, `src/renderer/run.js`). Group with #12.', '',
     'Related: #12',
   ].join('\n');
+  const big = DEMO_ISSUES.find((x) => x.number === 15);
+  const poSplit = require('../src/po-split');
+  const split = poSplit.normalizeSplit(poSplit.proposeSplit(big, { complexity: 5 }), big, { complexity: 5 });
   const messages = [
     { ts: at(0), role: 'user', mode: 'issue', text: 'export the report as pdf', attachments: [shot] },
     { ts: at(20), role: 'po', mode: 'issue', model: 'claude-sonnet-5', costUsd: 0.04, text: 'One question before I draft it:', issue: { reply: 'One question before I draft it:', questions: ['Should the PDF replace the Markdown export, or sit next to it?'], draft: null, duplicates: [], existingIssue: null, addition: '', assumptions: [] } },
     { ts: at(40), role: 'user', mode: 'issue', text: 'Next to it, same layout as the Markdown report.' },
     { ts: at(70), role: 'po', mode: 'issue', model: 'claude-sonnet-5', costUsd: 0.11, text: 'Drafted below. **#12** builds the report this exports: run them together.', issue: {
       reply: 'Drafted below.', questions: [],
-      draft: { title: 'Export the run report as a PDF next to the Markdown export, keeping the same layout', body, labels: ['enhancement', 'impact:3', 'complexity:2', 'area:renderer'], related: [12] },
+      draft: { title: 'Export the run report as a PDF next to the Markdown export, keeping the same layout', body, labels: ['enhancement', 'impact:3', 'complexity:2', 'area:renderer'], related: [12], epic: '#13', epicTitle: 'Run reports' },
       duplicates: [{ number: 12, title: 'Export a run report as Markdown', state: 'open', relation: 'overlaps', reason: 'Same report and menu.' }],
       existingIssue: null, addition: '', assumptions: ['The PDF uses the same template as the Markdown export.'],
     } },
@@ -208,6 +234,14 @@ function demoPoConversation(ws, projectId) {
         { name: 'Scrollbars and docs', issues: [10, 8], workflow: 'software-development.yaml', inputs: { mode: 'validated' }, reason: 'Two small fixes the owner can check in the app.', files: ['src/renderer/style.css'], stage: 3, complexity: 1, guessed: true, estimate: null, warnings: [] },
       ],
       conflicts: [], enrich: [],
+      // #124: the big issue split along its two areas; #138: #15 placed in an epic, a new one for the UI fixes
+      splits: [split],
+      epics: {
+        place: [{ issue: 15, epic: '#14', epicTitle: 'Workspace safety and recovery', reason: 'Run safety is this epic\'s theme.' }],
+        create: [{ title: 'UI polish', goal: 'Small fixes to how the app looks and behaves with the keyboard, shipped together.', issues: [10, 16] }],
+        merge: [],
+        split: [],
+      },
     } },
   ];
   fs.writeFileSync(path.join(ws.backlog, `${projectId}.po.jsonl`), messages.map((m) => JSON.stringify(m)).join('\n') + '\n');
@@ -247,7 +281,7 @@ function demoRoadmap(ws, projectId) {
 const DEMO_ENRICH_RUN = '20260119-090000-demo0012';
 function demoEnrichRun(ws, projectId) {
   const dir = path.join(ws.runs, DEMO_ENRICH_RUN);
-  const i = DEMO_ISSUES[0];
+  const i = DEMO_ISSUES.find((x) => x.number === 12);
   const issues = [{ number: i.number, url: `${DEMO_REPO}/issues/${i.number}`, title: i.title }];
   const document = `# Export a run report as Markdown\n\n## Context\nOwners copy run results by hand into PR descriptions and notes.\n\n## Decisions\n- One Markdown file per run, written into the run folder.\n\n## Acceptance criteria\n- [ ] An Export button in Run Details writes report.md\n- [ ] The report lists steps, agents, costs and the final answer\n- [ ] Tests cover a run with a failed step\n`;
   const inputs = { prompt: `Enrich issue #12 into a complete issue.\nIssue #12: ${i.title}`, goal: 'A complete issue someone else can implement without asking.', document_skill: 'issue-writing', project_path: '', threshold: 8, max_rounds: 5, writer_provider: 'claude', writer_model: 'claude-opus-5-5', writer_effort: 'high', reviewer_provider: 'codex', reviewer_model: 'gpt-6-luna', reviewer_effort: 'high' };
@@ -309,6 +343,8 @@ function simulateChannels(ipcMain) {
     if (channel === 'po:ask') return handle(channel, (e, arg) => fn(e, { ...arg, mock: true }));
     // and its filing of a drafted issue (#117) only previews: never calls gh/glab
     if (channel === 'po:file') return handle(channel, (e, arg) => fn(e, { ...arg, preview: true }));
+    // a split (#124) and an epic (#138) applied from a plan answer only preview too
+    if (channel === 'po:split' || channel === 'po:epic') return handle(channel, (e, arg) => fn(e, { ...arg, preview: true }));
     // the app-wide Supervisor chat too (#28)
     if (channel === 'supervisor:chat') return handle(channel, (e, arg) => fn(e, { ...arg, mock: true }));
     // Save to issue (Write & Review) only previews: never calls gh/glab

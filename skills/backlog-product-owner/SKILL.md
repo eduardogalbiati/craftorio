@@ -1,7 +1,7 @@
 ---
 name: backlog-product-owner
-description: Method for the Backlog's built-in Product Owner - reads a project's synced issues, the queue, runs in progress, local merges and past runs, and proposes which issues to run together, which must not run in parallel, in what order, how big each group is, and which issues to enrich first. Read-only; the owner applies a proposal with a click. Use when the owner asks the Product Owner about the backlog.
-summary: "Groups of issues per run, pairs that must not run in parallel, the order (stages), sizes from past runs, and issues to enrich first; read-only"
+description: Method for the Backlog's built-in Product Owner - reads a project's synced issues, the queue, runs in progress, local merges and past runs, and proposes which issues to run together, which must not run in parallel, in what order, how big each group is, which issues to enrich first, which are too big for one run (and how to split them), and how to organize issues into epics. Read-only; the owner applies a proposal with a click. Use when the owner asks the Product Owner about the backlog.
+summary: "Groups of issues per run, pairs that must not run in parallel, the order (stages), sizes from past runs, issues to enrich first, splits of issues too big for one run, and epics; read-only"
 used_by: "the Product Owner (Backlog screen, on demand)"
 ---
 
@@ -72,6 +72,46 @@ give the reason in `mode_reason` (one sentence, shown under the item in the Road
 
 An issue too vague to implement without guessing (no acceptance criteria, no expected behaviour,
 several readings) goes to `enrich` with what is missing, instead of into a group.
+
+## Split what is too big
+
+Big issues are where runs fail or cost the most: an issue of 14 tasks went through three review
+rounds with major findings in a different area each time; issues of complexity 5 cost $8-11 in
+their test step alone. An issue is **too big for one run** when one or more apply (the report
+lists them as "Split signals", with the issue's tasks numbered):
+
+- complexity 4-5;
+- more than about 8 task items;
+- tasks in unrelated areas of the code (estimated from the files each task names);
+- parts that could ship on their own (task lists under different headings);
+- past runs of a similar size hit the context limit or the test time budget.
+
+For each such issue propose, in `splits`, 2-4 **child issues**:
+
+- each child has a specific title, the numbers of the parent's tasks it takes, its complexity and
+  its `stage` (1 first; children of one stage can run together, e.g. different areas);
+- **every parent task goes to exactly one child**: none dropped, none invented, none twice;
+- cut along the areas or the parts that ship on their own, not in arbitrary chunks;
+- say what becomes of the parent (`parent`): `umbrella` (it keeps its context and gets a task list
+  linking the children) or `close` (closed in favour of them, when nothing is left in it).
+
+Never split an issue without a signal. The owner reviews the proposal, may move a task or merge two
+children, and files the children with one click; nothing is filed before that.
+
+## Organize into epics
+
+An epic groups the issues of one theme (GitHub: an issue labelled `epic` whose sub-issues are its
+members; GitLab: a group epic, or an issue labelled `epic` with members labelled `epic::<name>`).
+The report lists the epics with their members, and each issue's epic. In `epics`:
+
+- `place`: an open issue without an epic that clearly belongs to an existing one (its id: `#12`, `&5`);
+- `create`: a new epic (a title, a one-paragraph goal, its member issues) when several issues share
+  a theme and no epic exists; when asked to "organize into epics", propose epics for the whole
+  open backlog (themes like "Workflow chaining" or "Run safety and recovery");
+- `merge` / `split`: epics that overlap, or one that mixes unrelated themes, with the reason.
+
+When grouping runs, prefer issues of the same epic in one run when they touch the same code.
+Nothing is written until the owner applies a proposal.
 
 ## Sizes
 

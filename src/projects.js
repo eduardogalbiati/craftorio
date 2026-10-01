@@ -76,6 +76,8 @@ function updateProject(dir, id, patch) {
   if (patch.repo !== undefined) next.repo = String(patch.repo).trim() || null;
   // push the local base after every successful local merge (software-development-local-hero)
   if (patch.autoPush !== undefined) next.autoPush = !!patch.autoPush;
+  // #138: a new issue the Product Owner registers joins the existing epic it matches clearly, with no extra click
+  if (patch.autoEpic !== undefined) next.autoEpic = !!patch.autoEpic;
   // how to run a run's worktree from a gate (Run locally); overrides the workflow's orchestrator.local_preview
   if (patch.localPreview !== undefined) next.localPreview = cleanLocalPreview(patch.localPreview);
   // the fingerprint of the declared run command the owner confirmed (#115): a changed one asks again

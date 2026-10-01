@@ -17,6 +17,7 @@
 // accepted document can be saved back to the issue (`saveRunToIssue`: replace the description or comment).
 // An issue-tracker run whose owner chose "create and queue" names the issues to queue (`filedToQueue`);
 // the service syncs the backlog and assigns them when the run ends.
+// Each sync also reads the epics (#138, src/epics.js readEpics): `issue.epic` and the cache's `epics`.
 // Screen: src/renderer/backlog.js; channels: src/service/channels/backlog.js.
 
 const fs = require('fs');
@@ -90,6 +91,8 @@ function normalizeGitlab(raw) {
     tasks: taskProgress(i.description),
     createdAt: i.created_at,
     updatedAt: i.updated_at,
+    // a group epic (GitLab paid tiers): read by src/epics.js, not kept in the cache
+    ...(i.epic?.iid ? { groupEpic: { iid: i.epic.iid, title: i.epic.title || null, groupId: i.epic.group_id ?? null, url: i.epic.web_url || i.epic.url || null } } : {}),
   }));
 }
 
@@ -214,9 +217,10 @@ async function syncBacklog({ dir, project, platform, exec }) {
     fetchIssues({ platform, repo: project.repo, exec }),
     fetchOpenPullRequests({ platform, repo: project.repo, exec }).catch((e) => { pullRequestsError = e.message; return []; }),
   ]);
-  const issues = attachPullRequests(fetched, prs);
+  // epics, like the PRs, never fail the sync: an error leaves a note (epicsError)
+  const { issues, epics, epicsError } = await require('./epics').readEpics({ platform, repo: project.repo, issues: attachPullRequests(fetched, prs), exec });
   issues.sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
-  const data = { projectId: project.id, platform, repo: project.repo, syncedAt: new Date().toISOString(), pullRequestsError, issues };
+  const data = { projectId: project.id, platform, repo: project.repo, syncedAt: new Date().toISOString(), pullRequestsError, issues, epics, epicsError };
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(cacheFile(dir, project.id), JSON.stringify(data, null, 2));
   return data;
@@ -585,6 +589,15 @@ function issueCreateCommand({ platform, repo, title, labels = [], file, text }) 
   return { cli, args, display: `${cli} ${shown.join(' ')}` };
 }
 
+/** The CLI call that closes issue `number` (a parent split into child issues, #124): { cli, args, display }. */
+function issueCloseCommand({ platform, repo, number }) {
+  const target = cliTarget(platform, repo);
+  const n = String(Number(number));
+  const cli = platform === 'github' ? 'gh' : 'glab';
+  const args = platform === 'github' ? ['issue', 'close', n, '--repo', target, '--reason', 'not planned'] : ['issue', 'close', n, '--repo', target];
+  return { cli, args, display: `${cli} ${args.map((a) => (/\s/.test(a) ? `"${a}"` : a)).join(' ')}` };
+}
+
 /**
  * A description with `addition` appended as a dated section ("## Update (YYYY-MM-DD)"), keeping
  * everything already there (the hand-made updates of #77, #96, #110, #112).
@@ -737,9 +750,11 @@ module.exports = {
   readQueue, enqueue, unqueue, skipQueued, newPullRequests, setPaused, nextQueued, pauseAll, runInputs,
   itemIssues, runIssues, execCli, readLocal, writeLocal,
   claimQueued,
+  cliTarget,
   fetchIssue,
   filedToQueue,
   issueAppendBody,
+  issueCloseCommand,
   issueCreateCommand,
   issueSaveBody,
   issueSaveCommand,

@@ -1270,7 +1270,7 @@ function createService({ host }) {
     const roadmap = roadmapView(data.projectId, live);
     const stages = roadmaps.issueStages(roadmap);
     const issues = backlog.linkRuns(data.issues, live, queue, local).map((i) => (stages.has(i.number) ? { ...i, roadmap: stages.get(i.number) } : i));
-    return { ...data, queue, local, roadmap, autoPush: !!project?.autoPush, issues };
+    return { ...data, queue, local, roadmap, autoPush: !!project?.autoPush, autoEpic: !!project?.autoEpic, issues };
   }
 
   // A project's roadmap for the screen: item statuses derived from their runs (#112), each running

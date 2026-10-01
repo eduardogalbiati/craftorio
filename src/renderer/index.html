@@ -272,6 +272,7 @@
             <button class="chip" data-mode="list" role="tab">List</button>
             <button class="chip" data-mode="kanban" role="tab">Kanban</button>
             <button class="chip" data-mode="roadmap" role="tab" title="Ordered stages of runs: each stage starts when the previous one has finished and merged">Roadmap</button>
+            <button class="chip" data-mode="epics" role="tab" title="The epics: themes of issues, with their progress and members">Epics</button>
           </div>
           <div id="bl-filters" class="chips"></div>
           <input type="text" id="bl-search" placeholder="Search issues, labels…" aria-label="Search" />
@@ -280,6 +281,7 @@
             <div id="bl-labels-pop" class="bl-labels-pop hidden" role="menu" aria-label="Labels"></div>
           </div>
           <span id="bl-label-active" class="bl-label-active"></span>
+          <select id="bl-epic" class="hidden" aria-label="Epic" title="Show the issues of one epic, or those in no epic"></select>
           <select id="bl-sort" aria-label="Sort" title="Sort by the triage labels (impact:1-5, complexity:1-5); issues without them go last">
             <option value="updated">Recently updated</option>
             <option value="impact">Impact (highest first)</option>
@@ -1372,8 +1374,10 @@
   <script src="agents.js"></script>
   <script src="sessions.js"></script>
   <script src="backlog-labels.js"></script>
+  <script src="backlog-epics.js"></script>
   <script src="backlog-roadmap.js"></script>
   <script src="backlog.js"></script>
+  <script src="backlog-po-proposals.js"></script>
   <script src="backlog-po.js"></script>
   <script src="builder.js"></script>
   <script src="analytics.js"></script>
