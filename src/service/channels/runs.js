@@ -18,7 +18,7 @@ module.exports = (ctx) => [
         : undefined;
       const kept = list && !confirmed ? ctx.keptWorkForIssues(list) : null;
       if (kept) return { confirm: kept.message, runId: kept.runId };
-      return ctx.startWorkflowRun({ file, inputs, mock, mockSequences, projectId: projectId || undefined, issues: list });
+      return ctx.startWorkflowRun({ file, inputs, mock, mockSequences, projectId: projectId || undefined, issues: list, allowKeptWork: true });
     },
   },
   // runId: the run to stop (without it, the only run in progress)

@@ -490,7 +490,9 @@ function createService({ host }) {
   }
 
   // mockSequences: simulation scenario ({ field: [value per visit] }, invalid_answers), ignored for real runs
-  async function startWorkflowRun({ file, inputs, mock, mockSequences = null, resume = null, projectId: forcedProject = null, issues = null }) {
+  // allowKeptWork: the owner chose to start these issues again although an ended run kept commits
+  // for them (run:start's confirmation, a confirmed roadmap Retry); otherwise that start is refused (#112)
+  async function startWorkflowRun({ file, inputs, mock, mockSequences = null, resume = null, projectId: forcedProject = null, issues = null, allowKeptWork = false }) {
     // simulation-only (automated checks): a real run is refused, never turned into a simulation
     if (!mock) simulation.refuseReal('a real run');
     // the same issues never get a second live run, from this app or another one (#112): resume that run instead
@@ -498,6 +500,13 @@ function createService({ host }) {
     if (twin) {
       const err = new Error(`${twin.issues.map((i) => `#${i.number}`).join(', ')} already has a live run, ${twin.runId}${twin.runningElsewhere ? ' (in another app window)' : ''}: open or resume that run instead of starting the same work twice.`);
       err.runId = twin.runId;
+      throw err;
+    }
+    // automation (queue, roadmap) cannot ask: it stops and names the run that holds the same work (#112)
+    const kept = resume || allowKeptWork ? null : keptWorkForIssues(issues);
+    if (kept) {
+      const err = new Error(`${kept.message} Resume that run, or start the issues again on purpose (Retry on the roadmap item, Start on the issue).`);
+      err.runId = kept.runId;
       throw err;
     }
     const slot = { mock: !!mock, projectId: forcedProject };
@@ -529,9 +538,6 @@ function createService({ host }) {
         console.warn(msg);
         notices.push({ level: 'warn', message: msg });
       }
-      // automation (queue, roadmap) cannot ask: the run says which earlier run holds the same work (#112)
-      const kept = resume ? null : keptWorkForIssues(issues);
-      if (kept) notices.push({ level: 'warn', message: kept.message });
       const project = projectId ? projects.listProjects(ws.projects).find((p) => p.id === projectId) : null;
       run = new WorkflowRun({
         file: wfFile.file, inputs, mock, runsDir: ws.runs, skillsDirs: [ws.skills], notices,
@@ -1049,15 +1055,22 @@ function createService({ host }) {
   }
 
   // Whether the owner may confirm, at resume, the decision a run took at a human gate (#112): only
-  // a positive decision, and only while the branch is still at the commit approved there (a
-  // simulation has no branch: nothing can have changed). { ok, approvedCommit, currentCommit, reason }
-  function gateConfirmation(runDir, gate, spec) {
+  // an approval (approved: true, or the gate's first choice, its forward one by the workflows'
+  // convention, e.g. `approve`; never `changes` or `stop`), and only while the branch is still at
+  // the commit approved there (a simulation has no branch: nothing can have changed).
+  // { ok, approvedCommit, currentCommit, reason }
+  function gateConfirmation(runDir, gate, spec, wf) {
     const evs = supervisor.readEvents(runDir);
-    const stepOf = new Map(evs.filter((e) => e.type === 'approval.requested').map((e) => [e.approval_id, e.step_id]));
-    const decided = evs.filter((e) => e.type === 'approval.resolved' && !e.withdrawn && (e.step_id || stepOf.get(e.approval_id)) === gate).pop();
+    const requested = new Map(evs.filter((e) => e.type === 'approval.requested').map((e) => [e.approval_id, e]));
+    const decided = evs.filter((e) => e.type === 'approval.resolved' && !e.withdrawn && (e.step_id || requested.get(e.approval_id)?.step_id) === gate).pop();
     const out = spec.steps[gate]?.output || {};
     if (!decided && !spec.steps[gate]) return { ok: false, reason: `the previous run has no decision at ${gate}` };
-    if (decided?.approved === false || out.approved === false) return { ok: false, reason: `${gate} was rejected` };
+    const choices = (decided && requested.get(decided.approval_id)?.choices) || wf?.steps.find((s) => s.id === gate)?.choices || null;
+    const choice = decided ? decided.choice : out.choice;
+    const approval = choice !== undefined && choice !== null
+      ? !!choices?.length && String(choices[0].id) === String(choice) && !choices[0].feedback_required
+      : (decided ? decided.approved === true : out.approved !== false);
+    if (!approval) return { ok: false, reason: `the decision at ${gate} was ${choice ?? 'a rejection'}, not an approval` };
     const approvedCommit = decided?.commit || null;
     const wt = spec.worktree;
     const currentCommit = wt?.dir && fs.existsSync(wt.dir) ? gitOut(wt.dir, ['rev-parse', 'HEAD']) : null;
@@ -1088,7 +1101,7 @@ function createService({ host }) {
     let confirmedGate = null;
     if (gate) {
       if (confirmGate !== gate) throw new Error(`Cannot resume from "${fromStep}": it would go past the human gate "${gate}" on the previous run's decision. Resume from "${gate}" instead: it asks again.`);
-      const check = gateConfirmation(runDir, gate, spec);
+      const check = gateConfirmation(runDir, gate, spec, wf);
       if (!check.ok) throw new Error(`Cannot confirm ${gate} again: ${check.reason}. Resume from "${gate}" instead: it asks again.`);
       confirmedGate = { step: gate, commit: check.currentCommit };
     }
@@ -1120,7 +1133,7 @@ function createService({ host }) {
     // a step after a decided gate: allowed when the owner confirms that gate again (#112), see gateConfirmation
     const confirmations = new Map();
     const confirmationOf = (gate) => {
-      if (!confirmations.has(gate)) confirmations.set(gate, gateConfirmation(runDir, gate, spec));
+      if (!confirmations.has(gate)) confirmations.set(gate, gateConfirmation(runDir, gate, spec, wf));
       return confirmations.get(gate);
     };
     const steps = wf.steps.map((s) => {
@@ -1445,6 +1458,10 @@ function createService({ host }) {
   // while one is going runs again right after it (a run that ends meanwhile is never missed).
   let roadmapBusy = false;
   let roadmapAgain = false;
+  // "<projectId>:<itemId>" of the items whose Retry the owner confirmed over a kept worktree's work
+  // (#112): their next start goes ahead; kept in memory, so after a restart the start asks again
+  const keptWorkAllowed = new Set();
+  const allowKeptWork = (projectId, itemId) => keptWorkAllowed.add(`${projectId}:${itemId}`);
   async function dispatchRoadmaps() {
     if (!ws) return;
     if (roadmapBusy) { roadmapAgain = true; return; }
@@ -1499,7 +1516,9 @@ function createService({ host }) {
         const started = await startWorkflowRun({
           file: item.workflow, inputs: backlog.runInputs(run, wf, project.folder), mock: mockOf(item),
           projectId, issues: open.map(({ number, url, title }) => ({ number, url, title })),
+          allowKeptWork: keptWorkAllowed.has(`${projectId}:${item.id}`),
         });
+        keptWorkAllowed.delete(`${projectId}:${item.id}`);
         roadmaps.markStarted(ws.backlog, projectId, item.id, { runId: started.runId });
       } catch (e) {
         roadmaps.markStarted(ws.backlog, projectId, item.id, { error: e.message });
@@ -1653,7 +1672,7 @@ function createService({ host }) {
     get storeError() { return storeError; },
     host, active, events, notify, waiting, terminals, BUNDLED_SKILLS_DIR,
     setUiContext: (c) => { uiContext = notifier.normalizeContext(c); },
-    activeRuns, analyticsSnapshot, analyzeAnalytics, artifactRuns, assignWorkflow, cloneBuilderWorkflow, code, dispatchQueue, dispatchRoadmaps, envDetails, gateChanges, keptWorkForIssues, listAllRuns,
+    activeRuns, allowKeptWork, analyticsSnapshot, analyzeAnalytics, artifactRuns, assignWorkflow, cloneBuilderWorkflow, code, dispatchQueue, dispatchRoadmaps, envDetails, gateChanges, keptWorkForIssues, listAllRuns,
     listCliSessions, listLocalPreviews, listWorkflows, liveRun, loadBuilderWorkflow, openTerminal, projectRuns, pushProject,
     readArtifact, refreshLocal, renameCliSession, resolvePushConflict, restoreWorkflow, resumeOptions, resumeRun,
     roadmapView, runAlive, runAppInfo, runFolder, runPrState, runWorktreeCommits, saveBuilderWorkflow, saveLocalPreview, setBudget, setPrice, setRunTitle, startLocalPreview, startRoadmap, startWorkflowRun, stopLocalPreview, suggestLocalPreview, unpushedProjects, usageSnapshot,
