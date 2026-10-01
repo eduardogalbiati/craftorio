@@ -13,6 +13,7 @@
 // on an issue toggles its label. Selection and assignment only count the issues shown.
 // The third mode, Roadmap, is backlog-roadmap.js (ordered stages of runs); the assign dialog's
 // "Add to roadmap" plans the selection as a new stage, and assigning an issue the roadmap plans asks first.
+// The Product Owner's drawer (backlog-po.js) applies a proposed group through window.BacklogActions.
 // Uses app.js globals ($, esc, state, errMsg, dateOf, markdownHtml, showView, openModal,
 // closeModal, devMode, wantsSimulation, openGateOf, openNextGate, selectRun, confirmDialog).
 /* global api */
@@ -221,7 +222,8 @@
           : `${what ? `${what} ` : ''}${runs} real run${plural}: ${runs > 1 ? 'they use' : 'it uses'} your CLI subscriptions. Human gates still wait for you.`;
   }
 
-  async function openAssign() {
+  // prefill: the Product Owner's proposed group (assignGroup): { workflow, inputs, group }
+  async function openAssign(prefill = null) {
     if (!shownSelected().length) return;
     $b('#assign-error').textContent = '';
     try { bl.workflows = (await api.listWorkflows()).filter((w) => !w.error && w.inputs?.task); } catch (e) { bl.error = errMsg(e); render(); return; }
@@ -232,13 +234,60 @@
     const sel = $b('#assign-workflow');
     sel.innerHTML = bl.workflows.map((w) => `<option value="${esc(w.file)}">${esc(w.name)}</option>`).join('');
     const files = bl.workflows.map((w) => w.file);
-    sel.value = [load(WORKFLOW_KEY), 'software-development.yaml', files[0]].find((f) => f && files.includes(f));
+    sel.value = [prefill?.workflow, load(WORKFLOW_KEY), 'software-development.yaml', files[0]].find((f) => f && files.includes(f));
     // real runs by default: Simulation is opt-in (checked only where real runs are refused anyway)
     $b('#assign-mock').checked = !!state.simulationOnly;
-    document.querySelector('input[name="assign-group"][value="separate"]').checked = true;
+    document.querySelector(`input[name="assign-group"][value="${prefill?.group ? 'group' : 'separate'}"]`).checked = true;
     renderAssignBusy();
     renderAssignInputs();
+    for (const [k, v] of Object.entries(prefill?.inputs || {})) {
+      const el = document.querySelector(`#assign-inputs [data-input="${CSS.escape(k)}"]`);
+      if (el && v != null) el.value = String(v);
+    }
     openModal('#assign-modal');
+  }
+
+  // ---- the Product Owner's proposals (backlog-po.js) ------------------------------------------
+  // Only on the owner's click: a proposed group in the assign dialog (its To do issues selected, the
+  // filters cleared if they hide one, one run, its workflow and inputs), or as a new roadmap stage.
+  // Both return the issues left out (not To do any more, or not synced).
+  async function assignGroup({ issues, workflow, inputs }) {
+    const todo = (bl.data?.issues || []).filter(selectable);
+    const numbers = issues.filter((n) => todo.some((i) => i.number === n));
+    const skipped = issues.filter((n) => !numbers.includes(n));
+    if (!numbers.length) return skipped;
+    if (bl.mode === 'roadmap') { bl.mode = 'list'; save(MODE_KEY, bl.mode); }
+    if (numbers.some((n) => !isShown(todo.find((i) => i.number === n)))) {
+      bl.q = '';
+      $b('#bl-search').value = '';
+      setLabels([]);
+      bl.filter = 'open';
+    }
+    bl.selected.clear();
+    for (const n of numbers) bl.selected.add(n);
+    render();
+    await openAssign({ workflow, inputs, group: numbers.length > 1 });
+    return skipped;
+  }
+
+  async function roadmapGroup({ issues, workflow, inputs }) {
+    const list = issues.map((n) => (bl.data?.issues || []).find((i) => i.number === n)).filter(Boolean);
+    const skipped = issues.filter((n) => !list.some((i) => i.number === n));
+    if (!list.length) return skipped;
+    const wf = (await api.listWorkflows()).find((w) => w.file === workflow);
+    await window.BacklogRoadmap.addStage(roadmapCtx(), bl.data, {
+      issues: list, workflow, workflowName: wf?.name || workflow, inputs: inputs || {}, mock: !!state.simulationOnly, group: list.length > 1,
+    });
+    showRoadmap();
+    return skipped;
+  }
+
+  // After a roadmap change from outside the screen (the Product Owner's "Add all to the roadmap").
+  function showRoadmap(data) {
+    if (data) setData(data);
+    bl.mode = 'roadmap';
+    save(MODE_KEY, bl.mode);
+    render();
   }
 
   // Selected issues the roadmap already plans (not started): assigning them takes them out of it.
@@ -627,7 +676,7 @@
     if (!PLATFORMS[bl.platform]?.soon) sync();
   };
   $b('#btn-bl-sync').onclick = sync;
-  $b('#btn-bl-assign').onclick = openAssign;
+  $b('#btn-bl-assign').onclick = () => openAssign();
   $b('#btn-bl-clear').onclick = () => { bl.selected.clear(); render(); };
   $b('#bl-search').oninput = (e) => { bl.q = e.target.value.trim(); render(); };
   $b('#bl-mode').onclick = (e) => {
@@ -736,4 +785,11 @@
   $b('#btn-assign-cancel').onclick = () => closeModal('#assign-modal');
 
   window.refreshBacklog = refreshBacklog;
+  window.BacklogActions = {
+    assignGroup,
+    data: () => bl.data,
+    projectId: () => bl.projectId,
+    roadmapGroup,
+    showRoadmap,
+  };
 })();

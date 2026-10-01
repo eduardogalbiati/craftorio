@@ -95,10 +95,10 @@ function recordShot(dir, { path: file, caption, before }) {
 // ---- simulated data ------------------------------------------------------------------------
 const DEMO_REPO = 'https://github.com/example/demo-app';
 const DEMO_ISSUES = [
-  { number: 12, title: 'Export a run report as Markdown', state: 'open', labels: [{ name: 'enhancement', color: '#a2eeef' }], body: '- [x] Report layout\n- [ ] Export button\n- [ ] Tests' },
+  { number: 12, title: 'Export a run report as Markdown', state: 'open', labels: [{ name: 'enhancement', color: '#a2eeef' }, { name: 'server', color: '#fbca04' }, { name: 'complexity:2', color: '#ededed' }], body: '- [x] Report layout\n- [ ] Export button\n- [ ] Tests' },
   { number: 11, title: 'Crash when the workspace folder is renamed', state: 'open', labels: [{ name: 'bug', color: '#d73a4a' }], body: 'Steps to reproduce: rename the folder while the app is open.' },
-  { number: 10, title: 'Dark scrollbars in the terminal dock', state: 'open', labels: [{ name: 'ui', color: '#c5def5' }], body: '' },
-  { number: 9, title: 'Add a /health endpoint', state: 'open', labels: [{ name: 'enhancement', color: '#a2eeef' }], body: '- [ ] Endpoint\n- [ ] Docs' },
+  { number: 10, title: 'Dark scrollbars in the terminal dock', state: 'open', labels: [{ name: 'ui', color: '#c5def5' }, { name: 'complexity:1', color: '#ededed' }], body: '' },
+  { number: 9, title: 'Add a /health endpoint', state: 'open', labels: [{ name: 'enhancement', color: '#a2eeef' }, { name: 'server', color: '#fbca04' }, { name: 'complexity:3', color: '#ededed' }], body: '- [ ] Endpoint\n- [ ] Docs' },
   { number: 8, title: 'Document the workflow YAML', state: 'closed', labels: [{ name: 'docs', color: '#0075ca' }], body: '' },
 ];
 
@@ -199,6 +199,8 @@ function simulateChannels(ipcMain) {
     if (channel === 'usage:actions') return handle(channel, () => demoActionsUsage());
     // the supervisor's report on the sessions (Analytics) uses the mock provider
     if (channel === 'analytics:analyze') return handle(channel, (e, arg) => fn(e, { ...arg, mock: true }));
+    // the Backlog's Product Owner answers from its simulated self (no model call)
+    if (channel === 'po:ask') return handle(channel, (e, arg) => fn(e, { ...arg, mock: true }));
     return handle(channel, channel === 'backlog:sync' ? (e, arg) => handlers['backlog:get'](e, { projectId: arg?.projectId }) : fn);
   };
 }

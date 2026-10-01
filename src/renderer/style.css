@@ -896,6 +896,36 @@ body.resizing-dock .term-body { pointer-events: none; }
 .sup-wmsg-meta { font-size: 11px; color: var(--muted); margin-bottom: 4px; font-family: var(--mono); }
 .sup-watch-ask input { flex: 1; min-width: 0; }
 
+/* ---------- Backlog › Product Owner (#105, backlog-po.js): teal, like its robot ---------- */
+.po-fab {
+  position: fixed; right: 24px; bottom: 24px; z-index: 4; width: 64px; height: 64px; padding: 4px;
+  border-radius: 50%; border: 2px solid #0F9F8F; background: var(--panel); cursor: pointer;
+  box-shadow: 0 8px 24px rgba(0,0,0,.4); transition: transform .15s ease;
+}
+.po-fab:hover { transform: scale(1.06); }
+.po-fab svg { width: 100%; height: 100%; display: block; }
+.po-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.po-avatar { width: 40px; height: 40px; flex: none; }
+.po-avatar svg, .po-empty-robot svg { width: 100%; height: 100%; display: block; }
+.po-log { display: flex; flex-direction: column; gap: 10px; }
+.po-empty { display: flex; gap: 14px; align-items: center; }
+.po-empty-robot { width: 96px; height: 96px; flex: none; }
+.po-msg { border-left-color: #0F9F8F; }
+.po-sec { margin-top: 12px; }
+.po-sec .sup-h { color: #2DD4BF; }
+.po-group { border: 1px solid var(--border); border-left: 3px solid #0F9F8F; background: var(--panel); border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; display: grid; gap: 5px; }
+.po-group-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.po-issues { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+.po-issue { text-decoration: none; color: var(--text); }
+.po-issue:hover { border-color: #2DD4BF; }
+.po-list a:not(.po-issue) { color: #2DD4BF; }
+.po-group-actions { flex-wrap: wrap; margin-top: 2px; }
+.po-list { margin: 0; padding-left: 18px; display: grid; gap: 4px; font-size: 13px; }
+.po-foot { display: grid; gap: 8px; }
+.po-chips { margin-bottom: 0; }
+.po-ask textarea { flex: 1; min-width: 0; resize: vertical; }
+#po-note { margin: 0; }
+
 .toast {
   position: fixed; right: 18px; bottom: 18px; z-index: 30; max-width: 380px; display: flex; flex-direction: column; gap: 3px;
   padding: 10px 14px; border-radius: 10px; background: var(--panel); border: 1px solid rgba(192,132,252,.5);

@@ -286,6 +286,7 @@
         <div id="bl-queue" class="bl-queue hidden"></div>
         <p id="bl-error" class="error small"></p>
         <div id="bl-list" class="pr-list"></div>
+        <button id="btn-bl-po" class="po-fab" type="button" title="Ask the Product Owner: which issues to run together, which not, in what order" aria-label="Product Owner"></button>
       </section>
 
       <!-- ================= Artifacts ================= -->
@@ -941,6 +942,35 @@
         <div id="sup-result"></div>
       </div>
     </aside>
+
+    <!-- ================= Product Owner panel (Backlog, #105; backlog-po.js) ================= -->
+    <div id="po-backdrop" class="drawer-backdrop sup-backdrop hidden"></div>
+    <aside id="po-drawer" class="drawer sup-drawer po-drawer" aria-hidden="true" aria-label="Product Owner">
+      <div class="drawer-head">
+        <div class="po-head">
+          <span id="po-avatar" class="po-avatar" aria-hidden="true"></span>
+          <div class="sup-head">
+            <h2 class="drawer-title">Product Owner</h2>
+            <div id="po-sub" class="muted small"></div>
+          </div>
+        </div>
+        <div class="row">
+          <button id="btn-po-clear" class="btn sm ghost" type="button" title="Forget this project's conversation">Clear</button>
+          <button id="btn-po-close" class="icon-btn" title="Close (Esc)">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" /></svg>
+          </button>
+        </div>
+      </div>
+      <div id="po-log" class="drawer-body po-log"></div>
+      <div class="drawer-foot po-foot">
+        <div id="po-chips" class="chips po-chips"></div>
+        <div class="row po-ask">
+          <textarea id="po-question" rows="2" placeholder="Ask about the backlog: which issues should go first?"></textarea>
+          <button id="btn-po-ask" class="btn primary" type="button">Ask</button>
+        </div>
+        <p id="po-note" class="muted small"></p>
+      </div>
+    </aside>
   </div>
 
   <div id="toast" class="toast hidden" role="status"></div>
@@ -1119,7 +1149,7 @@
       </aside>
       <div class="ag-form">
         <h3 id="agent-modal-title">New agent</h3>
-        <p id="ag-system-note" class="ag-note hidden">Built into the platform: its prompt and skills can't be changed. You can change how it looks; the new look shows wherever the supervisor appears (e.g. Write &amp; Review).</p>
+        <p id="ag-system-note" class="ag-note hidden">Built into the platform: its prompt and skills can't be changed. You can change how it looks; the new look shows wherever <span id="ag-system-where">the supervisor appears (e.g. Write &amp; Review)</span>.</p>
         <div class="field">
           <label for="ag-name">Name <span class="req" id="ag-name-req">*</span></label>
           <input type="text" id="ag-name" maxlength="60" placeholder="e.g. Security reviewer" />
@@ -1149,6 +1179,18 @@
           <label>Skills <span class="muted">(<span id="ag-skill-count">0</span> selected; always given to this agent)</span></label>
           <input type="text" id="ag-skill-search" placeholder="Filter skills…" />
           <div id="ag-skills" class="ag-skills"></div>
+        </div>
+        <!-- the Product Owner only (#105): its model and effort (Claude Code) -->
+        <div id="ag-model-row" class="row hidden">
+          <div class="field">
+            <label for="ag-model">Model <span class="muted">(Claude Code)</span></label>
+            <input type="text" id="ag-model" list="ag-model-list" maxlength="80" placeholder="claude-opus-5-5" />
+            <datalist id="ag-model-list"></datalist>
+          </div>
+          <div class="field">
+            <label>Effort</label>
+            <div id="ag-effort" class="seg sm" role="group" aria-label="Effort"></div>
+          </div>
         </div>
 
         <p id="ag-error" class="error small"></p>
@@ -1405,6 +1447,7 @@
   <script src="backlog-labels.js"></script>
   <script src="backlog-roadmap.js"></script>
   <script src="backlog.js"></script>
+  <script src="backlog-po.js"></script>
   <script src="builder.js"></script>
   <script src="analytics.js"></script>
 </body>

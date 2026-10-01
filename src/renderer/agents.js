@@ -1,12 +1,19 @@
-// Agents screen: the list of agents (the built-in supervisor first) and the editor: the robot's look
-// (colors, eyes, emblem) with a live preview, the prompt (what the agent is for) and its skills.
+// Agents screen: the list of agents (the built-in supervisor and Product Owner first) and the editor:
+// the robot's look (colors, eyes, emblem) with a live preview, the prompt (what the agent is for) and
+// its skills; for the Product Owner, its model and effort instead.
 // Storage and validation are in src/agents.js. Uses app.js globals ($, esc, state, openModal,
 // closeModal, confirmDialog, errMsg, dateOf) and window.Robots (robots.js).
 /* global api, Robots */
 (() => {
   const SUPERVISOR = 'supervisor';
+  const PRODUCT_OWNER = 'product-owner';
   // Must match DEFAULT_APPEARANCE in src/agents.js (the supervisor's own look).
   const DEFAULT_LOOK = { body: '#7C5CFF', shell: '#F4F4F6', visor: '#15161A', glow: '#C9B8FF', eyes: 'dots', emblem: 'none' };
+  // Must match PRODUCT_OWNER_APPEARANCE in src/agents.js.
+  const PRODUCT_OWNER_LOOK = { body: '#0F9F8F', shell: '#F4F4F6', visor: '#15161A', glow: '#9FF5E6', eyes: 'arcs', emblem: 'clipboard' };
+  const defaultLook = () => (ed.agent?.id === PRODUCT_OWNER ? PRODUCT_OWNER_LOOK : DEFAULT_LOOK);
+  // where each built-in agent's look shows (the editor's note)
+  const SHOWN_IN = { [SUPERVISOR]: 'the supervisor appears (e.g. Write & Review)', [PRODUCT_OWNER]: 'the Product Owner appears (its Backlog button and drawer)' };
   const COLORS = [
     { key: 'body', label: 'Main color', hint: 'body and shoulder plate',
       swatches: ['#7C5CFF', '#3D7BF7', '#0EA5E9', '#14B8A6', '#10B981', '#84CC16', '#F59E0B', '#F97316', '#EF4444', '#EC4899', '#64748B', '#18181B'] },
@@ -19,7 +26,7 @@
   ];
   const EYE_LABELS = { dots: 'Dots', bars: 'Bars', arcs: 'Arcs', slits: 'Slits' };
   const EMBLEM_LABELS = {
-    none: 'Panel (no emblem)', bolt: 'Bolt', heart: 'Heart', shield: 'Shield', leaf: 'Leaf', gear: 'Gear', code: 'Code',
+    none: 'Panel (no emblem)', bolt: 'Bolt', clipboard: 'Clipboard', heart: 'Heart', shield: 'Shield', leaf: 'Leaf', gear: 'Gear', code: 'Code',
     rocket: 'Rocket', eye: 'Eye', crown: 'Crown', flask: 'Flask', star5: 'Star',
   };
   const PREVIEW_STATES = [['idle', 'Idle'], ['thinking', 'Thinking'], ['writing', 'Writing'], ['done', 'Done'], ['waiting', 'Waiting'], ['error', 'Error']];
@@ -29,12 +36,15 @@
   let agents = [];
 
   const variantOf = (a, name) => Robots.fromAppearance(a.appearance || a, name ?? a.name);
-  const isSystem = () => ed.agent?.id === SUPERVISOR;
+  const isSystem = () => !!ed.agent?.system;
+  const isProductOwner = () => ed.agent?.id === PRODUCT_OWNER;
 
-  // The supervisor's saved look replaces its default robot everywhere (Write & Review).
+  // The built-in agents' saved looks replace their default robots everywhere (Write & Review, the
+  // Backlog's Product Owner). The Product Owner's model and effort are read by backlog-po.js.
   function applySupervisorLook() {
-    const sup = agents.find((a) => a.id === SUPERVISOR);
-    if (sup && window.Robots) Robots.define(SUPERVISOR, sup.appearance, 'Supervisor');
+    if (!window.Robots) return;
+    for (const a of agents.filter((x) => x.system)) Robots.define(a.id, a.appearance, a.name);
+    window.productOwnerAgent = agents.find((a) => a.id === PRODUCT_OWNER) || null;
   }
 
   // One agent card: avatar, name, description and skills. Shared with the builder's agent picker
@@ -57,7 +67,7 @@
           </div>
         </div>
         ${actions ? `<div class="card-actions">
-          <span class="muted small">${a.system ? 'Look only' : a.updatedAt ? `updated ${esc(dateOf(a.updatedAt))}` : ''}</span>
+          <span class="muted small">${a.system ? (a.model ? `Look and model · ${esc(a.model)}` : 'Look only') : a.updatedAt ? `updated ${esc(dateOf(a.updatedAt))}` : ''}</span>
           <span class="spacer"></span>
           <button class="btn sm ghost" data-act="edit">${a.system ? 'Customize' : 'Edit'}</button>
           ${a.system ? '' : '<button class="btn sm ghost danger" data-act="remove">Remove</button>'}
@@ -101,13 +111,19 @@
   // ---- editor ---------------------------------------------------------------------------
   function openAgentModal(a) {
     ed.agent = a;
-    ed.look = { ...DEFAULT_LOOK, ...(a?.appearance || {}) };
+    ed.look = { ...defaultLook(), ...(a?.appearance || {}) };
     ed.skills = new Set(a?.skills || []);
     ed.state = 'idle';
     ed.filter = '';
+    ed.effort = a?.effort || 'high';
     const system = isSystem();
-    $a('#agent-modal-title').textContent = a ? (system ? 'Customize the supervisor' : `Edit ${a.name}`) : 'New agent';
+    $a('#agent-modal-title').textContent = a ? (system ? `Customize the ${a.id === SUPERVISOR ? 'supervisor' : a.name}` : `Edit ${a.name}`) : 'New agent';
     $a('#ag-system-note').classList.toggle('hidden', !system);
+    $a('#ag-system-where').textContent = SHOWN_IN[a?.id] || '';
+    $a('#ag-model-row').classList.toggle('hidden', !isProductOwner());
+    $a('#ag-model').value = a?.model || '';
+    $a('#ag-model-list').innerHTML = (window.ChatModels?.PROVIDERS['claude-code']?.models || []).map((m) => `<option value="${esc(m)}"></option>`).join('');
+    renderEffort();
     $a('#ag-name').value = a?.name || '';
     $a('#ag-description').value = a?.description || '';
     $a('#ag-prompt').value = a?.prompt || '';
@@ -127,8 +143,13 @@
   }
 
   function renderPreview() {
-    const name = $a('#ag-name').value.trim() || (isSystem() ? 'Supervisor' : 'New agent');
+    const name = $a('#ag-name').value.trim() || (isSystem() ? ed.agent.name : 'New agent');
     $a('#ag-robot').innerHTML = Robots.svg(variantOf(ed.look, name), ed.state);
+  }
+
+  function renderEffort() {
+    $a('#ag-effort').innerHTML = ['default', ...(window.ChatModels?.EFFORTS || ['low', 'medium', 'high', 'xhigh'])]
+      .map((e) => `<button type="button" data-effort="${e}" class="${e === ed.effort ? 'active' : ''}">${e}</button>`).join('');
   }
 
   function renderStates() {
@@ -189,7 +210,9 @@
 
   async function saveAgent(e) {
     e.preventDefault();
-    const data = isSystem()
+    const data = isProductOwner()
+      ? { appearance: ed.look, model: $a('#ag-model').value.trim(), effort: ed.effort }
+      : isSystem()
       ? { appearance: ed.look }
       : { name: $a('#ag-name').value, description: $a('#ag-description').value, prompt: $a('#ag-prompt').value, skills: [...ed.skills], appearance: ed.look };
     const btn = $a('#btn-ag-save');
@@ -215,7 +238,8 @@
       if (ed.agent && (await removeAgent(ed.agent))) closeModal('#agent-modal');
     };
     $a('#btn-ag-shuffle').onclick = shuffleLook;
-    $a('#btn-ag-reset').onclick = () => setLook({ ...DEFAULT_LOOK });
+    $a('#btn-ag-reset').onclick = () => setLook({ ...defaultLook() });
+    $a('#ag-effort').onclick = (e) => { const b = e.target.closest('[data-effort]'); if (b) { ed.effort = b.dataset.effort; renderEffort(); } };
     $a('#ag-name').addEventListener('input', renderPreview);
     $a('#ag-states').onclick = (e) => {
       const b = e.target.closest('[data-state]');
@@ -246,7 +270,7 @@
       e.target.closest('.ag-skill').classList.toggle('on', e.target.checked);
       $a('#ag-skill-count').textContent = String(ed.skills.size);
     });
-    // the supervisor's customized look, for the screens that show it
+    // the built-in agents' customized looks, for the screens that show them
     api.listAgents().then((list) => { agents = list; applySupervisorLook(); }).catch(() => {});
   }
 
