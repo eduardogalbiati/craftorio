@@ -56,10 +56,10 @@ test('a bare `bash` capability keeps allowing everything: no need for the fixed 
   assert.equal(argAfter(args, '--allowedTools'), 'Read Glob Grep Bash');
 });
 
-test('runDirs/commandGuide: an agent with commands gets a logs, a scratch and a screenshots folder under the run, and no other agent does', () => {
+test('runDirs/commandGuide: an agent with commands gets a logs, a scratch and an evidence folder under the run, and no other agent does', () => {
   const withBash = caps.normalize({ tools: ['read', 'bash:git'] });
   const noBash = caps.normalize({ tools: ['read'] });
-  assert.deepEqual(caps.runDirs(withBash, 'C:/run'), [path.join('C:/run', 'logs'), path.join('C:/run', 'scratch'), path.join('C:/run', 'screenshots')]);
+  assert.deepEqual(caps.runDirs(withBash, 'C:/run'), [path.join('C:/run', 'evidence'), path.join('C:/run', 'logs'), path.join('C:/run', 'scratch')]);
   assert.deepEqual(caps.runDirs(noBash, 'C:/run'), []);
   assert.deepEqual(caps.runDirs(withBash, null), [], 'no run folder yet: nothing to offer');
   assert.equal(caps.commandGuide(noBash, 'C:/run'), '', 'nothing to tell an agent with no commands');
@@ -217,11 +217,11 @@ test('a real turn gets the capability and isolation flags, and its context is me
   assert.equal(argAfter(spawn.args, '--tools'), 'Read,Glob,Grep,Bash');
   assert.equal(argAfter(spawn.args, '--allowedTools'), ['Read Glob Grep Bash(gh:*) Bash(MULTIAGENT_SIMULATION_ONLY=1 gh:*)', ...READ_BASH].join(' '));
   assert.ok(spawn.args.includes('--verbose'), 'cli_args still apply on top');
-  // the run's logs, scratch and screenshots folders exist and are offered to the CLI with --add-dir (#96, #120)
+  // the run's logs, scratch and evidence folders exist and are offered to the CLI with --add-dir (#96, #120, #146)
   const runDirArgs = spawn.args.filter((a, i) => spawn.args[i - 1] === '--add-dir');
   assert.ok(runDirArgs.some((d) => d.endsWith(`${path.sep}logs`) && fs.existsSync(d)), runDirArgs.join(', '));
   assert.ok(runDirArgs.some((d) => d.endsWith(`${path.sep}scratch`) && fs.existsSync(d)), runDirArgs.join(', '));
-  assert.ok(runDirArgs.some((d) => d.endsWith(`${path.sep}screenshots`) && fs.existsSync(d)), runDirArgs.join(', '));
+  assert.ok(runDirArgs.some((d) => d.endsWith(`${path.sep}evidence`) && fs.existsSync(d)), runDirArgs.join(', '));
   const log = events.find((e) => e.type === 'log' && e.kind === 'capabilities');
   assert.match(log.message, /dev \(claude-code, isolated\): tools: read, bash: gh/);
 

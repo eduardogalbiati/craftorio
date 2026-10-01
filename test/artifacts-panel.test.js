@@ -34,7 +34,7 @@ test('ARTIFACT_EVENTS covers what adds a file to a run (handoffs, decisions, sav
 // ---------------------------------------------------------------------------------------------
 // ArtifactsPanel itself: the whole module, evaluated with app.js's helpers stubbed.
 function loadPanel(opts = {}) {
-  const calls = { openArtifactsAt: [], readArtifact: [], artifactMenuOpen: [] };
+  const calls = { openArtifactsAt: [], readArtifact: [], artifactMenuOpen: [], imageViewerOpen: [] };
   const sandbox = {
     esc: (s) => (s == null ? '' : String(s)),
     artKindIcon: (kind) => `<i data-kind="${kind}"></i>`,
@@ -48,9 +48,16 @@ function loadPanel(opts = {}) {
     // the copy menu itself is artifact-menu.js's own seam (test/artifact-menu.test.js): here only
     // the wiring (what target onContextMenu opens it with) matters (#114)
     ArtifactMenu: { open: (e, target) => calls.artifactMenuOpen.push(target) },
+    // the shared image viewer is image-viewer.js's own seam (#145): here only the wiring (what it
+    // is opened with) and the thumbnail attributes (ImageViewer.THUMB) matter
+    ImageViewer: {
+      THUMB: 'tabindex="0" role="button" title="Click to enlarge" data-iv-thumb',
+      open: (o) => calls.imageViewerOpen.push(o),
+    },
     api: {
       listArtifacts: opts.listArtifacts || (async () => [{ artifacts: [] }]),
       readArtifact: opts.readArtifact || (async (p) => { calls.readArtifact.push(p); return { text: '' }; }),
+      runEvidence: opts.runEvidence,
     },
     window: {},
     document: {},
@@ -143,30 +150,94 @@ test('preview: selecting a markdown artifact renders it through markdownHtml', a
   assert.match(body.innerHTML, /<article class="md"><md># Handoff\n\nDone\.<\/md><\/article>/);
 });
 
-test('preview: a before/after pair from screenshots.json renders both images side by side', async () => {
+// A manifest (#146, src/evidence.js, as returned by src/service/index.js's runEvidence) with one
+// final original/modified pair for issue #146.
+function evidenceFixture() {
+  const modified = '/r/evidence/evidence/round-1/146-login-default.modified.png';
+  const original = '/r/evidence/evidence/round-1/146-login-default.original.png';
+  return {
+    version: 1, base: 'main', branch: 'feat/146', legacy: undefined,
+    final: { step: 'evidence', round: 1 },
+    rounds: [{ step: 'evidence', round: 1, captured_at: '2026-01-01T00:00:00Z', final: true }],
+    images: [
+      { path: 'evidence/evidence/round-1/146-login-default.modified.png', file: modified, pair: 'evidence/evidence/round-1/146-login-default.original.png', pair_file: original, side: 'modified', key: '146-login-default', issue: '146', caption: 'Login page', commit: 'abc1234', step: 'evidence', round: 1, final: true },
+      { path: 'evidence/evidence/round-1/146-login-default.original.png', file: original, pair: 'evidence/evidence/round-1/146-login-default.modified.png', pair_file: modified, side: 'original', key: '146-login-default', issue: '146', caption: 'Login page', commit: null, step: 'evidence', round: 1, final: true },
+    ],
+  };
+}
+
+test('preview: a final original/modified pair from the evidence manifest renders both images side by side, labelled Original/Modified', async () => {
+  const ev = evidenceFixture();
+  const [modified, original] = ev.images.map((x) => x.file);
   const files = [
-    { path: '/r/screenshots/before.png', name: 'before.png', rel: 'screenshots/before.png', kind: 'image', size: 1, mtime: '2026-01-01T00:00:00Z' },
-    { path: '/r/screenshots/after.png', name: 'after.png', rel: 'screenshots/after.png', kind: 'image', size: 1, mtime: '2026-01-01T00:00:01Z' },
-    { path: '/r/screenshots/screenshots.json', name: 'screenshots.json', rel: 'screenshots/screenshots.json', kind: 'other', size: 1, mtime: '2026-01-01T00:00:01Z' },
+    { path: modified, name: '146-login-default.modified.png', rel: 'evidence/evidence/round-1/146-login-default.modified.png', kind: 'image', size: 1, mtime: '2026-01-01T00:00:00Z' },
+    { path: original, name: '146-login-default.original.png', rel: 'evidence/evidence/round-1/146-login-default.original.png', kind: 'image', size: 1, mtime: '2026-01-01T00:00:00Z' },
   ];
   const { ArtifactsPanel } = loadPanel({
     listArtifacts: async () => [{ artifacts: files }],
-    readArtifact: async (p) => {
-      if (p.endsWith('screenshots.json')) return { text: JSON.stringify([{ path: 'after.png', before: 'before.png', caption: 'Login page' }]) };
-      if (p.endsWith('after.png')) return { image: 'data:after' };
-      if (p.endsWith('before.png')) return { image: 'data:before' };
-      return {};
-    },
+    runEvidence: async () => ev,
+    readArtifact: async (p) => (p === modified ? { image: 'data:modified' } : { image: 'data:original' }),
   });
   const { root, body } = fakeRoot();
   const panel = ArtifactsPanel.mount(root, { runId: 'r1' });
   await waitTick();
-  panel.select({ path: '/r/screenshots/after.png' });
+  panel.select({ path: modified });
   await waitTick(100);
-  assert.match(body.innerHTML, /class="ap-pair"/);
-  assert.match(body.innerHTML, /Before[\s\S]*data:before/);
-  assert.match(body.innerHTML, /After[\s\S]*data:after/);
   assert.match(body.innerHTML, /Login page/);
+  assert.match(body.innerHTML, /Original \(main\)/);
+  assert.match(body.innerHTML, /Modified \(feat\/146 @abc1234\)/);
+  assert.match(body.innerHTML, new RegExp(`data-ap-img="${modified.replace(/\//g, '\\/')}"[^>]*src="data:modified"`));
+  assert.ok(body.innerHTML.includes(`data-ap-img="${original}"`));
+});
+
+// listArtifacts walks every file under the run folder (src/runs.js), so a run with evidence images
+// also lists them as plain files; the fixtures below include matching entries, as a real run would.
+const fileEntry = (file, mtime = '2026-01-01T00:00:00Z') => ({ path: file, name: path.basename(file), rel: file.replace('/r/', ''), kind: 'image', size: 1, mtime });
+
+test('list: the final set is shown first, grouped by issue, with older rounds collapsed under History', async () => {
+  const ev = evidenceFixture();
+  // an older round (history): the developer step captured this pair before the evidence step did
+  const oldFile = '/r/evidence/developer/round-1/146-login-default.modified.png';
+  ev.images.push({ path: 'evidence/developer/round-1/146-login-default.modified.png', file: oldFile, pair: null, side: 'modified', key: '146-login-default', issue: '146', caption: 'Login page (first try)', commit: null, step: 'developer', round: 1, final: false });
+  ev.rounds.unshift({ step: 'developer', round: 1, captured_at: '2025-12-31T00:00:00Z', final: false });
+  const files = [...ev.images.map((x) => x.file), oldFile].map((f) => fileEntry(f));
+  const { ArtifactsPanel } = loadPanel({ listArtifacts: async () => [{ artifacts: files }], runEvidence: async () => ev });
+  const { root } = fakeRoot();
+  ArtifactsPanel.mount(root, { runId: 'r1' });
+  await waitTick();
+
+  assert.match(root.innerHTML, /Screenshots <span class="badge">final<\/span>[\s\S]*evidence · round 1/);
+  assert.match(root.innerHTML, /Issue #146/);
+  assert.match(root.innerHTML, /Login page/);
+  assert.match(root.innerHTML, /History <span class="muted">1<\/span>/);
+  assert.match(root.innerHTML, /developer · round 1/);
+  assert.match(root.innerHTML, /Login page \(first try\)/);
+});
+
+test('list: no evidence in the run shows "No screenshots in this run"', async () => {
+  const { ArtifactsPanel } = loadPanel({ listArtifacts: async () => [{ artifacts: [fileEntry('/r/a.md')] }], runEvidence: async () => ({ images: [] }) });
+  const { root } = fakeRoot();
+  ArtifactsPanel.mount(root, { runId: 'r1' });
+  await waitTick();
+  assert.match(root.innerHTML, /No screenshots in this run\./);
+});
+
+test('list: a legacy run (screenshots/ + screenshots.json) shows its one set with no History section', async () => {
+  const ev = {
+    version: 1, legacy: true, base: null, branch: null, final: { step: 'screenshots', round: 1 },
+    rounds: [{ step: 'screenshots', round: 1, captured_at: '', final: true }],
+    images: [
+      { path: 'screenshots/after.png', file: '/r/screenshots/after.png', pair: 'screenshots/before.png', pair_file: '/r/screenshots/before.png', side: 'modified', key: 'after', issue: null, caption: 'Settings', commit: null, step: 'screenshots', round: 1, final: true },
+      { path: 'screenshots/before.png', file: '/r/screenshots/before.png', pair: 'screenshots/after.png', pair_file: '/r/screenshots/after.png', side: 'original', key: 'after', issue: null, caption: 'Settings', commit: null, step: 'screenshots', round: 1, final: true },
+    ],
+  };
+  const files = ev.images.map((x) => fileEntry(x.file));
+  const { ArtifactsPanel } = loadPanel({ listArtifacts: async () => [{ artifacts: files }], runEvidence: async () => ev });
+  const { root } = fakeRoot();
+  ArtifactsPanel.mount(root, { runId: 'r1' });
+  await waitTick();
+  assert.match(root.innerHTML, /recorded before evidence rounds/);
+  assert.doesNotMatch(root.innerHTML, /History/);
 });
 
 test('live update: a new artifact (e.g. after file.saved) is reflected once ArtifactsPanel.refreshRun is called', async () => {

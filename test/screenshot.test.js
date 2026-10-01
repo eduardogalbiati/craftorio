@@ -8,7 +8,8 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
-const { parseArgs, recordShot, usage, VIEWS } = require('../scripts/screenshot');
+const { fileName, parseArgs, recordShot, usage, VIEWS } = require('../scripts/screenshot');
+const evidence = require('../src/evidence');
 
 const root = path.join(__dirname, '..');
 
@@ -20,7 +21,8 @@ function tmp(t) {
 
 test('--help prints the header comment: every option, without comment markers', () => {
   const text = usage();
-  for (const opt of ['--view', '--tab', '--click', '--ref', '--out', '--name', '--caption', '--before', '--input', '--stop-at']) assert.match(text, new RegExp(opt));
+  for (const opt of ['--view', '--tab', '--click', '--ref', '--out', '--name', '--side', '--caption', '--input', '--stop-at']) assert.match(text, new RegExp(opt));
+  assert.doesNotMatch(text, /--before/);
   assert.doesNotMatch(text, /^\/\//m);
 });
 
@@ -39,8 +41,32 @@ test('parseArgs names the file after the scenario and checks options against the
   assert.throws(() => parseArgs(['--view', 'dashboard', '--mode', 'kanban']), /does not apply to dashboard$/);
   assert.throws(() => parseArgs(['--size', 'big']), /WIDTHxHEIGHT/);
   assert.throws(() => parseArgs(['--name', '../x']), /plain file name/);
-  assert.throws(() => parseArgs(['--before', 'a.png']), /--before needs --caption/);
+  assert.throws(() => parseArgs(['--before', 'a.png']), /Unknown argument: --before/);
   assert.throws(() => parseArgs(['--real']), /Unknown argument: --real/);
+});
+
+test('--side takes original or modified, and is inferred from --ref (original) or --caption (modified) when not given', () => {
+  assert.equal(parseArgs(['--view', 'dashboard']).side, null);
+  assert.equal(parseArgs(['--view', 'dashboard', '--side', 'original']).side, 'original');
+  assert.throws(() => parseArgs(['--view', 'dashboard', '--side', 'before']), /--side takes original \| modified/);
+  assert.equal(parseArgs(['--view', 'dashboard', '--ref', 'HEAD']).side, 'original');
+});
+
+test('fileName: --side appends .original.png / .modified.png; without it, just <name>.png', () => {
+  assert.equal(fileName(parseArgs(['--view', 'dashboard'])), 'dashboard.png');
+  assert.equal(fileName(parseArgs(['--view', 'dashboard', '--side', 'original'])), 'dashboard.original.png');
+  assert.equal(fileName(parseArgs(['--view', 'dashboard', '--side', 'modified'])), 'dashboard.modified.png');
+});
+
+test('--caption needs --out to be a run\'s evidence round folder (<run_dir>/evidence/<step>/round-<n>)', (t) => {
+  const run = tmp(t);
+  assert.throws(() => parseArgs(['--view', 'dashboard', '--caption', 'x']), /--caption needs --out/);
+  assert.throws(() => parseArgs(['--view', 'dashboard', '--caption', 'x', '--out', run]), /--caption needs --out/, 'not a round folder');
+  const roundDir = evidence.roundDir(run, 'evidence', 1);
+  fs.mkdirSync(roundDir, { recursive: true });
+  const a = parseArgs(['--view', 'dashboard', '--caption', 'It works', '--out', roundDir]);
+  assert.equal(a.caption, 'It works');
+  assert.equal(a.side, 'modified');
 });
 
 test('--input and --stop-at only apply to --view run; --input takes key=value and is repeatable', () => {
@@ -52,15 +78,25 @@ test('--input and --stop-at only apply to --view run; --input takes key=value an
   assert.throws(() => parseArgs(['--view', 'run', '--input', 'mode']), /--input takes key=value/);
 });
 
-test('recordShot adds a shot to screenshots.json and replaces the one with the same file', (t) => {
+test('recordShot records a round folder\'s file (caption, commit) into the run\'s evidence manifest', (t) => {
+  const run = tmp(t);
+  const roundDir = evidence.roundDir(run, 'evidence', 1);
+  fs.mkdirSync(roundDir, { recursive: true });
+  const file = path.join(roundDir, 'settings-general.modified.png');
+  fs.writeFileSync(file, 'PNG');
+
+  const m = recordShot(roundDir, { file, caption: 'Settings > General', commit: 'abc1234' });
+
+  assert.equal(m.images.length, 1);
+  assert.equal(m.images[0].path, 'evidence/evidence/round-1/settings-general.modified.png');
+  assert.equal(m.images[0].caption, 'Settings > General');
+  assert.equal(m.images[0].commit, 'abc1234');
+  assert.deepEqual(JSON.parse(fs.readFileSync(evidence.manifestPath(run), 'utf8')).images[0].caption, 'Settings > General');
+});
+
+test('recordShot refuses a folder that is not a run\'s evidence round folder', (t) => {
   const dir = tmp(t);
-  recordShot(dir, { path: 'settings-after.png', caption: 'Settings', before: 'settings-before.png' });
-  recordShot(dir, { path: 'backlog.png', caption: 'Backlog' });
-  recordShot(dir, { path: 'settings-after.png', caption: 'Settings > General', before: 'settings-before.png' });
-  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(dir, 'screenshots.json'), 'utf8')), [
-    { path: 'settings-after.png', caption: 'Settings > General', before: 'settings-before.png' },
-    { path: 'backlog.png', caption: 'Backlog' },
-  ]);
+  assert.throws(() => recordShot(dir, { file: path.join(dir, 'x.png'), caption: 'x' }), /Not a round folder of a run's evidence/);
 });
 
 // ---- in Electron ------------------------------------------------------------------------------

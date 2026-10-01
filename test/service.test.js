@@ -847,6 +847,33 @@ test('artifacts: a run screenshot is read as an image data URL, a text file as t
   assert.equal(text.text, '[]');
 });
 
+test('artifacts:evidence (runEvidence) resolves the manifest\'s relative paths to absolute files under the run folder, pair included (#146)', (t) => {
+  const { api, service } = makeService(t);
+  const run = path.join(service.workspace().runs, '20260101-000000-abcd1235');
+  fs.mkdirSync(path.join(run, 'evidence', 'evidence', 'round-1'), { recursive: true });
+  fs.writeFileSync(path.join(run, 'events.jsonl'), `${JSON.stringify({ seq: 1, type: 'workflow.started', run_id: '20260101-000000-abcd1235', workflow: 'software-development' })}\n`);
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
+  fs.writeFileSync(path.join(run, 'evidence', 'evidence', 'round-1', '146-x-default.original.png'), png);
+  fs.writeFileSync(path.join(run, 'evidence', 'evidence', 'round-1', '146-x-default.modified.png'), png);
+
+  const m = api['artifacts:evidence']({ runId: '20260101-000000-abcd1235' });
+
+  assert.equal(m.images.length, 2);
+  const modified = m.images.find((x) => x.side === 'modified');
+  const original = m.images.find((x) => x.side === 'original');
+  assert.equal(modified.file, path.join(run, 'evidence', 'evidence', 'round-1', '146-x-default.modified.png'));
+  assert.equal(modified.pair_file, original.file);
+  assert.equal(original.pair_file, modified.file);
+});
+
+test('artifacts:evidence returns null for a run with no evidence and no legacy screenshots', (t) => {
+  const { api, service } = makeService(t);
+  const run = path.join(service.workspace().runs, '20260101-000000-abcd1236');
+  fs.mkdirSync(run, { recursive: true });
+  fs.writeFileSync(path.join(run, 'events.jsonl'), `${JSON.stringify({ seq: 1, type: 'workflow.started', run_id: '20260101-000000-abcd1236', workflow: 'software-development' })}\n`);
+  assert.equal(api['artifacts:evidence']({ runId: '20260101-000000-abcd1236' }), null);
+});
+
 // ---- Resume from step… (#100): runs:resume, no supervisor call, gates never skipped --------
 const RESUME_WORKFLOW = `apiVersion: multiagent/v1
 kind: Workflow
