@@ -953,11 +953,18 @@ body.resizing-dock .term-body { pointer-events: none; }
 .gate-app-state { font-size: 12px; color: var(--muted); }
 .gate-app-state.st-running { color: var(--green); }
 .gate-app-state.st-failed { color: var(--red); }
-.gate-app-error, .gate-app-setup { flex-basis: 100%; }
-.gate-app-setup { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel-2); }
+.gate-app-error { flex-basis: 100%; }
+/* Run App's confirmation / fields (#115): a popover under the tools, over the gate's choices, never pushing them */
+.gate-tools[data-run] { position: relative; }
+.gate-app-setup { position: absolute; top: calc(100% + 4px); left: 0; z-index: 30; width: min(440px, 100%); box-sizing: border-box; display: flex; flex-direction: column; align-items: stretch; gap: 8px;
+  padding: 10px 12px; text-align: left; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); box-shadow: 0 12px 32px rgba(0,0,0,.4); }
 .gate-app-setup.hidden, .gate-app-error.hidden { display: none; }
-.gate-app-setup label { display: flex; flex-direction: column; align-items: stretch; gap: 2px; text-align: left; color: var(--muted); }
-.gate-app-setup input { width: 100%; box-sizing: border-box; font-family: var(--mono); font-size: 12px; padding: 5px 8px; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 6px; }
+.gate-app-setup label { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; color: var(--muted); }
+.gate-app-setup label.gate-app-check { flex-direction: row; align-items: center; gap: 6px; }
+.gate-app-setup input:not([type=checkbox]), .gate-app-setup select { width: 100%; box-sizing: border-box; font-family: var(--mono); font-size: 12px; padding: 5px 8px; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 6px; }
+.gate-app-setup code, .pj-lp-detected code { font-family: var(--mono); font-size: 12px; padding: 0 4px; border-radius: 4px; background: var(--panel-2); }
+.gate-app-setup .row { justify-content: flex-start; gap: 6px; }
+.gate-app-changed { color: var(--yellow, #e3b341); }
 
 /* Artifacts panel (artifacts-panel.js): the Run screen's Artifacts tab and a gate's side panel */
 .tab-count { margin-left: 4px; padding: 0 6px; border-radius: 9px; background: var(--panel-2); color: var(--muted); font-size: 11px; font-weight: 600; }
@@ -983,6 +990,12 @@ body.resizing-dock .term-body { pointer-events: none; }
 .ap-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .ap-pair figure { margin: 0; }
 .ap-pair img { max-width: 100%; border: 1px solid var(--border); border-radius: 4px; }
+.ap-reported { cursor: default; }
+/* Artifact copy menu (artifact-menu.js, #114): right-click on an artifact or an open image */
+.ctx-menu { position: fixed; z-index: 1100; min-width: 180px; display: flex; flex-direction: column; padding: 4px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 12px 32px rgba(0,0,0,.4); }
+.ctx-item { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 6px 10px; text-align: left; font: inherit; font-size: 13px; color: var(--text); background: none; border: 0; border-radius: 6px; cursor: pointer; }
+.ctx-item:hover, .ctx-item:focus-visible { background: var(--panel-2); outline: none; }
+.ctx-item:focus-visible { box-shadow: 0 0 0 1px var(--accent) inset; }
 .run-gate-actions { flex-wrap: wrap; gap: 8px; }
 /* Run locally / Open the worktree at a gate: they never answer it */
 .gate-tools { flex-wrap: wrap; gap: 8px; align-items: center; margin: 4px 0; }

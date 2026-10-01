@@ -31,6 +31,9 @@ const DESKTOP = [
   { channel: 'artifacts:open', method: 'openArtifact', params: ['path', 'reveal'], desktop: 'Opening files with their app' },
   { channel: 'clipboard:read', method: 'clipboardRead', desktop: 'The clipboard' },
   { channel: 'clipboard:write', method: 'clipboardWrite', params: ['text'], desktop: 'The clipboard' },
+  // an artifact's image or the file itself (#114); only a run's artifacts are accepted
+  { channel: 'clipboard:writeImage', method: 'clipboardWriteImage', params: ['path'], desktop: 'Copying an image' },
+  { channel: 'clipboard:writeFile', method: 'clipboardWriteFile', params: ['path'], desktop: 'Copying a file' },
   // restarts the app (the code changed on disk); refuses with runs in progress unless interruptRuns
   { channel: 'app:relaunch', method: 'relaunchApp', params: ['interruptRuns'], desktop: 'Restarting the app' },
   // a click on a desktop notification ({ runId, workflow } | { terminalId })

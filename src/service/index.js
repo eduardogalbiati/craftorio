@@ -828,11 +828,18 @@ function createService({ host }) {
   // stopped when the gate is answered or the run ends. It never answers the gate.
   const previews = new Map(); // runId -> { id (terminal), stepId, approvalId, title, url, dir, startedAt }
 
-  // Run App (#108): the config a gate runs, read now (a Local preview saved while the gate waits
-  // applies at once): the project's, else the workflow's, else the one the gate was opened with.
+  // Run App (#108, #115): the config a gate runs, read now (a Local preview saved while the gate
+  // waits applies at once): the project's, else the repository's .multiagent/local-preview.yaml (in
+  // the run's folder), else the workflow's, else the one the gate was opened with.
+  // confirmed: the owner typed it (the project's) or confirmed this exact command for the project.
   function gateRunConfig(run, gate) {
     const project = run.projectId ? projects.listProjects(ws.projects).find((p) => p.id === run.projectId) : null;
-    return { project, config: localPreview.resolveConfig(project, run.wf) || (gate.local_preview?.command ? gate.local_preview : null) };
+    const repo = localPreview.readRepoConfig(gate.work_dir);
+    const resolved = localPreview.resolveSource(project, run.wf, repo?.error ? null : repo)
+      || (gate.local_preview?.command ? { config: localPreview.cleanConfig(gate.local_preview), source: 'workflow', from: 'the workflow (local_preview)' } : null);
+    const fp = resolved ? localPreview.fingerprint(resolved.config) : null;
+    const confirmed = resolved?.source === 'project' || (!!fp && project?.localPreviewConfirmed === fp);
+    return { project, config: resolved?.config || null, source: resolved?.source || null, from: resolved?.from || null, fingerprint: fp, confirmed, repoError: repo?.error || null };
   }
 
   function openRunAppGate({ runId, approvalId }) {
@@ -846,40 +853,71 @@ function createService({ host }) {
 
   // What the gate's Run App button runs, and when nothing is configured, a setup prefilled from
   // the worktree (package.json scripts, the README, a known framework).
+  // confirmed: false asks the owner once (one click) before a declared or detected command runs;
+  // changed: the declared command differs from the one confirmed earlier (repo file edited).
   function runAppInfo({ runId, approvalId }) {
     const { run, gate } = openRunAppGate({ runId, approvalId });
-    const { project, config } = gateRunConfig(run, gate);
-    const source = project?.localPreview?.command ? 'project' : config ? 'workflow' : null;
+    const { project, config, source, from, fingerprint, confirmed, repoError } = gateRunConfig(run, gate);
     return {
-      config, source, dir: gate.work_dir,
+      config, source, from, confirmed, repoError, dir: gate.work_dir,
+      changed: !!config && !confirmed && !!project?.localPreviewConfirmed,
+      fingerprint,
       project: project ? { id: project.id, name: project.name } : null,
       suggestion: config ? null : localPreview.suggestConfig(gate.work_dir),
       running: previews.has(run.runId) && terminals.procs.has(previews.get(run.runId).id),
     };
   }
 
+  // Run App's Save (#115): the gate's config becomes the project's Local preview; writeRepoFile also
+  // writes it to the project folder's .multiagent/local-preview.yaml (a change the owner commits).
+  function saveLocalPreview({ runId, approvalId, config, writeRepoFile = false }) {
+    const { run } = openRunAppGate({ runId, approvalId });
+    const cfg = localPreview.cleanConfig(config);
+    if (!cfg) throw new Error('Enter the command to run.');
+    if (!run.projectId) throw new Error('The run has no project to save it to.');
+    const project = projects.updateProject(ws.projects, run.projectId, { localPreview: cfg });
+    const file = writeRepoFile ? localPreview.writeRepoConfig(project.folder, cfg) : null;
+    return { project: { id: project.id, name: project.name }, config: cfg, file };
+  }
+
+  // Projects › Add / Edit (#115): what a folder declares or is detected to run with.
+  function suggestLocalPreview({ dir }) {
+    if (!dir || !fs.existsSync(String(dir))) return null;
+    const repo = localPreview.readRepoConfig(String(dir));
+    if (repo?.command) return repo;
+    return localPreview.suggestConfig(String(dir));
+  }
+
   // config: a one-off command from the gate's setup when the run has no project to save it to.
-  async function startLocalPreview({ runId, approvalId, realWorkspace = false, cols, rows, config = null }) {
+  // confirm: the owner clicked Run on the gate's confirmation (a declared or detected command that
+  // was never confirmed for this project, or changed since, never runs without it).
+  async function startLocalPreview({ runId, approvalId, realWorkspace = false, cols, rows, config = null, confirm = false }) {
     const { run, gate } = openRunAppGate({ runId, approvalId });
     // a terminal that went away without reporting its exit does not block the next preview
     if (previews.has(run.runId) && !terminals.procs.has(previews.get(run.runId).id)) previews.delete(run.runId);
     if (previews.has(run.runId)) throw new Error('A local preview of this run is already running: stop it first.');
-    const cfg = gateRunConfig(run, gate).config || (config?.command ? { install: config.install || null, command: String(config.command), url: config.url || null } : null);
+    const resolved = gateRunConfig(run, gate);
+    if (resolved.config && !resolved.confirmed) {
+      if (!confirm) throw new Error(`Confirm the command first: ${resolved.config.command} (from ${resolved.from}).`);
+      if (resolved.project) projects.updateProject(ws.projects, resolved.project.id, { localPreviewConfirmed: resolved.fingerprint });
+    }
+    const cfg = resolved.config || localPreview.cleanConfig(config);
     if (!cfg) throw new Error('No command to run: set the project\'s Local preview (Run App opens its setup).');
-    const dir = gate.work_dir;
+    const dir = localPreview.runFolder(gate.work_dir, cfg);
     if (!fs.existsSync(dir)) throw new Error(`The run's folder no longer exists: ${dir}`);
     const port = cfg.url ? localPreview.portOf(cfg.url) : null;
     if (port && await localPreview.portInUse(port)) throw new Error(`Port ${port} (${cfg.url}) is already in use: stop what listens on it (another local preview?) and try again.`);
     const root = path.join(ws.localPreviews, run.runId);
     const target = realWorkspace ? { workspace: ws.root, userData: null } : localPreview.scratchWorkspace(ws, root);
     const stateFile = path.join(root, 'install.json');
-    const due = localPreview.needsInstall(dir, stateFile);
+    // a monorepo's lockfile is at the root, not in the app's cwd
+    const due = localPreview.needsInstall(gate.work_dir, stateFile);
     const line = localPreview.commandLine(cfg, due.install);
     const label = run.issues?.length ? run.issues.map((i) => `#${i.number}`).join(', ') : run.runId;
     const title = `Local preview · ${label}`;
     const win = process.platform === 'win32';
     const spec = {
-      title, cwd: dir, env: localPreview.previewEnv(cliEnv(), target),
+      title, cwd: dir, env: localPreview.previewEnv(cliEnv(), target, cfg.env),
       file: win ? 'cmd.exe' : '/bin/sh', args: win ? `/d /s /c "${line}"` : ['-c', line],
       onExit: (exitCode) => {
         const p = previews.get(run.runId);
@@ -1386,10 +1424,17 @@ function createService({ host }) {
     return artifactRuns().flatMap((r) => r.artifacts).find((a) => norm(a.path) === norm(file)) || null;
   }
 
-  function readArtifact({ path: file }) {
-    const found = findArtifact(file);
+  // An artifact that still exists (a run folder's file or its recorded project copy), else an error:
+  // what reading it or copying it to the clipboard (#114) accepts.
+  function existingArtifact(file) {
+    const found = file ? findArtifact(String(file)) : null;
     if (!found) throw new Error('Not an artifact of any run.');
     if (!found.exists) throw new Error(`The file no longer exists: ${found.path}`);
+    return found;
+  }
+
+  function readArtifact({ path: file }) {
+    const found = existingArtifact(file);
     const buf = fs.readFileSync(found.path);
     const truncated = buf.length > MAX_ARTIFACT_BYTES;
     const binary = buf.subarray(0, 8000).includes(0);
@@ -1466,7 +1511,7 @@ function createService({ host }) {
     activeRuns, analyticsSnapshot, analyzeAnalytics, artifactRuns, assignWorkflow, cloneBuilderWorkflow, code, dispatchQueue, dispatchRoadmaps, envDetails, gateChanges, listAllRuns,
     listCliSessions, listLocalPreviews, listWorkflows, liveRun, loadBuilderWorkflow, openTerminal, projectRuns, pushProject,
     readArtifact, refreshLocal, renameCliSession, resolvePushConflict, restoreWorkflow, resumeOptions, resumeRun,
-    runAppInfo, runFolder, runPrState, saveBuilderWorkflow, setBudget, setPrice, setRunTitle, startLocalPreview, startRoadmap, startWorkflowRun, stopLocalPreview, unpushedProjects, usageSnapshot,
+    runAppInfo, runFolder, runPrState, saveBuilderWorkflow, saveLocalPreview, setBudget, setPrice, setRunTitle, startLocalPreview, startRoadmap, startWorkflowRun, stopLocalPreview, suggestLocalPreview, unpushedProjects, usageSnapshot,
     withIssueRuns, workflowDirs,
   };
   const entries = loadChannels(ctx);
@@ -1494,6 +1539,7 @@ function createService({ host }) {
     },
     // folders the UI may open on this machine: the workspace and the projects' folders
     openableFolders: () => [ws.root, ...projects.listProjects(ws.projects).map((x) => x.folder)],
+    existingArtifact,
     findArtifact,
     terminalSpec,
     // run worktrees left behind: succeeded runs whose removal failed, or unused for 14 days

@@ -15,6 +15,7 @@
 //                      (e.g. --input mode=validated --stop-at developer_check: the two-column gate
 //                      with Run App and its Artifacts panel)
 //   --click <css>      clicks this element once the view is open (repeatable, in order)
+//   --context <css>    then right-clicks this element (repeatable): e.g. an artifact's copy menu
 //   --theme <t>        dark | light | system: the theme Electron reports (prefers-color-scheme)
 //   --size <WxH>       window content size (default 1400x900)
 //   --ref <git ref>    captures the app as it is at this ref (e.g. origin/main, for "before" shots)
@@ -49,7 +50,7 @@ const VIEWS = {
 const THEMES = ['dark', 'light', 'system'];
 
 function parseArgs(argv) {
-  const a = { view: 'dashboard', tab: null, mode: null, run: 'mock', workflow: 'software-development.yaml', clicks: [], inputs: {}, stopAt: null, theme: null, size: [1400, 900], ref: null, out: null, name: null, caption: null, before: null, wait: null, timeout: 90000 };
+  const a = { view: 'dashboard', tab: null, mode: null, run: 'mock', workflow: 'software-development.yaml', clicks: [], contexts: [], inputs: {}, stopAt: null, theme: null, size: [1400, 900], ref: null, out: null, name: null, caption: null, before: null, wait: null, timeout: 90000 };
   for (let i = 0; i < argv.length; i++) {
     const k = argv[i];
     const next = () => { const v = argv[++i]; if (v === undefined) throw new Error(`${k} needs a value`); return v; };
@@ -60,6 +61,7 @@ function parseArgs(argv) {
     else if (k === '--run') a.run = next();
     else if (k === '--workflow') a.workflow = next();
     else if (k === '--click') a.clicks.push(next());
+    else if (k === '--context') a.contexts.push(next());
     else if (k === '--stop-at') a.stopAt = next();
     else if (k === '--input') {
       const m = /^([\w-]+)=(.*)$/s.exec(next());
@@ -402,6 +404,15 @@ function main() {
       const el = document.querySelector(sel);
       if (!el) throw new Error('nothing matches ' + sel);
       el.click();`);
+    // a right-click at the element's center (an artifact's copy menu, #114)
+    const context = (sel) => js(`
+      const sel = ${JSON.stringify(sel)};
+      for (let i = 0; i < 100 && !document.querySelector(sel); i++) await new Promise((r) => setTimeout(r, 100));
+      const el = document.querySelector(sel);
+      if (!el) throw new Error('nothing matches ' + sel);
+      el.scrollIntoView({ block: 'center' });
+      const r = el.getBoundingClientRect();
+      el.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 }));`);
     await pause(1500); // the app's first load (account, settings, workflows)
     const v = args.view;
     if (v === 'project') await js(`openProjectView(${JSON.stringify(project.id)})`);
@@ -452,6 +463,7 @@ function main() {
     // the demo runs are simulated, which Artifacts hides by default
     if (v === 'artifacts') await js(`const c = document.querySelector('#art-show-sim'); if (c && !c.checked) c.click();`);
     for (const sel of args.clicks) { await click(sel); await pause(500); }
+    for (const sel of args.contexts) { await context(sel); await pause(500); }
     if (v !== 'run') await pause(args.wait);
 
     const out = path.resolve(args.out || path.join(repo, 'runs', 'screenshots'));
@@ -491,4 +503,9 @@ function main() {
 // Electron's main process runs the capture; plain Node (the tests) only imports the helpers.
 if (process.type === 'browser') main();
 
-module.exports = { parseArgs, recordShot, usage, VIEWS };
+module.exports = {
+  parseArgs,
+  recordShot,
+  usage,
+  VIEWS,
+};

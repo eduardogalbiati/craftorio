@@ -5,13 +5,17 @@
 const path = require('path');
 const os = require('os');
 const fs = require('fs');
-const { spawn } = require('child_process');
+const {
+  execFile,
+  spawn,
+} = require('child_process');
 const {
   app,
   BrowserWindow,
   clipboard,
   dialog,
   ipcMain,
+  nativeImage,
   Notification,
   safeStorage,
   session,
@@ -234,6 +238,32 @@ ipcMain.handle('artifacts:open', (_e, { path: file, reveal }) => {
 // Clipboard for the terminals (the sandboxed renderer has no clipboard module)
 ipcMain.handle('clipboard:read', () => clipboard.readText());
 ipcMain.handle('clipboard:write', (_e, { text }) => { clipboard.writeText(String(text ?? '')); return true; });
+
+// An artifact's image, or the file itself, on the clipboard (#114). Only a run's artifact (a file of
+// its folder or its recorded project copy) is accepted: service.existingArtifact refuses the rest.
+ipcMain.handle('clipboard:writeImage', (_e, { path: file }) => {
+  const found = service.existingArtifact(file);
+  const img = nativeImage.createFromPath(found.path);
+  if (img.isEmpty()) throw new Error(`Not an image the clipboard can hold: ${path.basename(found.path)}`);
+  clipboard.writeImage(img);
+  return true;
+});
+
+// The file itself, to paste in the file explorer or attach in a chat. Windows: the file-drop list
+// (CF_HDROP) through Windows PowerShell's Set-Clipboard -LiteralPath (Electron cannot write it).
+ipcMain.handle('clipboard:writeFile', async (_e, { path: file }) => {
+  const found = service.existingArtifact(file);
+  if (process.platform === 'win32') {
+    const literal = `'${found.path.replace(/'/g, "''")}'`;
+    await new Promise((resolve, reject) => execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `Set-Clipboard -LiteralPath ${literal}`],
+      { windowsHide: true, timeout: 15000 }, (err, _out, stderr) => (err ? reject(new Error(`Could not copy the file: ${String(stderr || err.message).trim()}`)) : resolve())));
+  } else if (process.platform === 'darwin') {
+    clipboard.writeBuffer('public.file-url', Buffer.from(require('url').pathToFileURL(found.path).href));
+  } else {
+    clipboard.writeBuffer('text/uri-list', Buffer.from(require('url').pathToFileURL(found.path).href));
+  }
+  return true;
+});
 
 // External console window (Windows) for a session: its live log or its CLI conversation.
 const q = (a) => `"${String(a).replace(/"/g, '""')}"`;

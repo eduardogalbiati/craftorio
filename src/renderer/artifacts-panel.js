@@ -6,6 +6,7 @@
 // - a click previews the file without leaving the screen: markdown rendered, images (a before/after
 //   pair side by side when the folder's screenshots.json pairs them), TSV as a table, JSON and text
 //   as text; "Open in Artifacts" goes to the full screen at that file (openArtifactsAt in app.js);
+// - right-click (or Shift+F10) on a file or an open image: the copy menu (artifact-menu.js, #114);
 // - extras (the gate): changed files (a click opens that file's diff) and notes (the developer's
 //   test_notes / evidence_plan), shown above the files;
 // - live: ArtifactsPanel.refreshRun(runId) reloads every mounted panel of that run (app.js calls
@@ -80,6 +81,7 @@
     };
     root.classList.add('ap');
     root.addEventListener('click', (e) => onClick(p, e));
+    root.addEventListener('contextmenu', (e) => onContextMenu(p, e));
     panels.add(p);
     if (opts.runId) p.setRun(opts.runId);
     return p;
@@ -100,11 +102,17 @@
     const out = [];
     if (x.changes) {
       const list = Array.isArray(x.changes) ? x.changes : [];
-      out.push(`<div class="ap-group"><div class="ap-group-head">Changed files${list.length ? ` <span class="muted">${list.length}</span>` : ''}</div>
+      // changesReported: no git diff (a simulated run has no worktree, #115), the developer's files_changed
+      const reported = x.changesReported || null;
+      const label = reported === 'simulated' ? 'simulated' : 'reported by the developer';
+      out.push(`<div class="ap-group"><div class="ap-group-head">Changed files${list.length ? ` <span class="muted">${list.length}</span>` : ''}${reported ? ` <span class="badge" title="No git diff for this run: the files the developer step reported">${label}</span>` : ''}</div>
         ${typeof x.changes === 'string' ? `<p class="muted small ap-pad">${esc(x.changes)}</p>` : !list.length ? '<p class="muted small ap-pad">No changes against the base.</p>'
-    : list.map((c) => `<button type="button" class="ap-file ap-change" data-ap-change="${esc(c.file)}" title="Show the diff of ${esc(c.file)}">
-            <span class="ap-file-main"><span class="ap-file-name mono">${esc(baseOf(c.file))}</span><span class="ap-file-sub muted mono">${esc(dirOf(c.file) === slash(c.file) ? '' : dirOf(c.file))}</span></span>
-            <span class="ap-file-size">${c.added == null ? '<span class="muted">binary</span>' : `<span class="ap-add">+${c.added}</span> <span class="ap-del">−${c.deleted}</span>`}</span></button>`).join('')}</div>`);
+    : list.map((c) => {
+      const main = `<span class="ap-file-main"><span class="ap-file-name mono">${esc(baseOf(c.file))}</span><span class="ap-file-sub muted mono">${esc(dirOf(c.file) === slash(c.file) ? '' : dirOf(c.file))}</span></span>`;
+      if (reported) return `<div class="ap-file ap-change ap-reported" title="${esc(c.file)}">${main}<span class="ap-file-size muted">${label}</span></div>`;
+      return `<button type="button" class="ap-file ap-change" data-ap-change="${esc(c.file)}" title="Show the diff of ${esc(c.file)}">${main}
+            <span class="ap-file-size">${c.added == null ? '<span class="muted">binary</span>' : `<span class="ap-add">+${c.added}</span> <span class="ap-del">−${c.deleted}</span>`}</span></button>`;
+    }).join('')}</div>`);
     }
     if (x.notes?.length) {
       out.push(`<div class="ap-group"><div class="ap-group-head">From the developer</div>${x.notes.map((n, i) => `<button type="button" class="ap-file" data-ap-note="${i}">
@@ -179,12 +187,12 @@
     const meta = (p.files || []).find((f) => f.path === s.path) || d;
     const notice = d.truncated ? '<div class="art-notice">This file is larger than 5 MB: only the first 5 MB are shown.</div>' : '';
     if (d.image && d.pair) {
-      const img = (src, which) => `<figure><figcaption class="muted small">${which}</figcaption><img src="${esc(src || d.image)}" alt="${esc(which)}" /></figure>`;
+      const img = (src, which, file) => `<figure><figcaption class="muted small">${which}</figcaption><img src="${esc(src || d.image)}" alt="${esc(which)}" data-ap-img="${esc(file)}" /></figure>`;
       const mine = (x) => (x === s.path ? d.image : null);
-      body.innerHTML = `<div class="ap-pair">${img(mine(d.pair.beforePath) || d.pair.before, 'Before')}${img(mine(d.pair.afterPath) || d.pair.after, 'After')}</div>${d.pair.caption ? `<p class="muted small ap-pad">${esc(d.pair.caption)}</p>` : ''}`;
+      body.innerHTML = `<div class="ap-pair">${img(mine(d.pair.beforePath) || d.pair.before, 'Before', d.pair.beforePath)}${img(mine(d.pair.afterPath) || d.pair.after, 'After', d.pair.afterPath)}</div>${d.pair.caption ? `<p class="muted small ap-pad">${esc(d.pair.caption)}</p>` : ''}`;
       return;
     }
-    if (d.image) { body.innerHTML = `<div class="art-image"><img src="${esc(d.image)}" alt="${esc(meta.name || '')}" /></div>`; return; }
+    if (d.image) { body.innerHTML = `<div class="art-image"><img src="${esc(d.image)}" alt="${esc(meta.name || '')}" data-ap-img="${esc(s.path)}" /></div>`; return; }
     if (d.binary || d.text == null || meta.kind === 'other') { body.innerHTML = `${notice}<p class="muted small ap-pad">Preview not available for this file: open it in Artifacts.</p>`; return; }
     if (meta.kind === 'markdown') { body.innerHTML = `${notice}<article class="md">${markdownHtml(d.text)}</article>`; return; }
     if (meta.kind === 'json') { body.innerHTML = `${notice}<pre class="art-code json">${renderJsonText(d.text, /\.jsonl$/i.test(s.path))}</pre>`; return; }
@@ -207,6 +215,16 @@
       if (path) openArtifactsAt({ projectId: p.run?.project?.id || '', path, mock: !!p.run?.mock });
       else showToast('No artifacts yet', 'This run has not produced files yet.');
     }
+  }
+
+  // Right-click (or Shift+F10) on a file of the list or on an open image: the copy menu (#114)
+  function onContextMenu(p, e) {
+    const img = e.target.closest('[data-ap-img]');
+    if (img) { ArtifactMenu.open(e, { path: img.dataset.apImg, image: true }); return; }
+    const file = e.target.closest('[data-ap-file]');
+    if (!file) return;
+    const f = (p.files || []).find((x) => x.path === file.dataset.apFile) || { path: file.dataset.apFile };
+    ArtifactMenu.open(e, f);
   }
 
   // Reloads the panels of a run (throttled: a burst of events makes one listing).

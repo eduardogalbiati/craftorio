@@ -7,6 +7,7 @@
 const fs = require('fs');
 const path = require('path');
 const { execGit, repoNameFromUrl } = require('./workspace');
+const { cleanConfig } = require('./local-preview');
 
 const isDir = (p) => { try { return fs.statSync(p).isDirectory(); } catch { return false; } };
 
@@ -77,6 +78,8 @@ function updateProject(dir, id, patch) {
   if (patch.autoPush !== undefined) next.autoPush = !!patch.autoPush;
   // how to run a run's worktree from a gate (Run locally); overrides the workflow's orchestrator.local_preview
   if (patch.localPreview !== undefined) next.localPreview = cleanLocalPreview(patch.localPreview);
+  // the fingerprint of the declared run command the owner confirmed (#115): a changed one asks again
+  if (patch.localPreviewConfirmed !== undefined) next.localPreviewConfirmed = patch.localPreviewConfirmed ? String(patch.localPreviewConfirmed) : null;
   if (patch.folder !== undefined) {
     const folder = path.resolve(String(patch.folder).trim());
     if (!isDir(folder)) throw new Error(`Folder does not exist: ${folder}`);
@@ -87,12 +90,8 @@ function updateProject(dir, id, patch) {
   return readProject(dir, id);
 }
 
-// { install, command, url } with empty fields dropped; null without a command (the action is hidden)
-function cleanLocalPreview(v) {
-  const str = (x) => String(x ?? '').trim() || null;
-  const command = str(v?.command);
-  return command ? { install: str(v.install), command, url: str(v.url) } : null;
-}
+// { install, command, url, cwd?, env? } with empty fields dropped; null without a command (the action is hidden)
+const cleanLocalPreview = (v) => cleanConfig(v);
 
 /** Removes only the project entry; the project folder is not deleted. */
 function removeProject(dir, id) {

@@ -975,6 +975,7 @@
           <input type="text" id="pj-lp-command" name="lp_command" placeholder="Run: npm start" />
           <input type="text" id="pj-lp-url" name="lp_url" placeholder="URL: http://localhost:5173" />
         </div>
+        <div id="pj-lp-detected" class="hint pj-lp-detected hidden"></div>
         <div class="hint">How to run a run's worktree: adds Run locally to the gates that offer it (e.g. developer_check). The install runs only when dependencies are missing or the lockfile changed. Overrides the workflow's orchestrator.local_preview.</div>
       </div>
       <p id="pj-error" class="error small"></p>
@@ -1342,6 +1343,7 @@
   <script src="display-name.js"></script>
   <script src="view-registry.js"></script>
   <script src="app.js"></script>
+  <script src="artifact-menu.js"></script>
   <script src="artifacts-panel.js"></script>
   <script src="robots.js"></script>
   <script src="duo-issue.js"></script>

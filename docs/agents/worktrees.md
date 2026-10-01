@@ -25,6 +25,14 @@ actions, or any code that deletes or checks out branches.
   real workspace. Stopped on `approval.resolved` and `workflow.finished` (and by `terminals.killAll`
   at quit); it never answers the gate. `local_preview.started` / `local_preview.stopped` events land
   in the run's history and chat. Mock runs have no worktree: `work_dir` is `repo_path`.
+- **Run App's config (#115)**: `gateRunConfig` (service) resolves project `localPreview` >
+  `.multiagent/local-preview.yaml` read from the gate's `work_dir` (the run's branch, so a run that
+  edits it sees its own version) > `orchestrator.local_preview` > the gate's; `suggestConfig`
+  detects from `work_dir` only when none applies. A non-project config runs only after the owner's
+  one click (`localPreview:start` with `confirm`), which stores its fingerprint as the project's
+  `localPreviewConfirmed`; a different fingerprint (the file edited) asks again. `cwd` must stay
+  inside `work_dir`; the lockfile check (install) stays at the root. `localPreview:save` writes the
+  file to the project's folder (the owner's checkout, never the run's worktree).
 
 ## Gotchas
 

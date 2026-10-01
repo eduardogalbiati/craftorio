@@ -301,7 +301,7 @@ async function init() {
   $('#btn-projects-folder').onclick = () => api.openPath(state.ws.projects);
   $('#project-form').onsubmit = saveProject;
   $('#btn-pj-cancel').onclick = () => closeModal('#project-modal');
-  $('#btn-pj-pick').onclick = async () => { const d = await api.pickFolder(); if (d) $('#pj-folder').value = d; };
+  $('#btn-pj-pick').onclick = async () => { const d = await api.pickFolder(); if (d) { $('#pj-folder').value = d; detectProjectRun(); } };
 
   // supervisor
   $('#btn-sup-close').onclick = closeSupervisor;
@@ -1086,14 +1086,46 @@ function openProjectModal(p, { fromDrawer = false } = {}) {
   $('#pj-folder').required = !!p;
   $('#pj-folder-hint').classList.toggle('hidden', !!p);
   $('#pj-error').textContent = '';
+  pjDetected = null;
+  $('#pj-folder').oninput = () => { clearTimeout(pjDetectTimer); pjDetectTimer = setTimeout(detectProjectRun, 400); };
+  detectProjectRun();
   openModal('#project-modal');
   $('#pj-name').focus();
+}
+
+// What the folder declares (.multiagent/local-preview.yaml) or is detected to run with (#115), so
+// the owner confirms it here ("Use it" fills Local preview) before any gate asks.
+let pjDetectTimer = null;
+let pjDetectSeq = 0;
+let pjDetected = null; // the suggestion "Use it" took (its cwd / env are saved with the fields)
+async function detectProjectRun() {
+  const box = $('#pj-lp-detected');
+  const folder = $('#pj-folder').value.trim();
+  const seq = ++pjDetectSeq;
+  box.classList.add('hidden');
+  if (!folder || editingProject?.localPreview?.command) return;
+  let s = null;
+  try { s = await api.suggestLocalPreview(folder); } catch { /* an unreadable folder suggests nothing */ }
+  if (seq !== pjDetectSeq || !s?.command) return;
+  box.innerHTML = `Detected: ${runAppCommandHtml(s)}${s.url ? ` at ${esc(s.url)}` : ''} <span class="muted">(from ${esc(s.from || 'the folder')})</span>
+    <button type="button" class="btn sm ghost" id="btn-pj-lp-use">Use it</button>`;
+  box.classList.remove('hidden');
+  $('#btn-pj-lp-use').onclick = () => {
+    $('#pj-lp-install').value = s.install || '';
+    $('#pj-lp-command').value = s.command;
+    $('#pj-lp-url').value = s.url || '';
+    pjDetected = s;
+    box.classList.add('hidden');
+  };
 }
 
 async function saveProject(e) {
   e.preventDefault();
   const { lp_install: install, lp_command: command, lp_url: url, ...data } = Object.fromEntries(new FormData($('#project-form')));
-  data.localPreview = { install, command, url };
+  // the fields show install / command / URL; a monorepo app's folder and the env are kept
+  const kept = pjDetected?.command === command ? pjDetected : editingProject?.localPreview || {};
+  data.localPreview = { cwd: kept.cwd, env: kept.env, install, command, url };
+  pjDetected = null;
   const btn = $('#btn-pj-save');
   $('#pj-error').textContent = '';
   btn.disabled = true;
@@ -1566,7 +1598,13 @@ function mountGateSides(root) {
     if (diff) {
       Promise.resolve(api.gateChanges(runId, approval))
         .then((list) => panel.setExtras({ ...panel.extras, changes: list || [] }))
-        .catch((e) => panel.setExtras({ ...panel.extras, changes: `Could not list them: ${errMsg(e)}` }));
+        .catch((e) => {
+          // a simulated run has no git worktree (#115): the files the simulated developer reported
+          const reported = lastOutput(runId, (o) => Array.isArray(o.files_changed))?.files_changed || [];
+          const files = reported.map((f) => String(typeof f === 'object' && f ? f.file || f.path || '' : f)).filter(Boolean);
+          if (files.length) panel.setExtras({ ...panel.extras, changes: files.map((file) => ({ file, added: null, deleted: null })), changesReported: state.runs.get(runId)?.run?.mock ? 'simulated' : 'reported' });
+          else panel.setExtras({ ...panel.extras, changes: `Could not list them: ${errMsg(e)}` });
+        });
     }
   });
 }
@@ -1623,7 +1661,7 @@ function gateToolsHtml(g, { disabled = false, runId = g.run_id || g.runId || '' 
   const off = disabled ? ' disabled' : '';
   const how = lp ? `${lp.install ? `${lp.install} (when dependencies are missing or the lockfile changed), then ` : ''}${lp.command}` : '';
   const runApp = !!lp || (!!(g.run_app || g.runApp) && !!dir);
-  const run = runApp ? `<button type="button" class="btn sm" data-gate-tool="preview" title="${esc(lp ? `${how} in ${dir}. Runs in simulation only, on a scratch copy of your workspace.` : 'Nothing configured yet: proposes a command from the worktree and saves it as the project\'s Local preview.')}"${off}>${esc(runAppLabel(lp))}</button>
+  const run = runApp ? `<button type="button" class="btn sm" data-gate-tool="preview" title="${esc(lp ? `${how} in ${dir}. Runs in simulation only, on a scratch copy of your workspace.` : 'Asks once: the command the repository declares (.multiagent/local-preview.yaml) or one detected from the worktree, saved as the project\'s Local preview.')}"${off}>${esc(runAppLabel(lp))}</button>
     <span class="gate-app-state" data-gate-app-state></span>
     <button type="button" class="btn sm ghost hidden" data-gate-tool="stop" title="Stop this run's app"${off}>■ Stop</button>
     <button type="button" class="btn sm ghost hidden" data-gate-tool="app-term" title="Show or hide the app's terminal"${off}>Terminal</button>
@@ -1665,25 +1703,59 @@ function setRunPreview(runId, preview) {
   paintGateApps();
 }
 
-// Run App's setup when nothing is configured: install / command / URL prefilled from the worktree
-// (localPreview:info → suggestConfig in src/local-preview.js), saved as the project's Local preview.
-function runAppSetupHtml(info) {
-  const s = info.suggestion || {};
-  const input = (k, label, ph) => `<label class="small">${label}<input data-setup="${k}" value="${esc(s[k] || '')}" placeholder="${esc(ph)}" spellcheck="false"></label>`;
-  return `<div class="muted small">${s.from ? `Suggested from ${esc(s.from)}.` : 'Nothing found in the worktree: write how to run it.'}
-    ${info.project ? `Saved as the Local preview of <b>${esc(info.project.name)}</b> (Projects), so the next gates run it in one click.` : 'This run has no project: it runs this time only.'}
-    It runs in simulation only, on a scratch copy of your workspace.</div>
+// The commands of a config as the confirmation shows them: `npm ci` + `npm start` (in apps/web)
+const runAppCommandHtml = (c) => `${c.install ? `<code>${esc(c.install)}</code> + ` : ''}<code>${esc(c.command)}</code>${c.cwd ? ` in <code>${esc(c.cwd)}</code>` : ''}`;
+
+// Run App's one-click confirmation (#115), a popover over the gate (never above its choices): a
+// declared command (the repository's .multiagent/local-preview.yaml or the workflow's) the owner has
+// not confirmed for this project yet, or changed since; or one detected from the worktree
+// (localPreview:info → suggestConfig in src/local-preview.js), saved as the project's Local preview
+// on Run. A monorepo's apps: the owner picks one (stored as cwd).
+function runAppConfirmHtml(info, cfg) {
+  const apps = info.suggestion?.apps || [];
+  const pick = apps.length > 1 ? `<label class="small">App <select data-setup-app>${apps.map((a, i) => `<option value="${i}"${a.cwd === cfg.cwd ? ' selected' : ''}>${esc(a.cwd)}</option>`).join('')}</select></label>` : '';
+  const from = info.config ? info.from : cfg.from;
+  const lead = info.changed ? '<div class="small gate-app-changed">The declared run command changed since you confirmed it.</div>' : '';
+  const saved = !info.config && info.project ? ` Saved as the Local preview of <b>${esc(info.project.name)}</b>, so the next gates run it in one click.` : '';
+  return `${lead}<div>Run with ${runAppCommandHtml(cfg)}${from ? ` <span class="muted small">(from ${esc(from)})</span>` : ''}?</div>${pick}
+    <div class="muted small">It runs this repository's command on your machine, in simulation only, on a scratch copy of your workspace.${saved}</div>
+    <div class="row"><button type="button" class="btn sm primary" data-gate-tool="app-run">Run</button><button type="button" class="btn sm ghost" data-gate-tool="app-edit">Edit</button><button type="button" class="btn sm ghost" data-gate-tool="app-cancel">Cancel</button></div>`;
+}
+
+// Run App's fields (Edit, or nothing found): install / command / URL / folder, saved as the
+// project's Local preview and optionally written to the repository's .multiagent/local-preview.yaml.
+function runAppSetupHtml(info, cfg = {}) {
+  const input = (k, label, ph) => `<label class="small">${label}<input data-setup="${k}" value="${esc(cfg[k] || '')}" placeholder="${esc(ph)}" spellcheck="false"></label>`;
+  const found = cfg.from ? `From ${esc(cfg.from)}.` : info.suggestion || info.config ? '' : 'Nothing found in the worktree: write how to run it.';
+  return `<div class="muted small">${found} ${info.project ? `Saved as the Local preview of <b>${esc(info.project.name)}</b> (Projects).` : 'This run has no project: it runs this time only.'}</div>
     ${input('install', 'Install (when dependencies are missing or the lockfile changed)', 'npm ci (optional)')}
     ${input('command', 'Command', 'npm start')}
     ${input('url', 'URL (optional)', 'http://localhost:3000')}
+    ${input('cwd', 'Folder (optional, a monorepo\'s app)', 'apps/web')}
+    ${info.project ? '<label class="small gate-app-check"><input type="checkbox" data-setup-repo> Also write it to <code>.multiagent/local-preview.yaml</code> (a change you commit)</label>' : ''}
     <div class="row"><button type="button" class="btn sm primary" data-gate-tool="app-save">${info.project ? 'Save and run' : 'Run'}</button><button type="button" class="btn sm ghost" data-gate-tool="app-cancel">Cancel</button></div>`;
 }
 
-async function startRunApp(box, runId, approval, config = null) {
+// Shows the popover in one of its two forms; Esc closes it.
+function showRunAppSetup(setup, info, cfg, mode) {
+  setup._info = info;
+  setup._cfg = cfg;
+  setup.dataset.mode = mode;
+  setup.dataset.project = info?.project?.id || '';
+  setup.innerHTML = mode === 'confirm' ? runAppConfirmHtml(info, cfg) : runAppSetupHtml(info, cfg);
+  setup.classList.remove('hidden');
+  const app = setup.querySelector('[data-setup-app]');
+  if (app) app.onchange = () => showRunAppSetup(setup, info, info.suggestion.apps[+app.value], 'confirm');
+  setup.onkeydown = (ev) => { if (ev.key === 'Escape') { setup.classList.add('hidden'); setup.closest('.gate-tools')?.querySelector('[data-gate-tool="preview"]')?.focus(); } };
+  (setup.querySelector(mode === 'confirm' ? '[data-gate-tool="app-run"]' : '[data-setup="command"]'))?.focus();
+}
+
+// confirm: the owner clicked Run on the confirmation of a command not confirmed for the project yet
+async function startRunApp(box, runId, approval, config = null, confirm = false) {
   const real = !!box.querySelector('[data-gate-real]')?.checked;
   if (real && !(await confirmDialog('Run on your real workspace?', 'The local copy will use your REAL workspace (projects, runs, settings) instead of a scratch copy. It stays in simulation only, but anything it writes lands in your workspace.', 'Run on it'))) return;
   try {
-    await openTerminal({ kind: 'preview', runId, sessionId: approval, label: 'Run App', open: (cols, rows) => api.startLocalPreview(runId, approval, real, cols, rows, config) });
+    await openTerminal({ kind: 'preview', runId, sessionId: approval, label: 'Run App', open: (cols, rows) => api.startLocalPreview(runId, approval, real, cols, rows, config, confirm) });
   } catch (err) {
     setRunPreview(runId, { status: 'failed', approval, error: errMsg(err) });
     throw err;
@@ -1717,27 +1789,44 @@ async function onGateTool(e, runId) {
       toggleGateTerminal(runId, approval);
     } else if (b.dataset.gateTool === 'app-cancel') {
       setup?.classList.add('hidden');
+    } else if (b.dataset.gateTool === 'app-edit') {
+      showRunAppSetup(setup, setup._info || {}, setup._cfg || {}, 'edit');
+    } else if (b.dataset.gateTool === 'app-run') {
+      const info = setup._info || {};
+      const cfg = setup._cfg;
+      setup.classList.add('hidden');
+      // a declared command: confirmed for the project; a detected one: saved as its Local preview
+      if (info.config) { await startRunApp(box, runId, approval, null, true); return; }
+      const { from, apps, ...clean } = cfg;
+      if (setup.dataset.project) await api.saveLocalPreview(runId, approval, clean, false);
+      const run = box.querySelector('[data-gate-tool="preview"]');
+      if (run) run.textContent = runAppLabel(clean);
+      await startRunApp(box, runId, approval, setup.dataset.project ? null : clean, true);
     } else if (b.dataset.gateTool === 'app-save') {
       const val = (k) => setup.querySelector(`[data-setup="${k}"]`)?.value.trim() || '';
-      const cfg = { install: val('install') || null, command: val('command'), url: val('url') || null };
+      const cfg = { install: val('install') || null, command: val('command'), url: val('url') || null, cwd: val('cwd') || null, env: setup._cfg?.env };
       if (!cfg.command) { showToast('Write the command first', 'Run App runs that command in the worktree.'); setup.querySelector('[data-setup="command"]')?.focus(); return; }
-      if (setup.dataset.project) await api.updateProject(setup.dataset.project, { localPreview: cfg });
+      const writeRepo = !!setup.querySelector('[data-setup-repo]')?.checked;
+      if (setup.dataset.project) {
+        const saved = await api.saveLocalPreview(runId, approval, cfg, writeRepo);
+        if (saved?.file) showToast('Wrote the run command', `${saved.file}: commit it so everyone gets one-click Run App.`);
+      }
       setup.classList.add('hidden');
       const run = box.querySelector('[data-gate-tool="preview"]');
       if (run) run.textContent = runAppLabel(cfg);
       // saved: the service reads the project's config; no project: this time only
-      await startRunApp(box, runId, approval, setup.dataset.project ? null : cfg);
+      await startRunApp(box, runId, approval, setup.dataset.project ? null : cfg, true);
     } else if (b.dataset.gateTool === 'preview') {
-      const info = await api.localPreviewInfo(runId, approval);
-      if (!info?.config) {
-        setup.innerHTML = runAppSetupHtml(info || {});
-        setup.dataset.project = info?.project?.id || '';
-        setup.classList.remove('hidden');
-        setup.querySelector('[data-setup="command"]')?.focus();
+      const info = (await api.localPreviewInfo(runId, approval)) || {};
+      if (info.repoError) showToast('Could not read the run command file', info.repoError);
+      if (info.config && info.confirmed) {
+        b.textContent = runAppLabel(info.config);
+        await startRunApp(box, runId, approval);
         return;
       }
-      b.textContent = runAppLabel(info.config);
-      await startRunApp(box, runId, approval);
+      // asks once: a declared command not confirmed yet (or changed), a detected one, else the fields
+      const cfg = info.config || info.suggestion;
+      showRunAppSetup(setup, info, cfg || {}, cfg ? 'confirm' : 'edit');
     }
   } catch (err) {
     showToast('Could not do it', errMsg(err));
@@ -2685,7 +2774,11 @@ function renderArtifactList() {
         </button>`).join('')}
     </div>`;
   }).join('') + (hiddenSim ? `<p class="muted small art-pad">${hiddenSim} simulated run${hiddenSim > 1 ? 's' : ''} hidden.</p>` : '');
-  box.querySelectorAll('.art-file').forEach((b) => (b.onclick = () => selectArtifact(b.dataset.path)));
+  box.querySelectorAll('.art-file').forEach((b) => {
+    b.onclick = () => selectArtifact(b.dataset.path);
+    // right-click or Shift+F10: Copy to clipboard / Copy file / Copy path (artifact-menu.js, #114)
+    b.oncontextmenu = (e) => ArtifactMenu.open(e, findArtifactMeta(b.dataset.path) || { path: b.dataset.path });
+  });
   box.querySelectorAll('.art-run-head').forEach((b) => (b.onclick = () => {
     if (searching) return; // every matching group is shown open while searching
     const g = b.closest('.art-run');
@@ -2784,7 +2877,11 @@ function renderArtifactViewer() {
   if (d.loading) { body.innerHTML = '<div class="art-empty muted">Loading…</div>'; return; }
   if (d.error) { body.innerHTML = `<div class="art-empty"><p class="error">${esc(d.error)}</p></div>`; return; }
   const notice = d.truncated ? '<div class="art-notice">This file is larger than 5 MB: only the first 5 MB are shown.</div>' : '';
-  if (meta.kind === 'image' && d.image) { body.innerHTML = `<div class="art-image"><img src="${esc(d.image)}" alt="${esc(name)}" /></div>`; return; }
+  if (meta.kind === 'image' && d.image) {
+    body.innerHTML = `<div class="art-image"><img src="${esc(d.image)}" alt="${esc(name)}" /></div>`;
+    body.querySelector('.art-image img').oncontextmenu = (e) => ArtifactMenu.open(e, { path: d.path, name, image: true });
+    return;
+  }
   if (d.binary || d.text == null || meta.kind === 'other') {
     body.innerHTML = `${notice}<div class="art-empty"><p class="muted">Preview not available for this file.</p><button class="btn primary" id="art-open-default">Open</button></div>`;
     $('#art-open-default').onclick = () => api.openArtifact(d.path).catch(() => {});
