@@ -61,6 +61,7 @@ const state = {
   workflowsTab: 'runs', // 'runs' | 'definitions' | 'builder' (sub-items of Workflows in the sidebar)
   pendingProject: null, // project to preselect in the panel on open
   mainKey: null,      // the Start drawer's main free-text input (usually `task`), never remembered
+  starting: false,    // a startRun() request is pending: both start buttons stay disabled
   usage: null,        // last api.getUsage() result
   usageError: null,
   actionsUsage: null, // last api.getActionsUsage() result (GitHub Actions minutes)
@@ -611,10 +612,12 @@ async function openDrawer({ category = null, workflow = null, project = null, in
 // The drawer's main free-text field (usually `task`), picked by selectWorkflow()
 const mainField = () => (state.mainKey ? document.getElementById(`in-${state.mainKey}`) : null);
 
-// Both start buttons follow the same rules (no workflow, a workflow error, a start in progress, one run at a time)
+// Both start buttons follow the same rules (no workflow, a workflow error, a start in progress, one run at a time).
+// A pending start (state.starting) keeps them disabled whatever the caller computed, e.g. renderHeader() on a run update.
 function setStartDisabled(disabled) {
-  $('#btn-start').disabled = disabled;
-  $('#btn-start-another').disabled = disabled;
+  const off = disabled || !!state.starting;
+  $('#btn-start').disabled = off;
+  $('#btn-start-another').disabled = off;
 }
 
 function closeDrawer() {
@@ -749,6 +752,7 @@ async function startRun({ keepOpen = false } = {}) {
   try { localStorage.setItem(`${LS_KEY}.${wf.file}`, JSON.stringify(remembered)); } catch { /* ignore */ }
   if (project) for (const k of pathKeys) inputs[k] = project.folder;
 
+  state.starting = true;
   setStartDisabled(true);
   try {
     const { runId } = await api.startRun({ file: wf.file, inputs, mock: wantsSimulation($('#mock-toggle')) });
@@ -772,6 +776,7 @@ async function startRun({ keepOpen = false } = {}) {
   } catch (e) {
     $('#start-error').textContent = errMsg(e);
   } finally {
+    state.starting = false;
     renderHeader();
   }
 }
