@@ -238,20 +238,21 @@ test('run chat: a gate\'s Run locally / diff tools (local_preview, work_dir, dif
     { seq: 1, type: 'workflow.started', run_id: 'r1', workflow: 'wf', inputs: {} },
     {
       seq: 2, type: 'approval.requested', run_id: 'r1', approval_id: 'g1', step_id: 'developer_check', message: 'Try it',
-      local_preview: { command: 'npm start' }, work_dir: 'C:\\work\\wt', diff_base: 'origin/main',
+      local_preview: { command: 'npm start' }, work_dir: 'C:\\work\\wt', diff_base: 'origin/main', run_app: true,
     },
   ]);
   const [gate] = kinds(withTools, 'gate');
   assert.deepEqual(gate.localPreview, { command: 'npm start' });
   assert.equal(gate.workDir, 'C:\\work\\wt');
   assert.equal(gate.diffBase, 'origin/main');
+  assert.equal(gate.runApp, true);
 
   const withoutTools = chatOf([
     { seq: 1, type: 'workflow.started', run_id: 'r1', workflow: 'wf', inputs: {} },
     { seq: 2, type: 'approval.requested', run_id: 'r1', approval_id: 'g2', step_id: 'human_review', message: 'Merge?' },
   ]);
   const [gate2] = kinds(withoutTools, 'gate');
-  assert.deepEqual([gate2.localPreview, gate2.workDir, gate2.diffBase], [null, null, null]);
+  assert.deepEqual([gate2.localPreview, gate2.workDir, gate2.diffBase, gate2.runApp], [null, null, null, false]);
 });
 
 test('run chat: the run and its start message carry every issue; a run recorded with one `issue` shows a list of one', () => {

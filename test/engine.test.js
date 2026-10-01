@@ -443,6 +443,43 @@ steps:
   assert.equal('work_dir' in gate, false);
 });
 
+test('a human_approval gate with local_preview: true sets run_app even without a local_preview config; local_preview only with one', { timeout: 30000 }, async (t) => {
+  const yaml = `apiVersion: multiagent/v1
+kind: Workflow
+metadata: { name: gate-run-app }
+inputs:
+  repo_path: { type: string, required: true }
+agents:
+  a: { provider: claude, model: m }
+steps:
+  - id: gate
+    type: human_approval
+    local_preview: true
+    message: "ok?"
+`;
+  const { file } = tempWorkflow(t, yaml);
+  const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'));
+  t.after(() => fs.rmSync(runsDir, { recursive: true, force: true }));
+  const repoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'repo-'));
+  t.after(() => fs.rmSync(repoDir, { recursive: true, force: true }));
+
+  const noConfig = new WorkflowRun({ file, inputs: { repo_path: repoDir }, mock: true, runsDir });
+  const noConfigEvents = [];
+  noConfig.on('event', (ev) => { noConfigEvents.push(ev); if (ev.type === 'approval.requested') setImmediate(() => noConfig.resolveApproval(ev.approval_id, true)); });
+  await noConfig.start();
+  const gate1 = noConfigEvents.find((e) => e.type === 'approval.requested');
+  assert.equal(gate1.run_app, true, 'Run App is offered even without a configured preview');
+  assert.equal('local_preview' in gate1, false, 'nothing to run yet: no local_preview on the gate');
+
+  const withConfig = new WorkflowRun({ file, inputs: { repo_path: repoDir }, mock: true, runsDir, localPreview: { command: 'npm start' } });
+  const withConfigEvents = [];
+  withConfig.on('event', (ev) => { withConfigEvents.push(ev); if (ev.type === 'approval.requested') setImmediate(() => withConfig.resolveApproval(ev.approval_id, true)); });
+  await withConfig.start();
+  const gate2 = withConfigEvents.find((e) => e.type === 'approval.requested');
+  assert.equal(gate2.run_app, true);
+  assert.deepEqual(gate2.local_preview, { command: 'npm start' });
+});
+
 test('a run records the time spent waiting at a human gate separately from agent time (summary.timing.gate_wait_ms)', { timeout: 30000 }, async (t) => {
   const yaml = `apiVersion: multiagent/v1
 kind: Workflow

@@ -83,6 +83,71 @@ test('previewEnv: always simulation only, the target workspace/user-data, and ne
   assert.equal(env.MULTIAGENT_SIMULATION_ONLY, '1', 'still simulation only even on the real workspace');
 });
 
+// ---- suggestConfig (#108): Run App's setup prefilled from the worktree when nothing is configured ----
+
+function writePkg(dir, pkg) {
+  fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify(pkg));
+}
+
+test('suggestConfig: package.json with a start script and a lockfile suggests npm ci / npm start', (t) => {
+  const dir = tmp(t);
+  writePkg(dir, { scripts: { start: 'node server.js' } });
+  fs.writeFileSync(path.join(dir, 'package-lock.json'), '{}');
+  assert.deepEqual(lp.suggestConfig(dir), { install: 'npm ci', command: 'npm start', url: null, from: 'package.json (scripts.start)' });
+});
+
+test('suggestConfig: only a dev script (no start) suggests npm run dev', (t) => {
+  const dir = tmp(t);
+  writePkg(dir, { scripts: { dev: 'vite' }, dependencies: { vite: '^5.0.0' } });
+  const s = lp.suggestConfig(dir);
+  assert.equal(s.command, 'npm run dev');
+  assert.equal(s.url, 'http://localhost:5173', 'a known dev-server framework suggests its default URL');
+});
+
+test('suggestConfig: yarn.lock / pnpm-lock.yaml pick the matching package manager', (t) => {
+  const yarnDir = tmp(t);
+  writePkg(yarnDir, { scripts: { start: 'node server.js' } });
+  fs.writeFileSync(path.join(yarnDir, 'yarn.lock'), '');
+  assert.deepEqual(lp.suggestConfig(yarnDir), { install: 'yarn install --frozen-lockfile', command: 'yarn start', url: null, from: 'package.json (scripts.start)' });
+
+  const pnpmDir = tmp(t);
+  writePkg(pnpmDir, { scripts: { start: 'node server.js' } });
+  fs.writeFileSync(path.join(pnpmDir, 'pnpm-lock.yaml'), '');
+  assert.deepEqual(lp.suggestConfig(pnpmDir), { install: 'pnpm install --frozen-lockfile', command: 'pnpm start', url: null, from: 'package.json (scripts.start)' });
+});
+
+test('suggestConfig: no lockfile at all suggests npm install', (t) => {
+  const dir = tmp(t);
+  writePkg(dir, { scripts: { start: 'node server.js' } });
+  assert.equal(lp.suggestConfig(dir).install, 'npm install');
+});
+
+test('suggestConfig: an Electron app opens its own window, so no URL is suggested even with a dev script', (t) => {
+  const dir = tmp(t);
+  writePkg(dir, { scripts: { start: 'electron .' }, dependencies: { electron: '^30.0.0', vite: '^5.0.0' } });
+  assert.equal(lp.suggestConfig(dir).url, null);
+});
+
+test('suggestConfig: no package.json falls back to a run command found in the README\'s code blocks', (t) => {
+  const dir = tmp(t);
+  fs.writeFileSync(path.join(dir, 'README.md'), '# Demo\n\nRun it:\n\n```\ngo run .\n```\n');
+  assert.deepEqual(lp.suggestConfig(dir), { install: null, command: 'go run .', url: null, from: 'README' });
+});
+
+test('suggestConfig: a Django project (manage.py) without a package.json or README command', (t) => {
+  const dir = tmp(t);
+  fs.writeFileSync(path.join(dir, 'manage.py'), '');
+  assert.deepEqual(lp.suggestConfig(dir), { install: null, command: 'python manage.py runserver', url: 'http://localhost:8000', from: 'Django (manage.py)' });
+});
+
+test('suggestConfig: an empty directory suggests nothing', (t) => {
+  assert.equal(lp.suggestConfig(tmp(t)), null);
+});
+
+test('suggestConfig: this repository suggests npm ci / npm start with no URL', () => {
+  assert.deepEqual(lp.suggestConfig(path.join(__dirname, '..')), { install: 'npm ci', command: 'npm start', url: null, from: 'package.json (scripts.start)' });
+});
+
 test('scratchWorkspace: copies agents/skills/workflows/settings, points projects at empty scratch folders, never the real runs or a local repo path', (t) => {
   const wsRoot = tmp(t);
   fs.mkdirSync(path.join(wsRoot, 'agents'));

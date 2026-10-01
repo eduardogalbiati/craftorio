@@ -112,15 +112,18 @@ test('onRunGateClick: a click outside any gate button answers nothing', () => {
 
 function loadGateToolsHtml() {
   const esc = /const esc = \(s\) => [^\n]+/.exec(src)[0];
-  const gateToolsHtml = /function gateToolsHtml\(g, \{ disabled = false \} = \{\}\) \{[\s\S]*?\n\}/.exec(src)[0];
-  assert.ok(gateToolsHtml, 'gateToolsHtml not found in app.js: the source moved');
+  const gateToolsHtml = /function gateToolsHtml\(g, \{ disabled = false, runId = g\.run_id \|\| g\.runId \|\| '' \} = \{\}\) \{[\s\S]*?\n\}/.exec(src)[0];
+  const runAppLabel = /const runAppLabel = [^\n]+/.exec(src)[0];
+  for (const [name, code] of Object.entries({ gateToolsHtml, runAppLabel })) {
+    assert.ok(code, `${name} not found in app.js: the source moved`);
+  }
   const sandbox = {};
   vm.createContext(sandbox);
-  vm.runInContext(`${esc}\n${gateToolsHtml}\nthis.gateToolsHtml = gateToolsHtml;`, sandbox);
+  vm.runInContext(`${esc}\n${runAppLabel}\n${gateToolsHtml}\nthis.gateToolsHtml = gateToolsHtml;`, sandbox);
   return sandbox.gateToolsHtml;
 }
 
-test('gateToolsHtml: Show the diff only with a diff_base and a work dir; Run locally only with local_preview; neither without either', () => {
+test('gateToolsHtml: Show the diff only with a diff_base and a work dir; Run App with local_preview or run_app; neither without either', () => {
   const gateToolsHtml = loadGateToolsHtml();
   assert.equal(gateToolsHtml({ approval_id: 'a1' }), '', 'nothing to offer: no row at all');
 
@@ -136,6 +139,12 @@ test('gateToolsHtml: Show the diff only with a diff_base and a work dir; Run loc
   const previewOnly = gateToolsHtml({ approval_id: 'a1', local_preview: { command: 'npm start' }, work_dir: '/wt' });
   assert.match(previewOnly, /data-gate-tool="preview"/);
   assert.match(previewOnly, /data-gate-tool="stop"/);
+  assert.match(previewOnly, /Run App: npm start/, 'the button\'s label says what it will run');
+
+  // run_app without a config (#108): Run App is still offered, its label has no command yet
+  const runAppOnly = gateToolsHtml({ approval_id: 'a1', run_app: true, work_dir: '/wt' });
+  assert.match(runAppOnly, /data-gate-tool="preview"/);
+  assert.match(runAppOnly, /Run App…/);
 
   // the run chat's own event shape (camelCase) works the same way
   const camel = gateToolsHtml({ approvalId: 'a1', workDir: '/wt', diffBase: 'origin/main', localPreview: { command: 'npm start' } });
@@ -152,4 +161,117 @@ test('onRunGateClick: a refused answer re-enables the buttons and tells the user
   await new Promise((r) => setTimeout(r, 0));
   assert.equal(approve.disabled, false);
   assert.deepEqual(toasts[0].slice(0, 1), ['Could not answer the gate']);
+});
+
+// ---- #108: the gate's summary/brief, the side panel marker and the app's painted state -----------
+
+function loadGateBrief() {
+  const esc = /const esc = \(s\) => [^\n]+/.exec(src)[0];
+  const gateTriesChange = /const gateTriesChange = [^\n]+/.exec(src)[0];
+  const gateSideHtml = /function gateSideHtml\(g, runId = g\.run_id\) \{[\s\S]*?\n\}/.exec(src)[0];
+  const lastOutput = /function lastOutput\(runId, match\) \{[\s\S]*?\n\}/.exec(src)[0];
+  const gateBriefHtml = /function gateBriefHtml\(runId, g, fullHtml\) \{[\s\S]*?\n\}/.exec(src)[0];
+  for (const [name, code] of Object.entries({ gateTriesChange, gateSideHtml, lastOutput, gateBriefHtml })) {
+    assert.ok(code, `${name} not found in app.js: the source moved`);
+  }
+  const sandbox = { state: { runs: new Map() } };
+  vm.createContext(sandbox);
+  vm.runInContext(
+    `${esc}\n${gateTriesChange}\n${gateSideHtml}\n${lastOutput}\n${gateBriefHtml}\n`
+    + 'this.helpers = { gateTriesChange, gateSideHtml, gateBriefHtml };',
+    sandbox,
+  );
+  return { ...sandbox.helpers, sandbox };
+}
+
+test('gateSideHtml: only for a gate that tries the change (run_app/local_preview and a work dir), empty otherwise', () => {
+  const { gateSideHtml } = loadGateBrief();
+  assert.equal(gateSideHtml({ approval_id: 'a1' }), '', 'no work dir, no local_preview/run_app: no side panel');
+  assert.equal(gateSideHtml({ approval_id: 'a1', run_app: true }), '', 'run_app without a work dir does not try the change');
+  const side = gateSideHtml({ approval_id: 'a1', run_app: true, work_dir: '/wt' }, 'r1');
+  assert.match(side, /data-gate-side="a1"/);
+  assert.match(side, /data-run="r1"/);
+  assert.match(side, /data-diff=""/, 'no diff_base: nothing to mark');
+  assert.match(gateSideHtml({ approval_id: 'a1', local_preview: { command: 'npm start' }, work_dir: '/wt', diff_base: 'origin/main' }), /data-diff="1"/);
+});
+
+test('gateBriefHtml: \'\' without run_app/local_preview, or without a developer output to summarise', () => {
+  const { gateBriefHtml, sandbox } = loadGateBrief();
+  assert.equal(gateBriefHtml('r1', { approval_id: 'a1' }, '<pre>full</pre>'), '', 'not a gate that tries the change');
+  sandbox.state.runs.set('r1', { events: [] });
+  assert.equal(gateBriefHtml('r1', { approval_id: 'a1', run_app: true, work_dir: '/wt' }, '<pre>full</pre>'), '', 'no developer output recorded yet');
+});
+
+test('gateBriefHtml: one line per issue (done/not done, the issue number from its URL, one sentence), the full message expandable', () => {
+  const { gateBriefHtml, sandbox } = loadGateBrief();
+  sandbox.state.runs.set('r1', {
+    events: [{
+      type: 'step.finished',
+      output: {
+        summary: 'Implemented both issues. Ready for review.',
+        issues: [
+          { issue: 'https://github.com/o/r/issues/108', done: true, summary: 'Two-column gate shipped. Extra detail.' },
+          { issue: 'https://github.com/o/r/issues/109', done: false, summary: 'Artifacts tab still missing.' },
+        ],
+      },
+    }],
+  });
+  const brief = gateBriefHtml('r1', { approval_id: 'a1', run_app: true, work_dir: '/wt' }, '<pre>full message</pre>');
+  assert.match(brief, /<p>Implemented both issues\.<\/p>/, 'only the summary\'s first sentence');
+  assert.match(brief, /class="ok"[^]*?✔ done[^]*?#108[^]*?Two-column gate shipped\./);
+  assert.match(brief, /class="not"[^]*?✖ not done[^]*?#109[^]*?Artifacts tab still missing\./);
+  assert.match(brief, /<summary class="small">Full message<\/summary><pre>full message<\/pre>/);
+});
+
+function loadPaintGateApps() {
+  const paintGateApps = /function paintGateApps\(\) \{[\s\S]*?\n\}/.exec(src)[0];
+  assert.ok(paintGateApps, 'paintGateApps not found in app.js: the source moved');
+  const boxes = [];
+  const fakeBox = (dataset, parts) => {
+    const box = {
+      dataset,
+      querySelector: (sel) => parts[sel] || null,
+    };
+    boxes.push(box);
+    return box;
+  };
+  const stopBtn = { classList: { hidden: false, toggle(_cls, h) { this.hidden = h; } } };
+  const termBtn = { classList: { hidden: false, toggle(_cls, h) { this.hidden = h; } } };
+  const stateEl = { className: '', textContent: '', title: '' };
+  const errEl = { textContent: '', classList: { hidden: false, toggle(_cls, h) { this.hidden = h; } } };
+  const box = fakeBox({ run: 'r1', approval: 'a1' }, {
+    '[data-gate-app-state]': stateEl,
+    '[data-gate-tool="stop"]': stopBtn,
+    '[data-gate-tool="app-term"]': termBtn,
+    '[data-gate-app-url]': null,
+    '[data-gate-app-error]': errEl,
+  });
+  const sandbox = {
+    document: { querySelectorAll: (sel) => (sel === '.gate-tools[data-run]' ? boxes : []) },
+    state: { runs: new Map([['r1', { preview: null }]]) },
+    dock: { tabs: [] },
+  };
+  vm.createContext(sandbox);
+  vm.runInContext(`${paintGateApps}\nthis.paintGateApps = paintGateApps;`, sandbox);
+  return { paintGateApps: sandbox.paintGateApps, sandbox, stopBtn, termBtn, stateEl, errEl };
+}
+
+test('paintGateApps: shows the running/stopped/failed state, Stop only while running, and the app\'s error when it failed', () => {
+  const { paintGateApps, sandbox, stopBtn, stateEl, errEl } = loadPaintGateApps();
+  paintGateApps();
+  assert.equal(stateEl.textContent, '', 'nothing started yet');
+  assert.equal(stopBtn.classList.hidden, true);
+
+  sandbox.state.runs.get('r1').preview = { status: 'running', approval: 'a1', command: 'npm start' };
+  paintGateApps();
+  assert.equal(stateEl.textContent, '● running');
+  assert.equal(stopBtn.classList.hidden, false);
+  assert.equal(errEl.classList.hidden, true);
+
+  sandbox.state.runs.get('r1').preview = { status: 'failed', approval: 'a1', error: 'port 3000 is already in use' };
+  paintGateApps();
+  assert.equal(stateEl.textContent, '● failed');
+  assert.equal(stopBtn.classList.hidden, true);
+  assert.equal(errEl.textContent, 'port 3000 is already in use');
+  assert.equal(errEl.classList.hidden, false);
 });

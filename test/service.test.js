@@ -1243,6 +1243,112 @@ test('localPreview:stop: the Stop button ends the preview without answering the 
   await resolveAndWait(api, gate.run_id, gate.approval_id, 'approve');
 });
 
+// ---- #108: Run App at a gate without a configured preview (localPreview:info / :start, gate:changes) ----
+
+// local_preview: true on the gate, but no orchestrator.local_preview default: Run App is offered
+// (run_app) with nothing to run until a project (or a one-off config) supplies a command.
+const GATE_RUN_APP_WORKFLOW = `apiVersion: multiagent/v1
+kind: Workflow
+metadata:
+  name: gate-run-app
+inputs:
+  repo_path: { type: string, required: true }
+agents:
+  a: { provider: claude, model: m, session: ephemeral }
+steps:
+  - id: gate
+    type: human_approval
+    local_preview: true
+    message: "Try it?"
+    choices:
+      - { id: approve, label: Approve }
+      - { id: stop, label: Stop }
+`;
+
+test('localPreview:info: without a project config it returns a suggestion read from the worktree; after projects:update it returns the project\'s, re-read without restarting the run', async (t) => {
+  const { service, api } = makeService(t);
+  fs.writeFileSync(path.join(service.workspace().workflows, 'gate-run-app.yaml'), GATE_RUN_APP_WORKFLOW);
+  const repo = gitRepo(t);
+  fs.writeFileSync(path.join(repo.dir, 'package.json'), JSON.stringify({ scripts: { start: 'node server.js' } }));
+  const project = await api['projects:create']({ name: 'demo', folder: repo.dir });
+
+  const gateP = new Promise((resolve) => service.events.on('run:event', (ev) => { if (ev.type === 'approval.requested') resolve(ev); }));
+  const { runId } = await api['run:start']({ file: 'gate-run-app.yaml', inputs: { repo_path: repo.dir }, mock: true });
+  const gate = await gateP;
+  assert.equal(gate.run_app, true);
+  assert.equal('local_preview' in gate, false);
+
+  const before = await api['localPreview:info']({ runId, approvalId: gate.approval_id });
+  assert.equal(before.config, null);
+  assert.equal(before.source, null);
+  assert.deepEqual(before.suggestion, { install: 'npm install', command: 'npm start', url: null, from: 'package.json (scripts.start)' });
+  assert.equal(before.project.id, project.id);
+
+  api['projects:update']({ id: project.id, patch: { localPreview: { install: null, command: 'git --version', url: null } } });
+  const after = await api['localPreview:info']({ runId, approvalId: gate.approval_id });
+  assert.deepEqual(after.config, { install: null, command: 'git --version', url: null });
+  assert.equal(after.source, 'project');
+
+  await resolveAndWait(api, runId, gate.approval_id, 'approve');
+});
+
+test('localPreview:start: refuses without a command; a one-off config arg runs on a project-less run', async (t) => {
+  const { service, api } = makeService(t);
+  fs.writeFileSync(path.join(service.workspace().workflows, 'gate-run-app.yaml'), GATE_RUN_APP_WORKFLOW);
+  const repo = gitRepo(t); // no project matches this folder: the run has no project
+
+  const gateP = new Promise((resolve) => service.events.on('run:event', (ev) => { if (ev.type === 'approval.requested') resolve(ev); }));
+  const { runId } = await api['run:start']({ file: 'gate-run-app.yaml', inputs: { repo_path: repo.dir }, mock: true });
+  const gate = await gateP;
+
+  await assert.rejects(api['localPreview:start']({ runId, approvalId: gate.approval_id }), /No command to run/);
+
+  const events = [];
+  service.events.on('run:event', (ev) => events.push(ev));
+  const preview = await api['localPreview:start']({ runId, approvalId: gate.approval_id, config: { command: 'git --version' } });
+  assert.equal(preview.cwd, repo.dir);
+  assert.ok(events.some((e) => e.type === 'local_preview.started' && e.command === 'git --version'));
+  assert.equal(api['runs:active']().find((r) => r.runId === runId)?.gates.length, 1, 'starting it never answers the gate');
+
+  await resolveAndWait(api, runId, gate.approval_id, 'approve');
+});
+
+test('gate:changes: the files changed since the gate\'s diff_base, added/deleted per file; refuses on a non-git folder', async (t) => {
+  const { service, api } = makeService(t);
+  fs.writeFileSync(path.join(service.workspace().workflows, 'gate-fixture.yaml'), GATE_WORKFLOW);
+  const repo = gitRepo(t);
+  const gate = await openGateFixture(t, service, api, repo);
+  const changes = await api['gate:changes']({ runId: gate.run_id, approvalId: gate.approval_id });
+  assert.deepEqual(changes, [{ file: 'a.txt', added: 1, deleted: 0 }]);
+  await resolveAndWait(api, gate.run_id, gate.approval_id, 'approve');
+
+  const plainDir = fs.mkdtempSync(path.join(os.tmpdir(), 'svc-notgit-'));
+  t.after(() => fs.rmSync(plainDir, { recursive: true, force: true }));
+  const notGitGate = await openGateFixture(t, service, api, { dir: plainDir, base: 'HEAD' });
+  await assert.rejects(api['gate:changes']({ runId: notGitGate.run_id, approvalId: notGitGate.approval_id }), /not a git repository/);
+  await resolveAndWait(api, notGitGate.run_id, notGitGate.approval_id, 'approve');
+});
+
+test('term:open kind diff: a `file` opens that file\'s diff only (git diff ... -- <file>)', async (t) => {
+  const { service, api } = makeService(t);
+  fs.writeFileSync(path.join(service.workspace().workflows, 'gate-fixture.yaml'), GATE_WORKFLOW);
+  const repo = gitRepo(t);
+  // a second, untouched file: its diff must not show up when the gate's tool asks for a.txt only
+  fs.writeFileSync(path.join(repo.dir, 'b.txt'), 'other\n');
+  execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'add', '.'], { cwd: repo.dir });
+  execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-m', 'third'], { cwd: repo.dir });
+  const gate = await openGateFixture(t, service, api, repo);
+
+  const out = [];
+  service.events.on('term:data', (p) => out.push(p));
+  const opened = api['term:open']({ kind: 'diff', runId: gate.run_id, approvalId: gate.approval_id, file: 'a.txt' });
+  await untilTrue(() => out.some((p) => p.id === opened.id && /two/.test(p.data)));
+  const data = out.filter((p) => p.id === opened.id).map((p) => p.data).join('');
+  assert.match(data, /a\.txt/);
+  assert.doesNotMatch(data, /b\.txt/);
+  await resolveAndWait(api, gate.run_id, gate.approval_id, 'approve');
+});
+
 // ---- Backlog roadmap (#106): ordered stages of runs, each after the previous one merged -------
 const roadmapModel = require('../src/roadmap');
 const roadmapIssue = (number) => ({ number, title: `Issue ${number}`, state: 'open', url: `https://github.com/o/r/issues/${number}`, body: 'Do it', labels: [], assignees: [], tasks: { done: 0, total: 0 } });

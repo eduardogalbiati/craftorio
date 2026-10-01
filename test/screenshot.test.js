@@ -20,7 +20,7 @@ function tmp(t) {
 
 test('--help prints the header comment: every option, without comment markers', () => {
   const text = usage();
-  for (const opt of ['--view', '--tab', '--click', '--ref', '--out', '--name', '--caption', '--before']) assert.match(text, new RegExp(opt));
+  for (const opt of ['--view', '--tab', '--click', '--ref', '--out', '--name', '--caption', '--before', '--input', '--stop-at']) assert.match(text, new RegExp(opt));
   assert.doesNotMatch(text, /^\/\//m);
 });
 
@@ -41,6 +41,15 @@ test('parseArgs names the file after the scenario and checks options against the
   assert.throws(() => parseArgs(['--name', '../x']), /plain file name/);
   assert.throws(() => parseArgs(['--before', 'a.png']), /--before needs --caption/);
   assert.throws(() => parseArgs(['--real']), /Unknown argument: --real/);
+});
+
+test('--input and --stop-at only apply to --view run; --input takes key=value and is repeatable', () => {
+  const a = parseArgs(['--view', 'run', '--input', 'mode=validated', '--input', 'base_branch=main']);
+  assert.deepEqual(a.inputs, { mode: 'validated', base_branch: 'main' });
+  assert.equal(parseArgs(['--view', 'run', '--stop-at', 'developer_check']).stopAt, 'developer_check');
+  assert.throws(() => parseArgs(['--input', 'mode=validated']), /--stop-at and --input apply to --view run/);
+  assert.throws(() => parseArgs(['--view', 'dashboard', '--stop-at', 'developer_check']), /--stop-at and --input apply to --view run/);
+  assert.throws(() => parseArgs(['--view', 'run', '--input', 'mode']), /--input takes key=value/);
 });
 
 test('recordShot adds a shot to screenshots.json and replaces the one with the same file', (t) => {
