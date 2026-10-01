@@ -46,6 +46,8 @@ const ANSWER_SCHEMA = {
           workflow: { type: 'string' },
           inputs: { type: 'object' },
           reason: { type: 'string' },
+          // why this `inputs.mode` (validated: the owner can try it in the app; auto: engine, refactor, docs, tests)
+          mode_reason: { type: 'string' },
           files: { type: 'array', items: { type: 'string' } },
           stage: { type: 'integer' },
           warnings: { type: 'array', items: { type: 'string' } },
@@ -75,6 +77,7 @@ const RULES = [
   'You are the Product Owner of this project\'s backlog, inside the orchestrator\'s Backlog screen. The owner asks you a question; answer it from the backlog report below and, when you need to, from the project\'s code (your working directory, read-only: docs/agents/code-map.md, grep).',
   'Propose groups of issues to implement in one run (same files, same feature, one reuses the other), pairs or sets that must not run in parallel (overlapping files, a repo-wide refactor or reformat), the order to run the groups in (`stage`: 1 first; groups of one stage may run in parallel), and the issues too vague to implement that should be enriched first.',
   'Use only issue numbers and workflow files listed in the report. Suggest the workflow inputs that matter (for example `mode`). Leave a list empty when the question is not about it.',
+  'When the workflow has a `mode` input, set it on every group and say why in `mode_reason`: `validated` for a change the owner can try in the app (a screen, a dialog, a visible behaviour), `auto` for the engine, refactors, docs and tests.',
   'You never edit issues, never start runs and never answer a human gate: the owner applies a proposal with a click. Do not prescribe code changes.',
   'Write in English. The summary is Markdown, short, and answers the question.',
 ].join('\n');
@@ -176,6 +179,7 @@ function normalizeAnswer(answer, { issues, history, workflows }) {
       workflow: files.includes(g.workflow) ? g.workflow : fallback,
       inputs: g.inputs && typeof g.inputs === 'object' && !Array.isArray(g.inputs) ? g.inputs : {},
       reason: String(g.reason || ''),
+      ...(g.mode_reason ? { modeReason: String(g.mode_reason) } : {}),
       files: (g.files || []).map(String).slice(0, 20),
       stage: Number.isInteger(g.stage) && g.stage > 0 ? g.stage : n + 1,
       ...size,

@@ -91,6 +91,7 @@
         </div>
         <div class="small"><span class="muted">workflow</span> <span class="mono">${esc(g.workflow)}</span>${inputs.length ? ` · <span class="muted">inputs</span> ${inputs.map(([k, v]) => `<span class="mono">${esc(k)}=${esc(v)}</span>`).join(', ')}` : ''}</div>
         ${g.reason ? `<div class="small">${esc(g.reason)}</div>` : ''}
+        ${g.modeReason ? `<div class="small"><span class="muted">mode:</span> ${esc(g.modeReason)}</div>` : ''}
         ${g.files?.length ? `<div class="small muted">files: <span class="mono">${g.files.map(esc).join(', ')}</span></div>` : ''}
         <div class="small po-size">${sizeText(g)}</div>
         ${(g.warnings || []).map((w) => `<div class="small warn-text">⚠ ${esc(w)}</div>`).join('')}
@@ -163,7 +164,7 @@
       const stages = [...new Set(answer.groups.map((g) => g.stage))].sort((a, b) => a - b).map((s) => ({
         name: `Stage ${s} (Product Owner)`,
         note: '',
-        items: answer.groups.filter((g) => g.stage === s).map((g) => ({ workflow: g.workflow, issues: g.issues, inputs: g.inputs, mock: !!state.simulationOnly })),
+        items: answer.groups.filter((g) => g.stage === s).map((g) => ({ workflow: g.workflow, issues: g.issues, inputs: g.inputs, mock: !!state.simulationOnly, reason: g.reason, modeReason: g.modeReason })),
       }));
       try {
         const out = await api.proposeRoadmap(po.projectId, { stages }, false);

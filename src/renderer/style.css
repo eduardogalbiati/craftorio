@@ -1134,16 +1134,44 @@ button.bl-label { font-family: inherit; background: none; cursor: pointer; }
 .rm-stage { border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px; background: var(--panel); display: grid; gap: 6px; }
 .rm-stage.current { border-color: var(--accent); }
 .rm-stage.finished { opacity: .7; }
-.rm-stage-head, .rm-item-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.rm-name { flex: 0 1 260px; }
-.rm-note { width: 100%; }
+.rm-stage-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+/* the stage name reads as text until hovered or edited */
+input[type=text].rm-name { flex: 0 1 260px; border-color: transparent; background: transparent; padding: 3px 6px; font-weight: 600; }
+input[type=text].rm-name:hover { border-color: var(--border); }
+input[type=text].rm-name:focus { border-color: var(--accent); background: var(--panel-2); }
+input[type=text].rm-note { max-width: 520px; }
+.rm-note-text { margin: 0; }
 .rm-items { display: grid; gap: 6px; }
-.rm-item { border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; display: grid; gap: 4px; }
+.rm-item { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; display: grid; gap: 6px; }
 .rm-item[draggable="true"] { cursor: grab; }
 .rm-item.rm-failed { border-color: var(--red); }
 .rm-item.rm-waiting { border-color: var(--yellow); }
-.rm-issues { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+/* an item leads with its issues' titles, one line each (ellipsis, the full title on hover) */
+.rm-item-head { display: flex; align-items: flex-start; gap: 8px; }
+.rm-titles { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; flex: 1; min-width: 0; }
+.rm-issue { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
 .rm-issue[draggable="true"] { cursor: grab; }
-.rm-edit { display: grid; gap: 4px; }
-.rm-edit label { display: flex; gap: 6px; align-items: center; }
+.rm-num { color: var(--muted); font-size: 12px; flex: none; }
+.rm-title { color: var(--text); font-weight: 600; text-decoration: none; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+a.rm-title:hover { text-decoration: underline; }
+.rm-actions { display: flex; align-items: center; gap: 6px; flex: none; }
+.rm-meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.rm-meta .pill { font-size: 10px; padding: 1px 7px; }
+.rm-wf, .rm-input { color: var(--muted); }
+.rm-mode svg, .rm-mode-seg svg { width: 11px; height: 11px; margin-right: 4px; vertical-align: -1px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linejoin: round; }
+.badge.rm-mode-validated, .rm-mode-seg button.rm-mode-validated.active { color: var(--accent); }
+.rm-mode-seg button { display: inline-flex; align-items: center; }
+.rm-mode-seg button:focus-visible { outline: var(--focus-ring); outline-offset: 1px; }
+.rm-reason > summary { list-style: none; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rm-reason > summary::-webkit-details-marker { display: none; }
+.rm-reason[open] > summary { white-space: normal; }
+.rm-reason p { margin: 2px 0 0; }
+/* the Edit form: .field with the label above, two columns on wide cards, explicit Save / Cancel */
+.rm-form { border: 1px solid var(--border); border-radius: 8px; background: var(--panel-2); padding: 10px 12px; display: grid; gap: 6px; cursor: default; }
+.rm-form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0 16px; }
+.rm-form .field { margin-bottom: 6px; min-width: 0; }
+.rm-form select, .rm-form input[type=text] { background: var(--panel); max-width: 240px; padding: 5px 8px; }
+.rm-form .rm-add .row input { max-width: 180px; }
+.rm-form > .link-btn { justify-self: start; }
+.rm-form-actions { display: flex; align-items: center; gap: 8px; }
 .rm-import textarea { width: 100%; }

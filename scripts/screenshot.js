@@ -145,22 +145,29 @@ function demoLocalMerge(ws, projectId) {
 }
 
 // A roadmap (Backlog › Roadmap, src/roadmap.js): stage 1 done (the local-hero run of #11), then a
-// group of two issues, then one issue; planned, so nothing starts.
+// group of two issues (with the Product Owner's reasons, mode auto), then one UI issue (mode
+// validated, no stage note); planned, so nothing starts. `--click "[data-rm-edit]"` opens the first
+// planned item's Edit form (the workflow's inputs: select, checkbox, text).
 function demoRoadmap(ws, projectId) {
   const issue = (n) => {
     const i = DEMO_ISSUES.find((x) => x.number === n);
     return { number: n, url: `${DEMO_REPO}/issues/${n}`, title: i.title, body: i.body, knownPullRequests: [] };
   };
   const item = (id, workflow, numbers, extra = {}) => ({
-    id, workflow, workflowName: workflow.replace(/\.yaml$/, ''), inputs: { language: 'js' }, mock: false,
+    id, workflow, workflowName: workflow.replace(/\.yaml$/, ''), inputs: { language: 'js', mode: 'auto' }, mock: false,
     ...issue(numbers[0]), ...(numbers.length > 1 ? { issues: numbers.map(issue) } : {}), status: 'planned', runId: null, runs: [], error: null, ...extra,
   });
   fs.writeFileSync(path.join(ws.backlog, `${projectId}.roadmap.json`), JSON.stringify({
     state: 'planned', simulated: false, error: null, pausedBy: null, updatedAt: new Date().toISOString(),
     stages: [
       { id: 'stage-1', name: 'Stability first', note: 'The rename crash blocks the rest.', items: [item('item-1', 'software-development-local-hero.yaml', [11], { status: 'done', runId: '20260118-120000-demo0011', runs: ['20260118-120000-demo0011'] })] },
-      { id: 'stage-2', name: 'Reports and health', note: 'Both touch the server: one run, no conflict.', items: [item('item-2', 'software-development-local-hero.yaml', [12, 9])] },
-      { id: 'stage-3', name: '', note: '', items: [item('item-3', 'software-development.yaml', [10])] },
+      { id: 'stage-2', name: 'Reports and health', note: 'Both touch the server: one run, no conflict.', items: [item('item-2', 'software-development-local-hero.yaml', [12, 9], {
+        reason: 'Both add a server route and share the report formatter: one run avoids a merge conflict in src/server.',
+        modeReason: 'Auto: server code with no screen to try.',
+      })] },
+      { id: 'stage-3', name: '', note: '', items: [item('item-3', 'software-development.yaml', [10], {
+        inputs: { language: 'js', mode: 'validated' }, reason: 'A small UI fix on its own.', modeReason: 'Validated: a screen the owner can try in the app.',
+      })] },
     ],
   }, null, 2));
 }

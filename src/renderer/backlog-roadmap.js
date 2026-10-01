@@ -1,20 +1,59 @@
 // Backlog › Roadmap (#106): a project's ordered stages of runs (src/roadmap.js), each stage started
-// when the previous one has finished and merged. Shows each stage's items (workflow, issues, state:
-// planned / running / waiting at a gate / done / failed / skipped, a link to the run) and edits the
-// plan: stages and items up/down or by drag, an issue dragged from one item to another, items
-// removed, inputs and simulation edited, a stage renamed. Start (optionally simulated), Pause, Stop,
-// Clear; Retry / Skip on a failed item. A Product Owner proposal (#105, JSON) is added or replaces
-// the roadmap as planned; the plain queue's items can be moved in. Every edit saves the whole list
-// of stages (api.saveRoadmap); the service keeps each item's runs by id.
+// when the previous one has finished and merged. Each item leads with its issues' titles (a list,
+// one line per issue, linked; #110), then badges: its state (planned / running / waiting at a gate /
+// done / failed / skipped), the workflow's short name, the mode (a one-click toggle on planned and
+// failed items, saved at once), the complexity total of its `complexity:n` labels, a link to the
+// run; and the Product Owner's reason (#105) under the titles. The other inputs are edited in an
+// Edit form built from the workflow's input definitions (api.listWorkflows, loaded once: a select
+// for an enum, a checkbox for a flag, text otherwise), with Save / Cancel. The plan is edited too:
+// stages and items up/down or by drag, an issue dragged from one item to another, items removed, a
+// stage renamed or given a note ("add note"). Start (optionally simulated), Pause, Stop, Clear;
+// Retry / Skip on a failed item. A Product Owner proposal (#105, JSON) is added or replaces the
+// roadmap as planned; the plain queue's items can be moved in. Every edit saves the whole list of
+// stages (api.saveRoadmap); the service keeps each item's runs by id.
 // Rendered into #bl-list by backlog.js (mode 'roadmap'), which passes `ctx`
-// ({ projectId, setData, render, setError, openRun }). Uses app.js globals (esc, state, errMsg, devMode, confirmDialog).
+// ({ projectId, setData, render, setError }). Uses app.js globals (esc, state, errMsg, devMode, confirmDialog).
 /* global api */
 (() => {
   const STATE_LABEL = { planned: 'planned', running: 'running', paused: 'paused', done: 'done' };
-  const ITEM_PILL = { planned: 'pending', running: 'running', done: 'success', failed: 'failed', skipped: 'cancelled' };
+  // an item's state: [pill colour, label]
+  const ITEM_STATE = {
+    planned: ['idle', 'planned'],
+    running: ['running', 'running'],
+    waiting: ['cancelled', 'waiting at a gate'],
+    done: ['success', 'done'],
+    failed: ['failed', 'failed'],
+    skipped: ['interrupted', 'skipped'],
+  };
+  const MODE_LABEL = { auto: 'Auto', validated: 'Validated' };
+  const ICON = {
+    validated: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>',
+    auto: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 3 14h9l-1 8 10-12h-9z"/></svg>',
+  };
+  const COMPLEXITY = /^complexity\s*[:=/-]?\s*(\d+)/i;
   const refs = (x) => (x.issues?.length ? x.issues : [x]);
   const editable = (x) => x.status === 'planned' || x.status === 'failed';
   const clone = (stages) => JSON.parse(JSON.stringify(stages || []));
+  // inputs the Backlog fills itself when the run starts (as backlog.js's skipInput): never edited here
+  const skipInput = (k, def) => k === 'task' || k === 'issue' || k === 'issues' || def.type === 'run' || ((def.type || 'string') === 'string' && /path|dir/i.test(k));
+  // a flag: a boolean, or an enum of the strings "false"/"true" (e.g. validate_every_round)
+  const isFlag = (def) => def.type === 'boolean' || (Array.isArray(def.enum) && def.enum.length === 2 && def.enum.map(String).sort().join() === 'false,true');
+
+  // The workflows' input definitions (file → workflow), loaded once when the Roadmap is first drawn.
+  let workflows = null;
+  let loading = false;
+  function loadWorkflows(rerender) {
+    if (workflows || loading) return;
+    loading = true;
+    api.listWorkflows()
+      .then((list) => { workflows = new Map((list || []).filter((w) => !w.error).map((w) => [w.file, w])); rerender?.(); })
+      .catch(() => { workflows = new Map(); })
+      .finally(() => { loading = false; });
+  }
+  const inputDefs = (x) => workflows?.get(x.workflow)?.inputs || {};
+  let editing = null; // the item whose Edit form is open
+  let adding = false; // its "add input" name + value pair is shown
+  let noteEditing = null; // the stage whose note is being edited
 
   /** The badge of an issue card: its place in the roadmap ("Roadmap: stage 2"). */
   function badge(i) {
@@ -22,55 +61,144 @@
     return `<span class="badge bl-roadmap" title="${esc(`${i.roadmap.name}: ${i.roadmap.status}`)}">Roadmap: stage ${i.roadmap.stage}${i.roadmap.status === 'planned' ? '' : ` · ${esc(i.roadmap.status)}`}</span>`;
   }
 
-  function itemHtml(x, s, n) {
-    const status = x.waiting ? 'waiting' : x.status;
-    const locked = !editable(x);
-    const inputs = Object.entries(x.inputs || {});
-    const issues = refs(x).map((i) => `<span class="badge rm-issue"${locked ? '' : ` draggable="true" data-drag-issue="${i.number}" data-from="${esc(x.id)}"`} title="${esc(i.title || '')}">#${i.number}</span>`).join('');
+  /** A workflow's short name for its badge ("local hero", "software dev"); the file is in the tooltip. */
+  function shortWorkflow(file) {
+    const base = String(file || '').replace(/\.ya?ml$/i, '');
+    if (base === 'software-development') return 'software dev';
+    return base.replace(/^software-development-/, '').replace(/[-_]+/g, ' ');
+  }
+
+  /** The sum of the item's issues' `complexity:n` labels (null when none has one). */
+  function complexity(x, byNumber) {
+    const known = refs(x).map((i) => (byNumber.get(i.number)?.labels || [])
+      .map((l) => String(l?.name ?? l).match(COMPLEXITY)).find(Boolean)).filter(Boolean).map((m) => Number(m[1]));
+    return known.length ? known.reduce((a, c) => a + c, 0) : null;
+  }
+
+  // The mode: a toggle with the workflow's enum values on an editable item, a badge otherwise.
+  function modeHtml(x, locked) {
+    const def = inputDefs(x).mode;
+    const values = Array.isArray(def?.enum) ? def.enum.map(String) : x.inputs?.mode != null ? [String(x.inputs.mode)] : [];
+    if (!values.length) return '';
+    const value = String(x.inputs?.mode ?? def?.default ?? values[0]);
+    const label = (v) => `${ICON[v] || ''}${esc(MODE_LABEL[v] || v)}`;
+    const help = def?.description ? `. ${def.description}` : '';
+    if (locked || values.length < 2) return `<span class="badge rm-mode rm-mode-${esc(value)}" title="${esc(`Mode: ${value}${help}`)}">${label(value)}</span>`;
+    return `<span class="seg sm rm-mode-seg" role="group" aria-label="Mode" title="${esc(`Mode (saved at once)${help}`)}">${values.map((v) =>
+      `<button type="button" class="rm-mode-${esc(v)}${v === value ? ' active' : ''}" data-rm-mode="${esc(v)}" aria-pressed="${v === value}">${label(v)}</button>`).join('')}</span>`;
+  }
+
+  // The Product Owner's reason for the group and for the mode (#105): one line, expandable.
+  function reasonHtml(x) {
+    if (!x.reason && !x.modeReason) return '';
+    const head = x.reason ? `<span class="muted">Why:</span> ${esc(x.reason)}` : `<span class="muted">Mode:</span> ${esc(x.modeReason)}`;
+    return `<details class="rm-reason small"><summary title="The Product Owner's reason (click for all of it)">${head}</summary>
+      ${x.reason && x.modeReason ? `<p><span class="muted">Mode:</span> ${esc(x.modeReason)}</p>` : ''}</details>`;
+  }
+
+  // The Edit form: the workflow's inputs (but the mode, which has its toggle) with proper controls.
+  function formHtml(x) {
+    const defs = inputDefs(x);
+    const fields = Object.entries(defs).filter(([k, def]) => k !== 'mode' && !skipInput(k, def || {}));
+    const extra = Object.keys(x.inputs || {}).filter((k) => k !== 'mode' && !defs[k]);
+    let first = !adding; // the new input's name takes the focus when it was just opened
+    const focus = () => { const f = first; first = false; return f ? ' autofocus' : ''; };
+    const field = (k, def = {}) => {
+      const value = x.inputs?.[k] ?? def.default ?? '';
+      const id = `rm-f-${esc(x.id)}-${esc(k)}`;
+      const help = def.description ? `<div class="hint">${esc(def.description)}</div>` : '';
+      if (isFlag(def)) {
+        return `<div class="field"><div><label class="check small"><input type="checkbox" data-rm-field="${esc(k)}" data-flag="${def.type === 'boolean' ? 'bool' : 'text'}"${String(value) === 'true' ? ' checked' : ''}${focus()} /><span>${esc(k)}</span></label></div>${help}</div>`;
+      }
+      const ctrl = Array.isArray(def.enum)
+        ? `<select id="${id}" data-rm-field="${esc(k)}"${focus()}>${def.enum.map((o) => `<option value="${esc(o)}"${String(o) === String(value) ? ' selected' : ''}>${esc(o)}</option>`).join('')}</select>`
+        : `<input type="text" id="${id}" data-rm-field="${esc(k)}" value="${esc(value)}"${focus()} />`;
+      return `<div class="field"><label for="${id}">${esc(k)}</label>${ctrl}${help}</div>`;
+    };
+    const add = adding
+      ? `<div class="field rm-add"><label>New input</label><div class="row"><input type="text" data-rm-newname placeholder="name" aria-label="New input name" autofocus /><input type="text" data-rm-newvalue placeholder="value" aria-label="New input value" /></div></div>`
+      : '<button class="link-btn small" type="button" data-rm-addinput>+ add input</button>';
     return `
-      <div class="rm-item rm-${esc(status)}" data-item="${esc(x.id)}" data-stage="${s}"${locked ? '' : ' draggable="true" data-drag-item'}>
-        <div class="rm-item-head">
-          <span class="pill pill-${ITEM_PILL[x.status] || 'pending'}">${esc(status)}</span>
-          <b class="small">${esc(x.workflowName || x.workflow)}</b>
-          ${x.mock ? '<span class="badge p-mock">simulated</span>' : ''}
-          <span class="rm-issues">${issues}</span>
-          ${x.runId ? `<button class="bl-run link-btn small" type="button" data-run="${esc(x.runId)}" data-workflow="${esc(x.workflowName || '')}" title="Open the run (Resume from step… is there)">run ${esc(x.runId)}</button>` : ''}
+      <div class="rm-form" role="group" aria-label="Edit the inputs of this item">
+        <div class="rm-form-grid">${[...fields.map(([k, def]) => field(k, def || {})), ...extra.map((k) => field(k))].join('') || '<p class="small muted">This workflow has no other inputs.</p>'}</div>
+        ${add}
+        <div class="rm-form-actions">
+          <label class="check small dev-only"><input type="checkbox" data-rm-field-mock${x.mock ? ' checked' : ''} /><span>Simulation</span></label>
           <span class="spacer"></span>
-          ${x.status === 'failed' ? '<button class="btn sm primary" type="button" data-rm-item="retry">Retry</button><button class="btn sm ghost" type="button" data-rm-item="skip">Skip</button>' : ''}
-          ${locked ? '' : `<button class="btn sm ghost" type="button" data-rm-move="up" title="Earlier in the stage (or into the previous stage)"${n === 0 && s === 0 ? ' disabled' : ''}>↑</button>
-          <button class="btn sm ghost" type="button" data-rm-move="down" title="Later in the stage (or into the next stage)">↓</button>
-          <button class="link-btn small" type="button" data-rm-remove title="Take this item out of the roadmap">remove</button>`}
+          <button class="btn sm ghost" type="button" data-rm-cancel>Cancel</button>
+          <button class="btn sm primary" type="button" data-rm-save>Save</button>
         </div>
-        ${x.error ? `<div class="small ${x.status === 'failed' ? 'error' : 'muted'}">${esc(x.error)}</div>` : ''}
-        ${locked ? '' : `<details class="rm-edit"><summary class="small muted">Inputs${inputs.length ? `: ${esc(inputs.map(([k, v]) => `${k}=${v}`).join(', '))}` : ''}</summary>
-          ${inputs.map(([k, v]) => `<label class="small">${esc(k)} <input type="text" data-rm-input="${esc(k)}" value="${esc(v)}" /></label>`).join('')}
-          <label class="small">add input <input type="text" data-rm-newinput placeholder="name=value" /></label>
-          <label class="check small dev-only"><input type="checkbox" data-rm-mock${x.mock ? ' checked' : ''} /><span>Simulation</span></label>
-        </details>`}
       </div>`;
   }
 
-  function stageHtml(stage, s, count, current) {
+  function itemHtml(x, s, n, byNumber) {
+    const status = x.waiting ? 'waiting' : x.status;
+    const [pill, stateLabel] = ITEM_STATE[status] || ['idle', status];
+    const locked = !editable(x);
+    const open = !locked && editing === x.id;
+    const defs = inputDefs(x);
+    const others = Object.entries(x.inputs || {}).filter(([k]) => k !== 'mode');
+    const size = complexity(x, byNumber);
+    const titles = refs(x).map((i) => {
+      const title = i.title && i.title !== `#${i.number}` ? i.title : '';
+      const text = i.url ? `<a class="rm-title" href="${esc(i.url)}" target="_blank" rel="noopener" draggable="false">${esc(title || 'Open the issue')}</a>` : `<span class="rm-title">${esc(title)}</span>`;
+      return `<li class="rm-issue"${locked || open ? '' : ` draggable="true" data-drag-issue="${i.number}" data-from="${esc(x.id)}"`} title="${esc(`#${i.number} ${title}`.trim())}"><span class="rm-num mono">#${i.number}</span>${text}</li>`;
+    }).join('');
+    return `
+      <div class="rm-item rm-${esc(status)}" data-item="${esc(x.id)}" data-stage="${s}"${locked || open ? '' : ' draggable="true" data-drag-item'}>
+        <div class="rm-item-head">
+          <ul class="rm-titles">${titles}</ul>
+          <div class="rm-actions">
+            ${x.status === 'failed' ? '<button class="btn sm primary" type="button" data-rm-item="retry">Retry</button><button class="btn sm ghost" type="button" data-rm-item="skip">Skip</button>' : ''}
+            ${locked ? '' : `<button class="btn sm ghost" type="button" data-rm-move="up" title="Earlier in the stage (or into the previous stage)"${n === 0 && s === 0 ? ' disabled' : ''}>↑</button>
+            <button class="btn sm ghost" type="button" data-rm-move="down" title="Later in the stage (or into the next stage)">↓</button>
+            <button class="link-btn small" type="button" data-rm-remove title="Take this item out of the roadmap">remove</button>`}
+          </div>
+        </div>
+        <div class="rm-meta">
+          <span class="pill pill-${pill} rm-state">${esc(stateLabel)}</span>
+          <span class="badge rm-wf" title="${esc(x.workflowName && x.workflowName !== x.workflow ? `${x.workflowName} (${x.workflow})` : x.workflow)}">${esc(shortWorkflow(x.workflow))}</span>
+          ${modeHtml(x, locked)}
+          ${size != null ? `<span class="badge rm-size" title="The sum of the issues' complexity:n labels">complexity ${size}</span>` : ''}
+          ${x.mock ? '<span class="badge p-mock">simulated</span>' : ''}
+          ${others.map(([k, v]) => `<span class="badge rm-input" title="${esc(defs[k]?.description || k)}">${esc(k)}: ${esc(v)}</span>`).join('')}
+          ${x.runId ? `<button class="bl-run link-btn small" type="button" data-run="${esc(x.runId)}" data-workflow="${esc(x.workflowName || '')}" title="Open the run (Resume from step… is there)">run ${esc(x.runId)}</button>` : ''}
+          ${locked || open ? '' : '<button class="link-btn small" type="button" data-rm-edit title="Edit this item\'s inputs">Edit</button>'}
+        </div>
+        ${reasonHtml(x)}
+        ${x.error ? `<div class="small ${x.status === 'failed' ? 'error' : 'muted'}">${esc(x.error)}</div>` : ''}
+        ${open ? formHtml(x) : ''}
+      </div>`;
+  }
+
+  function stageHtml(stage, s, count, current, byNumber) {
     const done = stage.items.every((x) => x.status === 'done' || x.status === 'skipped');
+    const noteOpen = noteEditing != null && noteEditing === stage.id;
+    const note = noteOpen
+      ? `<input type="text" class="rm-note small" data-rm-note value="${esc(stage.note || '')}" placeholder="Why this order" aria-label="Stage note" autofocus />`
+      : stage.note ? `<p class="rm-note-text small muted">${esc(stage.note)} <button class="link-btn small" type="button" data-rm-addnote>edit</button></p>` : '';
     return `
       <section class="rm-stage${s === current ? ' current' : ''}${done ? ' finished' : ''}" data-stage="${s}" data-drop-stage="${s}">
         <div class="rm-stage-head">
           <span class="muted small">Stage ${s + 1}</span>
           <input type="text" class="rm-name" data-rm-name value="${esc(stage.name)}" placeholder="Name (optional)" aria-label="Stage name" />
           ${s === current ? '<span class="badge live">current</span>' : done ? '<span class="badge">done</span>' : ''}
+          ${stage.note || noteOpen ? '' : '<button class="link-btn small" type="button" data-rm-addnote>add note</button>'}
           <span class="spacer"></span>
           <button class="btn sm ghost" type="button" data-rm-stage="up" title="Run this stage earlier"${s === 0 ? ' disabled' : ''}>↑</button>
           <button class="btn sm ghost" type="button" data-rm-stage="down" title="Run this stage later"${s === count - 1 ? ' disabled' : ''}>↓</button>
         </div>
-        <input type="text" class="rm-note small" data-rm-note value="${esc(stage.note || '')}" placeholder="Why this order (optional)" aria-label="Stage note" />
-        <div class="rm-items">${stage.items.map((x, n) => itemHtml(x, s, n)).join('')}</div>
+        ${note}
+        <div class="rm-items">${stage.items.map((x, n) => itemHtml(x, s, n, byNumber)).join('')}</div>
       </section>`;
   }
 
-  /** The Roadmap view (into #bl-list): its bar, the plain queue's items, the stages in order. */
-  function html(data) {
+  /** The Roadmap view (into #bl-list): its bar, the plain queue's items, the stages in order. `rerender` redraws once the workflows are loaded. */
+  function html(data, rerender) {
+    loadWorkflows(rerender);
     const r = data?.roadmap || { state: 'planned', stages: [] };
     const q = data?.queue?.items || [];
+    const byNumber = new Map((data?.issues || []).map((i) => [i.number, i]));
     const current = r.stages.findIndex((s) => s.items.some((x) => x.status !== 'done' && x.status !== 'skipped'));
     const stateBadge = `<span class="badge ${r.state === 'running' ? 'live' : r.state === 'paused' ? 'warn' : ''}">${esc(STATE_LABEL[r.state] || r.state)}${r.simulated ? ' · simulated' : ''}</span>`;
     const bar = `
@@ -89,12 +217,12 @@
         <span class="spacer"></span><button class="btn sm ghost" type="button" data-rm="from-queue">Move into the roadmap</button></div>` : '';
     const importBox = `
       <details class="rm-import"><summary class="small muted">Product Owner proposal…</summary>
-        <p class="small muted">Paste the Product Owner's "Build a roadmap" answer (JSON: { "stages": [{ "name", "note", "items": [{ "workflow", "issues": [12, 13], "inputs", "mock" }] }] }). It arrives as planned and never starts until Start.</p>
+        <p class="small muted">Paste the Product Owner's "Build a roadmap" answer (JSON: { "stages": [{ "name", "note", "items": [{ "workflow", "issues": [12, 13], "inputs", "mock", "reason", "mode_reason" }] }] }). It arrives as planned and never starts until Start.</p>
         <textarea id="rm-proposal" rows="5" class="mono small" spellcheck="false"></textarea>
         <div class="modal-actions"><button class="btn sm ghost" type="button" data-rm="replace">Replace the roadmap</button><button class="btn sm primary" type="button" data-rm="propose">Add to roadmap</button></div>
       </details>`;
     const stages = r.stages.length
-      ? r.stages.map((s, n) => stageHtml(s, n, r.stages.length, current)).join('')
+      ? r.stages.map((s, n) => stageHtml(s, n, r.stages.length, current, byNumber)).join('')
       : '<div class="empty-state"><b>No roadmap yet</b><p class="muted">Select issues, Assign workflow…, then Add to roadmap: each addition is a stage that starts when the previous one has finished and merged.</p></div>';
     return `<div class="rm">${bar}${queued}${stages}${importBox}</div>`;
   }
@@ -130,6 +258,25 @@
     to.issues = [...refs(to), issue];
     for (const s of stages) s.items = s.items.filter((x) => x.issues.length);
     return true;
+  }
+
+  /** The inputs of the Edit form `form` applied to `item` (its fields, the new name + value pair, Simulation). */
+  function applyForm(item, form) {
+    const inputs = { ...item.inputs };
+    for (const el of form.querySelectorAll('[data-rm-field]')) {
+      const k = el.dataset.rmField;
+      if (el.type === 'checkbox') inputs[k] = el.dataset.flag === 'bool' ? el.checked : String(el.checked);
+      else if (el.value.trim() === '') delete inputs[k];
+      else inputs[k] = el.value.trim();
+    }
+    const name = form.querySelector('[data-rm-newname]')?.value.trim();
+    if (name) {
+      if (!/^[\w.-]+$/.test(name)) throw new Error('An input name has letters, digits, "_", "." or "-" only.');
+      inputs[name] = form.querySelector('[data-rm-newvalue]')?.value.trim() || '';
+    }
+    item.inputs = inputs;
+    const mock = form.querySelector('[data-rm-field-mock]');
+    if (mock) item.mock = mock.checked;
   }
 
   async function save(ctx, stages) {
@@ -168,6 +315,33 @@
       } else if (e.target.closest('[data-rm-item]')) {
         const box = e.target.closest('[data-item]');
         ctx.setData(await api.roadmapItem(ctx.projectId, box.dataset.item, e.target.closest('[data-rm-item]').dataset.rmItem));
+      } else if (e.target.closest('[data-rm-mode]')) {
+        // the mode toggle: saved at once, on planned and failed items only
+        const { s, n } = locate(stages, e.target);
+        const item = stages[s]?.items[n];
+        if (!item || !editable(item)) return true;
+        item.inputs = { ...item.inputs, mode: e.target.closest('[data-rm-mode]').dataset.rmMode };
+        await save(ctx, stages);
+        return true;
+      } else if (e.target.closest('[data-rm-edit]')) {
+        editing = e.target.closest('[data-item]').dataset.item;
+        adding = false;
+      } else if (e.target.closest('[data-rm-cancel]')) {
+        editing = null;
+        adding = false;
+      } else if (e.target.closest('[data-rm-addinput]')) {
+        adding = true;
+      } else if (e.target.closest('[data-rm-save]')) {
+        const { s, n } = locate(stages, e.target);
+        const item = stages[s]?.items[n];
+        if (!item || !editable(item)) return true;
+        applyForm(item, e.target.closest('.rm-form'));
+        editing = null;
+        adding = false;
+        await save(ctx, stages);
+        return true;
+      } else if (e.target.closest('[data-rm-addnote]')) {
+        noteEditing = r.stages[locate(stages, e.target).s]?.id ?? null;
       } else if (e.target.closest('[data-rm-stage]')) {
         const { s } = locate(stages, e.target);
         const t = s + (e.target.closest('[data-rm-stage]').dataset.rmStage === 'up' ? -1 : 1);
@@ -192,29 +366,20 @@
       ctx.setError(errMsg(err));
     }
     ctx.render();
+    // the form or note just opened: its first control gets the focus
+    document.querySelector('.rm [autofocus]')?.focus();
     return true;
   }
 
-  // Text fields and checkboxes: saved when they change.
+  // The stage's name and note: saved when they change (the Edit form saves with its Save button).
   async function onChange(e, ctx, data) {
     const r = data?.roadmap;
     const el = e.target;
     if (!r || !el.closest('.rm-stage')) return false;
     const stages = clone(r.stages);
-    const { s, n } = locate(stages, el);
+    const { s } = locate(stages, el);
     if (el.matches('[data-rm-name]')) stages[s].name = el.value;
-    else if (el.matches('[data-rm-note]')) stages[s].note = el.value;
-    else if (n < 0) return false;
-    else if (el.matches('[data-rm-mock]')) stages[s].items[n].mock = el.checked;
-    else if (el.matches('[data-rm-input]')) {
-      const inputs = { ...stages[s].items[n].inputs };
-      if (el.value.trim() === '') delete inputs[el.dataset.rmInput]; else inputs[el.dataset.rmInput] = el.value.trim();
-      stages[s].items[n].inputs = inputs;
-    } else if (el.matches('[data-rm-newinput]')) {
-      const m = el.value.match(/^\s*([\w.-]+)\s*=(.*)$/);
-      if (!m) { ctx.setError('Write a new input as name=value.'); ctx.render(); return true; }
-      stages[s].items[n].inputs = { ...stages[s].items[n].inputs, [m[1]]: m[2].trim() };
-    } else return false;
+    else if (el.matches('[data-rm-note]')) { stages[s].note = el.value; noteEditing = null; } else return false;
     await save(ctx, stages);
     return true;
   }
@@ -256,10 +421,11 @@
     await save(ctx, stages);
   }
 
-  /** A new stage at the end with the assign dialog's issues: one item (group) or one per issue. */
-  async function addStage(ctx, data, { issues, workflow, workflowName, inputs, mock, group }) {
+  /** A new stage at the end with the assign dialog's issues: one item (group) or one per issue; `reason`/`modeReason`: the Product Owner's. */
+  async function addStage(ctx, data, { issues, workflow, workflowName, inputs, mock, group, reason, modeReason }) {
     const stages = clone(data?.roadmap?.stages);
-    const items = group ? [{ workflow, workflowName, inputs, mock, issues }] : issues.map((n) => ({ workflow, workflowName, inputs, mock, issues: [n] }));
+    const why = { ...(reason ? { reason } : {}), ...(modeReason ? { modeReason } : {}) };
+    const items = group ? [{ workflow, workflowName, inputs, mock, issues, ...why }] : issues.map((n) => ({ workflow, workflowName, inputs, mock, issues: [n], ...why }));
     stages.push({ name: '', note: '', items });
     ctx.setData(await api.saveRoadmap(ctx.projectId, stages));
   }

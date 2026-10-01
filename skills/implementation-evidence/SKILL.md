@@ -41,6 +41,8 @@ Every tool call re-reads your whole context, so exploring is what makes this ste
   The tests already passed; the verifier checks each claim after you.
 - **At most 2 captures per issue** (before + after), no trial captures (e.g. to `/tmp`) and no
   re-captures to improve framing. A capture that fails once: one corrected retry, then `note`.
+  UI changes: plus one "after" capture per interaction state the plan lists (an edit form, an
+  empty or error state opened with `--click`), at most 4 more per issue.
 - **Look at each PNG at most once**, only to check it shows the intended screen (images are
   expensive to read).
 - **One command per call**, in the worktree (you are already there: no `cd`).
@@ -72,7 +74,9 @@ Every tool call re-reads your whole context, so exploring is what makes this ste
   desktop-app script. No such command: skip screenshots and say so.
 - Simulated data only; run captures in the foreground, one at a time; the command must stop by itself.
 - Only the screens the change affects, the same scenario before and after, at most one view per
-  issue of the run.
+  issue of the run, plus the interaction states the plan lists (after only).
+- When the ui-conventions skill is loaded, review the UI screenshots against it and return
+  `ui_findings` (its section 3); otherwise skip the visual review.
 - Save the PNGs and a `screenshots.json` in `<run_dir>/screenshots/`:
   `[{ "path": "<after>.png", "caption": "<screen>", "before": "<before>.png" }]` (`before` omitted
   for a new screen; some commands write the manifest themselves). Return the same list in

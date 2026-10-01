@@ -8,6 +8,8 @@
 #                  └──────────── code_review ◄──────────────────────────────────┘
 #   evidence: screenshots / HTTP request+response / CLI output / log lines that show the change
 #   working (local, simulated), in the run folder; it never blocks and the verifier uses it.
+#   UI changes (#111): it also captures the states the developer's evidence_plan lists and reviews
+#   the screenshots (ui-conventions skill); blocking `ui_findings` go back to develop once.
 #   Declared gaps (`left_out`: requirements of the task the developer did not implement): never
 #   reviewed. The first time, develop ─► develop with the list (no reviewer call); still there
 #   after that ─► requirements_left_out (human gate: continue without them / stop).
@@ -184,8 +186,9 @@ agents:
     # tests belong to the test writer: a turn that changes a test file (tests_paths) is sent back
     edits_tests: false
     # bug-diagnosis: fixes delegated after failures; merge-conflict-resolver: resolve_merge;
-    # long-commands: installs, builds and focused checks in the foreground
-    skills: [long-commands, bug-diagnosis, merge-conflict-resolver, context-economy, decision-log]
+    # long-commands: installs, builds and focused checks in the foreground; ui-conventions: changes
+    # that touch a screen (shared components, controls, the states to capture)
+    skills: [long-commands, bug-diagnosis, merge-conflict-resolver, context-economy, decision-log, ui-conventions]
     system_prompt: |
       You are a senior software engineer. Make small, cohesive changes to the production code
       that follow the architecture and conventions of the existing code.
@@ -270,7 +273,8 @@ agents:
     model: claude-sonnet-5
     session: ephemeral
     capabilities: { tools: [read, *toolchains], web: false }
-    skills: [implementation-evidence]
+    # ui-conventions: the visual review of the UI screenshots (ui_findings)
+    skills: [implementation-evidence, ui-conventions]
     system_prompt: |
       You collect evidence that the change works: UI screenshots, HTTP requests and their
       responses, CLI output or log lines, local and simulated only. You do not change code, do not
@@ -320,6 +324,12 @@ steps:
       {{ steps.developer_check.output.feedback }}
       Fix them on the same branch with a new commit, and answer each point in `summary`.
       {% endif %}
+      {% if previous_step == 'evidence' %}
+      The visual review of the screenshots found these UI problems (ui-conventions skill; one round):
+      {{ steps.evidence.output.ui_findings | selectattr('blocking') | list | to_yaml }}
+      Fix them on the same branch with a new commit and answer each one in `summary` (one you
+      disagree with: say why). Keep `evidence_plan` listing the states to capture.
+      {% endif %}
       {% if not steps.develop.output %}
       Before changing code: create your branch where the worktree starts (the local
       {{ inputs.base_branch }}): `git switch -c <branch>`, then make sure dependencies are
@@ -331,6 +341,9 @@ steps:
       In `evidence_plan`, say per issue how to show the change working, for the evidence step (it
       does not read the code): the screen and the screenshot options (view, tab, clicks), or the
       request, command or mock run whose output shows it; `none` and why when nothing is observable.
+      For a UI change, list the interaction states to capture (the default view, then each edit
+      form, empty state and error state the change adds, with the clicks that open them) and make
+      the screenshot demo data cover the fields the change introduces (ui-conventions skill).
       In `left_out`, list each requirement of the task (its acceptance criteria, each task of the
       issue) that you did not implement, with the reason: never leave one only in prose; an empty
       list when everything was done. A list that is not empty sends you back here, not to the review.{% if inputs.issues | length > 1 %}
@@ -782,12 +795,17 @@ steps:
       {{ steps.develop.output.evidence_plan }}
       {% endif %}
       Stay within the skill's budget: no reading code beyond `git diff --stat` and the plan, no
-      tests, no checking docs (the verifier does that), at most 2 captures per issue.
+      tests, no checking docs (the verifier does that), at most 2 captures per issue (plus the
+      interaction states the plan lists for a UI change, at most 4 more).
       Collect the evidence that the change does what the task asked, following the
       implementation-evidence skill: pick the kind per issue (UI screenshots before/after into
       `{{ run_dir }}/screenshots`, HTTP request and response, CLI output, log lines of a simulated
       run), local and simulated only, and stay read-only on the working tree. Nothing observable,
       or no way to capture it: say why in `note`.
+      UI screenshots: review them against the ui-conventions skill and list each problem in
+      `ui_findings` (`blocking` when it makes the screen hard to read or use); an empty list when
+      there is none or the change has no UI.{% if vars.ui_review_returned == 'yes' %} This is the
+      check after the developer's UI fix round: report what is still wrong, it is recorded for the owner.{% endif %}
     output_schema:
       type: object
       required: [evidence]
@@ -815,7 +833,25 @@ steps:
               caption: { type: string }
               before:  { type: string }
         note: { type: string }
+        # the visual review of the UI screenshots (ui-conventions skill; #111)
+        ui_findings:
+          type: array
+          items:
+            type: object
+            required: [element, problem, convention, blocking]
+            properties:
+              issue:      { type: string }
+              element:    { type: string }
+              problem:    { type: string }
+              convention: { type: string }
+              screenshot: { type: string }
+              blocking:   { type: boolean }
     transitions:
+      # blocking UI findings go back to the developer once, like review findings (one UI fix round:
+      # develop ─► code_review ─► test ─► build ─► evidence again); after it they are only recorded
+      - when: "(output.ui_findings or []) | selectattr('blocking') | list | length and vars.ui_review_returned != 'yes'"
+        goto: develop
+        set: { ui_review_returned: "yes" }
       - when: "true"
         goto: verify_change
 

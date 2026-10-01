@@ -309,13 +309,13 @@
     return skipped;
   }
 
-  async function roadmapGroup({ issues, workflow, inputs }) {
+  async function roadmapGroup({ issues, workflow, inputs, reason, modeReason }) {
     const list = issues.map((n) => (bl.data?.issues || []).find((i) => i.number === n)).filter(Boolean);
     const skipped = issues.filter((n) => !list.some((i) => i.number === n));
     if (!list.length) return skipped;
     const wf = (await api.listWorkflows()).find((w) => w.file === workflow);
     await window.BacklogRoadmap.addStage(roadmapCtx(), bl.data, {
-      issues: list, workflow, workflowName: wf?.name || workflow, inputs: inputs || {}, mock: !!state.simulationOnly, group: list.length > 1,
+      issues: list, workflow, workflowName: wf?.name || workflow, inputs: inputs || {}, mock: !!state.simulationOnly, group: list.length > 1, reason, modeReason,
     });
     showRoadmap();
     return skipped;
@@ -723,7 +723,7 @@
     } else if (!bl.data) {
       list.innerHTML = bl.syncing ? '<p class="muted">Loading issues…</p>' : '<p class="muted">Not synced yet.</p>';
     } else {
-      list.innerHTML = bl.mode === 'roadmap' ? window.BacklogRoadmap.html(bl.data) : bl.mode === 'kanban' ? renderKanban(issues) : renderList(issues);
+      list.innerHTML = bl.mode === 'roadmap' ? window.BacklogRoadmap.html(bl.data, render) : bl.mode === 'kanban' ? renderKanban(issues) : renderList(issues);
     }
   }
 

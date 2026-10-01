@@ -423,8 +423,10 @@ function mockValue(s, key, h) {
     }
     // sequences.preexisting_failures: true: the test writer reports a test that also fails on the base
     // sequences.left_out: [1, 0]: the developer declares one gap on its 1st visit, none after (default none)
+    // sequences.ui_findings: true: the evidence step's visual review returns a (blocking) UI finding
     case 'array': {
       if (key === 'preexisting_failures' && !h.sequences?.preexisting_failures) return [];
+      if (key === 'ui_findings' && !h.sequences?.ui_findings) return [];
       if (key === 'left_out') {
         const seq = h.sequences?.left_out;
         const count = Array.isArray(seq) && seq.length ? +seq[Math.min(h.visit - 1, seq.length - 1)] || 0 : 0;

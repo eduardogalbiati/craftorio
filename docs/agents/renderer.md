@@ -72,3 +72,27 @@ Read this before changing anything in `src/renderer/`.
   the screenshots. Never open real CLI terminals or start real runs in those checks. In a fresh
   workspace Developer mode is off and the Simulation box is ignored: set
   `api.setSettings({ developerMode: true })` before clicking Start.
+
+## UI conventions
+
+The general rules (and the visual review of the screenshots) are in the `ui-conventions` skill,
+which the software-development developer and evidence agents load (#111). In this app:
+
+- **Reuse what `style.css` has**: `.btn` (`.primary`, `.ghost`, `.sm`), `.link-btn` for small
+  actions ("add note", "Edit"); `.badge` (neutral; `.warn`, `.live`, `.p-mock`…) and `.pill`
+  (`-idle`, `-running`, `-success`, `-failed`, `-cancelled`, `-interrupted`) for states; `.field`
+  (label above the control, `.hint` for the help line, `.row` for a pair); `.s-group`/`.s-row` for
+  settings-like lists; `.switch` and `.check` for flags; `.seg` (`.sm`) for a small set of choices;
+  `.empty-state`; the standard `select` / `input[type=text]` styles (their focus is on the control).
+- **Controls follow the data**: a workflow input with `enum` is a select or a `.seg` toggle, a
+  boolean (or an enum of `"false"`/`"true"`) a checkbox, everything else text, with the input's
+  `description` as `.hint` (`renderAssignInputs` in `backlog.js` and the Roadmap's Edit form in
+  `backlog-roadmap.js` are the models). Short values never get a full-width box.
+- **What leads**: titles (issue, run, project) are the headline; workflow files, ids and run ids
+  are small badges or links with the full value in `title`. Long titles ellipsize.
+- **Edits**: several fields → an Edit form with Save / Cancel; one obvious choice (a mode) → a
+  toggle that saves at once; optional text (a note) appears when set or from an "add …" link.
+- **Check it**: extend the screen's demo data in `scripts/screenshot.js` with the fields you add,
+  then capture the default view and each state with `--click` (e.g.
+  `npm run screenshot -- --view backlog --mode roadmap --click "[data-rm-edit]"`). List those
+  captures in `evidence_plan` and log the UI choices in the decision log.

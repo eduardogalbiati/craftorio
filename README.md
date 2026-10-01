@@ -486,6 +486,7 @@ What is shared by a family lives in a suffix-less skill referenced with `uses:`.
 | `run-supervisor` | the AI supervisor (a failed step, or on demand) | Plain-words account of a run, root cause from its logs, a safe recovery (fix the output, retry with an instruction, go to an allowed step, resume, or hand over to a human) |
 | `test-plan-writing` | arena (`document_skill`) | Test plan (after ISO/IEC/IEEE 29119-3): risk-based approach, traceability to requirements, entry/exit criteria, environment and data, rubric |
 | `testing-principles` | via `uses` | Seams first, no tautological or implementation-coupled tests, mocks only at boundaries, red before green for bug fixes, each suite run once, pre-existing failures reported instead of chased |
+| `ui-conventions` | developer (software-development workflows, when the change touches the UI); evidence (the visual review) | UI changes: shared components, controls that follow the data, states to capture, and the visual review of the screenshots (ui_findings) |
 | `unit-test-writer-{js,python,go,java,csharp}` | test writer | Framework detection, commands, idioms per language |
 <!-- /generated:skills -->
 

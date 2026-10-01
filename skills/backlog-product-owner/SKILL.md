@@ -57,6 +57,17 @@ Give each group a `stage` (1 first). Groups of one stage may run in parallel onl
 them conflicts; a later stage starts after the previous one merged. Put what unblocks others and
 repo-wide refactors early and alone; leave issues that wait for a decision out.
 
+## Pick the mode of each group
+
+When the workflow has a `mode` input (`auto` / `validated`), set `inputs.mode` on every group and
+give the reason in `mode_reason` (one sentence, shown under the item in the Roadmap):
+
+- **validated** for a change the owner can try in the app: a screen, a dialog, a control, a
+  visible behaviour. The run stops after the developer so the owner looks at it before any review
+  or test is paid for; a screen that works but is hard to use is only caught by a person.
+- **auto** for the engine, refactors, docs, tests and anything with no screen to try.
+- A group that mixes both is validated.
+
 ## Say what to enrich first
 
 An issue too vague to implement without guessing (no acceptance criteria, no expected behaviour,
@@ -72,6 +83,6 @@ group is risky for another reason (an unknown area, a migration, a flaky test su
 
 - Answer the question asked; leave the lists it is not about empty.
 - Use only issue numbers and workflow files from the report; suggest the inputs that matter
-  (for example `mode`).
+  (`mode` with its `mode_reason`, see above).
 - The summary is short Markdown in English: the recommendation first, then the reasons.
 - End with the JSON block the prompt asks for.
