@@ -482,3 +482,132 @@ test('runs.listRuns ignores a runs/po-<project>-<stamp> folder: it has no events
   assert.ok(fs.readdirSync(runsDir).some((f) => f.startsWith('po-demo-')));
   assert.deepEqual(runs.listRuns(runsDir), []);
 });
+
+// ---- #124: splitting what is too big for one run, applied on the owner's click ---------------------
+
+const BIG_BODY = [
+  '- [ ] Update src/engine/workflow.js for X',
+  '- [ ] Add src/engine/queue.js handling',
+  '- [ ] Fix src/engine/graph.js edge case',
+  '- [ ] Tweak src/engine/retry.js',
+  '- [ ] Update src/engine/state.js',
+  '- [ ] Adjust src/engine/index.js',
+  '- [ ] Update src/renderer/backlog.js UI',
+  '- [ ] Add src/renderer/kanban.js view',
+  '- [ ] Fix src/renderer/style.css',
+  '- [ ] Update src/renderer/app.js',
+  '- [ ] Adjust src/renderer/index.html',
+  '- [ ] Polish src/renderer/icons.js',
+].join('\n');
+
+test('a mock plan answer flags a 12-task, two-area issue too big for one run, with a split covering every task once', () => {
+  const data = { issues: [{ number: 50, state: 'open', title: 'Big issue', labels: [], body: BIG_BODY }] };
+  const answer = productOwner.mockAnswer({ data });
+  assert.equal(answer.splits.length, 1);
+  const [split] = answer.splits;
+  assert.equal(split.issue, 50);
+  const all = split.children.flatMap((c) => c.tasks).sort((a, b) => a - b);
+  assert.deepEqual(all, Array.from({ length: 12 }, (_, i) => i + 1));
+});
+
+test('applySplit: files the proposed children and updates the parent only once called, and never files the same split twice', async (t) => {
+  const dir = tmp(t);
+  const runsDir = tmp(t);
+  const bigIssue = { number: 50, state: 'open', title: 'Big issue', labels: [], body: BIG_BODY };
+  const asked = await productOwner.ask({
+    backlogDir: dir, projectId: 'demo', runsDir, question: 'Analyze the backlog', data: { issues: [bigIssue] }, mock: true,
+  });
+  const split = asked.message.answer.splits.find((s) => s.issue === 50);
+  assert.ok(split);
+
+  let created = 100;
+  let filed = false;
+  const exec = async (cli, args) => {
+    if (args[0] === 'label' && args[1] === 'list') return JSON.stringify([]);
+    if (args[0] === 'issue' && args[1] === 'create') { filed = true; created += 1; return `https://github.com/example/repo/issues/${created}\n`; }
+    if (args[0] === 'issue' && args[1] === 'view') {
+      return JSON.stringify({ number: 50, title: bigIssue.title, state: 'open', labels: [], url: 'u', author: null, assignees: [], body: bigIssue.body, createdAt: 'c', updatedAt: 'u' });
+    }
+    return '';
+  };
+
+  const res = await productOwner.applySplit({
+    backlogDir: dir, projectId: 'demo', runsDir, at: asked.message.ts, split, preview: false,
+    platform: 'github', repo: 'https://github.com/example/repo', data: { issues: [bigIssue] }, exec,
+  });
+  assert.equal(filed, true); // nothing was filed before this call
+  assert.equal(res.children.length, split.children.length);
+  assert.ok(res.children.every((c) => c.number));
+  assert.match(res.message.text, /Split #50 into/);
+
+  await assert.rejects(productOwner.applySplit({
+    backlogDir: dir, projectId: 'demo', runsDir, at: asked.message.ts, split, preview: false,
+    platform: 'github', repo: 'https://github.com/example/repo', data: { issues: [bigIssue] }, exec,
+  }), /already split/);
+});
+
+// ---- #138: epics proposed by the Product Owner, applied on the owner's click -------------------------
+
+test('applyEpicProposal: a mock plan answer proposes a new epic for issues sharing a theme; applying creates it and places them, and refuses a second apply', async (t) => {
+  const dir = tmp(t);
+  const runsDir = tmp(t);
+  const issues = [
+    { number: 1, state: 'open', title: 'One', labels: [{ name: 'area:ui' }], body: 'x'.repeat(200) },
+    { number: 2, state: 'open', title: 'Two', labels: [{ name: 'area:ui' }], body: 'x'.repeat(200) },
+  ];
+  const asked = await productOwner.ask({
+    backlogDir: dir, projectId: 'demo', runsDir, question: 'Analyze the backlog', data: { issues }, mock: true,
+  });
+  const create = asked.message.answer.epics.create[0];
+  assert.deepEqual(create.issues, [1, 2]);
+
+  let createdNumber = 900;
+  let wrote = false;
+  const exec = async (cli, args) => {
+    if (args[0] === 'label' && args[1] === 'list') return JSON.stringify([]);
+    if (args[0] === 'issue' && args[1] === 'create') { wrote = true; createdNumber += 1; return `https://github.com/example/repo/issues/${createdNumber}\n`; }
+    return '';
+  };
+  const res = await productOwner.applyEpicProposal({
+    backlogDir: dir, projectId: 'demo', runsDir, at: asked.message.ts, key: 'create:0', epic: { title: create.title, goal: create.goal }, issues: create.issues, preview: false,
+    platform: 'github', repo: 'https://github.com/example/repo', data: { issues }, exec,
+  });
+  assert.equal(wrote, true);
+  assert.equal(res.epic.number, 901);
+  assert.deepEqual(res.linked, [1, 2]);
+  assert.match(res.message.text, /Created the epic/);
+
+  await assert.rejects(productOwner.applyEpicProposal({
+    backlogDir: dir, projectId: 'demo', runsDir, at: asked.message.ts, key: 'create:0', epic: { title: create.title, goal: create.goal }, issues: create.issues, preview: false,
+    platform: 'github', repo: 'https://github.com/example/repo', data: { issues }, exec,
+  }), /already applied/);
+});
+
+test('applyEpicProposal: a preview writes nothing and never counts as applied', async (t) => {
+  const dir = tmp(t);
+  const runsDir = tmp(t);
+  const issues = [
+    { number: 1, state: 'open', title: 'One', labels: [{ name: 'area:ui' }], body: 'x'.repeat(200) },
+    { number: 2, state: 'open', title: 'Two', labels: [{ name: 'area:ui' }], body: 'x'.repeat(200) },
+  ];
+  const asked = await productOwner.ask({
+    backlogDir: dir, projectId: 'demo', runsDir, question: 'Analyze the backlog', data: { issues }, mock: true,
+  });
+  const create = asked.message.answer.epics.create[0];
+  let called = false;
+  const exec = async () => { called = true; return ''; };
+  const res = await productOwner.applyEpicProposal({
+    backlogDir: dir, projectId: 'demo', runsDir, at: asked.message.ts, key: 'create:0', epic: { title: create.title, goal: create.goal }, issues: create.issues, preview: true,
+    platform: 'github', repo: 'https://github.com/example/repo', data: { issues }, exec,
+  });
+  assert.equal(called, false);
+  assert.match(res.message.text, /Preview/);
+
+  // the same proposal can still be applied for real afterwards: a preview never marks it as done
+  const real = await productOwner.applyEpicProposal({
+    backlogDir: dir, projectId: 'demo', runsDir, at: asked.message.ts, key: 'create:0', epic: { title: create.title, goal: create.goal }, issues: create.issues, preview: false,
+    platform: 'github', repo: 'https://github.com/example/repo', data: { issues },
+    exec: async (cli, args) => (args[0] === 'issue' && args[1] === 'create' ? 'https://github.com/example/repo/issues/950\n' : ''),
+  });
+  assert.equal(real.epic.number, 950);
+});

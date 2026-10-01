@@ -251,5 +251,21 @@ test('fileDraft (the owner\'s click): every "create" variant files action "creat
   const fn = /async function fileDraft\(act, el\)[\s\S]*?\n  \}/.exec(src)[0];
   assert.match(fn, /const action = act\.startsWith\('create'\) \? 'create' : act;/); // append/comment/discard/revise pass through unchanged
   assert.match(fn, /if \(!simulated\) \{[\s\S]*?if \(!await confirmDialog\(\.\.\.what\)\) return;/); // a real (non-simulated) filing is confirmed first
-  assert.match(fn, /await api\.fileProductOwnerDraft\(po\.projectId, msg\.ts, action, n, simulated\);/);
+  // #138: a draft that names its epic (x.draft.epic) joins it on Create only, and only while "Place in epic" is checked
+  assert.match(fn, /await api\.fileProductOwnerDraft\(po\.projectId, msg\.ts, action, n, simulated, action === 'create' && !!x\.draft\?\.epic && placeEpic\(m\)\);/);
+});
+
+// ---- a drafted issue may join its epic (#138) --------------------------------------------------------
+
+test('placeEpic: "Place in epic" defaults to the project\'s Auto-place option, until the owner toggles it for this message', () => {
+  const fn = /const placeEpic = \(m\) => [^\n]+/.exec(src)[0];
+  assert.match(fn, /m in po\.placeEpic \? po\.placeEpic\[m\] : !!actions\(\)\?\.data\(\)\?\.autoEpic/);
+});
+
+test('the "Place in epic" checkbox only shows next to the open draft, and toggling it records the owner\'s choice for that message, filing nothing by itself', () => {
+  assert.match(src, /data-po-epic\$\{placeEpic\(m\) \? ' checked' : ''\}/);
+  assert.match(src, /m === openDraftIndex\(\) \? `<label class="check small"[^`]*data-po-epic/);
+  const click = /\$p\('#po-log'\)\.onclick = \(e\) => \{[\s\S]*?\n  \};/.exec(src)[0];
+  assert.match(click, /const epic = e\.target\.closest\('\[data-po-epic\]'\);/);
+  assert.match(click, /if \(epic\) \{ po\.placeEpic\[Number\(epic\.closest\('\[data-msg\]'\)\.dataset\.msg\)\] = epic\.checked; return; \}/);
 });

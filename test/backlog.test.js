@@ -173,6 +173,31 @@ test('sync shows each issue its open PRs; PRs that cannot be read leave a note, 
   assert.match(data.pullRequestsError, /HTTP 502/);
 });
 
+// ---- epics (#138): read alongside the issues and PRs, cached with the rest -----------------------
+
+test('sync reads an epic and its sub-issues into the cache (src/epics.js readEpics)', async (t) => {
+  const dir = tmp(t);
+  const project = { id: 'p', repo: 'https://github.com/o/r' };
+  const epicIssue = { ...GH_ISSUE, number: 40, title: 'Theme epic', labels: [{ name: 'epic', color: '5319e7' }] };
+  const memberA = { ...GH_ISSUE, number: 41, title: 'Member A' };
+  const memberB = { ...GH_ISSUE, number: 42, title: 'Member B', state: 'CLOSED' };
+  const exec = routedExec({
+    issue: [epicIssue, memberA, memberB],
+    pr: [],
+    api: (args) => (args.join(' ').includes('sub_issues') ? [{ number: 41 }, { number: 42 }] : []),
+  });
+  const data = await backlog.syncBacklog({ dir, project, platform: 'github', exec: exec.exec });
+  assert.equal(data.epicsError, null);
+  assert.equal(data.epics.length, 1);
+  assert.deepEqual(data.epics[0].members, [41, 42]);
+  assert.deepEqual(data.epics[0].progress, { open: 1, closed: 1, total: 2 });
+  const epicOf = Object.fromEntries(data.issues.map((i) => [i.number, i.epic]));
+  assert.equal(epicOf[41], '#40');
+  assert.equal(epicOf[42], '#40');
+  assert.equal(data.issues.find((i) => i.number === 40).isEpic, true);
+  assert.deepEqual(backlog.readBacklog(dir, 'p').epics, data.epics); // cached like the rest
+});
+
 test('right before a queued issue starts: only PRs opened since it was assigned skip it, and the queue says why', async (t) => {
   const dir = tmp(t);
   const pr = (number, issue) => ({ number, title: `PR ${number} (#${issue})`, url: `https://github.com/o/r/pull/${number}`, body: '' });
