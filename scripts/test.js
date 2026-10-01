@@ -1,5 +1,6 @@
-// Test suite: unit tests (node:test in test/*.test.js) + full flow in mock mode.
-// Lists the files explicitly so it works on any Node version.
+// Test suite: unit tests (node:test in test/*.test.js and test/<area>/*.test.js, e.g.
+// test/service/, #156) + full flow in mock mode. Lists the files explicitly so it works on any
+// Node version; test/fixtures/ holds no tests.
 //   npm test
 
 const fs = require('fs');
@@ -13,9 +14,11 @@ process.env.MULTIAGENT_SIMULATION_ONLY = '1';
 const root = path.join(__dirname, '..');
 const run = (args, env = {}) => spawnSync(process.execPath, args, { cwd: root, stdio: 'inherit', env: { ...process.env, ...env } }).status;
 
-const files = fs.readdirSync(path.join(root, 'test'))
-  .filter((f) => f.endsWith('.test.js'))
-  .map((f) => path.join('test', f));
+const testFiles = (dir) => fs.readdirSync(path.join(root, dir), { withFileTypes: true }).flatMap((e) => {
+  if (e.isDirectory()) return e.name === 'fixtures' ? [] : testFiles(path.join(dir, e.name));
+  return e.name.endsWith('.test.js') ? [path.join(dir, e.name)] : [];
+}).sort();
+const files = testFiles('test');
 
 console.log(`\n== Unit tests (${files.length} file(s)) ==`);
 if (run(['--test', ...files]) !== 0) process.exit(1);

@@ -4,7 +4,17 @@ Read this before writing or changing tests, and before any check that could star
 
 ## Running and CI
 
-- `npm test` = node:test unit tests (`test/*.test.js`) + a full mock run of software-development.
+- `npm test` = node:test unit tests (`test/*.test.js` and `test/<area>/*.test.js`, listed by
+  `scripts/test.js`) + a full mock run of software-development.
+
+## Where a new test goes
+
+- Into the existing file of its area, never appended to a catch-all file. The service's tests are
+  one file per area in `test/service/<area>.test.js`, matching `src/service/areas/<area>.js` (and the
+  channel files in `src/service/channels/`), with the shared scratch workspace and fake host in
+  `test/service/helpers.js`.
+- A new area (a new `src/service/areas/<area>.js`, a new module) gets a new test file; no list to
+  edit: `scripts/test.js` finds it.
 - Node 24's test reporter is "spec", not TAP: look for `ℹ pass N` / `✖`, not `# pass`.
 - `npm test` must pass on Windows, Linux and macOS: `ci.yml` runs a matrix (checks `test (<os>)`)
   plus a combined `test` check that is green only when every planned OS is. PRs run Ubuntu +

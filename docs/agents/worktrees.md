@@ -71,7 +71,8 @@ actions, or any code that deletes or checks out branches.
 
 - Shared tables are generated from per-feature files (`npm run docs`, see the code map's header):
   the code map is gitignored, the README tables are committed with an out-of-date check. The
-  channels of `window.api` are one file per area (`src/service/channels/`).
+  channels of `window.api` are one file per area (`src/service/channels/`), and so are the
+  service's helpers and state (`src/service/areas/`) and its tests (`test/service/`).
 - Shared name lists (`module.exports`, destructured requires) are one item per line, sorted
   (`npm run lint:lists`, `-- --fix`); new functions go next to related code, not before the same
   section comment every run uses.

@@ -31,7 +31,7 @@ concurrent runs without a lock; gates and notifications lived only in memory.
 
 ## Rules
 
-- **Only the service opens it** (`openIndex` in `src/service/index.js`, on `setWorkspace`; closed in
+- **Only the service opens it** (`openIndex` in `src/service/areas/index-db.js`, on `setWorkspace`; closed in
   `shutdown`). The engine emits, the service writes (`indexEvent`, `notify`). The renderer and the
   browser UI use channels (`src/service/channels/storage.js`), never the file.
 - `storeFor(dir)` lets `src/runs.js` and `src/backlog.js` use the open store and fall back to the

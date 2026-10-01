@@ -29,6 +29,13 @@ Before writing tests, list the seams you will test at the top of your answer:
 - Covers the happy path, edges (empty, null/zero value, limits, unicode, time zones) and
   expected errors.
 
+## Where a test goes
+
+- A new test goes into the existing test file of the area it covers (the project's testing docs
+  name the split, e.g. one file per module or per area); a new area gets a new file.
+- Never append to a large catch-all test file because it is the one that already covers "everything":
+  every run editing it conflicts with the others.
+
 ## Anti-patterns (reject them in your own tests)
 
 - **Tautological test**: the expected value is computed with the same logic as the production
