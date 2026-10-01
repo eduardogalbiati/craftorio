@@ -8,6 +8,9 @@ Read this before touching run listings, the Backlog queue, pending gates, notifi
 - `runs/<id>/` (`events.jsonl`, `summary.json`, `meta.json`, `sessions/`, `handoffs/`, `decisions.tsv`),
   `backlog/<project>.json`, `projects/`, `agents/`, `skills/`, `workflows/`, `settings.json`,
   `active-run.json`: plain files, readable by the owner, agents and the supervisor, and portable.
+- `runs/po-<project>-<stamp>/`: a Product Owner issue thread (#117: `conversation.jsonl`,
+  `analysis/`, `attachments/`, `filed/`), not a run; it has no `events.jsonl` or `summary.json`,
+  so run listings skip it.
 - Never make the database the only copy of something a run produced.
 
 ## `<workspace>/index.db`: what it adds

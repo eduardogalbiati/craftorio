@@ -18,11 +18,16 @@
 // Registering an issue (#117, mode 'issue'): the same conversation drafts an issue with the owner,
 // like the issue-tracker workflow's analyze + write steps in one turn (skills issue-triage and
 // issue-writing, the code analyzer's cheaper model: ISSUE_AGENT). It may ask at most two short
-// questions; each new message revises the whole draft (ISSUE_SCHEMA). The owner files it with a
-// click (fileDraft: a new issue, or the addition appended to an existing issue's body as a dated
-// section, or as a comment) or discards it (discardDraft); both are recorded in the conversation.
-// The conversation's folder <workspace>/backlog/<projectId>.po/ keeps the owner's attachments
-// (attachments/) and every text sent to the platform (filed/). A preview (simulated) never calls gh/glab.
+// questions over the whole thread; each new message revises the whole draft (ISSUE_SCHEMA). The
+// owner files it with a click (fileDraft: a new issue, or the addition appended to an existing
+// issue's body as a dated section, or as a comment) or discards it (discardDraft); both are recorded
+// in the conversation. Each issue thread (from its first message to the draft filed or discarded)
+// has its own folder in the runs folder, <workspace>/runs/po-<projectId>-<stamp>/ (not a run: no
+// events.jsonl, so run listings skip it): conversation.jsonl (the thread's messages), analysis/ (each
+// turn's whole answer, with its evidence), attachments/ (the owner's files, moved there from the
+// staging folder <workspace>/backlog/<projectId>.po/attachments/ when sent) and filed/ (every text
+// sent to the platform). Clearing the conversation keeps these folders. A preview (simulated) never
+// calls gh/glab.
 
 const fs = require('fs');
 const path = require('path');
@@ -363,7 +368,7 @@ const ISSUE_RULES = [
   'You are the Product Owner of this project, registering an issue with its owner in a conversation inside the orchestrator\'s Backlog screen. The owner describes it in a few words (typed, dictated, sometimes with screenshots); you draft the issue; the owner reviews the draft and files it with a click.',
   'Analyse the request with the issue-triage skill, in the project\'s code (your working directory, read-only: docs/agents/code-map.md, grep): the code involved with evidence (file:line, today\'s behaviour), the files likely to change, impact and complexity, duplicates and overlapping issues from the backlog report (open and closed), open pull requests that already cover part of it, and the grouping advice.',
   'Write the draft with the issue-writing skill: a specific title; a context grounded in the evidence; "Decision (owner): ..." for every decision the owner stated; tasks as verifiable acceptance criteria (for a UI change, UI criteria: the controls, the states, what leads); "Related: #n". Add a short "Triage" section: impact and complexity with their reasons, the estimated files (marked as an estimate) and the grouping advice. Labels: `impact:<n>`, `complexity:<n>`, the kind, `area:<...>`.',
-  `The owner is here. When the request is ambiguous in a way that changes the issue, ask at most ${MAX_QUESTIONS} short questions in \`questions\` and leave the draft's title empty; otherwise draft at once and list your assumptions in \`assumptions\`. Each new message of the owner refines the current draft: always return the whole draft again.`,
+  `The owner is here. When the request is ambiguous in a way that changes the issue, ask at most ${MAX_QUESTIONS} short questions in the whole thread (in \`questions\`) and leave the draft's title empty; otherwise draft at once and list your assumptions in \`assumptions\`. Each new message of the owner refines the current draft: always return the whole draft again.`,
   'When the owner asks to add to an existing issue ("add this to #110"), or an open issue already covers the request (`relation: duplicate`), set `existing_issue` to its number and write in `addition` only the new part (a short context and the new tasks as a checklist), keeping what the issue already says; otherwise 0 and "".',
   'Language: answer the owner (`reply`, `questions`) in the language the owner writes in. The issue itself (title, body, labels, addition) is in English, the repository\'s language.',
   'You never file, edit or comment on issues and never start runs: the owner files the draft with a click. Do not prescribe code fixes beyond what the issue needs.',
@@ -373,7 +378,7 @@ const poDir = (backlogDir, projectId) => path.join(backlogDir, `${path.basename(
 const attachDir = (backlogDir, projectId) => path.join(poDir(backlogDir, projectId), 'attachments');
 const closesDraft = (m) => (m.filed && !m.filed.preview) || m.discarded;
 
-/** Stores a file the owner pasted or dropped (base64 `data`) in the conversation's folder: { name, path, size }. */
+/** Stores a file the owner pasted or dropped (base64 `data`) in the staging folder until it is sent: { name, path, size }. */
 function saveAttachment(backlogDir, projectId, { name, data }) {
   const buf = Buffer.from(String(data || ''), 'base64');
   if (!buf.length) throw new Error('The file is empty.');
@@ -410,8 +415,42 @@ function issueThread(messages) {
   return out;
 }
 
-/** Keeps an issue answer to what exists (issue numbers of the backlog); a draft without a title is none. */
-function normalizeIssueAnswer(raw, { issues }) {
+// The questions the PO already asked in the open thread: MAX_QUESTIONS is a cap on the whole thread.
+const questionsAsked = (messages) => issueThread(messages).filter((m) => m.role === 'po').reduce((n, m) => n + (m.issue?.questions?.length || 0), 0);
+
+// The open thread's id (its folder's name in the runs folder), or a new one for its first message.
+function threadOf(messages, projectId, now = new Date()) {
+  const known = issueThread(messages).find((m) => m.thread)?.thread;
+  return known || `po-${path.basename(String(projectId))}-${now.toISOString().replace(/[-:]/g, '').replace('T', '-').slice(0, 15)}`;
+}
+
+// where: { backlogDir, projectId, runsDir }; without a runs folder the thread stays in the conversation's folder.
+const threadDir = (where, thread) => path.join(where.runsDir || poDir(where.backlogDir, where.projectId), path.basename(String(thread)));
+
+// Appends an issue-mode message to the conversation and to its thread's conversation.jsonl.
+function recordIssueMessage(where, message) {
+  const m = appendMessage(where.backlogDir, where.projectId, message);
+  const dir = threadDir(where, m.thread);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.appendFileSync(path.join(dir, 'conversation.jsonl'), `${JSON.stringify(m)}\n`);
+  return m;
+}
+
+// Moves the staged attachments into the thread's attachments/ folder; returns their new paths.
+function moveAttachments(where, thread, files) {
+  if (!files.length) return [];
+  const dir = path.join(threadDir(where, thread), 'attachments');
+  fs.mkdirSync(dir, { recursive: true });
+  return files.map((f) => {
+    const to = path.join(dir, path.basename(f));
+    fs.copyFileSync(f, to);
+    fs.rmSync(f, { force: true });
+    return to;
+  });
+}
+
+/** Keeps an issue answer to what exists (issue numbers of the backlog); a draft without a title is none. maxQuestions: what the thread has left. */
+function normalizeIssueAnswer(raw, { issues, maxQuestions = MAX_QUESTIONS }) {
   const known = new Map((issues || []).map((i) => [i.number, i]));
   const d = raw?.draft || {};
   const title = String(d.title || '').trim();
@@ -419,7 +458,7 @@ function normalizeIssueAnswer(raw, { issues }) {
   const strings = (list) => (list || []).map((s) => String(s).trim()).filter(Boolean);
   return {
     reply: String(raw?.reply || ''),
-    questions: strings(raw?.questions).slice(0, MAX_QUESTIONS),
+    questions: strings(raw?.questions).slice(0, Math.max(0, maxQuestions)),
     draft: title ? {
       title,
       body: String(d.body || '').trim(),
@@ -449,6 +488,12 @@ function issueContext(messages) {
   const open = currentDraft(messages)?.message.issue;
   if (open?.draft) parts.push(`## The current draft (revise it with the owner's new message)\n# ${open.draft.title}\nLabels: ${open.draft.labels.join(', ')}\n\n${clip(open.draft.body, BODY_NAMED * 2)}`);
   if (open?.existingIssue) parts.push(`## Current addition to #${open.existingIssue}\n${clip(open.addition, BODY_NAMED)}`);
+  const asked = questionsAsked(messages);
+  if (asked) {
+    parts.push(asked >= MAX_QUESTIONS
+      ? `## Questions\nYou already asked ${asked} questions in this thread, the most allowed: ask no more (\`questions\` empty), draft now and list your assumptions.`
+      : `## Questions\nYou already asked ${asked} of at most ${MAX_QUESTIONS} questions in this thread: at most ${MAX_QUESTIONS - asked} more.`);
+  }
   return parts.filter(Boolean).join('\n\n');
 }
 
@@ -507,14 +552,18 @@ const createBody = (draft) => (draft.related.length && !/^Related:/im.test(draft
  * action: 'create' (a new issue), 'append' (a dated section at the end of issue `number`'s body) or
  * 'comment' (a comment on `number`). `number` defaults to the draft's existing issue; the text added
  * is the draft's addition for that issue, else the whole draft. `preview` never calls the CLI.
+ * The text sent is kept in the thread's folder (runsDir) under filed/.
  * Returns { preview, action, command, body, filed, message, messages, skippedLabels? }.
  */
-async function fileDraft({ backlogDir, projectId, at, action, number, preview, platform, repo, cached = null, exec = backlog.execCli }) {
+async function fileDraft({ backlogDir, projectId, runsDir, at, action, number, preview, platform, repo, cached = null, exec = backlog.execCli }) {
   if (!FILE_ACTIONS.includes(action)) throw new Error(`Unknown action: ${action} (${FILE_ACTIONS.join(', ')}).`);
-  const open = currentDraft(readConversation(backlogDir, projectId));
+  const messages = readConversation(backlogDir, projectId);
+  const open = currentDraft(messages);
   if (!open || open.message.ts !== at) throw new Error('This draft was filed, discarded or revised since: use the latest draft.');
   const issue = open.message.issue;
-  const dir = path.join(poDir(backlogDir, projectId), 'filed');
+  const where = { backlogDir, projectId, runsDir };
+  const thread = threadOf(messages, projectId);
+  const dir = path.join(threadDir(where, thread), 'filed');
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
   let command;
   let body;
@@ -543,7 +592,7 @@ async function fileDraft({ backlogDir, projectId, at, action, number, preview, p
   const out = { preview: !!preview, action, command: command.display, body };
   if (preview) {
     const filed = { action, number: target, preview: true, draft: at, command: command.display };
-    const message = appendMessage(backlogDir, projectId, { role: 'po', mode: 'issue', text: `**Preview** (simulated): nothing was filed. The app would run \`${command.display}\`.`, filed });
+    const message = recordIssueMessage(where, { role: 'po', mode: 'issue', thread, text: `**Preview** (simulated): nothing was filed. The app would run \`${command.display}\`.`, filed });
     return { ...out, filed, message, messages: readConversation(backlogDir, projectId) };
   }
   // gh reads the body from it; for glab it is the record of what was sent
@@ -563,15 +612,18 @@ async function fileDraft({ backlogDir, projectId, at, action, number, preview, p
     const ref = filed.url ? `[#${target}](${filed.url})` : `#${target}`;
     text = action === 'comment' ? `Commented on ${ref}.` : `Added to ${ref}: a dated section at the end of its description, the rest kept as it was.`;
   }
-  const message = appendMessage(backlogDir, projectId, { role: 'po', mode: 'issue', text, filed });
+  filed.folder = threadDir(where, thread);
+  text += ` The conversation and the analysis are kept in \`${filed.folder}\`.`;
+  const message = recordIssueMessage(where, { role: 'po', mode: 'issue', thread, text, filed });
   return { ...out, filed, message, messages: readConversation(backlogDir, projectId), ...(skippedLabels.length ? { skippedLabels } : {}) };
 }
 
-/** Discards the current draft (at: its ts): nothing is filed; recorded in the conversation. Returns the conversation. */
-function discardDraft(backlogDir, projectId, at) {
-  const open = currentDraft(readConversation(backlogDir, projectId));
+/** Discards the current draft (at: its ts): nothing is filed; recorded in the conversation and its thread's folder. Returns the conversation. */
+function discardDraft(backlogDir, projectId, at, runsDir) {
+  const messages = readConversation(backlogDir, projectId);
+  const open = currentDraft(messages);
   if (!open || open.message.ts !== at) throw new Error('This draft was filed, discarded or revised since.');
-  appendMessage(backlogDir, projectId, { role: 'po', mode: 'issue', text: 'Draft discarded: nothing was filed.', discarded: at });
+  recordIssueMessage({ backlogDir, projectId, runsDir }, { role: 'po', mode: 'issue', thread: threadOf(messages, projectId), text: 'Draft discarded: nothing was filed.', discarded: at });
   return readConversation(backlogDir, projectId);
 }
 
@@ -609,42 +661,54 @@ function checkBudget(budget) {
  * @param data      the backlog with its runs (the service's withIssueRuns)
  * @param runs      the project's runs (runs.runsForProject), for the history
  * @param agent     the Product Owner agent (model, effort); registering an issue uses ISSUE_AGENT
- * @param mode      'plan' (default) or 'issue' (#117: register an issue; `attachments`: paths saved by saveAttachment)
+ * @param mode      'plan' (default) or 'issue' (#117: register an issue; `attachments`: paths saved by saveAttachment,
+ *                  moved to the thread's folder in `runsDir`, which also keeps the thread and each turn's analysis)
  * @returns { message, messages }  the answer ({ role: 'po', text, answer | issue, model, costUsd }) and the whole conversation
  */
-async function ask({ backlogDir, projectId, question, data, activeRuns, runs, workflows, folder, agent, skillsDirs, resolveCommand, budget, mock, mode = 'plan', attachments = [] }) {
+async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns, runs, workflows, folder, agent, skillsDirs, resolveCommand, budget, mock, mode = 'plan', attachments = [] }) {
   const q = String(question || '').trim();
   if (!q) throw new Error('Ask a question.');
   const issueMode = mode === 'issue';
-  const files = issueMode ? (attachments || []).filter((f) => isAttachment(backlogDir, projectId, f)).map((f) => path.resolve(f)) : [];
-  const tag = issueMode ? { mode: 'issue' } : {};
   const history = runHistory(runs, data?.issues);
   const previous = readConversation(backlogDir, projectId);
-  appendMessage(backlogDir, projectId, { role: 'user', text: q, ...tag, ...(files.length ? { attachments: files } : {}) });
+  const where = { backlogDir, projectId, runsDir };
+  const thread = issueMode ? threadOf(previous, projectId) : null;
+  const tag = issueMode ? { mode: 'issue', thread } : {};
+  const record = (message) => (issueMode ? recordIssueMessage(where, message) : appendMessage(backlogDir, projectId, message));
+  const staged = issueMode ? (attachments || []).filter((f) => isAttachment(backlogDir, projectId, f)).map((f) => path.resolve(f)) : [];
+  const files = moveAttachments(where, thread, staged);
+  record({ role: 'user', text: q, ...tag, ...(files.length ? { attachments: files } : {}) });
+  const questionsLeft = MAX_QUESTIONS - questionsAsked(previous);
   let raw;
   let costUsd = 0;
   let model = 'simulated';
   let invalid = null;
+  let analysis = '';
   try {
     if (mock) {
       raw = issueMode ? mockIssueAnswer({ data, question: q, previous }) : mockAnswer({ data, question: q });
+      analysis = 'Simulated: no model was called, no code was read.';
     } else {
       checkBudget(budget);
       let tokens;
       const report = (issueMode ? issueReport : backlogReport)({ data, activeRuns, history, workflows, question: q });
-      ({ raw, costUsd, model, invalid, tokens } = await callAgent({
+      ({ raw, costUsd, model, invalid, tokens, text: analysis } = await callAgent({
         mode, question: q, report, previous, attachments: files, folder, agent: issueMode ? ISSUE_AGENT : agent, skillsDirs, resolveCommand,
       }));
       recordUsage(backlogDir, { projectId, model, tokens, costUsd });
     }
   } catch (e) {
-    const message = appendMessage(backlogDir, projectId, { role: 'po', ...tag, text: e.message, error: true, costUsd });
+    const message = record({ role: 'po', ...tag, text: e.message, error: true, costUsd });
     return { message, messages: readConversation(backlogDir, projectId) };
   }
   let message;
   if (issueMode) {
-    const issue = normalizeIssueAnswer(raw, { issues: data?.issues });
-    message = appendMessage(backlogDir, projectId, { role: 'po', ...tag, text: issue.reply, issue, model, costUsd, ...(invalid ? { invalid } : {}) });
+    const issue = normalizeIssueAnswer(raw, { issues: data?.issues, maxQuestions: questionsLeft });
+    message = recordIssueMessage(where, { role: 'po', ...tag, text: issue.reply, issue, model, costUsd, ...(invalid ? { invalid } : {}) });
+    // the turn's whole answer (code evidence, triage) next to the thread
+    const dir = path.join(threadDir(where, thread), 'analysis');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, `${message.ts.replace(/[:.]/g, '-')}.md`), `${String(analysis || '').trim()}\n\n\`\`\`json\n${JSON.stringify(raw, null, 2)}\n\`\`\`\n`);
   } else {
     const answer = normalizeAnswer(raw, { issues: data?.issues, history, workflows });
     message = appendMessage(backlogDir, projectId, {
@@ -693,9 +757,9 @@ async function callAgent({ mode = 'plan', question, report, previous, attachment
     const fallback = issueMode
       ? { reply: prose, questions: [], draft: { title: '', body: '', labels: [], related: [] }, duplicates: [], existing_issue: 0, addition: '', assumptions: [] }
       : { summary: prose, groups: [], conflicts: [], enrich: [] };
-    return { raw: fallback, costUsd: res.costUsd || 0, tokens: res.usage, model: agent.model, invalid: errs.join('; ') };
+    return { raw: fallback, costUsd: res.costUsd || 0, tokens: res.usage, model: agent.model, invalid: errs.join('; '), text: res.text || '' };
   }
-  return { raw, costUsd: res.costUsd || 0, tokens: res.usage, model: agent.model, invalid: null };
+  return { raw, costUsd: res.costUsd || 0, tokens: res.usage, model: agent.model, invalid: null, text: res.text || '' };
 }
 
 module.exports = {

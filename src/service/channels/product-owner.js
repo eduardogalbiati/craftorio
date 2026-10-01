@@ -35,6 +35,7 @@ module.exports = (ctx) => {
         return productOwner.ask({
           backlogDir: ctx.ws.backlog,
           projectId: id,
+          runsDir: ctx.ws.runs,
           question,
           data,
           activeRuns: ctx.activeRuns().filter((r) => r.projectId === id),
@@ -63,7 +64,7 @@ module.exports = (ctx) => {
       channel: 'po:discard',
       method: 'discardProductOwnerDraft',
       params: ['projectId', 'at'],
-      fn: ({ projectId, at }) => productOwner.discardDraft(ctx.ws.backlog, project(projectId), at),
+      fn: ({ projectId, at }) => productOwner.discardDraft(ctx.ws.backlog, project(projectId), at, ctx.ws.runs),
     },
     // Returns fileDraft's result plus, after a real filing, the backlog synced again (syncError when that failed).
     {
@@ -79,6 +80,7 @@ module.exports = (ctx) => {
         const res = await productOwner.fileDraft({
           backlogDir: ctx.ws.backlog,
           projectId: id,
+          runsDir: ctx.ws.runs,
           at,
           action,
           number,
