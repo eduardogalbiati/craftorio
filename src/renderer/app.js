@@ -322,6 +322,7 @@ async function init() {
   $('#btn-art-refresh').onclick = () => loadArtifacts();
   $('#art-project').onchange = (e) => { state.art.projectId = e.target.value; renderArtifactList(); };
   $('#art-search').oninput = (e) => { state.art.q = e.target.value; renderArtifactList(); };
+  $('#art-toggle-all').onclick = toggleAllArtGroups;
   $('#art-show-sim').onchange = (e) => { state.art.showSim = e.target.checked; renderArtifactList(); };
 
   // project detail
@@ -375,7 +376,8 @@ async function init() {
 
   state.ws = await api.getWorkspace();
   state.settings = await api.getSettings();
-  state.simulationOnly = !!(await api.appInfo()).simulationOnly;
+  const appInfo = await api.appInfo();
+  state.simulationOnly = !!appInfo.simulationOnly;
   $('#sim-only-badge').classList.toggle('hidden', !state.simulationOnly);
   applyDeveloperMode();
   [state.workflows, state.projects, state.skills] = await Promise.all([api.listWorkflows(), api.listProjects(), api.listSkills()]);
@@ -383,6 +385,8 @@ async function init() {
   await loadActiveRuns();
   initCodeBanner();
   renderDashboard();
+  // a Run App copy opens on the screen the change is about (#119): its nav item, as a click would
+  if (appInfo.startView) document.querySelector(`.nav-item[data-view="${CSS.escape(appInfo.startView)}"]`)?.click();
 
   const env = await api.checkEnv();
   $('#env-status').innerHTML = ['claude', 'codex'].map((k) =>
@@ -1552,7 +1556,7 @@ function renderRunGates() {
   box.dataset.key = key;
   box.innerHTML = gates.map((g) => {
     const buttons = g.choices
-      ? g.choices.map((c, i) => `<button type="button" class="btn sm ${i === 0 ? 'primary' : 'ghost'}" data-choice="${esc(c.id)}"${c.feedback_required ? ' data-needs-text="1"' : ''}>${esc(c.label)}</button>`).join('')
+      ? gateChoices(g).map((c, i) => `<button type="button" class="btn sm ${i === 0 ? 'primary' : 'ghost'}" data-choice="${esc(c.id)}"${c.intent ? ` data-intent="${esc(c.intent)}" title="${esc(c.title)}"` : ''}${c.feedback_required ? ' data-needs-text="1"' : ''}>${esc(c.label)}</button>`).join('')
       : '<button type="button" class="btn sm ghost" data-answer="false">Reject</button><button type="button" class="btn sm primary" data-answer="true">Approve</button>';
     const field = g.feedback ? `<label class="duo-ask-label">${esc(g.feedback.label || 'Instructions (optional)')}</label>
       <textarea class="duo-ask-text run-gate-feedback" rows="3" placeholder="${esc(g.feedback.placeholder || '')}"></textarea>` : '';
@@ -1646,9 +1650,25 @@ function onRunGateClick(e) {
   if (b.dataset.needsText && !text?.value.trim()) { showToast('Write your request first', `"${b.textContent}" sends the text to the agent.`); text?.focus(); return; }
   const buttons = card.querySelectorAll('button');
   buttons.forEach((x) => (x.disabled = true));
-  Promise.resolve(api.resolveApproval(card.dataset.approval, answer, text?.value || '', card.dataset.run))
+  // intent: "Accept and save to issue #n" (#125)
+  Promise.resolve(api.resolveApproval(card.dataset.approval, answer, text?.value || '', card.dataset.run, ...(b.dataset.intent ? [b.dataset.intent] : [])))
     .then((ok) => { if (ok === false) { buttons.forEach((x) => (x.disabled = false)); showToast('The gate did not accept the answer', 'It needs a text, or it was already answered.'); } })
     .catch((err) => { buttons.forEach((x) => (x.disabled = false)); showToast('Could not answer the gate', errMsg(err)); });
+}
+
+// A gate's choices (Run screen, run chat, Write & Review chat). A gate with save_to_issue in a run
+// about an issue (#125) also offers "Accept and save to issue #n", right after the choice it
+// answers: the same choice with intent save_to_issue (the Save to issue preview opens when the run ends).
+function gateChoices(gate) {
+  const choices = gate.choices || [{ id: true, label: 'Approve' }, { id: false, label: 'Reject' }];
+  const save = gate.save_to_issue;
+  const at = save?.issue ? choices.findIndex((c) => String(c.id) === String(save.choice)) : -1;
+  if (at < 0) return choices;
+  const extra = {
+    id: save.choice, intent: 'save_to_issue', label: `Accept and save to issue #${save.issue.number}`,
+    title: `Accepts the document, then previews the change to issue #${save.issue.number} when the run ends: nothing is sent before you confirm`,
+  };
+  return [...choices.slice(0, at + 1), extra, ...choices.slice(at + 1)];
 }
 
 // What a gate offers besides its answers (Run screen and run chat); none of them answers it:
@@ -1723,24 +1743,37 @@ function runAppConfirmHtml(info, cfg) {
   const from = info.config ? info.from : cfg.from;
   const lead = info.changed ? '<div class="small gate-app-changed">The declared run command changed since you confirmed it.</div>' : '';
   const saved = !info.config && info.project ? ` Saved as the Local preview of <b>${esc(info.project.name)}</b>, so the next gates run it in one click.` : '';
-  return `${lead}<div>Run with ${runAppCommandHtml(cfg)}${from ? ` <span class="muted small">(from ${esc(from)})</span>` : ''}?</div>${pick}
+  const install = cfg.install ? `<div>${runAppInstallHtml(info)}</div>` : '';
+  const run = !info.config && info.project ? 'Save as this project\'s Run App and start' : 'Run';
+  return `${lead}<div>Run with ${runAppCommandHtml(cfg)}${from ? ` <span class="muted small">(from ${esc(from)})</span>` : ''}?</div>${pick}${install}
     <div class="muted small">It runs this repository's command on your machine, in simulation only, on a scratch copy of your workspace.${saved}</div>
-    <div class="row"><button type="button" class="btn sm primary" data-gate-tool="app-run">Run</button><button type="button" class="btn sm ghost" data-gate-tool="app-edit">Edit</button><button type="button" class="btn sm ghost" data-gate-tool="app-cancel">Cancel</button></div>`;
+    <div class="row"><button type="button" class="btn sm primary" data-gate-tool="app-run">${run}</button><button type="button" class="btn sm ghost" data-gate-tool="app-edit">Edit</button><button type="button" class="btn sm ghost" data-gate-tool="app-cancel">Cancel</button></div>`;
+}
+
+// Whether the install step runs in this worktree now (#119, localPreview:info's install): a badge and why.
+function runAppInstallHtml(info) {
+  const s = info.install;
+  if (!s || s.state === 'none') return '';
+  const [head, ...why] = String(s.text).split(': ');
+  return `<span class="badge${s.state === 'will-run' ? ' warn' : ''}">${s.state === 'will-run' ? 'install will run' : 'install skipped'}</span> <span class="muted small">${esc(why.join(': ') || head)}</span>`;
 }
 
 // Run App's fields (Edit, or nothing found): install / command / URL / folder, saved as the
 // project's Local preview and optionally written to the repository's .multiagent/local-preview.yaml.
 function runAppSetupHtml(info, cfg = {}) {
-  const input = (k, label, ph) => `<label class="small">${label}<input data-setup="${k}" value="${esc(cfg[k] || '')}" placeholder="${esc(ph)}" spellcheck="false"></label>`;
+  const input = (k, label, ph, hint = '') => `<label class="small">${label}<input data-setup="${k}" value="${esc(cfg[k] || '')}" placeholder="${esc(ph)}" spellcheck="false">${hint ? `<span class="hint">${hint}</span>` : ''}</label>`;
   const found = cfg.from ? `From ${esc(cfg.from)}.` : info.suggestion || info.config ? '' : 'Nothing found in the worktree: write how to run it.';
-  return `<div class="muted small">${found} ${info.project ? `Saved as the Local preview of <b>${esc(info.project.name)}</b> (Projects).` : 'This run has no project: it runs this time only.'}</div>
-    ${input('install', 'Install (when dependencies are missing or the lockfile changed)', 'npm ci (optional)')}
+  return `<div class="muted small">${found} ${info.project ? `Saving makes it the Run App of <b>${esc(info.project.name)}</b> (Projects › Local preview): the next gates start it in one click.` : 'This run has no project: it runs this time only.'}</div>
+    ${input('install', 'Install (only when dependencies are missing or the lockfile changed)', 'npm ci (optional)', runAppInstallHtml(info))}
     ${input('command', 'Command', 'npm start')}
     ${input('url', 'URL (optional)', 'http://localhost:3000')}
     ${input('cwd', 'Folder (optional, a monorepo\'s app)', 'apps/web')}
     ${info.project ? '<label class="small gate-app-check"><input type="checkbox" data-setup-repo> Also write it to <code>.multiagent/local-preview.yaml</code> (a change you commit)</label>' : ''}
-    <div class="row"><button type="button" class="btn sm primary" data-gate-tool="app-save">${info.project ? 'Save and run' : 'Run'}</button><button type="button" class="btn sm ghost" data-gate-tool="app-cancel">Cancel</button></div>`;
+    <div class="row"><button type="button" class="btn sm primary" data-gate-tool="app-save">${info.project ? 'Save as this project\'s Run App and start' : 'Run'}</button><button type="button" class="btn sm ghost" data-gate-tool="app-cancel">Cancel</button></div>`;
 }
+
+// After Save (#119): said once, so the owner knows what the next Run App does.
+const runAppSavedToast = (cfg) => showToast('Saved as this project\'s Run App', `Next time Run App starts ${cfg.command} directly.`);
 
 // Shows the popover in one of its two forms; Esc closes it.
 function showRunAppSetup(setup, info, cfg, mode) {
@@ -1804,7 +1837,7 @@ async function onGateTool(e, runId) {
       // a declared command: confirmed for the project; a detected one: saved as its Local preview
       if (info.config) { await startRunApp(box, runId, approval, null, true); return; }
       const { from, apps, ...clean } = cfg;
-      if (setup.dataset.project) await api.saveLocalPreview(runId, approval, clean, false);
+      if (setup.dataset.project) { await api.saveLocalPreview(runId, approval, clean, false); runAppSavedToast(clean); }
       const run = box.querySelector('[data-gate-tool="preview"]');
       if (run) run.textContent = runAppLabel(clean);
       await startRunApp(box, runId, approval, setup.dataset.project ? null : clean, true);
@@ -1816,6 +1849,7 @@ async function onGateTool(e, runId) {
       if (setup.dataset.project) {
         const saved = await api.saveLocalPreview(runId, approval, cfg, writeRepo);
         if (saved?.file) showToast('Wrote the run command', `${saved.file}: commit it so everyone gets one-click Run App.`);
+        else runAppSavedToast(cfg);
       }
       setup.classList.add('hidden');
       const run = box.querySelector('[data-gate-tool="preview"]');
@@ -1976,6 +2010,22 @@ function runInfo(x) {
   };
 }
 
+// "Accept and save to issue #n" was chosen at a gate (#125): when the run ends with success, the Save to
+// issue preview opens (duo.js); the issue changes only once the owner confirms it there. Cancelling
+// keeps the document accepted and Save to issue available later (Write & Review chat, Run Details).
+function openSaveAfterAccept(v) {
+  v.saveToIssue = false;
+  const issue = v.run?.issues?.[0];
+  if (!issue) return;
+  if (v.run.status !== 'success') {
+    showToast(`Not saved to issue #${issue.number}`, `The run ended ${v.run.status}: the document was not accepted.`, v.run.id);
+    return;
+  }
+  if (typeof window.openDuoSaveToIssue !== 'function') return;
+  // the service lets the run go just after its last event: the preview reads it as a finished run
+  setTimeout(() => window.openDuoSaveToIssue({ runId: v.run.id, issue, mock: v.run.mock, docSkill: v.run.inputs?.document_skill || '' }), 500);
+}
+
 // An agent's readable name (display-name.js); the slug stays in tooltips.
 const agentLabel = (slug, names) => (window.displayName ? displayName(slug, names) : String(slug || ''));
 
@@ -2022,6 +2072,7 @@ function onEvent(ev) {
       // the Run screen moves on to a run still in progress when the one it showed ends elsewhere
       if (state.runId === ev.run_id && state.view !== 'run' && liveRuns().length) state.runId = liveRuns()[0].run.id;
       if (liveRuns().length && !replaying) showToast(`${runLabel(v.run)}: ${statusLabel(v.run)}`, ev.error, ev.run_id);
+      if (v.saveToIssue && !replaying) openSaveAfterAccept(v);
       if (!replaying) loadUsage();
       break;
 
@@ -2106,7 +2157,9 @@ function onEvent(ev) {
       v.approvals.delete(ev.approval_id);
       // the owner's time at the gates, shown apart from agent time (Details, the Time KPI)
       if (v.run && ev.wait_ms) v.run.gateWaitMs = (v.run.gateWaitMs || 0) + ev.wait_ms;
-      if (ev.choice !== undefined) orch(ev, `human decision: ${ev.choice} (${ev.by})`, 'transition');
+      // "Accept and save to issue #n" (#125): the preview opens when the run ends (workflow.finished)
+      if (ev.intent === 'save_to_issue' && !replaying) v.saveToIssue = true;
+      if (ev.choice !== undefined) orch(ev, `human decision: ${ev.choice}${ev.intent ? ` (${ev.intent})` : ''} (${ev.by})`, 'transition');
       else orch(ev, `approval ${ev.approved ? 'granted' : 'denied'} (${ev.by})`, ev.approved ? 'transition' : 'warn');
       break;
 
@@ -2749,10 +2802,11 @@ function artifactRunsFiltered() {
 function renderArtifactList() {
   const a = state.art;
   const box = $('#art-list');
-  if (a.runs == null) { box.innerHTML = a.error ? '' : '<p class="muted small art-pad">Loading…</p>'; return; }
+  if (a.runs == null) { box.innerHTML = a.error ? '' : '<p class="muted small art-pad">Loading…</p>'; paintArtToggleAll([], false); return; }
   const runs = artifactRunsFiltered();
   const hiddenSim = devMode() ? (a.runs || []).filter((r) => r.mock && !a.showSim).length : 0;
   if (!runs.length) {
+    paintArtToggleAll([], false);
     box.innerHTML = `<div class="art-pad muted small">${a.runs.length ? 'No artifacts match these filters.' : 'No run has produced documents or files yet.'}${hiddenSim ? `<br>${hiddenSim} simulated run${hiddenSim > 1 ? 's' : ''} hidden.` : ''}</div>`;
     return;
   }
@@ -2791,6 +2845,32 @@ function renderArtifactList() {
     setArtGroupOpen(g.dataset.run, !g.classList.contains('open'));
     renderArtifactList();
   }));
+  paintArtToggleAll(runs, searching);
+}
+
+// Collapse all / Expand all (#126): "Collapse all" while any listed group is open, "Expand all" when
+// all are closed; disabled while searching (matching groups are shown open then).
+function paintArtToggleAll(runs, searching) {
+  const b = $('#art-toggle-all');
+  if (!b) return;
+  b.classList.toggle('hidden', !runs.length);
+  const anyOpen = runs.some((r, i) => artGroupOpen(r.runId, i === 0));
+  const label = anyOpen ? 'Collapse all' : 'Expand all';
+  b.disabled = searching;
+  b.title = searching ? 'Groups are open while searching' : anyOpen ? 'Close every run group' : 'Open every run group';
+  b.setAttribute('aria-label', `${label} run groups`);
+  b.setAttribute('aria-pressed', String(!anyOpen)); // pressed: everything is collapsed
+  b.querySelector('span').textContent = label;
+  b.querySelector('polyline').setAttribute('points', anyOpen ? '18 15 12 9 6 15' : '6 9 12 15 18 9');
+}
+
+// Every listed group to the same state, each remembered as if toggled by hand (setArtGroupOpen).
+function toggleAllArtGroups() {
+  if (state.art.q.trim()) return;
+  const runs = artifactRunsFiltered();
+  const open = !runs.some((r, i) => artGroupOpen(r.runId, i === 0));
+  for (const r of runs) setArtGroupOpen(r.runId, open);
+  renderArtifactList();
 }
 
 // Open/closed state of the run groups, remembered across restarts. Groups the user never

@@ -245,6 +245,8 @@
         localPreview: ev.local_preview || null, workDir: ev.work_dir || null, diffBase: ev.diff_base || null,
         // Run App without a config (#108): the step has local_preview: true
         runApp: !!ev.run_app,
+        // "Accept and save to issue #n" ({ choice, issue }) in a run about an issue (#125)
+        saveToIssue: ev.save_to_issue || null,
         resolved: null, closed: false,
       });
       this.gates.set(ev.approval_id, gate);
@@ -254,9 +256,10 @@
       const gate = this.gates.get(ev.approval_id);
       // withdrawn: the PR/MR stopped being mergeable while the gate was open (the engine's check)
       const choice = ev.withdrawn ? 'withdrawn' : String(ev.choice ?? ev.approved);
-      const label = ev.withdrawn ? `Withdrawn before anyone answered: ${ev.reason || 'the check failed'}` : gate?.choices.find((c) => String(c.id) === choice)?.label || choice;
+      const saved = ev.intent === 'save_to_issue' && gate?.saveToIssue?.issue ? `Accept and save to issue #${gate.saveToIssue.issue.number}` : null;
+      const label = ev.withdrawn ? `Withdrawn before anyone answered: ${ev.reason || 'the check failed'}` : saved || gate?.choices.find((c) => String(c.id) === choice)?.label || choice;
       if (gate) {
-        gate.resolved = { choice, label };
+        gate.resolved = { choice, label, intent: ev.intent || null };
         this.touch(gate);
       }
       this.add({ kind: 'reply', ts: ev.ts, stepId: gate?.stepId || ev.step_id, label, feedback: ev.feedback || '', by: ev.by || 'user' });

@@ -347,6 +347,8 @@ steps:
       - { id: accept, label: "Accept the document{% if not steps.signoff.output.ready %} as it is{% endif %}" }
       - { id: revise, label: "Send it back to the writer" }
       - { id: stop,   label: "Stop without accepting" }
+    # a run about an issue also offers "Accept and save to issue #n" (the preview opens when the run ends)
+    save_to_issue: accept
     transitions:
       - when: "choice == 'accept'"
         goto: end
@@ -369,6 +371,7 @@ steps:
       - { id: accept, label: "Accept the last draft as it is" }
       - { id: more,   label: "One more round (write and review again)" }
       - { id: stop,   label: "Stop without a document" }
+    save_to_issue: accept
     transitions:
       - when: "choice == 'accept'"
         goto: end

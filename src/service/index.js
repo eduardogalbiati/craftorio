@@ -880,14 +880,26 @@ function createService({ host }) {
   function runAppInfo({ runId, approvalId }) {
     const { run, gate } = openRunAppGate({ runId, approvalId });
     const { project, config, source, from, fingerprint, confirmed, repoError } = gateRunConfig(run, gate);
+    const stateFile = path.join(ws.localPreviews, run.runId, 'install.json');
     return {
       config, source, from, confirmed, repoError, dir: gate.work_dir,
       changed: !!config && !confirmed && !!project?.localPreviewConfirmed,
       fingerprint,
       project: project ? { id: project.id, name: project.name } : null,
       suggestion: config ? null : localPreview.suggestConfig(gate.work_dir),
+      // whether an install step would run in this worktree now (#119): { state: 'skipped' | 'will-run', text }
+      install: localPreview.installState(gate.work_dir, stateFile, { install: config?.install || 'install' }),
       running: previews.has(run.runId) && terminals.procs.has(previews.get(run.runId).id),
     };
+  }
+
+  // The screen a Run App copy of this app opens on (#119): from the files the gate's run changed
+  // (diff_base); null without a diff or when none of them is a screen's.
+  async function gateStartView(runId, approvalId, gate) {
+    if (!gate.diff_base) return null;
+    try {
+      return localPreview.startView((await gateChanges({ runId, approvalId })).map((c) => c.file));
+    } catch { return null; }
   }
 
   // Run App's Save (#115): the gate's config becomes the project's Local preview; writeRepoFile also
@@ -935,12 +947,15 @@ function createService({ host }) {
     // a monorepo's lockfile is at the root, not in the app's cwd
     const due = localPreview.needsInstall(gate.work_dir, stateFile);
     const line = localPreview.commandLine(cfg, due.install);
+    // the terminal's first line says whether the install runs (#119)
+    const shown = localPreview.announced(line, localPreview.installState(gate.work_dir, stateFile, cfg).text);
+    const view = await gateStartView(runId, approvalId, gate);
     const label = run.issues?.length ? run.issues.map((i) => `#${i.number}`).join(', ') : run.runId;
     const title = `Local preview · ${label}`;
     const win = process.platform === 'win32';
     const spec = {
-      title, cwd: dir, env: localPreview.previewEnv(cliEnv(), target, cfg.env),
-      file: win ? 'cmd.exe' : '/bin/sh', args: win ? `/d /s /c "${line}"` : ['-c', line],
+      title, cwd: dir, env: localPreview.previewEnv(cliEnv(), target, cfg.env, { view }),
+      file: win ? 'cmd.exe' : '/bin/sh', args: win ? `/d /s /c "${shown}"` : ['-c', shown],
       onExit: (exitCode) => {
         const p = previews.get(run.runId);
         if (!p || p.id !== opened.id) return;
@@ -958,6 +973,7 @@ function createService({ host }) {
     run.emitEvent('local_preview.started', {
       step_id: gate.step_id, approval_id: approvalId, command: line, dir, url: cfg.url || null, terminal: opened.id,
       workspace: realWorkspace ? 'real' : 'scratch', installed: !!(due.install && cfg.install),
+      ...(view ? { start_view: view } : {}),
     });
     return { ...opened, url: cfg.url || null, cwd: dir };
   }

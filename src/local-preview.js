@@ -133,13 +133,61 @@ function lockHash(dir) {
 // stateFile: where the lockfile hash of the last install is kept (in the preview's own folder, not
 // the worktree). The first preview of a JS project whose node_modules exists trusts it (the
 // developer installed for this branch); anything else installs once, then again on a lockfile change.
+// reason: why it runs or not (installState says it to the owner).
 function needsInstall(dir, stateFile) {
   const hash = lockHash(dir);
   let last = null;
   try { last = JSON.parse(fs.readFileSync(stateFile, 'utf8')).lock_hash ?? null; } catch { /* first preview */ }
-  const jsReady = fs.existsSync(path.join(dir, 'package.json')) && fs.existsSync(path.join(dir, 'node_modules'));
+  const js = fs.existsSync(path.join(dir, 'package.json'));
+  const jsReady = js && fs.existsSync(path.join(dir, 'node_modules'));
   const install = last === null ? !jsReady : last !== hash;
-  return { install, hash };
+  const reason = last === null ? (jsReady ? 'installed' : js ? 'missing' : 'first') : install ? 'lockfile' : 'unchanged';
+  return { install, hash, reason };
+}
+
+// What the install step does for this worktree (#119), for the gate's setup and the terminal's
+// first line: { state: 'none' | 'skipped' | 'will-run', text }.
+const INSTALL_REASONS = {
+  installed: 'dependencies already installed',
+  missing: 'node_modules missing',
+  first: 'first preview of this run',
+  lockfile: 'lockfile changed since the last install',
+  unchanged: 'lockfile unchanged since the last install',
+};
+function installState(dir, stateFile, config) {
+  if (!config?.install) return { state: 'none', text: 'No install step.' };
+  const { install, reason } = needsInstall(dir, stateFile);
+  return install
+    ? { state: 'will-run', text: `Install will run: ${INSTALL_REASONS[reason]}.` }
+    : { state: 'skipped', text: `Install skipped: ${INSTALL_REASONS[reason]}.` };
+}
+
+// The app's screens a Run App copy can open on (#119), from the files the run changed: the most
+// touched of src/renderer/views/<view>/… and src/renderer/<view>[-part].{js,css}; null for none.
+const START_VIEWS = [
+  'agents',
+  'analytics',
+  'arena',
+  'artifacts',
+  'backlog',
+  'dashboard',
+  'duo',
+  'projects',
+  'sessions',
+  'settings',
+  'skills',
+  'supervisor',
+  'usage',
+  'workflows',
+];
+function startView(files) {
+  const counts = new Map();
+  for (const f of files || []) {
+    const m = String(f).replace(/\\/g, '/').match(/^src\/renderer\/(?:views\/([^/]+)\/|([a-z]+)[^/]*\.(?:js|css|html)$)/);
+    const view = m && (m[1] || m[2]);
+    if (START_VIEWS.includes(view)) counts.set(view, (counts.get(view) || 0) + 1);
+  }
+  return [...counts].sort((a, b) => b[1] - a[1])[0]?.[0] || null;
 }
 
 function recordInstall(stateFile, hash) {
@@ -210,11 +258,15 @@ function worktreeAppScratch(appDir) {
 }
 
 // The environment of the preview: always simulation only; the scratch workspace unless the owner
-// chose the real one (with a warning in the UI).
+// chose the real one (with a warning in the UI). When the command starts this app: no sign-in
+// (MULTIAGENT_AUTH=off, as the screenshot and smoke scripts; a copy in simulation only has nothing
+// to sign in for), and the screen the change is about (MULTIAGENT_START_VIEW). Both are this app's
+// own variables: other projects' commands ignore them.
 // extra: the config's own env (it never overrides the simulation guard).
-function previewEnv(base, { workspace, userData }, extra = null) {
-  const env = { ...base, ...extra, MULTIAGENT_SIMULATION_ONLY: '1', MULTIAGENT_WORKSPACE: workspace };
+function previewEnv(base, { workspace, userData }, extra = null, { view = null } = {}) {
+  const env = { ...base, ...extra, MULTIAGENT_SIMULATION_ONLY: '1', MULTIAGENT_WORKSPACE: workspace, MULTIAGENT_AUTH: 'off' };
   if (userData) env.MULTIAGENT_USER_DATA = userData;
+  if (view) env.MULTIAGENT_START_VIEW = view;
   delete env.ELECTRON_RUN_AS_NODE;
   delete env.CLAUDECODE;
   return env;
@@ -223,6 +275,13 @@ function previewEnv(base, { workspace, userData }, extra = null) {
 // One command line for the shell: `install && command` when the install is due
 function commandLine(config, install) {
   return install && config.install ? `${config.install} && ${config.command}` : config.command;
+}
+
+// The line the terminal runs: a first line saying whether the install runs (installState's text,
+// #119), then the command line. Plain words only, so the same echo works in cmd.exe and /bin/sh.
+function announced(line, note) {
+  const say = String(note || '').replace(/[^\w .,:/-]/g, '').trim();
+  return say ? `echo Run App: ${say} && ${line}` : line;
 }
 
 // Default dev-server URLs of known JS frameworks (a dependency of package.json)
@@ -339,9 +398,11 @@ function suggestConfig(dir) {
 }
 
 module.exports = {
+  announced,
   cleanConfig,
   commandLine,
   fingerprint,
+  installState,
   needsInstall,
   portInUse,
   portOf,
@@ -353,6 +414,7 @@ module.exports = {
   runFolder,
   scratchProjects,
   scratchWorkspace,
+  startView,
   suggestConfig,
   worktreeAppScratch,
   writeRepoConfig,

@@ -8,6 +8,11 @@ the workspace folder.
   `npm approve-scripts node-pty`.
 - Electron **44.4.5** (bundles Node 24.21). Electron 44 has no postinstall: its binary downloads on
   first use (`node node_modules/electron/install.js` to force it).
+- Electron 44's `clipboard` is **async and `ClipboardItem`-based**: only `clear`, `has`, `read`,
+  `readText`, `write` and `writeText`, all but `clear` returning promises. `writeImage`,
+  `writeBuffer`, `readImage` and `readBuffer` are gone: write an image as
+  `clipboard.write([new ClipboardItem({ 'image/png': new Blob([img.toPNG()]) })])` and await it
+  (`src/main.js`, #139). Raw OS formats use `electron application/osclipboard;format="<name>"`.
 - Installed CLIs: `claude` (~/.local/bin), `codex` (WinGet), `grok` (~/.grok/bin), `gh` in
   `C:\Program Files\GitHub CLI\gh.exe`, `glab` optional. Inside runs the engine refreshes PATH
   (`refreshWindowsPath`), so agents call bare `gh`/`glab` (see [capabilities.md](capabilities.md)).

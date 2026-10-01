@@ -477,11 +477,12 @@
     ['writer', 'reviewer'].forEach((r) => setCast(r, 'waiting'));
     setCast('supervisor', 'waiting');
     const off = chat.live ? '' : ' disabled';
-    const choices = ev.choices || [{ id: true, label: 'Approve' }, { id: false, label: 'Reject' }];
-    const buttons = choices.map((c, i) => `<button type="button" class="btn sm ${i === 0 ? 'primary' : ''}" data-approval="${esc(ev.approval_id)}" data-choice="${esc(c.id)}"${off}>${esc(c.label)}</button>`).join('');
+    // with "Accept and save to issue #n" when the run is about an issue (gateChoices in app.js, #125)
+    const choices = gateChoices(ev);
+    const buttons = choices.map((c, i) => `<button type="button" class="btn sm ${i === 0 ? 'primary' : ''}" data-approval="${esc(ev.approval_id)}" data-choice="${esc(c.id)}"${c.intent ? ` data-intent="${esc(c.intent)}" title="${esc(c.title)}"` : ''}${off}>${esc(c.label)}</button>`).join('');
     const field = ev.feedback ? `<label class="duo-ask-label">${esc(ev.feedback.label)}</label>
       <textarea class="duo-ask-text" rows="2" placeholder="${esc(ev.feedback.placeholder)}"${off}></textarea>` : '';
-    chat.labels = Object.fromEntries(choices.map((c) => [String(c.id), c.label]));
+    chat.labels = Object.fromEntries(choices.map((c) => [c.intent ? `${c.id}:${c.intent}` : String(c.id), c.label]));
     message('supervisor', `<div class="duo-ask" data-gate="${esc(ev.approval_id)}"><p class="duo-msg-text">${esc(ev.message)}</p>${field}<div class="row">${buttons}</div></div>`, ev.ts);
     $d('#duo-chat-status').textContent = 'The supervisor is waiting for you';
     if (chat.live) document.querySelector(`[data-gate="${ev.approval_id}"] textarea`)?.focus();
@@ -493,11 +494,11 @@
     const choice = String(ev.choice ?? ev.approved);
     if (gate) {
       gate.querySelectorAll('button, textarea').forEach((x) => { x.disabled = true; });
-      gate.querySelectorAll('button').forEach((x) => { x.classList.remove('primary'); x.classList.toggle('chosen', x.dataset.choice === choice); });
+      gate.querySelectorAll('button').forEach((x) => { x.classList.remove('primary'); x.classList.toggle('chosen', x.dataset.choice === choice && (x.dataset.intent || '') === (ev.intent || '')); });
       gate.querySelector('textarea')?.remove();
       gate.querySelector('.duo-ask-label')?.remove();
     }
-    const label = chat.labels?.[choice] || choice;
+    const label = (ev.intent && chat.labels?.[`${choice}:${ev.intent}`]) || chat.labels?.[choice] || choice;
     addToChat(`<div class="duo-msg user reply"><div class="duo-bubble">
       <div class="duo-meta"><b>You</b><span class="time">${clock(ev.ts)}</span></div>
       <p><b>${esc(label)}</b></p>${ev.feedback ? `<p class="duo-msg-text">${esc(ev.feedback)}</p>` : ''}</div></div>`);
@@ -636,6 +637,9 @@
         const where = r.saved?.commentUrl || issue.url;
         note(`Saved to issue <a href="${esc(where)}" target="_blank" rel="noopener">#${esc(issue.number)}</a> · ${r.mode === 'comment' ? 'as a comment' : 'description replaced (the original is kept at the end)'}${r.refreshError ? ` · the Backlog could not read it again: ${esc(r.refreshError)}` : ''}`, 'done');
         addCheck('ok', `Saved to issue #${issue.number} (${r.mode})`);
+      } else if (typeof showToast === 'function') {
+        // saved from the Run screen or Run Details (#125): Run Details lists it with the issue's link
+        showToast(`Saved to issue #${issue.number}`, r.mode === 'comment' ? 'As a comment.' : 'Description replaced (the original is kept at the end).', runId);
       }
       // the Backlog shows the new body, task progress and labels
       if (typeof window.refreshBacklog === 'function' && !$d('#view-backlog')?.classList.contains('hidden')) window.refreshBacklog();
@@ -707,7 +711,7 @@
       if (b && chat.live) {
         const v = b.dataset.choice;
         const text = b.closest('.duo-ask')?.querySelector('textarea')?.value || '';
-        api.resolveApproval(b.dataset.approval, v === 'true' ? true : v === 'false' ? false : v, text, chat.runId);
+        api.resolveApproval(b.dataset.approval, v === 'true' ? true : v === 'false' ? false : v, text, chat.runId, b.dataset.intent || null);
       }
     });
     api.onEvent(onEvent);

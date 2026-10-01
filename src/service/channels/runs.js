@@ -44,16 +44,17 @@ module.exports = (ctx) => [
     params: ['runId', '...opts'],
     fn: ({ runId, activity }) => runs.runEvents(ctx.runFolder(runId), { activity: !!activity }),
   },
-  // answer: true/false or the id of a choice; feedback: the optional text typed at the gate.
+  // answer: true/false or the id of a choice; feedback: the optional text typed at the gate;
+  // intent: 'save_to_issue' for "Accept and save to issue #n" (#125).
   // Gate ids are per run (a1, a2…): runId says which run (without it, the only run waiting on that id).
   {
     channel: 'approval:resolve',
     method: 'resolveApproval',
-    params: ['id', 'answer', 'feedback', 'runId'],
-    fn: ({ runId, id, answer, feedback }) => {
+    params: ['id', 'answer', 'feedback', 'runId', 'intent'],
+    fn: ({ runId, id, answer, feedback, intent }) => {
       const waiting = [...ctx.active.values()].filter((r) => r.approvals.has(id));
       const run = runId ? ctx.active.get(String(runId)) : waiting.length === 1 ? waiting[0] : null;
-      return run?.resolveApproval(id, answer, 'user', feedback) ?? false;
+      return run?.resolveApproval(id, answer, 'user', feedback, intent || null) ?? false;
     },
   },
   // resume a run from a step (a new run, no supervisor call) and what the dialog offers;

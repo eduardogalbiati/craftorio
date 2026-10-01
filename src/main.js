@@ -13,6 +13,7 @@ const {
   app,
   BrowserWindow,
   clipboard,
+  ClipboardItem,
   dialog,
   ipcMain,
   nativeImage,
@@ -288,33 +289,38 @@ ipcMain.handle('artifacts:open', (_e, { path: file, reveal }) => {
   return shell.openPath(found.path);
 });
 
-// Clipboard for the terminals (the sandboxed renderer has no clipboard module)
-ipcMain.handle('clipboard:read', () => clipboard.readText());
-ipcMain.handle('clipboard:write', (_e, { text }) => { clipboard.writeText(String(text ?? '')); return true; });
+// Clipboard for the terminals (the sandboxed renderer has no clipboard module). Electron 44's
+// clipboard is async and ClipboardItem-based (#139): readText/writeText return promises.
+ipcMain.handle('clipboard:read', async () => clipboard.readText());
+ipcMain.handle('clipboard:write', async (_e, { text }) => { await clipboard.writeText(String(text ?? '')); return true; });
 
 // An artifact's image, or the file itself, on the clipboard (#114). Only a run's artifact (a file of
 // its folder or its recorded project copy) is accepted: service.existingArtifact refuses the rest.
-ipcMain.handle('clipboard:writeImage', (_e, { path: file }) => {
+// The image goes as PNG data (writeImage was removed in Electron 44, #139).
+ipcMain.handle('clipboard:writeImage', async (_e, { path: file }) => {
   const found = service.existingArtifact(file);
   const img = nativeImage.createFromPath(found.path);
   if (img.isEmpty()) throw new Error(`Not an image the clipboard can hold: ${path.basename(found.path)}`);
-  clipboard.writeImage(img);
+  await clipboard.write([new ClipboardItem({ 'image/png': new Blob([img.toPNG()], { type: 'image/png' }) })]);
   return true;
 });
 
 // The file itself, to paste in the file explorer or attach in a chat. Windows: the file-drop list
 // (CF_HDROP) through Windows PowerShell's Set-Clipboard -LiteralPath (Electron cannot write it).
+// macOS / Linux: the file URL as a ClipboardItem (public.file-url as a raw macOS format, text/uri-list
+// on Linux), checked with clipboard.has afterwards: a platform that drops the type gets a clear error.
 ipcMain.handle('clipboard:writeFile', async (_e, { path: file }) => {
   const found = service.existingArtifact(file);
   if (process.platform === 'win32') {
     const literal = `'${found.path.replace(/'/g, "''")}'`;
     await new Promise((resolve, reject) => execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `Set-Clipboard -LiteralPath ${literal}`],
       { windowsHide: true, timeout: 15000 }, (err, _out, stderr) => (err ? reject(new Error(`Could not copy the file: ${String(stderr || err.message).trim()}`)) : resolve())));
-  } else if (process.platform === 'darwin') {
-    clipboard.writeBuffer('public.file-url', Buffer.from(require('url').pathToFileURL(found.path).href));
-  } else {
-    clipboard.writeBuffer('text/uri-list', Buffer.from(require('url').pathToFileURL(found.path).href));
+    return true;
   }
+  const type = process.platform === 'darwin' ? 'electron application/osclipboard;format="public.file-url"' : 'text/uri-list';
+  const url = require('url').pathToFileURL(found.path).href;
+  await clipboard.write([new ClipboardItem({ [type]: new Blob([url], { type: 'text/plain' }) })]);
+  if (!(await clipboard.has(type))) throw new Error('Copy file is not available on this platform: use Copy path instead');
   return true;
 });
 

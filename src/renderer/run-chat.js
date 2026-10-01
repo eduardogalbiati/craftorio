@@ -82,9 +82,11 @@
 
   function gateHtml(it) {
     const off = !chat.live || it.resolved || it.closed ? ' disabled' : '';
-    const buttons = it.choices.map((c, i) => {
-      const chosen = it.resolved && String(c.id) === it.resolved.choice;
-      return `<button type="button" class="btn sm ${!it.resolved && i === 0 ? 'primary' : ''}${chosen ? ' chosen' : ''}" data-approval="${esc(it.approvalId)}" data-choice="${esc(c.id)}"${c.feedback_required ? ' data-needs-text="1"' : ''}${off}>${esc(c.label)}</button>`;
+    // with "Accept and save to issue #n" when the run is about an issue (gateChoices in app.js, #125)
+    const choices = typeof gateChoices === 'function' ? gateChoices({ choices: it.choices, save_to_issue: it.saveToIssue }) : it.choices;
+    const buttons = choices.map((c, i) => {
+      const chosen = it.resolved && String(c.id) === it.resolved.choice && (c.intent || null) === (it.resolved.intent || null);
+      return `<button type="button" class="btn sm ${!it.resolved && i === 0 ? 'primary' : ''}${chosen ? ' chosen' : ''}" data-approval="${esc(it.approvalId)}" data-choice="${esc(c.id)}"${c.intent ? ` data-intent="${esc(c.intent)}" title="${esc(c.title)}"` : ''}${c.feedback_required ? ' data-needs-text="1"' : ''}${off}>${esc(c.label)}</button>`;
     }).join('');
     // Run App / Open the worktree (app.js), only while the gate waits in the live run
     const open = chat.live && !it.resolved && !it.closed;
@@ -294,7 +296,7 @@
       const text = b.closest('.duo-ask')?.querySelector('textarea')?.value || '';
       if (b.dataset.needsText && !text.trim()) { showToast('Write your request first', `"${b.textContent}" sends the text to the agent.`); b.closest('.duo-ask')?.querySelector('textarea')?.focus(); return; }
       b.closest('.duo-ask').querySelectorAll('button').forEach((x) => { x.disabled = true; });
-      api.resolveApproval(b.dataset.approval, v === 'true' ? true : v === 'false' ? false : v, text, chat.runId);
+      api.resolveApproval(b.dataset.approval, v === 'true' ? true : v === 'false' ? false : v, text, chat.runId, b.dataset.intent || null);
     });
     $c('#rc-stop').onclick = () => api.stopRun(chat.runId);
     $c('#rc-logs').onclick = () => chat.model.run.runDir && api.openPath(chat.model.run.runDir);

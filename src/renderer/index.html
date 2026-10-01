@@ -309,6 +309,11 @@
               </div>
               <select id="art-project" aria-label="Project"></select>
               <input type="text" id="art-search" placeholder="Search files, workflows, tasks…" aria-label="Search" />
+        <!-- Collapse all / Expand all the run groups (#126): label, icon and state set by renderArtifactList -->
+        <button type="button" id="art-toggle-all" class="btn sm ghost btn-icon art-toggle-all" aria-pressed="false">
+          <svg class="icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><polyline points="18 15 12 9 6 15" /></svg>
+          <span>Collapse all</span>
+        </button>
               <label class="check small dev-only"><input type="checkbox" id="art-show-sim" /><span>Show simulated</span></label>
             </div>
             <p id="art-error" class="error small"></p>

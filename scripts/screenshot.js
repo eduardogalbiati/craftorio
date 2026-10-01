@@ -383,7 +383,8 @@ function main() {
     if (args.view === 'backlog') demoLocalMerge(ws, project.id);
     if (args.view === 'backlog') demoRoadmap(ws, project.id);
     if (args.view === 'backlog') demoPoConversation(ws, project.id);
-    if (['backlog', 'duo'].includes(args.view)) demoEnrichRun(ws, project.id);
+    // also on Artifacts: a second run group (its document.md) for Collapse all / Expand all (#126)
+    if (['artifacts', 'backlog', 'duo'].includes(args.view)) demoEnrichRun(ws, project.id);
     if (args.view === 'analytics') demoAnalyticsRuns(ws, project.id);
     // Run App's setup at a gate is prefilled from the worktree's package.json (#108)
     if (args.view === 'run' && project.folder) {

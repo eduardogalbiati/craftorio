@@ -109,6 +109,11 @@ same features for users; this is the implementer's summary.
   offers Run locally (see worktrees.md); `diff_base: <ref>` (a template) offers Show the diff
   (`git diff <ref>...HEAD` in the worktree, read-only terminal). `approval.resolved` carries `wait_ms`; the summary's
   `timing.gates` / `timing.gate_wait_ms` hold the owner's time at gates, apart from agent time.
+- `save_to_issue: <choice id>` on a gate (#125, writer-reviewer's `decide` / `out_of_rounds`): when the
+  run has an issue, the gate's event carries `save_to_issue: { choice, issue }` and the UI adds
+  "Accept and save to issue #n". It answers that choice (transitions unchanged) with `intent:
+  'save_to_issue'` (`approval:resolve` takes `intent`; `approval.resolved` records it). When the run
+  ends with success the UI opens the Save to issue preview: nothing is written before it is confirmed.
 - Validated mode (`inputs.mode == 'validated'` in both software-development workflows):
   `develop` → `developer_check` while `vars.owner_validated != 'yes'` (set by the gate's
   approve/changes transitions) or `inputs.validate_every_round == 'true'`; the developer's
