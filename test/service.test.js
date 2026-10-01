@@ -542,6 +542,103 @@ test('backlog: issues assigned as one run queue one item, start one run for all 
   assert.deepEqual(recorded.issues.map((i) => i.number), [65, 53, 77]);
 });
 
+test('backlog: a group of exactly the Backlog\'s max size is accepted (only over the limit is refused)', async (t) => {
+  const { service, api } = makeService(t);
+  const ws = service.workspace();
+  fs.writeFileSync(path.join(ws.workflows, 'fixture-issue.yaml'), ISSUE_WORKFLOW);
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'service-group-max-'));
+  t.after(() => fs.rmSync(folder, { recursive: true, force: true }));
+  const p = await api['projects:create']({ name: 'demo', folder });
+  const issue = (number) => ({ number, title: `Issue ${number}`, state: 'open', url: `https://github.com/o/r/issues/${number}`, body: `Body ${number}`, labels: [], assignees: [], tasks: { done: 0, total: 0 } });
+  fs.mkdirSync(ws.backlog, { recursive: true });
+  fs.writeFileSync(path.join(ws.backlog, `${p.id}.json`), JSON.stringify({ projectId: p.id, platform: 'github', repo: 'https://github.com/o/r', issues: [1, 2, 3].map(issue) }));
+
+  api['settings:set']({ backlogMaxGroup: 3 });
+  const data = await api['backlog:assign']({ projectId: p.id, numbers: [1, 2, 3], workflow: 'fixture-issue.yaml', mock: true, group: true });
+  assert.deepEqual(data.queue.items, []); // the slot was free: it started right away, one run for all three
+  const run = api['runs:active']()[0];
+  assert.deepEqual(run.issues.map((i) => i.number), [1, 2, 3]);
+});
+
+// A workflow shaped like issue-tracker's filing path (its metadata.name is what backlog.filedToQueue
+// and the service's queueFiledIssues key on), trimmed to the fields they read: analyze (grouping,
+// nearby), a decision gate with a create_assign choice, and file (filed).
+const TRACKER_WORKFLOW = `apiVersion: multiagent/v1
+kind: Workflow
+metadata:
+  name: issue-tracker
+inputs:
+  project_path: { type: string, required: true }
+agents:
+  a: { provider: claude, model: m, session: ephemeral }
+steps:
+  - id: analyze
+    agent: a
+    prompt: "analyze"
+    output_schema:
+      type: object
+      required: [grouping, nearby]
+      properties:
+        grouping: { type: string, enum: [alone, group] }
+        nearby:
+          type: array
+          items:
+            type: object
+            properties:
+              number: { type: integer }
+              advice: { type: string, enum: [group_with, avoid_together, do_first, do_after] }
+              reason: { type: string }
+  - id: review
+    type: human_approval
+    message: "File it?"
+    choices:
+      - { id: create_assign, label: "Create and queue" }
+      - { id: discard, label: "Discard" }
+    transitions:
+      - when: "choice == 'discard'"
+        goto: end
+        status: cancelled
+      - when: "true"
+        goto: file
+  - id: file
+    agent: a
+    prompt: "file"
+    output_schema:
+      type: object
+      required: [filed]
+      properties:
+        filed:
+          type: array
+          items:
+            type: object
+            required: [action, number, url, title]
+            properties:
+              action: { type: string, enum: [created, commented, edited] }
+              number: { type: integer }
+              url:    { type: string }
+              title:  { type: string }
+`;
+
+test('backlog: a simulated issue-tracker run that chooses "create and queue" queues nothing (#81)', async (t) => {
+  const { service, api } = makeService(t);
+  const ws = service.workspace();
+  fs.writeFileSync(path.join(ws.workflows, 'fixture-tracker.yaml'), TRACKER_WORKFLOW);
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'service-tracker-'));
+  t.after(() => fs.rmSync(folder, { recursive: true, force: true }));
+  const p = await api['projects:create']({ name: 'demo', folder });
+
+  const gateP = new Promise((resolve) => {
+    const onEv = (ev) => { if (ev.type === 'approval.requested') { service.events.off('run:event', onEv); resolve(ev); } };
+    service.events.on('run:event', onEv);
+  });
+  const { runId } = await api['run:start']({ file: 'fixture-tracker.yaml', inputs: { project_path: folder }, mock: true });
+  const gate = await gateP;
+  api['approval:resolve']({ runId, id: gate.approval_id, answer: 'create_assign' });
+  await untilTrue(() => !service.isRunning());
+
+  assert.deepEqual(backlog.readQueue(ws.backlog, p.id).items, []);
+});
+
 test('backlog: queues are paused when the workspace opens; a start that fails pauses the queue', async (t) => {
   const { service, api } = makeService(t);
   const ws = service.workspace();

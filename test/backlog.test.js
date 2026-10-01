@@ -461,6 +461,98 @@ test('a real implementation run still decides the column alongside an enrich run
   assert.deepEqual(out.runs.map((r) => [r.runId, !!r.enrich]), [['enrich', true], ['impl', false]]);
 });
 
+// ---- issue tracker: what a "create and queue" run asks to queue (#81) ----------------------------
+function nearbyEntry(number, advice = 'group_with') {
+  return { number, advice, reason: 'shares a file' };
+}
+function filedSteps(numbers, grouping = 'alone', nearby = []) {
+  return {
+    review: { output: { choice: 'create_assign' } },
+    analyze: { output: { grouping, nearby } },
+    file: { output: { filed: numbers.map((n) => ({ action: 'created', number: n, url: `https://github.com/o/r/issues/${n}`, title: `Issue ${n}` })) } },
+  };
+}
+
+test('filedToQueue: a group advice adds the open issues named group_with, nearest first, up to maxGroup', () => {
+  const nearby = [1, 2, 3, 4, 5].map((n) => nearbyEntry(100 + n));
+  const plan = backlog.filedToQueue({
+    workflow: 'issue-tracker', status: 'success', inputs: { assign_workflow: 'writer-reviewer.yaml' }, maxGroup: 3,
+    steps: filedSteps([10, 11], 'group', nearby),
+  });
+  assert.deepEqual(plan.numbers, [10, 11, 101]); // the created issues first, then the nearest group_with filling the room left
+  assert.equal(plan.group, true);
+  assert.equal(plan.workflow, 'writer-reviewer.yaml');
+  assert.deepEqual(plan.batches, [{ numbers: [10, 11, 101], group: true }]);
+});
+
+test('filedToQueue: maxGroup 1 floors the group at 2; 0 or missing falls back to 5', () => {
+  const nearby = [201, 202, 203, 204, 205, 206].map((n) => nearbyEntry(n));
+  const plan = (maxGroup) => backlog.filedToQueue({ workflow: 'issue-tracker', status: 'success', inputs: {}, maxGroup, steps: filedSteps([20], 'group', nearby) });
+  assert.equal(plan(1).numbers.length, 2);
+  assert.equal(plan(0).numbers.length, 5);
+  assert.equal(backlog.filedToQueue({ workflow: 'issue-tracker', status: 'success', inputs: {}, steps: filedSteps([20], 'group', nearby) }).numbers.length, 5);
+});
+
+test('filedToQueue: created issues beyond maxGroup split into further batches; no room is left for nearby ones', () => {
+  const plan = backlog.filedToQueue({
+    workflow: 'issue-tracker', status: 'success', inputs: {}, maxGroup: 2,
+    steps: filedSteps([30, 31, 32], 'group', [nearbyEntry(33)]),
+  });
+  assert.deepEqual(plan.numbers, [30, 31, 32]); // no room left for the nearby issue
+  assert.deepEqual(plan.batches, [{ numbers: [30, 31], group: true }, { numbers: [32], group: false }]);
+});
+
+test('filedToQueue: a nearby issue already created, or named twice, is never duplicated', () => {
+  const nearby = [nearbyEntry(40), nearbyEntry(41), nearbyEntry(41), nearbyEntry(42)]; // 40 was also created
+  const plan = backlog.filedToQueue({ workflow: 'issue-tracker', status: 'success', inputs: {}, maxGroup: 5, steps: filedSteps([40], 'group', nearby) });
+  assert.deepEqual(plan.numbers, [40, 41, 42]);
+});
+
+test('filedToQueue: without the group advice, the created issues queue alone and nearby is ignored', () => {
+  const plan = backlog.filedToQueue({
+    workflow: 'issue-tracker', status: 'success', inputs: {}, maxGroup: 5,
+    steps: filedSteps([51, 52], 'alone', [nearbyEntry(50)]),
+  });
+  assert.deepEqual(plan.numbers, [51, 52]);
+  assert.equal(plan.group, false);
+  assert.deepEqual(plan.batches, [{ numbers: [51, 52], group: false }]);
+});
+
+test('filedToQueue: nearby advice other than group_with (avoid_together, do_first, do_after) never joins the group', () => {
+  const nearby = [nearbyEntry(60, 'avoid_together'), nearbyEntry(61, 'do_first'), nearbyEntry(62, 'do_after'), nearbyEntry(63, 'group_with')];
+  const plan = backlog.filedToQueue({ workflow: 'issue-tracker', status: 'success', inputs: {}, maxGroup: 5, steps: filedSteps([64], 'group', nearby) });
+  assert.deepEqual(plan.numbers, [64, 63]);
+});
+
+test('filedToQueue: only issues the filer actually created, with a valid number, are queued; duplicates collapse', () => {
+  const steps = {
+    review: { output: { choice: 'create_assign' } },
+    analyze: { output: { grouping: 'alone', nearby: [] } },
+    file: {
+      output: {
+        filed: [
+          { action: 'created', number: 80, url: 'u', title: 't' },
+          { action: 'created', number: 80, url: 'u', title: 't' }, // duplicate
+          { action: 'commented', number: 81, url: 'u', title: 't' }, // not created
+          { action: 'created', number: 0, url: 'u', title: 't' }, // invalid number
+          { action: 'created', number: 82, url: 'u', title: 't' },
+        ],
+      },
+    },
+  };
+  const plan = backlog.filedToQueue({ workflow: 'issue-tracker', status: 'success', inputs: {}, maxGroup: 5, steps });
+  assert.deepEqual(plan.numbers, [80, 82]);
+});
+
+test('filedToQueue: null unless the run is the issue tracker, it succeeded, the owner chose create_assign, and it created at least one issue', () => {
+  const okSteps = filedSteps([70]);
+  assert.equal(backlog.filedToQueue({ workflow: 'software-development', status: 'success', inputs: {}, steps: okSteps }), null);
+  assert.equal(backlog.filedToQueue({ workflow: 'issue-tracker', status: 'failed', inputs: {}, steps: okSteps }), null);
+  assert.equal(backlog.filedToQueue({ workflow: 'issue-tracker', status: 'success', inputs: {}, steps: { ...okSteps, review: { output: { choice: 'create' } } } }), null);
+  assert.equal(backlog.filedToQueue({ workflow: 'issue-tracker', status: 'success', inputs: {}, steps: { ...okSteps, file: { output: { filed: [] } } } }), null);
+  assert.equal(backlog.filedToQueue({}), null);
+});
+
 // ---- save a document to its issue (#103) --------------------------------------------------------
 test('issueSaveBody: replace keeps the original at the end in a collapsed <details> block', () => {
   const body = backlog.issueSaveBody({ mode: 'replace', document: '# Enriched\n\nBody.', original: 'Original text.' });
