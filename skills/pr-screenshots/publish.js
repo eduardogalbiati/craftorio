@@ -55,12 +55,14 @@ function readManifest(dir) {
     const resolve = resolver(path.dirname(path.resolve(dir)));
     const final = (m.images || []).filter((x) => x.final);
     const pairedOriginals = new Set(final.filter((x) => x.side === 'modified' && x.pair).map((x) => x.pair));
-    const shots = final.filter((x) => x.side === 'modified' || !pairedOriginals.has(x.path)).map((x) => ({
-      caption: String(x.caption || x.key || path.basename(x.path)),
-      path: resolve(x.path),
-      original: x.side === 'modified' && x.pair ? resolve(x.pair) : null,
-      removed: x.side === 'original',
-    }));
+    // a final original paired with an earlier round's modified (the last round recaptured only the
+    // original) is published with that modified; an original without a pair is a removed screen
+    const shots = final.filter((x) => x.side === 'modified' || !pairedOriginals.has(x.path)).map((x) => {
+      const caption = String(x.caption || x.key || path.basename(x.path));
+      if (x.side === 'modified') return { caption, path: resolve(x.path), original: x.pair ? resolve(x.pair) : null, removed: false };
+      if (x.pair) return { caption, path: resolve(x.pair), original: resolve(x.path), removed: false };
+      return { caption, path: resolve(x.path), original: null, removed: true };
+    });
     if (!shots.length) throw new Error('manifest.json has no final screenshots');
     return shots;
   }
