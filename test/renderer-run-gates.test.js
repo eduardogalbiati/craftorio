@@ -275,3 +275,179 @@ test('paintGateApps: shows the running/stopped/failed state, Stop only while run
   assert.equal(errEl.textContent, 'port 3000 is already in use');
   assert.equal(errEl.classList.hidden, false);
 });
+
+// ---- mountGateSides (#108/#115): the gate side's Artifacts panel, and what "Changed files" shows ---
+
+// A fake <aside data-gate-side> element: querySelectorAll('[data-gate-side]') finds it, classList
+// tracks whether ArtifactsPanel already mounted it ('ap').
+function fakeSide({ approval = 'a1', run = 'r1', diff = '1' } = {}) {
+  const classes = new Set();
+  return { dataset: { gateSide: approval, run, diff }, classList: { add: (c) => classes.add(c), contains: (c) => classes.has(c) } };
+}
+
+// extras.changes is built inside the sandbox (a different object realm): compare plain data, not identity
+const plain = (v) => JSON.parse(JSON.stringify(v));
+
+function loadMountGateSides() {
+  const lastOutput = /function lastOutput\(runId, match\) \{[\s\S]*?\n\}/.exec(src)[0];
+  const mountGateSides = /function mountGateSides\(root\) \{[\s\S]*?\n\}/.exec(src)[0];
+  for (const [name, code] of Object.entries({ lastOutput, mountGateSides })) {
+    assert.ok(code, `${name} not found in app.js: the source moved`);
+  }
+  const mounted = []; // every ArtifactsPanel.mount({ el, opts }) call
+  const artifactsPanel = {
+    mount: (el, opts) => {
+      const panel = { extras: opts.extras, setExtras(x) { this.extras = x; } };
+      mounted.push({ el, opts, panel });
+      return panel;
+    },
+  };
+  const sandbox = {
+    state: { runs: new Map() },
+    api: { gateChanges: async () => { throw new Error('gate:changes must not be called for a simulated run'); } },
+    openTerminal: () => Promise.resolve(),
+    showToast: () => {},
+    errMsg: (e) => String(e?.message || e),
+    // mountGateSides checks window.ArtifactsPanel, but calls the bare global ArtifactsPanel.mount
+    ArtifactsPanel: artifactsPanel,
+    window: { ArtifactsPanel: artifactsPanel },
+  };
+  vm.createContext(sandbox);
+  vm.runInContext(`${lastOutput}\n${mountGateSides}\nthis.mountGateSides = mountGateSides;`, sandbox);
+  return { mountGateSides: sandbox.mountGateSides, sandbox, mounted, gateChangesCalls: () => mounted };
+}
+
+test('mountGateSides: a simulated run (run.mock) never calls gate:changes, even with changed files reported', async () => {
+  const { mountGateSides, sandbox, mounted } = loadMountGateSides();
+  sandbox.state.runs.set('r1', {
+    run: { mock: true },
+    events: [{ type: 'step.finished', output: { files_changed: [{ file: 'src/a.js' }, 'src/b.js'] } }],
+  });
+  const root = { querySelectorAll: () => [fakeSide({ run: 'r1' })] };
+  mountGateSides(root);
+  await new Promise((r) => setTimeout(r, 0));
+  assert.equal(mounted.length, 1);
+  assert.deepEqual(plain(mounted[0].panel.extras.changes), [{ file: 'src/a.js', added: null, deleted: null }, { file: 'src/b.js', added: null, deleted: null }]);
+  assert.equal(mounted[0].panel.extras.changesReported, 'simulated');
+});
+
+test('mountGateSides: a simulated run with no reported files still shows the "simulated" badge with an empty list, never the folder\'s git diff', async () => {
+  const { mountGateSides, sandbox, mounted } = loadMountGateSides();
+  sandbox.state.runs.set('r1', { run: { mock: true }, events: [{ type: 'step.finished', output: {} }] });
+  const root = { querySelectorAll: () => [fakeSide({ run: 'r1' })] };
+  mountGateSides(root);
+  await new Promise((r) => setTimeout(r, 0));
+  assert.deepEqual(plain(mounted[0].panel.extras.changes), []);
+  assert.equal(mounted[0].panel.extras.changesReported, 'simulated');
+});
+
+test('mountGateSides: a real run still calls gate:changes for the side panel\'s "Changed files"', async () => {
+  const { mountGateSides, sandbox, mounted } = loadMountGateSides();
+  sandbox.state.runs.set('r1', { run: { mock: false }, events: [] });
+  sandbox.api.gateChanges = async () => [{ file: 'src/a.js', added: 2, deleted: 0 }];
+  const root = { querySelectorAll: () => [fakeSide({ run: 'r1' })] };
+  mountGateSides(root);
+  await new Promise((r) => setTimeout(r, 0));
+  assert.deepEqual(plain(mounted[0].panel.extras.changes), [{ file: 'src/a.js', added: 2, deleted: 0 }]);
+  assert.equal('changesReported' in mounted[0].panel.extras, false, 'a real git diff: not marked as reported');
+});
+
+test('mountGateSides: a real run whose diff fails falls back to the developer\'s reported files when there are any, labelled "reported" (not "simulated")', async () => {
+  const { mountGateSides, sandbox, mounted } = loadMountGateSides();
+  sandbox.state.runs.set('r1', {
+    run: { mock: false },
+    events: [{ type: 'step.finished', output: { files_changed: [{ file: 'src/a.js' }] } }],
+  });
+  sandbox.api.gateChanges = async () => { throw new Error('not a git repository'); };
+  const root = { querySelectorAll: () => [fakeSide({ run: 'r1' })] };
+  mountGateSides(root);
+  await new Promise((r) => setTimeout(r, 0));
+  assert.deepEqual(plain(mounted[0].panel.extras.changes), [{ file: 'src/a.js', added: null, deleted: null }]);
+  assert.equal(mounted[0].panel.extras.changesReported, 'reported');
+});
+
+test('mountGateSides: a real run whose diff fails with nothing reported shows the error instead of silently hiding it', async () => {
+  const { mountGateSides, sandbox, mounted } = loadMountGateSides();
+  sandbox.state.runs.set('r1', { run: { mock: false }, events: [] });
+  sandbox.api.gateChanges = async () => { throw new Error('the run\'s folder is not a git repository'); };
+  const root = { querySelectorAll: () => [fakeSide({ run: 'r1' })] };
+  mountGateSides(root);
+  await new Promise((r) => setTimeout(r, 0));
+  assert.match(mounted[0].panel.extras.changes, /Could not list them:.*not a git repository/);
+});
+
+// ---- Run App's one-click confirmation and Edit fields (#115) --------------------------------
+
+function loadRunAppHtml() {
+  const esc = /const esc = \(s\) => [^\n]+/.exec(src)[0];
+  const runAppCommandHtml = /const runAppCommandHtml = [^\n]+/.exec(src)[0];
+  const runAppConfirmHtml = /function runAppConfirmHtml\(info, cfg\) \{[\s\S]*?\n\}/.exec(src)[0];
+  const runAppSetupHtml = /function runAppSetupHtml\(info, cfg = \{\}\) \{[\s\S]*?\n\}/.exec(src)[0];
+  for (const [name, code] of Object.entries({ esc, runAppCommandHtml, runAppConfirmHtml, runAppSetupHtml })) {
+    assert.ok(code, `${name} not found in app.js: the source moved`);
+  }
+  const sandbox = {};
+  vm.createContext(sandbox);
+  vm.runInContext(
+    `${esc}\n${runAppCommandHtml}\n${runAppConfirmHtml}\n${runAppSetupHtml}\n`
+    + 'this.helpers = { runAppCommandHtml, runAppConfirmHtml, runAppSetupHtml };',
+    sandbox,
+  );
+  return sandbox.helpers;
+}
+
+test('runAppCommandHtml: install + command, with the folder when a monorepo app sets cwd', () => {
+  const { runAppCommandHtml } = loadRunAppHtml();
+  assert.equal(runAppCommandHtml({ command: 'npm start' }), '<code>npm start</code>');
+  assert.equal(runAppCommandHtml({ install: 'npm ci', command: 'npm start' }), '<code>npm ci</code> + <code>npm start</code>');
+  assert.equal(runAppCommandHtml({ command: 'npm start', cwd: 'apps/web' }), '<code>npm start</code> in <code>apps/web</code>');
+});
+
+test('runAppConfirmHtml: the one-click confirmation names the command and its source, with Run/Edit/Cancel, never the three-field form', () => {
+  const { runAppConfirmHtml } = loadRunAppHtml();
+  const info = { config: { command: 'npm start' }, from: 'package.json (scripts.start)', confirmed: false };
+  const html = runAppConfirmHtml(info, { command: 'npm start' });
+  assert.match(html, /Run with <code>npm start<\/code>/);
+  assert.match(html, /from package\.json \(scripts\.start\)/);
+  assert.match(html, /data-gate-tool="app-run">Run</);
+  assert.match(html, /data-gate-tool="app-edit">Edit</);
+  assert.match(html, /data-gate-tool="app-cancel">Cancel</);
+  assert.doesNotMatch(html, /data-setup="command"/, 'the confirmation never shows the fields');
+});
+
+test('runAppConfirmHtml: a declared command that changed since it was confirmed warns about it', () => {
+  const { runAppConfirmHtml } = loadRunAppHtml();
+  const html = runAppConfirmHtml({ changed: true, config: { command: 'npm run dev' }, from: '.multiagent/local-preview.yaml' }, { command: 'npm run dev' });
+  assert.match(html, /changed since you confirmed it/);
+});
+
+test('runAppConfirmHtml: a detected command (no project config yet) says it will be saved as the project\'s Local preview', () => {
+  const { runAppConfirmHtml } = loadRunAppHtml();
+  const html = runAppConfirmHtml({ config: null, project: { id: 'p1', name: 'demo' } }, { command: 'npm start', from: 'package.json (scripts.start)' });
+  assert.match(html, /Saved as the Local preview of <b>demo<\/b>/);
+});
+
+test('runAppConfirmHtml: several monorepo apps offer a picker, pre-selecting the one already chosen', () => {
+  const { runAppConfirmHtml } = loadRunAppHtml();
+  const apps = [{ cwd: 'apps/api', command: 'node api.js' }, { cwd: 'apps/web', command: 'npm start' }];
+  const html = runAppConfirmHtml({ config: null, suggestion: { apps } }, { command: 'npm start', cwd: 'apps/web' });
+  assert.match(html, /<select data-setup-app>/);
+  assert.match(html, /<option value="1" selected>apps\/web<\/option>/);
+});
+
+test('runAppSetupHtml (#111): Edit\'s fields are labelled above the controls, with a repo-file checkbox and Save/Cancel', () => {
+  const { runAppSetupHtml } = loadRunAppHtml();
+  const html = runAppSetupHtml({ project: { id: 'p1', name: 'demo' } }, { command: 'npm start', from: 'package.json (scripts.start)' });
+  assert.match(html, /<label class="small">Install[\s\S]*<input data-setup="install"/);
+  assert.match(html, /<label class="small">Command[\s\S]*<input data-setup="command" value="npm start"/);
+  assert.match(html, /Also write it to <code>\.multiagent\/local-preview\.yaml<\/code>/);
+  assert.match(html, /data-gate-tool="app-save">Save and run</);
+});
+
+test('runAppSetupHtml: a run without a project runs once, with no repo-file checkbox and a plain Run label', () => {
+  const { runAppSetupHtml } = loadRunAppHtml();
+  const html = runAppSetupHtml({ project: null }, { command: 'git --version' });
+  assert.doesNotMatch(html, /data-setup-repo/);
+  assert.match(html, /data-gate-tool="app-save">Run</);
+  assert.match(html, /This run has no project: it runs this time only\./);
+});

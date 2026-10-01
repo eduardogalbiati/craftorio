@@ -34,7 +34,7 @@ test('ARTIFACT_EVENTS covers what adds a file to a run (handoffs, decisions, sav
 // ---------------------------------------------------------------------------------------------
 // ArtifactsPanel itself: the whole module, evaluated with app.js's helpers stubbed.
 function loadPanel(opts = {}) {
-  const calls = { openArtifactsAt: [], readArtifact: [] };
+  const calls = { openArtifactsAt: [], readArtifact: [], artifactMenuOpen: [] };
   const sandbox = {
     esc: (s) => (s == null ? '' : String(s)),
     artKindIcon: (kind) => `<i data-kind="${kind}"></i>`,
@@ -44,6 +44,10 @@ function loadPanel(opts = {}) {
     renderDelimited: (t) => `<table>${t}</table>`,
     errMsg: (e) => String(e?.message || e),
     openArtifactsAt: (...a) => calls.openArtifactsAt.push(a),
+    showToast: () => {},
+    // the copy menu itself is artifact-menu.js's own seam (test/artifact-menu.test.js): here only
+    // the wiring (what target onContextMenu opens it with) matters (#114)
+    ArtifactMenu: { open: (e, target) => calls.artifactMenuOpen.push(target) },
     api: {
       listArtifacts: opts.listArtifacts || (async () => [{ artifacts: [] }]),
       readArtifact: opts.readArtifact || (async (p) => { calls.readArtifact.push(p); return { text: '' }; }),
@@ -59,11 +63,13 @@ function loadPanel(opts = {}) {
 
 // A fake DOM element good enough for mount()/render()/paintPreview(): innerHTML is just stored (no
 // parsing), and querySelector('.ap-body') returns the one element paintPreview looks for.
+// listeners: the handlers mount() registered (click, contextmenu), so a test can fire one directly.
 function fakeRoot() {
   const body = { innerHTML: '' };
+  const listeners = {};
   const root = {
     classList: { add() {} },
-    addEventListener() {},
+    addEventListener: (type, fn) => { listeners[type] = fn; },
     isConnected: true,
     _html: '',
     get innerHTML() { return this._html; },
@@ -71,8 +77,12 @@ function fakeRoot() {
     querySelector: (sel) => (sel === '.ap-body' ? body : null),
     querySelectorAll: () => [],
   };
-  return { root, body };
+  return { root, body, listeners };
 }
+
+// A fake contextmenu target: e.target.closest(sel) resolves like the real DOM would for a button
+// matching `match` (e.g. '[data-ap-file]'), with the given dataset.
+const closestTarget = (match, dataset) => ({ closest: (sel) => (sel === match ? { dataset } : null) });
 
 const waitTick = (ms = 60) => new Promise((r) => setTimeout(r, ms));
 
@@ -197,4 +207,50 @@ test('mount with flat: true (the gate\'s side panel) lists files newest first wi
   const newIdx = root.innerHTML.indexOf('new.md');
   const oldIdx = root.innerHTML.indexOf('old.md');
   assert.ok(newIdx > -1 && oldIdx > -1 && newIdx < oldIdx, 'newest first');
+});
+
+test('extras: an empty changes list without changesReported (a real run with no changes against the base) says so, not "no changed files"', async () => {
+  const { ArtifactsPanel } = loadPanel({ listArtifacts: async () => [{ artifacts: [] }] });
+  const { root } = fakeRoot();
+  ArtifactsPanel.mount(root, { runId: 'r1', flat: true, extras: { changes: [] } });
+  await waitTick();
+  assert.match(root.innerHTML, /No changes against the base\./);
+  assert.doesNotMatch(root.innerHTML, /simulated|reported by the developer/);
+});
+
+// ---------------------------------------------------------------------------------------------
+// Right-click (or Shift+F10) on a file of the list, or on an open image: the copy menu (#114)
+
+test('onContextMenu: right-click on a file of the list opens the copy menu with its metadata', async () => {
+  const files = [{ path: '/r/a.png', name: 'a.png', rel: 'a.png', kind: 'image', size: 10, mtime: '2026-01-01T00:00:00Z' }];
+  const { ArtifactsPanel, calls } = loadPanel({ listArtifacts: async () => [{ artifacts: files }] });
+  const { root, listeners } = fakeRoot();
+  ArtifactsPanel.mount(root, { runId: 'r1' });
+  await waitTick();
+
+  listeners.contextmenu({ target: closestTarget('[data-ap-file]', { apFile: '/r/a.png' }) });
+  assert.deepEqual(calls.artifactMenuOpen, [files[0]]);
+});
+
+test('onContextMenu: right-click on an open image opens the copy menu with its path, offering Copy image instead of a file\'s actions', async () => {
+  const { ArtifactsPanel, calls } = loadPanel();
+  const { root, listeners } = fakeRoot();
+  ArtifactsPanel.mount(root, { runId: 'r1' });
+  await waitTick();
+
+  listeners.contextmenu({ target: closestTarget('[data-ap-img]', { apImg: '/r/screenshots/after.png' }) });
+  // the target is built inside the sandbox (a different object realm): compare its fields, not identity
+  assert.equal(calls.artifactMenuOpen.length, 1);
+  assert.equal(calls.artifactMenuOpen[0].path, '/r/screenshots/after.png');
+  assert.equal(calls.artifactMenuOpen[0].image, true);
+});
+
+test('onContextMenu: right-click outside any file or image opens nothing', async () => {
+  const { ArtifactsPanel, calls } = loadPanel();
+  const { root, listeners } = fakeRoot();
+  ArtifactsPanel.mount(root, { runId: 'r1' });
+  await waitTick();
+
+  listeners.contextmenu({ target: { closest: () => null } });
+  assert.deepEqual(calls.artifactMenuOpen, []);
 });

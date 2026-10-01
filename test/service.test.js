@@ -1218,7 +1218,9 @@ test('localPreview:start: offered only when the gate sets local_preview, runs in
 
   const events = [];
   service.events.on('run:event', (ev) => events.push(ev));
-  const preview = await api['localPreview:start']({ runId: gate.run_id, approvalId: gate.approval_id });
+  // #115: the first run of a declared command (here the workflow's) still needs the owner's one-click confirmation
+  await assert.rejects(api['localPreview:start']({ runId: gate.run_id, approvalId: gate.approval_id }), /Confirm the command first: git --version/);
+  const preview = await api['localPreview:start']({ runId: gate.run_id, approvalId: gate.approval_id, confirm: true });
   assert.equal(preview.cwd, repo.dir);
   assert.deepEqual(api['localPreview:list']().map((p) => p.runId), [gate.run_id]);
   assert.ok(events.some((e) => e.type === 'local_preview.started' && e.dir === repo.dir), 'recorded in the run');
@@ -1235,7 +1237,8 @@ test('localPreview:stop: the Stop button ends the preview without answering the 
   fs.writeFileSync(path.join(service.workspace().workflows, 'gate-fixture.yaml'), GATE_WORKFLOW);
   const repo = gitRepo(t);
   const gate = await openGateFixture(t, service, api, repo);
-  await api['localPreview:start']({ runId: gate.run_id, approvalId: gate.approval_id });
+  // #115: the first run of a declared command still needs the owner's one-click confirmation
+  await api['localPreview:start']({ runId: gate.run_id, approvalId: gate.approval_id, confirm: true });
   assert.equal(api['localPreview:stop']({ runId: gate.run_id }), true);
   assert.deepEqual(api['localPreview:list'](), []);
   assert.equal(api['localPreview:stop']({ runId: gate.run_id }), false, 'nothing left to stop');
@@ -1309,6 +1312,101 @@ test('localPreview:start: refuses without a command; a one-off config arg runs o
   assert.equal(preview.cwd, repo.dir);
   assert.ok(events.some((e) => e.type === 'local_preview.started' && e.command === 'git --version'));
   assert.equal(api['runs:active']().find((r) => r.runId === runId)?.gates.length, 1, 'starting it never answers the gate');
+
+  await resolveAndWait(api, runId, gate.approval_id, 'approve');
+});
+
+// ---- #114: clipboard copy only accepts a run's own artifacts, inside the workspace or its project's folder ----
+
+test('existingArtifact: accepts a file inside the run\'s own folder; refuses anything that is not a recorded artifact', async (t) => {
+  const { service, api } = makeService(t);
+  const gateP = new Promise((resolve) => service.events.on('run:event', (ev) => { if (ev.type === 'approval.requested') resolve(ev); }));
+  const { runId } = await api['run:start']({ file: 'fixture-service.yaml', inputs: {}, mock: true });
+  const gate = await gateP;
+
+  // the recorder's events.jsonl is opened asynchronously: the run folder itself exists synchronously
+  const runDir = path.join(service.workspace().runs, runId);
+  const inside = path.join(runDir, 'documents', 'report.md');
+  fs.mkdirSync(path.dirname(inside), { recursive: true });
+  fs.writeFileSync(inside, '# report');
+  assert.equal(service.existingArtifact(inside).path, inside);
+
+  assert.throws(() => service.existingArtifact(path.join(os.tmpdir(), 'never-recorded.txt')), /Not an artifact of any run/);
+
+  await resolveAndWait(api, runId, gate.approval_id, true);
+});
+
+test('existingArtifact: also accepts a file recorded outside the run folder when it is inside the run\'s project folder (a project copy); refuses anywhere else', async (t) => {
+  const { service, api } = makeService(t);
+  fs.writeFileSync(path.join(service.workspace().workflows, 'gate-run-app.yaml'), GATE_RUN_APP_WORKFLOW);
+  const repo = gitRepo(t);
+  await api['projects:create']({ name: 'demo', folder: repo.dir });
+
+  const gateP = new Promise((resolve) => service.events.on('run:event', (ev) => { if (ev.type === 'approval.requested') resolve(ev); }));
+  const { runId } = await api['run:start']({ file: 'gate-run-app.yaml', inputs: { repo_path: repo.dir }, mock: true });
+  const gate = await gateP;
+  const runDir = path.join(service.workspace().runs, runId);
+  // the recorder's events.jsonl is opened asynchronously: wait for its first line before appending
+  const eventsFile = path.join(runDir, 'events.jsonl');
+  await untilTrue(() => { try { return fs.readFileSync(eventsFile, 'utf8').trim().length > 0; } catch { return false; } });
+
+  const projectCopy = path.join(repo.dir, 'prd.md');
+  fs.writeFileSync(projectCopy, '# PRD');
+  fs.appendFileSync(path.join(runDir, 'events.jsonl'), `${JSON.stringify({ type: 'file.saved', path: projectCopy, step_id: 'gate' })}\n`);
+  assert.equal(service.existingArtifact(projectCopy).path, projectCopy, 'inside the project\'s own folder: accepted');
+
+  const outsideDir = fs.mkdtempSync(path.join(os.tmpdir(), 'svc-outside-'));
+  t.after(() => fs.rmSync(outsideDir, { recursive: true, force: true }));
+  const bad = path.join(outsideDir, 'secret.txt');
+  fs.writeFileSync(bad, 'nope');
+  fs.appendFileSync(path.join(runDir, 'events.jsonl'), `${JSON.stringify({ type: 'file.saved', path: bad, step_id: 'gate' })}\n`);
+  assert.throws(() => service.existingArtifact(bad), /Outside the workspace and the project's folder/);
+
+  await resolveAndWait(api, runId, gate.approval_id, 'approve');
+});
+
+// ---- #115: the owner confirms a declared/detected run command once; an edited one asks again -------
+
+test('Run App: a command the repository declares needs the owner\'s confirmation once; editing it asks again; the project\'s own override needs no confirmation', async (t) => {
+  const { service, api } = makeService(t);
+  fs.writeFileSync(path.join(service.workspace().workflows, 'gate-run-app.yaml'), GATE_RUN_APP_WORKFLOW);
+  const repo = gitRepo(t);
+  fs.mkdirSync(path.join(repo.dir, '.multiagent'));
+  fs.writeFileSync(path.join(repo.dir, '.multiagent', 'local-preview.yaml'), 'command: git --version\n');
+  const project = await api['projects:create']({ name: 'demo', folder: repo.dir });
+
+  const gateP = new Promise((resolve) => service.events.on('run:event', (ev) => { if (ev.type === 'approval.requested') resolve(ev); }));
+  const { runId } = await api['run:start']({ file: 'gate-run-app.yaml', inputs: { repo_path: repo.dir }, mock: true });
+  const gate = await gateP;
+
+  const info = await api['localPreview:info']({ runId, approvalId: gate.approval_id });
+  assert.equal(info.source, 'repo');
+  assert.equal(info.confirmed, false, 'a declared command not yet confirmed for this project');
+  assert.equal(info.changed, false, 'never confirmed before: it is new, not "changed"');
+
+  await assert.rejects(api['localPreview:start']({ runId, approvalId: gate.approval_id }), /Confirm the command first: git --version/);
+  const events = [];
+  service.events.on('run:event', (ev) => events.push(ev));
+  await api['localPreview:start']({ runId, approvalId: gate.approval_id, confirm: true });
+  assert.ok(events.some((e) => e.type === 'local_preview.started' && e.command === 'git --version'));
+  assert.equal(api['projects:list']().find((p) => p.id === project.id)?.localPreviewConfirmed, info.fingerprint);
+  assert.equal(api['localPreview:stop']({ runId }), true);
+
+  const confirmedInfo = await api['localPreview:info']({ runId, approvalId: gate.approval_id });
+  assert.equal(confirmedInfo.confirmed, true, 'confirmed for this exact command now');
+
+  // the owner edits the repository's declared command (a new commit): it asks again
+  fs.writeFileSync(path.join(repo.dir, '.multiagent', 'local-preview.yaml'), 'command: git status\n');
+  const changedInfo = await api['localPreview:info']({ runId, approvalId: gate.approval_id });
+  assert.equal(changedInfo.confirmed, false);
+  assert.equal(changedInfo.changed, true, 'the declared command changed since it was confirmed');
+  await assert.rejects(api['localPreview:start']({ runId, approvalId: gate.approval_id }), /Confirm the command first: git status/);
+
+  // the project's own override always wins, and needs no confirmation of its own
+  api['projects:update']({ id: project.id, patch: { localPreview: { command: 'git log -1' } } });
+  const overrideInfo = await api['localPreview:info']({ runId, approvalId: gate.approval_id });
+  assert.equal(overrideInfo.source, 'project');
+  assert.equal(overrideInfo.confirmed, true);
 
   await resolveAndWait(api, runId, gate.approval_id, 'approve');
 });

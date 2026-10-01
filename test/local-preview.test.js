@@ -24,6 +24,49 @@ test('resolveConfig: the project\'s own command wins over the workflow\'s; neith
   assert.equal(lp.resolveConfig({ localPreview: {} }, null), null);
 });
 
+// ---- #115: a repository-declared command, between the project's override and the workflow's ----
+
+test('resolveSource: precedence is the project\'s override, then the repository\'s file, then the workflow\'s', () => {
+  const wf = { orchestrator: { local_preview: { command: 'from workflow' } } };
+  const repo = { command: 'from repo', from: '.multiagent/local-preview.yaml' };
+  const bySource = (project, w, r) => lp.resolveSource(project, w, r)?.source || null;
+  assert.deepEqual(lp.resolveSource(null, wf, repo), { config: { command: 'from repo' }, source: 'repo', from: '.multiagent/local-preview.yaml' });
+  assert.equal(bySource({ localPreview: { command: 'from project' } }, wf, repo), 'project', 'the project\'s own override wins over the repository\'s file');
+  assert.equal(bySource(null, wf, null), 'workflow', 'no repository file: falls back to the workflow\'s');
+  assert.equal(lp.resolveSource(null, null, null), null);
+});
+
+test('readRepoConfig / writeRepoConfig: a repository can declare how it runs (#115), committed by its owner', (t) => {
+  const dir = tmp(t);
+  assert.equal(lp.readRepoConfig(dir), null, 'nothing declared yet');
+  const file = lp.writeRepoConfig(dir, { command: 'npm start', install: 'npm ci', url: 'http://localhost:3000', cwd: 'apps/web' });
+  assert.equal(file, path.join(dir, '.multiagent', 'local-preview.yaml'));
+  const read = lp.readRepoConfig(dir);
+  assert.equal(read.command, 'npm start');
+  assert.equal(read.cwd, 'apps/web');
+  assert.equal(read.from, '.multiagent/local-preview.yaml');
+});
+
+test('readRepoConfig: invalid YAML or a file without a command is reported as an error, not silently ignored or run as is', (t) => {
+  const dir = tmp(t);
+  fs.mkdirSync(path.join(dir, '.multiagent'));
+  fs.writeFileSync(path.join(dir, '.multiagent', 'local-preview.yaml'), 'command: [not\n  closed');
+  assert.match(lp.readRepoConfig(dir).error, /\.multiagent\/local-preview\.yaml/);
+
+  fs.writeFileSync(path.join(dir, '.multiagent', 'local-preview.yaml'), 'url: http://localhost:3000\n');
+  assert.match(lp.readRepoConfig(dir).error, /no `command`/);
+});
+
+test('fingerprint: the same config fingerprints the same regardless of object identity; a changed command, cwd or env changes it', () => {
+  const base = { command: 'npm start', install: 'npm ci', url: 'http://localhost:3000' };
+  const fp = lp.fingerprint(base);
+  assert.equal(lp.fingerprint({ ...base }), fp);
+  assert.notEqual(lp.fingerprint({ ...base, command: 'npm run dev' }), fp, 'a changed declared command asks again (#115)');
+  assert.notEqual(lp.fingerprint({ ...base, cwd: 'apps/web' }), fp);
+  assert.notEqual(lp.fingerprint({ ...base, env: { FOO: '1' } }), fp);
+  assert.equal(lp.fingerprint(null), null);
+});
+
 test('needsInstall / recordInstall: a JS project with node_modules is trusted on the first preview, tracking the lockfile from then on; anything else installs first', (t) => {
   const dir = tmp(t);
   const stateFile = path.join(dir, '.state', 'install.json');
@@ -142,6 +185,50 @@ test('suggestConfig: a Django project (manage.py) without a package.json or READ
 
 test('suggestConfig: an empty directory suggests nothing', (t) => {
   assert.equal(lp.suggestConfig(tmp(t)), null);
+});
+
+test('suggestConfig: Docker Compose suggests `docker compose up`, with the URL from the first published port (#115)', (t) => {
+  const dir = tmp(t);
+  fs.writeFileSync(path.join(dir, 'docker-compose.yml'), 'services:\n  web:\n    ports:\n      - "8080:80"\n');
+  assert.deepEqual(lp.suggestConfig(dir), { install: null, command: 'docker compose up', url: 'http://localhost:8080', from: 'docker-compose.yml' });
+});
+
+test('suggestConfig: Docker Compose without a published port suggests the command with no URL', (t) => {
+  const dir = tmp(t);
+  fs.writeFileSync(path.join(dir, 'compose.yaml'), 'services:\n  worker:\n    image: alpine\n');
+  assert.deepEqual(lp.suggestConfig(dir), { install: null, command: 'docker compose up', url: null, from: 'compose.yaml' });
+});
+
+test('suggestConfig: a dev container\'s postStartCommand, with its forwarded ports as the URL (#115)', (t) => {
+  const dir = tmp(t);
+  fs.mkdirSync(path.join(dir, '.devcontainer'));
+  fs.writeFileSync(path.join(dir, '.devcontainer', 'devcontainer.json'), JSON.stringify({ postCreateCommand: 'npm ci', postStartCommand: 'npm start', forwardPorts: [3000] }));
+  assert.deepEqual(lp.suggestConfig(dir), { install: 'npm ci', command: 'npm start', url: 'http://localhost:3000', from: '.devcontainer/devcontainer.json (postStartCommand)' });
+});
+
+test('suggestConfig: a Procfile\'s web process (#115)', (t) => {
+  const dir = tmp(t);
+  fs.writeFileSync(path.join(dir, 'Procfile'), 'web: node server.js\nworker: node worker.js\n');
+  assert.deepEqual(lp.suggestConfig(dir), { install: null, command: 'node server.js', url: null, from: 'Procfile (web)' });
+});
+
+test('suggestConfig: a Makefile\'s run/dev/start target (#115)', (t) => {
+  const dir = tmp(t);
+  fs.writeFileSync(path.join(dir, 'Makefile'), 'build:\n\techo building\n\nrun:\n\tnode server.js\n');
+  assert.deepEqual(lp.suggestConfig(dir), { install: null, command: 'make run', url: null, from: 'Makefile (run)' });
+});
+
+test('suggestConfig: a monorepo\'s apps (package.json workspaces), each its own cwd; several apps are offered, not guessed (#115)', (t) => {
+  const dir = tmp(t);
+  writePkg(dir, { workspaces: ['apps/*'] });
+  fs.mkdirSync(path.join(dir, 'apps', 'web'), { recursive: true });
+  writePkg(path.join(dir, 'apps', 'web'), { scripts: { start: 'node server.js' } });
+  fs.mkdirSync(path.join(dir, 'apps', 'api'), { recursive: true });
+  writePkg(path.join(dir, 'apps', 'api'), { scripts: { start: 'node api.js' } });
+  const s = lp.suggestConfig(dir);
+  assert.equal(s.cwd, 'apps/api', 'the first app, sorted');
+  assert.equal(s.apps.length, 2, 'more than one app: offered to pick from, not guessed');
+  assert.deepEqual(s.apps.map((a) => a.cwd), ['apps/api', 'apps/web']);
 });
 
 test('suggestConfig: this repository suggests npm ci / npm start with no URL', () => {
