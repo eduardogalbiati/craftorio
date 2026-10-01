@@ -1,8 +1,10 @@
 // The run list shared by Projects › Project (views/project/) and Workflows › Runs
 // (views/workflows/): filter chips, one row per run (status, title, PR, duration, tokens, cost,
 // progress strip) and, expanded, its actions and agent sessions (tokens and cost per session, a
-// total row). Uses app.js globals ($, esc, state, fmtDur, fmtTok, fmtUsd, fmtNum, dateOf,
-// runTitleHtml, prBadge, runProgressStrip, termAction, canResume, WATCH_TITLE, openArtifactsAt…).
+// total row). Also the progress strip of a row (runProgressStrip: the groups a run visited, with
+// their agents' robots) and renderRunListsSoon (run events). Uses app.js globals ($, esc, state,
+// fmtDur, fmtNum, dateOf, runTitleHtml, prBadge…), fmtTok / fmtUsd (usage-widget.js), termAction
+// (term-dock.js), canResume (resume-dialog.js), WATCH_TITLE (supervisor-drawer.js), openArtifactsAt.
 
 const RUN_FILTERS = [
   ['all', 'All', () => true],
@@ -176,4 +178,71 @@ function sessionsTotalRow(sessions) {
 function runTaskBlock(r) {
   const t = String(r.task || '').trim();
   return t.includes('\n') || t.length > 120 ? `<details class="pr-fulltask"><summary class="muted small">Full task</summary><pre>${esc(t)}</pre></details>` : '';
+}
+
+// Run progress in the runs lists: the groups a run visited, with their agents' avatars
+let runListsFrame = 0;
+function renderRunListsSoon() {
+  if (runListsFrame) return;
+  runListsFrame = requestAnimationFrame(() => {
+    runListsFrame = 0;
+    if (workflowRunsVisible() && state.wr.runs) renderWorkflowRuns();
+    if (state.view === 'project' && state.pv?.runs) renderProjectView();
+  });
+}
+
+// Robot SVGs are large: one per provider/model/state, reused. A workflow agent with a look saved
+// in Agents (`workflow` + `agent`) gets its own entry, dropped when a look changes.
+const avatarCache = new Map();
+document.addEventListener('robots:changed', (e) => { if (e.detail?.name === 'workflow-agents') avatarCache.clear(); });
+function robotAvatar(provider, model, st, workflow, agent) {
+  const look = window.AgentLooks?.forWorkflow(workflow, agent);
+  const key = look ? `look|${workflow}/${agent}|${st}` : `${provider}|${model}|${st}`;
+  if (!avatarCache.has(key)) {
+    const variant = look || (window.Robots ? Robots.variantFor(window.RunChatModel?.providerType(provider, model) || provider, model || '') : null);
+    avatarCache.set(key, variant ? Robots.svg(variant, st, { bubble: false, plaque: '' }) : '');
+  }
+  return avatarCache.get(key);
+}
+const PERSON_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8.5" r="4" fill="currentColor"/><path d="M4.5 21c0-4.2 3.4-7 7.5-7s7.5 2.8 7.5 7z" fill="currentColor"/></svg>';
+const ENGINE_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M4.9 19.1l2.8-2.8M16.3 7.7l2.8-2.8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+const CHIP_ROBOT_STATE = { running: 'thinking', waiting: 'waiting', failed: 'error', stopped: 'sleeping', done: 'idle' };
+const MAX_CHIPS = 8;
+
+function progressAvatar(a, chip, names, workflow) {
+  const tip = a.human
+    ? `${a.steps.join(', ')} · You (human gate)${a.durationMs ? ` · ${fmtDur(a.durationMs)}` : ''}`
+    : `${a.steps.join(', ')} · ${agentLabel(a.agent, names)} (${a.agent})${a.provider ? ` · ${a.provider}${a.model ? `/${a.model}` : ''}` : ''}${a.durationMs ? ` · ${fmtDur(a.durationMs)}` : ''} · ${fmtUsd(a.cost)}`;
+  // the last chip's working agents show the run's state; the others rest
+  const st = chip.status === 'done' ? 'idle' : CHIP_ROBOT_STATE[chip.status];
+  const art = a.human ? PERSON_SVG : a.provider ? robotAvatar(a.provider, a.model, st, workflow, a.agent) : ENGINE_SVG;
+  return `<span class="rp-av${a.human ? ' human' : a.provider ? '' : ' engine'}" title="${esc(tip)}">${art}</span>`;
+}
+
+function progressChip(c, names, workflow) {
+  const label = {
+    done: '✓',
+    running: `${c.current}…`,
+    waiting: 'waiting for you',
+    failed: `✕ ${c.current}`,
+    stopped: `stopped at ${c.current}`,
+  }[c.status];
+  const agents = c.agents.length ? c.agents : [{ agent: 'orchestrator', steps: c.steps.map((e) => e.step), cost: 0, durationMs: 0 }];
+  const avs = agents.slice(0, 4).map((a) => progressAvatar(a, c, names, workflow)).join('') + (agents.length > 4 ? `<span class="rp-av rp-more" title="${esc(agents.slice(4).map((a) => agentLabel(a.agent, names)).join(', '))}">+${agents.length - 4}</span>` : '');
+  return `<div class="rp-chip st-${c.status}${c.status === 'done' ? ' still' : ''}">
+    <div class="rp-avs">${avs}</div>
+    <div class="rp-name${c.grouped ? '' : ' mono'}">${esc(c.name)}${c.round > 1 ? ` <span class="rp-round">×${c.round}</span>` : ''}</div>
+    <div class="rp-state" title="${esc(c.steps.map((e) => e.step).join(' › '))}">${esc(label)}</div>
+  </div>`;
+}
+
+// The progress strip of a run's row: the live trail for a run this window follows from its start.
+function runProgressStrip(r) {
+  const live = r.current ? state.runs.get(r.runId) : null;
+  const steps = live?.trail ? live.trail.steps : r.progress;
+  if (!steps?.length) return '';
+  const status = live?.trail ? live.run?.status || r.status : r.status;
+  const chips = RunProgress.progressGroups(steps, r.groups || live?.groups, status);
+  const skipped = chips.length - MAX_CHIPS;
+  return `<div class="rp-strip">${skipped > 0 ? `<span class="rp-skip" title="${esc(chips.slice(0, skipped).map((c) => c.name).join(' › '))}">+${skipped}</span><span class="rp-sep">›</span>` : ''}${chips.slice(Math.max(0, skipped)).map((c) => progressChip(c, r.agentNames || live?.run?.agentNames, r.workflow || live?.run?.workflow)).join('<span class="rp-sep">›</span>')}</div>`;
 }

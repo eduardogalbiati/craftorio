@@ -1,7 +1,7 @@
 // Any workflow run as a chat, rebuilt from its events (live run:event, or a past run's
 // events.jsonl): one message per agent turn, the orchestrator's transitions and loops as system
 // lines, human gates with their answers, the supervisor's interventions, and fan-out steps
-// (`agents: [...]`) grouped. No DOM here: run-chat.js renders it, a test feeds it engine events.
+// (`agents: [...]`) grouped. No DOM here: runchat.js renders it, a test feeds it engine events.
 // Browser: window.RunChatModel; Node: module.exports.
 (function (root) {
   // A session's provider is the workflow's provider key (claude, codex, grok) or its type; in a

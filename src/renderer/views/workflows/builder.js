@@ -5,7 +5,7 @@
 // Modes (from builder:load): 'full' = made with the builder, everything editable; 'fixed' = uses
 // what the builder doesn't draw (loops, fan-outs...): agents and prompts editable, steps fixed;
 // 'readonly' = bundled with the app: clone it to change it.
-// load: after duo.js (window.ChatModels is read as it loads)
+// window.ChatModels is read as it loads: chat-models.js, a top-level file, loads before the views.
 (() => {
   const PROVIDERS = ChatModels.PROVIDERS; // by CLI type: { label, key, models }
   const TYPE_OF = Object.fromEntries(Object.entries(PROVIDERS).map(([type, p]) => [p.key, type]));

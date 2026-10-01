@@ -10,9 +10,11 @@ Read this before changing anything in `src/renderer/`.
   Definitions shows agents with their session mode and capabilities, Builder is `views/workflows/builder.js`), agents, skills, usage,
   settings, run (+ run chat); terminal dock; supervisor drawer. The code map
   ([code-map.md](code-map.md)) says which file draws which screen.
-- **One folder per screen** (#78, moved in slices; the run screens follow in #154):
+- **One folder per screen** (#78, moved in slices, the last in #154): every screen is
   `src/renderer/views/<view>/<view>.js` + `<view>.css`, plus the screen's other parts in the same
-  folder. The folders today:
+  folder; `index.html` holds no screen, only the app frame (top bar, sidebar with the Run item and
+  runs menu, `main.content`, the drawers, the terminal dock, the shared dialogs) and the generated
+  file lists. The folders:
   - `views/dashboard/`: the start screen (its section has no `hidden`; `renderDashboard` is also called on run events);
   - `views/sessions/`: `sessions.js` (`window.SessionsView` for notifications and terminal events) and `sessions.css`;
   - `views/projects/`: the project cards and the New / Edit project dialog (`openProjectModal`, also opened from the Start drawer);
@@ -24,12 +26,29 @@ Read this before changing anything in `src/renderer/`.
   - `views/artifacts/`: the Artifacts screen (`openArtifactsAt` stays a global deep link);
   - `views/workflows/`: `workflows.js` (Runs, Definitions, the sidebar sub-items it adds after its entry, the deep links
     `showRunInList` / `showWorkflowDefinition`), `builder.js` + `builder.css` (Builder and its two dialogs);
+  - `views/run/`: Run Details (no sidebar entry: the Run item and the runs menu are the shell's): the
+    failure banner, the gate cards (`renderRunGates`), the summary, the steps, the sessions and the tabs;
+    `app.js`'s `render()` calls its `renderRunScreen()` while it shows;
+  - `views/runchat/`: `runchat.js` and the pure, unit-tested `run-chat-model.js` (it also wires the Run
+    screen's Chat button, so its header says `load: after … views/run/run.js`);
+  - `views/duo/` (Write & Review: `duo.js`, `duo-issue.js`, its Save to issue and guide dialogs) and
+    `views/arena/` (AI Arena: `arena.js`, `arena-shuffle.js`, its guide); both add their "lab" badge in `mount`;
   - `views/agents/`, `views/skills/`, `views/analytics/`, `views/settings/`, `views/usage/`, `views/supervisor/`.
 
-  **Shared pieces stay outside the folders**: `run-list.js` (the run list of Project and Workflows › Runs),
+  **Shared pieces stay outside the folders**, one file each: `gate-panel.js` (what a gate offers on the
+  Run screen, the run chat and Write & Review: choices, brief, Artifacts side panel, Run App, Show the
+  diff), `run-list.js` (the run list of Project and Workflows › Runs, with its progress strip),
   `artifacts-panel.js` and `artifact-menu.js` (the Run screen's Artifacts panel and the copy menu),
-  `robots.js`, the artifact kinds and markdown helpers in `app.js`; the agent cards and the skill picker's
-  rules (`.agent-card*`, `.ag-skill*`, also the Builder's dialogs) and the run list's (`.pr-*`) in `style.css`.
+  `artifact-render.js` (artifact kinds, markdown, JSON, tables), `start-drawer.js`, `supervisor-drawer.js`,
+  `resume-dialog.js`, `usage-widget.js` (the top bar's usage and the helpers the usage tables share),
+  `term-dock.js`, `code-banner.js`, `account.js`, `chat-models.js` (the CLIs and models the chat screens
+  and the Builder offer), `robots.js`, and the pure models `run-progress-model.js` / `run-badges.js`
+  (also required by the main process and tests). In CSS: `chat.css` (the chat look Write & Review, AI
+  Arena and the run chat share, `duo-` classes), and in `style.css` the gate cards and panel
+  (`.run-gate*`, `.gate-*`: the run chat builds on them), the agent cards and the skill picker's rules
+  (`.agent-card*`, `.ag-skill*`, also the Builder's dialogs) and the run list's (`.pr-*`, `.rp-*`).
+  Mind the cascade when moving a rule: the views' stylesheets load after every top-level one, so a
+  base rule another top-level file builds on (`.run-gate` under `.run-gate-wide`) stays top level.
   The script calls
   `registerView({ id, nav: { label, icon, order, title }, markup, modals, mount, show })`
   (`view-registry.js`, loaded before `app.js`): `markup` is the screen's whole
@@ -41,11 +60,14 @@ Read this before changing anything in `src/renderer/`.
   and use its globals (`$`, `esc`, `state`, `api`, `errMsg`, `openModal`…); functions other files call
   (`renderDashboard`, `openArtifactsAt`, `loadProjectRunsThrottled`…) are plain top-level functions, so
   they stay globals. `app.js`'s `init()` runs on `DOMContentLoaded`, once every view is registered: the
-  page can run an IPC reply between two scripts, so nothing it fills may be missing. Keep app-wide pieces (top-bar widgets, `loadUsage`, shared tables)
-  in `app.js`, and shared tokens and components (buttons, badges, `.s-group`/`.s-row`, `.switch`,
-  tables, scrollbars, checkboxes) in `style.css`. **Adding a screen**: create its folder, a `VIEWS`
-  entry in `scripts/screenshot.js` and a `docs/screens/<view>.md` fragment, then run `npm run docs`;
-  `index.html` stays untouched by hand (its nav, `showView`, `init()` and its file lists).
+  page can run an IPC reply between two scripts, so nothing it fills may be missing. `app.js` is the
+  shell only (its header lists what stays and why: helpers, the shared run state, navigation, the top
+  bar, toasts); an app-wide piece used by several screens gets its own top-level file, and `style.css`
+  keeps theme tokens, layout and shared components (buttons, badges, `.s-group`/`.s-row`, `.switch`,
+  tables, scrollbars, checkboxes). **Adding a screen is only adding a folder**: `views/<view>/` with
+  its script and stylesheet (plus, for its checks and the README, a `VIEWS` entry in
+  `scripts/screenshot.js` and a `docs/screens/<view>.md` fragment), then `npm run docs`; `index.html`,
+  `app.js` and `style.css` stay untouched (the nav, `showView`, `init()` and the file lists find it).
 - **How the files are loaded** (#152): `index.html`'s `<link>`/`<script>` lines for `src/renderer/*`
   and `src/renderer/views/*/*` sit between `<!-- generated:styles -->` / `<!-- generated:scripts -->`
   markers, written by `npm run docs` (`scripts/docs.js`); `node scripts/docs.js --check` (CI) fails
@@ -53,8 +75,8 @@ Read this before changing anything in `src/renderer/`.
   the files whose header comment has a `load: early` line (`api-http.js`, `view-registry.js`…,
   `style.css`), then `app.js`, then the other top-level files, then the views, each group sorted by
   path (`x-part.js` sorts before `x.js`). A file that needs another one as it loads (top-level code,
-  not a function called later) says so in its header: `load: after duo.js robots.js (why)`; a CSS
-  file that overrides another's rules too (`arena.css`: `load: after duo.css`). The vendor files
+  not a function called later) says so in its header: `load: after views/duo/duo-issue.js (why)`; a CSS
+  file that overrides another's rules too (`load: after <file>.css`). The vendor files
   (`node_modules`) stay hand-kept outside the markers. The CSP and the packaged app are unchanged:
   the page still lists plain files.
 - Several runs can be in progress: `state.runs` (run id → view: run, sessions, steps, log, gates) and
@@ -77,13 +99,13 @@ Read this before changing anything in `src/renderer/`.
 - **Run titles and PRs** (#84): `state.runMeta` (run id → `{ title, customTitle, pr }`) is fed by
   `runs:list`, the project's runs, `runs:active`, Backlog data and the `run:meta` push (PR state
   changes, a title set); every place reads it through `runTitle(r)` / `runLabel(r)` / `prBadge(r)`
-  in `app.js` (exported on `window` for `run-chat.js` and `views/backlog/backlog.js`) so they agree. Drawing is in
+  in `app.js` (exported on `window` for `views/runchat/runchat.js` and `views/backlog/backlog.js`) so they agree. Drawing is in
   `run-badges.js` (pure: PR glyph and state colours, the default title). A PR without a state is
   asked with `askPrStates` (`runs:prState`, cached by the service). The title's pencil
   (`runTitleHtml`, `[data-title-edit]`) and the PR link (`[data-pr-url]`) are handled by one
   capture-phase click listener, so they never select or expand the row around them.
 - Write & Review and AI Arena keep their own chat screens; every other run uses the run chat
-  (`run-chat-model.js` is pure and unit-tested, `run-chat.js` draws it).
+  (`views/runchat/run-chat-model.js` is pure and unit-tested, `runchat.js` draws it).
 - **How a run is opened**: one global run view, `state.runView` (`'details' | 'chat'`, saved in
   localStorage `multiagent.runView`). Every way of opening a run (sidebar Run menu, toasts,
   notifications, "View run", Backlog run links, the gate badge, a resume) goes through

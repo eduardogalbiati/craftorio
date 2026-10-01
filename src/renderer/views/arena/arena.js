@@ -1,8 +1,8 @@
 // AI Arena: runs the ai-arena workflow with up to five user-picked models and shows it as a chat
 // between the contenders, the synthesizer, the verifier and the platform's supervisor. Like Write &
-// Review (duo.js), the chat is rebuilt from the run's events, live (run:event) or from a past run's
-// events.jsonl (Workflows › Runs › "Open chat"). Styles: duo.css + arena.css.
-// load: after duo.js robots.js (window.ChatModels as it loads, window.Robots in its init)
+// Review (views/duo/), the chat is rebuilt from the run's events, live (run:event) or from a past
+// run's events.jsonl (Workflows › Runs › "Open chat"). Styles: chat.css + arena.css; models:
+// chat-models.js. Registers itself with registerView, with its guide dialog.
 (() => {
   const $a = (sel) => document.querySelector(sel);
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -813,5 +813,183 @@
     api.onEvent(onEvent);
   }
 
-  init();
+  registerView({
+    id: 'arena',
+    nav: { label: 'AI Arena', order: 130, title: 'Up to five models write the same document, critique each other, and the best parts are merged',
+      icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0z" /><path d="M7 6H4a3 3 0 0 0 3 4M17 6h3a3 3 0 0 1-3 4" /></svg>' },
+    markup: `
+      <section id="view-arena" class="view hidden">
+        <!-- Setup -->
+        <div id="arena-setup" class="duo-setup">
+          <div class="page-head">
+            <div>
+              <h1>AI Arena <span class="duo-lab">lab</span> <button id="arena-help-open" class="duo-help-btn" type="button" title="How the AI Arena works" aria-label="How the AI Arena works">?</button></h1>
+              <p class="muted small">Up to five models write the same document in parallel, blindly critique each other, and a synthesizer merges the best of each. Runs the <span class="mono">ai-arena</span> workflow; past runs are in Workflows › Runs.</p>
+            </div>
+            <button id="arena-edit-workflow" class="btn ghost sm" type="button" title="Open the workflow YAML">ai-arena.yaml</button>
+          </div>
+
+          <div class="duo-brief">
+            <div class="field">
+              <label for="arena-task">Request <span class="req">*</span></label>
+              <textarea id="arena-task" rows="3" placeholder="What should the models write? E.g. a PRD for an appointment-booking app for small clinics.">Write a PRD for an appointment-booking app for small clinics: problem, users, scope, non-goals, rollout and success metrics.</textarea>
+            </div>
+            <div class="field ar-attach" id="arena-drop">
+              <label>Reference documents <span class="muted">(optional)</span></label>
+              <div class="row">
+                <button id="arena-attach" class="btn sm" type="button" title="Attach text files: Markdown, plain text, JSON, YAML, CSV, HTML, code">
+                  <svg class="icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M21.4 11.1l-9.2 9.2a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5" /></svg>
+                  Attach files
+                </button>
+                <input id="arena-files" type="file" multiple hidden accept=".md,.markdown,.txt,.json,.yaml,.yml,.csv,.tsv,.html,.htm,.xml,.rst,.adoc,.log,.sql,.js,.ts,.py,.go,.java,.cs,text/*" />
+                <div id="arena-attachments" class="ar-chips"></div>
+                <span id="arena-attach-hint" class="muted small">or drop files here. Every model reads them (e.g. an existing PRD to improve, research notes, a spec).</span>
+              </div>
+            </div>
+            <div class="field duo-project">
+              <label for="arena-project">Project <span class="muted">(optional)</span></label>
+              <div class="row">
+                <select id="arena-project"></select>
+                <span id="arena-project-hint" class="muted small">The models read its files (read-only) and a copy of the final document is saved in it.</span>
+              </div>
+            </div>
+            <div class="duo-rules ar-rules">
+              <label title="The skill that defines the document's structure and scoring rubric">Document <select id="arena-skill"></select></label>
+              <label class="duo-switch" title="Each model scores the other proposals (anonymized) before the synthesis: better quality, higher cost"><input id="arena-peer" type="checkbox" checked /> <span>Blind peer review</span></label>
+              <label class="duo-switch" title="Each model writes under a different forced lens (user value, lean MVP, risk first, feasibility, evidence) for more divergent proposals"><input id="arena-lenses" type="checkbox" /> <span>Different lenses</span></label>
+            </div>
+          </div>
+
+          <div class="ar-section-head">
+            <h2>Contenders <span id="arena-count" class="muted small"></span></h2>
+            <span class="muted small">Pick 2 to 5 models. Mixing families (Claude, GPT, Grok) gives more distinct proposals.</span>
+          </div>
+          <div id="arena-contenders" class="ar-contenders"></div>
+
+          <div class="ar-internal">
+            <div class="duo-agent ar-internal-card" style="--role: var(--ar-synth)">
+              <div class="duo-agent-head">
+                <span class="duo-robot md" data-arena-robot="synthesizer"></span>
+                <div><b>Synthesizer</b><div class="muted small">Did not compete. Picks the best proposal as the base and grafts the best ideas of the others.</div></div>
+              </div>
+            </div>
+            <div class="duo-agent ar-internal-card" style="--role: var(--ar-verify)">
+              <div class="duo-agent-head">
+                <span class="duo-robot md" data-arena-robot="verifier"></span>
+                <div><b>Verifier</b><div class="muted small">Another model family checks the final document; one round of fixes at most.</div></div>
+              </div>
+            </div>
+            <div class="duo-agent ar-internal-card" style="--role: var(--supervisor)">
+              <div class="duo-agent-head">
+                <span class="duo-robot md" data-arena-robot="supervisor"></span>
+                <div><b>Supervisor</b><div class="muted small">Steps in when a turn fails and asks you to accept, redo or discard the final document.</div></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="duo-actions">
+            <span id="arena-error" class="error duo-error"></span>
+            <label class="duo-switch dev-only" id="arena-scenario-wrap" title="What the simulated agents do">Scenario <select id="arena-scenario"></select></label>
+            <label class="duo-switch dev-only" title="Simulated agents: no CLI is called and nothing is spent"><input id="arena-mock" type="checkbox" /> <span>Simulation (no model calls)</span></label>
+            <button id="arena-run" class="btn primary btn-icon" type="button">
+              <svg class="icon" width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 4.5v15a1 1 0 0 0 1.5.86l12-7.5a1 1 0 0 0 0-1.72l-12-7.5A1 1 0 0 0 7 4.5z" /></svg>
+              Run
+            </button>
+          </div>
+        </div>
+
+        <!-- Conversation -->
+        <div id="arena-chat" class="duo-chat hidden">
+          <div class="duo-chat-main">
+            <header class="duo-chat-head">
+              <button id="arena-back" class="icon-btn" type="button" title="Back to setup"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6" /></svg></button>
+              <div id="arena-cast" class="duo-pair ar-cast"></div>
+              <div class="duo-chat-title">
+                <b id="arena-chat-title">AI Arena</b>
+                <div id="arena-chat-status" class="muted small">starting…</div>
+              </div>
+              <div class="spacer"></div>
+              <div id="arena-phases" class="ar-phases"></div>
+              <button id="arena-help-open2" class="duo-help-btn sm" type="button" title="How the AI Arena works" aria-label="How the AI Arena works">?</button>
+              <button id="arena-logs" class="btn ghost sm" type="button" title="Open the run folder (events, proposals, final document)">Run folder</button>
+              <button id="arena-stop" class="btn danger sm hidden" type="button">Stop</button>
+            </header>
+            <div id="arena-messages" class="duo-messages"></div>
+          </div>
+
+          <aside class="duo-side">
+            <section class="duo-doc">
+              <div class="duo-side-head"><h2>Documents</h2></div>
+              <div id="arena-doc-tabs" class="ar-doc-tabs"></div>
+              <article id="arena-doc-body" class="duo-doc-body md md-compact">No proposal yet.</article>
+            </section>
+            <section class="ar-board-panel">
+              <div class="duo-side-head"><h2>Peer scores</h2><span class="muted small">average, 0–10</span></div>
+              <div id="arena-board" class="ar-board"></div>
+            </section>
+            <section class="duo-super-panel">
+              <div class="duo-side-head">
+                <h2>Supervisor</h2>
+                <span id="arena-super-state" class="pill pill-running">watching</span>
+              </div>
+              <ul id="arena-checks" class="duo-checks"></ul>
+              <div class="muted small">Interventions <b id="arena-interventions" class="mono">0/6</b></div>
+            </section>
+          </aside>
+        </div>
+      </section>`,
+    modals: `
+  <div id="arena-help" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="arena-help-title">
+    <div class="modal-card duo-help-card">
+      <div class="duo-help-head">
+        <h3 id="arena-help-title">How the AI Arena works</h3>
+        <button id="arena-help-close" class="icon-btn" type="button" title="Close (Esc)" aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" /></svg></button>
+      </div>
+      <div class="duo-help-body">
+        <p class="duo-help-lead">Up to five models get the same request and write their own version of the document, without seeing each other's work. They then score each other's proposals blindly, a <b class="c-synth">synthesizer</b> merges the best of each into one document, a <b class="c-verify">verifier</b> checks it, and the <b class="c-supervisor">supervisor</b> asks you what to do with it.</p>
+        <div class="duo-help-cast" id="arena-help-cast"></div>
+
+        <h4>1. Set up a run</h4>
+        <ul>
+          <li><b>Request</b>: what to write (a PRD, an ADR, a tech spec…).</li>
+          <li><b>Project</b> (optional): the models read its files (<b>read-only</b>) to ground their proposals; the final document stays in the run folder (workspace), not in the project. Without a project they work from the request only.</li>
+          <li><b>Reference documents</b> (optional): text files (Markdown, plain text, JSON, YAML, CSV…) that every model reads, e.g. an existing PRD to improve, research notes or a spec. Attach them with the button or drop them on the card; up to 200 KB each, 400 KB in total. PDF and Word files must be exported to text first. They show up in the chat and in the <b>Documents</b> panel.</li>
+          <li><b>Document</b>: the type of document, i.e. the skill with its structure and scoring rubric: <b>PRD</b>, <b>Design doc</b>, <b>RFC</b>, <b>ADR</b>, <b>Test plan</b> or <b>Design sketch</b>. Your own skills named <span class="mono">*-writing</span> show up too.</li>
+          <li><b>Blind peer review</b>: each model scores the others' proposals, anonymized as "Proposal 1, 2…", before the synthesis. Better quality, more turns.</li>
+          <li><b>Different lenses</b>: each contender writes with a forced emphasis (user value, lean MVP, risk first, feasibility, evidence), so the proposals diverge more.</li>
+          <li><b>Contenders</b>: 2 to 5 models. Pick the CLI (Claude Code, Codex, Grok), the model and the effort of each. The synthesizer, the verifier and the supervisor are fixed.</li>
+        </ul>
+
+        <h4>2. The flow</h4>
+        <div class="duo-help-flow">
+          <span>Compete</span><i>→</i><span>Critique</span><i>→</i><span class="c-synth">Synthesize</span><i>→</i><span class="c-verify">Verify</span><i>→</i><span class="c-you">You decide</span><i>→</i><span class="c-ok">Done</span>
+        </div>
+        <ul>
+          <li>All contenders work <b>in parallel</b>; the run goes on if at least two deliver a proposal.</li>
+          <li>The models never learn who wrote which proposal. <b>You</b> do: the chat and the <b>Peer scores</b> panel show the real author of each proposal.</li>
+          <li>If the verifier finds issues, the synthesizer fixes them once, then the supervisor asks you.</li>
+        </ul>
+
+        <h4>3. Your decision</h4>
+        <ul>
+          <li><b>Accept</b> the document, <b>redo the synthesis</b> (twice at most) or <b>discard</b> it.</li>
+          <li>When you redo it, you can type <b>instructions</b>, e.g. "Use Proposal 2 as the base". They go to the synthesizer and the verifier.</li>
+          <li>Nothing crosses this question automatically: the run waits for you.</li>
+        </ul>
+
+        <h4>4. Where the results are</h4>
+        <ul>
+          <li>In the run folder: <b>arena/proposals/</b> (one per contender), <b>arena/reviews/</b> and <b>arena/final.md</b>. Click a proposal in the chat, or use the tabs of the <b>Documents</b> panel, to read it.</li>
+          <li>Every run is in <b>Workflows › Runs</b>; <b>Open chat</b> replays it, or follows it while it runs.</li>
+          <li>With <b>Settings › Execution › Developer mode</b>, <b>Simulation</b> runs the whole flow with simulated agents (no CLI calls, no cost).</li>
+        </ul>
+      </div>
+    </div>
+  </div>`,
+    mount() {
+      // the screen is a preview: a badge after its label
+      document.querySelector('.nav-item[data-view="arena"]').insertAdjacentHTML('beforeend', '<span class="nav-badge">lab</span>');
+      init();
+    },
+  });
 })();

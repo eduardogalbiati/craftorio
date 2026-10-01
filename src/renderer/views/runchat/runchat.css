@@ -1,5 +1,4 @@
-/* Run chat (run-chat.js): any workflow run as a conversation. Builds on duo.css (bubbles, robots, gates).
-   load: after duo.css */
+/* Run chat (runchat.js): any workflow run as a conversation. Builds on chat.css (bubbles, robots, gates). */
 #view-runchat { padding: 0; overflow: hidden; position: relative; }
 .rc-jump { position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%); z-index: 5; box-shadow: 0 6px 18px rgba(0,0,0,.35); }
 #view-runchat:not(.hidden) { display: flex; flex-direction: column; }
@@ -10,9 +9,6 @@
 .rc-messages { flex: none; overflow: visible; padding-bottom: 8px; }
 .pill-warn { background: rgba(250, 204, 21, .12); color: var(--yellow); border-color: rgba(250, 204, 21, .3); }
 .pill-loading, .pill-unknown { background: #222733; color: var(--muted); border-color: var(--border); }
-
-/* Run screen: Chat / Details */
-.run-modebar { display: flex; align-items: center; gap: 10px; padding: 8px 16px 0; }
 
 /* agent turns: each agent on its side (alternating in order of appearance), in its own colour */
 .rc-msg { --rc-agent: var(--accent); position: relative; display: flex; gap: 10px; align-items: flex-start; max-width: 88%; align-self: flex-start; animation: duo-in .25s ease-out; }

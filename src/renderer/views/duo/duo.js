@@ -4,8 +4,10 @@
 // The document type is the workflow's `document_skill` (duo-issue.js). From a Backlog issue
 // (window.openDuoForIssue) the setup is prefilled and the run records the issue; once accepted,
 // "Save to issue" (window.openDuoSaveToIssue, also in Run Details) previews and, on the owner's
-// click, saves the document to it (backlog:save-doc).
-// load: after duo-issue.js robots.js (window.DuoIssue as it loads, window.Robots in its init)
+// click, saves the document to it (backlog:save-doc). Registers itself with registerView, with
+// its Save to issue and guide dialogs; the chat look it shares with AI Arena and the run chat is
+// chat.css, the models it offers chat-models.js.
+// load: after views/duo/duo-issue.js (window.DuoIssue as it loads)
 (() => {
   const $d = (sel) => document.querySelector(sel);
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -13,15 +15,8 @@
   const WORKFLOW = 'writer-reviewer';
   const FILE = 'writer-reviewer.yaml';
 
-  const PROVIDERS = {
-    'claude-code': { label: 'Claude Code', key: 'claude', models: ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-fable-5-1', 'claude-haiku-4-5'] },
-    'codex-cli': { label: 'Codex CLI', key: 'codex', models: ['gpt-6-luna'] },
-    'grok-cli': { label: 'Grok Build', key: 'grok', models: ['grok-4.7'] },
-  };
+  const { PROVIDERS, EFFORTS } = window.ChatModels;
   const BY_KEY = Object.fromEntries(Object.entries(PROVIDERS).map(([id, p]) => [p.key, id]));
-  const EFFORTS = ['low', 'medium', 'high', 'xhigh'];
-  // shared with the AI Arena screen (arena.js)
-  window.ChatModels = { PROVIDERS, EFFORTS };
   // Simulation scenarios (developer mode): what the simulated agents answer, as the engine's
   // mockSequences ({ field: [value per visit] }; invalid_answers: { step: n } = first n answers invalid).
   const SCENARIOS = {
@@ -718,5 +713,236 @@
     api.onEvent(onEvent);
   }
 
-  init();
+  registerView({
+    id: 'duo',
+    nav: { label: 'Write &amp; Review', order: 120, title: 'Layout preview: writer and reviewer agents in a chat',
+      icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z" /><path d="M9 10h6M9 13.5h4" /></svg>' },
+    markup: `
+      <section id="view-duo" class="view hidden">
+        <!-- Setup -->
+        <div id="duo-setup" class="duo-setup">
+          <div class="page-head">
+            <div>
+              <h1>Write &amp; Review <span class="duo-lab">lab</span> <button id="duo-help-open" class="duo-help-btn" type="button" title="How Write &amp; Review works" aria-label="How Write &amp; Review works">?</button></h1>
+              <p class="muted small">A writer drafts, a reviewer scores it against the goal and sends notes back, until the goal is met. Runs the <span class="mono">writer-reviewer</span> workflow; past runs are in Workflows › Runs.</p>
+            </div>
+            <button id="duo-edit-workflow" class="btn ghost sm" type="button" title="Open the workflow YAML">writer-reviewer.yaml</button>
+          </div>
+
+          <div class="duo-brief">
+            <!-- prefilled from a Backlog issue ("Enrich in Write & Review", duo.js openDuoForIssue) -->
+            <div id="duo-issue" class="duo-issue hidden"></div>
+            <div class="field duo-skill">
+              <label for="duo-skill">Document type <span class="muted">(optional)</span></label>
+              <div class="row">
+                <select id="duo-skill"></select>
+                <span class="muted small">The writer and the reviewer load this skill: its structure and its rubric.</span>
+              </div>
+            </div>
+            <div class="field">
+              <label for="duo-prompt">Prompt <span class="req">*</span></label>
+              <textarea id="duo-prompt" rows="3" placeholder="What should be written? E.g. a PRD for offline mode in the mobile app, a blog post, a migration plan...">Write a one-page PRD for adding offline mode to our mobile note-taking app: problem, users, scope, non-goals, rollout and success metrics.</textarea>
+            </div>
+            <div class="field">
+              <label for="duo-goal">Goal <span class="req">*</span></label>
+              <textarea id="duo-goal" rows="2" placeholder="When is the document good enough? The reviewer scores against this.">A PM can hand it to engineering as-is: every requirement is testable, conflicts during sync are addressed, and the metrics have targets.</textarea>
+            </div>
+            <div class="field duo-project">
+              <label for="duo-project">Project <span class="muted">(optional)</span></label>
+              <div class="row">
+                <select id="duo-project"></select>
+                <span id="duo-project-hint" class="muted small">The writer and the reviewer read its files (read-only) to ground the document.</span>
+              </div>
+            </div>
+            <div class="duo-rules">
+              <label>Approve at <input id="duo-threshold" type="number" min="1" max="10" step="0.5" value="8" /> / 10</label>
+              <label>Max rounds <input id="duo-rounds" type="number" min="1" max="10" value="5" /></label>
+              <span class="muted small">If the rounds run out, the run stops at a human gate.</span>
+            </div>
+          </div>
+
+          <div class="duo-agents">
+            <div class="duo-agent writer">
+              <div class="duo-agent-head">
+                <span class="duo-robot xl writer" data-robot="writer"></span>
+                <div><b>Writer</b><div class="muted small">Drafts the document and applies the reviewer's notes.</div></div>
+              </div>
+              <div class="duo-agent-form">
+                <div class="field"><label>Provider</label><select data-role="writer" data-field="provider"></select></div>
+                <div class="field"><label>Model</label><select data-role="writer" data-field="model"></select></div>
+                <div class="field"><label>Effort</label><div class="seg duo-effort" data-role="writer"></div></div>
+              </div>
+            </div>
+
+            <div class="duo-link" aria-hidden="true">
+              <svg viewBox="0 0 48 24"><path d="M4 8h36l-5-5M44 16H8l5 5" /></svg>
+              <span class="muted small">draft<br />score + notes</span>
+            </div>
+
+            <div class="duo-agent reviewer">
+              <div class="duo-agent-head">
+                <span class="duo-robot xl reviewer" data-robot="reviewer"></span>
+                <div><b>Reviewer</b><div class="muted small">Scores each draft 0–10 against the goal and lists what to fix.</div></div>
+              </div>
+              <div class="duo-agent-form">
+                <div class="field"><label>Provider</label><select data-role="reviewer" data-field="provider"></select></div>
+                <div class="field"><label>Model</label><select data-role="reviewer" data-field="model"></select></div>
+                <div class="field"><label>Effort</label><div class="seg duo-effort" data-role="reviewer"></div></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="duo-agent supervisor">
+            <div class="duo-agent-head">
+              <span class="duo-robot xl supervisor" data-robot="supervisor"></span>
+              <div class="spacer"><b>Supervisor</b><div class="muted small">The platform's own agent. Watches the loop, steps in when a turn fails or the loop stalls (max 6 interventions) and signs off at the end. It never edits the document.</div></div>
+            </div>
+          </div>
+
+          <div class="duo-actions">
+            <span id="duo-error" class="error duo-error"></span>
+            <label class="duo-switch dev-only" id="duo-scenario-wrap" title="What the simulated agents do">Scenario <select id="duo-scenario"></select></label>
+            <label class="duo-switch dev-only" title="Simulated agents: no CLI is called and nothing is spent"><input id="duo-mock" type="checkbox" /> <span>Simulation (no model calls)</span></label>
+            <button id="duo-run" class="btn primary btn-icon" type="button">
+              <svg class="icon" width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 4.5v15a1 1 0 0 0 1.5.86l12-7.5a1 1 0 0 0 0-1.72l-12-7.5A1 1 0 0 0 7 4.5z" /></svg>
+              Run
+            </button>
+          </div>
+        </div>
+
+        <!-- Conversation -->
+        <div id="duo-chat" class="duo-chat hidden">
+          <div class="duo-chat-main">
+            <header class="duo-chat-head">
+              <button id="duo-back" class="icon-btn" type="button" title="Back to setup"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6" /></svg></button>
+              <div class="duo-pair">
+                <span class="duo-cast"><span class="duo-robot head writer" data-cast="writer"></span><span data-cast-state="writer">idle</span></span>
+                <span class="duo-cast"><span class="duo-robot head reviewer" data-cast="reviewer"></span><span data-cast-state="reviewer">idle</span></span>
+                <span class="duo-cast"><span class="duo-robot head supervisor" data-cast="supervisor"></span><span data-cast-state="supervisor">idle</span></span>
+              </div>
+              <div class="duo-chat-title">
+                <b id="duo-chat-title">Writer &amp; Reviewer</b>
+                <div id="duo-chat-status" class="muted small">starting…</div>
+              </div>
+              <div class="spacer"></div>
+              <div class="duo-round"><label class="muted small">Round</label> <b id="duo-round" class="mono">0/5</b></div>
+              <div class="duo-scores" id="duo-scores" title="Reviewer score per round"></div>
+              <button id="duo-help-open2" class="duo-help-btn sm" type="button" title="How Write &amp; Review works" aria-label="How Write &amp; Review works">?</button>
+              <button id="duo-logs" class="btn ghost sm" type="button" title="Open the run folder (events, drafts, document.md)">Run folder</button>
+              <button id="duo-stop" class="btn danger sm hidden" type="button">Stop</button>
+            </header>
+            <div id="duo-messages" class="duo-messages"></div>
+          </div>
+
+          <aside class="duo-side">
+            <section class="duo-doc">
+              <div class="duo-side-head"><h2>Document</h2><div id="duo-versions" class="seg sm"></div></div>
+              <article id="duo-doc-body" class="duo-doc-body md md-compact">No draft yet.</article>
+            </section>
+            <section class="duo-super-panel">
+              <div class="duo-side-head">
+                <h2>Supervisor</h2>
+                <span id="duo-super-state" class="pill pill-running">watching</span>
+              </div>
+              <ul id="duo-checks" class="duo-checks"></ul>
+              <div class="muted small">Interventions <b id="duo-interventions" class="mono">0/6</b></div>
+            </section>
+          </aside>
+        </div>
+      </section>`,
+    modals: `
+  <div id="duo-save-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="duo-save-title">
+    <div class="modal-card duo-save-card">
+      <h3 id="duo-save-title">Save to issue</h3>
+      <p id="duo-save-issue" class="muted small"></p>
+      <fieldset class="bl-grouping">
+        <legend class="small">How</legend>
+        <label class="check"><input type="radio" name="duo-save-mode" value="replace" checked /><span>Replace the description: the document becomes the issue's body, the original is kept at the end in a collapsed "Original description" block</span></label>
+        <label class="check"><input type="radio" name="duo-save-mode" value="comment" /><span>Add as a comment: the issue's description stays as it is</span></label>
+      </fieldset>
+      <div class="small muted">Command: <span id="duo-save-command" class="mono"></span></div>
+      <div id="duo-save-preview" class="md duo-save-preview"></div>
+      <p id="duo-save-note" class="small"></p>
+      <p id="duo-save-error" class="error small"></p>
+      <div class="modal-actions">
+        <button type="button" id="btn-duo-save-cancel" class="btn ghost">Cancel</button>
+        <button type="button" id="btn-duo-save-ok" class="btn primary">Save to issue</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="duo-help" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="duo-help-title">
+    <div class="modal-card duo-help-card">
+      <div class="duo-help-head">
+        <h3 id="duo-help-title">How Write &amp; Review works</h3>
+        <button id="duo-help-close" class="icon-btn" type="button" title="Close (Esc)" aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" /></svg></button>
+      </div>
+      <div class="duo-help-body">
+        <p class="duo-help-lead">Three AI agents write a document for you. A <b class="c-writer">writer</b> drafts it, a <b class="c-reviewer">reviewer</b> scores it against your goal and sends notes back until it passes, and the <b class="c-supervisor">supervisor</b> checks the result and asks you what to do. You follow it as a chat, and you decide at the end.</p>
+        <div class="duo-help-cast" id="duo-help-cast"></div>
+
+        <h4>1. Set up a run</h4>
+        <ul>
+          <li><b>Prompt</b>: what to write (a PRD, a migration plan, a blog post…).</li>
+          <li><b>Goal</b>: when the document is good enough. The reviewer scores every draft against it, so make it concrete ("every requirement is testable", "metrics have targets").</li>
+          <li><b>Project</b> (optional): the writer and the reviewer work in the project's folder and read its files to ground the document. They are <b>read-only</b> there: they can't create, edit or delete anything, and the drafts are saved in the run folder, not in the project.</li>
+          <li><b>Approve at</b>: the minimum score (0-10) for a draft to pass. <b>Max rounds</b>: how many reviews before you are asked what to do.</li>
+          <li><b>Writer and reviewer</b>: pick the CLI (Claude Code, Codex, Grok), the model and the effort of each one. Different models in the two roles give the review a second perspective. The <b>supervisor</b> is the platform's own agent: it is fixed and not configurable.</li>
+        </ul>
+
+        <h4>2. The flow</h4>
+        <div class="duo-help-flow">
+          <span class="c-writer">Write</span><i>→</i><span class="c-reviewer">Review</span><i>→</i><span class="c-ok">score ≥ approve at?</span><i>→</i><span class="c-supervisor">Supervisor check</span><i>→</i><span class="c-you">You decide</span><i>→</i><span class="c-ok">Done</span>
+        </div>
+        <ul>
+          <li>Below the score, the reviewer's notes go back to the writer, who sends a new version (v2, v3…). The reviewer also checks whether its previous notes were addressed.</li>
+          <li>The <b>engine</b> decides whether a draft passes, from the score and your threshold. The agents don't.</li>
+          <li>If the rounds run out, the supervisor asks you: accept the last draft, one more round, or stop.</li>
+          <li>When a draft passes, the supervisor checks it against each part of your goal ("✓ Ready" or "↺ Not ready yet") and recommends what to do.</li>
+        </ul>
+
+        <h4>3. Talking to the supervisor</h4>
+        <ul>
+          <li>The supervisor <b>always asks you</b> before the run ends: <b>accept</b> the document, <b>send it back</b> to the writer, or <b>stop</b>.</li>
+          <li>You can also type <b>instructions</b>, e.g. "Keep the pricing and the launch date as open questions: they are decided later". Your instructions go into every later prompt of the writer, the reviewer and the supervisor. They take precedence over the goal, and the reviewer won't count them against the draft.</li>
+          <li>Nothing crosses these questions automatically: the run waits for you.</li>
+        </ul>
+
+        <h4>4. Reading the chat</h4>
+        <ul>
+          <li><b>Robots</b>: one per model (Claude, ChatGPT, Grok…), with the model on its name plate. The robot below the last message shows what the agent is doing right now: thinking, reading, writing, waiting for you, error, done. The same states are shown for all three agents in the header.</li>
+          <li><b>Writer</b> messages carry the draft (<i>document.md · vN</i>): click it, or use v1, v2… in the <b>Document</b> panel, to read any version.</li>
+          <li><b>Reviewer</b> messages show the score and its bar (the tick is your threshold), a summary and the notes. <span class="sev major">major</span> notes block approval and <span class="sev minor">minor</span> notes don't. The header chart shows the score per round.</li>
+          <li>The <b>Supervisor</b> panel lists what it checked and each intervention. Every message shows its tokens, cost and time. <b>Stop</b> ends the run and <b>Run folder</b> opens its files.</li>
+        </ul>
+
+        <h4>5. When something goes wrong</h4>
+        <ul>
+          <li>If an agent's answer doesn't have the expected format, it's rejected (red robot) and the agent is asked again, up to twice.</li>
+          <li>If it still fails, the supervisor steps in: it explains what happened and retries with an instruction, or asks you. It routes problems to the agents and never edits the document itself.</li>
+          <li>Real runs check before starting that the CLIs are installed, the budgets allow it and the project folder exists.</li>
+        </ul>
+
+        <h4>6. Where the results are</h4>
+        <ul>
+          <li>In the run folder: <b>document.md</b> (the last version) and <b>drafts/v1.md, v2.md…</b>, plus the full log of the run. They also show up in <b>Artifacts</b>.</li>
+          <li>Every run is in <b>Workflows › Runs</b>, and under the project when you picked one. <b>Open chat</b> replays the conversation, or follows it if it's still running.</li>
+          <li>Under the hood it's the <span class="mono">writer-reviewer</span> workflow (Workflows › Definitions), which you can also start from the Start panel.</li>
+        </ul>
+
+        <h4>7. Simulation (developer mode)</h4>
+        <ul>
+          <li>Turn on <b>Settings › Execution › Developer mode</b> to see the <b>Simulation</b> checkbox (checked by default). Simulated agents call no CLI and cost nothing.</li>
+          <li>The <b>Scenario</b> picker sets what the simulated agents do: approved on the 3rd review (5.5 → 7 → 8.6), approved on the 1st, never reaches the score (the rounds run out), the supervisor finds gaps, the reviewer answers in the wrong format (the supervisor steps in).</li>
+          <li>Real runs use your CLIs' plans. Every round is a writer turn and a reviewer turn, plus one supervisor check at the end.</li>
+        </ul>
+      </div>
+    </div>
+  </div>`,
+    mount() {
+      // the screen is a preview: a badge after its label
+      document.querySelector('.nav-item[data-view="duo"]').insertAdjacentHTML('beforeend', '<span class="nav-badge">lab</span>');
+      init();
+    },
+  });
 })();

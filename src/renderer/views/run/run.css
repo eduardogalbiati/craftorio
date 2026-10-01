@@ -1,0 +1,132 @@
+/* Run screen (run.js): its layout, the failure banner, the gate cards above the steps, the summary,
+   the steps by group, the session cards and the Session / Events / Artifacts tabs. The gate cards
+   and the gate panel the run chat shares (.run-gate*, .gate-tools, Run App) and the Artifacts
+   panel (.ap-*) stay in style.css; the Chat / Details toggle is .run-modebar. */
+#view-run { padding: 0; overflow: hidden; }
+/* ---------- run ---------- */
+.run-layout {
+  height: 100%;
+  display: grid; grid-template-columns: 280px minmax(320px, 1fr) minmax(420px, 1.4fr);
+  gap: 1px; background: var(--border);
+}
+.panel { background: var(--bg); padding: 16px; overflow: auto; min-height: 0; }
+.config { background: var(--panel); }
+.config section { margin-bottom: 22px; }
+.run-summary .kv { grid-template-columns: auto 1fr; }
+.run-summary .kv dd { word-break: break-word; overflow-wrap: anywhere; }
+.run-summary-name { margin-bottom: 4px; }
+/* run inputs: one line each, the full text on hover (title, or .full-pop for long values) */
+.run-summary .kv.run-inputs { grid-template-columns: minmax(0, max-content) minmax(0, 1fr); }
+.run-summary .run-inputs dt,
+.run-summary .run-inputs dd.kv-line { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; word-break: normal; overflow-wrap: normal; }
+.run-summary .run-inputs dt { max-width: 14ch; }
+.run-summary .run-inputs dd[data-full] { cursor: help; }
+.run-summary > .row { margin-top: 8px; gap: 6px; flex-wrap: wrap; }
+/* ---------- steps ---------- */
+.steps { list-style: none; padding: 0; margin: 0; display: grid; gap: 4px; }
+.steps li {
+  display: flex; align-items: center; gap: 8px; padding: 6px 8px;
+  border-radius: 6px; background: var(--panel-2); font-size: 12px;
+}
+.steps li .dot { width: 8px; height: 8px; border-radius: 50%; background: #3a4152; flex: none; }
+.steps li .visits { margin-left: auto; font-family: var(--mono); color: var(--muted); }
+.steps li.running { outline: 1px solid var(--accent); }
+.steps li.running .dot { background: var(--accent); animation: pulse 1.2s infinite; }
+.steps li.waiting .dot { background: var(--yellow); }
+.steps li.done .dot { background: var(--green); }
+.steps li .kind { font-size: 10px; color: var(--muted); }
+.step-groups { display: grid; gap: 6px; }
+.step-groups > .link-btn { justify-self: start; margin-top: 2px; }
+.step-group > summary {
+  display: flex; align-items: center; gap: 8px; padding: 5px 8px; cursor: pointer; list-style: none;
+  border-radius: 6px; font-size: 12px; user-select: none;
+}
+.step-group > summary::-webkit-details-marker { display: none; }
+.step-group > summary::after { content: '▸'; margin-left: 4px; color: var(--muted); order: -1; }
+.step-group[open] > summary::after { content: '▾'; }
+.step-group > summary:hover { background: var(--panel-2); }
+.step-group > summary .muted { margin-left: auto; font-family: var(--mono); }
+.step-group > summary .dot { width: 8px; height: 8px; border-radius: 50%; background: #3a4152; flex: none; }
+.step-group.running > summary .dot { background: var(--accent); animation: pulse 1.2s infinite; }
+.step-group.waiting > summary .dot { background: var(--yellow); }
+.step-group.done > summary .dot { background: var(--green); }
+.step-group > .steps { margin: 4px 0 2px 14px; }
+/* ---------- sessions ---------- */
+.sessions { display: grid; gap: 8px; }
+.session-card {
+  background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 10px 12px; cursor: pointer; position: relative;
+}
+.session-card:hover { border-color: #3a4152; }
+.session-card.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.session-card.child { margin-left: 22px; }
+.session-card.child::before {
+  content: ""; position: absolute; left: -14px; top: -9px; bottom: 50%;
+  width: 12px; border-left: 1px solid var(--border); border-bottom: 1px solid var(--border); border-bottom-left-radius: 6px;
+}
+.sc-head { display: flex; align-items: center; gap: 8px; }
+.sc-head .name { font-weight: 700; }
+.sc-head .id { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.sc-head .status { margin-left: auto; font-size: 11px; display: flex; align-items: center; gap: 5px; color: var(--muted); }
+.metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.metric { background: var(--panel-2); border-radius: 6px; padding: 5px 7px; }
+.metric label { display: block; font-size: 10px; color: var(--muted); }
+.metric b { font-family: var(--mono); font-size: 12px; font-weight: 600; }
+.detail-panel { display: flex; flex-direction: column; padding: 0; }
+.tab-body {flex: 1; overflow: auto; padding: 16px; min-height: 0; }
+.detail-head { margin-bottom: 14px; }
+.detail-actions { display: flex; gap: 8px; align-items: center; margin: 6px 0 10px; }
+.detail-head h3 { display: flex; gap: 8px; align-items: center; }
+.turn { border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 14px; overflow: hidden; }
+.turn-head { display: flex; gap: 10px; align-items: center; padding: 8px 12px; background: var(--panel); font-size: 12px; }
+.turn-head .t { font-weight: 700; }
+.turn-head .meta { margin-left: auto; font-family: var(--mono); color: var(--muted); }
+.turn-body { padding: 10px 12px; display: grid; gap: 8px; }
+.item { border-left: 3px solid var(--border); padding: 4px 0 4px 10px; }
+.item .label { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; font-weight: 700; margin-bottom: 3px; }
+.item.prompt { border-color: var(--accent); }
+.item.prompt .label { color: var(--accent); }
+.item.thinking { border-color: var(--purple); }
+.item.thinking .label { color: var(--purple); }
+.item.thinking pre { color: #c9b5e6; font-style: italic; }
+.item.tool_call { border-color: var(--orange); }
+.item.tool_call .label { color: var(--orange); }
+.item.tool_result { border-color: #555d70; }
+.item.tool_result .label { color: var(--muted); }
+.item.tool_result pre { color: var(--muted); max-height: 220px; overflow: auto; }
+.item.text { border-color: var(--green); }
+.item.text .label { color: var(--green); }
+.item.stderr { border-color: var(--red); }
+.item.stderr .label { color: var(--red); }
+.item.spawn, .item.raw { border-color: #3a4152; }
+.item.spawn .label, .item.raw .label { color: var(--muted); }
+.item.spawn pre, .item.raw pre { color: var(--muted); font-size: 11px; }
+.usage-row { display: flex; gap: 14px; flex-wrap: wrap; font-family: var(--mono); font-size: 11px; color: var(--muted); padding-top: 6px; border-top: 1px dashed var(--border); }
+.orch-log { display: grid; gap: 4px; }
+.orch-log .line { font-family: var(--mono); font-size: 12px; display: flex; gap: 10px; }
+.orch-log .line .ts { color: var(--muted); flex: none; }
+.orch-log .line.warn { color: var(--yellow); }
+.orch-log .line.error { color: var(--red); }
+.orch-log .line.transition { color: var(--accent); }
+.ev { border-bottom: 1px solid var(--border); padding: 6px 0; font-size: 12px; }
+.ev .ev-head { display: flex; gap: 10px; font-family: var(--mono); }
+.ev .ev-type { color: var(--accent); }
+.ev pre { color: var(--muted); font-size: 11px; max-height: 160px; overflow: auto; margin-top: 4px; }
+.run-summary .sup-btn { margin-top: 12px; }
+#view-run:not(.hidden) { display: flex; flex-direction: column; }
+#view-run .run-layout { flex: 1; min-height: 0; height: auto; }
+.fail-banner {
+  flex: none; display: flex; align-items: center; gap: 16px; padding: 10px 16px;
+  background: rgba(248,113,113,.1); border-bottom: 1px solid rgba(248,113,113,.35);
+}
+.fail-banner-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.fail-banner-text b { color: var(--red); }
+.fail-banner-text .mono { color: var(--text); opacity: .85; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.orch-log .line.supervisor { color: var(--purple); }
+/* a gate waiting in the run shown: asked inline above the steps, never in a dialog over the app
+   (the cards, .run-gate*, are in style.css: the gate panel's wide variant builds on them) */
+.run-gates { flex: none; display: flex; flex-direction: column; gap: 8px; padding: 10px 16px; background: rgba(250,204,21,.06); border-bottom: 1px solid rgba(250,204,21,.35); }
+.tab-count { margin-left: 4px; padding: 0 6px; border-radius: 9px; background: var(--panel-2); color: var(--muted); font-size: 11px; font-weight: 600; }
+.run-gate-actions { flex-wrap: wrap; gap: 8px; }
+/* Run screen: Chat / Details */
+.run-modebar { display: flex; align-items: center; gap: 10px; padding: 8px 16px 0; }

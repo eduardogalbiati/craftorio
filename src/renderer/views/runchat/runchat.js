@@ -5,6 +5,8 @@
 // way of opening a run while Chat is the remembered run view (showRun in app.js). A run always
 // opens at its latest message; "Jump to latest" shows while scrolled up.
 // Write & Review and AI Arena runs keep their own chat screens (openChatFor routes them).
+// Registers itself with registerView; its mount also wires the Run screen's Chat button.
+// load: after views/runchat/run-chat-model.js views/run/run.js (RunChatModel as it loads, #run-mode-chat in its mount)
 (() => {
   const $c = (sel) => document.querySelector(sel);
   const { RunChatModel, splitAnswer, providerType } = window.RunChatModel;
@@ -323,5 +325,28 @@
     api.onEvent(onEvent);
   }
 
-  init();
+  registerView({
+    id: 'runchat',
+    markup: `
+      <section id="view-runchat" class="view hidden">
+        <header class="duo-chat-head">
+          <div class="seg sm" role="group" aria-label="Run view">
+            <button type="button" class="active" aria-pressed="true">Chat</button>
+            <button id="rc-details" type="button" title="Sessions, prompts and events of this run">Details</button>
+          </div>
+          <div id="rc-title" class="rc-title"></div>
+          <span id="rc-status" class="pill"></span>
+          <div class="spacer"></div>
+          <span id="rc-cost" class="mono small muted" title="Cost so far"></span>
+          <button id="rc-logs" class="btn ghost sm" type="button" title="Open the run folder (events, sessions, artifacts)">Run folder</button>
+          <button id="rc-stop" class="btn danger sm hidden" type="button">Stop</button>
+        </header>
+        <div id="rc-scroll" class="rc-scroll">
+          <div id="rc-messages" class="duo-messages rc-messages"></div>
+          <div id="rc-typing" class="rc-typing"></div>
+        </div>
+        <button id="rc-jump" class="btn sm rc-jump hidden" type="button" title="Scroll to the latest message">Jump to latest ↓</button>
+      </section>`,
+    mount: init,
+  });
 })();

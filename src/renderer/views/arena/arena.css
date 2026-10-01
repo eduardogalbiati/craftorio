@@ -1,6 +1,6 @@
-/* AI Arena: the ai-arena workflow as a chat. Builds on duo.css (Write & Review); every role has
-   its own color in --role (contenders by slot, the synthesizer, the verifier).
-   load: after duo.css */
+/* AI Arena: the ai-arena workflow as a chat. Builds on chat.css (the look it shares with Write &
+   Review, loaded before every view); every role has its own color in --role (contenders by slot,
+   the synthesizer, the verifier). */
 :root {
   --ar-c1: #f05252;
   --ar-c2: #fb923c;

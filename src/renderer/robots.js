@@ -1,6 +1,6 @@
 // Robot avatars ("Visor" model): isometric robots drawn as SVG, one brand variant per provider and
 // one animated state per phase of a turn (thinking, writing, done...). Ported from the owner's
-// avatar generators. Animations are CSS classes prefixed with `rb-` (see duo.css), so the SVGs can
+// avatar generators. Animations are CSS classes prefixed with `rb-` (see chat.css), so the SVGs can
 // be inlined in the page without clashing with the app's own class names.
 // Exposes window.Robots = { svg(variant, state, opts), variantFor(provider, model), plaqueFor(model),
 // fromAppearance(appearance, label), define(name, appearance), emblem(name), VARIANTS, STATES, ... }.

@@ -1,4 +1,7 @@
-/* Write & Review: writer/reviewer agents shown as a chat (layout preview). */
+/* The chat look the chat screens share: Write & Review (views/duo/), AI Arena (views/arena/) and
+   the run chat (views/runchat/), and the Run screen's gate cards: role colours, setup forms, bubbles,
+   the side panel, the robots' animations (rb-*, robots.js), live runs, the supervisor asking (human
+   gates) and the guides ("?"). Class names keep the duo- prefix of the screen they started in. */
 :root {
   --writer: #f05252;
   --writer-soft: rgba(240, 82, 82, .12);
@@ -10,11 +13,6 @@
   --supervisor-soft: rgba(192, 132, 252, .12);
 }
 
-.nav-badge {
-  margin-left: auto; font-size: 9px; text-transform: uppercase; letter-spacing: .06em;
-  padding: 1px 5px; border-radius: 4px; background: var(--supervisor-soft); color: var(--supervisor);
-}
-#view-duo { padding: 0; overflow: hidden; }
 
 /* ---------- avatars ---------- */
 .duo-avatar {
@@ -155,7 +153,6 @@
 .duo-doc-body h4 { font-size: 12px; margin: 12px 0 4px; color: var(--text); }
 .duo-doc-body p, .duo-doc-body li { color: var(--text); font-size: 12px; }
 .duo-doc-body ins { background: rgba(74, 222, 128, .14); text-decoration: none; border-radius: 3px; }
-#duo-versions button.active { color: var(--writer); }
 
 .duo-checks { list-style: none; margin: 0 0 10px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .duo-checks li { display: flex; align-items: flex-start; gap: 8px; font-size: 12px; }
@@ -245,14 +242,6 @@
 .duo-project .row { gap: 12px; }
 .duo-project select { width: 320px; flex: none; }
 .duo-project .small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-/* Document type, the issue being enriched and Save to issue (#103) */
-.duo-skill .row { gap: 12px; }
-.duo-skill select { width: 320px; flex: none; }
-.duo-issue { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 12px; border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 8px; font-size: 13px; }
-.duo-issue a, #duo-save-issue a { color: var(--accent); }
-.duo-save-card { width: min(760px, 92vw); }
-.duo-save-preview { max-height: 46vh; overflow: auto; border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; margin-top: 8px; }
-.duo-save-row span { display: inline-flex; align-items: center; gap: 8px; }
 
 /* ---------- help ("?") ---------- */
 .duo-help-btn {
