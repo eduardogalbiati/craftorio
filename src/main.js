@@ -60,6 +60,15 @@ if (!app.isPackaged && !process.env.MULTIAGENT_WORKSPACE) {
     console.log(`Started from a worktree of ${scratch.owner}: using the scratch workspace ${scratch.workspace} (simulations only).`);
   }
 }
+// An agent's check started without its run's scratch workspace (#120): simulations only never open
+// the owner's workspace (workspace.resolveWorkspace) nor the owner's user data (sign-in, #112).
+// Agents of a run with a worktree get MULTIAGENT_WORKSPACE and MULTIAGENT_USER_DATA from the engine.
+if (!app.isPackaged && !process.env.MULTIAGENT_WORKSPACE && process.env.MULTIAGENT_SIMULATION_ONLY === '1') {
+  const scratch = workspace.simulationWorkspace();
+  process.env.MULTIAGENT_WORKSPACE = scratch.workspace;
+  if (!process.env.MULTIAGENT_USER_DATA) app.setPath('userData', scratch.userData);
+  console.log(`Simulation only: using the scratch workspace ${scratch.workspace}.`);
+}
 const secondCopy = !process.env.MULTIAGENT_WORKSPACE && !app.requestSingleInstanceLock();
 if (secondCopy) {
   const dir = workspace.resolveWorkspace().dir || os.tmpdir();
@@ -158,7 +167,7 @@ service.events.on('notify', (n) => {
 // ~/multiagent-workspace) does not exist, asks whether to create the default or pick another.
 async function ensureWorkspace() {
   const r = workspace.resolveWorkspace();
-  if (r.dir) return workspace.setupWorkspace(r.dir, { persist: r.source !== 'env' });
+  if (r.dir) return workspace.setupWorkspace(r.dir, { persist: r.source !== 'env' && r.source !== 'simulation' });
 
   const reason = r.registered
     ? `The registered workspace folder no longer exists:\n${r.registered}`

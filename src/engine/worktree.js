@@ -267,6 +267,15 @@ async function mergeLocally({ repo, dir, base, log = () => {} }) {
   return { branch, base, commit, checkout: checkout?.dir || null, rebased };
 }
 
+// The run's scratch workspace (<run>/scratch, #120) goes with its worktree; the run's logs/ and
+// screenshots/ (the evidence) stay. A folder still locked (a program left running) is left for the
+// next cleanup. true when it was removed.
+function removeScratch(runDir) {
+  const dir = path.join(runDir, 'scratch');
+  if (!fs.existsSync(dir)) return false;
+  try { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 3 }); return true; } catch { return false; }
+}
+
 /**
  * Orphan cleanup for <workspace>/worktrees (at app start). Never touches `active` folders
  * (runs in progress). Removes a worktree when its run succeeded (a removal that failed) or when
@@ -295,6 +304,7 @@ async function cleanupWorktrees({ worktreesDir, runsDir, active = [], maxAgeDays
     } else if (status === 'success' || stale) {
       await removeWorktree({ repo, dir, log });
     } else continue;
+    removeScratch(path.join(runsDir, name));
     removed.push(dir);
     log('info', `worktree: removed orphan ${dir}`);
   }
@@ -304,4 +314,5 @@ async function cleanupWorktrees({ worktreesDir, runsDir, active = [], maxAgeDays
 module.exports = {
   prepareWorktree, removeWorktree, mergeLocally, cleanupWorktrees, listWorktrees, isMerged, repoRoot, currentBranch, samePath, canonicalPath,
   git, identityArgs, FETCH_TIMEOUT_MS,
+  removeScratch,
 };

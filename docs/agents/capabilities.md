@@ -65,8 +65,14 @@ trip per refusal (136 of 2,437 tool calls in 7 real runs, #96). The engine remov
   (`MULTIAGENT_SIMULATION_ONLY=1`); `MULTIAGENT_MOCK_DELAY_SCALE` passes through when the app has
   it. A prefix that still appears is allowed as `Bash(MULTIAGENT_SIMULATION_ONLY=1 <command>:*)`
   for the agent's own commands only (never a free `VAR=` prefix: it would allow any command).
-- **`cd` into the worktree** and **writes outside it**: the engine creates `<run_dir>/logs` and
-  `<run_dir>/screenshots` for agents with commands, passes them with `--add-dir`, and adds a short
+- **Scratch workspace (#120)**: in a run with a worktree, `capabilities.agentEnv` adds
+  `MULTIAGENT_WORKSPACE` and `MULTIAGENT_USER_DATA` pointing to `<run_dir>/scratch/` (see
+  worktrees.md), passed to `runCli` as `agentEnv`; their prefixes are allowed like `AGENT_ENV`'s and
+  the command guide names the folder. The app's tools an agent runs (`npm run run`, `npm run
+  screenshot`, the app, engine scripts) resolve to it with no flag. Without it, simulation only
+  never resolves to the registered workspace (`resolveWorkspace` → OS temp).
+- **`cd` into the worktree** and **writes outside it**: the engine creates `<run_dir>/logs`,
+  `<run_dir>/scratch` and `<run_dir>/screenshots` (`RUN_DIRS`) for agents with commands, passes them with `--add-dir`, and adds a short
   "How to run commands" block to the agent's first turn (`commandGuide`, any CLI): run commands in
   the current folder, `git -C`/`npm --prefix` for another one, logs in `<run_dir>/logs`, never
   `/tmp`/`$TEMP`/AppData, one command per call when unsure, one rephrase after a refusal.

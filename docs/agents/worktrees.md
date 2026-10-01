@@ -37,6 +37,18 @@ actions, or any code that deletes or checks out branches.
   (dev only, no `MULTIAGENT_WORKSPACE`) gets a scratch workspace and user data folder under
   `<workspace>/local-previews/app-<id>/` and simulations only (`worktreeAppScratch` in
   `src/local-preview.js`, used by `src/main.js`): it never opens the owner's workspace. Prefer **Run App**.
+- **The run's scratch workspace (#120)**: a run with a worktree gets `runs/<id>/scratch/{workspace,
+  user-data}` (`WorkflowRun.scratchWorkspace`, same content rules as `scratchWorkspace` in
+  `src/local-preview.js`: agents, skills, workflows, settings, project entries pointing to empty
+  folders; never runs, repos or worktrees), created on the first agent turn. Every agent of the run
+  gets it as `MULTIAGENT_WORKSPACE` / `MULTIAGENT_USER_DATA` (`capabilities.agentEnv`), so
+  `npm run run -- --mock`, `npm run screenshot`, `npm start` and `node -e` engine scripts from the
+  worktree write there, never to the owner's runs, roadmap, queue or backlog. Removed with the
+  worktree (`finishWorktree` on success, `cleanupWorktrees` for orphans, `removeScratch` in
+  `src/engine/worktree.js`); a failed or cancelled run keeps it while its worktree is kept. The
+  evidence agents keep lives in `runs/<id>/logs` and `runs/<id>/screenshots`, which stay. Without
+  the variable, `resolveWorkspace` under `MULTIAGENT_SIMULATION_ONLY=1` falls back to
+  `<os tmp>/multiagent-simulation/workspace`, never the registered workspace.
 - **One app per workspace (#112)**: `src/main.js` takes Electron's single-instance lock (the owner's
   user data folder) and `<workspace>/.lock` (pid, host, heartbeat; `lockWorkspace` in
   `src/run-owner.js`). A second copy offers a scratch copy or quit; a stale lock (dead pid, old

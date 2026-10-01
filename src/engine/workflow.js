@@ -42,9 +42,11 @@ const {
   git,
   mergeLocally,
   prepareWorktree,
+  removeScratch,
   removeWorktree,
 } = require('./worktree');
 const capabilities = require('./capabilities');
+const { scratchWorkspace } = require('../local-preview');
 const { stopProcessesIn } = require('./processes');
 const { PROBES, runProbe, parseTarget } = require('./probes');
 const mergeQueue = require('./merge-queue');
@@ -815,7 +817,19 @@ class WorkflowRun extends EventEmitter {
     log('info', `worktree: ${how} ${info.dir} at ${info.ref || 'its branch'} (${String(info.commit || '').slice(0, 8)})`);
   }
 
-  // Success: remove the worktree and its local branch when merged. Otherwise keep it for a resume.
+  // The run's scratch workspace (#120), { workspace, userData } under <run>/scratch: a copy of the
+  // owner's agents, skills, workflows and settings with project entries pointing to empty folders
+  // (local-preview.scratchWorkspace). Agents get it in their environment, so the app's tools they
+  // run from the worktree (npm run run, npm run screenshot, the app itself) never write to the
+  // owner's workspace. Only runs with a worktree; created on the first agent turn, removed with it.
+  scratchWorkspace() {
+    if (!this.worktree) return null;
+    this.scratch ??= scratchWorkspace({ root: path.dirname(path.dirname(this.runDir)) }, path.join(this.runDir, 'scratch'));
+    return this.scratch;
+  }
+
+  // Success: remove the worktree and its local branch when merged, and the run's scratch workspace.
+  // Otherwise keep both for a resume.
   async finishWorktree(status) {
     const wt = this.worktree;
     if (!wt) return;
@@ -826,6 +840,7 @@ class WorkflowRun extends EventEmitter {
         Object.assign(wt, { removed: r.removed, branch: r.branch, branchDeleted: r.branchDeleted });
         this.emitEvent('worktree.removed', { dir: wt.dir, removed: r.removed, branch: r.branch, branch_deleted: r.branchDeleted });
         log('info', `worktree: removed ${wt.dir}${r.branch ? `; branch ${r.branch} ${r.branchDeleted ? 'deleted (merged)' : 'kept'}` : ''}`);
+        if (r.removed && removeScratch(this.runDir)) log('info', `worktree: removed the run's scratch workspace ${path.join(this.runDir, 'scratch')}`);
       } else {
         Object.assign(wt, { removed: false, branch: await currentBranch(wt.dir) });
         this.emitEvent('worktree.kept', { dir: wt.dir, branch: wt.branch });
@@ -2062,7 +2077,8 @@ class WorkflowRun extends EventEmitter {
     // agents with commands: the folders they may write to, and how to run commands unattended
     const runDirs = capabilities.runDirs(caps, this.runDir);
     for (const dir of runDirs) fs.mkdirSync(dir, { recursive: true });
-    const guide = capabilities.commandGuide(caps, this.runDir);
+    const agentEnv = capabilities.agentEnv(this.scratchWorkspace());
+    const guide = capabilities.commandGuide(caps, this.runDir, agentEnv);
     if (turn === 1 && (agent.system_prompt || agentSkills.length || guide)) {
       const system = [render(agent.system_prompt, this.ctx).trim(), guide, ...agentSkills.map(skillPrompt)].filter(Boolean).join('\n\n');
       parts.push(`<system>\n${system}\n</system>`);
@@ -2079,7 +2095,7 @@ class WorkflowRun extends EventEmitter {
     const providerType = this.wf.providers?.[agent.provider]?.type;
     const isolated = agent.isolation !== false;
     const denyEdits = guarded ? this.wf.tests_paths || testPaths.TESTS_PATHS : [];
-    const { args: capArgs, notes } = capabilities.providerArgs(providerType, { caps, isolated, mcpServers: this.wf.mcp_servers || {}, denyEdits, runDir: runDirs.length ? this.runDir : null });
+    const { args: capArgs, notes } = capabilities.providerArgs(providerType, { caps, isolated, mcpServers: this.wf.mcp_servers || {}, denyEdits, runDir: runDirs.length ? this.runDir : null, env: agentEnv });
     const capsKey = `${agentName}|${capabilities.describe(caps)}|${guarded}`;
     if (!this.capsLogged.has(capsKey)) {
       this.capsLogged.add(capsKey);
@@ -2101,7 +2117,7 @@ class WorkflowRun extends EventEmitter {
     // simulation: which answer of this step this is (mockSequences.invalid_answers: { step: n } makes the first n invalid)
     if (this.mock) { this.mockCalls ??= {}; hint.call = this.mockCalls[hint.stepId] = (this.mockCalls[hint.stepId] || 0) + 1; }
 
-    const call = { session, agentName, agent, provider, extraArgs, stepId, hint };
+    const call = { session, agentName, agent, provider, extraArgs, agentEnv, stepId, hint };
     let res;
     try {
       res = await this.invokeTurn(call, turn, fullPrompt);
@@ -2200,7 +2216,7 @@ class WorkflowRun extends EventEmitter {
     return parseDuration(v, 30 * 60e3);
   }
 
-  async invokeTurn({ session, agentName, agent, provider, extraArgs, stepId, hint, attempts }, turn, fullPrompt) {
+  async invokeTurn({ session, agentName, agent, provider, extraArgs, agentEnv, stepId, hint, attempts }, turn, fullPrompt) {
     const timeoutMs = this.turnTimeout(agent);
     this.emitEvent('session.message_sent', { session_id: session.id, turn, step_id: stepId, prompt: fullPrompt, timeout_ms: timeoutMs });
     // a retry after a failed attempt that did work (a timeout, a crash) starts with what it did
@@ -2270,7 +2286,7 @@ class WorkflowRun extends EventEmitter {
       try {
         const res = await runTurn({
           provider, model: agent.model, effort: agent.effort, providerSessionId: session.providerSessionId,
-          prompt, cwd: (session.cwd = this.workingDir(agent)), extraArgs,
+          prompt, cwd: (session.cwd = this.workingDir(agent)), extraArgs, agentEnv,
           timeoutMs, attempt: a,
           signal: turnAbort.signal, hint, render,
           onItem: (item) => { track(item); idle.item(item); this.emitEvent('session.stream', { session_id: session.id, turn, item }); },

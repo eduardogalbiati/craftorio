@@ -45,7 +45,7 @@ function openBrowser(url) {
 
 const args = parseArgs(process.argv.slice(2));
 const found = args.workspace ? { dir: args.workspace, source: 'arg' } : workspace.resolveWorkspace();
-const ws = workspace.setupWorkspace(found.dir || found.fallback, { persist: found.source !== 'env' && found.source !== 'arg' });
+const ws = workspace.setupWorkspace(found.dir || found.fallback, { persist: !['arg', 'env', 'simulation'].includes(found.source) });
 
 // The account session of the server lives next to the user's home, readable only by this user
 // (there is no OS encryption here as in the desktop app).

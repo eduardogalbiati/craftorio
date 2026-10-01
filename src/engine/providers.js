@@ -278,7 +278,7 @@ function gitConfigEnv(env, settings) {
 }
 
 function runCli(opts, parser) {
-  const { provider, model, effort, providerSessionId, prompt, cwd, extraArgs, timeoutMs, signal, onItem, render } = opts;
+  const { provider, model, effort, providerSessionId, prompt, cwd, extraArgs, timeoutMs, signal, onItem, render, agentEnv } = opts;
   // `prompt_file_arg`: CLIs that take the prompt from a file (e.g. grok --prompt-file) instead of stdin
   const promptFile = provider.prompt_file_arg ? path.join(os.tmpdir(), `multiagent-prompt-${crypto.randomUUID()}.md`) : null;
   const vars = { model, effort, session_id: providerSessionId, prompt_file: promptFile };
@@ -302,8 +302,9 @@ function runCli(opts, parser) {
   const env = { ...process.env };
   delete env.CLAUDECODE; // avoids the "nested session" block if the app is launched from inside Claude Code
   Object.assign(env, gitConfigEnv(env, { 'rerere.enabled': 'true' }));
-  // agents' own checks never start real runs, and need no `VAR=value` prefix (refused by allowlists)
-  Object.assign(env, AGENT_ENV);
+  // agents' own checks never start real runs, and need no `VAR=value` prefix (refused by allowlists);
+  // agentEnv (capabilities.agentEnv): with the run's scratch workspace when it has one (#120)
+  Object.assign(env, agentEnv || AGENT_ENV);
 
   if (promptFile) fs.writeFileSync(promptFile, prompt);
 

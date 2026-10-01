@@ -3,7 +3,10 @@
 // the skills (skills/), the agents (agents/), the workflows (workflows/) and the app preferences (settings.json).
 //
 // Resolution order:
-//   1. MULTIAGENT_WORKSPACE environment variable (tests/CI; not persisted)
+//   1. MULTIAGENT_WORKSPACE environment variable (tests/CI, an agent's run scratch workspace; not persisted)
+//   *. simulation only (MULTIAGENT_SIMULATION_ONLY=1) without it: a scratch workspace in the OS temp
+//      folder (simulationWorkspace), never the registered one, so an agent's check that missed its
+//      run's scratch workspace can't write to the owner's (#120); not persisted
 //   2. registered path (Windows: HKCU\Software\MultiagentOrchestrator\WorkspacePath;
 //      other OSes: ~/.multiagent-orchestrator.json)
 //   3. default folder ~/multiagent-workspace, if it already exists
@@ -14,6 +17,7 @@ const os = require('os');
 const path = require('path');
 const { execFile, execFileSync } = require('child_process');
 const { resolveCommand } = require('./engine/providers');
+const { simulationOnly } = require('./engine/simulation');
 
 const DEFAULT_NAME = 'multiagent-workspace';
 const REG_KEY = 'HKCU\\Software\\MultiagentOrchestrator';
@@ -21,6 +25,11 @@ const REG_VALUE = 'WorkspacePath';
 const ENV_VAR = 'MULTIAGENT_WORKSPACE';
 
 const defaultWorkspace = (home = os.homedir()) => path.join(home, DEFAULT_NAME);
+// Where a simulation-only process given no workspace works: { workspace, userData } (#120)
+const simulationWorkspace = (tmp = os.tmpdir()) => ({
+  workspace: path.join(tmp, 'multiagent-simulation', 'workspace'),
+  userData: path.join(tmp, 'multiagent-simulation', 'user-data'),
+});
 
 // ---------------------------------------------------------------------------
 // Where the path is registered
@@ -64,13 +73,14 @@ const isDir = (p) => { try { return fs.statSync(p).isDirectory(); } catch { retu
 
 /**
  * Finds the workspace without user interaction.
- * @returns {{ dir: string|null, source: 'env'|'registry'|'default'|null, registered: string|null, fallback: string }}
+ * @returns {{ dir: string|null, source: 'env'|'simulation'|'registry'|'default'|null, registered: string|null, fallback: string }}
  *   dir null => the UI needs to ask. `registered` holds the saved path even
- *   when it no longer exists (to warn the user).
+ *   when it no longer exists (to warn the user). Only 'registry' and 'default' may be persisted.
  */
-function resolveWorkspace({ store = defaultStore(), env = process.env, home = os.homedir() } = {}) {
+function resolveWorkspace({ store = defaultStore(), env = process.env, home = os.homedir(), tmp = os.tmpdir() } = {}) {
   const fallback = defaultWorkspace(home);
   if (env[ENV_VAR]) return { dir: path.resolve(env[ENV_VAR]), source: 'env', registered: null, fallback };
+  if (simulationOnly(env)) return { dir: simulationWorkspace(tmp).workspace, source: 'simulation', registered: null, fallback };
 
   const registered = store.get();
   if (registered && isDir(registered)) return { dir: path.resolve(registered), source: 'registry', registered, fallback };
@@ -238,5 +248,6 @@ module.exports = {
   repoNameFromUrl,
   resolveWorkspace,
   setupWorkspace,
+  simulationWorkspace,
   writeSettings,
 };

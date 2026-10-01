@@ -60,11 +60,20 @@ const WRITE_UTILITIES = [
 // `VAR=value` prefix; a prefix that still appears is allowed in front of an allowed command.
 const AGENT_ENV = { MULTIAGENT_SIMULATION_ONLY: '1' };
 // Folders of the run every agent with commands may write to (created by the engine, given to
-// Claude Code with --add-dir): logs of long commands, evidence screenshots.
+// Claude Code with --add-dir): logs of long commands, the run's scratch workspace (#120), evidence screenshots.
 const RUN_DIRS = [
   'logs',
+  'scratch',
   'screenshots',
 ];
+
+// The environment of an agent of a run: AGENT_ENV, plus the run's scratch workspace (#120) when it
+// has one ({ workspace, userData }, see WorkflowRun.scratchWorkspace), so `npm run run`, `npm run
+// screenshot` and the app started from the worktree never open the owner's workspace or user data.
+function agentEnv(scratch = null) {
+  if (!scratch) return { ...AGENT_ENV };
+  return { ...AGENT_ENV, MULTIAGENT_USER_DATA: scratch.userData, MULTIAGENT_WORKSPACE: scratch.workspace };
+}
 
 // Flags that take no value: never passed twice (clap-based CLIs refuse a repeated flag).
 const BARE_FLAGS = new Set(['--no-subagents', '--disable-web-search', '--always-approve', '--strict-mcp-config', '--no-chrome', '--disable-slash-commands']);
@@ -108,15 +117,15 @@ const bashRules = (caps) => caps.tools.filter((t) => t === 'bash' || t.startsWit
 const writes = (caps) => has(caps, 'edit') || has(caps, 'write');
 const readOnly = (caps) => !writes(caps) && !bashRules(caps).length;
 
-// Claude Code allow rules for the agent's commands: each bash:<command>, the same with an AGENT_ENV
-// prefix, and the utilities above (the write ones only for agents that write files). A bare `bash`
-// already allows everything.
-function claudeBashRules(caps) {
+// Claude Code allow rules for the agent's commands: each bash:<command>, the same with a prefix of
+// the agent's environment (env: agentEnv), and the utilities above (the write ones only for agents
+// that write files). A bare `bash` already allows everything.
+function claudeBashRules(caps, env = AGENT_ENV) {
   const bash = bashRules(caps);
   if (!bash.length) return [];
   if (bash.includes('bash')) return ['Bash'];
   const cmds = bash.map((t) => t.slice(5).trim());
-  const prefixes = Object.entries(AGENT_ENV).map(([k, v]) => `${k}=${v}`);
+  const prefixes = Object.entries(env).map(([k, v]) => `${k}=${v}`);
   const utilities = [...READ_UTILITIES, ...(writes(caps) ? WRITE_UTILITIES : [])].filter((u) => !cmds.includes(u));
   return [...cmds, ...prefixes.flatMap((p) => cmds.map((c) => `${p} ${c}`)), ...utilities].map((c) => `Bash(${c}:*)`);
 }
@@ -126,14 +135,17 @@ const runDirs = (caps, runDir) => (caps && runDir && bashRules(caps).length ? RU
 
 // Told to every agent with commands on its first turn (any CLI): unattended, a command the CLI
 // would ask about is refused, so this says how to run commands that are never asked about.
-function commandGuide(caps, runDir) {
+// agentVars: the agent's environment (agentEnv).
+function commandGuide(caps, runDir, agentVars = AGENT_ENV) {
   if (!caps || !bashRules(caps).length) return '';
-  const [logs, shots] = runDirs(caps, runDir);
-  const env = Object.entries(AGENT_ENV).map(([k, v]) => `${k}=${v}`).join(', ');
+  const dirs = runDirs(caps, runDir);
+  const [logs, shots] = ['logs', 'screenshots'].map((d) => dirs[RUN_DIRS.indexOf(d)]);
+  const env = Object.entries(agentVars).map(([k, v]) => `${k}=${v}`).join(', ');
   return [
     'How to run commands in this unattended run (nobody can approve a command the CLI would ask about: it is refused):',
     '- Your current folder already is your working folder: run commands directly, never `cd <folder> && ...`. For another folder use the tool\'s own path option (`git -C <dir>`, `npm --prefix <dir>`).',
-    `- ${env} is already set in your environment: never prefix a command with \`VAR=value\`.`,
+    `- ${env} ${Object.keys(agentVars).length > 1 ? 'are' : 'is'} already set in your environment: never prefix a command with \`VAR=value\`.`,
+    ...(agentVars.MULTIAGENT_WORKSPACE ? [`- Simulated runs, screenshots and app checks you start go to this run's scratch workspace \`${agentVars.MULTIAGENT_WORKSPACE}\`: never pass a path under the owner's workspace (its runs/ folder).`] : []),
     '- Avoid shell expansions the CLI cannot check (`$VAR`, `$(...)`, `$?`): write the value out; the tool already reports each command\'s exit code.',
     ...(logs ? [`- Write command logs to \`${logs}${path.sep}<name>.log\` and screenshots to \`${shots}\`, never to /tmp, $TEMP or AppData (a gitignored folder of the working folder is fine too).`] : []),
     '- Pipes and `;` chains are fine when every part is an allowed command or a simple utility (tail, head, grep, ls, cat, echo, wc, printenv; mkdir -p, mktemp and sort when you may write files). When unsure, run one command per call; after a refusal, rephrase it once into an allowed form instead of retrying variants.',
@@ -164,9 +176,10 @@ const claudePath = (p) => {
  * denyEdits: globs of files the agent may not edit (`edits_tests: false` → tests_paths); only
  * Claude's edit tools can refuse them, the engine checks every CLI's turn afterwards anyway.
  * runDir: the run's folder; its RUN_DIRS go to Claude with --add-dir when the agent has commands.
+ * env: the agent's environment (agentEnv), accepted as a command prefix by Claude's allow rules.
  * Returns { args, notes }: notes say what this CLI could not enforce (logged once per agent).
  */
-function providerArgs(type, { caps = null, isolated = true, mcpServers = {}, denyEdits = [], runDir = null } = {}) {
+function providerArgs(type, { caps = null, isolated = true, mcpServers = {}, denyEdits = [], runDir = null, env = AGENT_ENV } = {}) {
   const args = [];
   const notes = [];
   const mcp = caps ? pick(mcpServers, caps.mcp) : {};
@@ -186,7 +199,7 @@ function providerArgs(type, { caps = null, isolated = true, mcpServers = {}, den
       const allowed = ['Read', 'Glob', 'Grep'];
       if (has(caps, 'edit')) { offered.push('Edit', 'NotebookEdit'); allowed.push('Edit', 'NotebookEdit'); }
       if (has(caps, 'write')) { offered.push('Write'); allowed.push('Write'); }
-      const bash = claudeBashRules(caps);
+      const bash = claudeBashRules(caps, env);
       if (bash.length) { offered.push('Bash'); allowed.push(...bash); }
       if (caps.web) { offered.push('WebSearch', 'WebFetch'); allowed.push('WebSearch', 'WebFetch'); }
       if (caps.subagents) { offered.push(...CLAUDE_SUBAGENT_TOOLS); allowed.push(...CLAUDE_SUBAGENT_TOOLS); }
@@ -255,6 +268,7 @@ function describe(caps, type) {
 
 module.exports = {
   AGENT_ENV,
+  agentEnv,
   CLAUDE_SUBAGENT_TOOLS,
   CODEX_FEATURES_OFF,
   commandGuide,

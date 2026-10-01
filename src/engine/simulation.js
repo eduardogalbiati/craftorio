@@ -5,8 +5,8 @@
 
 const ENV = 'MULTIAGENT_SIMULATION_ONLY';
 
-function simulationOnly() {
-  return /^(1|true|yes|on)$/i.test(String(process.env[ENV] || '').trim());
+function simulationOnly(env = process.env) {
+  return /^(1|true|yes|on)$/i.test(String(env[ENV] || '').trim());
 }
 
 // Throws when simulation-only is on; `what` says what was refused ("a real run", "the claude CLI").
