@@ -168,8 +168,10 @@
     const key = `${m}:${n}`;
     const st = groupState(g);
     const done = applied(st);
-    // "Add all" left every issue of this group out: they were already planned
-    const already = st.kind === 'roadmap' && g.issues.every((x) => (po.notes[`${m}:all`]?.dropped || []).includes(x));
+    // planned, but by none of this answer's items (the roadmap records each item's origin): they were
+    // already planned, e.g. "Add all" left them out
+    const from = po.messages[m]?.ts;
+    const already = st.kind === 'roadmap' && g.issues.every((x) => issueOf(x)?.roadmap?.origin !== from);
     const off = done ? ` disabled title="${esc(appliedTitle(st))}"` : '';
     return `
       <div class="po-group${done ? ' applied' : ''}" data-msg="${m}" data-group="${n}">
@@ -334,17 +336,18 @@
     const m = Number(box.dataset.msg);
     const answer = po.messages[m]?.answer;
     if (!answer) return;
+    // the items remember this answer: its groups show "In roadmap", issues planned before "Already in the roadmap" (#140)
+    const origin = po.messages[m].ts;
     if (act === 'roadmap-all') {
       const stages = [...new Set(answer.groups.map((g) => g.stage))].sort((a, b) => a - b).map((s) => ({
         name: `Stage ${s} (Product Owner)`,
         note: '',
-        items: answer.groups.filter((g) => g.stage === s).map((g) => ({ workflow: g.workflow, issues: g.issues, inputs: g.inputs, mock: !!state.simulationOnly, reason: g.reason, modeReason: g.modeReason })),
+        items: answer.groups.filter((g) => g.stage === s).map((g) => ({ workflow: g.workflow, issues: g.issues, inputs: g.inputs, mock: !!state.simulationOnly, reason: g.reason, modeReason: g.modeReason, origin })),
       }));
       try {
         const out = await api.proposeRoadmap(po.projectId, { stages }, false);
         actions().showRoadmap(out);
-        // dropped: the groups made only of these show "Already in the roadmap" (#140)
-        po.notes[`${m}:all`] = { text: `Added to the roadmap as planned.${out.dropped?.length ? ` Already planned, left out: ${out.dropped.map((n) => `#${n}`).join(', ')}.` : ''}`, dropped: out.dropped || [] };
+        po.notes[`${m}:all`] = { text: `Added to the roadmap as planned.${out.dropped?.length ? ` Already planned, left out: ${out.dropped.map((n) => `#${n}`).join(', ')}.` : ''}` };
       } catch (e) { po.notes[`${m}:all`] = { text: errMsg(e), error: true }; }
       render();
       return;
@@ -353,7 +356,7 @@
     const st = groupState(answer.groups[n]);
     // an applied group is not applied again (#140); a partly applied one only for the rest
     if (applied(st)) return;
-    const g = st.kind === 'partly' ? { ...answer.groups[n], issues: st.rest } : answer.groups[n];
+    const g = { ...answer.groups[n], ...(st.kind === 'partly' ? { issues: st.rest } : {}), origin };
     const key = `${m}:${n}`;
     try {
       if (act === 'assign') {

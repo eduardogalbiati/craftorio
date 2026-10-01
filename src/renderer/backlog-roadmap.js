@@ -461,10 +461,10 @@
     await save(ctx, stages);
   }
 
-  /** A new stage at the end with the assign dialog's issues: one item (group) or one per issue; `reason`/`modeReason`: the Product Owner's. */
-  async function addStage(ctx, data, { issues, workflow, workflowName, inputs, mock, group, reason, modeReason }) {
+  /** A new stage at the end with the assign dialog's issues: one item (group) or one per issue; `reason`/`modeReason`/`origin`: the Product Owner's. */
+  async function addStage(ctx, data, { issues, workflow, workflowName, inputs, mock, group, reason, modeReason, origin }) {
     const stages = clone(data?.roadmap?.stages);
-    const why = { ...(reason ? { reason } : {}), ...(modeReason ? { modeReason } : {}) };
+    const why = { ...(reason ? { reason } : {}), ...(modeReason ? { modeReason } : {}), ...(origin ? { origin } : {}) };
     const items = group ? [{ workflow, workflowName, inputs, mock, issues, ...why }] : issues.map((n) => ({ workflow, workflowName, inputs, mock, issues: [n], ...why }));
     stages.push({ name: '', note: '', items });
     ctx.setData(await api.saveRoadmap(ctx.projectId, stages));

@@ -127,9 +127,11 @@ function issueOf(ref, known) {
 }
 
 // An item from what the UI or a proposal sends: { id?, workflow, workflowName?, inputs?, mock?, issues,
-// reason?, modeReason? (or mode_reason) }: the reasons are the Product Owner's (#105, #110), for the
-// group and for its mode. The run-related fields (status, runId, runs, error) come from the item with
-// the same id already in the roadmap: editing never loses track of a run.
+// reason?, modeReason? (or mode_reason), origin? }: the reasons are the Product Owner's (#105, #110), for the
+// group and for its mode; `origin` is the timestamp of the Product Owner's answer the item was added
+// from (#140: its groups show "In roadmap", the others "Already in the roadmap"). The run-related
+// fields (status, runId, runs, error) come from the item with the same id already in the roadmap:
+// editing never loses track of a run.
 function cleanItem(raw, known, previous) {
   const workflow = path.basename(String(raw?.workflow || ''));
   if (!workflow) throw new Error('Every roadmap item needs a workflow.');
@@ -140,10 +142,11 @@ function cleanItem(raw, known, previous) {
   const state = old || { status: 'planned', runId: null, runs: [], error: null };
   const reason = String(raw.reason ?? old?.reason ?? '').trim();
   const modeReason = String(raw.modeReason ?? raw.mode_reason ?? old?.modeReason ?? '').trim();
+  const origin = String(raw.origin ?? old?.origin ?? '').trim();
   return {
     id: old ? old.id : newId('item'), workflow, workflowName: raw.workflowName || old?.workflowName || workflow,
     inputs: raw.inputs && typeof raw.inputs === 'object' ? raw.inputs : {}, mock: !!raw.mock,
-    ...(reason ? { reason } : {}), ...(modeReason ? { modeReason } : {}),
+    ...(reason ? { reason } : {}), ...(modeReason ? { modeReason } : {}), ...(origin ? { origin } : {}),
     ...issues[0], ...(issues.length > 1 ? { issues } : {}),
     status: ITEM_STATES.includes(state.status) ? state.status : 'planned', runId: state.runId || null, runs: state.runs || [], error: state.error || null,
   };
@@ -393,7 +396,7 @@ function markStarted(dir, projectId, itemId, { runId = null, error = null }) {
 function issueStages(roadmap) {
   const out = new Map();
   (roadmap.stages || []).forEach((s, n) => {
-    for (const x of s.items) for (const i of itemIssues(x)) out.set(i.number, { stage: n + 1, name: s.name || `Stage ${n + 1}`, status: x.status, itemId: x.id });
+    for (const x of s.items) for (const i of itemIssues(x)) out.set(i.number, { stage: n + 1, name: s.name || `Stage ${n + 1}`, status: x.status, itemId: x.id, origin: x.origin || null });
   });
   return out;
 }

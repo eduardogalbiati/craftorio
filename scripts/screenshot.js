@@ -183,8 +183,9 @@ function demoPoConversation(ws, projectId) {
       duplicates: [{ number: 12, title: 'Export a run report as Markdown', state: 'open', relation: 'overlaps', reason: 'Same report and menu.' }],
       existingIssue: null, addition: '', assumptions: ['The PDF uses the same template as the Markdown export.'],
     } },
-    // a plan answer (#140) against the demo roadmap: #12 + #9 is its stage 2 (In roadmap · Stage 2),
-    // #11 its done stage 1, #10 + #8 only partly planned (Add the rest)
+    // a plan answer (#140) against the demo roadmap: #12 + #9 is its stage 2, added from this answer
+    // (In roadmap · Stage 2), #11 its done stage 1, planned before (Already in the roadmap), #10 + #8
+    // only partly planned (Add the rest)
     { ts: at(90), role: 'user', mode: 'plan', text: 'Analyze the backlog and propose runs' },
     { ts: at(110), role: 'po', mode: 'plan', model: 'claude-opus-5-5', costUsd: 0.21, text: 'Three runs: the rename crash first, then the server work together, then the small UI and docs fixes.', answer: {
       summary: 'Three runs.',
@@ -219,6 +220,7 @@ function demoRoadmap(ws, projectId) {
       { id: 'stage-2', name: 'Reports and health', note: 'Both touch the server: one run, no conflict.', items: [item('item-2', 'software-development-local-hero.yaml', [12, 9], {
         reason: 'Both add a server route and share the report formatter: one run avoids a merge conflict in src/server.',
         modeReason: 'Auto: server code with no screen to try.',
+        origin: new Date(Date.UTC(2026, 0, 20, 10, 1, 50)).toISOString(), // the demo Product Owner's plan answer
       })] },
       { id: 'stage-3', name: '', note: '', items: [item('item-3', 'software-development.yaml', [10], {
         inputs: { language: 'js', mode: 'validated' }, reason: 'A small UI fix on its own.', modeReason: 'Validated: a screen the owner can try in the app.',

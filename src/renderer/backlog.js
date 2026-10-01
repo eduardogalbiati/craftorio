@@ -311,13 +311,13 @@
     return skipped;
   }
 
-  async function roadmapGroup({ issues, workflow, inputs, reason, modeReason }) {
+  async function roadmapGroup({ issues, workflow, inputs, reason, modeReason, origin }) {
     const list = issues.map((n) => (bl.data?.issues || []).find((i) => i.number === n)).filter(Boolean);
     const skipped = issues.filter((n) => !list.some((i) => i.number === n));
     if (!list.length) return skipped;
     const wf = (await api.listWorkflows()).find((w) => w.file === workflow);
     await window.BacklogRoadmap.addStage(roadmapCtx(), bl.data, {
-      issues: list, workflow, workflowName: wf?.name || workflow, inputs: inputs || {}, mock: !!state.simulationOnly, group: list.length > 1, reason, modeReason,
+      issues: list, workflow, workflowName: wf?.name || workflow, inputs: inputs || {}, mock: !!state.simulationOnly, group: list.length > 1, reason, modeReason, origin,
     });
     showRoadmap();
     return skipped;
