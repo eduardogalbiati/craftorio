@@ -881,14 +881,16 @@ function createService({ host }) {
     const { run, gate } = openRunAppGate({ runId, approvalId });
     const { project, config, source, from, fingerprint, confirmed, repoError } = gateRunConfig(run, gate);
     const stateFile = path.join(ws.localPreviews, run.runId, 'install.json');
+    const suggestion = config ? null : localPreview.suggestConfig(gate.work_dir);
     return {
       config, source, from, confirmed, repoError, dir: gate.work_dir,
       changed: !!config && !confirmed && !!project?.localPreviewConfirmed,
       fingerprint,
       project: project ? { id: project.id, name: project.name } : null,
-      suggestion: config ? null : localPreview.suggestConfig(gate.work_dir),
-      // whether an install step would run in this worktree now (#119): { state: 'skipped' | 'will-run', text }
-      install: localPreview.installState(gate.work_dir, stateFile, { install: config?.install || 'install' }),
+      suggestion,
+      // whether the install step of the config (or of the prefilled setup) would run in this
+      // worktree now (#119): { state: 'none' | 'skipped' | 'will-run', text }
+      install: localPreview.installState(gate.work_dir, stateFile, config || suggestion),
       running: previews.has(run.runId) && terminals.procs.has(previews.get(run.runId).id),
     };
   }
