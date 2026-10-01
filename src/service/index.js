@@ -22,7 +22,7 @@
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
-const { execFile } = require('child_process');
+const { execFile, execFileSync } = require('child_process');
 const { EventEmitter } = require('events');
 const { WorkflowRun, loadWorkflow } = require('../engine/workflow');
 const { Recorder } = require('../engine/recorder');
@@ -46,6 +46,7 @@ const cliSessions = require('../cli-sessions');
 const { trustFolder } = require('../cli-trust');
 const { createCodeVersion } = require('../code-version');
 const runs = require('../runs');
+const runOwner = require('../run-owner');
 const runPr = require('../run-pr');
 const workflows = require('../workflows');
 const builder = require('../workflow-builder');
@@ -320,6 +321,7 @@ function createService({ host }) {
   }
 
   function runEnded(run) {
+    run.owner?.release();
     active.delete(run.runId);
     budgetAt.delete(run.runId);
     if (!run.mock && active.size) finishedPeers.push({ finishedAt: Date.now(), sessions: usageOf(run) });
@@ -339,10 +341,12 @@ function createService({ host }) {
         runId: r.runId, workflow: r.wf.metadata?.name || path.basename(r.file), file: path.basename(r.file), mock: r.mock,
         projectId: r.projectId, issues: r.issues, startedAt: r.startedAt ? new Date(r.startedAt).toISOString() : null,
         status: r.status, waiting: gates.length, gates, inputs: r.inputs, agent_names: r.agentNames(),
-        ...liveTitle(r), pr: withPrState(r.pr, r.mock),
+        ...liveTitle(r), pr: withPrState(r.pr, r.mock), passedGates: passedGates(r),
       };
     });
   }
+  // The human gates a run in progress has passed (decided, or confirmed at resume): stopping it asks first (#112).
+  const passedGates = (run) => run.wf.steps.filter((s) => s.type === 'human_approval' && run.ctx.steps[s.id]?.output).map((s) => s.id);
 
   function listWorkflows() {
     if (!fs.existsSync(ws.workflows)) return [];
@@ -489,6 +493,13 @@ function createService({ host }) {
   async function startWorkflowRun({ file, inputs, mock, mockSequences = null, resume = null, projectId: forcedProject = null, issues = null }) {
     // simulation-only (automated checks): a real run is refused, never turned into a simulation
     if (!mock) simulation.refuseReal('a real run');
+    // the same issues never get a second live run, from this app or another one (#112): resume that run instead
+    const twin = resume ? null : liveRunForIssues(issues);
+    if (twin) {
+      const err = new Error(`${twin.issues.map((i) => `#${i.number}`).join(', ')} already has a live run, ${twin.runId}${twin.runningElsewhere ? ' (in another app window)' : ''}: open or resume that run instead of starting the same work twice.`);
+      err.runId = twin.runId;
+      throw err;
+    }
     const slot = { mock: !!mock, projectId: forcedProject };
     const busy = slotProblem(slot);
     if (busy) throw new Error(busy);
@@ -541,6 +552,8 @@ function createService({ host }) {
       }
       budgetAt.set(run.runId, baselineAt);
       active.set(run.runId, run);
+      // runs/<id>/owner.json with a heartbeat (#112): another app process sees the run as running, not interrupted
+      run.owner = runOwner.claimRun(run.runDir);
     } finally {
       reserved.delete(slot);
     }
@@ -979,25 +992,87 @@ function createService({ host }) {
   }
 
   const runIsLive = (runId) => ['pending', 'running'].includes(active.get(runId)?.status);
+  // Whether a run is alive in this process or in another app process on the workspace (#112).
+  const runAlive = (runId) => {
+    const id = path.basename(String(runId || ''));
+    return !!id && (runIsLive(id) || (!!ws && runOwner.runOwnedElsewhere(path.join(ws.runs, id))));
+  };
+
+  // A live run (any app process) of one of these issues, or null (#112: no duplicate work).
+  function liveRunForIssues(issues) {
+    const numbers = new Set((issues || []).map((i) => Number(i?.number ?? i)).filter(Boolean));
+    if (!numbers.size || !ws) return null;
+    const mine = [...active.values()].find((r) => (r.issues || []).some((i) => numbers.has(Number(i.number))));
+    if (mine) return { runId: mine.runId, issues: mine.issues, runningElsewhere: null };
+    return runs.listRuns(ws.runs).find((r) => r.status === 'running' && r.runningElsewhere && (r.issues || []).some((i) => numbers.has(Number(i.number)))) || null;
+  }
+
+  const gitOut = (cwd, args) => {
+    try { return execFileSync('git', args, { cwd, encoding: 'utf8', windowsHide: true, timeout: 10000, stdio: ['ignore', 'pipe', 'ignore'] }).trim(); } catch { return null; }
+  };
+
+  // Commits a run's kept worktree has on top of its base (0: none, or no worktree left).
+  function runWorktreeCommits(runId) {
+    const runDir = runFolder(runId);
+    const ready = supervisor.readEvents(runDir).find((e) => e.type === 'worktree.ready');
+    const dir = ready?.dir;
+    if (!dir || !fs.existsSync(dir)) return 0;
+    for (const base of [ready.base && `origin/${ready.base}`, ready.base].filter(Boolean)) {
+      const n = gitOut(dir, ['rev-list', '--count', `${base}..HEAD`]);
+      if (n !== null) return Number(n) || 0;
+    }
+    return 0;
+  }
+
+  // Whether the owner may confirm, at resume, the decision a run took at a human gate (#112): only
+  // a positive decision, and only while the branch is still at the commit approved there (a
+  // simulation has no branch: nothing can have changed). { ok, approvedCommit, currentCommit, reason }
+  function gateConfirmation(runDir, gate, spec) {
+    const evs = supervisor.readEvents(runDir);
+    const stepOf = new Map(evs.filter((e) => e.type === 'approval.requested').map((e) => [e.approval_id, e.step_id]));
+    const decided = evs.filter((e) => e.type === 'approval.resolved' && !e.withdrawn && (e.step_id || stepOf.get(e.approval_id)) === gate).pop();
+    const out = spec.steps[gate]?.output || {};
+    if (!decided && !spec.steps[gate]) return { ok: false, reason: `the previous run has no decision at ${gate}` };
+    if (decided?.approved === false || out.approved === false) return { ok: false, reason: `${gate} was rejected` };
+    const approvedCommit = decided?.commit || null;
+    const wt = spec.worktree;
+    const currentCommit = wt?.dir && fs.existsSync(wt.dir) ? gitOut(wt.dir, ['rev-parse', 'HEAD']) : null;
+    if (!wt) return { ok: true, approvedCommit, currentCommit };
+    if (!approvedCommit) return { ok: false, approvedCommit, currentCommit, reason: `the run did not record the commit approved at ${gate}` };
+    if (!currentCommit) return { ok: false, approvedCommit, currentCommit, reason: 'the run\'s worktree is gone' };
+    if (currentCommit !== approvedCommit) return { ok: false, approvedCommit, currentCommit, reason: `the branch changed after the approval at ${gate}` };
+    return { ok: true, approvedCommit, currentCommit };
+  }
 
   // Continues a run from a step: a new run with the previous outputs, agent conversations and an
   // instruction. Called by the owner directly (Resume from step…) and by the supervisor's
   // recommendations; no LLM call. It never goes past a human gate on an earlier decision: a step
   // after a gate the previous run decided is refused, and every gate reached again asks again.
+  // Only the owner, in the dialog, may confirm that decision (`confirmGate`, the gate's id, #112)
+  // while the branch is still at the approved commit; it is recorded as their approval.
   // mock: true resumes as a simulation (a simulated run always resumes as one).
-  function resumeRun({ runId, step, instruction, mock }) {
+  function resumeRun({ runId, step, instruction, mock, confirmGate = null }) {
     const runDir = runFolder(runId);
     if (runIsLive(path.basename(runDir))) throw new Error('The run is still active: wait for it to end (or stop it) before resuming it.');
+    if (runAlive(path.basename(runDir))) throw new Error(`Run ${path.basename(runDir)} is still running in another app window: resume it there, or stop it first.`);
     const spec = supervisor.resumeSpec(runDir, step);
     if (!spec.file) throw new Error('The run does not record its workflow file.');
     const wf = loadWorkflow(workflowPath(spec.file).file);
     const fromStep = step || wf.steps[0].id;
     if (!wf.steps.some((s) => s.id === fromStep)) throw new Error(`Cannot resume: step "${fromStep}" does not exist in the current version of the workflow.`);
     const gate = supervisor.skippedGate(wf, fromStep, spec.steps);
-    if (gate) throw new Error(`Cannot resume from "${fromStep}": it would go past the human gate "${gate}" on the previous run's decision. Resume from "${gate}" instead: it asks again.`);
+    let confirmedGate = null;
+    if (gate) {
+      if (confirmGate !== gate) throw new Error(`Cannot resume from "${fromStep}": it would go past the human gate "${gate}" on the previous run's decision. Resume from "${gate}" instead: it asks again.`);
+      const check = gateConfirmation(runDir, gate, spec);
+      if (!check.ok) throw new Error(`Cannot confirm ${gate} again: ${check.reason}. Resume from "${gate}" instead: it asks again.`);
+      confirmedGate = { step: gate, commit: check.currentCommit };
+    }
+    const steps = supervisor.withoutGateDecisions(wf, spec.steps);
+    if (confirmedGate) steps[gate] = spec.steps[gate];
     return startWorkflowRun({
       file: spec.file, inputs: spec.inputs, mock: spec.mock || mock === true, projectId: spec.projectId, issues: spec.issues,
-      resume: { runId: spec.runId, fromStep, steps: supervisor.withoutGateDecisions(wf, spec.steps), sessions: spec.sessions, handoffs: spec.handoffs, instruction: instruction || null, worktree: spec.worktree },
+      resume: { runId: spec.runId, fromStep, steps, sessions: spec.sessions, handoffs: spec.handoffs, instruction: instruction || null, worktree: spec.worktree, confirmedGate },
     });
   }
 
@@ -1018,12 +1093,24 @@ function createService({ host }) {
       if (ev.type === 'step.finished' && ev.error) failedStep = ev.step_id;
     }
     const status = runIsLive(id) ? 'running' : runs.readRun(ws.runs, id)?.status || 'interrupted';
-    const steps = wf.steps.map((s) => ({
-      id: s.id, type: s.type || 'agent', gate: s.type === 'human_approval', visits: visits[s.id] || 0,
-      blockedBy: supervisor.skippedGate(wf, s.id, spec.steps),
-    }));
-    const exists = (x) => steps.some((s) => s.id === x && !s.blockedBy);
-    const suggested = [status === 'failed' ? failedStep : null, stoppedAt, failedStep].find(exists) || steps.find((s) => !s.blockedBy)?.id || null;
+    // a step after a decided gate: allowed when the owner confirms that gate again (#112), see gateConfirmation
+    const confirmations = new Map();
+    const confirmationOf = (gate) => {
+      if (!confirmations.has(gate)) confirmations.set(gate, gateConfirmation(runDir, gate, spec));
+      return confirmations.get(gate);
+    };
+    const steps = wf.steps.map((s) => {
+      const blockedBy = supervisor.skippedGate(wf, s.id, spec.steps);
+      return {
+        id: s.id, type: s.type || 'agent', gate: s.type === 'human_approval', visits: visits[s.id] || 0,
+        blockedBy, confirm: blockedBy ? confirmationOf(blockedBy) : null,
+      };
+    });
+    const allowed = (x) => steps.some((s) => s.id === x && (!s.blockedBy || s.confirm?.ok));
+    // where the run stopped, else the nearest allowed step before it; never the first step by default
+    const stoppedIdx = steps.findIndex((s) => s.id === stoppedAt);
+    const before = stoppedIdx > 0 ? steps.slice(0, stoppedIdx).reverse().find((s) => allowed(s.id))?.id : null;
+    const suggested = [status === 'failed' ? failedStep : null, stoppedAt, failedStep, before].find(allowed) || steps.find((s) => !s.blockedBy)?.id || null;
     const wt = spec.worktree;
     return {
       runId: id, workflow: wf.metadata?.name || spec.file, file: spec.file, status, active: status === 'running', mock: spec.mock,
@@ -1034,7 +1121,24 @@ function createService({ host }) {
   }
 
   // ---- run lists (Projects > Project and Workflows > Runs) ------------------------------
+  // Each roadmap run started by a retry of its item → the item's run before it (#112: the lists tell
+  // the duplicates apart); a resume of that run is not a retry. Read once per listing.
+  let retryCache = { at: 0, map: new Map() };
+  function retryLinks() {
+    if (Date.now() - retryCache.at < 2000) return retryCache.map;
+    const map = new Map();
+    for (const projectId of roadmaps.roadmapProjects(ws.backlog)) {
+      for (const s of roadmaps.readRoadmap(ws.backlog, projectId).stages || []) {
+        for (const x of s.items || []) (x.runs || []).forEach((id, n) => { if (n > 0) map.set(id, x.runs[n - 1]); });
+      }
+    }
+    retryCache = { at: Date.now(), map };
+    return map;
+  }
+
   function runListItem(r) {
+    const prev = retryLinks().get(r.runId);
+    const retryOf = prev && prev !== r.resumedFrom ? prev : null;
     const run = active.get(r.runId);
     const current = !!run && run.status === 'running';
     const live = current ? [...run.sessions.values()].map((x) => sessionView(run.snapshot(x), false)) : null;
@@ -1050,6 +1154,8 @@ function createService({ host }) {
       artifacts: runs.runArtifacts(r.runDir),
       status: current ? 'running' : r.status,
       current,
+      retryOf,
+      passedGates: current ? passedGates(run) : [],
       // runs recorded before `groups:` take the workflow's current ones
       groups: r.groups || wf.groups || [],
       // a run in progress: the engine's own trail, not events.jsonl
@@ -1342,13 +1448,15 @@ function createService({ host }) {
 
   async function advanceRoadmap(projectId) {
     const before = roadmaps.readRoadmap(ws.backlog, projectId);
-    if (before.state !== 'running') return;
+    // a planned roadmap has no run to follow; a paused one still refreshes its items from their runs (#112)
+    if (before.state === 'planned') return;
     const closed = new Set((backlog.readBacklog(ws.backlog, projectId)?.issues || []).filter((i) => i.state === 'closed').map((i) => i.number));
     const mockOf = (item) => !!item.mock || !!before.simulated;
     const { roadmap, start } = roadmaps.advance(before, {
       runOf: roadmapRun, closed: (n) => closed.has(n), canStart: (item) => !slotProblem({ mock: mockOf(item), projectId }),
     });
-    roadmaps.updateRoadmap(ws.backlog, projectId, (cur) => (cur.updatedAt === before.updatedAt ? roadmap : null));
+    const changed = JSON.stringify({ ...roadmap, updatedAt: null }) !== JSON.stringify({ ...before, updatedAt: null });
+    if (changed) roadmaps.updateRoadmap(ws.backlog, projectId, (cur) => (cur.updatedAt === before.updatedAt ? roadmap : null));
     if (roadmap.state === 'paused' && before.state === 'running') {
       notify({ kind: 'run', event: 'failed', title: 'Roadmap paused', body: String(roadmap.error || '').slice(0, 180) });
     }
@@ -1522,7 +1630,7 @@ function createService({ host }) {
     activeRuns, analyticsSnapshot, analyzeAnalytics, artifactRuns, assignWorkflow, cloneBuilderWorkflow, code, dispatchQueue, dispatchRoadmaps, envDetails, gateChanges, listAllRuns,
     listCliSessions, listLocalPreviews, listWorkflows, liveRun, loadBuilderWorkflow, openTerminal, projectRuns, pushProject,
     readArtifact, refreshLocal, renameCliSession, resolvePushConflict, restoreWorkflow, resumeOptions, resumeRun,
-    runAppInfo, runFolder, runPrState, saveBuilderWorkflow, saveLocalPreview, setBudget, setPrice, setRunTitle, startLocalPreview, startRoadmap, startWorkflowRun, stopLocalPreview, suggestLocalPreview, unpushedProjects, usageSnapshot,
+    runAlive, runAppInfo, runFolder, runPrState, runWorktreeCommits, saveBuilderWorkflow, saveLocalPreview, setBudget, setPrice, setRunTitle, startLocalPreview, startRoadmap, startWorkflowRun, stopLocalPreview, suggestLocalPreview, unpushedProjects, usageSnapshot,
     withIssueRuns, workflowDirs,
   };
   const entries = loadChannels(ctx);

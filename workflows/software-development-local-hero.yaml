@@ -432,7 +432,7 @@ steps:
     message: |
       The developer finished {% if previous_step == 'develop' and steps.developer_check.output and steps.developer_check.output.choice == 'changes' %}your change request {{ steps.developer_check.visits - 1 }}{% else %}the implementation{% endif %}. Try it before the review and the tests run.
       Branch `{{ steps.develop.output.branch }}`{% if worktree_dir %} in the worktree {{ worktree_dir }}{% endif %}.
-      {% if local_preview %}Run App starts `{{ local_preview.command }}` there.{% else %}To try it: Run App proposes a command from the worktree (package.json, the README) and saves it as the project's Local preview.{% endif %}
+      {% if local_preview %}Run App starts `{{ local_preview.command }}` there.{% else %}To try it: Run App proposes a command from the worktree (package.json, the README) and saves it as the project's Local preview.{% endif %} Try it with Run App, not by starting it by hand in the worktree.
 
       Summary: {{ steps.develop.output.summary }}
       {% if steps.develop.output.issues %}

@@ -748,6 +748,17 @@ class WorkflowRun extends EventEmitter {
     let error = null;
     try {
       await this.setupWorktree();
+      // the owner confirmed, in the Resume from step dialog, a gate the previous run decided (#112):
+      // recorded as the owner's decision; automation never sets `confirmedGate`
+      const confirmed = this.resume?.confirmedGate;
+      if (confirmed) {
+        const out = this.ctx.steps[confirmed.step]?.output || {};
+        const data = out.choice !== undefined ? { choice: out.choice } : { approved: out.approved !== false };
+        this.emitEvent('approval.resolved', {
+          approval_id: `resume-${confirmed.step}`, step_id: confirmed.step, ...data, by: 'owner', confirmed_at_resume: true,
+          note: 'confirmed at resume', wait_ms: 0, ...(confirmed.commit ? { commit: confirmed.commit } : {}),
+        });
+      }
       while (current !== 'end') {
         if (current === 'fail') throw new Error('Workflow routed to "fail" (retry limit reached).');
         if (++guard > 500) throw new Error('Limit of 500 transitions reached.');
@@ -2443,6 +2454,14 @@ class WorkflowRun extends EventEmitter {
     return [...this.approvals.values()].map((a) => a.gate).filter(Boolean);
   }
 
+  // The commit checked out in the run's worktree, or null (no worktree: a simulation, not a git repo).
+  worktreeHead() {
+    if (!this.worktree) return null;
+    try {
+      return execFileSync('git', ['rev-parse', 'HEAD'], { cwd: this.worktree.workDir || this.worktree.dir, encoding: 'utf8', windowsHide: true, timeout: 10000 }).trim() || null;
+    } catch { return null; }
+  }
+
   // answer: boolean (approve/reject) or the id of one of the step's choices; feedback: optional text
   resolveApproval(id, answer, by = 'user', feedback = '') {
     const a = this.approvals.get(id);
@@ -2455,7 +2474,9 @@ class WorkflowRun extends EventEmitter {
     w.waits++;
     w.wait_ms += waitMs;
     const data = typeof answer === 'boolean' ? { approved: answer } : { choice: answer };
-    this.emitEvent('approval.resolved', { approval_id: id, ...data, by, wait_ms: waitMs, ...(text ? { feedback: text } : {}) });
+    // the commit the owner decided on (#112): a resume may only pass this gate again while the branch is still there
+    const commit = this.worktreeHead();
+    this.emitEvent('approval.resolved', { approval_id: id, step_id: a.stepId, ...data, by, wait_ms: waitMs, ...(commit ? { commit } : {}), ...(text ? { feedback: text } : {}) });
     if (text) this.ctx.feedback.push({ step: a.stepId, choice: typeof answer === 'boolean' ? String(answer) : answer, text, ts: new Date().toISOString() });
     this.setStatus(this.orchestrator, 'active');
     a.resolve({ answer, feedback: text });

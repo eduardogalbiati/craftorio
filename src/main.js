@@ -22,6 +22,8 @@ const {
   shell,
 } = require('electron');
 const workspace = require('./workspace');
+const localPreview = require('./local-preview');
+const runOwner = require('./run-owner');
 const { allowPermission } = require('./permissions');
 const { createService } = require('./service');
 const { authChannels } = require('./service/manifest');
@@ -37,6 +39,32 @@ if (app.isPackaged && ['remote-debugging-port', 'remote-debugging-pipe'].some((s
 // A copy started by Run locally at a gate (src/local-preview.js) keeps its own user data folder,
 // so it never shares the owner's sign-in or window state
 if (!app.isPackaged && process.env.MULTIAGENT_USER_DATA) app.setPath('userData', path.resolve(process.env.MULTIAGENT_USER_DATA));
+
+// ---- one app per workspace (#112) ------------------------------------------------------------
+// Two copies on one workspace judge each other's runs as interrupted and start them twice.
+// - An app started by hand from a run's worktree (<workspace>/worktrees/<id>) opens a scratch
+//   workspace with its own user data folder, simulations only, as Run locally does.
+// - The owner's app (no MULTIAGENT_WORKSPACE) holds Electron's single-instance lock for its user
+//   data folder; a second copy gets a user data folder of its own and offers a scratch copy or quit.
+// - Whatever the user data folder, the app locks the workspace it opens (<workspace>/.lock with a
+//   heartbeat, src/run-owner.js); a locked workspace is never opened read-write by a second copy.
+// Scratch copies (screenshots, Run locally, smoke checks, tests) have their own workspaces: unaffected.
+const APP_DIR = path.join(__dirname, '..');
+if (!app.isPackaged && !process.env.MULTIAGENT_WORKSPACE) {
+  const scratch = localPreview.worktreeAppScratch(APP_DIR);
+  if (scratch) {
+    process.env.MULTIAGENT_WORKSPACE = scratch.workspace;
+    process.env.MULTIAGENT_SIMULATION_ONLY = '1';
+    if (!process.env.MULTIAGENT_USER_DATA) app.setPath('userData', scratch.userData);
+    console.log(`Started from a worktree of ${scratch.owner}: using the scratch workspace ${scratch.workspace} (simulations only).`);
+  }
+}
+const secondCopy = !process.env.MULTIAGENT_WORKSPACE && !app.requestSingleInstanceLock();
+if (secondCopy) {
+  const dir = workspace.resolveWorkspace().dir || os.tmpdir();
+  app.setPath('userData', path.join(dir, 'local-previews', `app-${process.pid}`, 'user-data'));
+}
+let workspaceLock = null;
 
 let win = null;
 
@@ -150,6 +178,31 @@ async function ensureWorkspace() {
     const dir = await pickWorkspaceDir();
     if (dir) return workspace.setupWorkspace(dir);
   }
+}
+
+// Locks the workspace for this process (#112). Held by another live copy: says so and offers a
+// scratch copy of it (simulations only) or quit; returns the workspace to open, or null to quit.
+async function claimWorkspace(ws) {
+  const lock = secondCopy ? { ok: false, holder: null } : runOwner.lockWorkspace(ws.root, { app: APP_DIR });
+  if (lock.ok) { workspaceLock = lock; return ws; }
+  const h = lock.holder;
+  const who = h ? `process ${h.pid} on ${h.host}, open since ${h.started_at}${h.app ? ` (from ${h.app})` : ''}` : 'another copy of the app';
+  const { response } = await dialog.showMessageBox({
+    type: 'warning',
+    title: 'Workspace in use',
+    message: 'This workspace is already open in another copy of the app',
+    detail: `${ws.root}\n\nIt is open in ${who}. Two copies on one workspace would take each other's runs for interrupted and start them twice.\n\nOpen a scratch copy (your agents, skills, workflows and settings copied to a new workspace; simulations only), or quit.`,
+    buttons: ['Open a scratch copy', 'Quit'],
+    defaultId: 0,
+    cancelId: 1,
+    noLink: true,
+  });
+  if (response !== 0) return null;
+  const scratch = localPreview.scratchWorkspace(ws, path.join(ws.root, 'local-previews', `app-${process.pid}`));
+  process.env.MULTIAGENT_SIMULATION_ONLY = '1';
+  const next = workspace.setupWorkspace(scratch.workspace, { persist: false });
+  workspaceLock = runOwner.lockWorkspace(next.root, { app: APP_DIR });
+  return next;
 }
 
 async function pickWorkspaceDir(parent) {
@@ -290,6 +343,8 @@ ipcMain.handle('app:relaunch', (_e, arg) => {
     // the renderer saved the interrupted runs to list after the restart
     if (win && !win.isDestroyed()) win.webContents.session.flushStorageData();
     service.shutdown();
+    // app.exit skips will-quit: the new process takes the workspace lock
+    workspaceLock?.release();
     app.relaunch();
     app.exit(0);
   });
@@ -301,7 +356,8 @@ if (process.platform === 'win32') app.setAppUserModelId(app.isPackaged ? 'Multia
 
 app.whenReady().then(async () => {
   createAccount();
-  const ws = await ensureWorkspace();
+  const found = await ensureWorkspace();
+  const ws = found && await claimWorkspace(found);
   if (!ws) return app.quit();
   service.setWorkspace(ws);
   restrictPermissions(session.defaultSession);
@@ -315,4 +371,12 @@ app.whenReady().then(async () => {
 app.on('window-all-closed', () => {
   service.shutdown();
   app.quit();
+});
+app.on('will-quit', () => workspaceLock?.release());
+// a second copy started on the same user data folder: this window comes forward (#112)
+app.on('second-instance', () => {
+  if (!win || win.isDestroyed()) return;
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.focus();
 });

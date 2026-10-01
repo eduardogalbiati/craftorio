@@ -16,6 +16,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { itemIssues } = require('./backlog');
+const { writeJsonSafe } = require('./state-file');
 
 // planned: edited, never started by itself · running · paused (a failure, the owner, a proposal) · done
 const STATES = ['done', 'paused', 'planned', 'running'];
@@ -30,11 +31,25 @@ function readRoadmap(dir, projectId) {
   try { return { ...emptyRoadmap(), ...JSON.parse(fs.readFileSync(roadmapFile(dir, projectId), 'utf8')) }; } catch { return emptyRoadmap(); }
 }
 
+// What a roadmap file must look like (#112: a write that breaks it is refused, src/state-file.js).
+function roadmapProblem(r) {
+  if (!r || typeof r !== 'object') return 'not an object';
+  if (!STATES.includes(r.state)) return `unknown state ${JSON.stringify(r.state)}`;
+  if (!Array.isArray(r.stages)) return 'stages is not a list';
+  for (const s of r.stages) {
+    if (!s || !Array.isArray(s.items)) return 'a stage has no items list';
+    for (const x of s.items) {
+      if (!x?.id || !x.workflow) return 'an item has no id or workflow';
+      if (!ITEM_STATES.includes(x.status)) return `item ${x.id} has an unknown status ${JSON.stringify(x.status)}`;
+      if (x.runs && !Array.isArray(x.runs)) return `item ${x.id}: runs is not a list`;
+    }
+  }
+  return null;
+}
+
 function writeRoadmap(dir, projectId, roadmap) {
-  fs.mkdirSync(dir, { recursive: true });
   const out = { ...roadmap, updatedAt: new Date().toISOString() };
-  fs.writeFileSync(roadmapFile(dir, projectId), JSON.stringify(out, null, 2));
-  return out;
+  return writeJsonSafe(roadmapFile(dir, projectId), out, { validate: roadmapProblem });
 }
 
 const updateRoadmap = (dir, projectId, fn) => writeRoadmap(dir, projectId, fn(readRoadmap(dir, projectId)) || readRoadmap(dir, projectId));
@@ -205,12 +220,15 @@ function setState(dir, projectId, state, { simulated } = {}) {
 
 // Owner actions on an item: retry (planned again, its runs kept in `runs`), skip (counts as finished).
 // On the item that paused the roadmap, the roadmap goes on (the owner decided what to do with it).
-function itemAction(dir, projectId, itemId, action) {
+// `alive(runId)`: whether a process (this one or another app) still runs it (#112): a retry then
+// would start the same work twice, so it is refused.
+function itemAction(dir, projectId, itemId, action, { alive = () => false } = {}) {
   if (!['retry', 'skip'].includes(action)) throw new Error(`Unknown roadmap item action: ${action}`);
   return updateRoadmap(dir, projectId, (r) => {
     const item = findItem(r, itemId);
     if (!item) throw new Error('This roadmap item no longer exists.');
     if (item.status === 'running') throw new Error('Its run is in progress: stop the run first.');
+    if (action === 'retry' && item.runId && alive(item.runId)) throw new Error(`Run ${item.runId} is still running.`);
     const status = action === 'retry' ? 'planned' : 'skipped';
     const unblocked = r.pausedBy === itemId;
     return {
@@ -221,11 +239,12 @@ function itemAction(dir, projectId, itemId, action) {
 }
 
 // The run of an item that failed was resumed from a step (#100): the new run takes its place, and a
-// roadmap that this failure paused goes on (the owner acted on it).
+// roadmap that this failure paused goes on (the owner acted on it). Also when the run resumed is
+// one of the item's earlier runs (`runs`, #112: an original resumed after its duplicate was cancelled).
 function adoptResumed(dir, projectId, oldRunId, newRunId) {
   if (!fs.existsSync(roadmapFile(dir, projectId))) return null;
   const r = readRoadmap(dir, projectId);
-  const item = allItems(r).find((x) => x.runId === oldRunId);
+  const item = allItems(r).find((x) => x.runId === oldRunId) || allItems(r).find((x) => (x.runs || []).includes(oldRunId));
   if (!item) return null;
   return updateRoadmap(dir, projectId, (cur) => ({
     ...cur, ...(cur.pausedBy === item.id ? { state: 'running', pausedBy: null, error: null } : {}),
@@ -256,7 +275,29 @@ const refs = (item) => itemIssues(item).map((i) => `#${i.number}`).join(', ');
  * @returns {{ roadmap: object, start: object[] }} the items to start (still `planned`: the caller marks them)
  */
 function advance(roadmap, { runOf, closed = () => false, canStart = () => true }) {
-  const r = { ...roadmap, stages: (roadmap.stages || []).map((s) => ({ ...s, items: s.items.map((x) => ({ ...x })) })) };
+  let r = { ...roadmap, stages: (roadmap.stages || []).map((s) => ({ ...s, items: s.items.map((x) => ({ ...x })) })) };
+  // Item statuses follow their runs whatever the roadmap state (#112): a paused roadmap still shows
+  // a cancelled run as failed, and an item marked failed while its run is alive (e.g. judged by
+  // another app process) is running again. `runOf` reports a run another live process owns as running.
+  for (const item of allItems(r)) {
+    if (!item.runId || !['running', 'failed'].includes(item.status)) continue;
+    const run = runOf(item.runId);
+    if (!run) continue;
+    if (['pending', 'running'].includes(run.status)) {
+      if (item.status === 'failed') {
+        Object.assign(item, { status: 'running', error: null });
+        if (r.pausedBy === item.id) r = { ...r, pausedBy: null, error: null, state: r.state === 'paused' ? 'running' : r.state };
+      }
+    } else if (item.status === 'running') {
+      if (run.status === 'success' && run.merged) Object.assign(item, { status: 'done', error: null });
+      else {
+        const why = run.status === 'success' ? 'finished without merging: merge it, then skip the item'
+          : `${run.status === 'interrupted' ? 'was interrupted' : run.status}${run.error ? `: ${String(run.error).slice(0, 200)}` : ''}`;
+        Object.assign(item, { status: 'failed', error: `Run ${item.runId} ${why}` });
+      }
+    }
+  }
+  // only starting new items (and pausing on a failure) waits for a running roadmap
   if (r.state !== 'running') return { roadmap: r, start: [] };
   for (;;) {
     const at = currentStage(r);
@@ -265,15 +306,6 @@ function advance(roadmap, { runOf, closed = () => false, canStart = () => true }
     for (const item of stage.items) {
       if (item.status === 'planned' && itemIssues(item).every((i) => closed(i.number))) {
         Object.assign(item, { status: 'skipped', error: 'Every issue is closed.' });
-      } else if (item.status === 'running') {
-        const run = runOf(item.runId);
-        if (!run || ['pending', 'running'].includes(run.status)) continue;
-        if (run.status === 'success' && run.merged) Object.assign(item, { status: 'done', error: null });
-        else {
-          const why = run.status === 'success' ? 'finished without merging: merge it, then skip the item'
-            : `${run.status === 'interrupted' ? 'was interrupted' : run.status}${run.error ? `: ${String(run.error).slice(0, 200)}` : ''}`;
-          Object.assign(item, { status: 'failed', error: `Run ${item.runId} ${why}` });
-        }
       }
     }
     const failed = stage.items.find((x) => x.status === 'failed');

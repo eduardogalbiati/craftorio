@@ -314,7 +314,14 @@
         if (out.dropped?.length) ctx.setError(`Already in the roadmap, left out of the proposal: ${out.dropped.map((n) => `#${n}`).join(', ')}`);
       } else if (e.target.closest('[data-rm-item]')) {
         const box = e.target.closest('[data-item]');
-        ctx.setData(await api.roadmapItem(ctx.projectId, box.dataset.item, e.target.closest('[data-rm-item]').dataset.rmItem));
+        const action = e.target.closest('[data-rm-item]').dataset.rmItem;
+        let out = await api.roadmapItem(ctx.projectId, box.dataset.item, action);
+        // a retry whose previous run still has commits in its worktree asks first (#112)
+        if (out?.confirm) {
+          if (!await confirmDialog('Retry the item', out.confirm, 'Retry')) return true;
+          out = await api.roadmapItem(ctx.projectId, box.dataset.item, action, true);
+        }
+        ctx.setData(out);
       } else if (e.target.closest('[data-rm-mode]')) {
         // the mode toggle: saved at once, on planned and failed items only
         const { s, n } = locate(stages, e.target);

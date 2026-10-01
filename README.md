@@ -582,9 +582,13 @@ the chosen step. It says what is kept (the previous steps' outputs, the agents' 
 notes, the worktree and branch, or a new worktree from the base when it was removed) and what runs
 again (the chosen step and the steps its transitions lead to). The resume is a new run.
 
-Human gates are never crossed: every gate reached again asks again, and a step after a gate the run
-already decided is refused (resume from the gate instead). In Developer mode the dialog has the
-Simulation toggle; a simulated run always resumes as one.
+Human gates are never crossed by automation: every gate reached again asks again, and a step after
+a gate the run already decided is refused (resume from the gate instead), unless you tick **Approve
+<gate> again** in the dialog. That box shows the commit approved at the gate and the branch's
+current commit, and is only offered while they are the same; your confirmation is recorded in the
+new run as your approval ("confirmed at resume"). The supervisor and the roadmap never confirm a
+gate. The dialog pre-selects the step where the run stopped (or the nearest allowed step before
+it). In Developer mode the dialog has the Simulation toggle; a simulated run always resumes as one.
 
 ### Parallel steps
 
@@ -977,7 +981,21 @@ Everything the app produces lives in a local workspace folder:
   workflows/ workflow definitions (one .yaml per workflow)
   settings.json  app preferences, budgets and prices
   index.db   SQLite index next to the files: runs cache, Backlog queues, pending gates, notifications
+  .lock      the app that has the workspace open (pid, host, heartbeat)
 ```
+
+- **One app per workspace.** The app locks the workspace it opens. A second copy on the same
+  workspace (or on the same user data folder) says so and offers a **scratch copy** (your agents,
+  skills, workflows and settings copied to a new workspace, simulations only) or to quit; it never
+  opens your workspace read-write. A lock left by an app that died is taken over. Each run in
+  progress records its owner (`runs/<id>/owner.json`, refreshed every few seconds): another copy
+  shows it as **running (another window)**, never as interrupted, and its roadmap, Retry and Resume
+  leave it alone. A run is only interrupted once its owner is gone.
+- **Trying a run's worktree**: use **Run App** at the gate. Started by hand from
+  `<workspace>/worktrees/<id>` (`npm start`), the app uses a scratch workspace and user data folder
+  of its own (`<workspace>/local-previews/app-<id>/`), simulations only, as Run App does.
+- **Safe state files**: the roadmap and queue files are checked before each write (an invalid one
+  is refused and logged), written atomically, and the previous version is kept as `<file>.bak`.
 
 - **The files are the source of truth; `index.db` is an index next to them** (built into Node, no
   extra dependency). It caches the run list (Workflows › Runs, Projects, Usage and Analytics read it

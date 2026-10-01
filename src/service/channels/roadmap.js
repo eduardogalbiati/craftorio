@@ -68,13 +68,21 @@ module.exports = (ctx) => {
         return current(projectId);
       },
     },
-    // retry (the item runs again) or skip (it counts as finished) an item, usually the one that paused the roadmap
+    // retry (the item runs again) or skip (it counts as finished) an item, usually the one that paused the roadmap.
+    // A retry is refused while the item's run is alive (in any app process, #112); when its worktree
+    // still has commits, the answer is { confirm } (the work it would start again) until `confirmed`.
     {
       channel: 'roadmap:item',
       method: 'roadmapItem',
-      params: ['projectId', 'itemId', 'action'],
-      fn: async ({ projectId, itemId, action }) => {
-        roadmaps.itemAction(ctx.ws.backlog, project(projectId), String(itemId), String(action));
+      params: ['projectId', 'itemId', 'action', 'confirmed'],
+      fn: async ({ projectId, itemId, action, confirmed }) => {
+        const id = project(projectId);
+        const item = roadmaps.findItem(roadmaps.readRoadmap(ctx.ws.backlog, id), String(itemId));
+        if (action === 'retry' && item?.runId && !confirmed && !ctx.runAlive(item.runId)) {
+          const commits = ctx.runWorktreeCommits(item.runId);
+          if (commits) return { ...current(projectId), confirm: `Run ${item.runId} still has ${commits} commit(s) in its worktree. Retry starts the item again from scratch; resuming that run keeps its work. Retry anyway?`, runId: item.runId };
+        }
+        roadmaps.itemAction(ctx.ws.backlog, id, String(itemId), String(action), { alive: ctx.runAlive });
         await ctx.dispatchRoadmaps();
         return current(projectId);
       },

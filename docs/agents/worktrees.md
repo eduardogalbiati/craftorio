@@ -33,6 +33,16 @@ actions, or any code that deletes or checks out branches.
   `localPreviewConfirmed`; a different fingerprint (the file edited) asks again. `cwd` must stay
   inside `work_dir`; the lockfile check (install) stays at the root. `localPreview:save` writes the
   file to the project's folder (the owner's checkout, never the run's worktree).
+- **The app started by hand in a worktree (#112)**: `npm start` in `<workspace>/worktrees/<id>`
+  (dev only, no `MULTIAGENT_WORKSPACE`) gets a scratch workspace and user data folder under
+  `<workspace>/local-previews/app-<id>/` and simulations only (`worktreeAppScratch` in
+  `src/local-preview.js`, used by `src/main.js`): it never opens the owner's workspace. Prefer **Run App**.
+- **One app per workspace (#112)**: `src/main.js` takes Electron's single-instance lock (the owner's
+  user data folder) and `<workspace>/.lock` (pid, host, heartbeat; `lockWorkspace` in
+  `src/run-owner.js`). A second copy offers a scratch copy or quit; a stale lock (dead pid, old
+  heartbeat) is taken over. Each run in progress has `runs/<id>/owner.json` with a heartbeat
+  (`claimRun`): another process lists it as `running` (`runningElsewhere`), never `interrupted`,
+  and the roadmap, Retry, Resume and a new run for the same issues leave it alone.
 
 ## Gotchas
 

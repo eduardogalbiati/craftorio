@@ -15,6 +15,7 @@ const fs = require('fs');
 const path = require('path');
 const { trailOf } = require('./renderer/run-progress-model');
 const { defaultTitle, prOfEvents, readMeta } = require('./run-pr');
+const { ownerAlive, readOwner } = require('./run-owner');
 const { storeFor } = require('./store');
 
 const SESSION_EVENTS = new Set(['session.opened', 'session.message_received', 'session.closed']);
@@ -108,6 +109,14 @@ function issuesOf(rec) {
   return rec?.issue ? [rec.issue] : null;
 }
 
+// A run without summary.json (#112): "running" while its owner (runs/<id>/owner.json, src/run-owner.js)
+// is alive, in this process or another one; "interrupted" only once the owner is gone.
+function liveStatus(dir) {
+  const owner = readOwner(dir);
+  if (!ownerAlive(owner)) return { status: 'interrupted', elsewhere: null };
+  return { status: 'running', elsewhere: owner.pid === process.pid ? null : { pid: owner.pid, host: owner.host } };
+}
+
 /** One run folder → RunInfo base (sessions as engine snapshots), or null if it is not a run. */
 function readRun(runsDir, runId) {
   const dir = path.join(runsDir, runId);
@@ -129,7 +138,7 @@ function readRun(runsDir, runId) {
     progress = summary.progress || fromEvents(path.join(dir, 'events.jsonl')).progress;
   } else {
     ({ sessions, progress } = fromEvents(path.join(dir, 'events.jsonl')));
-    status = 'interrupted';
+    status = liveStatus(dir).status;
   }
   if (summary && summary.status !== 'success') {
     const last = readEvents(path.join(dir, 'events.jsonl')).reverse().find((e) => e.type === 'workflow.finished');
@@ -174,6 +183,8 @@ function readRun(runsDir, runId) {
     issueSaves: readIssueSaves(dir),
     recovery: fromEvents(path.join(dir, 'events.jsonl')).recovery,
     error,
+    // a run without an end that another live app process runs (#112): { pid, host }, else null
+    runningElsewhere: summary ? null : liveStatus(dir).elsewhere,
     inputs,
     runDir: dir,
     sessions,
@@ -232,8 +243,11 @@ function listRuns(runsDir) {
     list = store.transaction(() => ids.map((id) => {
       const row = rows.get(id);
       if (!row?.info || row.sig !== runSignature(path.join(runsDir, id))) return indexRunIn(store, runsDir, id);
-      // a run without an end keeps aging while its files stay the same (it died with the app)
-      return row.info.finishedAt || !row.info.startedAt ? row.info : { ...row.info, durationMs: Date.now() - Date.parse(row.info.startedAt) };
+      // a run without an end keeps aging while its files stay the same, and its owner's heartbeat
+      // decides between running (elsewhere) and interrupted (#112)
+      if (row.info.finishedAt || !row.info.startedAt || !['interrupted', 'running'].includes(row.info.status)) return row.info;
+      const live = liveStatus(path.join(runsDir, id));
+      return { ...row.info, status: live.status, runningElsewhere: live.elsewhere, durationMs: Date.now() - Date.parse(row.info.startedAt) };
     }));
     const present = new Set(ids);
     const gone = [...rows.keys()].filter((id) => !present.has(id));

@@ -197,6 +197,18 @@ function scratchWorkspace(ws, root) {
   return { workspace: dir, userData };
 }
 
+// The scratch workspace of an app started by hand from a run's worktree (#112): when the app's own
+// folder is <workspace>/worktrees/<id>, it gets <workspace>/local-previews/app-<id>/{workspace,
+// user-data}, as Run locally does, instead of opening the owner's workspace. null otherwise.
+function worktreeAppScratch(appDir) {
+  const parts = path.resolve(appDir).split(path.sep);
+  const at = parts.length - 2;
+  if (at < 1 || parts[at].toLowerCase() !== 'worktrees') return null;
+  const root = parts.slice(0, at).join(path.sep) || path.sep;
+  if (!fs.existsSync(path.join(root, 'runs'))) return null;
+  return { owner: root, ...scratchWorkspace({ root }, path.join(root, 'local-previews', `app-${parts[at + 1]}`)) };
+}
+
 // The environment of the preview: always simulation only; the scratch workspace unless the owner
 // chose the real one (with a warning in the UI).
 // extra: the config's own env (it never overrides the simulation guard).
@@ -342,5 +354,6 @@ module.exports = {
   scratchProjects,
   scratchWorkspace,
   suggestConfig,
+  worktreeAppScratch,
   writeRepoConfig,
 };

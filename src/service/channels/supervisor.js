@@ -51,7 +51,8 @@ module.exports = (ctx) => {
       }),
     },
     // resuming needs no supervisor: runs:resume is the channel; this one is kept for older clients
-    { channel: 'supervisor:resume', fn: (opts) => ctx.resumeRun(opts) },
+    // (never with the owner's gate confirmation, #112: automation does not cross a human gate)
+    { channel: 'supervisor:resume', fn: ({ confirmGate: _owner, ...opts } = {}) => ctx.resumeRun(opts) },
     // Watch mode (opt-in per run, it costs tokens): on/off with { provider, model, effort }; the
     // messages are pushed on supervisor:watch.
     {

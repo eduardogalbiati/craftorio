@@ -745,7 +745,10 @@ async function startRun() {
 async function stopRun() {
   const r = state.run;
   if (r?.status !== 'running') return;
-  if (state.settings.confirmStop && !(await confirmDialog('Stop workflow', `Running sessions of ${runLabel(r)} will be closed. Stop this run?`, 'Stop'))) return;
+  // a run past a human gate holds work the owner already approved: always ask (#112)
+  const passed = ((await api.listActiveRuns().catch(() => [])) || []).find((x) => x.runId === r.id)?.passedGates || [];
+  const why = passed.length ? `It has already passed the human gate${passed.length > 1 ? 's' : ''} ${passed.join(', ')}: a new run would redo that work. ` : '';
+  if ((state.settings.confirmStop || passed.length) && !(await confirmDialog('Stop workflow', `${why}Running sessions of ${runLabel(r)} will be closed. Stop this run?`, 'Stop'))) return;
   api.stopRun(r.id);
 }
 
@@ -955,7 +958,7 @@ function runListRow(r, pv) {
       <div class="pr-row" title="${open ? 'Hide' : 'Show'} sessions">
         <span class="pill pill-${esc(r.status)}">${esc(r.status)}</span>
         <div class="pr-main">
-          <div><b>${runTitleHtml(r)}</b> ${prBadge(r)} <span class="muted small" title="workflow">${esc(r.workflow || r.file || 'workflow')}${r.version ? ` v${esc(r.version)}` : ''}</span>${r.mock ? ' <span class="badge p-mock">simulated</span>' : ''}${r.current ? ' <span class="badge live">this window</span>' : ''}${!pv.id && r.project ? ` <span class="badge" title="project">${esc(r.project.name)}</span>` : ''}</div>
+          <div><b>${runTitleHtml(r)}</b> ${prBadge(r)} <span class="muted small" title="workflow">${esc(r.workflow || r.file || 'workflow')}${r.version ? ` v${esc(r.version)}` : ''}</span>${r.mock ? ' <span class="badge p-mock">simulated</span>' : ''}${r.current ? ' <span class="badge live">this window</span>' : ''}${r.runningElsewhere ? ' <span class="badge" title="Another app process on this workspace runs it: stop or resume it there">another window</span>' : ''}${r.retryOf ? ` <span class="badge" title="Started by a retry of the same roadmap item: the two runs do the same work">retry of ${esc(String(r.retryOf).slice(9))}</span>` : ''}${!pv.id && r.project ? ` <span class="badge" title="project">${esc(r.project.name)}</span>` : ''}</div>
           <div class="muted small pr-task" title="${esc(task)}">${esc(firstLine || 'No task')}</div>
         </div>
         <span class="pr-meta"><label>started</label>${r.startedAt ? esc(dateOf(r.startedAt)) : '—'}</span>
@@ -3267,7 +3270,21 @@ function resumeFields(id, options, pre, instruction = '') {
 function resumeStepLabel(o, s) {
   const where = s.id === o.stoppedAt ? (o.status === 'failed' && s.id === o.failedStep ? 'failed here' : 'stopped here')
     : s.id === o.failedStep ? 'failed' : s.visits ? 'reached' : '';
-  return [s.id, s.gate ? 'human gate' : '', where, s.blockedBy ? `after the decided gate ${s.blockedBy}` : ''].filter(Boolean).join(' · ');
+  const after = s.blockedBy ? `after the decided gate ${s.blockedBy}${s.confirm?.ok ? ' (approve it again)' : s.confirm?.reason ? ` (${s.confirm.reason})` : ''}` : '';
+  return [s.id, s.gate ? 'human gate' : '', where, after].filter(Boolean).join(' · ');
+}
+
+// A step after a decided gate (#112): the owner may approve that gate again here, while the branch
+// is still at the commit approved there; nothing else (supervisor, roadmap) ever does.
+function resumeGateConfirm(o, stepId) {
+  const s = o.steps.find((x) => x.id === stepId);
+  if (!s?.blockedBy || !s.confirm?.ok) return '';
+  const short = (c) => (c ? `<span class="mono">${esc(String(c).slice(0, 8))}</span>` : '');
+  const commits = s.confirm.approvedCommit
+    ? `Approved at commit ${short(s.confirm.approvedCommit)}; the branch is still at ${short(s.confirm.currentCommit)}.`
+    : 'A simulation: no branch to compare.';
+  return `<label class="check"><input type="checkbox" id="resume-confirm-gate" data-gate="${esc(s.blockedBy)}"> Approve <b>${esc(s.blockedBy)}</b> again</label>
+    <div class="muted small">${commits} It is recorded as your approval in the new run.</div>`;
 }
 
 // What the resume keeps and what runs again, for the chosen step.
@@ -3285,7 +3302,7 @@ function resumeEffects(o, stepId) {
   ].filter(Boolean);
   return `<div><b>Kept:</b> ${kept.join('; ')}.</div>
     <div><b>Runs again:</b> <b>${esc(stepId)}</b> and the steps its transitions lead to${again.length > 1 ? ` (reached before: ${again.slice(1).map(esc).join(', ')})` : ''}.</div>
-    <div><b>Human gates ask again</b> when the run reaches them${gates.length ? ` (${gates.map(esc).join(', ')}${o.steps[at].gate ? '; this step is one' : ''})` : ''}: none is treated as already approved.</div>`;
+    <div><b>Human gates ask again</b> when the run reaches them${gates.length ? ` (${gates.map(esc).join(', ')}${o.steps[at].gate ? '; this step is one' : ''})` : ''}: none is treated as already approved${o.steps[at].blockedBy ? `, except ${esc(o.steps[at].blockedBy)} when you approve it again above` : ''}.</div>`;
 }
 
 async function openResumeDialog(runId) {
@@ -3304,22 +3321,32 @@ async function openResumeDialog(runId) {
   try { o = await api.resumeOptions(runId); } catch (e) { body.innerHTML = `<p class="error small">${esc(errMsg(e))}</p>`; return; }
   $('#resume-run').innerHTML = `<span class="mono">${esc(o.runId)}</span> · ${esc(o.workflow || '')} <span class="pill pill-${esc(o.status)}">${esc(o.status)}</span>${o.mock ? ' <span class="badge p-mock">simulated</span>' : ''}`;
   if (o.active) { body.innerHTML = '<p class="error small">The run is still active: it can be resumed once it ends.</p>'; return; }
-  body.innerHTML = `${resumeFields('resume', o.steps.map((s) => ({ id: s.id, label: resumeStepLabel(o, s), disabled: !!s.blockedBy })), o.suggested)}
+  body.innerHTML = `${resumeFields('resume', o.steps.map((s) => ({ id: s.id, label: resumeStepLabel(o, s), disabled: !!s.blockedBy && !s.confirm?.ok })), o.suggested)}
+    <div id="resume-gate" class="field"></div>
     <div id="resume-effects" class="resume-effects small"></div>`;
   const sel = $('#resume-step');
-  const effects = () => { $('#resume-effects').innerHTML = resumeEffects(o, sel.value); };
+  const gateBox = () => $('#resume-confirm-gate');
+  // a step past a decided gate starts only once the owner ticks the confirmation
+  const ready = () => { yes.disabled = !sel.value || (!!gateBox() && !gateBox().checked); };
+  const effects = () => {
+    $('#resume-gate').innerHTML = resumeGateConfirm(o, sel.value);
+    if (gateBox()) gateBox().onchange = ready;
+    $('#resume-effects').innerHTML = resumeEffects(o, sel.value);
+    ready();
+  };
   sel.onchange = effects;
   effects();
   // a simulated run resumes as one; simulation-only (automated checks) never resumes a real run
   box.checked = o.mock || devMode();
   box.disabled = o.mock || !!state.simulationOnly;
-  yes.disabled = !o.suggested;
+  if (!o.suggested) yes.disabled = true;
   yes.onclick = async () => {
     yes.disabled = true;
     msg.className = 'small muted';
     msg.textContent = 'Starting…';
     try {
-      const { runId } = await api.resumeRun(o.runId, sel.value, $('#resume-ins').value.trim() || undefined, o.mock || wantsSimulation(box));
+      const confirmGate = gateBox()?.checked ? gateBox().dataset.gate : undefined;
+      const { runId } = await api.resumeRun(o.runId, sel.value, $('#resume-ins').value.trim() || undefined, o.mock || wantsSimulation(box), confirmGate);
       closeModal('#resume-modal');
       showRun(runId, { running: true });
     } catch (e) {

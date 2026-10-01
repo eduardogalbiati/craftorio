@@ -26,6 +26,7 @@ module.exports = (ctx) => [
     fn: (opts) => {
       const run = ctx.liveRun(opts?.runId);
       if (!run && !opts?.runId && ctx.active.size > 1) throw new Error('Several runs are in progress: say which one to stop.');
+      if (!run && opts?.runId && ctx.runAlive(opts.runId)) throw new Error(`Run ${opts.runId} runs in another app window: stop it there.`);
       run?.stop();
       return !!run;
     },
@@ -52,8 +53,9 @@ module.exports = (ctx) => [
       return run?.resolveApproval(id, answer, 'user', feedback) ?? false;
     },
   },
-  // resume a run from a step (a new run, no supervisor call) and what the dialog offers
-  { channel: 'runs:resume', method: 'resumeRun', params: ['runId', 'step', 'instruction', 'mock'], fn: (opts) => ctx.resumeRun(opts) },
+  // resume a run from a step (a new run, no supervisor call) and what the dialog offers;
+  // confirmGate: the decided gate the owner approves again in the dialog (#112)
+  { channel: 'runs:resume', method: 'resumeRun', params: ['runId', 'step', 'instruction', 'mock', 'confirmGate'], fn: (opts) => ctx.resumeRun(opts) },
   { channel: 'runs:resumeOptions', method: 'resumeOptions', params: ['runId'], fn: (opts) => ctx.resumeOptions(opts) },
   // the PR a run opened, with its state read with gh/glab (cached), and the owner's title of a run (#84)
   { channel: 'runs:prState', method: 'runPrState', params: ['runId'], fn: (opts) => ctx.runPrState(opts) },

@@ -23,6 +23,7 @@ const fs = require('fs');
 const path = require('path');
 const { execFile } = require('child_process');
 const { resolveCommand } = require('./engine/providers');
+const { writeJsonSafe } = require('./state-file');
 const { storeFor } = require('./store');
 
 const PLATFORMS = {
@@ -334,13 +335,23 @@ function readQueue(dir, projectId) {
   try { return { ...emptyQueue(), ...JSON.parse(fs.readFileSync(queueFile(dir, projectId), 'utf8')) }; } catch { return emptyQueue(); }
 }
 
+// What a queue must look like (#112: a write that breaks it is refused, src/state-file.js).
+function queueProblem(q) {
+  if (!q || typeof q !== 'object') return 'not an object';
+  if (!Array.isArray(q.items)) return 'items is not a list';
+  if (q.skipped && !Array.isArray(q.skipped)) return 'skipped is not a list';
+  const bad = q.items.find((x) => !x || !x.workflow || !Number.isInteger(Number(x.number)));
+  return bad ? `an item has no workflow or issue number: ${JSON.stringify(bad).slice(0, 120)}` : null;
+}
+
+// atomic, with the previous version kept as .bak (src/state-file.js)
 function writeQueueFile(dir, projectId, queue) {
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(queueFile(dir, projectId), JSON.stringify(queue, null, 2));
-  return queue;
+  return writeJsonSafe(queueFile(dir, projectId), queue, { validate: queueProblem });
 }
 
 function writeQueue(dir, projectId, queue) {
+  const problem = queueProblem(queue);
+  if (problem) writeQueueFile(dir, projectId, queue); // refused, logged and thrown before the index changes
   const store = storeFor(dir);
   if (!store) return writeQueueFile(dir, projectId, queue);
   return store.transaction(() => {
