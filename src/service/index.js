@@ -1098,14 +1098,18 @@ function createService({ host }) {
 
   // Issue tracker (#81), "create and queue": once the run filed its issues, the project's backlog is
   // synced (the new issues are in it) and they are assigned like the Backlog's Assign does. A
-  // simulated run filed nothing real: nothing is queued.
+  // simulated run filed nothing real: nothing is queued. Groups respect backlogMaxGroup (one assign
+  // per batch), so a long group_with list never makes the assign refuse the whole queue.
   async function queueFiledIssues(run, ev) {
-    const plan = backlog.filedToQueue({ workflow: run.wf.metadata?.name, status: ev.status, steps: run.ctx.steps, inputs: run.inputs });
+    const maxGroup = workspace.readSettings(ws).backlogMaxGroup || workspace.DEFAULT_SETTINGS.backlogMaxGroup;
+    const plan = backlog.filedToQueue({ workflow: run.wf.metadata?.name, status: ev.status, steps: run.ctx.steps, inputs: run.inputs, maxGroup });
     if (!plan || !run.projectId || run.mock) return;
     const project = projects.readProject(ws.projects, run.projectId);
     const platform = run.inputs.git_platform === 'gl' ? 'gitlab' : 'github';
     await backlog.syncBacklog({ dir: ws.backlog, project, platform });
-    await assignWorkflow({ projectId: project.id, numbers: plan.numbers, workflow: plan.workflow, inputs: {}, mock: false, group: plan.group });
+    for (const batch of plan.batches) {
+      await assignWorkflow({ projectId: project.id, numbers: batch.numbers, workflow: plan.workflow, inputs: {}, mock: false, group: batch.group });
+    }
   }
 
   // Starts queued issues while there are free run slots: the oldest first across projects, a

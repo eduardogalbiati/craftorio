@@ -605,22 +605,33 @@ function runInputs(item, wf, folder) {
  * What an issue-tracker run asks to queue when it ends: the issues its `file` step created, for
  * `inputs.assign_workflow`. When the analyzer advised grouping, the open issues it named
  * `group_with` (shown at the review gate) join them and they all run grouped (one run), when
- * that makes more than one issue. Null unless the run succeeded and the owner chose
- * `create_assign` at the review gate.
- * @param {{ workflow: string, status: string, steps: object, inputs: object }} run
- * @returns {{ numbers: number[], workflow: string, group: boolean } | null}
+ * that makes more than one issue. A group holds at most `maxGroup` issues (the backlogMaxGroup
+ * setting, which the Backlog's assign enforces): the nearby issues only fill the room the created
+ * ones leave (in the analyzer's order), and created issues beyond it go in further groups.
+ * `batches` are the assign calls to make, each grouped when it has more than one issue. Null
+ * unless the run succeeded and the owner chose `create_assign` at the review gate.
+ * @param {{ workflow: string, status: string, steps: object, inputs: object, maxGroup?: number }} run
+ * @returns {{ numbers: number[], workflow: string, group: boolean, batches: { numbers: number[], group: boolean }[] } | null}
  */
-function filedToQueue({ workflow, status, steps, inputs } = {}) {
+function filedToQueue({ workflow, status, steps, inputs, maxGroup = 5 } = {}) {
   if (workflow !== ISSUE_TRACKER_WORKFLOW || status !== 'success') return null;
   if (steps?.review?.output?.choice !== 'create_assign') return null;
   const valid = (n) => Number.isInteger(n) && n > 0;
-  const created = (steps.file?.output?.filed || []).filter((f) => f?.action === 'created' && valid(f.number)).map((f) => f.number);
+  const created = [...new Set((steps.file?.output?.filed || []).filter((f) => f?.action === 'created' && valid(f.number)).map((f) => f.number))];
   if (!created.length) return null;
   const analysis = steps.analyze?.output || {};
   const advised = analysis.grouping === 'group';
-  const nearby = advised ? (analysis.nearby || []).filter((n) => n?.advice === 'group_with' && valid(n.number)).map((n) => n.number) : [];
-  const numbers = [...new Set([...created, ...nearby])];
-  return { numbers, workflow: inputs?.assign_workflow || 'software-development.yaml', group: advised && numbers.length > 1 };
+  const size = Math.max(2, Number(maxGroup) || 5);
+  const nearby = advised ? (analysis.nearby || []).filter((n) => n?.advice === 'group_with' && valid(n.number) && !created.includes(n.number)).map((n) => n.number) : [];
+  const numbers = [...created, ...[...new Set(nearby)].slice(0, Math.max(0, size - created.length))];
+  const group = advised && numbers.length > 1;
+  const batches = [];
+  if (!group) batches.push({ numbers, group: false });
+  else for (let i = 0; i < numbers.length; i += size) {
+    const part = numbers.slice(i, i + size);
+    batches.push({ numbers: part, group: part.length > 1 });
+  }
+  return { numbers, workflow: inputs?.assign_workflow || 'software-development.yaml', group, batches };
 }
 
 module.exports = {

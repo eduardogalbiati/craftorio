@@ -347,7 +347,7 @@ steps:
       Files to change (estimate): {{ steps.analyze.output.files_count }}. Grouping: {{ steps.analyze.output.grouping }} ({{ steps.analyze.output.grouping_reason }}).
       {% for d in steps.analyze.output.duplicates %}Possible {{ d.relation }}: #{{ d.number }} {{ d.title }} ({{ d.state }}).
       {% endfor %}{% for p in steps.analyze.output.in_flight %}Open PR/MR #{{ p.number }} already covers: {{ p.covers }}.
-      {% endfor %}{% for n in steps.analyze.output.nearby %}Nearby #{{ n.number }} ({{ n.advice }}): {{ n.reason }}{% if steps.analyze.output.grouping == 'group' and n.advice == 'group_with' %} - "Create and queue" runs it grouped with the new issue(s).{% endif %}
+      {% endfor %}{% for n in steps.analyze.output.nearby %}Nearby #{{ n.number }} ({{ n.advice }}): {{ n.reason }}{% if steps.analyze.output.grouping == 'group' and n.advice == 'group_with' %} - "Create and queue" runs it grouped with the new issue(s), up to the Backlog's group size (Settings › General › Backlog).{% endif %}
       {% endfor %}
       {{ steps.write.output.message }}
       {% for i in steps.write.output.issues %}
