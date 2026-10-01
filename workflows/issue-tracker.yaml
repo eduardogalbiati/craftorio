@@ -27,6 +27,10 @@
 # queues the created issues for `assign_workflow` (src/backlog.js filedToQueue, the service's
 # queueFiledIssues), as one run when there are several and the analysis said `group`. Simulated runs
 # queue nothing. The Backlog's New issue button starts this workflow for the selected project.
+# Epics (#138): the analyzer names the existing epic the issue belongs to (`epic`). When the match is
+# `clear` and the project's "Auto-place new issues" option (project.autoEpic) is on, the app places
+# the created issues in it when the run ends (src/epics.js filedToEpic, the service's
+# placeFiledInEpic). It never creates an epic: new epics are the Product Owner's proposals.
 # =============================================================================
 
 apiVersion: multiagent/v1
@@ -195,10 +199,15 @@ steps:
       6. `labels_missing`: which of the labels the issue needs (impact:<n>, complexity:<n>, its kind,
          area:<...>) do not exist yet in the repository (label list). Do not create them.
       7. `follow_ups`: related smells you noticed, as separate suggestions.
+      8. `epic`: the existing epic the issue belongs to. Epics are the open issues labelled `epic`
+         (GitLab: also the group epics of the project's issues). `id` is `#<number>` (`&<iid>` for
+         a GitLab group epic), `title` its title, `match` `clear` when the issue plainly belongs to
+         its theme, `unsure` when it might, `none` (with `id` and `title` "") when no epic fits or
+         the project has none; `reason` in one line. Never create an epic.
       `repo` is owner/name of the remote. Everything in English.
     output_schema:
       type: object
-      required: [repo, summary, kind, evidence, files, files_count, blast_radius, impact, complexity, duplicates, in_flight, grouping, grouping_reason, nearby, areas, labels_missing, follow_ups, assumptions]
+      required: [repo, summary, kind, evidence, files, files_count, blast_radius, impact, complexity, duplicates, in_flight, grouping, grouping_reason, nearby, areas, labels_missing, follow_ups, epic, assumptions]
       properties:
         repo:    { type: string }
         summary: { type: string }
@@ -272,6 +281,14 @@ steps:
         follow_ups:
           type: array
           items: { type: string }
+        epic:
+          type: object
+          required: [id, title, match, reason]
+          properties:
+            id:     { type: string }
+            title:  { type: string }
+            match:  { type: string, enum: [clear, unsure, none] }
+            reason: { type: string }
         assumptions:
           type: array
           items: { type: string }
@@ -348,7 +365,8 @@ steps:
       {% for d in steps.analyze.output.duplicates %}Possible {{ d.relation }}: #{{ d.number }} {{ d.title }} ({{ d.state }}).
       {% endfor %}{% for p in steps.analyze.output.in_flight %}Open PR/MR #{{ p.number }} already covers: {{ p.covers }}.
       {% endfor %}{% for n in steps.analyze.output.nearby %}Nearby #{{ n.number }} ({{ n.advice }}): {{ n.reason }}{% if steps.analyze.output.grouping == 'group' and n.advice == 'group_with' %} - "Create and queue" runs it grouped with the new issue(s), up to the Backlog's group size (Settings › General › Backlog).{% endif %}
-      {% endfor %}
+      {% endfor %}{% if steps.analyze.output.epic.id %}Epic: {{ steps.analyze.output.epic.id }} {{ steps.analyze.output.epic.title }} ({{ steps.analyze.output.epic.match }} match: {{ steps.analyze.output.epic.reason }}).{% if steps.analyze.output.epic.match == 'clear' %} Created issues join it when the project's "Auto-place new issues" option is on (Backlog › Epics).{% endif %}
+      {% endif %}
       {{ steps.write.output.message }}
       {% for i in steps.write.output.issues %}
       ### {{ i.title }}

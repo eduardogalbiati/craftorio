@@ -100,8 +100,8 @@ children, and files the children with one click; nothing is filed before that.
 
 ## Organize into epics
 
-An epic groups the issues of one theme (GitHub: an issue labelled `epic` whose sub-issues are its
-members; GitLab: a group epic, or an issue labelled `epic` with members labelled `epic::<name>`).
+An epic groups the issues of one theme (GitHub: an issue labelled `epic`, or of the issue type "Epic",
+whose sub-issues are its members; GitLab: a group epic, or an issue labelled `epic` with members labelled `epic::<name>`).
 The report lists the epics with their members, and each issue's epic. In `epics`:
 
 - `place`: an open issue without an epic that clearly belongs to an existing one (its id: `#12`, `&5`);

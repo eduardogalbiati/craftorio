@@ -1,5 +1,6 @@
 // Epics (#138): the level above the issue in a project's backlog.
-// GitHub: an issue labelled `epic`, whose members are its sub-issues (`gh api .../sub_issues`).
+// GitHub: an issue labelled `epic` or whose issue type is "Epic" (`typedEpics`, organizations with
+// issue types), whose members are its sub-issues (`gh api .../sub_issues`).
 // GitLab: a group epic when the project's issues carry one (`epic` in glab's JSON, paid tiers),
 // otherwise an issue labelled `epic` whose members carry the scoped label `epic::<slug>` (the epic
 // issue carries it too, or its slug is its title's).
@@ -9,7 +10,8 @@
 // progress: { open, closed, total } }). A failed read leaves `epicsError`, not a failed sync.
 // `applyEpic` creates an epic and/or moves issues into it; it writes to the platform, so it runs
 // only on the owner's click (the Product Owner's proposals, src/product-owner.js applyEpicProposal)
-// or, for a new issue the PO registers, when the project's `autoEpic` option is on. A preview never
+// or, for a new issue the PO registers or the issue tracker files (`filedToEpic`), when the project's
+// `autoEpic` option is on. A preview never
 // calls the CLI: it returns the commands it would run.
 
 const fs = require('fs');
@@ -39,6 +41,21 @@ function apiTarget(platform, repo) {
   return { path: parsed.path, host: parsed.host, hostArgs: parsed.host === own ? [] : ['--hostname', parsed.host] };
 }
 
+/**
+ * The open issues whose GitHub issue type is "Epic" (organizations with issue types): `gh issue list`
+ * cannot return the type, the REST issues list does (`type.name`). A repository without issue types
+ * (or a failed read) gives none: the `epic` label still works.
+ */
+async function typedEpics({ platform, repo, exec = backlog.execCli }) {
+  try {
+    const t = apiTarget(platform, repo);
+    const out = await exec('gh', ['api', ...t.hostArgs, '--paginate', `repos/${t.path}/issues?state=open&per_page=100`, '--jq', '.[] | select(((.type.name // "") | ascii_downcase) == "epic") | .number']);
+    return new Set(String(out || '').split(/\s+/).filter((s) => /^\d+$/.test(s)).map(Number));
+  } catch {
+    return new Set();
+  }
+}
+
 /** The member numbers of a GitHub epic: its sub-issues of the same repository. */
 async function subIssues({ platform, repo, number, exec = backlog.execCli }) {
   const t = apiTarget(platform, repo);
@@ -62,8 +79,10 @@ async function readEpics({ platform, repo, issues, exec = backlog.execCli }) {
   const byNumber = new Map(issues.map((i) => [i.number, i]));
   const epics = [];
   let epicsError = null;
+  const typed = platform === 'github' && issues.length ? await typedEpics({ platform, repo, exec }) : new Set();
+  const isEpic = (i) => isEpicIssue(i) || typed.has(i.number);
   if (platform === 'github') {
-    const found = issues.filter(isEpicIssue).slice(0, MAX_EPICS);
+    const found = issues.filter(isEpic).slice(0, MAX_EPICS);
     for (const e of found) {
       let members = [];
       try {
@@ -101,7 +120,7 @@ async function readEpics({ platform, repo, issues, exec = backlog.execCli }) {
     const next = { ...i };
     delete next.groupEpic;
     if (memberOf.has(i.number)) next.epic = memberOf.get(i.number);
-    if (isEpicIssue(i)) next.isEpic = true;
+    if (isEpic(i)) next.isEpic = true;
     return next;
   });
   return { issues: out, epics, epicsError };
@@ -179,11 +198,30 @@ async function applyEpic({ platform, repo, epic, issues = [], epics = [], dir, p
   return { preview: !!preview, commands, epic: { id: made.id, number: made.number, title, url: made.url, kind: made.kind }, linked };
 }
 
+/**
+ * The epic an issue-tracker run (#81) places its created issues in when it ends: the analyzer's
+ * `epic` with a `clear` match, after the owner chose create or create_assign at the review gate.
+ * Only an existing epic: the issue tracker never creates one. Null otherwise. The service applies it
+ * only when the project's autoEpic option is on and the epic is in the synced cache.
+ * @returns {{ epic: string, numbers: number[] } | null}
+ */
+function filedToEpic({ workflow, status, steps } = {}) {
+  if (workflow !== 'issue-tracker' || status !== 'success') return null;
+  if (!['create', 'create_assign'].includes(steps?.review?.output?.choice)) return null;
+  const epic = steps.analyze?.output?.epic;
+  const id = String(epic?.id || '').trim();
+  if (epic?.match !== 'clear' || !/^[#&]\d+$/.test(id)) return null;
+  const numbers = [...new Set((steps.file?.output?.filed || []).filter((f) => f?.action === 'created' && Number.isInteger(f.number) && f.number > 0).map((f) => f.number))];
+  return numbers.length ? { epic: id, numbers } : null;
+}
+
 module.exports = {
   applyEpic,
   EPIC_LABEL,
+  filedToEpic,
   isEpicIssue,
   readEpics,
   slugify,
   subIssues,
+  typedEpics,
 };

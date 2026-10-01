@@ -34,6 +34,7 @@ const workspace = require('../workspace');
 const projects = require('../projects');
 const localPreview = require('../local-preview');
 const backlog = require('../backlog');
+const epics = require('../epics');
 const roadmaps = require('../roadmap');
 const localPush = require('../local-push');
 const skills = require('../skills');
@@ -598,7 +599,8 @@ function createService({ host }) {
         if (run.issues && run.projectId && ev.status === 'failed' && !run.mock) {
           try { backlog.setPaused(ws.backlog, run.projectId, true, `${run.issues.map((i) => `#${i.number}`).join(', ')} failed: resume to start the next issues.`); } catch (e) { console.error('backlog queue:', e); }
         }
-        queueFiledIssues(run, ev).catch((e) => console.error('issue tracker queue:', e.message));
+        placeFiledInEpic(run, ev).catch((e) => console.error('issue tracker epic:', e.message))
+          .then(() => queueFiledIssues(run, ev)).catch((e) => console.error('issue tracker queue:', e.message));
         // a roadmap's next items first (its stage may be over), then the plain queue
         setTimeout(() => dispatchRoadmaps().catch((e) => console.error('roadmap dispatch:', e)).then(() => dispatchQueue()).catch((e) => console.error('backlog dispatch:', e)), 1000);
       }
@@ -1425,6 +1427,22 @@ function createService({ host }) {
     for (const batch of plan.batches) {
       await assignWorkflow({ projectId: project.id, numbers: batch.numbers, workflow: plan.workflow, inputs: {}, mock: false, group: batch.group });
     }
+  }
+
+  // Issue tracker (#81) and epics (#138): the created issues join the existing epic the analyzer
+  // matched clearly, only when the project's autoEpic option ("Auto-place new issues") is on and the
+  // epic is in the synced backlog. Never creates an epic; a simulated run places nothing.
+  async function placeFiledInEpic(run, ev) {
+    const plan = epics.filedToEpic({ workflow: run.wf.metadata?.name, status: ev.status, steps: run.ctx.steps });
+    if (!plan || !run.projectId || run.mock) return;
+    const project = projects.readProject(ws.projects, run.projectId);
+    if (!project?.autoEpic) return;
+    const platform = run.inputs.git_platform === 'gl' ? 'gitlab' : 'github';
+    const synced = await backlog.syncBacklog({ dir: ws.backlog, project, platform });
+    const list = synced?.epics || backlog.readBacklog(ws.backlog, project.id)?.epics || [];
+    if (!list.some((e) => e.id === plan.epic)) return;
+    await epics.applyEpic({ platform, repo: project.repo, epic: { id: plan.epic }, issues: plan.numbers, epics: list });
+    await backlog.syncBacklog({ dir: ws.backlog, project, platform });
   }
 
   // Starts queued issues while there are free run slots: the oldest first across projects, a
