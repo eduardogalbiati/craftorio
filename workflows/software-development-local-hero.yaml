@@ -342,7 +342,7 @@ steps:
       {% endif %}
     output_schema:
       type: object
-      required: [branch, summary, files_changed, test_notes, committed]
+      required: [branch, summary, files_changed, test_notes, committed, left_out]
       properties:
         branch:        { type: string }
         summary:       { type: string }
@@ -366,7 +366,8 @@ steps:
               issue:   { type: string }
               done:    { type: boolean }
               summary: { type: string }
-        # requirements of the task the developer did not implement (#98), single issue or group
+        # requirements of the task the developer did not implement (#98), single issue or group;
+        # required, so an answer cannot skip it (an empty list when nothing is missing)
         left_out:
           type: array
           items:
@@ -377,12 +378,12 @@ steps:
               reason:      { type: string }
     transitions:
       # declared gaps (#98): no review is spent on work the developer says is missing. The first
-      # time, back to the developer with the list (no reviewer call); still there after that (or on
-      # a later round), the owner decides at requirements_left_out
-      - when: "(output.left_out or []) | length and not steps.requirements_left_out.output and vars.gaps_returned != 'yes'"
+      # time, back to the developer with the list (no reviewer call); any gap after that (also a new
+      # one after the owner continued, or on a review round) goes to the owner at requirements_left_out
+      - when: "(output.left_out or []) | length and vars.gaps_returned != 'yes'"
         goto: develop
         set: { gaps_returned: "yes" }
-      - when: "(output.left_out or []) | length and not steps.requirements_left_out.output"
+      - when: "(output.left_out or []) | length"
         goto: requirements_left_out
       # an issue of the group could not be done: the owner decides (once) whether the run goes on without it
       - when: "output.committed and inputs.issues | length > 1 and not steps.issue_not_done.output and (output.issues or []) | rejectattr('done') | list | length"
@@ -460,7 +461,7 @@ steps:
       # nothing committed yet: the developer commits the rest first
       - when: "choice == 'continue' and not (steps.develop.output.committed or steps.develop.output.no_change)"
         goto: develop
-        set: &accepted_gaps { accepted_gaps: "{% for g in steps.develop.output.left_out %}{{ g.requirement }}; {% endfor %}" }
+        set: &accepted_gaps { accepted_gaps: "{{ vars.accepted_gaps }}{% for g in steps.develop.output.left_out %}{{ g.requirement }}; {% endfor %}" }
       - when: "choice == 'continue' and inputs.issues | length > 1 and not steps.issue_not_done.output and (steps.develop.output.issues or []) | rejectattr('done') | list | length"
         goto: issue_not_done
         set: *accepted_gaps
