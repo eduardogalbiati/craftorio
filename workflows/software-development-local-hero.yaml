@@ -8,6 +8,9 @@
 #                  └──────────── code_review ◄──────────────────────────────────┘
 #   evidence: screenshots / HTTP request+response / CLI output / log lines that show the change
 #   working (local, simulated), in the run folder; it never blocks and the verifier uses it.
+#   Declared gaps (`left_out`: requirements of the task the developer did not implement): never
+#   reviewed. The first time, develop ─► develop with the list (no reviewer call); still there
+#   after that ─► requirements_left_out (human gate: continue without them / stop).
 #
 # The software-development pipeline without GitHub/GitLab and without a merge approval: no
 # push, no PR/MR, no CI, no preview, no deploy. Each run works in its own git worktree, started
@@ -53,7 +56,7 @@ kind: Workflow
 
 metadata:
   name: software-development-local-hero
-  version: 0.5.0
+  version: 0.6.0
   description: Implements, reviews, tests, builds and verifies a change in its own worktree, then merges it into the local base branch automatically, resolving conflicts on the way. No push, no PR, no CI; push when you want.
   tags: [dev, review, test, build, local, worktree]
   # Dashboard category: plan (Plan & Design), build (Code & Build) or monitor (Monitor & Improve).
@@ -271,7 +274,7 @@ agents:
 
 groups:
   - name: Develop
-    steps: [develop, issue_not_done, developer_check]
+    steps: [develop, requirements_left_out, issue_not_done, developer_check]
   - name: Review
     steps: [code_review, human_review]
   - name: Validate
@@ -324,6 +327,19 @@ steps:
       In `evidence_plan`, say per issue how to show the change working, for the evidence step (it
       does not read the code): the screen and the screenshot options (view, tab, clicks), or the
       request, command or mock run whose output shows it; `none` and why when nothing is observable.
+      In `left_out`, list each requirement of the task (its acceptance criteria, each task of the
+      issue) that you did not implement, with the reason: never leave one only in prose; an empty
+      list when everything was done. A list that is not empty sends you back here, not to the review.{% if inputs.issues | length > 1 %}
+      A whole issue you could not do goes in `issues` (`done: false`), not in `left_out`.{% endif %}
+      {% if vars.accepted_gaps %}
+      The owner chose to continue without these requirements; do not list them again: {{ vars.accepted_gaps }}
+      {% elif previous_step == 'develop' and vars.gaps_returned == 'yes' and steps.develop.output.left_out %}
+      Your previous answer left these requirements out, so the review was not called:
+      {{ steps.develop.output.left_out | to_yaml }}
+      Finish them on the same branch with a new commit. Keep in `left_out` only those that are
+      impossible in this run, each with the reason: the owner then decides whether the run goes on
+      without them.
+      {% endif %}
     output_schema:
       type: object
       required: [branch, summary, files_changed, test_notes, committed]
@@ -350,7 +366,24 @@ steps:
               issue:   { type: string }
               done:    { type: boolean }
               summary: { type: string }
+        # requirements of the task the developer did not implement (#98), single issue or group
+        left_out:
+          type: array
+          items:
+            type: object
+            required: [requirement, reason]
+            properties:
+              requirement: { type: string }
+              reason:      { type: string }
     transitions:
+      # declared gaps (#98): no review is spent on work the developer says is missing. The first
+      # time, back to the developer with the list (no reviewer call); still there after that (or on
+      # a later round), the owner decides at requirements_left_out
+      - when: "(output.left_out or []) | length and not steps.requirements_left_out.output and vars.gaps_returned != 'yes'"
+        goto: develop
+        set: { gaps_returned: "yes" }
+      - when: "(output.left_out or []) | length and not steps.requirements_left_out.output"
+        goto: requirements_left_out
       # an issue of the group could not be done: the owner decides (once) whether the run goes on without it
       - when: "output.committed and inputs.issues | length > 1 and not steps.issue_not_done.output and (output.issues or []) | rejectattr('done') | list | length"
         goto: issue_not_done
@@ -411,6 +444,36 @@ steps:
         goto: end
         status: cancelled
 
+  # Requirements of the task the developer still leaves out after being sent back once to finish
+  # them (#98): never dropped silently. A human gate: neither the supervisor nor a retry answers it.
+  - id: requirements_left_out
+    type: human_approval
+    message: |
+      The developer left these requirements of the task out, even after being sent back once to finish them:
+      {% for g in steps.develop.output.left_out %}
+      - {{ g.requirement }}: {{ g.reason }}{% endfor %}
+      The rest is on branch `{{ steps.develop.output.branch }}`; the code review has not run yet.
+    choices:
+      - { id: continue, label: "Continue without them" }
+      - { id: stop,     label: "Stop the run as failed (worktree kept to resume)" }
+    transitions:
+      # nothing committed yet: the developer commits the rest first
+      - when: "choice == 'continue' and not (steps.develop.output.committed or steps.develop.output.no_change)"
+        goto: develop
+        set: &accepted_gaps { accepted_gaps: "{% for g in steps.develop.output.left_out %}{{ g.requirement }}; {% endfor %}" }
+      - when: "choice == 'continue' and inputs.issues | length > 1 and not steps.issue_not_done.output and (steps.develop.output.issues or []) | rejectattr('done') | list | length"
+        goto: issue_not_done
+        set: *accepted_gaps
+      - when: "choice == 'continue' and inputs.mode == 'validated' and vars.owner_validated != 'yes'"
+        goto: developer_check
+        set: *accepted_gaps
+      - when: "choice == 'continue'"
+        goto: code_review
+        set: *accepted_gaps
+      - when: "choice == 'stop'"
+        goto: end
+        status: failed
+
   # A run for several issues where the developer could not do one of them: never dropped silently.
   - id: issue_not_done
     type: human_approval
@@ -454,6 +517,7 @@ steps:
       `{{ inputs.base_branch }}` (`git diff {{ inputs.base_branch }}...{{ steps.develop.output.branch }}`).
       Task (the spec for the spec axis): {{ inputs.task }}
       Developer summary: {{ steps.develop.output.summary }}
+      {% if vars.accepted_gaps %}The owner accepted that the run goes on without these requirements (not blocking): {{ vars.accepted_gaps }}{% endif %}
       {% endif %}
       {% if inputs.issues | length > 1 and vars.recheck != 'resolution' %}
       This run implements several issues: check the spec axis per issue, and set `issue` (its URL)

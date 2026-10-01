@@ -422,9 +422,16 @@ function mockValue(s, key, h) {
       return o;
     }
     // sequences.preexisting_failures: true: the test writer reports a test that also fails on the base
-    case 'array':
+    // sequences.left_out: [1, 0]: the developer declares one gap on its 1st visit, none after (default none)
+    case 'array': {
       if (key === 'preexisting_failures' && !h.sequences?.preexisting_failures) return [];
+      if (key === 'left_out') {
+        const seq = h.sequences?.left_out;
+        const count = Array.isArray(seq) && seq.length ? +seq[Math.min(h.visit - 1, seq.length - 1)] || 0 : 0;
+        return Array.from({ length: count }, () => mockValue(s.items || { type: 'string' }, key, h));
+      }
       return [mockValue(s.items || { type: 'string' }, key, h)];
+    }
     case 'boolean': {
       const seq = h.sequences?.[key];
       return seq && seq.every((v) => typeof v === 'boolean') ? seq[Math.min(h.visit - 1, seq.length - 1)] : true;

@@ -164,6 +164,13 @@ same features for users; this is the implementer's summary.
   one with `done: false` goes to the `issue_not_done` gate (continue without it / stop), asked once per
   run; the review sets `issue` on its findings, the verifier answers a verdict per issue, and the CI
   Pusher's PR/MR body closes each issue that was done.
+- software-development (0.19.0) and local-hero (0.6.0), declared gaps (#98): `develop` answers
+  `left_out: [{ requirement, reason }]` (single issue or group). Not empty → back to `develop` with
+  the list, once (`set: { gaps_returned: yes }`), without calling the reviewer; not empty again (or on
+  a later round) → the `requirements_left_out` gate (continue without them / stop as failed). Continue
+  sets `vars.accepted_gaps` (shown to the developer and the reviewer, not blocking) and goes on as
+  `issue_not_done` would. Mock: `mockSequences.left_out: [1, 0]` = gaps declared per develop visit
+  (default none).
 - software-development (0.17.0), merge conflicts (#69): `approve_merge` has `check` (pr_mergeable,
   `on_fail: merge_failed`, `recover: [resolve_conflict]`) and its approved transition `precheck: true`
   with the same routes. `resolve_conflict` (developer, `edits_tests: true`, merges `origin/<base>`,
