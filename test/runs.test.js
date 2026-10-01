@@ -6,6 +6,7 @@ const os = require('os');
 const path = require('path');
 const runs = require('../src/runs');
 const projects = require('../src/projects');
+const { writeTitle } = require('../src/run-pr');
 
 const jl = (...objs) => objs.map((o) => JSON.stringify(o)).join('\n') + '\n';
 const snap = (id, agent, extra = {}) => ({ id, agent, provider: 'claude', model: 'm', status: 'idle', turns: 1, tokens: { input: 10, output: 5 }, cost_usd: 0.5, provider_session_id: `p-${id}`, ...extra });
@@ -71,6 +72,76 @@ test('readRun gives the issues a run implements; a run recorded with one `issue`
   assert.deepEqual(runs.readRun(root, 'old-finished').issues, [ref(7)]);
   assert.deepEqual(runs.readRun(root, 'old-interrupted').issues, [ref(8)]);
   assert.equal(runs.readRun(root, 'none').issues, null);
+});
+
+test('readRun exposes the PR from the latest step output with pr_url/pr_number, and the default title from the task', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-pr-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  fs.mkdirSync(path.join(root, 'a'));
+  fs.writeFileSync(path.join(root, 'a', 'events.jsonl'), jl(
+    { ts: '2026-09-27T10:00:00Z', type: 'workflow.started', workflow: 'w', inputs: { task: 'Fix the bug' } },
+    { ts: '2026-09-27T10:01:00Z', type: 'step.finished', step_id: 'ci', output: { pr_url: 'https://github.com/o/r/pull/42', pr_number: 42 } },
+  ));
+  const r = runs.readRun(root, 'a');
+  assert.deepEqual(r.pr, { number: 42, url: 'https://github.com/o/r/pull/42' });
+  assert.equal(r.title, 'Fix the bug');
+  assert.equal(r.customTitle, null);
+  assert.equal(r.resumedFrom, null);
+});
+
+test('readRun: the owner\'s title (meta.json) wins over the default', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-title-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  fs.mkdirSync(path.join(root, 'a'));
+  fs.writeFileSync(path.join(root, 'a', 'events.jsonl'), jl({ ts: '2026-09-27T10:00:00Z', type: 'workflow.started', workflow: 'w', inputs: { task: 'Fix the bug' } }));
+  writeTitle(path.join(root, 'a'), 'Second try after conflict');
+  const r = runs.readRun(root, 'a');
+  assert.equal(r.title, 'Second try after conflict');
+  assert.equal(r.customTitle, 'Second try after conflict');
+});
+
+test('readRun: a resumed run without its own PR or title inherits them from the run it resumes', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-resume-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  fs.mkdirSync(path.join(root, 'a'));
+  fs.writeFileSync(path.join(root, 'a', 'events.jsonl'), jl(
+    { ts: '2026-09-27T10:00:00Z', type: 'workflow.started', workflow: 'w', inputs: { task: 'Fix the bug' } },
+    { ts: '2026-09-27T10:01:00Z', type: 'step.finished', step_id: 'ci', output: { pr_url: 'https://github.com/o/r/pull/42', pr_number: 42 } },
+  ));
+  writeTitle(path.join(root, 'a'), 'Notifications');
+  fs.mkdirSync(path.join(root, 'b'));
+  fs.writeFileSync(path.join(root, 'b', 'events.jsonl'), jl(
+    { ts: '2026-09-28T10:00:00Z', type: 'workflow.started', workflow: 'w', inputs: { task: 'Fix the bug, again' }, resumed_from: { run_id: 'a', step: 'develop' } },
+  ));
+  const r = runs.readRun(root, 'b');
+  assert.equal(r.resumedFrom, 'a');
+  assert.deepEqual(r.pr, { number: 42, url: 'https://github.com/o/r/pull/42' });
+  assert.equal(r.title, 'Notifications');
+  assert.equal(r.customTitle, 'Notifications');
+});
+
+test('writeTitle never touches events.jsonl', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-events-untouched-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const dir = path.join(root, 'a');
+  fs.mkdirSync(dir);
+  const eventsPath = path.join(dir, 'events.jsonl');
+  fs.writeFileSync(eventsPath, jl({ ts: '2026-09-27T10:00:00Z', type: 'workflow.started', workflow: 'w' }));
+  const before = fs.readFileSync(eventsPath, 'utf8');
+  writeTitle(dir, 'A title');
+  assert.equal(fs.readFileSync(eventsPath, 'utf8'), before);
+  assert.ok(fs.existsSync(path.join(dir, 'meta.json')));
+});
+
+test('runArtifacts never lists meta.json', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-meta-artifact-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const dir = path.join(root, 'a');
+  fs.mkdirSync(dir);
+  fs.writeFileSync(path.join(dir, 'events.jsonl'), '');
+  writeTitle(dir, 'A title');
+  const names = runs.runArtifacts(dir).map((a) => a.name);
+  assert.ok(!names.includes('meta.json'));
 });
 
 test('runsForProject matches the project id, then the current or previous folders', (t) => {

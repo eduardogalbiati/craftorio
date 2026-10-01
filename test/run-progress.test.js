@@ -146,6 +146,34 @@ test('without a recorded workflow.started only the live events are applied', () 
   assert.deepEqual(hydrationEvents([{ type: 'log', ts: 'x' }], []), []);
 });
 
+test('hydrationEvents: a live event with seq at or below the last recorded one is dropped; a higher seq is kept', () => {
+  const recorded = [
+    { seq: 1, type: 'workflow.started', ts: 't0' },
+    { seq: 2, type: 'step.started', ts: 't1', step_id: 'a' },
+    { seq: 3, type: 'step.finished', ts: 't2', step_id: 'a' },
+  ];
+  const live = [
+    { seq: 2, type: 'step.started', ts: 't1', step_id: 'a' }, // already recorded: dropped
+    { seq: 3, type: 'step.finished', ts: 't2', step_id: 'a' }, // seq == lastSeq: dropped
+    { seq: 4, type: 'step.started', ts: 't3', step_id: 'b' }, // higher: kept
+  ];
+  const out = hydrationEvents(recorded, live);
+  assert.deepEqual(out.map((e) => e.seq), [1, 2, 3, 4]);
+});
+
+test('hydrationEvents: a live event without a seq (older recording) falls back to matching by what identifies it', () => {
+  const recorded = [
+    { seq: 1, type: 'workflow.started', ts: 't0' },
+    { type: 'log', ts: 't1', message: 'token <REDACTED>' }, // no seq: an older recording
+  ];
+  const live = [
+    { type: 'log', ts: 't1', message: 'token abc' }, // same event, matched by key (type/ts), not seq
+    { type: 'log', ts: 't2', message: 'new' },
+  ];
+  const out = hydrationEvents(recorded, live);
+  assert.deepEqual(out.map((e) => e.message ?? e.type), ['workflow.started', 'token <REDACTED>', 'new']);
+});
+
 // ---- on disk ------------------------------------------------------------------------------
 const jl = (...objs) => objs.map((o) => JSON.stringify(o)).join('\n') + '\n';
 

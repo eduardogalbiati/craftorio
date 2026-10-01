@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { runNotice, sessionNotice, shouldNotify, attentionSignal, promptLine, WaitDetector } = require('../src/notifications');
+const { runNotice, interruptedNotice, sessionNotice, shouldNotify, attentionSignal, promptLine, WaitDetector } = require('../src/notifications');
 const { setupWorkspace } = require('../src/workspace');
 const { createService } = require('../src/service');
 
@@ -30,6 +30,19 @@ test('a run notice names the workflow, the project and the new status', () => {
 
   assert.equal(runNotice({ type: 'workflow.finished', run_id: 'r1', status: 'cancelled' }, RUN).title, 'Run cancelled: software-development');
   assert.equal(runNotice({ type: 'step.started', run_id: 'r1' }, RUN), null);
+});
+
+test('a run\'s display title (#84) is shown with its workflow; without one the workflow alone is used', () => {
+  const titled = { ...RUN, title: 'Notifications, 2nd try after conflict' };
+  const started = runNotice({ type: 'workflow.started', run_id: 'r1', workflow: 'software-development' }, titled);
+  assert.equal(started.title, 'Run started: Notifications, 2nd try after conflict (software-development)');
+  const gate = runNotice({ type: 'approval.requested', run_id: 'r1', step_id: 'human_review' }, titled);
+  assert.equal(gate.title, 'Waiting for you: Notifications, 2nd try after conflict (software-development)');
+
+  const interrupted = interruptedNotice({ runId: 'r1', workflow: 'software-development', project: 'demo', mock: false, title: 'Notifications' });
+  assert.equal(interrupted.title, 'Run interrupted: Notifications (software-development)');
+  const noTitle = interruptedNotice({ runId: 'r1', workflow: 'software-development', project: 'demo', mock: false });
+  assert.equal(noTitle.title, 'Run interrupted: software-development');
 });
 
 test('notices respect the per-kind setting and what the focused window shows', () => {

@@ -328,6 +328,24 @@ test('a queued simulation leaves the column as it would be without it; a real qu
   assert.deepEqual(by[2].queued, { position: 2, workflow: 'w', mock: false });
 });
 
+test('linkRuns passes a run\'s title and PR through to its history (#84)', () => {
+  const issue = { number: 1, state: 'open', url: 'https://github.com/o/r/issues/1' };
+  const pr = { number: 42, url: 'https://github.com/o/r/pull/42', state: 'ready' };
+  const run = { runId: 'a', workflow: 'w', status: 'success', startedAt: '2026-09-01', issue: { number: 1, url: issue.url }, title: 'Fix the bug', customTitle: null, pr };
+  const [out] = backlog.linkRuns([issue], [run]);
+  assert.equal(out.runs[0].title, 'Fix the bug');
+  assert.equal(out.runs[0].customTitle, null);
+  assert.deepEqual(out.runs[0].pr, pr);
+});
+
+test('linkRuns: a run with no title or PR carries neither (no undefined fields leaking in)', () => {
+  const issue = { number: 1, state: 'open', url: 'https://github.com/o/r/issues/1' };
+  const run = { runId: 'a', workflow: 'w', status: 'success', startedAt: '2026-09-01', issue: { number: 1, url: issue.url } };
+  const [out] = backlog.linkRuns([issue], [run]);
+  assert.ok(!('title' in out.runs[0]));
+  assert.ok(!('pr' in out.runs[0]));
+});
+
 test('the queue: enqueue skips duplicates and remembers inputs, next item across projects, pause', (t) => {
   const dir = tmp(t);
   const issue = (number) => ({ number, url: `u${number}`, title: `T${number}`, body: `B${number}` });

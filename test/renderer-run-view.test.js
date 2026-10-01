@@ -23,7 +23,7 @@ function loadHelpers({ runs = new Map(), runView = 'details' } = {}) {
     assert.ok(code, `${name} not found in app.js: the source moved`);
   }
 
-  const calls = { showView: [], showRunInList: [], openRunChat: [], showCodeBanner: 0 };
+  const calls = { showView: [], showRunInList: [], openRunChat: [], openPastRun: [], showCodeBanner: 0 };
   const storage = new Map();
   const sandbox = {
     state: { runs, runId: null, runView },
@@ -33,6 +33,7 @@ function loadHelpers({ runs = new Map(), runView = 'details' } = {}) {
     },
     showView: (v) => calls.showView.push(v),
     showRunInList: (id) => calls.showRunInList.push(id),
+    openPastRun: (id) => calls.openPastRun.push(id),
     scheduleRender: () => {},
   };
   sandbox.window = sandbox;
@@ -96,10 +97,11 @@ test('showRun: with Chat remembered, it opens the run chat instead of the Run sc
   assert.deepEqual({ ...calls.openRunChat[0] }, { runId: 'r1', workflow: 'override', running: true });
 });
 
-test('showRun: a past run this window is not tracking opens in the runs list instead of a blank Run screen', () => {
+test('showRun: a past run this window is not tracking opens in Details, rebuilt from its recorded events (openPastRun)', () => {
   const { helpers, calls } = loadHelpers({ runs: new Map(), runView: 'details' });
   helpers.showRun('old-run');
-  assert.deepEqual(calls.showRunInList, ['old-run']);
+  assert.deepEqual(calls.openPastRun, ['old-run']);
+  assert.deepEqual(calls.showRunInList, []);
   assert.deepEqual(calls.showView, []);
 });
 
