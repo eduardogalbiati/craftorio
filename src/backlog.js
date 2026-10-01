@@ -603,19 +603,24 @@ function runInputs(item, wf, folder) {
 
 /**
  * What an issue-tracker run asks to queue when it ends: the issues its `file` step created, for
- * `inputs.assign_workflow`, grouped (one run) when there are several and the analyzer advised
- * grouping. Null unless the run succeeded and the owner chose `create_assign` at the review gate.
+ * `inputs.assign_workflow`. When the analyzer advised grouping, the open issues it named
+ * `group_with` (shown at the review gate) join them and they all run grouped (one run), when
+ * that makes more than one issue. Null unless the run succeeded and the owner chose
+ * `create_assign` at the review gate.
  * @param {{ workflow: string, status: string, steps: object, inputs: object }} run
  * @returns {{ numbers: number[], workflow: string, group: boolean } | null}
  */
 function filedToQueue({ workflow, status, steps, inputs } = {}) {
   if (workflow !== ISSUE_TRACKER_WORKFLOW || status !== 'success') return null;
   if (steps?.review?.output?.choice !== 'create_assign') return null;
-  const numbers = [...new Set((steps.file?.output?.filed || [])
-    .filter((f) => f?.action === 'created' && Number.isInteger(f.number) && f.number > 0).map((f) => f.number))];
-  if (!numbers.length) return null;
-  const group = numbers.length > 1 && steps.analyze?.output?.grouping === 'group';
-  return { numbers, workflow: inputs?.assign_workflow || 'software-development.yaml', group };
+  const valid = (n) => Number.isInteger(n) && n > 0;
+  const created = (steps.file?.output?.filed || []).filter((f) => f?.action === 'created' && valid(f.number)).map((f) => f.number);
+  if (!created.length) return null;
+  const analysis = steps.analyze?.output || {};
+  const advised = analysis.grouping === 'group';
+  const nearby = advised ? (analysis.nearby || []).filter((n) => n?.advice === 'group_with' && valid(n.number)).map((n) => n.number) : [];
+  const numbers = [...new Set([...created, ...nearby])];
+  return { numbers, workflow: inputs?.assign_workflow || 'software-development.yaml', group: advised && numbers.length > 1 };
 }
 
 module.exports = {
