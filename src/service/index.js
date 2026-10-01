@@ -1079,6 +1079,8 @@ function createService({ host }) {
     const project = gitProject(projectId);
     base = base || projectBase(project);
     const result = update ? await localPush.updateAndPush({ repo: project.folder, base }) : await localPush.pushBase({ repo: project.folder, base });
+    // a merge conflict (#69) is a row of the notification center too, whoever asked for the push
+    if (result.conflict) notify(notifier.pushConflictNotice({ project, base, files: result.files, error: result.error }), { projectId: project.id });
     return afterPush(project.id, result);
   }
 

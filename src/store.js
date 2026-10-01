@@ -16,7 +16,8 @@
 //                  a project with no row yet (a new or deleted index.db) is imported from its file.
 //   gates          a row per approval.requested, closed on approval.resolved or the run's end; the
 //                  open gates of runs that did not survive a restart become `interrupted`.
-//   notifications  every notice (run started/finished/failed, gate waiting, CLI session waiting...),
+//   notifications  every notice (run started/finished/failed, gate waiting, CLI session waiting, push
+//                  merge conflict...),
 //                  for the notification center; kept notificationRetentionDays days (settings).
 //
 // `openStore(ws)` opens (or reopens) the store of a workspace layout; `storeFor(dir)` finds the open

@@ -478,6 +478,14 @@ function reportNotifyContext() {
 }
 window.reportNotifyContext = reportNotifyContext;
 
+// Where a notification leads (desktop click or the notification center): its terminal, the
+// project's Backlog (a push conflict), or its run.
+function openNotificationTarget(t) {
+  if (t.terminalId) { window.SessionsView?.focusTerminal(t.terminalId); return; }
+  if (t.view === 'backlog') { window.BacklogActions?.focusProject(t.projectId); showView('backlog'); return; }
+  if (t.runId) showRun(t.runId, { workflow: t.workflow });
+}
+
 function initNotifications() {
   window.addEventListener('focus', reportNotifyContext);
   // gates answered or requested while the window was in the background, or while the browser UI
@@ -486,11 +494,7 @@ function initNotifications() {
   api.onReconnect?.(() => loadActiveRuns());
   window.addEventListener('blur', reportNotifyContext);
   document.addEventListener('visibilitychange', reportNotifyContext);
-  api.onNotificationClick((target) => {
-    if (target?.terminalId) { window.SessionsView?.focusTerminal(target.terminalId); return; }
-    if (!target?.runId) return;
-    showRun(target.runId, { workflow: target.workflow });
-  });
+  api.onNotificationClick((target) => openNotificationTarget(target || {}));
   reportNotifyContext();
 }
 

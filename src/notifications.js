@@ -3,7 +3,8 @@
 //
 // Two kinds, each with its own setting:
 //   run      a workflow run changed status (started, waiting on a human gate, succeeded, failed,
-//            cancelled, interrupted); target = { runId, workflow }
+//            cancelled, interrupted); target = { runId, workflow }; or a push met a merge conflict
+//            (event `conflict`); target = { view: 'backlog', projectId }
 //   session  an AI CLI in a Sessions terminal stopped and waits for the user; target = { terminalId }
 //
 // Nothing is shown while the window is focused on the notice's run or session.
@@ -52,6 +53,18 @@ function sessionNotice(terminalId, { title } = {}, message = '') {
     title: `Waiting for you: ${clip(title || 'CLI session', 80)}`,
     body: clip(message) || 'The CLI stopped and is waiting for your answer.',
     target: { terminalId },
+  };
+}
+
+// The notice for a merge conflict met by Push / Update and push (#69): a `run` notice (same setting)
+// whose target opens the project's Backlog, where "Resolve in a run" hands it to a workflow.
+function pushConflictNotice({ project = {}, base, files = [], error } = {}) {
+  const list = (files || []).map(String);
+  return {
+    kind: 'run', event: 'conflict',
+    title: `Merge conflict: ${clip(project.name || project.id || 'project', 80)}`,
+    body: clip([list.length ? `Local ${base || 'base'} conflicts with origin in ${list.join(', ')}.` : '', error].filter(Boolean).join(' ')) || 'The local base conflicts with origin.',
+    target: { view: 'backlog', projectId: project.id || null },
   };
 }
 
@@ -194,6 +207,7 @@ module.exports = {
   interruptedNotice,
   normalizeContext,
   promptLine,
+  pushConflictNotice,
   runNotice,
   sessionNotice,
   shouldNotify,

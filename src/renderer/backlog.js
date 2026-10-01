@@ -856,6 +856,8 @@
   window.BacklogActions = {
     assignGroup,
     data: () => bl.data,
+    // the project the next refresh shows (a notification's click, before showView('backlog'))
+    focusProject: (id) => { if (id) bl.projectId = id; },
     projectId: () => bl.projectId,
     roadmapGroup,
     showRoadmap,
