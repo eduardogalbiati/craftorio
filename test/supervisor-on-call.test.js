@@ -12,8 +12,9 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { WorkflowRun, loadWorkflow } = require('../src/engine/workflow');
+const { WorkflowRun, loadWorkflow, repeatKey } = require('../src/engine/workflow');
 const supervisor = require('../src/supervisor');
+const root = path.join(__dirname, '..');
 
 process.env.MULTIAGENT_MOCK_DELAY_SCALE = process.env.MULTIAGENT_MOCK_DELAY_SCALE || '0.05';
 process.env.MULTIAGENT_SIMULATION_ONLY = '1'; // tests never call real models
@@ -716,4 +717,282 @@ test('superviseSlow: on_call off never calls the supervisor; a per-step limit re
   assert.ok(!limitedEvents.some((e) => e.type === 'supervisor.started'));
   const warn = limitedEvents.find((e) => e.type === 'log' && e.level === 'warn');
   assert.match(warn.message, /not called on the slow step build \(its 1 interventions on this step are used\); it keeps running\./);
+});
+
+// ---- #121: same_output compares progress, not only control fields (repeatKey) -----------------------
+
+test('loadWorkflow validates a step\'s stall.same_output_fields', () => {
+  const base = (stepExtra, schema) => `agents: { a: { provider: claude, model: m } }\nsteps:\n  - id: s1\n    agent: a\n    prompt: x\n${stepExtra}    output_schema:\n${schema}\n`;
+  const schema = '      type: object\n      properties: { commit_sha: { type: string }, summary: { type: string } }\n';
+  assert.throws(
+    () => loadWorkflow(writeTmp(base('    stall: {}\n', schema))),
+    /Step "s1": stall\.same_output_fields must be a non-empty list of output field names\./,
+  );
+  assert.throws(
+    () => loadWorkflow(writeTmp(base('    stall: { same_output_fields: [] }\n', schema))),
+    /Step "s1": stall\.same_output_fields must be a non-empty list of output field names\./,
+  );
+  assert.throws(
+    () => loadWorkflow(writeTmp(base('    stall: { same_output_fields: [commit_sha, 3] }\n', schema))),
+    /Step "s1": stall\.same_output_fields must be a non-empty list of output field names\./,
+  );
+  assert.throws(
+    () => loadWorkflow(writeTmp(base('    stall: { same_output_fields: [commit_sha, verdict] }\n', schema))),
+    /Step "s1": stall\.same_output_fields names "verdict", which is not in its output_schema\./,
+  );
+  assert.doesNotThrow(() => loadWorkflow(writeTmp(base('    stall: { same_output_fields: [commit_sha, summary] }\n', schema))));
+});
+
+test('both bundled development workflows load with develop.stall set to commit_sha, summary, files_changed', () => {
+  for (const file of ['software-development.yaml', 'software-development-local-hero.yaml']) {
+    const wf = loadWorkflow(path.join(root, 'workflows', file));
+    const develop = wf.steps.find((s) => s.id === 'develop');
+    assert.deepEqual(develop.stall, { same_output_fields: ['commit_sha', 'summary', 'files_changed'] });
+  }
+});
+
+const DEVELOP_SCHEMA = {
+  type: 'object',
+  properties: {
+    committed: { type: 'boolean' },
+    commit_sha: { type: 'string' },
+    summary: { type: 'string' },
+    files_changed: { type: 'array', items: { type: 'string' } },
+  },
+};
+const developStep = (fields = ['commit_sha', 'summary', 'files_changed']) => ({ output_schema: DEVELOP_SCHEMA, stall: { same_output_fields: fields } });
+
+test('repeatKey: three develop-like visits with different commit_sha and summary give three different keys', () => {
+  const step = developStep();
+  const outputs = [
+    { committed: true, commit_sha: 'a1b2c3d', summary: 'Implement the artifact export.', files_changed: ['src/export.js'] },
+    { committed: true, commit_sha: 'e4f5a6b', summary: 'Fix artifact path to stay inside the workspace.', files_changed: ['src/export.js', 'src/paths.js'] },
+    { committed: true, commit_sha: 'c7d8e9f', summary: 'Fix empty files_changed blocker from the review.', files_changed: ['src/paths.js'] },
+  ];
+  const keys = outputs.map((o) => repeatKey(step, o));
+  assert.notEqual(keys[0], keys[1]);
+  assert.notEqual(keys[1], keys[2]);
+  assert.notEqual(keys[0], keys[2]);
+});
+
+test('repeatKey: three develop-like visits with the same commit_sha, summary and files_changed give the same key', () => {
+  const step = developStep();
+  const output = { committed: true, commit_sha: 'same0001', summary: 'No changes needed.', files_changed: ['src/export.js'] };
+  const keys = [repeatKey(step, { ...output }), repeatKey(step, { ...output }), repeatKey(step, { ...output })];
+  assert.equal(keys[0], keys[1]);
+  assert.equal(keys[1], keys[2]);
+});
+
+const REVIEW_SCHEMA = {
+  type: 'object',
+  properties: {
+    verdict: { type: 'string', enum: ['approved', 'changes_requested'] },
+    findings: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          axis: { type: 'string', enum: ['correctness', 'spec', 'standards'] },
+          severity: { type: 'string', enum: ['blocker', 'major', 'minor', 'nit'] },
+          file: { type: 'string' },
+          line: { type: 'integer' },
+          description: { type: 'string' },
+        },
+      },
+    },
+  },
+};
+const reviewStep = { output_schema: REVIEW_SCHEMA };
+
+test('repeatKey: a reviewer giving the same verdict and findings gives the same key, reworded descriptions included', () => {
+  const output1 = {
+    verdict: 'changes_requested',
+    findings: [{ axis: 'correctness', severity: 'blocker', file: 'src/export.js', line: 10, description: 'Off-by-one error in the loop bound causes an extra iteration.' }],
+  };
+  const output2 = {
+    verdict: 'changes_requested',
+    findings: [{ axis: 'correctness', severity: 'blocker', file: 'src/export.js', line: 10, description: 'The loop runs one time too many due to a boundary mistake.' }],
+  };
+  assert.equal(repeatKey(reviewStep, output1), repeatKey(reviewStep, output2));
+});
+
+test('repeatKey: a reviewer giving a finding at a different file or line gives a different key', () => {
+  const base = { axis: 'correctness', severity: 'blocker', file: 'src/export.js', line: 10, description: 'An off-by-one error.' };
+  const output1 = { verdict: 'changes_requested', findings: [base] };
+  const output2 = { verdict: 'changes_requested', findings: [{ ...base, line: 42 }] };
+  const output3 = { verdict: 'changes_requested', findings: [{ ...base, file: 'src/paths.js' }] };
+  assert.notEqual(repeatKey(reviewStep, output1), repeatKey(reviewStep, output2));
+  assert.notEqual(repeatKey(reviewStep, output1), repeatKey(reviewStep, output3));
+});
+
+test('repeatKey: the "answered" findings (the step it came from) are part of the key, breaking a repeat', () => {
+  const step = developStep();
+  const output = { committed: true, commit_sha: 'same0002', summary: 'Fix review findings.', files_changed: ['src/export.js'] };
+  const noAnswered = repeatKey(step, output);
+  const answeredA = repeatKey(step, output, { answered: 'findings-round-A' });
+  const answeredB = repeatKey(step, output, { answered: 'findings-round-B' });
+  const answeredAAgain = repeatKey(step, output, { answered: 'findings-round-A' });
+  assert.notEqual(noAnswered, answeredA);
+  assert.notEqual(answeredA, answeredB);
+  assert.equal(answeredA, answeredAAgain);
+});
+
+test('repeatKey: without a declared commit_sha field, it falls back to the worktree head, null with no worktree', () => {
+  const step = { output_schema: { type: 'object', properties: { files_changed: { type: 'array', items: { type: 'string' } } } } };
+  const output = { files_changed: ['src/export.js'] };
+  const keyNoWorktree = repeatKey(step, output, { head: () => null });
+  const keyWithWorktree = repeatKey(step, output, { head: () => 'headsha1' });
+  assert.notEqual(keyNoWorktree, keyWithWorktree);
+  assert.equal(JSON.parse(keyNoWorktree)[1], null);
+  assert.equal(JSON.parse(keyWithWorktree)[1], 'headsha1');
+});
+
+// ---- #121: engine integration (checkStalls + repeatKey) ----------------------------------------------
+
+const DEVELOP_PROGRESS_WF = `
+apiVersion: multiagent/v1
+kind: Workflow
+metadata: { name: fixture-oncall-develop-progress }
+orchestrator:
+  supervisor: { enabled: true, on_call: true, max_interventions: 5, max_total: 10 }
+agents:
+  a: { provider: claude, model: m, session: ephemeral }
+steps:
+  - id: develop
+    agent: a
+    prompt: "develop"
+    stall:
+      same_output_fields: [commit_sha, summary, files_changed]
+    output_schema:
+      type: object
+      required: [committed, round]
+      properties:
+        committed: { type: boolean }
+        commit_sha: { type: string }
+        summary: { type: string }
+        files_changed: { type: array, items: { type: string } }
+        round: { type: integer }
+    transitions:
+      - { when: "output.round < 3", goto: develop }
+      - { when: "output.round >= 3", goto: end }
+`;
+
+test('three develop visits with different commit_sha and summary raise no same_output stall', async (t) => {
+  const r = makeRun(t, DEVELOP_PROGRESS_WF);
+  script(r, { a: [
+    { committed: true, commit_sha: 'a1b2c3d', summary: 'Implement the export.', files_changed: ['src/export.js'], round: 1 },
+    { committed: true, commit_sha: 'e4f5a6b', summary: 'Fix the artifact path.', files_changed: ['src/export.js', 'src/paths.js'], round: 2 },
+    { committed: true, commit_sha: 'c7d8e9f', summary: 'Fix the empty files_changed blocker.', files_changed: ['src/paths.js'], round: 3 },
+  ] }, []);
+  const { events, finished } = await run(r);
+  assert.equal(finished.status, 'success', finished.error);
+  assert.ok(!events.some((e) => e.type === 'log' && e.kind === 'stall' && e.stall === 'same_output'));
+  assert.ok(!events.some((e) => e.type === 'supervisor.started'));
+  assert.equal(events.filter((e) => e.type === 'step.started' && e.step_id === 'develop').length, 3);
+});
+
+test('three develop visits with the same commit_sha, summary and files_changed raise a same_output stall', async (t) => {
+  const r = makeRun(t, DEVELOP_PROGRESS_WF);
+  const output = { committed: true, commit_sha: 'same0003', summary: 'No changes needed.', files_changed: ['src/export.js'] };
+  script(r, { a: [
+    { ...output, round: 1 },
+    { ...output, round: 2 },
+    { ...output, round: 3 },
+  ] }, []);
+  const { events, finished } = await run(r);
+  assert.equal(finished.status, 'success', finished.error);
+  const stall = events.find((e) => e.type === 'log' && e.kind === 'stall' && e.stall === 'same_output' && e.step_id === 'develop');
+  assert.ok(stall, 'a same_output stall is logged');
+  assert.match(stall.message, /same_output/);
+});
+
+// A fix round answering new review findings is progress, even when the developer's commit_sha,
+// summary and files_changed happen to repeat; the same findings answered twice in a row do count (#121).
+const DEVELOP_REVIEW_CYCLE_WF = `
+apiVersion: multiagent/v1
+kind: Workflow
+metadata: { name: fixture-oncall-develop-review-cycle }
+orchestrator:
+  supervisor: { enabled: true, on_call: false, max_interventions: 5, max_total: 10, stall: { same_output: 2 } }
+agents:
+  dev: { provider: claude, model: m, session: ephemeral }
+  rev: { provider: claude, model: m, session: ephemeral }
+steps:
+  - id: develop
+    agent: dev
+    prompt: "develop"
+    stall:
+      same_output_fields: [commit_sha, summary, files_changed]
+    output_schema:
+      type: object
+      required: [committed]
+      properties:
+        committed: { type: boolean }
+        commit_sha: { type: string }
+        summary: { type: string }
+        files_changed: { type: array, items: { type: string } }
+    transitions:
+      - { when: "output.committed == true", goto: code_review }
+  - id: code_review
+    agent: rev
+    prompt: "review"
+    output_schema:
+      type: object
+      required: [verdict]
+      properties:
+        verdict: { type: string, enum: [approved, changes_requested] }
+        findings:
+          type: array
+          items:
+            type: object
+            properties:
+              axis: { type: string, enum: [correctness, spec, standards] }
+              severity: { type: string, enum: [blocker, major, minor, nit] }
+              file: { type: string }
+              line: { type: integer }
+              description: { type: string }
+    transitions:
+      - { when: "output.verdict == 'approved'", goto: end }
+      - { when: "output.verdict == 'changes_requested'", goto: develop }
+`;
+
+test('a develop visit following a code_review with different findings is never a repeat; the same findings again do count', async (t) => {
+  const r = makeRun(t, DEVELOP_REVIEW_CYCLE_WF);
+  // the developer's commit, summary and files are the same every round, on purpose: only the
+  // review findings it answers change, to isolate what repeatKey's `answered` does.
+  const devOutput = { committed: true, commit_sha: 'sha1', summary: 'Fix review findings.', files_changed: ['src/a.js'] };
+  const findingsA = [{ axis: 'correctness', severity: 'blocker', file: 'src/a.js', line: 10, description: 'Off-by-one error in loop bound.' }];
+  const findingsB = [{ axis: 'standards', severity: 'major', file: 'src/b.js', line: 42, description: 'Missing input validation on user id.' }];
+  const findingsB2 = [{ axis: 'standards', severity: 'major', file: 'src/b.js', line: 42, description: 'The user id is used without validating it first, a possible security issue.' }];
+  script(r, {
+    dev: [{ ...devOutput }, { ...devOutput }, { ...devOutput }, { ...devOutput }],
+    rev: [
+      { verdict: 'changes_requested', findings: findingsA },
+      { verdict: 'changes_requested', findings: findingsB },
+      { verdict: 'changes_requested', findings: findingsB2 }, // same as findingsB, reworded
+      { verdict: 'approved' },
+    ],
+  }, []);
+  const { events, finished } = await run(r);
+  assert.equal(finished.status, 'success', finished.error);
+  const developStalls = events.filter((e) => e.type === 'log' && e.kind === 'stall' && e.stall === 'same_output' && e.step_id === 'develop');
+  // visits 1-3: no previous review, then findings A, then findings B (new each time) - no repeat
+  assert.equal(developStalls.length, 1, 'only the 4th develop visit (answering the same findings as the 3rd) repeats');
+  assert.equal(events.filter((e) => e.type === 'step.started' && e.step_id === 'develop').length, 4);
+});
+
+// ---- #121: the supervisor writes in English, whatever the task's or the owner's language ------------
+
+test('the failure, action-error, idle and on-call prompts all pin English, not the task\'s language', () => {
+  const wf = { metadata: { name: 'wf' } };
+  const prompts = [
+    supervisor.decisionPrompt({ wf, step: { id: 's1' }, error: 'boom', answer: null, allowed: ['s1'], events: [] }),
+    supervisor.actionErrorPrompt({ wf, step: { id: 's1' }, error: 'boom', check: null, recover: ['s1'], gate: 'g1', events: [] }),
+    supervisor.idlePrompt({ wf, step: { id: 's1' }, agent: 'a', idle: { idle_ms: 6e5, tool: 'bash', command: 'npm test' }, events: [] }),
+    supervisor.onCallPrompt({ wf, step: { id: 's1' }, signals: [{ kind: 'same_output', detail: 'x' }], retryStep: 's1', steps: ['s1'], events: [] }),
+  ];
+  for (const prompt of prompts) {
+    assert.match(prompt, /in English/);
+    assert.doesNotMatch(prompt, /in the language of/);
+  }
 });
