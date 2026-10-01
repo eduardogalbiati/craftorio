@@ -147,6 +147,11 @@ const DEFAULT_SETTINGS = {
   prices: {},
   // GitHub Actions quota minutes included per month (GitHub Free: 2,000), see src/actions-usage.js
   actionsIncludedMinutes: 2000,
+  // voice input (src/speech.js): the whisper.cpp CLI (a name in PATH or a path), the model (an id
+  // from speech.MODELS or a path to a ggml .bin) and the spoken language ('auto' = detect)
+  voiceCommand: 'whisper-cli',
+  voiceModel: 'small',
+  voiceLanguage: 'pt',
 };
 
 function readSettings(ws) {

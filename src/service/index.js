@@ -15,6 +15,7 @@
 //   isPackaged       the packaged app can't run itself as node (see terminalSpec)
 //   assertCanRun({ mock })  optional; throws when the account may not start or resume a run
 //   readPrJson(cmd, args)   optional; replaces the gh/glab call that reads a run's PR (tests, UI checks)
+//   userDataDir      optional; the app's user data folder, where speech models live (src/speech.js)
 
 const path = require('path');
 const fs = require('fs');

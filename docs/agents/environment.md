@@ -12,6 +12,12 @@ the workspace folder.
   `C:\Program Files\GitHub CLI\gh.exe`, `glab` optional. Inside runs the engine refreshes PATH
   (`refreshWindowsPath`), so agents call bare `gh`/`glab` (see [capabilities.md](capabilities.md)).
   A shell opened outside the app may still lack it on PATH.
+- Voice input (optional, `src/speech.js`): `whisper-cli` from whisper.cpp. On Windows download
+  `whisper-bin-x64.zip` from https://github.com/ggml-org/whisper.cpp/releases, unzip it (e.g. to
+  `%LOCALAPPDATA%\whisper.cpp`) and add that folder to PATH, or put the full path of
+  `whisper-cli.exe` in Settings › General › Voice input. Models (`ggml-<id>.bin`) are downloaded
+  from Settings into `%APPDATA%\<app>\speech-models` (Electron's userData; the engine server uses
+  `%APPDATA%\multiagent-orchestrator\speech-models`). Tests use a fake CLI, never the real one.
 - Workspace: `%USERPROFILE%\multiagent-workspace` (registry `HKCU\Software\MultiagentOrchestrator\WorkspacePath`,
   overridable with `MULTIAGENT_WORKSPACE`). Layout: `runs/`, `repos/` (git checkouts, `<owner>-<repo>`),
   `worktrees/` (one git worktree per run, `<run_id>`), `backlog/` (issue sync per project), `projects/` (`<id>.json`),

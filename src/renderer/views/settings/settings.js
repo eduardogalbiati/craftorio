@@ -1,5 +1,5 @@
 /* global api */
-// Settings screen: General (workspace folder, backlog defaults), Agents & CLIs (installed CLIs and
+// Settings screen: General (workspace folder, backlog defaults, voice input), Agents & CLIs (installed CLIs and
 // their sign-in), Execution (developer mode, notifications, concurrent runs) and About. Registers
 // itself with registerView (view-registry.js); uses app.js globals ($, esc, errMsg, state,
 // applyDeveloperMode, renderHeader, renderWorkspacePaths) and window.BACKLOG_PLATFORMS (backlog.js).
@@ -30,6 +30,7 @@ async function renderSettings() {
   platform.value = state.settings.backlogPlatform || 'github';
   $('#set-backlog-group').value = state.settings.backlogMaxGroup || 5;
   renderConcurrency();
+  renderVoice();
   if (!document.querySelector('[data-spage="agents"]').classList.contains('hidden')) renderTools();
 }
 
@@ -52,6 +53,48 @@ async function saveConcurrency() {
   state.settings = await api.setSettings({ concurrentRuns });
   renderConcurrency();
   renderHeader();
+}
+
+// Settings › General › Voice input (#82): the whisper.cpp CLI, the model and the language (src/speech.js).
+const VOICE_LANGUAGES = { auto: 'Auto-detect', pt: 'Portuguese', en: 'English', es: 'Spanish', fr: 'French', de: 'German', it: 'Italian' };
+async function renderVoice(st) {
+  try {
+    st = st || await api.speechStatus();
+  } catch (e) {
+    $('#set-voice-cli').textContent = errMsg(e);
+    return;
+  }
+  $('#set-voice-command').value = state.settings.voiceCommand || '';
+  $('#set-voice-cli').innerHTML = st.path
+    ? `Found: <code>${esc(st.path)}</code>`
+    : `Not found (command "${esc(st.command)}"). Install: ${esc(st.installHint)}`;
+  const known = st.models.some((m) => m.id === st.model);
+  $('#set-voice-model').innerHTML = st.models.map((m) =>
+    `<option value="${esc(m.id)}">${esc(m.label)} · ${esc(m.size)} · ${esc(m.note)}${m.downloaded ? ' ✓' : ''}</option>`).join('')
+    + (known ? '' : `<option value="${esc(st.model)}">${esc(st.model)}</option>`);
+  $('#set-voice-model').value = st.model;
+  const btn = $('#btn-voice-download');
+  btn.classList.toggle('hidden', !known || st.modelReady);
+  btn.disabled = false;
+  btn.textContent = 'Download';
+  $('#set-voice-model-info').textContent = st.modelReady
+    ? `Ready. Stored in ${st.modelsDir}.`
+    : known ? `Not downloaded yet. It goes to ${st.modelsDir}.` : 'Model file not found.';
+  $('#set-voice-language').innerHTML = st.languages.map((l) => `<option value="${esc(l)}">${esc(VOICE_LANGUAGES[l] || l)}</option>`).join('');
+  $('#set-voice-language').value = st.language;
+}
+
+async function downloadVoiceModel() {
+  const btn = $('#btn-voice-download');
+  btn.disabled = true;
+  btn.textContent = 'Downloading…';
+  try {
+    await renderVoice(await api.downloadSpeechModel($('#set-voice-model').value));
+  } catch (e) {
+    btn.disabled = false;
+    btn.textContent = 'Download';
+    $('#set-voice-model-info').textContent = errMsg(e);
+  }
 }
 
 async function renderTools() {
@@ -121,6 +164,22 @@ registerView({
                 <div class="s-row">
                   <div class="s-label"><b>Issues per run</b><span>The most issues Assign workflow sends as one run (one branch, one PR/MR that closes all of them).</span></div>
                   <div class="s-ctrl"><input type="number" id="set-backlog-group" min="2" max="20" aria-label="Most issues in one run" /></div>
+                </div>
+              </div>
+              <h3 class="s-subtitle">Voice input</h3>
+              <p class="muted small">Dictate into any field with the OS: <b>Win+H</b> on Windows, <b>Dictation</b> on macOS (press Fn twice). Or use the mic button on the long text fields (or Ctrl+Shift+M): the recording is transcribed on this machine by whisper.cpp, inserted at the cursor for review, and deleted right after. Nothing leaves the machine.</p>
+              <div id="set-voice" class="s-group">
+                <div class="s-row">
+                  <div class="s-label"><b>Speech-to-text CLI</b><span id="set-voice-cli">Checking…</span></div>
+                  <div class="s-ctrl"><input type="text" id="set-voice-command" spellcheck="false" placeholder="whisper-cli" aria-label="Speech-to-text command or path" /></div>
+                </div>
+                <div class="s-row">
+                  <div class="s-label"><b>Model</b><span id="set-voice-model-info">Bigger models transcribe better and slower. Downloaded once into the app's data folder.</span></div>
+                  <div class="s-ctrl row"><select id="set-voice-model" aria-label="Speech model"></select><button id="btn-voice-download" class="btn sm">Download</button></div>
+                </div>
+                <div class="s-row">
+                  <div class="s-label"><b>Language</b><span>The language you speak. Auto detects it on each recording (less reliable on short ones).</span></div>
+                  <div class="s-ctrl"><select id="set-voice-language" aria-label="Spoken language"></select></div>
                 </div>
               </div>
               <h3 class="s-subtitle">Folders</h3>
@@ -203,6 +262,13 @@ registerView({
       state.settings = await api.setSettings({ backlogMaxGroup: Number.isFinite(n) && n >= 2 ? Math.min(n, 20) : 5 });
       e.target.value = state.settings.backlogMaxGroup;
     };
+    $('#set-voice-command').onchange = async (e) => {
+      state.settings = await api.setSettings({ voiceCommand: e.target.value.trim() || 'whisper-cli' });
+      renderVoice();
+    };
+    $('#set-voice-model').onchange = async (e) => { state.settings = await api.setSettings({ voiceModel: e.target.value }); renderVoice(); };
+    $('#set-voice-language').onchange = async (e) => { state.settings = await api.setSettings({ voiceLanguage: e.target.value }); };
+    $('#btn-voice-download').onclick = downloadVoiceModel;
     for (const sel of ['#set-cr-enabled', '#set-cr-max', '#set-cr-project', '#set-cr-sims']) $(sel).onchange = saveConcurrency;
   },
   show: renderSettings,

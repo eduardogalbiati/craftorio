@@ -14,9 +14,11 @@ const {
   ipcMain,
   Notification,
   safeStorage,
+  session,
   shell,
 } = require('electron');
 const workspace = require('./workspace');
+const { allowPermission } = require('./permissions');
 const { createService } = require('./service');
 const { authChannels } = require('./service/manifest');
 const { createAuth, fileStorage } = require('./auth');
@@ -65,6 +67,7 @@ const service = createService({
     appVersion: app.getVersion(),
     isPackaged: app.isPackaged,
     assertCanRun: (opts) => auth.assertCanRun(opts),
+    userDataDir: app.getPath('userData'),
   },
 });
 
@@ -151,6 +154,17 @@ async function pickWorkspaceDir(parent) {
   return r.canceled ? null : r.filePaths[0];
 }
 
+const APP_PAGE = path.join(__dirname, 'renderer', 'index.html');
+
+// The microphone (voice input, #82) for the app's own page only, audio only; every other
+// permission and page is denied (see src/permissions.js). A check names the page through its
+// webContents (its origin is just "file://").
+function restrictPermissions(ses) {
+  ses.setPermissionRequestHandler((_wc, permission, callback, details) => callback(allowPermission(permission, details, APP_PAGE)));
+  ses.setPermissionCheckHandler((wc, permission, _origin, details) =>
+    allowPermission(permission, { ...details, requestingUrl: details?.requestingUrl || wc?.getURL() }, APP_PAGE));
+}
+
 function createWindow() {
   win = new BrowserWindow({
     width: 1500,
@@ -177,7 +191,7 @@ function createWindow() {
       if (/^https?:\/\//i.test(url)) shell.openExternal(url);
     }
   });
-  win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
+  win.loadFile(APP_PAGE);
   // a run that died with the app last time, once the window can open it
   win.webContents.once('did-finish-load', () => service.notifyInterruptedRun());
 }
@@ -260,6 +274,7 @@ app.whenReady().then(async () => {
   const ws = await ensureWorkspace();
   if (!ws) return app.quit();
   service.setWorkspace(ws);
+  restrictPermissions(session.defaultSession);
   createWindow();
   service.cleanupWorktrees().catch((e) => console.error('worktree cleanup:', e));
   // the trial can end while the app is open

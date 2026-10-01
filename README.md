@@ -27,7 +27,7 @@ Keep **Simulation mode** checked to try a flow without calling the CLIs.
 | Agents | Reusable agents in `<workspace>/agents/<id>.json`: a robot look (main color, shell, visor, glow, eyes, emblem; live preview of the animated states), a prompt with what the agent is for and the skills it always gets. The built-in **Supervisor** is always listed: its prompt and skills are fixed, only its look can be changed (it shows wherever the supervisor appears, e.g. Write & Review). The built-in **Product Owner** (the Backlog's planner, skill `backlog-product-owner`, a teal robot with a clipboard) is listed second: its prompt and skills are fixed; its look, its model (default `claude-opus-5-5`) and its effort (default high) can be changed. Neither can be removed. The visual builder imports them into desks, or picks one at random when a run starts. The **workflows' own agents** (the `agents:` of each workflow in `<workspace>/workflows/`, edited and custom ones included) follow, one section per workflow with a `workflow` badge: readable name, provider, model and effort (a value the user picks when starting a run shows the workflow's default, marked "picked at start"), session, skills (a templated skill shows its family) and capabilities; a workflow that fails to load shows its error once. They are read-only: **View** shows their prompt, skills, capabilities and the steps that use them, and only their look can be changed (saved in `agents/workflows/<file>/<agent>.json`, shown in that workflow's run chat, progress chips and Write & Review); **Open in workflow** jumps to Workflows › Definitions; **Duplicate as my agent** makes an editable copy |
 | Skills | One folder per skill in `<workspace>/skills/<id>/SKILL.md` (Claude Code format) |
 | Usage | Tokens and cost per provider this month and today, monthly budgets (USD and/or tokens), per-model prices for CLIs that do not report cost, recent runs, and the GitHub Actions minutes of the month against the included quota (warning at 80%, see CI/CD). The topbar widget shows this month's total; click it for a per-provider popover |
-| Settings | Workspace, CLI status (Claude Code, Codex, Grok Build, GitHub CLI, GitLab CLI, Git) and run preferences (`<workspace>/settings.json`). **Execution › Concurrent runs**: off by default (one run at a time); on, several workflows run at the same time up to a **maximum** (default 2), with an optional **maximum per project**; simulations count toward the limits only if you say so. Each run has its own git worktree, and the monthly budgets count every run in progress. The **Run** menu item then lists the runs in progress (status, workflow, project/issue): click one to show it on the Run screen and in the top bar (whose **All runs** counter adds them up); a badge counts the human gates waiting across runs, and a gate never pops up over another screen: a toast names its run |
+| Settings | Workspace, voice input (**General › Voice input**: OS dictation, the whisper.cpp CLI, model download and language, see Voice input below), CLI status (Claude Code, Codex, Grok Build, GitHub CLI, GitLab CLI, Git) and run preferences (`<workspace>/settings.json`). **Execution › Concurrent runs**: off by default (one run at a time); on, several workflows run at the same time up to a **maximum** (default 2), with an optional **maximum per project**; simulations count toward the limits only if you say so. Each run has its own git worktree, and the monthly budgets count every run in progress. The **Run** menu item then lists the runs in progress (status, workflow, project/issue): click one to show it on the Run screen and in the top bar (whose **All runs** counter adds them up); a badge counts the human gates waiting across runs, and a gate never pops up over another screen: a toast names its run |
 | Supervisor | The Supervisor as a companion on every screen: the top bar's **Supervisor** button opens a chat drawer that knows the screen you are on (e.g. "Workflows, builder tab, editing workflow X", "Analytics, range 2026-09-01 to 2026-09-30"), and the Supervisor menu item shows the whole conversation full page. It reads the app's data through read-only tools (workflows, projects, runs, skills, agents, usage, analytics) served by its own MCP server, never the repositories' code; it never answers a human gate and routes code problems to the workflow's agents. Each message is one model call (developer mode: the simulated supervisor, no cost) |
 <!-- /generated:screens -->
 
@@ -903,6 +903,27 @@ Grok Build: install it from x.ai (it lands in `%USERPROFILE%\.grok\bin`, which m
 
 Then log in once to each, interactively (`claude`, `codex login` and `grok login`).
 The app shows in Settings whether it found each command on the PATH.
+
+## Voice input
+
+- **OS dictation, no setup**: `Win+H` on Windows, Dictation on macOS. It types into any focused
+  field of the app.
+- **Mic button** on the long text fields (supervisor questions, gate feedback, the Start drawer's
+  task and issue intake, Write & Review and Arena prompts, the resume instruction): click to
+  record and click again to stop, or hold it and release to stop (push-to-talk). `Ctrl+Shift+M`
+  toggles it in the focused field and `Escape` discards a recording. It records up to 2 minutes.
+  The transcript is inserted at the cursor for you to review; it is never sent by itself.
+- **Local and private**: the page records the audio, converts it to a 16 kHz mono WAV and sends it
+  to the engine (`audio:transcribe`), which runs [whisper.cpp](https://github.com/ggml-org/whisper.cpp)
+  (`whisper-cli`). The audio goes to a temp folder for the CLI and is deleted right after; nothing
+  leaves the machine and nothing is kept.
+- **Setup** (Settings › General › Voice input): install `whisper-cli` (see
+  [environment.md](docs/agents/environment.md)), pick a model (Tiny 75 MB to Medium 1.5 GB: bigger
+  is better and slower; Small is the default) and click **Download** (stored in the app's user data
+  folder, `speech-models/`, not the workspace), and choose the language (Portuguese by default, or
+  auto-detect). A missing CLI or model is reported with what to install.
+- The microphone is allowed only for the app's own page (audio only); every other web permission
+  is denied. In the browser UI (`npm run serve`) the browser asks, and only on `localhost` or HTTPS.
 
 ## Workspace
 
