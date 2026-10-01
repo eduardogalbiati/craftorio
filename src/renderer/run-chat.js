@@ -31,7 +31,9 @@
   function robot(who, st = 'idle', opts = {}) {
     const mirror = isSupervisor(who.agent) || who.side !== 'right';
     if (isSupervisor(who.agent)) return Robots.svg('supervisor', st, { mirror, ...opts });
-    const variant = Robots.variantFor(providerType(who.provider, who.model), who.model || '');
+    // a look saved for this workflow's agent in Agents, else the provider's robot
+    const variant = window.AgentLooks?.forWorkflow(chat.model.run?.workflow, who.agent)
+      || Robots.variantFor(providerType(who.provider, who.model), who.model || '');
     return Robots.svg(variant, st, { plaque: who.model ? Robots.plaqueFor(who.model) : undefined, mirror, ...opts });
   }
   const avatar = (who) => `<span class="duo-robot still" aria-hidden="true">${robot(who, 'idle', { bubble: false })}</span>`;
@@ -295,9 +297,9 @@
     };
     $c('#rc-scroll').addEventListener('scroll', drawJump, { passive: true });
     $c('#rc-jump').onclick = toLatest;
-    // the supervisor's look is customizable in Agents
+    // the supervisor's look and the workflow agents' looks are customizable in Agents
     document.addEventListener('robots:changed', (e) => {
-      if (e.detail?.name !== 'supervisor' || chat.loading || !chat.runId) return;
+      if (!['supervisor', 'workflow-agents'].includes(e.detail?.name) || chat.loading || !chat.runId) return;
       $c('#rc-messages').innerHTML = '';
       draw(chat.model.items.map((it) => it.id));
     });

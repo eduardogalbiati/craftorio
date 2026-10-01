@@ -1017,6 +1017,7 @@
       <div class="ag-form">
         <h3 id="agent-modal-title">New agent</h3>
         <p id="ag-system-note" class="ag-note hidden">Built into the platform: its prompt and skills can't be changed. You can change how it looks; the new look shows wherever <span id="ag-system-where">the supervisor appears (e.g. Write &amp; Review)</span>.</p>
+        <p id="ag-workflow-note" class="ag-note hidden">Defined in the <b id="ag-workflow-name"></b> workflow: its prompt, skills, model and tools are changed there (Open in workflow). You can change how it looks; the new look shows in this workflow's runs, its chat and Write &amp; Review.</p>
         <div class="field">
           <label for="ag-name">Name <span class="req" id="ag-name-req">*</span></label>
           <input type="text" id="ag-name" maxlength="60" placeholder="e.g. Security reviewer" />
@@ -1059,10 +1060,14 @@
             <div id="ag-effort" class="seg sm" role="group" aria-label="Effort"></div>
           </div>
         </div>
+        <!-- a workflow's agent only (#68): what the workflow's YAML says, read-only -->
+        <dl id="ag-workflow-facts" class="ag-facts hidden"></dl>
 
         <p id="ag-error" class="error small"></p>
         <div class="modal-actions">
           <button type="button" id="btn-ag-remove" class="btn ghost danger hidden">Remove</button>
+          <button type="button" id="btn-ag-open-workflow" class="btn ghost hidden">Open in workflow</button>
+          <button type="button" id="btn-ag-duplicate" class="btn ghost hidden">Duplicate as my agent</button>
           <span class="spacer"></span>
           <button type="button" id="btn-ag-cancel" class="btn ghost">Cancel</button>
           <button type="submit" id="btn-ag-save" class="btn primary">Save</button>

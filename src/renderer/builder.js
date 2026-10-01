@@ -262,7 +262,8 @@
   // The Agents menu's cards (agents.js), in a modal; resolves with the agent clicked, or null.
   async function chooseAgent(currentId) {
     try { b.agents = await api.listAgents(); } catch { /* keep the last list */ }
-    const list = b.agents.filter((x) => !x.system && !x.error);
+    // the user's agents only: a workflow's agent comes in through "Duplicate as my agent" (Agents menu)
+    const list = b.agents.filter((x) => !x.system && !x.workflow && !x.error);
     const box = $('#wb-agents-list');
     box.innerHTML = list.length
       ? list.map((x) => window.AgentCards.card(x, { selected: x.id === currentId })).join('')

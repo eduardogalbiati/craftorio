@@ -8,10 +8,17 @@
 // The Backlog's Product Owner (#105, src/product-owner.js) is built in the same way, listed second:
 // its instructions are the backlog-product-owner skill; its look, model and effort are saved
 // (agents/product-owner.json).
+// The workflows' own agents (the `agents:` of each YAML in <workspace>/workflows/, #68) are listed
+// after the user's agents, grouped by workflow, read-only: only their look is saved
+// (agents/workflows/<file>/<agent>.json); the rest is changed in the workflow.
 
 const fs = require('fs');
 const path = require('path');
+const capabilities = require('./engine/capabilities');
+const { displayName } = require('./renderer/display-name');
+const { loadWorkflow, render } = require('./engine/workflow');
 const { slugify } = require('./projects');
+const { isWorkflowFile } = require('./workflows');
 
 const SUPERVISOR_ID = 'supervisor';
 const PRODUCT_OWNER_ID = 'product-owner';
@@ -112,8 +119,118 @@ function readAgent(dir, id) {
   };
 }
 
-/** The supervisor first, then the Product Owner, then the user's agents by name. */
-function listAgents(dir) {
+// ---- workflow agents (#68) ----------------------------------------------------------------
+// The agents defined inline in each workflow's YAML (`agents:`), read from the files on disk (the
+// same source as Workflows › Definitions, so edited and custom workflows show what they define).
+// Read-only here, like the supervisor: only their look is saved, in
+// agents/workflows/<workflow file>/<agent>.json (a subfolder, so it never lists as a user agent).
+// Their id is `workflow:<file>:<agent>`: names repeat across workflows (reviewer, verifier).
+const WORKFLOW_ID = /^workflow:([^:/\\]+\.ya?ml):([\w-]+)$/i;
+const workflowAgentId = (file, key) => `workflow:${file}:${key}`;
+const isWorkflowAgent = (id) => WORKFLOW_ID.test(String(id));
+const lookFile = (dir, file, key) => path.join(dir, 'workflows', path.basename(file), `${path.basename(key)}.json`);
+const isTemplate = (v) => typeof v === 'string' && v.includes('{{');
+
+/** `unit-test-writer-{{ inputs.language }}` → `unit-test-writer` (the family). */
+function skillFamily(s) {
+  const name = String(typeof s === 'object' && s ? s.name || s.id || '' : s || '');
+  return name.replace(/[-_]?\{\{.*$/, '').trim();
+}
+
+/** The defaults of a workflow's inputs, to resolve `{{ inputs.x }}` for display. */
+function inputDefaults(wf) {
+  return Object.fromEntries(Object.entries(wf.inputs || {}).map(([k, d]) => [k, d && typeof d === 'object' ? d.default ?? '' : d ?? '']));
+}
+
+function savedLook(dir, file, key) {
+  try { return readJson(lookFile(dir, file, key)); } catch { return {}; }
+}
+
+/**
+ * The agents of one workflow file, or one entry with the error when the file doesn't load (shown
+ * once, not per agent). `appearance` is null when the look was never customised: the screens then
+ * draw the provider's robot.
+ */
+function agentsOfWorkflow(dir, workflowsDir, file) {
+  let wf;
+  try { wf = loadWorkflow(path.join(workflowsDir, file)); } catch (e) {
+    return [{ id: `workflow:${file}`, name: file, workflowError: true, workflow: { file, name: file }, error: e.message, skills: [], appearance: null }];
+  }
+  const workflow = { file, name: String(wf.metadata?.name || file) };
+  const scope = { inputs: inputDefaults(wf) };
+  // a templated value shows the workflow's default and is marked as picked when the run starts
+  const value = (v) => {
+    if (!isTemplate(v)) return { value: v == null || v === '' ? null : String(v), picked: false };
+    let out = '';
+    try { out = render(v, scope).trim(); } catch { out = ''; }
+    return { value: out || null, picked: true };
+  };
+  return Object.entries(wf.agents).map(([key, raw]) => {
+    const a = { ...(wf.defaults || {}), ...(raw || {}) };
+    const provider = value(a.provider);
+    const model = value(a.model);
+    const effort = value(a.effort);
+    const saved = savedLook(dir, file, key);
+    return {
+      id: workflowAgentId(file, key),
+      key,
+      name: displayName(key),
+      system: false,
+      readOnly: true,
+      workflow,
+      description: String(a.description || `An agent of the ${workflow.name} workflow.`),
+      prompt: String(a.system_prompt || ''),
+      provider: provider.value,
+      providerType: wf.providers?.[provider.value]?.type || null,
+      model: model.value,
+      effort: effort.value,
+      // which of provider / model / effort the user picks when starting a run
+      pickedAtStart: [['provider', provider], ['model', model], ['effort', effort]].filter(([, v]) => v.picked).map(([k]) => k),
+      session: a.session || 'persistent',
+      skills: [...new Set((Array.isArray(a.skills) ? a.skills : []).map(skillFamily).filter(Boolean))],
+      capabilities: capabilities.describe(a.capabilities),
+      steps: wf.steps.filter((s) => s.agent === key || (Array.isArray(s.agents) && s.agents.includes(key))).map((s) => s.id),
+      appearance: saved.appearance ? normalizeAppearance(saved.appearance) : null,
+      updatedAt: saved.updatedAt || null,
+    };
+  });
+}
+
+/** Every workflow's agents, grouped by workflow file (sorted), agents in the YAML's order. */
+function listWorkflowAgents(dir, workflowsDir) {
+  if (!workflowsDir || !isDir(workflowsDir)) return [];
+  return fs.readdirSync(workflowsDir).filter(isWorkflowFile).sort().flatMap((file) => agentsOfWorkflow(dir, workflowsDir, file));
+}
+
+function readWorkflowAgent(dir, workflowsDir, id) {
+  const [, file] = WORKFLOW_ID.exec(String(id)) || [];
+  const a = file && isDir(workflowsDir || '') && fs.existsSync(path.join(workflowsDir, file))
+    ? agentsOfWorkflow(dir, workflowsDir, file).find((x) => x.id === id && !x.workflowError)
+    : null;
+  if (!a) throw new Error(`Workflow agent not found: ${id}`);
+  return a;
+}
+
+/**
+ * Only the look of a workflow agent is saved (everything else belongs to the workflow's YAML);
+ * `appearance: null` goes back to the provider's robot.
+ */
+function saveWorkflowAgent(dir, workflowsDir, id, data) {
+  const a = readWorkflowAgent(dir, workflowsDir, id);
+  const file = lookFile(dir, a.workflow.file, a.key);
+  if (data?.appearance == null) fs.rmSync(file, { force: true });
+  else {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, `${JSON.stringify({ appearance: normalizeAppearance(data.appearance), updatedAt: new Date().toISOString() }, null, 2)}\n`);
+  }
+  return readWorkflowAgent(dir, workflowsDir, id);
+}
+
+/**
+ * The supervisor first, then the Product Owner, then the user's agents by name, then (with
+ * `workflowsDir`) the workflows' agents grouped by workflow.
+ */
+function listAgents(dir, { workflowsDir } = {}) {
   const custom = isDir(dir)
     ? fs.readdirSync(dir)
       .filter((f) => f.endsWith('.json') && !isSystem(f.slice(0, -5)))
@@ -123,7 +240,7 @@ function listAgents(dir) {
       })
       .sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id))
     : [];
-  return [supervisorAgent(dir), productOwnerAgent(dir), ...custom];
+  return [supervisorAgent(dir), productOwnerAgent(dir), ...custom, ...listWorkflowAgents(dir, workflowsDir)];
 }
 
 function fields(data) {
@@ -156,7 +273,8 @@ function createAgent(dir, data) {
  * The supervisor only takes `appearance`, the Product Owner `appearance`, `model` and `effort`;
  * everything else about them is fixed.
  */
-function saveAgent(dir, id, data) {
+function saveAgent(dir, id, data, { workflowsDir } = {}) {
+  if (isWorkflowAgent(id)) return saveWorkflowAgent(dir, workflowsDir, id, data);
   if (id === SUPERVISOR_ID) {
     return write(dir, SUPERVISOR_ID, { appearance: normalizeAppearance(data?.appearance), updatedAt: new Date().toISOString() });
   }
@@ -177,6 +295,7 @@ function saveAgent(dir, id, data) {
 
 /** Path of the file to move to the trash; the built-in agents can't be removed. */
 function agentPathForRemoval(dir, id) {
+  if (String(id).startsWith('workflow:')) throw new Error('A workflow agent belongs to its workflow: change it in Workflows › Definitions.');
   if (isSystem(id)) throw new Error(`The ${SYSTEM[path.basename(String(id))].name} is part of the platform and can't be removed.`);
   const file = agentFile(dir, id);
   if (!fs.existsSync(file)) throw new Error(`Agent not found: ${id}`);
@@ -189,11 +308,14 @@ module.exports = {
   DEFAULT_APPEARANCE,
   EMBLEMS,
   EYES,
+  isWorkflowAgent,
   listAgents,
+  listWorkflowAgents,
   normalizeAppearance,
   PRODUCT_OWNER_APPEARANCE,
   PRODUCT_OWNER_ID,
   readAgent,
   saveAgent,
   SUPERVISOR_ID,
+  workflowAgentId,
 };

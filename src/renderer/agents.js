@@ -1,8 +1,11 @@
 // Agents screen: the list of agents (the built-in supervisor and Product Owner first) and the editor:
 // the robot's look (colors, eyes, emblem) with a live preview, the prompt (what the agent is for) and
 // its skills; for the Product Owner, its model and effort instead.
+// The workflows' own agents follow, one section per workflow (#68): read-only (View shows their
+// prompt, skills, model, capabilities and steps; only the look is saved), "Open in workflow" and
+// "Duplicate as my agent". Their saved looks are shared through window.AgentLooks.
 // Storage and validation are in src/agents.js. Uses app.js globals ($, esc, state, openModal,
-// closeModal, confirmDialog, errMsg, dateOf) and window.Robots (robots.js).
+// closeModal, confirmDialog, errMsg, dateOf, showToast, showWorkflowDefinition) and window.Robots (robots.js).
 /* global api, Robots */
 (() => {
   const SUPERVISOR = 'supervisor';
@@ -32,25 +35,51 @@
   const PREVIEW_STATES = [['idle', 'Idle'], ['thinking', 'Thinking'], ['writing', 'Writing'], ['done', 'Done'], ['waiting', 'Waiting'], ['error', 'Error']];
 
   const $a = (sel) => document.querySelector(sel);
-  const ed = { agent: null, look: { ...DEFAULT_LOOK }, skills: new Set(), state: 'idle', filter: '' };
+  // `custom`: a workflow agent's look was customised (else it draws its provider's robot)
+  const ed = { agent: null, look: { ...DEFAULT_LOOK }, custom: true, skills: new Set(), state: 'idle', filter: '' };
   let agents = [];
+  let workflowLooks = {};
 
-  const variantOf = (a, name) => Robots.fromAppearance(a.appearance || a, name ?? a.name);
+  // A workflow's agent whose look was never customised draws its provider's robot.
+  const providerVariant = (a) => Robots.variantFor(a.providerType || a.provider, a.model || '');
+  const variantOf = (a, name) => (a.workflow && !a.appearance ? providerVariant(a) : Robots.fromAppearance(a.appearance || a, name ?? a.name));
   const isSystem = () => !!ed.agent?.system;
+  const isWorkflow = () => !!ed.agent?.workflow;
+  const isReadOnly = () => isSystem() || isWorkflow();
   const isProductOwner = () => ed.agent?.id === PRODUCT_OWNER;
 
   // The built-in agents' saved looks replace their default robots everywhere (Write & Review, the
   // Backlog's Product Owner). The Product Owner's model and effort are read by backlog-po.js.
+  // The workflow agents' saved looks are found by workflow (file name without .yaml, or its
+  // metadata name) and agent: window.AgentLooks.forWorkflow (run chat, run progress, Write & Review).
   function applySupervisorLook() {
     if (!window.Robots) return;
     for (const a of agents.filter((x) => x.system)) Robots.define(a.id, a.appearance, a.name);
     window.productOwnerAgent = agents.find((a) => a.id === PRODUCT_OWNER) || null;
+    const looks = {};
+    for (const a of agents.filter((x) => x.workflow && x.key && x.appearance)) {
+      const v = Robots.fromAppearance(a.appearance, a.name);
+      looks[`${a.workflow.file.replace(/\.ya?ml$/i, '')}/${a.key}`] = v;
+      looks[`${a.workflow.name}/${a.key}`] = v;
+    }
+    if (JSON.stringify(looks) === JSON.stringify(workflowLooks)) return;
+    workflowLooks = looks;
+    document.dispatchEvent(new CustomEvent('robots:changed', { detail: { name: 'workflow-agents' } }));
+  }
+  window.AgentLooks = { forWorkflow: (workflow, agent) => (workflow && agent ? workflowLooks[`${workflow}/${agent}`] || null : null) };
+
+  // A workflow agent's model line: provider · model · effort, "picked at start" when the user picks
+  // them when starting a run (the value shown is then the workflow's default).
+  function modelLine(a) {
+    const parts = [a.provider, a.model, a.effort && `effort ${a.effort}`].filter(Boolean).join(' · ') || 'no model set';
+    return a.pickedAtStart?.length ? `${parts} (picked at start)` : parts;
   }
 
   // One agent card: avatar, name, description and skills. Shared with the builder's agent picker
-  // (window.AgentCards). `actions`: the Agents screen's footer (Edit / Remove); `selected` marks
-  // the current pick.
+  // (window.AgentCards). `actions`: the Agents screen's footer (Edit / Remove; View / Open in
+  // workflow / Duplicate for a workflow's agent); `selected` marks the current pick.
   function agentCard(a, { skillIds = new Set((state.skills || []).map((s) => s.id)), actions = false, selected = false } = {}) {
+    const fixed = a.system || a.workflow;
     return `
       <div class="card clickable agent-card${selected ? ' selected' : ''}" data-id="${esc(a.id)}" tabindex="0">
         <div class="agent-card-body">
@@ -58,15 +87,23 @@
           <div class="agent-card-text">
             <div class="card-head">
               <b class="card-title">${esc(a.name)}</b>
-              ${a.system ? '<span class="badge">system</span>' : ''}${selected ? '<span class="badge">selected</span>' : ''}
+              ${a.system ? '<span class="badge">system</span>' : ''}${a.workflow ? `<span class="badge" title="Defined in the ${esc(a.workflow.name)} workflow (read-only here)">workflow</span>` : ''}${selected ? '<span class="badge">selected</span>' : ''}
             </div>
-            <p class="muted small clamp">${esc(a.error ? `Error: ${a.error}` : a.description || (a.prompt ? a.prompt.slice(0, 160) : 'No description.'))}</p>
+            ${a.workflow ? `<p class="muted agent-facts mono">${esc(modelLine(a))} · ${esc(a.session)}</p>
+            <p class="muted agent-facts" title="Capabilities">${esc(a.capabilities || '')}</p>`
+              : `<p class="muted small clamp">${esc(a.error ? `Error: ${a.error}` : a.description || (a.prompt ? a.prompt.slice(0, 160) : 'No description.'))}</p>`}
             <div class="agent-skills">${(a.skills || []).slice(0, 4).map((s) =>
-              `<span class="agent-skill mono${a.system || skillIds.has(s) ? '' : ' missing'}" title="${a.system || skillIds.has(s) ? 'Skill' : 'This skill is not in the workspace'}">${esc(s)}</span>`).join('')}${
+              `<span class="agent-skill mono${fixed || skillIds.has(s) ? '' : ' missing'}" title="${fixed || skillIds.has(s) ? 'Skill' : 'This skill is not in the workspace'}">${esc(s)}</span>`).join('')}${
               a.skills?.length > 4 ? `<span class="muted small">+${a.skills.length - 4}</span>` : ''}</div>
           </div>
         </div>
-        ${actions ? `<div class="card-actions">
+        ${actions && a.workflow ? `<div class="card-actions">
+          <span class="muted small">${esc(a.workflow.name)}</span>
+          <span class="spacer"></span>
+          <button class="btn sm ghost" data-act="edit">View</button>
+          <button class="btn sm ghost" data-act="open-workflow">Open in workflow</button>
+          <button class="btn sm ghost" data-act="duplicate">Duplicate</button>
+        </div>` : actions ? `<div class="card-actions">
           <span class="muted small">${a.system ? (a.model ? `Look and model · ${esc(a.model)}` : 'Look only') : a.updatedAt ? `updated ${esc(dateOf(a.updatedAt))}` : ''}</span>
           <span class="spacer"></span>
           <button class="btn sm ghost" data-act="edit">${a.system ? 'Customize' : 'Edit'}</button>
@@ -75,6 +112,19 @@
       </div>`;
   }
   window.AgentCards = { card: agentCard };
+
+  // The workflows' agents, one heading per workflow file; a file that doesn't load shows its error
+  // once, in its heading.
+  function workflowSections(list, skillIds) {
+    const files = [...new Set(list.map((a) => a.workflow.file))];
+    return files.map((file) => {
+      const of = list.filter((a) => a.workflow.file === file);
+      const broken = of.find((a) => a.workflowError);
+      return `<div class="agents-group"><h3>${esc(of[0].workflow.name)}</h3><span class="muted small mono">${esc(file)}</span>${
+        broken ? `<p class="error small">Could not load this workflow: ${esc(broken.error)}</p>` : ''}</div>${
+        of.filter((a) => !a.workflowError).map((a) => agentCard(a, { skillIds, actions: true })).join('')}`;
+    }).join('');
+  }
 
   async function refreshAgents() {
     const box = $a('#agents-list');
@@ -86,19 +136,44 @@
     }
     applySupervisorLook();
     const skillIds = new Set(state.skills.map((s) => s.id));
-    const custom = agents.filter((a) => !a.system);
-    box.innerHTML = agents.map((a) => agentCard(a, { skillIds, actions: true })).join('') + (custom.length ? '' : `
+    const own = agents.filter((a) => !a.workflow);
+    const custom = own.filter((a) => !a.system);
+    const fromWorkflows = agents.filter((a) => a.workflow);
+    box.innerHTML = own.map((a) => agentCard(a, { skillIds, actions: true })).join('') + (custom.length ? '' : `
       <div class="card agent-empty">
         <b>Create your first agent</b>
         <p class="muted small">Give it a look, a prompt that says what it is for and the skills it needs. Workflows will be able to use it later.</p>
         <div><button class="btn primary sm" id="empty-new-agent" type="button">New agent</button></div>
-      </div>`);
+      </div>`) + workflowSections(fromWorkflows, skillIds);
     $a('#empty-new-agent')?.addEventListener('click', () => openAgentModal(null));
     box.querySelectorAll('.agent-card').forEach((c) => (c.onclick = async (e) => {
       const a = agents.find((x) => x.id === c.dataset.id);
-      if (e.target.closest('[data-act]')?.dataset.act === 'remove') return removeAgent(a);
+      const act = e.target.closest('[data-act]')?.dataset.act;
+      if (act === 'remove') return removeAgent(a);
+      if (act === 'open-workflow') return showWorkflowDefinition(a.workflow.file);
+      if (act === 'duplicate') return duplicateAgent(a);
       openAgentModal(a);
     }));
+  }
+
+  // "Duplicate as my agent": a user agent (editable) from a workflow's agent: its name, prompt,
+  // skills (families) and look; then opens it in the editor.
+  async function duplicateAgent(a) {
+    try {
+      const created = await api.createAgent({
+        name: a.name,
+        description: `From the ${a.workflow.name} workflow (${a.key}).`,
+        prompt: a.prompt || a.description,
+        skills: a.skills,
+        appearance: a.appearance || undefined,
+      });
+      closeModal('#agent-modal');
+      await refreshAgents();
+      openAgentModal(agents.find((x) => x.id === created.id) || created);
+    } catch (e) {
+      if (!$a('#agent-modal').classList.contains('hidden')) $a('#ag-error').textContent = errMsg(e);
+      else showToast('Could not duplicate the agent', errMsg(e));
+    }
   }
 
   async function removeAgent(a) {
@@ -112,14 +187,31 @@
   function openAgentModal(a) {
     ed.agent = a;
     ed.look = { ...defaultLook(), ...(a?.appearance || {}) };
+    ed.custom = !a?.workflow || !!a.appearance;
     ed.skills = new Set(a?.skills || []);
     ed.state = 'idle';
     ed.filter = '';
     ed.effort = a?.effort || 'high';
-    const system = isSystem();
-    $a('#agent-modal-title').textContent = a ? (system ? `Customize the ${a.id === SUPERVISOR ? 'supervisor' : a.name}` : `Edit ${a.name}`) : 'New agent';
-    $a('#ag-system-note').classList.toggle('hidden', !system);
+    const system = isReadOnly();
+    const workflow = isWorkflow();
+    $a('#agent-modal-title').textContent = a ? (workflow ? `${a.name} · ${a.workflow.name}` : isSystem() ? `Customize the ${a.id === SUPERVISOR ? 'supervisor' : a.name}` : `Edit ${a.name}`) : 'New agent';
+    $a('#ag-system-note').classList.toggle('hidden', !isSystem());
     $a('#ag-system-where').textContent = SHOWN_IN[a?.id] || '';
+    $a('#ag-workflow-note').classList.toggle('hidden', !workflow);
+    $a('#ag-workflow-name').textContent = workflow ? a.workflow.name : '';
+    $a('#ag-workflow-facts').classList.toggle('hidden', !workflow);
+    $a('#ag-workflow-facts').innerHTML = workflow ? [
+      ['Workflow', `${a.workflow.name} (${a.workflow.file}) · agent ${a.key}`],
+      ['Provider', a.provider || 'none'],
+      ['Model', a.model || 'CLI default'],
+      ['Effort', a.effort || 'default'],
+      ...(a.pickedAtStart?.length ? [['Picked at start', `${a.pickedAtStart.join(', ')}: the values above are the workflow's defaults`]] : []),
+      ['Session', a.session],
+      ['Capabilities', a.capabilities],
+      ['Used in steps', a.steps?.join(', ') || 'none'],
+    ].map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('') : '';
+    $a('#btn-ag-open-workflow').classList.toggle('hidden', !workflow);
+    $a('#btn-ag-duplicate').classList.toggle('hidden', !workflow);
     $a('#ag-model-row').classList.toggle('hidden', !isProductOwner());
     $a('#ag-model').value = a?.model || '';
     $a('#ag-model-list').innerHTML = (window.ChatModels?.PROVIDERS['claude-code']?.models || []).map((m) => `<option value="${esc(m)}"></option>`).join('');
@@ -143,8 +235,8 @@
   }
 
   function renderPreview() {
-    const name = $a('#ag-name').value.trim() || (isSystem() ? ed.agent.name : 'New agent');
-    $a('#ag-robot').innerHTML = Robots.svg(variantOf(ed.look, name), ed.state);
+    const name = $a('#ag-name').value.trim() || (isReadOnly() ? ed.agent.name : 'New agent');
+    $a('#ag-robot').innerHTML = Robots.svg(ed.custom ? variantOf(ed.look, name) : providerVariant(ed.agent), ed.state);
   }
 
   function renderEffort() {
@@ -175,6 +267,7 @@
 
   function setLook(patch) {
     Object.assign(ed.look, patch);
+    ed.custom = true;
     renderLookControls();
     renderPreview();
   }
@@ -190,8 +283,10 @@
     const all = state.skills || [];
     const known = new Set(all.map((s) => s.id));
     $a('#ag-skill-count').textContent = String(ed.skills.size);
-    if (isSystem()) {
-      box.innerHTML = [...ed.skills].map((s) => `<div class="ag-skill fixed"><span class="mono">${esc(s)}</span><span class="muted small">built in</span></div>`).join('');
+    if (isReadOnly()) {
+      const from = isWorkflow() ? 'from the workflow' : 'built in';
+      box.innerHTML = [...ed.skills].map((s) => `<div class="ag-skill fixed"><span class="mono">${esc(s)}</span><span class="muted small">${from}</span></div>`).join('')
+        || '<p class="muted small">No skills.</p>';
       return;
     }
     const q = ed.filter.trim().toLowerCase();
@@ -212,6 +307,9 @@
     e.preventDefault();
     const data = isProductOwner()
       ? { appearance: ed.look, model: $a('#ag-model').value.trim(), effort: ed.effort }
+      : isWorkflow()
+      // only the look; null = back to the provider's robot
+      ? { appearance: ed.custom ? ed.look : null }
       : isSystem()
       ? { appearance: ed.look }
       : { name: $a('#ag-name').value, description: $a('#ag-description').value, prompt: $a('#ag-prompt').value, skills: [...ed.skills], appearance: ed.look };
@@ -237,8 +335,19 @@
     $a('#btn-ag-remove').onclick = async () => {
       if (ed.agent && (await removeAgent(ed.agent))) closeModal('#agent-modal');
     };
+    $a('#btn-ag-open-workflow').onclick = () => {
+      const file = ed.agent?.workflow?.file;
+      if (!file) return;
+      closeModal('#agent-modal');
+      showWorkflowDefinition(file);
+    };
+    $a('#btn-ag-duplicate').onclick = () => { if (ed.agent?.workflow) duplicateAgent(ed.agent); };
     $a('#btn-ag-shuffle').onclick = shuffleLook;
-    $a('#btn-ag-reset').onclick = () => setLook({ ...defaultLook() });
+    // a workflow's agent goes back to its provider's robot
+    $a('#btn-ag-reset').onclick = () => {
+      setLook({ ...defaultLook() });
+      if (isWorkflow()) { ed.custom = false; renderPreview(); }
+    };
     $a('#ag-effort').onclick = (e) => { const b = e.target.closest('[data-effort]'); if (b) { ed.effort = b.dataset.effort; renderEffort(); } };
     $a('#ag-name').addEventListener('input', renderPreview);
     $a('#ag-states').onclick = (e) => {
@@ -256,6 +365,7 @@
     $a('#ag-colors').addEventListener('input', (e) => {
       if (e.target.type !== 'color') return;
       ed.look[e.target.closest('[data-color]').dataset.color] = e.target.value.toUpperCase();
+      ed.custom = true;
       renderPreview();
     });
     $a('#ag-colors').addEventListener('change', (e) => { if (e.target.type === 'color') renderLookControls(); });

@@ -44,7 +44,9 @@
   // Robots on the left of the chat (writer, supervisor) are mirrored so they face the conversation.
   const MIRRORED = { writer: true, supervisor: true };
   let roles = config; // the setup, or the roles of the run being shown
-  const variantOf = (role) => (roles[role].internal ? 'supervisor' : Robots.variantFor(roles[role].provider, roles[role].model));
+  // the writer and the reviewer wear the look saved for writer-reviewer's agents in Agents, if any
+  const variantOf = (role) => (roles[role].internal ? 'supervisor'
+    : window.AgentLooks?.forWorkflow('writer-reviewer', role) || Robots.variantFor(roles[role].provider, roles[role].model));
   // The name plate shows the chosen model; the internal supervisor keeps its own generic plate.
   const plaqueOf = (role) => (roles[role].internal ? undefined : Robots.plaqueFor(roles[role].model));
   const robotSvg = (role, st = 'idle', opts = {}) => Robots.svg(variantOf(role), st, { mirror: MIRRORED[role], plaque: plaqueOf(role), ...opts });
@@ -71,7 +73,8 @@
     const prev = roles;
     roles = config;
     const slot = $d(`[data-robot="${role}"]`);
-    const key = `${variantOf(role)}:${c.model}`;
+    const v = variantOf(role);
+    const key = `${typeof v === 'string' ? v : `look-${v.body}-${v.screen}-${v.accent}-${v.head}-${v.eyes}-${v.logo}`}:${c.model}`;
     if (slot.dataset.key !== key) { slot.dataset.key = key; slot.innerHTML = robotSvg(role, 'idle'); }
     roles = prev;
   }
@@ -525,9 +528,10 @@
     fillAgentForm('writer');
     fillAgentForm('reviewer');
     $d('[data-robot="supervisor"]').innerHTML = robotSvg('supervisor');
-    // the supervisor's look is customizable in Agents
+    // the supervisor's look and the workflow agents' looks are customizable in Agents
     document.addEventListener('robots:changed', (e) => {
       if (e.detail?.name === 'supervisor') $d('[data-robot="supervisor"]').innerHTML = robotSvg('supervisor');
+      if (e.detail?.name === 'workflow-agents') { fillAgentForm('writer'); fillAgentForm('reviewer'); }
     });
     $d('#duo-run').onclick = startRun;
     $d('#duo-stop').onclick = () => api.stopRun(chat.runId);
