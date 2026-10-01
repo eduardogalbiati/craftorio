@@ -161,16 +161,18 @@
 
   // The events that rebuild the view of a run picked up mid-way: the ones recorded on disk (from
   // workflow.started on), then the live ones that came in while the file was read and are not on
-  // disk yet. The recorder may redact an event's text, so an event is matched by what identifies
-  // it (type, time, step, session, turn, gate), not by its content. Nothing recorded from
-  // workflow.started: only the live events.
+  // disk yet: those after the last recorded `seq` (the engine numbers a run's events). Events
+  // without a seq (older recordings) are matched by what identifies them (type, time, step,
+  // session, turn, gate), not by their content, which the recorder may redact. Nothing recorded
+  // from workflow.started: only the live events.
   const eventKey = (e) => [e.type, e.ts, e.step_id, e.session_id, e.turn, e.approval_id].map((x) => x ?? '').join('|');
   function hydrationEvents(recorded = [], live = []) {
     const start = recorded.findIndex((e) => e.type === 'workflow.started');
     if (start < 0) return live.slice();
     const past = recorded.slice(start);
+    const lastSeq = past.reduce((m, e) => Math.max(m, e.seq || 0), 0);
     const seen = new Set(past.map(eventKey));
-    return past.concat(live.filter((e) => !seen.has(eventKey(e))));
+    return past.concat(live.filter((e) => (e.seq && lastSeq ? e.seq > lastSeq : !seen.has(eventKey(e)))));
   }
 
   const api = { StepTrail, trailOf, progressGroups, hydrationEvents };

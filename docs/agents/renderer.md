@@ -31,13 +31,32 @@ Read this before changing anything in `src/renderer/`.
   (the run chats, or the gate card on its Run screen, `renderRunGates`); elsewhere the Run badge, a
   dismissable toast, the dashboard's pending approvals list and a desktop notification say it waits.
   Nothing a run raises may cover the screen: dialogs are for the user's own clicks.
+- **Where run state comes from** (#74): a run's view is built only by `onEvent`, the reducer of
+  live `run:event`s, and `hydrateRun(runId)` replays the recorded events (`runs:events` with
+  `activity: true`: stream items compacted, the rest of the CLI output stays on disk) through the
+  same reducer, with `replaying` set (no toasts, no list reloads, one render at the end). It runs
+  for every run in `runs:active` when the window loads or reloads (`loadActiveRuns`), for a run first
+  heard of mid-way (`viewOf`) and for a past run opened in Details (`openPastRun`, `v.past`:
+  read-only, an unfinished one becomes interrupted). Live events that arrive during the replay wait
+  in `hydrating` and follow in order; each view keeps `lastSeq` and ignores a live event whose `seq`
+  is at or below it. Gates still pending after a replay show their toast; the engine's list
+  (`runs:active` gates) stays the source of truth.
+- **Run titles and PRs** (#84): `state.runMeta` (run id → `{ title, customTitle, pr }`) is fed by
+  `runs:list`, the project's runs, `runs:active`, Backlog data and the `run:meta` push (PR state
+  changes, a title set); every place reads it through `runTitle(r)` / `runLabel(r)` / `prBadge(r)`
+  in `app.js` (exported on `window` for `run-chat.js` and `backlog.js`) so they agree. Drawing is in
+  `run-badges.js` (pure: PR glyph and state colours, the default title). A PR without a state is
+  asked with `askPrStates` (`runs:prState`, cached by the service). The title's pencil
+  (`runTitleHtml`, `[data-title-edit]`) and the PR link (`[data-pr-url]`) are handled by one
+  capture-phase click listener, so they never select or expand the row around them.
 - Write & Review and AI Arena keep their own chat screens; every other run uses the run chat
   (`run-chat-model.js` is pure and unit-tested, `run-chat.js` draws it).
 - **How a run is opened**: one global run view, `state.runView` (`'details' | 'chat'`, saved in
   localStorage `multiagent.runView`). Every way of opening a run (sidebar Run menu, toasts,
   notifications, "View run", Backlog run links, the gate badge, a resume) goes through
   `selectRun(runId)` / `showRun(runId, { workflow, running })` in `app.js`, which open that run's
-  chat (Write & Review and AI Arena: their own screens) or its Run screen. Only the explicit
+  chat (Write & Review and AI Arena: their own screens) or its Run screen (a run this window does
+  not follow: loaded from disk by `openPastRun`). Only the explicit
   switches change the choice (`setRunView`): the Run screen's Chat button, the chat's Details
   button and "Open chat". A chat always opens at its latest message ("Jump to latest" while
   scrolled up).

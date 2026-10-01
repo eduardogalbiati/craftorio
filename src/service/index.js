@@ -3,7 +3,7 @@
 // one argument; `notifications` are the fire-and-forget channels (no reply). Both come from one
 // file per area in src/service/channels/ (a new channel is one edit there), and `manifest` is what
 // the clients build `window.api` from (see src/service/manifest.js). Pushed data
-// ('run:event', 'supervisor:watch', 'term:data', 'term:exit') is emitted on `events`, and so are desktop notifications
+// ('run:event', 'run:meta', 'supervisor:watch', 'term:data', 'term:exit') is emitted on `events`, and so are desktop notifications
 // ('notify', see src/notifications.js), already filtered by the settings and what the UI shows.
 //
 // Today src/main.js exposes it over Electron IPC; the same object can be exposed over HTTP +
@@ -14,6 +14,7 @@
 //   appVersion       shown in Settings
 //   isPackaged       the packaged app can't run itself as node (see terminalSpec)
 //   assertCanRun({ mock })  optional; throws when the account may not start or resume a run
+//   readPrJson(cmd, args)   optional; replaces the gh/glab call that reads a run's PR (tests, UI checks)
 
 const path = require('path');
 const fs = require('fs');
@@ -42,6 +43,7 @@ const cliSessions = require('../cli-sessions');
 const { trustFolder } = require('../cli-trust');
 const { createCodeVersion } = require('../code-version');
 const runs = require('../runs');
+const runPr = require('../run-pr');
 const workflows = require('../workflows');
 const builder = require('../workflow-builder');
 const { Terminals } = require('../terminals');
@@ -121,6 +123,36 @@ function createService({ host }) {
   // their usage is not in the baseline of those runs, so the per-turn budget check adds it.
   const budgetAt = new Map();
   let finishedPeers = []; // [{ finishedAt, sessions }]
+
+  // ---- the PR of each run (#84) ------------------------------------------------------------
+  // Read with gh/glab (no LLM), cached by URL: the runs in progress every minute and on their
+  // events, finished runs when a list shows them (runs:prState). A change is pushed on 'run:meta'
+  // ({ runId, pr } or { runId, title, customTitle }). A simulated run's PR is not real: never read
+  // (unless host.readPrJson stands in for gh/glab).
+  const prs = runPr.prCache({ reader: host.readPrJson });
+  const SIMULATED_PR = { state: 'unknown', detail: 'simulated run: its PR is not real, so it is not read' };
+  const unreadPr = (mock) => !!mock && !host.readPrJson;
+  const prSeen = new Map(); // run id → "url state" last pushed
+  function withPrState(pr, mock) {
+    if (!pr) return null;
+    if (unreadPr(mock)) return { ...pr, ...SIMULATED_PR, checkedAt: null };
+    const hit = prs.get(pr.url);
+    return hit ? { ...pr, state: hit.state, detail: hit.detail, checkedAt: hit.checkedAt } : { ...pr, state: null, detail: null, checkedAt: null };
+  }
+  async function refreshLivePr(run, maxAgeMs) {
+    if (!run.pr) return;
+    const pr = unreadPr(run.mock) ? withPrState(run.pr, true) : await prs.refresh(run.pr, { maxAgeMs });
+    const key = `${pr.url} ${pr.state}`;
+    if (prSeen.get(run.runId) === key) return;
+    prSeen.set(run.runId, key);
+    events.emit('run:meta', { runId: run.runId, pr });
+  }
+  // { title, customTitle } of a run in progress (meta.json, the run it resumes, its issue or task)
+  const liveTitle = (run) => runs.runTitle(ws.runs, run.runId, { issues: run.issues, inputs: run.inputs });
+  const prTimer = setInterval(() => {
+    for (const run of active.values()) refreshLivePr(run, 0).catch((e) => console.error('run PR:', e.message));
+  }, 60 * 1000);
+  prTimer.unref?.();
 
   // ---- desktop notifications ----------------------------------------------------------------
   // uiContext: what the window shows ({ focused, runId, terminalId }), reported by the UI.
@@ -245,6 +277,7 @@ function createService({ host }) {
         runId: r.runId, workflow: r.wf.metadata?.name || path.basename(r.file), file: path.basename(r.file), mock: r.mock,
         projectId: r.projectId, issues: r.issues, startedAt: r.startedAt ? new Date(r.startedAt).toISOString() : null,
         status: r.status, waiting: gates.length, gates, inputs: r.inputs, agent_names: r.agentNames(),
+        ...liveTitle(r), pr: withPrState(r.pr, r.mock),
       };
     });
   }
@@ -453,9 +486,16 @@ function createService({ host }) {
     const runInfo = {
       runId: run.runId, workflow: run.wf.metadata?.name || path.basename(run.file), mock: !!run.mock,
       project: run.projectId ? projects.listProjects(ws.projects).find((p) => p.id === run.projectId)?.name || run.projectId : null,
+      // the run's display title (#84), read when a notice is made: the owner can change it meanwhile
+      get title() { return liveTitle(run).title; },
     };
+    // a resumed run shows the PR of the run it resumes until one of its steps reports one
+    run.pr = resume?.runId ? runs.runPr(ws.runs, resume.runId) : null;
     run.on('event', (ev) => {
       try { recorder.write(ev); } catch (e) { console.error('recorder:', e); }
+      const pr = ev.type === 'step.finished' ? runPr.prOfOutput(ev.output) : null;
+      if (pr) run.pr = pr;
+      if (run.pr) refreshLivePr(run, pr || ev.type === 'workflow.finished' ? 0 : 15000).catch((e) => console.error('run PR:', e.message));
       if (ev.type === 'workflow.finished') runEnded(run);
       // a local preview lives only while its gate is open
       if (ev.type === 'approval.resolved' || ev.type === 'workflow.finished') {
@@ -854,6 +894,8 @@ function createService({ host }) {
     const { inputs, ...info } = r;
     return {
       ...info,
+      // { number, url, state, detail, checkedAt }: the state from the cache (null until read, runs:prState)
+      pr: withPrState(run?.pr || r.pr, r.mock),
       artifacts: runs.runArtifacts(r.runDir),
       status: current ? 'running' : r.status,
       current,
@@ -869,6 +911,29 @@ function createService({ host }) {
     };
   }
 
+  // The PR of a run with its state read now (or from the cache, under 5 minutes old): the lists ask
+  // for the runs they show. null when the run opened none.
+  async function runPrState({ runId }) {
+    const id = path.basename(runFolder(runId));
+    const run = active.get(id);
+    const r = run ? { pr: run.pr, mock: run.mock } : runs.readRun(ws.runs, id);
+    if (!r?.pr) return null;
+    return unreadPr(r.mock) ? withPrState(r.pr, true) : prs.refresh(r.pr);
+  }
+
+  // The owner's title for a run (empty: back to the default), in runs/<id>/meta.json: events.jsonl
+  // is never touched. Pushed on 'run:meta' so every window and list shows it.
+  function setRunTitle({ runId, title }) {
+    const dir = runFolder(runId);
+    const id = path.basename(dir);
+    runPr.writeTitle(dir, title);
+    const run = active.get(id);
+    const r = run ? null : runs.readRun(ws.runs, id);
+    const out = { runId: id, ...runs.runTitle(ws.runs, id, run ? { issues: run.issues, inputs: run.inputs } : { issues: r?.issues, task: r?.task }) };
+    events.emit('run:meta', out);
+    return out;
+  }
+
   function projectRuns({ id }) {
     const project = projects.listProjects(ws.projects).find((p) => p.id === id);
     if (!project) throw new Error(`Project not found: ${id}`);
@@ -881,7 +946,11 @@ function createService({ host }) {
     if (!data) return null;
     const project = projects.listProjects(ws.projects).find((p) => p.id === data.projectId);
     const list = project ? runs.runsForProject(runs.listRuns(ws.runs), project) : [];
-    const live = list.map((r) => (active.has(r.runId) ? { ...r, status: 'running', waiting: active.get(r.runId).approvals.size > 0 } : r));
+    const live = list.map((r) => {
+      const run = active.get(r.runId);
+      const pr = withPrState(run?.pr || r.pr, r.mock); // the card's PR icon (#84)
+      return run ? { ...r, status: 'running', waiting: run.approvals.size > 0, pr } : { ...r, pr };
+    });
     const queue = backlog.readQueue(ws.backlog, data.projectId);
     const local = backlog.readLocal(ws.backlog, data.projectId);
     // the roadmap, each item with its run's live state, and each issue's stage ("Roadmap: stage 2")
@@ -1261,7 +1330,7 @@ function createService({ host }) {
     activeRuns, analyticsSnapshot, analyzeAnalytics, artifactRuns, assignWorkflow, cloneBuilderWorkflow, code, dispatchQueue, dispatchRoadmaps, envDetails, listAllRuns,
     listCliSessions, listLocalPreviews, listWorkflows, liveRun, loadBuilderWorkflow, openTerminal, projectRuns, pushProject,
     readArtifact, refreshLocal, renameCliSession, resolvePushConflict, restoreWorkflow, resumeOptions, resumeRun,
-    runFolder, saveBuilderWorkflow, setBudget, setPrice, startLocalPreview, startRoadmap, startWorkflowRun, stopLocalPreview, unpushedProjects, usageSnapshot,
+    runFolder, runPrState, saveBuilderWorkflow, setBudget, setPrice, setRunTitle, startLocalPreview, startRoadmap, startWorkflowRun, stopLocalPreview, unpushedProjects, usageSnapshot,
     withIssueRuns, workflowDirs,
   };
   const entries = loadChannels(ctx);
@@ -1315,6 +1384,7 @@ function createService({ host }) {
       return { interrupted: runs };
     },
     shutdown() {
+      clearInterval(prTimer);
       waiting.closeAll();
       terminals.killAll();
       for (const run of active.values()) run.stop();

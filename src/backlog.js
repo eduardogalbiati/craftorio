@@ -270,6 +270,9 @@ function linkRuns(issues, runs, queue = null, local = null) {
           ...(r.localMerge ? { localMerge: r.localMerge } : {}), ...(others.length ? { groupedWith: others } : {}),
           // the supervisor sent the run back after a failed merge (runs.js fromEvents)
           ...(r.recovery ? { recovery: r.recovery } : {}),
+          // its display title and the PR it opened (#84)
+          ...(r.title ? { title: r.title, customTitle: r.customTitle || null } : {}),
+          ...(r.pr ? { pr: r.pr } : {}),
         };
       });
     const at = items.findIndex((q) => itemIssues(q).some((x) => x.number === issue.number));

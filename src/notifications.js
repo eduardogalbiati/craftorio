@@ -16,22 +16,24 @@ const clip = (s, n = 180) => {
   return t.length > n ? `${t.slice(0, n - 1)}…` : t;
 };
 
-// The notice for a run event, or null. `run`: { workflow, project (name or null), mock }.
+// The notice for a run event, or null. `run`: { workflow, project (name or null), mock, title? }:
+// the run's display title (#84) is shown with its workflow, "Title (workflow)".
 function runNotice(ev, run = {}) {
   const workflow = run.workflow || ev.workflow || 'Workflow';
+  const name = () => (run.title ? `${run.title} (${workflow})` : workflow);
   const lines = (detail) => [`Project: ${run.project || 'none'}${run.mock ? ' (simulation)' : ''}`, detail && clip(detail)].filter(Boolean).join('\n');
   const notice = (event, title, detail) => ({
     kind: 'run', event, title, body: lines(detail), target: { runId: ev.run_id, workflow },
   });
   switch (ev.type) {
     case 'workflow.started':
-      return notice('started', `Run started: ${workflow}`, ev.resumed_from ? `Resumed from ${ev.resumed_from.run_id} at ${ev.resumed_from.step}` : '');
+      return notice('started', `Run started: ${name()}`, ev.resumed_from ? `Resumed from ${ev.resumed_from.run_id} at ${ev.resumed_from.step}` : '');
     case 'approval.requested':
-      return notice('waiting', `Waiting for you: ${workflow}`, ev.message || `Approval needed at ${ev.step_id}`);
+      return notice('waiting', `Waiting for you: ${name()}`, ev.message || `Approval needed at ${ev.step_id}`);
     case 'workflow.finished': {
       const label = STATUS_LABEL[ev.status] || ev.status;
       const ok = ev.status === 'success' ? (ev.summary?.local_merge ? `Merged locally into ${ev.summary.local_merge.base}, not pushed yet.` : '') : ev.error;
-      return notice(ev.status === 'success' ? 'succeeded' : label, `Run ${label}: ${workflow}`, ok);
+      return notice(ev.status === 'success' ? 'succeeded' : label, `Run ${label}: ${name()}`, ok);
     }
     default:
       return null;
@@ -39,8 +41,8 @@ function runNotice(ev, run = {}) {
 }
 
 // The notice for a run that died with the app (found at the next start).
-function interruptedNotice({ runId, workflow, project, mock }) {
-  return runNotice({ type: 'workflow.finished', run_id: runId, status: 'interrupted', error: 'The app closed while the run was in progress. Resume it from the run screen.' }, { workflow, project, mock });
+function interruptedNotice({ runId, workflow, project, mock, title }) {
+  return runNotice({ type: 'workflow.finished', run_id: runId, status: 'interrupted', error: 'The app closed while the run was in progress. Resume it from the run screen.' }, { workflow, project, mock, title });
 }
 
 // The notice for a CLI waiting in a Sessions terminal.

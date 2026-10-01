@@ -48,5 +48,10 @@ module.exports = (ctx) => [
   // resume a run from a step (a new run, no supervisor call) and what the dialog offers
   { channel: 'runs:resume', method: 'resumeRun', params: ['runId', 'step', 'instruction', 'mock'], fn: (opts) => ctx.resumeRun(opts) },
   { channel: 'runs:resumeOptions', method: 'resumeOptions', params: ['runId'], fn: (opts) => ctx.resumeOptions(opts) },
+  // the PR a run opened, with its state read with gh/glab (cached), and the owner's title of a run (#84)
+  { channel: 'runs:prState', method: 'runPrState', params: ['runId'], fn: (opts) => ctx.runPrState(opts) },
+  { channel: 'runs:setTitle', method: 'setRunTitle', params: ['runId', 'title'], fn: (opts) => ctx.setRunTitle(opts) },
   { event: 'run:event', method: 'onEvent' },
+  // a run's PR state or title changed: { runId, pr } or { runId, title, customTitle }
+  { event: 'run:meta', method: 'onRunMeta' },
 ];

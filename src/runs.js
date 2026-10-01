@@ -4,20 +4,24 @@
 // A finished run has summary.json; a run that is still going, or that died with the app, only
 // has events.jsonl, so its data is rebuilt from the events (status "interrupted" unless it is
 // the run in progress in this window).
+//
+// Each run also has a display title and the PR it opened (#84, src/run-pr.js): the owner's title is
+// in runs/<id>/meta.json, and a resumed run inherits both from the run it resumes.
 
 const fs = require('fs');
 const path = require('path');
 const { trailOf } = require('./renderer/run-progress-model');
+const { defaultTitle, prOfEvents, readMeta } = require('./run-pr');
 
 const SESSION_EVENTS = new Set(['session.opened', 'session.message_received', 'session.closed']);
 
 // What a run without a (complete) summary.json needs from its events.jsonl: its sessions, its
 // step trail (progress by group) and its local merge (runs recorded before summary.local_merge),
 // cached by mtime+size so an unchanged file is read once.
-const derived = new Map(); // events.jsonl path → { key, sessions, progress, localMerge, recovery }
+const derived = new Map(); // events.jsonl path → { key, sessions, progress, localMerge, recovery, pr }
 function fromEvents(file) {
   let st;
-  try { st = fs.statSync(file); } catch { return { sessions: [], progress: [], localMerge: null, recovery: null }; }
+  try { st = fs.statSync(file); } catch { return { sessions: [], progress: [], localMerge: null, recovery: null, pr: null }; }
   const key = `${st.mtimeMs}:${st.size}`;
   const hit = derived.get(file);
   if (hit?.key === key) return hit;
@@ -31,10 +35,33 @@ function fromEvents(file) {
   const localMerge = merged ? { branch: merged.branch, base: merged.base, commit: merged.commit } : null;
   // the supervisor's latest recovery from a failed merge/action ("went back to develop at 00:10 because ...")
   const recovery = events.findLast((e) => e.type === 'supervisor.decision' && e.kind === 'action_error')?.record || null;
-  const out = { key, sessions: [...byId.values()], progress: trailOf(events), localMerge, recovery };
+  // the PR the run opened (#84): the latest step output with pr_url / pr_number
+  const out = { key, sessions: [...byId.values()], progress: trailOf(events), localMerge, recovery, pr: prOfEvents(events) };
   derived.set(file, out);
   return out;
 }
+
+// A resumed run without a PR or a title of its own shows those of the run it resumes (the chain,
+// followed through workflow.started's resumed_from).
+function fromChain(runsDir, runId, pick, depth = 0) {
+  if (!runId || depth > 20) return null;
+  const dir = path.join(runsDir, path.basename(String(runId)));
+  const own = pick(dir);
+  if (own) return own;
+  return fromChain(runsDir, firstEvent(path.join(dir, 'events.jsonl'))?.resumed_from?.run_id, pick, depth + 1);
+}
+const chainPr = (dir) => fromEvents(path.join(dir, 'events.jsonl')).pr;
+const chainTitle = (dir) => readMeta(dir).title || null;
+
+/** { title, customTitle } of a run (also one in progress): the owner's title, else the default. */
+// inputs: the run's inputs, when the task is not known yet
+function runTitle(runsDir, runId, { issues, task, inputs } = {}) {
+  const customTitle = fromChain(runsDir, runId, chainTitle);
+  return { title: customTitle || defaultTitle({ issues, task: task ?? firstText(inputs) }), customTitle };
+}
+
+/** The PR a finished run (or the run it resumes) opened: { number, url } or null. */
+const runPr = (runsDir, runId) => fromChain(runsDir, runId, chainPr);
 
 function readEvents(file) {
   try {
@@ -104,6 +131,10 @@ function readRun(runsDir, runId) {
     : summary?.status === 'success' && summary.worktree?.repo ? fromEvents(path.join(dir, 'events.jsonl')).localMerge : null;
   const inputs = summary?.inputs || started?.inputs || {};
   const startedAt = summary?.started_at || started?.ts || null;
+  const issues = issuesOf(summary) || issuesOf(started);
+  const task = firstText(inputs);
+  const resumedFrom = started?.resumed_from?.run_id || null;
+  const { title, customTitle } = runTitle(runsDir, runId, { issues, task });
   return {
     runId,
     workflow: summary?.workflow || started?.workflow || null,
@@ -120,8 +151,15 @@ function readRun(runsDir, runId) {
     tokens: sumTokens(sessions),
     projectId: summary?.project_id || started?.project_id || null,
     // the issues the run implements (Backlog); runs recorded before groups have one `issue`
-    issues: issuesOf(summary) || issuesOf(started),
-    task: firstText(inputs),
+    issues,
+    task,
+    // what the lists show instead of the workflow name (#84): the owner's title (meta.json, or the
+    // resumed run's), else the issue or the task's first line; customTitle: null when none is set
+    title,
+    customTitle,
+    resumedFrom,
+    // { number, url } of the PR the run (or the run it resumes) opened; the state is added by the service
+    pr: runPr(runsDir, runId),
     localMerge,
     recovery: fromEvents(path.join(dir, 'events.jsonl')).recovery,
     error,
@@ -169,7 +207,7 @@ function projectOf(run, projectList) {
 // events, possibly outside the run folder, e.g. docs/arena in the project) plus any other file
 // in the run folder, except the run's own logs.
 // ---------------------------------------------------------------------------
-const INTERNAL = new Set(['events.jsonl', 'summary.json']);
+const INTERNAL = new Set(['events.jsonl', 'meta.json', 'summary.json']);
 const KINDS = { '.md': 'markdown', '.markdown': 'markdown', '.json': 'json', '.jsonl': 'json', '.tsv': 'table', '.csv': 'table', '.txt': 'text', '.log': 'text', '.yaml': 'text', '.yml': 'text', '.html': 'text', '.patch': 'text', '.diff': 'text', '.png': 'image', '.jpg': 'image', '.jpeg': 'image', '.gif': 'image', '.webp': 'image' };
 const kindOf = (file) => KINDS[path.extname(file).toLowerCase()] || 'other';
 
@@ -254,5 +292,7 @@ module.exports = {
   readRun,
   runArtifacts,
   runEvents,
+  runPr,
   runsForProject,
+  runTitle,
 };

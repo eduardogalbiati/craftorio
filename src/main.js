@@ -92,7 +92,7 @@ ipcMain.on('api:manifest', (e) => {
   service.code.markLoaded();
   e.returnValue = service.manifest;
 });
-for (const channel of ['run:event', 'supervisor:watch', 'term:data', 'term:exit']) {
+for (const channel of ['run:event', 'run:meta', 'supervisor:watch', 'term:data', 'term:exit']) {
   service.events.on(channel, (payload) => { if (win && !win.isDestroyed()) win.webContents.send(channel, payload); });
 }
 

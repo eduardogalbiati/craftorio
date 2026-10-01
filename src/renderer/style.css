@@ -148,6 +148,30 @@ body:not(.dev-mode) .dev-only { display: none !important; }
 .nav-run-wf { font-weight: 600; }
 .nav-run-sub { font-size: 11px; color: var(--muted); }
 .nav-run-item .nav-gates { cursor: inherit; }
+.nav-run-item .run-pr { flex: none; }
+
+/* A run's PR (#84, run-badges.js): the pull-request glyph in the PR state's colour, "#66" a link to it */
+.run-pr { display: inline-flex; align-items: center; gap: 3px; color: var(--muted); text-decoration: none; font-size: 12px; font-weight: 500; vertical-align: middle; white-space: nowrap; }
+.run-pr:hover .run-pr-num { text-decoration: underline; }
+.run-pr-glyph { width: 13px; height: 13px; flex: none; }
+.run-pr.compact { font-size: 11px; gap: 2px; }
+.run-pr.compact .run-pr-glyph { width: 11px; height: 11px; }
+.run-pr-pending, .run-pr-open { color: var(--accent); }
+.run-pr-ready { color: var(--green); }
+.run-pr-failing { color: var(--red); }
+.run-pr-conflict { color: var(--orange); }
+.run-pr-draft, .run-pr-unknown, .run-pr-checking { color: var(--muted); }
+.run-pr-merged { color: var(--purple); }
+.run-pr-closed { color: var(--muted); }
+.run-pr-closed .run-pr-num { text-decoration: line-through; }
+.run-pr-warn { display: inline-grid; place-items: center; width: 11px; height: 11px; border-radius: 50%; background: var(--orange); color: #000; font-size: 9px; font-weight: 800; line-height: 1; }
+
+/* A run's display title with its pencil, shown on hover (#84) */
+.run-title { display: inline-flex; align-items: center; gap: 4px; min-width: 0; }
+.run-title-edit { padding: 1px; visibility: hidden; }
+.run-title-edit svg { width: 12px; height: 12px; stroke: none; }
+.run-title:hover .run-title-edit, .run-title-edit:focus-visible { visibility: visible; }
+.run-title-input { font: inherit; font-weight: 600; min-width: 260px; padding: 2px 6px; color: var(--text); background: var(--bg); border: 1px solid var(--accent); border-radius: 6px; }
 
 .content { flex: 1; min-width: 0; min-height: 0; overflow: hidden; display: flex; }
 .view { flex: 1; min-width: 0; min-height: 0; overflow: auto; padding: 28px 32px; }

@@ -83,6 +83,11 @@
     for (const n of [...bl.selected]) if (!ok.has(n)) bl.selected.delete(n);
     // labels no synced issue has any more leave the filter
     if (data?.issues) setLabels(pruneLabels(bl.labels, data.issues));
+    // the cards' run titles and PRs, shared with the other run lists (app.js); the latest run of
+    // each card has its PR state read when the service has not yet
+    const runs = (data?.issues || []).flatMap((i) => i.runs || []);
+    window.noteRunMeta?.(runs);
+    window.askPrStates?.((data?.issues || []).map((i) => i.runs?.[0]).filter(Boolean));
   }
 
   function loadLabels(id) {
@@ -427,8 +432,9 @@
     const pct = Math.round((i.tasks.done / i.tasks.total) * 100);
     return `<span class="bl-tasks" title="${i.tasks.done} of ${i.tasks.total} tasks done"><span class="bl-bar"><span style="width:${pct}%"></span></span><span class="mono small">${i.tasks.done}/${i.tasks.total}</span></span>`;
   };
-  const runLink = (r) => `<button class="bl-run" type="button" data-run="${esc(r.runId)}" data-workflow="${esc(r.workflow || '')}" title="Open run ${esc(r.runId)}">
-      <span class="pill pill-${esc(r.status)}">${esc(r.waiting ? 'waiting' : r.status)}</span><span>${esc(r.workflow || 'workflow')}</span>${r.mock ? '<span class="badge p-mock">simulated</span>' : ''}</button>`;
+  // the run's title and its PR (#84: state icon, #n link opening the PR, not the run)
+  const runLink = (r) => `<button class="bl-run" type="button" data-run="${esc(r.runId)}" data-workflow="${esc(r.workflow || '')}" title="Open run ${esc(r.runId)} (${esc(r.workflow || 'workflow')})">
+      <span class="pill pill-${esc(r.status)}">${esc(r.waiting ? 'waiting' : r.status)}</span><span>${esc(window.runTitle ? runTitle(r) : r.workflow || 'workflow')}</span>${window.runPrBadge ? runPrBadge(r, { compact: true }) : ''}${r.mock ? '<span class="badge p-mock">simulated</span>' : ''}</button>`;
   // Open PRs/MRs that refer to the issue, each a link to it.
   const prBadges = (i) => (i.pullRequests || []).map((p) =>
     `<a class="badge bl-pr${p.draft ? ' draft' : ''}" href="${esc(p.url)}" target="_blank" rel="noopener" title="${esc(`Open ${p.draft ? 'draft ' : ''}${prName(p)}: ${p.title}`)}">${esc(prName(p))}</a>`).join('');
@@ -785,6 +791,8 @@
   $b('#btn-assign-cancel').onclick = () => closeModal('#assign-modal');
 
   window.refreshBacklog = refreshBacklog;
+  // a run's title or PR state changed (app.js onRunMeta): the cards draw it from the shared data
+  window.renderBacklogCards = () => { if (visible() && bl.data) render(); };
   window.BacklogActions = {
     assignGroup,
     data: () => bl.data,

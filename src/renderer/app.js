@@ -54,6 +54,9 @@ const state = {
   // steps, orchLog, events, selected and openDetails read the selected run (defined below).
   runs: new Map(),
   runId: null,
+  // run id → { title, customTitle, pr } (#84): what every list shows of a run, so they agree; from
+  // runs:list, runs:active, the project's runs and 'run:meta' (PR state changes, a title set)
+  runMeta: new Map(),
   tab: 'detail',
   workflowsTab: 'runs', // 'runs' | 'definitions' | 'builder' (sub-items of Workflows in the sidebar)
   pendingProject: null, // project to preselect in the panel on open
@@ -75,9 +78,11 @@ const state = {
 //   approvals: approval id -> approval.requested event (gates waiting)
 //   trail: RunProgress.StepTrail from workflow.started on (null for a run picked up mid-way),
 //   groups: the workflow's `groups:`, openGroups: group name -> open, as toggled in the sidebar
+//   lastSeq: the highest event `seq` applied (a live event at or below it was already replayed)
+//   past: a finished run opened from disk (openPastRun): read-only, no live events expected
 const newRunView = () => ({
   run: null, sessions: new Map(), steps: new Map(), orchLog: [], events: [], selected: null, openDetails: new Set(), approvals: new Map(),
-  trail: null, groups: [], openGroups: new Map(), allSteps: false,
+  trail: null, groups: [], openGroups: new Map(), allSteps: false, lastSeq: 0, past: false,
 });
 const NO_RUN = newRunView();
 const selectedView = () => state.runs.get(state.runId) || NO_RUN;
@@ -93,7 +98,93 @@ const pendingGates = () => [...state.runs.values()].flatMap((v) => [...v.approva
 // recorded before groups have a single `issue`.
 const issuesOfRun = (r) => r?.issues || (r?.issue ? [r.issue] : []);
 const issueRefs = (r) => issuesOfRun(r).map((i) => `#${i.number}`).join(', ');
-const runLabel = (r) => [r?.workflow || 'workflow', r?.project, issueRefs(r) || null].filter(Boolean).join(' · ');
+// The run's display title (#84): the owner's, else its issue or its task's first line, else the
+// workflow. r: a run list item ({ runId }) or a window run view ({ id }).
+const runMetaOf = (r) => state.runMeta.get(r?.runId || r?.id) || {};
+const runTitle = (r) => runMetaOf(r).title || r?.title || RunBadges.defaultTitle(r) || r?.workflow || 'workflow';
+const runPr = (r) => runMetaOf(r).pr || r?.pr || null;
+// "title · workflow · project" of a run, for toasts, dialogs and tooltips
+const runLabel = (r) => {
+  const title = runTitle(r);
+  return [title, r?.workflow && r.workflow !== title ? r.workflow : null, r?.project].filter(Boolean).join(' · ');
+};
+// Records what the service says of runs (lists, runs:active, run:meta); a PR without its state
+// keeps the state already known for the same URL.
+function noteRunMeta(list) {
+  for (const r of list || []) {
+    const id = r?.runId;
+    if (!id) continue;
+    const cur = state.runMeta.get(id) || {};
+    const next = { ...cur };
+    if ('title' in r) { next.title = r.title; next.customTitle = r.customTitle || null; }
+    if ('pr' in r) next.pr = r.pr && !r.pr.state && cur.pr?.url === r.pr.url && cur.pr.state ? { ...r.pr, ...pickKeys(cur.pr, ['state', 'detail', 'checkedAt']) } : r.pr;
+    state.runMeta.set(id, next);
+  }
+}
+const pickKeys = (o, keys) => Object.fromEntries(keys.filter((k) => k in o).map((k) => [k, o[k]]));
+function onRunMeta(m) {
+  noteRunMeta([m]);
+  renderRunListsSoon();
+  scheduleRender();
+  window.runChatRefreshHead?.();
+  window.renderBacklogCards?.();
+}
+// The PR states the lists show and the service has not read yet (finished runs: on demand, cached
+// by the service), one request per run at a time.
+const prAsked = new Set();
+function askPrStates(list) {
+  for (const r of list || []) {
+    const id = r?.runId || r?.id;
+    const pr = runPr(r);
+    if (!pr?.url || pr.state || prAsked.has(id)) continue;
+    prAsked.add(id);
+    Promise.resolve(api.runPrState?.(id))
+      .then((p) => { if (p) onRunMeta({ runId: id, pr: p }); })
+      .catch(() => {})
+      .finally(() => setTimeout(() => prAsked.delete(id), 60 * 1000));
+  }
+}
+const prBadge = (r, opts) => RunBadges.prBadgeHtml(runPr(r), opts);
+// The title with its pencil (shown on hover): a click edits it inline, Enter saves, Esc cancels,
+// an empty title goes back to the default.
+const PENCIL_SVG = '<svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path fill="currentColor" d="M11.013 1.427a1.75 1.75 0 0 1 2.474 0l1.086 1.086a1.75 1.75 0 0 1 0 2.474l-8.61 8.61c-.21.21-.47.364-.756.445l-3.251.93a.75.75 0 0 1-.927-.928l.929-3.25c.081-.286.235-.547.445-.758l8.61-8.61Zm1.414 1.06a.25.25 0 0 0-.354 0L10.811 3.75l1.439 1.44 1.263-1.263a.25.25 0 0 0 0-.354Zm-2.677 2.323L3.13 11.43a.25.25 0 0 0-.064.108l-.558 1.953 1.953-.558a.25.25 0 0 0 .108-.064l6.62-6.62Z"/></svg>';
+function runTitleHtml(r, runId = r?.runId || r?.id) {
+  return `<span class="run-title" data-title-run="${esc(runId)}"><span class="run-title-text">${esc(runTitle(r))}</span><button type="button" class="icon-btn run-title-edit" data-title-edit title="Rename this run (only its display title)">${PENCIL_SVG}</button></span>`;
+}
+function editRunTitle(btn) {
+  const box = btn.closest('[data-title-run]');
+  const runId = box.dataset.titleRun;
+  const meta = state.runMeta.get(runId) || {};
+  const input = document.createElement('input');
+  input.className = 'run-title-input';
+  input.value = meta.customTitle || box.querySelector('.run-title-text').textContent;
+  input.placeholder = 'Default title';
+  box.replaceChildren(input);
+  input.focus();
+  input.select();
+  let done = false;
+  const finish = async (save) => {
+    if (done) return;
+    done = true;
+    const value = input.value.trim();
+    input.remove(); // every place draws the title again below
+    if (save) {
+      try { onRunMeta(await api.setRunTitle(runId, value)); } catch (e) { showToast('Could not rename the run', errMsg(e)); }
+    }
+    $('#run-summary')._html = null; // drawn again even when nothing changed (Esc)
+    window.runChatRefreshHead?.();
+    renderRunListsSoon();
+    scheduleRender();
+  };
+  input.onkeydown = (e) => { e.stopPropagation(); if (e.key === 'Enter') finish(true); if (e.key === 'Escape') finish(false); };
+  input.onclick = (e) => e.stopPropagation();
+  input.onblur = () => finish(true);
+}
+window.runTitle = runTitle;
+window.runTitleHtml = runTitleHtml;
+window.runPrBadge = prBadge;
+window.noteRunMeta = noteRunMeta;
+window.askPrStates = askPrStates;
 
 // Shows a run in the top bar and, with `open`, opens it in the remembered run view (showRun).
 function selectRun(runId, { open = true } = {}) {
@@ -110,8 +201,9 @@ function setRunView(view) {
 }
 
 // Opens a run the way runs were last looked at: its chat (Write & Review and AI Arena runs their
-// own chat screens), or its Run screen, or Workflows › Runs for a past run this window does not
-// follow. `running`: a run just started (resumed) whose first event may not be here yet.
+// own chat screens), or its Run screen; a past run this window does not follow is loaded from disk
+// into the Run screen (openPastRun). `running`: a run just started (resumed) whose first event may
+// not be here yet.
 function showRun(runId, { workflow, running } = {}) {
   const v = state.runs.get(runId);
   if (v) state.runId = runId;
@@ -121,11 +213,34 @@ function showRun(runId, { workflow, running } = {}) {
   } else if (v || live) {
     showView('run');
   } else {
-    showRunInList(runId);
+    openPastRun(runId);
   }
   scheduleRender();
 }
 window.showRun = showRun;
+
+// A run this window does not follow (finished, or from before the window opened): its recorded
+// events are replayed into the same view as a live run (hydrateRun), read-only: no Stop, no gates.
+// A run with nothing recorded opens in Workflows › Runs instead.
+async function openPastRun(runId) {
+  if (!state.runs.has(runId)) {
+    const v = newRunView();
+    v.past = true;
+    v.run = { id: runId, status: 'loading', startedAt: Date.now(), workflow: null, inputs: {} };
+    state.runs.set(runId, v);
+  }
+  state.runId = runId;
+  showView('run');
+  await hydrateRun(runId);
+  const v = state.runs.get(runId);
+  if (v?.past && !v.events.length) {
+    state.runs.delete(runId);
+    if (state.runId === runId) state.runId = liveRuns()[0]?.run.id || null;
+    showRunInList(runId);
+  }
+  scheduleRender();
+}
+window.openPastRun = openPastRun;
 
 // ---------------------------------------------------------------------------
 // Initialization
@@ -239,6 +354,18 @@ async function init() {
   renderScopeToggles();
 
   api.onEvent(onEvent);
+  api.onRunMeta?.(onRunMeta);
+  // a run's PR link opens the PR in the browser, and its title's pencil edits it, without
+  // selecting or expanding the run row (or sidebar entry) around them
+  document.addEventListener('click', (e) => {
+    const link = e.target.closest?.('[data-pr-url]');
+    const edit = link ? null : e.target.closest?.('[data-title-edit]');
+    if (!link && !edit) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (link) window.open(link.dataset.prUrl, '_blank', 'noopener');
+    else editRunTitle(edit);
+  }, true);
   api.onWatch(onWatch);
   initNotifications();
   initTerminalDock();
@@ -274,6 +401,7 @@ async function loadActiveRuns() {
   let list = null;
   try { list = await api.listActiveRuns?.(); } catch { return; }
   if (!Array.isArray(list)) return;
+  noteRunMeta(list);
   const live = new Set(list.map((a) => a.runId));
   for (const a of list) {
     let v = state.runs.get(a.runId);
@@ -697,7 +825,7 @@ function loadProjectRuns() {
   pvLoading = (async () => {
     try {
       const res = await api.listProjectRuns(pv.id);
-      if (state.pv === pv) { pv.project = res.project || pv.project; pv.local = res.local || null; pv.runs = res.runs || []; pv.error = null; }
+      if (state.pv === pv) { pv.project = res.project || pv.project; pv.local = res.local || null; pv.runs = res.runs || []; pv.error = null; noteRunMeta(pv.runs); }
     } catch (e) {
       if (state.pv === pv) pv.error = errMsg(e);
     }
@@ -756,6 +884,8 @@ function renderRunList(rl, { prefix, box: boxSel, empty, start, rerender }) {
   filters.querySelectorAll('[data-filter]').forEach((b) => (b.onclick = () => { rl.filter = b.dataset.filter; rerender(); }));
 
   const box = $(boxSel);
+  // a run's title being edited stays until it is saved or cancelled (which renders again)
+  if (box.contains(document.activeElement) && document.activeElement.classList.contains('run-title-input')) return;
   if (rl.runs == null) {
     box.innerHTML = rl.error ? '' : '<p class="muted">Loading…</p>';
     return;
@@ -770,6 +900,7 @@ function renderRunList(rl, { prefix, box: boxSel, empty, start, rerender }) {
   const fn = RUN_FILTERS.find(([id]) => id === rl.filter)?.[2] || (() => true);
   const runs = visible.filter(fn);
   box.innerHTML = (runs.map((r) => runListRow(r, rl)).join('') || '<p class="muted pr-none">No runs match this filter.</p>') + simNote;
+  askPrStates(runs);
 
   box.querySelectorAll('.pr-row').forEach((row) => (row.onclick = () => {
     const id = row.closest('.pr-run').dataset.run;
@@ -813,7 +944,7 @@ function runListRow(r, pv) {
       <div class="pr-row" title="${open ? 'Hide' : 'Show'} sessions">
         <span class="pill pill-${esc(r.status)}">${esc(r.status)}</span>
         <div class="pr-main">
-          <div><b>${esc(r.workflow || r.file || 'workflow')}</b>${r.version ? ` <span class="muted small">v${esc(r.version)}</span>` : ''}${r.mock ? ' <span class="badge p-mock">simulated</span>' : ''}${r.current ? ' <span class="badge live">this window</span>' : ''}${!pv.id && r.project ? ` <span class="badge" title="project">${esc(r.project.name)}</span>` : ''}</div>
+          <div><b>${runTitleHtml(r)}</b> ${prBadge(r)} <span class="muted small" title="workflow">${esc(r.workflow || r.file || 'workflow')}${r.version ? ` v${esc(r.version)}` : ''}</span>${r.mock ? ' <span class="badge p-mock">simulated</span>' : ''}${r.current ? ' <span class="badge live">this window</span>' : ''}${!pv.id && r.project ? ` <span class="badge" title="project">${esc(r.project.name)}</span>` : ''}</div>
           <div class="muted small pr-task" title="${esc(task)}">${esc(firstLine || 'No task')}</div>
         </div>
         <span class="pr-meta"><label>started</label>${r.startedAt ? esc(dateOf(r.startedAt)) : '—'}</span>
@@ -863,7 +994,7 @@ function projectRunBody(r, pv) {
       ${r.current && r.status === 'running' ? `<button class="btn sm ghost sup-btn" data-run-act="watch" title="${WATCH_TITLE}"><span class="sup-mark">◆</span> Watch with the supervisor</button>` : ''}
       ${canResume(r) ? '<button class="btn sm ghost" data-run-act="resume" title="Start a new run from a step of this one, keeping the previous outputs (no supervisor call)">Resume from step…</button>' : ''}
       <button class="btn sm" data-run-act="chat" title="${esc(CHAT_TITLES[r.workflow] || 'See the agents, the orchestrator and the human gates as a chat')}">Open chat</button>
-      ${r.current || state.runs.has(r.runId) ? '<button class="btn sm" data-run-act="view">View run</button>' : ''}
+      <button class="btn sm" data-run-act="view" title="${r.current || state.runs.has(r.runId) ? 'Open its Run screen' : 'Open its Run screen, rebuilt from its recorded events (read-only)'}">View run</button>
       <span class="spacer"></span>
       <span class="muted small mono">${esc(r.runId)}</span>
     </div>
@@ -1015,6 +1146,7 @@ function loadWorkflowRuns() {
     try {
       wr.runs = (await api.listRuns()).runs || [];
       wr.error = null;
+      noteRunMeta(wr.runs);
     } catch (e) {
       wr.error = errMsg(e);
     }
@@ -1510,27 +1642,47 @@ function viewOf(ev) {
   return v;
 }
 
-// Runs picked up mid-way: their steps, sessions, trail and gates so far are replayed from the
-// recorded events; the live events that come in while the file is read wait in `hydrating`.
+// Runs picked up mid-way (a reload, a window opened while runs are in progress) and past runs
+// opened from disk: their steps, sessions, orchestrator log, trail and gates so far are replayed
+// from the recorded events through onEvent, the reducer of live events; the live events that come
+// in while the file is read wait in `hydrating` and follow in order. Every event has a `seq`: the
+// view keeps the last one applied (lastSeq), so a live event already replayed is ignored. The
+// replay reduces without rendering and renders once at the end; the streamed CLI output comes
+// compacted (runs:events `activity`: tool calls and thinking, what Details shows of a turn).
 const hydrating = new Map(); // run id -> live events held back
-let replaying = false;       // no toasts, dialogs or Run screen switches for past events
+let replaying = false;       // no toasts, dialogs, reloads or Run screen switches for past events
 async function hydrateRun(runId) {
   if (hydrating.has(runId)) return;
   hydrating.set(runId, []);
   let recorded = [];
-  try { recorded = (await api.runEvents?.(runId)) || []; } catch { /* the live events only */ }
+  try { recorded = (await api.runEvents?.(runId, { activity: true })) || []; } catch { /* the live events only */ }
   const live = hydrating.get(runId);
   hydrating.delete(runId);
   const v = state.runs.get(runId);
   if (!v) return;
   const replay = RunProgress.hydrationEvents(recorded, live);
   if (replay.length > live.length) {
-    const { run } = v;
+    const { run, past } = v;
     Object.assign(v, newRunView());
     v.run = run; // runs:active details until workflow.started is replayed
+    v.past = past;
   }
   replaying = true;
   try { for (const ev of replay) onEvent(ev); } finally { replaying = false; }
+  // a past run still "running" after its events: in progress in the engine after all (followed
+  // from now on), or it ended with the app (interrupted, no gate)
+  if (v.past && v.run?.status === 'running') {
+    let active = [];
+    try { active = (await api.listActiveRuns?.()) || []; } catch { /* treated as not active */ }
+    if (active.some((a) => a.runId === runId)) { v.past = false; loadActiveRuns(); } else { v.run.status = 'interrupted'; v.approvals.clear(); }
+  }
+  // the gates it still waits at say so, as when they were asked (the badge and gate card read v.approvals)
+  const shown = (state.view === 'run' && state.runId === runId) || window.duoShowsRun?.(runId) || window.arenaShowsRun?.(runId) || window.runChatShowsRun?.(runId);
+  if (!v.past && !shown) {
+    for (const g of v.approvals.values()) showToast(`Approval waiting: ${runLabel(v.run)}`, `Step ${g.step_id}. Click to open its run.`, runId, g);
+  }
+  renderRunListsSoon();
+  scheduleRender();
 }
 
 // Workflow, project and issue of a run, from workflow.started or from runs:active.
@@ -1560,6 +1712,10 @@ function onEvent(ev) {
   if (!replaying) scheduleActiveSync();
   const v = viewOf(ev);
   if (!replaying && hydrating.has(ev.run_id)) { hydrating.get(ev.run_id).push(ev); return; }
+  if (ev.seq) {
+    if (ev.seq <= v.lastSeq) return; // replayed from disk already
+    v.lastSeq = ev.seq;
+  }
   v.events.push(ev);
   const sess = ev.session_id ? v.sessions.get(ev.session_id) : null;
 
@@ -1586,7 +1742,7 @@ function onEvent(ev) {
       // the Run screen moves on to a run still in progress when the one it showed ends elsewhere
       if (state.runId === ev.run_id && state.view !== 'run' && liveRuns().length) state.runId = liveRuns()[0].run.id;
       if (liveRuns().length && !replaying) showToast(`${runLabel(v.run)}: ${statusLabel(v.run)}`, ev.error, ev.run_id);
-      loadUsage();
+      if (!replaying) loadUsage();
       break;
 
     case 'session.opened':
@@ -1626,7 +1782,7 @@ function onEvent(ev) {
         Object.assign(sess, ev.session);
         orch(ev, `← ${ev.session_id} replied in ${fmtDur(ev.duration_ms)}`);
       }
-      if (v.run?.status === 'running') loadUsageThrottled();
+      if (v.run?.status === 'running' && !replaying) loadUsageThrottled();
       break;
 
     case 'step.started': {
@@ -1718,7 +1874,9 @@ function onEvent(ev) {
     }
   }
   // the run's row in the runs lists follows its steps from here, without a reload
-  if (v.trail?.apply(ev)) renderRunListsSoon();
+  if (v.trail?.apply(ev) && !replaying) renderRunListsSoon();
+  // a replay (hydrateRun) reloads and renders once, at its end
+  if (replaying) return;
   if (PROJECT_REFRESH_EVENTS.has(ev.type)) { loadProjectRunsThrottled(); loadWorkflowRunsThrottled(); }
   if (ev.type === 'workflow.finished' || ev.type === 'file.saved') loadArtifactsThrottled();
   // the service re-checks the project's commits not pushed right after a local merge
@@ -1820,6 +1978,7 @@ function renderNavRuns() {
   badge.title = `${gates} approval${gates === 1 ? '' : 's'} waiting: click to review`;
   // failed or interrupted runs stay listed: they need attention (resume, supervisor) and are otherwise unreachable here
   const list = [...state.runs.values()].filter((v) => v.run && (['running', 'failed', 'interrupted'].includes(v.run.status) || v.run.id === state.runId));
+  askPrStates(list.map((v) => v.run));
   const box = $('#nav-runs');
   const show = list.length > 1 || !!gates;
   box.classList.toggle('hidden', !show);
@@ -1827,11 +1986,12 @@ function renderNavRuns() {
   const html = list.map(({ run: r, approvals }) => {
     const gate = [...approvals.values()][0];
     const where = [r.project, issueRefs(r) || null].filter(Boolean).join(' · ');
-    const sub = gate ? `waiting for you · ${gate.step_id}` : `${where || statusLabel(r)} · ${new Date(r.startedAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`;
+    // the run's title first (#84), its workflow in the second line
+    const sub = gate ? `waiting for you · ${gate.step_id}` : `${[r.workflow, r.project].filter(Boolean).join(' · ') || statusLabel(r)} · ${new Date(r.startedAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`;
     const title = gate ? `${runLabel(r)} — waiting for you at ${gate.step_id}: click to answer` : `${runLabel(r)} — ${statusLabel(r)}`;
     return `<button type="button" class="nav-run-item st-${gate ? 'waiting' : runSessionStatus(r.status)}${r.id === state.runId ? ' selected' : ''}" data-run="${esc(r.id)}"${gate ? ' data-gate="1"' : ''} title="${esc(title)}">
-      <span class="status-dot"></span>
-      <span class="nav-run-text"><span class="nav-run-wf">${esc(gate && where ? `${r.workflow || 'workflow'} · ${where}` : r.workflow || 'workflow')}</span><span class="nav-run-sub">${esc(sub)}</span></span>
+      <span class="status-dot"></span>${prBadge(r, { compact: true })}
+      <span class="nav-run-text"><span class="nav-run-wf">${esc(gate && where ? `${runTitle(r)} · ${where}` : runTitle(r))}</span><span class="nav-run-sub">${esc(sub)}</span></span>
       ${approvals.size ? `<span class="nav-gates" title="Approval waiting">${approvals.size}</span>` : ''}
     </button>`;
   }).join('');
@@ -1844,9 +2004,12 @@ function renderNavRuns() {
 function renderRunSummary() {
   const r = state.run;
   if (!r) return;
+  askPrStates([r]);
   const inputs = Object.entries(r.inputs || {}).filter(([, v]) => v !== undefined && v !== null && v !== '' && !(Array.isArray(v) && !v.length));
+  // its title (editable) and PR first, the workflow under it (#84); a past run opened from disk is read-only
   const html = `
-    <div class="run-summary-name"><b>${esc(r.workflow || '')}</b>${r.version ? ` <span class="muted small">v${esc(r.version)}</span>` : ''}</div>
+    <div class="run-summary-name"><b>${runTitleHtml(r)}</b> ${prBadge(r)}</div>
+    <div class="small muted">${esc(r.workflow || '')}${r.version ? ` v${esc(r.version)}` : ''}${selectedView().past ? ' · <span title="Opened from its recorded events: nothing here can change it">read-only</span>' : ''}</div>
     ${r.project ? `<div class="small">Project: <b>${esc(r.project)}</b></div>` : ''}
     ${r.gateWaitMs ? `<div class="small" title="Time the run waited for your answers at its human gates: no agent works (or costs) meanwhile">Waiting for you at gates: <b>${esc(fmtDur(r.gateWaitMs))}</b></div>` : ''}
     <dl class="kv run-inputs">${inputs.map(([k, v]) => `<dt title="${esc(k)}">${esc(k)}</dt>${inputValueCell(v)}`).join('')}</dl>
@@ -1857,7 +2020,7 @@ function renderRunSummary() {
     </div>`;
   // rendered on every event: rebuilt only when it changes, so a hover popover over an input stays open
   const box = $('#run-summary');
-  if (box._html === html) return;
+  if (box._html === html || box.querySelector('.run-title-input') === document.activeElement) return;
   box._html = html;
   box.innerHTML = html;
   $('#btn-run-sup').onclick = () => openSupervisorForCurrent();

@@ -185,7 +185,11 @@
 
   function drawHead() {
     const r = chat.model.run;
-    $c('#rc-title').innerHTML = r.id ? `<b>${esc(r.workflow)}</b>${r.mock ? ' <span class="badge p-mock">simulated</span>' : ''} <span class="muted small mono">${esc(r.id)}</span>` : `<span class="muted mono">${esc(chat.runId || '')}</span>`;
+    // the run's title (editable) and PR (#84, app.js), its workflow next to them
+    const run = { ...r, id: r.id };
+    if (!$c('#rc-title .run-title-input')) $c('#rc-title').innerHTML = r.id
+      ? `<b>${window.runTitleHtml ? runTitleHtml(run) : esc(r.workflow)}</b> ${window.runPrBadge ? runPrBadge(run) : ''} <span class="muted small">${esc(r.workflow)}</span>${r.mock ? ' <span class="badge p-mock">simulated</span>' : ''} <span class="muted small mono">${esc(r.id)}</span>`
+      : `<span class="muted mono">${esc(chat.runId || '')}</span>`;
     const status = chat.loading ? 'loading' : r.status === 'running' && !chat.live ? 'interrupted' : r.status || 'unknown';
     const waiting = chat.live && chat.model.pendingGates().length;
     const pill = $c('#rc-status');
@@ -267,6 +271,8 @@
   window.runChatShowsRun = (runId) => chat.live && chat.runId === runId && visible();
   // the run this screen shows (live or replayed), for desktop notifications
   window.runChatShownRunId = () => (visible() ? chat.runId : null);
+  // its title or PR state changed (app.js onRunMeta); not while the title is being edited
+  window.runChatRefreshHead = () => { if (chat.runId && !$c('#rc-title .run-title-input')) drawHead(); };
 
   function init() {
     if (!$c('#view-runchat')) return;
@@ -283,12 +289,12 @@
     });
     $c('#rc-stop').onclick = () => api.stopRun(chat.runId);
     $c('#rc-logs').onclick = () => chat.model.run.runDir && api.openPath(chat.model.run.runDir);
-    // Chat / Details: the Run screen for the run in progress, the runs list for a past one. The
+    // Chat / Details: the Run screen, for a past run rebuilt from its events (openPastRun). The
     // choice is remembered: the next run opened shows the same view (setRunView in app.js).
     $c('#rc-details').onclick = () => {
       setRunView('details');
       if (state.runs.has(chat.runId)) selectRun(chat.runId);
-      else showRunInList(chat.runId);
+      else openPastRun(chat.runId);
     };
     $c('#run-mode-chat').onclick = () => {
       if (!state.run) return;
