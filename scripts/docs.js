@@ -1,6 +1,7 @@
 // Generated docs: files built from small per-feature sources, so features add a file instead of
 // editing a shared table (fewer merge conflicts between parallel runs, issue #77).
-//   docs/agents/code-map.md  from the header comment at the top of each source file. Derived and
+//   docs/agents/code-map.md  from the header comment at the top of each source file, plus one row
+//                            per screen folder (src/renderer/views/<view>/). Derived and
 //                            gitignored (nobody reads it at runtime): rebuilt by `prepare`,
 //                            `prestart`, `pretest` and `prebuild`, so a pull never leaves it stale.
 //   README.md tables         between `<!-- generated:<name> -->` markers: the bundled skills (each
@@ -86,6 +87,15 @@ function headerOf(text) {
 function codeMap(root = ROOT) {
   const files = SOURCE_DIRS.flatMap((d) => listJs(root, d)).filter((f) => !f.startsWith('src/service/channels/'));
   const rows = files.map((f) => `| \`${f}\` | ${cell(headerOf(read(root, f))) || '(no header comment)'} |`);
+  // One row per screen folder (src/renderer/views/<view>/), discovered: its files, from disk.
+  const viewsDir = path.join(root, RENDERER, 'views');
+  const viewRows = fs.existsSync(viewsDir)
+    ? fs.readdirSync(viewsDir, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name).sort()
+      .map((v) => {
+        const own = fs.readdirSync(path.join(viewsDir, v)).filter((f) => /\.(js|css)$/.test(f)).sort();
+        return `| \`src/renderer/views/${v}/\` | The ${v} screen's folder (registered with \`registerView\`): ${own.map((f) => `\`${f}\``).join(', ')}. |`;
+      })
+    : [];
   return [
     '# Code map',
     '',
@@ -115,6 +125,7 @@ function codeMap(root = ROOT) {
     '| File | What it does |',
     '|---|---|',
     ...rows,
+    ...viewRows,
     ...FOLDERS.map(([f, text]) => `| \`${f}\` | ${text} |`),
     '',
   ].join('\n');
