@@ -304,6 +304,7 @@ async function cleanupWorktrees({ worktreesDir, runsDir, active = [], maxAgeDays
     } else if (status === 'success' || stale) {
       await removeWorktree({ repo, dir, log });
     } else continue;
+    if (fs.existsSync(dir)) continue; // locked by a process: the worktree and its scratch stay for the next cleanup
     removeScratch(path.join(runsDir, name));
     removed.push(dir);
     log('info', `worktree: removed orphan ${dir}`);
