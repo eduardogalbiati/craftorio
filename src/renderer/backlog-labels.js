@@ -2,6 +2,8 @@
 // same group with OR. A group is the prefix before ':' (`complexity:1`, `complexity:2`); labels
 // without a prefix form one group of their own (`bug`, `enhancement`). Names compare whole and
 // case-insensitively, never as substrings (`bug` does not match `debug`).
+// The triage labels of the issue tracker (`impact:<1-5>`, `complexity:<1-5>`) also give each issue
+// scores, for the badges and the sort.
 // No DOM here: backlog.js draws the control, a test feeds it issues.
 // Browser: window.BacklogLabels; Node: module.exports.
 (function (root) {
@@ -64,7 +66,31 @@
 
   const hasLabel = (selected, name) => (selected || []).some((s) => key(s) === key(name));
 
-  const api = { hasLabel, labelGroup: group, labelOptions, matchesLabels, pruneLabels, toggleLabel };
+  // The issue tracker's triage labels (#81): `impact:1`…`impact:5`, `complexity:1`…`complexity:5`.
+  // A score is null when the issue has no such label (or not a 1-5 one); with several, the highest.
+  function triageScores(issue) {
+    const out = { impact: null, complexity: null };
+    for (const n of names(issue)) {
+      const m = /^(impact|complexity):\s*([1-5])$/.exec(key(n));
+      if (m) out[m[1]] = Math.max(out[m[1]] || 0, Number(m[2]));
+    }
+    return out;
+  }
+
+  // Issues in the order the Backlog's sort asks for, without changing the array: `updated` keeps
+  // the sync's order; `impact` puts the highest impact first; `complexity` the smallest first.
+  // Issues without the score go last; ties keep the sync's order.
+  const SORTS = { impact: (s) => -s.impact, complexity: (s) => s.complexity };
+  function sortIssues(issues, by) {
+    const list = [...(issues || [])];
+    const rank = SORTS[by];
+    if (!rank) return list;
+    const scored = list.map((issue, at) => ({ issue, at, s: triageScores(issue) }));
+    const val = (x) => (x.s[by] == null ? Infinity : rank(x.s));
+    return scored.sort((a, b) => val(a) - val(b) || a.at - b.at).map((x) => x.issue);
+  }
+
+  const api = { hasLabel, labelGroup: group, labelOptions, matchesLabels, pruneLabels, sortIssues, toggleLabel, triageScores };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.BacklogLabels = api;
 })(typeof window !== 'undefined' ? window : globalThis);

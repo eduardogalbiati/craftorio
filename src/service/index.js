@@ -512,6 +512,7 @@ function createService({ host }) {
         if (run.issues && run.projectId && ev.status === 'failed' && !run.mock) {
           try { backlog.setPaused(ws.backlog, run.projectId, true, `${run.issues.map((i) => `#${i.number}`).join(', ')} failed: resume to start the next issues.`); } catch (e) { console.error('backlog queue:', e); }
         }
+        queueFiledIssues(run, ev).catch((e) => console.error('issue tracker queue:', e.message));
         // a roadmap's next items first (its stage may be over), then the plain queue
         setTimeout(() => dispatchRoadmaps().catch((e) => console.error('roadmap dispatch:', e)).then(() => dispatchQueue()).catch((e) => console.error('backlog dispatch:', e)), 1000);
       }
@@ -1093,6 +1094,18 @@ function createService({ host }) {
     roadmaps.dropIssues(ws.backlog, project.id, issues.map((i) => i.number));
     await dispatchQueue();
     return withIssueRuns(backlog.readBacklog(ws.backlog, project.id));
+  }
+
+  // Issue tracker (#81), "create and queue": once the run filed its issues, the project's backlog is
+  // synced (the new issues are in it) and they are assigned like the Backlog's Assign does. A
+  // simulated run filed nothing real: nothing is queued.
+  async function queueFiledIssues(run, ev) {
+    const plan = backlog.filedToQueue({ workflow: run.wf.metadata?.name, status: ev.status, steps: run.ctx.steps, inputs: run.inputs });
+    if (!plan || !run.projectId || run.mock) return;
+    const project = projects.readProject(ws.projects, run.projectId);
+    const platform = run.inputs.git_platform === 'gl' ? 'gitlab' : 'github';
+    await backlog.syncBacklog({ dir: ws.backlog, project, platform });
+    await assignWorkflow({ projectId: project.id, numbers: plan.numbers, workflow: plan.workflow, inputs: {}, mock: false, group: plan.group });
   }
 
   // Starts queued issues while there are free run slots: the oldest first across projects, a

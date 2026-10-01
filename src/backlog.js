@@ -15,6 +15,8 @@
 // locally while its commit is not on origin (`readLocal`/`writeLocal`: `<id>.local.json`).
 // Write & Review runs started from an issue (`enrich` on the linked run) never move its column; their
 // accepted document can be saved back to the issue (`saveRunToIssue`: replace the description or comment).
+// An issue-tracker run whose owner chose "create and queue" names the issues to queue (`filedToQueue`);
+// the service syncs the backlog and assigns them when the run ends.
 // Screen: src/renderer/backlog.js; channels: src/service/channels/backlog.js.
 
 const fs = require('fs');
@@ -31,6 +33,9 @@ const DEFAULT_PLATFORM = 'github';
 const MAX_ISSUES = 300;
 // the workflow of Write & Review: its runs enrich an issue's text, they do not implement it
 const ENRICH_WORKFLOW = 'writer-reviewer';
+// the issue tracker (#81) files issues, it does not implement them: its runs never link to an issue
+// they mention (e.g. "related to #41"); its "create and queue" choice queues the issues it filed
+const ISSUE_TRACKER_WORKFLOW = 'issue-tracker';
 
 /**
  * https://host/owner/repo(.git), ssh://git@host/owner/repo.git, git@host:owner/repo.git
@@ -265,7 +270,7 @@ function linkRuns(issues, runs, queue = null, local = null) {
   const sorted = [...runs].sort((a, b) => String(b.startedAt).localeCompare(String(a.startedAt)));
   const items = queue?.items || [];
   return issues.map((issue) => {
-    const linked = sorted.filter((r) => startedFor(r, issue) || (!r.mock && !runIssues(r).length && mentions(r, issue)))
+    const linked = sorted.filter((r) => startedFor(r, issue) || (!r.mock && r.workflow !== ISSUE_TRACKER_WORKFLOW && !runIssues(r).length && mentions(r, issue)))
       .map((r) => {
         // a run started for a group: the other issues it implements ("grouped with #a, #b")
         const others = runIssues(r).filter((a) => !sameIssue(a, issue)).map((a) => a.number);
@@ -596,12 +601,30 @@ function runInputs(item, wf, folder) {
   return inputs;
 }
 
+/**
+ * What an issue-tracker run asks to queue when it ends: the issues its `file` step created, for
+ * `inputs.assign_workflow`, grouped (one run) when there are several and the analyzer advised
+ * grouping. Null unless the run succeeded and the owner chose `create_assign` at the review gate.
+ * @param {{ workflow: string, status: string, steps: object, inputs: object }} run
+ * @returns {{ numbers: number[], workflow: string, group: boolean } | null}
+ */
+function filedToQueue({ workflow, status, steps, inputs } = {}) {
+  if (workflow !== ISSUE_TRACKER_WORKFLOW || status !== 'success') return null;
+  if (steps?.review?.output?.choice !== 'create_assign') return null;
+  const numbers = [...new Set((steps.file?.output?.filed || [])
+    .filter((f) => f?.action === 'created' && Number.isInteger(f.number) && f.number > 0).map((f) => f.number))];
+  if (!numbers.length) return null;
+  const group = numbers.length > 1 && steps.analyze?.output?.grouping === 'group';
+  return { numbers, workflow: inputs?.assign_workflow || 'software-development.yaml', group };
+}
+
 module.exports = {
   PLATFORMS, DEFAULT_PLATFORM, parseRepoUrl, platformOfHost, taskProgress, fetchIssues, readBacklog, syncBacklog, linkRuns,
   referencedIssues, fetchOpenPullRequests, attachPullRequests,
   readQueue, enqueue, unqueue, skipQueued, newPullRequests, setPaused, nextQueued, pauseAll, runInputs,
   itemIssues, runIssues, execCli, readLocal, writeLocal,
   fetchIssue,
+  filedToQueue,
   issueSaveBody,
   issueSaveCommand,
   readIssueSaves,

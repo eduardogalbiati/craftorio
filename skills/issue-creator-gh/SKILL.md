@@ -2,8 +2,8 @@
 name: issue-creator-gh
 description: Files, updates or comments on GitHub issues with the gh CLI, after searching for duplicates, using the issue-writing structure (context, evidence, decisions, verifiable acceptance criteria). Use when an agent must record a bug, an enhancement or a follow-up on GitHub.
 uses: [issue-writing]
-summary: "Search for duplicates, create/comment/edit issues with gh or glab, existing labels only"
-used_by: "backlog planner (#30), any agent that files issues"
+summary: "Search for duplicates, create/comment/edit issues with gh or glab, existing labels only (new ones only when a person confirmed them)"
+used_by: "issue-tracker (code_analyzer, issue_filer), backlog planner (#30), any agent that files issues"
 ---
 
 # Issue creator: GitHub (gh CLI)
@@ -29,7 +29,9 @@ tool, no full paths, no `;`/`&&`/pipes, no files: long bodies go inline with `--
    - or, when the task list itself changes, edit the body: `gh issue view <n> --repo <r> --json body --jq .body`,
      then `gh issue edit <n> --repo <r> --body "<full new body>"` (keep the existing content).
 3. **Check the label exists**: `gh label list --repo <r> --json name --jq '.[].name'`. Use only
-   existing labels (`bug`, `enhancement`, `documentation`…); don't create labels.
+   existing labels (`bug`, `enhancement`, `documentation`…); don't create labels. Only exception:
+   your task lists labels a person confirmed creating (the issue-tracker's review gate): create
+   exactly those that are still missing, once, `gh label create <name> --repo <r> --color <hex>`.
 4. **Create**: `gh issue create --repo <r> --title "<title>" --label <label> --body "<body>"`.
    It prints the issue URL.
 5. **Link**: reference related issues in the body (`#<n>`); when a new issue splits or follows

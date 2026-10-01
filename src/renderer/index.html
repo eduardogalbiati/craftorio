@@ -256,6 +256,7 @@
             <select id="bl-project" aria-label="Project"></select>
             <select id="bl-platform" aria-label="Platform"></select>
             <button id="btn-bl-sync" class="btn primary nowrap">Sync</button>
+            <button id="btn-bl-new-issue" class="btn ghost nowrap" type="button" title="Describe a problem or an idea in a few words: the issue-tracker workflow analyses the code, rates impact and complexity, drafts the issue and files it once you approve">New issue…</button>
           </div>
         </div>
         <div class="pr-toolbar">
@@ -271,6 +272,11 @@
             <div id="bl-labels-pop" class="bl-labels-pop hidden" role="menu" aria-label="Labels"></div>
           </div>
           <span id="bl-label-active" class="bl-label-active"></span>
+          <select id="bl-sort" aria-label="Sort" title="Sort by the triage labels (impact:1-5, complexity:1-5); issues without them go last">
+            <option value="updated">Recently updated</option>
+            <option value="impact">Impact (highest first)</option>
+            <option value="complexity">Complexity (smallest first)</option>
+          </select>
           <button id="btn-bl-assign" class="btn sm primary hidden" type="button">Assign workflow…</button>
           <button id="btn-bl-clear" class="btn sm ghost hidden" type="button">Clear selection</button>
           <span class="spacer"></span>

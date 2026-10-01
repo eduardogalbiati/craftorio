@@ -576,7 +576,8 @@ const statusLabel = (r) => ({ idle: 'idle', running: r?.mock ? 'running (simulat
 // ---------------------------------------------------------------------------
 // Right drawer: start workflow
 // ---------------------------------------------------------------------------
-async function openDrawer({ category = null, workflow = null, project = null } = {}) {
+// `inputs` prefills fields of the picked workflow (e.g. the Backlog's New issue sets git_platform).
+async function openDrawer({ category = null, workflow = null, project = null, inputs = null } = {}) {
   state.category = category;
   state.pendingProject = project;
   [state.workflows, state.projects, state.settings] = await Promise.all([api.listWorkflows(), api.listProjects(), api.getSettings()]);
@@ -584,6 +585,12 @@ async function openDrawer({ category = null, workflow = null, project = null } =
   $('#start-error').textContent = '';
   renderDrawerCategories();
   renderWorkflowOptions(workflow || state.settings.lastWorkflow);
+  if (inputs && (!workflow || state.wf?.file === workflow)) {
+    for (const [k, v] of Object.entries(inputs)) {
+      const el = document.getElementById(`in-${k}`);
+      if (el) el.value = v;
+    }
+  }
   renderProjectOptions(project || state.settings.lastProject);
   $('#drawer').classList.add('open');
   $('#drawer').setAttribute('aria-hidden', 'false');
@@ -961,6 +968,7 @@ function runListRow(r, pv) {
 const CHAT_TITLES = {
   'writer-reviewer': 'See the writer, reviewer and supervisor conversation',
   'ai-arena': 'See the contenders, the synthesis and the supervisor as a chat',
+  'issue-tracker': 'See the analysis and the draft as a chat, and answer the review there',
 };
 
 // Opens a run in Workflows › Runs, expanded.

@@ -11,6 +11,9 @@
 // The list narrows by state, by text and by labels (the rule is in backlog-labels.js: AND across
 // label groups, OR within one); the selected labels are remembered per project and a label chip
 // on an issue toggles its label. Selection and assignment only count the issues shown.
+// Issues filed by the issue tracker (#81) carry `impact:<1-5>` / `complexity:<1-5>` labels: shown as
+// badges, sortable (backlog-labels.js sortIssues), filterable like any label. New issue opens the
+// Start drawer on the issue-tracker workflow for the selected project and platform.
 // The third mode, Roadmap, is backlog-roadmap.js (ordered stages of runs); the assign dialog's
 // "Add to roadmap" plans the selection as a new stage, and assigning an issue the roadmap plans asks first.
 // The Product Owner's drawer (backlog-po.js) applies a proposed group through window.BacklogActions.
@@ -25,6 +28,9 @@
   const MODE_KEY = 'multiagent.backlogMode';
   const WORKFLOW_KEY = 'multiagent.backlogWorkflow';
   const LABELS_KEY = 'multiagent.backlogLabels.'; // + project id
+  const SORT_KEY = 'multiagent.backlogSort';
+  const SORTS = ['complexity', 'impact', 'updated'];
+  const ISSUE_TRACKER = 'issue-tracker.yaml';
   const FILTERS = [['open', 'Open'], ['closed', 'Closed'], ['all', 'All']];
   // 'local': merged into the local base by a local workflow, not pushed yet (shown when there is any)
   const COLUMNS = [['todo', 'To do'], ['in_progress', 'In progress'], ['waiting', 'Waiting for approval'], ['local', 'Merged locally'], ['done', 'Done']];
@@ -36,8 +42,17 @@
     projects: [], projectId: null, platform: null, data: null, error: null, syncing: false,
     mode: ['kanban', 'roadmap'].includes(load(MODE_KEY)) ? load(MODE_KEY) : 'list', filter: 'open', q: '', expanded: new Set(), seq: 0,
     selected: new Set(), workflows: [], labels: [], labelsOpen: false,
+    sort: SORTS.includes(load(SORT_KEY)) ? load(SORT_KEY) : 'updated',
   };
-  const { hasLabel, labelOptions, matchesLabels, pruneLabels, toggleLabel } = window.BacklogLabels;
+  const {
+    hasLabel,
+    labelOptions,
+    matchesLabels,
+    pruneLabels,
+    sortIssues,
+    toggleLabel,
+    triageScores,
+  } = window.BacklogLabels;
   const $b = (sel) => document.querySelector(sel);
   const project = () => bl.projects.find((p) => p.id === bl.projectId) || null;
   const visible = () => state.view === 'backlog';
@@ -157,6 +172,13 @@
       platform: bl.data.platform,
       issue: { number: issue.number, title: issue.title, url: issue.url, body: issue.body || '', labels: issue.labels || [] },
     });
+  }
+
+  // New issue (#81): the Start drawer on the issue-tracker workflow, for this project and platform;
+  // the owner writes the request and starts it. The issue shows here after the next sync.
+  function newIssue() {
+    if (!project()?.repo) return;
+    openDrawer({ workflow: ISSUE_TRACKER, project: bl.projectId, inputs: { git_platform: bl.platform === 'gitlab' ? 'gl' : 'gh' } });
   }
 
   // "Review approval" opens its run, where the gate is answered (the run chat, or the Run screen's
@@ -417,6 +439,12 @@
     return `<button class="bl-label${on ? ' on' : ''}" type="button" data-label="${esc(l.name)}" title="${on ? 'Remove from the label filter' : 'Filter by this label'}"${colorStyle(l.color)}>${esc(l.name)}</button>`;
   };
   const labels = (i) => i.labels.map(labelChip).join('');
+  // Impact and complexity from the triage labels, as two compact badges (none without the labels).
+  const triage = (i) => {
+    const s = triageScores(i);
+    return [['impact', 'I', 'Impact'], ['complexity', 'C', 'Complexity']].filter(([k]) => s[k] != null)
+      .map(([k, short, name]) => `<span class="badge bl-triage bl-${k} lvl-${s[k]}" title="${name} ${s[k]}/5 (issue triage)">${short}${s[k]}</span>`).join('');
+  };
 
   // The label filter: every label of the synced issues, with how many the state filter shows.
   // Hidden when no issue has a label.
@@ -495,7 +523,7 @@
           <span class="bl-num mono">#${i.number}</span>
           <div class="bl-main">
             <div class="bl-title">${esc(i.title)}</div>
-            <div class="bl-labels">${labels(i)}</div>
+            <div class="bl-labels">${triage(i)}${labels(i)}</div>
           </div>
           <span class="bl-status">${prBadges(i)}${status(i)}${enrichBtn(i)}</span>
           ${tasks(i) || '<span></span>'}
@@ -516,19 +544,19 @@
   const card = (i) => `
     <div class="bl-card${bl.selected.has(i.number) ? ' selected' : ''}" data-n="${i.number}">
       <div class="bl-card-head">${checkbox(i)}<span class="bl-num mono">#${i.number}</span><a class="bl-card-title" href="${esc(i.url)}" target="_blank" rel="noopener" title="Open on ${esc(PLATFORMS[bl.data?.platform]?.label || 'the platform')}">${esc(i.title)}</a></div>
-      <div class="bl-labels">${labels(i)}</div>
+      <div class="bl-labels">${triage(i)}${labels(i)}</div>
       ${tasks(i)}
       ${prBadges(i) || status(i) ? `<div class="bl-card-run">${prBadges(i)}${status(i)}</div>` : ''}
       ${enrichBtn(i) ? `<div class="bl-card-actions">${enrichBtn(i)}</div>` : ''}
     </div>`;
 
   function renderList(issues) {
-    const shown = issues.filter(isShown);
+    const shown = sortIssues(issues.filter(isShown), bl.sort);
     return shown.length ? shown.map(issueRow).join('') : filtering() ? noMatch() : '<p class="muted">No issues match.</p>';
   }
 
   function renderKanban(issues) {
-    const shown = issues.filter(isShown);
+    const shown = sortIssues(issues.filter(isShown), bl.sort);
     const withLocal = bl.data?.local?.ahead > 0 || issues.some((i) => i.column === 'local');
     const columns = COLUMNS.filter(([col]) => col !== 'local' || withLocal);
     return `${!shown.length && issues.length && filtering() ? noMatch() : ''}<div class="bl-board${withLocal ? ' with-local' : ''}">${columns.map(([col, title]) => {
@@ -659,6 +687,9 @@
     const btn = $b('#btn-bl-sync');
     btn.disabled = !p?.repo || bl.syncing || !!PLATFORMS[bl.platform]?.soon;
     btn.textContent = bl.syncing ? 'Syncing…' : 'Sync';
+    $b('#btn-bl-new-issue').disabled = !p?.repo || !!PLATFORMS[bl.platform]?.soon;
+    $b('#bl-sort').value = bl.sort;
+    $b('#bl-sort').classList.toggle('hidden', bl.mode === 'roadmap');
 
     document.querySelectorAll('#bl-mode [data-mode]').forEach((b) => {
       b.classList.toggle('active', b.dataset.mode === bl.mode);
@@ -707,6 +738,8 @@
     if (!PLATFORMS[bl.platform]?.soon) sync();
   };
   $b('#btn-bl-sync').onclick = sync;
+  $b('#btn-bl-new-issue').onclick = newIssue;
+  $b('#bl-sort').onchange = (e) => { bl.sort = e.target.value; save(SORT_KEY, bl.sort); render(); };
   $b('#btn-bl-assign').onclick = () => openAssign();
   $b('#btn-bl-clear').onclick = () => { bl.selected.clear(); render(); };
   $b('#bl-search').oninput = (e) => { bl.q = e.target.value.trim(); render(); };

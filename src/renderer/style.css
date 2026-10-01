@@ -1065,6 +1065,13 @@ button.bl-label { font-family: inherit; background: none; cursor: pointer; }
 .bl-label-opt .muted { margin-left: auto; }
 .bl-label-active { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
 .bl-label-active:empty { display: none; }
+/* Issue triage (#81): impact / complexity 1-5 from the impact:<n> / complexity:<n> labels */
+#bl-sort { width: auto; flex: none; }
+.bl-triage { font-family: var(--mono); font-size: 10.5px; padding: 0 6px; border: 1px solid currentColor; background: transparent; }
+.bl-triage.lvl-1, .bl-triage.lvl-2 { color: var(--muted); }
+.bl-triage.lvl-3 { color: var(--yellow); }
+.bl-triage.lvl-4 { color: var(--orange); }
+.bl-triage.lvl-5 { color: var(--red); }
 .bl-tasks { display: flex; align-items: center; gap: 6px; }
 .bl-bar { flex: 1; height: 5px; border-radius: 3px; background: var(--panel-2); overflow: hidden; }
 .bl-bar > span { display: block; height: 100%; background: var(--green); }
