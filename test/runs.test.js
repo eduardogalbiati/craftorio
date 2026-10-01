@@ -55,6 +55,49 @@ test('listRuns reads finished runs from summary.json and rebuilds interrupted on
   assert.equal(r2.sessions[0].provider_session_id, 'p-s1');
 });
 
+// ---- owner.json: "running (elsewhere)" vs "interrupted" (#112) ----------------------------------
+
+function unfinishedRun(t, extra = {}) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-owner-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const dir = path.join(root, 'live1');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'events.jsonl'), jl({ ts: '2026-09-27T10:00:00Z', type: 'workflow.started', workflow: 'w', file: 'w.yaml', inputs: {}, mock: true }));
+  if (extra.owner) fs.writeFileSync(path.join(dir, 'owner.json'), JSON.stringify(extra.owner));
+  return { root, dir };
+}
+
+test('readRun/listRuns: a run with no owner.json (died with the app, before #112, or the owner never wrote one in time) is interrupted', (t) => {
+  const { root } = unfinishedRun(t);
+  assert.equal(runs.readRun(root, 'live1').status, 'interrupted');
+  assert.equal(runs.readRun(root, 'live1').runningElsewhere, null);
+  assert.equal(runs.listRuns(root).find((r) => r.runId === 'live1').status, 'interrupted');
+});
+
+test('readRun/listRuns: a fresh heartbeat from another live process reads as "running", never "interrupted"', (t) => {
+  const { root } = unfinishedRun(t, { owner: { pid: process.ppid, host: os.hostname(), heartbeat_at: new Date().toISOString() } });
+  const read = runs.readRun(root, 'live1');
+  assert.equal(read.status, 'running');
+  assert.deepEqual(read.runningElsewhere, { pid: process.ppid, host: os.hostname() });
+  const listed = runs.listRuns(root).find((r) => r.runId === 'live1');
+  assert.equal(listed.status, 'running');
+  assert.deepEqual(listed.runningElsewhere, { pid: process.ppid, host: os.hostname() });
+});
+
+test('readRun/listRuns: this process\'s own ownership reads as "running" with no runningElsewhere (the service already knows its own runs)', (t) => {
+  const { root } = unfinishedRun(t, { owner: { pid: process.pid, host: os.hostname(), heartbeat_at: new Date().toISOString() } });
+  const read = runs.readRun(root, 'live1');
+  assert.equal(read.status, 'running');
+  assert.equal(read.runningElsewhere, null);
+});
+
+test('readRun/listRuns: a dead owner (stale heartbeat) makes the run interrupted, even if it once had a live one', (t) => {
+  const stale = new Date(Date.now() - 60000).toISOString(); // past STALE_MS (30s)
+  const { root } = unfinishedRun(t, { owner: { pid: process.ppid, host: os.hostname(), heartbeat_at: stale } });
+  assert.equal(runs.readRun(root, 'live1').status, 'interrupted');
+  assert.equal(runs.listRuns(root).find((r) => r.runId === 'live1').status, 'interrupted');
+});
+
 test('readRun gives the issues a run implements; a run recorded with one `issue` still loads as a list of one', (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-issues-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));

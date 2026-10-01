@@ -265,3 +265,34 @@ test('scratchWorkspace: copies agents/skills/workflows/settings, points projects
   const p2 = JSON.parse(fs.readFileSync(path.join(target.workspace, 'projects', 'p2.json'), 'utf8'));
   assert.equal(p2.repo, 'https://github.com/o/r.git', 'a remote is kept: the scratch copy can clone it itself');
 });
+
+// ---- worktreeAppScratch (#112): an app started by hand from a run's worktree --------------------
+
+test('worktreeAppScratch: an app folder under <workspace>/worktrees/<id> gets a scratch copy of its owner workspace', (t) => {
+  const ws = tmp(t);
+  fs.mkdirSync(path.join(ws, 'runs'));
+  const appDir = path.join(ws, 'worktrees', '20260101-000000-abcd1234');
+  fs.mkdirSync(appDir, { recursive: true });
+
+  const scratch = lp.worktreeAppScratch(appDir);
+  assert.equal(scratch.owner, ws);
+  assert.ok(fs.existsSync(scratch.workspace));
+  assert.ok(fs.existsSync(scratch.userData));
+  assert.ok(scratch.workspace.includes('20260101-000000-abcd1234'), 'one scratch copy per worktree: Run locally keeps its own');
+});
+
+test('worktreeAppScratch: a folder not two levels under "worktrees", or whose owner is not a workspace, is null', (t) => {
+  const ws = tmp(t);
+  fs.mkdirSync(path.join(ws, 'runs'));
+  assert.equal(lp.worktreeAppScratch(ws), null, 'the workspace root itself');
+  assert.equal(lp.worktreeAppScratch(path.join(ws, 'worktrees')), null, 'only one level deep: no run id folder');
+  assert.equal(lp.worktreeAppScratch(path.join(ws, 'projects', 'demo')), null, 'a project folder, not a worktree');
+
+  const noOwner = tmp(t); // "worktrees/<id>" under a folder with no runs dir: not a real workspace
+  assert.equal(lp.worktreeAppScratch(path.join(noOwner, 'worktrees', 'abcd1234')), null);
+
+  // the check is case-insensitive (Windows paths)
+  const upper = path.join(ws, 'Worktrees', 'abcd1234');
+  fs.mkdirSync(upper, { recursive: true });
+  assert.equal(lp.worktreeAppScratch(upper).owner, ws);
+});

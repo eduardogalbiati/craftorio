@@ -61,7 +61,9 @@ test('saveStages keeps status/runId/runs by item id when the UI re-saves', (t) =
   ], { issues: synced });
 
   const kept = resaved.stages[0].items.find((x) => x.id === item1.id);
-  assert.equal(kept.status, 'running');
+  // a run's status is derived (withStatus) when read, never stored: markStarted stores a running
+  // item as 'planned' with its runId (#112)
+  assert.equal(kept.status, 'planned');
   assert.equal(kept.runId, 'run-1');
   assert.deepEqual(kept.runs, ['run-1']);
   assert.equal(resaved.stages[0].note, 'do this first');
@@ -192,6 +194,62 @@ test('advance does nothing to a roadmap that is planned or paused', () => {
   }
 });
 
+// ---- statuses derived from the runs, whatever the roadmap state (#112) --------------------
+
+test('a paused roadmap still refreshes its items\' statuses from their runs; it never starts new ones', () => {
+  // i1 paused the roadmap (its run failed); i2, in the same stage, is still shown with a stale
+  // status from before the run it names was cancelled: advance corrects it (to failed) without
+  // unpausing the roadmap or starting anything, so the owner sees the truth while deciding on i1.
+  const roadmap = mkRoadmap(
+    [{ id: 's1', items: [mkItem('i1', 1, { status: 'failed', runId: 'r1', runs: ['r1'], error: 'boom' }), mkItem('i2', 2, { status: 'running', runId: 'r2' })] }],
+    { state: 'paused', pausedBy: 'i1', error: 'Stage 1: #1 failed.' },
+  );
+  const runs = { r1: { status: 'failed', error: 'boom' }, r2: { status: 'cancelled' } };
+  const { roadmap: after, start } = roadmaps.advance(roadmap, { runOf: (id) => runs[id] || null });
+  assert.deepEqual(start, []);
+  assert.equal(after.state, 'paused', 'still paused: i1\'s run did not become alive again');
+  assert.equal(after.pausedBy, 'i1');
+  assert.equal(after.stages[0].items[1].status, 'failed', 'i2 reflects its run being cancelled, not left "running"');
+  assert.match(after.stages[0].items[1].error, /cancelled/);
+});
+
+test('advance unpauses a roadmap once the item that paused it is alive again (resumed, or owned by another live process)', () => {
+  const roadmap = mkRoadmap(
+    [{ id: 's1', items: [mkItem('i1', 8, { status: 'failed', runId: 'r1', runs: ['r1'], error: 'boom' })] }],
+    { state: 'paused', pausedBy: 'i1', error: 'Stage 1: #8 failed.' },
+  );
+  const { roadmap: after, start } = roadmaps.advance(roadmap, { runOf: () => ({ status: 'running', waiting: true }) });
+  assert.equal(after.state, 'running');
+  assert.equal(after.pausedBy, null);
+  assert.equal(after.error, null);
+  assert.equal(after.stages[0].items[0].status, 'running');
+  assert.deepEqual(start, [], 'the item itself never starts again: it is already running');
+});
+
+test('writeRoadmap/readRoadmap never persists a live status: it is derived when read, not stored', (t) => {
+  const dir = tmp(t);
+  roadmaps.writeRoadmap(dir, 'proj', mkRoadmap([{ id: 's1', items: [mkItem('i1', 1, { status: 'running', runId: 'r1' })] }]));
+  const stored = JSON.parse(fs.readFileSync(path.join(dir, 'proj.roadmap.json'), 'utf8'));
+  assert.equal(stored.stages[0].items[0].status, 'planned');
+  assert.equal(stored.stages[0].items[0].runId, 'r1');
+  // a finished status (done/skipped) is the one outcome kept as stored: no run event can rebuild it
+  roadmaps.writeRoadmap(dir, 'proj', mkRoadmap([{ id: 's1', items: [mkItem('i1', 1, { status: 'done', runId: 'r1' })] }]));
+  const finished = JSON.parse(fs.readFileSync(path.join(dir, 'proj.roadmap.json'), 'utf8'));
+  assert.equal(finished.stages[0].items[0].status, 'done');
+});
+
+test('writeRoadmap refuses to write a roadmap that breaks its shape, keeping the file (and its backup) as they were', (t) => {
+  const dir = tmp(t);
+  roadmaps.writeRoadmap(dir, 'proj', mkRoadmap([{ id: 's1', items: [mkItem('i1', 1)] }]));
+  // a second, valid write: now there is a .bak of the first one too (writeJsonSafe, src/state-file.js)
+  roadmaps.writeRoadmap(dir, 'proj', mkRoadmap([{ id: 's1', items: [mkItem('i1', 2)] }]));
+  const before = fs.readFileSync(path.join(dir, 'proj.roadmap.json'), 'utf8');
+  const bakBefore = fs.readFileSync(path.join(dir, 'proj.roadmap.json.bak'), 'utf8');
+  assert.throws(() => roadmaps.writeRoadmap(dir, 'proj', mkRoadmap([{ id: 's1', items: [mkItem('i1', 1)] }], { state: 'not-a-state' })), /unknown state/);
+  assert.equal(fs.readFileSync(path.join(dir, 'proj.roadmap.json'), 'utf8'), before, 'the previous, valid file is untouched');
+  assert.equal(fs.readFileSync(path.join(dir, 'proj.roadmap.json.bak'), 'utf8'), bakBefore, 'the backup is untouched too');
+});
+
 // ---- itemAction ----------------------------------------------------------------------------
 
 test('itemAction retry or skip on the item that paused the roadmap resumes it', (t) => {
@@ -214,10 +272,14 @@ test('itemAction retry or skip on the item that paused the roadmap resumes it', 
   assert.equal(afterSkip.stages[0].items[0].error, 'Skipped by the owner.');
 });
 
-test('itemAction refuses an item whose run is in progress', (t) => {
+test('itemAction refuses an item whose run is alive (alive(runId), #112), naming the run', (t) => {
   const dir = tmp(t);
   roadmaps.writeRoadmap(dir, 'proj', mkRoadmap([{ id: 's1', items: [mkItem('i1', 1, { status: 'running', runId: 'r1' })] }]));
-  assert.throws(() => roadmaps.itemAction(dir, 'proj', 'i1', 'retry'), /in progress/);
+  assert.throws(() => roadmaps.itemAction(dir, 'proj', 'i1', 'retry', { alive: (id) => id === 'r1' }), /Run r1 is still running\./);
+  assert.throws(() => roadmaps.itemAction(dir, 'proj', 'i1', 'skip', { alive: (id) => id === 'r1' }), /in progress/);
+  // no `alive` (a stored file written before #112): falls back to the stored status, itself never
+  // persisted as 'running' any more, so the item is free to retry/skip
+  roadmaps.itemAction(dir, 'proj', 'i1', 'retry');
 });
 
 // ---- propose (the Product Owner's roadmap, #105) -------------------------------------------
@@ -233,10 +295,12 @@ test('propose(add) appends planned stages, drops issues already planned, and pau
   assert.deepEqual(itemIssues(roadmap.stages[1].items[0]).map((i) => i.number), [2]);
 });
 
-test('propose(replace) throws while an item is running', (t) => {
+test('propose(replace) throws while an item\'s run is alive (alive(runId), #112)', (t) => {
   const dir = tmp(t);
   roadmaps.writeRoadmap(dir, 'proj', mkRoadmap([{ id: 's1', items: [mkItem('i1', 1, { status: 'running', runId: 'r1' })] }]));
-  assert.throws(() => roadmaps.propose(dir, 'proj', { stages: [] }, { replace: true }), /in progress/);
+  assert.throws(() => roadmaps.propose(dir, 'proj', { stages: [] }, { replace: true, alive: (id) => id === 'r1' }), /in progress/);
+  // no `alive`: the stored status (never 'running' any more, see persisted/withStatus) never blocks it
+  roadmaps.propose(dir, 'proj', { stages: [] }, { replace: true });
 });
 
 // ---- dropIssues / adoptResumed ---------------------------------------------------------------
@@ -262,7 +326,8 @@ test('adoptResumed moves the item to the new run and resumes a roadmap it paused
   assert.equal(after.pausedBy, null);
   assert.equal(after.error, null);
   const item = after.stages[0].items[0];
-  assert.equal(item.status, 'running');
+  // status is derived from the run when read (withStatus), never stored as 'running' (#112)
+  assert.equal(item.status, 'planned');
   assert.equal(item.runId, 'run-new');
   assert.deepEqual(item.runs, ['run-old', 'run-new']);
 });
