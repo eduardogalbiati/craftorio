@@ -512,7 +512,7 @@ What is shared by a family lives in a suffix-less skill referenced with `uses:`.
 | `pr-babysitter-{gh,gl}` | PR babysitter | Mergeability signals, threads/discussions, replies |
 | `pr-comment-triage` | via `uses` | Actionable vs doubtful comments, durable fix requests, resume logic, AI marker on replies |
 | `pr-description` | via `uses` | PR/MR title and body: visual summary, evidence, merge danger |
-| `pr-screenshots` | via `uses` | `publish.js`: commits the PNGs to the `pr-screenshots` branch (one folder per PR/MR, closed ones pruned) without touching the checkout, then posts one before/after comment |
+| `pr-screenshots` | via `uses` | `publish.js`: commits the PNGs to the `pr-screenshots` branch (one folder per PR/MR, closed ones pruned) without touching the checkout, then posts one original/modified comment |
 | `pr-screenshots-{gh,gl}` | CI pusher | Screenshots comment on the PR/MR (GitHub `blob/...?raw=true`, GitLab `-/raw/` URLs) |
 | `prd-writing` | arena, Write & Review (`document_skill`) | PRD structure (user stories, traceable requirements, testing decisions, questions with defaults) and scoring rubric |
 | `review-synthesis` | multi-model review judge | Lead judgment: merge, verify, weigh agreement and nitpicks, act on / consider / noted / dismissed |
