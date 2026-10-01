@@ -1596,15 +1596,18 @@ function mountGateSides(root) {
       .catch((e) => showToast('Could not show the diff', errMsg(e)));
     const panel = ArtifactsPanel.mount(el, { runId, flat: true, extras: { notes, changes: diff ? 'Loading…' : null, onChange } });
     if (diff) {
-      Promise.resolve(api.gateChanges(runId, approval))
-        .then((list) => panel.setExtras({ ...panel.extras, changes: list || [] }))
-        .catch((e) => {
-          // a simulated run has no git worktree (#115): the files the simulated developer reported
-          const reported = lastOutput(runId, (o) => Array.isArray(o.files_changed))?.files_changed || [];
-          const files = reported.map((f) => String(typeof f === 'object' && f ? f.file || f.path || '' : f)).filter(Boolean);
-          if (files.length) panel.setExtras({ ...panel.extras, changes: files.map((file) => ({ file, added: null, deleted: null })), changesReported: state.runs.get(runId)?.run?.mock ? 'simulated' : 'reported' });
-          else panel.setExtras({ ...panel.extras, changes: `Could not list them: ${errMsg(e)}` });
-        });
+      // the files the developer reported: a simulated run's only changes (#115), whatever git says
+      // of its folder, and a real run's fallback when its worktree cannot be listed
+      const reported = (lastOutput(runId, (o) => Array.isArray(o.files_changed))?.files_changed || [])
+        .map((f) => String(typeof f === 'object' && f ? f.file || f.path || '' : f)).filter(Boolean);
+      const simulated = !!state.runs.get(runId)?.run?.mock;
+      const showReported = () => panel.setExtras({ ...panel.extras, changes: reported.map((file) => ({ file, added: null, deleted: null })), changesReported: simulated ? 'simulated' : 'reported' });
+      if (simulated && reported.length) showReported();
+      else {
+        Promise.resolve(api.gateChanges(runId, approval))
+          .then((list) => panel.setExtras({ ...panel.extras, changes: list || [] }))
+          .catch((e) => (reported.length ? showReported() : panel.setExtras({ ...panel.extras, changes: `Could not list them: ${errMsg(e)}` })));
+      }
     }
   });
 }

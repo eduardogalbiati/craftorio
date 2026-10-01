@@ -1425,11 +1425,22 @@ function createService({ host }) {
   }
 
   // An artifact that still exists (a run folder's file or its recorded project copy), else an error:
-  // what reading it or copying it to the clipboard (#114) accepts.
+  // what reading it or copying it to the clipboard (#114) accepts. A recorded path is not trusted
+  // as is: it must be inside the workspace or the folder of the run's project (compared canonically,
+  // so a symlink or an 8.3 name cannot lead outside).
   function existingArtifact(file) {
-    const found = file ? findArtifact(String(file)) : null;
+    const norm = (x) => (process.platform === 'win32' ? path.resolve(x).toLowerCase() : path.resolve(x));
+    const projectList = projects.listProjects(ws.projects);
+    let found = null, run = null;
+    for (const r of file ? artifactRuns() : []) {
+      found = r.artifacts.find((a) => norm(a.path) === norm(String(file))) || null;
+      if (found) { run = r; break; }
+    }
     if (!found) throw new Error('Not an artifact of any run.');
     if (!found.exists) throw new Error(`The file no longer exists: ${found.path}`);
+    const folder = run.project ? projectList.find((x) => x.id === run.project.id)?.folder : null;
+    const inside = folderMatcher();
+    if (![ws.root, folder].some((root) => inside(found.path, root))) throw new Error(`Outside the workspace and the project's folder: ${found.path}`);
     return found;
   }
 
