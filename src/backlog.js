@@ -5,7 +5,8 @@
 // `linkRuns` ties runs to issues (`run.issues` recorded by the engine, `run.issue` for older runs,
 // else task/inputs mentioning the URL or `#n`, mock runs excluded; `groupedWith` = the other issues
 // of the same run or queued group) and picks the kanban column (todo / in_progress / waiting / local
-// / done; done = closed on the platform). Each sync also reads the open PRs/MRs
+// / done; done = closed on the platform). Simulated (mock) runs and queue items are listed but never
+// move the column: it comes from the newest real run and the real queue items. Each sync also reads the open PRs/MRs
 // (`fetchOpenPullRequests`, `referencedIssues`) into `issue.pullRequests`. Assigning a workflow
 // queues issues in `<id>.queue.json` (`enqueue`, `group: true` = one item with `issues` for one run,
 // `itemIssues`, `unqueue`, `runInputs` builds one task listing every issue of a group; before a real
@@ -233,7 +234,7 @@ function notPushed(issue, run, local) {
   return (local.issues || []).includes(issue.number) || (local.commits || []).some((c) => c.sha === run.localMerge.commit);
 }
 
-// Kanban column from the issue state, its place in the queue, its latest run and the project's
+// Kanban column from the issue state, a real queue item for it, its latest real run and the project's
 // local commits not pushed yet (localStatus in src/local-push.js). Done = closed on the platform,
 // only: an open issue whose run succeeded (a PR not merged yet, a push the platform hasn't seen)
 // stays in progress until a sync reports it closed.
@@ -276,7 +277,9 @@ function linkRuns(issues, runs, queue = null, local = null) {
     const queued = at < 0 ? null : {
       position: at + 1, workflow: items[at].workflowName || items[at].workflow, mock: !!items[at].mock, ...(others.length ? { groupedWith: others } : {}),
     };
-    return { ...issue, runs: linked, queued, column: columnOf(issue, linked[0], queued, local) };
+    // simulations stay in the issue's history (and keep their queued badge) but never decide its column
+    const realQueued = items.some((q) => !q.mock && itemIssues(q).some((x) => x.number === issue.number));
+    return { ...issue, runs: linked, queued, column: columnOf(issue, linked.find((r) => !r.mock), realQueued, local) };
   });
 }
 

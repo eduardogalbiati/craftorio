@@ -451,7 +451,7 @@
     const recovered = r.recovery ? `<span class="badge bl-recovered" title="${esc(`Supervisor: ${r.recovery}`)}">sent back after a failed merge</span>` : '';
     const watch = r.status === 'running' && isRunLive(r.runId)
       ? `<button class="btn sm ghost sup-btn" type="button" data-watch="${esc(r.runId)}" data-workflow="${esc(r.workflow || '')}" title="The supervisor follows this run and explains it in a chat (opt-in: it costs tokens)"><span class="sup-mark">◆</span> Watch</button>` : '';
-    return `${rm}${runLink(r)}${notPushed}${recovered}${groupBadge(r.groupedWith)}${i.column === 'waiting' ? '<button class="btn sm primary" type="button" data-gate>Review approval</button>' : ''}${watch}`;
+    return `${rm}${runLink(r)}${notPushed}${recovered}${groupBadge(r.groupedWith)}${r.waiting ? '<button class="btn sm primary" type="button" data-gate>Review approval</button>' : ''}${watch}`;
   }
 
   function issueRow(i) {
