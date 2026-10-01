@@ -40,7 +40,8 @@ module.exports = (ctx) => {
           agent: agents.readAgent(ctx.ws.agents, agents.PRODUCT_OWNER_ID),
           skillsDirs: [ctx.ws.skills, ctx.BUNDLED_SKILLS_DIR],
           resolveCommand,
-          budget: simulated ? null : usage.budgetBaseline({ runsDir: ctx.ws.runs, settings }),
+          // its own past calls are in no run: add them to what the runs used this month
+          budget: simulated ? null : usage.withPeerUsage(usage.budgetBaseline({ runsDir: ctx.ws.runs, settings }), productOwner.monthUsage(ctx.ws.backlog), settings.prices),
           mock: simulated,
         });
       },

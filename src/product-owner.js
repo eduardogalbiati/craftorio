@@ -12,6 +12,8 @@
 // Simulated (developer mode, MULTIAGENT_SIMULATION_ONLY): mockAnswer builds the answer from the
 // backlog itself, with no model call and no cost.
 // The conversation is kept per project in <workspace>/backlog/<projectId>.po.jsonl until cleared.
+// Each real call's cost and tokens also go to <workspace>/backlog/product-owner.usage.jsonl, which
+// clearing does not touch: monthUsage feeds them to the monthly budget check (they are in no run).
 
 const fs = require('fs');
 const path = require('path');
@@ -302,7 +304,28 @@ function previousExchanges(messages) {
   return `## Earlier in this conversation\n${recent.map((m) => (m.role === 'user' ? `Owner: ${clip(m.text, 500)}` : `You: ${clip(m.answer?.summary || m.text, 1500)}`)).join('\n')}`;
 }
 
-/** Throws when Claude Code already reached a blocking monthly budget (`budget`: usage.budgetBaseline). */
+// ---- usage: every real call, for the monthly budgets ------------------------------------------------
+const usageFile = (backlogDir) => path.join(backlogDir, 'product-owner.usage.jsonl');
+
+function recordUsage(backlogDir, { projectId, model, tokens, costUsd }) {
+  fs.mkdirSync(backlogDir, { recursive: true });
+  fs.appendFileSync(usageFile(backlogDir), `${JSON.stringify({ ts: new Date().toISOString(), projectId, provider: 'claude', model, tokens: tokens || {}, costUsd: costUsd || 0 })}\n`);
+}
+
+/**
+ * The Product Owner's calls this month, every project, as sessions for usage.withPeerUsage
+ * ([{ provider, model, tokens, costUsd }]): its spend is in no run, so budgetBaseline misses it.
+ */
+function monthUsage(backlogDir, now = new Date()) {
+  const month = now.toISOString().slice(0, 7);
+  let lines = [];
+  try { lines = fs.readFileSync(usageFile(backlogDir), 'utf8').split('\n'); } catch { return []; }
+  return lines.map((l) => { try { return l ? JSON.parse(l) : null; } catch { return null; } })
+    .filter((u) => u && String(u.ts).slice(0, 7) === month)
+    .map((u) => ({ provider: u.provider, model: u.model, tokens: u.tokens, costUsd: u.costUsd }));
+}
+
+/** Throws when Claude Code already reached a blocking monthly budget (`budget`: usage.budgetBaseline plus monthUsage). */
 function checkBudget(budget) {
   const b = budget?.claude;
   if (b?.blockOnLimit && ((b.limitUsd && b.usedUsd >= b.limitUsd) || (b.limitTokens && b.usedTokens >= b.limitTokens))) {
@@ -332,9 +355,11 @@ async function ask({ backlogDir, projectId, question, data, activeRuns, runs, wo
       raw = mockAnswer({ data, question: q });
     } else {
       checkBudget(budget);
-      ({ raw, costUsd, model, invalid } = await callAgent({
+      let tokens;
+      ({ raw, costUsd, model, invalid, tokens } = await callAgent({
         question: q, report: backlogReport({ data, activeRuns, history, workflows, question: q }), previous, folder, agent, skillsDirs, resolveCommand,
       }));
+      recordUsage(backlogDir, { projectId, model, tokens, costUsd });
     }
   } catch (e) {
     const message = appendMessage(backlogDir, projectId, { role: 'po', text: e.message, error: true, costUsd });
@@ -378,9 +403,9 @@ async function callAgent({ question, report, previous, folder, agent, skillsDirs
   try { raw = extractJson(res.text); errs = validateSchema(raw, ANSWER_SCHEMA); } catch (e) { errs = [e.message]; }
   if (errs.length) {
     const prose = String(res.text || '').replace(/```json[\s\S]*$/, '').trim();
-    return { raw: { summary: prose || 'The answer could not be read.', groups: [], conflicts: [], enrich: [] }, costUsd: res.costUsd || 0, model: agent.model, invalid: errs.join('; ') };
+    return { raw: { summary: prose || 'The answer could not be read.', groups: [], conflicts: [], enrich: [] }, costUsd: res.costUsd || 0, tokens: res.usage, model: agent.model, invalid: errs.join('; ') };
   }
-  return { raw, costUsd: res.costUsd || 0, model: agent.model, invalid: null };
+  return { raw, costUsd: res.costUsd || 0, tokens: res.usage, model: agent.model, invalid: null };
 }
 
 module.exports = {
@@ -391,6 +416,7 @@ module.exports = {
   complexityOf,
   estimate,
   mockAnswer,
+  monthUsage,
   normalizeAnswer,
   readConversation,
   runHistory,
