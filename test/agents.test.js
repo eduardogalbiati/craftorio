@@ -12,6 +12,17 @@ function tmp(t) {
   return path.join(dir, 'agents');
 }
 
+// A copy of the bundled workflows, so a test can add/break a file without touching workflows/.
+function tmpWorkflows(t) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'workflows-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const src = path.join(__dirname, '..', 'workflows');
+  for (const f of fs.readdirSync(src).filter((x) => /\.ya?ml$/i.test(x))) {
+    fs.copyFileSync(path.join(src, f), path.join(dir, f));
+  }
+  return dir;
+}
+
 const LOOK = { body: '#10b981', shell: '#FFFFFF', visor: '#000000', glow: '#FACC15', eyes: 'arcs', emblem: 'rocket' };
 
 test('the supervisor and the Product Owner are always listed first, even with no agents folder', (t) => {
@@ -108,6 +119,154 @@ test('a broken agent file is listed with its error instead of breaking the list'
   const list = agents.listAgents(dir);
   assert.equal(list[2].id, 'broken');
   assert.ok(list[2].error);
+});
+
+// ---- workflow agents (#68) ----------------------------------------------------------------
+
+test('listAgents without a workflowsDir keeps the old behaviour: no workflow agents', (t) => {
+  const dir = tmp(t);
+  const list = agents.listAgents(dir);
+  assert.deepEqual(list.map((x) => x.id), ['supervisor', 'product-owner']);
+});
+
+test('listAgents(dir, { workflowsDir }) lists every agent of every workflow after the supervisor and the Product Owner', (t) => {
+  const dir = tmp(t);
+  const workflowsDir = tmpWorkflows(t);
+  const list = agents.listAgents(dir, { workflowsDir });
+  assert.equal(list[0].id, 'supervisor');
+  assert.equal(list[1].id, 'product-owner');
+
+  const workflowIds = list.slice(2).map((x) => x.id);
+  assert.deepEqual(workflowIds, [
+    'workflow:ai-arena.yaml:contender_1',
+    'workflow:ai-arena.yaml:contender_2',
+    'workflow:ai-arena.yaml:contender_3',
+    'workflow:ai-arena.yaml:contender_4',
+    'workflow:ai-arena.yaml:contender_5',
+    'workflow:ai-arena.yaml:synthesizer',
+    'workflow:ai-arena.yaml:verifier',
+    'workflow:multi-model-review.yaml:opus',
+    'workflow:multi-model-review.yaml:sonnet',
+    'workflow:multi-model-review.yaml:gpt',
+    'workflow:multi-model-review.yaml:blaster',
+    'workflow:multi-model-review.yaml:judge',
+    'workflow:run-retrospective.yaml:retro',
+    'workflow:software-development-local-hero.yaml:developer',
+    'workflow:software-development-local-hero.yaml:reviewer',
+    'workflow:software-development-local-hero.yaml:test_writer',
+    'workflow:software-development-local-hero.yaml:builder',
+    'workflow:software-development-local-hero.yaml:verifier',
+    'workflow:software-development-local-hero.yaml:evidence',
+    'workflow:software-development.yaml:developer',
+    'workflow:software-development.yaml:reviewer',
+    'workflow:software-development.yaml:test_writer',
+    'workflow:software-development.yaml:builder',
+    'workflow:software-development.yaml:verifier',
+    'workflow:software-development.yaml:evidence',
+    'workflow:software-development.yaml:ci_pusher',
+    'workflow:software-development.yaml:pr_babysitter',
+    'workflow:software-development.yaml:deployer',
+    'workflow:writer-reviewer.yaml:writer',
+    'workflow:writer-reviewer.yaml:reviewer',
+    'workflow:writer-reviewer.yaml:signoff',
+  ]);
+
+  const testWriter = list.find((x) => x.id === 'workflow:software-development.yaml:test_writer');
+  assert.equal(testWriter.key, 'test_writer');
+  assert.equal(testWriter.name, 'Test writer');
+  assert.deepEqual(testWriter.workflow, { file: 'software-development.yaml', name: 'software-development' });
+  assert.equal(testWriter.readOnly, true);
+  assert.equal(testWriter.session, 'persistent');
+  assert.ok(testWriter.skills.includes('unit-test-writer'), 'the templated skill name resolves to its family');
+  assert.ok(testWriter.steps.includes('test'), 'the step that runs it is listed');
+
+  // the fan-out step of ai-arena (`agents: [contender_1, ...]`) lists each contender
+  const contender1 = list.find((x) => x.id === 'workflow:ai-arena.yaml:contender_1');
+  assert.ok(contender1.steps.includes('compete'));
+});
+
+test('template resolution: writer-reviewer\'s user-picked models show "picked at start", its fixed signoff does not', (t) => {
+  const dir = tmp(t);
+  const workflowsDir = tmpWorkflows(t);
+  const list = agents.listAgents(dir, { workflowsDir });
+
+  const writer = list.find((x) => x.id === 'workflow:writer-reviewer.yaml:writer');
+  assert.equal(writer.provider, 'claude');
+  assert.equal(writer.providerType, 'claude-code');
+  assert.equal(writer.model, 'claude-opus-5-5');
+  assert.equal(writer.effort, 'high');
+  assert.deepEqual([...writer.pickedAtStart].sort(), ['effort', 'model', 'provider']);
+
+  const signoff = list.find((x) => x.id === 'workflow:writer-reviewer.yaml:signoff');
+  assert.equal(signoff.provider, 'claude');
+  assert.equal(signoff.model, 'claude-opus-5-5');
+  assert.equal(signoff.effort, 'high');
+  assert.deepEqual(signoff.pickedAtStart, []);
+});
+
+test('a workflow file that fails to load shows one entry with its error; the other workflows still list', (t) => {
+  const dir = tmp(t);
+  const workflowsDir = tmpWorkflows(t);
+  fs.writeFileSync(path.join(workflowsDir, 'broken.yaml'), 'steps: [');
+  const list = agents.listAgents(dir, { workflowsDir });
+
+  const broken = list.filter((x) => x.workflowError);
+  assert.equal(broken.length, 1);
+  assert.equal(broken[0].id, 'workflow:broken.yaml');
+  assert.ok(broken[0].error);
+
+  // the other workflows still produced their agents
+  assert.ok(list.some((x) => x.id === 'workflow:writer-reviewer.yaml:writer'));
+  assert.ok(list.some((x) => x.id === 'workflow:ai-arena.yaml:synthesizer'));
+});
+
+test('saveAgent on a workflow agent only saves its look; the YAML name, prompt and model are kept', (t) => {
+  const dir = tmp(t);
+  const workflowsDir = tmpWorkflows(t);
+  const id = agents.workflowAgentId('writer-reviewer.yaml', 'writer');
+
+  const saved = agents.saveAgent(dir, id, { name: 'Renamed', prompt: 'Different prompt', skills: ['z'], model: 'other-model', appearance: LOOK }, { workflowsDir });
+  assert.equal(saved.name, 'Writer');
+  assert.notEqual(saved.prompt, 'Different prompt');
+  assert.equal(saved.model, 'claude-opus-5-5');
+  assert.equal(saved.appearance.emblem, 'rocket');
+
+  const lookFile = path.join(dir, 'workflows', 'writer-reviewer.yaml', 'writer.json');
+  assert.deepEqual(Object.keys(JSON.parse(fs.readFileSync(lookFile, 'utf8'))).sort(), ['appearance', 'updatedAt']);
+
+  // the look file never shows up as a user agent
+  const list = agents.listAgents(dir, { workflowsDir });
+  assert.equal(list.find((x) => x.id === 'writer'), undefined);
+  assert.equal(list.find((x) => x.id === id).appearance.emblem, 'rocket');
+
+  const cleared = agents.saveAgent(dir, id, { appearance: null }, { workflowsDir });
+  assert.equal(cleared.appearance, null);
+  assert.equal(fs.existsSync(lookFile), false);
+});
+
+test('saveAgent on an unknown workflow agent throws', (t) => {
+  const dir = tmp(t);
+  const workflowsDir = tmpWorkflows(t);
+  assert.throws(() => agents.saveAgent(dir, 'workflow:nope.yaml:foo', { appearance: LOOK }, { workflowsDir }), /Workflow agent not found/);
+});
+
+test('agentPathForRemoval refuses a workflow agent: it belongs to its workflow', (t) => {
+  const dir = tmp(t);
+  const id = agents.workflowAgentId('writer-reviewer.yaml', 'writer');
+  assert.throws(() => agents.agentPathForRemoval(dir, id), /belongs to its workflow/);
+});
+
+test('editing a workflow file on disk is reflected in the next listAgents', (t) => {
+  const dir = tmp(t);
+  const workflowsDir = tmpWorkflows(t);
+  const before = agents.listAgents(dir, { workflowsDir }).find((x) => x.id === 'workflow:writer-reviewer.yaml:signoff');
+  assert.equal(before.model, 'claude-opus-5-5');
+
+  const file = path.join(workflowsDir, 'writer-reviewer.yaml');
+  fs.writeFileSync(file, fs.readFileSync(file, 'utf8').replace('model: claude-opus-5-5\n    effort: high\n    session: ephemeral', 'model: claude-sonnet-5-5\n    effort: high\n    session: ephemeral'));
+
+  const after = agents.listAgents(dir, { workflowsDir }).find((x) => x.id === 'workflow:writer-reviewer.yaml:signoff');
+  assert.equal(after.model, 'claude-sonnet-5-5');
 });
 
 test('the emblems and eyes match the ones the robots can draw', () => {

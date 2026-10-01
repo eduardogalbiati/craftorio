@@ -21,6 +21,8 @@ function loadHelpers() {
   }
   const sandbox = {
     providerType,
+    chat: { model: { run: null } },
+    window: { AgentLooks: null }, // the agent's saved look (Agents menu), when one exists (#68)
     Robots: {
       svg: (variant, st, opts) => ({ variant, st, ...opts }),
       variantFor: (type) => type,
@@ -33,10 +35,10 @@ function loadHelpers() {
     + 'this.helpers = { robot, cardLines };',
     sandbox,
   );
-  return sandbox.helpers;
+  return { ...sandbox.helpers, sandbox };
 }
 
-const { robot, cardLines } = loadHelpers();
+const { robot, cardLines, sandbox } = loadHelpers();
 
 test('robot(): an agent on the left is mirrored to face right, toward the centre of the screen', () => {
   assert.equal(robot({ agent: 'developer', side: 'left', provider: 'claude', model: 'claude-opus-5-5' }).mirror, true);
@@ -51,6 +53,19 @@ test('robot(): an agent on the right is not mirrored, so it faces left, toward t
 test('robot(): the supervisor is always mirrored, whatever side it is given', () => {
   assert.equal(robot({ agent: 'supervisor', side: 'right' }).mirror, true);
   assert.equal(robot({ agent: '_supervisor' }).mirror, true);
+});
+
+test('robot(): uses the workflow agent\'s saved look (Agents menu) over the provider\'s robot, when one exists', (t) => {
+  t.after(() => { sandbox.chat.model.run = null; sandbox.window.AgentLooks = null; });
+  sandbox.chat.model.run = { workflow: 'writer-reviewer.yaml' };
+  sandbox.window.AgentLooks = { forWorkflow: (workflow, agent) => (workflow === 'writer-reviewer.yaml' && agent === 'writer' ? 'studio' : null) };
+  assert.equal(robot({ agent: 'writer', provider: 'claude', model: 'claude-opus-5-5' }).variant, 'studio');
+  // a different agent of the same workflow has no saved look: falls back to the provider's robot
+  assert.equal(robot({ agent: 'reviewer', provider: 'codex', model: 'gpt-6-luna' }).variant, 'codex-cli');
+});
+
+test('robot(): without a saved look, draws the provider\'s robot as before', () => {
+  assert.equal(robot({ agent: 'developer', provider: 'claude', model: 'claude-opus-5-5' }).variant, 'claude-code');
 });
 
 test('cardLines(): the hover card shows provider, model and effort, then the session mode and turn', () => {
