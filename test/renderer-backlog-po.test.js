@@ -9,11 +9,12 @@ const path = require('path');
 
 const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'backlog-po.js'), 'utf8');
 
-test('groupHtml renders the workflow, size, warnings and the Assign/Add to roadmap buttons, never applying anything by itself', () => {
+test('groupHtml renders the workflow, size, warnings, the mode reason and the Assign/Add to roadmap buttons, never applying anything by itself', () => {
   const fn = /function groupHtml\(g, m, n\)[\s\S]*?\n  \}/.exec(src)[0];
   assert.match(fn, /<span class="mono">\$\{esc\(g\.workflow\)\}<\/span>/);
   assert.match(fn, /\$\{sizeText\(g\)\}/);
   assert.match(fn, /\$\{\(g\.warnings \|\| \[\]\)\.map\(\(w\) => `<div class="small warn-text">⚠ \$\{esc\(w\)\}<\/div>`\)\.join\(''\)\}/);
+  assert.match(fn, /\$\{g\.modeReason \? `<div class="small"><span class="muted">mode:<\/span> \$\{esc\(g\.modeReason\)\}<\/div>` : ''\}/);
   assert.match(fn, /data-po-act="assign"/);
   assert.match(fn, /data-po-act="roadmap"/);
   assert.doesNotMatch(fn, /api\.(startRun|assignIssues)/); // rendering never starts a run or assigns by itself
@@ -43,9 +44,10 @@ test('apply: Assign and Add to roadmap act on one proposed group through window.
   assert.match(fn, /None of these issues is To do any more\./); // every issue in the group was skipped
 });
 
-test('apply: Add all to the roadmap plans every group as a stage, ordered by its proposed stage number', () => {
+test('apply: Add all to the roadmap plans every group as a stage, ordered by its proposed stage number, each item carrying the group\'s reason and modeReason', () => {
   const fn = /async function apply\(act, el\)[\s\S]*?\n  \}/.exec(src)[0];
   assert.match(fn, /const stages = \[\.\.\.new Set\(answer\.groups\.map\(\(g\) => g\.stage\)\)\]\.sort\(\(a, b\) => a - b\)/);
+  assert.match(fn, /items: answer\.groups\.filter\(\(g\) => g\.stage === s\)\.map\(\(g\) => \(\{ workflow: g\.workflow, issues: g\.issues, inputs: g\.inputs, mock: !!state\.simulationOnly, reason: g\.reason, modeReason: g\.modeReason \}\)\)/);
   assert.match(fn, /await api\.proposeRoadmap\(po\.projectId, \{ stages \}, false\);/);
 });
 

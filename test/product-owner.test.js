@@ -141,6 +141,27 @@ test('normalizeAnswer keeps only known issue numbers and workflow files, and fil
   assert.equal(out.enrich[0].link, 'https://github.com/eduardogalbiati/multiagent-orchestrator/issues/103');
 });
 
+test('normalizeAnswer maps a group\'s mode_reason to modeReason, absent when the group has none', () => {
+  const raw = {
+    summary: 'ok',
+    groups: [
+      { issues: [1], workflow: 'software-development.yaml', reason: 'r', mode_reason: 'Validated: the owner can try it in the app' },
+      { issues: [2], workflow: 'software-development.yaml', reason: 'r' },
+    ],
+  };
+  const out = productOwner.normalizeAnswer(raw, { issues: ISSUES, history: [], workflows: [{ file: 'software-development.yaml' }] });
+  assert.equal(out.groups[0].modeReason, 'Validated: the owner can try it in the app');
+  assert.equal('modeReason' in out.groups[1], false);
+});
+
+test('RULES states the rule for mode_reason (validated for a change the owner can try in the app, auto otherwise): checked on the source, RULES is not exported', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'product-owner.js'), 'utf8');
+  const rules = /const RULES = \[[\s\S]*?\]\.join\('\\n'\);/.exec(src)[0];
+  assert.match(rules, /mode_reason/);
+  assert.match(rules, /validated/);
+  assert.match(rules, /auto/);
+});
+
 test('sizeGroup warns at a complexity known to hit the context limit, and at a lower one for several issues', () => {
   assert.deepEqual(productOwner.sizeGroup([1], ISSUES, []).warnings, []); // complexity 2 alone: no warning
   const overContext = productOwner.sizeGroup([1, 2], ISSUES, []); // complexity 7: a group this size hit the context limit

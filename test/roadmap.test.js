@@ -67,6 +67,36 @@ test('saveStages keeps status/runId/runs by item id when the UI re-saves', (t) =
   assert.equal(resaved.stages[0].note, 'do this first');
 });
 
+test('saveStages keeps reason and modeReason (also from mode_reason), adding no keys when both are empty', (t) => {
+  const dir = tmp(t);
+  const withReasons = roadmaps.saveStages(dir, 'proj', [
+    { items: [
+      { workflow: 'a.yaml', number: 1, reason: 'Groups the UI fixes together', mode_reason: 'Validated: the owner can try it in the app' },
+      { workflow: 'a.yaml', number: 2 },
+    ] },
+  ]);
+  const [withReason, withoutReason] = withReasons.stages[0].items;
+  assert.equal(withReason.reason, 'Groups the UI fixes together');
+  assert.equal(withReason.modeReason, 'Validated: the owner can try it in the app');
+  assert.equal('reason' in withoutReason, false);
+  assert.equal('modeReason' in withoutReason, false);
+});
+
+test('saveStages keeps reason/modeReason from the previous item with the same id when the UI omits them', (t) => {
+  const dir = tmp(t);
+  const first = roadmaps.saveStages(dir, 'proj', [
+    { items: [{ workflow: 'a.yaml', number: 1, reason: 'Groups the UI fixes together', modeReason: 'Validated' }] },
+  ]);
+  const item1 = first.stages[0].items[0];
+
+  const resaved = roadmaps.saveStages(dir, 'proj', [
+    { id: first.stages[0].id, items: [{ id: item1.id, workflow: 'a.yaml', number: 1 }] },
+  ]);
+  const kept = resaved.stages[0].items[0];
+  assert.equal(kept.reason, 'Groups the UI fixes together');
+  assert.equal(kept.modeReason, 'Validated');
+});
+
 test('saveStages throws when an issue is in two unfinished roadmap items', (t) => {
   const dir = tmp(t);
   assert.throws(() => roadmaps.saveStages(dir, 'proj', [
