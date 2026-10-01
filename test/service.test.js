@@ -1317,3 +1317,82 @@ test('roadmap: reordering stages on save persists the new order', async (t) => {
   assert.deepEqual(reordered.roadmap.stages.map((s) => s.items[0].number), [3, 1, 2]);
   assert.deepEqual(api['roadmap:get']({ projectId: p.id }).stages.map((s) => s.items[0].number), [3, 1, 2]);
 });
+
+// ---- Backlog issue enrichment: run:start records the issue, backlog:save-doc saves to it (#103) --
+
+test('run:start forwards projectId and issues (sanitized), recorded in the run and shown by runs:list', async (t) => {
+  const { service, api } = makeService(t);
+  const ws = service.workspace();
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'service-enrich-'));
+  t.after(() => fs.rmSync(folder, { recursive: true, force: true }));
+  const p = await api['projects:create']({ name: 'demo', folder });
+  const { runId } = await api['run:start']({
+    file: 'writer-reviewer.yaml', inputs: { prompt: 'Enrich #29', goal: 'g' }, mock: true, projectId: p.id,
+    issues: [{ number: 29, url: 'https://github.com/o/r/issues/29', title: 'Backlog screen', extra: 'dropped' }],
+  });
+  const run = api['runs:active']().find((r) => r.runId === runId);
+  assert.equal(run.projectId, p.id);
+  assert.deepEqual(run.issues, [{ number: 29, url: 'https://github.com/o/r/issues/29', title: 'Backlog screen' }]);
+  api['run:stop']({ runId });
+});
+
+// Drives a writer-reviewer mock run to acceptance through the service, resolving its non-boolean
+// gate (decide: accept/revise/stop) and any other one with its first choice.
+async function acceptedWriterReviewerRun(service, api, inputs, start = {}) {
+  const events = [];
+  const finished = new Promise((resolve) => {
+    const onEvent = (ev) => {
+      events.push(ev);
+      if (ev.type === 'approval.requested') {
+        const answer = ev.step_id === 'decide' ? 'accept' : ev.choices?.[0]?.id ?? true;
+        setImmediate(() => api['approval:resolve']({ id: ev.approval_id, answer, runId: ev.run_id }));
+      }
+      if (ev.type === 'workflow.finished') { service.events.off('run:event', onEvent); resolve(ev); }
+    };
+    service.events.on('run:event', onEvent);
+  });
+  const { runId, runDir } = await api['run:start']({
+    file: 'writer-reviewer.yaml', inputs: { prompt: 'A one-page PRD', goal: 'Every requirement is testable', ...inputs },
+    mock: true, mockSequences: { score: [9] }, ...start,
+  });
+  const end = await finished;
+  return { runId, runDir, end, events };
+}
+
+test('backlog:save-doc: preview works for a finished, accepted run started from an issue', async (t) => {
+  const { service, api } = makeService(t);
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'service-save-preview-'));
+  t.after(() => fs.rmSync(folder, { recursive: true, force: true }));
+  const p = await api['projects:create']({ name: 'demo', folder });
+  api['projects:update']({ id: p.id, patch: { repo: 'https://github.com/o/r' } });
+  const { runId, end } = await acceptedWriterReviewerRun(service, api, {}, {
+    projectId: p.id, issues: [{ number: 29, url: 'https://github.com/o/r/issues/29', title: 'Backlog screen' }],
+  });
+  assert.equal(end.status, 'success', end.error);
+
+  const out = await api['backlog:save-doc']({ runId, mode: 'replace', preview: true });
+  assert.equal(out.preview, true);
+  assert.equal(out.issue.number, 29);
+  assert.match(out.command, /^gh issue edit 29/);
+});
+
+test('backlog:save-doc: a real save (preview:false) on a non-mock run is refused by simulation-only', async (t) => {
+  const { service, api } = makeService(t);
+  const ws = service.workspace();
+  const runDir = path.join(ws.runs, '20260101-000000-enrich0001');
+  fs.mkdirSync(runDir, { recursive: true });
+  fs.writeFileSync(path.join(runDir, 'document.md'), '# Enriched issue');
+  fs.writeFileSync(path.join(runDir, 'events.jsonl'), JSON.stringify({
+    ts: '2026-01-01T00:00:00Z', type: 'workflow.started', workflow: 'writer-reviewer',
+    issues: [{ number: 29, url: 'https://github.com/o/r/issues/29', title: 'T' }], mock: false,
+  }) + '\n' + JSON.stringify({ ts: '2026-01-01T00:01:00Z', type: 'workflow.finished', status: 'success' }) + '\n');
+  await assert.rejects(api['backlog:save-doc']({ runId: '20260101-000000-enrich0001', mode: 'replace', preview: false }), /Simulation only/);
+});
+
+test('backlog:save-doc: a run still in progress is refused', async (t) => {
+  const { service, api } = makeService(t);
+  const { runId } = await api['run:start']({ file: 'fixture-service.yaml', inputs: {}, mock: true });
+  await until(() => api['runs:active']().some((r) => r.runId === runId && r.waiting > 0));
+  await assert.rejects(api['backlog:save-doc']({ runId, mode: 'replace', preview: true }), /still in progress/);
+  api['run:stop']({ runId });
+});

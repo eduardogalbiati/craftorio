@@ -440,6 +440,214 @@ test('a queued group becomes one task listing every issue, with `issues` next to
   assert.deepEqual(backlog.runInputs(ref(7, 'x'), wf, 'C:/repo').issues, ['https://github.com/o/r/issues/7']);
 });
 
+test('a Write & Review run enriching an issue is shown on its card and never decides the column', () => {
+  const issue = (number) => ({ number, state: 'open', url: `https://github.com/o/r/issues/${number}` });
+  const runs = [
+    { runId: 'enrich', workflow: 'writer-reviewer', status: 'success', startedAt: '2026-09-02', issues: [{ number: 1, url: 'https://github.com/o/r/issues/1' }] },
+  ];
+  const [out] = backlog.linkRuns([issue(1)], runs);
+  assert.equal(out.runs[0].enrich, true);
+  assert.equal(out.column, 'todo'); // only a Write & Review run: the issue is still untouched
+});
+
+test('a real implementation run still decides the column alongside an enrich run', () => {
+  const issue = { number: 1, state: 'open', url: 'https://github.com/o/r/issues/1' };
+  const runs = [
+    { runId: 'enrich', workflow: 'writer-reviewer', status: 'success', startedAt: '2026-09-03', issues: [{ number: 1, url: issue.url }] },
+    { runId: 'impl', workflow: 'software-development', status: 'success', startedAt: '2026-09-01', issues: [{ number: 1, url: issue.url }] },
+  ];
+  const [out] = backlog.linkRuns([issue], runs);
+  assert.equal(out.column, 'in_progress');
+  assert.deepEqual(out.runs.map((r) => [r.runId, !!r.enrich]), [['enrich', true], ['impl', false]]);
+});
+
+// ---- save a document to its issue (#103) --------------------------------------------------------
+test('issueSaveBody: replace keeps the original at the end in a collapsed <details> block', () => {
+  const body = backlog.issueSaveBody({ mode: 'replace', document: '# Enriched\n\nBody.', original: 'Original text.' });
+  assert.equal(body, '# Enriched\n\nBody.\n\n<details><summary>Original description</summary>\n\nOriginal text.\n\n</details>\n');
+});
+
+test('issueSaveBody: replace without an original gives the document only', () => {
+  assert.equal(backlog.issueSaveBody({ mode: 'replace', document: 'Doc.', original: '' }), 'Doc.\n');
+  assert.equal(backlog.issueSaveBody({ mode: 'replace', document: 'Doc.' }), 'Doc.\n');
+});
+
+test('issueSaveBody: saving again never nests the original block', () => {
+  const already = 'New doc 1.\n\n<details><summary>Original description</summary>\n\nOriginal text.\n\n</details>\n';
+  const body = backlog.issueSaveBody({ mode: 'replace', document: 'New doc 2.', original: already });
+  assert.equal(body, 'New doc 2.\n\n<details><summary>Original description</summary>\n\nOriginal text.\n\n</details>\n');
+});
+
+test('issueSaveBody: a comment is the document only, whatever the original', () => {
+  assert.equal(backlog.issueSaveBody({ mode: 'comment', document: 'An RFC.', original: 'Kept as is.' }), 'An RFC.\n');
+});
+
+test('issueSaveBody: CRLF is normalized', () => {
+  const body = backlog.issueSaveBody({ mode: 'replace', document: 'Doc.\r\nLine 2.', original: 'Old.\r\nLine 2.' });
+  assert.equal(body, 'Doc.\nLine 2.\n\n<details><summary>Original description</summary>\n\nOld.\nLine 2.\n\n</details>\n');
+});
+
+test('issueSaveCommand: GitHub replace/comment call gh with --body-file; Enterprise prepends the host', () => {
+  const file = 'C:/run/issue-save.md';
+  const replace = backlog.issueSaveCommand({ platform: 'github', repo: 'https://github.com/o/r', number: 29, mode: 'replace', file, text: 'x' });
+  assert.deepEqual(replace, { cli: 'gh', args: ['issue', 'edit', '29', '--repo', 'o/r', '--body-file', file], display: `gh issue edit 29 --repo o/r --body-file ${file}` });
+  const comment = backlog.issueSaveCommand({ platform: 'github', repo: 'https://github.com/o/r', number: 29, mode: 'comment', file, text: 'x' });
+  assert.deepEqual(comment.args, ['issue', 'comment', '29', '--repo', 'o/r', '--body-file', file]);
+  const ghe = backlog.issueSaveCommand({ platform: 'github', repo: 'https://ghe.corp/o/r', number: 1, mode: 'replace', file, text: 'x' });
+  assert.ok(ghe.args.includes('ghe.corp/o/r'));
+});
+
+test('issueSaveCommand: GitLab replace/comment pass the text as an argument; a self-hosted GitLab gives an https:// target', () => {
+  const replace = backlog.issueSaveCommand({ platform: 'gitlab', repo: 'https://gitlab.com/g/r', number: 7, mode: 'replace', text: 'the body' });
+  assert.deepEqual(replace.args, ['issue', 'update', '7', '--repo', 'g/r', '--description', 'the body']);
+  const comment = backlog.issueSaveCommand({ platform: 'gitlab', repo: 'https://gitlab.com/g/r', number: 7, mode: 'comment', text: 'the body' });
+  assert.deepEqual(comment.args, ['issue', 'note', '7', '--repo', 'g/r', '--message', 'the body']);
+  const selfHosted = backlog.issueSaveCommand({ platform: 'gitlab', repo: 'git@gitlab.corp:g/sub/r.git', number: 7, mode: 'replace', text: 'x' });
+  assert.ok(selfHosted.args.includes('https://gitlab.corp/g/sub/r'));
+});
+
+test('issueSaveCommand: an unknown mode throws; Bitbucket has no CLI to save with; the text never appears in the display', () => {
+  assert.throws(() => backlog.issueSaveCommand({ platform: 'github', repo: 'https://github.com/o/r', number: 1, mode: 'delete', file: 'f', text: 'x' }), /Unknown save mode: delete/);
+  assert.throws(() => backlog.issueSaveCommand({ platform: 'bitbucket', repo: 'https://bitbucket.org/o/r', number: 1, mode: 'replace', text: 'x' }), /needs GitHub or GitLab/);
+  const secret = 'the full document text';
+  const cmd = backlog.issueSaveCommand({ platform: 'gitlab', repo: 'https://gitlab.com/g/r', number: 7, mode: 'comment', text: secret });
+  assert.ok(!cmd.display.includes(secret));
+  assert.match(cmd.display, /<document>/);
+});
+
+function savesTmp(t) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'issue-save-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  return dir;
+}
+
+function writeDoc(runDir, text = '# Enriched issue\n\nBody.') {
+  fs.mkdirSync(runDir, { recursive: true });
+  fs.writeFileSync(path.join(runDir, 'document.md'), text);
+}
+
+test('saveRunToIssue: preview never calls the CLI and returns the body and the command', async (t) => {
+  const runDir = savesTmp(t);
+  writeDoc(runDir);
+  const { exec, calls } = fakeExec('irrelevant');
+  const run = { runDir, status: 'success', issues: [{ number: 29, url: 'https://github.com/o/r/issues/29', title: 'Backlog screen' }] };
+  const out = await backlog.saveRunToIssue({ run, mode: 'replace', preview: true, platform: 'github', repo: 'https://github.com/o/r', cached: { body: 'Original.' }, exec });
+  assert.equal(out.preview, true);
+  assert.equal(calls.length, 0);
+  assert.match(out.body, /^# Enriched issue/);
+  assert.match(out.body, /<details><summary>Original description<\/summary>\n\nOriginal\./);
+  assert.match(out.command, /^gh issue edit 29 --repo o\/r --body-file/);
+  assert.equal(fs.existsSync(path.join(runDir, 'issue-saves.json')), false);
+});
+
+test('saveRunToIssue: a simulated run only previews, even without preview:true', async (t) => {
+  const runDir = savesTmp(t);
+  writeDoc(runDir);
+  const { exec, calls } = fakeExec('irrelevant');
+  const run = { runDir, status: 'success', mock: true, issues: [{ number: 29, url: 'https://github.com/o/r/issues/29' }] };
+  const out = await backlog.saveRunToIssue({ run, mode: 'comment', preview: false, platform: 'github', repo: 'https://github.com/o/r', exec });
+  assert.equal(out.preview, true);
+  assert.equal(calls.length, 0);
+  assert.equal(fs.existsSync(path.join(runDir, 'issue-saves.json')), false);
+});
+
+test('saveRunToIssue: replace reads the issue again first (the kept original is the current body) and records the save', async (t) => {
+  const runDir = savesTmp(t);
+  writeDoc(runDir, '# Enriched\n\nFresh content.');
+  const calls = [];
+  const exec = async (cli, args) => {
+    calls.push([cli, ...args]);
+    if (args[0] === 'issue' && args[1] === 'view') {
+      return JSON.stringify({ number: 29, title: 'Backlog screen', state: 'OPEN', url: 'https://github.com/o/r/issues/29', labels: [], body: 'The current description.', assignees: [] });
+    }
+    return '';
+  };
+  const run = { runDir, status: 'success', issues: [{ number: 29, url: 'https://github.com/o/r/issues/29', title: 'Backlog screen' }] };
+  const out = await backlog.saveRunToIssue({ run, mode: 'replace', preview: false, platform: 'github', repo: 'https://github.com/o/r', cached: { body: 'A stale cached body.' }, exec });
+  assert.ok(calls.some((c) => c[0] === 'gh' && c[1] === 'issue' && c[2] === 'view'));
+  assert.ok(calls.some((c) => c[0] === 'gh' && c[1] === 'issue' && c[2] === 'edit'));
+  assert.match(out.body, /The current description\./); // the fresh body, not the stale cache
+  assert.equal(out.saved.number, 29);
+  assert.equal(out.saved.mode, 'replace');
+  assert.equal(out.saved.platform, 'github');
+  assert.equal(fs.readFileSync(path.join(runDir, 'issue-save.md'), 'utf8'), out.body);
+  assert.deepEqual(backlog.readIssueSaves(runDir), [out.saved]);
+});
+
+test('saveRunToIssue: comment mode does not read the issue first and records the comment URL from stdout', async (t) => {
+  const runDir = savesTmp(t);
+  writeDoc(runDir);
+  const calls = [];
+  const exec = async (cli, args) => { calls.push([cli, ...args]); return 'created https://github.com/o/r/issues/29#issuecomment-1\n'; };
+  const run = { runDir, status: 'success', issues: [{ number: 29, url: 'https://github.com/o/r/issues/29' }] };
+  const out = await backlog.saveRunToIssue({ run, mode: 'comment', preview: false, platform: 'github', repo: 'https://github.com/o/r', exec });
+  assert.ok(!calls.some((c) => c[1] === 'view'));
+  assert.equal(out.saved.commentUrl, 'https://github.com/o/r/issues/29#issuecomment-1');
+});
+
+test('saveRunToIssue: a successful save refreshes the project\'s cached issue (its pull requests are kept)', async (t) => {
+  const runDir = savesTmp(t);
+  writeDoc(runDir);
+  const dir = savesTmp(t);
+  fs.writeFileSync(path.join(dir, 'p.json'), JSON.stringify({
+    projectId: 'p', platform: 'github', repo: 'https://github.com/o/r',
+    issues: [{ number: 29, title: 'Old title', state: 'open', url: 'https://github.com/o/r/issues/29', body: 'old', pullRequests: [{ number: 5, title: 'A PR', url: 'u', draft: false }] }],
+  }));
+  const exec = async (cli, args) => {
+    if (args[0] === 'issue' && (args[1] === 'edit' || args[1] === 'view')) {
+      if (args[1] === 'view') return JSON.stringify({ number: 29, title: 'New title', state: 'OPEN', url: 'https://github.com/o/r/issues/29', labels: [], body: 'New body', assignees: [] });
+      return '';
+    }
+    return '';
+  };
+  const run = { runDir, status: 'success', issues: [{ number: 29, url: 'https://github.com/o/r/issues/29' }] };
+  await backlog.saveRunToIssue({ run, mode: 'replace', preview: false, platform: 'github', repo: 'https://github.com/o/r', exec, dir, projectId: 'p' });
+  const cache = backlog.readBacklog(dir, 'p');
+  assert.equal(cache.issues[0].title, 'New title');
+  assert.equal(cache.issues[0].body, 'New body');
+  assert.deepEqual(cache.issues[0].pullRequests, [{ number: 5, title: 'A PR', url: 'u', draft: false }]);
+});
+
+test('saveRunToIssue: a failing refresh still records the save, with refreshError set', async (t) => {
+  const runDir = savesTmp(t);
+  writeDoc(runDir);
+  const dir = savesTmp(t); // no project cache file: fetchIssue after the save will fail to update it
+  let calls = 0;
+  const exec = async (cli, args) => {
+    calls += 1;
+    if (args[1] === 'view') throw new Error('gh issue view failed: not found');
+    return '';
+  };
+  const run = { runDir, status: 'success', issues: [{ number: 29, url: 'https://github.com/o/r/issues/29' }] };
+  const out = await backlog.saveRunToIssue({ run, mode: 'comment', preview: false, platform: 'github', repo: 'https://github.com/o/r', exec, dir, projectId: 'missing' });
+  assert.ok(out.saved);
+  assert.match(out.refreshError, /not found/);
+});
+
+test('saveRunToIssue: refuses a run with no issue, a run that did not succeed, or a missing/empty document', async (t) => {
+  const runDir = savesTmp(t);
+  const { exec } = fakeExec('x');
+  await assert.rejects(backlog.saveRunToIssue({ run: { runDir, status: 'success', issues: [] }, preview: true, platform: 'github', repo: 'r', exec }), /not started from an issue/);
+  await assert.rejects(backlog.saveRunToIssue({ run: { runDir, status: 'running', issues: [{ number: 1, url: 'u' }] }, preview: true, platform: 'github', repo: 'r', exec }), /Only an accepted document/);
+  await assert.rejects(backlog.saveRunToIssue({ run: { runDir, status: 'success', issues: [{ number: 1, url: 'u' }] }, preview: true, platform: 'github', repo: 'r', exec }), /has no document\.md/);
+  writeDoc(runDir, '   \n  ');
+  await assert.rejects(backlog.saveRunToIssue({ run: { runDir, status: 'success', issues: [{ number: 1, url: 'u' }] }, preview: true, platform: 'github', repo: 'r', exec }), /document\.md is empty/);
+});
+
+test('saveRunToIssue: an exec error (e.g. no auth) propagates and nothing is recorded', async (t) => {
+  const runDir = savesTmp(t);
+  writeDoc(runDir);
+  const exec = async () => { throw new Error('gh issue edit failed: not authenticated'); };
+  const run = { runDir, status: 'success', issues: [{ number: 29, url: 'https://github.com/o/r/issues/29' }] };
+  await assert.rejects(backlog.saveRunToIssue({ run, mode: 'comment', preview: false, platform: 'github', repo: 'https://github.com/o/r', exec }), /not authenticated/);
+  assert.equal(fs.existsSync(path.join(runDir, 'issue-saves.json')), false);
+});
+
+test('readIssueSaves: [] when the run has never saved to an issue', (t) => {
+  const runDir = savesTmp(t);
+  assert.deepEqual(backlog.readIssueSaves(runDir), []);
+});
+
 test('a queued issue becomes the run inputs: task, project folder and issue', () => {
   const item = { number: 7, url: 'https://github.com/o/r/issues/7', title: 'Add X', body: 'Details', inputs: { language: 'go', repo_path: '' } };
   const wf = { inputs: { task: {}, repo_path: { type: 'string' }, language: {}, issue: {}, run_id: { type: 'run' } } };

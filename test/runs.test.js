@@ -74,6 +74,19 @@ test('readRun gives the issues a run implements; a run recorded with one `issue`
   assert.equal(runs.readRun(root, 'none').issues, null);
 });
 
+test('readRun exposes the saves of its document to its issue (issue-saves.json), [] when there are none', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-issue-saves-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  fs.mkdirSync(path.join(root, 'a'));
+  fs.writeFileSync(path.join(root, 'a', 'events.jsonl'), jl({ ts: '2026-09-27T10:00:00Z', type: 'workflow.started', workflow: 'writer-reviewer', issues: [{ number: 29, url: 'https://github.com/o/r/issues/29', title: 'T' }] }));
+  const saved = [{ number: 29, url: 'https://github.com/o/r/issues/29', mode: 'replace', platform: 'github', at: '2026-09-27T11:00:00Z' }];
+  fs.writeFileSync(path.join(root, 'a', 'issue-saves.json'), JSON.stringify(saved));
+  fs.mkdirSync(path.join(root, 'b'));
+  fs.writeFileSync(path.join(root, 'b', 'events.jsonl'), jl({ ts: '2026-09-27T10:00:00Z', type: 'workflow.started', workflow: 'writer-reviewer' }));
+  assert.deepEqual(runs.readRun(root, 'a').issueSaves, saved);
+  assert.deepEqual(runs.readRun(root, 'b').issueSaves, []);
+});
+
 test('readRun exposes the PR from the latest step output with pr_url/pr_number, and the default title from the task', (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-pr-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));

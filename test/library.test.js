@@ -180,6 +180,7 @@ test('every templated skill in the workflows resolves for every enum input value
     for (const inputs of combos) {
       for (const n of names) {
         const id = nunjucks.renderString(n, { inputs });
+        if (!id) continue; // optional skill left empty (e.g. document_skill): the engine skips it, as loadSkills does
         assert.doesNotThrow(() => skills.resolveSkill([dir], id), `${file}: ${n} → ${id}`);
       }
     }

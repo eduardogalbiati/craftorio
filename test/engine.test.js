@@ -876,6 +876,28 @@ test('writer-reviewer: agents take provider, model and effort from the inputs', 
   assert.deepEqual(run.ctx.agents.writer, { provider: 'grok', model: 'grok-4.7' });
 });
 
+test('writer-reviewer: document_skill is loaded by the writer and the reviewer, not by the sign-off', { timeout: 60000 }, async () => {
+  const { events, finished, cleanup } = await runWriterReviewer({ inputs: { document_skill: 'rfc-writing' }, mockSequences: { score: [9] } });
+  try {
+    assert.equal(finished.status, 'success', finished.error);
+    const first = (step) => events.filter((e) => e.type === 'session.message_sent' && e.step_id === step)[0].prompt;
+    assert.match(first('write'), /<skill name="rfc-writing"/);
+    assert.match(first('review'), /<skill name="rfc-writing"/);
+    assert.doesNotMatch(first('signoff'), /<skill name="rfc-writing"/);
+  } finally { cleanup(); }
+});
+
+test('writer-reviewer: an empty document_skill (the default) adds no skill to any agent', { timeout: 60000 }, async () => {
+  const { events, finished, cleanup } = await runWriterReviewer({ mockSequences: { score: [9] } });
+  try {
+    assert.equal(finished.status, 'success', finished.error);
+    for (const step of ['write', 'review', 'signoff']) {
+      const first = events.filter((e) => e.type === 'session.message_sent' && e.step_id === step)[0].prompt;
+      assert.doesNotMatch(first, /<skill name=/);
+    }
+  } finally { cleanup(); }
+});
+
 test('writer-reviewer: notes go back to the writer until the score passes, then the supervisor asks the user', { timeout: 60000 }, async () => {
   const { events, finished, transitions, files, cleanup } = await runWriterReviewer();
   try {
