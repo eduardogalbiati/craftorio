@@ -1,7 +1,8 @@
-// src/renderer/views/supervisor/supervisor.js, src/renderer/builder.js and src/renderer/analytics.js
-// run only inside the Electron renderer (document, window.api), so the screen-context helpers they
-// expose for the Supervisor (#28) are pulled out of the source and evaluated in a sandbox, the way
-// test/renderer-run-gates.test.js checks app.js as a seam.
+// src/renderer/views/supervisor/supervisor.js, src/renderer/views/workflows/builder.js and
+// src/renderer/views/analytics/analytics.js run only inside the Electron renderer (document,
+// window.api), so the screen-context helpers they expose for the Supervisor (#28) are pulled out
+// of the source and evaluated in a sandbox, the way test/renderer-run-gates.test.js checks app.js
+// as a seam.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
@@ -9,8 +10,8 @@ const path = require('path');
 const vm = require('vm');
 
 const supervisorSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'views', 'supervisor', 'supervisor.js'), 'utf8');
-const builderSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'builder.js'), 'utf8');
-const analyticsSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'analytics.js'), 'utf8');
+const builderSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'views', 'workflows', 'builder.js'), 'utf8');
+const analyticsSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'views', 'analytics', 'analytics.js'), 'utf8');
 
 function loadSupervisorScreenContext() {
   const LABELS = /const LABELS = \{[\s\S]*?\n  \};/.exec(supervisorSrc)?.[0];

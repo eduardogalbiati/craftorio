@@ -1,19 +1,24 @@
-// src/renderer/app.js: the Artifacts screen's run groups and the Collapse all / Expand all toggle
-// (#126). It runs only inside the Electron renderer, so the relevant functions are pulled out of
-// the source and evaluated in a sandbox, the way test/renderer-run-gates.test.js checks app.js as a
-// seam. A minimal fake DOM stands in for #art-list and #art-toggle-all: enough to read back the
-// toggle button's label/aria state and the run groups' open/closed markup, not a full parser.
+// src/renderer/views/artifacts/artifacts.js: the Artifacts screen's run groups and the Collapse
+// all / Expand all toggle (#126); ART_KIND/artKindIcon/fmtSize stay shared in app.js (also used by
+// artifacts-panel.js). It runs only inside the Electron renderer, so the relevant functions are
+// pulled out of the source and evaluated in a sandbox, the way test/renderer-run-gates.test.js
+// checks app.js as a seam. A minimal fake DOM stands in for #art-list and #art-toggle-all: enough
+// to read back the toggle button's label/aria state and the run groups' open/closed markup, not a
+// full parser.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 
-const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'app.js'), 'utf8');
+const appSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'app.js'), 'utf8');
+const artifactsSrc = fs.readFileSync(
+  path.join(__dirname, '..', 'src', 'renderer', 'views', 'artifacts', 'artifacts.js'), 'utf8',
+);
 
-function extract(name, re) {
+function extract(name, re, src = artifactsSrc) {
   const m = re.exec(src);
-  assert.ok(m, `${name} not found in app.js: the source moved`);
+  assert.ok(m, `${name} not found: the source moved`);
   return m[0];
 }
 
@@ -48,9 +53,9 @@ function load({ runs = [], q = '', projectId = '', showSim = false, developerMod
     "const esc = (s) => String(s ?? '').replace(/[&<>\"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', \"'\": '&#39;' })[c]);",
     "const dateOf = (iso) => new Date(iso).toLocaleString('en-US', { dateStyle: 'short', timeStyle: 'short' });",
     "const devMode = () => !!state.settings.developerMode || !!state.simulationOnly;",
-    extract('ART_KIND', /const ART_KIND = \{[^\n]+\};/),
-    extract('artKindIcon', /const artKindIcon = [^\n]+/),
-    extract('fmtSize', /function fmtSize\(n\) \{[\s\S]*?\n\}/),
+    extract('ART_KIND', /const ART_KIND = \{[^\n]+\};/, appSrc),
+    extract('artKindIcon', /const artKindIcon = [^\n]+/, appSrc),
+    extract('fmtSize', /function fmtSize\(n\) \{[\s\S]*?\n\}/, appSrc),
     extract('artShowSim', /const artShowSim = [^\n]+/),
     extract('artifactRunsFiltered', /function artifactRunsFiltered\(\) \{[\s\S]*?\n\}/),
     extract('renderArtifactList', /function renderArtifactList\(\) \{[\s\S]*?\n\}/),
@@ -175,12 +180,11 @@ test('setArtGroupOpen / artGroupOpen: a run id not yet toggled by hand falls bac
   assert.equal(artGroupOpen('r1', true), false, 'once set, the remembered value wins over the default');
 });
 
-test('index.html: the toggle is a real <button> (Enter/Space work without extra wiring) under the search box, with aria-pressed set', () => {
-  const html = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'index.html'), 'utf8');
-  const searchIdx = html.indexOf('id="art-search"');
-  const toggleIdx = html.indexOf('id="art-toggle-all"');
+test('views/artifacts/artifacts.js markup: the toggle is a real <button> (Enter/Space work without extra wiring) under the search box, with aria-pressed set', () => {
+  const searchIdx = artifactsSrc.indexOf('id="art-search"');
+  const toggleIdx = artifactsSrc.indexOf('id="art-toggle-all"');
   assert.ok(searchIdx > 0 && toggleIdx > searchIdx, 'the toggle sits after the search box');
-  const tag = html.slice(toggleIdx - 40, toggleIdx);
+  const tag = artifactsSrc.slice(toggleIdx - 40, toggleIdx);
   assert.match(tag, /<button\b/);
-  assert.match(html.slice(toggleIdx, toggleIdx + 200), /aria-pressed="false"/);
+  assert.match(artifactsSrc.slice(toggleIdx, toggleIdx + 200), /aria-pressed="false"/);
 });

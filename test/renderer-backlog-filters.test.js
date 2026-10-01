@@ -1,13 +1,14 @@
-// src/renderer/backlog.js: the epic filter (#138, rule in backlog-epics.js, checked for real in
-// test/backlog-epics.test.js) combines with the label filter and the search, and narrows both the
-// list and the kanban through the same `isShown`. It runs only inside the Electron renderer, so these
-// tests check its source as a seam, the way test/renderer-backlog-assign.test.js checks the same file.
+// src/renderer/views/backlog/backlog.js: the epic filter (#138, rule in backlog-epics.js, checked
+// for real in test/backlog-epics.test.js) combines with the label filter and the search, and
+// narrows both the list and the kanban through the same `isShown`. It runs only inside the
+// Electron renderer, so these tests check its source as a seam, the way
+// test/renderer-backlog-assign.test.js checks the same file.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 
-const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'backlog.js'), 'utf8');
+const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'views', 'backlog', 'backlog.js'), 'utf8');
 
 test('matches: an issue must pass both the label filter and the epic filter (AND), before the search', () => {
   const fn = /const matches = \(i\) => \{[\s\S]*?\n  \};/.exec(src)[0];

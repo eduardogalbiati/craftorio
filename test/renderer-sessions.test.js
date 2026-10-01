@@ -1,6 +1,6 @@
-// src/renderer/sessions.js: the "Open terminals" list's hover pencil (rename) and trash can
-// (close), #54. It runs only inside the Electron renderer (document, window.api), so the rename
-// logic is pulled out of the source and evaluated in a sandbox, the way
+// src/renderer/views/sessions/sessions.js: the "Open terminals" list's hover pencil (rename) and
+// trash can (close), #54. It runs only inside the Electron renderer (document, window.api), so the
+// rename logic is pulled out of the source and evaluated in a sandbox, the way
 // test/renderer-run-chat.test.js checks run-chat.js as a seam; the markup itself (itemHtml) is
 // checked as source text, the way test/renderer-backlog-assign.test.js checks backlog.js.
 const test = require('node:test');
@@ -9,7 +9,7 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 
-const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'sessions.js'), 'utf8');
+const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'views', 'sessions', 'sessions.js'), 'utf8');
 
 test('itemHtml: every item shows a pencil and a trash can, not only a resumed CLI session', () => {
   // the Open terminals loop: rename/close are passed for every tab, unconditionally (no `t.kind === 'cli-resume' ? ... : null` gate)

@@ -1,9 +1,10 @@
-// src/renderer/backlog-epics.js: the epic filter rule, its options with counts, a stale filter falling
-// back, and an epic's progress. Pure functions, no DOM: backlog.js draws the select, badges and the
-// Epics view around them (checked separately, as a seam, in test/renderer-backlog-filters.test.js).
+// src/renderer/views/backlog/backlog-epics.js: the epic filter rule, its options with counts, a
+// stale filter falling back, and an epic's progress. Pure functions, no DOM: backlog.js draws the
+// select, badges and the Epics view around them (checked separately, as a seam, in
+// test/renderer-backlog-filters.test.js).
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const backlogEpics = require('../src/renderer/backlog-epics');
+const backlogEpics = require('../src/renderer/views/backlog/backlog-epics');
 
 test('matchesEpic: no filter shows every issue; "none" shows issues with no epic and leaves epics themselves out; an id shows only its members', () => {
   const member = { number: 1, epic: '#9' };

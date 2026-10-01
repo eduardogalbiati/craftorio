@@ -1,14 +1,14 @@
-// src/renderer/backlog-po.js: the Product Owner's drawer renders a proposed analysis (groups,
-// conflicts, issues to enrich) and applies a group only on the owner's click (Assign, roadmap). It
-// runs only inside the Electron renderer, so these tests check its source as a seam, the way
-// test/renderer-backlog-assign.test.js checks backlog.js.
+// src/renderer/views/backlog/backlog-po.js: the Product Owner's drawer renders a proposed
+// analysis (groups, conflicts, issues to enrich) and applies a group only on the owner's click
+// (Assign, roadmap). It runs only inside the Electron renderer, so these tests check its source as
+// a seam, the way test/renderer-backlog-assign.test.js checks backlog.js.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 
-const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'backlog-po.js'), 'utf8');
+const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'views', 'backlog', 'backlog-po.js'), 'utf8');
 
 // A group's applied state (#140) is derived (groupState) from the Backlog's own data (each issue's
 // roadmap place, queue entry and live run): pure enough to pull out of the source and run for real,

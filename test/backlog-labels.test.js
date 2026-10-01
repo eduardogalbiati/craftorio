@@ -1,8 +1,9 @@
-// src/renderer/backlog-labels.js: the Backlog label filter rule (#91). Plain logic, no DOM, so it
-// is required directly (module.exports), unlike the renderer files that only run inside Electron.
+// src/renderer/views/backlog/backlog-labels.js: the Backlog label filter rule (#91). Plain logic,
+// no DOM, so it is required directly (module.exports), unlike the renderer files that only run
+// inside Electron.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { hasLabel, labelGroup, labelOptions, matchesLabels, pruneLabels, toggleLabel } = require('../src/renderer/backlog-labels');
+const { hasLabel, labelGroup, labelOptions, matchesLabels, pruneLabels, toggleLabel } = require('../src/renderer/views/backlog/backlog-labels');
 
 const issue = (...labels) => ({ labels: labels.map((l) => (typeof l === 'string' ? { name: l } : l)) });
 

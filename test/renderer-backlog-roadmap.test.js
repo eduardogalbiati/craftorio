@@ -1,16 +1,16 @@
-// src/renderer/backlog-roadmap.js: the Backlog "Roadmap" view (#106, #110). It runs only inside the
-// Electron renderer (document, window.api), so it is loaded whole into a vm sandbox that stubs those
-// globals (esc, state, errMsg, devMode, confirmDialog, api, document, window), the way
-// test/renderer-run-view.test.js and test/renderer-run-gates.test.js check app.js as a seam. Each test
-// gets a fresh sandbox: `editing` / `adding` / `noteEditing` / the loaded workflows are the module's own
-// closure state, not reset between calls.
+// src/renderer/views/backlog/backlog-roadmap.js: the Backlog "Roadmap" view (#106, #110). It runs
+// only inside the Electron renderer (document, window.api), so it is loaded whole into a vm
+// sandbox that stubs those globals (esc, state, errMsg, devMode, confirmDialog, api, document,
+// window), the way test/renderer-run-view.test.js and test/renderer-run-gates.test.js check app.js
+// as a seam. Each test gets a fresh sandbox: `editing` / `adding` / `noteEditing` / the loaded
+// workflows are the module's own closure state, not reset between calls.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 
-const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'backlog-roadmap.js'), 'utf8');
+const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'views', 'backlog', 'backlog-roadmap.js'), 'utf8');
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
 function loadRoadmap({ listWorkflows, confirmDialog, querySelector, devMode } = {}) {

@@ -1,12 +1,13 @@
-// src/renderer/backlog.js: the Backlog "Assign a workflow" modal. It runs only inside the
-// Electron renderer (document, window.api), so these tests check its source as a seam, the way
-// test/agents.test.js checks robots.js and test/renderer-styles.test.js checks the stylesheets.
+// src/renderer/views/backlog/backlog.js: the Backlog "Assign a workflow" modal. It runs only
+// inside the Electron renderer (document, window.api), so these tests check its source as a seam,
+// the way test/agents.test.js checks robots.js and test/renderer-styles.test.js checks the
+// stylesheets.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 
-const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'backlog.js'), 'utf8');
+const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'views', 'backlog', 'backlog.js'), 'utf8');
 
 test('openAssign: the Simulation checkbox defaults to unchecked, not to Developer mode', () => {
   assert.match(src, /#assign-mock['"]\)\.checked\s*=\s*!!state\.simulationOnly/);

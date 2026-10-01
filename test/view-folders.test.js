@@ -1,7 +1,9 @@
 // src/renderer/views/<view>/: one folder per screen, registering itself with registerView instead of
-// index.html listing its markup and nav entry (#78, slice 1: Settings and Usage). A generic check
-// (any view folder registers under its own folder name and is loaded by index.html) plus a check that
-// the move left no duplicate markup behind in index.html, so this stays a pure move.
+// index.html listing its markup and nav entry (#78 moved Settings, Usage and Supervisor; #153 moved
+// dashboard, sessions, projects, project, backlog, artifacts, workflows, agents, skills and
+// analytics; the run screens follow in #154). A generic check (any view folder registers under its
+// own folder name and is loaded by index.html) plus a check that the move left no duplicate markup
+// behind in index.html, so this stays a pure move.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
@@ -12,8 +14,11 @@ const indexHtml = fs.readFileSync(path.join(rendererDir, 'index.html'), 'utf8');
 const viewIds = fs.readdirSync(path.join(rendererDir, 'views'), { withFileTypes: true })
   .filter((d) => d.isDirectory()).map((d) => d.name);
 
-test('views/: Settings, Usage and Supervisor have moved into their own folders', () => {
-  assert.deepEqual(viewIds.sort(), ['settings', 'supervisor', 'usage']);
+test('views/: the first 13 screens have moved into their own folders', () => {
+  assert.deepEqual(viewIds.sort(), [
+    'agents', 'analytics', 'artifacts', 'backlog', 'dashboard', 'project', 'projects',
+    'sessions', 'settings', 'skills', 'supervisor', 'usage', 'workflows',
+  ]);
 });
 
 for (const id of viewIds) {
@@ -57,4 +62,10 @@ test('index.html: no longer holds the Usage screen or its budget dialog inline (
 test('index.html: the Usage top-bar popover (app-wide, not part of the view) is still there', () => {
   // the popover lives in the shell (app.js/index.html), only the Usage screen itself moved
   assert.match(indexHtml, /id="usage-pop-month"/);
+});
+
+test('index.html: no longer holds the #153 screens inline (moved into their own views/<view>/ folders)', () => {
+  for (const id of ['agents', 'analytics', 'artifacts', 'backlog', 'dashboard', 'project', 'projects', 'sessions', 'skills', 'workflows']) {
+    assert.doesNotMatch(indexHtml, new RegExp(`id="view-${id}"`), `index.html still has id="view-${id}"`);
+  }
 });

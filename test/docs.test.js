@@ -28,6 +28,39 @@ test('the generated code map documents the channel manifest folder', () => {
   assert.match(codeMap(root), /src\/service\/channels\//);
 });
 
+// A temporary root with just src/renderer/views/: enough for codeMap's own views-folder rows
+// (it does not read skills/, docs/screens/ or README.md).
+function tmpViewsRoot(t, files) {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'code-map-views-'));
+  t.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
+  for (const [rel, content] of Object.entries(files)) {
+    const abs = path.join(tmp, 'src', 'renderer', 'views', rel);
+    fs.mkdirSync(path.dirname(abs), { recursive: true });
+    fs.writeFileSync(abs, content);
+  }
+  return tmp;
+}
+
+test('the generated code map adds no views/ rows when src/renderer/views/ does not exist', (t) => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'code-map-no-views-'));
+  t.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
+  // the "Adding things" section mentions `src/renderer/views/<view>/` by itself: only a generated
+  // row (naming a real folder) counts as evidence of a screen folder.
+  assert.doesNotMatch(codeMap(tmp), /\| `src\/renderer\/views\/[^`]+\/` \|/);
+});
+
+test('the generated code map adds one row per view folder, listing only its .js/.css files, sorted', (t) => {
+  const tmp = tmpViewsRoot(t, {
+    'foo/b.js': '// b\n',
+    'foo/a.js': '// a\n',
+    'foo/a.css': '/* a */\n',
+    'foo/readme.md': 'not js or css\n',
+  });
+  const map = codeMap(tmp);
+  assert.match(map, /\| `src\/renderer\/views\/foo\/` \| The foo screen's folder \(registered with `registerView`\): `a\.css`, `a\.js`, `b\.js`\. \|/);
+  assert.doesNotMatch(map, /readme\.md/);
+});
+
 // A temporary copy of only what the generator reads (skills/, docs/screens/, README.md): editing
 // one skill's summary there must not touch the real repository's files.
 function tmpDocsRoot(t) {
@@ -79,13 +112,14 @@ test('rendererAssets on the real src/renderer/: load-order guarantees the app de
   // view-registry.js and api-http.js are read as app.js loads
   assert.ok(at(scripts, 'view-registry.js') < at(scripts, 'app.js'));
   assert.ok(at(scripts, 'api-http.js') < at(scripts, 'app.js'));
-  // duo.js's window.ChatModels is read by arena.js and builder.js as they load
+  // duo.js's window.ChatModels is read by arena.js and views/workflows/builder.js as they load
   assert.ok(at(scripts, 'duo.js') < at(scripts, 'arena.js'));
-  assert.ok(at(scripts, 'duo.js') < at(scripts, 'builder.js'));
-  // robots.js's window.Robots is read by duo.js, agents.js and backlog-po.js as they load
+  assert.ok(at(scripts, 'duo.js') < at(scripts, 'views/workflows/builder.js'));
+  // robots.js's window.Robots is read by duo.js, views/agents/agents.js and
+  // views/backlog/backlog-po.js as they load
   assert.ok(at(scripts, 'robots.js') < at(scripts, 'duo.js'));
-  assert.ok(at(scripts, 'robots.js') < at(scripts, 'agents.js'));
-  assert.ok(at(scripts, 'robots.js') < at(scripts, 'backlog-po.js'));
+  assert.ok(at(scripts, 'robots.js') < at(scripts, 'views/agents/agents.js'));
+  assert.ok(at(scripts, 'robots.js') < at(scripts, 'views/backlog/backlog-po.js'));
   // every views/ script loads after every top-level one
   const firstView = scripts.findIndex((f) => f.startsWith('views/'));
   assert.ok(firstView > 0);
