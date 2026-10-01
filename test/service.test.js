@@ -1428,6 +1428,70 @@ test('localPreview:start: refuses without a command; a one-off config arg runs o
   await resolveAndWait(api, runId, gate.approval_id, 'approve');
 });
 
+// ---- #119: localPreview:info's install state, and the terminal's first line agreeing with it ------
+
+test('localPreview:info: install.state is "none" for a config with no install command, "will-run" with no node_modules, "skipped" once installed, and follows the suggestion without any config at all', async (t) => {
+  const { service, api } = makeService(t);
+  fs.writeFileSync(path.join(service.workspace().workflows, 'gate-run-app.yaml'), GATE_RUN_APP_WORKFLOW);
+  const repo = gitRepo(t);
+  fs.writeFileSync(path.join(repo.dir, 'package.json'), JSON.stringify({ scripts: { start: 'node server.js' } }));
+  const project = await api['projects:create']({ name: 'demo', folder: repo.dir });
+
+  const gateP = new Promise((resolve) => service.events.on('run:event', (ev) => { if (ev.type === 'approval.requested') resolve(ev); }));
+  const { runId } = await api['run:start']({ file: 'gate-run-app.yaml', inputs: { repo_path: repo.dir }, mock: true });
+  const gate = await gateP;
+
+  // no config at all: the install state follows the prefilled suggestion (a package.json with no lockfile: npm install)
+  const noConfig = await api['localPreview:info']({ runId, approvalId: gate.approval_id });
+  assert.equal(noConfig.suggestion.install, 'npm install');
+  assert.equal(noConfig.install.state, 'will-run', 'no node_modules yet: the suggested install would run');
+
+  // a config with a command but no install: 'none', never "will run"
+  api['projects:update']({ id: project.id, patch: { localPreview: { command: 'git --version' } } });
+  const noInstall = await api['localPreview:info']({ runId, approvalId: gate.approval_id });
+  assert.equal(noInstall.install.state, 'none');
+
+  // a config with an install command, but no node_modules yet: 'will-run'
+  api['projects:update']({ id: project.id, patch: { localPreview: { install: 'npm ci', command: 'git --version' } } });
+  const willRun = await api['localPreview:info']({ runId, approvalId: gate.approval_id });
+  assert.equal(willRun.install.state, 'will-run');
+  assert.match(willRun.install.text, /missing/);
+
+  // node_modules already there, lockfile unchanged: 'skipped'
+  fs.mkdirSync(path.join(repo.dir, 'node_modules'));
+  fs.writeFileSync(path.join(repo.dir, 'package-lock.json'), '{}');
+  const skipped = await api['localPreview:info']({ runId, approvalId: gate.approval_id });
+  assert.equal(skipped.install.state, 'skipped');
+
+  await resolveAndWait(api, runId, gate.approval_id, 'approve');
+});
+
+test('startLocalPreview: the terminal\'s first line announces the same install state localPreview:info reports for the same config', async (t) => {
+  const { service, api } = makeService(t);
+  fs.writeFileSync(path.join(service.workspace().workflows, 'gate-run-app.yaml'), GATE_RUN_APP_WORKFLOW);
+  const repo = gitRepo(t);
+  fs.writeFileSync(path.join(repo.dir, 'package.json'), JSON.stringify({ scripts: { start: 'node server.js' } }));
+  // a harmless, fast "install": no real npm call in a test
+  const project = await api['projects:create']({ name: 'demo', folder: repo.dir });
+  api['projects:update']({ id: project.id, patch: { localPreview: { install: 'node -e "0"', command: 'git --version' } } });
+
+  const gateP = new Promise((resolve) => service.events.on('run:event', (ev) => { if (ev.type === 'approval.requested') resolve(ev); }));
+  const { runId } = await api['run:start']({ file: 'gate-run-app.yaml', inputs: { repo_path: repo.dir }, mock: true });
+  const gate = await gateP;
+
+  const info = await api['localPreview:info']({ runId, approvalId: gate.approval_id });
+  assert.equal(info.install.state, 'will-run');
+
+  const out = [];
+  service.events.on('term:data', (p) => out.push(p));
+  const opened = await api['localPreview:start']({ runId, approvalId: gate.approval_id });
+  await untilTrue(() => out.some((p) => p.id === opened.id && p.data.includes('Run App:')));
+  const data = out.filter((p) => p.id === opened.id).map((p) => p.data).join('');
+  assert.ok(data.includes(`Run App: ${info.install.text}`), `the terminal's first line does not match localPreview:info's install text:\n${data}`);
+
+  await resolveAndWait(api, runId, gate.approval_id, 'approve');
+});
+
 // ---- #114: clipboard copy only accepts a run's own artifacts, inside the workspace or its project's folder ----
 
 test('existingArtifact: accepts a file inside the run\'s own folder; refuses anything that is not a recorded artifact', async (t) => {

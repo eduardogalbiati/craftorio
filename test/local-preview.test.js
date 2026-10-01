@@ -126,6 +126,96 @@ test('previewEnv: always simulation only, the target workspace/user-data, and ne
   assert.equal(env.MULTIAGENT_SIMULATION_ONLY, '1', 'still simulation only even on the real workspace');
 });
 
+// ---- #119: no sign-in and the right screen in a Run App copy of this app ----------------------
+
+test('previewEnv: MULTIAGENT_AUTH=off always, even on the real workspace (still simulation only); MULTIAGENT_START_VIEW only with a view', () => {
+  const base = { PATH: '/usr/bin' };
+  const scratch = lp.previewEnv(base, { workspace: '/scratch/workspace', userData: '/scratch/user-data' });
+  assert.equal(scratch.MULTIAGENT_AUTH, 'off');
+  assert.equal('MULTIAGENT_START_VIEW' in scratch, false, 'no view: nothing to open on');
+
+  const real = lp.previewEnv(base, { workspace: '/real', userData: null });
+  assert.equal(real.MULTIAGENT_AUTH, 'off', 'the real workspace is still simulation only: no sign-in either');
+
+  const withView = lp.previewEnv(base, { workspace: '/scratch/workspace', userData: '/scratch/user-data' }, null, { view: 'backlog' });
+  assert.equal(withView.MULTIAGENT_START_VIEW, 'backlog');
+});
+
+test('previewEnv: an extra env from the config never overrides the simulation guard', () => {
+  const env = lp.previewEnv({}, { workspace: '/scratch' }, { MULTIAGENT_SIMULATION_ONLY: '0', MULTIAGENT_AUTH: 'on' });
+  assert.equal(env.MULTIAGENT_SIMULATION_ONLY, '1');
+  assert.equal(env.MULTIAGENT_AUTH, 'off');
+});
+
+test('startView: the most touched view under src/renderer/views/<view>/ or src/renderer/<view>*.{js,css}; null without a match', () => {
+  assert.equal(lp.startView(['src/renderer/views/backlog/board.js', 'src/renderer/views/backlog/card.js', 'src/renderer/views/artifacts/list.js']), 'backlog', 'two files touch backlog, one touches artifacts');
+  assert.equal(lp.startView(['src/renderer/artifacts.js', 'src/renderer/style.css']), 'artifacts');
+  assert.equal(lp.startView(['src/service/index.js', 'README.md']), null, 'no renderer screen changed');
+  assert.equal(lp.startView([]), null);
+  assert.equal(lp.startView(undefined), null);
+});
+
+test('installState: a config with no install command reports "none" (#119 regression: a config without one must not say install will run)', (t) => {
+  const dir = tmp(t);
+  const stateFile = path.join(dir, '.state', 'install.json');
+  const s = lp.installState(dir, stateFile, { command: 'node server.js' });
+  assert.equal(s.state, 'none');
+  assert.match(s.text, /No install step/);
+});
+
+test('installState: an install command on a worktree with node_modules and an unchanged lockfile is "skipped"', (t) => {
+  const dir = tmp(t);
+  fs.writeFileSync(path.join(dir, 'package.json'), '{}');
+  fs.mkdirSync(path.join(dir, 'node_modules'));
+  fs.writeFileSync(path.join(dir, 'package-lock.json'), '{"a":1}');
+  const stateFile = path.join(dir, '.state', 'install.json');
+  const first = lp.installState(dir, stateFile, { install: 'npm ci', command: 'npm start' });
+  assert.equal(first.state, 'skipped', 'node_modules already there: trusted on the first preview');
+  assert.match(first.text, /already installed/);
+
+  lp.recordInstall(stateFile, lp.needsInstall(dir, stateFile).hash);
+  const again = lp.installState(dir, stateFile, { install: 'npm ci', command: 'npm start' });
+  assert.equal(again.state, 'skipped');
+  assert.match(again.text, /unchanged/);
+});
+
+test('installState: an install command with no node_modules at all is "will-run"', (t) => {
+  const dir = tmp(t);
+  fs.writeFileSync(path.join(dir, 'package.json'), '{}');
+  const stateFile = path.join(dir, '.state', 'install.json');
+  const s = lp.installState(dir, stateFile, { install: 'npm ci', command: 'npm start' });
+  assert.equal(s.state, 'will-run');
+  assert.match(s.text, /missing/);
+});
+
+test('installState: a changed lockfile since the last recorded install is "will-run" too', (t) => {
+  const dir = tmp(t);
+  fs.writeFileSync(path.join(dir, 'package.json'), '{}');
+  fs.mkdirSync(path.join(dir, 'node_modules'));
+  fs.writeFileSync(path.join(dir, 'package-lock.json'), '{"a":1}');
+  const stateFile = path.join(dir, '.state', 'install.json');
+  lp.recordInstall(stateFile, lp.needsInstall(dir, stateFile).hash);
+  fs.writeFileSync(path.join(dir, 'package-lock.json'), '{"a":2}');
+  const s = lp.installState(dir, stateFile, { install: 'npm ci', command: 'npm start' });
+  assert.equal(s.state, 'will-run');
+  assert.match(s.text, /lockfile changed/);
+});
+
+test('announced: the terminal\'s first line echoes the install state, then runs the real command; no note means no echo', () => {
+  const line = lp.announced('npm start', 'Install skipped: dependencies already installed.');
+  assert.equal(line, 'echo Run App: Install skipped: dependencies already installed. && npm start');
+  assert.equal(lp.announced('npm start', ''), 'npm start');
+  assert.equal(lp.announced('npm start', null), 'npm start');
+});
+
+test('announced: strips characters an echo in cmd.exe or /bin/sh could not pass through safely', () => {
+  const line = lp.announced('npm start', 'Install will run: a "weird" note & more; `rm -rf /`');
+  assert.match(line, /^echo Run App: /);
+  assert.equal(line.endsWith(' && npm start'), true);
+  const note = line.slice('echo Run App: '.length, -' && npm start'.length);
+  assert.doesNotMatch(note, /["&;`]/, 'the note itself carries none of the characters the shell would need escaped');
+});
+
 // ---- suggestConfig (#108): Run App's setup prefilled from the worktree when nothing is configured ----
 
 function writePkg(dir, pkg) {

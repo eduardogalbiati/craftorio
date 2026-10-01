@@ -416,6 +416,98 @@ test('loadWorkflow validates local_preview and diff_base: human_approval steps o
   }
 });
 
+// ---- #125: save_to_issue on a human_approval gate ("Accept and save to issue #n") ----------------
+
+test('loadWorkflow validates save_to_issue: human_approval steps only, and must name one of the step\'s own choices', () => {
+  const onAgentStep = `agents: { a: { provider: claude, model: m } }\nsteps:\n  - id: s1\n    agent: a\n    prompt: "do it"\n    save_to_issue: accept\n`;
+  const onGate = (choice) => `agents: { a: { provider: claude, model: m } }\nsteps:\n  - id: g\n    type: human_approval\n    message: "ok?"\n    choices:\n      - { id: accept, label: Accept }\n      - { id: stop, label: Stop }\n    save_to_issue: ${choice}\n`;
+  const tmp = path.join(os.tmpdir(), `wf-save-issue-${process.pid}.yaml`);
+  try {
+    fs.writeFileSync(tmp, onAgentStep);
+    assert.throws(() => loadWorkflow(tmp), /save_to_issue must be the id of one of the step's choices \(e\.g\. accept\), on a human_approval step/);
+
+    fs.writeFileSync(tmp, onGate('revise')); // not one of the gate's own choices
+    assert.throws(() => loadWorkflow(tmp), /save_to_issue must be the id of one of the step's choices/);
+
+    fs.writeFileSync(tmp, onGate('accept'));
+    assert.doesNotThrow(() => loadWorkflow(tmp));
+  } finally {
+    fs.unlinkSync(tmp);
+  }
+});
+
+test('a human_approval gate with save_to_issue carries { choice, issue } only for a run about an issue', { timeout: 30000 }, async (t) => {
+  const yaml = `apiVersion: multiagent/v1
+kind: Workflow
+metadata: { name: gate-save-issue }
+agents:
+  a: { provider: claude, model: m }
+steps:
+  - id: gate
+    type: human_approval
+    message: "ok?"
+    choices:
+      - { id: accept, label: Accept }
+      - { id: stop, label: Stop }
+    save_to_issue: accept
+`;
+  const { file } = tempWorkflow(t, yaml);
+  const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'));
+  t.after(() => fs.rmSync(runsDir, { recursive: true, force: true }));
+
+  const withIssue = new WorkflowRun({ file, inputs: {}, mock: true, runsDir, issue: { number: 42, url: 'https://github.com/o/r/issues/42', title: 'T' } });
+  const withIssueEvents = [];
+  withIssue.on('event', (ev) => { withIssueEvents.push(ev); if (ev.type === 'approval.requested') setImmediate(() => withIssue.resolveApproval(ev.approval_id, 'accept')); });
+  await withIssue.start();
+  const gate1 = withIssueEvents.find((e) => e.type === 'approval.requested');
+  assert.deepEqual(gate1.save_to_issue, { choice: 'accept', issue: { number: 42, url: 'https://github.com/o/r/issues/42', title: 'T' } });
+
+  const withoutIssue = new WorkflowRun({ file, inputs: {}, mock: true, runsDir });
+  const withoutIssueEvents = [];
+  withoutIssue.on('event', (ev) => { withoutIssueEvents.push(ev); if (ev.type === 'approval.requested') setImmediate(() => withoutIssue.resolveApproval(ev.approval_id, 'accept')); });
+  await withoutIssue.start();
+  const gate2 = withoutIssueEvents.find((e) => e.type === 'approval.requested');
+  assert.equal('save_to_issue' in gate2, false, 'no issue on the run: nothing to save to');
+});
+
+test('resolveApproval: intent save_to_issue is recorded only when the answer is the gate\'s own save_to_issue choice', { timeout: 30000 }, async (t) => {
+  const yaml = `apiVersion: multiagent/v1
+kind: Workflow
+metadata: { name: gate-save-issue-intent }
+agents:
+  a: { provider: claude, model: m }
+steps:
+  - id: gate
+    type: human_approval
+    message: "ok?"
+    choices:
+      - { id: accept, label: Accept }
+      - { id: stop, label: Stop }
+    save_to_issue: accept
+`;
+  const { file } = tempWorkflow(t, yaml);
+  const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'));
+  t.after(() => fs.rmSync(runsDir, { recursive: true, force: true }));
+  const issue = { number: 7, url: 'https://github.com/o/r/issues/7', title: 'T' };
+
+  const run = new WorkflowRun({ file, inputs: {}, mock: true, runsDir, issue });
+  const events = [];
+  run.on('event', (ev) => { events.push(ev); if (ev.type === 'approval.requested') setImmediate(() => run.resolveApproval(ev.approval_id, 'accept', 'user', '', 'save_to_issue')); });
+  await run.start();
+  const resolved = events.find((e) => e.type === 'approval.resolved');
+  assert.equal(resolved.choice, 'accept', 'the transition still runs off the plain choice');
+  assert.equal(resolved.intent, 'save_to_issue');
+
+  // the intent is dropped for any other answer, even on the same gate (never saves on "stop")
+  const run2 = new WorkflowRun({ file, inputs: {}, mock: true, runsDir, issue });
+  const events2 = [];
+  run2.on('event', (ev) => { events2.push(ev); if (ev.type === 'approval.requested') setImmediate(() => run2.resolveApproval(ev.approval_id, 'stop', 'user', '', 'save_to_issue')); });
+  await run2.start();
+  const resolved2 = events2.find((e) => e.type === 'approval.resolved');
+  assert.equal(resolved2.choice, 'stop');
+  assert.equal('intent' in resolved2, false);
+});
+
 test('a human_approval gate carries diff_base and work_dir only when the run has a work dir', { timeout: 30000 }, async (t) => {
   const yaml = `apiVersion: multiagent/v1
 kind: Workflow

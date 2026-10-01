@@ -1,0 +1,186 @@
+// src/renderer/app.js: the Artifacts screen's run groups and the Collapse all / Expand all toggle
+// (#126). It runs only inside the Electron renderer, so the relevant functions are pulled out of
+// the source and evaluated in a sandbox, the way test/renderer-run-gates.test.js checks app.js as a
+// seam. A minimal fake DOM stands in for #art-list and #art-toggle-all: enough to read back the
+// toggle button's label/aria state and the run groups' open/closed markup, not a full parser.
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('fs');
+const path = require('path');
+const vm = require('vm');
+
+const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'app.js'), 'utf8');
+
+function extract(name, re) {
+  const m = re.exec(src);
+  assert.ok(m, `${name} not found in app.js: the source moved`);
+  return m[0];
+}
+
+// A fake #art-toggle-all button: enough of the DOM API paintArtToggleAll touches.
+function fakeToggleButton() {
+  const span = { textContent: '' };
+  const polyline = { points: '', setAttribute(k, v) { if (k === 'points') this.points = v; } };
+  const attrs = {};
+  const classes = new Set();
+  return {
+    disabled: false,
+    title: '',
+    classList: { toggle: (c, force) => (force ? classes.add(c) : classes.delete(c)), contains: (c) => classes.has(c) },
+    setAttribute: (k, v) => { attrs[k] = v; },
+    getAttribute: (k) => attrs[k],
+    querySelector: (sel) => (sel === 'span' ? span : sel === 'polyline' ? polyline : null),
+    _span: span,
+    _polyline: polyline,
+  };
+}
+
+// A fake #art-list: innerHTML is kept as a plain string; querySelectorAll always returns no
+// elements (the file/group click wiring is exercised through setArtGroupOpen directly in these
+// tests, not through simulated DOM clicks).
+function fakeListBox() {
+  return { _html: '', set innerHTML(v) { this._html = v; }, get innerHTML() { return this._html; }, querySelectorAll: () => [] };
+}
+
+function load({ runs = [], q = '', projectId = '', showSim = false, developerMode = false, storage = {} } = {}) {
+  const body = [
+    "const $ = (sel) => document.querySelector(sel);",
+    "const esc = (s) => String(s ?? '').replace(/[&<>\"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', \"'\": '&#39;' })[c]);",
+    "const dateOf = (iso) => new Date(iso).toLocaleString('en-US', { dateStyle: 'short', timeStyle: 'short' });",
+    "const devMode = () => !!state.settings.developerMode || !!state.simulationOnly;",
+    extract('ART_KIND', /const ART_KIND = \{[^\n]+\};/),
+    extract('artKindIcon', /const artKindIcon = [^\n]+/),
+    extract('fmtSize', /function fmtSize\(n\) \{[\s\S]*?\n\}/),
+    extract('artShowSim', /const artShowSim = [^\n]+/),
+    extract('artifactRunsFiltered', /function artifactRunsFiltered\(\) \{[\s\S]*?\n\}/),
+    extract('renderArtifactList', /function renderArtifactList\(\) \{[\s\S]*?\n\}/),
+    extract('paintArtToggleAll', /function paintArtToggleAll\(runs, searching\) \{[\s\S]*?\n\}/),
+    extract('toggleAllArtGroups', /function toggleAllArtGroups\(\) \{[\s\S]*?\n\}/),
+    extract('ART_GROUPS_KEY', /const ART_GROUPS_KEY = [^\n]+/),
+    'let artGroups = null;',
+    extract('artGroupsState', /function artGroupsState\(\) \{[\s\S]*?\n\}/),
+    extract('artGroupOpen', /function artGroupOpen\(runId, fallback\) \{[\s\S]*?\n\}/),
+    extract('setArtGroupOpen', /function setArtGroupOpen\(runId, open\) \{[\s\S]*?\n\}/),
+  ].join('\n');
+
+  const listBox = fakeListBox();
+  const toggleBtn = fakeToggleButton();
+  const store = { ...storage };
+  const sandbox = {
+    state: { art: { runs, q, projectId, showSim, sel: null }, settings: { developerMode }, simulationOnly: false, projects: [] },
+    document: { querySelector: (sel) => (sel === '#art-list' ? listBox : sel === '#art-toggle-all' ? toggleBtn : null) },
+    localStorage: {
+      getItem: (k) => (k in store ? store[k] : null),
+      setItem: (k, v) => { store[k] = v; },
+    },
+  };
+  vm.createContext(sandbox);
+  vm.runInContext(
+    `${body}\nthis.fns = { artifactRunsFiltered, renderArtifactList, paintArtToggleAll, toggleAllArtGroups, artGroupOpen, setArtGroupOpen };`,
+    sandbox,
+  );
+  return { ...sandbox.fns, listBox, toggleBtn, sandbox, store };
+}
+
+function run(id, { mock = false, artifacts = [{ name: 'a.md', rel: 'a.md', path: `${id}/a.md`, kind: 'markdown', size: 10 }] } = {}) {
+  return { runId: id, workflow: 'wf', status: 'success', task: 't', startedAt: '2026-01-01T00:00:00Z', mock, project: null, artifacts };
+}
+
+test('paintArtToggleAll: "Collapse all" while any listed group is open, "Expand all" once every one is closed', () => {
+  const runs = [run('r1'), run('r2'), run('r3')];
+  const { paintArtToggleAll, toggleBtn } = load({ runs });
+  // default: only the first of the three is open
+  paintArtToggleAll(runs, false);
+  assert.equal(toggleBtn._span.textContent, 'Collapse all');
+  assert.equal(toggleBtn.getAttribute('aria-pressed'), 'false');
+
+  const { paintArtToggleAll: paint2, toggleBtn: btn2, setArtGroupOpen } = load({ runs });
+  for (const id of ['r1', 'r2', 'r3']) setArtGroupOpen(id, false);
+  paint2(runs, false);
+  assert.equal(btn2._span.textContent, 'Expand all');
+  assert.equal(btn2.getAttribute('aria-pressed'), 'true');
+});
+
+test('renderArtifactList + toggle: three groups (one open by default) show "Collapse all"; collapsing all shows "Expand all"; expanding all restores "Collapse all"', () => {
+  const { renderArtifactList, toggleAllArtGroups, toggleBtn } = load({ runs: [run('r1'), run('r2'), run('r3')] });
+  renderArtifactList();
+  assert.equal(toggleBtn._span.textContent, 'Collapse all', 'the first group opens by default');
+  assert.equal(toggleBtn.getAttribute('aria-pressed'), 'false');
+
+  toggleAllArtGroups();
+  assert.equal(toggleBtn._span.textContent, 'Expand all');
+  assert.equal(toggleBtn.getAttribute('aria-pressed'), 'true');
+  assert.doesNotMatch(toggleBtn._polyline.points, /18 15 12 9 6 15/, 'the chevron flips too');
+
+  toggleAllArtGroups();
+  assert.equal(toggleBtn._span.textContent, 'Collapse all');
+  assert.equal(toggleBtn.getAttribute('aria-pressed'), 'false');
+});
+
+test('toggleAllArtGroups: each group is remembered as if toggled by hand (setArtGroupOpen), and the state survives a later render', () => {
+  const { toggleAllArtGroups, renderArtifactList, artGroupOpen } = load({ runs: [run('r1'), run('r2'), run('r3')] });
+  toggleAllArtGroups(); // collapses all three
+  assert.equal(artGroupOpen('r1', true), false);
+  assert.equal(artGroupOpen('r2', false), false);
+  assert.equal(artGroupOpen('r3', false), false);
+
+  renderArtifactList(); // a later render must not reset them to the "first one open" default
+  assert.equal(artGroupOpen('r1', true), false);
+});
+
+test('opening one group by hand after "Collapse all" flips the button back to "Collapse all"', () => {
+  const { toggleAllArtGroups, renderArtifactList, setArtGroupOpen, toggleBtn } = load({ runs: [run('r1'), run('r2'), run('r3')] });
+  toggleAllArtGroups();
+  assert.equal(toggleBtn._span.textContent, 'Expand all');
+
+  setArtGroupOpen('r2', true); // what the art-run-head click handler does by hand
+  renderArtifactList();
+  assert.equal(toggleBtn._span.textContent, 'Collapse all');
+  assert.equal(toggleBtn.getAttribute('aria-pressed'), 'false');
+});
+
+test('while searching, the toggle is disabled with a tooltip explaining why, and toggling does nothing', () => {
+  const { renderArtifactList, toggleAllArtGroups, toggleBtn, artGroupOpen } = load({ runs: [run('r1'), run('r2')], q: 'a.md' });
+  renderArtifactList();
+  assert.equal(toggleBtn.disabled, true);
+  assert.match(toggleBtn.title, /open while searching/);
+
+  toggleAllArtGroups(); // a no-op while searching: nothing to collapse by hand
+  assert.equal(artGroupOpen('r1', true), true, 'the remembered state (still only r1 open) is untouched');
+});
+
+test('clearing the search restores the remembered open/closed states, not every group open', () => {
+  const { renderArtifactList, toggleAllArtGroups, toggleBtn, sandbox } = load({ runs: [run('r1'), run('r2')] });
+  toggleAllArtGroups(); // remembers both closed
+  sandbox.state.art.q = 'a.md';
+  renderArtifactList();
+  assert.equal(toggleBtn.disabled, true, 'both groups show open while searching, but the toggle is disabled, not relabelled');
+
+  sandbox.state.art.q = '';
+  renderArtifactList();
+  assert.equal(toggleBtn.disabled, false);
+  assert.equal(toggleBtn._span.textContent, 'Expand all', 'the remembered collapsed state is back');
+});
+
+test('renderArtifactList: no run has artifacts hides the toggle instead of showing a disabled, empty button', () => {
+  const { renderArtifactList, toggleBtn } = load({ runs: [] });
+  renderArtifactList();
+  assert.equal(toggleBtn.classList.contains('hidden'), true);
+});
+
+test('setArtGroupOpen / artGroupOpen: a run id not yet toggled by hand falls back to the caller\'s default, not false', () => {
+  const { artGroupOpen, setArtGroupOpen } = load({ runs: [run('r1')] });
+  assert.equal(artGroupOpen('never-touched', true), true);
+  setArtGroupOpen('r1', false);
+  assert.equal(artGroupOpen('r1', true), false, 'once set, the remembered value wins over the default');
+});
+
+test('index.html: the toggle is a real <button> (Enter/Space work without extra wiring) under the search box, with aria-pressed set', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'index.html'), 'utf8');
+  const searchIdx = html.indexOf('id="art-search"');
+  const toggleIdx = html.indexOf('id="art-toggle-all"');
+  assert.ok(searchIdx > 0 && toggleIdx > searchIdx, 'the toggle sits after the search box');
+  const tag = html.slice(toggleIdx - 40, toggleIdx);
+  assert.match(tag, /<button\b/);
+  assert.match(html.slice(toggleIdx, toggleIdx + 200), /aria-pressed="false"/);
+});

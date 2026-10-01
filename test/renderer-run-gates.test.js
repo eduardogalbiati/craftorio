@@ -25,7 +25,7 @@ test('renderRunGates: the gate card names the run (workflow/project/issue via ru
   assert.match(renderRunGates, /step: \$\{g\.step_id\}/);
   assert.match(renderRunGates, /data-answer="false">Reject/);
   assert.match(renderRunGates, /data-answer="true">Approve/);
-  assert.match(renderRunGates, /g\.choices\.map/, 'a gate with choices offers them instead of Approve/Reject');
+  assert.match(renderRunGates, /gateChoices\(g\)\.map/, 'a gate with choices offers them (plus save_to_issue, #125) instead of Approve/Reject');
   assert.match(renderRunGates, /run-gate-feedback/, 'the optional feedback field');
 });
 
@@ -101,6 +101,20 @@ test('onRunGateClick: a choice gate resolves with the choice id, even an empty-s
   const choice = addButton({ choice: '' });
   helpers.onRunGateClick({ target: choice });
   assert.deepEqual(calls, [['a2', '', '', 'r2']]);
+});
+
+test('onRunGateClick: "Accept and save to issue #n" (#125) passes its save_to_issue intent as a 5th argument; a plain choice passes none', () => {
+  const { helpers, calls } = loadHelpers();
+  const { addButton } = fakeGate({ approval: 'a1', run: 'r1', feedback: null });
+  const saveChoice = addButton({ choice: 'accept', intent: 'save_to_issue' });
+  helpers.onRunGateClick({ target: saveChoice });
+  assert.deepEqual(calls, [['a1', 'accept', '', 'r1', 'save_to_issue']]);
+
+  const { helpers: helpers2, calls: calls2 } = loadHelpers();
+  const { addButton: addButton2 } = fakeGate({ approval: 'a2', run: 'r2', feedback: null });
+  const plain = addButton2({ choice: 'accept' });
+  helpers2.onRunGateClick({ target: plain });
+  assert.deepEqual(calls2, [['a2', 'accept', '', 'r2']], 'no intent: no 5th argument at all');
 });
 
 test('onRunGateClick: a click outside any gate button answers nothing', () => {
@@ -382,15 +396,16 @@ function loadRunAppHtml() {
   const esc = /const esc = \(s\) => [^\n]+/.exec(src)[0];
   const runAppCommandHtml = /const runAppCommandHtml = [^\n]+/.exec(src)[0];
   const runAppConfirmHtml = /function runAppConfirmHtml\(info, cfg\) \{[\s\S]*?\n\}/.exec(src)[0];
+  const runAppInstallHtml = /function runAppInstallHtml\(info\) \{[\s\S]*?\n\}/.exec(src)[0];
   const runAppSetupHtml = /function runAppSetupHtml\(info, cfg = \{\}\) \{[\s\S]*?\n\}/.exec(src)[0];
-  for (const [name, code] of Object.entries({ esc, runAppCommandHtml, runAppConfirmHtml, runAppSetupHtml })) {
+  for (const [name, code] of Object.entries({ esc, runAppCommandHtml, runAppConfirmHtml, runAppInstallHtml, runAppSetupHtml })) {
     assert.ok(code, `${name} not found in app.js: the source moved`);
   }
   const sandbox = {};
   vm.createContext(sandbox);
   vm.runInContext(
-    `${esc}\n${runAppCommandHtml}\n${runAppConfirmHtml}\n${runAppSetupHtml}\n`
-    + 'this.helpers = { runAppCommandHtml, runAppConfirmHtml, runAppSetupHtml };',
+    `${esc}\n${runAppCommandHtml}\n${runAppConfirmHtml}\n${runAppInstallHtml}\n${runAppSetupHtml}\n`
+    + 'this.helpers = { runAppCommandHtml, runAppConfirmHtml, runAppInstallHtml, runAppSetupHtml };',
     sandbox,
   );
   return sandbox.helpers;
@@ -437,17 +452,108 @@ test('runAppConfirmHtml: several monorepo apps offer a picker, pre-selecting the
 
 test('runAppSetupHtml (#111): Edit\'s fields are labelled above the controls, with a repo-file checkbox and Save/Cancel', () => {
   const { runAppSetupHtml } = loadRunAppHtml();
-  const html = runAppSetupHtml({ project: { id: 'p1', name: 'demo' } }, { command: 'npm start', from: 'package.json (scripts.start)' });
+  const html = runAppSetupHtml({ project: { id: 'p1', name: 'demo' }, install: { state: 'none' } }, { command: 'npm start', from: 'package.json (scripts.start)' });
   assert.match(html, /<label class="small">Install[\s\S]*<input data-setup="install"/);
   assert.match(html, /<label class="small">Command[\s\S]*<input data-setup="command" value="npm start"/);
   assert.match(html, /Also write it to <code>\.multiagent\/local-preview\.yaml<\/code>/);
-  assert.match(html, /data-gate-tool="app-save">Save and run</);
+  assert.match(html, /data-gate-tool="app-save">Save as this project's Run App and start</);
 });
 
 test('runAppSetupHtml: a run without a project runs once, with no repo-file checkbox and a plain Run label', () => {
   const { runAppSetupHtml } = loadRunAppHtml();
-  const html = runAppSetupHtml({ project: null }, { command: 'git --version' });
+  const html = runAppSetupHtml({ project: null, install: { state: 'none' } }, { command: 'git --version' });
   assert.doesNotMatch(html, /data-setup-repo/);
   assert.match(html, /data-gate-tool="app-save">Run</);
   assert.match(html, /This run has no project: it runs this time only\./);
+});
+
+// ---- #119: Save says what it does, and the install field shows whether it will run ---------------
+
+test('runAppSetupHtml: "Saving" says what happens to the project, not the muted old "Saved as the Local preview" wording', () => {
+  const { runAppSetupHtml } = loadRunAppHtml();
+  const html = runAppSetupHtml({ project: { id: 'p1', name: 'demo' }, install: { state: 'none' } }, {});
+  assert.match(html, /Saving makes it the Run App of <b>demo<\/b> \(Projects › Local preview\)/);
+});
+
+test('runAppInstallHtml: \'\' when there is no install step (hidden in the renderer); a badge and reason otherwise', () => {
+  const { runAppInstallHtml } = loadRunAppHtml();
+  assert.equal(runAppInstallHtml({ install: { state: 'none', text: 'No install step.' } }), '');
+  assert.equal(runAppInstallHtml({ install: null }), '');
+
+  const skipped = runAppInstallHtml({ install: { state: 'skipped', text: 'Install skipped: dependencies already installed.' } });
+  assert.match(skipped, /install skipped/);
+  assert.doesNotMatch(skipped, /class="badge warn"/, 'skipped is not a warning badge');
+  assert.match(skipped, /dependencies already installed/);
+
+  const willRun = runAppInstallHtml({ install: { state: 'will-run', text: 'Install will run: node_modules missing.' } });
+  assert.match(willRun, /class="badge warn">install will run/);
+  assert.match(willRun, /node_modules missing/);
+});
+
+test('runAppSetupHtml: the Install field shows runAppInstallHtml\'s badge as its hint', () => {
+  const { runAppSetupHtml } = loadRunAppHtml();
+  const html = runAppSetupHtml({ project: null, install: { state: 'will-run', text: 'Install will run: node_modules missing.' } }, { install: 'npm ci' });
+  assert.match(html, /<label class="small">Install[\s\S]*<span class="hint">[\s\S]*install will run[\s\S]*<\/span>/);
+});
+
+test('runAppConfirmHtml: shows the install line only when the config has an install command', () => {
+  const { runAppConfirmHtml } = loadRunAppHtml();
+  const withInstall = runAppConfirmHtml({ config: { command: 'npm start' }, install: { state: 'will-run', text: 'Install will run: node_modules missing.' } }, { install: 'npm ci', command: 'npm start' });
+  assert.match(withInstall, /install will run/);
+
+  const withoutInstall = runAppConfirmHtml({ config: { command: 'npm start' }, install: { state: 'none', text: 'No install step.' } }, { command: 'npm start' });
+  assert.doesNotMatch(withoutInstall, /install will run|install skipped/);
+});
+
+test('runAppConfirmHtml: a detected command with no project config yet offers "Save as this project\'s Run App and start"', () => {
+  const { runAppConfirmHtml } = loadRunAppHtml();
+  const html = runAppConfirmHtml({ config: null, project: { id: 'p1', name: 'demo' } }, { command: 'npm start', from: 'package.json (scripts.start)' });
+  assert.match(html, /data-gate-tool="app-run">Save as this project's Run App and start</);
+});
+
+// ---- #125: "Accept and save to issue #n" on the decide/out_of_rounds gate ----------------------
+
+function loadGateChoices() {
+  const gateChoices = /function gateChoices\(gate\) \{[\s\S]*?\n\}/.exec(src)[0];
+  assert.ok(gateChoices, 'gateChoices not found in app.js: the source moved');
+  const sandbox = {};
+  vm.createContext(sandbox);
+  vm.runInContext(`${gateChoices}\nthis.gateChoices = gateChoices;`, sandbox);
+  return sandbox.gateChoices;
+}
+
+test('gateChoices: a run with an issue and save_to_issue adds "Accept and save to issue #n" right after the choice it answers', () => {
+  const gateChoices = loadGateChoices();
+  const gate = {
+    choices: [{ id: 'accept', label: 'Accept the document' }, { id: 'revise', label: 'Send it back to the writer' }, { id: 'stop', label: 'Stop without accepting' }],
+    save_to_issue: { choice: 'accept', issue: { number: 42 } },
+  };
+  const choices = plain(gateChoices(gate));
+  assert.deepEqual(choices.map((c) => c.id), ['accept', 'accept', 'revise', 'stop']);
+  assert.equal(choices[1].intent, 'save_to_issue');
+  assert.equal(choices[1].label, 'Accept and save to issue #42');
+  assert.match(choices[1].title, /nothing is sent before you confirm/);
+});
+
+test('gateChoices: a run without an issue (no save_to_issue, or save_to_issue with no matching choice) shows the choices unchanged', () => {
+  const gateChoices = loadGateChoices();
+  const choices = [{ id: 'accept', label: 'Accept' }, { id: 'stop', label: 'Stop' }];
+  assert.deepEqual(plain(gateChoices({ choices })), choices);
+  assert.deepEqual(plain(gateChoices({ choices, save_to_issue: { choice: 'accept', issue: null } })), choices, 'save_to_issue without an issue: no extra choice');
+  assert.deepEqual(plain(gateChoices({ choices, save_to_issue: { choice: 'nope', issue: { number: 1 } } })), choices, 'save_to_issue points at a choice the gate does not have');
+});
+
+test('gateChoices: a binary gate (no choices) falls back to Approve/Reject, untouched by save_to_issue', () => {
+  const gateChoices = loadGateChoices();
+  assert.deepEqual(plain(gateChoices({})), [{ id: true, label: 'Approve' }, { id: false, label: 'Reject' }]);
+});
+
+test('gateChoices: out_of_rounds offers the same save-to-issue choice when it allows accepting', () => {
+  const gateChoices = loadGateChoices();
+  const gate = {
+    choices: [{ id: 'accept', label: 'Accept the last draft as it is' }, { id: 'more', label: 'One more round' }, { id: 'stop', label: 'Stop without a document' }],
+    save_to_issue: { choice: 'accept', issue: { number: 7 } },
+  };
+  const choices = gateChoices(gate);
+  assert.equal(choices.find((c) => c.intent === 'save_to_issue')?.label, 'Accept and save to issue #7');
 });

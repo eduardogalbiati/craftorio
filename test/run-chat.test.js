@@ -201,7 +201,7 @@ test('run chat: loops back show as loop lines, gates keep the chosen answer and 
   assert.equal(gate.stepId, 'out_of_rounds');
   assert.ok(gate.choices.some((c) => c.id === 'stop'));
   const stop = gate.choices.find((c) => c.id === 'stop');
-  assert.deepEqual(gate.resolved, { choice: 'stop', label: stop.label });
+  assert.deepEqual(gate.resolved, { choice: 'stop', label: stop.label, intent: null });
   const [reply] = kinds(model, 'reply');
   assert.deepEqual([reply.label, reply.feedback, reply.by], [stop.label, 'Too vague, stop here.', 'user']);
   assert.deepEqual(model.pendingGates(), []);
@@ -255,6 +255,41 @@ test('run chat: a gate\'s Run locally / diff tools (local_preview, work_dir, dif
   assert.deepEqual([gate2.localPreview, gate2.workDir, gate2.diffBase, gate2.runApp], [null, null, null, false]);
 });
 
+test('run chat: "Accept and save to issue #n" (#125) is kept on the gate, and the reply label names it, not the plain "Accept" choice', () => {
+  const events = [
+    { seq: 1, type: 'workflow.started', run_id: 'r1', workflow: 'writer-reviewer', inputs: {}, issue: { number: 42, url: 'https://github.com/o/r/issues/42', title: 'T' } },
+    {
+      seq: 2, type: 'approval.requested', run_id: 'r1', approval_id: 'g1', step_id: 'decide', message: 'Accept?',
+      choices: [{ id: 'accept', label: 'Accept the document' }, { id: 'stop', label: 'Stop without accepting' }],
+      save_to_issue: { choice: 'accept', issue: { number: 42 } },
+    },
+  ];
+  const model = chatOf(events);
+  const [gate] = kinds(model, 'gate');
+  assert.deepEqual(gate.saveToIssue, { choice: 'accept', issue: { number: 42 } });
+
+  model.apply({ seq: 3, type: 'approval.resolved', run_id: 'r1', approval_id: 'g1', step_id: 'decide', choice: 'accept', intent: 'save_to_issue', by: 'user' });
+  const [resolvedGate] = kinds(model, 'gate');
+  assert.deepEqual(resolvedGate.resolved, { choice: 'accept', label: 'Accept and save to issue #42', intent: 'save_to_issue' });
+  const [reply] = kinds(model, 'reply');
+  assert.equal(reply.label, 'Accept and save to issue #42', 'not the plain "Accept the document" label');
+});
+
+test('run chat: a plain "accept" on the same gate (no intent) keeps the ordinary choice label', () => {
+  const events = [
+    { seq: 1, type: 'workflow.started', run_id: 'r1', workflow: 'writer-reviewer', inputs: {}, issue: { number: 42, url: 'https://github.com/o/r/issues/42', title: 'T' } },
+    {
+      seq: 2, type: 'approval.requested', run_id: 'r1', approval_id: 'g1', step_id: 'decide', message: 'Accept?',
+      choices: [{ id: 'accept', label: 'Accept the document' }, { id: 'stop', label: 'Stop without accepting' }],
+      save_to_issue: { choice: 'accept', issue: { number: 42 } },
+    },
+  ];
+  const model = chatOf(events);
+  model.apply({ seq: 3, type: 'approval.resolved', run_id: 'r1', approval_id: 'g1', step_id: 'decide', choice: 'accept', by: 'user' });
+  const [gate] = kinds(model, 'gate');
+  assert.deepEqual(gate.resolved, { choice: 'accept', label: 'Accept the document', intent: null });
+});
+
 test('run chat: the run and its start message carry every issue; a run recorded with one `issue` shows a list of one', () => {
   const group = [{ number: 65, url: 'https://github.com/o/r/issues/65', title: 'Checkboxes' }, { number: 53, url: 'https://github.com/o/r/issues/53', title: 'Scrollbars' }];
   const grouped = chatOf([{ seq: 1, type: 'workflow.started', run_id: 'r1', workflow: 'wf', inputs: {}, issues: group }]);
@@ -302,7 +337,7 @@ test('run chat: an approval withdrawn by the engine\'s check shows why, not as a
     { seq: 3, type: 'approval.resolved', approval_id: 'a1', withdrawn: true, by: 'check', reason: 'conflict: the PR now conflicts with main' },
   ]);
   const [gate] = kinds(model, 'gate');
-  assert.deepEqual(gate.resolved, { choice: 'withdrawn', label: 'Withdrawn before anyone answered: conflict: the PR now conflicts with main' });
+  assert.deepEqual(gate.resolved, { choice: 'withdrawn', label: 'Withdrawn before anyone answered: conflict: the PR now conflicts with main', intent: null });
 });
 
 test('run chat: a supervisor recovery from a failed merge shows its record ("went back to..."), not the raw explanation', () => {
