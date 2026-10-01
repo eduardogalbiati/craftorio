@@ -509,10 +509,10 @@ test('the bundled workflows group every step', () => {
 // Full software-development flow in mock mode. Gates get `answers[step]` (default: approve /
 // first choice), like --auto-approve. `answers[step]` (and `feedback[step]`) may be a list, one
 // per visit to that gate (shifted as it is visited again; the last one repeats past the end).
-async function runSoftwareDevelopment({ mockSequences, answers = {}, feedback = {}, inputs = {}, issues }) {
+async function runSoftwareDevelopment({ mockSequences, answers = {}, feedback = {}, inputs = {}, issues, file = 'software-development.yaml' }) {
   const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'));
   const run = new WorkflowRun({
-    file: path.join(root, 'workflows', 'software-development.yaml'),
+    file: path.join(root, 'workflows', file),
     inputs: { task: 'Engine test', repo_path: root, ...inputs },
     mock: true,
     runsDir,
@@ -642,6 +642,93 @@ test('software-development: an issue of the group that cannot be done stops at t
   const single = await runSoftwareDevelopment({ mockSequences: { done: [false], preview_status: ['success'] }, issues: [GROUP[0]], inputs: { issue: GROUP[0].url } });
   assert.ok(!single.transitions.includes('develop>issue_not_done'));
 });
+
+// ---- #98: declared gaps (output.left_out) go back to develop, then to the owner, never straight
+// to the review. Both software-development and its local-hero variant. --------------------------
+
+test('#98: develop output_schema requires left_out, so an answer cannot skip it', () => {
+  for (const file of ['software-development.yaml', 'software-development-local-hero.yaml']) {
+    const wf = loadWorkflow(path.join(root, 'workflows', file));
+    const develop = wf.steps.find((s) => s.id === 'develop');
+    const output = { branch: 'b', summary: 's', files_changed: [], test_notes: 't', committed: true };
+    assert.match(validateSchema(output, develop.output_schema).join(), /left_out: required/, file);
+    assert.deepEqual(validateSchema({ ...output, left_out: [] }, develop.output_schema), [], file);
+  }
+});
+
+test('#98: requirements_left_out is a human gate; neither a retry nor the supervisor can answer it', () => {
+  for (const file of ['software-development.yaml', 'software-development-local-hero.yaml']) {
+    const wf = loadWorkflow(path.join(root, 'workflows', file));
+    const gate = wf.steps.find((s) => s.id === 'requirements_left_out');
+    assert.equal(gate.type, 'human_approval', file);
+    assert.deepEqual(gate.choices.map((c) => c.id), ['continue', 'stop'], file);
+  }
+});
+
+for (const file of ['software-development.yaml', 'software-development-local-hero.yaml']) {
+  // software-development also needs a successful preview to reach the end; local-hero has none
+  const toEnd = file === 'software-development.yaml' ? { preview_status: ['success'] } : {};
+  // only transitions where both ends are one of these three steps (hides the rest of the pipeline)
+  const groupBy = (xs, re) => xs.filter((x) => re.test(x));
+  const DEV_RE = /^(develop|requirements_left_out|code_review)>(develop|requirements_left_out|code_review)$/;
+
+  test(`${file}: no declared gap goes straight develop > code_review`, { timeout: 120000 }, async () => {
+    const { transitions, events } = await runSoftwareDevelopment({ file, mockSequences: { verdict: ['approved'], ...toEnd } });
+    assert.deepEqual(groupBy(transitions, DEV_RE), ['develop>code_review']);
+    assert.ok(!events.some((e) => e.type === 'approval.requested' && e.step_id === 'requirements_left_out'));
+  });
+
+  test(`${file}: a gap declared once sends the developer back before the review, never straight to code_review`, { timeout: 120000 }, async () => {
+    const { transitions, events } = await runSoftwareDevelopment({ file, mockSequences: { left_out: [1, 0], verdict: ['approved'], ...toEnd } });
+    assert.deepEqual(groupBy(transitions, DEV_RE), ['develop>develop', 'develop>code_review']);
+    assert.ok(!events.some((e) => e.type === 'approval.requested' && e.step_id === 'requirements_left_out'));
+  });
+
+  test(`${file}: a gap still open after one round stops at the owner's gate; "stop" ends the run failed, no review`, { timeout: 120000 }, async () => {
+    const { transitions, finished, events } = await runSoftwareDevelopment({
+      file, mockSequences: { left_out: [1, 1], ...toEnd }, answers: { requirements_left_out: 'stop' },
+    });
+    const gate = events.find((e) => e.type === 'approval.requested' && e.step_id === 'requirements_left_out');
+    assert.deepEqual(gate.choices.map((c) => c.id), ['continue', 'stop']);
+    assert.match(gate.message, /left these requirements of the task out, even after being sent back once/);
+    assert.equal(finished.status, 'failed');
+    assert.match(finished.error, /ended as failed at step "requirements_left_out"/);
+    assert.deepEqual(groupBy(transitions, DEV_RE), ['develop>develop', 'develop>requirements_left_out']);
+  });
+
+  test(`${file}: "continue" at the gate moves on to the review`, { timeout: 120000 }, async () => {
+    const { transitions, finished } = await runSoftwareDevelopment({
+      file, mockSequences: { left_out: [1, 1, 0], verdict: ['approved'], ...toEnd }, answers: { requirements_left_out: 'continue' },
+    });
+    assert.equal(finished.status, 'success', finished.error);
+    assert.deepEqual(groupBy(transitions, DEV_RE), ['develop>develop', 'develop>requirements_left_out', 'requirements_left_out>code_review']);
+  });
+
+  test(`${file}: a gap declared again on a review fix round goes back to the gate, not straight to the review`, { timeout: 120000 }, async () => {
+    const { transitions, finished, events } = await runSoftwareDevelopment({
+      file,
+      mockSequences: { left_out: [1, 1, 1, 0], verdict: ['changes_requested', 'approved'], ...toEnd },
+      answers: { requirements_left_out: 'continue' },
+    });
+    assert.equal(finished.status, 'success', finished.error);
+    const gates = events.filter((e) => e.type === 'approval.requested' && e.step_id === 'requirements_left_out');
+    assert.equal(gates.length, 2, transitions.join(' '));
+    assert.ok(!transitions.includes('develop>code_review'), transitions.join(' '));
+    assert.deepEqual(groupBy(transitions, DEV_RE), [
+      'develop>develop', 'develop>requirements_left_out', 'requirements_left_out>code_review',
+      'code_review>develop', 'develop>requirements_left_out', 'requirements_left_out>code_review',
+    ]);
+    // vars.accepted_gaps accumulates across both gate answers instead of being overwritten: both
+    // accepted requirements show up (not just the latest one) by the second code_review visit
+    const developPrompts = events.filter((e) => e.type === 'session.message_sent' && e.step_id === 'develop').map((e) => e.prompt);
+    assert.match(developPrompts[2], /do not list them again: \(simulated\) requirement;/);
+    const reviewPrompts = events.filter((e) => e.type === 'session.message_sent' && e.step_id === 'code_review').map((e) => e.prompt);
+    const accepted = reviewPrompts[1].match(/accepted that the run goes on without these requirements \(not blocking\): (.*)/)[1];
+    assert.equal((accepted.match(/\(simulated\) requirement/g) || []).length, 2, accepted);
+    // the two accepted requirements must stay distinguishable, not run together into one word
+    assert.match(accepted, /requirement;\s+\(simulated\) requirement;|requirement,\s*\(simulated\) requirement;/, accepted);
+  });
+}
 
 // ---- #104: validated mode (mode input, developer_check gate) ------------------------------
 
