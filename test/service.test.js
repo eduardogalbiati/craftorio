@@ -70,12 +70,13 @@ test('seeds the bundled workflows and answers the UI channels', async (t) => {
 
 test('agents: the supervisor comes built in; removing an agent goes through the host trash', async (t) => {
   const { api, trashed, service } = makeService(t);
-  assert.deepEqual(api['agents:list']().map((a) => a.id), ['supervisor']);
+  assert.deepEqual(api['agents:list']().map((a) => a.id), ['supervisor', 'product-owner']);
   const a = api['agents:create']({ name: 'Tester', prompt: 'You write tests.', skills: ['unit-test-writer-js'] });
   assert.equal(api['agents:save']({ id: a.id, data: { ...a, description: 'Writes tests' } }).description, 'Writes tests');
   await api['agents:remove'](a.id);
   assert.deepEqual(trashed, [path.join(service.workspace().agents, 'tester.json')]);
   await assert.rejects(async () => api['agents:remove']('supervisor'), /can't be removed/);
+  await assert.rejects(async () => api['agents:remove']('product-owner'), /can't be removed/);
 });
 
 test('deleting a skill goes through the host trash', async (t) => {

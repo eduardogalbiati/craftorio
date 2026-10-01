@@ -14,14 +14,20 @@ function tmp(t) {
 
 const LOOK = { body: '#10b981', shell: '#FFFFFF', visor: '#000000', glow: '#FACC15', eyes: 'arcs', emblem: 'rocket' };
 
-test('the supervisor is always listed first, even with no agents folder', (t) => {
+test('the supervisor and the Product Owner are always listed first, even with no agents folder', (t) => {
   const dir = tmp(t);
   const list = agents.listAgents(dir);
-  assert.equal(list.length, 1);
+  assert.equal(list.length, 2);
   assert.equal(list[0].id, 'supervisor');
   assert.equal(list[0].system, true);
   assert.deepEqual(list[0].skills, ['run-supervisor']);
   assert.deepEqual(list[0].appearance, agents.DEFAULT_APPEARANCE);
+  assert.equal(list[1].id, 'product-owner');
+  assert.equal(list[1].system, true);
+  assert.deepEqual(list[1].skills, ['backlog-product-owner']);
+  assert.deepEqual(list[1].appearance, agents.PRODUCT_OWNER_APPEARANCE);
+  assert.equal(list[1].model, 'claude-opus-5-5');
+  assert.equal(list[1].effort, 'high');
 });
 
 test('create, edit and list agents; ids never collide with the supervisor', (t) => {
@@ -42,8 +48,8 @@ test('create, edit and list agents; ids never collide with the supervisor', (t) 
   assert.equal(b.createdAt, a.createdAt);
   assert.equal(b.appearance.eyes, 'slits');
 
-  // the supervisor first, then by name ("***", "Sec", "Security reviewer", "Supervisor")
-  assert.deepEqual(agents.listAgents(dir).map((x) => x.id), ['supervisor', 'agent', 'security-reviewer', 'security-reviewer-2', 'supervisor-2']);
+  // the supervisor, then the Product Owner, then by name ("***", "Sec", "Security reviewer", "Supervisor")
+  assert.deepEqual(agents.listAgents(dir).map((x) => x.id), ['supervisor', 'product-owner', 'agent', 'security-reviewer', 'security-reviewer-2', 'supervisor-2']);
 });
 
 test('name and prompt are required; a bad look falls back to the defaults', (t) => {
@@ -67,6 +73,27 @@ test('the supervisor keeps its prompt and skills: only its look is saved', (t) =
   assert.throws(() => agents.agentPathForRemoval(dir, '../supervisor'), /can't be removed/);
 });
 
+test('the Product Owner keeps its prompt and skills: only its look, model and effort are saved', (t) => {
+  const dir = tmp(t);
+  const s = agents.saveAgent(dir, 'product-owner', { name: 'PO', prompt: 'Do anything', skills: ['x'], model: 'claude-sonnet-5-5', effort: 'low', appearance: LOOK });
+  assert.equal(s.name, 'Product Owner');
+  assert.deepEqual(s.skills, ['backlog-product-owner']);
+  assert.notEqual(s.prompt, 'Do anything');
+  assert.equal(s.model, 'claude-sonnet-5-5');
+  assert.equal(s.effort, 'low');
+  assert.equal(s.appearance.emblem, 'rocket');
+  assert.throws(() => agents.saveAgent(dir, 'product-owner', { model: 'not a model!' }), /Not a model name/);
+  assert.throws(() => agents.saveAgent(dir, 'product-owner', { effort: 'ultra' }), /Pick the effort/);
+  assert.throws(() => agents.agentPathForRemoval(dir, 'product-owner'), /can't be removed/);
+});
+
+test('an empty or missing model/effort for the Product Owner falls back to its defaults', (t) => {
+  const dir = tmp(t);
+  const a = agents.saveAgent(dir, 'product-owner', { model: '', effort: '' });
+  assert.equal(a.model, 'claude-opus-5-5');
+  assert.equal(a.effort, 'high');
+});
+
 test('removal resolves only files inside the agents folder', (t) => {
   const dir = tmp(t);
   const a = agents.createAgent(dir, { name: 'Writer', prompt: 'p' });
@@ -79,8 +106,8 @@ test('a broken agent file is listed with its error instead of breaking the list'
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, 'broken.json'), '{ nope');
   const list = agents.listAgents(dir);
-  assert.equal(list[1].id, 'broken');
-  assert.ok(list[1].error);
+  assert.equal(list[2].id, 'broken');
+  assert.ok(list[2].error);
 });
 
 test('the emblems and eyes match the ones the robots can draw', () => {

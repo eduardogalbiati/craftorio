@@ -34,3 +34,24 @@ test('submitAssign: assigning an issue the roadmap already plans asks first, and
   assert.match(fn, /if \(inRoadmap\.length && !await confirmDialog\('Already in the roadmap'/);
   assert.match(fn, /takes \$\{inRoadmap\.length > 1 \? 'them' : 'it'\} out of the roadmap and into the queue/);
 });
+
+test('openAssign: a prefill from the Product Owner picks its workflow, groups its issues into one run, and fills its inputs', () => {
+  const fn = /async function openAssign\(prefill = null\)[\s\S]*?\n  \}/.exec(src)[0];
+  // the proposed workflow wins over the last-used one when it exists among the project's workflows
+  assert.match(fn, /sel\.value = \[prefill\?\.workflow, load\(WORKFLOW_KEY\), 'software-development\.yaml', files\[0\]\]\.find\(\(f\) => f && files\.includes\(f\)\);/);
+  // a multi-issue group is assigned as one run, not as separate runs
+  assert.match(fn, /document\.querySelector\(`input\[name="assign-group"\]\[value="\$\{prefill\?\.group \? 'group' : 'separate'\}"\]`\)\.checked = true;/);
+  // each proposed input value is written into its field
+  assert.match(fn, /for \(const \[k, v\] of Object\.entries\(prefill\?\.inputs \|\| \{\}\)\) \{/);
+  assert.match(fn, /if \(el && v != null\) el\.value = String\(v\);/);
+});
+
+test('assignGroup: a proposed group selects its To do issues, clears filters that would hide one, and opens Assign prefilled as one run', () => {
+  const fn = /async function assignGroup\(\{ issues, workflow, inputs \}\)[\s\S]*?\n  \}/.exec(src)[0];
+  assert.match(fn, /const numbers = issues\.filter\(\(n\) => todo\.some\(\(i\) => i\.number === n\)\);/);
+  assert.match(fn, /const skipped = issues\.filter\(\(n\) => !numbers\.includes\(n\)\);/);
+  assert.match(fn, /if \(!numbers\.length\) return skipped;/); // none still To do: nothing to open, nothing left unmentioned
+  assert.match(fn, /bl\.selected\.clear\(\);/);
+  assert.match(fn, /await openAssign\(\{ workflow, inputs, group: numbers\.length > 1 \}\);/);
+  assert.match(fn, /return skipped;/);
+});
