@@ -60,6 +60,7 @@ const state = {
   tab: 'detail',
   workflowsTab: 'runs', // 'runs' | 'definitions' | 'builder' (sub-items of Workflows in the sidebar)
   pendingProject: null, // project to preselect in the panel on open
+  mainKey: null,      // the Start drawer's main free-text input (usually `task`), never remembered
   usage: null,        // last api.getUsage() result
   usageError: null,
   actionsUsage: null, // last api.getActionsUsage() result (GitHub Actions minutes)
@@ -272,7 +273,8 @@ async function init() {
   $('#wf-select').onchange = () => selectWorkflow($('#wf-select').value);
   $('#project-select').onchange = renderProjectInfo;
   $('#btn-drawer-new-project').onclick = () => openProjectModal(null, { fromDrawer: true });
-  $('#btn-start').onclick = startRun;
+  $('#btn-start').onclick = () => startRun();
+  $('#btn-start-another').onclick = () => startRun({ keepOpen: true });
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
     if (!$('#usage-pop').classList.contains('hidden')) return closeUsagePopover();
@@ -388,10 +390,10 @@ async function init() {
   // a Run App copy opens on the screen the change is about (#119): its nav item, as a click would
   if (appInfo.startView) document.querySelector(`.nav-item[data-view="${CSS.escape(appInfo.startView)}"]`)?.click();
 
+  // only a missing CLI is worth a line on the Start drawer: the warning before a real run fails
   const env = await api.checkEnv();
-  $('#env-status').innerHTML = ['claude', 'codex'].map((k) =>
-    env[k] ? `<span class="ok">✓ ${k}</span>`
-           : `<span class="missing">✗ ${k} not found in PATH (use simulation mode)</span>`).join('');
+  $('#env-status').innerHTML = ['claude', 'codex'].filter((k) => !env[k]).map((k) =>
+    `<span class="missing">✗ ${k} not found in PATH (use simulation mode)</span>`).join('');
 }
 
 // The runs in progress and the gates they wait at, from the engine (runs:active): read when the
@@ -603,10 +605,20 @@ async function openDrawer({ category = null, workflow = null, project = null, in
   $('#drawer').classList.add('open');
   $('#drawer').setAttribute('aria-hidden', 'false');
   $('#drawer-backdrop').classList.remove('hidden');
-  setTimeout(() => ($('#in-task') || $('#wf-select')).focus(), 200);
+  setTimeout(() => (mainField() || $('#wf-select')).focus(), 200);
+}
+
+// The drawer's main free-text field (usually `task`), picked by selectWorkflow()
+const mainField = () => (state.mainKey ? document.getElementById(`in-${state.mainKey}`) : null);
+
+// Both start buttons follow the same rules (no workflow, a workflow error, a start in progress, one run at a time)
+function setStartDisabled(disabled) {
+  $('#btn-start').disabled = disabled;
+  $('#btn-start-another').disabled = disabled;
 }
 
 function closeDrawer() {
+  $('#start-info').textContent = '';
   $('#drawer').classList.remove('open');
   $('#drawer').setAttribute('aria-hidden', 'true');
   $('#drawer-backdrop').classList.add('hidden');
@@ -637,7 +649,8 @@ function renderWorkflowOptions(preferred) {
     $('#inputs-form').innerHTML = '';
     $('#adv-form').innerHTML = '';
     $('#wf-agents').innerHTML = '';
-    $('#btn-start').disabled = true;
+    state.mainKey = null;
+    setStartDisabled(true);
     return;
   }
   const pick = list.find((w) => w.file === preferred) || list[0];
@@ -678,9 +691,11 @@ function selectWorkflow(file) {
   // the main field is a free-text one: never a run id or a fixed list
   const textual = entries.filter(([, d]) => d.type !== 'run' && !d.enum);
   const mainKey = textual.find(([k]) => k === 'task')?.[0] || textual.find(([, d]) => d.required)?.[0] || textual[0]?.[0];
+  state.mainKey = mainKey || null;
   const field = ([key, def], main) => {
-    // a run id is not remembered: the default ("latest") is usually what is wanted next time
-    const val = (def.type === 'run' ? null : saved[key]) ?? def.default ?? '';
+    // a run id is not remembered: the default ("latest") is usually what is wanted next time;
+    // nor is the main field: each run starts from an empty task (entries saved before included)
+    const val = (def.type === 'run' || main ? null : saved[key]) ?? def.default ?? '';
     const label = `<label for="in-${key}">${main ? 'Input' : esc(key)} ${def.required ? '<span class="req">*</span>' : ''}</label>`;
     const hint = def.description ? `<div class="hint">${esc(def.description)}</div>` : '';
     let control;
@@ -703,7 +718,7 @@ function selectWorkflow(file) {
   // a folder input with `required: false` (e.g. writer-reviewer's project_path) makes the project optional
   const needsProject = Object.entries(wf.inputs || {}).some(([k, def]) => isPathInput(k) && def.required !== false);
   $('#project-req').classList.toggle('hidden', !needsProject);
-  $('#btn-start').disabled = !!wf.error || oneRunAtATime();
+  setStartDisabled(!!wf.error || oneRunAtATime());
 }
 
 // Without concurrent runs (Settings › Execution) a second run can't start; with them, the engine
@@ -716,8 +731,11 @@ function readInputs() {
   return out;
 }
 
-async function startRun() {
+// `keepOpen` (Start and create another): the drawer stays open on the same workflow, project and
+// parameters, with the main field cleared, and the shown run does not change.
+async function startRun({ keepOpen = false } = {}) {
   $('#start-error').textContent = '';
+  $('#start-info').textContent = '';
   const wf = state.wf;
   if (!wf) return;
   const project = state.projects.find((p) => p.id === $('#project-select').value);
@@ -726,18 +744,31 @@ async function startRun() {
   if (project && !project.exists) return ($('#start-error').textContent = `The project folder does not exist: ${project.folder}`);
 
   const inputs = readInputs();
-  try { localStorage.setItem(`${LS_KEY}.${wf.file}`, JSON.stringify(inputs)); } catch { /* ignore */ }
+  // the main field is not remembered: the next run starts from an empty task
+  const { [state.mainKey]: _main, ...remembered } = inputs;
+  try { localStorage.setItem(`${LS_KEY}.${wf.file}`, JSON.stringify(remembered)); } catch { /* ignore */ }
   if (project) for (const k of pathKeys) inputs[k] = project.folder;
 
-  $('#btn-start').disabled = true;
+  setStartDisabled(true);
   try {
     const { runId } = await api.startRun({ file: wf.file, inputs, mock: wantsSimulation($('#mock-toggle')) });
     state.settings = await api.setSettings({ lastWorkflow: wf.file, lastProject: project?.id || null });
     const view = state.runs.get(runId);
     if (view?.run && project) view.run.project = project.name;
-    closeDrawer();
-    // the run started here is the one shown
-    if (view) selectRun(runId, { open: state.settings.openRunOnStart });
+    const main = mainField();
+    if (main) main.value = state.wf?.inputs?.[state.mainKey]?.default ?? '';
+    if (!keepOpen) {
+      closeDrawer();
+      // the run started here is the one shown
+      if (view) selectRun(runId, { open: state.settings.openRunOnStart });
+      return;
+    }
+    // what started, and a way to open it, while the drawer stays on the next one
+    const info = $('#start-info');
+    info.innerHTML = `<button type="button" class="link-btn" title="Open this run">Started ${esc(runLabel(view?.run || { workflow: wf.name, project: project?.name }))}</button>`;
+    info.querySelector('button').onclick = () => { closeDrawer(); selectRun(runId, { open: true }); };
+    if (oneRunAtATime()) info.insertAdjacentHTML('beforeend', '<br>Turn on concurrent runs in Settings › Execution to start several runs in a row.');
+    main?.focus();
   } catch (e) {
     $('#start-error').textContent = errMsg(e);
   } finally {
@@ -2303,7 +2334,7 @@ function renderHeader() {
   $('#btn-stop').disabled = st !== 'running';
   $('#btn-stop').title = st === 'running' ? `Stop ${runLabel(r)} (only this run)` : '';
   const blocked = oneRunAtATime();
-  $('#btn-start').disabled = blocked || !state.wf || !!state.wf.error;
+  setStartDisabled(blocked || !state.wf || !!state.wf.error);
   $('#btn-start').textContent = blocked ? 'A workflow is already running' : 'Start workflow';
   if (state.view === 'dashboard') renderDashboard();
 }

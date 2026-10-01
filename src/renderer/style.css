@@ -337,6 +337,7 @@ label:has(> input[type=checkbox]:disabled, > input[type=radio]:disabled) { curso
 .drawer-body { flex: 1; overflow: auto; padding: 16px 18px; }
 .drawer-foot { padding: 12px 18px 16px; border-top: 1px solid var(--border); }
 .drawer-foot .btn.block { margin-top: 0; }
+.drawer-foot .btn.block + .btn.block { margin-top: 8px; }
 .drawer-foot .error, .drawer-foot #start-info { margin: 0 0 8px; }
 #start-error:empty { display: none; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
@@ -372,7 +373,7 @@ select:focus, input:focus, textarea:focus { outline: none; border-color: var(--a
 .check { display: flex; gap: 8px; align-items: center; cursor: pointer; }
 .env { display: flex; gap: 12px; flex-wrap: wrap; }
 .env { margin-top: 8px; }
-.env .ok { color: var(--green); }
+.env:empty { display: none; }
 .env .missing { color: var(--yellow); }
 
 .agents { display: grid; gap: 4px; margin-top: 8px; }
