@@ -42,14 +42,14 @@ function apiTarget(platform, repo) {
 }
 
 /**
- * The open issues whose GitHub issue type is "Epic" (organizations with issue types): `gh issue list`
- * cannot return the type, the REST issues list does (`type.name`). A repository without issue types
- * (or a failed read) gives none: the `epic` label still works.
+ * The issues (open and closed, like the sync) whose GitHub issue type is "Epic" (organizations with
+ * issue types): `gh issue list` cannot return the type, the REST issues list does (`type.name`). A
+ * repository without issue types (or a failed read) gives none: the `epic` label still works.
  */
 async function typedEpics({ platform, repo, exec = backlog.execCli }) {
   try {
     const t = apiTarget(platform, repo);
-    const out = await exec('gh', ['api', ...t.hostArgs, '--paginate', `repos/${t.path}/issues?state=open&per_page=100`, '--jq', '.[] | select(((.type.name // "") | ascii_downcase) == "epic") | .number']);
+    const out = await exec('gh', ['api', ...t.hostArgs, '--paginate', `repos/${t.path}/issues?state=all&per_page=100`, '--jq', '.[] | select(((.type.name // "") | ascii_downcase) == "epic") | .number']);
     return new Set(String(out || '').split(/\s+/).filter((s) => /^\d+$/.test(s)).map(Number));
   } catch {
     return new Set();
