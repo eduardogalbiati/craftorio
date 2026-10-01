@@ -25,7 +25,7 @@ const SUFFIXES = ['js', 'python', 'go', 'java', 'csharp', 'gh', 'gl'];
 const SOURCE_DIRS = ['src', 'scripts'];
 // Folders described as a whole: no header comment to read from.
 const FOLDERS = [
-  ['src/renderer/', 'Plain HTML/CSS/JS UI, no bundler (index.html, style.css and one script per screen). See [renderer.md](renderer.md).'],
+  ['src/renderer/', 'Plain HTML/CSS/JS UI, no bundler (index.html, style.css and one script per screen; moved screens in `views/<view>/`, registered with `registerView`). See [renderer.md](renderer.md).'],
   ['src/service/channels/', 'The service\'s channels, one file per area (see `src/service/manifest.js`).'],
   ['workflows/*.yaml', 'The bundled workflows (seeded into `<workspace>/workflows/`). See [engine.md](engine.md).'],
   ['skills/', 'The bundled skills, one folder each (`SKILL.md` + support files, seeded into `<workspace>/skills/`); the README table is generated from their frontmatter.'],
@@ -89,8 +89,9 @@ function codeMap(root = ROOT) {
     '- **A channel** (`window.api` method): add an entry to the area\'s file in `src/service/channels/`',
     '  (or a new file there: files are discovered). `src/preload.js` and `src/renderer/api-http.js` build',
     '  `window.api` from the manifest at runtime; nothing else to edit.',
-    '- **A screen**: its script and markup in `src/renderer/`, and a fragment `docs/screens/<view>.md`',
-    '  (`menu`, `order`, text) for the README table; run `npm run docs`.',
+    '- **A screen**: a folder `src/renderer/views/<view>/` (`<view>.js` calling `registerView`, `<view>.css`;',
+    '  see [renderer.md](renderer.md)), its `<link>`/`<script>` lines in `index.html`, and a fragment',
+    '  `docs/screens/<view>.md` (`menu`, `order`, text) for the README table; run `npm run docs`.',
     '- **A skill**: a folder `skills/<name>/SKILL.md` with `name`, `description`, `summary` and `used_by`',
     '  in its frontmatter; run `npm run docs` for the README table.',
     '- **A source file**: start it with a header comment (what it does, who uses it); this map picks it up.',

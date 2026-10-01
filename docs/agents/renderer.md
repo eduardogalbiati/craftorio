@@ -10,6 +10,20 @@ Read this before changing anything in `src/renderer/`.
   Definitions shows agents with their session mode and capabilities, Builder is `builder.js`), agents, skills, usage,
   settings, run (+ run chat); terminal dock; supervisor drawer. The code map
   ([code-map.md](code-map.md)) says which file draws which screen.
+- **One folder per screen** (#78, moved in slices; Settings and Usage so far):
+  `src/renderer/views/<view>/<view>.js` + `<view>.css`. The script ends with
+  `registerView({ id, nav: { label, icon, order, title }, markup, modals, mount, show })`
+  (`view-registry.js`, loaded before `app.js`): `markup` is the screen's whole
+  `<section id="view-<id>" class="view hidden">`, added to `main.content`; `modals` its own dialogs,
+  added to the body; `nav` its sidebar entry, placed by `order` among the static entries'
+  `data-order` (10 = Sessions … 130 = AI Arena: pick a free number between two); `mount()` wires its
+  controls once; `show()` runs on each `showView(id)`. Sidebar clicks are delegated, so registered
+  entries need no wiring. View scripts load after `app.js` and use its globals (`$`, `esc`, `state`,
+  `api`, `errMsg`, `openModal`…); keep app-wide pieces (top-bar widgets, `loadUsage`, shared tables)
+  in `app.js`, and shared tokens and components (buttons, badges, `.s-group`/`.s-row`, `.switch`,
+  tables, scrollbars, checkboxes) in `style.css`. **Adding a screen**: create its folder, add its
+  `<link>` and `<script>` lines to `index.html`, a `VIEWS` entry in `scripts/screenshot.js` and a
+  `docs/screens/<view>.md` fragment; `index.html`'s nav, `showView` and `init()` stay untouched.
 - Several runs can be in progress: `state.runs` (run id → view: run, sessions, steps, log, gates) and
   `state.runId` (the one the Run screen and the top bar show); `state.run`, `state.sessions`… read the
   selected one. Route anything run-specific by `ev.run_id` and pass the `runId` to `stopRun`,

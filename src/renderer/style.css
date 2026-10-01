@@ -247,16 +247,7 @@ body:not(.dev-mode) .dev-only { display: none !important; }
 .wf-step-head .badge { font-size: 10px; }
 .wf-step-next { color: var(--muted); margin-top: 3px; }
 
-/* ---------- settings (Cursor style) ---------- */
-.settings { display: flex; height: 100%; }
-.settings-nav { width: 220px; flex: none; padding: 28px 12px 28px 20px; border-right: 1px solid var(--border); display: flex; flex-direction: column; gap: 2px; }
-.settings-nav h1 { margin-bottom: 14px; padding-left: 10px; }
-.settings-tab { text-align: left; padding: 7px 10px; border-radius: 7px; border: none; background: none; color: var(--muted); font: inherit; cursor: pointer; }
-.settings-tab:hover { color: var(--text); background: var(--panel-2); }
-.settings-tab.active { color: var(--text); background: var(--panel-2); font-weight: 600; }
-.settings-body { flex: 1; overflow: auto; padding: 28px 40px; }
-.settings-page { max-width: 760px; }
-.settings-title { font-size: 18px; text-transform: none; letter-spacing: 0; color: var(--text); margin: 0 0 14px; }
+/* ---------- settings rows (Settings, Usage and other screens; the Settings layout is in views/settings) ---------- */
 .s-subtitle { font-size: 13px; color: var(--muted); margin: 24px 0 8px; font-weight: 600; }
 .s-group { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 12px; }
 .s-row { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 14px 16px; }
@@ -578,29 +569,15 @@ details[open] > summary .label::after { content: " ▾"; }
 .meter.compact .meter-top { font-size: 11px; }
 .meter.compact .meter-bar { height: 4px; border: none; }
 
-/* ---------- usage view ---------- */
-#view-usage .s-subtitle { margin-top: 28px; }
+/* ---------- usage and analytics: stats and tables (the Usage screen is in views/usage) ---------- */
 .badge.live { margin-left: 6px; color: var(--accent); font-family: inherit; }
 .usage-unavailable { color: var(--muted); border: 1px dashed var(--border); border-radius: 10px; padding: 12px 14px; margin-bottom: 14px; }
-.usage-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
-.usage-card { gap: 10px; }
-.card-icon.p-claude { color: var(--orange); }
-.card-icon.p-codex { color: var(--green); }
-.card-icon.p-grok { color: var(--purple); }
-.u-status { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; }
-.u-status.st-ok { color: var(--green); }
-.u-status.st-warn { color: var(--yellow); }
-.u-status.st-over { color: var(--red); }
-.u-install { display: flex; flex-direction: column; gap: 3px; background: var(--panel-2); border-radius: 8px; padding: 8px 10px; }
-.u-install code { font-family: var(--mono); font-size: 11px; word-break: break-all; user-select: all; }
 .u-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
 .u-stat { background: var(--panel-2); border-radius: 8px; padding: 7px 9px; min-width: 0; }
 .u-stat label { display: block; font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .u-stat b { font-family: var(--mono); font-size: 16px; font-weight: 600; }
 .u-breakdown { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 11px; color: var(--muted); }
 .u-breakdown b { color: var(--text); font-weight: 600; }
-.u-note { margin: 0; }
-.u-meters { display: grid; gap: 10px; }
 .table-wrap { overflow-x: auto; }
 .u-table { width: 100%; border-collapse: collapse; font-size: 12px; }
 .u-table th { text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; padding: 9px 12px; border-bottom: 1px solid var(--border); }
@@ -610,14 +587,7 @@ details[open] > summary .label::after { content: " ▾"; }
 .u-table .nowrap { white-space: nowrap; }
 .u-table.compact th, .u-table.compact td { padding: 5px 0; }
 .u-table.compact th + th, .u-table.compact td + td { padding-left: 10px; }
-.u-table.prices input { width: 96px; font-family: var(--mono); text-align: right; padding: 5px 7px; }
-.u-table.prices input.price-model { width: 100%; min-width: 160px; text-align: left; }
-.u-table.prices td:last-child { white-space: nowrap; }
-.price-msg { margin-right: 8px; color: var(--green); }
-.price-msg.error { color: var(--red); min-height: 0; }
-.u-split { display: flex; flex-wrap: wrap; gap: 4px; }
 .u-table .pill { font-size: 10px; }
-.usage-note { margin-top: 20px; }
 
 /* ---------- usage: scope toggle, plan, orchestrator split ---------- */
 .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; padding: 2px; background: var(--panel-2); gap: 2px; }
@@ -632,13 +602,6 @@ details[open] > summary .label::after { content: " ▾"; }
 .u-plan-pct.st-ok { color: var(--green); }
 .u-plan-pct.st-warn { color: var(--yellow); }
 .u-plan-pct.st-over { color: var(--red); }
-.u-plan { display: grid; gap: 8px; border: 1px solid var(--border); border-radius: 8px; padding: 9px 10px; }
-.u-plan-head { display: flex; align-items: center; gap: 8px; }
-.u-orch { display: grid; gap: 4px; }
-.split-bar { height: 6px; border-radius: 99px; background: rgba(138,145,163,.3); overflow: hidden; }
-.split-bar span { display: block; height: 100%; background: var(--accent); }
-.bd-outside { margin-top: 8px; align-items: flex-start; }
-.bd-outside input { margin-top: 3px; }
 
 /* ---------- project detail ---------- */
 .pill-interrupted { background: #222733; color: var(--muted); border-color: var(--border); }
