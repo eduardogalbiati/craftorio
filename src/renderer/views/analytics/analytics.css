@@ -1,4 +1,4 @@
-/* ---------- analytics view (analytics.js) ---------- */
+/* ---------- analytics view (views/analytics/analytics.js) ---------- */
 #view-analytics .s-subtitle { margin-top: 24px; }
 .an-controls { flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .an-date { display: inline-flex; align-items: center; gap: 6px; }

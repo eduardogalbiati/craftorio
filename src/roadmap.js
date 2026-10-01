@@ -13,7 +13,7 @@
 // Run this stage (#141, `scope: { stage: <id> }`): only that stage's items start, in any order; when
 // they are all finished the roadmap pauses ("Stage N done") with the scope cleared, so Start then
 // runs the whole roadmap from its first unfinished stage.
-// Screen: src/renderer/backlog-roadmap.js; channels: src/service/channels/roadmap.js.
+// Screen: src/renderer/views/backlog/backlog-roadmap.js; channels: src/service/channels/roadmap.js.
 
 const fs = require('fs');
 const path = require('path');

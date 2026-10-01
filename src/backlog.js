@@ -18,7 +18,7 @@
 // An issue-tracker run whose owner chose "create and queue" names the issues to queue (`filedToQueue`);
 // the service syncs the backlog and assigns them when the run ends.
 // Each sync also reads the epics (#138, src/epics.js readEpics): `issue.epic` and the cache's `epics`.
-// Screen: src/renderer/backlog.js; channels: src/service/channels/backlog.js.
+// Screen: src/renderer/views/backlog/backlog.js; channels: src/service/channels/backlog.js.
 
 const fs = require('fs');
 const path = require('path');

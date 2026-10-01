@@ -1,6 +1,7 @@
 // Analytics: tokens and session metrics over a date range (default the last 30 days), for the
 // orchestrator's runs or every CLI session on this machine (the same scopes as Usage). Charts are
 // plain SVG/CSS. "Ask the supervisor" writes a report on the range (a real model call: it asks first).
+// Registers itself with registerView (view-registry.js).
 // Uses app.js globals: api, esc, fmtTok, fmtUsd, fmtDur, fmtNum, dateOf, errMsg, markdownHtml, state.
 (() => {
   const $a = (sel) => document.querySelector(sel);
@@ -214,7 +215,33 @@
     $a('#an-analyze').addEventListener('click', analyze);
   }
 
-  window.refreshAnalytics = () => { wire(); render(); load(); };
+  registerView({
+    id: 'analytics',
+    nav: { label: 'Analytics', order: 100, icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10" /><path d="M10 20V4" /><path d="M16 20v-7" /><path d="M22 20H2" /></svg>' },
+    markup: `
+      <section id="view-analytics" class="view hidden">
+        <div class="page-head">
+          <div>
+            <h1>Analytics</h1>
+            <p class="muted small" id="an-sub">Tokens and session metrics</p>
+          </div>
+          <div class="row an-controls">
+            <div class="seg" role="group" aria-label="Analytics scope"><button type="button" data-an-scope="orchestrator">Orchestrator</button><button type="button" data-an-scope="machine">This machine</button></div>
+            <div class="seg sm" role="group" aria-label="Quick range"><button type="button" data-an-days="7">7 days</button><button type="button" data-an-days="30">30 days</button><button type="button" data-an-days="90">90 days</button></div>
+            <label class="an-date small muted">From <input type="date" id="an-from" /></label>
+            <label class="an-date small muted">To <input type="date" id="an-to" /></label>
+            <button class="btn" id="an-refresh" type="button">Refresh</button>
+            <button class="btn primary" id="an-analyze" type="button" title="The supervisor writes a report on these sessions (a real model call)">Ask the supervisor</button>
+          </div>
+        </div>
+        <div id="an-body"></div>
+      </section>`,
+    mount: wire,
+    show() {
+      render();
+      load();
+    },
+  });
   // what the Supervisor is told about this screen (supervisor-chat.js)
   window.analyticsContext = () => {
     const r = range();

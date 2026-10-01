@@ -4,6 +4,7 @@
 // The workflows' own agents follow, one section per workflow (#68): read-only (View shows their
 // prompt, skills, model, capabilities and steps; only the look is saved), "Open in workflow" and
 // "Duplicate as my agent". Their saved looks are shared through window.AgentLooks.
+// Registers itself with registerView (view-registry.js), with the agent editor dialog.
 // Storage and validation are in src/agents.js. Uses app.js globals ($, esc, state, openModal,
 // closeModal, confirmDialog, errMsg, dateOf, showToast, showWorkflowDefinition) and window.Robots (robots.js).
 // load: after robots.js (the agents' robots)
@@ -385,6 +386,95 @@
     api.listAgents().then((list) => { agents = list; applySupervisorLook(); }).catch(() => {});
   }
 
-  window.refreshAgents = refreshAgents;
-  init();
+  registerView({
+    id: 'agents',
+    nav: { label: 'Agents', order: 70, icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="8" width="16" height="12" rx="3" /><path d="M12 8V4" /><circle cx="12" cy="3.5" r="1" /><circle cx="9" cy="14" r="1.2" /><circle cx="15" cy="14" r="1.2" /><path d="M2 13v3M22 13v3" /></svg>' },
+    markup: `
+      <section id="view-agents" class="view hidden">
+        <div class="page-head">
+          <div>
+            <h1>Agents</h1>
+            <p class="muted small">Reusable agents: a look, a prompt with what the agent is for, and the skills it always gets. In <span id="agents-dir" class="mono"></span></p>
+          </div>
+          <div class="row">
+            <button id="btn-new-agent" class="btn primary nowrap">New agent</button>
+          </div>
+        </div>
+        <div id="agents-list" class="card-grid agents-grid"></div>
+      </section>`,
+    modals: `
+  <div id="agent-modal" class="modal hidden">
+    <form id="agent-form" class="modal-card agent-editor">
+      <aside class="ag-preview">
+        <div id="ag-robot" class="ag-robot"></div>
+        <div id="ag-states" class="ag-states" role="group" aria-label="Preview state"></div>
+        <div class="ag-look-actions">
+          <button type="button" id="btn-ag-shuffle" class="btn ghost sm" title="Pick random colors, eyes and emblem">Shuffle look</button>
+          <button type="button" id="btn-ag-reset" class="btn ghost sm" title="Back to the default look">Reset look</button>
+        </div>
+      </aside>
+      <div class="ag-form">
+        <h3 id="agent-modal-title">New agent</h3>
+        <p id="ag-system-note" class="ag-note hidden">Built into the platform: its prompt and skills can't be changed. You can change how it looks; the new look shows wherever <span id="ag-system-where">the supervisor appears (e.g. Write &amp; Review)</span>.</p>
+        <p id="ag-workflow-note" class="ag-note hidden">Defined in the <b id="ag-workflow-name"></b> workflow: its prompt, skills, model and tools are changed there (Open in workflow). You can change how it looks; the new look shows in this workflow's runs, its chat and Write &amp; Review.</p>
+        <div class="field">
+          <label for="ag-name">Name <span class="req" id="ag-name-req">*</span></label>
+          <input type="text" id="ag-name" maxlength="60" placeholder="e.g. Security reviewer" />
+        </div>
+        <div class="field">
+          <label for="ag-description">Description <span class="muted">(one line, shown on the card)</span></label>
+          <input type="text" id="ag-description" maxlength="200" placeholder="e.g. Reviews diffs for injection, secrets and unsafe defaults" />
+        </div>
+
+        <h4 class="ag-section">Look</h4>
+        <div id="ag-colors" class="ag-colors"></div>
+        <div class="field">
+          <label>Eyes</label>
+          <div id="ag-eyes" class="seg ag-eyes" role="group" aria-label="Eyes"></div>
+        </div>
+        <div class="field">
+          <label>Emblem</label>
+          <div id="ag-emblems" class="ag-emblems" role="group" aria-label="Emblem"></div>
+        </div>
+
+        <h4 class="ag-section">Behavior</h4>
+        <div class="field">
+          <label for="ag-prompt">Prompt <span class="req" id="ag-prompt-req">*</span> <span class="muted">(the agent's context: what it is for, how it works, what it must never do)</span></label>
+          <textarea id="ag-prompt" rows="9" placeholder="You are a security reviewer. You read diffs and point out..."></textarea>
+        </div>
+        <div class="field">
+          <label>Skills <span class="muted">(<span id="ag-skill-count">0</span> selected; always given to this agent)</span></label>
+          <input type="text" id="ag-skill-search" placeholder="Filter skills…" />
+          <div id="ag-skills" class="ag-skills"></div>
+        </div>
+        <!-- the Product Owner only (#105): its model and effort (Claude Code) -->
+        <div id="ag-model-row" class="row hidden">
+          <div class="field">
+            <label for="ag-model">Model <span class="muted">(Claude Code)</span></label>
+            <input type="text" id="ag-model" list="ag-model-list" maxlength="80" placeholder="claude-opus-5-5" />
+            <datalist id="ag-model-list"></datalist>
+          </div>
+          <div class="field">
+            <label>Effort</label>
+            <div id="ag-effort" class="seg sm" role="group" aria-label="Effort"></div>
+          </div>
+        </div>
+        <!-- a workflow's agent only (#68): what the workflow's YAML says, read-only -->
+        <dl id="ag-workflow-facts" class="ag-facts hidden"></dl>
+
+        <p id="ag-error" class="error small"></p>
+        <div class="modal-actions">
+          <button type="button" id="btn-ag-remove" class="btn ghost danger hidden">Remove</button>
+          <button type="button" id="btn-ag-open-workflow" class="btn ghost hidden">Open in workflow</button>
+          <button type="button" id="btn-ag-duplicate" class="btn ghost hidden">Duplicate as my agent</button>
+          <span class="spacer"></span>
+          <button type="button" id="btn-ag-cancel" class="btn ghost">Cancel</button>
+          <button type="submit" id="btn-ag-save" class="btn primary">Save</button>
+        </div>
+      </div>
+    </form>
+  </div>`,
+    mount: init,
+    show: refreshAgents,
+  });
 })();

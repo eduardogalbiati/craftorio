@@ -1,4 +1,4 @@
-/* Sessions: CLI conversations list + embedded terminal (src/renderer/sessions.js) */
+/* Sessions: CLI conversations list + embedded terminal (views/sessions/sessions.js) */
 .view.view-sessions { padding: 0; display: flex; overflow: hidden; }
 
 .sx-side {

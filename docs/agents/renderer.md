@@ -7,19 +7,41 @@ Read this before changing anything in `src/renderer/`.
   or `api-http.js` over the engine server; a test keeps their method lists equal).
 - Views: dashboard, sessions, projects (+ project detail with runs/sessions/artifacts), backlog,
   artifacts, workflows (sidebar sub-items Runs / Definitions / Builder, `state.workflowsTab`;
-  Definitions shows agents with their session mode and capabilities, Builder is `builder.js`), agents, skills, usage,
+  Definitions shows agents with their session mode and capabilities, Builder is `views/workflows/builder.js`), agents, skills, usage,
   settings, run (+ run chat); terminal dock; supervisor drawer. The code map
   ([code-map.md](code-map.md)) says which file draws which screen.
-- **One folder per screen** (#78, moved in slices; Settings and Usage so far):
-  `src/renderer/views/<view>/<view>.js` + `<view>.css`. The script ends with
+- **One folder per screen** (#78, moved in slices; the run screens follow in #154):
+  `src/renderer/views/<view>/<view>.js` + `<view>.css`, plus the screen's other parts in the same
+  folder. The folders today:
+  - `views/dashboard/`: the start screen (its section has no `hidden`; `renderDashboard` is also called on run events);
+  - `views/sessions/`: `sessions.js` (`window.SessionsView` for notifications and terminal events) and `sessions.css`;
+  - `views/projects/`: the project cards and the New / Edit project dialog (`openProjectModal`, also opened from the Start drawer);
+  - `views/project/`: one project's page (no sidebar entry: `showView` highlights Projects);
+  - `views/backlog/`: `backlog.js` (the screen, its dialogs, the sidebar's unpushed badge), `backlog-epics.js`,
+    `backlog-labels.js`, `backlog-roadmap.js` (no DOM as they load), `backlog-po.js` and `backlog-po-proposals.js`
+    (the Product Owner drawer, put inside `.shell` like the other drawers; `backlog-po.js` wires it as it loads, so
+    its header says `load: after views/backlog/backlog.js`) and `backlog.css`;
+  - `views/artifacts/`: the Artifacts screen (`openArtifactsAt` stays a global deep link);
+  - `views/workflows/`: `workflows.js` (Runs, Definitions, the sidebar sub-items it adds after its entry, the deep links
+    `showRunInList` / `showWorkflowDefinition`), `builder.js` + `builder.css` (Builder and its two dialogs);
+  - `views/agents/`, `views/skills/`, `views/analytics/`, `views/settings/`, `views/usage/`, `views/supervisor/`.
+
+  **Shared pieces stay outside the folders**: `run-list.js` (the run list of Project and Workflows › Runs),
+  `artifacts-panel.js` and `artifact-menu.js` (the Run screen's Artifacts panel and the copy menu),
+  `robots.js`, the artifact kinds and markdown helpers in `app.js`; the agent cards and the skill picker's
+  rules (`.agent-card*`, `.ag-skill*`, also the Builder's dialogs) and the run list's (`.pr-*`) in `style.css`.
+  The script calls
   `registerView({ id, nav: { label, icon, order, title }, markup, modals, mount, show })`
   (`view-registry.js`, loaded before `app.js`): `markup` is the screen's whole
   `<section id="view-<id>" class="view hidden">`, added to `main.content`; `modals` its own dialogs,
-  added to the body; `nav` its sidebar entry, placed by `order` among the static entries'
+  added to the body; `nav` its sidebar entry, placed by `order` among the other entries'
   `data-order` (10 = Sessions … 130 = AI Arena: pick a free number between two); `mount()` wires its
-  controls once; `show()` runs on each `showView(id)`. Sidebar clicks are delegated, so registered
-  entries need no wiring. View scripts load after `app.js` and use its globals (`$`, `esc`, `state`,
-  `api`, `errMsg`, `openModal`…); keep app-wide pieces (top-bar widgets, `loadUsage`, shared tables)
+  controls once (and adds what `nav` can't: a badge, sub-items); `show()` runs on each `showView(id)`.
+  Sidebar clicks are delegated, so registered entries need no wiring. View scripts load after `app.js`
+  and use its globals (`$`, `esc`, `state`, `api`, `errMsg`, `openModal`…); functions other files call
+  (`renderDashboard`, `openArtifactsAt`, `loadProjectRunsThrottled`…) are plain top-level functions, so
+  they stay globals. `app.js`'s `init()` runs on `DOMContentLoaded`, once every view is registered: the
+  page can run an IPC reply between two scripts, so nothing it fills may be missing. Keep app-wide pieces (top-bar widgets, `loadUsage`, shared tables)
   in `app.js`, and shared tokens and components (buttons, badges, `.s-group`/`.s-row`, `.switch`,
   tables, scrollbars, checkboxes) in `style.css`. **Adding a screen**: create its folder, a `VIEWS`
   entry in `scripts/screenshot.js` and a `docs/screens/<view>.md` fragment, then run `npm run docs`;
@@ -55,7 +77,7 @@ Read this before changing anything in `src/renderer/`.
 - **Run titles and PRs** (#84): `state.runMeta` (run id → `{ title, customTitle, pr }`) is fed by
   `runs:list`, the project's runs, `runs:active`, Backlog data and the `run:meta` push (PR state
   changes, a title set); every place reads it through `runTitle(r)` / `runLabel(r)` / `prBadge(r)`
-  in `app.js` (exported on `window` for `run-chat.js` and `backlog.js`) so they agree. Drawing is in
+  in `app.js` (exported on `window` for `run-chat.js` and `views/backlog/backlog.js`) so they agree. Drawing is in
   `run-badges.js` (pure: PR glyph and state colours, the default title). A PR without a state is
   asked with `askPrStates` (`runs:prState`, cached by the service). The title's pencil
   (`runTitleHtml`, `[data-title-edit]`) and the PR link (`[data-pr-url]`) are handled by one
@@ -131,8 +153,8 @@ which the software-development developer and evidence agents load (#111). In thi
   `.empty-state`; the standard `select` / `input[type=text]` styles (their focus is on the control).
 - **Controls follow the data**: a workflow input with `enum` is a select or a `.seg` toggle, a
   boolean (or an enum of `"false"`/`"true"`) a checkbox, everything else text, with the input's
-  `description` as `.hint` (`renderAssignInputs` in `backlog.js` and the Roadmap's Edit form in
-  `backlog-roadmap.js` are the models). Short values never get a full-width box.
+  `description` as `.hint` (`renderAssignInputs` in `views/backlog/backlog.js` and the Roadmap's Edit
+  form in `views/backlog/backlog-roadmap.js` are the models). Short values never get a full-width box.
 - **What leads**: titles (issue, run, project) are the headline; workflow files, ids and run ids
   are small badges or links with the full value in `title`. Long titles ellipsize.
 - **Edits**: several fields → an Edit form with Save / Cancel; one obvious choice (a mode) → a

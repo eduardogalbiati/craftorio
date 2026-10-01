@@ -1,0 +1,226 @@
+/* Backlog screen (views/backlog/): the Product Owner panel (backlog-po.js), the list, kanban, epics
+   and roadmap modes, the queue, the local merges and the assign / push / unqueue dialogs. The
+   sidebar badge (.nav-badge.warn) and .bl-grouping (also the Write & Review save dialog) stay in
+   style.css. */
+/* ---------- Backlog › Product Owner (#105, backlog-po.js): teal, like its robot ---------- */
+.po-fab {
+  position: fixed; right: 24px; bottom: 24px; z-index: 4; width: 64px; height: 64px; padding: 4px;
+  border-radius: 50%; border: 2px solid #0F9F8F; background: var(--panel); cursor: pointer;
+  box-shadow: 0 8px 24px rgba(0,0,0,.4); transition: transform .15s ease;
+}
+.po-fab:hover { transform: scale(1.06); }
+.po-fab svg { width: 100%; height: 100%; display: block; }
+.po-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.po-avatar { width: 40px; height: 40px; flex: none; }
+.po-avatar svg, .po-empty-robot svg { width: 100%; height: 100%; display: block; }
+.po-log { display: flex; flex-direction: column; gap: 10px; }
+.po-empty { display: flex; gap: 14px; align-items: center; }
+.po-empty-robot { width: 96px; height: 96px; flex: none; }
+.po-msg { border-left-color: #0F9F8F; }
+.po-sec { margin-top: 12px; }
+.po-sec .sup-h { color: #2DD4BF; }
+.po-group { border: 1px solid var(--border); border-left: 3px solid #0F9F8F; background: var(--panel); border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; display: grid; gap: 5px; }
+.po-group-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.po-issues { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+.po-issue { text-decoration: none; color: var(--text); }
+.po-issue:hover { border-color: #2DD4BF; }
+.po-list a:not(.po-issue) { color: #2DD4BF; }
+.po-group-actions { flex-wrap: wrap; margin-top: 2px; }
+/* a group already in the roadmap or assigned (#140): dimmed, still readable and selectable */
+.po-group.applied { border-left-color: var(--border); background: transparent; color: var(--muted); }
+.po-group.applied .po-issue { color: var(--muted); }
+.po-applied { cursor: pointer; border-color: var(--accent); color: var(--accent); background: transparent; }
+span.po-applied { cursor: default; }
+.po-list { margin: 0; padding-left: 18px; display: grid; gap: 4px; font-size: 13px; }
+.po-foot { display: grid; gap: 8px; }
+.po-chips { margin-bottom: 0; }
+.po-ask textarea { flex: 1; min-width: 0; resize: vertical; }
+/* Register an issue (#117): attachments, the draft preview and its actions */
+.po-foot > .seg { justify-self: start; }
+.po-foot.dropping { outline: 2px dashed #2DD4BF; outline-offset: -4px; }
+.po-files { display: flex; gap: 6px; flex-wrap: wrap; }
+.po-file { display: inline-flex; align-items: center; gap: 4px; max-width: 220px; }
+.po-file span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.po-file button { border: none; background: none; color: var(--muted); cursor: pointer; padding: 0 2px; }
+.po-draft { border: 1px solid var(--border); border-left: 3px solid #0F9F8F; background: var(--panel); border-radius: 8px; padding: 10px 12px; display: grid; gap: 6px; }
+.po-draft-title { font-size: 15px; font-weight: 700; }
+.po-draft-meta { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
+.po-draft-body { max-height: 360px; overflow: auto; border-top: 1px solid var(--border); padding-top: 6px; }
+.po-draft-actions { flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.po-questions { font-weight: 600; }
+#po-note { margin: 0; }
+/* Split what is too big (#124) and epics (#138): backlog-po-proposals.js */
+.po-split-title { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.po-children { margin: 0; padding-left: 18px; display: grid; gap: 6px; }
+.po-child-head { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.po-child-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.po-tasks { margin: 2px 0 0; padding-left: 14px; list-style: none; display: grid; gap: 1px; }
+.po-tasks li { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.po-edit { border: 1px solid var(--border); border-radius: 8px; background: var(--panel-2); padding: 10px; display: grid; gap: 8px; }
+.po-edit .field { margin-bottom: 0; }
+.po-edit-child { display: grid; gap: 4px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+.po-edit-child input[type="text"] { width: 100%; }
+.po-edit-num { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); }
+.po-edit-num input { width: 52px; }
+.po-edit-tasks { display: grid; gap: 4px; max-height: 260px; overflow: auto; }
+.po-edit-task { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; }
+.po-edit-task > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---- Backlog ---- */
+#bl-search { width: 240px; }
+#bl-project { width: 220px; }
+#bl-platform { width: 130px; }
+.bl-row {
+  display: grid; grid-template-columns: 16px 10px 48px minmax(0, 1fr) auto 110px 130px 16px;
+  align-items: center; gap: 12px; padding: 10px 14px; cursor: pointer;
+}
+.bl-row:hover { background: var(--panel-2); border-radius: 10px; }
+.pr-run.open .bl-row { border-bottom: 1px solid var(--border); border-radius: 10px 10px 0 0; }
+.bl-state { width: 10px; height: 10px; border-radius: 50%; background: var(--green); }
+.bl-state.closed { background: var(--purple); }
+.bl-num { color: var(--muted); font-size: 12px; }
+.bl-main { min-width: 0; }
+.bl-title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bl-labels { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.bl-labels:empty { display: none; }
+.bl-label { --lc: var(--muted); font-size: 10.5px; padding: 0 7px; border-radius: 99px; border: 1px solid var(--lc); color: var(--lc); }
+button.bl-label { font-family: inherit; background: none; cursor: pointer; }
+.bl-label.on { background: color-mix(in srgb, var(--lc) 22%, transparent); }
+.bl-labels-wrap { position: relative; }
+.bl-labels-pop {
+  position: absolute; top: calc(100% + 6px); left: 0; z-index: 20; min-width: 220px; max-height: 340px; overflow: auto;
+  padding: 6px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 12px 32px rgba(0,0,0,.4);
+}
+.bl-label-opt { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 6px; cursor: pointer; }
+.bl-label-opt:hover { background: var(--panel-2); }
+.bl-label-opt .muted { margin-left: auto; }
+.bl-label-active { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.bl-label-active:empty { display: none; }
+/* Issue triage (#81): impact / complexity 1-5 from the impact:<n> / complexity:<n> labels */
+#bl-sort { width: auto; flex: none; }
+.bl-triage { font-family: var(--mono); font-size: 10.5px; padding: 0 6px; border: 1px solid currentColor; background: transparent; }
+.bl-triage.lvl-1, .bl-triage.lvl-2 { color: var(--muted); }
+.bl-triage.lvl-3 { color: var(--yellow); }
+.bl-triage.lvl-4 { color: var(--orange); }
+.bl-triage.lvl-5 { color: var(--red); }
+.bl-tasks { display: flex; align-items: center; gap: 6px; }
+.bl-bar { flex: 1; height: 5px; border-radius: 3px; background: var(--panel-2); overflow: hidden; }
+.bl-bar > span { display: block; height: 100%; background: var(--green); }
+.bl-md { max-width: none; font-size: 13px; }
+.bl-md li:has(> input[type=checkbox]) { list-style: none; margin-left: -20px; }
+.bl-issue a.btn { text-decoration: none; }
+#bl-mode { flex-wrap: nowrap; }
+.bl-run { display: inline-flex; align-items: center; gap: 6px; font: inherit; font-size: 12px; color: var(--text); background: none; border: 1px solid var(--border); border-radius: 99px; padding: 2px 8px 2px 3px; cursor: pointer; white-space: nowrap; }
+.bl-run:hover { border-color: var(--accent); }
+.bl-runs { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.bl-board { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; align-items: start; }
+.bl-board.with-local { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.bl-col-local h3 { color: var(--orange); }
+.bl-local { border-color: var(--orange); }
+.bl-local .error { margin: 0; }
+.bl-notpushed { color: var(--orange); border-color: var(--orange); }
+.bl-push-commits { max-height: 220px; overflow: auto; margin: 6px 0; padding-left: 18px; }
+.bl-col { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 10px; }
+.bl-col h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 2px 4px 10px; }
+.bl-col-in_progress h3 { color: var(--accent); }
+.bl-col-done h3 { color: var(--purple); }
+.bl-col-waiting h3 { color: var(--yellow); }
+.bl-col-body { display: grid; gap: 8px; }
+.bl-card { background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 10px; display: grid; gap: 6px; }
+.bl-card-head { display: flex; gap: 8px; align-items: baseline; }
+.bl-card-title { color: var(--text); font-weight: 600; text-decoration: none; min-width: 0; overflow-wrap: anywhere; }
+.bl-card-title:hover { text-decoration: underline; }
+.bl-card .bl-labels { margin-top: 0; }
+.bl-sel { display: flex; }
+.bl-check { margin: 0; cursor: pointer; }
+.bl-card-head .bl-check { align-self: flex-start; margin-top: 2px; }
+.bl-issue.selected, .bl-card.selected { border-color: var(--accent); }
+.bl-status { display: flex; align-items: center; gap: 6px; justify-self: end; }
+.bl-queued { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.bl-card-run { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
+/* narrow columns (five with "Merged locally"): the workflow name ellipsizes instead of overflowing the card */
+.bl-card-run .bl-run { max-width: 100%; min-width: 0; }
+.bl-card-run .bl-run > span:not(.pill):not(.badge) { overflow: hidden; text-overflow: ellipsis; }
+.bl-queue { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 8px 12px; margin-bottom: 12px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; }
+.bl-queue .error { margin: 0; }
+#assign-issues { max-height: 90px; overflow: auto; }
+.bl-pr { color: var(--green); text-decoration: none; }
+.bl-pr:hover { text-decoration: underline; }
+.bl-pr.draft { color: var(--muted); }
+.bl-prs { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.bl-busy { border: 1px solid var(--yellow); border-radius: 8px; padding: 8px 10px; margin: 8px 0; display: grid; gap: 6px; }
+.bl-busy ul { margin: 0; padding-left: 18px; }
+.bl-group { color: var(--accent); }
+/* Write & Review on an issue (#103): its run's badge and the card's action */
+.bl-enrich { cursor: pointer; border: 1px solid var(--accent); color: var(--accent); background: transparent; }
+.bl-card-actions { display: flex; justify-content: flex-end; }
+.bl-skipped { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+/* Epics (#138): the card badge, the filter, the Epics view (backlog.js renderEpics) */
+.bl-epic { border: 1px solid #8B5CF6; color: #A78BFA; background: transparent; cursor: pointer; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: inherit; font-size: 11px; }
+.bl-epic.on { background: rgba(139, 92, 246, 0.18); }
+#bl-epic { width: auto; flex: none; max-width: 220px; }
+#bl-epic.active { border-color: #8B5CF6; }
+.bl-epics { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 10px; }
+.bl-epic-card { border: 1px solid var(--border); border-left: 3px solid #8B5CF6; border-radius: 10px; padding: 8px 12px; background: var(--panel); display: grid; gap: 6px; align-content: start; }
+.bl-epic-card.bl-epic-none { border-left-color: var(--border); }
+.bl-epic-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.bl-epic-title { font-weight: 700; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); text-decoration: none; }
+.bl-epic-members { margin: 0; padding: 0; list-style: none; display: grid; gap: 3px; font-size: 13px; }
+.bl-epic-member { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.bl-epic-member-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); text-decoration: none; }
+.bl-epic-member-title:hover { text-decoration: underline; }
+.bl-epics-bar { margin-bottom: 10px; }
+.bl-epic-head .bl-tasks { width: 110px; flex-shrink: 0; }
+.bl-epic-member > .badge, .bl-epic-member > span { flex-shrink: 0; white-space: nowrap; }
+.rm-by-epic { margin-right: 6px; }
+/* Backlog › Roadmap (backlog-roadmap.js) */
+.bl-roadmap { color: var(--accent); }
+.rm { display: grid; gap: 10px; }
+.rm .bl-queue { margin-bottom: 0; }
+.rm-stage { border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px; background: var(--panel); display: grid; gap: 6px; }
+.rm-stage.current { border-color: var(--accent); }
+.rm-stage.finished { opacity: .7; }
+/* the stage run on its own (#141); a stage opened from the Product Owner's drawer (#140) */
+.rm-stage.scoped { border-color: var(--green); box-shadow: inset 3px 0 0 var(--green); }
+.rm-stage.flash { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); transition: box-shadow .3s; }
+.rm-stage-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+/* the stage name reads as text until hovered or edited */
+input[type=text].rm-name { flex: 0 1 260px; border-color: transparent; background: transparent; padding: 3px 6px; font-weight: 600; }
+input[type=text].rm-name:hover { border-color: var(--border); }
+input[type=text].rm-name:focus { border-color: var(--accent); background: var(--panel-2); }
+input[type=text].rm-note { max-width: 520px; }
+.rm-note-text { margin: 0; }
+.rm-items { display: grid; gap: 6px; }
+.rm-item { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; display: grid; gap: 6px; }
+.rm-item[draggable="true"] { cursor: grab; }
+.rm-item.rm-failed { border-color: var(--red); }
+.rm-item.rm-waiting { border-color: var(--yellow); }
+/* an item leads with its issues' titles, one line each (ellipsis, the full title on hover) */
+.rm-item-head { display: flex; align-items: flex-start; gap: 8px; }
+.rm-titles { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; flex: 1; min-width: 0; }
+.rm-issue { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+.rm-issue[draggable="true"] { cursor: grab; }
+.rm-num { color: var(--muted); font-size: 12px; flex: none; }
+.rm-title { color: var(--text); font-weight: 600; text-decoration: none; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+a.rm-title:hover { text-decoration: underline; }
+.rm-actions { display: flex; align-items: center; gap: 6px; flex: none; }
+.rm-meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.rm-meta .pill { font-size: 10px; padding: 1px 7px; }
+.rm-wf, .rm-input { color: var(--muted); }
+.rm-mode svg, .rm-mode-seg svg { width: 11px; height: 11px; margin-right: 4px; vertical-align: -1px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linejoin: round; }
+.badge.rm-mode-validated, .rm-mode-seg button.rm-mode-validated.active { color: var(--accent); }
+.rm-mode-seg button { display: inline-flex; align-items: center; }
+.rm-mode-seg button:focus-visible { outline: var(--focus-ring); outline-offset: 1px; }
+.rm-reason > summary { list-style: none; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rm-reason > summary::-webkit-details-marker { display: none; }
+.rm-reason[open] > summary { white-space: normal; }
+.rm-reason p { margin: 2px 0 0; }
+/* the Edit form: .field with the label above, two columns on wide cards, explicit Save / Cancel */
+.rm-form { border: 1px solid var(--border); border-radius: 8px; background: var(--panel-2); padding: 10px 12px; display: grid; gap: 6px; cursor: default; }
+.rm-form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0 16px; }
+.rm-form .field { margin-bottom: 6px; min-width: 0; }
+.rm-form select, .rm-form input[type=text] { background: var(--panel); max-width: 240px; padding: 5px 8px; }
+.rm-form .rm-add .row input { max-width: 180px; }
+.rm-form > .link-btn { justify-self: start; }
+.rm-form-actions { display: flex; align-items: center; gap: 8px; }
+.rm-import textarea { width: 100%; }

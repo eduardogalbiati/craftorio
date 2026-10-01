@@ -22,7 +22,8 @@
 // Developer or simulated mode asks the simulated Product Owner (no model call) and only previews a filing.
 // Uses app.js globals ($, esc, state, errMsg, devMode, fmtCost, fmtSize, markdownHtml, confirmDialog)
 // and window.Robots (robots.js).
-// load: after robots.js (the button's robot is drawn as it loads)
+// Its button and drawer are part of the Backlog's markup (backlog.js registerView): wired as it loads.
+// load: after robots.js views/backlog/backlog.js (the button's robot is drawn and the drawer wired as it loads)
 /* global api, Robots */
 (() => {
   const QUESTIONS = [

@@ -22,6 +22,8 @@
 // and the search); the fourth mode, Epics, lists the epics with their progress (closed, done in the
 // roadmap) and members, the "Auto-place new issues" option (project.autoEpic) and "Organize into
 // epics…", which asks the Product Owner (window.BacklogPO).
+// Registers itself with registerView (view-registry.js), with the Product Owner drawer and the
+// assign / push / unqueue dialogs; mount() wires them and adds the sidebar's unpushed badge.
 // Uses app.js globals ($, esc, state, errMsg, dateOf, markdownHtml, showView, openModal,
 // closeModal, devMode, wantsSimulation, openGateOf, openNextGate, selectRun, confirmDialog).
 /* global api */
@@ -820,26 +822,7 @@
     }
   }
 
-  // ---- events --------------------------------------------------------------------------------
-  $b('#bl-project').onchange = (e) => selectProject(e.target.value || null);
-  $b('#bl-platform').onchange = (e) => {
-    bl.platform = e.target.value;
-    bl.seq++;
-    bl.syncing = false;
-    bl.error = null;
-    render();
-    if (!PLATFORMS[bl.platform]?.soon) sync();
-  };
-  $b('#btn-bl-sync').onclick = sync;
-  $b('#btn-bl-new-issue').onclick = newIssue;
-  $b('#bl-sort').onchange = (e) => { bl.sort = e.target.value; save(SORT_KEY, bl.sort); render(); };
-  $b('#btn-bl-assign').onclick = () => openAssign();
-  $b('#btn-bl-clear').onclick = () => { bl.selected.clear(); render(); };
-  $b('#bl-search').oninput = (e) => { bl.q = e.target.value.trim(); render(); };
-  $b('#bl-mode').onclick = (e) => {
-    const mode = e.target.closest('[data-mode]')?.dataset.mode;
-    if (mode) { bl.mode = mode; save(MODE_KEY, mode); render(); }
-  };
+  // the toolbar's and the list's filters
   function clearFilters() {
     bl.q = '';
     $b('#bl-search').value = '';
@@ -847,7 +830,6 @@
     bl.epic = '';
     render();
   }
-  $b('#bl-epic').onchange = (e) => { bl.epic = e.target.value; render(); };
   // an epic's badge or "Show its issues": that epic in the list (the Epics view switches to the list)
   function filterEpic(id) {
     bl.epic = bl.epic === id && bl.mode !== 'epics' ? '' : id;
@@ -855,112 +837,284 @@
     render();
   }
   const flipLabel = (name) => { setLabels(toggleLabel(bl.labels, name)); render(); };
-  $b('#btn-bl-labels').onclick = () => { bl.labelsOpen = !bl.labelsOpen; render(); };
-  $b('#bl-labels-pop').onchange = (e) => {
-    const opt = e.target.closest('[data-label-opt]');
-    if (opt) flipLabel(opt.dataset.labelOpt);
-  };
-  $b('#bl-label-active').onclick = (e) => {
-    if (e.target.closest('[data-label-clear]')) { setLabels([]); render(); return; }
-    const chip = e.target.closest('[data-label]');
-    if (chip) flipLabel(chip.dataset.label);
-  };
-  // the label menu closes on a click outside it
-  document.addEventListener('click', (e) => {
-    if (bl.labelsOpen && e.target.isConnected && !e.target.closest('#bl-labels-wrap')) { bl.labelsOpen = false; render(); }
+
+  // the Product Owner's drawer (backlog-po.js): inside the app shell, like the other drawers
+  const PO_DRAWER = `
+    <div id="po-backdrop" class="drawer-backdrop sup-backdrop hidden"></div>
+    <aside id="po-drawer" class="drawer sup-drawer po-drawer" aria-hidden="true" aria-label="Product Owner">
+      <div class="drawer-head">
+        <div class="po-head">
+          <span id="po-avatar" class="po-avatar" aria-hidden="true"></span>
+          <div class="sup-head">
+            <h2 class="drawer-title">Product Owner</h2>
+            <div id="po-sub" class="muted small"></div>
+          </div>
+        </div>
+        <div class="row">
+          <button id="btn-po-clear" class="btn sm ghost" type="button" title="Forget this project's conversation">Clear</button>
+          <button id="btn-po-close" class="icon-btn" title="Close (Esc)">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" /></svg>
+          </button>
+        </div>
+      </div>
+      <div id="po-log" class="drawer-body po-log"></div>
+      <div class="drawer-foot po-foot">
+        <div id="po-mode" class="seg sm" role="group" aria-label="What to do with the Product Owner">
+          <button type="button" data-po-mode="plan">Plan the backlog</button>
+          <button type="button" data-po-mode="issue">Register an issue</button>
+        </div>
+        <div id="po-chips" class="chips po-chips"></div>
+        <div id="po-files" class="po-files hidden"></div>
+        <div class="row po-ask">
+          <textarea id="po-question" rows="2" placeholder="Ask about the backlog: which issues should go first?"></textarea>
+          <button id="btn-po-attach" class="icon-btn hidden" type="button" title="Attach screenshots or files (you can also paste or drop them)" aria-label="Attach files">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5l-8.5 8.5a5 5 0 0 1-7-7L14 4.5a3.5 3.5 0 0 1 5 5L10.5 18a2 2 0 0 1-3-3L15 7.5" /></svg>
+          </button>
+          <button id="btn-po-ask" class="btn primary" type="button">Ask</button>
+          <input id="po-file-input" type="file" multiple hidden />
+        </div>
+        <p id="po-note" class="muted small"></p>
+      </div>
+    </aside>
+`;
+
+  // ---- events --------------------------------------------------------------------------------
+  function mount() {
+    $b('.shell').insertAdjacentHTML('beforeend', PO_DRAWER);
+    // the sidebar entry's count of commits merged locally and not pushed (app.js refreshUnpushed)
+    $b('nav.sidebar [data-view="backlog"]').insertAdjacentHTML('beforeend', '<span id="nav-backlog-unpushed" class="nav-badge warn hidden"></span>');
+    $b('#bl-project').onchange = (e) => selectProject(e.target.value || null);
+    $b('#bl-platform').onchange = (e) => {
+      bl.platform = e.target.value;
+      bl.seq++;
+      bl.syncing = false;
+      bl.error = null;
+      render();
+      if (!PLATFORMS[bl.platform]?.soon) sync();
+    };
+    $b('#btn-bl-sync').onclick = sync;
+    $b('#btn-bl-new-issue').onclick = newIssue;
+    $b('#bl-sort').onchange = (e) => { bl.sort = e.target.value; save(SORT_KEY, bl.sort); render(); };
+    $b('#btn-bl-assign').onclick = () => openAssign();
+    $b('#btn-bl-clear').onclick = () => { bl.selected.clear(); render(); };
+    $b('#bl-search').oninput = (e) => { bl.q = e.target.value.trim(); render(); };
+    $b('#bl-mode').onclick = (e) => {
+      const mode = e.target.closest('[data-mode]')?.dataset.mode;
+      if (mode) { bl.mode = mode; save(MODE_KEY, mode); render(); }
+    };
+    $b('#bl-epic').onchange = (e) => { bl.epic = e.target.value; render(); };
+    $b('#btn-bl-labels').onclick = () => { bl.labelsOpen = !bl.labelsOpen; render(); };
+    $b('#bl-labels-pop').onchange = (e) => {
+      const opt = e.target.closest('[data-label-opt]');
+      if (opt) flipLabel(opt.dataset.labelOpt);
+    };
+    $b('#bl-label-active').onclick = (e) => {
+      if (e.target.closest('[data-label-clear]')) { setLabels([]); render(); return; }
+      const chip = e.target.closest('[data-label]');
+      if (chip) flipLabel(chip.dataset.label);
+    };
+    // the label menu closes on a click outside it
+    document.addEventListener('click', (e) => {
+      if (bl.labelsOpen && e.target.isConnected && !e.target.closest('#bl-labels-wrap')) { bl.labelsOpen = false; render(); }
+    });
+    $b('#bl-filters').onclick = (e) => {
+      const f = e.target.closest('[data-f]')?.dataset.f;
+      if (f) { bl.filter = f; render(); }
+    };
+    $b('#bl-queue').onclick = async (e) => {
+      const out = e.target.closest('[data-unqueue]');
+      if (out) {
+        try { setData(await api.unqueueIssue(bl.projectId, Number(out.dataset.unqueue))); } catch (err) { bl.error = errMsg(err); }
+        render();
+        return;
+      }
+      const b = e.target.closest('[data-pause]');
+      if (!b) return;
+      b.disabled = true;
+      try { setData(await api.pauseQueue(bl.projectId, b.dataset.pause === 'on')); } catch (err) { bl.error = errMsg(err); }
+      render();
+    };
+    $b('#bl-local').onclick = async (e) => {
+      if (e.target.closest('[data-push]')) { openPush(); return; }
+      const auto = e.target.closest('[data-autopush]');
+      if (auto) {
+        try {
+          await api.setAutoPush(bl.projectId, auto.checked);
+          if (bl.data) bl.data.autoPush = auto.checked;
+        } catch (err) { bl.error = errMsg(err); render(); }
+        return;
+      }
+      const check = e.target.closest('[data-check]');
+      if (!check) return;
+      check.disabled = true;
+      try {
+        const r = await api.checkLocal(bl.projectId);
+        if (r.backlog) setData(r.backlog);
+        window.refreshUnpushed?.();
+      } catch (err) { bl.error = errMsg(err); }
+      render();
+    };
+    $b('#btn-push-ok').onclick = () => doPush(false);
+    $b('#btn-push-update').onclick = () => doPush(true);
+    $b('#btn-push-resolve').onclick = resolveInRun;
+    $b('#btn-push-cancel').onclick = () => closeModal('#push-modal');
+    // Roadmap mode: its buttons, fields and drags (backlog-roadmap.js); its run links open the run below
+    $b('#bl-list').addEventListener('change', (e) => { if (bl.mode === 'roadmap') window.BacklogRoadmap.onChange(e, roadmapCtx(), bl.data); });
+    $b('#bl-list').addEventListener('dragstart', (e) => { if (bl.mode === 'roadmap') window.BacklogRoadmap.onDragStart(e); });
+    $b('#bl-list').addEventListener('dragover', (e) => { if (bl.mode === 'roadmap') window.BacklogRoadmap.onDragOver(e); });
+    $b('#bl-list').addEventListener('drop', (e) => { if (bl.mode === 'roadmap') window.BacklogRoadmap.onDrop(e, roadmapCtx(), bl.data); });
+    $b('#bl-list').onclick = async (e) => {
+      if (bl.mode === 'roadmap' && await window.BacklogRoadmap.onClick(e, roadmapCtx(), bl.data)) return;
+      const check = e.target.closest('[data-sel]');
+      if (check) {
+        const n = Number(check.dataset.sel);
+        if (check.checked) bl.selected.add(n); else bl.selected.delete(n);
+        render();
+        return;
+      }
+      const watch = e.target.closest('[data-watch]');
+      if (watch) { window.watchWithSupervisor({ runId: watch.dataset.watch, workflow: watch.dataset.workflow, status: 'running', mock: !!watch.closest('[data-n]')?.querySelector('.p-mock') }); return; }
+      const label = e.target.closest('[data-label]');
+      if (label) { flipLabel(label.dataset.label); return; }
+      const epic = e.target.closest('[data-epic-filter]');
+      if (epic) { filterEpic(epic.dataset.epicFilter); return; }
+      const auto = e.target.closest('[data-auto-epic]');
+      if (auto) {
+        try {
+          await api.setAutoEpic(bl.projectId, auto.checked);
+          if (bl.data) bl.data.autoEpic = auto.checked;
+        } catch (err) { bl.error = errMsg(err); render(); }
+        return;
+      }
+      if (e.target.closest('[data-organize]')) { window.BacklogPO?.ask(ORGANIZE); return; }
+      if (e.target.closest('[data-clear-filters]')) { clearFilters(); return; }
+      const run = e.target.closest('[data-run]');
+      if (run) { openRun(run); return; }
+      const gate = e.target.closest('[data-gate]');
+      if (gate) { openGate(gate); return; }
+      const out = e.target.closest('[data-unqueue]');
+      if (out) { await removeQueued(Number(out.dataset.unqueue)); return; }
+      const enrich = e.target.closest('[data-enrich]');
+      if (enrich) { enrichIssue(Number(enrich.dataset.enrich)); return; }
+      if (e.target.closest('a')) return;
+      const row = e.target.closest('[data-act="toggle"]');
+      if (!row) return;
+      const n = Number(row.closest('.bl-issue').dataset.n);
+      if (bl.expanded.has(n)) bl.expanded.delete(n); else bl.expanded.add(n);
+      render();
+    };
+    $b('#assign-workflow').onchange = renderAssignInputs;
+    $b('#assign-mock').onchange = updateAssignNote;
+    $b('#assign-grouping').onchange = updateAssignNote;
+    $b('#assign-form').onsubmit = submitAssign;
+    $b('#btn-assign-roadmap').onclick = addToRoadmap;
+    $b('#btn-assign-cancel').onclick = () => closeModal('#assign-modal');
+  }
+
+  registerView({
+    id: 'backlog',
+    nav: { label: 'Backlog', order: 40, icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 6 1.5 1.5L8 5" /><path d="m4 12 1.5 1.5L8 11" /><path d="m4 18 1.5 1.5L8 17" /><path d="M11 6h9M11 12h9M11 18h9" /></svg>' },
+    markup: `
+      <section id="view-backlog" class="view hidden">
+        <div class="page-head">
+          <div>
+            <h1>Backlog</h1>
+            <p class="muted small">A project's issues, synced from its git platform. The last sync is kept in <span id="backlog-dir" class="mono"></span></p>
+          </div>
+          <div class="row">
+            <select id="bl-project" aria-label="Project"></select>
+            <select id="bl-platform" aria-label="Platform"></select>
+            <button id="btn-bl-sync" class="btn primary nowrap">Sync</button>
+            <button id="btn-bl-new-issue" class="btn ghost nowrap" type="button" title="Describe a problem or an idea in a few words: the issue-tracker workflow analyses the code, rates impact and complexity, drafts the issue and files it once you approve">New issue…</button>
+          </div>
+        </div>
+        <div class="pr-toolbar">
+          <div id="bl-mode" class="chips" role="tablist" aria-label="View">
+            <button class="chip" data-mode="list" role="tab">List</button>
+            <button class="chip" data-mode="kanban" role="tab">Kanban</button>
+            <button class="chip" data-mode="roadmap" role="tab" title="Ordered stages of runs: each stage starts when the previous one has finished and merged">Roadmap</button>
+            <button class="chip" data-mode="epics" role="tab" title="The epics: themes of issues, with their progress and members">Epics</button>
+          </div>
+          <div id="bl-filters" class="chips"></div>
+          <input type="text" id="bl-search" placeholder="Search issues, labels…" aria-label="Search" />
+          <div id="bl-labels-wrap" class="bl-labels-wrap">
+            <button id="btn-bl-labels" class="btn sm ghost" type="button" aria-haspopup="true" title="Filter by labels. Labels of different groups (the prefix before ':') must all match; labels of the same group match any of them, e.g. bug AND (complexity:1 OR complexity:2). Whole names, any case.">Labels</button>
+            <div id="bl-labels-pop" class="bl-labels-pop hidden" role="menu" aria-label="Labels"></div>
+          </div>
+          <span id="bl-label-active" class="bl-label-active"></span>
+          <select id="bl-epic" class="hidden" aria-label="Epic" title="Show the issues of one epic, or those in no epic"></select>
+          <select id="bl-sort" aria-label="Sort" title="Sort by the triage labels (impact:1-5, complexity:1-5); issues without them go last">
+            <option value="updated">Recently updated</option>
+            <option value="impact">Impact (highest first)</option>
+            <option value="complexity">Complexity (smallest first)</option>
+          </select>
+          <button id="btn-bl-assign" class="btn sm primary hidden" type="button">Assign workflow…</button>
+          <button id="btn-bl-clear" class="btn sm ghost hidden" type="button">Clear selection</button>
+          <span class="spacer"></span>
+          <span id="bl-synced" class="muted small"></span>
+        </div>
+        <div id="bl-local" class="bl-queue bl-local hidden"></div>
+        <div id="bl-queue" class="bl-queue hidden"></div>
+        <p id="bl-error" class="error small"></p>
+        <div id="bl-list" class="pr-list"></div>
+        <button id="btn-bl-po" class="po-fab" type="button" title="Ask the Product Owner: which issues to run together, which not, in what order" aria-label="Product Owner"></button>
+      </section>`,
+    modals: `
+  <div id="unqueue-modal" class="modal hidden">
+    <div class="modal-card">
+      <h3>Remove from a grouped run</h3>
+      <p id="unqueue-message" class="muted"></p>
+      <div class="modal-actions">
+        <button type="button" id="btn-unqueue-keep" class="btn ghost">Keep it</button>
+        <button type="button" id="btn-unqueue-one" class="btn">Remove it from the group</button>
+        <button type="button" id="btn-unqueue-all" class="btn danger-solid">Cancel the group</button>
+      </div>
+    </div>
+  </div>
+  <div id="push-modal" class="modal hidden">
+    <div class="modal-card">
+      <h3 id="push-title">Push the local merges</h3>
+      <p id="push-message" class="muted small"></p>
+      <ul id="push-commits" class="bl-push-commits small"></ul>
+      <p id="push-error" class="error small"></p>
+      <div class="modal-actions">
+        <label id="push-resolve-mock-wrap" class="check small hidden" title="Developer mode: the run is simulated, no CLI is called"><input type="checkbox" id="push-resolve-mock" /><span>Simulate</span></label>
+        <button type="button" id="btn-push-cancel" class="btn ghost">Cancel</button>
+        <button type="button" id="btn-push-resolve" class="btn primary hidden" title="Start a run of the local workflow: its developer merges origin into the local commits and resolves the conflict">Resolve in a run</button>
+        <button type="button" id="btn-push-update" class="btn hidden">Update and push</button>
+        <button type="button" id="btn-push-ok" class="btn primary">Push</button>
+      </div>
+    </div>
+  </div>
+  <div id="assign-modal" class="modal hidden">
+    <form id="assign-form" class="modal-card">
+      <h3 id="assign-title">Assign a workflow</h3>
+      <p id="assign-issues" class="muted small"></p>
+      <div id="assign-busy" class="bl-busy hidden"></div>
+      <fieldset id="assign-grouping" class="bl-grouping hidden">
+        <legend class="small">Send them as</legend>
+        <label class="check"><input type="radio" name="assign-group" value="separate" checked /><span>Separate runs: one per issue (one branch and one PR/MR each), in the order selected</span></label>
+        <label class="check"><input type="radio" name="assign-group" value="group" /><span>One run for all: one branch and one PR/MR that closes every issue</span></label>
+      </fieldset>
+      <div class="field">
+        <label for="assign-workflow">Workflow</label>
+        <select id="assign-workflow"></select>
+        <div id="assign-wf-desc" class="hint"></div>
+      </div>
+      <div id="assign-inputs"></div>
+      <label class="check dev-only"><input type="checkbox" id="assign-mock" /><span>Simulation (no CLI is called, nothing is spent)</span></label>
+      <p id="assign-note" class="small"></p>
+      <p id="assign-error" class="error small"></p>
+      <div class="modal-actions">
+        <button type="button" id="btn-assign-cancel" class="btn ghost">Cancel</button>
+        <button type="button" id="btn-assign-roadmap" class="btn ghost" title="Plan it instead: a new stage at the end of the roadmap, started with the roadmap">Add to roadmap</button>
+        <button type="submit" id="btn-assign-ok" class="btn primary">Start</button>
+      </div>
+    </form>
+  </div>`,
+    mount,
+    show: refreshBacklog,
   });
-  $b('#bl-filters').onclick = (e) => {
-    const f = e.target.closest('[data-f]')?.dataset.f;
-    if (f) { bl.filter = f; render(); }
-  };
-  $b('#bl-queue').onclick = async (e) => {
-    const out = e.target.closest('[data-unqueue]');
-    if (out) {
-      try { setData(await api.unqueueIssue(bl.projectId, Number(out.dataset.unqueue))); } catch (err) { bl.error = errMsg(err); }
-      render();
-      return;
-    }
-    const b = e.target.closest('[data-pause]');
-    if (!b) return;
-    b.disabled = true;
-    try { setData(await api.pauseQueue(bl.projectId, b.dataset.pause === 'on')); } catch (err) { bl.error = errMsg(err); }
-    render();
-  };
-  $b('#bl-local').onclick = async (e) => {
-    if (e.target.closest('[data-push]')) { openPush(); return; }
-    const auto = e.target.closest('[data-autopush]');
-    if (auto) {
-      try {
-        await api.setAutoPush(bl.projectId, auto.checked);
-        if (bl.data) bl.data.autoPush = auto.checked;
-      } catch (err) { bl.error = errMsg(err); render(); }
-      return;
-    }
-    const check = e.target.closest('[data-check]');
-    if (!check) return;
-    check.disabled = true;
-    try {
-      const r = await api.checkLocal(bl.projectId);
-      if (r.backlog) setData(r.backlog);
-      window.refreshUnpushed?.();
-    } catch (err) { bl.error = errMsg(err); }
-    render();
-  };
-  $b('#btn-push-ok').onclick = () => doPush(false);
-  $b('#btn-push-update').onclick = () => doPush(true);
-  $b('#btn-push-resolve').onclick = resolveInRun;
-  $b('#btn-push-cancel').onclick = () => closeModal('#push-modal');
-  // Roadmap mode: its buttons, fields and drags (backlog-roadmap.js); its run links open the run below
-  $b('#bl-list').addEventListener('change', (e) => { if (bl.mode === 'roadmap') window.BacklogRoadmap.onChange(e, roadmapCtx(), bl.data); });
-  $b('#bl-list').addEventListener('dragstart', (e) => { if (bl.mode === 'roadmap') window.BacklogRoadmap.onDragStart(e); });
-  $b('#bl-list').addEventListener('dragover', (e) => { if (bl.mode === 'roadmap') window.BacklogRoadmap.onDragOver(e); });
-  $b('#bl-list').addEventListener('drop', (e) => { if (bl.mode === 'roadmap') window.BacklogRoadmap.onDrop(e, roadmapCtx(), bl.data); });
-  $b('#bl-list').onclick = async (e) => {
-    if (bl.mode === 'roadmap' && await window.BacklogRoadmap.onClick(e, roadmapCtx(), bl.data)) return;
-    const check = e.target.closest('[data-sel]');
-    if (check) {
-      const n = Number(check.dataset.sel);
-      if (check.checked) bl.selected.add(n); else bl.selected.delete(n);
-      render();
-      return;
-    }
-    const watch = e.target.closest('[data-watch]');
-    if (watch) { window.watchWithSupervisor({ runId: watch.dataset.watch, workflow: watch.dataset.workflow, status: 'running', mock: !!watch.closest('[data-n]')?.querySelector('.p-mock') }); return; }
-    const label = e.target.closest('[data-label]');
-    if (label) { flipLabel(label.dataset.label); return; }
-    const epic = e.target.closest('[data-epic-filter]');
-    if (epic) { filterEpic(epic.dataset.epicFilter); return; }
-    const auto = e.target.closest('[data-auto-epic]');
-    if (auto) {
-      try {
-        await api.setAutoEpic(bl.projectId, auto.checked);
-        if (bl.data) bl.data.autoEpic = auto.checked;
-      } catch (err) { bl.error = errMsg(err); render(); }
-      return;
-    }
-    if (e.target.closest('[data-organize]')) { window.BacklogPO?.ask(ORGANIZE); return; }
-    if (e.target.closest('[data-clear-filters]')) { clearFilters(); return; }
-    const run = e.target.closest('[data-run]');
-    if (run) { openRun(run); return; }
-    const gate = e.target.closest('[data-gate]');
-    if (gate) { openGate(gate); return; }
-    const out = e.target.closest('[data-unqueue]');
-    if (out) { await removeQueued(Number(out.dataset.unqueue)); return; }
-    const enrich = e.target.closest('[data-enrich]');
-    if (enrich) { enrichIssue(Number(enrich.dataset.enrich)); return; }
-    if (e.target.closest('a')) return;
-    const row = e.target.closest('[data-act="toggle"]');
-    if (!row) return;
-    const n = Number(row.closest('.bl-issue').dataset.n);
-    if (bl.expanded.has(n)) bl.expanded.delete(n); else bl.expanded.add(n);
-    render();
-  };
-  $b('#assign-workflow').onchange = renderAssignInputs;
-  $b('#assign-mock').onchange = updateAssignNote;
-  $b('#assign-grouping').onchange = updateAssignNote;
-  $b('#assign-form').onsubmit = submitAssign;
-  $b('#btn-assign-roadmap').onclick = addToRoadmap;
-  $b('#btn-assign-cancel').onclick = () => closeModal('#assign-modal');
 
   window.refreshBacklog = refreshBacklog;
   // a run's title or PR state changed (app.js onRunMeta): the cards draw it from the shared data
