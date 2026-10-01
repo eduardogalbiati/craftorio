@@ -158,8 +158,9 @@ function demoLocalMerge(ws, projectId) {
 }
 
 // The Product Owner registering an issue (#117): a short request with a screenshot, one question,
-// the owner's answer, then a draft (long title, labels, Related, a close issue: #12). Shown with
-// `--click "#btn-bl-po"`; `--click "[data-po-act=create]"` previews the filing (po:file previews here).
+// the owner's answer, then a draft (long title, labels, Related, a close issue: #12), then a plan
+// answer whose groups the demo roadmap already holds (#140). Shown with `--click "#btn-bl-po"`;
+// `--click "[data-po-act=create]"` previews the filing (po:file previews here).
 function demoPoConversation(ws, projectId) {
   const at = (s) => new Date(Date.UTC(2026, 0, 20, 10, 0, s)).toISOString();
   const shot = path.join(ws.backlog, `${projectId}.po`, 'attachments', '1768903200000-run-report.png');
@@ -181,6 +182,18 @@ function demoPoConversation(ws, projectId) {
       draft: { title: 'Export the run report as a PDF next to the Markdown export, keeping the same layout', body, labels: ['enhancement', 'impact:3', 'complexity:2', 'area:renderer'], related: [12] },
       duplicates: [{ number: 12, title: 'Export a run report as Markdown', state: 'open', relation: 'overlaps', reason: 'Same report and menu.' }],
       existingIssue: null, addition: '', assumptions: ['The PDF uses the same template as the Markdown export.'],
+    } },
+    // a plan answer (#140) against the demo roadmap: #12 + #9 is its stage 2 (In roadmap · Stage 2),
+    // #11 its done stage 1, #10 + #8 only partly planned (Add the rest)
+    { ts: at(90), role: 'user', mode: 'plan', text: 'Analyze the backlog and propose runs' },
+    { ts: at(110), role: 'po', mode: 'plan', model: 'claude-opus-5-5', costUsd: 0.21, text: 'Three runs: the rename crash first, then the server work together, then the small UI and docs fixes.', answer: {
+      summary: 'Three runs.',
+      groups: [
+        { name: 'Rename crash', issues: [11], workflow: 'software-development-local-hero.yaml', inputs: { mode: 'auto' }, reason: 'It blocks the rest.', files: ['src/workspace.js'], stage: 1, complexity: 4, guessed: false, estimate: null, warnings: [] },
+        { name: 'Reports and health', issues: [12, 9], workflow: 'software-development-local-hero.yaml', inputs: { mode: 'auto' }, reason: 'Both add a server route: one run avoids a merge conflict in src/server.', files: ['src/server.js'], stage: 2, complexity: 5, guessed: false, estimate: { minutes: 35, costUsd: 1.8, basis: '3 past runs' }, warnings: [] },
+        { name: 'Scrollbars and docs', issues: [10, 8], workflow: 'software-development.yaml', inputs: { mode: 'validated' }, reason: 'Two small fixes the owner can check in the app.', files: ['src/renderer/style.css'], stage: 3, complexity: 1, guessed: true, estimate: null, warnings: [] },
+      ],
+      conflicts: [], enrich: [],
     } },
   ];
   fs.writeFileSync(path.join(ws.backlog, `${projectId}.po.jsonl`), messages.map((m) => JSON.stringify(m)).join('\n') + '\n');

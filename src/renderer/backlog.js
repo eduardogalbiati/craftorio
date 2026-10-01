@@ -103,6 +103,8 @@
     const runs = (data?.issues || []).flatMap((i) => i.runs || []);
     window.noteRunMeta?.(runs);
     window.askPrStates?.((data?.issues || []).map((i) => i.runs?.[0]).filter(Boolean));
+    // the Product Owner's drawer redraws its groups' applied state (backlog-po.js, #140)
+    document.dispatchEvent(new CustomEvent('backlog:data'));
   }
 
   function loadLabels(id) {
@@ -327,6 +329,16 @@
     bl.mode = 'roadmap';
     save(MODE_KEY, bl.mode);
     render();
+  }
+
+  // The Roadmap scrolled to stage `n` (1-based; an applied group's badge in the Product Owner's drawer, #140).
+  function openStage(n) {
+    showRoadmap();
+    const el = document.querySelector(`#bl-list .rm-stage[data-stage="${Number(n) - 1}"]`);
+    if (!el) return;
+    el.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    el.classList.add('flash');
+    setTimeout(() => el.classList.remove('flash'), 1600);
   }
 
   // Selected issues the roadmap already plans (not started): assigning them takes them out of it.
@@ -858,6 +870,7 @@
     data: () => bl.data,
     // the project the next refresh shows (a notification's click, before showView('backlog'))
     focusProject: (id) => { if (id) bl.projectId = id; },
+    openStage,
     projectId: () => bl.projectId,
     roadmapGroup,
     // the backlog synced again after the Product Owner filed or updated an issue (#117)

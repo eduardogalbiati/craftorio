@@ -1518,7 +1518,10 @@ function createService({ host }) {
     // derived statuses are not stored (roadmaps.persisted): only a stored change is written
     const changed = JSON.stringify({ ...roadmaps.persisted(roadmap), updatedAt: null }) !== JSON.stringify({ ...before, updatedAt: null });
     if (changed) roadmaps.updateRoadmap(ws.backlog, projectId, (cur) => (cur.updatedAt === before.updatedAt ? roadmap : null));
-    if (roadmap.state === 'paused' && before.state === 'running') {
+    // a stage run on its own (#141) that finished pauses the roadmap without a failure
+    if (roadmap.state === 'paused' && before.state === 'running' && before.scope && !roadmap.scope && !roadmap.pausedBy) {
+      notify({ kind: 'run', event: 'succeeded', title: 'Roadmap stage done', body: String(roadmap.error || '').slice(0, 180) });
+    } else if (roadmap.state === 'paused' && before.state === 'running') {
       notify({ kind: 'run', event: 'failed', title: 'Roadmap paused', body: String(roadmap.error || '').slice(0, 180) });
     }
     if (roadmap.state === 'done' && before.state === 'running') notify({ kind: 'run', event: 'succeeded', title: 'Roadmap finished', body: `Every stage of ${projectId} is done.` });
@@ -1547,14 +1550,16 @@ function createService({ host }) {
   }
 
   // Start: a roadmap with real items is refused in simulation-only mode (automated checks), like assignments.
-  async function startRoadmap({ projectId, simulated = false }) {
+  // `stage` (a stage id): run only that stage (#141); only its items count as real then.
+  async function startRoadmap({ projectId, simulated = false, stage = null }) {
     const id = path.basename(String(projectId));
     const r = roadmaps.readRoadmap(ws.backlog, id);
-    if (!simulated && r.stages.some((s) => s.items.some((x) => !x.mock && !['done', 'skipped'].includes(x.status)))) {
+    const stages = stage ? r.stages.filter((s) => s.id === stage) : r.stages;
+    if (!simulated && stages.some((s) => s.items.some((x) => !x.mock && !['done', 'skipped'].includes(x.status)))) {
       simulation.refuseReal('real runs from a roadmap');
       await host.assertCanRun?.({ mock: false });
     }
-    roadmaps.setState(ws.backlog, id, 'running', { simulated: !!simulated });
+    roadmaps.setState(ws.backlog, id, 'running', { simulated: !!simulated, stage: stage ? String(stage) : null });
     await dispatchRoadmaps();
     return withIssueRuns(backlog.readBacklog(ws.backlog, id));
   }

@@ -6,6 +6,9 @@
 // parallel and the issues to enrich first. A group is applied only on the owner's click: Assign
 // (the assign dialog prefilled) or Add to roadmap (a new stage), through window.BacklogActions
 // (backlog.js); "Add all to the roadmap" sends the groups as planned stages (api.proposeRoadmap).
+// A group already applied (#140, `groupState`, derived from the Backlog's roadmap, queue and runs)
+// stays in the conversation dimmed, with a badge (In roadmap · Stage N, a link to the Roadmap; Queued;
+// Running, a link to the run) and its buttons disabled; a partly applied one offers "Add the rest".
 // Register an issue (#117, the #po-mode toggle or its chip): the owner describes an issue (typed,
 // dictated, with screenshots pasted, dropped or attached: api.attachProductOwnerFile), the Product
 // Owner may ask a couple of questions, then shows the draft (title, labels, Related, the body
@@ -121,15 +124,60 @@
     return `complexity ${g.complexity}${g.guessed ? ' <span class="muted" title="Some issues have no complexity:n label: counted as 3">(some guessed)</span>' : ''} · ${est}`;
   };
 
+  // ---- a group already applied (#140): derived from the Backlog's data (its issues' roadmap place,
+  // queue entry and live run), never remembered, so it holds after a reopen or a restart ------------
+  const liveRun = (i) => i?.runs?.find((x) => !x.enrich && ['pending', 'running'].includes(x.status));
+  // An issue is "in the roadmap" when an item plans it, runs it or has done it (a skipped one is not).
+  const inRoadmap = (i) => !!i?.roadmap && i.roadmap.status !== 'skipped';
+  /**
+   * { kind: 'roadmap' | 'running' | 'queued' | 'partly' | null, stages: [n], covered: [numbers], rest: [numbers], runId }:
+   * every issue in the roadmap (or assigned), some of them (partly), or none (null: the group is still to apply).
+   */
+  function groupState(g) {
+    const issues = g.issues.map((n) => ({ n, i: issueOf(n) }));
+    const covered = issues.filter(({ i }) => inRoadmap(i) || i?.queued || liveRun(i));
+    const rest = issues.filter((x) => !covered.includes(x)).map(({ n }) => n);
+    const stages = [...new Set(covered.filter(({ i }) => inRoadmap(i)).map(({ i }) => i.roadmap.stage))].sort((a, b) => a - b);
+    const run = covered.map(({ i }) => liveRun(i)).find(Boolean);
+    const out = { stages, covered: covered.map(({ n }) => n), rest, runId: run?.runId || null };
+    if (!covered.length) return { ...out, kind: null };
+    if (rest.length) return { ...out, kind: 'partly' };
+    return { ...out, kind: stages.length ? 'roadmap' : run ? 'running' : 'queued' };
+  }
+  const stagesLabel = (s) => (s.length > 1 ? `Stages ${s.join(', ')}` : `Stage ${s[0]}`);
+
+  // The badge of an applied group: a link to the roadmap stage or to the run.
+  function appliedBadge(st, already) {
+    if (st.kind === 'roadmap') {
+      const label = already ? 'Already in the roadmap' : `In roadmap · ${stagesLabel(st.stages)}`;
+      return `<button class="badge po-applied" type="button" data-po-stage="${st.stages[0]}" title="Open the Roadmap at stage ${st.stages[0]}">${esc(label)}</button>`;
+    }
+    if (st.kind === 'running' && st.runId) return `<button class="badge po-applied live" type="button" data-po-run="${esc(st.runId)}" title="Open run ${esc(st.runId)}">Running</button>`;
+    if (st.kind === 'running' || st.kind === 'queued') return '<span class="badge po-applied" title="Assigned: in the queue, it starts when a slot is free">Queued</span>';
+    if (st.kind === 'partly') {
+      const where = st.stages.length ? 'in the roadmap' : 'assigned';
+      return `<span class="badge warn" title="${esc(`${st.covered.map((x) => `#${x}`).join(', ')} already ${where}; ${st.rest.map((x) => `#${x}`).join(', ')} not yet`)}">Partly ${where} (${esc(st.covered.map((x) => `#${x}`).join(', '))})</span>`;
+    }
+    return '';
+  }
+  const applied = (st) => ['queued', 'roadmap', 'running'].includes(st.kind);
+  const appliedTitle = (st) => (st.kind === 'roadmap' ? `Already in the roadmap, ${stagesLabel(st.stages).toLowerCase()}` : st.kind === 'running' ? 'Already assigned: its run is in progress' : 'Already assigned: it is in the queue');
+
   function groupHtml(g, m, n) {
     const inputs = Object.entries(g.inputs || {});
     const key = `${m}:${n}`;
+    const st = groupState(g);
+    const done = applied(st);
+    // "Add all" left every issue of this group out: they were already planned
+    const already = st.kind === 'roadmap' && g.issues.every((x) => (po.notes[`${m}:all`]?.dropped || []).includes(x));
+    const off = done ? ` disabled title="${esc(appliedTitle(st))}"` : '';
     return `
-      <div class="po-group" data-msg="${m}" data-group="${n}">
+      <div class="po-group${done ? ' applied' : ''}" data-msg="${m}" data-group="${n}">
         <div class="po-group-head">
           <span class="badge">stage ${g.stage}</span>
           <b>${esc(g.name)}</b>
           <span class="po-issues">${g.issues.map(issueRef).join('')}</span>
+          ${appliedBadge(st, already)}
         </div>
         <div class="small"><span class="muted">workflow</span> <span class="mono">${esc(g.workflow)}</span>${inputs.length ? ` · <span class="muted">inputs</span> ${inputs.map(([k, v]) => `<span class="mono">${esc(k)}=${esc(v)}</span>`).join(', ')}` : ''}</div>
         ${g.reason ? `<div class="small">${esc(g.reason)}</div>` : ''}
@@ -138,8 +186,10 @@
         <div class="small po-size">${sizeText(g)}</div>
         ${(g.warnings || []).map((w) => `<div class="small warn-text">⚠ ${esc(w)}</div>`).join('')}
         <div class="row po-group-actions">
-          <button class="btn sm primary" type="button" data-po-act="assign" title="Open the assign dialog with these issues as one run">Assign…</button>
-          <button class="btn sm ghost" type="button" data-po-act="roadmap" title="Plan this group as a new stage at the end of the roadmap">Add to roadmap</button>
+          <button class="btn sm primary" type="button" data-po-act="assign"${off || ' title="Open the assign dialog with these issues as one run"'}>Assign…</button>
+          ${st.kind === 'partly'
+            ? `<button class="btn sm ghost" type="button" data-po-act="roadmap" title="${esc(`Plan ${st.rest.map((x) => `#${x}`).join(', ')} as a new stage at the end of the roadmap`)}">Add the rest</button>`
+            : `<button class="btn sm ghost" type="button" data-po-act="roadmap"${off || ' title="Plan this group as a new stage at the end of the roadmap"'}>Add to roadmap</button>`}
           ${po.notes[key] ? `<span class="small ${po.notes[key].error ? 'error' : 'muted'}">${esc(po.notes[key].text)}</span>` : ''}
         </div>
       </div>`;
@@ -149,8 +199,10 @@
     if (!a) return '';
     const parts = [];
     if (a.groups?.length) {
+      const allDone = a.groups.every((g) => applied(groupState(g)));
+      const allTitle = allDone ? 'Every group is already in the roadmap or assigned' : 'Every group as a planned stage (by its stage number) at the end of the roadmap';
       parts.push(`<div class="po-sec"><div class="sup-h">Proposed runs</div>${a.groups.map((g, n) => groupHtml(g, m, n)).join('')}
-        <div class="row"><button class="btn sm ghost" type="button" data-po-act="roadmap-all" data-msg="${m}" title="Every group as a planned stage (by its stage number) at the end of the roadmap">Add all to the roadmap</button>
+        <div class="row"><button class="btn sm ghost" type="button" data-po-act="roadmap-all" data-msg="${m}" title="${allTitle}"${allDone ? ' disabled' : ''}>Add all to the roadmap</button>
         ${po.notes[`${m}:all`] ? `<span class="small ${po.notes[`${m}:all`].error ? 'error' : 'muted'}">${esc(po.notes[`${m}:all`].text)}</span>` : ''}</div></div>`);
     }
     if (a.conflicts?.length) {
@@ -291,21 +343,26 @@
       try {
         const out = await api.proposeRoadmap(po.projectId, { stages }, false);
         actions().showRoadmap(out);
-        po.notes[`${m}:all`] = { text: `Added to the roadmap as planned.${out.dropped?.length ? ` Already planned, left out: ${out.dropped.map((n) => `#${n}`).join(', ')}.` : ''}` };
+        // dropped: the groups made only of these show "Already in the roadmap" (#140)
+        po.notes[`${m}:all`] = { text: `Added to the roadmap as planned.${out.dropped?.length ? ` Already planned, left out: ${out.dropped.map((n) => `#${n}`).join(', ')}.` : ''}`, dropped: out.dropped || [] };
       } catch (e) { po.notes[`${m}:all`] = { text: errMsg(e), error: true }; }
       render();
       return;
     }
     const n = Number(box.dataset.group);
-    const g = answer.groups[n];
+    const st = groupState(answer.groups[n]);
+    // an applied group is not applied again (#140); a partly applied one only for the rest
+    if (applied(st)) return;
+    const g = st.kind === 'partly' ? { ...answer.groups[n], issues: st.rest } : answer.groups[n];
     const key = `${m}:${n}`;
     try {
       if (act === 'assign') {
         const skipped = await actions().assignGroup(g);
         po.notes[key] = skipped.length === g.issues.length ? { text: 'None of these issues is To do any more.', error: true } : skipped.length ? { text: leftOut(skipped).trim() } : null;
       } else {
+        // the group's badge says where it went; only what was left out is noted
         const skipped = await actions().roadmapGroup(g);
-        po.notes[key] = { text: `Added as a new roadmap stage.${leftOut(skipped)}` };
+        po.notes[key] = skipped.length ? { text: `Added as a new roadmap stage.${leftOut(skipped)}` } : null;
       }
     } catch (e) { po.notes[key] = { text: errMsg(e), error: true }; }
     render();
@@ -400,6 +457,11 @@
   };
   const DRAFT_ACTS = ['append', 'comment', 'create', 'create-assign', 'create-roadmap', 'discard', 'revise'];
   $p('#po-log').onclick = (e) => {
+    // an applied group's badge (#140): the Roadmap at its stage, or its run
+    const stage = e.target.closest('[data-po-stage]');
+    if (stage) { close(); actions().openStage(Number(stage.dataset.poStage)); return; }
+    const run = e.target.closest('[data-po-run]');
+    if (run) { close(); window.showRun(run.dataset.poRun); return; }
     const b = e.target.closest('[data-po-act]');
     if (!b) return;
     if (DRAFT_ACTS.includes(b.dataset.poAct)) fileDraft(b.dataset.poAct, b);
@@ -415,5 +477,14 @@
     if (e.key === 'Escape' && po.open && !document.querySelector('.modal:not(.hidden)')) close();
   }, true);
   document.addEventListener('robots:changed', (e) => { if (e.detail?.name === 'product-owner') renderButton(); });
+  // the roadmap, queue or runs changed (backlog.js setData): the groups' applied state follows (#140),
+  // the conversation keeps its scroll position
+  document.addEventListener('backlog:data', () => {
+    if (!po.open) return;
+    const log = $p('#po-log');
+    const top = log.scrollTop;
+    render();
+    log.scrollTop = top;
+  });
   renderButton();
 })();

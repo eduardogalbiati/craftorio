@@ -8,7 +8,8 @@
 // for an enum, a checkbox for a flag, text otherwise), with Save / Cancel. The plan is edited too:
 // stages and items up/down or by drag, an issue dragged from one item to another, items removed, a
 // stage renamed or given a note ("add note"). Start (optionally simulated), Pause, Stop, Clear;
-// Retry / Skip on a failed item. A Product Owner proposal (#105, JSON) is added or replaces the
+// Retry / Skip on a failed item; Run this stage on a stage's head (#141: only its items, then the
+// roadmap pauses; out of order after a confirmation). A Product Owner proposal (#105, JSON) is added or replaces the
 // roadmap as planned; the plain queue's items can be moved in. Every edit saves the whole list of
 // stages (api.saveRoadmap); the service keeps each item's runs by id.
 // Rendered into #bl-list by backlog.js (mode 'roadmap'), which passes `ctx`
@@ -171,20 +172,33 @@
       </div>`;
   }
 
-  function stageHtml(stage, s, count, current, byNumber) {
+  // "Stages 1–2", "Stages 1, 3", "Stage 2" (0-based indexes in)
+  function stagesText(list) {
+    const n = list.map((s) => s + 1);
+    if (n.length === 1) return `Stage ${n[0]}`;
+    return `Stages ${n.every((x, k) => !k || x === n[k - 1] + 1) ? `${n[0]}–${n[n.length - 1]}` : n.join(', ')}`;
+  }
+
+  // `scoped`: the index of the stage run on its own (#141), -1 when none; `r`: the roadmap.
+  function stageHtml(stage, s, count, current, byNumber, scoped, r) {
     const done = stage.items.every((x) => x.status === 'done' || x.status === 'skipped');
     const noteOpen = noteEditing != null && noteEditing === stage.id;
     const note = noteOpen
       ? `<input type="text" class="rm-note small" data-rm-note value="${esc(stage.note || '')}" placeholder="Why this order" aria-label="Stage note" autofocus />`
       : stage.note ? `<p class="rm-note-text small muted">${esc(stage.note)} <button class="link-btn small" type="button" data-rm-addnote>edit</button></p>` : '';
+    const runnable = r.state !== 'running' && stage.items.some((x) => x.status === 'planned');
+    const runTitle = r.state === 'running' ? 'The roadmap is running: pause or stop it first' : runnable ? 'Run only this stage\'s items; the roadmap pauses when they are done' : 'No planned item in this stage';
+    const stateBadge = s === scoped ? `<span class="badge ${r.state === 'running' ? 'live' : 'warn'}">${r.state === 'running' ? 'Running this stage only' : 'This stage only · paused'}</span>`
+      : s === current ? '<span class="badge live">current</span>' : done ? '<span class="badge">done</span>' : '';
     return `
-      <section class="rm-stage${s === current ? ' current' : ''}${done ? ' finished' : ''}" data-stage="${s}" data-drop-stage="${s}">
+      <section class="rm-stage${s === current ? ' current' : ''}${s === scoped ? ' scoped' : ''}${done ? ' finished' : ''}" data-stage="${s}" data-drop-stage="${s}">
         <div class="rm-stage-head">
           <span class="muted small">Stage ${s + 1}</span>
           <input type="text" class="rm-name" data-rm-name value="${esc(stage.name)}" placeholder="Name (optional)" aria-label="Stage name" />
-          ${s === current ? '<span class="badge live">current</span>' : done ? '<span class="badge">done</span>' : ''}
+          ${stateBadge}
           ${stage.note || noteOpen ? '' : '<button class="link-btn small" type="button" data-rm-addnote>add note</button>'}
           <span class="spacer"></span>
+          <button class="btn sm ghost rm-run-stage" type="button" data-rm-run-stage title="${esc(runTitle)}"${runnable ? '' : ' disabled'}><span aria-hidden="true">▶</span> Run this stage</button>
           <button class="btn sm ghost" type="button" data-rm-stage="up" title="Run this stage earlier"${s === 0 ? ' disabled' : ''}>↑</button>
           <button class="btn sm ghost" type="button" data-rm-stage="down" title="Run this stage later"${s === count - 1 ? ' disabled' : ''}>↓</button>
         </div>
@@ -199,15 +213,17 @@
     const r = data?.roadmap || { state: 'planned', stages: [] };
     const q = data?.queue?.items || [];
     const byNumber = new Map((data?.issues || []).map((i) => [i.number, i]));
-    const current = r.stages.findIndex((s) => s.items.some((x) => x.status !== 'done' && x.status !== 'skipped'));
-    const stateBadge = `<span class="badge ${r.state === 'running' ? 'live' : r.state === 'paused' ? 'warn' : ''}">${esc(STATE_LABEL[r.state] || r.state)}${r.simulated ? ' · simulated' : ''}</span>`;
+    // a stage run on its own (#141) is the one in progress; the others keep their planned look
+    const scoped = r.scope ? r.stages.findIndex((s) => s.id === r.scope.stage) : -1;
+    const current = scoped >= 0 ? scoped : r.stages.findIndex((s) => s.items.some((x) => x.status !== 'done' && x.status !== 'skipped'));
+    const stateBadge = `<span class="badge ${r.state === 'running' ? 'live' : r.state === 'paused' ? 'warn' : ''}">${esc(STATE_LABEL[r.state] || r.state)}${scoped >= 0 ? ` · stage ${scoped + 1} only` : ''}${r.simulated ? ' · simulated' : ''}</span>`;
     const bar = `
       <div class="bl-queue rm-bar">
         <span><b>Roadmap</b> ${stateBadge} ${r.stages.length} stage${r.stages.length === 1 ? '' : 's'}</span>
         ${r.error ? `<span class="${r.state === 'paused' ? 'warn-text' : 'error'} small">${esc(r.error)}</span>` : ''}
         <span class="spacer"></span>
         ${r.state !== 'running' && r.stages.length ? `<label class="check small dev-only"><input type="checkbox" id="rm-simulate"${state.simulationOnly || r.simulated ? ' checked' : ''} /><span>Simulated</span></label>
-          <button class="btn sm primary" type="button" data-rm="start">${r.state === 'paused' ? 'Resume' : 'Start'}</button>` : ''}
+          <button class="btn sm primary" type="button" data-rm="start"${scoped >= 0 && r.state === 'paused' ? ` title="Resume stage ${scoped + 1} only"` : ''}>${r.state === 'paused' ? 'Resume' : 'Start'}</button>` : ''}
         ${r.state === 'running' ? '<button class="btn sm ghost" type="button" data-rm="pause" title="Nothing new starts; runs in progress go on">Pause</button>' : ''}
         ${r.state === 'running' || r.state === 'paused' ? '<button class="btn sm ghost" type="button" data-rm="stop" title="Back to a plan: nothing starts until Start">Stop</button>' : ''}
         ${r.stages.length ? '<button class="btn sm ghost" type="button" data-rm="clear">Clear</button>' : ''}
@@ -222,7 +238,7 @@
         <div class="modal-actions"><button class="btn sm ghost" type="button" data-rm="replace">Replace the roadmap</button><button class="btn sm primary" type="button" data-rm="propose">Add to roadmap</button></div>
       </details>`;
     const stages = r.stages.length
-      ? r.stages.map((s, n) => stageHtml(s, n, r.stages.length, current, byNumber)).join('')
+      ? r.stages.map((s, n) => stageHtml(s, n, r.stages.length, current, byNumber, scoped, r)).join('')
       : '<div class="empty-state"><b>No roadmap yet</b><p class="muted">Select issues, Assign workflow…, then Add to roadmap: each addition is a stage that starts when the previous one has finished and merged.</p></div>';
     return `<div class="rm">${bar}${queued}${stages}${importBox}</div>`;
   }
@@ -284,6 +300,19 @@
     ctx.render();
   }
 
+  // Run this stage (#141): only stage `s`'s items start, with Start's simulated choice and real-run
+  // confirmation; earlier stages not done ask first (the Product Owner's order is a recommendation).
+  async function runStage(ctx, r, s) {
+    const stage = r.stages[s];
+    if (!stage) return;
+    const earlier = r.stages.slice(0, s).map((x, n) => (x.items.some((i) => i.status !== 'done' && i.status !== 'skipped') ? n : -1)).filter((n) => n >= 0);
+    if (earlier.length && !await confirmDialog(`Run stage ${s + 1} out of order`, `${stagesText(earlier)} ${earlier.length > 1 ? 'are' : 'is'} not done: ${earlier.length > 1 ? 'their' : 'its'} issues may conflict with this stage's. They stay planned.`, 'Run this stage')) return;
+    const simulated = !!document.querySelector('#rm-simulate')?.checked && devMode();
+    const real = !simulated && stage.items.some((x) => !x.mock && editable(x));
+    if (real && !await confirmDialog(`Run stage ${s + 1}`, 'Its items run as real runs: they use your CLI subscriptions and cost money. Human gates still wait for you. The roadmap pauses when this stage is done.', 'Run')) return;
+    ctx.setData(await api.startRoadmap(ctx.projectId, simulated, stage.id));
+  }
+
   // The owner's buttons; true when the click was the roadmap's.
   async function onClick(e, ctx, data) {
     const r = data?.roadmap;
@@ -293,9 +322,13 @@
     try {
       if (act === 'start') {
         const simulated = !!document.querySelector('#rm-simulate')?.checked && devMode();
-        const real = !simulated && r.stages.some((s) => s.items.some((x) => !x.mock && editable(x)));
+        // Resume on a stage run on its own (#141) goes on with that stage only
+        const scope = r.state === 'paused' && r.scope ? r.scope.stage : null;
+        const real = !simulated && r.stages.some((s) => (!scope || s.id === scope) && s.items.some((x) => !x.mock && editable(x)));
         if (real && !await confirmDialog('Start the roadmap', 'Its items run as real runs: they use your CLI subscriptions and cost money. Human gates still wait for you.', 'Start')) return true;
-        ctx.setData(await api.startRoadmap(ctx.projectId, simulated));
+        ctx.setData(await api.startRoadmap(ctx.projectId, simulated, scope));
+      } else if (e.target.closest('[data-rm-run-stage]')) {
+        await runStage(ctx, r, locate(stages, e.target).s);
       } else if (act === 'pause' || act === 'stop') {
         ctx.setData(await api.pauseRoadmap(ctx.projectId, act === 'stop'));
       } else if (act === 'clear') {

@@ -47,8 +47,14 @@ module.exports = (ctx) => {
         return current(id);
       },
     },
-    // simulated: every item runs as a simulation (mock runs), whatever its own setting
-    { channel: 'roadmap:start', method: 'startRoadmap', params: ['projectId', 'simulated'], fn: ({ projectId, simulated }) => ctx.startRoadmap({ projectId, simulated: !!simulated }) },
+    // simulated: every item runs as a simulation (mock runs), whatever its own setting; stage: a
+    // stage id, to run only that stage (#141: the roadmap pauses when it is done)
+    {
+      channel: 'roadmap:start',
+      method: 'startRoadmap',
+      params: ['projectId', 'simulated', 'stage'],
+      fn: ({ projectId, simulated, stage }) => ctx.startRoadmap({ projectId, simulated: !!simulated, stage: stage || null }),
+    },
     // pause: nothing new starts (runs in progress go on); stop: back to a plan
     {
       channel: 'roadmap:pause',

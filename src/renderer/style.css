@@ -908,6 +908,11 @@ body.resizing-dock .term-body { pointer-events: none; }
 .po-issue:hover { border-color: #2DD4BF; }
 .po-list a:not(.po-issue) { color: #2DD4BF; }
 .po-group-actions { flex-wrap: wrap; margin-top: 2px; }
+/* a group already in the roadmap or assigned (#140): dimmed, still readable and selectable */
+.po-group.applied { border-left-color: var(--border); background: transparent; color: var(--muted); }
+.po-group.applied .po-issue { color: var(--muted); }
+.po-applied { cursor: pointer; border-color: var(--accent); color: var(--accent); background: transparent; }
+span.po-applied { cursor: default; }
 .po-list { margin: 0; padding-left: 18px; display: grid; gap: 4px; font-size: 13px; }
 .po-foot { display: grid; gap: 8px; }
 .po-chips { margin-bottom: 0; }
@@ -1213,6 +1218,9 @@ button.bl-label { font-family: inherit; background: none; cursor: pointer; }
 .rm-stage { border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px; background: var(--panel); display: grid; gap: 6px; }
 .rm-stage.current { border-color: var(--accent); }
 .rm-stage.finished { opacity: .7; }
+/* the stage run on its own (#141); a stage opened from the Product Owner's drawer (#140) */
+.rm-stage.scoped { border-color: var(--green); box-shadow: inset 3px 0 0 var(--green); }
+.rm-stage.flash { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); transition: box-shadow .3s; }
 .rm-stage-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 /* the stage name reads as text until hovered or edited */
 input[type=text].rm-name { flex: 0 1 260px; border-color: transparent; background: transparent; padding: 3px 6px; font-weight: 600; }
