@@ -911,6 +911,19 @@ body.resizing-dock .term-body { pointer-events: none; }
 .po-foot { display: grid; gap: 8px; }
 .po-chips { margin-bottom: 0; }
 .po-ask textarea { flex: 1; min-width: 0; resize: vertical; }
+/* Register an issue (#117): attachments, the draft preview and its actions */
+.po-foot > .seg { justify-self: start; }
+.po-foot.dropping { outline: 2px dashed #2DD4BF; outline-offset: -4px; }
+.po-files { display: flex; gap: 6px; flex-wrap: wrap; }
+.po-file { display: inline-flex; align-items: center; gap: 4px; max-width: 220px; }
+.po-file span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.po-file button { border: none; background: none; color: var(--muted); cursor: pointer; padding: 0 2px; }
+.po-draft { border: 1px solid var(--border); border-left: 3px solid #0F9F8F; background: var(--panel); border-radius: 8px; padding: 10px 12px; display: grid; gap: 6px; }
+.po-draft-title { font-size: 15px; font-weight: 700; }
+.po-draft-meta { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
+.po-draft-body { max-height: 360px; overflow: auto; border-top: 1px solid var(--border); padding-top: 6px; }
+.po-draft-actions { flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.po-questions { font-weight: 600; }
 #po-note { margin: 0; }
 
 .toast {

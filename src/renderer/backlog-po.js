@@ -6,9 +6,15 @@
 // parallel and the issues to enrich first. A group is applied only on the owner's click: Assign
 // (the assign dialog prefilled) or Add to roadmap (a new stage), through window.BacklogActions
 // (backlog.js); "Add all to the roadmap" sends the groups as planned stages (api.proposeRoadmap).
-// Developer or simulated mode asks the simulated Product Owner (no model call).
-// Uses app.js globals ($, esc, state, errMsg, devMode, fmtCost, markdownHtml, confirmDialog) and
-// window.Robots (robots.js).
+// Register an issue (#117, the #po-mode toggle or its chip): the owner describes an issue (typed,
+// dictated, with screenshots pasted, dropped or attached: api.attachProductOwnerFile), the Product
+// Owner may ask a couple of questions, then shows the draft (title, labels, Related, the body
+// rendered, close issues). The latest draft is filed only on the owner's click: Create, Create +
+// roadmap, Create + assign…, Add to #n / Comment on #n, or Discard; Revise is a new message. After a
+// filing the Backlog shows the synced issues (BacklogActions.showData).
+// Developer or simulated mode asks the simulated Product Owner (no model call) and only previews a filing.
+// Uses app.js globals ($, esc, state, errMsg, devMode, fmtCost, fmtSize, markdownHtml, confirmDialog)
+// and window.Robots (robots.js).
 /* global api, Robots */
 (() => {
   const QUESTIONS = [
@@ -17,7 +23,11 @@
     'Build a roadmap',
     'Which issues are too big or unclear?',
   ];
-  const po = { open: false, busy: false, projectId: null, messages: [], pending: null, error: null, notes: {} };
+  const REGISTER = 'Register an issue';
+  // the workflow a filed issue is planned or assigned with (the assign dialog lets the owner change it)
+  const DEFAULT_WORKFLOW = 'software-development.yaml';
+  const MAX_CANDIDATES = 3;
+  const po = { open: false, busy: false, projectId: null, messages: [], pending: null, error: null, notes: {}, mode: 'plan', files: [] };
   const $p = (sel) => document.querySelector(sel);
   const actions = () => window.BacklogActions;
   const issueOf = (n) => (actions()?.data()?.issues || []).find((i) => i.number === n);
@@ -31,6 +41,8 @@
   async function open() {
     const projectId = actions()?.projectId();
     if (!projectId) return;
+    // attachments not sent yet belong to the other project's conversation
+    if (po.projectId !== projectId) po.files = [];
     if (po.projectId !== projectId) Object.assign(po, { projectId, messages: [], pending: null, error: null, notes: {} });
     po.open = true;
     $p('#po-drawer').classList.add('open');
@@ -38,6 +50,8 @@
     $p('#po-backdrop').classList.remove('hidden');
     render();
     try { po.messages = await api.productOwnerHistory(projectId); } catch (e) { po.error = errMsg(e); }
+    // a draft still to file: back to Register an issue
+    if (openDraftIndex() >= 0) po.mode = 'issue';
     render();
     setTimeout(() => $p('#po-question').focus(), 200);
   }
@@ -49,22 +63,50 @@
     $p('#po-backdrop').classList.add('hidden');
   }
 
+  function setMode(mode) {
+    po.mode = mode === 'issue' ? 'issue' : 'plan';
+    render();
+    $p('#po-question').focus();
+  }
+
   async function ask(question) {
     const q = String(question || '').trim();
     if (!q || po.busy || !po.projectId) return;
     const projectId = po.projectId;
+    const mode = po.mode;
+    const files = mode === 'issue' ? po.files.map((f) => f.path) : [];
     Object.assign(po, { busy: true, pending: q, error: null });
     $p('#po-question').value = '';
     render();
     try {
-      const out = await api.askProductOwner(projectId, q, devMode());
-      if (po.projectId === projectId) po.messages = out.messages;
+      const out = await api.askProductOwner(projectId, q, devMode(), mode, files);
+      if (po.projectId === projectId) { po.messages = out.messages; if (mode === 'issue') po.files = []; }
     } catch (e) {
       if (po.projectId === projectId) po.error = errMsg(e);
     } finally {
       Object.assign(po, { busy: false, pending: null });
       render();
     }
+  }
+
+  // ---- attachments (Register an issue): stored in the conversation's folder by the service ---------
+  const toBase64 = (file) => new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result).replace(/^data:[^,]*,/, ''));
+    r.onerror = () => reject(r.error || new Error(`Could not read ${file.name}`));
+    r.readAsDataURL(file);
+  });
+  async function addFiles(list) {
+    const files = [...(list || [])];
+    if (!files.length || !po.projectId) return;
+    if (po.mode !== 'issue') po.mode = 'issue';
+    po.error = null;
+    for (const f of files) {
+      try {
+        po.files.push(await api.attachProductOwnerFile(po.projectId, f.name || 'pasted.png', await toBase64(f)));
+      } catch (e) { po.error = `${f.name || 'file'}: ${errMsg(e)}`; }
+    }
+    render();
   }
 
   // ---- rendering ---------------------------------------------------------------------------------
@@ -122,14 +164,74 @@
     return parts.join('');
   }
 
+  // The draft the owner can still file: the latest one, unless filed (not a preview) or discarded since
+  // (the same rule as currentDraft in src/product-owner.js).
+  function openDraftIndex() {
+    for (let i = po.messages.length - 1; i >= 0; i--) {
+      const m = po.messages[i];
+      if ((m.filed && !m.filed.preview) || m.discarded) return -1;
+      if (m.role === 'po' && m.mode === 'issue' && (m.issue?.draft || m.issue?.existingIssue)) return i;
+    }
+    return -1;
+  }
+
+  // The issues the draft may go into instead: the one named by the owner or the PO, then the close ones.
+  const candidates = (x) => [...new Set([x.existingIssue, ...(x.duplicates || []).filter((d) => d.state !== 'closed').map((d) => d.number)].filter(Boolean))].slice(0, MAX_CANDIDATES);
+
+  function draftActions(x, m) {
+    const busy = po.busy ? ' disabled' : '';
+    const note = po.notes[`draft:${m}`];
+    const into = candidates(x);
+    return `<div class="row po-draft-actions">
+        ${x.draft ? `<button class="btn sm primary" type="button" data-po-act="create"${busy} title="File this draft as a new issue">Create</button>
+        <button class="btn sm ghost" type="button" data-po-act="create-roadmap"${busy} title="File it, then plan it as a new roadmap stage (${esc(DEFAULT_WORKFLOW)})">Create + roadmap</button>
+        <button class="btn sm ghost" type="button" data-po-act="create-assign"${busy} title="File it, then open the assign dialog with it">Create + assign…</button>` : ''}
+        ${into.map((n) => `<button class="btn sm${x.draft ? ' ghost' : ' primary'}" type="button" data-po-act="append" data-n="${n}"${busy} title="Append ${x.existingIssue === n && x.addition ? 'the addition' : 'this draft'} to #${n}'s description as a dated section, keeping what is there">Add to #${n}${x.draft ? ' instead' : ''}</button>
+          <button class="link-btn small" type="button" data-po-act="comment" data-n="${n}"${busy} title="Add it as a comment on #${n} instead">comment on #${n}</button>`).join('')}
+        <button class="btn sm ghost" type="button" data-po-act="revise"${busy} title="Tell the Product Owner what to change">Revise</button>
+        <button class="btn sm ghost" type="button" data-po-act="discard"${busy} title="Drop this draft: nothing is filed">Discard</button>
+        ${note ? `<span class="small ${note.error ? 'error' : 'muted'}">${esc(note.text)}</span>` : ''}
+      </div>`;
+  }
+
+  function issueHtml(x, m) {
+    if (!x) return '';
+    const parts = [];
+    if (x.questions?.length) parts.push(`<ol class="po-list po-questions">${x.questions.map((q) => `<li>${esc(q)}</li>`).join('')}</ol>`);
+    if (x.draft) {
+      const d = x.draft;
+      parts.push(`<div class="po-sec"><div class="sup-h">Draft</div><div class="po-draft">
+        <div class="po-draft-title" title="${esc(d.title)}">${esc(d.title)}</div>
+        <div class="po-draft-meta">${d.labels.map((l) => `<span class="badge">${esc(l)}</span>`).join('')}
+          ${d.related.length ? `<span class="muted small">Related</span> ${d.related.map(issueRef).join('')}` : ''}</div>
+        <div class="md md-compact po-draft-body">${markdownHtml(d.body)}</div>
+      </div></div>`);
+    }
+    if (x.existingIssue && x.addition) {
+      const i = issueOf(x.existingIssue);
+      parts.push(`<div class="po-sec"><div class="sup-h">Addition to #${x.existingIssue}${i ? ` ${esc(i.title)}` : ''}</div><div class="po-draft">
+        <div class="md md-compact po-draft-body">${markdownHtml(`## Update (${new Date().toISOString().slice(0, 10)})\n\n${x.addition}`)}</div></div></div>`);
+    }
+    if (x.duplicates?.length) {
+      parts.push(`<div class="po-sec"><div class="sup-h">Close issues</div><ul class="po-list">${x.duplicates.map((d) =>
+        `<li>${issueRef(d.number)} <span class="badge${d.relation === 'duplicate' ? ' warn' : ''}">${esc(d.relation)}</span> ${esc(d.title)}${d.state === 'closed' ? ' <span class="muted small">(closed)</span>' : ''}${d.reason ? ` <span class="muted small">${esc(d.reason)}</span>` : ''}</li>`).join('')}</ul></div>`);
+    }
+    if (x.assumptions?.length) parts.push(`<details class="small"><summary class="muted">Assumptions (${x.assumptions.length})</summary><ul class="po-list">${x.assumptions.map((a) => `<li>${esc(a)}</li>`).join('')}</ul></details>`);
+    if (m === openDraftIndex()) parts.push(draftActions(x, m));
+    return parts.join('');
+  }
+
   function messageHtml(msg, m) {
     const time = msg.ts ? new Date(msg.ts).toLocaleTimeString() : '';
-    if (msg.role === 'user') return `<div class="sup-wmsg user"><div class="sup-wmsg-meta">You · ${esc(time)}</div><div>${esc(msg.text)}</div></div>`;
+    if (msg.role === 'user') {
+      const files = (msg.attachments || []).map((f) => `<span class="badge" title="${esc(f)}">${esc(f.split(/[\\/]/).pop())}</span>`).join(' ');
+      return `<div class="sup-wmsg user"><div class="sup-wmsg-meta">You · ${esc(time)}</div><div>${esc(msg.text)}</div>${files ? `<div class="po-files">${files}</div>` : ''}</div>`;
+    }
     const meta = `Product Owner · ${esc(time)}${msg.model ? ` · ${esc(msg.model)}` : ''} · ${esc(fmtCost(msg.costUsd || 0))}`;
-    return `<div class="sup-wmsg po-msg${msg.error ? ' error' : ''}"><div class="sup-wmsg-meta">${meta}</div>
+    return `<div class="sup-wmsg po-msg${msg.error ? ' error' : ''}" data-msg="${m}"><div class="sup-wmsg-meta">${meta}</div>
       <div class="md md-compact">${msg.error ? esc(msg.text) : markdownHtml(msg.text || '')}</div>
-      ${msg.invalid ? `<p class="small muted">The answer had no valid proposal (${esc(msg.invalid)}): shown as text only.</p>` : ''}
-      ${answerHtml(msg.answer, m)}</div>`;
+      ${msg.invalid ? `<p class="small muted">The answer had no valid ${msg.mode === 'issue' ? 'draft' : 'proposal'} (${esc(msg.invalid)}): shown as text only.</p>` : ''}
+      ${answerHtml(msg.answer, m)}${issueHtml(msg.issue, m)}</div>`;
   }
 
   function render() {
@@ -137,20 +239,40 @@
     if (!po.open) return;
     const agent = window.productOwnerAgent;
     const simulated = devMode();
-    $p('#po-sub').textContent = `${po.projectId || ''} · ${simulated ? 'simulated (developer mode)' : `${agent?.model || 'claude-opus-5-5'}${agent?.effort && agent.effort !== 'default' ? ` · ${agent.effort}` : ''}`}`;
+    const issueMode = po.mode === 'issue';
+    // registering an issue uses the issue tracker's cheaper analysis model (ISSUE_AGENT in src/product-owner.js)
+    const model = issueMode ? 'claude-sonnet-5 · medium' : `${agent?.model || 'claude-opus-5-5'}${agent?.effort && agent.effort !== 'default' ? ` · ${agent.effort}` : ''}`;
+    $p('#po-sub').textContent = `${po.projectId || ''} · ${simulated ? 'simulated (developer mode)' : model}`;
     const log = $p('#po-log');
     const cost = po.messages.reduce((a, x) => a + (x.costUsd || 0), 0);
+    const empty = issueMode
+      ? 'Describe the issue in a few words: type it, dictate it, or paste a screenshot. I look at the code and the backlog for evidence and duplicates, ask a question if I must, and draft it. Nothing is filed until you click Create or Add to #n.'
+      : 'I read the synced issues, the queue, the runs in progress and past runs (and the code, read-only), and propose which issues to run together, which not, and in what order. I never start runs or edit issues: you apply a proposal with a click.';
     log.innerHTML = (po.messages.length || po.pending ? '' : `<div class="po-empty"><span class="po-empty-robot" aria-hidden="true">${avatar()}</span>
-        <p class="muted small">I read the synced issues, the queue, the runs in progress and past runs (and the code, read-only), and propose which issues to run together, which not, and in what order. I never start runs or edit issues: you apply a proposal with a click.</p></div>`)
+        <p class="muted small">${empty}</p></div>`)
       + po.messages.map(messageHtml).join('')
       + (po.pending ? `<div class="sup-wmsg user"><div class="sup-wmsg-meta">You</div><div>${esc(po.pending)}</div></div>` : '')
-      + (po.busy ? '<div class="sup-loading"><span class="spinner"></span><span>The Product Owner is reading the backlog…</span></div>' : '')
+      + (po.busy ? `<div class="sup-loading"><span class="spinner"></span><span>${issueMode ? 'The Product Owner is reading the code and the backlog…' : 'The Product Owner is reading the backlog…'}</span></div>` : '')
       + (po.error ? `<p class="error small">${esc(po.error)}</p>` : '');
     log.scrollTop = log.scrollHeight;
-    $p('#po-chips').innerHTML = QUESTIONS.map((q) => `<button class="chip" type="button" data-q="${esc(q)}"${po.busy ? ' disabled' : ''}>${esc(q)}</button>`).join('');
+    document.querySelectorAll('#po-mode [data-po-mode]').forEach((b) => {
+      b.classList.toggle('active', b.dataset.poMode === po.mode);
+      b.disabled = po.busy;
+    });
+    $p('#po-chips').innerHTML = issueMode ? '' : [...QUESTIONS.map((q) => `<button class="chip" type="button" data-q="${esc(q)}"${po.busy ? ' disabled' : ''}>${esc(q)}</button>`),
+      `<button class="chip" type="button" data-mode="issue"${po.busy ? ' disabled' : ''} title="Describe an issue; the Product Owner drafts it and you file it">${esc(REGISTER)}…</button>`].join('');
+    $p('#po-chips').classList.toggle('hidden', issueMode);
+    $p('#po-files').classList.toggle('hidden', !issueMode || !po.files.length);
+    $p('#po-files').innerHTML = po.files.map((f, n) => `<span class="badge po-file" title="${esc(f.path)}"><span>${esc(f.name)}</span> <span class="muted">${esc(fmtSize(f.size))}</span><button type="button" data-po-unattach="${n}" aria-label="Remove ${esc(f.name)}">×</button></span>`).join('');
+    $p('#btn-po-attach').classList.toggle('hidden', !issueMode);
+    $p('#btn-po-attach').disabled = po.busy;
+    $p('#po-question').placeholder = issueMode
+      ? (openDraftIndex() >= 0 ? 'What should change? Or "add this to #n"…' : 'Describe the issue in a few words (paste or drop screenshots)…')
+      : 'Ask about the backlog: which issues should go first?';
+    $p('#btn-po-ask').textContent = issueMode ? 'Send' : 'Ask';
     $p('#btn-po-ask').disabled = po.busy;
     $p('#btn-po-clear').disabled = po.busy || !po.messages.length;
-    $p('#po-note').textContent = `${simulated ? 'Simulated: no model is called and nothing is spent.' : 'Each question is one call to the model: it uses your Claude Code subscription.'}${cost ? ` Conversation cost ${fmtCost(cost)}.` : ''}`;
+    $p('#po-note').textContent = `${simulated ? `Simulated: no model is called and nothing is spent.${issueMode ? ' Filing only previews: nothing reaches GitHub/GitLab.' : ''}` : 'Each question is one call to the model: it uses your Claude Code subscription.'}${cost ? ` Conversation cost ${fmtCost(cost)}.` : ''}`;
   }
 
   // ---- applying a proposal (the owner's click) ------------------------------------------------------
@@ -189,6 +311,57 @@
     render();
   }
 
+  // ---- filing a draft (the owner's click; Register an issue) ----------------------------------------
+  // act: create | create-roadmap | create-assign | append | comment | revise | discard. A real filing
+  // asks once more; developer or simulated mode only previews (the service never calls gh/glab then).
+  async function fileDraft(act, el) {
+    const m = Number(el.closest('[data-msg]').dataset.msg);
+    const msg = po.messages[m];
+    const x = msg?.issue;
+    if (!x || po.busy) return;
+    const key = `draft:${m}`;
+    if (act === 'revise') {
+      setMode('issue');
+      $p('#po-question').placeholder = 'What should change in the draft?';
+      return;
+    }
+    const n = Number(el.dataset.n) || null;
+    const simulated = devMode();
+    if (act === 'discard') {
+      if (!await confirmDialog('Discard the draft', 'Nothing is filed. The conversation keeps it, marked as discarded.', 'Discard')) return;
+      try { po.messages = await api.discardProductOwnerDraft(po.projectId, msg.ts); } catch (e) { po.notes[key] = { text: errMsg(e), error: true }; }
+      render();
+      return;
+    }
+    const action = act.startsWith('create') ? 'create' : act;
+    if (!simulated) {
+      const what = action === 'create' ? [`Create the issue “${x.draft.title}”`, 'It is filed on the project\'s repository as shown.', 'Create']
+        : action === 'append' ? [`Add to #${n}`, `The ${x.existingIssue === n && x.addition ? 'addition' : 'draft'} is appended to #${n}'s description as a dated section; the rest of it is kept.`, 'Add']
+          : [`Comment on #${n}`, `The ${x.existingIssue === n && x.addition ? 'addition' : 'draft'} is added as a comment on #${n}.`, 'Comment'];
+      if (!await confirmDialog(...what)) return;
+    }
+    Object.assign(po, { busy: true, error: null });
+    po.notes[key] = null;
+    render();
+    try {
+      const out = await api.fileProductOwnerDraft(po.projectId, msg.ts, action, n, simulated);
+      po.messages = out.messages;
+      if (out.backlog) actions().showData(out.backlog);
+      if (out.syncError) po.notes[key] = { text: `Filed, but the backlog sync failed: ${out.syncError}`, error: true };
+      const filed = !out.preview && out.filed?.number;
+      if (filed && act === 'create-roadmap') {
+        await actions().roadmapGroup({ issues: [filed], workflow: DEFAULT_WORKFLOW, inputs: {}, reason: 'Filed by the Product Owner.' });
+      } else if (filed && act === 'create-assign') {
+        await actions().assignGroup({ issues: [filed], workflow: DEFAULT_WORKFLOW, inputs: {} });
+      }
+    } catch (e) {
+      po.notes[key] = { text: errMsg(e), error: true };
+    } finally {
+      po.busy = false;
+      render();
+    }
+  }
+
   // ---- events ----------------------------------------------------------------------------------------
   $p('#btn-bl-po').onclick = open;
   $p('#btn-po-close').onclick = close;
@@ -197,11 +370,44 @@
   $p('#po-question').addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ask(e.target.value); }
   });
-  $p('#po-chips').onclick = (e) => { const c = e.target.closest('[data-q]'); if (c) ask(c.dataset.q); };
-  $p('#po-log').onclick = (e) => { const b = e.target.closest('[data-po-act]'); if (b) apply(b.dataset.poAct, b); };
+  // a pasted screenshot becomes an attachment (and switches to Register an issue); text pastes as usual
+  $p('#po-question').addEventListener('paste', (e) => {
+    const files = [...(e.clipboardData?.files || [])];
+    if (!files.length) return;
+    e.preventDefault();
+    addFiles(files);
+  });
+  const foot = $p('#po-drawer .po-foot');
+  foot.addEventListener('dragover', (e) => { if ([...(e.dataTransfer?.types || [])].includes('Files')) { e.preventDefault(); foot.classList.add('dropping'); } });
+  foot.addEventListener('dragleave', () => foot.classList.remove('dropping'));
+  foot.addEventListener('drop', (e) => {
+    foot.classList.remove('dropping');
+    if (!e.dataTransfer?.files?.length) return;
+    e.preventDefault();
+    addFiles(e.dataTransfer.files);
+  });
+  $p('#btn-po-attach').onclick = () => $p('#po-file-input').click();
+  $p('#po-file-input').onchange = (e) => { addFiles(e.target.files); e.target.value = ''; };
+  $p('#po-files').onclick = (e) => {
+    const b = e.target.closest('[data-po-unattach]');
+    if (b) { po.files.splice(Number(b.dataset.poUnattach), 1); render(); }
+  };
+  $p('#po-mode').onclick = (e) => { const b = e.target.closest('[data-po-mode]'); if (b) setMode(b.dataset.poMode); };
+  $p('#po-chips').onclick = (e) => {
+    const c = e.target.closest('[data-q], [data-mode]');
+    if (c?.dataset.mode) setMode(c.dataset.mode);
+    else if (c) ask(c.dataset.q);
+  };
+  const DRAFT_ACTS = ['append', 'comment', 'create', 'create-assign', 'create-roadmap', 'discard', 'revise'];
+  $p('#po-log').onclick = (e) => {
+    const b = e.target.closest('[data-po-act]');
+    if (!b) return;
+    if (DRAFT_ACTS.includes(b.dataset.poAct)) fileDraft(b.dataset.poAct, b);
+    else apply(b.dataset.poAct, b);
+  };
   $p('#btn-po-clear').onclick = async () => {
-    if (!await confirmDialog('Clear the conversation', 'The Product Owner forgets this project\'s questions and answers.', 'Clear')) return;
-    try { po.messages = await api.clearProductOwner(po.projectId); po.notes = {}; } catch (e) { po.error = errMsg(e); }
+    if (!await confirmDialog('Clear the conversation', 'The Product Owner forgets this project\'s questions and answers (and the files attached to them).', 'Clear')) return;
+    try { po.messages = await api.clearProductOwner(po.projectId); po.notes = {}; po.files = []; } catch (e) { po.error = errMsg(e); }
     render();
   };
   // capture: runs before app.js's Esc handler closes a dialog over the drawer

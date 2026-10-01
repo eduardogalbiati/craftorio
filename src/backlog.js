@@ -564,6 +564,46 @@ function issueSaveCommand({ platform, repo, number, mode, file, text }) {
   return { cli, args, display: `${cli} ${shown.join(' ')}` };
 }
 
+/**
+ * The CLI call that files a new issue (the Product Owner's Create, #117): gh reads the body from
+ * `file` (--body-file), glab takes it as an argument. { cli, args, display }.
+ */
+function issueCreateCommand({ platform, repo, title, labels = [], file, text }) {
+  const target = cliTarget(platform, repo);
+  const t = String(title || '').trim();
+  if (!t) throw new Error('The issue has no title.');
+  let cli;
+  let args;
+  if (platform === 'github') {
+    cli = 'gh';
+    args = ['issue', 'create', '--repo', target, '--title', t, '--body-file', file, ...labels.flatMap((l) => ['--label', l])];
+  } else {
+    cli = 'glab';
+    args = ['issue', 'create', '--repo', target, '--title', t, '--description', text, ...(labels.length ? ['--label', labels.join(',')] : []), '--yes'];
+  }
+  const shown = args.map((a) => (a === text ? '<document>' : /\s/.test(a) ? `"${a}"` : a));
+  return { cli, args, display: `${cli} ${shown.join(' ')}` };
+}
+
+/**
+ * A description with `addition` appended as a dated section ("## Update (YYYY-MM-DD)"), keeping
+ * everything already there (the hand-made updates of #77, #96, #110, #112).
+ */
+function issueAppendBody({ original = '', addition, date = new Date() }) {
+  const current = String(original || '').replace(/\r\n/g, '\n').trimEnd();
+  const add = String(addition || '').replace(/\r\n/g, '\n').trim();
+  if (!add) throw new Error('Nothing to add to the issue.');
+  const section = `## Update (${date.toISOString().slice(0, 10)})\n\n${add}\n`;
+  return current ? `${current}\n\n${section}` : section;
+}
+
+/** The repository's label names (GitHub), or null when unknown (GitLab creates missing labels itself). */
+async function repoLabels({ platform, repo, exec = execCli }) {
+  if (platform !== 'github') return null;
+  const out = await exec('gh', ['label', 'list', '--repo', cliTarget(platform, repo), '--limit', '500', '--json', 'name']);
+  return JSON.parse(out || '[]').map((l) => l.name);
+}
+
 /** One issue, read again from the platform (same shape as fetchIssues). */
 async function fetchIssue({ platform, repo, number, exec = execCli }) {
   const target = cliTarget(platform, repo);
@@ -699,10 +739,13 @@ module.exports = {
   claimQueued,
   fetchIssue,
   filedToQueue,
+  issueAppendBody,
+  issueCreateCommand,
   issueSaveBody,
   issueSaveCommand,
   readIssueSaves,
   releaseQueued,
+  repoLabels,
   saveRunToIssue,
   updateCachedIssue,
 };

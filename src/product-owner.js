@@ -14,9 +14,19 @@
 // The conversation is kept per project in <workspace>/backlog/<projectId>.po.jsonl until cleared.
 // Each real call's cost and tokens also go to <workspace>/backlog/product-owner.usage.jsonl, which
 // clearing does not touch: monthUsage feeds them to the monthly budget check (they are in no run).
+//
+// Registering an issue (#117, mode 'issue'): the same conversation drafts an issue with the owner,
+// like the issue-tracker workflow's analyze + write steps in one turn (skills issue-triage and
+// issue-writing, the code analyzer's cheaper model: ISSUE_AGENT). It may ask at most two short
+// questions; each new message revises the whole draft (ISSUE_SCHEMA). The owner files it with a
+// click (fileDraft: a new issue, or the addition appended to an existing issue's body as a dated
+// section, or as a comment) or discards it (discardDraft); both are recorded in the conversation.
+// The conversation's folder <workspace>/backlog/<projectId>.po/ keeps the owner's attachments
+// (attachments/) and every text sent to the platform (filed/). A preview (simulated) never calls gh/glab.
 
 const fs = require('fs');
 const path = require('path');
+const backlog = require('./backlog');
 const { readEvents } = require('./supervisor');
 
 const MAX_REPORT = 60000;
@@ -298,6 +308,7 @@ function appendMessage(backlogDir, projectId, message) {
 
 function clearConversation(backlogDir, projectId) {
   fs.rmSync(chatFile(backlogDir, projectId), { force: true });
+  fs.rmSync(poDir(backlogDir, projectId), { recursive: true, force: true });
   return [];
 }
 
@@ -306,6 +317,262 @@ function previousExchanges(messages) {
   const recent = messages.filter((m) => m.role === 'user' || m.role === 'po').slice(-PREVIOUS_EXCHANGES * 2);
   if (!recent.length) return '';
   return `## Earlier in this conversation\n${recent.map((m) => (m.role === 'user' ? `Owner: ${clip(m.text, 500)}` : `You: ${clip(m.answer?.summary || m.text, 1500)}`)).join('\n')}`;
+}
+
+// ---- registering an issue (#117) ---------------------------------------------------------------------
+// The issue tracker's code analyzer (workflows/issue-tracker.yaml): cheaper than the planner's model.
+const ISSUE_AGENT = { model: 'claude-sonnet-5', effort: 'medium' };
+const MAX_QUESTIONS = 2;
+const MAX_ATTACHMENT = 10 * 1024 * 1024;
+const CLOSED_TITLES = 300;
+const RELATIONS = ['duplicate', 'overlaps', 'related'];
+const FILE_ACTIONS = ['append', 'comment', 'create'];
+
+const ISSUE_SCHEMA = {
+  type: 'object',
+  required: ['reply', 'questions', 'draft', 'duplicates', 'existing_issue', 'addition', 'assumptions'],
+  properties: {
+    reply: { type: 'string' },
+    questions: { type: 'array', items: { type: 'string' } },
+    // title "" while a question is open
+    draft: {
+      type: 'object',
+      required: ['title', 'body', 'labels', 'related'],
+      properties: {
+        title: { type: 'string' },
+        body: { type: 'string' },
+        labels: { type: 'array', items: { type: 'string' } },
+        related: { type: 'array', items: { type: 'integer' } },
+      },
+    },
+    duplicates: {
+      type: 'array',
+      items: {
+        type: 'object',
+        required: ['number', 'relation'],
+        properties: { number: { type: 'integer' }, relation: { type: 'string', enum: RELATIONS }, reason: { type: 'string' } },
+      },
+    },
+    existing_issue: { type: 'integer' },
+    addition: { type: 'string' },
+    assumptions: { type: 'array', items: { type: 'string' } },
+  },
+};
+
+const ISSUE_RULES = [
+  'You are the Product Owner of this project, registering an issue with its owner in a conversation inside the orchestrator\'s Backlog screen. The owner describes it in a few words (typed, dictated, sometimes with screenshots); you draft the issue; the owner reviews the draft and files it with a click.',
+  'Analyse the request with the issue-triage skill, in the project\'s code (your working directory, read-only: docs/agents/code-map.md, grep): the code involved with evidence (file:line, today\'s behaviour), the files likely to change, impact and complexity, duplicates and overlapping issues from the backlog report (open and closed), open pull requests that already cover part of it, and the grouping advice.',
+  'Write the draft with the issue-writing skill: a specific title; a context grounded in the evidence; "Decision (owner): ..." for every decision the owner stated; tasks as verifiable acceptance criteria (for a UI change, UI criteria: the controls, the states, what leads); "Related: #n". Add a short "Triage" section: impact and complexity with their reasons, the estimated files (marked as an estimate) and the grouping advice. Labels: `impact:<n>`, `complexity:<n>`, the kind, `area:<...>`.',
+  `The owner is here. When the request is ambiguous in a way that changes the issue, ask at most ${MAX_QUESTIONS} short questions in \`questions\` and leave the draft's title empty; otherwise draft at once and list your assumptions in \`assumptions\`. Each new message of the owner refines the current draft: always return the whole draft again.`,
+  'When the owner asks to add to an existing issue ("add this to #110"), or an open issue already covers the request (`relation: duplicate`), set `existing_issue` to its number and write in `addition` only the new part (a short context and the new tasks as a checklist), keeping what the issue already says; otherwise 0 and "".',
+  'Language: answer the owner (`reply`, `questions`) in the language the owner writes in. The issue itself (title, body, labels, addition) is in English, the repository\'s language.',
+  'You never file, edit or comment on issues and never start runs: the owner files the draft with a click. Do not prescribe code fixes beyond what the issue needs.',
+].join('\n');
+
+const poDir = (backlogDir, projectId) => path.join(backlogDir, `${path.basename(String(projectId))}.po`);
+const attachDir = (backlogDir, projectId) => path.join(poDir(backlogDir, projectId), 'attachments');
+const closesDraft = (m) => (m.filed && !m.filed.preview) || m.discarded;
+
+/** Stores a file the owner pasted or dropped (base64 `data`) in the conversation's folder: { name, path, size }. */
+function saveAttachment(backlogDir, projectId, { name, data }) {
+  const buf = Buffer.from(String(data || ''), 'base64');
+  if (!buf.length) throw new Error('The file is empty.');
+  if (buf.length > MAX_ATTACHMENT) throw new Error(`The file is larger than ${MAX_ATTACHMENT / 1024 / 1024} MB.`);
+  const safe = path.basename(String(name || 'file')).replace(/[^\w.-]+/g, '-').slice(-80) || 'file';
+  const dir = attachDir(backlogDir, projectId);
+  fs.mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, `${Date.now()}-${safe}`);
+  fs.writeFileSync(file, buf);
+  return { name: safe, path: file, size: buf.length };
+}
+
+// Only files of this conversation's attachments folder reach the prompt.
+const isAttachment = (backlogDir, projectId, file) => {
+  const dir = attachDir(backlogDir, projectId);
+  const f = path.resolve(String(file || ''));
+  return f.startsWith(dir + path.sep) && fs.existsSync(f);
+};
+
+/** The draft the owner can still file: the latest one, unless filed or discarded since. { index, message } or null. */
+function currentDraft(messages) {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (closesDraft(m)) return null;
+    if (m.role === 'po' && m.mode === 'issue' && (m.issue?.draft || m.issue?.existingIssue)) return { index: i, message: m };
+  }
+  return null;
+}
+
+// The issue-mode messages since the last draft was filed or discarded.
+function issueThread(messages) {
+  const out = [];
+  for (let i = messages.length - 1; i >= 0 && !closesDraft(messages[i]); i--) if (messages[i].mode === 'issue') out.unshift(messages[i]);
+  return out;
+}
+
+/** Keeps an issue answer to what exists (issue numbers of the backlog); a draft without a title is none. */
+function normalizeIssueAnswer(raw, { issues }) {
+  const known = new Map((issues || []).map((i) => [i.number, i]));
+  const d = raw?.draft || {};
+  const title = String(d.title || '').trim();
+  const existing = Number(raw?.existing_issue) || 0;
+  const strings = (list) => (list || []).map((s) => String(s).trim()).filter(Boolean);
+  return {
+    reply: String(raw?.reply || ''),
+    questions: strings(raw?.questions).slice(0, MAX_QUESTIONS),
+    draft: title ? {
+      title,
+      body: String(d.body || '').trim(),
+      labels: [...new Set(strings(d.labels))],
+      related: [...new Set((d.related || []).map(Number).filter((n) => known.has(n)))],
+    } : null,
+    duplicates: (raw?.duplicates || []).filter((x) => known.has(Number(x.number))).map((x) => {
+      const i = known.get(Number(x.number));
+      return { number: i.number, title: i.title, state: i.state, relation: RELATIONS.includes(x.relation) ? x.relation : 'related', ...(x.reason ? { reason: String(x.reason) } : {}) };
+    }),
+    existingIssue: known.has(existing) ? existing : null,
+    addition: known.has(existing) ? String(raw?.addition || '').trim() : '',
+    assumptions: strings(raw?.assumptions),
+  };
+}
+
+// The planner's report plus the closed issues' titles (duplicates may be closed).
+function issueReport(args) {
+  const closed = (args.data?.issues || []).filter((i) => i.state !== 'open').slice(0, CLOSED_TITLES);
+  return `${backlogReport(args)}\n\n## Closed issues (titles only)\n${closed.map((i) => `- #${i.number} ${i.title}`).join('\n') || '(none)'}`;
+}
+
+// The thread's exchanges and the current draft in full, so the owner's next message revises it.
+function issueContext(messages) {
+  const thread = issueThread(messages);
+  const parts = [previousExchanges(thread)];
+  const open = currentDraft(messages)?.message.issue;
+  if (open?.draft) parts.push(`## The current draft (revise it with the owner's new message)\n# ${open.draft.title}\nLabels: ${open.draft.labels.join(', ')}\n\n${clip(open.draft.body, BODY_NAMED * 2)}`);
+  if (open?.existingIssue) parts.push(`## Current addition to #${open.existingIssue}\n${clip(open.addition, BODY_NAMED)}`);
+  return parts.filter(Boolean).join('\n\n');
+}
+
+/**
+ * The simulated issue answer: a short first request (under 8 words) gets one question; then a draft
+ * built from the owner's messages, the open issues sharing two title words as overlaps, and "add
+ * this to #n" as an addition to that issue.
+ */
+function mockIssueAnswer({ data, question = '', previous = [] }) {
+  const issues = data?.issues || [];
+  const thread = issueThread(previous);
+  const said = [...thread.filter((m) => m.role === 'user').map((m) => m.text), question].map((t) => String(t).trim()).filter(Boolean);
+  const target = Number(String(question).match(/\badd (?:this |it )?to #(\d+)/i)?.[1]) || 0;
+  const empty = { title: '', body: '', labels: [], related: [] };
+  if (said.length === 1 && question.split(/\s+/).filter(Boolean).length < 8 && !target) {
+    return {
+      reply: '**Simulated answer** (no model was called). One question before I draft it:',
+      questions: ['Where does it happen (which screen or command), and what should happen instead?'],
+      draft: empty, duplicates: [], existing_issue: 0, addition: '', assumptions: [],
+    };
+  }
+  const words = (t) => new Set(String(t).toLowerCase().match(/[a-z]{4,}/g) || []);
+  const asked = words(said.join(' '));
+  const close = issues.filter((i) => i.state === 'open' && [...words(i.title)].filter((w) => asked.has(w)).length >= 2);
+  const first = said[0].split(/(?<=[.!?])\s/)[0];
+  const title = clip(first.charAt(0).toUpperCase() + first.slice(1), 80).replace(/[.!?]$/, '');
+  const known = target && issues.some((i) => i.number === target) ? target : 0;
+  return {
+    reply: `**Simulated draft** (no model was called, no code was read). ${known ? `I would add this to #${known}: review the addition below.` : 'Review it below, or tell me what to change.'}`,
+    questions: [],
+    draft: {
+      title,
+      body: [
+        '## Context', '', ...said.map((t) => `> ${t}`), '',
+        `Decision (owner): ${said[said.length - 1]}`, '',
+        '## Tasks', '', ...said.map((t) => `- [ ] ${t}`), '- [ ] Tests', '',
+        ...(close.length ? [`Related: ${close.map((i) => `#${i.number}`).join(', ')}`] : []),
+      ].join('\n'),
+      labels: ['enhancement', 'impact:3', 'complexity:2'],
+      related: close.map((i) => i.number),
+    },
+    duplicates: close.map((i) => ({ number: i.number, relation: 'overlaps', reason: 'Shares words with the request (simulated).' })),
+    existing_issue: known,
+    addition: known ? `- [ ] ${question.replace(/\badd (?:this |it )?to #\d+:?\s*/i, '').trim() || said[0]}` : '',
+    assumptions: ['Simulated: the code was not read.'],
+  };
+}
+
+// The body filed for a new issue: the draft, with its Related line when the body has none.
+const createBody = (draft) => (draft.related.length && !/^Related:/im.test(draft.body)
+  ? `${draft.body}\n\nRelated: ${draft.related.map((n) => `#${n}`).join(', ')}\n` : `${draft.body}\n`);
+
+/**
+ * Files the current draft on the owner's click and records it in the conversation.
+ * at: the draft message's ts (a draft revised, filed or discarded since is refused);
+ * action: 'create' (a new issue), 'append' (a dated section at the end of issue `number`'s body) or
+ * 'comment' (a comment on `number`). `number` defaults to the draft's existing issue; the text added
+ * is the draft's addition for that issue, else the whole draft. `preview` never calls the CLI.
+ * Returns { preview, action, command, body, filed, message, messages, skippedLabels? }.
+ */
+async function fileDraft({ backlogDir, projectId, at, action, number, preview, platform, repo, cached = null, exec = backlog.execCli }) {
+  if (!FILE_ACTIONS.includes(action)) throw new Error(`Unknown action: ${action} (${FILE_ACTIONS.join(', ')}).`);
+  const open = currentDraft(readConversation(backlogDir, projectId));
+  if (!open || open.message.ts !== at) throw new Error('This draft was filed, discarded or revised since: use the latest draft.');
+  const issue = open.message.issue;
+  const dir = path.join(poDir(backlogDir, projectId), 'filed');
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  let command;
+  let body;
+  let file;
+  let target = null;
+  let skippedLabels = [];
+  if (action === 'create') {
+    if (!issue.draft) throw new Error('There is no draft to file yet.');
+    body = createBody(issue.draft);
+    let labels = issue.draft.labels;
+    // gh refuses a label the repository does not have: file without it and say so
+    const names = preview ? null : await backlog.repoLabels({ platform, repo, exec });
+    if (names) { skippedLabels = labels.filter((l) => !names.includes(l)); labels = labels.filter((l) => names.includes(l)); }
+    file = path.join(dir, `${stamp}-new.md`);
+    command = backlog.issueCreateCommand({ platform, repo, title: issue.draft.title, labels, file, text: body });
+  } else {
+    target = Number(number) || issue.existingIssue;
+    if (!target) throw new Error('Pick the issue to add to.');
+    const addition = issue.existingIssue === target && issue.addition ? issue.addition : issue.draft ? `### ${issue.draft.title}\n\n${issue.draft.body}` : '';
+    if (!addition) throw new Error('There is nothing to add yet.');
+    if (action === 'comment') body = `${addition}\n`;
+    else body = backlog.issueAppendBody({ original: preview ? cached?.body : (await backlog.fetchIssue({ platform, repo, number: target, exec })).body, addition });
+    file = path.join(dir, `${stamp}-${target}.md`);
+    command = backlog.issueSaveCommand({ platform, repo, number: target, mode: action === 'comment' ? 'comment' : 'replace', file, text: body });
+  }
+  const out = { preview: !!preview, action, command: command.display, body };
+  if (preview) {
+    const filed = { action, number: target, preview: true, draft: at, command: command.display };
+    const message = appendMessage(backlogDir, projectId, { role: 'po', mode: 'issue', text: `**Preview** (simulated): nothing was filed. The app would run \`${command.display}\`.`, filed });
+    return { ...out, filed, message, messages: readConversation(backlogDir, projectId) };
+  }
+  // gh reads the body from it; for glab it is the record of what was sent
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(file, body);
+  const stdout = String(await exec(command.cli, command.args) || '');
+  const url = stdout.match(/https?:\/\/\S+/)?.[0] || null;
+  let filed;
+  let text;
+  if (action === 'create') {
+    const n = Number(url?.match(/\/(\d+)\/?$/)?.[1]) || null;
+    filed = { action, number: n, url, title: issue.draft.title, draft: at, labels: issue.draft.labels.filter((l) => !skippedLabels.includes(l)) };
+    text = `Filed ${n ? `[#${n}](${url})` : url || 'the issue'}: ${issue.draft.title}.${skippedLabels.length ? ` Labels the repository does not have were left out: ${skippedLabels.join(', ')}.` : ''}`;
+  } else {
+    const issueUrl = cached?.url || null;
+    filed = { action, number: target, url: action === 'comment' ? url || issueUrl : issueUrl, draft: at };
+    const ref = filed.url ? `[#${target}](${filed.url})` : `#${target}`;
+    text = action === 'comment' ? `Commented on ${ref}.` : `Added to ${ref}: a dated section at the end of its description, the rest kept as it was.`;
+  }
+  const message = appendMessage(backlogDir, projectId, { role: 'po', mode: 'issue', text, filed });
+  return { ...out, filed, message, messages: readConversation(backlogDir, projectId), ...(skippedLabels.length ? { skippedLabels } : {}) };
+}
+
+/** Discards the current draft (at: its ts): nothing is filed; recorded in the conversation. Returns the conversation. */
+function discardDraft(backlogDir, projectId, at) {
+  const open = currentDraft(readConversation(backlogDir, projectId));
+  if (!open || open.message.ts !== at) throw new Error('This draft was filed, discarded or revised since.');
+  appendMessage(backlogDir, projectId, { role: 'po', mode: 'issue', text: 'Draft discarded: nothing was filed.', discarded: at });
+  return readConversation(backlogDir, projectId);
 }
 
 // ---- usage: every real call, for the monthly budgets ------------------------------------------------
@@ -341,44 +608,56 @@ function checkBudget(budget) {
  * Asks the Product Owner a question about a project's backlog and records the exchange.
  * @param data      the backlog with its runs (the service's withIssueRuns)
  * @param runs      the project's runs (runs.runsForProject), for the history
- * @param agent     the Product Owner agent (model, effort)
- * @returns { message, messages }  the answer ({ role: 'po', text, answer, model, costUsd }) and the whole conversation
+ * @param agent     the Product Owner agent (model, effort); registering an issue uses ISSUE_AGENT
+ * @param mode      'plan' (default) or 'issue' (#117: register an issue; `attachments`: paths saved by saveAttachment)
+ * @returns { message, messages }  the answer ({ role: 'po', text, answer | issue, model, costUsd }) and the whole conversation
  */
-async function ask({ backlogDir, projectId, question, data, activeRuns, runs, workflows, folder, agent, skillsDirs, resolveCommand, budget, mock }) {
+async function ask({ backlogDir, projectId, question, data, activeRuns, runs, workflows, folder, agent, skillsDirs, resolveCommand, budget, mock, mode = 'plan', attachments = [] }) {
   const q = String(question || '').trim();
   if (!q) throw new Error('Ask a question.');
+  const issueMode = mode === 'issue';
+  const files = issueMode ? (attachments || []).filter((f) => isAttachment(backlogDir, projectId, f)).map((f) => path.resolve(f)) : [];
+  const tag = issueMode ? { mode: 'issue' } : {};
   const history = runHistory(runs, data?.issues);
   const previous = readConversation(backlogDir, projectId);
-  appendMessage(backlogDir, projectId, { role: 'user', text: q });
+  appendMessage(backlogDir, projectId, { role: 'user', text: q, ...tag, ...(files.length ? { attachments: files } : {}) });
   let raw;
   let costUsd = 0;
   let model = 'simulated';
   let invalid = null;
   try {
     if (mock) {
-      raw = mockAnswer({ data, question: q });
+      raw = issueMode ? mockIssueAnswer({ data, question: q, previous }) : mockAnswer({ data, question: q });
     } else {
       checkBudget(budget);
       let tokens;
+      const report = (issueMode ? issueReport : backlogReport)({ data, activeRuns, history, workflows, question: q });
       ({ raw, costUsd, model, invalid, tokens } = await callAgent({
-        question: q, report: backlogReport({ data, activeRuns, history, workflows, question: q }), previous, folder, agent, skillsDirs, resolveCommand,
+        mode, question: q, report, previous, attachments: files, folder, agent: issueMode ? ISSUE_AGENT : agent, skillsDirs, resolveCommand,
       }));
       recordUsage(backlogDir, { projectId, model, tokens, costUsd });
     }
   } catch (e) {
-    const message = appendMessage(backlogDir, projectId, { role: 'po', text: e.message, error: true, costUsd });
+    const message = appendMessage(backlogDir, projectId, { role: 'po', ...tag, text: e.message, error: true, costUsd });
     return { message, messages: readConversation(backlogDir, projectId) };
   }
-  const answer = normalizeAnswer(raw, { issues: data?.issues, history, workflows });
-  const message = appendMessage(backlogDir, projectId, {
-    role: 'po', text: answer.summary, answer, model, costUsd, ...(invalid ? { invalid } : {}),
-  });
+  let message;
+  if (issueMode) {
+    const issue = normalizeIssueAnswer(raw, { issues: data?.issues });
+    message = appendMessage(backlogDir, projectId, { role: 'po', ...tag, text: issue.reply, issue, model, costUsd, ...(invalid ? { invalid } : {}) });
+  } else {
+    const answer = normalizeAnswer(raw, { issues: data?.issues, history, workflows });
+    message = appendMessage(backlogDir, projectId, {
+      role: 'po', text: answer.summary, answer, model, costUsd, ...(invalid ? { invalid } : {}),
+    });
+  }
   return { message, messages: readConversation(backlogDir, projectId) };
 }
 
 // One read-only Claude Code turn in the project folder. An answer that does not validate is kept as
-// prose (no second call: one call per question).
-async function callAgent({ question, report, previous, folder, agent, skillsDirs, resolveCommand }) {
+// prose (no second call: one call per question). Mode 'issue': the issue skills, ISSUE_SCHEMA, and
+// read access to the attachments' folder.
+async function callAgent({ mode = 'plan', question, report, previous, attachments = [], folder, agent, skillsDirs, resolveCommand }) {
   const { extractJson, validateSchema, render } = require('./engine/workflow');
   const { runTurn } = require('./engine/providers');
   const { resolveSkill, skillPrompt } = require('./skills');
@@ -387,27 +666,34 @@ async function callAgent({ question, report, previous, folder, agent, skillsDirs
   const provider = Object.values(PROVIDERS).find((p) => p.type === 'claude-code');
   if (!resolveCommand(provider.command)) throw new Error(`The Product Owner needs ${provider.command}, which is not installed.`);
   if (!folder || !fs.existsSync(folder)) throw new Error('The project has no folder on this machine: the Product Owner reads its code there.');
-  const skill = resolveSkill(skillsDirs, 'backlog-product-owner');
+  const issueMode = mode === 'issue';
+  const schema = issueMode ? ISSUE_SCHEMA : ANSWER_SCHEMA;
+  const skills = (issueMode ? ['issue-triage', 'issue-writing'] : ['backlog-product-owner']).map((s) => resolveSkill(skillsDirs, s));
   const readOnly = providerArgs(provider.type, { caps: normalize({ tools: ['read'] }) }).args;
-  const extraArgs = dedupeFlags([...readOnly, ...(provider.skill_args || []).map((x) => render(x, { skill_dir: skill.path }))], provider.args || []);
+  const dirs = [...new Set(attachments.map((f) => path.dirname(f)))].flatMap((d) => ['--add-dir', d]);
+  const extraArgs = dedupeFlags([...readOnly, ...dirs, ...skills.flatMap((skill) => (provider.skill_args || []).map((x) => render(x, { skill_dir: skill.path })))], provider.args || []);
   const prompt = [
-    skillPrompt(skill),
-    RULES,
+    ...skills.map(skillPrompt),
+    issueMode ? ISSUE_RULES : RULES,
     report,
-    previousExchanges(previous),
-    `## The owner's question\n${question}`,
-    `\n---\nAt the end of your response you MUST include a \`\`\`json block with an object that validates against this JSON Schema:\n\`\`\`json\n${JSON.stringify(ANSWER_SCHEMA, null, 2)}\n\`\`\``,
+    issueMode ? issueContext(previous) : previousExchanges(previous),
+    issueMode ? `## The owner's new message\n${question}` : `## The owner's question\n${question}`,
+    attachments.length ? `## Files the owner attached (read them; screenshots are images)\n${attachments.map((f) => `- ${f}`).join('\n')}` : '',
+    `\n---\nAt the end of your response you MUST include a \`\`\`json block with an object that validates against this JSON Schema:\n\`\`\`json\n${JSON.stringify(schema, null, 2)}\n\`\`\``,
   ].filter(Boolean).join('\n\n');
   const res = await runTurn({
     provider, model: agent.model, effort: agent.effort && agent.effort !== 'default' ? agent.effort : undefined, prompt, cwd: folder, extraArgs,
-    timeoutMs: 15 * 60e3, render, hint: { stepId: 'product-owner', visit: 1, agent: 'product-owner', schema: ANSWER_SCHEMA }, onItem: () => {},
+    timeoutMs: 15 * 60e3, render, hint: { stepId: issueMode ? 'product-owner-issue' : 'product-owner', visit: 1, agent: 'product-owner', schema }, onItem: () => {},
   });
   let raw;
   let errs;
-  try { raw = extractJson(res.text); errs = validateSchema(raw, ANSWER_SCHEMA); } catch (e) { errs = [e.message]; }
+  try { raw = extractJson(res.text); errs = validateSchema(raw, schema); } catch (e) { errs = [e.message]; }
   if (errs.length) {
-    const prose = String(res.text || '').replace(/```json[\s\S]*$/, '').trim();
-    return { raw: { summary: prose || 'The answer could not be read.', groups: [], conflicts: [], enrich: [] }, costUsd: res.costUsd || 0, tokens: res.usage, model: agent.model, invalid: errs.join('; ') };
+    const prose = String(res.text || '').replace(/```json[\s\S]*$/, '').trim() || 'The answer could not be read.';
+    const fallback = issueMode
+      ? { reply: prose, questions: [], draft: { title: '', body: '', labels: [], related: [] }, duplicates: [], existing_issue: 0, addition: '', assumptions: [] }
+      : { summary: prose, groups: [], conflicts: [], enrich: [] };
+    return { raw: fallback, costUsd: res.costUsd || 0, tokens: res.usage, model: agent.model, invalid: errs.join('; ') };
   }
   return { raw, costUsd: res.costUsd || 0, tokens: res.usage, model: agent.model, invalid: null };
 }
@@ -418,11 +704,19 @@ module.exports = {
   backlogReport,
   clearConversation,
   complexityOf,
+  currentDraft,
+  discardDraft,
   estimate,
+  fileDraft,
+  ISSUE_AGENT,
+  ISSUE_SCHEMA,
   mockAnswer,
+  mockIssueAnswer,
   monthUsage,
   normalizeAnswer,
+  normalizeIssueAnswer,
   readConversation,
   runHistory,
+  saveAttachment,
   sizeGroup,
 };

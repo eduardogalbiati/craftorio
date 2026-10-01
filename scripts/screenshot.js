@@ -157,6 +157,35 @@ function demoLocalMerge(ws, projectId) {
   }, null, 2));
 }
 
+// The Product Owner registering an issue (#117): a short request with a screenshot, one question,
+// the owner's answer, then a draft (long title, labels, Related, a close issue: #12). Shown with
+// `--click "#btn-bl-po"`; `--click "[data-po-act=create]"` previews the filing (po:file previews here).
+function demoPoConversation(ws, projectId) {
+  const at = (s) => new Date(Date.UTC(2026, 0, 20, 10, 0, s)).toISOString();
+  const shot = path.join(ws.backlog, `${projectId}.po`, 'attachments', '1768903200000-run-report.png');
+  fs.mkdirSync(path.dirname(shot), { recursive: true });
+  fs.writeFileSync(shot, '');
+  const body = [
+    '## Context', '', 'The run report (#12) exports Markdown only (`src/report.js:41`, `exportMarkdown`). The owner shares reports with people who do not read Markdown.', '',
+    'Decision (owner): a PDF export next to the Markdown one, same layout.', '',
+    '## Tasks', '', '- [ ] **Export as PDF** in the run report menu, next to Markdown', '- [ ] The PDF keeps the report layout (headings, tables, cost)', '- [ ] Tests: a mock run exports a PDF with the report title', '',
+    '## Triage', '', 'Impact 3 (sharing reports), complexity 2 (one renderer, estimate: `src/report.js`, `src/renderer/run.js`). Group with #12.', '',
+    'Related: #12',
+  ].join('\n');
+  const messages = [
+    { ts: at(0), role: 'user', mode: 'issue', text: 'export the report as pdf', attachments: [shot] },
+    { ts: at(20), role: 'po', mode: 'issue', model: 'claude-sonnet-5', costUsd: 0.04, text: 'One question before I draft it:', issue: { reply: 'One question before I draft it:', questions: ['Should the PDF replace the Markdown export, or sit next to it?'], draft: null, duplicates: [], existingIssue: null, addition: '', assumptions: [] } },
+    { ts: at(40), role: 'user', mode: 'issue', text: 'Next to it, same layout as the Markdown report.' },
+    { ts: at(70), role: 'po', mode: 'issue', model: 'claude-sonnet-5', costUsd: 0.11, text: 'Drafted below. **#12** builds the report this exports: run them together.', issue: {
+      reply: 'Drafted below.', questions: [],
+      draft: { title: 'Export the run report as a PDF next to the Markdown export, keeping the same layout', body, labels: ['enhancement', 'impact:3', 'complexity:2', 'area:renderer'], related: [12] },
+      duplicates: [{ number: 12, title: 'Export a run report as Markdown', state: 'open', relation: 'overlaps', reason: 'Same report and menu.' }],
+      existingIssue: null, addition: '', assumptions: ['The PDF uses the same template as the Markdown export.'],
+    } },
+  ];
+  fs.writeFileSync(path.join(ws.backlog, `${projectId}.po.jsonl`), messages.map((m) => JSON.stringify(m)).join('\n') + '\n');
+}
+
 // A roadmap (Backlog › Roadmap, src/roadmap.js): stage 1 done (the local-hero run of #11), then a
 // group of two issues (with the Product Owner's reasons, mode auto), then one UI issue (mode
 // validated, no stage note); planned, so nothing starts. `--click "[data-rm-edit]"` opens the first
@@ -250,6 +279,8 @@ function simulateChannels(ipcMain) {
     if (channel === 'analytics:analyze') return handle(channel, (e, arg) => fn(e, { ...arg, mock: true }));
     // the Backlog's Product Owner answers from its simulated self (no model call)
     if (channel === 'po:ask') return handle(channel, (e, arg) => fn(e, { ...arg, mock: true }));
+    // and its filing of a drafted issue (#117) only previews: never calls gh/glab
+    if (channel === 'po:file') return handle(channel, (e, arg) => fn(e, { ...arg, preview: true }));
     // the app-wide Supervisor chat too (#28)
     if (channel === 'supervisor:chat') return handle(channel, (e, arg) => fn(e, { ...arg, mock: true }));
     // Save to issue (Write & Review) only previews: never calls gh/glab
@@ -351,6 +382,7 @@ function main() {
     fs.writeFileSync(path.join(ws.backlog, `${project.id}.json`), JSON.stringify(demoBacklog(project.id, src('backlog').taskProgress), null, 2));
     if (args.view === 'backlog') demoLocalMerge(ws, project.id);
     if (args.view === 'backlog') demoRoadmap(ws, project.id);
+    if (args.view === 'backlog') demoPoConversation(ws, project.id);
     if (['backlog', 'duo'].includes(args.view)) demoEnrichRun(ws, project.id);
     if (args.view === 'analytics') demoAnalyticsRuns(ws, project.id);
     // Run App's setup at a gate is prefilled from the worktree's package.json (#108)

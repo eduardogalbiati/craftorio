@@ -860,6 +860,8 @@
     focusProject: (id) => { if (id) bl.projectId = id; },
     projectId: () => bl.projectId,
     roadmapGroup,
+    // the backlog synced again after the Product Owner filed or updated an issue (#117)
+    showData: (data) => { if (data) { setData(data); render(); } },
     showRoadmap,
   };
 })();

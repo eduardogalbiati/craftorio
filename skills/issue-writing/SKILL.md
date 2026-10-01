@@ -2,7 +2,7 @@
 name: issue-writing
 description: Writes a GitHub/GitLab issue that someone else (a person or an agent) can pick up and finish without asking - a concrete context with evidence, the decisions already taken, and a checklist of verifiable acceptance criteria. Use when filing a bug, an enhancement or a follow-up.
 summary: "Issue structure: concrete context with evidence, decisions taken, a checklist of verifiable acceptance criteria, related issues"
-used_by: "via `uses`; Write & Review (`document_skill`); issue-tracker (issue_writer)"
+used_by: "via `uses`; Write & Review (`document_skill`); issue-tracker (issue_writer); the Product Owner (Register an issue)"
 ---
 
 # Issue writing
