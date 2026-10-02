@@ -1,7 +1,7 @@
 /* global api */
 // Settings screen: General (workspace folder, backlog defaults, voice input, the workspace index and
 // its Rebuild index, src/store.js), Agents & CLIs (installed CLIs and
-// their sign-in), Execution (developer mode, Keep awake (keep-awake.js), notifications, concurrent runs) and About. Registers
+// their sign-in), Execution (developer mode, Keep awake (keep-awake.js), notifications, concurrent runs, the Oracle's daily budget and compaction threshold) and About. Registers
 // itself with registerView (view-registry.js); uses app.js globals ($, esc, errMsg, state,
 // applyDeveloperMode, renderHeader, renderWorkspacePaths), commandHint (command-hint.js: the install
 // commands of missing CLIs) and window.BACKLOG_PLATFORMS (backlog.js).
@@ -33,6 +33,7 @@ async function renderSettings() {
   $('#set-backlog-group').value = state.settings.backlogMaxGroup || 5;
   $('#set-notif-retention').value = state.settings.notificationRetentionDays ?? 30;
   renderConcurrency();
+  renderOracleSettings();
   refreshKeepAwake();
   renderVoice();
   renderIndexStatus();
@@ -58,6 +59,27 @@ async function saveConcurrency() {
   state.settings = await api.setSettings({ concurrentRuns });
   renderConcurrency();
   renderHeader();
+}
+
+// Settings › Execution › Oracle (settings.oracle, read by src/oracle.js): both fields are saved
+// together, since setSettings replaces the whole object.
+function renderOracleSettings() {
+  const o = state.settings.oracle || {};
+  $('#set-oracle-budget').value = o.dailyBudgetUsd ?? 20;
+  $('#set-oracle-compact').value = o.compactAtTokens || 150000;
+}
+
+async function saveOracleSettings() {
+  const budget = Number($('#set-oracle-budget').value);
+  const compact = Math.floor(Number($('#set-oracle-compact').value));
+  const prev = state.settings.oracle || {};
+  const oracle = {
+    ...prev,
+    dailyBudgetUsd: $('#set-oracle-budget').value !== '' && Number.isFinite(budget) && budget >= 0 ? Math.min(budget, 10000) : (prev.dailyBudgetUsd ?? 20),
+    compactAtTokens: Number.isFinite(compact) && compact >= 10000 ? Math.min(compact, 1000000) : (prev.compactAtTokens || 150000),
+  };
+  state.settings = await api.setSettings({ oracle });
+  renderOracleSettings();
 }
 
 // Settings › General › Voice input (#82): the whisper.cpp CLI, the model and the language (src/speech.js).
@@ -286,6 +308,17 @@ registerView({
                   <label class="switch"><input type="checkbox" id="set-cr-sims" /><span></span></label>
                 </div>
               </div>
+              <h3 class="s-subtitle">Oracle</h3>
+              <div id="set-oracle" class="s-group">
+                <div class="s-row">
+                  <div class="s-label"><b>Daily budget (USD)</b><span>Once today's Oracle spend reaches it, questions are refused until tomorrow (UTC); an answer already running is not cut. It also counts in the monthly Claude Code budget. 0: no cap.</span></div>
+                  <div class="s-ctrl"><input type="number" id="set-oracle-budget" min="0" max="10000" step="0.5" class="s-num" aria-label="Oracle daily budget in USD" /></div>
+                </div>
+                <div class="s-row">
+                  <div class="s-label"><b>Compact past (tokens)</b><span>When a turn's context passes this size, the next question starts a new session from the skill, the memory and a handoff note. The history is kept.</span></div>
+                  <div class="s-ctrl"><input type="number" id="set-oracle-compact" min="10000" max="1000000" step="10000" class="s-num" aria-label="Oracle compaction threshold in tokens" /></div>
+                </div>
+              </div>
             </div>
 
             <div class="settings-page hidden" data-spage="about">
@@ -324,6 +357,7 @@ registerView({
       e.target.value = state.settings.notificationRetentionDays;
     };
     for (const sel of ['#set-cr-enabled', '#set-cr-max', '#set-cr-project', '#set-cr-sims']) $(sel).onchange = saveConcurrency;
+    for (const sel of ['#set-oracle-budget', '#set-oracle-compact']) $(sel).onchange = saveOracleSettings;
   },
   show: renderSettings,
 });
