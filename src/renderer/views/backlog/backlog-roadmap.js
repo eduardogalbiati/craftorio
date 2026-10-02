@@ -530,8 +530,11 @@
       if (dragging.issue) {
         const why = dropProblem(data?.roadmap?.stages, dragging, itemEl?.dataset.item);
         ok = !why;
-        // its own item stays unmarked: the drag has just started there
-        if (itemEl?.dataset.item !== dragging.from) mark(itemEl || stageEl, ok ? 'rm-drop-target' : 'rm-drop-denied', why);
+        // its own item stays unmarked while the drag has just started there; once the cursor has
+        // left it, coming back shows why it is refused ("already in this item")
+        const home = itemEl?.dataset.item === dragging.from;
+        if (!home) dragging.left = true;
+        if (!home || dragging.left) mark(itemEl || stageEl, ok ? 'rm-drop-target' : 'rm-drop-denied', why);
       } else if (itemEl?.dataset.item === dragging.item) {
         ok = false;
       } else if (itemEl) {
@@ -560,10 +563,7 @@
       const targetItem = e.target.closest('[data-item]')?.dataset.item;
       if (d.issue) {
         const why = dropProblem(stages, d, targetItem);
-        if (why) {
-          if (targetItem !== d.from) { ctx.setError(why); ctx.render(); }
-          return;
-        }
+        if (why) { ctx.setError(why); ctx.render(); return; }
         moveIssue(stages, d.issue, d.from, targetItem);
       } else {
         const s = stages.findIndex((st) => st.items.some((x) => x.id === d.item));
