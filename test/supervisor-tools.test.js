@@ -87,6 +87,37 @@ test('callTool: list_workflows, list_projects, list_skills, list_agents and get_
   assert.ok('budgets' in JSON.parse(usage.text) || typeof JSON.parse(usage.text) === 'object');
 });
 
+test('list_workflows on the bundled workflows stays under MAX_CHARS and parses (#161: backlog-refresh.yaml once pushed it over)', async (t) => {
+  const { ctx } = makeCtx(t);
+  const tools = supervisorTools(ctx);
+
+  const out = await callTool(tools, 'list_workflows', {});
+  assert.equal(out.isError, false);
+  assert.ok(out.text.length <= MAX_CHARS, `list_workflows is ${out.text.length} chars, over MAX_CHARS (${MAX_CHARS}): clip() would cut it mid-string`);
+  const list = JSON.parse(out.text);
+  assert.equal(list.length, ctx.listWorkflows().length);
+});
+
+test('list_workflows items carry only the fields the tool describes, not the Workflows screen\'s builderProblems or update/bundle flags', async (t) => {
+  const { ctx } = makeCtx(t);
+  const tools = supervisorTools(ctx);
+
+  const out = await callTool(tools, 'list_workflows', {});
+  const list = JSON.parse(out.text);
+  const described = ['agents', 'category', 'description', 'file', 'inputs', 'name', 'origin', 'outputs', 'steps', 'tags', 'version'];
+  const item = list.find((w) => w.file === 'fixture-supervisor-tools.yaml');
+  assert.ok(Object.keys(item).every((k) => described.includes(k)), `unexpected field in ${Object.keys(item)}`);
+  const bundled = list.find((w) => w.file === 'software-development.yaml');
+  assert.deepEqual(Object.keys(bundled).sort(), described.sort());
+  for (const w of list) {
+    assert.ok(!('builderProblems' in w));
+    assert.ok(!('updateAvailable' in w));
+    assert.ok(!('restorable' in w));
+    assert.ok(!('bundledVersion' in w));
+    assert.ok(!('builder' in w));
+  }
+});
+
 test('callTool: list_runs answers isError false and its limit, projectId and status filters narrow the list', async (t) => {
   const { ctx, api } = makeCtx(t);
   const tools = supervisorTools(ctx);
