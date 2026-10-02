@@ -19,6 +19,13 @@
 // is on): Create then places the new issue in it. The plan answer's splits (#124) and epics (#138) are
 // drawn and applied by backlog-po-proposals.js; window.BacklogPO.ask opens the drawer and asks (the
 // Epics view's "Organize into epics…").
+// Send to Product Owner (#169, window.BacklogPO.attach, the Backlog's button next to Assign workflow…):
+// the selected issues become removable chips (#po-attached; a closed one struck through) and the
+// text box gets an editable suggested question; nothing is sent until Ask. They go with every plan
+// question (api.askProductOwner's `issues`: read in full) until removed or the conversation is
+// cleared. A group's suggested extra issues are checkboxes, unchecked: Assign…, Add to roadmap and
+// Add all add only the checked ones (po.extras). While a question is in flight the Backlog's button
+// is disabled ("Product Owner is answering": syncSendButton).
 // Developer or simulated mode asks the simulated Product Owner (no model call) and only previews a filing.
 // Uses app.js globals ($, esc, state, errMsg, devMode, fmtCost, fmtSize, markdownHtml, confirmDialog)
 // and window.Robots (robots.js).
@@ -38,7 +45,10 @@
   // the workflow a filed issue is planned or assigned with (the assign dialog lets the owner change it)
   const DEFAULT_WORKFLOW = 'software-development.yaml';
   const MAX_CANDIDATES = 3;
-  const po = { open: false, busy: false, projectId: null, messages: [], pending: null, error: null, notes: {}, mode: 'plan', files: [], placeEpic: {} };
+  // #169: the question the drawer suggests for issues sent from the Backlog (the owner may edit it)
+  const SELECTION_QUESTION = 'What is the best strategy to put these issues in the roadmap? Should any other open issue join them?';
+  // attached: issue numbers sent from the Backlog (#169); extras: `${m}:${n}` → the suggested issues checked in a group
+  const po = { open: false, busy: false, projectId: null, messages: [], pending: null, error: null, notes: {}, mode: 'plan', files: [], placeEpic: {}, attached: [], extras: {} };
   const $p = (sel) => document.querySelector(sel);
   const actions = () => window.BacklogActions;
   const issueOf = (n) => (actions()?.data()?.issues || []).find((i) => i.number === n);
@@ -47,6 +57,16 @@
   function renderButton() {
     $p('#btn-bl-po').innerHTML = avatar();
     $p('#po-avatar').innerHTML = avatar(po.busy ? 'thinking' : 'idle');
+    syncSendButton();
+  }
+
+  // The Backlog's Send to Product Owner (n) (#169): disabled while a question is in flight.
+  function syncSendButton() {
+    const b = $p('#btn-bl-send-po');
+    if (!b) return;
+    b.disabled = po.busy;
+    b.textContent = po.busy ? 'Product Owner is answering…' : `Send to Product Owner (${b.dataset.n || 0})`;
+    b.title = po.busy ? 'Product Owner is answering: wait for the answer' : 'Ask the Product Owner about the selected issues before planning them';
   }
 
   async function open() {
@@ -55,6 +75,7 @@
     // attachments not sent yet belong to the other project's conversation
     if (po.projectId !== projectId) po.files = [];
     if (po.projectId !== projectId) po.placeEpic = {};
+    if (po.projectId !== projectId) Object.assign(po, { attached: [], extras: {} });
     if (po.projectId !== projectId) Object.assign(po, { projectId, messages: [], pending: null, error: null, notes: {} });
     po.open = true;
     $p('#po-drawer').classList.add('open');
@@ -87,11 +108,13 @@
     const projectId = po.projectId;
     const mode = po.mode;
     const files = mode === 'issue' ? po.files.map((f) => f.path) : [];
+    // #169: the attached issues go with every plan question until the owner removes them
+    const issues = mode === 'plan' ? [...po.attached] : [];
     Object.assign(po, { busy: true, pending: q, error: null });
     $p('#po-question').value = '';
     render();
     try {
-      const out = await api.askProductOwner(projectId, q, devMode(), mode, files);
+      const out = await api.askProductOwner(projectId, q, devMode(), mode, files, issues);
       if (po.projectId === projectId) { po.messages = out.messages; if (mode === 'issue') po.files = []; }
     } catch (e) {
       if (po.projectId === projectId) po.error = errMsg(e);
@@ -99,6 +122,21 @@
       Object.assign(po, { busy: false, pending: null });
       render();
     }
+  }
+
+  // #169: the Backlog's selection attached to the next plan questions; nothing is asked until the
+  // owner sends. An empty text box gets the suggested question; a typed one is kept.
+  async function attach(numbers) {
+    if (po.busy || !numbers?.length) return;
+    await open();
+    if (!po.open) return;
+    if (po.mode !== 'plan') setMode('plan');
+    po.attached = [...new Set(numbers)];
+    const box = $p('#po-question');
+    if (!box.value.trim()) box.value = SELECTION_QUESTION;
+    render();
+    box.focus();
+    box.setSelectionRange(box.value.length, box.value.length);
   }
 
   // ---- attachments (Register an issue): stored in the conversation's folder by the service ---------
@@ -172,6 +210,21 @@
   const applied = (st) => ['queued', 'roadmap', 'running'].includes(st.kind);
   const appliedTitle = (st) => (st.kind === 'roadmap' ? `Already in the roadmap, ${stagesLabel(st.stages).toLowerCase()}` : st.kind === 'running' ? 'Already assigned: its run is in progress' : 'Already assigned: it is in the queue');
 
+  // #169: open issues the owner did not attach that could join the group, each unchecked until the
+  // owner keeps it (po.extras); only the checked ones go with Assign…, Add to roadmap and Add all
+  const extrasOf = (key) => po.extras[key] || [];
+  const withExtras = (issues, key) => [...issues, ...extrasOf(key).filter((x) => !issues.includes(x) && issueOf(x)?.state !== 'closed')];
+  function suggestedHtml(g, key, done) {
+    if (!g.suggested?.length) return '';
+    return `<div class="po-suggested"><div class="small muted">Could join (suggested, not selected)</div>
+      ${g.suggested.map((s) => {
+        const i = issueOf(s.issue);
+        const tip = `${i ? `#${s.issue} ${i.title}` : `#${s.issue}`}${s.reason ? ` · ${s.reason}` : ''}`;
+        return `<label class="check small" title="${esc(tip)}"><input type="checkbox" data-po-extra="${s.issue}"${extrasOf(key).includes(s.issue) ? ' checked' : ''}${done ? ' disabled' : ''} />
+          <span>${issueRef(s.issue)} ${esc(i?.title || '')}${s.reason ? ` <span class="muted">${esc(s.reason)}</span>` : ''}</span></label>`;
+      }).join('')}</div>`;
+  }
+
   function groupHtml(g, m, n) {
     const inputs = Object.entries(g.inputs || {});
     const key = `${m}:${n}`;
@@ -196,6 +249,7 @@
         ${g.files?.length ? `<div class="small muted">files: <span class="mono">${g.files.map(esc).join(', ')}</span></div>` : ''}
         <div class="small po-size">${sizeText(g)}</div>
         ${(g.warnings || []).map((w) => `<div class="small warn-text">⚠ ${esc(w)}</div>`).join('')}
+        ${suggestedHtml(g, key, done)}
         <div class="row po-group-actions">
           <button class="btn sm primary" type="button" data-po-act="assign"${off || ' title="Open the assign dialog with these issues as one run"'}>Assign…</button>
           ${st.kind === 'partly'
@@ -216,6 +270,8 @@
         <div class="row"><button class="btn sm ghost" type="button" data-po-act="roadmap-all" data-msg="${m}" title="${allTitle}"${allDone ? ' disabled' : ''}>Add all to the roadmap</button>
         ${po.notes[`${m}:all`] ? `<span class="small ${po.notes[`${m}:all`].error ? 'error' : 'muted'}">${esc(po.notes[`${m}:all`].text)}</span>` : ''}</div></div>`);
     }
+    // #169: attached issues closed meanwhile are in no group
+    if (a.closed?.length) parts.push(`<div class="small muted">Left out (closed): ${a.closed.map(issueRef).join(' ')}</div>`);
     if (a.conflicts?.length) {
       parts.push(`<div class="po-sec"><div class="sup-h">Do not run in parallel</div><ul class="po-list">${a.conflicts.map((c) =>
         `<li>${c.issues.map(issueRef).join(' ⟷ ')} ${esc(c.reason)}${c.files?.length ? ` <span class="muted mono small">${c.files.map(esc).join(', ')}</span>` : ''}</li>`).join('')}</ul></div>`);
@@ -298,7 +354,7 @@
   function messageHtml(msg, m) {
     const time = msg.ts ? new Date(msg.ts).toLocaleTimeString() : '';
     if (msg.role === 'user') {
-      const files = (msg.attachments || []).map((f) => `<span class="badge" title="${esc(f)}">${esc(f.split(/[\\/]/).pop())}</span>`).join(' ');
+      const files = [...(msg.issues || []).map(issueRef), ...(msg.attachments || []).map((f) => `<span class="badge" title="${esc(f)}">${esc(f.split(/[\\/]/).pop())}</span>`)].join(' ');
       return `<div class="sup-wmsg user"><div class="sup-wmsg-meta">You · ${esc(time)}</div><div>${esc(msg.text)}</div>${files ? `<div class="po-files">${files}</div>` : ''}</div>`;
     }
     const meta = `Product Owner · ${esc(time)}${msg.model ? ` · ${esc(msg.model)}` : ''} · ${esc(fmtCost(msg.costUsd || 0))}`;
@@ -340,9 +396,18 @@
     $p('#po-files').innerHTML = po.files.map((f, n) => `<span class="badge po-file" title="${esc(f.path)}"><span>${esc(f.name)}</span> <span class="muted">${esc(fmtSize(f.size))}</span><button type="button" data-po-unattach="${n}" aria-label="Remove ${esc(f.name)}">×</button></span>`).join('');
     $p('#btn-po-attach').classList.toggle('hidden', !issueMode);
     $p('#btn-po-attach').disabled = po.busy;
+    // #169: the issues sent from the Backlog (plan questions only); a closed one is struck through
+    const attached = !issueMode && po.attached.length;
+    $p('#po-attached').classList.toggle('hidden', !attached);
+    $p('#po-attached').innerHTML = attached ? `<span class="muted small">Attached</span>${po.attached.map((n) => {
+      const i = issueOf(n);
+      const closed = i?.state === 'closed';
+      const tip = `${i ? `#${n} ${i.title}` : `#${n} (not synced)`}${closed ? ' · closed: left out of the proposal' : ''}`;
+      return `<span class="badge po-file${closed ? ' closed' : ''}" title="${esc(tip)}"><span>#${n}</span> <span class="muted">${esc(i?.title || '')}</span><button type="button" data-po-unattach-issue="${n}" aria-label="Remove #${n}"${po.busy ? ' disabled' : ''}>×</button></span>`;
+    }).join('')}<button class="link-btn small" type="button" data-po-unattach-all${po.busy ? ' disabled' : ''} title="Ask about the whole backlog again">clear</button>` : '';
     $p('#po-question').placeholder = issueMode
       ? (openDraftIndex() >= 0 ? 'What should change? Or "add this to #n"…' : 'Describe the issue in a few words (paste or drop screenshots)…')
-      : 'Ask about the backlog: which issues should go first?';
+      : attached ? 'Ask about the attached issues…' : 'Ask about the backlog: which issues should go first?';
     $p('#btn-po-ask').textContent = issueMode ? 'Send' : 'Ask';
     $p('#btn-po-ask').disabled = po.busy;
     $p('#btn-po-clear').disabled = po.busy || !po.messages.length;
@@ -362,7 +427,7 @@
       const stages = [...new Set(answer.groups.map((g) => g.stage))].sort((a, b) => a - b).map((s) => ({
         name: `Stage ${s} (Product Owner)`,
         note: '',
-        items: answer.groups.filter((g) => g.stage === s).map((g) => ({ workflow: g.workflow, issues: g.issues, inputs: g.inputs, mock: !!state.simulationOnly, reason: g.reason, modeReason: g.modeReason, origin })),
+        items: answer.groups.map((g, n) => ({ g, n })).filter(({ g }) => g.stage === s).map(({ g, n }) => ({ workflow: g.workflow, issues: withExtras(g.issues, `${m}:${n}`), inputs: g.inputs, mock: !!state.simulationOnly, reason: g.reason, modeReason: g.modeReason, origin })),
       }));
       try {
         const out = await api.proposeRoadmap(po.projectId, { stages }, false);
@@ -376,8 +441,9 @@
     const st = groupState(answer.groups[n]);
     // an applied group is not applied again (#140); a partly applied one only for the rest
     if (applied(st)) return;
-    const g = { ...answer.groups[n], ...(st.kind === 'partly' ? { issues: st.rest } : {}), origin };
     const key = `${m}:${n}`;
+    // the suggested issues the owner checked join the group (#169)
+    const g = { ...answer.groups[n], issues: withExtras(st.kind === 'partly' ? st.rest : answer.groups[n].issues, key), origin };
     try {
       if (act === 'assign') {
         const skipped = await actions().assignGroup(g);
@@ -472,6 +538,14 @@
     const b = e.target.closest('[data-po-unattach]');
     if (b) { po.files.splice(Number(b.dataset.poUnattach), 1); render(); }
   };
+  $p('#po-attached').onclick = (e) => {
+    const one = e.target.closest('[data-po-unattach-issue]');
+    if (one) po.attached = po.attached.filter((n) => n !== Number(one.dataset.poUnattachIssue));
+    else if (e.target.closest('[data-po-unattach-all]')) po.attached = [];
+    else return;
+    render();
+    $p('#po-question').focus();
+  };
   $p('#po-mode').onclick = (e) => { const b = e.target.closest('[data-po-mode]'); if (b) setMode(b.dataset.poMode); };
   $p('#po-chips').onclick = (e) => {
     const c = e.target.closest('[data-q], [data-mode]');
@@ -489,6 +563,15 @@
     if (window.BacklogPoProposals.onClick(e, proposalsCtx())) return;
     const epic = e.target.closest('[data-po-epic]');
     if (epic) { po.placeEpic[Number(epic.closest('[data-msg]').dataset.msg)] = epic.checked; return; }
+    // a suggested extra issue kept in (or out of) its group (#169)
+    const extra = e.target.closest('[data-po-extra]');
+    if (extra) {
+      const box = extra.closest('[data-group]');
+      const key = `${box.dataset.msg}:${box.dataset.group}`;
+      const x = Number(extra.dataset.poExtra);
+      po.extras[key] = extra.checked ? [...extrasOf(key).filter((y) => y !== x), x] : extrasOf(key).filter((y) => y !== x);
+      return;
+    }
     const b = e.target.closest('[data-po-act]');
     if (!b) return;
     if (DRAFT_ACTS.includes(b.dataset.poAct)) fileDraft(b.dataset.poAct, b);
@@ -498,7 +581,7 @@
   $p('#po-log').addEventListener('change', (e) => window.BacklogPoProposals.onInput(e, proposalsCtx()));
   $p('#btn-po-clear').onclick = async () => {
     if (!await confirmDialog('Clear the conversation', 'The Product Owner forgets this project\'s questions and answers (and the files attached to them).', 'Clear')) return;
-    try { po.messages = await api.clearProductOwner(po.projectId); po.notes = {}; po.files = []; } catch (e) { po.error = errMsg(e); }
+    try { po.messages = await api.clearProductOwner(po.projectId); Object.assign(po, { notes: {}, files: [], attached: [], extras: {} }); } catch (e) { po.error = errMsg(e); }
     render();
   };
   // capture: runs before app.js's Esc handler closes a dialog over the drawer
@@ -522,6 +605,9 @@
       if (po.mode !== 'plan') setMode('plan');
       ask(question);
     },
+    // the Backlog's Send to Product Owner (#169)
+    attach,
+    syncSendButton,
   };
   renderButton();
 })();

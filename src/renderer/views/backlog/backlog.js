@@ -17,6 +17,8 @@
 // The third mode, Roadmap, is backlog-roadmap.js (ordered stages of runs); the assign dialog's
 // "Add to roadmap" plans the selection as a new stage, and assigning an issue the roadmap plans asks first.
 // The Product Owner's drawer (backlog-po.js) applies a proposed group through window.BacklogActions.
+// Send to Product Owner (n) (#169), next to Assign workflow…, attaches the selection to the drawer's
+// question (window.BacklogPO.attach); the selection is kept.
 // Epics (#138): each card shows its epic as a badge (a click filters by it); the epic select narrows
 // the list and the kanban to one epic or to "No epic" (rule in backlog-epics.js, AND with the labels
 // and the search); the fourth mode, Epics, lists the epics with their progress (closed, done in the
@@ -792,6 +794,11 @@
     const n = shownSelected().length;
     $b('#btn-bl-assign').classList.toggle('hidden', !n);
     $b('#btn-bl-assign').textContent = `Assign workflow… (${n})`;
+    // #169: busy while the Product Owner answers (backlog-po.js renderButton keeps it in step)
+    $b('#btn-bl-send-po').classList.toggle('hidden', !n);
+    $b('#btn-bl-send-po').dataset.n = String(n);
+    $b('#btn-bl-send-po').textContent = `Send to Product Owner (${n})`;
+    window.BacklogPO?.syncSendButton();
     $b('#btn-bl-clear').classList.toggle('hidden', !n);
 
     const issues = bl.data?.issues || [];
@@ -865,6 +872,7 @@
         </div>
         <div id="po-chips" class="chips po-chips"></div>
         <div id="po-files" class="po-files hidden"></div>
+        <div id="po-attached" class="po-files po-attached hidden" aria-label="Attached issues"></div>
         <div class="row po-ask">
           <textarea id="po-question" rows="2" placeholder="Ask about the backlog: which issues should go first?"></textarea>
           <button id="btn-po-attach" class="icon-btn hidden" type="button" title="Attach screenshots or files (you can also paste or drop them)" aria-label="Attach files">
@@ -896,6 +904,8 @@
     $b('#btn-bl-new-issue').onclick = newIssue;
     $b('#bl-sort').onchange = (e) => { bl.sort = e.target.value; save(SORT_KEY, bl.sort); render(); };
     $b('#btn-bl-assign').onclick = () => openAssign();
+    // #169: the selection stays selected; the drawer only attaches it
+    $b('#btn-bl-send-po').onclick = () => window.BacklogPO.attach(shownSelected());
     $b('#btn-bl-clear').onclick = () => { bl.selected.clear(); render(); };
     $b('#bl-search').oninput = (e) => { bl.q = e.target.value.trim(); render(); };
     $b('#bl-mode').onclick = (e) => {
@@ -1050,6 +1060,7 @@
             <option value="complexity">Complexity (smallest first)</option>
           </select>
           <button id="btn-bl-assign" class="btn sm primary hidden" type="button">Assign workflow…</button>
+          <button id="btn-bl-send-po" class="btn sm ghost hidden" type="button" title="Ask the Product Owner about the selected issues before planning them">Send to Product Owner</button>
           <button id="btn-bl-clear" class="btn sm ghost hidden" type="button">Clear selection</button>
           <span class="spacer"></span>
           <span id="bl-synced" class="muted small"></span>

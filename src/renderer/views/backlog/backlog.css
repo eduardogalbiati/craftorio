@@ -49,6 +49,13 @@ span.po-applied { cursor: default; }
 .po-draft-actions { flex-wrap: wrap; gap: 6px; margin-top: 4px; }
 .po-questions { font-weight: 600; }
 #po-note { margin: 0; }
+/* Send to Product Owner (#169): the attached issues and a group's suggested extra issues */
+.po-attached { align-items: center; }
+.po-attached .po-file > span:first-child { flex: none; }
+.po-file.closed > span:first-child { text-decoration: line-through; color: var(--muted); }
+.po-suggested { display: grid; gap: 2px; }
+.po-suggested .check { min-width: 0; }
+.po-suggested .check > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Split what is too big (#124) and epics (#138): backlog-po-proposals.js */
 .po-split-title { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .po-children { margin: 0; padding-left: 18px; display: grid; gap: 6px; }
@@ -98,6 +105,9 @@ button.bl-label { font-family: inherit; background: none; cursor: pointer; }
 .bl-label-active:empty { display: none; }
 /* Issue triage (#81): impact / complexity 1-5 from the impact:<n> / complexity:<n> labels */
 #bl-sort { width: auto; flex: none; }
+/* the selection's buttons (Assign workflow…, Send to Product Owner #169, Clear) stay on one line: the toolbar wraps instead */
+#view-backlog .pr-toolbar { flex-wrap: wrap; }
+#btn-bl-assign, #btn-bl-send-po, #btn-bl-clear { white-space: nowrap; flex: none; }
 .bl-triage { font-family: var(--mono); font-size: 10.5px; padding: 0 6px; border: 1px solid currentColor; background: transparent; }
 .bl-triage.lvl-1, .bl-triage.lvl-2 { color: var(--muted); }
 .bl-triage.lvl-3 { color: var(--yellow); }

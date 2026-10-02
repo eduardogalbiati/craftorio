@@ -201,7 +201,8 @@ function demoLocalMerge(ws, projectId) {
 
 // The Product Owner registering an issue (#117): a short request with a screenshot, one question,
 // the owner's answer, then a draft (long title, labels, Related, a close issue: #12), then a plan
-// answer whose groups the demo roadmap already holds (#140). Shown with `--click "#btn-bl-po"`;
+// answer whose groups the demo roadmap already holds (#140), then a question about issues sent from
+// the selection with a suggested extra issue (#169). Shown with `--click "#btn-bl-po"`;
 // `--click "[data-po-act=create]"` previews the filing (po:file previews here).
 function demoPoConversation(ws, projectId) {
   const at = (s) => new Date(Date.UTC(2026, 0, 20, 10, 0, s)).toISOString();
@@ -248,6 +249,18 @@ function demoPoConversation(ws, projectId) {
         merge: [],
         split: [],
       },
+    } },
+    // #169: issues sent from the Backlog's selection (#8 closed meanwhile: left out), a group with a
+    // suggested extra issue (#10, unchecked until the owner keeps it)
+    { ts: at(130), role: 'user', mode: 'plan', text: 'What is the best strategy to put these issues in the roadmap? Should any other open issue join them?', issues: [16, 8] },
+    { ts: at(150), role: 'po', mode: 'plan', model: 'claude-opus-5-5', costUsd: 0.09, text: 'One validated run for #16; **#10** touches the same styles and could join it. #8 is closed: left out.', answer: {
+      summary: 'One run.',
+      groups: [
+        { name: 'Keyboard focus', issues: [16], workflow: 'software-development.yaml', inputs: { mode: 'validated' }, modeReason: 'A behaviour the owner can try in the app.', reason: 'A small UI fix on its own.', files: ['src/renderer/app.js'], stage: 1, complexity: 1, guessed: false, estimate: null, warnings: [],
+          suggested: [{ issue: 10, reason: 'Same area (ui): the dialog and dock styles, one validated run.' }] },
+      ],
+      closed: [8],
+      conflicts: [], enrich: [], splits: [], epics: { place: [], create: [], merge: [], split: [] },
     } },
   ];
   fs.writeFileSync(path.join(ws.backlog, `${projectId}.po.jsonl`), messages.map((m) => JSON.stringify(m)).join('\n') + '\n');

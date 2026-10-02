@@ -36,6 +36,12 @@
 // writes one of them on the owner's click. A registered issue's draft may name its epic: it joins it
 // when the owner keeps "Place in epic" (on by default with the project's autoEpic option). Both are
 // recorded in the conversation (`split`, `epicApplied`), so the drawer shows what was applied.
+//
+// Selected issues (#169, `selection`): the Backlog's "Send to Product Owner" attaches the selected
+// issues to a plan question. The report gives them first and whole (bodies never clipped), the rules
+// ask for groups of these issues only, with similar open issues that could join as each group's
+// `suggested` (never in its `issues`: the owner adds one with a checkbox). Closed ones are left out of
+// the groups and listed in the answer's `closed`. The user message records them (`issues`).
 
 const fs = require('fs');
 const path = require('path');
@@ -76,6 +82,11 @@ const ANSWER_SCHEMA = {
           files: { type: 'array', items: { type: 'string' } },
           stage: { type: 'integer' },
           warnings: { type: 'array', items: { type: 'string' } },
+          // #169: open issues not attached by the owner that could join this group (same files or area)
+          suggested: {
+            type: 'array',
+            items: { type: 'object', required: ['issue', 'reason'], properties: { issue: { type: 'integer' }, reason: { type: 'string' } } },
+          },
         },
       },
     },
@@ -146,7 +157,14 @@ const RULES = [
   'Write in English. The summary is Markdown, short, and answers the question.',
 ].join('\n');
 
-const clip = (s, n) => { s = String(s ?? '').trim(); return s.length > n ? `${s.slice(0, n)}… (${s.length - n} more characters)` : s; };
+// #169: added to RULES when the owner attached issues from the Backlog
+const SELECTION_RULES = [
+  'The owner attached issues to this question (the report\'s "Attached issues", in full): the question is about them. Propose groups and stages for these issues only: one run or separate runs, the workflow and its mode, the stage order, what must not run in parallel, and each group\'s size.',
+  'For each group, list in `suggested` the other open issues to do that could join it (the same files or area), each with why. Never put an issue the owner did not attach in a group\'s `issues`: the owner decides whether a suggested issue joins.',
+  'Leave the attached issues that are closed out of every group.',
+].join('\n');
+
+const clip =(s, n) => { s = String(s ?? '').trim(); return s.length > n ? `${s.slice(0, n)}… (${s.length - n} more characters)` : s; };
 const minutes = (ms) => Math.round((ms || 0) / 60e3);
 
 /** The complexity of an issue from its `complexity:n` label (null when it has none). */
@@ -242,15 +260,29 @@ function sizeGroup(numbers, issues, history) {
 /**
  * Keeps an answer to what exists (issue numbers of the backlog, workflow files) and adds each
  * group's size. Groups left with no issue are dropped.
+ * With a `selection` (#169): a group keeps only the open attached issues; another open issue it names
+ * becomes one of its `suggested` issues (open, not in the group, once per group); the closed attached
+ * issues are listed in `closed`.
  */
-function normalizeAnswer(answer, { issues, history, workflows, epics: epicList = [] }) {
+function normalizeAnswer(answer, { issues, history, workflows, epics: epicList = [], selection = [] }) {
   const numbers = new Set((issues || []).map((i) => i.number));
   const byNumber = new Map((issues || []).map((i) => [i.number, i]));
   const files = (workflows || []).map((w) => w.file);
   const fallback = files.includes('software-development.yaml') ? 'software-development.yaml' : files[0] || '';
   const keep = (list) => [...new Set((list || []).map(Number).filter((n) => numbers.has(n)))];
+  const isOpen = (n) => byNumber.get(n)?.state === 'open';
+  const attached = new Set(keep(selection));
+  const closed = [...attached].filter((n) => !isOpen(n));
   const groups = (answer.groups || []).map((g, n) => {
-    const nums = keep(g.issues);
+    const named = keep(g.issues);
+    const nums = attached.size ? named.filter((x) => attached.has(x) && isOpen(x)) : named;
+    const moved = named.filter((x) => !attached.has(x)).map((issue) => ({ issue, reason: 'Named by the Product Owner for this group.' }));
+    const suggested = [];
+    for (const s of [...(g.suggested || []), ...(attached.size ? moved : [])]) {
+      const x = Number(s?.issue);
+      if (!isOpen(x) || attached.has(x) || nums.includes(x) || suggested.some((y) => y.issue === x)) continue;
+      suggested.push({ issue: x, reason: String(s.reason || '') });
+    }
     const size = sizeGroup(nums, issues, history);
     return {
       name: String(g.name || `Group ${n + 1}`),
@@ -263,11 +295,13 @@ function normalizeAnswer(answer, { issues, history, workflows, epics: epicList =
       stage: Number.isInteger(g.stage) && g.stage > 0 ? g.stage : n + 1,
       ...size,
       warnings: [...new Set([...size.warnings, ...(g.warnings || []).map(String)])],
+      ...(suggested.length ? { suggested } : {}),
     };
   }).filter((g) => g.issues.length);
   return {
     summary: String(answer.summary || ''),
     groups,
+    ...(closed.length ? { closed } : {}),
     conflicts: (answer.conflicts || []).map((c) => ({ issues: keep(c.issues), reason: String(c.reason || ''), files: (c.files || []).map(String).slice(0, 20) })).filter((c) => c.issues.length > 1),
     enrich: (answer.enrich || []).filter((e) => numbers.has(Number(e.issue))).map((e) => ({ issue: Number(e.issue), reason: String(e.reason || ''), link: ENRICH_ISSUE })),
     splits: normalizeSplits(answer.splits, byNumber, history),
@@ -315,12 +349,15 @@ const plannable = (i) => i.state === 'open' && (!i.column || i.column === 'todo'
 /**
  * The text context of a question: open issues (bodies clipped unless the question names them), the
  * queue, runs in progress, the local merges not pushed, the roadmap, the finished runs and the
- * workflows. Capped at MAX_REPORT characters.
+ * workflows. Capped at MAX_REPORT characters. The issues the owner attached (`selection`, #169) come
+ * first and whole, closed ones included (marked), outside the cap; the open issues then skip them.
  */
-function backlogReport({ data, activeRuns = [], history = [], workflows = [], question = '' }) {
+function backlogReport({ data, activeRuns = [], history = [], workflows = [], question = '', selection = [] }) {
   const named = new Set([...String(question).matchAll(/#(\d+)/g)].map((m) => Number(m[1])));
-  const issues = (data?.issues || []).filter((i) => i.state === 'open');
-  const issueText = (i) => {
+  const all = data?.issues || [];
+  const attached = [...new Set(selection.map(Number))].map((n) => all.find((i) => i.number === n)).filter(Boolean);
+  const issues = all.filter((i) => i.state === 'open' && !attached.includes(i));
+  const issueText = (i, whole = false) => {
     const labels = (i.labels || []).map((l) => l.name).join(', ');
     const prs = (i.pullRequests || []).map((p) => `#${p.number}${p.draft ? ' (draft)' : ''}`).join(', ');
     const runs = (i.runs || []).slice(0, 3).map((r) => `${r.runId} ${r.status}`).join(', ');
@@ -328,9 +365,9 @@ function backlogReport({ data, activeRuns = [], history = [], workflows = [], qu
     const signals = plannable(i) ? poSplit.splitSignals(i, { complexity: complexityOf(i), history }) : [];
     const tasks = signals.length ? poSplit.parentTasks(i.body).slice(0, 60) : [];
     return [
-      `### #${i.number} ${i.title}${i.isEpic ? ' (epic)' : ''}`,
+      `### #${i.number} ${i.title}${i.isEpic ? ' (epic)' : ''}${i.state === 'open' ? '' : ' (closed: leave it out)'}`,
       `column: ${i.column || 'todo'}${labels ? ` · labels: ${labels}` : ''}${i.epic ? ` · epic ${i.epic}` : ''}${i.tasks?.total ? ` · ${i.tasks.total} tasks` : ''}${prs ? ` · open PRs: ${prs}` : ''}${i.queued ? ' · queued' : ''}${i.roadmap ? ` · roadmap stage ${i.roadmap.stage} (${i.roadmap.status})` : ''}${runs ? ` · runs: ${runs}` : ''}`,
-      clip(i.body, named.has(i.number) ? BODY_NAMED : BODY_CLIP) || '(no description)',
+      (whole ? String(i.body ?? '').trim() : clip(i.body, named.has(i.number) ? BODY_NAMED : BODY_CLIP)) || '(no description)',
       ...(signals.length ? [`Split signals: ${signals.join(' ')}`, `Tasks:\n${tasks.map((t) => `${t.n}. ${clip(t.text, 160)}`).join('\n')}`] : []),
     ].join('\n');
   };
@@ -348,9 +385,11 @@ function backlogReport({ data, activeRuns = [], history = [], workflows = [], qu
     `## Roadmap\n${stages.map((s, n) => `- stage ${n + 1}${s.name ? ` ${s.name}` : ''}: ${s.items.map((x) => `${(x.issues || []).map((i) => `#${i.number ?? i}`).join(' + ')} ${x.status}`).join('; ')}`).join('\n') || '(empty)'}`,
     `## Finished runs (newest first; agent time without gate waits)\n${history.map((h) => `- ${h.runId} ${h.workflow || ''} ${h.status} · issues ${h.issues.map((n) => `#${n}`).join(', ') || '-'} · complexity ${h.complexity ?? '?'} · ${h.agentMinutes} min · $${h.costUsd.toFixed(2)} · ${Math.round(h.tokens / 1e3)}k tokens${h.conflicts.count ? ` · ${h.conflicts.count} merge conflict(s)${h.conflicts.files.length ? ` in ${h.conflicts.files.join(', ')}` : ''}` : ''}`).join('\n') || '(none)'}`,
   ];
-  const head = sections.join('\n\n');
-  const out = [head, '## Open issues'];
-  let size = head.length;
+  const whole = attached.length ? `## Attached issues (the owner's selection, in full)\n\n${attached.map((i) => issueText(i, true)).join('\n\n')}` : '';
+  const head = [...sections, ...(whole ? [whole] : [])].join('\n\n');
+  const out = [head, whole ? '## Other open issues' : '## Open issues'];
+  // the attached issues are not counted: the cap only leaves out other issues
+  let size = head.length - whole.length;
   for (const i of issues) {
     const t = issueText(i);
     if (size + t.length > MAX_REPORT) { out.push(`… ${issues.length - (out.length - 2)} more issues left out (context cap).`); break; }
@@ -363,12 +402,21 @@ function backlogReport({ data, activeRuns = [], history = [], workflows = [], qu
 /**
  * The simulated answer: groups of to-do issues that share a label (complexity at most 6 per group),
  * the issues that look like a repo-wide refactor kept apart from the others, and the issues with a
- * short description to enrich first.
+ * short description to enrich first. With a `selection` (#169): only the attached issues to do are
+ * planned, and each group suggests up to two other issues to do of its topic.
  */
-function mockAnswer({ data, question = '' }) {
-  const todo = (data?.issues || []).filter(plannable);
+function mockAnswer({ data, question = '', selection = [] }) {
+  const backlogTodo = (data?.issues || []).filter(plannable);
+  const attached = new Set(selection.map(Number));
+  const todo = attached.size ? backlogTodo.filter((i) => attached.has(i.number)) : backlogTodo;
   // issues of one epic group first (#138), then a shared label
   const topic = (i) => (i.epic ? `epic ${i.epic}` : null) || (i.labels || []).map((l) => l.name).find((n) => !/^complexity/i.test(n) && !/^(bug|enhancement|feature)$/i.test(n)) || null;
+  const suggest = (nums) => {
+    if (!attached.size) return [];
+    const topics = new Set(nums.map((n) => topic(backlogTodo.find((i) => i.number === n))).filter(Boolean));
+    return backlogTodo.filter((i) => !attached.has(i.number) && topics.has(topic(i))).slice(0, 2)
+      .map((i) => ({ issue: i.number, reason: `Same area (${topic(i)}) as the attached issues (simulated).` }));
+  };
   const refactor = todo.filter((i) => /refactor|reformat|rename|move files|lint/i.test(i.title));
   const others = todo.filter((i) => !refactor.includes(i));
   const groups = [];
@@ -386,13 +434,14 @@ function mockAnswer({ data, question = '' }) {
       : g.issues.length > 1 ? `Same area (${/^epic /.test(g.topic) ? g.topic : `label ${g.topic}`}): likely the same files.` : 'On its own: no other issue shares its area.',
     files: [],
     stage,
+    suggested: suggest(g.issues),
   });
   const splits = todo.map((i) => poSplit.proposeSplit(i, { complexity: complexityOf(i) })).filter(Boolean);
-  const epicPlan = mockEpics(data);
+  const epicPlan = attached.size ? { place: [], create: [], merge: [], split: [] } : mockEpics(data);
   return {
     summary: [
       `**Simulated answer** (developer or simulated mode: no model was called)${question ? ` to: “${clip(question, 120)}”` : ''}.`,
-      `${todo.length} issues to do: ${groups.length + refactor.length} proposed run${groups.length + refactor.length === 1 ? '' : 's'}, grouped by epic, else by shared label; repo-wide changes first and alone, then stages of at most two runs.`,
+      `${todo.length} ${attached.size ? 'attached ' : ''}issues to do:${groups.length + refactor.length} proposed run${groups.length + refactor.length === 1 ? '' : 's'}, grouped by epic, else by shared label; repo-wide changes first and alone, then stages of at most two runs.`,
       `${splits.length ? `${splits.length} issue${splits.length > 1 ? 's are' : ' is'} too big for one run: see the proposed splits.` : 'No issue is too big for one run.'} ${epicPlan.place.length + epicPlan.create.length ? `Epics: ${epicPlan.place.length} issue${epicPlan.place.length === 1 ? '' : 's'} to place, ${epicPlan.create.length} epic${epicPlan.create.length === 1 ? '' : 's'} to create.` : ''}`.trim(),
     ].join('\n\n'),
     splits,
@@ -462,7 +511,7 @@ function clearConversation(backlogDir, projectId) {
 function previousExchanges(messages) {
   const recent = messages.filter((m) => m.role === 'user' || m.role === 'po').slice(-PREVIOUS_EXCHANGES * 2);
   if (!recent.length) return '';
-  return `## Earlier in this conversation\n${recent.map((m) => (m.role === 'user' ? `Owner: ${clip(m.text, 500)}` : `You: ${clip(m.answer?.summary || m.text, 1500)}`)).join('\n')}`;
+  return `## Earlier in this conversation\n${recent.map((m) => (m.role === 'user' ? `Owner: ${clip(m.text, 500)}${m.issues?.length ? ` (attached ${m.issues.map((n) => `#${n}`).join(', ')})` : ''}` : `You: ${clip(m.answer?.summary || m.text, 1500)}`)).join('\n')}`;
 }
 
 // ---- registering an issue (#117) ---------------------------------------------------------------------
@@ -884,10 +933,13 @@ function checkBudget(budget) {
  *                  moved to the thread's folder in `runsDir`, which also keeps the thread and each turn's analysis)
  * @returns { message, messages }  the answer ({ role: 'po', text, answer | issue, model, costUsd }) and the whole conversation
  */
-async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns, runs, workflows, folder, agent, skillsDirs, resolveCommand, budget, mock, mode = 'plan', attachments = [] }) {
+async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns, runs, workflows, folder, agent, skillsDirs, resolveCommand, budget, mock, mode = 'plan', attachments = [], selection = [] }) {
   const q = String(question || '').trim();
   if (!q) throw new Error('Ask a question.');
   const issueMode = mode === 'issue';
+  // #169: the attached issues the backlog knows (plan mode only)
+  const known = new Set((data?.issues || []).map((i) => i.number));
+  const selected = issueMode ? [] : [...new Set((selection || []).map(Number))].filter((n) => known.has(n));
   const history = runHistory(runs, data?.issues);
   const previous = readConversation(backlogDir, projectId);
   const where = { backlogDir, projectId, runsDir };
@@ -896,7 +948,7 @@ async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns,
   const record = (message) => (issueMode ? recordIssueMessage(where, message) : appendMessage(backlogDir, projectId, message));
   const staged = issueMode ? (attachments || []).filter((f) => isAttachment(backlogDir, projectId, f)).map((f) => path.resolve(f)) : [];
   const files = moveAttachments(where, thread, staged);
-  record({ role: 'user', text: q, ...tag, ...(files.length ? { attachments: files } : {}) });
+  record({ role: 'user', text: q, ...tag, ...(files.length ? { attachments: files } : {}), ...(selected.length ? { issues: selected } : {}) });
   const questionsLeft = MAX_QUESTIONS - questionsAsked(previous);
   let raw;
   let costUsd = 0;
@@ -905,14 +957,14 @@ async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns,
   let analysis = '';
   try {
     if (mock) {
-      raw = issueMode ? mockIssueAnswer({ data, question: q, previous }) : mockAnswer({ data, question: q });
+      raw = issueMode ? mockIssueAnswer({ data, question: q, previous }) : mockAnswer({ data, question: q, selection: selected });
       analysis = 'Simulated: no model was called, no code was read.';
     } else {
       checkBudget(budget);
       let tokens;
-      const report = (issueMode ? issueReport : backlogReport)({ data, activeRuns, history, workflows, question: q });
+      const report = (issueMode ? issueReport : backlogReport)({ data, activeRuns, history, workflows, question: q, selection: selected });
       ({ raw, costUsd, model, invalid, tokens, text: analysis } = await callAgent({
-        mode, question: q, report, previous, attachments: files, folder, agent: issueMode ? ISSUE_AGENT : agent, skillsDirs, resolveCommand,
+        mode, question: q, report, previous, attachments: files, selection: selected, folder, agent: issueMode ? ISSUE_AGENT : agent, skillsDirs, resolveCommand,
       }));
       recordUsage(backlogDir, { projectId, model, tokens, costUsd });
     }
@@ -929,7 +981,7 @@ async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns,
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, `${message.ts.replace(/[:.]/g, '-')}.md`), `${String(analysis || '').trim()}\n\n\`\`\`json\n${JSON.stringify(raw, null, 2)}\n\`\`\`\n`);
   } else {
-    const answer = normalizeAnswer(raw, { issues: data?.issues, history, workflows, epics: data?.epics });
+    const answer = normalizeAnswer(raw, { issues: data?.issues, history, workflows, epics: data?.epics, selection: selected });
     message = appendMessage(backlogDir, projectId, {
       role: 'po', text: answer.summary, answer, model, costUsd, ...(invalid ? { invalid } : {}),
     });
@@ -940,7 +992,7 @@ async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns,
 // One read-only Claude Code turn in the project folder. An answer that does not validate is kept as
 // prose (no second call: one call per question). Mode 'issue': the issue skills, ISSUE_SCHEMA, and
 // read access to the attachments' folder.
-async function callAgent({ mode = 'plan', question, report, previous, attachments = [], folder, agent, skillsDirs, resolveCommand }) {
+async function callAgent({ mode = 'plan', question, report, previous, attachments = [], selection = [], folder, agent, skillsDirs, resolveCommand }) {
   const { extractJson, validateSchema, render } = require('./engine/workflow');
   const { runTurn } = require('./engine/providers');
   const { resolveSkill, skillPrompt } = require('./skills');
@@ -958,6 +1010,7 @@ async function callAgent({ mode = 'plan', question, report, previous, attachment
   const prompt = [
     ...skills.map(skillPrompt),
     issueMode ? ISSUE_RULES : RULES,
+    selection.length ? SELECTION_RULES : '',
     report,
     issueMode ? issueContext(previous) : previousExchanges(previous),
     issueMode ? `## The owner's new message\n${question}` : `## The owner's question\n${question}`,
@@ -1003,5 +1056,6 @@ module.exports = {
   readConversation,
   runHistory,
   saveAttachment,
+  SELECTION_RULES,
   sizeGroup,
 };

@@ -1,7 +1,8 @@
 // The Backlog's Product Owner (#105, src/product-owner.js): questions about a project's backlog and
 // the conversation kept per project. Read-only: it proposes, the owner applies (Assign, roadmap).
 // `mock` (the screen's developer mode) and MULTIAGENT_SIMULATION_ONLY answer from the simulated
-// Product Owner: no model call, no cost.
+// Product Owner: no model call, no cost. po:ask's `issues` (#169): the issues the owner selected on
+// the Backlog and sent to the Product Owner, read in full and planned with suggested extra issues.
 // Registering an issue (#117): `mode: 'issue'` drafts an issue in the same conversation; po:attach
 // stores a pasted or dropped file; po:file files the draft on the owner's click (create, append to
 // an existing issue's body, or comment), then syncs the backlog; po:discard drops it. `preview`
@@ -45,8 +46,8 @@ module.exports = (ctx) => {
     {
       channel: 'po:ask',
       method: 'askProductOwner',
-      params: ['projectId', 'question', 'mock', 'mode', 'attachments'],
-      fn: async ({ projectId, question, mock, mode, attachments }) => {
+      params: ['projectId', 'question', 'mock', 'mode', 'attachments', 'issues'],
+      fn: async ({ projectId, question, mock, mode, attachments, issues }) => {
         const id = project(projectId);
         const p = projects.readProject(ctx.ws.projects, id);
         const data = ctx.withIssueRuns(backlog.readBacklog(ctx.ws.backlog, id));
@@ -71,6 +72,8 @@ module.exports = (ctx) => {
           mock: simulated,
           mode: mode === 'issue' ? 'issue' : 'plan',
           attachments: Array.isArray(attachments) ? attachments : [],
+          // #169: the Backlog's selection sent to the Product Owner (plan mode)
+          selection: Array.isArray(issues) ? issues : [],
         });
       },
     },
