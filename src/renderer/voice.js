@@ -89,7 +89,7 @@
     ta.classList.toggle('voice-transcribing', on);
     if (on) ta.setAttribute('aria-busy', 'true'); else ta.removeAttribute('aria-busy');
     let ind = ta._voiceInd;
-    if (on && !ind && ta.parentElement) {
+    if (on && !ind && ta.isConnected && ta.parentElement) {
       ind = document.createElement('span');
       ind.className = 'voice-busy';
       ind.setAttribute('role', 'status');
@@ -103,10 +103,12 @@
   }
 
   // the button sits in the field's bottom-right corner, the transcribing badge in its bottom-left
-  // one (their parent is the positioning box)
+  // one (their parent is the positioning box). A field removed from the page (a gate card closed
+  // while it was transcribing) is left alone.
   function place(btn) {
     const ta = btn._voiceField;
-    const parent = ta.parentElement;
+    const parent = ta?.parentElement;
+    if (!parent || !ta.isConnected) return void btn.classList.add('hidden');
     const shown = ta.offsetParent !== null && !ta.disabled;
     btn.classList.toggle('hidden', !shown);
     if (!shown || ta.offsetParent !== parent) return;
