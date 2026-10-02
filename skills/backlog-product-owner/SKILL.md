@@ -68,6 +68,26 @@ Use the parallelism: put every group that conflicts with nothing in the same sta
 its own run), so the roadmap has as few stages as possible; the owner wants runs producing day and
 night. Give a group a stage of its own only when it depends on another or shares files with it.
 
+### Dependencies are per task, not only per file
+
+Two issues that touch different files can still depend on each other through one task. Before
+giving an issue a stage, read **each of its tasks** and look for work that does not exist yet:
+
+- a task that names another open issue or its feature ("in the 24/7 tab (#188)", "the Run pipeline
+  action needs the runner of #135", "uses the live component of #180") depends on that issue: put
+  it in a later stage than that issue, or in the same run as it;
+- a task that only makes sense once another issue is merged (it extends a screen, a tool, a step
+  or a skill that another planned issue adds) depends on it the same way, even when the issue does
+  not say so;
+- when the rest of the issue is worth running earlier (speed), say which task waits and propose to
+  move that task to the issue it depends on, so it is not lost and the run does not stop at the
+  requirements_left_out gate.
+
+Real cases (2026-10-02): #137 (Workflows screen) ran beside #134 and before #135, and its "Run
+pipeline" task needed #135's runner; #189 (Product Owner calibration) ran before #188, and its
+measure task asked for numbers "in the 24/7 tab (#188)". Both runs stopped at the
+requirements_left_out gate and waited for the owner.
+
 ## Leave out what is not ready to run
 
 - ideas and RFCs (a title starting with "Idea:" or "RFC:", or a body saying the issue is an idea or
