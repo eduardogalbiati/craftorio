@@ -2694,9 +2694,9 @@ class WorkflowRun extends EventEmitter {
     if (!a) return false;
     const text = String(feedback ?? '').trim();
     if (!text && a.gate?.choices?.find((c) => c.id === answer)?.feedback_required) return false;
-    const checked = checkAttachments(images);
+    // copied before the approval is taken: a failed copy throws and leaves the gate open to answer again
+    const stored = this.copyAttachments(checkAttachments(images), `${a.stepId}-feedback`);
     this.approvals.delete(id);
-    const stored = this.copyAttachments(checked, `${a.stepId}-feedback`);
     if (stored.length) this.gateImages = stored;
     const waitMs = Math.max(0, Date.now() - Date.parse(a.gate?.requested_at || Date.now()));
     const w = (this.gateWaits[a.stepId] ??= { waits: 0, wait_ms: 0 });

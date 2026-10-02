@@ -282,9 +282,11 @@ function gitConfigEnv(env, settings) {
 // them in the workspace first (a run's attachments/ folder, a conversation's folder); runTurn checks
 // them before anything is spawned. How each CLI opens them (IMAGE_INPUT):
 //   read: Claude Code reads them with its Read tool: their folders go with --add-dir, Read is offered
-//   flag: Codex CLI attaches them to the message with --image=<file> (the `=` form: --image takes
-//         several values, a separate one would swallow `resume` or the `-` stdin argument)
-//   none: no known way (Grok Build): the prompt still lists the paths; the caller warns (imageInput)
+//   flag: attached to the message with --image=<file> (the `=` form: --image takes several values,
+//         a separate one would swallow `resume` or the `-` stdin argument). Meant for Codex CLI, off
+//         until a real `codex exec --image` call confirms it: then add 'codex-cli': 'flag' below
+//   none: no confirmed way (Codex CLI for now, Grok Build): the prompt still lists the paths; the
+//         caller warns (imageInput)
 // Every provider gets the "Attached images" block with the absolute paths.
 // ---------------------------------------------------------------------------
 const IMAGE_TYPES = {
@@ -295,7 +297,7 @@ const IMAGE_TYPES = {
   '.webp': 'webp',
 };
 const ATTACHMENT_LIMITS = { count: 10, bytes: 10 * 1024 * 1024 };
-const IMAGE_INPUT = { 'claude-code': 'read', 'codex-cli': 'flag', mock: 'record' };
+const IMAGE_INPUT = { 'claude-code': 'read', mock: 'record' };
 
 // How a provider type opens attached images: 'read', 'flag', 'record' (mock) or null (it cannot).
 const imageInput = (type) => IMAGE_INPUT[type] || null;
