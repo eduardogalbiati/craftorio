@@ -10,6 +10,7 @@ const path = require('path');
 const vm = require('vm');
 const RunProgress = require('../src/renderer/run-progress-model');
 const RunBadges = require('../src/renderer/run-badges');
+const ChainModel = require('../src/renderer/chain-model'); // #134: runInfo reads a run's chain through it
 
 const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'app.js'), 'utf8');
 const supSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'supervisor-drawer.js'), 'utf8');
@@ -55,6 +56,7 @@ function loadHelpers({ api = {}, view = 'dashboard' } = {}) {
     clearTimeout,
     RunProgress,
     RunBadges,
+    ChainModel,
     showToast: (...args) => calls.showToast.push(args),
     loadUsage: () => { calls.loadUsage += 1; },
     loadUsageThrottled: () => { calls.loadUsageThrottled += 1; },

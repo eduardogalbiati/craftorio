@@ -294,3 +294,35 @@ test('chainBadgesHtml: a paused chain is marked (warn tone) with its reason in t
   assert.match(html, /the run ended failed &lt;script&gt;/);
   assert.doesNotMatch(html, /<script>/);
 });
+
+// ---- runChain / withThen (#134, 758184d: the run lists' own chain reading, moved out of app.js) ----
+
+test('runChain: an existing x.chain is kept as is, from/state and all', () => {
+  const existing = { then: { action: 'queue', workflow: 'a.yaml' }, from: { run_id: 'r0' }, state: 'paused', reason: 'x' };
+  assert.equal(chain.runChain({ chain: existing }), existing);
+});
+
+test('runChain: without x.chain, a then gets state "waiting"; a from alone gets no state', () => {
+  const then = { action: 'workflow', workflow: 'a.yaml' };
+  assert.deepEqual(chain.runChain({ then }), { then, from: null, state: 'waiting' });
+  const from = { run_id: 'r0', workflow: 'issue-tracker' };
+  assert.deepEqual(chain.runChain({ from }), { then: null, from, state: undefined });
+  assert.deepEqual(chain.runChain({ then, from }), { then, from, state: 'waiting' });
+});
+
+test('runChain: neither x.chain, x.then nor x.from returns null', () => {
+  assert.equal(chain.runChain({}), null);
+  assert.equal(chain.runChain({ runId: 'r0' }), null);
+});
+
+test('withThen: keeps the chain\'s other fields (e.g. from) and sets the new then, state "waiting"', () => {
+  const chain1 = { from: { run_id: 'r0', workflow: 'issue-tracker' }, state: 'done', reason: 'old' };
+  const then = { action: 'workflow', workflow: 'b.yaml' };
+  assert.deepEqual(chain.withThen(chain1, then), { from: chain1.from, reason: 'old', then, state: 'waiting' });
+});
+
+test('withThen: setting then to null clears the state (and a missing chain defaults to {})', () => {
+  const chain1 = { then: { action: 'queue', workflow: 'a.yaml' }, state: 'waiting' };
+  assert.deepEqual(chain.withThen(chain1, null), { then: null, state: undefined });
+  assert.deepEqual(chain.withThen(null, null), { then: null, state: undefined });
+});
