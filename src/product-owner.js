@@ -264,7 +264,8 @@ function sizeGroup(numbers, issues, history) {
  * becomes one of its `suggested` issues (open, not in the group, once per group); the closed attached
  * issues are listed in `closed`.
  */
-function normalizeAnswer(answer, { issues, history, workflows, epics: epicList = [], selection = [] }) {
+// `mock`: a simulated answer, whose groups may carry a synthesized applied state (`simulated`, #148).
+function normalizeAnswer(answer, { issues, history, workflows, epics: epicList = [], selection = [], mock = false }) {
   const numbers = new Set((issues || []).map((i) => i.number));
   const byNumber = new Map((issues || []).map((i) => [i.number, i]));
   const files = (workflows || []).map((w) => w.file);
@@ -284,6 +285,7 @@ function normalizeAnswer(answer, { issues, history, workflows, epics: epicList =
       suggested.push({ issue: x, reason: String(s.reason || '') });
     }
     const size = sizeGroup(nums, issues, history);
+    const simulated = mock && g.simulated ? keep(g.simulated.covered).filter((x) => nums.includes(x)) : [];
     return {
       name: String(g.name || `Group ${n + 1}`),
       issues: nums,
@@ -296,6 +298,7 @@ function normalizeAnswer(answer, { issues, history, workflows, epics: epicList =
       ...size,
       warnings: [...new Set([...size.warnings, ...(g.warnings || []).map(String)])],
       ...(suggested.length ? { suggested } : {}),
+      ...(simulated.length ? { simulated: { covered: simulated, stage: Number.isInteger(g.simulated.stage) && g.simulated.stage > 0 ? g.simulated.stage : 1 } } : {}),
     };
   }).filter((g) => g.issues.length);
   return {
@@ -800,22 +803,22 @@ function mockScenario(scenario, { data, question = '', previous = [], files = []
       draft: draft(clip(question, 80) || 'Simulated issue with screenshots', `## Context\n\n> ${question}\n\n## Screenshots (${names.length})\n\n${names.map((f) => `- ${f}`).join('\n') || '- (none attached)'}\n`),
     });
   }
-  // plan scenarios: one group already in the roadmap or assigned, one partly, the rest still to apply
-  const covered = issues.filter((i) => (i.roadmap && i.roadmap.status !== 'skipped') || i.queued || i.runs?.some((r) => !r.enrich && ['pending', 'running'].includes(r.status)));
-  const todo = issues.filter((i) => plannable(i) && !covered.includes(i));
-  // the partly applied group takes the first issue to do
-  const rest = covered.length ? todo.slice(1) : todo;
+  // plan scenarios: one group already applied, one partly, the rest still to apply. The applied state is
+  // synthesized (`simulated.covered`, shown by the drawer as in the roadmap at `simulated.stage`), so
+  // it shows whatever the backlog's roadmap, queue and runs hold; nothing is written to the roadmap.
+  const todo = issues.filter(plannable);
+  const [one, two, three, ...rest] = todo;
   const pairs = [];
   for (let n = 0; n < rest.length; n += 2) pairs.push(rest.slice(n, n + 2).map((i) => i.number));
-  const group = (name, list, stage, reason) => ({ name, issues: list, workflow: 'software-development.yaml', inputs: {}, reason, files: ['src/renderer/views/backlog/backlog-po.js'], stage });
+  const group = (name, list, stage, reason, extra = {}) => ({ name, issues: list, workflow: 'software-development.yaml', inputs: {}, reason, files: ['src/renderer/views/backlog/backlog-po.js'], stage, ...extra });
   const groups = [
-    ...(covered[0] ? [group('Already applied', [covered[0].number], 1, 'Already in the roadmap or assigned (simulated).')] : []),
-    ...(covered.length && todo.length ? [group('Partly applied', [(covered[1] || covered[0]).number, todo[0].number], 1, 'One issue already applied, one not (simulated).')] : []),
+    ...(one ? [group('Already applied', [one.number], 1, 'Already in the roadmap (simulated).', { simulated: { covered: [one.number], stage: 1 } })] : []),
+    ...(two ? [group('Partly applied', [two.number, ...(three ? [three.number] : [])], 1, 'One issue already in the roadmap, one not (simulated).', { simulated: { covered: [two.number], stage: 1 } })] : []),
     ...pairs.slice(0, scenario === 'large-answer' ? 12 : 4).map((p, n) => group(`Group ${n + 1}`, p, Math.floor(n / 2) + 2, 'Same area (simulated).')),
   ];
   const long = scenario === 'large-answer' ? `\n\n${Array.from({ length: 15 }, (_, n) => `Paragraph ${n + 1}. ${'A long simulated explanation of the plan to check the scroll position of the conversation. '.repeat(5)}`).join('\n\n')}` : '';
   return {
-    summary: `${head}. ${groups.length} proposed run${groups.length === 1 ? '' : 's'}${covered.length ? ', the first one already applied and the second one partly' : ' (no issue of this backlog is in the roadmap or assigned: no applied group to show)'}.${long}`,
+    summary: `${head}. ${groups.length} proposed run${groups.length === 1 ? '' : 's'}${groups.length > 1 ? ', the first one already applied and the second one partly' : ''}.${long}`,
     groups,
     conflicts: pairs.length > 1 ? [{ issues: [pairs[0][0], pairs[1][0]], reason: 'Both change the same file (simulated).', files: ['src/renderer/views/backlog/backlog-po.js'] }] : [],
     enrich: scenario === 'large-answer' ? todo.slice(0, 5).map((i) => ({ issue: i.number, reason: 'The description is too short (simulated).' })) : [],
@@ -1070,7 +1073,7 @@ async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns,
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, `${message.ts.replace(/[:.]/g, '-')}.md`), `${String(analysis || '').trim()}\n\n\`\`\`json\n${JSON.stringify(raw, null, 2)}\n\`\`\`\n`);
   } else {
-    const answer = normalizeAnswer(raw, { issues: data?.issues, history, workflows, epics: data?.epics, selection: selected });
+    const answer = normalizeAnswer(raw, { issues: data?.issues, history, workflows, epics: data?.epics, selection: selected, mock: !!mock });
     message = appendMessage(backlogDir, projectId, {
       role: 'po', text: answer.summary, answer, model, costUsd, ...(invalid ? { invalid } : {}),
     });

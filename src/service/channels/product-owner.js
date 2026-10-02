@@ -11,7 +11,7 @@
 // issue too big for one run (#124); po:epic creates an epic or places issues in one (#138). Both
 // run only on the owner's click, preview like po:file, and sync the backlog after a real write.
 // po:ask's `scenario` (#148, simulated only): forces the simulated answer (MOCK_SCENARIOS). Every
-// answer raises a `po` notice (#149, src/notifications.js), simulated ones too.
+// real answer raises a `po` notice (#149, src/notifications.js); a simulated one does not.
 
 const path = require('path');
 const agents = require('../../agents');
@@ -80,8 +80,9 @@ module.exports = (ctx) => {
           // #148: the drawer's simulation-only scenario picker (ignored for a real call)
           scenario: simulated && typeof scenario === 'string' && scenario ? scenario : null,
         });
-        // #149: the bell and a desktop notice (not while the window shows this project's drawer)
-        ctx.notify?.(notifier.productOwnerNotice({ project: { id, name: p?.name }, message: out.message }), { projectId: id });
+        // #149: the bell and a desktop notice for a real answer only (not while the window shows this
+        // project's drawer); a simulated one shows the avatar's unread dot only
+        if (!simulated) ctx.notify?.(notifier.productOwnerNotice({ project: { id, name: p?.name }, message: out.message }), { projectId: id });
         return out;
       },
     },

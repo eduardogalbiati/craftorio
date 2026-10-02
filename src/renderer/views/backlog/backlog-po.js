@@ -234,12 +234,14 @@
   /**
    * { kind: 'roadmap' | 'running' | 'queued' | 'partly' | null, stages: [n], covered: [numbers], rest: [numbers], runId }:
    * every issue in the roadmap (or assigned), some of them (partly), or none (null: the group is still to apply).
+   * A simulated answer's group may add issues counted as in the roadmap at a stage (`g.simulated`, #148).
    */
   function groupState(g) {
     const issues = g.issues.map((n) => ({ n, i: issueOf(n) }));
-    const covered = issues.filter(({ i }) => inRoadmap(i) || i?.queued || liveRun(i));
+    const sim = (n) => !!g.simulated?.covered?.includes(n);
+    const covered = issues.filter(({ n, i }) => sim(n) || inRoadmap(i) || i?.queued || liveRun(i));
     const rest = issues.filter((x) => !covered.includes(x)).map(({ n }) => n);
-    const stages = [...new Set(covered.filter(({ i }) => inRoadmap(i)).map(({ i }) => i.roadmap.stage))].sort((a, b) => a - b);
+    const stages = [...new Set(covered.map(({ n, i }) => (inRoadmap(i) ? i.roadmap.stage : sim(n) ? g.simulated.stage : null)).filter((s) => s != null))].sort((a, b) => a - b);
     const run = covered.map(({ i }) => liveRun(i)).find(Boolean);
     const out = { stages, covered: covered.map(({ n }) => n), rest, runId: run?.runId || null };
     if (!covered.length) return { ...out, kind: null };
