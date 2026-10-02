@@ -179,7 +179,8 @@ function demoActionsUsage() {
 }
 
 // A local-hero run that merged #11 into the local main, not pushed yet (the Backlog's "Merged
-// locally" column and Push bar): its summary and the project's cached push status.
+// locally" column and Push bar): its summary and the project's cached push status. It started while
+// GitHub could not be read (#168): its issue came from the last sync (the run list's "issue from cache").
 function demoLocalMerge(ws, projectId) {
   const runId = '20260118-120000-demo0011';
   const commit = 'b7e4c2a91f0d3e5a6c8b9d0e1f2a3b4c5d6e7f80';
@@ -187,7 +188,10 @@ function demoLocalMerge(ws, projectId) {
   fs.writeFileSync(path.join(ws.runs, runId, 'summary.json'), JSON.stringify({
     run_id: runId, workflow: 'software-development-local-hero', project_id: projectId, status: 'success', mock: false,
     started_at: '2026-01-18T12:00:00.000Z', finished_at: '2026-01-18T12:40:00.000Z', duration_ms: 2400000,
-    issues: [{ number: 11, url: `${DEMO_REPO}/issues/11`, title: DEMO_ISSUES.find((x) => x.number === 11).title }], inputs: {}, sessions: [],
+    issues: [{
+      number: 11, url: `${DEMO_REPO}/issues/11`, title: DEMO_ISSUES.find((x) => x.number === 11).title,
+      updatedAt: '2026-01-18T09:30:00.000Z', fallback: 'cache', cachedAt: '2026-01-18T11:52:00.000Z',
+    }], inputs: {}, sessions: [],
     local_merge: { branch: 'fix/workspace-rename', base: 'main', commit },
   }, null, 2));
   fs.writeFileSync(path.join(ws.backlog, `${projectId}.local.json`), JSON.stringify({
@@ -483,7 +487,8 @@ function main() {
     workspace.writeSettings(ws, { developerMode: true, lastWorkflow: 'software-development.yaml', lastProject: project.id, keepAwake: !!args.keepAwake && args.keepAwake !== 'off' });
     fs.mkdirSync(ws.backlog, { recursive: true });
     fs.writeFileSync(path.join(ws.backlog, `${project.id}.json`), JSON.stringify(demoBacklog(project.id, src('backlog').taskProgress), null, 2));
-    if (args.view === 'backlog') demoLocalMerge(ws, project.id);
+    // also on Project: its run list shows the run's "issue from cache" badge (#168)
+    if (['backlog', 'project'].includes(args.view)) demoLocalMerge(ws, project.id);
     if (args.view === 'backlog') demoRoadmap(ws, project.id);
     if (args.view === 'backlog') demoPoConversation(ws, project.id);
     // also on Artifacts: a second run group (its document.md) for Collapse all / Expand all (#126)
