@@ -18,6 +18,9 @@
 // An issue-tracker run whose owner chose "create and queue" names the issues to queue (`filedToQueue`);
 // the service syncs the backlog and assigns them when the run ends.
 // Each sync also reads the epics (#138, src/epics.js readEpics): `issue.epic` and the cache's `epics`.
+// The platform is the source of truth (#168): queue and roadmap items keep a read-only copy of their
+// issues, refreshed by each sync (`refreshQueuedCopies`) and read again right before a run starts
+// (`freshIssues`, with the cache as a recorded fallback when the platform cannot be read).
 // Screen: src/renderer/views/backlog/backlog.js; channels: src/service/channels/backlog.js.
 
 const fs = require('fs');
@@ -223,6 +226,12 @@ async function syncBacklog({ dir, project, platform, exec }) {
   const data = { projectId: project.id, platform, repo: project.repo, syncedAt: new Date().toISOString(), pullRequestsError, issues, epics, epicsError };
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(cacheFile(dir, project.id), JSON.stringify(data, null, 2));
+  // the planned items not started yet show (and the Product Owner reads) the current text (#168);
+  // a plan that cannot be written leaves the sync done
+  try {
+    refreshQueuedCopies(dir, project.id, issues);
+    require('./roadmap').refreshCopies(dir, project.id, issues);
+  } catch (e) { console.error('planned issue copies:', e.message); }
   return data;
 }
 
@@ -371,7 +380,11 @@ function updateQueue(dir, projectId, fn) {
   return store ? store.transaction(apply) : apply();
 }
 
-const issueFields = (i) => ({ number: i.number, url: i.url, title: i.title, body: i.body || '', knownPullRequests: i.knownPullRequests || [] });
+// An item's copy of an issue (#168: read-only, refreshed by each sync and right before its run starts)
+const issueFields = (i) => ({
+  number: i.number, url: i.url, title: i.title, body: i.body || '', labels: i.labels || [], updatedAt: i.updatedAt || null,
+  knownPullRequests: i.knownPullRequests || [],
+});
 /** The issues of a queue item: its `issues` (a group), or the item itself. */
 const itemIssues = (item) => (Array.isArray(item.issues) && item.issues.length ? item.issues : [issueFields(item)]);
 // An item with these issues: a group while it has two or more, a single issue otherwise.
@@ -638,6 +651,80 @@ function updateCachedIssue(dir, projectId, issue) {
   return data;
 }
 
+// ---- the platform is the source of truth (#168) ------------------------------------------------
+// Queue and roadmap items keep a read-only copy of their issues (issueFields) for the screen and the
+// Product Owner: every sync brings the copies of the items not started yet up to date
+// (refreshQueuedCopies, roadmap.refreshCopies), and right before a run starts its issues are read
+// again from the platform (freshIssues). Nothing here writes to the platform.
+
+/** A copy of an issue with the text of `synced` (title, body, labels, updatedAt), or the copy when there is none. */
+function withSyncedText(copy, synced) {
+  if (!synced) return copy;
+  return { ...copy, url: synced.url || copy.url, title: synced.title, body: synced.body || '', labels: synced.labels || [], updatedAt: synced.updatedAt || null };
+}
+const copyChanged = (copy, synced) => JSON.stringify(withSyncedText(copy, synced)) !== JSON.stringify(copy);
+
+/**
+ * Brings the copies of a project's queued issues up to `issues` (a sync, or a fresh read). Items a
+ * dispatcher is starting (claimed) are left as they are, unless `includeClaimed`. Writes only on a change.
+ */
+function refreshQueuedCopies(dir, projectId, issues, { includeClaimed = false } = {}) {
+  const known = new Map((issues || []).map((i) => [i.number, i]));
+  const claimed = includeClaimed ? new Set() : storeFor(dir)?.claimedNumbers(projectId) || new Set();
+  const open = (x) => !claimed.has(x.number);
+  if (!readQueue(dir, projectId).items.some((x) => open(x) && itemIssues(x).some((i) => copyChanged(i, known.get(i.number))))) return false;
+  updateQueue(dir, projectId, (q) => ({ ...q, items: q.items.map((x) => (open(x) ? withIssues(x, itemIssues(x).map((i) => withSyncedText(i, known.get(i.number)))) : x)) }));
+  return true;
+}
+
+const clockOf = (iso) => {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? 'an unknown time' : d.toTimeString().slice(0, 5);
+};
+
+/**
+ * The issues of an item read again from the platform right before its run starts (title, body,
+ * state, labels, updatedAt), each `{ ...issueFields, state }`. A read that fails falls back to the
+ * synced cache (`cache`, readBacklog) when its version is at least as new as the item's copy, else to
+ * the copy, and says so: the issue gets `fallback: 'cache' | 'copy'` (and `cachedAt`), and a warning
+ * for the run's log. `fromPlatform: false` (a simulation, a project without repository) never calls
+ * the CLI: the newest of the cache and the copy, without warning.
+ * @returns {Promise<{ issues: object[], warnings: string[] }>}
+ */
+async function freshIssues({ item, platform, repo, cache = null, fromPlatform = true, exec = execCli }) {
+  const synced = new Map((cache?.issues || []).map((i) => [i.number, i]));
+  const issues = [];
+  const warnings = [];
+  for (const copy of itemIssues(item)) {
+    const kept = { knownPullRequests: copy.knownPullRequests || [] };
+    let error = null;
+    if (fromPlatform) {
+      try {
+        const read = await fetchIssue({ platform, repo, number: copy.number, exec });
+        issues.push({ ...issueFields({ ...read, ...kept }), state: read.state });
+        continue;
+      } catch (e) { error = e.message; }
+    }
+    const cached = synced.get(copy.number);
+    // a copy without updatedAt was saved before #168: the cache is at least as new
+    const useCache = !!cached && !(copy.updatedAt && String(cached.updatedAt || '') < String(copy.updatedAt));
+    issues.push({
+      ...issueFields({ ...(useCache ? cached : copy), ...kept }), state: cached?.state || 'open',
+      ...(error ? { fallback: useCache ? 'cache' : 'copy', ...(useCache ? { cachedAt: cache.syncedAt || null } : {}) } : {}),
+    });
+    if (error) {
+      warnings.push(useCache ? `Issue #${copy.number} read from the cache of ${clockOf(cache.syncedAt)}: ${error}`
+        : `Issue #${copy.number} read from the copy saved with the planned item (the cache has no newer version): ${error}`);
+    }
+  }
+  return { issues, warnings };
+}
+
+/** What a run records of each issue it starts from (workflow.started `issues`): the version read (`updatedAt`) and any fallback. */
+const recordedIssues = (issues) => issues.map(({ number, url, title, updatedAt = null, fallback = null, cachedAt = null }) => ({
+  number, url, title, updatedAt, ...(fallback ? { fallback, cachedAt } : {}),
+}));
+
 const savesFile = (runDir) => path.join(runDir, 'issue-saves.json');
 /** The saves of a run to its issue (issue-saves.json), oldest first. */
 function readIssueSaves(runDir) {
@@ -753,6 +840,7 @@ module.exports = {
   cliTarget,
   fetchIssue,
   filedToQueue,
+  freshIssues,
   issueAppendBody,
   issueCloseCommand,
   issueCreateCommand,
@@ -760,8 +848,11 @@ module.exports = {
   issueSaveCommand,
   queuedProjects,
   readIssueSaves,
+  recordedIssues,
+  refreshQueuedCopies,
   releaseQueued,
   repoLabels,
   saveRunToIssue,
   updateCachedIssue,
+  withSyncedText,
 };

@@ -13,12 +13,15 @@
 // Run this stage (#141, `scope: { stage: <id> }`): only that stage's items start, in any order; when
 // they are all finished the roadmap pauses ("Stage N done") with the scope cleared, so Start then
 // runs the whole roadmap from its first unfinished stage.
+// The items' issue texts are read-only copies (#168): each sync refreshes the items not started yet
+// (`refreshCopies`), and the service reads the issues again right before a start (an item whose
+// issues are all closed then is skipped, `skipClosed`).
 // Screen: src/renderer/views/backlog/backlog-roadmap.js; channels: src/service/channels/roadmap.js.
 
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { itemIssues } = require('./backlog');
+const { itemIssues, withSyncedText } = require('./backlog');
 const { writeJsonSafe } = require('./state-file');
 
 // planned: edited, never started by itself · running · paused (a failure, the owner, a proposal) · done
@@ -130,9 +133,28 @@ function issueOf(ref, known) {
   const synced = known.get(number);
   const src = { ...(typeof ref === 'object' ? ref : {}), ...(synced || {}) };
   return {
-    number, url: src.url || '', title: src.title || `#${number}`, body: src.body || '',
+    number, url: src.url || '', title: src.title || `#${number}`, body: src.body || '', labels: src.labels || [], updatedAt: src.updatedAt || null,
     knownPullRequests: src.knownPullRequests || (src.pullRequests || []).map((p) => p.url),
   };
+}
+
+/**
+ * Brings the issue copies of the items not started yet (not finished, no run) up to `issues` (a
+ * sync, or the fresh read right before a start, #168): the platform is the source of truth, the
+ * copies only show it. Items with a run keep the text their run used. Writes only on a change.
+ */
+function refreshCopies(dir, projectId, issues) {
+  if (!fs.existsSync(roadmapFile(dir, projectId))) return false;
+  const known = new Map((issues || []).map((i) => [i.number, i]));
+  const refresh = (x) => {
+    if (FINISHED.has(x.status) || x.runId) return x;
+    const list = itemIssues(x).map((i) => withSyncedText(i, known.get(i.number)));
+    return { ...x, ...list[0], issues: list };
+  };
+  const before = readRoadmap(dir, projectId);
+  if (allItems(before).every((x) => JSON.stringify(refresh(x)) === JSON.stringify(x))) return false;
+  updateRoadmap(dir, projectId, (r) => ({ ...r, stages: r.stages.map((s) => ({ ...s, items: s.items.map(refresh) })) }));
+  return true;
 }
 
 // An item from what the UI or a proposal sends: { id?, workflow, workflowName?, inputs?, mock?, issues,
@@ -401,6 +423,13 @@ function markStarted(dir, projectId, itemId, { runId = null, error = null }) {
   }));
 }
 
+// An item whose issues were all found closed right before its start (#168: read again from the platform).
+function skipClosed(dir, projectId, itemId) {
+  return updateRoadmap(dir, projectId, (r) => ({
+    ...r, stages: r.stages.map((s) => ({ ...s, items: s.items.map((x) => (x.id === itemId ? { ...x, status: 'skipped', error: 'Every issue is closed.' } : x)) })),
+  }));
+}
+
 /** Each planned issue's place in the roadmap (the Backlog's cards): number → { stage, status, itemId }. */
 function issueStages(roadmap) {
   const out = new Map();
@@ -427,9 +456,11 @@ module.exports = {
   persisted,
   propose,
   readRoadmap,
+  refreshCopies,
   roadmapProjects,
   saveStages,
   setState,
+  skipClosed,
   updateRoadmap,
   withStatus,
   writeRoadmap,

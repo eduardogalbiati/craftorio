@@ -14,6 +14,29 @@ Read this before touching run listings, the Backlog queue, pending gates, notifi
   so run listings skip it.
 - Never make the database the only copy of something a run produced.
 
+## Issues: the git platform is the source of truth (#168)
+
+GitHub/GitLab own the issues; everything local is a read-only replica, and issue changes are
+never made locally nor flow back from local data to the platform. Only the explicit, previewed
+owner actions write to the platform (Save to issue, create, close, epics: `src/backlog.js`,
+`src/po-split.js`, `src/epics.js`).
+
+- `backlog/<project>.json`: the sync cache (`syncedAt`, every issue with its PRs/MRs and epic),
+  rewritten by each sync (`syncBacklog`); a save to an issue re-reads that one issue into it.
+- Queue items (`<project>.queue.json` / the index) and roadmap items (`<project>.roadmap.json`)
+  keep a **copy** of each issue (`number`, `url`, `title`, `body`, `labels`, `updatedAt`,
+  `knownPullRequests`) so the screen and the Product Owner can show it. Each sync refreshes the
+  copies of the items not started yet (`refreshQueuedCopies`, `roadmap.refreshCopies`); an item
+  with a run keeps the text its run used.
+- Right before a queued or roadmap item starts, the service reads its issues again
+  (`backlog.freshIssues`: `gh issue view` / `glab issue view`), builds the task from them, updates
+  the item's copy, and skips issues found closed. If the read fails, the latest cache (or the copy,
+  when it is newer) is used and said: a `log` warn "Issue #n read from the cache of HH:MM: …" and
+  the issue recorded with `fallback` (the run card's "issue from cache" badge). Simulations never
+  call the platform: they use the newest of the cache and the copy.
+- `workflow.started.issues` records each issue's `updatedAt` as read, so a run can be traced to
+  the issue text it used.
+
 ## `<workspace>/index.db`: what it adds
 
 `node:sqlite` (`DatabaseSync`, built into Node 24 / Electron 44: no dependency, nothing to unpack in

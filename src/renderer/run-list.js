@@ -78,6 +78,15 @@ function renderRunList(rl, { prefix, box: boxSel, empty, start, rerender }) {
   }));
 }
 
+// A run that started while its issues could not be read from the platform (#168): the cache or the
+// planned copy was used, named here and in the run's log.
+function issueFallbackBadge(r) {
+  const used = issuesOfRun(r).filter((i) => i.fallback);
+  if (!used.length) return '';
+  const what = used.map((i) => `#${i.number}: ${i.fallback === 'cache' ? `the cache of ${i.cachedAt ? dateOf(i.cachedAt) : 'the last sync'}` : 'the copy saved with the planned item'}`).join('; ');
+  return ` <span class="badge warn" title="${esc(`The platform could not be read when this run started, so it used ${what}. See the run's log.`)}">issue from cache</span>`;
+}
+
 function runListRow(r, pv) {
   const open = pv.expanded.has(r.runId);
   const task = String(r.task || '').trim();
@@ -88,7 +97,7 @@ function runListRow(r, pv) {
       <div class="pr-row" title="${open ? 'Hide' : 'Show'} sessions">
         <span class="pill pill-${esc(r.status)}">${esc(r.status)}</span>
         <div class="pr-main">
-          <div><b>${runTitleHtml(r)}</b> ${prBadge(r)} <span class="muted small" title="workflow">${esc(r.workflow || r.file || 'workflow')}${r.version ? ` v${esc(r.version)}` : ''}</span>${r.mock ? ' <span class="badge p-mock">simulated</span>' : ''}${r.current ? ' <span class="badge live">this window</span>' : ''}${r.runningElsewhere ? ' <span class="badge" title="Another app process on this workspace runs it: stop or resume it there">another window</span>' : ''}${r.retryOf ? ` <span class="badge" title="Started by a retry of the same roadmap item: the two runs do the same work">retry of ${esc(String(r.retryOf).slice(9))}</span>` : ''}${!pv.id && r.project ? ` <span class="badge" title="project">${esc(r.project.name)}</span>` : ''}</div>
+          <div><b>${runTitleHtml(r)}</b> ${prBadge(r)} <span class="muted small" title="workflow">${esc(r.workflow || r.file || 'workflow')}${r.version ? ` v${esc(r.version)}` : ''}</span>${r.mock ? ' <span class="badge p-mock">simulated</span>' : ''}${r.current ? ' <span class="badge live">this window</span>' : ''}${r.runningElsewhere ? ' <span class="badge" title="Another app process on this workspace runs it: stop or resume it there">another window</span>' : ''}${r.retryOf ? ` <span class="badge" title="Started by a retry of the same roadmap item: the two runs do the same work">retry of ${esc(String(r.retryOf).slice(9))}</span>` : ''}${issueFallbackBadge(r)}${!pv.id && r.project ? ` <span class="badge" title="project">${esc(r.project.name)}</span>` : ''}</div>
           <div class="muted small pr-task" title="${esc(task)}">${esc(firstLine || 'No task')}</div>
         </div>
         <span class="pr-meta"><label>started</label>${r.startedAt ? esc(dateOf(r.startedAt)) : '—'}</span>

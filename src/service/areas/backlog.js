@@ -116,10 +116,12 @@ module.exports = (ctx) => {
         try {
           const project = projects.readProject(ws.projects, projectId);
           const wf = loadWorkflow(ctx.workflowPath(item.workflow).file);
+          const cache = backlog.readBacklog(ws.backlog, projectId);
+          const platform = cache?.platform || workspace.readSettings(ws).backlogPlatform || backlog.DEFAULT_PLATFORM;
+          const real = !item.mock && !!project.repo;
           // a PR/MR may have been opened for an issue since it was queued: skip it, don't redo the work
           // (an issue of a group leaves the group, which starts with the others)
-          if (!item.mock && project.repo) {
-            const platform = backlog.readBacklog(ws.backlog, projectId)?.platform || workspace.readSettings(ws).backlogPlatform || backlog.DEFAULT_PLATFORM;
+          if (real) {
             const prs = await backlog.newPullRequests({ item, platform, repo: project.repo });
             if (prs.length) {
               for (const n of new Set(prs.map((p) => p.issue ?? item.number))) {
@@ -129,9 +131,20 @@ module.exports = (ctx) => {
               continue;
             }
           }
+          // the platform is the source of truth (#168): the issues are read again now, the task is
+          // built from what was read and the queued copy updated; an issue closed meanwhile is skipped
+          const { issues: read, warnings } = await backlog.freshIssues({ item, platform, repo: project.repo, cache, fromPlatform: real });
+          backlog.refreshQueuedCopies(ws.backlog, projectId, read, { includeClaimed: true });
+          const closed = read.filter((i) => i.state === 'closed');
+          if (closed.length) {
+            for (const i of closed) backlog.skipQueued(ws.backlog, projectId, i.number, 'closed on the platform');
+            backlog.releaseQueued(ws.backlog, projectId, item.number);
+            continue;
+          }
+          const run = { ...item, ...read[0], issues: read.length > 1 ? read : undefined };
           await ctx.startWorkflowRun({
-            file: item.workflow, inputs: backlog.runInputs(item, wf, project.folder), mock: item.mock,
-            projectId, issues: backlog.itemIssues(item).map(({ number, url, title }) => ({ number, url, title })),
+            file: item.workflow, inputs: backlog.runInputs(run, wf, project.folder), mock: item.mock,
+            projectId, issues: backlog.recordedIssues(read), notices: warnings.map((message) => ({ level: 'warn', message })),
           });
           backlog.unqueue(ws.backlog, projectId, item.number, { cancelGroup: true });
         } catch (e) {

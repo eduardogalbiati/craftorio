@@ -6,6 +6,7 @@
 const path = require('path');
 const { loadWorkflow } = require('../../engine/workflow');
 const simulation = require('../../engine/simulation');
+const workspace = require('../../workspace');
 const projects = require('../../projects');
 const backlog = require('../../backlog');
 const roadmaps = require('../../roadmap');
@@ -65,7 +66,8 @@ module.exports = (ctx) => {
     const before = roadmaps.readRoadmap(ws.backlog, projectId);
     // a planned roadmap has no run to follow; a paused one still refreshes its items from their runs (#112)
     if (before.state === 'planned') return;
-    const closed = new Set((backlog.readBacklog(ws.backlog, projectId)?.issues || []).filter((i) => i.state === 'closed').map((i) => i.number));
+    const cache = backlog.readBacklog(ws.backlog, projectId);
+    const closed = new Set((cache?.issues || []).filter((i) => i.state === 'closed').map((i) => i.number));
     const mockOf = (item) => !!item.mock || !!before.simulated;
     const { roadmap, start } = roadmaps.advance(before, {
       runOf: roadmapRun, closed: (n) => closed.has(n), canStart: (item) => !ctx.slotProblem({ mock: mockOf(item), projectId }),
@@ -86,12 +88,21 @@ module.exports = (ctx) => {
       try {
         const project = projects.readProject(ws.projects, projectId);
         const wf = loadWorkflow(ctx.workflowPath(item.workflow).file);
+        // the platform is the source of truth (#168): the issues are read again now, the task is built
+        // from what was read and the item's copy updated (a simulation reads the synced cache only)
+        const platform = cache?.platform || workspace.readSettings(ws).backlogPlatform || backlog.DEFAULT_PLATFORM;
+        const { issues: read, warnings } = await backlog.freshIssues({ item, platform, repo: project.repo, cache, fromPlatform: !mockOf(item) && !!project.repo });
+        roadmaps.refreshCopies(ws.backlog, projectId, read);
         // a closed issue of a group is left out; the others start
-        const open = backlog.itemIssues(item).filter((i) => !closed.has(i.number));
+        const open = read.filter((i) => i.state !== 'closed');
+        if (!open.length) {
+          roadmaps.skipClosed(ws.backlog, projectId, item.id);
+          continue;
+        }
         const run = { ...item, ...open[0], ...(open.length > 1 ? { issues: open } : { issues: undefined }) };
         const started = await ctx.startWorkflowRun({
           file: item.workflow, inputs: backlog.runInputs(run, wf, project.folder), mock: mockOf(item),
-          projectId, issues: open.map(({ number, url, title }) => ({ number, url, title })),
+          projectId, issues: backlog.recordedIssues(open), notices: warnings.map((message) => ({ level: 'warn', message })),
           allowKeptWork: keptWorkAllowed.has(`${projectId}:${item.id}`),
         });
         keptWorkAllowed.delete(`${projectId}:${item.id}`);

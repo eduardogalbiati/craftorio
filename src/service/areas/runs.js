@@ -129,7 +129,8 @@ module.exports = (ctx) => {
   // mockSequences: simulation scenario ({ field: [value per visit] }, invalid_answers), ignored for real runs
   // allowKeptWork: the owner chose to start these issues again although an ended run kept commits
   // for them (run:start's confirmation, a confirmed roadmap Retry); otherwise that start is refused (#112)
-  async function startWorkflowRun({ file, inputs, mock, mockSequences = null, resume = null, projectId: forcedProject = null, issues = null, allowKeptWork = false }) {
+  // notices: [{ level, message }] the starter logs in the run (e.g. an issue read from the cache, #168)
+  async function startWorkflowRun({ file, inputs, mock, mockSequences = null, resume = null, projectId: forcedProject = null, issues = null, allowKeptWork = false, notices: startNotices = [] }) {
     // simulation-only (automated checks): a real run is refused, never turned into a simulation
     if (!mock) simulation.refuseReal('a real run');
     // the same issues never get a second live run, from this app or another one (#112): resume that run instead
@@ -170,7 +171,7 @@ module.exports = (ctx) => {
       const baselineAt = Date.now();
       const budget = usage.budgetBaseline({ runsDir: ws.runs, settings, local: needsLocal ? readLocalUsage() : null });
       const wfFile = ctx.workflowPath(file);
-      const notices = [];
+      const notices = [...(startNotices || [])];
       if (wfFile.fallback) {
         const msg = `workflow ${path.basename(wfFile.file)} is not in ${ws.workflows}; using the copy bundled with the app (${wfFile.file})`;
         console.warn(msg);
