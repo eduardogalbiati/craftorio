@@ -306,7 +306,8 @@
   }
 
   // Moves issue `number` from item `fromId` into item `toId` (a group while it has two or more); the
-  // emptied item goes. Items of either shape (an `issues` list, or a single issue stored as the item).
+  // emptied item goes. Items of either shape (an `issues` list, or a single issue stored as the item);
+  // both keep their first issue's fields at the top for older readers.
   function moveIssue(stages, number, fromId, toId) {
     if (dropProblem(stages, { issue: number, from: fromId }, toId)) return false;
     const items = stages.flatMap((s) => s.items);
@@ -314,10 +315,15 @@
     const to = items.find((x) => x.id === toId);
     const issue = refs(from).find((i) => i.number === number);
     const left = refs(from).filter((i) => i.number !== number);
-    to.issues = [...refs(to), issue];
-    if (left.length) from.issues = left;
+    setIssues(to, [...refs(to), issue]);
+    if (left.length) setIssues(from, left);
     else for (const s of stages) s.items = s.items.filter((x) => x !== from);
     return true;
+  }
+
+  function setIssues(item, issues) {
+    const { number, url, title, body, knownPullRequests } = issues[0];
+    Object.assign(item, { number, url, title, body, knownPullRequests, issues });
   }
 
   /** The inputs of the Edit form `form` applied to `item` (its fields, the new name + value pair, Simulation). */
