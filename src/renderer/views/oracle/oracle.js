@@ -79,7 +79,7 @@
     or.nightForm = { ...f, saving: true, error: null };
     render();
     try {
-      const out = await api.setOracleNightWatch({ on: true, until: until.toISOString() });
+      const out = await api.setOracleNightWatch({ on: true, until: until.toISOString(), from: 'the Oracle drawer' });
       or.messages = out.messages;
       or.service = out.state;
       or.nightForm = null;
@@ -317,7 +317,7 @@
         <div class="field">
           <label for="oracle-night-until-${w}">Night watch until</label>
           <input type="datetime-local" id="oracle-night-until-${w}" class="oracle-night-until" value="${esc(f.until || '')}"${f.saving ? ' disabled' : ''} />
-          <div class="hint">Until then the Oracle fixes what stops the roadmap without asking: it retries or skips a failed item, regroups or reorders planned items, refreshes issue text, restores a workflow or skill default and restarts the dispatch. Each action is logged with its backup and sent as a notification. Gates stay yours; it never closes issues or pushes.</div>
+          <div class="hint">Until then the Oracle fixes what stops the roadmap without asking, but only with the permissions you chose on the Night watch screen (by default: retry a failed item and refresh issue text). Each action is logged with its backup and sent as a notification. Gates stay yours; it never closes issues or pushes.</div>
           ${f.error ? `<p class="error small">${esc(f.error)}</p>` : ''}
         </div>
         <div class="row"><button class="btn primary sm" type="submit"${f.saving ? ' disabled' : ''}>Start</button><button class="btn ghost sm" type="button" data-oracle-night-cancel>Cancel</button></div>

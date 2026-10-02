@@ -419,6 +419,8 @@ window.reportNotifyContext = reportNotifyContext;
 function openNotificationTarget(t) {
   if (t.terminalId) { window.SessionsView?.focusTerminal(t.terminalId); return; }
   if (t.openOracle) { window.OracleChat?.open(); return; }
+  // a Night watch's morning summary (#172)
+  if (t.view === 'nightwatch') { showView('nightwatch'); return; }
   if (t.view === 'backlog') {
     window.BacklogActions?.focusProject(t.projectId);
     showView('backlog');

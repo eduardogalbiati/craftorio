@@ -1,5 +1,5 @@
 // Dashboard screen (the start screen): the three workflow categories (each opens the Start drawer
-// on it), the gates waiting for approval across runs and the runs in progress. Registers itself with
+// on it), the last Night watch's morning summary, the gates waiting for approval across runs and the runs in progress. Registers itself with
 // registerView (view-registry.js); uses app.js globals ($, esc, state, liveRuns, selectedView,
 // pendingGates, selectRun, openGateOf, openDrawer, issueRefs, runSessionStatus, statusLabel).
 // renderDashboard is also called by app.js (init, and renderHeader on run events).
@@ -31,6 +31,8 @@ function renderDashboard() {
       <button class="btn sm primary" data-gate-run="${esc(g.run_id)}">Open run</button></div>`;
   }).join('')}` : '';
   gbox.querySelectorAll('[data-gate-run]').forEach((b) => (b.onclick = () => openGateOf(b.dataset.gateRun)));
+  // the last Night watch's morning summary (#172, views/nightwatch/)
+  window.NightWatchView?.renderMorning($('#dash-nightwatch'));
 }
 
 registerView({
@@ -62,6 +64,7 @@ registerView({
               <span class="dash-count" data-count="monitor"></span>
             </button>
           </div>
+          <div id="dash-nightwatch" class="dash-gates hidden"></div>
           <div id="dash-gates" class="dash-gates hidden"></div>
           <div id="dash-run" class="dash-run hidden"></div>
         </div>

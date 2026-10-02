@@ -45,6 +45,8 @@ const git = (folder, args) => new Promise((resolve, reject) => {
   execFile('git', ['-C', folder, ...args], { timeout: 30e3, windowsHide: true, env: { ...process.env, GIT_TERMINAL_PROMPT: '0' } }, (err, stdout, stderr) => (err ? reject(new Error(String(stderr || err.message).trim())) : resolve(String(stdout).trim())));
 });
 const cut = (s, n) => (s.length > n ? `${s.slice(0, n)}…` : s);
+// who turned the Night watch on (#172): the account, and the screen it was turned on from
+const nightBy = (from) => `${process.env.USERNAME || process.env.USER || 'the owner'} (${String(from || 'the Oracle drawer').slice(0, 60)})`;
 const inside = (root, p) => { const r = path.relative(path.resolve(root), path.resolve(p)); return !r.startsWith('..') && !path.isAbsolute(r); };
 
 module.exports = (ctx) => {
@@ -130,7 +132,9 @@ module.exports = (ctx) => {
       if (p.action === 'retry' && !(item.runId && ctx.runAlive(item.runId))) {
         const issues = backlog.itemIssues(item);
         const kept = (item.runId && ctx.keptWorkOfRun(item.runId, issues)) || ctx.keptWorkForIssues(issues);
-        if (kept) throw new Error(`${kept.text} Resume that run instead (run.resume), or retry from the Backlog to start from scratch.`);
+        // fresh (#172): from scratch over the kept work, as the Backlog's confirmed retry does
+        if (kept && p.fresh) ctx.allowKeptWork(id, item.id);
+        else if (kept) throw new Error(`${kept.text} Resume that run instead (run.resume), or retry with fresh: true to start from scratch.`);
       }
       const backup = snapshotRoadmap(a, id);
       roadmaps.itemAction(ctx.ws.backlog, id, String(p.itemId), p.action, { alive: ctx.runAlive });
@@ -139,6 +143,13 @@ module.exports = (ctx) => {
     },
     'roadmap.stages': async (a) => {
       const id = pid(a.params.projectId);
+      // append (#164, #172): every item already planned keeps its stage and its order; only new items come in
+      if (a.params.append) {
+        const before = roadmaps.readRoadmap(ctx.ws.backlog, id).stages || [];
+        const ids = (stages) => stages.map((s) => (s.items || []).map((x) => x.id));
+        const kept = ids(a.params.stages).map((list, i) => list.filter((x) => (ids(before)[i] || []).includes(x)));
+        if (ids(before).some((list, i) => JSON.stringify(list) !== JSON.stringify(kept[i] || []))) throw new Error('An append may only add items: a planned item moved or disappeared. Nothing was saved.');
+      }
       const backup = snapshotRoadmap(a, id);
       roadmaps.saveStages(ctx.ws.backlog, id, a.params.stages, { issues: synced(id) });
       await ctx.dispatchRoadmaps();
@@ -336,10 +347,14 @@ module.exports = (ctx) => {
         perform, restore,
         notify: (n) => ctx.notify?.(notifier.oracleNotice(n)),
         onChange: (m) => ctx.events.emit('oracle:changed', { id: m.id, role: m.role, kind: m.kind || null }),
+        // the morning summary (#172): src/service/channels/nightwatch.js
+        onNightEnd: (w) => ctx.events.emit('nightwatch:ended', w),
       }));
     }
     return oracles.get(root);
   };
+  // the Night watch screen's channel (#172) reads the Oracle's state and switches the watch through it
+  ctx.oracleService = get;
 
   // ---- wake-ups (#123) ---------------------------------------------------------------------------
   const wake = createWake({
@@ -401,8 +416,8 @@ module.exports = (ctx) => {
     { channel: 'oracle:memory', method: 'oracleMemory', fn: () => get().memory() },
     // mutes (on) or unmutes one run's wake-ups → the wake-up state
     { channel: 'oracle:mute', method: 'muteOracleRun', params: ['runId', 'on'], fn: ({ runId, on }) => wake.mute(runId, on !== false) },
-    // the Night watch: { on, until (ISO, at most 24 h ahead) } → { nightWatch, messages, state }
-    { channel: 'oracle:nightWatch', method: 'setOracleNightWatch', params: ['on', 'until'], fn: ({ on, until }) => get().setNightWatch({ on, until }) },
+    // the Night watch: { on, until (ISO, at most 24 h ahead), from (the screen it was turned on from) } → { nightWatch, messages, state }
+    { channel: 'oracle:nightWatch', method: 'setOracleNightWatch', params: ['on', 'until', 'from'], fn: ({ on, until, from }) => get().setNightWatch({ on, until, by: nightBy(from) }) },
     // the owner proposes a card themselves (or a check): { kind, params, why } → { id, status, ... }
     {
       channel: 'oracle:propose',

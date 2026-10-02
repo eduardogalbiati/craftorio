@@ -7,7 +7,8 @@
 //            (event `conflict`); target = { view: 'backlog', projectId }
 //   session  an AI CLI in a Sessions terminal stopped and waits for the user; target = { terminalId }
 //   po       the Backlog's Product Owner answered a question (#149); target = { view: 'backlog', projectId, openPO: true }
-//   oracle   the Oracle acted on its own under the owner's Night watch (#123); target = { openOracle: true }
+//   oracle   the Oracle acted on its own under the owner's Night watch (#123); target = { openOracle: true };
+//            or a Night watch ended (its morning summary, #172); target = { view: 'nightwatch' }
 //
 // Nothing is shown while the window is focused on the notice's run, session or Product Owner drawer.
 
@@ -91,6 +92,17 @@ function oracleNotice({ title, body, ok = true } = {}) {
     title: clip(title || 'Oracle', 120),
     body: clip(body) || 'Open the Oracle to see what it did.',
     target: { openOracle: true },
+  };
+}
+
+// The morning summary when a Night watch ends (#172): { ran, did, waits, safety, alarm } from
+// src/night-watch.js morningSummary; opens the Night watch screen.
+function nightWatchNotice({ ran, did, waits, safety, alarm = false } = {}) {
+  return {
+    kind: 'oracle', event: alarm ? 'night-alarm' : 'night-summary',
+    title: alarm ? 'Night watch ended: safety alarm' : 'Night watch ended',
+    body: clip([did, waits, alarm ? safety : ran].filter(Boolean).join(' '), 240) || 'Open the Night watch to see the night.',
+    target: { view: 'nightwatch' },
   };
 }
 
@@ -235,6 +247,7 @@ class WaitDetector {
 module.exports = {
   attentionSignal,
   interruptedNotice,
+  nightWatchNotice,
   normalizeContext,
   oracleNotice,
   productOwnerNotice,

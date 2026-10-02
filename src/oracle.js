@@ -23,6 +23,7 @@
 //   night-watch.json the Night watch switch and its end time (src/oracle-actions.js)
 //   actions.jsonl    every action proposed, done, failed, dismissed or undone, with its backup
 //   backups/         the copies taken before an action (Undo puts them back)
+//   night-permissions.json, night-log.jsonl   what it may do alone at night and its night events (#172, src/night-watch.js)
 // An action card is a message { role: 'oracle', kind: 'action', action }; its result is a later
 // { kind: 'action-result', actionId, status } that history() folds into the card (action.status).
 // A wake-up is a { role: 'system', kind: 'wake', events } message, then the Oracle's answer
@@ -44,6 +45,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const actions = require('./oracle-actions');
+const night = require('./night-watch');
 const { hold, ownerAlive } = require('./run-owner');
 
 const DEFAULT_MODEL = 'claude-opus-5-5';
@@ -164,11 +166,12 @@ function monthlyBlock(budget) {
  * the workspace settings; `budget()` the monthly budget state with every peer's spend.
  * Part 2 (#123): `perform(action, { mock })` → { ok, text, backup?, preview? } runs a card (the
  * service's functions); `restore(action, backup)` → { text } puts its backup back; `notify(notice)` a
- * push notification (an action taken under Night watch); `onChange(message)` a message was added.
+ * push notification (an action taken under Night watch); `onChange(message)` a message was added;
+ * `onNightEnd({ startedAt, until, by })` a Night watch ended (#172: its morning summary).
  */
 function createOracle({
   dir, tools, bridge, mcpCommand, skillsDirs, resolveCommand, refuseReal, agent, settings, budget = () => null,
-  perform = null, restore = null, notify = () => {}, onChange = () => {},
+  perform = null, restore = null, notify = () => {}, onChange = () => {}, onNightEnd = () => {},
 }) {
   let busy = false;
   const acting = new Set(); // action ids being performed
@@ -449,11 +452,19 @@ function createOracle({
     const nw = actions.nightWatch(dir());
     if (nw.on && !nw.active && ownerInfo()?.self) {
       actions.setNightWatch(dir(), { on: false });
-      nightSummary(nw.startedAt);
+      nightEnded(nw);
       return actions.nightWatch(dir());
     }
     return nw;
   }
+  // a watch ended (its end time, or turned off): the log, the summary message, the morning summary (#172)
+  function nightEnded(nw) {
+    night.logNight(dir(), 'oracle.watch', { on: false, until: nw.until, startedAt: nw.startedAt, by: nw.by });
+    nightSummary(nw.startedAt);
+    try { onNightEnd({ startedAt: nw.startedAt, until: nw.until, by: nw.by }); } catch { /* the summary is in the chat */ }
+  }
+  // the watch actions on one item this night (the loop cap)
+  const nightActionsOn = (target, since) => night.readNightLog(dir()).filter((e) => e.type === 'oracle.action' && e.auto && e.target === target && (!since || e.ts >= since)).length;
   // The morning summary: every action taken without asking since the Night watch started.
   function nightSummary(since) {
     const done = history().filter((m) => m.kind === 'action' && m.action.result?.auto && (!since || m.ts >= since));
@@ -472,7 +483,7 @@ function createOracle({
     acting.add(id);
   }
 
-  async function runAction(a, { mock, auto }) {
+  async function runAction(a, { mock, auto, permission = null }) {
     if (!perform) throw new Error('Actions are not available here.');
     reserve(a.id);
     let out;
@@ -486,6 +497,12 @@ function createOracle({
       backup, undoable: !!(ok && backup?.undo && restore), preview: !!out.preview, auto: !!auto,
     });
     actions.logAction(dir(), { event: m.status, actionId: a.id, kind: a.kind, params: a.params, auto: !!auto, preview: !!out.preview, text: m.text, backup });
+    if (auto || actions.nightWatch(dir()).active) {
+      night.logNight(dir(), 'oracle.action', {
+        actionId: a.id, kind: a.kind, title: a.title, ...night.targetOf(a.params), permission: auto ? permission : 'owner-click', auto: !!auto,
+        backup: backup?.text || a.backup || null, undoable: m.undoable, result: m.text, ok,
+      });
+    }
     if (auto) notify({ title: `Oracle (Night watch): ${a.title}`, body: `${ok ? 'Done' : 'Failed'}: ${m.text}`, ok });
     return { ok, text: m.text, preview: !!out.preview };
   }
@@ -576,8 +593,9 @@ function createOracle({
 
     /**
      * Proposes an action as a card (oracle-actions.actionCard's input). It runs only on the owner's
-     * click (act), or at once under the Night watch for the repairs it allows (never one that
-     * content asked for). → { id, status, title, auto, text? }
+     * click (act), or at once under the Night watch when the owner allowed its permission (#172;
+     * never one that content asked for, never past the loop cap). A card the watch could not take
+     * is counted (oracle.blocked) and left for the owner (oracle.escalated). → { id, status, title, auto, text? }
      */
     async propose(input = {}, { mock } = {}) {
       claim();
@@ -585,9 +603,17 @@ function createOracle({
       const id = crypto.randomUUID();
       post({ id, role: 'oracle', kind: 'action', text: c.title, action: { ...c, id } });
       actions.logAction(dir(), { event: 'proposed', actionId: id, kind: c.kind, params: c.params, requestedBy: c.requestedBy, source: c.source });
-      if (actions.actsAlone(c, nightState())) {
-        const out = await runAction({ ...c, id }, { mock, auto: true });
+      const nw = nightState();
+      const where = night.targetOf(c.params);
+      const decision = actions.nightDecision(c, nw, { allowed: night.readPermissions(dir()).allowed, actionsOnTarget: nw.active ? nightActionsOn(where.target, nw.startedAt) : 0 });
+      if (decision.alone) {
+        const out = await runAction({ ...c, id }, { mock, auto: true, permission: decision.permission });
         return { id, status: out.ok ? 'done' : 'failed', title: c.title, auto: true, text: out.text };
+      }
+      if (decision.reason) {
+        night.logNight(dir(), 'oracle.blocked', { actionId: id, kind: c.kind, ...where, permission: decision.permission, reason: decision.reason });
+        const why = { content: 'content the Oracle read asked for it', permission: 'its permission is not allowed at night', loop: `the item already had ${night.LOOP_CAP} watch actions tonight` }[decision.reason];
+        night.logNight(dir(), 'oracle.escalated', { actionId: id, ...where, reason: decision.reason, recommendation: `${c.title} (waits for your click: ${why})` });
       }
       return { id, status: 'proposed', title: c.title, auto: false };
     },
@@ -624,6 +650,7 @@ function createOracle({
       const out = await restore(a, result.backup.undo);
       post({ role: 'system', kind: 'action-result', actionId: a.id, status: 'undone', ok: true, text: out?.text || 'Undone: the backup was put back.' });
       actions.logAction(dir(), { event: 'undone', actionId: a.id, kind: a.kind, text: out?.text || '' });
+      night.logNight(dir(), 'oracle.undone', { action_id: a.id, kind: a.kind });
       return { messages: history(), state: status() };
     },
 
@@ -632,13 +659,17 @@ function createOracle({
       return post({ role: 'system', kind: 'delegation', to: String(to || ''), question: String(question || ''), text: String(text || ''), costUsd: Number(costUsd) || 0, model, failed: !!error, ref });
     },
 
-    /** The Night watch switch: { on, until (ISO) }. Turning it off stops autonomous actions at once and posts its summary. */
-    setNightWatch({ on, until } = {}) {
+    /** The Night watch switch: { on, until (ISO), by (who) }. Turning it off stops autonomous actions at once and posts its summary. */
+    setNightWatch({ on, until, by } = {}) {
       claim();
       const prev = nightState();
-      const next = actions.setNightWatch(dir(), { on: !!on, until });
-      if (on && !prev.active) post({ role: 'system', kind: 'night-watch', until: next.until, text: `Night watch on: the Oracle repairs what stops the roadmap without asking (retry or skip a failed item, regroup or reorder planned items, refresh issue text, restore a default, restart the dispatch). Gates stay yours.` });
-      if (!on && prev.active) nightSummary(prev.startedAt);
+      const next = actions.setNightWatch(dir(), { on: !!on, until, by });
+      if (on && !prev.active) {
+        const allowed = night.readPermissions(dir()).allowed.map((p) => night.PERMISSIONS.find((x) => x.id === p).label.toLowerCase());
+        post({ role: 'system', kind: 'night-watch', until: next.until, text: `Night watch on: the Oracle does without asking only what you allowed (${allowed.join('; ') || 'nothing: every action waits for your click'}). Gates stay yours.` });
+      }
+      if (on) night.logNight(dir(), 'oracle.watch', { on: true, until: next.until, startedAt: next.startedAt, by: next.by });
+      if (!on && prev.active) nightEnded(prev);
       actions.logAction(dir(), { event: on ? 'night-watch-on' : 'night-watch-off', until: next.until });
       return { nightWatch: next, messages: history(), state: status() };
     },

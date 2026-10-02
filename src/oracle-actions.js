@@ -6,13 +6,16 @@
 // data, starting a real run or a paid call without the click.
 //
 // Night watch (the owner's switch with an end time, <oracle dir>/night-watch.json): while it is on,
-// the repairs that keep the roadmap producing run at once (NIGHT_WATCH_KINDS, `night` true for the
-// params); everything else still waits for the click. An action requested by content the Oracle read
-// (an issue body, a run output, a file: requestedBy 'content') always waits for the click.
+// an action runs at once only when the owner allowed its permission on the Night watch screen
+// (#172, src/night-watch.js permissionOf / readPermissions; NIGHT_WATCH_KINDS, `night` true for the
+// params) and the item had fewer than LOOP_CAP watch actions that night (nightDecision); everything
+// else still waits for the click. An action requested by content the Oracle read (an issue body, a
+// run output, a file: requestedBy 'content') always waits for the click.
 // Every proposal, action and result is appended to <oracle dir>/actions.jsonl.
 
 const fs = require('fs');
 const path = require('path');
+const { DEFAULT_PERMISSIONS, LOOP_CAP, permissionOf } = require('./night-watch');
 
 const REQUESTERS = ['content', 'oracle', 'owner'];
 const ROADMAP_ITEM_ACTIONS = ['retry', 'skip'];
@@ -33,7 +36,7 @@ const ACTIONS = {
   },
   'issue.file': {
     label: 'File an issue',
-    night: () => false,
+    night: () => true,
     check: (p) => need(p, ['projectId', 'title', 'body']),
     describe: (p) => ({ title: `File an issue: ${s(p.title)}`, change: `Creates a new issue "${s(p.title)}"${Array.isArray(p.labels) && p.labels.length ? ` with labels ${p.labels.join(', ')}` : ''}.`, where: `The issue tracker of project ${s(p.projectId)} (gh / glab)`, backup: 'Nothing is replaced: a new issue.' }),
   },
@@ -65,7 +68,12 @@ const ACTIONS = {
       need(p, ['projectId', 'itemId', 'action']);
       if (!ROADMAP_ITEM_ACTIONS.includes(p.action)) throw new Error('action is retry or skip.');
     },
-    describe: (p) => ({ title: `${p.action === 'skip' ? 'Skip' : 'Retry'} roadmap item ${s(p.itemId)}`, change: p.action === 'skip' ? 'The item counts as finished; the roadmap goes on.' : 'The item runs again (a new run).', where: `The roadmap of project ${s(p.projectId)}`, backup: roadmapBackup }),
+    // fresh: a retry from scratch over the kept work of an earlier run (#170)
+    describe: (p) => ({
+      title: `${p.action === 'skip' ? 'Skip' : p.fresh ? 'Retry from scratch' : 'Retry'} roadmap item ${s(p.itemId)}`,
+      change: p.action === 'skip' ? 'The item counts as finished; the roadmap goes on.' : p.fresh ? 'The item runs again from scratch (a new run); the kept work of its earlier run stays in its branch.' : 'The item runs again (a new run).',
+      where: `The roadmap of project ${s(p.projectId)}`, backup: roadmapBackup,
+    }),
   },
   'roadmap.stages': {
     label: 'Edit the roadmap',
@@ -74,7 +82,8 @@ const ACTIONS = {
       need(p, ['projectId']);
       if (!Array.isArray(p.stages)) throw new Error('stages is the whole list of stages (the roadmap tool\'s shape).');
     },
-    describe: (p) => ({ title: 'Edit the roadmap (regroup, reorder, point items at runs)', change: `The roadmap becomes ${p.stages.length} stage(s): ${p.stages.map((x) => `${s(x.name) || '?'} (${(x.items || []).length} items)`).join(', ')}. Validated before it is written.`, where: `The roadmap of project ${s(p.projectId)}`, backup: roadmapBackup }),
+    // append: only adds items after the planned ones (#164), checked against the roadmap when performed
+    describe: (p) => ({ title: p.append ? 'Append items to the roadmap' : 'Edit the roadmap (regroup, reorder, point items at runs)', change: `${p.append ? 'Only new items are added; nothing planned moves. ' : ''}The roadmap becomes ${p.stages.length} stage(s): ${p.stages.map((x) => `${s(x.name) || '?'} (${(x.items || []).length} items)`).join(', ')}. Validated before it is written.`, where: `The roadmap of project ${s(p.projectId)}`, backup: roadmapBackup }),
   },
   'run.resume': {
     label: 'Resume a run from a step',
@@ -102,7 +111,7 @@ const ACTIONS = {
   },
   'workflow.commit': {
     label: 'Commit a workflow or skill change',
-    night: () => false,
+    night: () => true,
     check: (p) => {
       need(p, ['projectId', 'message']);
       if (!Array.isArray(p.files) || !p.files.length || p.files.some((f) => !s(f?.path) || typeof f.content !== 'string')) throw new Error('files is a list of { path, content }.');
@@ -119,7 +128,16 @@ const ACTIONS = {
   },
 };
 const ACTION_KINDS = Object.keys(ACTIONS).sort();
-const NIGHT_WATCH_KINDS = ['dispatch.restart', 'issue.update', 'roadmap.item', 'roadmap.stages', 'skill.restore', 'workflow.restore'];
+const NIGHT_WATCH_KINDS = [
+  'dispatch.restart',
+  'issue.file',
+  'issue.update',
+  'roadmap.item',
+  'roadmap.stages',
+  'skill.restore',
+  'workflow.commit',
+  'workflow.restore',
+];
 
 /**
  * A proposed action as a card: { kind, params, why, requestedBy, source, title, change, where,
@@ -139,17 +157,17 @@ function actionCard({ kind, params, why, requestedBy, source } = {}) {
 
 const nightFile = (dir) => path.join(dir, 'night-watch.json');
 
-/** The Night watch: { on, until, startedAt, active } (active = on and before its end time; never without one). */
+/** The Night watch: { on, until, startedAt, by, active } (active = on and before its end time; never without one; by: who turned it on). */
 function nightWatch(dir, now = Date.now()) {
   let j = {};
   try { j = JSON.parse(fs.readFileSync(nightFile(dir), 'utf8')); } catch { /* off */ }
   const until = j.until || null;
   const on = !!j.on;
-  return { on, until, startedAt: j.startedAt || null, active: on && !!until && Date.parse(until) > now };
+  return { on, until, startedAt: j.startedAt || null, by: j.by || null, active: on && !!until && Date.parse(until) > now };
 }
 
-/** Turns the Night watch on (with a required end time, ISO, within 24 hours) or off. → the new state. */
-function setNightWatch(dir, { on, until } = {}, now = Date.now()) {
+/** Turns the Night watch on (with a required end time, ISO, within 24 hours) or off; `by`: who turned it on. → the new state. */
+function setNightWatch(dir, { on, until, by } = {}, now = Date.now()) {
   if (on) {
     const t = until ? Date.parse(until) : NaN;
     if (!until || Number.isNaN(t)) throw new Error('The Night watch needs an end time.');
@@ -157,15 +175,32 @@ function setNightWatch(dir, { on, until } = {}, now = Date.now()) {
     if (t - now > 24 * 3600e3) throw new Error('The Night watch lasts at most 24 hours.');
   }
   const prev = nightWatch(dir, now);
-  const next = on ? { on: true, until: new Date(Date.parse(until)).toISOString(), startedAt: prev.active ? prev.startedAt : new Date(now).toISOString() } : { on: false, until: null, startedAt: prev.startedAt };
+  const next = on
+    ? { on: true, until: new Date(Date.parse(until)).toISOString(), startedAt: prev.active ? prev.startedAt : new Date(now).toISOString(), by: prev.active ? prev.by : s(by) || 'the owner' }
+    : { on: false, until: null, startedAt: prev.startedAt, by: prev.by };
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(nightFile(dir), JSON.stringify(next, null, 2));
   return nightWatch(dir, now);
 }
 
-/** Whether Night watch runs this card without the owner's click. */
-function actsAlone(card, watch) {
-  return !!watch?.active && card.requestedBy !== 'content' && NIGHT_WATCH_KINDS.includes(card.kind) && ACTIONS[card.kind].night(card.params);
+/**
+ * Whether Night watch runs this card without the owner's click (#172): { alone, reason, permission }.
+ * Under an active watch, reason says why not: 'content' (content asked for it), 'permission' (the
+ * owner did not allow it, or it never runs alone), 'loop' (the item already had LOOP_CAP watch
+ * actions this night). `allowed`: the owner's permissions; `actionsOnTarget`: watch actions on the item so far.
+ */
+function nightDecision(card, watch, { allowed = DEFAULT_PERMISSIONS, actionsOnTarget = 0 } = {}) {
+  const permission = permissionOf(card.kind, card.params);
+  if (!watch?.active) return { alone: false, reason: null, permission };
+  if (card.requestedBy === 'content') return { alone: false, reason: 'content', permission };
+  if (!permission || !NIGHT_WATCH_KINDS.includes(card.kind) || !ACTIONS[card.kind].night(card.params) || !allowed.includes(permission)) return { alone: false, reason: 'permission', permission };
+  if (actionsOnTarget >= LOOP_CAP) return { alone: false, reason: 'loop', permission };
+  return { alone: true, reason: null, permission };
+}
+
+/** Whether Night watch runs this card without the owner's click (nightDecision's `alone`). */
+function actsAlone(card, watch, allowed = DEFAULT_PERMISSIONS) {
+  return nightDecision(card, watch, { allowed }).alone;
 }
 
 /** Appends one entry to <dir>/actions.jsonl (the action log). */
@@ -181,6 +216,7 @@ module.exports = {
   actsAlone,
   logAction,
   NIGHT_WATCH_KINDS,
+  nightDecision,
   nightWatch,
   REQUESTERS,
   setNightWatch,

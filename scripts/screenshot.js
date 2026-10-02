@@ -4,9 +4,13 @@
 //   npx electron scripts/screenshot.js --view <view> [options]      (or: npm run screenshot -- ...)
 //
 //   --view <name>      dashboard, sessions, projects, project, backlog, artifacts, workflows, agents,
-//                      skills, usage, analytics, supervisor, oracle, settings, duo, arena, run-chat, run
+//                      skills, usage, analytics, supervisor, oracle, nightwatch, settings, duo, arena,
+//                      run-chat, run
 //                      (default dashboard; oracle: Projects with the Oracle's drawer open from its
-//                      sidebar button; the Dashboard shows its docked panel)
+//                      sidebar button; the Dashboard shows its docked panel; nightwatch (#172): two
+//                      replayed nights, src/night-watch-demo.js, also the Dashboard's morning
+//                      summary; its turn-on form: --click "#nw-switch", the permissions' Save /
+//                      Cancel: --click ".nw-perm-check[data-perm=skip]")
 //   --oracle <state>   the Oracle's demo state (#171), on any view: empty | conversation | answering |
 //                      error | paused | unavailable | unread | attachment | actions (#123: wake-up,
 //                      cards, delegation, Night watch on; its form: --oracle conversation --click
@@ -66,6 +70,8 @@ const VIEWS = {
   supervisor: {},
   // the Oracle's drawer (#171), opened from its sidebar button on another screen (Projects)
   oracle: {},
+  // the Night watch (#172): two replayed nights
+  nightwatch: {},
   analytics: { tabs: ['usage', 'performance'] },
   backlog: { modes: ['list', 'kanban', 'roadmap', 'epics'] },
   workflows: { tabs: ['runs', 'definitions'] },
@@ -716,6 +722,10 @@ function main() {
     if (['artifacts', 'backlog', 'duo'].includes(args.view)) demoEnrichRun(ws, project.id);
     if (args.view === 'analytics') demoAnalyticsRuns(ws, project.id);
     if (args.view === 'analytics' && args.tab === 'performance') demoPerformanceRuns(ws, project.folder, project.id);
+    // the Night watch's nights (#172): its screen, and the Dashboard's morning summary (an app before it: nothing)
+    if (['dashboard', 'nightwatch'].includes(args.view)) {
+      try { src('night-watch-demo').writeDemoNights(ws, project.id); } catch (e) { if (e.code !== 'MODULE_NOT_FOUND') throw e; }
+    }
     // Run App's setup at a gate is prefilled from the worktree's package.json (#108); the Backlog's
     // Assign dialog shows the language detected from it (#116)
     if (['run', 'backlog'].includes(args.view) && project.folder) {
