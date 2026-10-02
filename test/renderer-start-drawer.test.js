@@ -69,6 +69,10 @@ function loadStartDrawer({ workflows = [], projects = [], settings = {}, runs = 
     closeDrawer: /function closeDrawer\(\) \{[\s\S]*?\n\}/,
     oneRunAtATime: /const oneRunAtATime = [^\n]+;/,
     readInputs: /function readInputs\(\) \{[\s\S]*?\n\}/,
+    // Pasted images (#130): startRun collects them before starting; out of scope here, the real
+    // PasteImage module is stubbed below (sandbox.PasteImage), only the wiring is loaded.
+    pasteFields: /const pasteFields = [^\n]+;/,
+    pastedImages: /async function pastedImages\(\) \{[\s\S]*?\n\}/,
     startRun: /async function startRun\(\{ keepOpen = false \} = \{\}\) \{[\s\S]*?\n\}/,
     selectWorkflow: /function selectWorkflow\(file\) \{[\s\S]*?\n\}/,
     // "When it finishes" (#134): selectWorkflow and startRun both call drawerChain(), the drawer's
@@ -120,6 +124,9 @@ function loadStartDrawer({ workflows = [], projects = [], settings = {}, runs = 
     ChainPicker: { mount: () => ({ refresh: () => {}, value: () => null, set: () => {} }) },
     // A pipeline's stages strip (#135, chain-model.js): out of scope here, only the wiring that calls it.
     ChainModel: { pipelineStagesHtml: () => '' },
+    // Pasted images (#130, paste-image.js): out of scope here; no textarea in this fixture ever has
+    // attachments, so pastedImages() resolves to null (nothing pasted) unless a test sets one up.
+    PasteImage: { settle: async () => {}, attachments: () => [], clear: () => {} },
   };
   sandbox.$ = (sel) => getEl(sel.slice(1));
   sandbox.window = sandbox; // WorkflowInputs (browser build) attaches itself to window
@@ -198,6 +205,10 @@ test('setStartDisabled / startRun: a renderHeader-style call during a pending st
 
   const p = helpers.startRun({});
   assert.equal(sandbox.state.starting, true, 'a start in flight sets state.starting');
+
+  // startRun awaits pastedImages() (#130) before calling api.startRun: let that microtask settle
+  // so resolveStart is assigned before this test calls it.
+  await Promise.resolve();
 
   // a run update arrives while the start is pending and (wrongly, if unguarded) tries to re-enable
   helpers.setStartDisabled(false);
