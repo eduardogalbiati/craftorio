@@ -465,6 +465,42 @@ test('adoptResumed moves the item to the new run and resumes a roadmap it paused
   assert.deepEqual(item.runs, ['run-old', 'run-new']);
 });
 
+// ---- one item shape (#163): every item normalizes to an `issues` list ---------------------
+
+test('normalizeItem turns a single-issue item (no issues list) into one with an issues list, keeping its top fields; leaves other items unchanged', () => {
+  const singleIssue = { id: 'i1', workflow: 'w.yaml', number: 155, url: 'https://x/155', title: '#155', body: '', knownPullRequests: [] };
+  const normalized = roadmaps.normalizeItem(singleIssue);
+  assert.deepEqual(normalized.issues.map((i) => i.number), [155]);
+  assert.equal(normalized.number, 155); // kept for older readers
+  assert.equal(normalized.url, 'https://x/155');
+
+  const alreadyGrouped = { id: 'i2', workflow: 'w.yaml', issues: [{ number: 1, url: 'u', title: 't', body: '', knownPullRequests: [] }] };
+  assert.equal(roadmaps.normalizeItem(alreadyGrouped), alreadyGrouped); // untouched: already has an issues list
+
+  const noIssueAtAll = { id: 'i3', workflow: 'w.yaml' }; // neither issues nor number: nothing to normalize
+  assert.equal(roadmaps.normalizeItem(noIssueAtAll), noIssueAtAll);
+  assert.equal(roadmaps.normalizeItem(null), null);
+});
+
+test('readRoadmap normalizes items stored in the single-issue shape from before #163 (a hand-edited or pre-fix file), so the renderer always finds an issues list', (t) => {
+  const dir = tmp(t);
+  const raw = {
+    state: 'planned', simulated: false, error: null, pausedBy: null, scope: null, updatedAt: null,
+    stages: [
+      { id: 's1', name: '', note: '', items: [
+        { id: 'i1', workflow: 'w.yaml', workflowName: 'w', inputs: {}, mock: false, number: 155, url: 'https://x/155', title: '#155', body: '', knownPullRequests: [], status: 'planned', runId: null, runs: [], error: null },
+        { id: 'i2', workflow: 'w.yaml', workflowName: 'w', inputs: {}, mock: false, number: 156, url: 'https://x/156', title: '#156', body: '', knownPullRequests: [], status: 'planned', runId: null, runs: [], error: null },
+      ] },
+    ],
+  };
+  fs.writeFileSync(path.join(dir, 'proj.roadmap.json'), JSON.stringify(raw));
+  const roadmap = roadmaps.readRoadmap(dir, 'proj');
+  const [item1, item2] = roadmap.stages[0].items;
+  assert.deepEqual(item1.issues.map((i) => i.number), [155]);
+  assert.deepEqual(item2.issues.map((i) => i.number), [156]);
+  assert.equal(item1.number, 155); // the top-level fields stay, for older readers
+});
+
 // ---- mergedPullRequest ------------------------------------------------------------------------
 
 test('mergedPullRequest is true only for a successful, unskipped gh/glab merge action', (t) => {

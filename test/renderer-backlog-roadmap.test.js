@@ -7,8 +7,16 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const vm = require('vm');
+const roadmaps = require('../src/roadmap');
+
+function tmp(t) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'roadmap-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  return dir;
+}
 
 const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'views', 'backlog', 'backlog-roadmap.js'), 'utf8');
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -445,4 +453,192 @@ test('addStage (Product Owner, #140): a new stage\'s item carries the origin it 
   const ctx = makeCtx('proj-z');
   await BacklogRoadmap.addStage(ctx, { roadmap: { stages: [] } }, { issues: [1, 2], workflow: 'w.yaml', inputs: {}, mock: true, group: true, origin: 'ts-1' });
   assert.equal(savedCalls[0].stages[0].items[0].origin, 'ts-1');
+});
+
+// ---- moveIssue / drag and drop (#163) ------------------------------------------------------
+
+test('moveIssue groups a single-issue item\'s issue into another single-issue item, removing the emptied source', () => {
+  const { BacklogRoadmap } = loadRoadmap();
+  const from = { id: 'i1', status: 'planned', workflow: 'w.yaml', number: 1, url: 'u1', title: 'A' };
+  const to = { id: 'i2', status: 'planned', workflow: 'w.yaml', number: 2, url: 'u2', title: 'B' };
+  const stages = [{ id: 's1', items: [from, to] }];
+  assert.equal(BacklogRoadmap.moveIssue(stages, 1, 'i1', 'i2'), true);
+  assert.equal(stages[0].items.length, 1); // the emptied source is gone
+  assert.deepEqual(Array.from(stages[0].items[0].issues, (i) => i.number), [2, 1]);
+  assert.equal(stages[0].items[0].number, 2); // the group's first issue stays on top, for older readers
+});
+
+test('moveIssue groups an issues-list item\'s issue into another issues-list item', () => {
+  const { BacklogRoadmap } = loadRoadmap();
+  const from = { id: 'i1', status: 'planned', workflow: 'w.yaml', issues: [{ number: 1, title: 'A', url: 'u1' }] };
+  const to = { id: 'i2', status: 'planned', workflow: 'w.yaml', issues: [{ number: 2, title: 'B', url: 'u2' }, { number: 3, title: 'C', url: 'u3' }] };
+  const stages = [{ id: 's1', items: [from, to] }];
+  assert.equal(BacklogRoadmap.moveIssue(stages, 1, 'i1', 'i2'), true);
+  assert.equal(stages[0].items.length, 1);
+  assert.deepEqual(Array.from(stages[0].items[0].issues, (i) => i.number), [2, 3, 1]);
+});
+
+test('moveIssue on a mix of shapes moves one issue out of a multi-issue source without emptying it, and into a single-issue target; throws nothing', () => {
+  const { BacklogRoadmap } = loadRoadmap();
+  const from = { id: 'i1', status: 'planned', workflow: 'w.yaml', issues: [{ number: 1, title: 'A', url: 'u1' }, { number: 4, title: 'D', url: 'u4' }] };
+  const to = { id: 'i2', status: 'planned', workflow: 'w.yaml', number: 2, url: 'u2', title: 'B' };
+  const stages = [{ id: 's1', items: [from, to] }];
+  assert.doesNotThrow(() => assert.equal(BacklogRoadmap.moveIssue(stages, 1, 'i1', 'i2'), true));
+  assert.equal(stages[0].items.length, 2); // #4 keeps the source alive
+  const src = stages[0].items.find((x) => x.id === 'i1');
+  const tgt = stages[0].items.find((x) => x.id === 'i2');
+  assert.deepEqual(Array.from(src.issues, (i) => i.number), [4]);
+  assert.deepEqual(Array.from(tgt.issues, (i) => i.number), [2, 1]);
+});
+
+test('moveIssue refuses, without throwing, to drop on the source item itself or on a running (non-editable) item', () => {
+  const { BacklogRoadmap } = loadRoadmap();
+  const planned = { id: 'i1', status: 'planned', workflow: 'w.yaml', number: 1, url: 'u1', title: 'A' };
+  const running = { id: 'i2', status: 'running', workflow: 'w.yaml', number: 2, url: 'u2', title: 'B' };
+  const stages = [{ id: 's1', items: [planned, running] }];
+  assert.equal(BacklogRoadmap.moveIssue(stages, 1, 'i1', 'i1'), false);
+  assert.equal(BacklogRoadmap.moveIssue(stages, 1, 'i1', 'i2'), false);
+  assert.equal(stages[0].items.length, 2); // nothing changed
+});
+
+// A drop target/source element: dataset.item plus a classList (add/remove/contains) the handlers
+// mark; `closest` resolves the same selectors the real markup would, through the given stage.
+function dragItemEl(itemId, stageEl) {
+  const classes = new Set();
+  const el = {
+    dataset: { item: itemId },
+    classList: { add: (c) => classes.add(c), remove: (...cs) => cs.forEach((c) => classes.delete(c)), contains: (c) => classes.has(c) },
+  };
+  el.closest = (sel) => (sel === '[data-item]' ? el : sel === '[data-drop-stage]' ? stageEl : null);
+  return el;
+}
+function dragStageEl(idx) {
+  const el = { dataset: { dropStage: String(idx) } };
+  el.closest = (sel) => (sel === '[data-drop-stage]' ? el : null);
+  return el;
+}
+function chipTarget(issueNumber, fromId) {
+  const chip = { dataset: { dragIssue: String(issueNumber), from: fromId } };
+  chip.closest = (sel) => (sel === '[data-drag-issue]' ? chip : null);
+  return chip;
+}
+function startDrag(BacklogRoadmap, issueNumber, fromId) {
+  BacklogRoadmap.onDragStart({ target: chipTarget(issueNumber, fromId), stopPropagation: () => {}, dataTransfer: { setData: () => {} } });
+}
+
+test('dragstart on an issue chip, then dragover on its own item: no mark (no rm-drop-denied class)', () => {
+  const { BacklogRoadmap } = loadRoadmap();
+  const itemA = { id: 'itA', status: 'planned', workflow: 'w.yaml', number: 1, url: 'u1', title: 'A' };
+  const itemB = { id: 'itB', status: 'planned', workflow: 'w.yaml', number: 2, url: 'u2', title: 'B' };
+  const data = { roadmap: { stages: [{ id: 'st1', items: [itemA, itemB] }] }, issues: [] };
+  const stageEl = dragStageEl(0);
+  const itemAEl = dragItemEl('itA', stageEl);
+
+  startDrag(BacklogRoadmap, 1, 'itA');
+  let prevented = false;
+  BacklogRoadmap.onDragOver({ target: itemAEl, preventDefault: () => { prevented = true; }, dataTransfer: {} }, data);
+  assert.equal(itemAEl.classList.contains('rm-drop-denied'), false);
+  assert.equal(itemAEl.classList.contains('rm-drop-target'), false);
+  assert.equal(prevented, false);
+});
+
+test('dragover on another item, then back on the source item: the source item gets rm-drop-denied and data-drop-why, and preventDefault is not called', () => {
+  const { BacklogRoadmap } = loadRoadmap();
+  const itemA = { id: 'itA', status: 'planned', workflow: 'w.yaml', number: 1, url: 'u1', title: 'A' };
+  const itemB = { id: 'itB', status: 'planned', workflow: 'w.yaml', number: 2, url: 'u2', title: 'B' };
+  const data = { roadmap: { stages: [{ id: 'st1', items: [itemA, itemB] }] }, issues: [] };
+  const stageEl = dragStageEl(0);
+  const itemAEl = dragItemEl('itA', stageEl);
+  const itemBEl = dragItemEl('itB', stageEl);
+
+  startDrag(BacklogRoadmap, 1, 'itA');
+  let preventedOnB = false;
+  BacklogRoadmap.onDragOver({ target: itemBEl, preventDefault: () => { preventedOnB = true; }, dataTransfer: {} }, data);
+  assert.equal(itemBEl.classList.contains('rm-drop-target'), true);
+  assert.equal(preventedOnB, true);
+
+  let preventedOnA = false;
+  BacklogRoadmap.onDragOver({ target: itemAEl, preventDefault: () => { preventedOnA = true; }, dataTransfer: {} }, data);
+  assert.equal(itemAEl.classList.contains('rm-drop-denied'), true);
+  assert.equal(itemAEl.dataset.dropWhy, '#1 is already in this item.');
+  assert.equal(preventedOnA, false);
+  assert.equal(itemBEl.classList.contains('rm-drop-target'), false); // the previous mark is cleared
+});
+
+test('onDrop with the target equal to d.from calls ctx.setError with the "already in this item" reason and does not save', async () => {
+  const { BacklogRoadmap, savedCalls } = loadRoadmap();
+  const itemA = { id: 'itA', status: 'planned', workflow: 'w.yaml', number: 1, url: 'u1', title: 'A' };
+  const itemB = { id: 'itB', status: 'planned', workflow: 'w.yaml', number: 2, url: 'u2', title: 'B' };
+  const data = { roadmap: { stages: [{ id: 'st1', items: [itemA, itemB] }] }, issues: [] };
+  const stageEl = dragStageEl(0);
+  const itemAEl = dragItemEl('itA', stageEl);
+  const ctx = makeCtx();
+
+  startDrag(BacklogRoadmap, 1, 'itA');
+  await BacklogRoadmap.onDrop({ target: itemAEl, preventDefault: () => {} }, ctx, data);
+  assert.equal(savedCalls.length, 0);
+  assert.deepEqual(ctx._calls.setError, ['#1 is already in this item.']);
+  assert.equal(ctx._calls.render, 1);
+});
+
+test('dragend clears the marks and the dragging state, so a new drag starts with the source unmarked again', () => {
+  const { BacklogRoadmap } = loadRoadmap();
+  const itemA = { id: 'itA', status: 'planned', workflow: 'w.yaml', number: 1, url: 'u1', title: 'A' };
+  const itemB = { id: 'itB', status: 'planned', workflow: 'w.yaml', number: 2, url: 'u2', title: 'B' };
+  const data = { roadmap: { stages: [{ id: 'st1', items: [itemA, itemB] }] }, issues: [] };
+  const stageEl = dragStageEl(0);
+  const itemAEl = dragItemEl('itA', stageEl);
+  const itemBEl = dragItemEl('itB', stageEl);
+
+  startDrag(BacklogRoadmap, 1, 'itA');
+  BacklogRoadmap.onDragOver({ target: itemBEl, preventDefault: () => {}, dataTransfer: {} }, data);
+  BacklogRoadmap.onDragOver({ target: itemAEl, preventDefault: () => {}, dataTransfer: {} }, data);
+  assert.equal(itemAEl.classList.contains('rm-drop-denied'), true);
+
+  BacklogRoadmap.onDragEnd();
+  assert.equal(itemAEl.classList.contains('rm-drop-denied'), false);
+  assert.equal(itemAEl.dataset.dropWhy, undefined);
+
+  startDrag(BacklogRoadmap, 1, 'itA');
+  let prevented = false;
+  BacklogRoadmap.onDragOver({ target: itemAEl, preventDefault: () => { prevented = true; }, dataTransfer: {} }, data);
+  assert.equal(itemAEl.classList.contains('rm-drop-denied'), false); // unmarked again: dragging.left reset
+  assert.equal(prevented, false);
+});
+
+test('dragover on a running (non-editable) item marks it rm-drop-denied, naming the status in data-drop-why', () => {
+  const { BacklogRoadmap } = loadRoadmap();
+  const itemA = { id: 'itA', status: 'planned', workflow: 'w.yaml', number: 1, url: 'u1', title: 'A' };
+  const itemB = { id: 'itB', status: 'running', workflow: 'w.yaml', number: 2, url: 'u2', title: 'B' };
+  const data = { roadmap: { stages: [{ id: 'st1', items: [itemA, itemB] }] }, issues: [] };
+  const stageEl = dragStageEl(0);
+  const itemBEl = dragItemEl('itB', stageEl);
+
+  startDrag(BacklogRoadmap, 1, 'itA');
+  let prevented = false;
+  BacklogRoadmap.onDragOver({ target: itemBEl, preventDefault: () => { prevented = true; }, dataTransfer: {} }, data);
+  assert.equal(itemBEl.classList.contains('rm-drop-denied'), true);
+  assert.match(itemBEl.dataset.dropWhy, /only planned or failed items take issues/);
+  assert.equal(prevented, false);
+});
+
+test('a Product Owner proposal, then two of its items grouped by dropping one chip on the other, saves one item with both issues', async (t) => {
+  const dir = tmp(t);
+  const { roadmap } = roadmaps.propose(dir, 'proj', { stages: [
+    { name: 'Stage A', items: [{ workflow: 'software-development.yaml', number: 155 }, { workflow: 'software-development.yaml', number: 156 }] },
+  ] });
+  const [item155, item156] = roadmap.stages[0].items;
+
+  const { BacklogRoadmap, savedCalls } = loadRoadmap();
+  const data = { roadmap, issues: [] };
+  const ctx = makeCtx();
+  const stageEl = dragStageEl(0);
+  const targetEl = dragItemEl(item155.id, stageEl);
+
+  startDrag(BacklogRoadmap, 156, item156.id);
+  await BacklogRoadmap.onDrop({ target: targetEl, preventDefault: () => {} }, ctx, data);
+
+  assert.equal(savedCalls.length, 1);
+  assert.equal(savedCalls[0].stages[0].items.length, 1);
+  assert.deepEqual(Array.from(savedCalls[0].stages[0].items[0].issues, (i) => i.number).sort(), [155, 156]);
 });
