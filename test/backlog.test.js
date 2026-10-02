@@ -579,6 +579,11 @@ test('filedToQueue: null unless the run is the issue tracker, it succeeded, the 
   assert.equal(backlog.filedToQueue({}), null);
 });
 
+test('filedToQueue: a mode "auto" run (no review step at all) never queues: queueing stays an explicit choice at the review gate (#133)', () => {
+  const { review, ...autoSteps } = filedSteps([71]);
+  assert.equal(backlog.filedToQueue({ workflow: 'issue-tracker', status: 'success', inputs: {}, steps: autoSteps }), null);
+});
+
 // ---- save a document to its issue (#103) --------------------------------------------------------
 test('issueSaveBody: replace keeps the original at the end in a collapsed <details> block', () => {
   const body = backlog.issueSaveBody({ mode: 'replace', document: '# Enriched\n\nBody.', original: 'Original text.' });

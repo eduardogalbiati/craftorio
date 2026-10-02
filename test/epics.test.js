@@ -189,6 +189,34 @@ test('applyEpic: an unknown epic id (stale cache) is refused before anything is 
 
 // ---- applyEpic: GitLab, creating and linking for real (label-based, no group epics yet) --------------
 
+// ---- filedToEpic: where an issue-tracker run's created issues join (#81, #133) -----------------
+
+function filedSteps({ choice, existingReview = true } = {}) {
+  const steps = {
+    analyze: { output: { epic: { id: '#5', title: 'Run safety', match: 'clear', reason: 'same theme' } } },
+    file: { output: { filed: [{ action: 'created', number: 10, url: 'u', title: 't' }] } },
+  };
+  if (existingReview) steps.review = { output: { choice } };
+  return steps;
+}
+
+test('filedToEpic: with no review output (mode: auto) but a file output, the run is treated as "create"', () => {
+  const plan = epics.filedToEpic({ workflow: 'issue-tracker', status: 'success', steps: filedSteps({ existingReview: false }) });
+  assert.deepEqual(plan, { epic: '#5', numbers: [10] });
+});
+
+test('filedToEpic: a review choice of "add_to" (no new issue created in the epic\'s own theme) gives null', () => {
+  const plan = epics.filedToEpic({ workflow: 'issue-tracker', status: 'success', steps: filedSteps({ choice: 'add_to' }) });
+  assert.equal(plan, null);
+});
+
+test('filedToEpic: create and create_assign both place the created issues; steps undefined gives null, not a throw', () => {
+  assert.deepEqual(epics.filedToEpic({ workflow: 'issue-tracker', status: 'success', steps: filedSteps({ choice: 'create' }) }), { epic: '#5', numbers: [10] });
+  assert.deepEqual(epics.filedToEpic({ workflow: 'issue-tracker', status: 'success', steps: filedSteps({ choice: 'create_assign' }) }), { epic: '#5', numbers: [10] });
+  assert.equal(epics.filedToEpic({ workflow: 'issue-tracker', status: 'success' }), null);
+  assert.equal(epics.filedToEpic({}), null);
+});
+
 test('applyEpic: creates a GitLab label-based epic and links members with the scoped label', async (t) => {
   const dir = tmp(t);
   const calls = [];

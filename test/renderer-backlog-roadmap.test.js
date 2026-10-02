@@ -19,6 +19,7 @@ function tmp(t) {
 }
 
 const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'views', 'backlog', 'backlog-roadmap.js'), 'utf8');
+const workflowInputsSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'workflow-inputs.js'), 'utf8');
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
 function loadRoadmap({ listWorkflows, confirmDialog, keptWorkDialog, roadmapItem, querySelector, devMode } = {}) {
@@ -51,6 +52,7 @@ function loadRoadmap({ listWorkflows, confirmDialog, keptWorkDialog, roadmapItem
   };
   sandbox.window = sandbox;
   vm.createContext(sandbox);
+  vm.runInContext(workflowInputsSrc, sandbox); // the real WorkflowInputs module (#116), not reimplemented
   vm.runInContext(src, sandbox);
   return { BacklogRoadmap: sandbox.window.BacklogRoadmap, savedCalls, startCalls, roadmapItemCalls };
 }
@@ -226,7 +228,7 @@ test('html: a running item shows the mode as a read-only badge, not draggable; o
   assert.equal(savedCalls.length, 0);
 });
 
-test('onClick [data-rm-edit] then html: an enum input renders a select, a boolean/flag renders a checkbox, others render text; task/issue/path/mode inputs stay out of the form', async () => {
+test('onClick [data-rm-edit] then html: an enum input renders pills with human labels, a boolean renders a switch, others render text; task/issue/path/mode inputs stay out of the form', async () => {
   const workflow = { file: 'software-development.yaml', inputs: {
     mode: { enum: ['auto', 'validated'] },
     language: { enum: ['js', 'python'], description: 'Programming language' },
@@ -247,9 +249,13 @@ test('onClick [data-rm-edit] then html: an enum input renders a select, a boolea
   const ctx = makeCtx();
   await BacklogRoadmap.onClick({ target: editButtonTarget('it1', 0) }, ctx, data);
   const html = BacklogRoadmap.html(data, () => {});
-  assert.match(html, /<select id="rm-f-it1-language" data-rm-field="language"[^>]*><option value="js">js<\/option><option value="python" selected>python<\/option><\/select>/);
+  // language (a short enum) renders as pills (#116), with a human label, not the raw key
+  assert.match(html, /<label id="rm-f-it1-language-label"[^>]*>Language</);
+  assert.match(html, /data-wi-pill="python" class="active"[^>]*title="Python">Python<\/button>/);
+  assert.match(html, /data-rm-field="language"[^>]*value="python"/);
   assert.match(html, /Programming language/);
-  assert.match(html, /<input type="checkbox" data-rm-field="validate_every_round" data-flag="bool"[^/]*checked/);
+  // validate_every_round (a boolean) renders as a switch
+  assert.match(html, /<input type="checkbox" role="switch"[^>]*data-rm-field="validate_every_round" data-wi-flag="bool"[^/]*checked/);
   assert.doesNotMatch(html, /data-rm-field="task"/);
   assert.doesNotMatch(html, /data-rm-field="project_path"/);
   assert.doesNotMatch(html, /data-rm-field="mode"/);
@@ -269,8 +275,8 @@ test('onClick [data-rm-save]: writes the form values (empty removes the key, a f
   const fields = [
     { dataset: { rmField: 'language' }, type: 'select-one', value: 'python' },
     { dataset: { rmField: 'note_field' }, type: 'text', value: '' },
-    { dataset: { rmField: 'feature_flag', flag: 'text' }, type: 'checkbox', checked: true },
-    { dataset: { rmField: 'validate_every_round', flag: 'bool' }, type: 'checkbox', checked: false },
+    { dataset: { rmField: 'feature_flag', wiFlag: 'text' }, type: 'checkbox', checked: true },
+    { dataset: { rmField: 'validate_every_round', wiFlag: 'bool' }, type: 'checkbox', checked: false },
   ];
   const form = fakeFormEl(fields, { newName: 'extra_key', newValue: 'ev' });
   const handled = await BacklogRoadmap.onClick({ target: saveButtonTarget('it1', 0, form) }, ctx, data);

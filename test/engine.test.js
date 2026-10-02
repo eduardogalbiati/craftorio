@@ -308,6 +308,17 @@ test('a transition action runs a skill script through skill_dir()', async (t) =>
   assert.equal(actions[0].command, `node "${script}/publish.js" --cleanup`);
 });
 
+// ---- resolveInputs: a `type: boolean` input accepts a real boolean or its saved text (#133/#116) ---
+
+test('resolveInputs (type: boolean): a real boolean, and the text forms a form/CLI/older saved input sends, all coerce; an unreadable one throws', () => {
+  const file = path.join(__dirname, 'fixtures', 'conditional-action.yaml');
+  const inputsOf = (cleanup) => new WorkflowRun({ file, inputs: { cleanup }, mock: true, runsDir: os.tmpdir(), skillsDirs: [] }).inputs.cleanup;
+  for (const [given, expected] of [[true, true], [false, false], ['true', true], ['false', false], ['yes', true], ['no', false], ['', false]]) {
+    assert.equal(inputsOf(given), expected, JSON.stringify(given));
+  }
+  assert.throws(() => inputsOf('maybe'), /Input "cleanup" must be true or false/);
+});
+
 test('software-development removes the PR screenshots on merge or close, only when some were posted', () => {
   const wf = loadWorkflow(path.join(root, 'workflows', 'software-development.yaml'));
   const action = (stepId, when) => wf.steps.find((s) => s.id === stepId).transitions.find((x) => x.when === when).action;

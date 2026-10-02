@@ -12,6 +12,7 @@ const vm = require('vm');
 
 const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'app.js'), 'utf8');
 const drawerSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'start-drawer.js'), 'utf8');
+const workflowInputsSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'workflow-inputs.js'), 'utf8');
 const style = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'style.css'), 'utf8');
 
 function makeEl() {
@@ -44,13 +45,20 @@ function makeEl() {
       if (!this._btn) this._btn = { onclick: null };
       return this._btn;
     },
+    // WorkflowInputs.read(root) reads the current values straight from this fixture (set as
+    // [key, value] pairs), the way the real DOM would expose each control's own value.
+    querySelectorAll(sel) {
+      if (sel !== '[data-wi-input]') return [];
+      return this._fields.map(([k, v]) => ({ dataset: { wiInput: k }, type: 'text', value: v }));
+    },
   };
   return el;
 }
 
 // Builds a sandbox with the Start drawer's functions loaded from the real source (never
 // reimplemented), a fake DOM (one element per id used by these functions) and stubs for api and
-// the few app.js functions that are out of scope here (selectRun, renderHeader elsewhere).
+// the few app.js functions that are out of scope here (selectRun, renderHeader, applyProjectHints
+// elsewhere; WorkflowInputs itself is the real module, #116, not reimplemented either).
 function loadStartDrawer({ workflows = [], projects = [], settings = {}, runs = new Map(), api = {} } = {}) {
   const defs = {
     LS_KEY: /const LS_KEY = [^\n]+;/,
@@ -95,11 +103,12 @@ function loadStartDrawer({ workflows = [], projects = [], settings = {}, runs = 
     renderHeader: () => { calls.renderHeader += 1; },
     errMsg: (e) => String(e?.message || e),
     liveRuns: () => [...runs.values()].filter((v) => v.run?.status === 'running'),
+    applyProjectHints: () => {}, // the project's detected language/branches (#116): out of scope here
   };
   sandbox.$ = (sel) => getEl(sel.slice(1));
-  sandbox.FormData = function FormData(form) { this._entries = form?._fields || []; };
-  sandbox.FormData.prototype.forEach = function forEach(cb) { this._entries.forEach(([k, v]) => cb(v, k)); };
+  sandbox.window = sandbox; // WorkflowInputs (browser build) attaches itself to window
   vm.createContext(sandbox);
+  vm.runInContext(workflowInputsSrc, sandbox);
   vm.runInContext(Object.values(code).join('\n') + '\nthis.helpers = { startRun, selectWorkflow, setStartDisabled, closeDrawer, mainField, oneRunAtATime };', sandbox);
   return { sandbox, helpers: sandbox.helpers, getEl, storage, calls };
 }
@@ -146,7 +155,9 @@ test('selectWorkflow: the main field ignores a previous save (even one from befo
   assert.match(inputsHtml, /id="in-task"/);
   assert.doesNotMatch(inputsHtml, /OLD TASK TEXT/, 'the main field must not be prefilled from localStorage');
   assert.match(inputsHtml, /placeholder="Describe what needs to be done…"/);
-  assert.match(inputsHtml, /<option selected>validated<\/option>/, 'a non-main field (mode) still uses the saved value');
+  // mode (a short enum) renders as pills (#116); the saved value "validated" is the one marked active
+  assert.match(inputsHtml, /data-wi-input="mode"[^>]*value="validated"/, 'a non-main field (mode) still uses the saved value');
+  assert.match(inputsHtml, /data-wi-pill="validated" class="active"[^>]*>Validated<\/button>/);
 });
 
 test('openDrawer: an explicit inputs prefill is applied after the workflow is selected, so it can still set the main field', () => {

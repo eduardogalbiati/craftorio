@@ -29,6 +29,22 @@ test('status(): a run the supervisor sent back after a failed merge shows a "sen
   assert.match(status, /sent back after a failed merge<\/span>` : ''/);
 });
 
+// ---- renderAssignInputs (#116): human labels/pills/switches via WorkflowInputs, not raw selects ---
+
+test('renderAssignInputs: the workflow\'s inputs are drawn by WorkflowInputs (human labels, pills, switches), prefilled from the project\'s hints without overriding a remembered value', () => {
+  const fn = /function renderAssignInputs\(\)[\s\S]*?\n  \}/.exec(src)[0];
+  assert.match(fn, /const defs = Object\.fromEntries\(Object\.entries\(wf\?\.inputs \|\| \{\}\)\.filter\(\(\[k, def\]\) => !skipInput\(k, def \|\| \{\}\)\)\);/);
+  assert.match(fn, /box\.innerHTML = WorkflowInputs\.formHtml\(defs, \{ values: saved, id: \(k\) => `ai-\$\{k\}`, attrs: \(k\) => `data-input="\$\{esc\(k\)\}"` \}\);/);
+  assert.match(fn, /WorkflowInputs\.applyHints\(box, defs, bl\.projectId, \{ keep: Object\.keys\(saved\) \}\);/);
+  // the "Settings" group is hidden when the workflow has no input left to show
+  assert.match(fn, /\$b\('#assign-settings'\)\.classList\.toggle\('hidden', !Object\.keys\(defs\)\.length\);/);
+});
+
+test('renderAssignInputs: the workflow\'s "About" details only appear when its description is more than the leading one-line summary', () => {
+  const fn = /function renderAssignInputs\(\)[\s\S]*?\n  \}/.exec(src)[0];
+  assert.match(fn, /\$b\('#assign-wf-about'\)\.classList\.toggle\('hidden', !about \|\| firstSentence\(about\) === about\.trim\(\)\);/);
+});
+
 test('submitAssign: assigning an issue the roadmap already plans asks first, and takes it out of the roadmap', () => {
   const fn = /async function submitAssign\(e\)[\s\S]*?\n  \}/.exec(src)[0];
   assert.match(fn, /const inRoadmap = planned\(numbers\);/);
@@ -60,9 +76,8 @@ test('openAssign: a prefill from the Product Owner picks its workflow, groups it
   assert.match(fn, /sel\.value = \[prefill\?\.workflow, load\(WORKFLOW_KEY\), 'software-development\.yaml', files\[0\]\]\.find\(\(f\) => f && files\.includes\(f\)\);/);
   // a multi-issue group is assigned as one run, not as separate runs
   assert.match(fn, /document\.querySelector\(`input\[name="assign-group"\]\[value="\$\{prefill\?\.group \? 'group' : 'separate'\}"\]`\)\.checked = true;/);
-  // each proposed input value is written into its field
-  assert.match(fn, /for \(const \[k, v\] of Object\.entries\(prefill\?\.inputs \|\| \{\}\)\) \{/);
-  assert.match(fn, /if \(el && v != null\) el\.value = String\(v\);/);
+  // each proposed input value is written into its field, through the shared WorkflowInputs renderer
+  assert.match(fn, /for \(const \[k, v\] of Object\.entries\(prefill\?\.inputs \|\| \{\}\)\) WorkflowInputs\.set\(\$b\('#assign-inputs'\), k, v\);/);
 });
 
 test('assignGroup: a proposed group selects its To do issues, clears filters that would hide one, and opens Assign prefilled as one run', () => {
