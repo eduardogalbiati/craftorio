@@ -128,6 +128,13 @@ tpl.addFilter('filed_issues', (filed, analysis) => {
   }));
 });
 
+// The developer's declared gaps (`left_out`, #98) that are really theirs (#173): an issue's Tests
+// task belongs to the test writer and its Measure task to the owner's real runs, so an entry led by
+// "Tests"/"Measure" (bold or not, then `:`, `-`, `(` or nothing) never sends the run back to develop
+// nor to the requirements_left_out gate; it stays in the develop output of the run's summary.
+const NOT_DEVELOPER_TASK = /^[\s>*_#[\]x-]*(?:tests?|measures?|measurements?)\b[*_\s]*(?::|-|–|—|\(|$)/i;
+tpl.addFilter('developer_gaps', (gaps) => (Array.isArray(gaps) ? gaps : []).filter((g) => !NOT_DEVELOPER_TASK.test(String(g?.requirement ?? ''))));
+
 const render = (s, scope) => (s == null ? '' : tpl.renderString(String(s), scope));
 const evalExpr = (expr, scope) => render(`{% if ${expr} %}1{% else %}0{% endif %}`, scope).trim() === '1';
 

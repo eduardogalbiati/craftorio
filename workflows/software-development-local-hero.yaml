@@ -12,7 +12,8 @@
 #   the screenshots (ui-conventions skill); blocking `ui_findings` go back to develop once.
 #   Declared gaps (`left_out`: requirements of the task the developer did not implement): never
 #   reviewed. The first time, develop ─► develop with the list (no reviewer call); still there
-#   after that ─► requirements_left_out (human gate: continue without them / stop).
+#   after that ─► requirements_left_out (human gate: continue without them / stop). An entry led
+#   by "Tests" or "Measure" (the test writer's and the owner's tasks, #173) triggers neither.
 #
 # The software-development pipeline without GitHub/GitLab and without a merge approval: no
 # push, no PR/MR, no CI, no preview, no deploy. Each run works in its own git worktree, started
@@ -380,9 +381,9 @@ steps:
       A whole issue you could not do goes in `issues` (`done: false`), not in `left_out`.{% endif %}
       {% if vars.accepted_gaps %}
       The owner chose to continue without these requirements; do not list them again: {{ vars.accepted_gaps }}
-      {% elif previous_step == 'develop' and vars.gaps_returned == 'yes' and steps.develop.output.left_out %}
+      {% elif previous_step == 'develop' and vars.gaps_returned == 'yes' and steps.develop.output.left_out | developer_gaps | length %}
       Your previous answer left these requirements out, so the review was not called:
-      {{ steps.develop.output.left_out | to_yaml }}
+      {{ steps.develop.output.left_out | developer_gaps | to_yaml }}
       Finish them on the same branch with a new commit. Keep in `left_out` only those that are
       impossible in this run, each with the reason: the owner then decides whether the run goes on
       without them.
@@ -440,11 +441,12 @@ steps:
     transitions:
       # declared gaps (#98): no review is spent on work the developer says is missing. The first
       # time, back to the developer with the list (no reviewer call); any gap after that (also a new
-      # one after the owner continued, or on a review round) goes to the owner at requirements_left_out
-      - when: "(output.left_out or []) | length and vars.gaps_returned != 'yes'"
+      # one after the owner continued, or on a review round) goes to the owner at requirements_left_out.
+      # Tests and Measure tasks are never the developer's (#173): developer_gaps drops them
+      - when: "output.left_out | developer_gaps | length and vars.gaps_returned != 'yes'"
         goto: develop
         set: { gaps_returned: "yes" }
-      - when: "(output.left_out or []) | length"
+      - when: "output.left_out | developer_gaps | length"
         goto: requirements_left_out
       # an issue of the group could not be done: the owner decides (once) whether the run goes on without it
       - when: "output.committed and inputs.issues | length > 1 and not steps.issue_not_done.output and (output.issues or []) | rejectattr('done') | list | length"
@@ -527,7 +529,7 @@ steps:
     type: human_approval
     message: |
       The developer left these requirements of the task out, even after being sent back once to finish them:
-      {% for g in steps.develop.output.left_out %}
+      {% for g in steps.develop.output.left_out | developer_gaps %}
       - {{ g.requirement }}: {{ g.reason }}{% endfor %}
       The rest is on branch `{{ steps.develop.output.branch }}`; the code review has not run yet.
     choices:
@@ -538,7 +540,7 @@ steps:
       - when: "choice == 'continue' and not (steps.develop.output.committed or steps.develop.output.no_change)"
         goto: develop
         # the separator goes before each entry: the engine trims a set: value, so a trailing one is lost
-        set: &accepted_gaps { accepted_gaps: "{{ vars.accepted_gaps }}{% for g in steps.develop.output.left_out %}{% if vars.accepted_gaps or not loop.first %} {% endif %}{{ g.requirement }};{% endfor %}" }
+        set: &accepted_gaps { accepted_gaps: "{{ vars.accepted_gaps }}{% for g in steps.develop.output.left_out | developer_gaps %}{% if vars.accepted_gaps or not loop.first %} {% endif %}{{ g.requirement }};{% endfor %}" }
       - when: "choice == 'continue' and inputs.issues | length > 1 and not steps.issue_not_done.output and (steps.develop.output.issues or []) | rejectattr('done') | list | length"
         goto: issue_not_done
         set: *accepted_gaps
@@ -606,7 +608,8 @@ steps:
       Tests are not part of this review: the test writer writes and runs them in the next step,
       after your approval, and the developer never edits test files. A missing test, coverage or
       screenshot, even when the task asks for it, is never a finding here: list it in
-      `for_test_writer` instead; it does not change the verdict.
+      `for_test_writer` instead; it does not change the verdict. A measurement that needs real runs
+      or the owner (an issue's Measure task) is the owner's, never a finding either.
     output_schema:
       type: object
       required: [verdict, findings]
@@ -942,7 +945,9 @@ steps:
       {% endif %}
       The run's screenshots are indexed in `{{ run_dir }}/evidence/manifest.json`: use its final set
       (images with `final: true`; a `modified` image's `pair` is its original), not older rounds.
-      Verify the change following the claim-verification skill. Stay read-only: the
+      Verify the change following the claim-verification skill. The issue's Tests task is checked
+      at the test step and a measurement that needs real runs or the owner (its Measure task) is the
+      owner's: neither is a claim to verify nor a reason for not_verified. Stay read-only: the
       working tree must not change (no files, stash, worktree or checkout).
       {% if inputs.issues | length > 1 %}
       This run implements several issues: verify each one the developer did (their report:

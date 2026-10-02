@@ -223,7 +223,10 @@ same features for users; this is the implementer's summary.
   `requirements_left_out` gate (continue without them / stop as failed), so a gap never reaches the
   review. Continue appends to `vars.accepted_gaps` (shown to the developer and the reviewer, not
   blocking) and goes on as `issue_not_done` would. Mock: `mockSequences.left_out: [1, 0]` = gaps declared per develop visit
-  (default none).
+  (default none). Only the developer's own gaps count (#173): the `developer_gaps` filter drops
+  entries led by "Tests" or "Measure" (the test writer's and the owner's tasks), so they trigger
+  neither the return nor the gate and stay in the develop output of `summary.json`. Mock:
+  `mockSequences.left_out_not_mine: true` adds one Tests and one Measure entry on every visit.
 - software-development (0.17.0), merge conflicts (#69): `approve_merge` has `check` (pr_mergeable,
   `on_fail: merge_failed`, `recover: [resolve_conflict]`) and its approved transition `precheck: true`
   with the same routes. `resolve_conflict` (developer, `edits_tests: true`, merges `origin/<base>`,

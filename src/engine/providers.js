@@ -539,6 +539,7 @@ function mockValue(s, key, h) {
     }
     // sequences.preexisting_failures: true: the test writer reports a test that also fails on the base
     // sequences.left_out: [1, 0]: the developer declares one gap on its 1st visit, none after (default none)
+    // sequences.left_out_not_mine: true: the developer also declares the issue's Tests and Measure tasks (#173)
     // sequences.ui_findings: true: the evidence step's visual review returns a (blocking) UI finding
     case 'array': {
       if (key === 'preexisting_failures' && !h.sequences?.preexisting_failures) return [];
@@ -548,7 +549,11 @@ function mockValue(s, key, h) {
       if (key === 'left_out') {
         const seq = h.sequences?.left_out;
         const count = Array.isArray(seq) && seq.length ? +seq[Math.min(h.visit - 1, seq.length - 1)] || 0 : 0;
-        return Array.from({ length: count }, () => mockValue(s.items || { type: 'string' }, key, h));
+        const gaps = Array.from({ length: count }, () => mockValue(s.items || { type: 'string' }, key, h));
+        if (!h.sequences?.left_out_not_mine) return gaps;
+        return [...gaps,
+          { requirement: '**Tests**: unit tests of the change (simulated)', reason: 'Only the test writer writes tests' },
+          { requirement: 'Measure: real before/after runs (simulated)', reason: 'Real runs are refused in this run' }];
       }
       return [mockValue(s.items || { type: 'string' }, key, h)];
     }
