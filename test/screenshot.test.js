@@ -46,6 +46,13 @@ test('parseArgs names the file after the scenario and checks options against the
   assert.throws(() => parseArgs(['--real']), /Unknown argument: --real/);
 });
 
+// #162: --keep-awake off | idle | active | error, a demo state of the Keep awake switch.
+test('--keep-awake takes off, idle, active or error; anything else is refused', () => {
+  assert.equal(parseArgs(['--view', 'workflows']).keepAwake, null);
+  for (const v of ['off', 'idle', 'active', 'error']) assert.equal(parseArgs(['--view', 'workflows', '--keep-awake', v]).keepAwake, v);
+  assert.throws(() => parseArgs(['--view', 'workflows', '--keep-awake', 'nope']), /--keep-awake takes off \| idle \| active \| error/);
+});
+
 test('--side takes original or modified, and is inferred from --ref (original) or --caption (modified) when not given', () => {
   assert.equal(parseArgs(['--view', 'dashboard']).side, null);
   assert.equal(parseArgs(['--view', 'dashboard', '--side', 'original']).side, 'original');

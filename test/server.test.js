@@ -260,3 +260,18 @@ test('a channel manifest declaring the same channel twice is refused', () => {
   assert.throws(() => declarations([{ channel: 'x:y', method: 'a' }, { channel: 'x:y', method: 'b' }]), /x:y is declared twice/);
   assert.throws(() => declarations([{ channel: 'a:b', method: 'same' }, { channel: 'c:d', method: 'same' }]), /method same is declared twice/);
 });
+
+// #162: Keep awake has no equivalent in the browser client (npm run serve has no powerSaveBlocker):
+// its state is desktop-only, and its change is a pushed event like any other.
+test('manifest: keepAwake:state is desktop-only, keepAwake:changed is a pushed event, and the browser client refuses to read the state', async () => {
+  const { DESKTOP, declarations } = require('../src/service/manifest');
+  const stateEntry = DESKTOP.find((e) => e.channel === 'keepAwake:state');
+  assert.equal(stateEntry.method, 'keepAwakeState');
+  assert.ok(stateEntry.desktop, 'declared desktop-only');
+  const changedEntry = DESKTOP.find((e) => e.event === 'keepAwake:changed');
+  assert.equal(changedEntry.method, 'onKeepAwakeChange');
+
+  const browser = loadApiHttpApi(declarations(DESKTOP));
+  assert.equal(typeof browser.keepAwakeState, 'function');
+  await assert.rejects(browser.keepAwakeState(), /Keeping the computer awake is only available in the desktop app\./);
+});

@@ -386,6 +386,7 @@ test('the queue: enqueue skips duplicates and remembers inputs, next item across
   assert.deepEqual(q.inputs, { 'sd.yaml': { language: 'js' } });
 
   backlog.enqueue(dir, 'other', { issues: [issue(9)], workflow: 'sd.yaml' });
+  assert.deepEqual(backlog.queuedProjects(dir).sort(), ['other', 'p']); // #162: Keep awake sums work across these
   assert.deepEqual(backlog.nextQueued(dir), { projectId: 'p', item: q.items[0] }); // the oldest first
   assert.equal(backlog.nextQueued(dir, (projectId) => projectId !== 'p').projectId, 'other'); // p at its limit of runs
   assert.equal(backlog.nextQueued(dir, () => false), null);
