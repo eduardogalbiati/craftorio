@@ -117,6 +117,13 @@ function hasChanges(runId) {
   return (state.runs.get(runId)?.events || []).some((e) => e.type === 'worktree.ready' || (e.type === 'step.finished' && Array.isArray(e.output?.files_changed)));
 }
 
+// #203: which tests the run wrote and ran, as badges ("Unit tests: Off", warn when off), the
+// value's source (workflow default / chosen for this run) on hover; '' for other workflows.
+function testsPlanHtml(plan) {
+  if (!Array.isArray(plan) || !plan.length) return '';
+  return `<div class="small run-tests-plan">${plan.map((p) => `<span class="badge${p.value === 'off' ? ' warn' : ''}" title="${esc(`${p.label}: ${p.value_label} (${p.source})${p.value === 'off' ? ': nothing of it is tested in this run' : ''}`)}">${esc(p.label)}: ${esc(p.value_label)}</span>`).join(' ')}</div>`;
+}
+
 function renderRunSummary() {
   const r = state.run;
   if (!r) return;
@@ -131,6 +138,7 @@ function renderRunSummary() {
     ${r.project ? `<div class="small">Project: <b>${esc(r.project)}</b></div>` : ''}
     ${(r.issueSaves || []).map((s) => `<div class="small" title="The accepted document was saved to the issue (Save to issue, Write & Review)">Saved to issue: <a href="${esc(s.commentUrl || s.url)}" target="_blank" rel="noopener">#${esc(s.number)}</a> · ${s.mode === 'comment' ? 'as a comment' : 'description replaced'} · ${esc(new Date(s.at).toLocaleString('en-US'))}</div>`).join('')}
     ${r.gateWaitMs ? `<div class="small" title="Time the run waited for your answers at its human gates: no agent works (or costs) meanwhile">Waiting for you at gates: <b>${esc(fmtDur(r.gateWaitMs))}</b></div>` : ''}
+    ${testsPlanHtml(r.testsPlan)}
     <dl class="kv run-inputs">${inputs.map(([k, v]) => `<dt title="${esc(k)}">${esc(k)}</dt>${inputValueCell(v)}`).join('')}</dl>
     ${inputImagesHtml()}
     ${window.gateScenariosHtml ? window.gateScenariosHtml(r.id) : ''}
@@ -419,7 +427,7 @@ function renderSteps() {
   const item = (s) => `
     <li class="${s.status}">
       <span class="dot"></span>
-      <span>${esc(s.id)}<br><span class="kind"${s.agent ? ` title="${esc(s.agent)}"` : ''}>${s.type === 'human_approval' ? 'human approval' : s.type === 'screenshots' ? 'screenshots (no agent)' : s.type === 'workflow' ? 'child workflow runs' : esc(agentLabel(s.agent, v.run?.agentNames))}</span></span>
+      <span>${esc(s.id)}<br><span class="kind"${s.agent ? ` title="${esc(s.agent)}"` : ''}>${s.type === 'human_approval' ? 'human approval' : s.type === 'screenshots' ? 'screenshots (no agent)' : s.type === 'suite' ? 'test suite (no agent)' : s.type === 'workflow' ? 'child workflow runs' : esc(agentLabel(s.agent, v.run?.agentNames))}</span></span>
       <span class="visits">${s.visits ? '×' + s.visits : ''}</span>
     </li>`;
   // in the workflow's step order: a group where its first shown step is

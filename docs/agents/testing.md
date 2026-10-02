@@ -65,6 +65,18 @@ creates a commit needs its own `-c user.name/email`.
   scenario → developer → review → the scenario again, at most `max_rounds`, then a human gate; a
   green pass records `refs/multiagent/e2e-last-green`). Development runs merge locally without
   waiting for it.
+- **Who runs the suite (#177)**: in the software-development workflows and test-batch the
+  orchestrator does, not the test writer: a `type: suite` step (`src/engine/suite-step.js`) runs the
+  project's whole suite once per round after the test step, logs it to `logs/suite-<round>.log` and
+  gives the test writer only the failing tests; the test writer runs focused tests (skill
+  testing-principles), and a whole-suite command it starts is a warn (`full_suite: warn`). Tests of
+  the step pass `mock` with `mockResult` or a fake `run`; `parseFailures` takes sample outputs.
+  Mock runs: `mockSequences.suite: { suite: ['fail', 'pass'] }` (a failing suite goes back to the
+  test writer once, then passes), `['preexisting']` with `preexisting_failures: true` (only
+  pre-existing failures: no loop).
+- **Unit / E2E test inputs (#203)**: `unit_tests` × `e2e_tests` of the development workflows take
+  different paths (both off: no test step; run_existing + E2E off: suite only); mock runs cover each
+  combination with `inputs: { unit_tests, e2e_tests }` and `tests_status: ['pass']`.
 - **One Electron screenshot at a time (#199)**: `scripts/screenshot.js` and the screenshots step
   take the machine-wide slot of `src/engine/machine-slot.js` (`<os tmp>/multiagent-orchestrator/locks/screenshot.slot`,
   or `MULTIAGENT_LOCKS_DIR`): a second capture waits ("waiting for the screenshot slot"), a dead

@@ -15,6 +15,8 @@ used_by: "test writer"
 | Maven (`pom.xml`; prefer `./mvnw`) | `./mvnw -B test` | `./mvnw -B test -Dtest='ClassTest#method'` |
 | Gradle (`build.gradle[.kts]`; prefer `./gradlew`) | `./gradlew test` | `./gradlew test --tests 'pkg.ClassTest.method'` |
 
+Run only the tests you write (the "One test" column); the whole suite is the orchestrator's when
+the workflow has a suite step (see testing-principles: time budget).
 On Windows use `mvnw.cmd`/`gradlew.bat` if the extensionless scripts do not run.
 Dependencies: a fresh checkout (each run has its own worktree) has no build output; the first
 `test` run resolves dependencies into the shared Maven/Gradle cache, so give it time and do not

@@ -21,6 +21,8 @@ Assertions: `FluentAssertions`/`Shouldly` if present.
 | By category/trait | `dotnet test --filter "Category=Unit"` |
 | Coverage (only when asked) | `dotnet test --collect:"XPlat Code Coverage"` |
 
+Run only the tests you write (`--filter`); the whole suite is the orchestrator's when the workflow
+has a suite step (see testing-principles: time budget).
 Dependencies: a fresh checkout (each run has its own worktree) has no `obj/` folders; `dotnet test`
 restores implicitly, but run `dotnet restore` (with `--locked-mode` when `packages.lock.json`
 exists) first if a restore error appears.

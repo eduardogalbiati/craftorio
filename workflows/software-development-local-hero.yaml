@@ -1,9 +1,9 @@
 # =============================================================================
 # Workflow: Software Development, local hero
 # -----------------------------------------------------------------------------
-#   develop ─► code_review ─► test ─► build ─► evidence ─► verify_change ──merge: local──► end
-#     ▲            │            │        │                        │              │ conflict
-#     └────────────┴────────────┴────────┴────────────────────────┘              ▼
+#   develop ─► code_review ─► test ─► suite ─► build ─► evidence ─► verify_change ──merge: local──► end
+#     ▲            │            │        │        │                        │              │ conflict
+#     └────────────┴────────────┴────────┴────────┴────────────────────────┘              ▼
 #                  ▲                                                       resolve_merge (developer)
 #                  └──────────── code_review ◄──────────────────────────────────┘
 #   evidence: screenshots / HTTP request+response / CLI output / log lines that show the change
@@ -49,9 +49,24 @@
 #   Offered when the project (Projects › Local preview) or `orchestrator.local_preview`
 #   ({ install, command, url }) says how to run the worktree. It never answers the gate.
 #
+# TESTS (inputs `unit_tests` and `e2e_tests`, #203; the workflow's default, changeable per run)
+#   unit_tests: write_and_run (default) = test (the test writer writes and runs focused tests) ─►
+#     suite; run_existing = no unit tests written, suite only (failures go to the developer);
+#     off = no suite at all. e2e_tests: write (default) = the test writer writes the issue's
+#     scenarios and checks that they parse; write_and_run = it also runs them; off = none.
+#   Both off: code_review ─► build (no test step). Only run_existing: code_review ─► suite.
+#   build, evidence, verify_change and the local merge always run. Nothing is reported as tested
+#   when it was off: verify_failed and the verifier get `tests_plan` ("Unit tests: Off (workflow
+#   default)"), and the run summary records it. Test later, all together: test-batch.yaml.
+#   suite (no agent, #177): the orchestrator runs the project's whole test suite once per round
+#   (`test_command`, else found from the project's files), log in logs/suite-<round>.log; failing
+#   tests go back to the test writer with the failures and the log (2 rounds, then test_failed).
+#   Tests that also fail on the base (the test writer's preexisting_failures) never count.
+#
 # Rules (as in software-development):
 #   - Agents never talk to each other: the engine delegates fixes to the developer.
-#   - Tests belong to the test writer (the only full suite run); the developer changes production
+#   - Tests belong to the test writer (focused runs; the suite step runs the whole suite, and a
+#     whole-suite command of the test writer is noted, `full_suite: warn`); the developer changes production
 #     code only (`edits_tests: false`, enforced by the engine) and says what to test (`test_notes`).
 #   - `language` picks unit-test-writer-<language> and e2e-test-writer-<language> (test writer)
 #     and build-audit-<language> (builder).
@@ -72,7 +87,7 @@ kind: Workflow
 
 metadata:
   name: software-development-local-hero
-  version: 0.8.0
+  version: 0.9.0
   description: Implements, reviews, tests, builds and verifies a change in its own worktree, then merges it into the local base branch automatically, resolving conflicts on the way. No push, no PR, no CI; push when you want.
   tags: [dev, review, test, build, local, worktree]
   # Dashboard category: plan (Plan & Design), build (Code & Build) or monitor (Monitor & Improve).
@@ -121,6 +136,26 @@ inputs:
     default: false
     show_if: "mode == 'validated'"
     description: "Also stop for you after each round of review fixes, not only after the first change and your own change requests."
+  # #203: the test step is the largest cost of a run (about half of it): turn its parts on or off.
+  unit_tests:
+    type: string
+    enum: [write_and_run, run_existing, "off"]
+    default: write_and_run
+    label: Unit tests
+    options: { write_and_run: Write and run, run_existing: Run existing, "off": "Off" }
+    description: "Write and run: the test writer writes the change's tests, then the orchestrator runs the whole suite (about half of a run's cost). Run existing: no new tests, the suite runs once without an agent and failures go to the developer (cheap, the change stays untested). Off: no suite at all (cheapest; test later with the test-batch workflow)."
+  e2e_tests:
+    type: string
+    enum: ["off", write, write_and_run]
+    default: write
+    label: E2E tests
+    options: { "off": "Off", write: Write, write_and_run: Write and run }
+    description: "Write: the test writer writes the issue's end-to-end scenarios and checks that they parse; the E2E release workflow runs them. Write and run: it also runs them here (slow: starts the app, about 25 more minutes). Off: none."
+  test_command:
+    type: string
+    default: ""
+    label: Test command
+    description: "The project's whole-suite command the orchestrator runs once per test round (e.g. npm test). Empty: found from the project's files (package.json, go.mod, pom.xml, build.gradle, *.csproj, pyproject.toml)."
 
 # -----------------------------------------------------------------------------
 # Final command line = args + capability and isolation flags + agent.cli_args + (resume_args if
@@ -262,14 +297,20 @@ agents:
     # edits test files only (a convention of its role: the tools can't tell tests from code)
     # subagents: exploration sub-agents map the behaviours and tests, so the main context stays small
     capabilities: { tools: [read, edit, write, *toolchains], web: false, subagents: true }
-    skills: ["unit-test-writer-{{ inputs.language }}", "e2e-test-writer-{{ inputs.language }}", context-economy]
+    # only the parts the run's unit_tests / e2e_tests turn on (#203)
+    skills:
+      - "{% if inputs.unit_tests == 'write_and_run' %}unit-test-writer-{{ inputs.language }}{% endif %}"
+      - "{% if inputs.e2e_tests != 'off' %}e2e-test-writer-{{ inputs.language }}{% endif %}"
+      - context-economy
     system_prompt: |
       You are the test writer, the only agent of this workflow that writes tests. You write
       and update them (including tests an intended behaviour change makes obsolete) and run
-      the full suite, following the test skill for this language. You also write the
+      the focused tests of the change, following the test skill for this language; the
+      orchestrator runs the whole suite once after your step and gives you its failures
+      (never start the whole suite yourself). You also write the
       end-to-end acceptance scenarios (Given/When/Then feature files and their step
-      definitions) and check that they parse, following the E2E test skill: they run at
-      release (E2E release workflow), never here. You do NOT fix production
+      definitions) and check that they parse, following the E2E test skill, when the run's
+      E2E tests are on. Your step's prompt says which parts are on. You do NOT fix production
       code: when a test fails because of a bug in the code, describe the failure precisely
       (test, file, error, probable cause) so the orchestrator can hand it to the developer.
       Commit test files only.
@@ -277,8 +318,8 @@ agents:
       sub-agent that maps, from the developer's test_notes and the branch diff, the changed
       behaviours, the existing tests that cover them and the test helpers and conventions,
       with file and line numbers; then read only the test files you edit and the production
-      lines under test. A long suite output goes to a sub-agent that returns the failures;
-      the suite run that decides your step stays in your own turn.
+      lines under test. A long test output or the suite's log goes to a sub-agent that returns
+      the failures; the focused runs that decide your step stay in your own turn.
 
   builder:
     provider: claude
@@ -322,7 +363,7 @@ groups:
   - name: Review
     steps: [code_review, human_review]
   - name: Validate
-    steps: [test, test_failed, build, build_failed, evidence, verify_change, verify_failed]
+    steps: [test, suite, test_failed, build, build_failed, evidence, verify_change, verify_failed]
   - name: Merge
     steps: [resolve_merge, merge_blocked]
 
@@ -520,9 +561,10 @@ steps:
       {% endif %}
       {% if worktree_dir %}Diff: Show the diff opens the branch's changes since `{{ inputs.base_branch }}` here.{% endif %}
       Test notes: {{ steps.develop.output.test_notes }}
+      {% if tests_plan %}{{ tests_plan }}{% endif %}
       {% if steps.developer_screenshots.output %}Screenshots: {{ steps.developer_screenshots.output.message }}{% endif %}
       {% if steps.develop.output.evidence_plan %}Evidence plan: {{ steps.develop.output.evidence_plan }}{% endif %}
-      {% set e2e = steps.test.output | e2e_scenarios %}{% if e2e %}{{ e2e }}{% else %}E2E scenarios: none yet. The test writer writes and runs them after the code review; they show in the run's summary.{% endif %}
+      {% set e2e = steps.test.output | e2e_scenarios %}{% if e2e %}{{ e2e }}{% elif inputs.e2e_tests == 'off' %}E2E scenarios: off in this run.{% else %}E2E scenarios: none yet. The test writer writes them after the code review; they show in the run's summary.{% endif %}
     feedback: { label: "Your change request for the developer (required with \"Ask for changes\")", placeholder: "What to change, point by point" }
     choices:
       - { id: approve, label: "Approve: go on to the code review" }
@@ -646,6 +688,11 @@ steps:
               description: { type: string }
               issue:       { type: string }
     transitions:
+      # #203: unit and E2E tests both off → no test step; only the existing suite → no test writer
+      - when: "output.verdict == 'approved' and inputs.unit_tests == 'off' and inputs.e2e_tests == 'off'"
+        goto: build
+      - when: "output.verdict == 'approved' and inputs.unit_tests == 'run_existing' and inputs.e2e_tests == 'off'"
+        goto: suite
       - when: "output.verdict == 'approved'"
         goto: test
       - when: "output.verdict == 'changes_requested'"
@@ -661,20 +708,29 @@ steps:
     message: |
       The review loop did not converge in 3 iterations.
       Approve: move on to testing anyway. Reject: stop the run (cancelled).
+      {% if tests_plan %}{{ tests_plan }}{% endif %}
     transitions:
+      # #203: the same test routing as code_review's
+      - when: "approved and inputs.unit_tests == 'off' and inputs.e2e_tests == 'off'"
+        goto: build
+      - when: "approved and inputs.unit_tests == 'run_existing' and inputs.e2e_tests == 'off'"
+        goto: suite
       - when: "approved"
         goto: test
       - when: "rejected"
         goto: end
         status: cancelled
 
-  # Test writer: owns the tests (writes/updates them) and runs the full suite, the only full run
-  # of this workflow. On a production-code failure the orchestrator hands it to the developer and
-  # tells the test writer when it is fixed.
+  # Test writer: owns the tests (writes/updates them) and runs the focused ones; the suite step
+  # after it runs the whole suite (#177). On a production-code failure the orchestrator hands it
+  # to the developer and tells the test writer when it is fixed. Its parts follow unit_tests /
+  # e2e_tests (#203): it only runs when one of them makes it write something.
   - id: test
     agent: test_writer
     # the run's checkout of the base with its dependencies, for the pre-existing-failure check (#198)
     base_worktree: true
+    # the orchestrator runs the whole suite: a whole-suite command of the test writer is noted (#177)
+    full_suite: warn
     prompt: |
       Branch `{{ steps.develop.output.branch }}` (already reviewed).
       Original task: {{ inputs.task }}
@@ -689,10 +745,27 @@ steps:
       {{ steps.code_review.output.for_test_writer }}
       {% endif %}
 
-      {% if delegate_result %}
+      This run's tests (#203): {{ tests_plan }}
+      Never start the project's whole test suite yourself: the orchestrator runs it once after
+      your step (round by round) and gives you its failing tests. Run only focused tests: the
+      files you touch, filtered to the tests you are writing (e.g. `--test-name-pattern`), each
+      slow one (over a minute) at most once per round. Never start a full mock run of a workflow
+      (`scripts/run.js`).
+
+      {% if previous_step == 'suite' and steps.suite.output and steps.suite.output.status == 'fail' %}
+      The orchestrator ran the whole suite after your last step and it failed. Only these tests
+      fail (the full output is in `{{ run_dir }}/{{ steps.suite.output.log }}`: read only what
+      you need, or have a sub-agent summarise it):
+      {{ steps.suite.output | suite_failures }}
+      For each one: a test that is wrong or obsolete (yours or one the change made obsolete by an
+      intended behaviour change) → fix the test and commit it; a failure caused by the production
+      code → do NOT fix it, describe it in `failure_report` and set `tests_status: fail` (the
+      developer fixes it); a test that also fails on the base → `preexisting_failures` (below).
+      Run only these failing tests to confirm.
+      {% elif delegate_result %}
       The developer fixed the production code you reported (it does not touch the tests):
       {{ delegate_result.text }}
-      Run the full suite and this run's E2E scenarios (by their issue tag) again and confirm.
+      Run the failing tests again{% if inputs.e2e_tests == 'write_and_run' %} and this run's E2E scenarios (by their issue tag){% endif %} and confirm.
       {% elif vars.recheck == 'resolution' and (steps.resolve_merge.output.files_changed or []) | length <= 5 %}
       Your tests already passed on this change. Since then the developer rebased the branch onto
       the local `{{ inputs.base_branch }}` and resolved a conflict, touching only:
@@ -707,19 +780,24 @@ steps:
       Your tests already passed on this change. Since then the developer rebased the branch onto
       the local `{{ inputs.base_branch }}` and resolved a conflict that touched many files:
       {{ steps.resolve_merge.output.summary }}
-      Run the full suite once. Update a test only when the base's change made it obsolete (not a
-      bug); no new tests.
+      Run the tests of the files the resolution touched (the orchestrator runs the whole suite
+      next). Update a test only when the base's change made it obsolete (not a bug); no new tests.
       {% else %}
+      {% if inputs.unit_tests == 'write_and_run' %}
       1. Check out the branch. You own the tests: the developer did not write or run any.
          Write the tests the change needs, starting from the developer's notes (they are a
          starting point, not a limit), following the test skill (the framework and folder the
          project already uses). Update the tests the change makes obsolete because of an
          intended behaviour change (not a bug). Commit only test files. Purely visual changes
          may not need a new test — justify it.
-      2. While writing, run only the test files you touch, each slow one (over a minute) at most
-         once per round, filtered to the tests you are writing (e.g. `--test-name-pattern`). Then
-         run the full suite once, at the end, with the project's test command. Never start a full
-         mock run of a workflow (`scripts/run.js`): the suite already includes one.
+      2. While writing, run only the test files you touch (see above); the whole suite is the
+         orchestrator's.
+      {% else %}
+      1. Check out the branch. Unit tests are {{ 'run without new tests' if inputs.unit_tests == 'run_existing' else 'off' }} in this run: write no unit
+         tests and leave `tests_added` empty; `tests_status` is pass unless your scenarios'
+         parse check fails because of the production code.
+      {% endif %}
+      {% if inputs.e2e_tests != 'off' %}
       3. End-to-end acceptance scenarios, following the E2E test skill, kept cheap:
          - only when the issue has user-visible behaviour (a screen, a dialog, a CLI output a
            person reads); an engine, refactor or docs issue gets none: say why in `e2e_note`;
@@ -727,24 +805,38 @@ steps:
            Given/When/Then from the original task and the issue's acceptance criteria, tagged
            `@issue-<n>`, in the project's usual feature folder, reusing the existing step
            definitions before writing new ones;
+         {% if inputs.e2e_tests == 'write_and_run' %}
+         - write them, check that they parse, then run only this issue's scenarios
+           (`--tags "@issue-<n>"`), one feature file at a time, with the E2E skill's release-run
+           commands; screenshots of UI scenarios go to {{ evidence_dir }}. A scenario that fails
+           because of the production code makes `tests_status` fail (failure_report).
+         {% else %}
          - write them, do not run them: check that they parse (e.g. `npx cucumber-js --dry-run
            --tags "@issue-<n>"`) and never start Electron, the app or a browser for them. The
            E2E release workflow (e2e-release.yaml) runs the whole suite at release time.
+         {% endif %}
+      {% else %}
+      3. E2E tests are off in this run: write no scenarios and leave `scenarios` empty
+         (`e2e_note`: "E2E tests off").
       {% endif %}
+      {% endif %}
+      {% if inputs.e2e_tests != 'off' %}
       Report every scenario in `scenarios` (feature file, name, its Given/When/Then lines, status
-      `pending` = written and parsed, run at release; `skipped` with the reason when it could not
-      be written, e.g. no E2E framework). Scenarios never make `tests_status` fail; say in
+      {% if inputs.e2e_tests == 'write_and_run' %}`passed` / `failed` = run here, with their screenshots{% else %}`pending` = written and parsed, run at release{% endif %}; `skipped` with the reason when it could not
+      be written, e.g. no E2E framework).{% if inputs.e2e_tests != 'write_and_run' %} Scenarios never make `tests_status` fail.{% endif %} Say in
       `e2e_note` how you checked that they parse. The Dev/QA reads these
       scenarios in the run's summary and at the gates.
-      No screenshots here: the scenarios do not run in this workflow, and the evidence of the
-      change is collected after the build (evidence step).
-      If the suite fails, first check whether the same tests fail on the local
+      {% endif %}
+      {% if inputs.e2e_tests != 'write_and_run' %}
+      No screenshots here: the evidence of the change is collected after the build (evidence step).
+      {% endif %}
+      When a test fails (yours or one of the suite's), first check whether the same test fails on the local
       `{{ inputs.base_branch }}`, following the test skill (pre-existing failures): run only the
       failing files in the base checkout the engine prepared ({{ base_worktree_dir or "a
       temporary worktree of the base" }}, dependencies already there). A test that also fails there is not this
       run's: list it in `preexisting_failures` (test, file, reason), do not investigate or fix it
       (unless it is trivial and in files this change touches), and it does not make
-      `tests_status` fail. The owner gets the list as a follow-up.
+      `tests_status` fail; the orchestrator's suite does not count it either. The owner gets the list as a follow-up.
       If a test fails because of production code, do NOT fix it:
       fill failure_report with test, file, error and probable cause.
     output_schema:
@@ -776,14 +868,22 @@ steps:
               feature:     { type: string }
               name:        { type: string }
               steps:       { type: array, items: { type: string } }
-              status:      { type: string, enum: [pending, skipped] }
+              # pending: written and parsed (e2e_tests: write); passed / failed: run here (write_and_run)
+              status:      { type: string, enum: [pending, skipped, passed, failed] }
               reason:      { type: string }
               screenshots: { type: array, items: { type: string } }
         # why there are no scenarios, the issue tag run, the framework assumed, an environment problem
         e2e_note: { type: string }
     transitions:
-      - when: "output.tests_status == 'pass'"
+      # unit tests off (#203): the test writer only wrote scenarios; no suite
+      - when: "output.tests_status == 'pass' and inputs.unit_tests == 'off'"
         goto: build
+      # a small conflict resolution: the related tests and a smoke check were enough, no whole suite
+      - when: "output.tests_status == 'pass' and vars.recheck == 'resolution' and (steps.resolve_merge.output.files_changed or []) | length <= 5"
+        goto: build
+      # the orchestrator runs the whole suite (#177)
+      - when: "output.tests_status == 'pass'"
+        goto: suite
       - when: "output.tests_status == 'fail'"
         delegate:
           agent: developer
@@ -792,18 +892,59 @@ steps:
             {{ output.failure_report }}
             Fix the production code only: never change the tests (if you think a test is wrong,
             say why in your answer; the test writer owns it). Run only the failing tests, not the
-            full suite (the test writer runs it next), commit and report the commit hash.
+            full suite (the orchestrator runs it after the test writer), commit and report the commit hash.
         goto: test
         max_visits: 3
+        on_exhausted: test_failed
+
+  # The project's whole test suite, once per round, without an agent (#177): the command of
+  # `test_command` (empty: found from the project's files), its output in logs/suite-<round>.log.
+  # Failing tests go back to the test writer (write_and_run) or to the developer (run_existing),
+  # 2 rounds, then test_failed. Tests that also fail on the base (the test writer's
+  # preexisting_failures) never count. A suite that cannot run (no command) goes to test_failed.
+  - id: suite
+    type: suite
+    command: "{{ inputs.test_command }}"
+    timeout: 30m
+    transitions:
+      # build: after a merge-conflict resolution it goes on to verify_change (evidence kept)
+      - when: "output.status == 'pass'"
+        goto: build
+      - when: "output.status == 'blocked'"
+        goto: test_failed
+      - when: "output.status == 'fail' and inputs.unit_tests == 'write_and_run'"
+        goto: test
+        max_visits: 2
+        on_exhausted: test_failed
+      - when: "output.status == 'fail'"
+        delegate:
+          agent: developer
+          prompt: |
+            The project's test suite fails on branch `{{ steps.develop.output.branch }}` (no new
+            tests were written in this run: unit_tests is run_existing):
+            {{ output | suite_failures }}
+            The whole log: {{ run_dir }}/{{ output.log }} (read only the failing tests' part).
+            Fix the production code only: never change the tests (if you think a test is wrong or
+            made obsolete by the intended change, say why in your answer). Run only the failing
+            tests, not the full suite (the orchestrator runs it next), commit and report the commit hash.
+        goto: suite
+        max_visits: 2
         on_exhausted: test_failed
 
   - id: test_failed
     type: human_approval
     kind: escalation   # the supervisor on call tries first
     message: |
-      Tests are still failing after 3 rounds of fixes:
+      {% if previous_step == 'suite' and steps.suite.output.status == 'blocked' %}The project's test suite could not run:
+      {{ steps.suite.output.reason }}
+      Set the workflow's `test_command` input (e.g. npm test) when the project's files do not give it.
+      {% elif previous_step == 'suite' %}The project's test suite still fails after {{ steps.suite.visits }} round(s):
+      {{ steps.suite.output | suite_failures }}
+      {% else %}Tests are still failing after 3 rounds of fixes:
       {{ steps.test.output.failure_report }}
-      Approve: continue to the build anyway. Reject: stop the run as failed (the worktree is kept to resume it).
+      {% endif %}
+      {{ tests_plan }}
+      Approve: continue to the build anyway (the change is reported as not tested green). Reject: stop the run as failed (the worktree is kept to resume it).
     transitions:
       - when: "approved"
         goto: build
@@ -998,6 +1139,10 @@ steps:
       at the test step and a measurement that needs real runs or the owner (its Measure task) is the
       owner's: neither is a claim to verify nor a reason for not_verified. Stay read-only: the
       working tree must not change (no files, stash, worktree or checkout).
+      {% if tests_plan %}
+      This run's tests (#203): {{ tests_plan }} Never claim or imply test coverage for a part that
+      was off: say "not tested in this run" for it in your summary.
+      {% endif %}
       {% if inputs.issues | length > 1 %}
       This run implements several issues: verify each one the developer did (their report:
       {{ steps.develop.output.issues | to_json }}). In `issues`, one entry per issue with its own
@@ -1047,8 +1192,9 @@ steps:
       The change still does not do what the task asked after 2 rounds of fixes.
       Claim: {{ steps.verify_change.output.claim }}
       Observed: {{ steps.verify_change.output.evidence }}
+      {{ tests_plan }}{% if steps.suite.output %} {{ steps.suite.output.message }}{% elif inputs.unit_tests == 'off' %} The test suite did not run in this run: nothing was tested here.{% endif %}
       Dev/QA: read the E2E scenarios and the screenshots; run the app and test by hand only what they do not cover.
-      {% set e2e = steps.test.output | e2e_scenarios %}{% if e2e %}{{ e2e }}{% else %}E2E scenarios: none reported by the test writer.{% endif %}
+      {% set e2e = steps.test.output | e2e_scenarios %}{% if e2e %}{{ e2e }}{% elif inputs.e2e_tests == 'off' %}E2E scenarios: off in this run (none written).{% else %}E2E scenarios: none reported by the test writer.{% endif %}
       Approve: merge it into the local {{ inputs.base_branch }} anyway. Reject: stop the run as failed (the worktree is kept to resume it).
     transitions:
       - when: "approved"

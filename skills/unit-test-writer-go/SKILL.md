@@ -18,6 +18,8 @@ used_by: "test writer"
 | One sub-case | `go test ./pkg -run 'TestName/case' -v` |
 | Coverage (only when asked) | `go test -cover ./...` |
 
+Run only the tests you write (`-run`); the whole suite is the orchestrator's when the workflow has
+a suite step (see testing-principles: time budget).
 Also run `go vet ./...`: vet findings count as failures.
 Dependencies: a fresh checkout (each run has its own worktree) may lack modules; `go mod download`
 first if `go test` reports missing modules (the module cache is shared, so this is usually instant).

@@ -18,6 +18,39 @@ same features for users; this is the implementer's summary.
 - A **human gate** can take `check: { probe, target, on_fail?, recover? }` (`openGate`): the probe runs right before it opens (`check` in the message's template context: `{ state, detail, target, checked_at }`), and again on every `merged` notification of another run for the same key while it is open. Not `passed`/`error` with `on_fail` → the gate is not opened / is withdrawn (`approval.resolved` with `withdrawn: true, by: 'check', reason`) and the run takes `recoverFromActionError` with `{ on_error: on_fail, recover }`. Nothing ever approves a gate for the person.
 - A **screenshots step** (`type: screenshots`, no agent, #144; `runScreenshots` → `src/engine/screenshot-step.js`): `from: <step>` (whose output lists `screenshots: [{ name, caption, args }]`, `args` = the options of the project's screenshot command), `folder` (default the step id), `base` (template, the ref of the "original" side; default the worktree's base ref), `timeout` per shot (default 3m). It runs `npm run screenshot -- <args> --out <run_dir>/evidence/<folder>/round-<visit> --name <name> --side modified`, then the same with `--side original --ref <base>`, with the agents' environment (simulation only, scratch workspace); at most 8 entries, `--out/--name/--side/--ref/--caption` in `args` are refused. It never fails and never calls the supervisor: an empty list, a simulated run (`mock`: nothing is launched), no worktree, no `screenshot` script in the worktree's package.json, an invalid entry, a timeout or a crash end up in its output `{ kind: 'screenshots', folder, round, dir, taken, screens, screenshots: [{ path, caption, side }], errors: [{ name, side?, error }], reason, message }` (`message`: "N screenshots of M screens taken in round n" or "No screenshots: <reason>"). software-development and local-hero run `developer_screenshots` (from `develop`, folder `developer`) on every way into `developer_check`, whose message shows `message`; the gate's Artifacts panel shows that round only (`lastCapture` in gate-panel.js).
   - **The screenshot slot (#199)**: at most one Electron screenshot process at a time on the machine, across all runs and apps. Each capture of the step takes the machine-wide slot (`src/engine/machine-slot.js`, `acquireSlot('screenshot')`: a file `<os tmp>/multiagent-orchestrator/locks/screenshot.slot` with pid, host and token, or under `MULTIAGENT_LOCKS_DIR`) and passes its token to `npm run screenshot` (`MULTIAGENT_SCREENSHOT_SLOT`), which then does not wait for it. While another run holds it the step emits `screenshots.waiting` (`holder_pid`) and a log line "waiting for the screenshot slot". `scripts/screenshot.js` takes the same slot itself (`acquireSlotSync`), so an agent's `npm run screenshot` (evidence, test writer, E2E runner) waits too and prints the same line. A slot whose process is gone, or held over 15 minutes, is freed; a wait over 20 minutes fails that capture.
+- A **suite step** (`type: suite`, no agent, #177; `runSuiteStep` → `src/engine/suite-step.js`): the
+  project's whole test suite, once per visit, run by the orchestrator instead of an agent (an agent
+  running it kept its turn and its 100k+ context open for minutes, several times per run).
+  `command` (template; empty → `detectTestCommand` from the worktree's files: package.json's test
+  script → `npm test`, go.mod, pom.xml/mvnw, build.gradle/gradlew, *.sln/*.csproj, pyproject.toml…),
+  `timeout` (default 30m). It runs in the worktree with the agents' environment, its whole output in
+  `<run_dir>/logs/suite-<visit>.log` (`file.saved`), and reads the failing tests from it
+  (`parseFailures`: node:test spec/TAP, Jest, pytest, go test, dotnet test, Maven). Output `{ kind:
+  'suite', status: pass | fail | blocked, round, command, log, exit_code, duration_ms, timed_out,
+  failures: [{ test, file, error }], preexisting, reason, message }`; the run's known pre-existing
+  failures (`notePreexistingFailures`) are moved to `preexisting` and never fail it; `blocked` = it
+  could not run (no worktree, no command). It never throws and never calls the supervisor: the
+  transitions route it. Filter `suite_failures` (`{{ steps.suite.output | suite_failures }}`): the
+  message plus one line per failing test, for a prompt or a gate. Simulation:
+  `mockSequences.suite: { <step>: ['fail', 'pass'] }` per visit (default pass; `preexisting` = only
+  the run's pre-existing failures fail, so it passes; `blocked`), a simulated log is written.
+  - **`full_suite: warn`** on an agent step: a tool call of its agent that starts the whole suite
+    (`isFullSuiteCommand`: `npm test`, `pytest`, `go test ./...`, `dotnet test`, `mvn test`, the
+    suite step's own command…) is noted, not refused: a `log` warn `kind: full_suite_by_agent`.
+  - `summary.suite_runs: { engine, agents }`: whole-suite runs by suite steps and by agents (the
+    measure of #177).
+  - software-development and local-hero: `test` (test writer, focused tests) → `suite` → build; a
+    failing suite goes back to the test writer (its prompt gets the failures and the log path when
+    `previous_step == 'suite'`), 2 rounds, then `test_failed`.
+- **Test inputs (#203)**: the development workflows' `unit_tests` (write_and_run | run_existing |
+  off) and `e2e_tests` (off | write | write_and_run) route the transitions (code_review/human_review
+  → test, suite or build; test → suite or build; suite failures → test writer or developer) and
+  the test writer's skills and prompt. `testsPlan` (workflow.js) turns them into `ctx.tests_plan`
+  ("Unit tests: Off (workflow default). E2E tests: Write (chosen for this run).": a value differs
+  from the workflow's `default` = chosen for this run), and `tests_plan: [{ input, label, value,
+  value_label, source }]` in `workflow.started` and the summary (runs.js `testsPlan`, the Run
+  screen's badges). The gates and the verifier's prompt show it; nothing off is reported as tested.
+  `test-batch.yaml` writes the skipped tests later, for a range of local commits, in one session.
 - **`base_worktree: true`** on an agent step (#198; needs `orchestrator.worktree`): before each visit the engine prepares the run's checkout of the base (`<worktreesDir>/<run_id>-base`, detached at the current base, dependencies linked from the shared cache) and gives it as `base_worktree_dir` (empty without a worktree), for the test writer's pre-existing-failure check. See [worktrees.md](worktrees.md).
 - **`deps.ready`** (#198): the run's dependencies from the shared cache, after `worktree.ready`, for the base checkout and after an agent step that changed the lockfile (`{ for: worktree|base, after, status, hit, lockfile, manager, key, entry, seconds, waited, reason }`; nothing when the folder already links its key). Agents with commands get a line about it in their command guide (`depsGuide`). See [worktrees.md](worktrees.md).
 - `orchestrator.limits.max_total_context` (e.g. `20M`): the context the run's agents read (input + cache, summed over every turn). Past it, `contextGate` pauses the run before the next agent turn with a `<step>:context_limit` gate (choices `continue` = allow another block of the same size, `stop` = cancel; the worktree is kept). A turn is never cut; `limit.exceeded` is emitted with `paused: true`.

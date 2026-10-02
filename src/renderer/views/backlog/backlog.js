@@ -179,11 +179,57 @@
     runTimer = setTimeout(() => { runTimer = null; reload(); }, 1500);
   });
   // The queue also changes without run events (a start that fails, the next issue starting), and a
-  // live roadmap's refill (#164) with none.
+  // live roadmap's refill (#164) with none. Also the fallback of the file watch (#204): while the
+  // service cannot watch backlog/, the Roadmap tab is polled every 5 s.
+  let watching = true;
+  api.backlogWatching?.().then((w) => { watching = w !== false; }).catch(() => {});
   setInterval(() => {
     const busy = bl.data?.queue?.items?.length || bl.data?.issues?.some((i) => i.runs?.[0]?.status === 'running') || bl.data?.roadmap?.live || bl.data?.refresh?.running;
-    if (visible() && busy) reload();
+    if (visible() && (busy || (!watching && bl.mode === 'roadmap'))) liveReload();
   }, 5000);
+
+  // #204: the screen follows the backlog/ files live (the service watches the folder and pushes
+  // backlog:changed, debounced). The owner is never disturbed: while they type in a field of the
+  // screen, drag, or edit a roadmap item or a stage's note, the reload waits until they are done
+  // (the Edit form says "The roadmap changed"); the scroll position and expanded rows are kept.
+  let pendingReload = null;
+  const ownerBusy = () => {
+    const el = document.activeElement;
+    const typing = el?.closest?.('#view-backlog') && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) && !el.closest('.modal');
+    return !!typing || (bl.mode === 'roadmap' && !!window.BacklogRoadmap?.busy());
+  };
+  async function liveReload() {
+    if (!visible() || document.hidden) return;
+    if (ownerBusy()) {
+      staleNotice();
+      pendingReload ??= setInterval(() => { if (!ownerBusy()) { clearInterval(pendingReload); pendingReload = null; liveReload(); } }, 1000);
+      return;
+    }
+    const view = $b('#view-backlog');
+    const top = view?.scrollTop;
+    await reload();
+    if (view && top != null) view.scrollTop = top;
+  }
+  // the open Edit form tells the owner the file changed under it; Reload drops the unsaved values
+  function staleNotice() {
+    const form = $b('#view-backlog .rm-form');
+    if (!form || form.querySelector('[data-bl-stale]')) return;
+    const p = document.createElement('p');
+    p.className = 'small muted bl-stale';
+    p.dataset.blStale = '';
+    p.innerHTML = 'The roadmap changed. <button type="button" class="link-btn small" data-bl-stale-reload>Reload</button>';
+    p.querySelector('button').addEventListener('click', () => {
+      window.BacklogRoadmap?.closeEdit();
+      document.activeElement?.blur?.();
+      liveReload();
+    });
+    form.prepend(p);
+  }
+  api.onBacklogChanged?.((ev) => {
+    if (ev?.watching === false) { watching = false; return; }
+    watching = true;
+    if (ev?.projectId && ev.projectId === bl.projectId) liveReload();
+  });
 
   // Opens a run in the remembered run view (Chat or Details, showRun in app.js).
   function openRun(el) {

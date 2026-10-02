@@ -62,6 +62,7 @@ const { stopProcessesIn } = require('./processes');
 const { PROBES, runProbe, parseTarget } = require('./probes');
 const scenarios = require('./scenarios');
 const { captureScreenshots } = require('./screenshot-step');
+const suiteStep = require('./suite-step');
 const {
   runWorkflowStep,
   validateWorkflowStep,
@@ -149,6 +150,23 @@ tpl.addFilter('developer_gaps', (gaps) => (Array.isArray(gaps) ? gaps : []).filt
 //   {{ steps.test.output | e2e_scenarios }}
 tpl.addFilter('e2e_scenarios', (output) => scenarios.scenariosMessage(output));
 
+// A `type: suite` step's output for a prompt or a gate (#177): the result, the log path and one line
+// per failing test; '' when the output is not a suite's (src/engine/suite-step.js).
+//   {{ steps.suite.output | suite_failures }}
+tpl.addFilter('suite_failures', (output) => suiteStep.suiteMessage(output));
+
+// The test inputs of the development workflows (#203): what the run summary and the gates say
+// ("Unit tests: Off (workflow default)").
+const TEST_INPUTS = { unit_tests: 'Unit tests', e2e_tests: 'E2E tests' };
+function testsPlan(defs, given, resolved) {
+  return Object.entries(TEST_INPUTS).filter(([k]) => defs?.[k]).map(([k, label]) => {
+    const def = defs[k];
+    const value = resolved[k];
+    const chosen = given?.[k] !== undefined && given[k] !== '' && given[k] !== def.default;
+    return { input: k, label: def.label || label, value, value_label: def.options?.[value] || String(value), source: chosen ? 'chosen for this run' : 'workflow default' };
+  });
+}
+
 const render = (s, scope) => (s == null ? '' : tpl.renderString(String(s), scope));
 const evalExpr = (expr, scope) => render(`{% if ${expr} %}1{% else %}0{% endif %}`, scope).trim() === '1';
 
@@ -211,6 +229,11 @@ function loadWorkflow(file) {
       if (!ids.has(s.from)) throw new Error(`Step "${s.id}": from must be the step whose output lists the screenshots.`);
       if (s.folder !== undefined && !/^[\w-]+$/.test(String(s.folder))) throw new Error(`Step "${s.id}": folder must be a plain folder name (e.g. developer).`);
       if (s.timeout !== undefined && parseDuration(s.timeout, null) == null) throw new Error(`Step "${s.id}": timeout must be a duration such as 3m.`);
+    } else if (s.type === 'suite') {
+      // `type: suite` (#177): no agent; the project's whole test suite, once per visit
+      if (s.agent || s.agents) throw new Error(`Step "${s.id}": a suite step has no agent.`);
+      if (s.command !== undefined && typeof s.command !== 'string') throw new Error(`Step "${s.id}": command must be a string (a template; empty = found from the project's files).`);
+      if (s.timeout !== undefined && !String(s.timeout).includes('{{') && parseDuration(s.timeout, null) == null) throw new Error(`Step "${s.id}": timeout must be a duration such as 30m.`);
     } else if (s.type === 'workflow') {
       // `type: workflow` (#174): a child run of another workflow, once or per `foreach` item
       validateWorkflowStep(s, file);
@@ -235,7 +258,8 @@ function loadWorkflow(file) {
       if (w.grace !== undefined && parseDuration(w.grace, null) == null) throw new Error(`Step "${s.id}": wait.grace must be a duration such as 10m.`);
     }
     if (s.choices && s.type !== 'human_approval') throw new Error(`Step "${s.id}": choices is only valid for human_approval.`);
-    if (s.base_worktree !== undefined && (typeof s.base_worktree !== 'boolean' || ['human_approval', 'screenshots', 'workflow'].includes(s.type) || !wf.orchestrator?.worktree)) throw new Error(`Step "${s.id}": base_worktree must be true or false, on an agent step of a workflow with orchestrator.worktree.`);
+    if (s.full_suite !== undefined && (s.full_suite !== 'warn' || ['human_approval', 'screenshots', 'suite', 'workflow'].includes(s.type))) throw new Error(`Step "${s.id}": full_suite must be "warn", on an agent step (a whole-suite command its agent starts is noted, #177).`);
+    if (s.base_worktree !== undefined && (typeof s.base_worktree !== 'boolean' || ['human_approval', 'screenshots', 'suite', 'workflow'].includes(s.type) || !wf.orchestrator?.worktree)) throw new Error(`Step "${s.id}": base_worktree must be true or false, on an agent step of a workflow with orchestrator.worktree.`);
     if (s.local_preview !== undefined && (s.type !== 'human_approval' || typeof s.local_preview !== 'boolean')) throw new Error(`Step "${s.id}": local_preview must be true or false, on a human_approval step.`);
     if (s.diff_base !== undefined && (s.type !== 'human_approval' || typeof s.diff_base !== 'string' || !s.diff_base.trim())) throw new Error(`Step "${s.id}": diff_base must be a ref (e.g. "origin/{{ inputs.base_branch }}"), on a human_approval step.`);
     if (s.save_to_issue !== undefined && (s.type !== 'human_approval' || !(s.choices || []).some((c) => c.id === s.save_to_issue))) throw new Error(`Step "${s.id}": save_to_issue must be the id of one of the step's choices (e.g. accept), on a human_approval step.`);
@@ -658,6 +682,8 @@ class WorkflowRun extends EventEmitter {
     this.idleWarnMs = idleWarnMs ?? IDLE_WARN_MS;
     this.stepTiming = {};           // step id -> { turns, duration_ms, active_ms, waiting_ms, stalled_ms } (summary.timing)
     this.inputs = this.resolveInputs(inputs || {});
+    this.testsPlan = testsPlan(this.wf.inputs, inputs, this.inputs); // summary.tests_plan, ctx.tests_plan (#203)
+    this.suiteRuns = { engine: 0, agents: 0 }; // whole-suite runs: suite steps vs agents' own commands (#177, summary.suite_runs)
     this.inputImages = this.checkInputAttachments(attachments || {});
     this.attachments = {}; // input -> [{ name, path }] the copies in the run folder (storeInputAttachments)
     this.gateImages = []; // images attached to the last gate's feedback, for the next agent step
@@ -685,6 +711,8 @@ class WorkflowRun extends EventEmitter {
       local_preview: null,
       // folder of a skill (workspace first, then bundled), e.g. to run its script in an action
       skill_dir: (name) => resolveSkill(this.skillsDirs, name).path,
+      // the unit / E2E test inputs (#203), one sentence for the gates and the verifier ('' without them)
+      tests_plan: this.testsPlan.map((p) => `${p.label}: ${p.value_label} (${p.source}).`).join(' '),
     };
     for (const s of this.wf.steps) this.ctx.steps[s.id] = { output: null, visits: 0 };
     this.resume = resume || null;
@@ -784,7 +812,7 @@ class WorkflowRun extends EventEmitter {
       if (!enabled) delete this.wf.agents[name];
     }
     for (const s of this.wf.steps) {
-      if (s.type === 'human_approval' || s.type === 'screenshots' || s.type === 'workflow') continue;
+      if (s.type === 'human_approval' || s.type === 'screenshots' || s.type === 'suite' || s.type === 'workflow') continue;
       if (!s.agents) {
         if (!this.wf.agents[s.agent]) throw new Error(`Step "${s.id}" uses agent "${s.agent}", which is disabled for this run.`);
         continue;
@@ -966,6 +994,8 @@ class WorkflowRun extends EventEmitter {
       workflow: this.wf.metadata?.name, version: this.wf.metadata?.version, project_id: this.projectId,
       issues: this.issues || undefined,
       file: path.basename(this.file), inputs: this.inputs, mock: this.mock, run_dir: this.runDir,
+      // the unit / E2E test inputs and where each value came from (#203)
+      tests_plan: this.testsPlan.length ? this.testsPlan : undefined,
       attachments: Object.keys(this.attachments).length ? this.attachments : undefined,
       resumed_from: this.resume ? { run_id: this.resume.runId, step: this.resume.fromStep } : undefined,
       then: this.then || undefined,
@@ -1278,6 +1308,17 @@ class WorkflowRun extends EventEmitter {
       }
       st.output = output;
       scope = { ...this.ctx, output, iteration: st.iteration };
+    } else if (step.type === 'suite') {
+      // no agent, no supervisor (#177): the result (pass, fail with the failing tests, blocked) is
+      // the output, and the transitions route it
+      try {
+        output = await this.runSuiteStep(step, st);
+      } finally {
+        await this.stopWorktreeProcesses(`step ${step.id}`);
+      }
+      if (this.abort.signal.aborted) throw new Error('Cancelled');
+      st.output = output;
+      scope = { ...this.ctx, output, iteration: st.iteration };
     } else if (step.type === 'workflow') {
       // child runs (#174): their gates wait for the owner, and so does this run; no supervisor here
       output = await this.runChildWorkflows(step, st);
@@ -1337,7 +1378,7 @@ class WorkflowRun extends EventEmitter {
       if (step.wait) await this.afterAgentTurn(step, st);
     }
     const next = await this.finishStep(step, st, output, scope, t0);
-    return step.type === 'human_approval' || step.type === 'screenshots' || step.type === 'workflow' ? next : this.checkStalls(step, st, output, t0, next, again);
+    return ['human_approval', 'screenshots', 'suite', 'workflow'].includes(step.type) ? next : this.checkStalls(step, st, output, t0, next, again);
   }
 
   // ---- stall detection and the supervisor on call (#41) ---------------------------------------
@@ -2624,9 +2665,15 @@ class WorkflowRun extends EventEmitter {
       // context window of each model request: the first one and the largest
       const context = { start: null, peak: null };
       const calls = new Map();
+      // `full_suite: warn` (#177): the engine's suite step runs the whole suite; the agent's own run is noted
+      const suiteWarn = this.wf.steps.find((s) => s.id === stepId)?.full_suite === 'warn' ? this.suiteCommand() : null;
       const track = (item) => {
         if (item.kind === 'context') { context.start ??= item.tokens; context.peak = Math.max(context.peak || 0, item.tokens); return; }
         if (item.kind === 'tool_call') calls.set(item.id, { ...item });
+        if (suiteWarn !== null && item.kind === 'tool_call' && suiteStep.isFullSuiteCommand(item.input?.command, suiteWarn)) {
+          this.suiteRuns.agents++;
+          this.emitEvent('log', { level: 'warn', kind: 'full_suite_by_agent', step_id: stepId, agent: agentName, command: String(item.input.command).slice(0, 200), message: `[${agentName}] started the whole test suite in ${stepId} (\`${String(item.input.command).slice(0, 120)}\`): the orchestrator runs it once per round after the step; agents run only the focused tests of the change.` });
+        }
         if (item.kind === 'tool_call' && capabilities.CLAUDE_SUBAGENT_TOOLS.includes(item.name)) tools.subagents++;
         if (item.kind !== 'tool_result') return;
         if (calls.has(item.id)) calls.get(item.id).result = item;
@@ -2955,6 +3002,44 @@ class WorkflowRun extends EventEmitter {
     }
   }
 
+  // The whole-suite command of the run (its first suite step's, else the one the worktree's files
+  // give), '' when none: what `full_suite: warn` compares an agent's commands with.
+  suiteCommand() {
+    const s = this.wf.steps.find((x) => x.type === 'suite');
+    const cmd = s?.command ? render(String(s.command), this.ctx).trim() : '';
+    return cmd || suiteStep.detectTestCommand(this.ctx.worktree_dir) || '';
+  }
+
+  // `type: suite` (#177): the project's whole test suite once (src/engine/suite-step.js), with the
+  // agents' environment (simulation only, scratch workspace), its log in logs/suite-<visit>.log; the
+  // run's known pre-existing failures do not count. Simulation: mockSequences.suite: { <step>: [...] }.
+  async runSuiteStep(step, st) {
+    const seq = this.mockSequences?.suite?.[step.id];
+    const mockResult = Array.isArray(seq) && seq.length ? seq[Math.min(st.visits, seq.length) - 1] : 'pass';
+    let output;
+    try {
+      output = await suiteStep.runSuite({
+        command: step.command ? render(String(step.command), this.ctx).trim() : '',
+        cwd: this.ctx.worktree_dir,
+        runDir: this.runDir,
+        round: st.visits,
+        env: { ...process.env, ...capabilities.agentEnv(this.scratchWorkspace()) },
+        mock: this.mock,
+        mockResult,
+        preexisting: this.preexisting,
+        signal: this.abort.signal,
+        timeoutMs: parseDuration(step.timeout ? render(String(step.timeout), this.ctx).trim() : null, suiteStep.SUITE_TIMEOUT_MS),
+        log: (level, message) => this.emitEvent('log', { level, message }),
+      });
+    } catch (e) {
+      output = { kind: 'suite', status: 'blocked', round: st.visits, command: null, log: null, exit_code: null, duration_ms: 0, timed_out: false, failures: [], preexisting: [], reason: e.message, message: `The suite could not run: ${e.message}` };
+    }
+    if (output.status !== 'blocked') this.suiteRuns.engine++;
+    if (output.log) this.emitEvent('file.saved', { step_id: step.id, path: path.join(this.runDir, output.log) });
+    this.emitEvent('log', { level: output.status === 'pass' ? 'info' : 'warn', kind: 'suite', step_id: step.id, status: output.status, failures: output.failures.length, message: `${step.id}: ${output.message}` });
+    return output;
+  }
+
   // `type: workflow` (#174): the child runs of the step (src/engine/workflow-step.js), started through
   // startChild; the run shows as waiting while they go. Each one lands in `child_runs` (summary).
   async runChildWorkflows(step, st) {
@@ -3096,6 +3181,10 @@ ${stderr || stdout}`.slice(0, 1500)));
         steps: Object.fromEntries(Object.entries(this.ctx.steps).map(([k, v]) => [k, { visits: v.visits, output: v.output }])),
         // failures that also fail on the base, reported by a step and not chased in this run: follow-up issues for the owner
         ...(this.preexisting.length ? { preexisting_failures: this.preexisting } : {}),
+        // #203: the unit / E2E test inputs and where each value came from; #177: whole-suite runs
+        // by the engine's suite steps and by the agents' own commands (the measure of the change)
+        ...(this.testsPlan.length ? { tests_plan: this.testsPlan } : {}),
+        ...(this.suiteRuns.engine || this.suiteRuns.agents ? { suite_runs: this.suiteRuns } : {}),
         // step visits in order with their agents (runs list); this event's own update lands in it
         groups: this.wf.groups, progress: this.trail.steps,
         ...(outputs ? { outputs } : {}),

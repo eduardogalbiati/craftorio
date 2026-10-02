@@ -518,13 +518,14 @@ const MOCK_SEQUENCES = {
 // fails (the 1st by default) has a failed scenario, the next ones pass it; one is always skipped
 // (environment). The UI scenario's screenshot is under the visit's evidence folder (the screenshot
 // demo writes it; a plain mock run has no image).
-// A schema whose status has no `passed` (a development run's test step, #199): the scenarios are
-// written, not run: pending (run at release by e2e-release), one skipped (not writable here).
+// A schema whose status allows `pending` (a development run's test step, #199; it also allows
+// passed / failed for `e2e_tests: write_and_run`, #203, and test-batch): the scenarios are written,
+// not run: pending (run at release by e2e-release), one skipped (not writable here).
 function mockScenarios(h, statuses = []) {
   const seq = h.sequences?.tests_status || MOCK_SEQUENCES.tests_status;
   const failing = seq[Math.min(h.visit - 1, seq.length - 1)] === 'fail';
   const feature = 'features/143-dashboard-filter.feature';
-  if (statuses.length && !statuses.includes('passed')) {
+  if (statuses.includes('pending') || (statuses.length && !statuses.includes('passed'))) {
     return [
       { feature, name: 'Filter the runs by status', status: 'pending', steps: ['Given the dashboard lists 3 runs, one of them failed', 'When I pick "Failed" in the status filter', 'Then only the failed run is listed'], screenshots: [] },
       { feature, name: 'An empty filter result explains itself', status: 'pending', steps: ['Given the dashboard lists 2 runs, none of them failed', 'When I pick "Failed" in the status filter', 'Then I see "No run matches this filter"'], screenshots: [] },

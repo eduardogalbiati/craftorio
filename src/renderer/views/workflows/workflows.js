@@ -307,7 +307,7 @@ function stepList(w) {
         <div class="wf-step-head"><b>${esc(s.id)}</b>
           ${s.agents ? '<span class="badge">parallel</span>' : ''}${s.goal ? '<span class="badge">/goal</span>' : ''}${s.loop ? '<span class="badge">/loop</span>' : ''}
           ${skillNames.map((k) => `<span class="badge" title="skill">⚡ ${esc(k.replace(/\{\{\s*inputs\.(\w+)\s*\}\}/g, '‹$1›'))}</span>`).join('')}</div>
-        <div class="muted small">${human ? 'human approval' : s.type === 'screenshots' ? 'screenshots (no agent)' : s.type === 'workflow' ? `runs ${esc(s.workflow || 'a workflow')}${s.foreach ? ` for each item${s.max_parallel ? `, ${esc(String(s.max_parallel))} at a time` : ''}` : ''}` : who}</div>
+        <div class="muted small">${human ? 'human approval' : s.type === 'screenshots' ? 'screenshots (no agent)' : s.type === 'suite' ? 'test suite (no agent)' : s.type === 'workflow' ? `runs ${esc(s.workflow || 'a workflow')}${s.foreach ? ` for each item${s.max_parallel ? `, ${esc(String(s.max_parallel))} at a time` : ''}` : ''}` : who}</div>
         ${others.length ? `<div class="wf-step-next small">↳ ${others.map((n) => `<span class="mono">${esc(n)}</span>`).join(', ')}</div>` : ''}
       </div>
     </li>`;

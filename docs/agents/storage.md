@@ -51,6 +51,23 @@ owner actions write to the platform (Save to issue, create, close, epics: `src/b
 - `workflow.started.issues` records each issue's `updatedAt` as read, so a run can be traced to
   the issue text it used.
 
+### Who writes the backlog files, and the change event (#204)
+
+- Writers of `backlog/`: the sync (`<project>.json`, `<project>.local.json`), the queue snapshot
+  (`writeQueueFile`), the roadmap (`writeRoadmap`, `src/roadmap.js`: the screen, the service's
+  dispatch and live refill, the Oracle's `roadmap.stages`, the Product Owner), the refresh banner's
+  dismissal (`<project>.refresh.json`), and anything outside the app (another window, a script).
+  The roadmap and the queue go through `src/state-file.js` (temp file + rename, `.bak`).
+- `src/service/areas/backlog-watch.js` watches the folder (one `fs.watch` per workspace, started by
+  `setWorkspace`, closed on a switch and on `shutdown`) and pushes `backlog:changed { projectId,
+  file: roadmap | queue | issues | local | refresh, watching: true }` once per file, 300 ms after
+  its last write; a write that leaves the same mtime and size pushes nothing. A watcher error
+  pushes `{ projectId: null, watching: false }` (`backlogWatching()` answers the same): the Backlog
+  screen then polls every 5 s while its Roadmap tab is visible.
+- The Backlog screen reloads the project's data on its project's event, unless the owner types in
+  one of its fields, drags, or edits a roadmap item or a stage's note: the reload waits until they
+  are done (an open Edit form shows "The roadmap changed. Reload"). Scroll and expanded rows stay.
+
 ## `<workspace>/index.db`: what it adds
 
 `node:sqlite` (`DatabaseSync`, built into Node 24 / Electron 44: no dependency, nothing to unpack in

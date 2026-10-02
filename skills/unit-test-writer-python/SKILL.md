@@ -17,6 +17,8 @@ used_by: "test writer"
 | Django with `pytest-django` | pytest | `python -m pytest -q` | as pytest |
 | Django without pytest | Django | `python manage.py test` | `python manage.py test app.tests.Class.test_y` |
 
+- Run only the tests you write (the "One test" column); the whole suite is the orchestrator's when
+  the workflow has a suite step (see testing-principles: time budget).
 - Environment from the lockfile: `uv.lock` → prefix `uv run`; `poetry.lock` → `poetry run`; otherwise the active venv (`python -m ...`).
 - No framework yet: pytest.
 - Dependencies first: a fresh checkout (each run has its own worktree) has no environment.

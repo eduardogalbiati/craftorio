@@ -152,6 +152,33 @@ It is a human gate: no timeout, no supervisor, no retry ever answers it. The tim
 you at its gates is recorded apart from agent time (`summary.timing.gate_wait_ms`, the Details
 panel and the Time tooltip).
 
+**Tests: on or off, per workflow and per run** (#203; inputs `unit_tests` and `e2e_tests`, shown
+like `mode` in the Start drawer, the roadmap item's Edit form and the Backlog's Assign dialog, with
+the workflow's default). The test step is the largest cost of a run (about half of it), so:
+- `unit_tests`: **Write and run** (default) = the test writer writes the change's tests and runs the
+  focused ones, then the orchestrator runs the whole suite; **Run existing** = no test writer for
+  unit tests, the suite runs once without an agent and its failures go to the developer; **Off** =
+  no suite at all.
+- `e2e_tests`: **Write** (default) = the issue's BDD scenarios are written and checked to parse (run
+  at release by `e2e-release`); **Write and run** = also run here (slow: it starts the app);
+  **Off** = none.
+- Both off: the run goes from the code review straight to the build (no test step); the build,
+  the evidence, the verification and the merge always run. Nothing off is reported as tested: the
+  run's Details show a badge per input ("Unit tests: Off", the source on hover: workflow default or
+  chosen for this run), and the gates and the verifier get the same sentence. To test later, all
+  together: the `test-batch` workflow.
+- Your own defaults: change `default:` of these inputs in the workspace copy of the workflow. A
+  copy changed only in its inputs' defaults still gets the app's new versions (your values kept).
+
+**The orchestrator runs the suite, not an agent** (#177): after the test writer's turn, the `suite`
+step (no agent) runs the project's whole test suite once (`test_command`, else found from the
+project's files: `npm test`, `go test ./...`, `mvn test`, `dotnet test`, `pytest`…), saves the output
+in the run's `logs/suite-<round>.log` and gives the test writer only the failing tests (name, file,
+first lines of the error) and the log's path: at most 2 rounds, then the `test_failed` gate. Tests
+that also fail on the base (the test writer's pre-existing failures) are reported, never chased.
+The test writer runs only focused tests; a whole-suite command it starts anyway is noted in the
+run as a warning. The summary counts the suite runs (`suite_runs: { engine, agents }`).
+
 **Run App at a gate.** `developer_check`, `human_review` and `approve_merge` (any gate with
 `local_preview: true`) always offer **Run App** (its label says what it runs, e.g. "Run App: npm
 start"). It uses the project's Local preview (Projects › Edit › Local preview), else the
@@ -303,6 +330,7 @@ use what its `capabilities` declare (e.g. the CI pusher: read, `git`, `gh`, `gla
 The same develop → code review → test → build → verify pipeline as `software-development`, for working fast on your machine without GitHub or GitLab: no push, no PR/MR, no CI, no preview, no deploy.
 
 <!-- generated:local-hero -->
+- **Tests on or off** (#203): the same `unit_tests` / `e2e_tests` inputs and the same `suite` step (the orchestrator runs the whole suite once per round, #177) as `software-development`. With unit tests off nothing is reported as tested: `verify_failed` and the verifier say so, and the run's Details show it.
 - Each run still gets its own git worktree, started from your **local** `base_branch` (nothing is fetched, so a run sees the local merges of earlier runs you haven't pushed).
 - **No merge approval**: once `verify_change` passes, the engine merges the run's branch into the local `base_branch` automatically: rebased onto it first if it moved (another run merged meanwhile), fast-forward only (linear history), never pushed. The run's worktree and branch are then removed.
 - **Conflicts are resolved automatically**: a failed merge goes to `resolve_merge`, where the developer rebases onto the local base and resolves the conflicts (skill `merge-conflict-resolver`). Then only what the resolution changed is checked again: the review covers the rebase against the last approved commit (`git range-diff`; findings on untouched code are not blocking), the tests are the ones related to the files the resolution touched plus a smoke check (the full suite when it touched more than 5 files), the build runs, the verifier re-checks only the claims whose files were touched, and the merge is attempted right after. A resolution that changes behaviour (the developer answers `behaviour_changed: true`) goes through the full review, suite and verification. Merges of concurrent runs go one at a time. At most 3 rounds; what the developer can't fix, such as uncommitted changes in the checkout where the base is checked out (your work), stops at the `merge_blocked` gate (retry / stop).
@@ -329,6 +357,19 @@ nothing fixed: the tested commit is recorded as the last green E2E (`refs/multia
 a local ref). Green after fixes: you approve, then the fix merges into the local base. Development
 runs only write their issue's scenarios and check that they parse ("written, run at release"); they
 never wait for this workflow. It never pushes, tags or publishes.
+
+## Test batch (`workflows/test-batch.yaml`)
+
+Code & Build (#203). Write features first and test them later, all together: for runs made with
+unit or E2E tests off, it covers a range of local commits (since `since`, else since the last green
+batch, `refs/multiagent/test-batch-last-green`, a local ref; or the commits that close the run's
+issues) in its own worktree of the local base. One test writer session writes the missing unit tests
+(and E2E scenarios when `e2e_tests` is on) on the branch `test-batch-<run_id>`; the orchestrator runs
+the whole suite once per round (`suite` step, no agent) and sends the failing tests back to the test
+writer, at most `max_rounds`, then a human gate. A failure caused by the production code goes to the
+developer; then you approve the merge (nothing reviewed the fix). Green: the branch merges into the
+local base and the commit becomes the last green batch. Start it by hand, from the Backlog or as a
+roadmap item (e.g. the last item of a stage). It never pushes, tags or publishes.
 
 ## AI Arena (`workflows/ai-arena.yaml`)
 

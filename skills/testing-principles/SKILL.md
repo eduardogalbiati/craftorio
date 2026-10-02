@@ -65,20 +65,29 @@ You run unattended. When something is ambiguous (which seam, which expected valu
 option most consistent with the existing tests and code, and list it under **Assumptions** in
 your answer.
 
-## Fit the time budget (run each suite once)
+## Fit the time budget (focused tests; the orchestrator runs the suite)
 
-A test turn has a time limit; a killed turn loses its answer and the next attempt pays again.
+A test turn has a time limit; a killed turn loses its answer and the next attempt pays again, and
+every minute a suite runs keeps your turn (and its whole context) open.
 
-- While writing, run only the test files you touch, filtered to the tests you are writing (the
-  language skill's "one file / test" command). A slow file (over a minute) runs **at most once per
-  round**; don't rerun it to read a different part of its output: keep the output in a file.
-- Run the full suite **once, at the end**. A second run only after a fix, not to double-check.
+- Run only the focused tests of the change: the test files you touch, filtered to the tests you
+  are writing (the language skill's "one file / test" command). A slow file (over a minute) runs
+  **at most once per round**; don't rerun it to read a different part of its output: keep the
+  output in a file.
+- **The whole suite is the orchestrator's** when your workflow has a suite step (the
+  software-development workflows, #177): it runs the project's suite once after your step, without
+  an agent, and gives you only its failing tests (name, file, first lines of the error) and the
+  path of its log. Never start the whole suite yourself there (the run notes it as a warning).
+  Read the log only for the failures you fix, or have a sub-agent summarise it.
+- Only when your prompt says nothing runs the suite after you (no suite step): run the full suite
+  **once, at the end**, and a second time only after a fix, not to double-check.
 - Never start a full end-to-end or mock run of the application (e.g. a workflow run script) unless
   the task asks for it: the suite already includes what the project wants run.
 
 ## Pre-existing failures: report them, don't chase them
 
-When the suite fails, first find out whether the failure is this change's:
+When a test fails (yours, or one the orchestrator's suite reports), first find out whether the
+failure is this change's:
 
 1. Run **only the failing files** on the base commit. When your prompt gives a base checkout (the
    orchestrator prepares one, with its dependencies linked from the shared cache), run them there
@@ -97,6 +106,7 @@ When the suite fails, first find out whether the failure is this change's:
 ## Done when
 
 - every seam you listed has at least one test for the behaviour that changed;
-- the full suite was run once with the project's command and the result (pass/fail counts) is reported;
+- the focused tests of the change pass (or fail for a reported reason); the full suite was run once
+  with the project's command only when no suite step runs it after you;
 - every failure is reported as test name, error, and probable cause (production bug vs outdated test),
   and a failure that also fails on the base is listed as pre-existing instead.

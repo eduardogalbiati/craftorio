@@ -678,9 +678,20 @@
     ctx.setData(await api.saveRoadmap(ctx.projectId, stages));
   }
 
+  // #204: a live reload waits while the owner drags, or edits an item or a stage's note; Reload in
+  // the Edit form's "The roadmap changed" notice closes the form (its values were not saved).
+  const busy = () => !!(dragging || editing || noteEditing);
+  function closeEdit() {
+    editing = null;
+    adding = false;
+    noteEditing = null;
+  }
+
   window.BacklogRoadmap = {
     addStage,
     badge,
+    busy,
+    closeEdit,
     dropProblem,
     html,
     liveBanner,

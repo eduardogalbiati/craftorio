@@ -215,6 +215,9 @@ function readRun(runsDir, runId) {
     chain: chainOf(dir, summary, started),
     // the declared outputs it finished with (#134), null before it finished or without a contract
     outputs: summary?.outputs || null,
+    // #203: [{ input, label, value, value_label, source: 'workflow default' | 'chosen for this run' }]
+    // of the development workflows' unit_tests / e2e_tests (null: a workflow without them)
+    testsPlan: summary?.tests_plan || started?.tests_plan || null,
     // `type: workflow` steps (#174): { run_id, workflow, step_id, index?, depth } of the run that started
     // this one, and [{ run_id, step_id, index?, workflow, status }] of the runs this one started (null: none)
     parentRun: summary?.parent_run || started?.parent_run || null,

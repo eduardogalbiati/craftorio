@@ -73,6 +73,10 @@ module.exports = (ctx) => {
       fn: ({ projectId, on }) => projects.updateProject(ctx.ws.projects, project(projectId), { autoEpic: !!on }),
     },
     { channel: 'backlog:unpushed', method: 'listUnpushed', fn: () => ctx.unpushedProjects() },
+    // #204: a backlog/ file changed ({ projectId, file, watching }, areas/backlog-watch.js); watching:
+    // false = the watcher failed, the screen polls while visible
+    { event: 'backlog:changed', method: 'onBacklogChanged' },
+    { channel: 'backlog:watching', method: 'backlogWatching', fn: () => ctx.backlogWatching() },
     // Assign a workflow to issues: they are queued and start while there are free run slots (see dispatchQueue).
     // When an ended run kept work for them, the answer is the kept-work question { confirm, kept, runId }
     // (nothing queued) until `confirmed` (#170: Start from scratch).

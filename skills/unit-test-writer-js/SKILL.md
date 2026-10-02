@@ -17,12 +17,13 @@ used_by: "test writer"
 | `mocha` in devDependencies | Mocha | `npx mocha` | `npx mocha <path> --grep "<name>"` |
 | none of the above, `"test": "node --test ..."` | node:test | `node --test` | `node --test --test-name-pattern "<name>" <path>` |
 
-- The official suite command is `scripts.test` in `package.json`: use it for the full run.
+- The official suite command is `scripts.test` in `package.json`: the orchestrator's suite step
+  runs it after your step (never run it yourself then); only without a suite step, use it for the full run.
 - Package manager from the lockfile: `package-lock.json` → npm, `pnpm-lock.yaml` → pnpm, `yarn.lock` → yarn.
 - No framework yet: plain Node → `node:test` + `node:assert/strict`; Vite/TS front end → Vitest.
 - Always non-interactive (`vitest run`, never watch mode; set `CI=true` if needed).
 - While iterating run single files, filtered to the tests you write (`--test-name-pattern`, `-t`,
-  `--grep`), a slow file at most once per round; run the full suite once at the end (see
+  `--grep`), a slow file at most once per round; the whole suite is the orchestrator's (see
   testing-principles: time budget, pre-existing failures).
 - Dependencies are ready: the engine links each run's `node_modules` from a shared cache,
   installed once per lockfile. Never run `npm ci` (or a frozen pnpm/yarn install) and never delete

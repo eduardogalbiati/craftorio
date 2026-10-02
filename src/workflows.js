@@ -12,12 +12,57 @@ const BUNDLED_WORKFLOWS_DIR = path.join(__dirname, '..', 'workflows');
 const isWorkflowFile = (f) => /\.ya?ml$/i.test(f);
 const isFile = (p) => { try { return fs.statSync(p).isFile(); } catch { return false; } };
 
+// The `default:` lines of a workflow's top-level `inputs:` (#203), as text: { input: { start, end,
+// value } } (line indexes, end exclusive; value = the text after `default:` plus a block scalar's
+// lines). Read as text, not parsed, so the file's comments and layout stay as they are.
+function inputDefaults(lines) {
+  const out = {};
+  const start = lines.findIndex((l) => /^inputs:\s*(#.*)?$/.test(l));
+  if (start < 0) return out;
+  let input = null;
+  for (let i = start + 1; i < lines.length; i++) {
+    const l = lines[i];
+    if (/^\S/.test(l) && !/^#/.test(l)) break; // the next top-level key
+    const key = /^ {2}([A-Za-z0-9_]+):\s*(#.*)?$/.exec(l);
+    if (key) { input = key[1]; continue; }
+    const def = input && /^ {4}default:(.*)$/.exec(l);
+    if (!def) continue;
+    let end = i + 1;
+    // a block scalar (default: |) goes on with its deeper lines
+    if (/^\s*[|>][-+]?\s*$/.test(def[1])) while (end < lines.length && (/^ {5,}/.test(lines[end]) || !lines[end].trim())) end++;
+    out[input] = { start: i, end, value: [def[1], ...lines.slice(i + 1, end)].join('\n') };
+  }
+  return out;
+}
+
+const readLines = (dir, id) => fs.readFileSync(path.join(dir, id), 'utf8').split('\n');
+
 const WORKFLOW_KIND = {
   list: (dir) => fs.readdirSync(dir).filter((f) => isWorkflowFile(f) && isFile(path.join(dir, f))).sort(),
   exists: (dir, id) => isFile(path.join(dir, id)),
   hash: (dir, id) => crypto.createHash('sha256').update(fs.readFileSync(path.join(dir, id))).digest('hex'),
   copy: (srcDir, destDir, id) => fs.writeFileSync(path.join(destDir, id), fs.readFileSync(path.join(srcDir, id))),
   remove: (dir, id) => fs.rmSync(path.join(dir, id), { force: true }),
+  // #203: a copy changed only in its inputs' defaults is not "frozen" (src/seed.js): the hash
+  // without the default values, and the new version written with the user's values
+  baseHash: (dir, id) => {
+    const lines = readLines(dir, id);
+    const defs = inputDefaults(lines);
+    for (const d of Object.values(defs).sort((a, b) => b.start - a.start)) lines.splice(d.start, d.end - d.start, '    default: <default>');
+    return crypto.createHash('sha256').update(lines.join('\n')).digest('hex');
+  },
+  carryOver: (srcDir, destDir, id) => {
+    const lines = readLines(srcDir, id);
+    const src = inputDefaults(lines);
+    const mine = inputDefaults(readLines(destDir, id));
+    // an input whose default line the new version no longer has: nothing safe to write
+    if (Object.keys(mine).some((k) => !src[k])) return false;
+    for (const [k, d] of Object.entries(src).sort((a, b) => b[1].start - a[1].start)) {
+      if (mine[k] && mine[k].value !== d.value) lines.splice(d.start, d.end - d.start, ...`    default:${mine[k].value}`.split('\n'));
+    }
+    fs.writeFileSync(path.join(destDir, id), lines.join('\n'));
+    return true;
+  },
 };
 
 /** Copies/updates the bundled workflows into the workspace folder. Returns the files copied or updated. */
