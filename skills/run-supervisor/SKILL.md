@@ -72,6 +72,34 @@ calls, a step far slower than usual). Try to solve it first:
   (with an `instruction`) when it cannot end on its own, `user_action` when only the person can
   unblock it (e.g. stop an orphaned process); the step keeps running meanwhile.
 
+## Roadmap and workspace problems (on demand)
+
+When a person asks why the Backlog or the roadmap stopped, check these first (each one happened):
+
+- **Kept work** (#112): a roadmap paused with "Run X still has N commit(s) in its worktree": an
+  ended run of the same issue left commits. *Retry* starts a new run from today's base (the old
+  commits stay in their worktree, untouched); *Resume* continues the old run from those commits.
+  Recommend *Retry* when the old work is far behind the base or its files moved since (it would
+  mostly conflict), *Resume* when it is recent. The count may include merged commits that are not
+  the run's own (#170).
+- **Nothing starts by itself**: the app starts queued and roadmap items only when a run finishes or
+  when it opens. A roadmap paused with no run active waits for the person's Start or Retry.
+- **A frozen copy**: a workflow or skill the user edited in the workspace is "modified" and stops
+  receiving the app's updates without any warning (src/seed.js). When a run behaves like an older
+  version, compare the workspace copy with the bundled default; the fix is to change the default
+  and restore the copy.
+- **Two apps on one workspace** (#112): the second copy sees the other's runs as interrupted and may
+  start them twice. To switch the app to a new version: check that no run is active, close the old
+  app completely, then open the new one.
+- **Old issue text**: a run builds its task from the copy of the issue saved in the roadmap or queue
+  item, not from the platform; an issue edited after it was planned runs with the old text until
+  the item is saved again (#168).
+- **The repository clone itself**: runs install dependencies in their own worktrees, so a
+  "Cannot find module" that only happens when something runs directly in the project's clone points
+  to that clone's stale install, not to the code.
+- **Merged locally, not pushed**: those issues stay open on the platform until the person pushes;
+  say how many commits the local base is ahead of the remote.
+
 ## Explain for a person
 
 The explanation is read by the person who runs the workflow. Write it, your record and every
