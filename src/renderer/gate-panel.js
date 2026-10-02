@@ -27,8 +27,21 @@ function lastOutput(runId, match) {
   return null;
 }
 
+// The output of a `type: screenshots` step (#144) when it is the last step that ran before the
+// gate (gates' own answers skipped): { folder, round, taken, errors, reason, message }, else null.
+function lastCapture(runId) {
+  const evs = state.runs.get(runId)?.events || [];
+  for (let i = evs.length - 1; i >= 0; i--) {
+    const o = evs[i].type === 'step.finished' ? evs[i].output : null;
+    if (!o || typeof o !== 'object' || 'approved' in o || 'choice' in o) continue;
+    return o.kind === 'screenshots' ? o : null;
+  }
+  return null;
+}
+
 // Mounts the Artifacts panel of every gate side in root: the run's files newest first, and at a
-// gate with diff_base the changed files (each opens its diff) and the developer's notes.
+// gate with diff_base the changed files (each opens its diff) and the developer's notes. Right
+// after a screenshots step (developer_check), that step's latest round leads the panel.
 function mountGateSides(root) {
   if (!window.ArtifactsPanel) return;
   root.querySelectorAll('[data-gate-side]').forEach((el) => {
@@ -39,7 +52,7 @@ function mountGateSides(root) {
       .filter(([, t]) => t).map(([title, t]) => ({ title, text: typeof t === 'string' ? t : JSON.stringify(t, null, 2) }));
     const onChange = (file) => openTerminal({ kind: 'diff', runId, sessionId: `diff-${approval}-${file}`, label: `Diff ${file.split('/').pop()}`, open: (cols, rows) => api.termOpen({ kind: 'diff', runId, approvalId: approval, file, cols, rows }) })
       .catch((e) => showToast('Could not show the diff', errMsg(e)));
-    const panel = ArtifactsPanel.mount(el, { runId, flat: true, extras: { notes, changes: diff ? 'Loading…' : null, onChange } });
+    const panel = ArtifactsPanel.mount(el, { runId, flat: true, extras: { notes, changes: diff ? 'Loading…' : null, onChange, capture: lastCapture(runId) } });
     if (diff) {
       // the files the developer reported: a simulated run's only changes (#115), whatever git says
       // of its folder, and a real run's fallback when its worktree cannot be listed

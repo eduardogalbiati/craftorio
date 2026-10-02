@@ -15,6 +15,7 @@
 //   --stop-at <step>   run: approves every gate but this step's and captures once it waits there
 //                      (e.g. --input mode=validated --stop-at developer_check: the two-column gate
 //                      with Run App and its Artifacts panel)
+//   --no-demo-shots    artifacts, run: no demo screenshots (e.g. the gate's "No screenshots: …" state)
 //   --keep-awake <s>   off | idle | active | error: the Keep awake switch (#162, Workflows header,
 //                      Settings › Execution, the sidebar's moon-off item); active and error show
 //                      demo states (2 runs, roadmap stage 3/6; a blocker that failed to start)
@@ -67,7 +68,7 @@ const THEMES = ['dark', 'light', 'system'];
 const KEEP_AWAKE = ['off', 'idle', 'active', 'error'];
 
 function parseArgs(argv) {
-  const a = { view: 'dashboard', tab: null, mode: null, run: 'mock', workflow: 'software-development.yaml', clicks: [], contexts: [], inputs: {}, stopAt: null, keepAwake: null, theme: null, size: [1400, 900], ref: null, out: null, name: null, side: null, caption: null, wait: null, timeout: 90000 };
+  const a = { view: 'dashboard', tab: null, mode: null, run: 'mock', workflow: 'software-development.yaml', clicks: [], contexts: [], inputs: {}, stopAt: null, keepAwake: null, theme: null, size: [1400, 900], ref: null, out: null, name: null, side: null, caption: null, wait: null, timeout: 90000, demoShots: true };
   for (let i = 0; i < argv.length; i++) {
     const k = argv[i];
     const next = () => { const v = argv[++i]; if (v === undefined) throw new Error(`${k} needs a value`); return v; };
@@ -99,6 +100,7 @@ function parseArgs(argv) {
     else if (k === '--side') a.side = next();
     else if (k === '--wait') a.wait = ms();
     else if (k === '--timeout') a.timeout = ms();
+    else if (k === '--no-demo-shots') a.demoShots = false;
     else throw new Error(`Unknown argument: ${k}`);
   }
   const v = VIEWS[a.view];
@@ -653,6 +655,9 @@ function main() {
       fs.mkdirSync(dir, { recursive: true });
       fs.writeFileSync(path.join(dir, name), img.toPNG());
     };
+    // the developer's capture before developer_check (#144): a pair with its caption
+    save('developer', 1, '144-dashboard-default.original.png', shot.crop({ x: 0, y: 0, width: Math.round(width * 0.6), height: Math.round(height * 0.6) }));
+    save('developer', 1, '144-dashboard-default.modified.png', shot.crop({ x: 0, y: 0, width: Math.round(width * 0.7), height: Math.round(height * 0.7) }));
     save('developer', 1, '146-artifacts-panel-default.modified.png', shot.crop({ x: 0, y: 0, width: Math.round(width * 0.8), height: Math.round(height * 0.8) }));
     await new Promise((r) => setTimeout(r, 50)); // the final round captures last
     save('evidence', 1, '146-artifacts-panel-default.original.png', shot.crop({ x: 0, y: 0, width: Math.round(width * 0.8), height: Math.round(height * 0.8) }));
@@ -662,6 +667,7 @@ function main() {
     evidence.writeManifest(runDir, {
       base: 'main', branch: 'feat/demo-evidence', commit: '3f9c2ab71d0e', baseCommit: 'a17b0c4e9f21',
       captions: {
+        [rel('developer', '144-dashboard-default.modified.png')]: { caption: 'The dashboard with the developer\'s change' },
         [rel('developer', '146-artifacts-panel-default.modified.png')]: { caption: 'Artifacts panel (first try)' },
         [rel('evidence', '146-artifacts-panel-default.modified.png')]: { caption: 'Artifacts panel with the run\'s screenshots' },
         [rel('evidence', '145-image-viewer-small.modified.png')]: { caption: 'A small image (opens at 100%)' },
@@ -735,7 +741,7 @@ function main() {
           if (!shown) throw new Error(`the run never waited at ${args.stopAt}`);
           // demo screenshots in the live run, for its gate's Artifacts panel and the viewer
           const live = runDirs()[0];
-          if (live) {
+          if (live && args.demoShots) {
             await demoEvidence(win, live);
             await js(`ArtifactsPanel.refreshRun(${JSON.stringify(path.basename(live))})`);
           }
@@ -745,7 +751,7 @@ function main() {
         clearInterval(approve);
       }
     } else {
-      if (v === 'artifacts' && run?.simulated) await demoEvidence(win, run.dir);
+      if (v === 'artifacts' && run?.simulated && args.demoShots) await demoEvidence(win, run.dir);
       await click(`.nav-item[data-view="${v}"]`);
     }
     await pause(500);

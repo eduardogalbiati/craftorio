@@ -12,7 +12,8 @@
 // `contextSummary` → `summary.context`). `sendToAgent` builds one turn; `invokeTurn` runs it against
 // the provider (templated `timeout` via `turnTimeout`; a failed attempt's tool calls go to the next
 // one, `attemptSummary`). Exports `render` (nunjucks, autoescape off, filters `to_yaml`, `to_json`,
-// `shuffle(seed)`, `clamp(lo, hi)`), `takeHandoff`, `parseTokens`.
+// `shuffle(seed)`, `clamp(lo, hi)`), `takeHandoff`, `parseTokens`. Steps without an agent: gates
+// (`type: human_approval`) and `type: screenshots` (`runScreenshots`, #144).
 
 const fs = require('fs');
 const path = require('path');
@@ -50,6 +51,7 @@ const evidence = require('../evidence');
 const { scratchWorkspace } = require('../local-preview');
 const { stopProcessesIn } = require('./processes');
 const { PROBES, runProbe, parseTarget } = require('./probes');
+const { captureScreenshots } = require('./screenshot-step');
 const mergeQueue = require('./merge-queue');
 const { IdleWatch } = require('./idle');
 const testPaths = require('./test-paths');
@@ -156,7 +158,13 @@ function loadWorkflow(file) {
   for (const s of wf.steps) {
     capabilities.validate(s.capabilities, `Step "${s.id}"`, mcpServers);
     if (s.edits_tests !== undefined && typeof s.edits_tests !== 'boolean') throw new Error(`Step "${s.id}": edits_tests must be true or false.`);
-    if (s.type !== 'human_approval') {
+    if (s.type === 'screenshots') {
+      // `type: screenshots` (#144): no agent; the screens listed in `from`'s `screenshots` output
+      if (s.agent || s.agents) throw new Error(`Step "${s.id}": a screenshots step has no agent.`);
+      if (!ids.has(s.from)) throw new Error(`Step "${s.id}": from must be the step whose output lists the screenshots.`);
+      if (s.folder !== undefined && !/^[\w-]+$/.test(String(s.folder))) throw new Error(`Step "${s.id}": folder must be a plain folder name (e.g. developer).`);
+      if (s.timeout !== undefined && parseDuration(s.timeout, null) == null) throw new Error(`Step "${s.id}": timeout must be a duration such as 3m.`);
+    } else if (s.type !== 'human_approval') {
       // `agents: [...]` = fan-out: the same prompt goes to several agents in parallel
       if (s.agents && (!Array.isArray(s.agents) || !s.agents.length)) throw new Error(`Step "${s.id}": agents must be a non-empty list.`);
       if (s.agents && s.goal) throw new Error(`Step "${s.id}": goal is not supported on a fan-out step (agents).`);
@@ -645,7 +653,7 @@ class WorkflowRun extends EventEmitter {
       if (!enabled) delete this.wf.agents[name];
     }
     for (const s of this.wf.steps) {
-      if (s.type === 'human_approval') continue;
+      if (s.type === 'human_approval' || s.type === 'screenshots') continue;
       if (!s.agents) {
         if (!this.wf.agents[s.agent]) throw new Error(`Step "${s.id}" uses agent "${s.agent}", which is disabled for this run.`);
         continue;
@@ -988,6 +996,15 @@ class WorkflowRun extends EventEmitter {
         scope = { ...this.ctx, output, approved: answer, rejected: !answer, feedback };
       }
       st.output = output;
+    } else if (step.type === 'screenshots') {
+      // no agent, no supervisor: whatever fails is in the output, for the gate that follows (#144)
+      try {
+        output = await this.runScreenshots(step, st);
+      } finally {
+        await this.stopWorktreeProcesses(`step ${step.id}`);
+      }
+      st.output = output;
+      scope = { ...this.ctx, output, iteration: st.iteration };
     } else {
       const slow = this.watchSlowStep(step, st);
       try {
@@ -1025,7 +1042,7 @@ class WorkflowRun extends EventEmitter {
       if (step.wait) await this.afterAgentTurn(step, st);
     }
     const next = await this.finishStep(step, st, output, scope, t0);
-    return step.type === 'human_approval' ? next : this.checkStalls(step, st, output, t0, next, again);
+    return step.type === 'human_approval' || step.type === 'screenshots' ? next : this.checkStalls(step, st, output, t0, next, again);
   }
 
   // ---- stall detection and the supervisor on call (#41) ---------------------------------------
@@ -2570,6 +2587,33 @@ class WorkflowRun extends EventEmitter {
       });
     } catch (e) {
       this.emitEvent('log', { level: 'warn', message: `evidence manifest: ${e.message}` });
+    }
+  }
+
+  // `type: screenshots` (#144): the project's screenshot command once per entry of `from`'s
+  // `screenshots` output, modified from the worktree and original at `base` (default: the
+  // worktree's base ref), into evidence/<folder>/round-<visit>/ (src/engine/screenshot-step.js).
+  // A simulated run captures nothing. Never throws: an error becomes the output's reason.
+  async runScreenshots(step, st) {
+    const folder = step.folder || step.id;
+    try {
+      const base = step.base ? render(String(step.base), this.ctx).trim() : this.worktree?.ref || null;
+      return await captureScreenshots({
+        entries: this.ctx.steps[step.from]?.output?.screenshots,
+        cwd: this.ctx.worktree_dir,
+        runDir: this.runDir,
+        folder,
+        round: st.visits,
+        base: base || null,
+        env: { ...process.env, ...capabilities.agentEnv(this.scratchWorkspace()) },
+        mock: this.mock,
+        signal: this.abort.signal,
+        timeoutMs: parseDuration(step.timeout, undefined),
+        log: (level, message) => this.emitEvent('log', { level, message }),
+      });
+    } catch (e) {
+      const reason = `the capture failed: ${e.message}`;
+      return { kind: 'screenshots', folder, round: st.visits, dir: null, taken: 0, screens: 0, screenshots: [], errors: [], reason, message: `No screenshots: ${reason}` };
     }
   }
 

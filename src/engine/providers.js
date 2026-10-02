@@ -428,6 +428,8 @@ function mockValue(s, key, h) {
     case 'array': {
       if (key === 'preexisting_failures' && !h.sequences?.preexisting_failures) return [];
       if (key === 'ui_findings' && !h.sequences?.ui_findings) return [];
+      // the developer's screens to capture (#144): one valid entry of the screenshot command
+      if (key === 'screenshots' && s.items?.properties?.args) return [{ name: '144-dashboard-default', caption: 'The dashboard (simulated)', args: ['--view', 'dashboard'] }];
       if (key === 'left_out') {
         const seq = h.sequences?.left_out;
         const count = Array.isArray(seq) && seq.length ? +seq[Math.min(h.visit - 1, seq.length - 1)] || 0 : 0;
@@ -545,7 +547,9 @@ module.exports = {
   gitConfigEnv,
   isPermissionDenial,
   isRetryable,
+  killTree,
   parseGrok,
+  quoteCmd,
   refreshWindowsPath,
   resolveCommand,
   runTurn,

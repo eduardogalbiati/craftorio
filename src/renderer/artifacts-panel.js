@@ -14,7 +14,9 @@
 //   ArtifactsPanel.openImage does the same for the Artifacts screen;
 // - right-click (or Shift+F10) on a file or an open image: the copy menu (artifact-menu.js, #114);
 // - extras (the gate): changed files (a click opens that file's diff) and notes (the developer's
-//   test_notes / evidence_plan), shown above the files;
+//   test_notes / evidence_plan), shown above the files; the gate right after a screenshots step
+//   (extras.capture, #144) leads with that step's latest round only, its failed captures, the other
+//   rounds in History, or "No screenshots: <reason>";
 // - live: ArtifactsPanel.refreshRun(runId) reloads every mounted panel of that run (app.js calls
 //   it on file.saved, handoff.saved, decision.logged, step.finished, workflow.finished).
 // Uses app.js's helpers (esc, api, artKindIcon, fmtSize, markdownHtml, renderJsonText,
@@ -142,11 +144,12 @@
     const extras = extrasHtml(p.extras);
     if (p.files == null) return `${head}${extras}<p class="muted small ap-pad">Loading…</p>`;
     const error = p.error ? `<p class="error small ap-pad">Could not load artifacts: ${esc(p.error)}</p>` : '';
-    if (!p.files.length) {
-      return `${head}${extras}${error}<div class="ap-empty"><b>No artifacts yet</b><p class="muted small">Handoff notes, the decision log, documents the steps save and the evidence step's screenshots appear here as the run produces them.</p></div>`;
-    }
     const shots = shotsHtml(p);
-    if (p.flat) return `${head}${extras}${error}${shots}<div class="ap-group">${extras || shots ? '<div class="ap-group-head">Run files</div>' : ''}${[...p.files].sort(newest).map(fileHtml).join('')}</div>`;
+    if (!p.files.length) {
+      return `${head}${p.extras?.capture ? shots : ''}${extras}${error}<div class="ap-empty"><b>No artifacts yet</b><p class="muted small">Handoff notes, the decision log, documents the steps save and the evidence step's screenshots appear here as the run produces them.</p></div>`;
+    }
+    // the gate: the screenshots lead, then the changed files and the developer's notes
+    if (p.flat) return `${head}${shots}${extras}${error}<div class="ap-group">${extras || shots ? '<div class="ap-group-head">Run files</div>' : ''}${[...p.files].sort(newest).map(fileHtml).join('')}</div>`;
     const groups = GROUPS.map(([id, label]) => {
       const files = p.files.filter((f) => groupOf(f) === id).sort(newest);
       return files.length ? `<div class="ap-group" data-group="${id}"><div class="ap-group-head">${esc(label)} <span class="muted">${files.length}</span></div>${files.map(fileHtml).join('')}</div>` : '';
@@ -176,9 +179,12 @@
   }
 
   // The final set, one shot per name (an original kept from an earlier round included)
-  function finalShots(ev) {
+  const finalShots = (ev) => pairShots(ev, (ev?.images || []).filter((i) => i.final));
+
+  // Images → one shot per name, each with its pair
+  function pairShots(ev, images) {
     const shots = new Map();
-    for (const x of (ev?.images || []).filter((i) => i.final)) {
+    for (const x of images) {
       const s = shots.get(x.key);
       if (!s) shots.set(x.key, shotOf(ev, x));
       else s.sides[x.side] = x;
@@ -197,9 +203,24 @@
       <div class="ap-pair${sides.length === 1 ? ' single' : ''}">${sides.map(fig).join('')}</div></div>`;
   }
 
+  // The gate right after a screenshots step (#144, extras.capture: its output): only that step's
+  // round, original/modified side by side with captions, the failed captures listed; every other
+  // round in History (no stale screenshots of an older commit); "No screenshots: <reason>".
+  function captureHtml(p, ev, cap) {
+    const latest = (x) => x.step === cap.folder && x.round === cap.round;
+    const shots = pairShots(ev, (ev?.images || []).filter(latest));
+    const failed = (cap.errors || []).map((e) => `${e.name}${e.side ? ` (${e.side})` : ''}: ${e.error}`);
+    const errors = failed.map((t) => `<p class="error small ap-pad" title="${esc(t)}">${esc(t)}</p>`).join('');
+    const body = shots.length ? shots.map((s) => shotCardHtml(ev, s)).join('')
+      : `<div class="ap-empty"><b>No screenshots:</b> <span class="muted">${esc(cap.reason || 'none were captured')}</span></div>`;
+    return `<div class="ap-group ap-shots"><div class="ap-group-head">Screenshots <span class="badge">latest</span> <span class="muted" title="Captured before this gate">${esc(`${cap.folder} · round ${cap.round}`)}</span></div>
+      ${body}${errors}${ev?.images?.length ? historyHtml(p, ev, (x) => !latest(x)) : ''}</div>`;
+  }
+
   function shotsHtml(p) {
     if (p.evidence === undefined) return ''; // not loaded yet
     const ev = p.evidence;
+    if (p.extras?.capture) return captureHtml(p, ev, p.extras.capture);
     if (!ev?.images?.length) return '<div class="ap-group ap-shots"><div class="ap-group-head">Screenshots</div><p class="muted small ap-pad">No screenshots in this run.</p></div>';
     const shots = finalShots(ev);
     const issues = [...new Set(shots.map((s) => s.issue || ''))];
@@ -211,11 +232,12 @@
     return `<div class="ap-group ap-shots"><div class="ap-group-head">Screenshots <span class="badge">final</span> <span class="muted" title="The last round that captured">${esc(where)}</span></div>${body}${historyHtml(p, ev)}</div>`;
   }
 
-  // Older rounds and steps, newest first, each image opening in the viewer with its pair
-  function historyHtml(p, ev) {
-    const old = ev.images.filter((x) => !x.final);
+  // Older rounds and steps (isOld: the images that are not shown above), newest first, each image
+  // opening in the viewer with its pair
+  function historyHtml(p, ev, isOld = (x) => !x.final) {
+    const old = ev.images.filter(isOld);
     if (!old.length) return '';
-    const rounds = (ev.rounds || []).filter((r) => !r.final).reverse();
+    const rounds = [...(ev.rounds || [])].reverse();
     const item = (x) => `<button type="button" class="ap-file" data-ap-hist="${esc(x.file)}" data-ap-img="${esc(x.file)}" title="${esc(x.path)}">${artKindIcon('image')}
       <span class="ap-file-main"><span class="ap-file-name">${esc(x.caption || x.key)}</span><span class="ap-file-sub muted">${esc(x.key)}</span></span><span class="badge">${esc(x.side)}</span></button>`;
     const groups = rounds.map((r) => {

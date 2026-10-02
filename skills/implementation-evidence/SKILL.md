@@ -89,6 +89,12 @@ Every tool call re-reads your whole context, so exploring is what makes this ste
   show): no other index to write.
 - Return the captions in `screenshots`: `[{ "path": "<file name in your round folder>", "caption":
   "<screen>" }]`, one per image (a pair: its modified image).
+- **The developer's shots may already exist.** A workflow with a screenshots step before the
+  owner's check (software-development's `developer_screenshots`, #144) captured the states the
+  developer listed into `<run_dir>/evidence/developer/round-<n>/` (listed in the manifest). Read
+  that folder first: a pair of the latest round taken at the commit you are checking (the manifest's
+  `commit`) can be reused (say so in `evidence`, with its path) instead of captured again; capture
+  only what is missing, failed there, or changed since.
 - This orchestrator's own repository: `npx electron scripts/screenshot.js --view <view> [options]`
   (`--help` for all of them). Views: dashboard, sessions, projects, project, backlog, artifacts,
   workflows, agents, skills, usage, analytics, settings, duo, arena, run-chat, run. Options:

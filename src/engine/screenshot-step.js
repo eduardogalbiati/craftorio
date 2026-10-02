@@ -1,0 +1,163 @@
+// The `type: screenshots` step (#144): a step without an agent that runs the project's screenshot
+// command (`npm run screenshot -- <args>`, the `screenshot` script of the worktree's package.json)
+// once per entry of an earlier step's `screenshots: [{ name, caption, args }]` output: "modified"
+// from the worktree, then "original" with `--ref <base>`, into <run_dir>/evidence/<folder>/round-<n>/
+// as `<name>.<side>.png` (src/evidence.js; the engine rebuilds the manifest after the step, with the
+// captions of the output's `screenshots: [{ path, caption }]`).
+// It never fails: no entries, a simulated run, no worktree, no screenshot command, an invalid entry,
+// a timeout or a crash end up in the output (`errors`, `reason`, `message`), and the run goes on to
+// the next step (the developer_check gate, which says what failed). Nothing is retried by an agent.
+// Output: { kind: 'screenshots', folder, round, dir, taken, screens, screenshots, errors, reason, message }.
+
+const fs = require('fs');
+const path = require('path');
+const { spawn } = require('child_process');
+const evidence = require('../evidence');
+const { killTree, quoteCmd, resolveCommand } = require('./providers');
+
+const MAX_SCREENS = 8;
+const SHOT_TIMEOUT_MS = 180000;
+// set by the step itself: the round folder, the file name, the side and the base
+const RESERVED = ['--caption', '--name', '--out', '--ref', '--side'];
+const NAME = /^[\w.-]+$/;
+
+// "--view run --click \"[data-x] .y\"" → ['--view', 'run', '--click', '[data-x] .y'] (a list stays a list)
+function splitArgs(v) {
+  if (Array.isArray(v)) return v.every((a) => typeof a === 'string' || typeof a === 'number') ? v.map(String) : null;
+  if (typeof v !== 'string') return v == null ? [] : null;
+  const out = [];
+  const re = /"((?:[^"\\]|\\.)*)"|'([^']*)'|(\S+)/g;
+  for (let m; (m = re.exec(v));) out.push(m[1] != null ? m[1].replace(/\\(.)/g, '$1') : m[2] ?? m[3]);
+  return out;
+}
+
+// One entry of the list → { name, caption, args } or { name, error }
+function checkEntry(e, i) {
+  const name = typeof e?.name === 'string' ? e.name.trim().replace(/\.(original|modified)?\.?png$/i, '') : '';
+  const label = name || `entry ${i + 1}`;
+  if (!e || typeof e !== 'object') return { name: label, error: 'not an object { name, caption, args }' };
+  if (!NAME.test(name)) return { name: label, error: 'name must be a plain file name such as 144-gate-panel-default' };
+  const args = splitArgs(e.args);
+  if (!args) return { name, error: 'args must be a list of the screenshot command\'s options (or one string)' };
+  const reserved = args.find((a) => RESERVED.includes(a));
+  if (reserved) return { name, error: `${reserved} is set by the step` };
+  return { name, caption: String(e.caption || '').trim() || name, args };
+}
+
+// The project's screenshot command, from the worktree's package.json: 'npm run screenshot' or null
+function screenshotCommand(dir) {
+  try {
+    const pkg = JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8'));
+    return typeof pkg.scripts?.screenshot === 'string' && pkg.scripts.screenshot.trim() ? 'npm run screenshot' : null;
+  } catch { return null; }
+}
+
+// Runs `npm run screenshot -- <args>` in cwd → { code, output, timedOut }; never rejects.
+function runShot({ cwd, args, env, timeoutMs, signal }) {
+  const npm = resolveCommand('npm');
+  if (!npm) return Promise.resolve({ code: null, output: 'npm not found in PATH', timedOut: false });
+  const argv = ['run', 'screenshot', '--', ...args];
+  // Electron as Electron (the engine may itself run inside Electron as node)
+  const childEnv = { ...env };
+  delete childEnv.ELECTRON_RUN_AS_NODE;
+  delete childEnv.CLAUDECODE;
+  return new Promise((resolve) => {
+    let child;
+    try {
+      child = npm.shell
+        ? spawn(quoteCmd(npm.file), argv.map(quoteCmd), { cwd, env: childEnv, shell: true, windowsHide: true })
+        : spawn(npm.file, argv, { cwd, env: childEnv, windowsHide: true });
+    } catch (e) {
+      resolve({ code: null, output: e.message, timedOut: false });
+      return;
+    }
+    let output = '';
+    let timedOut = false;
+    const keep = (d) => { output = (output + d).slice(-4000); };
+    child.stdout?.on('data', keep);
+    child.stderr?.on('data', keep);
+    const stop = () => killTree(child);
+    const timer = setTimeout(() => { timedOut = true; stop(); }, timeoutMs);
+    signal?.addEventListener('abort', stop, { once: true });
+    const done = (code, err) => {
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', stop);
+      resolve({ code, output: err ? `${output}${err.message}` : output, timedOut });
+    };
+    child.on('error', (e) => done(null, e));
+    child.on('close', (code) => done(code));
+  });
+}
+
+// The last meaningful line of a failed command (the script prints its error last)
+const lastLine = (s) => String(s || '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean).pop() || '';
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+// entries: the developer's list; cwd: the worktree; base: the ref of the "original" side (none: modified
+// only); env: the agents' environment (simulation only, scratch workspace); run: runShot (replaceable)
+async function captureScreenshots({ entries, cwd, runDir, folder, round, base, env, mock, signal, timeoutMs = SHOT_TIMEOUT_MS, run = runShot, log = () => {} }) {
+  const dir = runDir ? evidence.roundDir(runDir, folder, round) : null;
+  const out = {
+    kind: 'screenshots', folder, round, dir: dir ? path.relative(runDir, dir).split(path.sep).join('/') : null,
+    taken: 0, screens: 0, screenshots: [], errors: [], reason: null, message: '',
+  };
+  const finish = () => {
+    if (!out.taken && !out.reason) out.reason = `every capture failed (${out.errors[0]?.name}: ${out.errors[0]?.error})`;
+    const failed = out.errors.length ? `; ${plural(out.errors.length, 'error')}: ${out.errors.map((e) => `${e.name}${e.side ? ` (${e.side})` : ''}: ${e.error}`).join('; ')}` : '';
+    out.message = out.taken
+      ? `${plural(out.taken, 'screenshot')} of ${plural(out.screens, 'screen')} taken in round ${round}${failed}`
+      : `No screenshots: ${out.reason}${failed}`;
+    return out;
+  };
+  const list = Array.isArray(entries) ? entries : [];
+  if (!list.length) { out.reason = 'the developer listed no screens (a change without UI)'; return finish(); }
+  const valid = [];
+  list.forEach((e, i) => {
+    const c = i < MAX_SCREENS ? checkEntry(e, i) : { name: e?.name || `entry ${i + 1}`, error: `over the limit of ${MAX_SCREENS} screens` };
+    if (c.error) out.errors.push(c);
+    else if (valid.some((v) => v.name === c.name)) out.errors.push({ name: c.name, error: 'the same name twice' });
+    else valid.push(c);
+  });
+  const command = cwd && fs.existsSync(cwd) ? screenshotCommand(cwd) : null;
+  if (!valid.length) out.reason = 'no valid entry in the developer\'s list';
+  else if (mock) out.reason = 'simulated run (the app is not captured)';
+  else if (!runDir) out.reason = 'the run has no folder';
+  else if (!cwd || !fs.existsSync(cwd)) out.reason = 'the run has no worktree to capture';
+  else if (!command) out.reason = 'the project has no screenshot command (a "screenshot" script in package.json)';
+  if (out.reason) return finish();
+
+  fs.mkdirSync(dir, { recursive: true });
+  for (const e of valid) {
+    let shot = false;
+    for (const side of base ? ['modified', 'original'] : ['modified']) {
+      const args = [...e.args, '--out', dir, '--name', e.name, '--side', side, ...(side === 'original' ? ['--ref', base] : [])];
+      const t0 = Date.now();
+      log('info', `screenshots: ${command} -- ${args.join(' ')}`);
+      const r = await run({ cwd, args, env, timeoutMs, signal });
+      const file = path.join(dir, `${e.name}.${side}.png`);
+      if (r.code === 0 && fs.existsSync(file)) {
+        out.taken++;
+        shot = true;
+        out.screenshots.push({ path: path.relative(runDir, file).split(path.sep).join('/'), caption: e.caption, side, duration_ms: Date.now() - t0 });
+        continue;
+      }
+      const error = r.timedOut ? `timed out after ${Math.round(timeoutMs / 1000)} s`
+        : r.code === 0 ? 'the command wrote no image'
+          : `exit ${r.code ?? '?'}: ${lastLine(r.output) || 'no output'}`;
+      out.errors.push({ name: e.name, side, error });
+      // an invalid option (exit 2) fails the same way on the other side; a cancelled run stops here
+      if (r.code === 2 || signal?.aborted) break;
+    }
+    if (shot) out.screens++;
+    if (signal?.aborted) break;
+  }
+  return finish();
+}
+
+module.exports = {
+  captureScreenshots,
+  checkEntry,
+  MAX_SCREENS,
+  screenshotCommand,
+  splitArgs,
+};
