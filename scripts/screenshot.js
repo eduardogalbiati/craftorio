@@ -21,8 +21,9 @@
 //                      analytics: usage | performance (performance: a demo git repository and a marker)
 //   --mode <name>      backlog: list | kanban | roadmap | epics
 //   --run <mock|dir>   run-chat: a simulated software-development run (default) or a copy of a run folder
-//   --workflow <file>  the workflow of the simulated run (default software-development.yaml); run:
-//                      `pipe:<file>` starts a saved pipeline (#135, e.g. pipe:develop-to-retrospective.yaml)
+//   --workflow <file>  the workflow of the simulated run (default software-development.yaml)
+//   --pipeline <file>  run: starts this saved pipeline instead (#135, e.g. develop-to-retrospective.yaml):
+//                      its Run screen shows each stage's run
 //   --then <file>      run: the workflow the run's chain starts when it finishes (#134), set in the
 //                      Start panel; its Run screen offers "Save as pipeline" (--click "[data-chain=save-pipe-open]")
 //   --input <k=v>      run: a workflow input of the Start panel (repeatable), e.g. mode=validated
@@ -108,6 +109,7 @@ function parseArgs(argv) {
     else if (k === '--run') a.run = next();
     else if (k === '--workflow') { a.workflow = next(); a.workflowGiven = true; }
     else if (k === '--then') a.then = next();
+    else if (k === '--pipeline') a.pipeline = next();
     else if (k === '--click') a.clicks.push(next());
     else if (k === '--context') a.contexts.push(next());
     else if (k === '--paste') a.pastes.push({ sel: next(), big: false });
@@ -992,7 +994,9 @@ function main() {
     } else if (v === 'run') {
       // a live simulated run started from the Start panel; gates are approved as they come
       await js(`
-        await api.setSettings({ developerMode: true, lastWorkflow: ${JSON.stringify(args.workflow)} });
+        // a pipeline is the Start panel's option "pipe:<file>" (start-drawer.js); never an Electron
+        // argument: one with a colon makes Electron exit before this script runs
+        await api.setSettings({ developerMode: true, lastWorkflow: ${JSON.stringify(args.pipeline ? `pipe:${args.pipeline}` : args.workflow)} });
         document.querySelector('#btn-quick-start').click();
         await new Promise((r) => setTimeout(r, 500));
         document.querySelector('#project-select').value = ${JSON.stringify(project.id)};

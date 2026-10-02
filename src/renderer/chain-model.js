@@ -146,7 +146,8 @@
     }
     for (const [k, src] of Object.entries(then?.map || {})) {
       if (!defs?.[k]) continue;
-      const value = src === RUN_SOURCE ? prev?.runDir || prev?.runId : convertValue(prev?.outputs?.[src], defs[k]);
+      // a `type: run` input takes a run id (the engine refuses a folder path)
+      const value = src === RUN_SOURCE ? prev?.runId || fileOf(prev?.runDir) || undefined : convertValue(prev?.outputs?.[src], defs[k]);
       if (value !== undefined && value !== '') out[k] = value;
     }
     for (const [k, v] of Object.entries(then?.inputs || {})) if (v !== undefined && v !== '') out[k] = v;

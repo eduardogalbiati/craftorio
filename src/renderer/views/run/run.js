@@ -321,7 +321,7 @@ function renderChainBanner() {
       <div class="field"><label for="pipe-save-name">Name</label><input type="text" id="pipe-save-name" value="${esc(draft.name)}" spellcheck="false" /></div>
       <div class="field"><label for="pipe-save-category">Category</label><select id="pipe-save-category">${PIPE_CATEGORIES.map(([v, l]) => `<option value="${v}"${v === draft.category ? ' selected' : ''}>${l}</option>`).join('')}</select></div>
       <div class="field pipe-save-desc"><label for="pipe-save-description">Description</label><input type="text" id="pipe-save-description" value="${esc(draft.description)}" placeholder="What the pipeline does (shown when you start it)" /></div>
-      <p class="hint">Saved in the workspace's pipelines folder: this run's workflow, then each step of its chain with its mapping. Start it from the Start drawer or Workflows › Definitions.</p>
+      <p class="muted small">Saved in the workspace's pipelines folder: this run's workflow, then each step of its chain with its mapping. Start it from the Start drawer or Workflows › Definitions.</p>
     </div>` : '';
   if (saved) text = `Saved as the pipeline "${saved.name}" (${saved.file}).`;
   box.innerHTML = `<div class="chain-banner-head">

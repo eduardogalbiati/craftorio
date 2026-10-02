@@ -248,7 +248,7 @@
     strip.classList.toggle('hidden', !pipe);
     strip.innerHTML = pipe ? `<div class="drawer-pipeline-head"><span class="chain-banner-title">Pipeline</span><span class="badge">${pipe.stages.length} stages</span></div>
       ${ChainModel.pipelineStagesHtml(pipe, { names: Object.fromEntries((bl.chainWorkflows || []).map((w) => [w.file, w.name])), current: 0 })}
-      <p class="hint">Each issue's run is the first stage; the next stages follow it when it succeeds. A failed or stopped stage pauses its pipeline.</p>` : '';
+      <p class="muted small">Each issue's run is the first stage; the next stages follow it when it succeeds. A failed or stopped stage pauses its pipeline.</p>` : '';
     // a roadmap stage runs one workflow: a pipeline is assigned, not planned
     const toRoadmap = $b('#btn-assign-roadmap');
     if (toRoadmap) {

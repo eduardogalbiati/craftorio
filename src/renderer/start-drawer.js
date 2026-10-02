@@ -183,8 +183,8 @@ function renderDrawerPipeline() {
   const names = Object.fromEntries(state.workflows.map((w) => [w.file, w.name]));
   box.innerHTML = `<div class="drawer-pipeline-head"><span class="chain-banner-title">Pipeline</span><span class="badge">${p.stages.length} stages</span></div>
     ${ChainModel.pipelineStagesHtml(p, { names, current: 0 })}
-    <p class="hint">You give the first stage's inputs; each next stage takes the previous one's outputs. A stage that fails or stops pauses the pipeline, and every gate still waits for you.</p>
-    <p class="hint" data-pipe-estimate>Estimating the cost…</p>`;
+    <p class="muted small">You give the first stage's inputs; each next stage takes the previous one's outputs. A stage that fails or stops pauses the pipeline, and every gate still waits for you.</p>
+    <p class="muted small" data-pipe-estimate>Estimating the cost…</p>`;
   if (!api.pipelineEstimate) { box.querySelector('[data-pipe-estimate]').remove(); return; }
   api.pipelineEstimate(p.file).then((est) => {
     const el = box.querySelector('[data-pipe-estimate]');

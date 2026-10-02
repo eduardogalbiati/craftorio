@@ -53,5 +53,6 @@
 .wf-stage.wf-stage-target { cursor: default; border-style: dashed; }
 .wf-stage.wf-stage-target:hover { border-color: var(--border); }
 .wf-pipe-error { margin: 4px 0 0; }
+.wf-pipe-head .btn { flex: none; white-space: nowrap; }
 .wf-link { display: flex; align-items: center; gap: 5px; }
 .wf-link-arrow { color: var(--accent); font-size: 18px; line-height: 1; }

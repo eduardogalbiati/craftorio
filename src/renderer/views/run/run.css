@@ -132,8 +132,8 @@
 .chain-banner-pipe { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 6px; }
 .pipe-save-form { display: grid; grid-template-columns: minmax(0, 2fr) minmax(120px, 1fr); gap: 8px 12px; align-items: end; }
 .pipe-save-form .field { margin: 0; }
-.pipe-save-form .pipe-save-desc, .pipe-save-form .hint { grid-column: 1 / -1; }
-.pipe-save-form .hint { margin: 0; }
+.pipe-save-form .pipe-save-desc, .pipe-save-form > p { grid-column: 1 / -1; }
+.pipe-save-form > p { margin: 0; }
 .orch-log .line.supervisor { color: var(--purple); }
 /* a gate waiting in the run shown: asked inline above the steps, never in a dialog over the app
    (the cards, .run-gate*, are in style.css: the gate panel's wide variant builds on them) */
