@@ -23,12 +23,15 @@ const { exec, execFileSync } = require('child_process');
 const yaml = require('js-yaml');
 const nunjucks = require('nunjucks');
 const {
+  checkAttachments,
   emptyUsage,
+  imageInput,
   isPermissionDenial,
   isRetryable,
   refreshWindowsPath,
   runTurn,
   sleep,
+  storeAttachments,
 } = require('./providers');
 const { resolveSkill, skillPrompt } = require('../skills');
 const {
@@ -545,7 +548,10 @@ class WorkflowRun extends EventEmitter {
   // idleWarnMs: an agent silent this long while a tool call is open gets an `agent_idle` warning (src/engine/idle.js).
   //   Default 5 minutes; 0 disables it.
   // personas: [{ id, name, prompt, skills }] the user's agents (Agents menu), for `persona: random`.
-  constructor({ file, inputs, mock, runsDir, skillsDirs, budget, prices, projectId, issues, issue, resume, worktreesDir, mockSequences, notices, stopProcesses, probe, actionsQuota, peerSessions, idleWarnMs, personas, localPreview }) {
+  // attachments: { <input>: [path | { path, name }] } images attached to inputs (#129), checked here (refused
+  //   before anything runs), copied into <run_dir>/attachments/<input>/ at start and given to every turn of a
+  //   step whose prompt uses that input (stepAttachments). A resume passes the previous run's copies.
+  constructor({ file, inputs, mock, runsDir, skillsDirs, budget, prices, projectId, issues, issue, resume, worktreesDir, mockSequences, notices, stopProcesses, probe, actionsQuota, peerSessions, idleWarnMs, personas, localPreview, attachments }) {
     super();
     refreshWindowsPath(); // actions (e.g. gh pr merge) need the refreshed PATH
     this.file = file;
@@ -573,6 +579,10 @@ class WorkflowRun extends EventEmitter {
     this.idleWarnMs = idleWarnMs ?? IDLE_WARN_MS;
     this.stepTiming = {};           // step id -> { turns, duration_ms, active_ms, waiting_ms, stalled_ms } (summary.timing)
     this.inputs = this.resolveInputs(inputs || {});
+    this.inputImages = this.checkInputAttachments(attachments || {});
+    this.attachments = {}; // input -> [{ name, path }] the copies in the run folder (storeInputAttachments)
+    this.gateImages = []; // images attached to the last gate's feedback, for the next agent step
+    this.imagesWarned = new Set();
     // An agent's provider, model and effort can be templates over the inputs
     // (provider: "{{ inputs.writer_provider }}"), so a workflow can let the user pick them.
     // Resolved once per run, before anything reads them (preflight, budgets, sessions).
@@ -651,6 +661,35 @@ class WorkflowRun extends EventEmitter {
       out[k] = v;
     }
     return out;
+  }
+
+  // The images attached to inputs (constructor's `attachments`): only the workflow's inputs, each
+  // image within the limits (checkAttachments), and no more images in all than one turn may carry.
+  checkInputAttachments(given) {
+    const out = {};
+    for (const [k, list] of Object.entries(given)) {
+      if (!Array.isArray(list) || !list.length) continue;
+      if (!this.wf.inputs?.[k]) throw new Error(`Images are attached to "${k}", which is not an input of this workflow.`);
+      out[k] = checkAttachments(list);
+    }
+    checkAttachments(Object.values(out).flat());
+    return out;
+  }
+
+  // Copies images into <run_dir>/attachments/<folder>/ (storeAttachments): the run keeps them whatever
+  // happens to the originals. Returns [{ name, path }] of the copies.
+  copyAttachments(files, folder) {
+    return storeAttachments(files, path.join(this.runDir, 'attachments', String(folder).replace(/[^A-Za-z0-9_.-]+/g, '-')));
+  }
+
+  storeInputAttachments() {
+    for (const [k, files] of Object.entries(this.inputImages)) this.attachments[k] = this.copyAttachments(files, k);
+  }
+
+  // The input images a prompt template gets: those of every input it uses ({{ inputs.<name> }}).
+  stepAttachments(template) {
+    const used = new Set([...String(template || '').matchAll(/\binputs\.([A-Za-z0-9_]+)/g)].map((m) => m[1]));
+    return Object.entries(this.attachments).filter(([k]) => used.has(k)).flatMap(([, files]) => files);
   }
 
   // `agents.<name>.enabled` (a boolean or a template over the inputs) leaves an agent out of
@@ -794,10 +833,12 @@ class WorkflowRun extends EventEmitter {
   async start() {
     this.startedAt = Date.now();
     this.status = 'running';
+    this.storeInputAttachments();
     this.emitEvent('workflow.started', {
       workflow: this.wf.metadata?.name, version: this.wf.metadata?.version, project_id: this.projectId,
       issues: this.issues || undefined,
       file: path.basename(this.file), inputs: this.inputs, mock: this.mock, run_dir: this.runDir,
+      attachments: Object.keys(this.attachments).length ? this.attachments : undefined,
       resumed_from: this.resume ? { run_id: this.resume.runId, step: this.resume.fromStep } : undefined,
       personas: Object.keys(this.personas).length ? this.personas : undefined,
       agent_names: this.agentNames(),
@@ -1361,7 +1402,7 @@ class WorkflowRun extends EventEmitter {
       let delegated = null;
       if (t.delegate && target === t.goto) {
         this.emitEvent('log', { level: 'info', message: `${step.id} delegated to ${t.delegate.agent}` });
-        const res = await this.sendToAgent(t.delegate.agent, render(t.delegate.prompt, scope), { stepId: `${step.id}:delegate` })
+        const res = await this.sendToAgent(t.delegate.agent, render(t.delegate.prompt, scope), { stepId: `${step.id}:delegate`, attachments: this.stepAttachments(t.delegate.prompt) })
           .finally(() => this.stopWorktreeProcesses(`${step.id} delegation to ${t.delegate.agent}`));
         delegated = { agent: t.delegate.agent, text: res.text };
       }
@@ -1710,6 +1751,7 @@ class WorkflowRun extends EventEmitter {
     const settled = await Promise.allSettled(step.agents.map((name) => this.runAgentStep(step, st, name)));
     st.delegate_result = null; // consumed by all agents
     st.supervisorNote = null;
+    this.gateImages = [];
     if (this.abort.signal.aborted) throw new Error('Cancelled');
     const results = {};
     const failed = [];
@@ -1751,7 +1793,10 @@ class WorkflowRun extends EventEmitter {
         + OUTPUT_LANGUAGE;
     }
     const hint = { stepId: step.id, visit, schema, agent: agentName, sequences: this.mockSequences };
-    const opts = { stepId: step.id, hint, skills, capabilities: step.capabilities, editsTests: step.edits_tests };
+    // images (#129): those of the inputs its prompt uses, and those of the last gate's feedback
+    const attachments = [...this.stepAttachments(step.prompt), ...this.gateImages];
+    if (!step.agents) this.gateImages = []; // consumed (in a fan-out, after all of them)
+    const opts = { stepId: step.id, hint, skills, capabilities: step.capabilities, editsTests: step.edits_tests, attachments };
     const countTools = (r) => {
       if (r.turnRec) st.turnRecs?.push(r.turnRec);
       if (!r.tools || !st.tools) return;
@@ -2117,7 +2162,9 @@ class WorkflowRun extends EventEmitter {
     return `${prompt}\n\n---\nYou already answered this task:\n<previous_answer>\n${String(previous).slice(-20000)}\n</previous_answer>\n\n${fix}`;
   }
 
-  async agentTurn(agentName, prompt, { stepId, hint, skills: stepSkills = [], capabilities: stepCaps, retry = false, guarded = false } = {}) {
+  // opts.attachments: images for this turn ([{ name, path }] in the run folder, #129); a provider that
+  // cannot open images still gets their paths, with one warning per step and agent.
+  async agentTurn(agentName, prompt, { stepId, hint, skills: stepSkills = [], capabilities: stepCaps, retry = false, guarded = false, attachments = [] } = {}) {
     const def = this.wf.agents[agentName];
     if (!def) throw new Error(`Unknown agent: ${agentName}`);
     const agent = { ...(this.wf.defaults || {}), ...def };
@@ -2198,7 +2245,16 @@ class WorkflowRun extends EventEmitter {
     // simulation: which answer of this step this is (mockSequences.invalid_answers: { step: n } makes the first n invalid)
     if (this.mock) { this.mockCalls ??= {}; hint.call = this.mockCalls[hint.stepId] = (this.mockCalls[hint.stepId] || 0) + 1; }
 
-    const call = { session, agentName, agent, provider, extraArgs, agentEnv, stepId, hint };
+    const imagesKey = `${stepId}|${agentName}`;
+    // the configured provider's type, so a simulation warns like the real run would
+    if (attachments.length && !imageInput(providerType || provider?.type) && !this.imagesWarned.has(imagesKey)) {
+      this.imagesWarned.add(imagesKey);
+      this.emitEvent('log', {
+        level: 'warn', kind: 'attachments_unsupported', step_id: stepId, agent: agentName, provider: providerType || agent.provider,
+        message: `[${agentName}] ${stepId}: ${providerType || agent.provider} cannot open attached images; it only gets their paths (${attachments.map((f) => f.name).join(', ')})`,
+      });
+    }
+    const call = { session, agentName, agent, provider, extraArgs, agentEnv, stepId, hint, attachments };
     let res;
     try {
       res = await this.invokeTurn(call, turn, fullPrompt);
@@ -2246,7 +2302,7 @@ class WorkflowRun extends EventEmitter {
     const { session } = call;
     if (!session.providerSessionId) return null;
     try {
-      const res = await this.invokeTurn({ ...call, hint: { ...call.hint, handoffOnly: true }, attempts: 1 }, ++session.turns, HANDOFF_ONLY);
+      const res = await this.invokeTurn({ ...call, hint: { ...call.hint, handoffOnly: true }, attempts: 1, attachments: [] }, ++session.turns, HANDOFF_ONLY);
       rec.tokens += totalTokens(res.usage);
       rec.cost_usd += res.costUsd || 0;
       const plain = String(res.text || '').trim();
@@ -2297,9 +2353,9 @@ class WorkflowRun extends EventEmitter {
     return parseDuration(v, 30 * 60e3);
   }
 
-  async invokeTurn({ session, agentName, agent, provider, extraArgs, agentEnv, stepId, hint, attempts }, turn, fullPrompt) {
+  async invokeTurn({ session, agentName, agent, provider, extraArgs, agentEnv, stepId, hint, attempts, attachments = [] }, turn, fullPrompt) {
     const timeoutMs = this.turnTimeout(agent);
-    this.emitEvent('session.message_sent', { session_id: session.id, turn, step_id: stepId, prompt: fullPrompt, timeout_ms: timeoutMs });
+    this.emitEvent('session.message_sent', { session_id: session.id, turn, step_id: stepId, prompt: fullPrompt, timeout_ms: timeoutMs, ...(attachments.length ? { attachments } : {}) });
     // a retry after a failed attempt that did work (a timeout, a crash) starts with what it did
     let prompt = fullPrompt;
     if (!provider) throw new Error(`Provider "${agent.provider}" is not defined.`);
@@ -2369,7 +2425,7 @@ class WorkflowRun extends EventEmitter {
       try {
         const res = await runTurn({
           provider, model: agent.model, effort: agent.effort, providerSessionId: session.providerSessionId,
-          prompt, cwd: (session.cwd = this.workingDir(agent)), extraArgs, agentEnv,
+          prompt, cwd: (session.cwd = this.workingDir(agent)), extraArgs, agentEnv, attachments,
           timeoutMs, attempt: a,
           signal: turnAbort.signal, hint, render,
           onItem: (item) => { track(item); idle.item(item); this.emitEvent('session.stream', { session_id: session.id, turn, item }); },
@@ -2630,12 +2686,18 @@ class WorkflowRun extends EventEmitter {
 
   // answer: boolean (approve/reject) or the id of one of the step's choices; feedback: optional text;
   // intent: 'save_to_issue' with the gate's save_to_issue choice (#125), recorded on the answer
-  resolveApproval(id, answer, by = 'user', feedback = '', intent = null) {
+  // images: pictures attached to the feedback (#129), checked (an error names the file and the limit),
+  // copied into <run_dir>/attachments/<gate>-feedback/ and given to the next agent step. They never
+  // decide anything: the answer is the owner's choice.
+  resolveApproval(id, answer, by = 'user', feedback = '', intent = null, images = []) {
     const a = this.approvals.get(id);
     if (!a) return false;
     const text = String(feedback ?? '').trim();
     if (!text && a.gate?.choices?.find((c) => c.id === answer)?.feedback_required) return false;
+    const checked = checkAttachments(images);
     this.approvals.delete(id);
+    const stored = this.copyAttachments(checked, `${a.stepId}-feedback`);
+    if (stored.length) this.gateImages = stored;
     const waitMs = Math.max(0, Date.now() - Date.parse(a.gate?.requested_at || Date.now()));
     const w = (this.gateWaits[a.stepId] ??= { waits: 0, wait_ms: 0 });
     w.waits++;
@@ -2644,8 +2706,8 @@ class WorkflowRun extends EventEmitter {
     if (intent === 'save_to_issue' && a.gate?.save_to_issue?.choice === answer) data.intent = intent;
     // the commit the owner decided on (#112): a resume may only pass this gate again while the branch is still there
     const commit = this.worktreeHead();
-    this.emitEvent('approval.resolved', { approval_id: id, step_id: a.stepId, ...data, by, wait_ms: waitMs, ...(commit ? { commit } : {}), ...(text ? { feedback: text } : {}) });
-    if (text) this.ctx.feedback.push({ step: a.stepId, choice: typeof answer === 'boolean' ? String(answer) : answer, text, ts: new Date().toISOString() });
+    this.emitEvent('approval.resolved', { approval_id: id, step_id: a.stepId, ...data, by, wait_ms: waitMs, ...(commit ? { commit } : {}), ...(text ? { feedback: text } : {}), ...(stored.length ? { attachments: stored } : {}) });
+    if (text) this.ctx.feedback.push({ step: a.stepId, choice: typeof answer === 'boolean' ? String(answer) : answer, text, ts: new Date().toISOString(), ...(stored.length ? { images: stored } : {}) });
     this.setStatus(this.orchestrator, 'active');
     a.resolve({ answer, feedback: text });
     return true;

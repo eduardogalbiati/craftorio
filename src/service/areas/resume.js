@@ -161,7 +161,7 @@ module.exports = (ctx) => {
     const steps = supervisor.withoutGateDecisions(wf, spec.steps);
     if (confirmedGate) steps[gate] = spec.steps[gate];
     return ctx.startWorkflowRun({
-      file: spec.file, inputs: spec.inputs, mock: spec.mock || mock === true, projectId: spec.projectId, issues: spec.issues,
+      file: spec.file, inputs: spec.inputs, attachments: spec.attachments, mock: spec.mock || mock === true, projectId: spec.projectId, issues: spec.issues,
       resume: { runId: spec.runId, fromStep, steps, sessions: spec.sessions, handoffs: spec.handoffs, instruction: instruction || null, worktree: spec.worktree, confirmedGate },
     });
   }

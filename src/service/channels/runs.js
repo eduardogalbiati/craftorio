@@ -12,13 +12,14 @@ module.exports = (ctx) => [
     // projectId/issues: a run started from a Backlog issue (Write & Review's "Enrich"), recorded in workflow.started.
     // When an ended run of those issues kept a worktree with commits, the answer is the kept-work
     // question { confirm, kept, runId } (that run can be resumed instead) until `confirmed` (#112, #170).
-    fn: ({ file, inputs, mock, mockSequences, projectId, issues, confirmed }) => {
+    // attachments: { <input>: [path | { path, name }] } images attached to inputs (#129, WorkflowRun).
+    fn: ({ file, inputs, mock, mockSequences, projectId, issues, confirmed, attachments }) => {
       const list = Array.isArray(issues) && issues.length
         ? issues.map((i) => ({ number: Number(i.number), url: String(i.url || ''), title: String(i.title || '') }))
         : undefined;
       const kept = list && !confirmed ? ctx.keptWorkForIssues(list) : null;
       if (kept) return { confirm: kept.text, kept, runId: kept.runId };
-      return ctx.startWorkflowRun({ file, inputs, mock, mockSequences, projectId: projectId || undefined, issues: list, allowKeptWork: true });
+      return ctx.startWorkflowRun({ file, inputs, mock, mockSequences, projectId: projectId || undefined, issues: list, allowKeptWork: true, attachments });
     },
   },
   // runId: the run to stop (without it, the only run in progress)
@@ -50,11 +51,12 @@ module.exports = (ctx) => [
   {
     channel: 'approval:resolve',
     method: 'resolveApproval',
-    params: ['id', 'answer', 'feedback', 'runId', 'intent'],
-    fn: ({ runId, id, answer, feedback, intent }) => {
+    // images: pictures attached to the feedback (#129), given to the next agent step
+    params: ['id', 'answer', 'feedback', 'runId', 'intent', 'images'],
+    fn: ({ runId, id, answer, feedback, intent, images }) => {
       const waiting = [...ctx.active.values()].filter((r) => r.approvals.has(id));
       const run = runId ? ctx.active.get(String(runId)) : waiting.length === 1 ? waiting[0] : null;
-      return run?.resolveApproval(id, answer, 'user', feedback, intent || null) ?? false;
+      return run?.resolveApproval(id, answer, 'user', feedback, intent || null, Array.isArray(images) ? images : []) ?? false;
     },
   },
   // resume a run from a step (a new run, no supervisor call) and what the dialog offers;

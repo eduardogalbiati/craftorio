@@ -1,7 +1,7 @@
 // The app-wide Supervisor chat (#28): the person's companion on every screen (the drawer) and on the
 // Supervisor page (the whole conversation). One conversation per workspace, resumed turn after turn
 // (claude --resume), kept in <workspace>/supervisor/chat.jsonl (messages) and chat.json (the CLI
-// session and model).
+// session and model); the images attached to questions in attachments/ (#129).
 //
 // Each question carries the screen the person is on ("Builder, editing workflow X"), so requests need
 // not repeat it. The supervisor reads the app's data through its read-only MCP tools
@@ -79,7 +79,8 @@ function createSupervisorChat({ dir, tools, bridge, mcpCommand, skillsDirs, reso
     ].join('\n\n');
   }
 
-  async function realTurn(text, model) {
+  // attachments: this question's images (#129), already stored in the chat's attachments/ folder
+  async function realTurn(text, model, attachments = []) {
     refuseReal('the supervisor\'s CLI (claude)');
     const { runTurn } = require('./engine/providers');
     const { render } = require('./engine/workflow');
@@ -91,7 +92,8 @@ function createSupervisorChat({ dir, tools, bridge, mcpCommand, skillsDirs, reso
     const { url, token } = await bridge.start();
     const mcp = mcpCommand();
     const server = { command: mcp.command, args: mcp.args, env: { ...mcp.env, SUPERVISOR_BRIDGE_URL: url, SUPERVISOR_BRIDGE_TOKEN: token } };
-    // isolated, its MCP server only, no built-in tool (no file reads, no commands)
+    // isolated, its MCP server only, no built-in tool (no file reads, no commands); with attached
+    // images, runTurn offers Read and the attachments folder only (providers.js, #129)
     const extraArgs = dedupeFlags([
       ...providerArgs(provider.type, { caps: null, isolated: true }).args,
       '--mcp-config', JSON.stringify({ mcpServers: { [MCP_NAME]: server } }),
@@ -108,7 +110,7 @@ function createSupervisorChat({ dir, tools, bridge, mcpCommand, skillsDirs, reso
     }
     fs.mkdirSync(dir(), { recursive: true });
     const res = await runTurn({
-      provider, model, providerSessionId: sessionId, prompt, cwd: dir(), extraArgs, timeoutMs: TIMEOUT_MS, render,
+      provider, model, providerSessionId: sessionId, prompt, cwd: dir(), extraArgs, timeoutMs: TIMEOUT_MS, render, attachments,
       hint: { stepId: 'supervisor-chat', visit: 1, agent: 'supervisor' }, onItem: () => {},
     });
     saveState({ sessionId: res.providerSessionId || sessionId, model });
@@ -118,21 +120,28 @@ function createSupervisorChat({ dir, tools, bridge, mcpCommand, skillsDirs, reso
   return {
     history,
 
-    /** { question, screen, mock, model } → { message, messages } (the answer and the whole conversation). */
-    async ask({ question, screen, mock, model } = {}) {
+    /**
+     * { question, screen, mock, model, attachments } → { message, messages } (the answer and the whole
+     * conversation). attachments: images for this question only (#129, paths or { path, name }), copied
+     * into the chat's attachments/ folder first; the simulated supervisor lists them without opening them.
+     */
+    async ask({ question, screen, mock, model, attachments = [] } = {}) {
       const q = String(question || '').trim();
       if (!q) throw new Error('Type a message for the supervisor.');
       if (busy) throw new Error('The supervisor is still answering the previous message.');
+      const { storeAttachments } = require('./engine/providers');
+      const images = storeAttachments(attachments, path.join(dir(), 'attachments'));
       busy = true;
       try {
-        post({ role: 'user', text: q, screen: String(screen || '').trim() || null });
+        post({ role: 'user', text: q, screen: String(screen || '').trim() || null, ...(images.length ? { attachments: images } : {}) });
         let message;
         try {
           if (mock) {
-            message = post({ role: 'supervisor', text: await mockAnswer(String(screen || '').trim()), simulated: true, costUsd: 0 });
+            const seen = images.length ? `\n\nAttached images (simulated: not opened): ${images.map((f) => f.name).join(', ')}.` : '';
+            message = post({ role: 'supervisor', text: `${await mockAnswer(String(screen || '').trim())}${seen}`, simulated: true, costUsd: 0 });
           } else {
             const m = String(model || state().model || DEFAULT_MODEL);
-            const res = await realTurn(questionText(q, screen), m);
+            const res = await realTurn(questionText(q, screen), m, images);
             message = post({ role: 'supervisor', text: String(res.text || '').trim() || '(no answer)', model: m, costUsd: res.costUsd ?? null });
           }
         } catch (e) {

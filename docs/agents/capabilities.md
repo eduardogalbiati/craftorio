@@ -40,6 +40,15 @@ from the bundled workflows: it was documentation only. The run log gets one
 | Sub-agents | `Agent` and `Task` (the tool's current and older name; `--tools` drops names the CLI doesn't know) only with `subagents: true`; the `capabilities:` log line says `subagents: Agent/Task tool offered` | n/a (the log line says `subagents: not offered by Codex`) | `--no-subagents` unless `subagents: true` |
 | MCP | `--mcp-config` with the declared servers + `mcp__<name>` allowed | declared servers only | not passed (noted in the log) |
 | Test files (`edits_tests: false`) | `--disallowedTools "Edit(<glob>) …"` over `tests_paths` (a bare name gets `**/`); Bash can still write them | not refused (noted) | not refused (noted) |
+| Images (#129, **not yet confirmed with a real call**) | `--add-dir <attachments folder>` + `Read` added to a restricted `--tools` (read-only agents and the tool-less Supervisor chat included) + the "Attached images" block with the absolute paths | `--image=<file>` per image (the `=` form: `--image` takes several values and would swallow `resume` or the stdin `-`) + the same block | no known way: the block with the paths only, plus one `log` `kind: attachments_unsupported` warning per step and agent; the step does not fail |
+
+Images row: `src/engine/providers.js` (`IMAGE_INPUT`, `cliInvocation`). Limits, checked by
+`checkAttachments` before anything is spawned (an error names the file and the limit): PNG, JPEG,
+GIF and WebP (extension and first bytes), at most 10 images per turn, 10 MB each
+(`ATTACHMENT_LIMITS`). Without attachments, the arguments and the prompt are exactly as before. To
+confirm (real calls, the owner's money): one `claude -p`, `codex exec` and `grok --prompt-file` call
+each with one small PNG and "Describe this image in one sentence", with a read-only and a writing
+agent; then update the row (and `IMAGE_INPUT` if Grok turns out to read images, e.g. with `read_file`).
 
 Whatever the CLI, the engine checks the turn's changes afterwards and sends a turn that touched
 test files back (see `edits_tests` in [engine.md](engine.md)). The `Edit(...)` deny rules were

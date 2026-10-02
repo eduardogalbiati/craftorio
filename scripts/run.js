@@ -1,7 +1,9 @@
 // Runs a workflow from the terminal (without Electron).
 //
 //   node scripts/run.js --task "..." [--repo <path>] [--file <yaml>] [--mock] [--auto-approve] [--input key=value]
+//                       [--attach key=<image file>]
 //
+// --attach: an image attached to an input (#129; repeat it for several), e.g. --attach task=C:/shots/bug.png.
 // --file: an absolute path is used as is; a name or relative path is looked up in <workspace>/workflows
 // first, then in the workflows bundled with the app (workflows/ in this repository).
 // --auto-approve approves every human gate (use with care outside mock mode).
@@ -19,7 +21,7 @@ const { seedSkills } = require('../src/skills');
 const root = path.join(__dirname, '..');
 
 function parseArgs(argv) {
-  const a = { inputs: {}, mock: false, autoApprove: false, file: 'software-development.yaml' };
+  const a = { inputs: {}, attachments: {}, mock: false, autoApprove: false, file: 'software-development.yaml' };
   for (let i = 0; i < argv.length; i++) {
     const k = argv[i];
     const next = () => argv[++i];
@@ -29,6 +31,7 @@ function parseArgs(argv) {
     else if (k === '--task') a.inputs.task = next();
     else if (k === '--repo') a.inputs.repo_path = next();
     else if (k === '--input') { const [key, ...v] = next().split('='); a.inputs[key] = v.join('='); }
+    else if (k === '--attach') { const [key, ...v] = next().split('='); (a.attachments[key] ??= []).push(v.join('=')); }
     else throw new Error(`Unknown argument: ${k}`);
   }
   a.inputs.repo_path ??= root;
@@ -52,6 +55,7 @@ const budget = usage.budgetBaseline({ runsDir: ws.runs, settings, local: needsLo
 const run = new WorkflowRun({
   file: wfFile.file,
   inputs: args.inputs,
+  attachments: args.attachments,
   mock: args.mock,
   runsDir: ws.runs,
   skillsDirs: [ws.skills],

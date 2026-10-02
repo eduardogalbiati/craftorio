@@ -133,7 +133,8 @@ module.exports = (ctx) => {
   // allowKeptWork: the owner chose to start these issues again although an ended run kept commits
   // for them (run:start's confirmation, a confirmed roadmap Retry); otherwise that start is refused (#112)
   // notices: [{ level, message }] the starter logs in the run (e.g. an issue read from the cache, #168)
-  async function startWorkflowRun({ file, inputs, mock, mockSequences = null, resume = null, projectId: forcedProject = null, issues = null, allowKeptWork = false, notices: startNotices = [] }) {
+  // attachments: { <input>: [path | { path, name }] } images attached to inputs (#129, WorkflowRun)
+  async function startWorkflowRun({ file, inputs, mock, mockSequences = null, resume = null, projectId: forcedProject = null, issues = null, allowKeptWork = false, notices: startNotices = [], attachments = null }) {
     // simulation-only (automated checks): a real run is refused, never turned into a simulation
     if (!mock) simulation.refuseReal('a real run');
     // the same issues never get a second live run, from this app or another one (#112): resume that run instead
@@ -186,7 +187,7 @@ module.exports = (ctx) => {
         file: wfFile.file, inputs, mock, runsDir: ws.runs, skillsDirs: [ws.skills], notices,
         // Run locally at gates: the project's override of the workflow's orchestrator.local_preview
         localPreview: project?.localPreview?.command ? project.localPreview : null,
-        budget, prices: settings.prices, projectId, issues, resume, mockSequences: mock ? mockSequences : null,
+        budget, prices: settings.prices, projectId, issues, resume, attachments, mockSequences: mock ? mockSequences : null,
         // simulation runs never touch git: the agents are mocked and work in the repository folder
         worktreesDir: mock ? null : ws.worktrees,
         // concurrent runs share the monthly budgets

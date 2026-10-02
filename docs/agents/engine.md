@@ -29,6 +29,13 @@ same features for users; this is the implementer's summary.
   `inputs.x`, not `inputs.x == 'true'`. UI-only keys the engine ignores (#116, rendered by
   `src/renderer/workflow-inputs.js`): `label` (else derived from the key), `options` (`{ value:
   label }` for an enum), `show_if` (`"mode == 'validated'"`: hidden while false, value kept).
+- Images attached to inputs (#129): `attachments: { <input>: [path | { path, name }] }` on
+  `run:start` / `WorkflowRun` (`--attach task=<file>` in `scripts/run.js`). Checked in the
+  constructor (limits in capabilities.md, "Images"), copied into `<run_dir>/attachments/<input>/`
+  at start, recorded in `workflow.started.attachments` (a resume copies them again). Every turn of a
+  step whose prompt template uses `inputs.<input>` gets them (`stepAttachments`, delegations
+  included); `session.message_sent` lists them. Simulations: the mock provider lists them in a
+  thinking item and never opens them.
 - Agent `provider`/`model`/`effort` can be templates over the inputs (resolved once in the constructor);
   `cli_args` can be a map keyed by provider; providers' `effort_args` get `{{ effort }}`.
   `max_visits` / `loop.max_iterations` accept templates. `agents.<name>.enabled` (bool or template)
@@ -110,6 +117,9 @@ same features for users; this is the implementer's summary.
 - Human gates can ask for free text (`feedback: true | { label, placeholder }`): `output.feedback` and the
   run-wide `feedback` list in templates (`approval:resolve` takes `feedback`). `previous_step` = the step that
   ran before. Gates are answered inside their run: the run chats inline, or the gate card on the Run screen (no dialog).
+  `approval:resolve` also takes `images` (#129): copied into `<run_dir>/attachments/<gate>-feedback/`,
+  recorded in `approval.resolved.attachments`, and given to the next agent step only (all agents of
+  a fan-out). They never decide anything: the answer stays the owner's choice.
 - A gate choice with `feedback_required: true` (needs the step's `feedback`) is refused without a
   text: `resolveApproval` returns false and the gate stays open. `local_preview: true` on a gate
   offers Run locally (see worktrees.md); `diff_base: <ref>` (a template) offers Show the diff

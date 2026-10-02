@@ -6,7 +6,9 @@ Read this before touching run listings, the Backlog queue, pending gates, notifi
 ## Files are the source of truth
 
 - `runs/<id>/` (`events.jsonl`, `summary.json`, `meta.json`, `sessions/`, `handoffs/`, `decisions.tsv`,
-  `evidence/<step>/round-<n>/` screenshots with `evidence/manifest.json`, see engine.md),
+  `evidence/<step>/round-<n>/` screenshots with `evidence/manifest.json`, see engine.md,
+  `attachments/<input>/` and `attachments/<gate>-feedback/` images given to agents (#129),
+  `supervisor/attachments/` the images of questions about the run),
   `backlog/<project>.json`, `projects/`, `agents/`, `skills/`, `workflows/`, `settings.json`,
   `active-run.json`: plain files, readable by the owner, agents and the supervisor, and portable.
 - `runs/po-<project>-<stamp>/`: a Product Owner issue thread (#117: `conversation.jsonl`,

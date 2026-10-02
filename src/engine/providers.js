@@ -277,20 +277,133 @@ function gitConfigEnv(env, settings) {
   return out;
 }
 
-function runCli(opts, parser) {
-  const { provider, model, effort, providerSessionId, prompt, cwd, extraArgs, timeoutMs, signal, onItem, render, agentEnv } = opts;
+// ---------------------------------------------------------------------------
+// Image attachments (#129): image files a turn hands to the CLI next to its prompt. Callers store
+// them in the workspace first (a run's attachments/ folder, a conversation's folder); runTurn checks
+// them before anything is spawned. How each CLI opens them (IMAGE_INPUT):
+//   read: Claude Code reads them with its Read tool: their folders go with --add-dir, Read is offered
+//   flag: Codex CLI attaches them to the message with --image=<file> (the `=` form: --image takes
+//         several values, a separate one would swallow `resume` or the `-` stdin argument)
+//   none: no known way (Grok Build): the prompt still lists the paths; the caller warns (imageInput)
+// Every provider gets the "Attached images" block with the absolute paths.
+// ---------------------------------------------------------------------------
+const IMAGE_TYPES = {
+  '.gif': 'gif',
+  '.jpeg': 'jpeg',
+  '.jpg': 'jpeg',
+  '.png': 'png',
+  '.webp': 'webp',
+};
+const ATTACHMENT_LIMITS = { count: 10, bytes: 10 * 1024 * 1024 };
+const IMAGE_INPUT = { 'claude-code': 'read', 'codex-cli': 'flag', mock: 'record' };
+
+// How a provider type opens attached images: 'read', 'flag', 'record' (mock) or null (it cannot).
+const imageInput = (type) => IMAGE_INPUT[type] || null;
+
+// The image format of a file's first bytes, or null.
+function sniffImage(buf) {
+  if (buf.length >= 8 && buf.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return 'png';
+  if (buf.length >= 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return 'jpeg';
+  if (buf.length >= 6 && /^GIF8[79]a$/.test(buf.subarray(0, 6).toString('latin1'))) return 'gif';
+  if (buf.length >= 12 && buf.subarray(0, 4).toString('latin1') === 'RIFF' && buf.subarray(8, 12).toString('latin1') === 'WEBP') return 'webp';
+  return null;
+}
+
+/**
+ * Checks a turn's attachments (paths or { path, name }) against the limits: PNG, JPEG, GIF or WebP
+ * (by extension and content), at most ATTACHMENT_LIMITS.count images of ATTACHMENT_LIMITS.bytes each.
+ * Returns [{ path (absolute), name }]; throws an error naming the file and the limit.
+ */
+function checkAttachments(list) {
+  const files = (list || []).map((a) => (typeof a === 'string' ? { path: a } : a || {}))
+    .map((a) => ({ path: path.resolve(String(a.path || '')), name: String(a.name || path.basename(String(a.path || ''))) }));
+  if (files.length > ATTACHMENT_LIMITS.count) throw new Error(`Too many attached images: ${files.length} (at most ${ATTACHMENT_LIMITS.count} per turn).`);
+  const mb = (n) => `${(n / 1024 / 1024).toFixed(1)} MB`;
+  for (const f of files) {
+    const type = IMAGE_TYPES[path.extname(f.path).toLowerCase()];
+    if (!type) throw new Error(`Attached file "${f.name}" is not a supported image: only PNG, JPEG, GIF and WebP files can be attached.`);
+    let stat;
+    try { stat = fs.statSync(f.path); } catch { throw new Error(`Attached image "${f.name}" was not found: ${f.path}`); }
+    if (!stat.isFile()) throw new Error(`Attached image "${f.name}" is not a file: ${f.path}`);
+    if (stat.size > ATTACHMENT_LIMITS.bytes) throw new Error(`Attached image "${f.name}" is ${mb(stat.size)}: the limit is ${mb(ATTACHMENT_LIMITS.bytes)} per image.`);
+    const head = Buffer.alloc(12);
+    const fd = fs.openSync(f.path, 'r');
+    let read;
+    try { read = fs.readSync(fd, head, 0, 12, 0); } finally { fs.closeSync(fd); }
+    if (sniffImage(head.subarray(0, read)) !== type) throw new Error(`Attached file "${f.name}" is not a valid ${type.toUpperCase()} image: only PNG, JPEG, GIF and WebP files can be attached.`);
+  }
+  return files;
+}
+
+// Whether a file name is one of the image types a turn may carry (by extension only).
+const isImagePath = (file) => !!IMAGE_TYPES[path.extname(String(file || '')).toLowerCase()];
+
+/**
+ * Checks images (checkAttachments) and copies them into `dir` (a workspace folder: a run's
+ * attachments/, a conversation's folder), each under a safe file name (-2, -3... when taken), so
+ * they outlive the originals and survive a resume. Returns [{ name, path }] of the copies.
+ */
+function storeAttachments(list, dir) {
+  const files = checkAttachments(list);
+  if (!files.length) return [];
+  fs.mkdirSync(dir, { recursive: true });
+  return files.map((f) => {
+    const ext = path.extname(f.path).toLowerCase();
+    const base = path.basename(f.name, path.extname(f.name)).replace(/[^A-Za-z0-9_.-]+/g, '-').replace(/^[-.]+|-+$/g, '').slice(-80) || 'image';
+    let file = path.join(dir, `${base}${ext}`);
+    for (let n = 2; fs.existsSync(file); n++) file = path.join(dir, `${base}-${n}${ext}`);
+    fs.copyFileSync(f.path, file);
+    return { name: f.name, path: file };
+  });
+}
+
+// The prompt block listing a turn's images, worded for how the CLI opens them.
+function attachmentsBlock(files, type) {
+  const how = {
+    read: 'Open each one with your Read tool before you start.',
+    flag: 'They are attached to this message; the files are:',
+  }[imageInput(type)] || 'Open each file if you can read images.';
+  return `## Attached images\n${how}\n${files.map((f) => `- ${f.name}: ${f.path}`).join('\n')}`;
+}
+
+// Claude Code: Read among the offered tools (a --tools list without it, e.g. a tool-less chat).
+function withReadTool(args) {
+  const i = args.indexOf('--tools');
+  if (i < 0 || i + 1 >= args.length) return args;
+  const tools = String(args[i + 1]).split(',').map((t) => t.trim()).filter(Boolean);
+  if (tools.includes('Read')) return args;
+  return [...args.slice(0, i + 1), [...tools, 'Read'].join(','), ...args.slice(i + 2)];
+}
+
+/**
+ * The command line and prompt of one CLI turn: { args, prompt, promptFile }. Without attachments
+ * both are exactly what the provider's definition and extraArgs give; `attachments` (checked by
+ * checkAttachments) add the per-CLI arguments (IMAGE_INPUT) and the "Attached images" block.
+ */
+function cliInvocation({ provider, model, effort, providerSessionId, prompt, extraArgs, render, attachments = [] }) {
   // `prompt_file_arg`: CLIs that take the prompt from a file (e.g. grok --prompt-file) instead of stdin
   const promptFile = provider.prompt_file_arg ? path.join(os.tmpdir(), `multiagent-prompt-${crypto.randomUUID()}.md`) : null;
   const vars = { model, effort, session_id: providerSessionId, prompt_file: promptFile };
-  const args = [
+  const input = attachments.length ? imageInput(provider.type) : null;
+  const imageArgs = input === 'read' ? [...new Set(attachments.map((f) => path.dirname(f.path)))].flatMap((d) => ['--add-dir', d])
+    : input === 'flag' ? attachments.map((f) => `--image=${f.path}`) : [];
+  let args = [
     ...(provider.args || []),
     // `effort_args` (e.g. claude --effort {{ effort }}): only when the agent sets an effort
     ...(effort ? provider.effort_args || [] : []),
     ...(extraArgs || []),
+    ...imageArgs,
     ...(providerSessionId ? provider.resume_args || [] : []),
     ...(provider.stdin_arg ? [provider.stdin_arg] : []),
     ...(provider.prompt_file_arg || []),
   ].map((a) => render(String(a), vars));
+  if (input === 'read') args = withReadTool(args);
+  return { args, prompt: attachments.length ? `${prompt}\n\n${attachmentsBlock(attachments, provider.type)}` : prompt, promptFile };
+}
+
+function runCli(opts, parser) {
+  const { provider, providerSessionId, cwd, timeoutMs, signal, onItem, agentEnv } = opts;
+  const { args, prompt, promptFile } = cliInvocation(opts);
 
   const resolved = resolveCommand(provider.command);
   if (!resolved) return Promise.reject(new Error(`Command "${provider.command}" not found in PATH.`));
@@ -451,7 +564,7 @@ function mockValue(s, key, h) {
 const mockTurns = new Map();
 const MOCK_HANDOFF = '```handoff\n- Goal: simulated goal of this agent\n- State: branch feat/mock-feature, commit abc1234\n- Done: simulated work of this turn\n- Left: nothing blocking\n- Decisions: none\n- Key files: src/auth/login.ts\n- Known problems: none\n```';
 
-async function runMock({ providerSessionId, model, hint, signal, onItem, attempt = 1, timeoutMs }) {
+async function runMock({ providerSessionId, model, hint, signal, onItem, attempt = 1, timeoutMs, attachments = [] }) {
   const sid = providerSessionId || `mock-${Math.random().toString(36).slice(2, 10)}`;
   const scale = +(process.env.MULTIAGENT_MOCK_DELAY_SCALE ?? 1);
   const d = (ms) => sleep(ms * scale * (0.6 + Math.random() * 0.8), signal);
@@ -471,6 +584,8 @@ async function runMock({ providerSessionId, model, hint, signal, onItem, attempt
   }
   await d(600);
   onItem({ kind: 'thinking', text: `Analyzing step "${hint?.stepId ?? 'delegated'}" (visit ${hint?.visit ?? '-'}).\nI will inspect the repository and plan the next steps.` });
+  // attached images (#129): recorded, never opened
+  if (attachments.length) onItem({ kind: 'thinking', text: `Attached images (simulated: not opened): ${attachments.map((f) => `${f.name} (${f.path})`).join(', ')}` });
   await d(900);
   // sequences.permission_denials: { stepId: n }: in the first n answers of that step every tool
   // call is refused by the allowlist (an agent fighting its cli_args)
@@ -514,12 +629,15 @@ async function runMock({ providerSessionId, model, hint, signal, onItem, attempt
   const usage = { input: rand(2000, 12000), output: rand(300, 2500), cache_read: rand(0, 8000), cache_write: rand(0, 2000), reasoning: rand(100, 1500) };
   const costUsd = +(usage.input * 3e-6 + usage.output * 15e-6).toFixed(4);
   onItem({ kind: 'usage', usage, costUsd });
-  return { text, usage, costUsd, providerSessionId: sid, exitCode: 0 };
+  return { text, usage, costUsd, providerSessionId: sid, exitCode: 0, ...(attachments.length ? { attachments } : {}) };
 }
 
 // ---------------------------------------------------------------------------
+// opts.attachments: optional image files for this turn (paths or { path, name }), checked against
+// the limits before anything runs (checkAttachments); see "Image attachments" above.
 async function runTurn(opts) {
   if (opts.provider.type !== 'mock') refuseReal(`the ${opts.provider.type} provider`);
+  opts = { ...opts, attachments: checkAttachments(opts.attachments) };
   switch (opts.provider.type) {
     case 'mock': return runMock(opts);
     case 'claude-code': return runCli(opts, parseClaude);
@@ -543,8 +661,13 @@ function isRetryable(err) {
 }
 
 module.exports = {
+  ATTACHMENT_LIMITS,
+  checkAttachments,
+  cliInvocation,
   emptyUsage,
   gitConfigEnv,
+  imageInput,
+  isImagePath,
   isPermissionDenial,
   isRetryable,
   killTree,
@@ -554,4 +677,5 @@ module.exports = {
   resolveCommand,
   runTurn,
   sleep,
+  storeAttachments,
 };

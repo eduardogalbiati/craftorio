@@ -1081,7 +1081,7 @@ async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns,
 // read access to the attachments' folder.
 async function callAgent({ mode = 'plan', question, report, previous, attachments = [], selection = [], folder, agent, skillsDirs, resolveCommand }) {
   const { extractJson, validateSchema, render } = require('./engine/workflow');
-  const { runTurn } = require('./engine/providers');
+  const { runTurn, isImagePath } = require('./engine/providers');
   const { resolveSkill, skillPrompt } = require('./skills');
   const { providerArgs, normalize, dedupeFlags } = require('./engine/capabilities');
   const { PROVIDERS } = require('./workflow-builder');
@@ -1092,7 +1092,11 @@ async function callAgent({ mode = 'plan', question, report, previous, attachment
   const schema = issueMode ? ISSUE_SCHEMA : ANSWER_SCHEMA;
   const skills = (issueMode ? ['issue-triage', 'issue-writing'] : ['backlog-product-owner']).map((s) => resolveSkill(skillsDirs, s));
   const readOnly = providerArgs(provider.type, { caps: normalize({ tools: ['read'] }) }).args;
-  const dirs = [...new Set(attachments.map((f) => path.dirname(f)))].flatMap((d) => ['--add-dir', d]);
+  // images go as the turn's attachments (#129: checked against the limits, Read on their folder);
+  // other files are listed with read access to their folder
+  const images = attachments.filter(isImagePath);
+  const others = attachments.filter((f) => !isImagePath(f));
+  const dirs = [...new Set(others.map((f) => path.dirname(f)))].flatMap((d) => ['--add-dir', d]);
   const extraArgs = dedupeFlags([...readOnly, ...dirs, ...skills.flatMap((skill) => (provider.skill_args || []).map((x) => render(x, { skill_dir: skill.path })))], provider.args || []);
   const prompt = [
     ...skills.map(skillPrompt),
@@ -1101,11 +1105,11 @@ async function callAgent({ mode = 'plan', question, report, previous, attachment
     report,
     issueMode ? issueContext(previous) : previousExchanges(previous),
     issueMode ? `## The owner's new message\n${question}` : `## The owner's question\n${question}`,
-    attachments.length ? `## Files the owner attached (read them; screenshots are images)\n${attachments.map((f) => `- ${f}`).join('\n')}` : '',
+    others.length ? `## Files the owner attached (read them)\n${others.map((f) => `- ${f}`).join('\n')}` : '',
     `\n---\nAt the end of your response you MUST include a \`\`\`json block with an object that validates against this JSON Schema:\n\`\`\`json\n${JSON.stringify(schema, null, 2)}\n\`\`\``,
   ].filter(Boolean).join('\n\n');
   const res = await runTurn({
-    provider, model: agent.model, effort: agent.effort && agent.effort !== 'default' ? agent.effort : undefined, prompt, cwd: folder, extraArgs,
+    provider, model: agent.model, effort: agent.effort && agent.effort !== 'default' ? agent.effort : undefined, prompt, cwd: folder, extraArgs, attachments: images,
     timeoutMs: 15 * 60e3, render, hint: { stepId: issueMode ? 'product-owner-issue' : 'product-owner', visit: 1, agent: 'product-owner', schema }, onItem: () => {},
   });
   let raw;

@@ -311,7 +311,8 @@ function resumeSpec(runDir, fromStep) {
     if (/^worktree\./.test(ev.type) && ev.dir) worktree = { dir: ev.dir, branch: ev.branch || worktree?.branch || null };
     if (ev.type === 'handoff.saved' && ev.agent && ev.note) handoffs[ev.agent] = { text: ev.note, step: ev.step_id, visit: ev.visit, path: ev.path };
   }
-  return { runId: path.basename(runDir), file: started.file, inputs: started.inputs || {}, mock: !!started.mock, projectId: started.project_id || null,
+  // attachments: the images attached to inputs (#129), the previous run's copies (the new run copies them again)
+  return { runId: path.basename(runDir), file: started.file, inputs: started.inputs || {}, attachments: started.attachments || null, mock: !!started.mock, projectId: started.project_id || null,
     // runs recorded before groups have a single `issue`
     issues: started.issues || (started.issue ? [started.issue] : null), personas: started.personas || null, fromStep, steps, sessions, handoffs, worktree };
 }
@@ -351,11 +352,14 @@ const DEFAULT_MODEL = 'claude-sonnet-5';
 /**
  * Asks the supervisor about a run (a person's question from the UI). Simulated runs use the mock
  * provider. The analysis is saved as supervisor/analysis-<time>.md in the run folder.
+ * attachments: images for this question (#129, paths or { path, name }), copied into the run's
+ * supervisor/attachments/ and given to this question's turn only.
  * @returns { analysis, artifactPath, model, costUsd, steps }
  */
-async function analyzeRun({ runDir, question, workflowsDir, skillsDirs, resolveCommand }) {
+async function analyzeRun({ runDir, question, workflowsDir, skillsDirs, resolveCommand, attachments = [] }) {
   const { extractJson, validateSchema, render } = require('./engine/workflow');
-  const { runTurn } = require('./engine/providers');
+  const { runTurn, storeAttachments } = require('./engine/providers');
+  const images = storeAttachments(attachments, path.join(runDir, 'supervisor', 'attachments'));
   const { resolveSkill, skillPrompt } = require('./skills');
   const cfg = supervisorConfig(runDir, workflowsDir);
   const skill = resolveSkill(skillsDirs, 'run-supervisor');
@@ -377,7 +381,7 @@ async function analyzeRun({ runDir, question, workflowsDir, skillsDirs, resolveC
   const readOnly = providerArgs(provider.type, { caps: normalize({ tools: ['read'] }) }).args;
   const extraArgs = dedupeFlags([...readOnly, ...(provider.skill_args || []).map((x) => render(x, { skill_dir: skill.path }))], provider.args || []);
   const turn = (text) => runTurn({
-    provider, model: cfg.model, prompt: text, cwd: runDir, extraArgs, timeoutMs: 15 * 60e3, render,
+    provider, model: cfg.model, prompt: text, cwd: runDir, extraArgs, timeoutMs: 15 * 60e3, render, attachments: images,
     hint: { stepId: 'supervisor', visit: 1, schema }, onItem: () => {},
   });
   let res = await turn(prompt);
