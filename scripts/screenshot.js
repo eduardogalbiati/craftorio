@@ -437,6 +437,41 @@ function demoEnrichRun(ws, projectId) {
   fs.writeFileSync(path.join(dir, 'summary.json'), JSON.stringify(summary, null, 2));
 }
 
+// Backlog Refresh (#161): a refresh run that started 25 h ago and updated #15 and #12 (their
+// "refreshed" badge, within a day of its end), and the project's folder a git repository whose main
+// got 14 commits since: the Backlog's banner says "Backlog refreshed 25 h ago · 14 merges since".
+function demoBacklogRefresh(ws, folder, projectId) {
+  const runId = '20260119-210000-demo0161';
+  const dir = path.join(ws.runs, runId);
+  const started = new Date(Date.now() - 25 * 3600e3).toISOString();
+  const finished = new Date(Date.now() - 23.5 * 3600e3).toISOString();
+  const inputs = { project_path: folder, git_platform: 'gh', base_branch: 'main', since: '24 hours ago', issues: [] };
+  const summary = { run_id: runId, workflow: 'backlog-refresh', project_id: projectId, status: 'success', mock: false, started_at: started, finished_at: finished, duration_ms: 5400000, inputs, sessions: [] };
+  const base = { run_id: runId };
+  const events = [
+    { ...base, seq: 1, ts: started, type: 'workflow.started', workflow: 'backlog-refresh', file: 'backlog-refresh.yaml', project_id: projectId, inputs, mock: false, run_dir: dir },
+    { ...base, seq: 2, ts: finished, type: 'workflow.finished', status: 'success', summary },
+  ];
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'events.jsonl'), events.map((e) => JSON.stringify(e)).join('\n') + '\n');
+  fs.writeFileSync(path.join(dir, 'summary.json'), JSON.stringify(summary, null, 2));
+  fs.writeFileSync(path.join(dir, 'applied-safe.json'), JSON.stringify({
+    repo: DEMO_REPO.replace('https://github.com/', ''), platform: 'gh', mode: 'safe', at: finished,
+    results: [{ number: 15, result: 'updated', changes: ['body (3 edits)'] }, { number: 12, result: 'updated', changes: ['body (1 edit)', 'complexity:3 -> complexity:2'] }, { number: 9, result: 'skipped', reason: 'edited after the review' }],
+  }, null, 2));
+  fs.mkdirSync(folder, { recursive: true });
+  const git = (args, at) => execFileSync('git', ['-c', 'user.name=Demo', '-c', 'user.email=demo@example.com', ...args], {
+    cwd: folder, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], env: { ...process.env, ...(at ? { GIT_AUTHOR_DATE: at, GIT_COMMITTER_DATE: at } : {}) },
+  }).trim();
+  git(['init', '-q', '-b', 'main']);
+  for (let n = 0; n < 15; n++) {
+    fs.writeFileSync(path.join(folder, 'CHANGES.md'), `change ${n}\n`);
+    git(['add', '-A']);
+    // the first one before the refresh, 14 merges after it
+    git(['commit', '-q', '-m', n ? `Merge change ${n} (#${60 + n})` : 'Initial commit'], new Date(Date.now() - (n ? 22 - n : 30) * 3600e3).toISOString());
+  }
+}
+
 // Finished (not simulated) runs over the last 30 days with Claude, Codex and Grok sessions, so the
 // Analytics screen has tokens per day, provider, model and project (mock runs are left out of it).
 function demoAnalyticsRuns(ws, projectId) {
@@ -860,6 +895,7 @@ function main() {
     if (['backlog', 'project'].includes(args.view)) demoLocalMerge(ws, project.id);
     if (args.view === 'backlog') demoRoadmap(ws, project.id, args.live);
     if (args.view === 'backlog') demoPoConversation(ws, project.id);
+    if (args.view === 'backlog' && project.folder) demoBacklogRefresh(ws, project.folder, project.id);
     // also on Artifacts: a second run group (its document.md) for Collapse all / Expand all (#126)
     if (['artifacts', 'backlog', 'duo'].includes(args.view)) demoEnrichRun(ws, project.id);
     if (args.view === 'analytics') demoAnalyticsRuns(ws, project.id);

@@ -248,6 +248,8 @@ module.exports = (ctx) => {
         // the epic first (the chain may sync the backlog), then what the run's chain starts (#134)
         ctx.placeFiledInEpic(run, ev).catch((e) => console.error('issue tracker epic:', e.message))
           .then(() => ctx.continueChain(run, ev)).catch((e) => console.error('run chain:', e.message));
+        // a Backlog Refresh run edited or closed issues: the Backlog syncs the project (#161)
+        ctx.afterBacklogRefresh(run).catch((e) => console.error('backlog refresh sync:', e.message));
         // a roadmap's next items first (its stage may be over), then the plain queue
         setTimeout(() => ctx.dispatchRoadmaps().catch((e) => console.error('roadmap dispatch:', e)).then(() => ctx.dispatchQueue()).catch((e) => console.error('backlog dispatch:', e)), 1000);
       }

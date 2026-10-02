@@ -20,6 +20,9 @@
 // The Product Owner's drawer (backlog-po.js) applies a proposed group through window.BacklogActions.
 // Send to Product Owner (n) (#169), next to Assign workflow…, attaches the selection to the drawer's
 // question (window.BacklogPO.attach); the selection is kept.
+// Backlog Refresh (#161): a banner above the views suggests a refresh run when the last one is stale
+// and the base got merges since (Refresh now opens the Start drawer prefilled; Dismiss for today);
+// issues the last refresh updated carry a "refreshed" badge for a day.
 // Epics (#138): each card shows its epic as a badge (a click filters by it); the epic select narrows
 // the list and the kanban to one epic or to "No epic" (rule in backlog-epics.js, AND with the labels
 // and the search); the fourth mode, Epics, lists the epics with their progress (closed, done in the
@@ -41,6 +44,7 @@
   const SORT_KEY = 'multiagent.backlogSort';
   const SORTS = ['complexity', 'impact', 'updated'];
   const ISSUE_TRACKER = 'issue-tracker.yaml';
+  const REFRESH = 'backlog-refresh.yaml';
   // the one-off seed of #138: the Product Owner proposes epics for the open issues (same text as its chip)
   const ORGANIZE = 'Organize the open issues into epics';
   const FILTERS = [['open', 'Open'], ['closed', 'Closed'], ['all', 'All']];
@@ -177,7 +181,7 @@
   // The queue also changes without run events (a start that fails, the next issue starting), and a
   // live roadmap's refill (#164) with none.
   setInterval(() => {
-    const busy = bl.data?.queue?.items?.length || bl.data?.issues?.some((i) => i.runs?.[0]?.status === 'running') || bl.data?.roadmap?.live;
+    const busy = bl.data?.queue?.items?.length || bl.data?.issues?.some((i) => i.runs?.[0]?.status === 'running') || bl.data?.roadmap?.live || bl.data?.refresh?.running;
     if (visible() && busy) reload();
   }, 5000);
 
@@ -660,6 +664,10 @@
   const enrichBtn = (i, cls = 'link-btn small') => (i.state === 'open'
     ? `<button class="${cls}" type="button" data-enrich="${i.number}" title="Enrich this issue in Write & Review (e.g. into a fuller issue or an RFC), then save the result back to it">Enrich in Write &amp; Review</button>` : '');
 
+  // Updated by the last Backlog Refresh run (#161), for a day after it ended.
+  const refreshedBadge = (i) => (i.refreshed
+    ? `<span class="badge bl-refreshed" title="${esc(`Paths, lines or tasks updated by the Backlog Refresh run ${bl.data?.refresh?.lastRun?.runId || ''}`)}">refreshed</span>` : '');
+
   function issueRow(i) {
     const open = bl.expanded.has(i.number);
     const host = PLATFORMS[bl.data?.platform]?.label || 'the platform';
@@ -671,7 +679,7 @@
           <span class="bl-num mono">#${i.number}</span>
           <div class="bl-main">
             <div class="bl-title">${esc(i.title)}</div>
-            <div class="bl-labels">${epicBadge(i)}${triage(i)}${labels(i)}</div>
+            <div class="bl-labels">${refreshedBadge(i)}${epicBadge(i)}${triage(i)}${labels(i)}</div>
           </div>
           <span class="bl-status">${prBadges(i)}${status(i)}${enrichBtn(i)}</span>
           ${tasks(i) || '<span></span>'}
@@ -692,7 +700,7 @@
   const card = (i) => `
     <div class="bl-card${bl.selected.has(i.number) ? ' selected' : ''}" data-n="${i.number}">
       <div class="bl-card-head">${checkbox(i)}<span class="bl-num mono">#${i.number}</span><a class="bl-card-title" href="${esc(i.url)}" target="_blank" rel="noopener" title="Open on ${esc(PLATFORMS[bl.data?.platform]?.label || 'the platform')}">${esc(i.title)}</a></div>
-      <div class="bl-labels">${epicBadge(i)}${triage(i)}${labels(i)}</div>
+      <div class="bl-labels">${refreshedBadge(i)}${epicBadge(i)}${triage(i)}${labels(i)}</div>
       ${tasks(i)}
       ${prBadges(i) || status(i) ? `<div class="bl-card-run">${prBadges(i)}${status(i)}</div>` : ''}
       ${enrichBtn(i) ? `<div class="bl-card-actions">${enrichBtn(i)}</div>` : ''}
@@ -733,6 +741,39 @@
       ${skips}
       <span class="spacer"></span>
       <button class="btn sm${q.paused ? ' primary' : ' ghost'}" type="button" data-pause="${q.paused ? 'off' : 'on'}">${q.paused ? 'Resume' : 'Pause'}</button>`;
+  }
+
+  // The Backlog Refresh banner (#161, src/backlog-refresh.js): above every view when the last refresh
+  // is older than Settings › General › Backlog's interval and the base got merges since (or none
+  // ever ran); "Refreshing…" with a link while a refresh run is live. Never starts a run by itself.
+  const ago = (h) => (h >= 48 ? `${Math.floor(h / 24)} days ago` : `${h} h ago`);
+  function renderRefresh() {
+    const box = $b('#bl-refresh');
+    const r = bl.data?.refresh;
+    const show = !!project()?.repo && !!r && (!!r.running || r.due);
+    box.classList.toggle('hidden', !show);
+    if (!show) { box.innerHTML = ''; return; }
+    if (r.running) {
+      box.innerHTML = `<span><b>Refreshing the backlog…</b> <span class="badge live">running</span></span><span class="spacer"></span>
+        <button class="link-btn small" type="button" data-run="${esc(r.running.runId)}" data-workflow="${esc(r.running.workflow || '')}">Open the run</button>`;
+      return;
+    }
+    const when = r.lastRun ? `Backlog refreshed ${ago(r.hoursAgo)}${r.merges != null ? ` · ${r.merges} merge${r.merges === 1 ? '' : 's'} since` : ''}` : 'Backlog never refreshed';
+    const tip = r.lastRun ? `Last Backlog Refresh: run ${r.lastRun.runId}, ${dateOf(r.lastRun.startedAt)}` : 'No Backlog Refresh run yet for this project';
+    box.innerHTML = `<span title="${esc(tip)}"><b>${esc(when)}</b> <span class="muted small">Issues may cite moved files or tasks already done.</span></span>
+      <span class="spacer"></span>
+      <button class="btn sm primary" type="button" data-refresh-now title="Opens the Start panel for the Backlog Refresh workflow, prefilled; nothing starts until you press Start">Refresh now</button>
+      <button class="btn sm ghost" type="button" data-refresh-dismiss>Dismiss for today</button>`;
+  }
+
+  // Refresh now: the Start drawer on backlog-refresh, prefilled with the project, its platform, the
+  // base and `since` = the last refresh's start (the owner presses Start; developer mode starts it simulated).
+  function refreshNow() {
+    const r = bl.data?.refresh;
+    const inputs = { git_platform: bl.platform === 'gitlab' ? 'gl' : 'gh' };
+    if (r?.base) inputs.base_branch = r.base;
+    if (r?.since) inputs.since = r.since;
+    openDrawer({ workflow: REFRESH, project: bl.projectId, inputs });
   }
 
   // The live roadmap's banner (#164, backlog-roadmap.js liveBanner): on top of every view while it is on.
@@ -872,6 +913,7 @@
     $b('#bl-synced').textContent = bl.syncing ? 'Syncing…' : bl.data ? `Synced ${dateOf(bl.data.syncedAt)} from ${PLATFORMS[bl.data.platform]?.label || bl.data.platform}` : '';
     const prError = bl.data?.pullRequestsError ? `Open ${bl.data.platform === 'gitlab' ? 'MRs' : 'PRs'} could not be read: ${bl.data.pullRequestsError}` : '';
     $b('#bl-error').textContent = bl.error || prError;
+    renderRefresh();
     renderLive();
     renderLocal();
     renderQueue();
@@ -1015,6 +1057,16 @@
       } catch (err) { bl.error = errMsg(err); }
       render();
     };
+    $b('#bl-refresh').onclick = async (e) => {
+      if (e.target.closest('[data-refresh-now]')) { refreshNow(); return; }
+      const run = e.target.closest('[data-run]');
+      if (run) { openRun(run); return; }
+      const dismiss = e.target.closest('[data-refresh-dismiss]');
+      if (!dismiss) return;
+      dismiss.disabled = true;
+      try { setData(await api.dismissBacklogRefresh(bl.projectId)); } catch (err) { bl.error = errMsg(err); }
+      render();
+    };
     $b('#bl-live').onclick = async (e) => {
       const off = e.target.closest('[data-live-off]');
       if (!off) return;
@@ -1143,6 +1195,7 @@
           <span class="spacer"></span>
           <span id="bl-synced" class="muted small"></span>
         </div>
+        <div id="bl-refresh" class="bl-queue bl-refresh hidden" role="status"></div>
         <div id="bl-live" class="bl-live hidden" role="status"></div>
         <div id="bl-local" class="bl-queue bl-local hidden"></div>
         <div id="bl-queue" class="bl-queue hidden"></div>

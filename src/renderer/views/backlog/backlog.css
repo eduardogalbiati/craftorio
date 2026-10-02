@@ -188,6 +188,10 @@ button.bl-label { font-family: inherit; background: none; cursor: pointer; }
 .bl-group { color: var(--accent); }
 /* Write & Review on an issue (#103): its run's badge and the card's action */
 .bl-enrich { cursor: pointer; border: 1px solid var(--accent); color: var(--accent); background: transparent; }
+/* Backlog Refresh (#161): the banner is one line; an issue the last refresh updated has a badge for a day */
+.bl-refresh { flex-wrap: nowrap; border-color: var(--accent); }
+.bl-refresh > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bl-refreshed { border: 1px solid var(--accent); color: var(--accent); background: transparent; }
 .bl-card-actions { display: flex; justify-content: flex-end; }
 .bl-skipped { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 /* Epics (#138): the card badge, the filter, the Epics view (backlog.js renderEpics) */

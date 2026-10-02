@@ -4,7 +4,8 @@
 // queue's item shape, so `itemIssues`/`runInputs` start it like an assigned group) run in parallel
 // up to the concurrency limit. A stage is over when every item is done (finished successfully and
 // merged: `localMerge` for the local workflow, the `gh pr merge`/`glab mr merge` action for
-// software-development, success for a simulation) or skipped. A failed, cancelled or interrupted
+// software-development, success for a simulation or for a workflow with `metadata.merges: false`
+// such as backlog-refresh, #161) or skipped. A failed, cancelled or interrupted
 // run pauses the roadmap at its stage (`pausedBy`): the owner resumes the run (#100, `adoptResumed`),
 // retries or skips the item, or stops the roadmap; nothing is skipped or approved by itself.
 // `advance` is the pure sequencing step; the service's `dispatchRoadmaps` applies it after each run

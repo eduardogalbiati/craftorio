@@ -31,6 +31,7 @@ async function renderSettings() {
   platform.innerHTML = Object.entries(window.BACKLOG_PLATFORMS || {}).map(([id, p]) => `<option value="${id}">${esc(p.label)}${p.soon ? ' (sync not available yet)' : ''}</option>`).join('');
   platform.value = state.settings.backlogPlatform || 'github';
   $('#set-backlog-group').value = state.settings.backlogMaxGroup || 5;
+  $('#set-backlog-refresh').value = String(state.settings.backlogRefreshHours ?? 24);
   $('#set-notif-retention').value = state.settings.notificationRetentionDays ?? 30;
   renderConcurrency();
   renderOracleSettings();
@@ -275,6 +276,16 @@ registerView({
                   <div class="s-label"><b>Issues per run</b><span>The most issues Assign workflow sends as one run (one branch, one PR/MR that closes all of them).</span></div>
                   <div class="s-ctrl"><input type="number" id="set-backlog-group" min="2" max="20" aria-label="Most issues in one run" /></div>
                 </div>
+                <div class="s-row">
+                  <div class="s-label"><b>Suggest a backlog refresh every</b><span>The Backlog offers to run Backlog Refresh (it updates the issues' paths, lines and done tasks) when the last refresh is older than this and the base branch got merges since. It never starts a run by itself.</span></div>
+                  <div class="s-ctrl"><select id="set-backlog-refresh" aria-label="Suggest a backlog refresh every">
+                    <option value="12">12 hours</option>
+                    <option value="24">24 hours</option>
+                    <option value="48">2 days</option>
+                    <option value="168">7 days</option>
+                    <option value="0">Off</option>
+                  </select></div>
+                </div>
               </div>
               <h3 class="s-subtitle">Live roadmap</h3>
               <div id="set-live" class="s-group">
@@ -429,6 +440,7 @@ registerView({
       if (el.dataset.setting === 'developerMode') applyDeveloperMode();
     }));
     $('#set-backlog-platform').onchange = async (e) => { state.settings = await api.setSettings({ backlogPlatform: e.target.value }); };
+    $('#set-backlog-refresh').onchange = async (e) => { state.settings = await api.setSettings({ backlogRefreshHours: Number(e.target.value) || 0 }); };
     $('#set-backlog-group').onchange = async (e) => {
       const n = Math.floor(Number(e.target.value));
       state.settings = await api.setSettings({ backlogMaxGroup: Number.isFinite(n) && n >= 2 ? Math.min(n, 20) : 5 });

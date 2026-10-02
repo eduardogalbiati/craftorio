@@ -89,7 +89,10 @@ files did not change. Starting from scratch never deletes the old commits.
 
 Issues written before a refactor still cite the old paths and lines. They can run, but the
 developer spends time finding the code. When many planned issues cite files that moved, recommend
-refreshing them first (backlog refresh, or updating those issues), and say which.
+refreshing them first (backlog refresh, or updating those issues), and say which. When the
+report lists `backlog-refresh.yaml`, you may plan it as a group of its own in the stage right
+after the one that moves the files, with those issues: it never merges (its item is done when the
+run succeeds) and the next stage starts on refreshed issues.
 
 ## Pick the mode of each group
 

@@ -209,7 +209,9 @@ same features for users; this is the implementer's summary.
   slot is free; `dispatchRoadmaps` (src/roadmap.js `advance`) runs a started roadmap stage by stage,
   first after every `workflow.finished` (before the queue) and when a workspace opens. An item is done when
   its run succeeded and merged: `summary.local_merge`, an `action.executed` with `gh pr merge`/`glab mr merge`
-  and exit 0 (`mergedPullRequest`), or `mock`. Any other end pauses the roadmap (`pausedBy`); a resumed run
+  and exit 0 (`mergedPullRequest`), or `mock`. A workflow that never merges declares `metadata.merges: false`
+  (backlog-refresh, #161): its item is done when its run succeeds (service `roadmapRun` reads the run's
+  workflow file). Any other end pauses the roadmap (`pausedBy`); a resumed run
   (`resume.runId` = the item's run) takes the item's place (`adoptResumed`).
 - Inputs with `type: array` take a list; text from a form becomes one item per line or comma.
 - software-development (0.15.0) for several issues: the developer answers `issues: [{ issue, done, summary }]`;

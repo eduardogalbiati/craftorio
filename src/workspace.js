@@ -159,6 +159,8 @@ const DEFAULT_SETTINGS = {
   backlogPlatform: 'github',
   // the most issues the Backlog sends as one run (one branch, one PR/MR)
   backlogMaxGroup: 5,
+  // the Backlog suggests a Backlog Refresh run when the last one is older than this (#161); 0 = off
+  backlogRefreshHours: 24,
   // Live roadmap (#164, src/live-roadmap.js): the highest complexity:n a refill picks, the most stages
   // per refill, the spend over 24 h (USD, runs and refills; 0 = no cap) past which refills stop, and
   // whether the backlog is synced before the Product Owner reads it

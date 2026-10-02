@@ -4,6 +4,7 @@
 
 const path = require('path');
 const backlog = require('../../backlog');
+const refreshes = require('../../backlog-refresh');
 const simulation = require('../../engine/simulation');
 const projects = require('../../projects');
 const runs = require('../../runs');
@@ -14,6 +15,16 @@ module.exports = (ctx) => {
   const current = (projectId) => ctx.withIssueRuns(backlog.readBacklog(ctx.ws.backlog, projectId));
   return [
     { channel: 'backlog:get', method: 'getBacklog', params: ['projectId'], fn: ({ projectId }) => current(projectId) },
+    // the Backlog Refresh banner's "Dismiss for today" (#161, src/backlog-refresh.js)
+    {
+      channel: 'backlog:dismiss-refresh',
+      method: 'dismissBacklogRefresh',
+      params: ['projectId'],
+      fn: ({ projectId }) => {
+        refreshes.dismiss(ctx.ws.backlog, project(projectId));
+        return current(project(projectId));
+      },
+    },
     // a sync also checks the local commits not pushed (fetching origin/<base>)
     {
       channel: 'backlog:sync',

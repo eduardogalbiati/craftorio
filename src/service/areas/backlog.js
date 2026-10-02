@@ -1,7 +1,8 @@
 // Service area: a project's Backlog (src/backlog.js). The synced issues with their runs, queue,
 // roadmap stage and local status; Assign (queue issues for a workflow, alone or as one group run,
 // with an optional chain, #134); the queue's dispatch into free run slots; and the issue tracker's
-// epic placement after a run filed issues (#138). "Create and queue" is a chain (src/service/areas/chain.js).
+// epic placement after a run filed issues (#138); the Backlog Refresh banner and the sync after a
+// refresh run (#161, src/backlog-refresh.js). "Create and queue" is a chain (src/service/areas/chain.js).
 
 const path = require('path');
 const { loadWorkflow } = require('../../engine/workflow');
@@ -9,6 +10,8 @@ const simulation = require('../../engine/simulation');
 const workspace = require('../../workspace');
 const projects = require('../../projects');
 const backlog = require('../../backlog');
+const refreshes = require('../../backlog-refresh');
+const { gitOut } = require('../common');
 const epics = require('../../epics');
 const roadmaps = require('../../roadmap');
 const { normalizeThen } = require('../../renderer/chain-model');
@@ -34,8 +37,40 @@ module.exports = (ctx) => {
     // the roadmap, each item with its run's live state, and each issue's stage ("Roadmap: stage 2")
     const roadmap = ctx.roadmapView(data.projectId, live);
     const stages = roadmaps.issueStages(roadmap);
-    const issues = backlog.linkRuns(data.issues, live, queue, local).map((i) => (stages.has(i.number) ? { ...i, roadmap: stages.get(i.number) } : i));
-    return { ...data, queue, local, roadmap, autoPush: !!project?.autoPush, autoEpic: !!project?.autoEpic, issues };
+    const refresh = refreshBanner(project, live, local);
+    const refreshed = new Set(refresh.refreshed);
+    const issues = backlog.linkRuns(data.issues, live, queue, local)
+      .map((i) => (stages.has(i.number) ? { ...i, roadmap: stages.get(i.number) } : i))
+      .map((i) => (refreshed.has(i.number) && i.state === 'open' ? { ...i, refreshed: true } : i));
+    return { ...data, queue, local, roadmap, refresh, autoPush: !!project?.autoPush, autoEpic: !!project?.autoEpic, issues };
+  }
+
+  // The Backlog Refresh banner (#161, src/backlog-refresh.js): the merges on the base since the
+  // last refresh are counted (first-parent commits: merges and squashes) only when it is stale;
+  // `refreshed`: the issues that refresh updated, for a day.
+  function refreshBanner(project, list, local) {
+    const { ws } = ctx;
+    const hours = workspace.readSettings(ws).backlogRefreshHours;
+    const { last } = refreshes.refreshRuns(list);
+    const stale = last && Number(hours) > 0 && Date.now() - Date.parse(last.startedAt) >= Number(hours) * 3600e3;
+    const count = stale && project?.folder
+      ? gitOut(project.folder, ['rev-list', '--count', '--first-parent', `--since=${last.startedAt}`, local?.base || 'HEAD', '--'])
+      : null;
+    const state = refreshes.refreshState({
+      runs: list, intervalHours: hours, merges: count == null ? null : Number(count), dismissedOn: project ? refreshes.readDismissed(ws.backlog, project.id) : null,
+    });
+    const refreshed = last ? refreshes.refreshedIssues(path.join(ws.runs, last.runId), last.finishedAt) : [];
+    return { ...state, base: local?.base || null, refreshed };
+  }
+
+  // A Backlog Refresh run ended (#161): the Backlog syncs the project, so the edited and closed
+  // issues show at once. A simulated run changed nothing on the platform: no sync.
+  async function afterBacklogRefresh(run) {
+    if (!refreshes.isRefreshRun({ file: run.file }) || !run.projectId || run.mock) return;
+    const { ws } = ctx;
+    const project = projects.readProject(ws.projects, run.projectId);
+    const platform = backlog.readBacklog(ws.backlog, project.id)?.platform || (run.inputs?.git_platform === 'gl' ? 'gitlab' : 'github');
+    await backlog.syncBacklog({ dir: ws.backlog, project, platform });
   }
 
   // Queues issues of a project's synced backlog for a workflow and starts the first ones if there
@@ -164,6 +199,7 @@ module.exports = (ctx) => {
   }
 
   return {
+    afterBacklogRefresh,
     allowQueuedKeptWork,
     assignWorkflow,
     dispatchQueue,

@@ -52,13 +52,20 @@ module.exports = (ctx) => {
   }
 
   // The state of a roadmap item's run: live (a gate keeps it open), else what it recorded; merged =
-  // a local merge, a PR/MR merge action, or a simulation that succeeded (simulations never merge).
+  // a local merge, a PR/MR merge action, or a simulation that succeeded (simulations never merge);
+  // a run of a workflow that never merges (`metadata.merges: false`, e.g. backlog-refresh, #161)
+  // counts as merged when it succeeds.
   function roadmapRun(runId) {
     const live = runId && ctx.active.get(runId);
     if (live) return { status: 'running', waiting: live.approvals.size > 0 };
     const r = runId ? runs.readRun(ctx.ws.runs, runId) : null;
     if (!r) return null;
-    return { status: r.status, error: r.error, merged: r.status === 'success' && (r.mock || !!r.localMerge || roadmaps.mergedPullRequest(r.runDir)) };
+    return { status: r.status, error: r.error, merged: r.status === 'success' && (r.mock || !!r.localMerge || roadmaps.mergedPullRequest(r.runDir) || neverMerges(r.file)) };
+  }
+
+  function neverMerges(file) {
+    if (!file) return false;
+    try { return loadWorkflow(ctx.workflowPath(file).file).metadata?.merges === false; } catch { return false; }
   }
 
   async function advanceRoadmap(projectId) {
