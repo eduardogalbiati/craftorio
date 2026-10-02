@@ -866,6 +866,9 @@
       </div>
       <div id="po-log" class="drawer-body po-log"></div>
       <div class="drawer-foot po-foot">
+        <div id="po-sim" class="po-sim hidden" role="group" aria-label="Simulated scenario" title="Simulation only, not part of the app: forces the simulated Product Owner's next answers">
+          <span class="po-sim-label">Simulated scenario</span><span id="po-scenario" class="po-sim-opts"></span>
+        </div>
         <div id="po-mode" class="seg sm" role="group" aria-label="What to do with the Product Owner">
           <button type="button" data-po-mode="plan">Plan the backlog</button>
           <button type="button" data-po-mode="issue">Register an issue</button>

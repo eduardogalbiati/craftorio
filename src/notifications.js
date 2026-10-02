@@ -6,10 +6,11 @@
 //            cancelled, interrupted); target = { runId, workflow }; or a push met a merge conflict
 //            (event `conflict`); target = { view: 'backlog', projectId }
 //   session  an AI CLI in a Sessions terminal stopped and waits for the user; target = { terminalId }
+//   po       the Backlog's Product Owner answered a question (#149); target = { view: 'backlog', projectId, openPO: true }
 //
-// Nothing is shown while the window is focused on the notice's run or session.
+// Nothing is shown while the window is focused on the notice's run, session or Product Owner drawer.
 
-const SETTING = { run: 'notifyRuns', session: 'notifySessions' };
+const SETTING = { po: 'notifyPO', run: 'notifyRuns', session: 'notifySessions' };
 const STATUS_LABEL = { success: 'succeeded', failed: 'failed', cancelled: 'cancelled', interrupted: 'interrupted' };
 
 const clip = (s, n = 180) => {
@@ -68,12 +69,28 @@ function pushConflictNotice({ project = {}, base, files = [], error } = {}) {
   };
 }
 
-// What the window shows, as reported by the UI: { focused, runId, terminalId }.
+// The notice for a Product Owner's answer (#149): `message` is the answer recorded by
+// src/product-owner.js ask() ({ text, error, mode, issue }); `project`: { id, name }.
+function productOwnerNotice({ project = {}, message = {} } = {}) {
+  const name = clip(project.name || project.id || 'project', 80);
+  const draft = message.mode === 'issue' && message.issue?.draft?.title;
+  return {
+    kind: 'po', event: message.error ? 'failed' : 'answered',
+    title: message.error ? `The Product Owner could not answer: ${name}` : `The Product Owner answered: ${name}`,
+    body: clip(draft ? `Draft: ${draft}` : message.text) || 'Open the Backlog to read the answer.',
+    target: { view: 'backlog', projectId: project.id || null, openPO: true },
+  };
+}
+
+// What the window shows, as reported by the UI: { focused, runId, terminalId, poProjectId } (poProjectId:
+// the project whose Product Owner drawer is open on the Backlog).
 function normalizeContext(ctx) {
+  const id = (v) => (typeof v === 'string' && v ? v : null);
   return {
     focused: !!ctx?.focused,
-    runId: typeof ctx?.runId === 'string' && ctx.runId ? ctx.runId : null,
-    terminalId: typeof ctx?.terminalId === 'string' && ctx.terminalId ? ctx.terminalId : null,
+    runId: id(ctx?.runId),
+    terminalId: id(ctx?.terminalId),
+    poProjectId: id(ctx?.poProjectId),
   };
 }
 
@@ -83,6 +100,7 @@ function shouldNotify(notice, { settings = {}, context } = {}) {
   const ctx = normalizeContext(context);
   if (!ctx.focused) return true;
   const t = notice.target || {};
+  if (t.openPO) return !(t.projectId && t.projectId === ctx.poProjectId);
   return !((t.runId && t.runId === ctx.runId) || (t.terminalId && t.terminalId === ctx.terminalId));
 }
 
@@ -206,6 +224,7 @@ module.exports = {
   attentionSignal,
   interruptedNotice,
   normalizeContext,
+  productOwnerNotice,
   promptLine,
   pushConflictNotice,
   runNotice,

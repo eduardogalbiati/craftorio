@@ -10,6 +10,8 @@
 }
 .po-fab:hover { transform: scale(1.06); }
 .po-fab svg { width: 100%; height: 100%; display: block; }
+/* an answer not seen yet (#149): the sidebar's yellow .status-dot (.st-waiting) on the button */
+.po-fab .status-dot { position: absolute; top: 2px; right: 2px; width: 14px; height: 14px; border: 2px solid var(--panel); }
 .po-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .po-avatar { width: 40px; height: 40px; flex: none; }
 .po-avatar svg, .po-empty-robot svg { width: 100%; height: 100%; display: block; }
@@ -42,6 +44,14 @@ span.po-applied { cursor: default; }
 .po-file { display: inline-flex; align-items: center; gap: 4px; max-width: 220px; }
 .po-file span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .po-file button { border: none; background: none; color: var(--muted); cursor: pointer; padding: 0 2px; }
+.po-file button:disabled { opacity: .35; cursor: not-allowed; }
+/* the simulation-only scenario picker (#148): orange, never part of the production UI */
+.po-sim { display: grid; gap: 4px; padding: 6px 8px; border: 1px dashed var(--orange); border-radius: 6px; color: var(--orange); font-size: 12px; }
+.po-sim-label { font-weight: 700; }
+.po-sim-opts { display: flex; flex-wrap: wrap; gap: 4px; }
+.po-sim-opt { border: 1px solid var(--orange); border-radius: 999px; background: transparent; color: var(--orange); font-size: 11px; padding: 1px 8px; cursor: pointer; }
+.po-sim-opt.active { background: var(--orange); color: #1a1a1a; }
+.po-sim-opt:disabled { opacity: .5; cursor: not-allowed; }
 .po-draft { border: 1px solid var(--border); border-left: 3px solid #0F9F8F; background: var(--panel); border-radius: 8px; padding: 10px 12px; display: grid; gap: 6px; }
 .po-draft-title { font-size: 15px; font-weight: 700; }
 .po-draft-meta { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }

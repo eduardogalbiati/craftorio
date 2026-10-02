@@ -406,16 +406,24 @@ function reportNotifyContext() {
       focused: document.hasFocus() && !document.hidden,
       runId: shownRunId(),
       terminalId: state.view === 'sessions' ? window.SessionsView?.shownTerminalId() || null : null,
+      // #149: the Product Owner's answers are not notified while its drawer shows them
+      poProjectId: state.view === 'backlog' ? window.BacklogPO?.openProjectId() || null : null,
     });
   }, 0);
 }
 window.reportNotifyContext = reportNotifyContext;
 
 // Where a notification leads (desktop click or the notification center): its terminal, the
-// project's Backlog (a push conflict), or its run.
+// project's Backlog (a push conflict; with the Product Owner's drawer open for its answer, #149),
+// or its run.
 function openNotificationTarget(t) {
   if (t.terminalId) { window.SessionsView?.focusTerminal(t.terminalId); return; }
-  if (t.view === 'backlog') { window.BacklogActions?.focusProject(t.projectId); showView('backlog'); return; }
+  if (t.view === 'backlog') {
+    window.BacklogActions?.focusProject(t.projectId);
+    showView('backlog');
+    if (t.openPO) window.BacklogPO?.open();
+    return;
+  }
   if (t.runId) showRun(t.runId, { workflow: t.workflow });
 }
 

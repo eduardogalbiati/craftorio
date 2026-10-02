@@ -10,10 +10,13 @@
 // po:file's `epic`: a new issue joins its draft's epic (#138). po:split files a proposed split of an
 // issue too big for one run (#124); po:epic creates an epic or places issues in one (#138). Both
 // run only on the owner's click, preview like po:file, and sync the backlog after a real write.
+// po:ask's `scenario` (#148, simulated only): forces the simulated answer (MOCK_SCENARIOS). Every
+// answer raises a `po` notice (#149, src/notifications.js), simulated ones too.
 
 const path = require('path');
 const agents = require('../../agents');
 const backlog = require('../../backlog');
+const notifier = require('../../notifications');
 const productOwner = require('../../product-owner');
 const projects = require('../../projects');
 const runs = require('../../runs');
@@ -46,15 +49,15 @@ module.exports = (ctx) => {
     {
       channel: 'po:ask',
       method: 'askProductOwner',
-      params: ['projectId', 'question', 'mock', 'mode', 'attachments', 'issues'],
-      fn: async ({ projectId, question, mock, mode, attachments, issues }) => {
+      params: ['projectId', 'question', 'mock', 'mode', 'attachments', 'issues', 'scenario'],
+      fn: async ({ projectId, question, mock, mode, attachments, issues, scenario }) => {
         const id = project(projectId);
         const p = projects.readProject(ctx.ws.projects, id);
         const data = ctx.withIssueRuns(backlog.readBacklog(ctx.ws.backlog, id));
         if (!data) throw new Error('Sync the backlog first: the Product Owner reads the synced issues.');
         const simulated = !!mock || simulation.simulationOnly();
         const settings = workspace.readSettings(ctx.ws);
-        return productOwner.ask({
+        const out = await productOwner.ask({
           backlogDir: ctx.ws.backlog,
           projectId: id,
           runsDir: ctx.ws.runs,
@@ -74,7 +77,12 @@ module.exports = (ctx) => {
           attachments: Array.isArray(attachments) ? attachments : [],
           // #169: the Backlog's selection sent to the Product Owner (plan mode)
           selection: Array.isArray(issues) ? issues : [],
+          // #148: the drawer's simulation-only scenario picker (ignored for a real call)
+          scenario: simulated && typeof scenario === 'string' && scenario ? scenario : null,
         });
+        // #149: the bell and a desktop notice (not while the window shows this project's drawer)
+        ctx.notify?.(notifier.productOwnerNotice({ project: { id, name: p?.name }, message: out.message }), { projectId: id });
+        return out;
       },
     },
     {

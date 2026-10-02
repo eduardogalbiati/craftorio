@@ -27,6 +27,14 @@
 // Add all add only the checked ones (po.extras). While a question is in flight the Backlog's button
 // is disabled ("Product Owner is answering": syncSendButton).
 // Developer or simulated mode asks the simulated Product Owner (no model call) and only previews a filing.
+// Its scenario picker (#148, #po-sim, orange, shown in that mode only) forces the next simulated answer
+// (MOCK_SCENARIOS in src/product-owner.js: a question, a draft, a duplicate, an error, large answers,
+// applied groups, a long attachments list) to click through every state by hand or in a smoke check.
+// The conversation keeps the owner's scroll position on every render; a new message (the question
+// sent, the answer) scrolls to the end only when the owner was already there (#148). While a
+// question is in flight its attachments can't be removed: they were sent with it.
+// An answer the owner has not seen (the drawer closed, or another screen) puts a yellow dot on the
+// robot button until the drawer opens (#149, po.unread); the service also notifies it (`po` notice).
 // Uses app.js globals ($, esc, state, errMsg, devMode, fmtCost, fmtSize, markdownHtml, confirmDialog)
 // and window.Robots (robots.js).
 // Its button and drawer are part of the Backlog's markup (backlog.js registerView): wired as it loads.
@@ -48,14 +56,36 @@
   // #169: the question the drawer suggests for issues sent from the Backlog (the owner may edit it)
   const SELECTION_QUESTION = 'What is the best strategy to put these issues in the roadmap? Should any other open issue join them?';
   // attached: issue numbers sent from the Backlog (#169); extras: `${m}:${n}` → the suggested issues checked in a group
-  const po = { open: false, busy: false, projectId: null, messages: [], pending: null, error: null, notes: {}, mode: 'plan', files: [], placeEpic: {}, attached: [], extras: {} };
+  // unread: an answer the owner has not seen yet (#149); scenario: the simulated answer forced (#148)
+  const po = { open: false, busy: false, projectId: null, messages: [], pending: null, error: null, notes: {}, mode: 'plan', files: [], placeEpic: {}, attached: [], extras: {}, unread: false, scenario: '' };
   const $p = (sel) => document.querySelector(sel);
   const actions = () => window.BacklogActions;
   const issueOf = (n) => (actions()?.data()?.issues || []).find((i) => i.number === n);
   const avatar = (st = 'idle') => (window.Robots ? Robots.svg('product-owner', st, { bubble: false, plaque: '' }) : '');
+  // #148: the simulated answers the picker forces (ids of MOCK_SCENARIOS, src/product-owner.js); `mode`:
+  // the drawer switches to the mode it answers in
+  const SCENARIOS = [
+    { id: '', label: 'Default (built from the backlog)' },
+    { id: 'question', label: 'A pending question', mode: 'issue' },
+    { id: 'draft', label: 'A draft ready to file', mode: 'issue' },
+    { id: 'duplicate', label: 'A duplicate found', mode: 'issue' },
+    { id: 'large-draft', label: 'A large draft', mode: 'issue' },
+    { id: 'attachments', label: 'A long attachments list', mode: 'issue' },
+    { id: 'groups', label: 'Several groups (applied, partly applied)', mode: 'plan' },
+    { id: 'large-answer', label: 'A large answer', mode: 'plan' },
+    { id: 'error', label: 'An error answer' },
+  ];
+  const SIM_FILES = 8;
+  // the owner reads the drawer: an answer arriving now is seen (#149)
+  const watching = () => po.open && state.view === 'backlog' && !document.hidden;
 
   function renderButton() {
-    $p('#btn-bl-po').innerHTML = avatar();
+    // #149: the sidebar's yellow status dot while an answer is unseen (the robot thinks while busy)
+    const unread = po.unread && !po.busy;
+    const b = $p('#btn-bl-po');
+    b.innerHTML = avatar() + (unread ? '<span class="status-dot" aria-hidden="true"></span>' : '');
+    b.classList.toggle('st-waiting', unread);
+    b.setAttribute('aria-label', unread ? 'Product Owner: a new answer' : 'Product Owner');
     $p('#po-avatar').innerHTML = avatar(po.busy ? 'thinking' : 'idle');
     syncSendButton();
   }
@@ -77,15 +107,17 @@
     if (po.projectId !== projectId) po.placeEpic = {};
     if (po.projectId !== projectId) Object.assign(po, { attached: [], extras: {} });
     if (po.projectId !== projectId) Object.assign(po, { projectId, messages: [], pending: null, error: null, notes: {} });
-    po.open = true;
+    Object.assign(po, { open: true, unread: false });
     $p('#po-drawer').classList.add('open');
     $p('#po-drawer').setAttribute('aria-hidden', 'false');
     $p('#po-backdrop').classList.remove('hidden');
-    render();
+    window.reportNotifyContext?.();
+    render({ scroll: 'end' });
+    // while a question is in flight the service already recorded it: render() leaves out the pending bubble
     try { po.messages = await api.productOwnerHistory(projectId); } catch (e) { po.error = errMsg(e); }
     // a draft still to file: back to Register an issue
-    if (openDraftIndex() >= 0) po.mode = 'issue';
-    render();
+    if (openDraftIndex() >= 0 && !po.busy) po.mode = 'issue';
+    render({ scroll: 'end' });
     setTimeout(() => $p('#po-question').focus(), 200);
   }
 
@@ -94,6 +126,7 @@
     $p('#po-drawer').classList.remove('open');
     $p('#po-drawer').setAttribute('aria-hidden', 'true');
     $p('#po-backdrop').classList.add('hidden');
+    window.reportNotifyContext?.();
   }
 
   function setMode(mode) {
@@ -114,14 +147,36 @@
     $p('#po-question').value = '';
     render();
     try {
-      const out = await api.askProductOwner(projectId, q, devMode(), mode, files, issues);
-      if (po.projectId === projectId) { po.messages = out.messages; if (mode === 'issue') po.files = []; }
+      // #148: the simulation-only scenario picker forces the simulated answer
+      const out = await api.askProductOwner(projectId, q, devMode(), mode, files, issues, devMode() ? po.scenario || null : null);
+      if (po.projectId === projectId) {
+        po.messages = out.messages;
+        if (mode === 'issue') po.files = [];
+        // #149: the answer arrived while the owner was not looking at the drawer
+        if (!watching()) po.unread = true;
+      }
     } catch (e) {
       if (po.projectId === projectId) po.error = errMsg(e);
     } finally {
       Object.assign(po, { busy: false, pending: null });
       render();
     }
+  }
+
+  // #148: the "long attachments list" scenario attaches simulated screenshots through the real path
+  // (api.attachProductOwnerFile): a 1×1 PNG each, with long names
+  const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+  function simulatedFiles() {
+    const bytes = Uint8Array.from(atob(PNG), (c) => c.charCodeAt(0));
+    return Array.from({ length: SIM_FILES }, (_, n) => new File([bytes], `simulated-screenshot-${n + 1}-of-the-backlog-drawer-with-a-long-name.png`, { type: 'image/png' }));
+  }
+
+  async function setScenario(id) {
+    const s = SCENARIOS.find((x) => x.id === id) || SCENARIOS[0];
+    po.scenario = s.id;
+    if (s.mode && s.mode !== po.mode) setMode(s.mode);
+    if (s.id === 'attachments') await addFiles(simulatedFiles());
+    else render();
   }
 
   // #169: the Backlog's selection attached to the next plan questions; nothing is asked until the
@@ -364,7 +419,21 @@
       ${answerHtml(msg.answer, m)}${issueHtml(msg.issue, m)}</div>`;
   }
 
-  function render() {
+  // Whether the conversation is scrolled to its end (or near it).
+  const NEAR_END = 40;
+  const atEnd = (log) => log.scrollHeight - log.scrollTop - log.clientHeight <= NEAR_END;
+  // The question sent while the service answers it; once recorded (a history reloaded meanwhile,
+  // open()), the conversation shows it and the pending bubble would repeat it (#148).
+  const pendingShown = () => {
+    const last = po.messages[po.messages.length - 1];
+    return po.pending && !(last?.role === 'user' && last.text === po.pending);
+  };
+
+  // scroll (#148): 'keep' the owner's position (an applied group, a filing, an attachment, a mode
+  // switch, a backlog refresh; a new message too), except that an owner at the end stays at the end
+  // (so the question sent and the answer show up only then); 'end' when the drawer opens.
+  function render({ scroll = 'keep' } = {}) {
+    if (po.unread && watching()) po.unread = false;
     renderButton();
     if (!po.open) return;
     const agent = window.productOwnerAgent;
@@ -374,6 +443,8 @@
     const model = issueMode ? 'claude-sonnet-5 · medium' : `${agent?.model || 'claude-opus-5-5'}${agent?.effort && agent.effort !== 'default' ? ` · ${agent.effort}` : ''}`;
     $p('#po-sub').textContent = `${po.projectId || ''} · ${simulated ? 'simulated (developer mode)' : model}`;
     const log = $p('#po-log');
+    const top = log.scrollTop;
+    const toEnd = scroll === 'end' || atEnd(log);
     const cost = po.messages.reduce((a, x) => a + (x.costUsd || 0), 0);
     const empty = issueMode
       ? 'Describe the issue in a few words: type it, dictate it, or paste a screenshot. I look at the code and the backlog for evidence and duplicates, ask a question if I must, and draft it. Nothing is filed until you click Create or Add to #n.'
@@ -381,10 +452,12 @@
     log.innerHTML = (po.messages.length || po.pending ? '' : `<div class="po-empty"><span class="po-empty-robot" aria-hidden="true">${avatar()}</span>
         <p class="muted small">${empty}</p></div>`)
       + po.messages.map(messageHtml).join('')
-      + (po.pending ? `<div class="sup-wmsg user"><div class="sup-wmsg-meta">You</div><div>${esc(po.pending)}</div></div>` : '')
+      + (pendingShown() ? `<div class="sup-wmsg user"><div class="sup-wmsg-meta">You</div><div>${esc(po.pending)}</div></div>` : '')
       + (po.busy ? `<div class="sup-loading"><span class="spinner"></span><span>${issueMode ? 'The Product Owner is reading the code and the backlog…' : 'The Product Owner is reading the backlog…'}</span></div>` : '')
       + (po.error ? `<p class="error small">${esc(po.error)}</p>` : '');
-    log.scrollTop = log.scrollHeight;
+    // #148: the simulation-only scenario picker (never in the production UI)
+    $p('#po-sim').classList.toggle('hidden', !simulated);
+    $p('#po-scenario').innerHTML = simulated ? SCENARIOS.map((s) => `<button type="button" class="po-sim-opt${s.id === po.scenario ? ' active' : ''}" data-po-scenario="${esc(s.id)}" aria-pressed="${s.id === po.scenario}"${po.busy ? ' disabled' : ''}>${esc(s.label)}</button>`).join('') : '';
     document.querySelectorAll('#po-mode [data-po-mode]').forEach((b) => {
       b.classList.toggle('active', b.dataset.poMode === po.mode);
       b.disabled = po.busy;
@@ -393,7 +466,9 @@
       `<button class="chip" type="button" data-mode="issue"${po.busy ? ' disabled' : ''} title="Describe an issue; the Product Owner drafts it and you file it">${esc(REGISTER)}…</button>`].join('');
     $p('#po-chips').classList.toggle('hidden', issueMode);
     $p('#po-files').classList.toggle('hidden', !issueMode || !po.files.length);
-    $p('#po-files').innerHTML = po.files.map((f, n) => `<span class="badge po-file" title="${esc(f.path)}"><span>${esc(f.name)}</span> <span class="muted">${esc(fmtSize(f.size))}</span><button type="button" data-po-unattach="${n}" aria-label="Remove ${esc(f.name)}">×</button></span>`).join('');
+    // #148: an attachment sent with the question in flight can't be removed until the answer
+    const sent = po.busy ? ' disabled title="Already sent with this question: you can remove it once the Product Owner answers"' : '';
+    $p('#po-files').innerHTML = po.files.map((f, n) => `<span class="badge po-file" title="${esc(f.path)}"><span>${esc(f.name)}</span> <span class="muted">${esc(fmtSize(f.size))}</span><button type="button" data-po-unattach="${n}" aria-label="Remove ${esc(f.name)}"${sent}>×</button></span>`).join('');
     $p('#btn-po-attach').classList.toggle('hidden', !issueMode);
     $p('#btn-po-attach').disabled = po.busy;
     // #169: the issues sent from the Backlog (plan questions only); a closed one is struck through
@@ -412,6 +487,8 @@
     $p('#btn-po-ask').disabled = po.busy;
     $p('#btn-po-clear').disabled = po.busy || !po.messages.length;
     $p('#po-note').textContent = `${simulated ? `Simulated: no model is called and nothing is spent.${issueMode ? ' Filing only previews: nothing reaches GitHub/GitLab.' : ''}` : 'Each question is one call to the model: it uses your Claude Code subscription.'}${cost ? ` Conversation cost ${fmtCost(cost)}.` : ''}`;
+    // last: the footer above may have changed the log's height
+    log.scrollTop = toEnd ? log.scrollHeight : top;
   }
 
   // ---- applying a proposal (the owner's click) ------------------------------------------------------
@@ -514,8 +591,10 @@
   $p('#po-backdrop').onclick = close;
   $p('#btn-po-ask').onclick = () => ask($p('#po-question').value);
   $p('#po-question').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ask(e.target.value); }
+    // an Enter that ends an IME composition is not a send
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); ask(e.target.value); }
   });
+  $p('#po-scenario').onclick = (e) => { const b = e.target.closest('[data-po-scenario]'); if (b && !po.busy) setScenario(b.dataset.poScenario); };
   // a pasted screenshot becomes an attachment (and switches to Register an issue); text pastes as usual
   $p('#po-question').addEventListener('paste', (e) => {
     const files = [...(e.clipboardData?.files || [])];
@@ -536,7 +615,7 @@
   $p('#po-file-input').onchange = (e) => { addFiles(e.target.files); e.target.value = ''; };
   $p('#po-files').onclick = (e) => {
     const b = e.target.closest('[data-po-unattach]');
-    if (b) { po.files.splice(Number(b.dataset.poUnattach), 1); render(); }
+    if (b && !po.busy) { po.files.splice(Number(b.dataset.poUnattach), 1); render(); }
   };
   $p('#po-attached').onclick = (e) => {
     const one = e.target.closest('[data-po-unattach-issue]');
@@ -590,13 +669,9 @@
   }, true);
   document.addEventListener('robots:changed', (e) => { if (e.detail?.name === 'product-owner') renderButton(); });
   // the roadmap, queue or runs changed (backlog.js setData): the groups' applied state follows (#140),
-  // the conversation keeps its scroll position
+  // the conversation keeps its scroll position (render's default)
   document.addEventListener('backlog:data', () => {
-    if (!po.open) return;
-    const log = $p('#po-log');
-    const top = log.scrollTop;
-    render();
-    log.scrollTop = top;
+    if (po.open) render();
   });
   // the Epics view's "Organize into epics…" (#138): open the drawer and ask, as a plan question
   window.BacklogPO = {
@@ -607,6 +682,10 @@
     },
     // the Backlog's Send to Product Owner (#169)
     attach,
+    // a `po` notification's click (#149, app.js openNotificationTarget)
+    open,
+    // the project whose drawer is open, for the notifications' window context (#149)
+    openProjectId: () => (po.open ? po.projectId : null),
     syncSendButton,
   };
   renderButton();

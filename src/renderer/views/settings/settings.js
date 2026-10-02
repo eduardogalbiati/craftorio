@@ -258,6 +258,10 @@ registerView({
                   <label class="switch"><input type="checkbox" data-setting="notifySessions" /><span></span></label>
                 </div>
                 <div class="s-row">
+                  <div class="s-label"><b>Notify when the Product Owner answers</b><span>A desktop notification when the Backlog's Product Owner answers a question. Not shown while this window shows its drawer for that project.</span></div>
+                  <label class="switch"><input type="checkbox" data-setting="notifyPO" /><span></span></label>
+                </div>
+                <div class="s-row">
                   <div class="s-label"><b>Keep notifications</b><span>Days the notification center (the bell in the sidebar) keeps notifications; older ones are deleted. 0: keep them all.</span></div>
                   <div class="s-ctrl"><input type="number" id="set-notif-retention" min="0" max="3650" step="1" class="s-num" aria-label="Days to keep notifications" /></div>
                 </div>

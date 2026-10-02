@@ -50,6 +50,11 @@ creates a commit needs its own `-c user.name/email`.
 - Its context grows 30k per turn of the same conversation (start 20k, peak +20k): `max_context`
   rotations are deterministic (`test/fixtures/handoff.yaml`).
 - `run:start` takes `mockSequences` (simulation only): the Write & Review scenario picker uses it.
+- The Backlog's Product Owner drawer has its own scenario picker (#148, `#po-scenario`, orange,
+  shown only in developer or simulation-only mode): `po:ask`'s `scenario` forces the simulated
+  answer (`MOCK_SCENARIOS` / `mockScenario` in `src/product-owner.js`: a pending question, a draft,
+  a duplicate, a large draft, a long attachments list, applied and partly applied groups, a large
+  answer, an error). Ignored for a real call.
   Settings `developerMode` (replaces `mockByDefault`) shows the `.dev-only` Simulation checkboxes,
   checked by default; off = real runs. Simulated `/loop` waits scale with `MULTIAGENT_MOCK_DELAY_SCALE`.
 - To check the flags a real turn gets without a model, point a provider at `node` +

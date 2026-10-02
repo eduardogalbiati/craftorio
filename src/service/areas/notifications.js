@@ -1,7 +1,7 @@
 // Service area: desktop notifications and the notification center (src/notifications.js). Every
 // notice is a row of the index's notification center (whatever the settings say about showing it
 // on the desktop) and is emitted on 'notify' when the settings and what the window shows
-// (uiContext: { focused, runId, terminalId }, reported by the UI) let it through.
+// (uiContext: { focused, runId, terminalId, poProjectId }, reported by the UI) let it through.
 
 const workspace = require('../../workspace');
 const notifier = require('../../notifications');

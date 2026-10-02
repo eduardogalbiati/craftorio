@@ -139,7 +139,9 @@ const DEFAULT_SETTINGS = {
   developerMode: false,
   openRunOnStart: true,   // when a workflow starts, switch to the run screen
   confirmStop: true,      // ask for confirmation before stopping a workflow
-  // desktop notifications (see src/notifications.js): run status changes, CLI sessions waiting for you
+  // desktop notifications (see src/notifications.js): run status changes, CLI sessions waiting for you,
+  // the Product Owner's answers (#149)
+  notifyPO: true,
   notifyRuns: true,
   notifySessions: true,
   // days the notification center keeps notifications (src/store.js); older ones are deleted

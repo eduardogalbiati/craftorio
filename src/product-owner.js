@@ -740,6 +740,90 @@ function mockIssueAnswer({ data, question = '', previous = [] }) {
   };
 }
 
+// ---- simulated scenarios (#148): the drawer's simulation-only picker forces the next answer ---------
+// id → the mode it answers in (the drawer switches to it); 'error' answers in either mode.
+const MOCK_SCENARIOS = {
+  question: 'issue',
+  draft: 'issue',
+  duplicate: 'issue',
+  'large-draft': 'issue',
+  attachments: 'issue',
+  groups: 'plan',
+  'large-answer': 'plan',
+  error: null,
+};
+
+/**
+ * The simulated answer of a forced scenario (no model call), in the mode's raw shape (ANSWER_SCHEMA or
+ * ISSUE_SCHEMA); 'error' throws, so the conversation records an error answer. `files`: the turn's
+ * attachments (the 'attachments' scenario lists them in the draft).
+ */
+function mockScenario(scenario, { data, question = '', previous = [], files = [] }) {
+  if (!(scenario in MOCK_SCENARIOS)) throw new Error(`Unknown simulated scenario: ${scenario}.`);
+  if (scenario === 'error') throw new Error('Simulated error (scenario "error"): the Product Owner could not answer. Nothing was spent.');
+  const issues = (data?.issues || []).filter((i) => i.state === 'open');
+  const nums = issues.map((i) => i.number);
+  const head = `**Simulated answer** (scenario "${scenario}": no model was called)`;
+  const empty = { title: '', body: '', labels: [], related: [] };
+  const issueAnswer = (x) => ({ reply: head, questions: [], draft: empty, duplicates: [], existing_issue: 0, addition: '', assumptions: ['Simulated: the code was not read.'], ...x });
+  const draft = (title, body, extra = {}) => ({ title, body, labels: ['bug', 'impact:3', 'complexity:2'], related: nums.slice(0, 2), epic: '', ...extra });
+  if (scenario === 'question') {
+    return issueAnswer({ reply: `${head}. Two questions before I draft it:`, questions: ['Which screen or command shows it?', 'What should happen instead?'] });
+  }
+  if (scenario === 'draft') {
+    return issueAnswer({ draft: draft(clip(question, 80) || 'Simulated issue', `## Context\n\n> ${question}\n\n## Tasks\n\n- [ ] Fix it\n- [ ] Tests\n`) });
+  }
+  if (scenario === 'duplicate') {
+    const [dup, overlap] = nums;
+    return issueAnswer({
+      reply: `${head}. ${dup ? `#${dup} already covers this: add it there, or file it anyway.` : 'No open issue to compare with in this backlog.'}`,
+      draft: draft(clip(question, 80) || 'Simulated duplicate', `## Context\n\n> ${question}\n`),
+      duplicates: [
+        ...(dup ? [{ number: dup, relation: 'duplicate', reason: 'Same symptom and same screen (simulated).' }] : []),
+        ...(overlap ? [{ number: overlap, relation: 'overlaps', reason: 'Touches the same file (simulated).' }] : []),
+      ],
+      existing_issue: dup || 0,
+      addition: dup ? `- [ ] ${question}` : '',
+    });
+  }
+  if (scenario === 'large-draft') {
+    const sections = Array.from({ length: 12 }, (_, n) => `## Part ${n + 1}\n\n${'A long paragraph of simulated context to scroll through. '.repeat(8)}\n\n${Array.from({ length: 6 }, (__, t) => `- [ ] Task ${n + 1}.${t + 1}: a step of the simulated work`).join('\n')}`);
+    return issueAnswer({
+      reply: `${head}. ${'A long reply to check the scroll position of the conversation. '.repeat(10)}`,
+      draft: draft(`A very long simulated title that goes on to check how the drawer cuts a long title with an ellipsis (${clip(question, 40)})`, sections.join('\n\n'), { labels: ['enhancement', 'impact:4', 'complexity:5', 'area:backlog', 'area:renderer'] }),
+      assumptions: Array.from({ length: 8 }, (_, n) => `Simulated assumption ${n + 1}: recorded instead of asking.`),
+    });
+  }
+  if (scenario === 'attachments') {
+    const names = files.map((f) => String(f).split(/[\\/]/).pop());
+    return issueAnswer({
+      draft: draft(clip(question, 80) || 'Simulated issue with screenshots', `## Context\n\n> ${question}\n\n## Screenshots (${names.length})\n\n${names.map((f) => `- ${f}`).join('\n') || '- (none attached)'}\n`),
+    });
+  }
+  // plan scenarios: one group already in the roadmap or assigned, one partly, the rest still to apply
+  const covered = issues.filter((i) => (i.roadmap && i.roadmap.status !== 'skipped') || i.queued || i.runs?.some((r) => !r.enrich && ['pending', 'running'].includes(r.status)));
+  const todo = issues.filter((i) => plannable(i) && !covered.includes(i));
+  // the partly applied group takes the first issue to do
+  const rest = covered.length ? todo.slice(1) : todo;
+  const pairs = [];
+  for (let n = 0; n < rest.length; n += 2) pairs.push(rest.slice(n, n + 2).map((i) => i.number));
+  const group = (name, list, stage, reason) => ({ name, issues: list, workflow: 'software-development.yaml', inputs: {}, reason, files: ['src/renderer/views/backlog/backlog-po.js'], stage });
+  const groups = [
+    ...(covered[0] ? [group('Already applied', [covered[0].number], 1, 'Already in the roadmap or assigned (simulated).')] : []),
+    ...(covered.length && todo.length ? [group('Partly applied', [(covered[1] || covered[0]).number, todo[0].number], 1, 'One issue already applied, one not (simulated).')] : []),
+    ...pairs.slice(0, scenario === 'large-answer' ? 12 : 4).map((p, n) => group(`Group ${n + 1}`, p, Math.floor(n / 2) + 2, 'Same area (simulated).')),
+  ];
+  const long = scenario === 'large-answer' ? `\n\n${Array.from({ length: 15 }, (_, n) => `Paragraph ${n + 1}. ${'A long simulated explanation of the plan to check the scroll position of the conversation. '.repeat(5)}`).join('\n\n')}` : '';
+  return {
+    summary: `${head}. ${groups.length} proposed run${groups.length === 1 ? '' : 's'}${covered.length ? ', the first one already applied and the second one partly' : ' (no issue of this backlog is in the roadmap or assigned: no applied group to show)'}.${long}`,
+    groups,
+    conflicts: pairs.length > 1 ? [{ issues: [pairs[0][0], pairs[1][0]], reason: 'Both change the same file (simulated).', files: ['src/renderer/views/backlog/backlog-po.js'] }] : [],
+    enrich: scenario === 'large-answer' ? todo.slice(0, 5).map((i) => ({ issue: i.number, reason: 'The description is too short (simulated).' })) : [],
+    splits: [],
+    epics: {},
+  };
+}
+
 // The body filed for a new issue: the draft, with its Related line when the body has none.
 const createBody = (draft) => (draft.related.length && !/^Related:/im.test(draft.body)
   ? `${draft.body}\n\nRelated: ${draft.related.map((n) => `#${n}`).join(', ')}\n` : `${draft.body}\n`);
@@ -931,9 +1015,10 @@ function checkBudget(budget) {
  * @param agent     the Product Owner agent (model, effort); registering an issue uses ISSUE_AGENT
  * @param mode      'plan' (default) or 'issue' (#117: register an issue; `attachments`: paths saved by saveAttachment,
  *                  moved to the thread's folder in `runsDir`, which also keeps the thread and each turn's analysis)
+ * @param scenario  with `mock` only: a MOCK_SCENARIOS id forcing the simulated answer (#148)
  * @returns { message, messages }  the answer ({ role: 'po', text, answer | issue, model, costUsd }) and the whole conversation
  */
-async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns, runs, workflows, folder, agent, skillsDirs, resolveCommand, budget, mock, mode = 'plan', attachments = [], selection = [] }) {
+async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns, runs, workflows, folder, agent, skillsDirs, resolveCommand, budget, mock, mode = 'plan', attachments = [], selection = [], scenario = null }) {
   const q = String(question || '').trim();
   if (!q) throw new Error('Ask a question.');
   const issueMode = mode === 'issue';
@@ -956,7 +1041,11 @@ async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns,
   let invalid = null;
   let analysis = '';
   try {
-    if (mock) {
+    // a scenario of the other mode is ignored (the default simulated answer)
+    if (mock && scenario && (MOCK_SCENARIOS[scenario] ?? mode) === mode) {
+      raw = mockScenario(scenario, { data, question: q, previous, files });
+      analysis = `Simulated (scenario "${scenario}"): no model was called, no code was read.`;
+    } else if (mock) {
       raw = issueMode ? mockIssueAnswer({ data, question: q, previous }) : mockAnswer({ data, question: q, selection: selected });
       analysis = 'Simulated: no model was called, no code was read.';
     } else {
@@ -1048,8 +1137,10 @@ module.exports = {
   fileDraft,
   ISSUE_AGENT,
   ISSUE_SCHEMA,
+  MOCK_SCENARIOS,
   mockAnswer,
   mockIssueAnswer,
+  mockScenario,
   monthUsage,
   normalizeAnswer,
   normalizeIssueAnswer,
