@@ -1,14 +1,17 @@
 // #77: shared docs generated from per-feature fragments instead of hand-edited shared lists.
 // #152: src/renderer/index.html's <link>/<script> lists are generated the same way.
+// #157: README sections features used to hand-edit (workflows, engine, workspace, structure) are
+// generated from docs/features/*.md fragments too.
 // Seams: scripts/docs.js's own exports (renderReadme, missingHeaders, codeMap, main, loadRule,
-// rendererAssets, renderIndexHtml).
+// rendererAssets, renderIndexHtml, featurePieces, featureSection).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const {
-  codeMap, loadRule, main, missingHeaders, renderIndexHtml, rendererAssets, renderReadme,
+  codeMap, featurePieces, featureSection, loadRule, main, missingHeaders, renderIndexHtml,
+  rendererAssets, renderReadme,
 } = require('../scripts/docs.js');
 
 const root = path.join(__dirname, '..');
@@ -69,6 +72,7 @@ function tmpDocsRoot(t) {
   fs.cpSync(path.join(root, 'skills'), path.join(tmp, 'skills'), { recursive: true });
   fs.mkdirSync(path.join(tmp, 'docs'));
   fs.cpSync(path.join(root, 'docs', 'screens'), path.join(tmp, 'docs', 'screens'), { recursive: true });
+  fs.cpSync(path.join(root, 'docs', 'features'), path.join(tmp, 'docs', 'features'), { recursive: true });
   fs.copyFileSync(path.join(root, 'README.md'), path.join(tmp, 'README.md'));
   return tmp;
 }
@@ -91,6 +95,111 @@ test('--check passes on an up-to-date copy', (t) => {
   // missingHeaders(tmp) would fail on the copy (no src/scripts/ there to check), so --check only
   // reports the README here: confirm it is silent when nothing changed.
   assert.equal(main(['--check'], tmp), 0);
+});
+
+// #157: README sections generated from docs/features/*.md fragments.
+
+// A temporary root with just docs/features/<name>.md, built from the given { name: content } map:
+// enough for featurePieces/featureSection, which read nothing else.
+function tmpFeaturesRoot(t, files) {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'docs-features-'));
+  t.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
+  const dir = path.join(tmp, 'docs', 'features');
+  fs.mkdirSync(dir, { recursive: true });
+  for (const [name, content] of Object.entries(files)) fs.writeFileSync(path.join(dir, name), content);
+  return tmp;
+}
+
+test('featurePieces: sorts by order (a piece\'s own order wins over its file\'s frontmatter order), '
+  + 'then by file name, then by position in the file; a piece with no order defaults to 999', (t) => {
+  const tmp = tmpFeaturesRoot(t, {
+    'order-999.md': '<!-- section:workflows -->\nDefault order piece\n',
+    'order-10.md': '---\norder: 10\n---\n<!-- section:workflows -->\nFirst piece order10\n'
+      + '<!-- section:workflows -->\nSecond piece order10\n',
+    'order-10-other.md': '---\norder: 10\n---\n<!-- section:workflows -->\nOther order10 file\n',
+    'order-1-override.md': '---\norder: 10\n---\n<!-- section:workflows order:1 -->\nOverride piece\n',
+  });
+
+  const texts = featurePieces(tmp).filter((p) => p.section === 'workflows').map((p) => p.text);
+  assert.deepEqual(texts, [
+    'Override piece', 'Other order10 file', 'First piece order10', 'Second piece order10', 'Default order piece',
+  ]);
+});
+
+test('featurePieces: a fragment with pieces for two different sections feeds both', (t) => {
+  const tmp = tmpFeaturesRoot(t, {
+    'two-sections.md': '<!-- section:engine -->\nEngine piece\n<!-- section:workspace -->\nWorkspace piece\n',
+  });
+
+  assert.equal(featureSection('engine', tmp), 'Engine piece');
+  assert.equal(featureSection('workspace', tmp), 'Workspace piece');
+});
+
+test('featureSection: prose sections (workflows, engine, workspace) join pieces with a blank line', (t) => {
+  const tmp = tmpFeaturesRoot(t, {
+    'a.md': '<!-- section:engine -->\nFirst paragraph\n',
+    'b.md': '<!-- section:engine -->\nSecond paragraph\n',
+  });
+  assert.equal(featureSection('engine', tmp), 'First paragraph\n\nSecond paragraph');
+});
+
+test('featureSection: list sections (local-hero) join pieces with a single newline, no blank line', (t) => {
+  const tmp = tmpFeaturesRoot(t, {
+    'a.md': '<!-- section:local-hero -->\n- bullet one\n',
+    'b.md': '<!-- section:local-hero -->\n- bullet two\n',
+  });
+  assert.equal(featureSection('local-hero', tmp), '- bullet one\n- bullet two');
+});
+
+test('featureSection: fenced sections (workspace-tree, structure) wrap their joined pieces in ``` lines', (t) => {
+  const tmp = tmpFeaturesRoot(t, {
+    'a.md': '<!-- section:structure -->\nsrc/foo.js  does foo\n',
+    'b.md': '<!-- section:structure -->\nsrc/bar.js  does bar\n',
+  });
+  assert.equal(featureSection('structure', tmp), '```\nsrc/foo.js  does foo\nsrc/bar.js  does bar\n```');
+});
+
+test('featurePieces: an unknown section name throws, naming the file and the section', (t) => {
+  const tmp = tmpFeaturesRoot(t, { 'bad.md': '<!-- section:not-a-real-section -->\ntext\n' });
+  assert.throws(() => featurePieces(tmp), /docs\/features\/bad\.md.*not-a-real-section/);
+});
+
+test('featurePieces: non-blank text before the first section line throws', (t) => {
+  const tmp = tmpFeaturesRoot(t, { 'bad.md': 'some stray prose\n<!-- section:workflows -->\ntext\n' });
+  assert.throws(() => featurePieces(tmp), /docs\/features\/bad\.md.*text before the first/);
+});
+
+test('featurePieces: a fragment with no section line throws', (t) => {
+  const tmp = tmpFeaturesRoot(t, { 'bad.md': '---\norder: 1\n---\n' });
+  assert.throws(() => featurePieces(tmp), /docs\/features\/bad\.md.*no <!-- section:<name> --> line/);
+});
+
+test('renderReadme: the local-hero markers nested inside the workflows piece get filled too', (t) => {
+  const tmp = tmpDocsRoot(t);
+  const rendered = renderReadme(read(path.join(tmp, 'README.md')), tmp);
+
+  const openNested = rendered.indexOf('<!-- generated:local-hero -->');
+  const closeNested = rendered.indexOf('<!-- /generated:local-hero -->');
+  const closeWorkflows = rendered.indexOf('<!-- /generated:workflows -->');
+  assert.ok(openNested > 0 && closeNested > openNested, 'the nested local-hero markers should both be present');
+  assert.ok(closeNested < closeWorkflows, 'the nested local-hero markers should sit inside the workflows section');
+  assert.match(
+    rendered.slice(openNested, closeNested),
+    /Each run still gets its own git worktree/,
+  );
+});
+
+test('main(--check): a docs/features/ fragment edited without regenerating makes the README stale; '
+  + 'main() makes --check pass again', (t) => {
+  const tmp = tmpDocsRoot(t);
+  fs.mkdirSync(path.join(tmp, 'docs', 'agents'), { recursive: true }); // main() always (re)writes the code map
+  const fragmentPath = path.join(tmp, 'docs', 'features', 'software-development.md');
+  fs.writeFileSync(fragmentPath, read(fragmentPath).replace('Software development flow', 'Changed flow name'));
+
+  assert.equal(main(['--check'], tmp), 1);
+  assert.equal(main([], tmp), 0);
+  assert.equal(main(['--check'], tmp), 0);
+  assert.match(read(path.join(tmp, 'README.md')), /Changed flow name/);
 });
 
 // #152: src/renderer/index.html's <link>/<script> lists.

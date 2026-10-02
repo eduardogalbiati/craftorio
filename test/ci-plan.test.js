@@ -25,7 +25,10 @@ test('planOs: a docs-only PR runs no tests', () => {
 });
 
 test('planOs: docs the tests read are not docs-only', () => {
-  for (const file of ['CLAUDE.md', 'docs/agents/testing.md', 'skills/code-review/SKILL.md', 'skills/code-review/rules/js.md']) {
+  for (const file of [
+    'CLAUDE.md', 'docs/agents/testing.md', 'skills/code-review/SKILL.md', 'skills/code-review/rules/js.md',
+    'docs/features/software-development.md', 'docs/screens/backlog.md',
+  ]) {
     assert.deepEqual(planOs({ event: 'pull_request', files: ['README.md', file] }), ['ubuntu-latest', 'windows-latest'], file);
   }
 });
