@@ -261,6 +261,11 @@ test('onClick [data-rm-edit] then html: an enum input renders pills with human l
   assert.doesNotMatch(html, /data-rm-field="mode"/);
 });
 
+test('the Edit form\'s inputs grid (#116) is a one-field-per-row block in backlog.css, not the auto-fill columns of .rm-form-grid, so pills and help text keep their own row width', () => {
+  const css = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'views', 'backlog', 'backlog.css'), 'utf8');
+  assert.match(css, /\.rm-form-grid\.wi-grid \{[^}]*display: block/);
+});
+
 test('onClick [data-rm-save]: writes the form values (empty removes the key, a flag checkbox stores a string or a boolean, plus the new input); keeps untouched inputs', async () => {
   const { BacklogRoadmap, savedCalls } = loadRoadmap();
   const item = {
