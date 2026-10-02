@@ -20,20 +20,21 @@ function loadHelpers() {
   const looksLikePath = /const looksLikePath = [^\n]+/.exec(runSrc)[0];
   const inputValueCell = /function inputValueCell\(v\) \{[\s\S]*?\n\}/.exec(runSrc)[0];
   const canResume = /const canResume = [^\n]+/.exec(resumeSrc)[0];
-  for (const [name, code] of Object.entries({ esc, issueRe, inputText, looksLikePath, inputValueCell, canResume })) {
+  const hasChanges = /function hasChanges\(runId\) \{[\s\S]*?\n\}/.exec(runSrc)[0];
+  for (const [name, code] of Object.entries({ esc, issueRe, inputText, looksLikePath, inputValueCell, canResume, hasChanges })) {
     assert.ok(code, `${name} not found in app.js, views/run/run.js or resume-dialog.js: the source moved`);
   }
-  const sandbox = {};
+  const sandbox = { state: { runs: new Map() } };
   vm.createContext(sandbox);
   vm.runInContext(
-    `${esc}\n${issueRe}\n${inputText}\n${looksLikePath}\n${inputValueCell}\n${canResume}\n`
-    + 'this.helpers = { inputText, inputValueCell, canResume };',
+    `${esc}\n${issueRe}\n${inputText}\n${looksLikePath}\n${inputValueCell}\n${canResume}\n${hasChanges}\n`
+    + 'this.helpers = { inputText, inputValueCell, canResume, hasChanges };',
     sandbox,
   );
-  return sandbox.helpers;
+  return { ...sandbox.helpers, sandbox };
 }
 
-const { inputText, inputValueCell, canResume } = loadHelpers();
+const { inputText, inputValueCell, canResume, hasChanges, sandbox: runHelpersSandbox } = loadHelpers();
 
 test('inputText: an array of issue/PR URLs reads as "#65, #61, #53"; other arrays join with ", "', () => {
   const issues = ['https://github.com/o/r/issues/65', 'https://github.com/o/r/pull/61', 'https://gitlab.com/o/r/-/issues/53'];
@@ -73,10 +74,32 @@ test('renderRunSummary: an empty array input is hidden entirely, not shown as a 
   assert.match(runSrc, /!\(Array\.isArray\(v\) && !v\.length\)/);
 });
 
+test('renderRunSummary: Review changes (#118) is shown only when hasChanges(r.id), and opens the diff viewer for this run', () => {
+  assert.match(runSrc, /hasChanges\(r\.id\) \? '<button class="btn sm ghost" id="btn-run-diff"/);
+  assert.match(runSrc, /\$\('#btn-run-diff'\)\.onclick = \(\) => DiffViewer\.open\(\{ runId: r\.id/);
+});
+
 test('canResume: a finished, failed, cancelled or interrupted run offers it; an active one does not', () => {
   assert.equal(canResume({ status: 'success', current: false }), true);
   assert.equal(canResume({ status: 'failed', current: false }), true);
   assert.equal(canResume({ status: 'running', current: false }), false);
   assert.equal(canResume({ status: 'success', current: true }), false, 'the run active in this window');
   assert.equal(canResume(null), false);
+});
+
+test('hasChanges (#118): true with a worktree.ready event, or a step.finished output with files_changed; false otherwise', () => {
+  const { runs } = runHelpersSandbox.state;
+  runs.set('with-worktree', { events: [{ type: 'worktree.ready', dir: '/wt' }] });
+  assert.equal(hasChanges('with-worktree'), true);
+
+  runs.set('with-report', { events: [{ type: 'step.finished', output: { files_changed: ['src/a.js'] } }] });
+  assert.equal(hasChanges('with-report'), true);
+
+  runs.set('empty-report', { events: [{ type: 'step.finished', output: { files_changed: [] } }] });
+  assert.equal(hasChanges('empty-report'), true, 'an empty array still counts: the developer reported no changes, which is still a report');
+
+  runs.set('neither', { events: [{ type: 'step.finished', output: { summary: 'done' } }] });
+  assert.equal(hasChanges('neither'), false);
+
+  assert.equal(hasChanges('unknown-run'), false);
 });

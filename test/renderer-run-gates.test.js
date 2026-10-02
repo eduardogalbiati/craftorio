@@ -322,6 +322,7 @@ function loadMountGateSides() {
       return panel;
     },
   };
+  const diffViewerCalls = [];
   const sandbox = {
     state: { runs: new Map() },
     api: { gateChanges: async () => { throw new Error('gate:changes must not be called for a simulated run'); } },
@@ -331,10 +332,11 @@ function loadMountGateSides() {
     // mountGateSides checks window.ArtifactsPanel, but calls the bare global ArtifactsPanel.mount
     ArtifactsPanel: artifactsPanel,
     window: { ArtifactsPanel: artifactsPanel },
+    DiffViewer: { open: (opts) => diffViewerCalls.push(opts) },
   };
   vm.createContext(sandbox);
   vm.runInContext(`${lastOutput}\n${lastCapture}\n${mountGateSides}\nthis.mountGateSides = mountGateSides;`, sandbox);
-  return { mountGateSides: sandbox.mountGateSides, sandbox, mounted, gateChangesCalls: () => mounted };
+  return { mountGateSides: sandbox.mountGateSides, sandbox, mounted, diffViewerCalls, gateChangesCalls: () => mounted };
 }
 
 test('mountGateSides: a simulated run (run.mock) never calls gate:changes, even with changed files reported', async () => {
@@ -394,6 +396,18 @@ test('mountGateSides: a real run whose diff fails with nothing reported shows th
   mountGateSides(root);
   await new Promise((r) => setTimeout(r, 0));
   assert.match(mounted[0].panel.extras.changes, /Could not list them:.*not a git repository/);
+});
+
+test('mountGateSides: extras.onChange (the Changed files entries) opens the diff viewer at that file, not a terminal (#118)', async () => {
+  const { mountGateSides, sandbox, mounted, diffViewerCalls } = loadMountGateSides();
+  sandbox.state.runs.set('r1', { run: { mock: false }, events: [] });
+  sandbox.api.gateChanges = async () => [{ file: 'src/a.js', added: 2, deleted: 0 }];
+  const root = { querySelectorAll: () => [fakeSide({ run: 'r1', approval: 'a1' })] };
+  mountGateSides(root);
+  await new Promise((r) => setTimeout(r, 0));
+
+  mounted[0].panel.extras.onChange('src/a.js');
+  assert.deepEqual(plain(diffViewerCalls), [{ runId: 'r1', approvalId: 'a1', file: 'src/a.js' }]);
 });
 
 // ---- lastCapture (#144): extras.capture, the screenshots step's output right before the gate ----
