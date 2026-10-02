@@ -87,14 +87,17 @@ const refillNote = (at, costUsd) => `Added by the live roadmap at ${clock(at)}, 
 /**
  * The stages to add from the Product Owner's plan answer (product-owner normalizeAnswer): its groups
  * kept to `allowed` (the candidates) minus the issues it flags to enrich, an issue in one group only,
- * grouped by the answer's `stage` in order, the first `maxStages` stages.
+ * at most `maxGroup` issues per group (Settings › Backlog › Issues per run: the rest stay candidates
+ * for the next refill; splitting them into a parallel run would race on the same files), grouped by
+ * the answer's `stage` in order, the first `maxStages` stages.
  */
-function refillStages(answer, { allowed, maxStages = DEFAULTS.maxStages, mock = false, origin = '', note = '' } = {}) {
+function refillStages(answer, { allowed, maxStages = DEFAULTS.maxStages, maxGroup = Infinity, mock = false, origin = '', note = '' } = {}) {
   const enrich = new Set((answer?.enrich || []).map((e) => Number(e?.issue)));
   const seen = new Set();
   const groups = [];
+  const limit = Math.max(1, Math.floor(Number(maxGroup)) || 1);
   for (const g of answer?.groups || []) {
-    const issues = (g.issues || []).map(Number).filter((n) => allowed.has(n) && !enrich.has(n) && !seen.has(n));
+    const issues = (g.issues || []).map(Number).filter((n) => allowed.has(n) && !enrich.has(n) && !seen.has(n)).slice(0, limit);
     if (!issues.length || !g.workflow) continue;
     issues.forEach((n) => seen.add(n));
     groups.push({ ...g, issues });

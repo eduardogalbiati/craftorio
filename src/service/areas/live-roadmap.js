@@ -94,7 +94,7 @@ module.exports = (ctx) => {
     }
     const at = new Date();
     const stages = live.refillStages(message.answer, {
-      allowed: new Set(picks.map((i) => i.number)), maxStages: opts.maxStages, mock: simulated, origin: message.ts || '', note: live.refillNote(at, costUsd),
+      allowed: new Set(picks.map((i) => i.number)), maxStages: opts.maxStages, maxGroup, mock: simulated, origin: message.ts || '', note: live.refillNote(at, costUsd),
     });
     // the owner may have turned live off, paused or stopped the roadmap while the Product Owner answered
     const now = roadmaps.readRoadmap(ws.backlog, projectId);
