@@ -387,6 +387,24 @@ test('run chat: tool calls and thinking are kept with the turn and say what the 
   assert.equal(model.run.cost, 0.25);
 });
 
+test('run chat: an Agent/Task tool call is kept as a sub-agent, with its type and description; other tools are not', () => {
+  const model = chatOf([
+    { seq: 1, type: 'workflow.started', run_id: 'r1', workflow: 'wf', inputs: {} },
+    { seq: 2, type: 'session.opened', session_id: 's1', session: { agent: 'developer', provider: 'claude', model: 'claude-opus-5-5' } },
+    { seq: 3, type: 'session.message_sent', session_id: 's1', turn: 1, step_id: 'develop' },
+    { seq: 4, type: 'session.stream', session_id: 's1', turn: 1, item: { kind: 'tool_call', name: 'Task', input: { subagent_type: 'Explore', description: 'Map the login flow' } } },
+    { seq: 5, type: 'session.stream', session_id: 's1', turn: 1, item: { kind: 'tool_call', name: 'Agent', input: { description: 'Summarize the failing suite' } } },
+    { seq: 6, type: 'session.stream', session_id: 's1', turn: 1, item: { kind: 'tool_call', name: 'Bash', input: { command: 'npm test' } } },
+    { seq: 7, type: 'session.message_received', session_id: 's1', turn: 1, step_id: 'develop', text: 'Done.' },
+  ]);
+  const [turn] = kinds(model, 'turn');
+  assert.deepEqual(turn.activity.map((a) => a.subagent || null), [
+    { type: 'Explore', description: 'Map the login flow' },
+    { type: 'general-purpose', description: 'Summarize the failing suite' }, // no subagent_type: the generic default
+    null, // Bash: not a sub-agent
+  ]);
+});
+
 test('run chat: the supervisor shows its decision, not its raw turn', () => {
   const model = chatOf([
     { seq: 1, type: 'workflow.started', run_id: 'r1', workflow: 'wf', inputs: {} },

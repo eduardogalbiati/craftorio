@@ -88,6 +88,37 @@ test('turnHtml: a message on the right gets the rc-right class', () => {
   assert.match(src, /rc-\$\{it\.side === 'right' \? 'right' : 'left'\}/);
 });
 
+// turnHtml's activity block (#160): a sub-agent entry gets its own class, a tag for its type and
+// its description (not the raw tool input); an ordinary tool keeps the plain rendering.
+function activityExtras(activity) {
+  const block = /const tools = it\.activity\.filter[\s\S]*?\n    \}\n/.exec(src)[0];
+  assert.ok(block, 'activity block not found in runchat.js: the source moved');
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+  const sandbox = { esc, it: { activity } };
+  vm.createContext(sandbox);
+  vm.runInContext(`const extras = [];\n${block}\nthis.extras = extras;`, sandbox);
+  return sandbox.extras;
+}
+
+test('turnHtml activity: a sub-agent call renders its type and description, tagged rc-subagent', () => {
+  const [html] = activityExtras([{ kind: 'tool', name: 'Task', input: '{}', subagent: { type: 'Explore', description: 'Map the login flow' } }]);
+  assert.match(html, /<li class="rc-subagent">/);
+  assert.match(html, /<span class="tag">Explore<\/span> Map the login flow/);
+  assert.match(html, /1 sub-agent</);
+});
+
+test('turnHtml activity: an ordinary tool call (no subagent) keeps the plain rendering, with its input', () => {
+  const [html] = activityExtras([{ kind: 'tool', name: 'Bash', input: '{"command":"npm test"}' }]);
+  assert.doesNotMatch(html, /rc-subagent/);
+  assert.match(html, /<b class="mono">Bash<\/b> <span class="mono muted">\{&quot;command&quot;:&quot;npm test&quot;\}<\/span>/);
+  assert.doesNotMatch(html, /sub-agent/);
+});
+
+test('turnHtml activity: a failed sub-agent call still gets the err class alongside rc-subagent', () => {
+  const [html] = activityExtras([{ kind: 'tool', name: 'Task', input: '{}', error: true, subagent: { type: 'Explore', description: 'Read the build log' } }]);
+  assert.match(html, /<li class="rc-subagent err">/);
+});
+
 // #80: a run's chat always opens scrolled to its latest message, live or past (it used to open a
 // past run at the start: "scroller.scrollTop = chat.live ? scroller.scrollHeight : 0").
 test('openRun(): every run opens scrolled to its latest message, not only a live one', () => {

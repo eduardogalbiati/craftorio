@@ -129,6 +129,35 @@ test("views/run/run.js: registerView's show() schedules a render", () => {
   assert.equal(calls, 1);
 });
 
+// #160: the Events/Details view's renderItem() labels a sub-agent (Agent/Task) tool call with its
+// type and description; an ordinary tool call keeps the plain "tool · <name>" label.
+function renderToolCall(item) {
+  const subagentLabel = /function subagentLabel\(item\) \{[\s\S]*?\n\}/.exec(runSrc)[0];
+  const renderItem = /function renderItem\(sid, turn, item, i\) \{[\s\S]*?\n\}/.exec(runSrc)[0];
+  assert.ok(subagentLabel && renderItem, 'subagentLabel/renderItem not found in run.js: the source moved');
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+  const sandbox = { esc };
+  vm.createContext(sandbox);
+  vm.runInContext(`${subagentLabel}\n${renderItem}\nthis.renderItem = renderItem;`, sandbox);
+  return sandbox.renderItem('s1', 1, item, 0);
+}
+
+test('run view renderItem: a Task/Agent tool call is labelled with its sub-agent type and description', () => {
+  const html = renderToolCall({ kind: 'tool_call', name: 'Task', input: { subagent_type: 'Explore', description: 'Map the login flow' } });
+  assert.match(html, /tool · Task · sub-agent Explore: Map the login flow/);
+});
+
+test('run view renderItem: a Task/Agent call with no subagent_type falls back to "general-purpose"', () => {
+  const html = renderToolCall({ kind: 'tool_call', name: 'Agent', input: { description: 'Summarize the failing suite' } });
+  assert.match(html, /tool · Agent · sub-agent general-purpose: Summarize the failing suite/);
+});
+
+test('run view renderItem: an ordinary tool call keeps the plain "tool · <name>" label, no sub-agent suffix', () => {
+  const html = renderToolCall({ kind: 'tool_call', name: 'Bash', input: { command: 'npm test' } });
+  assert.match(html, /tool · Bash<\/div>/);
+  assert.doesNotMatch(html, /sub-agent/);
+});
+
 test('selectRun: opening honours the remembered view; not opening only updates the top bar', () => {
   const runs = new Map([['r1', { run: { status: 'running', workflow: 'w' } }]]);
   const { helpers, calls, state } = loadHelpers({ runs, runView: 'chat' });

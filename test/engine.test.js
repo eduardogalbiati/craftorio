@@ -805,6 +805,9 @@ for (const file of ['software-development.yaml', 'software-development-local-her
     const { transitions, events } = await runSoftwareDevelopment({ file, mockSequences: { verdict: ['approved'], ...toEnd } });
     assert.deepEqual(groupBy(transitions, DEV_RE), ['develop>code_review']);
     assert.ok(!events.some((e) => e.type === 'approval.requested' && e.step_id === 'requirements_left_out'));
+    // #160: the test writer's capabilities log line shows the Agent/Task tool is offered
+    const log = events.find((e) => e.type === 'log' && e.kind === 'capabilities' && e.agent === 'test_writer');
+    assert.match(log.message, /subagents: Agent\/Task tool offered/, file);
   });
 
   test(`${file}: a gap declared once sends the developer back before the review, never straight to code_review`, { timeout: 120000 }, async () => {
@@ -1223,6 +1226,17 @@ test('document skills for the arena exist and have a structure and a rubric', ()
     const text = fs.readFileSync(path.join(root, 'skills', id, 'SKILL.md'), 'utf8');
     assert.match(text, new RegExp(`^---\r?\nname: ${id}\r?\n`), id);
     assert.match(text, /rubric/i, id);
+  }
+});
+
+// ---- #160: sub-agents by default for code research (test_writer gets them too) ---------------
+
+test('#160: test_writer gets subagents: true and the context-economy skill; the developer still has subagents: true', () => {
+  for (const file of ['software-development.yaml', 'software-development-local-hero.yaml']) {
+    const wf = loadWorkflow(path.join(root, 'workflows', file));
+    assert.equal(wf.agents.test_writer.capabilities.subagents, true, file);
+    assert.ok(wf.agents.test_writer.skills.includes('context-economy'), file);
+    assert.equal(wf.agents.developer.capabilities.subagents, true, file);
   }
 });
 

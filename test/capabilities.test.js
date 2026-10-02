@@ -195,6 +195,15 @@ test('a real turn gets the capability and isolation flags, and its context is me
   const guard = process.env.MULTIAGENT_SIMULATION_ONLY;
   delete process.env.MULTIAGENT_SIMULATION_ONLY;
   t.after(() => { if (guard !== undefined) process.env.MULTIAGENT_SIMULATION_ONLY = guard; });
+  // this run has no worktree (no orchestrator.worktree), so the engine's own agentEnv carries no
+  // MULTIAGENT_WORKSPACE/MULTIAGENT_USER_DATA; isolate the ones the *outer* run (this very CI/agent
+  // turn) already has, so the spawned fake does not inherit them through process.env
+  const outerEnv = { MULTIAGENT_WORKSPACE: process.env.MULTIAGENT_WORKSPACE, MULTIAGENT_USER_DATA: process.env.MULTIAGENT_USER_DATA };
+  delete process.env.MULTIAGENT_WORKSPACE;
+  delete process.env.MULTIAGENT_USER_DATA;
+  t.after(() => {
+    for (const [k, v] of Object.entries(outerEnv)) { if (v !== undefined) process.env[k] = v; }
+  });
   const fake = path.join(__dirname, 'fixtures', 'fake-claude.js').replace(/\\/g, '/');
   const file = path.join(dir, 'wf.yaml');
   fs.writeFileSync(file, [
@@ -238,4 +247,46 @@ test('a real turn gets the capability and isolation flags, and its context is me
   assert.equal(received.handoff, '- Goal: fake');
   assert.ok(fs.existsSync(path.join(run.runDir, 'handoffs', 'work-v1-dev.md')));
   assert.deepEqual(finished.summary.context.agents.dev.per_turn[0], { step: 'work', visit: 1, start: 31000, peak: 41500, tokens: 72520 });
+});
+
+test('Agent/Task tool calls are counted as sub-agent calls, per agent and per step; other tools and a step with none do not count (#160)', { timeout: 30000 }, async (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'caps-subagent-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const guard = process.env.MULTIAGENT_SIMULATION_ONLY;
+  delete process.env.MULTIAGENT_SIMULATION_ONLY;
+  t.after(() => { if (guard !== undefined) process.env.MULTIAGENT_SIMULATION_ONLY = guard; });
+  const withSubagent = path.join(__dirname, 'fixtures', 'fake-claude-subagent.js').replace(/\\/g, '/');
+  const plain = path.join(__dirname, 'fixtures', 'fake-claude.js').replace(/\\/g, '/');
+  const file = path.join(dir, 'wf.yaml');
+  fs.writeFileSync(file, [
+    'providers:',
+    `  devcli: { type: claude-code, command: node, args: ["${withSubagent}", "-p"] }`,
+    `  qacli: { type: claude-code, command: node, args: ["${plain}", "-p"] }`,
+    'agents:',
+    '  dev: { provider: devcli, model: fake, session: ephemeral, capabilities: { tools: [read, edit], subagents: true } }',
+    '  qa: { provider: qacli, model: fake, session: ephemeral, capabilities: { tools: [read] } }',
+    'steps:',
+    '  - { id: map, agent: dev, prompt: "Do it." }',
+    '  - { id: check, agent: qa, prompt: "Check it." }',
+  ].join('\n'));
+  const run = new WorkflowRun({ file, inputs: {}, runsDir: path.join(dir, 'runs') });
+  const events = [];
+  run.on('event', (ev) => events.push(ev));
+  await run.start();
+  const finished = events.find((e) => e.type === 'workflow.finished');
+  assert.equal(finished.status, 'success', finished.error);
+
+  // two of the turn's three tool calls are Task/Agent; the plain Bash call does not count
+  const received = events.find((e) => e.type === 'session.message_received' && e.step_id === 'map');
+  assert.equal(received.subagent_calls, 2);
+  const noSubagents = events.find((e) => e.type === 'session.message_received' && e.step_id === 'check');
+  assert.equal('subagent_calls' in noSubagents, false, 'a turn with no Agent/Task call omits the field');
+
+  const { agents } = finished.summary.context;
+  assert.equal(agents.dev.subagent_calls, 2);
+  assert.deepEqual(agents.dev.subagent_calls_by_step, { map: 2 });
+  assert.equal(agents.qa.subagent_calls, 0);
+  assert.deepEqual(agents.qa.subagent_calls_by_step, {});
+  assert.equal(agents.dev.per_turn[0].subagent_calls, 2);
+  assert.equal('subagent_calls' in agents.qa.per_turn[0], false);
 });

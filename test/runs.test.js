@@ -301,3 +301,24 @@ test('runEvents with activity keeps tool calls and thinking, compacted, and drop
   assert.deepEqual(runs.runEvents(dir).map((e) => e.seq), [1, 11]);
   fs.rmSync(dir, { recursive: true, force: true });
 });
+
+test('runEvents with activity keeps a sub-agent call\'s type and description, not its long prompt (#160)', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'run-events-'));
+  const s = (seq, item) => ({ seq, type: 'session.stream', session_id: 's1', turn: 1, item });
+  fs.writeFileSync(path.join(dir, 'events.jsonl'), jl(
+    { seq: 1, type: 'workflow.started', workflow: 'software-development' },
+    s(2, { kind: 'tool_call', name: 'Task', input: { subagent_type: 'Explore', description: `Map the login flow ${'x'.repeat(1000)}`, prompt: 'z'.repeat(5000) } }),
+    s(3, { kind: 'tool_call', name: 'Agent', input: {} }),
+    s(4, { kind: 'tool_call', name: 'Bash', input: { command: 'npm test' } }),
+  ));
+  const events = runs.runEvents(dir, { activity: true });
+  assert.deepEqual(events.map((e) => e.seq), [1, 2, 3, 4]);
+  assert.deepEqual(Object.keys(events[1].item.input), ['subagent_type', 'description']); // no raw prompt
+  assert.equal(events[1].item.input.subagent_type, 'Explore');
+  assert.equal(events[1].item.input.description.length, 601); // 600 characters + "…"
+  // no subagent_type or description at all: still the compact { subagent_type, description } shape
+  assert.deepEqual(events[2].item.input, { subagent_type: undefined, description: '' });
+  // an ordinary tool call keeps its usual (JSON string) input
+  assert.equal(events[3].item.input, '{"command":"npm test"}');
+  fs.rmSync(dir, { recursive: true, force: true });
+});
