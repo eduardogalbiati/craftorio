@@ -9,7 +9,7 @@
 //   const picker = ChainPicker.mount(el, { workflows: () => list, source: () => wf, value, onChange })
 //   picker.value() → the then (ChainModel.normalizeThen form) or null; picker.refresh() after the
 //   first workflow changed; picker.set(then).
-// load: any order (used when a dialog opens)
+// Any load order: used only when a dialog opens.
 (function (root) {
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
   const isPath = (k) => /path|dir/i.test(k);

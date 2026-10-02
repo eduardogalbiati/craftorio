@@ -619,8 +619,7 @@ function runInfo(x) {
     id: x.run_id || x.runId, startedAt: Date.parse(x.ts || x.startedAt) || Date.now(), mock: !!x.mock, workflow: x.workflow,
     version: x.version, inputs, issues: issuesOfRun(x), project: project?.name || null,
     agentNames: x.agent_names || null, // agents from the Agents menu: key → their own name
-    // its chain (#134): runs:active's `chain`, or workflow.started's then/from
-    chain: x.chain || (x.then || x.from ? { then: x.then || null, from: x.from || null, state: x.then ? 'waiting' : undefined } : null),
+    chain: ChainModel.runChain(x), // its chain (#134)
   };
 }
 
@@ -678,7 +677,7 @@ function onEvent(ev) {
 
     // the chain edited while the run goes (#134): the Run screen's chain banner
     case 'run.then':
-      if (v.run) v.run.chain = { ...(v.run.chain || {}), then: ev.then || null, state: ev.then ? 'waiting' : undefined };
+      if (v.run) v.run.chain = ChainModel.withThen(v.run.chain, ev.then);
       break;
 
     case 'workflow.finished':

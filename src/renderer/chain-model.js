@@ -9,7 +9,7 @@
 //   { action: 'queue', workflow: '<file>', inputs } the produced issues are queued (the Backlog's Assign)
 // A source is the name of one of the previous run's declared `outputs:`, or RUN_SOURCE (the previous
 // run itself, for a `type: run` input). Nothing (`action: 'none'`, or no then) is null.
-// load: any order (read when a screen draws)
+// Any load order: read only when a screen draws or an event comes in.
 (function (root) {
   const ACTIONS = ['none', 'workflow', 'product_owner', 'queue'];
   const ACTION_LABELS = {
@@ -236,6 +236,17 @@
     return out.join(' ');
   }
 
+  // A run's chain for the UI's run lists: runs:active's `chain`, or workflow.started's then/from.
+  function runChain(x) {
+    if (x.chain) return x.chain;
+    return x.then || x.from ? { then: x.then || null, from: x.from || null, state: x.then ? 'waiting' : undefined } : null;
+  }
+
+  // The chain once its then was edited while the run goes (a run.then event).
+  function withThen(chain, then) {
+    return { ...(chain || {}), then: then || null, state: then ? 'waiting' : undefined };
+  }
+
   const api = {
     ACTION_LABELS,
     ACTIONS,
@@ -252,7 +263,9 @@
     normalizeThen,
     producedIssues,
     queueBatches,
+    runChain,
     thenLabel,
+    withThen,
   };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.ChainModel = api;
