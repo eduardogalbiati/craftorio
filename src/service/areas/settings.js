@@ -1,7 +1,12 @@
 // Service area: the Settings screen's environment details: path, version and authentication of
-// each CLI the workflows call (claude, codex, grok, gh, glab, git).
+// each CLI the workflows call (claude, codex, grok, gh, glab, git), and how to install a missing one
+// (src/install-commands.js).
 
 const { resolveCommand } = require('../../engine/providers');
+const {
+  installCommand,
+  installHint,
+} = require('../../install-commands');
 const { runTool } = require('../common');
 
 const TOOLS = [
@@ -18,7 +23,7 @@ module.exports = () => {
   function envDetails() {
     return Promise.all(TOOLS.map(async (t) => {
       const r = resolveCommand(t.id);
-      if (!r) return { id: t.id, name: t.name, path: null, connected: false };
+      if (!r) return { id: t.id, name: t.name, path: null, connected: false, installCommand: installCommand(t.id), installHint: installHint(t.id) };
       const v = await runTool(r.file, t.args, r.shell);
       const out = { id: t.id, name: t.name, path: r.file, version: v.ok ? v.out.split(/\r?\n/)[0] : null, connected: v.ok, auth: !!t.auth };
       if (t.auth) {

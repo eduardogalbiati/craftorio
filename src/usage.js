@@ -12,13 +12,16 @@
 
 const fs = require('fs');
 const path = require('path');
+const { installCommand } = require('./install-commands');
 const { runSummaries } = require('./runs');
 
+// installCommand: what the Usage screen's play button runs (#147); installNote: what to do after it
 const PROVIDERS = [
-  { id: 'claude', type: 'claude-code', command: 'claude', name: 'Claude Code', costReported: true, installHint: 'irm https://claude.ai/install.ps1 | iex   (then run `claude` once to log in)' },
-  { id: 'codex', type: 'codex-cli', command: 'codex', name: 'Codex CLI', costReported: false, installHint: 'npm install -g @openai/codex   (then `codex login`)' },
-  { id: 'grok', type: 'grok-cli', command: 'grok', name: 'Grok Build', costReported: true, installHint: 'install Grok Build from x.ai (then `grok login`)' },
+  { id: 'claude', type: 'claude-code', command: 'claude', name: 'Claude Code', costReported: true, installCommand: installCommand('claude'), installNote: 'then run `claude` once to log in' },
+  { id: 'codex', type: 'codex-cli', command: 'codex', name: 'Codex CLI', costReported: false, installCommand: installCommand('codex'), installNote: 'then `codex login`' },
+  { id: 'grok', type: 'grok-cli', command: 'grok', name: 'Grok Build', costReported: true, installCommand: null, installNote: 'then `grok login`', installHint: 'install Grok Build from x.ai (then `grok login`)' },
 ];
+for (const p of PROVIDERS) p.installHint = p.installHint || `${p.installCommand}   (${p.installNote})`;
 const WARN_AT = 0.8;
 
 const TOKEN_KEYS = ['input', 'output', 'cache_read', 'cache_write', 'reasoning'];
@@ -171,7 +174,7 @@ function computeUsage({ runsDir, settings = {}, live = null, installed = {}, now
     const usedPctTokens = budget.monthlyTokens ? u.month.tokens.total / budget.monthlyTokens : null;
     const worst = Math.max(usedPctUsd ?? 0, usedPctTokens ?? 0);
     return {
-      id: p.id, name: p.name, installed: installed[p.id] ?? null, installHint: p.installHint, costReported: p.costReported,
+      id: p.id, name: p.name, installed: installed[p.id] ?? null, installHint: p.installHint, installCommand: p.installCommand, installNote: p.installNote, costReported: p.costReported,
       month: u.month, today: u.today, budget, usedPctUsd, usedPctTokens,
       status: worst >= 1 ? 'over' : worst >= WARN_AT ? 'warn' : 'ok',
       models: Object.entries(u.models).map(([model, month]) => ({ model, month })).sort((a, b) => b.month.tokens.total - a.month.tokens.total),

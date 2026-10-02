@@ -10,6 +10,7 @@ const path = require('path');
 const https = require('https');
 const { execFile } = require('child_process');
 const { resolveCommand } = require('./engine/providers');
+const { installCommand } = require('./install-commands');
 
 const DEFAULT_COMMAND = 'whisper-cli';
 const MODEL_URL = 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/';
@@ -51,6 +52,8 @@ function status(settings, dataDir) {
     command,
     path: resolved ? resolved.file : null,
     installHint: INSTALL_HINT,
+    // the command run by the play button (#147), only for the default CLI
+    installCommand: command === DEFAULT_COMMAND ? installCommand(DEFAULT_COMMAND) : null,
     modelsDir: modelsDir(dataDir),
     model: settings.voiceModel,
     modelReady: fs.existsSync(modelPath(settings.voiceModel, dataDir)),

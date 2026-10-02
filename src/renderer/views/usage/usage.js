@@ -76,7 +76,9 @@ function providerCard(p, u) {
         ${meters.length ? `<span class="u-status st-${esc(p.status)}"><span class="u-dot st-${esc(p.status)}"></span>${esc(STATUS_TEXT[p.status] || p.status)}</span>` : ''}
       </div>
       ${p.localAvailable === false ? `<p class="muted small u-note">No local logs found${u.sources?.[p.id] ? ` at <span class="mono">${esc(u.sources[p.id])}</span>` : ''}.</p>` : ''}
-      ${p.installed ? '' : `<div class="u-install"><span class="muted small">Install with</span><code>${esc(p.installHint || '')}</code></div>`}
+      ${p.installed ? '' : p.installCommand
+    ? `<div class="u-install"><span class="muted small">Install with</span>${commandHint(p.installCommand)}${p.installNote ? `<span class="muted small">${esc(p.installNote)}</span>` : ''}</div>`
+    : `<div class="u-install"><span class="muted small">Install with</span><code>${esc(p.installHint || '')}</code></div>`}
       <div class="u-stats">
         <div class="u-stat"><label>Month tokens</label><b>${fmtTok(t.total)}</b></div>
         <div class="u-stat"><label>Month cost</label><b>${fmtUsd(m.costUsd)}</b></div>
@@ -130,7 +132,7 @@ function actionsCard() {
   if (a.error) {
     return `<div class="card usage-card" data-provider="actions">${head()}
       <p class="muted small u-note">Actions minutes unavailable: ${esc(a.error)}.</p>
-      ${a.hint ? `<div class="u-install"><span class="muted small">Allow gh to read billing usage (optional)</span><code>${esc(a.hint)}</code></div>` : ''}
+      ${a.hint ? `<div class="u-install"><span class="muted small">Allow gh to read billing usage (optional)</span>${commandHint(a.hint)}</div>` : ''}
     </div>`;
   }
   const note = a.status === 'over'

@@ -116,6 +116,13 @@ body:not(.dev-mode) .dev-only { display: none !important; }
 .icon-btn { background: none; border: 1px solid transparent; color: var(--muted); border-radius: 6px; padding: 4px; cursor: pointer; display: grid; place-items: center; }
 .icon-btn:hover { color: var(--text); border-color: var(--border); }
 .icon-btn svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+/* a suggested command with its play button (command-hint.js) */
+.cmd-hint { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; min-width: 0; }
+.cmd-hint code { font-family: var(--mono); font-size: 11px; word-break: break-all; user-select: all; margin: 0; }
+.cmd-hint .cmd-run { flex: none; padding: 2px; color: var(--accent); }
+.cmd-hint .cmd-run svg { width: 14px; height: 14px; fill: currentColor; stroke-width: 1.5; stroke-linejoin: round; }
+.s-label .cmd-hint { margin-top: 4px; }
+.s-label .cmd-hint code { margin-top: 0; }
 .run-meta { background: none; border: 1px solid transparent; border-radius: 8px; padding: 3px 6px; color: inherit; font: inherit; cursor: default; }
 .run-meta.clickable { cursor: pointer; }
 .run-meta.clickable:hover { border-color: var(--border); }

@@ -1,6 +1,6 @@
 // Service area: embedded terminals (xterm.js in the UI + node-pty here, src/terminals.js). Opens a
 // session's live log or CLI, a Sessions screen CLI, a shell in a workspace or project folder, a
-// gate's diff and the supervisor's chat; 'term:data' / 'term:exit' go out on `events`, and a CLI
+// suggested command (an install command, #147), a gate's diff and the supervisor's chat; 'term:data' / 'term:exit' go out on `events`, and a CLI
 // that stops to wait for the user becomes a notification.
 
 const fs = require('fs');
@@ -13,7 +13,9 @@ const skills = require('../../skills');
 const supervisor = require('../../supervisor');
 const notifier = require('../../notifications');
 const { Terminals } = require('../../terminals');
+const { SCOPE_HINT } = require('../../actions-usage');
 const { followSession } = require('../../session-tail');
+const { installCommands } = require('../../install-commands');
 const {
   BUNDLED_SKILLS_DIR,
   cliEnv,
@@ -77,9 +79,26 @@ module.exports = (ctx) => {
     return { title: path.basename(dir), cwd: dir, file: win ? 'cmd.exe' : process.env.SHELL || '/bin/sh', args: [], env: cliEnv() };
   }
 
+  // A command the app suggests (#147: an install command, gh's billing scope) in a shell in the
+  // workspace folder; the shell stays open afterwards to show the result or finish a login. Any
+  // other command is refused: the play buttons only send these fixed strings.
+  function commandSpec(command, platform = process.platform) {
+    const allowed = [...Object.values(installCommands(platform)), SCOPE_HINT].filter(Boolean);
+    if (!allowed.includes(command)) throw new Error('Only the commands the app suggests can run in a command terminal.');
+    const cwd = ctx.ws.root || os.homedir();
+    if (platform === 'win32') return { title: command, cwd, file: 'cmd.exe', args: `/s /k "${command}"`, env: cliEnv() };
+    const shell = process.env.SHELL || '/bin/sh';
+    return { title: command, cwd, file: shell, args: ['-c', `${command}; exec '${shell}'`], env: cliEnv() };
+  }
+
   function openTerminal({ kind, runId, sessionId, cols, rows, ...opts }) {
     if (kind === 'supervisor') return openProgram(supervisorChatSpec(runId || ctx.liveRun(null)?.runId), cols, rows);
     if (kind === 'shell') return { ...openProgram(shellSpec(opts.folder), cols, rows), cwd: path.resolve(String(opts.folder)) };
+    if (kind === 'command') {
+      const spec = commandSpec(opts.command);
+      simulation.refuseReal(`the command "${opts.command}"`);
+      return { ...openProgram(spec, cols, rows), cwd: spec.cwd };
+    }
     if (kind === 'diff') {
       const spec = ctx.gateDiffSpec({ runId, approvalId: opts.approvalId, file: opts.file });
       return { ...openProgram(spec, cols, rows), cwd: spec.cwd };
@@ -100,6 +119,7 @@ module.exports = (ctx) => {
   }
 
   return {
+    commandSpec,
     openProgram,
     openTerminal,
     terminals,

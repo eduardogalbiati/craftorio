@@ -17,6 +17,9 @@
 //   --keep-awake <s>   off | idle | active | error: the Keep awake switch (#162, Workflows header,
 //                      Settings › Execution, the sidebar's moon-off item); active and error show
 //                      demo states (2 runs, roadmap stage 3/6; a blocker that failed to start)
+//   --missing-clis     usage, settings: Claude Code, Grok, gh and glab not installed, no speech-to-text
+//                      CLI and gh without the "user" scope (the install commands and their play
+//                      buttons, #147)
 //   --click <css>      clicks this element once the view is open (repeatable, in order)
 //   --context <css>    then right-clicks this element (repeatable): e.g. an artifact's copy menu
 //   --theme <t>        dark | light | system: the theme Electron reports (prefers-color-scheme)
@@ -76,6 +79,7 @@ function parseArgs(argv) {
     else if (k === '--context') a.contexts.push(next());
     else if (k === '--stop-at') a.stopAt = next();
     else if (k === '--keep-awake') a.keepAwake = next();
+    else if (k === '--missing-clis') a.missingClis = true;
     else if (k === '--input') {
       const m = /^([\w-]+)=(.*)$/s.exec(next());
       if (!m) throw new Error('--input takes key=value');
@@ -354,11 +358,12 @@ function demoAnalyticsRuns(ws, projectId) {
 
 // Simulation: the Backlog's sync answers with the cached demo issues instead of calling gh, and the
 // Usage screen's GitHub Actions minutes are demo data. `keepAwake`: a demo state of Keep awake, or null.
-function simulateChannels(ipcMain, keepAwake = null) {
+function simulateChannels(ipcMain, keepAwake = null, missing = null) {
   const handle = ipcMain.handle.bind(ipcMain);
   const handlers = {};
   ipcMain.handle = (channel, fn) => {
     handlers[channel] = fn;
+    if (missing && missing[channel]) return handle(channel, async (...a) => missing[channel](await fn(...a)));
     if (channel === 'usage:actions') return handle(channel, () => demoActionsUsage());
     if (channel === 'keepAwake:state' && keepAwake) return handle(channel, () => keepAwake);
     // the supervisor's report on the sessions (Analytics) uses the mock provider
@@ -374,6 +379,23 @@ function simulateChannels(ipcMain, keepAwake = null) {
     // Save to issue (Write & Review) only previews: never calls gh/glab
     if (channel === 'backlog:save-doc') return handle(channel, (e, arg) => fn(e, { ...arg, preview: true }));
     return handle(channel, channel === 'backlog:sync' ? (e, arg) => handlers['backlog:get'](e, { projectId: arg?.projectId }) : fn);
+  };
+}
+
+// --missing-clis: what the Usage and Settings channels answer when CLIs are missing, each built from
+// the real answer (the install commands come from the app tree, absent at an older --ref).
+function demoMissingClis(appDir, on) {
+  if (!on) return null;
+  let ic = null;
+  try { ic = require(path.join(appDir, 'src', 'install-commands')); } catch { /* older ref */ }
+  const ids = ['claude', 'gh', 'glab', 'grok'];
+  return {
+    'usage:actions': () => ({ error: 'GitHub billing usage needs the gh "user" scope', hint: 'gh auth refresh -s user', includedMinutes: 2000 }),
+    'usage:get': (u) => ({ ...u, providers: (u.providers || []).map((p) => (ids.includes(p.id) ? { ...p, installed: false } : p)) }),
+    'env:details': (tools) => tools.map((t) => (ids.includes(t.id)
+      ? { id: t.id, name: t.name, path: null, connected: false, ...(ic ? { installCommand: ic.installCommand(t.id), installHint: ic.installHint(t.id) } : {}) }
+      : t)),
+    'audio:status': (st) => ({ ...st, path: null }),
   };
 }
 
@@ -677,7 +699,7 @@ function main() {
     }
   }
 
-  simulateChannels(ipcMain, demoKeepAwake(appDir, args.keepAwake));
+  simulateChannels(ipcMain, demoKeepAwake(appDir, args.keepAwake), demoMissingClis(appDir, args.missingClis));
   require(path.join(appDir, 'src', 'main'));
 }
 

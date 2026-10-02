@@ -3,7 +3,8 @@
 // its Rebuild index, src/store.js), Agents & CLIs (installed CLIs and
 // their sign-in), Execution (developer mode, Keep awake (keep-awake.js), notifications, concurrent runs) and About. Registers
 // itself with registerView (view-registry.js); uses app.js globals ($, esc, errMsg, state,
-// applyDeveloperMode, renderHeader, renderWorkspacePaths) and window.BACKLOG_PLATFORMS (backlog.js).
+// applyDeveloperMode, renderHeader, renderWorkspacePaths), commandHint (command-hint.js: the install
+// commands of missing CLIs) and window.BACKLOG_PLATFORMS (backlog.js).
 
 function showSettingsTab(tab) {
   document.querySelectorAll('.settings-tab').forEach((b) => b.classList.toggle('active', b.dataset.stab === tab));
@@ -71,7 +72,7 @@ async function renderVoice(st) {
   $('#set-voice-command').value = state.settings.voiceCommand || '';
   $('#set-voice-cli').innerHTML = st.path
     ? `Found: <code>${esc(st.path)}</code>`
-    : `Not found (command "${esc(st.command)}"). Install: ${esc(st.installHint)}`;
+    : `Not found (command "${esc(st.command)}"). Install: ${st.installCommand ? commandHint(st.installCommand) : esc(st.installHint)}`;
   const known = st.models.some((m) => m.id === st.model);
   $('#set-voice-model').innerHTML = st.models.map((m) =>
     `<option value="${esc(m.id)}">${esc(m.label)} · ${esc(m.size)} · ${esc(m.note)}${m.downloaded ? ' ✓' : ''}</option>`).join('')
@@ -133,7 +134,7 @@ async function renderTools() {
       <div class="s-label">
         <b>${esc(t.name)}</b>
         <span>${t.path ? esc(t.version || 'unknown version') : 'Not found in PATH.'}${t.account ? ` · account <b>${esc(t.account)}</b>` : ''}</span>
-        ${t.path ? `<code>${esc(t.path)}</code>` : ''}
+        ${t.path ? `<code>${esc(t.path)}</code>` : t.installCommand ? commandHint(t.installCommand) : t.installHint ? `<span>Install: ${esc(t.installHint)}</span>` : ''}
       </div>
       <div class="s-ctrl"><span class="conn ${t.connected ? 'on' : 'off'}"><span class="conn-dot"></span>${t.connected ? 'Connected' : t.path ? (t.auth ? 'Not signed in' : 'Error') : 'Not installed'}</span></div>
     </div>`).join('');
