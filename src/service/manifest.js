@@ -38,6 +38,9 @@ const DESKTOP = [
   { channel: 'app:relaunch', method: 'relaunchApp', params: ['interruptRuns'], desktop: 'Restarting the app' },
   // a click on a desktop notification ({ runId, workflow } | { terminalId })
   { event: 'notify:open', method: 'onNotificationClick' },
+  // Keep awake (#162, src/keep-awake.js): the blocker's state, re-checked; pushed when it changes
+  { channel: 'keepAwake:state', method: 'keepAwakeState', desktop: 'Keeping the computer awake' },
+  { event: 'keepAwake:changed', method: 'onKeepAwakeChange' },
 ];
 
 // Account: sign-in with an OAuth provider (system browser) and the free trial. Declared even when

@@ -81,6 +81,8 @@ function createService({ host }) {
     workspace: () => ctx.ws,
     setWorkspace: ctx.setWorkspace,
     isRunning: ctx.isRunning,
+    // the runs, roadmaps and queued items Keep awake keeps the computer awake for (#162)
+    pendingWork: ctx.pendingWork,
     // a run's folder (the run in progress without an id), for "Open log folder"
     runDir: (runId) => {
       if (!runId) return ctx.liveRun(null)?.runDir || null;

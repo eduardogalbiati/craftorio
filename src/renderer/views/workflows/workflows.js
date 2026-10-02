@@ -1,7 +1,8 @@
 /* global api */
 // Workflows screen and its sidebar sub-items (state.workflowsTab): Runs (every run, in the shared run
 // list of run-list.js), Definitions (the workflow files with their steps, origin badge, Restore
-// default, Send to builder, Run) and Builder (builder.js, with its two dialogs). The deep links
+// default, Send to builder, Run) and Builder (builder.js, with its two dialogs). The header has the
+// Keep awake switch on Runs and Definitions (keep-awake.js, #162). The deep links
 // showRunInList (app.js openPastRun) and showWorkflowDefinition (the Agents menu), and the runs'
 // reload on run events (loadWorkflowRunsThrottled, workflowRunsVisible, renderWorkflowRuns) stay
 // globals. Registers itself with registerView (view-registry.js); uses app.js globals ($, esc, state,
@@ -24,6 +25,9 @@ function showWorkflowsTab(tab) {
   document.querySelectorAll('[data-wpage]').forEach((p) => p.classList.toggle('hidden', p.dataset.wpage !== tab));
   $('#workflows-page-title').textContent = { runs: 'Runs', definitions: 'Definitions', builder: 'Builder' }[tab];
   $('#workflows-page-hint').textContent = WORKFLOW_PAGES[tab];
+  // Keep awake (#162) on Runs and Definitions; the Builder needs the room
+  $('#workflows-keep-awake').classList.toggle('hidden', tab === 'builder');
+  if (tab !== 'builder') refreshKeepAwake();
   if (tab === 'definitions') refreshWorkflows();
   if (tab === 'runs') { renderWorkflowRuns(); loadWorkflowRuns(); }
   if (tab === 'builder') window.showBuilder?.();
@@ -171,7 +175,16 @@ registerView({
             <h1>Workflows <span class="muted">›</span> <span id="workflows-page-title">Runs</span></h1>
             <p class="muted small"><span id="workflows-page-hint"></span> Folder: <span id="workflows-dir" class="mono"></span> (defaults bundled with the app are copied there; your edits are kept on app updates).</p>
           </div>
-          <div class="row">
+          <div class="row keep-awake-head">
+            <div id="workflows-keep-awake" class="keep-awake">
+              <div class="keep-awake-top">
+                <b>Keep awake</b>
+                <span class="badge keep-awake-status" data-keep-awake-status></span>
+                <label class="switch" title="Keep awake"><input type="checkbox" data-keep-awake-toggle aria-label="Keep awake" /><span></span></label>
+              </div>
+              <span class="muted small">Keeps this computer from sleeping while runs or a roadmap are active (this workspace). Sleep, the lid and the power plan still apply.</span>
+              <span class="error small" data-keep-awake-error></span>
+            </div>
             <button id="btn-workflows-folder" class="btn ghost">Open folder</button>
           </div>
         </div>

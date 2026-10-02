@@ -266,6 +266,16 @@ label:has(> input[type=checkbox]:disabled, > input[type=radio]:disabled) { curso
 .switch input:checked + span { background: var(--accent); }
 .switch input:checked + span::after { transform: translateX(16px); background: #fff; }
 .switch input:focus-visible + span { outline: var(--focus-ring); outline-offset: 2px; }
+.switch input:disabled + span { opacity: .45; cursor: not-allowed; }
+/* Keep awake (#162, keep-awake.js): the Workflows header's switch with its state, Settings › Execution's line */
+.keep-awake-head { align-items: flex-start; gap: 14px; flex: none; }
+.keep-awake-head .btn { white-space: nowrap; }
+.keep-awake { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; width: 400px; text-align: right; }
+.keep-awake-top { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+.keep-awake-status { max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.keep-awake .error:empty, .keep-awake-line .error:empty { display: none; }
+.keep-awake-line { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 4px; }
+.nav-keep-awake { color: var(--accent); font-size: 12px; }
 .conn { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 99px; border: 1px solid var(--border); }
 .conn-dot { width: 7px; height: 7px; border-radius: 50%; }
 .conn.on { color: var(--green); border-color: rgba(74,222,128,.3); }

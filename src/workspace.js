@@ -153,6 +153,8 @@ const DEFAULT_SETTINGS = {
   // several workflows at the same time (Settings › Execution); disabled = one run at a time.
   // perProject: null = no limit per project; simulations count toward the limits only if countSimulations.
   concurrentRuns: { enabled: false, max: 2, perProject: null, countSimulations: false },
+  // Keep awake (#162, src/keep-awake.js): no sleep while runs, a roadmap or a queue have work to do
+  keepAwake: false,
   // warn when an agent shows no output for this long while a command it started is waiting; 0 = off
   idleWarningMinutes: 5,
   // monthly limits per provider (see src/usage.js); null = no limit

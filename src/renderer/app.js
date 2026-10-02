@@ -323,6 +323,7 @@ async function init() {
   renderWorkspacePaths();
   await loadActiveRuns();
   initCodeBanner();
+  initKeepAwake();
   renderDashboard();
   // a Run App copy opens on the screen the change is about (#119): its nav item, as a click would
   if (appInfo.startView) document.querySelector(`.nav-item[data-view="${CSS.escape(appInfo.startView)}"]`)?.click();

@@ -758,6 +758,7 @@ module.exports = {
   issueCreateCommand,
   issueSaveBody,
   issueSaveCommand,
+  queuedProjects,
   readIssueSaves,
   releaseQueued,
   repoLabels,

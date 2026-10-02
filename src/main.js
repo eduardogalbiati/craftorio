@@ -18,6 +18,7 @@ const {
   ipcMain,
   nativeImage,
   Notification,
+  powerSaveBlocker,
   safeStorage,
   session,
   shell,
@@ -30,6 +31,7 @@ const { createService } = require('./service');
 const { authChannels } = require('./service/manifest');
 const { createAuth, fileStorage } = require('./auth');
 const authConfig = require('./auth-config');
+const { createKeepAwake } = require('./keep-awake');
 
 // The packaged app doesn't accept Chromium's remote debugging switches (the Node inspector is
 // already disabled by a fuse, see scripts/package.js)
@@ -140,6 +142,25 @@ ipcMain.on('api:manifest', (e) => {
 for (const channel of ['notifications:changed', 'run:event', 'run:meta', 'supervisor:watch', 'term:data', 'term:exit']) {
   service.events.on(channel, (payload) => { if (win && !win.isDestroyed()) win.webContents.send(channel, payload); });
 }
+
+// ---- keep awake (#162) -----------------------------------------------------------------
+// The app that runs the work (#112) holds the blocker, only while the setting is on and there is
+// work (src/keep-awake.js). Re-checked after run events, when the settings change and every 15 s
+// (a roadmap or a queue changed from the Backlog); released when idle, switched off and on quit.
+const keepAwake = createKeepAwake({
+  blocker: powerSaveBlocker,
+  enabled: () => { const ws = service.workspace(); return !!ws && !!workspace.readSettings(ws).keepAwake; },
+  readWork: () => service.pendingWork(),
+  onChange: (s) => { if (win && !win.isDestroyed()) win.webContents.send('keepAwake:changed', s); },
+});
+let keepAwakeTimer = null;
+function checkKeepAwake() {
+  if (keepAwakeTimer) return;
+  keepAwakeTimer = setTimeout(() => { keepAwakeTimer = null; keepAwake.update(); }, 1000);
+}
+service.events.on('run:event', checkKeepAwake);
+service.events.on('settings:changed', () => keepAwake.update());
+ipcMain.handle('keepAwake:state', () => keepAwake.update());
 
 // ---- desktop notifications -------------------------------------------------------------
 // The service decides what deserves one (settings, what the window shows); clicking it brings the
@@ -358,7 +379,8 @@ ipcMain.handle('app:relaunch', (_e, arg) => {
     // the renderer saved the interrupted runs to list after the restart
     if (win && !win.isDestroyed()) win.webContents.session.flushStorageData();
     service.shutdown();
-    // app.exit skips will-quit: the new process takes the workspace lock
+    // app.exit skips will-quit: the new process takes the workspace lock (and holds its own blocker)
+    keepAwake.stop();
     workspaceLock?.release();
     app.relaunch();
     app.exit(0);
@@ -375,6 +397,8 @@ app.whenReady().then(async () => {
   const ws = found && await claimWorkspace(found);
   if (!ws) return app.quit();
   service.setWorkspace(ws);
+  keepAwake.update();
+  setInterval(() => keepAwake.update(), 15 * 1000).unref();
   restrictPermissions(session.defaultSession);
   createWindow();
   service.cleanupWorktrees().catch((e) => console.error('worktree cleanup:', e));
@@ -385,9 +409,13 @@ app.whenReady().then(async () => {
 });
 app.on('window-all-closed', () => {
   service.shutdown();
+  keepAwake.stop();
   app.quit();
 });
-app.on('will-quit', () => workspaceLock?.release());
+app.on('will-quit', () => {
+  keepAwake.stop();
+  workspaceLock?.release();
+});
 // a second copy started on the same user data folder: this window comes forward (#112)
 app.on('second-instance', () => {
   if (!win || win.isDestroyed()) return;

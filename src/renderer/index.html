@@ -92,6 +92,11 @@
     <!-- ================= Sidebar ================= -->
     <nav class="sidebar">
       <div class="nav-spacer"></div>
+      <!-- Keep awake (#162, keep-awake.js): shown while the computer is kept from sleeping -->
+      <button id="nav-keep-awake" class="nav-item nav-keep-awake hidden" type="button">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" /><line x1="3" y1="3" x2="21" y2="21" /></svg>
+        <span>Keeping awake</span>
+      </button>
       <button id="nav-notifications" class="nav-item" type="button" title="Notifications" aria-haspopup="true" aria-expanded="false" aria-controls="notification-center">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" /><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0" /></svg>
         <span>Notifications</span>
@@ -295,6 +300,7 @@
   <script src="gate-panel.js"></script>
   <script src="image-viewer-model.js"></script>
   <script src="image-viewer.js"></script>
+  <script src="keep-awake.js"></script>
   <script src="notification-center.js"></script>
   <script src="resume-dialog.js"></script>
   <script src="robots.js"></script>

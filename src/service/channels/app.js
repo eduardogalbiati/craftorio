@@ -39,6 +39,8 @@ module.exports = (ctx) => [
       const next = workspace.writeSettings(ctx.ws, patch);
       // a higher limit of concurrent runs frees slots for the Backlog queues
       if (patch && 'concurrentRuns' in patch) ctx.dispatchQueue().catch((e) => console.error('backlog dispatch:', e));
+      // the desktop app re-checks Keep awake (#162, src/main.js)
+      ctx.events.emit('settings:changed', next);
       return next;
     },
   },

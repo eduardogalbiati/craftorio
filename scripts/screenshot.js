@@ -14,6 +14,9 @@
 //   --stop-at <step>   run: approves every gate but this step's and captures once it waits there
 //                      (e.g. --input mode=validated --stop-at developer_check: the two-column gate
 //                      with Run App and its Artifacts panel)
+//   --keep-awake <s>   off | idle | active | error: the Keep awake switch (#162, Workflows header,
+//                      Settings › Execution, the sidebar's moon-off item); active and error show
+//                      demo states (2 runs, roadmap stage 3/6; a blocker that failed to start)
 //   --click <css>      clicks this element once the view is open (repeatable, in order)
 //   --context <css>    then right-clicks this element (repeatable): e.g. an artifact's copy menu
 //   --theme <t>        dark | light | system: the theme Electron reports (prefers-color-scheme)
@@ -56,9 +59,10 @@ const VIEWS = {
   run: { live: true },
 };
 const THEMES = ['dark', 'light', 'system'];
+const KEEP_AWAKE = ['off', 'idle', 'active', 'error'];
 
 function parseArgs(argv) {
-  const a = { view: 'dashboard', tab: null, mode: null, run: 'mock', workflow: 'software-development.yaml', clicks: [], contexts: [], inputs: {}, stopAt: null, theme: null, size: [1400, 900], ref: null, out: null, name: null, side: null, caption: null, wait: null, timeout: 90000 };
+  const a = { view: 'dashboard', tab: null, mode: null, run: 'mock', workflow: 'software-development.yaml', clicks: [], contexts: [], inputs: {}, stopAt: null, keepAwake: null, theme: null, size: [1400, 900], ref: null, out: null, name: null, side: null, caption: null, wait: null, timeout: 90000 };
   for (let i = 0; i < argv.length; i++) {
     const k = argv[i];
     const next = () => { const v = argv[++i]; if (v === undefined) throw new Error(`${k} needs a value`); return v; };
@@ -71,6 +75,7 @@ function parseArgs(argv) {
     else if (k === '--click') a.clicks.push(next());
     else if (k === '--context') a.contexts.push(next());
     else if (k === '--stop-at') a.stopAt = next();
+    else if (k === '--keep-awake') a.keepAwake = next();
     else if (k === '--input') {
       const m = /^([\w-]+)=(.*)$/s.exec(next());
       if (!m) throw new Error('--input takes key=value');
@@ -95,6 +100,7 @@ function parseArgs(argv) {
   if (a.tab && !v.tabs?.includes(a.tab)) throw new Error(`--tab ${a.tab} does not apply to ${a.view}${v.tabs ? ` (tabs: ${v.tabs.join(', ')})` : ''}`);
   if (a.mode && !v.modes?.includes(a.mode)) throw new Error(`--mode ${a.mode} does not apply to ${a.view}${v.modes ? ` (modes: ${v.modes.join(', ')})` : ''}`);
   if (a.theme && !THEMES.includes(a.theme)) throw new Error(`--theme takes ${THEMES.join(' | ')}`);
+  if (a.keepAwake && !KEEP_AWAKE.includes(a.keepAwake)) throw new Error(`--keep-awake takes ${KEEP_AWAKE.join(' | ')}`);
   if ((a.stopAt || Object.keys(a.inputs).length) && a.view !== 'run') throw new Error('--stop-at and --input apply to --view run');
   a.wait ??= v.live ? 20000 : 1500;
   a.name ??= [a.view, a.tab, a.mode, a.theme].filter(Boolean).join('-');
@@ -330,13 +336,14 @@ function demoAnalyticsRuns(ws, projectId) {
 }
 
 // Simulation: the Backlog's sync answers with the cached demo issues instead of calling gh, and the
-// Usage screen's GitHub Actions minutes are demo data.
-function simulateChannels(ipcMain) {
+// Usage screen's GitHub Actions minutes are demo data. `keepAwake`: a demo state of Keep awake, or null.
+function simulateChannels(ipcMain, keepAwake = null) {
   const handle = ipcMain.handle.bind(ipcMain);
   const handlers = {};
   ipcMain.handle = (channel, fn) => {
     handlers[channel] = fn;
     if (channel === 'usage:actions') return handle(channel, () => demoActionsUsage());
+    if (channel === 'keepAwake:state' && keepAwake) return handle(channel, () => keepAwake);
     // the supervisor's report on the sessions (Analytics) uses the mock provider
     if (channel === 'analytics:analyze') return handle(channel, (e, arg) => fn(e, { ...arg, mock: true }));
     // the Backlog's Product Owner answers from its simulated self (no model call)
@@ -351,6 +358,19 @@ function simulateChannels(ipcMain) {
     if (channel === 'backlog:save-doc') return handle(channel, (e, arg) => fn(e, { ...arg, preview: true }));
     return handle(channel, channel === 'backlog:sync' ? (e, arg) => handlers['backlog:get'](e, { projectId: arg?.projectId }) : fn);
   };
+}
+
+// --keep-awake active | error: what main answers (built by the app tree's src/keep-awake.js, absent
+// at an older --ref); off and idle are the real state from the setting.
+function demoKeepAwake(appDir, which) {
+  if (which !== 'active' && which !== 'error') return null;
+  let ka;
+  try { ka = require(path.join(appDir, 'src', 'keep-awake')); } catch { return null; }
+  const work = ka.workToDo({ runs: [{ waiting: false }, { waiting: true }], roadmaps: [{ projectId: 'demo-app', state: 'running', stage: 3, of: 6 }] });
+  const s = which === 'active'
+    ? { available: true, enabled: true, holding: true, work, error: null }
+    : { available: true, enabled: true, holding: false, work, error: 'Could not keep the computer awake: the system refused the request (demo).' };
+  return { ...s, label: ka.keepAwakeLabel(s) };
 }
 
 // The commit checked out in the repository (the "modified" shots), or null.
@@ -447,7 +467,7 @@ function main() {
     const projects = src('projects');
     const created = await projects.createProject(ws.projects, { name: 'demo-app', description: 'Sample project (simulated data)' });
     const project = projects.updateProject(ws.projects, created.id, { repo: DEMO_REPO });
-    workspace.writeSettings(ws, { developerMode: true, lastWorkflow: 'software-development.yaml', lastProject: project.id });
+    workspace.writeSettings(ws, { developerMode: true, lastWorkflow: 'software-development.yaml', lastProject: project.id, keepAwake: !!args.keepAwake && args.keepAwake !== 'off' });
     fs.mkdirSync(ws.backlog, { recursive: true });
     fs.writeFileSync(path.join(ws.backlog, `${project.id}.json`), JSON.stringify(demoBacklog(project.id, src('backlog').taskProgress), null, 2));
     if (args.view === 'backlog') demoLocalMerge(ws, project.id);
@@ -639,7 +659,7 @@ function main() {
     }
   }
 
-  simulateChannels(ipcMain);
+  simulateChannels(ipcMain, demoKeepAwake(appDir, args.keepAwake));
   require(path.join(appDir, 'src', 'main'));
 }
 

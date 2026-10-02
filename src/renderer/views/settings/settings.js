@@ -1,7 +1,7 @@
 /* global api */
 // Settings screen: General (workspace folder, backlog defaults, voice input, the workspace index and
 // its Rebuild index, src/store.js), Agents & CLIs (installed CLIs and
-// their sign-in), Execution (developer mode, notifications, concurrent runs) and About. Registers
+// their sign-in), Execution (developer mode, Keep awake (keep-awake.js), notifications, concurrent runs) and About. Registers
 // itself with registerView (view-registry.js); uses app.js globals ($, esc, errMsg, state,
 // applyDeveloperMode, renderHeader, renderWorkspacePaths) and window.BACKLOG_PLATFORMS (backlog.js).
 
@@ -32,6 +32,7 @@ async function renderSettings() {
   $('#set-backlog-group').value = state.settings.backlogMaxGroup || 5;
   $('#set-notif-retention').value = state.settings.notificationRetentionDays ?? 30;
   renderConcurrency();
+  refreshKeepAwake();
   renderVoice();
   renderIndexStatus();
   if (!document.querySelector('[data-spage="agents"]').classList.contains('hidden')) renderTools();
@@ -240,6 +241,11 @@ registerView({
                 <div class="s-row">
                   <div class="s-label"><b>Confirm before stopping</b><span>Ask for confirmation when clicking Stop.</span></div>
                   <label class="switch"><input type="checkbox" data-setting="confirmStop" /><span></span></label>
+                </div>
+                <div class="s-row">
+                  <div class="s-label"><b>Keep awake</b><span>Keeps this computer from sleeping while runs or a roadmap are active (this workspace; also on the Workflows screen). The display may still turn off; choosing Sleep, closing the lid and the Windows power plan still apply.</span>
+                    <span class="keep-awake-line"><span class="badge keep-awake-status" data-keep-awake-status></span><span class="error small" data-keep-awake-error></span></span></div>
+                  <label class="switch"><input type="checkbox" data-keep-awake-toggle aria-label="Keep awake" /><span></span></label>
                 </div>
               </div>
               <div class="s-group">
