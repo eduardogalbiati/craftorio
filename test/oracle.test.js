@@ -346,6 +346,94 @@ test('createOracle: without mock, outside a mocked run, refuseReal is consulted 
   assert.match(message.text, /Simulation only/);
 });
 
+// ---- actions and the Night watch: one run each, never twice (#123) ------------------------------
+
+function makeActingOracle(t, { perform } = {}) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'oracle-act-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  return oracle.createOracle({
+    dir: () => dir,
+    tools: () => [],
+    bridge: { start: async () => { throw new Error('not needed'); } },
+    mcpCommand: () => { throw new Error('not needed'); },
+    skillsDirs: () => [],
+    resolveCommand: () => { throw new Error('not needed'); },
+    refuseReal: () => { throw new Error('not needed'); },
+    agent: () => ({ model: 'claude-opus-5-5', effort: 'high' }),
+    settings: () => ({}),
+    perform,
+  });
+}
+
+// a controllable `perform`: resolves only when the test calls `resolve`, and counts its calls
+function deferredPerform() {
+  let resolve;
+  const calls = [];
+  const fn = async (a, opts) => {
+    calls.push({ a, opts });
+    return new Promise((r) => { resolve = r; });
+  };
+  return { fn, calls, resolve: (out) => resolve(out) };
+}
+
+test('act: two clicks on the same card at once run it exactly once; the second rejects, and a third after it is done rejects too', async (t) => {
+  const perform = deferredPerform();
+  const o = makeActingOracle(t, { perform: perform.fn });
+  const { id } = await o.propose({ kind: 'dispatch.restart', params: {}, requestedBy: 'owner' });
+
+  const first = o.act(id);
+  const second = o.act(id);
+  await assert.rejects(second, /already running/);
+  assert.equal(perform.calls.length, 1);
+
+  perform.resolve({ text: 'Restarted.' });
+  const out = await first;
+  assert.equal(out.ok, true);
+  assert.equal((await o.history()).find((m) => m.action?.id === id).action.status, 'done');
+
+  await assert.rejects(() => o.act(id), /already done/);
+  assert.equal(perform.calls.length, 1); // never performed twice
+});
+
+test('act: a Night watch auto action already running on the same id is rejected the same way', async (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'oracle-act-night-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  fs.writeFileSync(path.join(dir, 'night-watch.json'), JSON.stringify({ on: true, until: new Date(Date.now() + 3600e3).toISOString(), startedAt: new Date().toISOString() }));
+  const perform = deferredPerform();
+  const o = oracle.createOracle({
+    dir: () => dir, tools: () => [], bridge: { start: async () => { throw new Error('not needed'); } },
+    mcpCommand: () => { throw new Error('not needed'); }, skillsDirs: () => [], resolveCommand: () => { throw new Error('not needed'); },
+    refuseReal: () => { throw new Error('not needed'); }, agent: () => ({ model: 'claude-opus-5-5', effort: 'high' }), settings: () => ({}),
+    perform: perform.fn,
+  });
+
+  // dispatch.restart is a Night watch repair (NIGHT_WATCH_KINDS): propose() runs it at once, and
+  // awaits its result, so the id is only known once the card is posted (before that await resolves)
+  const proposing = o.propose({ kind: 'dispatch.restart', params: {}, requestedBy: 'oracle' });
+  const { id } = (await o.history())[0].action;
+  assert.equal((await o.history())[0].action.status, 'running');
+
+  await assert.rejects(() => o.act(id), /already running/);
+  assert.equal(perform.calls.length, 1);
+
+  perform.resolve({ text: 'Restarted.' });
+  const proposed = await proposing;
+  assert.equal(proposed.auto, true);
+  assert.equal(proposed.status, 'done');
+});
+
+test('dismiss: a card being performed cannot be dismissed', async (t) => {
+  const perform = deferredPerform();
+  const o = makeActingOracle(t, { perform: perform.fn });
+  const { id } = await o.propose({ kind: 'dispatch.restart', params: {}, requestedBy: 'owner' });
+
+  const acting = o.act(id);
+  assert.throws(() => o.dismiss(id), /already running/);
+
+  perform.resolve({ text: 'Restarted.' });
+  await acting;
+});
+
 // ---- one process answers (#112, open question default) -------------------------------------------
 
 test('a question from another live app process is refused, naming its pid and host', async (t) => {
