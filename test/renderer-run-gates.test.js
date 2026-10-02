@@ -189,15 +189,19 @@ function loadGateBrief() {
   const gateTriesChange = /const gateTriesChange = [^\n]+/.exec(gateSrc)[0];
   const gateSideHtml = /function gateSideHtml\(g, runId = g\.run_id\) \{[\s\S]*?\n\}/.exec(gateSrc)[0];
   const lastOutput = /function lastOutput\(runId, match\) \{[\s\S]*?\n\}/.exec(gateSrc)[0];
+  // gateBriefHtml calls gateScenariosHtml (#143): both must be in the sandbox, with its own deps.
+  const scenarioPill = /const SCENARIO_PILL = [^\n]+/.exec(gateSrc)[0];
+  const openScenarios = /const openScenarios = new Set\(\);[^\n]*/.exec(gateSrc)[0];
+  const gateScenariosHtml = /function gateScenariosHtml\(runId, g = \{\}\) \{[\s\S]*?\n\}/.exec(gateSrc)[0];
   const gateBriefHtml = /function gateBriefHtml\(runId, g, fullHtml\) \{[\s\S]*?\n\}/.exec(gateSrc)[0];
-  for (const [name, code] of Object.entries({ gateTriesChange, gateSideHtml, lastOutput, gateBriefHtml })) {
+  for (const [name, code] of Object.entries({ gateTriesChange, gateSideHtml, lastOutput, scenarioPill, openScenarios, gateScenariosHtml, gateBriefHtml })) {
     assert.ok(code, `${name} not found in gate-panel.js: the source moved`);
   }
-  const sandbox = { state: { runs: new Map() } };
+  const sandbox = { state: { runs: new Map() }, window: {} };
   vm.createContext(sandbox);
   vm.runInContext(
-    `${esc}\n${gateTriesChange}\n${gateSideHtml}\n${lastOutput}\n${gateBriefHtml}\n`
-    + 'this.helpers = { gateTriesChange, gateSideHtml, gateBriefHtml };',
+    `${esc}\n${gateTriesChange}\n${gateSideHtml}\n${lastOutput}\n${scenarioPill}\n${openScenarios}\n${gateScenariosHtml}\n${gateBriefHtml}\n`
+    + 'this.helpers = { gateTriesChange, gateSideHtml, gateScenariosHtml, gateBriefHtml };',
     sandbox,
   );
   return { ...sandbox.helpers, sandbox };
@@ -240,6 +244,81 @@ test('gateBriefHtml: one line per issue (done/not done, the issue number from it
   assert.match(brief, /class="ok"[^]*?✔ done[^]*?#108[^]*?Two-column gate shipped\./);
   assert.match(brief, /class="not"[^]*?✖ not done[^]*?#109[^]*?Artifacts tab still missing\./);
   assert.match(brief, /<summary class="small">Full message<\/summary><pre>full message<\/pre>/);
+});
+
+// ---- gateScenariosHtml (#143): the test writer's E2E scenarios for the Dev/QA -----------------
+
+test('gateScenariosHtml: \'\' with no scenarios output and no mention of E2E scenarios in the gate message', () => {
+  const { gateScenariosHtml, sandbox } = loadGateBrief();
+  sandbox.state.runs.set('r1', { events: [] });
+  assert.equal(gateScenariosHtml('r1', { approval_id: 'a1', message: 'Approve the merge?' }), '');
+});
+
+test('gateScenariosHtml: a "None yet" placeholder when the gate message already mentions E2E scenarios but none ran yet', () => {
+  const { gateScenariosHtml, sandbox } = loadGateBrief();
+  sandbox.state.runs.set('r1', { events: [] });
+  const html = gateScenariosHtml('r1', { approval_id: 'a1', message: 'E2E scenarios: none yet.' });
+  assert.match(html, /<b>E2E scenarios<\/b>/);
+  assert.match(html, /None yet: the test writer writes and runs them after the code review\./);
+});
+
+test('gateScenariosHtml: an output with an empty scenarios list says "No scenario for this change.", with the note shown', () => {
+  const { gateScenariosHtml, sandbox } = loadGateBrief();
+  sandbox.state.runs.set('r1', { events: [{ type: 'step.finished', output: { scenarios: [], e2e_note: 'Engine-only change' } }] });
+  const html = gateScenariosHtml('r1', { approval_id: 'a1' });
+  assert.match(html, /No scenario for this change\./);
+  assert.match(html, /gate-scenarios-note" title="Engine-only change">Engine-only change/);
+});
+
+test('gateScenariosHtml: mixed statuses render the counts, one row per scenario, and the reason of a failed/skipped one', () => {
+  const { gateScenariosHtml, sandbox } = loadGateBrief();
+  sandbox.state.runs.set('r1', {
+    events: [{
+      type: 'step.finished',
+      output: {
+        scenarios: [
+          { name: 'Filter the runs', status: 'passed', steps: ['Given a dashboard'] },
+          { name: 'Empty filter result', status: 'failed', reason: 'no message shown' },
+          { name: 'Restart keeps the filter', status: 'skipped', reason: 'no headless browser' },
+        ],
+      },
+    }],
+  });
+  const html = gateScenariosHtml('r1', { approval_id: 'a1' });
+  assert.match(html, /<span class="pill pill-success">1 passed<\/span> <span class="pill pill-failed">1 failed<\/span> <span class="pill pill-cancelled">1 skipped<\/span>/);
+  assert.match(html, /class="gate-scenario st-passed"[^]*?Filter the runs/);
+  assert.match(html, /class="gate-scenario st-failed"[^]*?Empty filter result[^]*?no message shown/);
+  assert.match(html, /class="gate-scenario st-skipped"[^]*?Restart keeps the filter[^]*?no headless browser/);
+  assert.match(html, /<b>Given<\/b> a dashboard/, 'a Given/When/Then step splits its keyword');
+});
+
+test('gateScenariosHtml: an unknown status renders as skipped (pill and text), never breaking the layout', () => {
+  const { gateScenariosHtml, sandbox } = loadGateBrief();
+  sandbox.state.runs.set('r1', { events: [{ type: 'step.finished', output: { scenarios: [{ name: 'A', status: 'blocked' }] } }] });
+  const html = gateScenariosHtml('r1', { approval_id: 'a1' });
+  assert.match(html, /class="gate-scenario st-skipped"/);
+  assert.match(html, /<span class="pill pill-cancelled">skipped<\/span>/);
+});
+
+test('gateScenariosHtml: a relative screenshot resolves against the run folder; an already-absolute one is kept as-is', () => {
+  const { gateScenariosHtml, sandbox } = loadGateBrief();
+  sandbox.state.runs.set('r1', {
+    events: [
+      { type: 'workflow.started', run_dir: 'C:\\runs\\r1' },
+      {
+        type: 'step.finished',
+        output: {
+          scenarios: [
+            { name: 'A', status: 'passed', screenshots: ['evidence/test/round-1/shot.png'] },
+            { name: 'B', status: 'passed', screenshots: ['C:\\other\\abs.png'] },
+          ],
+        },
+      },
+    ],
+  });
+  const html = gateScenariosHtml('r1', { approval_id: 'a1' });
+  assert.match(html, /data-gate-shot="C:\\runs\\r1\/evidence\/test\/round-1\/shot\.png"/);
+  assert.match(html, /data-gate-shot="C:\\other\\abs\.png"/);
 });
 
 function loadPaintGateApps() {
@@ -335,7 +414,12 @@ function loadMountGateSides() {
     DiffViewer: { open: (opts) => diffViewerCalls.push(opts) },
   };
   vm.createContext(sandbox);
-  vm.runInContext(`${lastOutput}\n${lastCapture}\n${mountGateSides}\nthis.mountGateSides = mountGateSides;`, sandbox);
+  // mountGateSides also calls mountGateScenarios(root) first (#143); these tests are about the
+  // Artifacts panel, not the E2E scenarios block, so a no-op stub keeps them focused.
+  vm.runInContext(
+    `const mountGateScenarios = () => {};\n${lastOutput}\n${lastCapture}\n${mountGateSides}\nthis.mountGateSides = mountGateSides;`,
+    sandbox,
+  );
   return { mountGateSides: sandbox.mountGateSides, sandbox, mounted, diffViewerCalls, gateChangesCalls: () => mounted };
 }
 
@@ -435,6 +519,95 @@ test('mountGateSides: extras.capture is null when nothing before the gate was a 
   mountGateSides(root);
   await new Promise((r) => setTimeout(r, 0));
   assert.equal(mounted[0].panel.extras.capture, null);
+});
+
+// ---- mountGateScenarios (#143): toggling a scenario, loading its screenshots -------------------
+
+// A fake <details data-scenario-key> element: ontoggle is assigned by mountGateScenarios, fired by
+// the test the way a real click on <summary> would (flip .open, then call it).
+function fakeScenarioDetails(key) {
+  const d = { dataset: { scenarioKey: key }, open: false };
+  d.toggle = (open) => { d.open = open; d.ontoggle(); };
+  return d;
+}
+
+// A fake <img data-gate-shot> inside a .gate-scenario-shots box: closest/getAttribute/after as
+// mountGateScenarios uses them; src/hidden are plain properties.
+function fakeScenarioImg(file) {
+  const box = { querySelectorAll: () => [img], onclick: null, onkeydown: null };
+  const img = {
+    dataset: { gateShot: file }, alt: file, hidden: false, src: '',
+    getAttribute: (a) => (a === 'src' ? (img.src || null) : null),
+    closest: (sel) => (sel === '.gate-scenario-shots' ? box : null),
+    nextElementSibling: null,
+    after(el) { img.nextElementSibling = el; },
+  };
+  return img;
+}
+
+function loadMountGateScenarios() {
+  const openScenarios = /const openScenarios = new Set\(\);[^\n]*/.exec(gateSrc)[0];
+  const scenarioShots = /const scenarioShots = new Map\(\); \/\/[^\n]*/.exec(gateSrc)[0];
+  const mountGateScenarios = /function mountGateScenarios\(root\) \{[\s\S]*?\n\}/.exec(gateSrc)[0];
+  for (const [name, code] of Object.entries({ openScenarios, scenarioShots, mountGateScenarios })) {
+    assert.ok(code, `${name} not found in gate-panel.js: the source moved`);
+  }
+  const readArtifactCalls = [];
+  const sandbox = {
+    api: {
+      readArtifact: async (file) => {
+        readArtifactCalls.push(file);
+        if (file === 'missing.png') throw new Error('ENOENT');
+        return { image: `data:image/png;base64,${file}` };
+      },
+    },
+    window: {},
+    document: { createElement: () => ({ classList: { add() {} }, textContent: '', title: '' }) },
+  };
+  vm.createContext(sandbox);
+  vm.runInContext(
+    `${openScenarios}\n${scenarioShots}\n${mountGateScenarios}\n`
+    + 'this.mountGateScenarios = mountGateScenarios; this.openScenarios = openScenarios; this.scenarioShots = scenarioShots;',
+    sandbox,
+  );
+  return { mountGateScenarios: sandbox.mountGateScenarios, openScenarios: sandbox.openScenarios, scenarioShots: sandbox.scenarioShots, readArtifactCalls };
+}
+
+test('mountGateScenarios: opening and closing a scenario tracks it in openScenarios, kept across re-renders', () => {
+  const { mountGateScenarios, openScenarios } = loadMountGateScenarios();
+  const details = fakeScenarioDetails('r1\nfeature.feature\nA');
+  const root = { querySelectorAll: (sel) => (sel === 'details[data-scenario-key]' ? [details] : []) };
+  mountGateScenarios(root);
+  details.toggle(true);
+  assert.ok(openScenarios.has('r1\nfeature.feature\nA'));
+  details.toggle(false);
+  assert.ok(!openScenarios.has('r1\nfeature.feature\nA'));
+});
+
+test('mountGateScenarios: reads a screenshot once via artifacts:read and sets the image src, caching it', async () => {
+  const { mountGateScenarios, readArtifactCalls } = loadMountGateScenarios();
+  const img = fakeScenarioImg('evidence/test/round-1/shot.png');
+  const root = { querySelectorAll: (sel) => (sel === 'img[data-gate-shot]' ? [img] : []) };
+  mountGateScenarios(root);
+  await new Promise((r) => setTimeout(r, 0));
+  assert.equal(img.src, 'data:image/png;base64,evidence/test/round-1/shot.png');
+  assert.equal(img.hidden, false);
+  assert.deepEqual(readArtifactCalls, ['evidence/test/round-1/shot.png']);
+
+  // a second mount of the same root does not read it again: the Map cached it
+  mountGateScenarios(root);
+  await new Promise((r) => setTimeout(r, 0));
+  assert.deepEqual(readArtifactCalls, ['evidence/test/round-1/shot.png']);
+});
+
+test('mountGateScenarios: a screenshot that cannot be read stays hidden, with a "Screenshot not found" line instead', async () => {
+  const { mountGateScenarios } = loadMountGateScenarios();
+  const img = fakeScenarioImg('missing.png');
+  const root = { querySelectorAll: (sel) => (sel === 'img[data-gate-shot]' ? [img] : []) };
+  mountGateScenarios(root);
+  await new Promise((r) => setTimeout(r, 0));
+  assert.equal(img.hidden, true);
+  assert.match(img.nextElementSibling.textContent, /Screenshot not found: missing\.png/);
 });
 
 // ---- Run App's one-click confirmation and Edit fields (#115) --------------------------------

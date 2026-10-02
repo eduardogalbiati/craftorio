@@ -79,6 +79,11 @@ test('renderRunSummary: Review changes (#118) is shown only when hasChanges(r.id
   assert.match(runSrc, /\$\('#btn-run-diff'\)\.onclick = \(\) => DiffViewer\.open\(\{ runId: r\.id/);
 });
 
+test('renderRunSummary: the test writer\'s E2E scenarios (#143) are drawn via gateScenariosHtml, and mounted for their screenshots/toggles', () => {
+  assert.match(runSrc, /\$\{window\.gateScenariosHtml \? window\.gateScenariosHtml\(r\.id\) : ''\}/);
+  assert.match(runSrc, /if \(window\.mountGateScenarios\) window\.mountGateScenarios\(box\);/);
+});
+
 test('canResume: a finished, failed, cancelled or interrupted run offers it; an active one does not', () => {
   assert.equal(canResume({ status: 'success', current: false }), true);
   assert.equal(canResume({ status: 'failed', current: false }), true);

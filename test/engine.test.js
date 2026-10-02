@@ -4,6 +4,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { WorkflowRun, loadWorkflow, extractJson, validateSchema, evalExpr, render } = require('../src/engine/workflow');
+const evidence = require('../src/evidence');
 
 process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.05';
 const root = path.join(__dirname, '..');
@@ -987,6 +988,9 @@ test('software-development: validated mode stops at developer_check with the dif
   assert.deepEqual(gate.choices.map((c) => c.id), ['approve', 'changes', 'stop']);
   assert.match(gate.message, /Try it before the review and the tests run/);
   assert.match(gate.message, /Files changed:/);
+  // E2E scenarios (#143): the Dev/QA line is always there; the test step has not run yet here
+  assert.match(gate.message, /Dev\/QA: read the E2E scenarios and the screenshots/);
+  assert.match(gate.message, /E2E scenarios: none yet\. The test writer writes and runs them after the code review; they show at the merge approval\./);
   assert.match(gate.feedback.label, /Your change request for the developer/);
   assert.deepEqual(validated.transitions.filter((x) => /developer_check|developer_screenshots/.test(x)), [
     'develop>developer_screenshots', 'developer_screenshots>developer_check', 'developer_check>code_review',
@@ -996,6 +1000,18 @@ test('software-development: validated mode stops at developer_check with the dif
   assert.equal(auto.finished.status, 'success', auto.finished.error);
   assert.ok(!auto.events.some((e) => e.type === 'approval.requested' && e.step_id === 'developer_check'));
   assert.ok(auto.transitions.includes('develop>code_review'));
+});
+
+test('software-development: approve_merge\'s message shows the Dev/QA line and the test writer\'s E2E scenarios (#143)', { timeout: 120000 }, async () => {
+  const { events, finished } = await runSoftwareDevelopment({ mockSequences: { preview_status: ['success'] } });
+  assert.equal(finished.status, 'success', finished.error);
+  const gate = events.find((e) => e.type === 'approval.requested' && e.step_id === 'approve_merge');
+  assert.ok(gate);
+  assert.match(gate.message, /Dev\/QA: read the E2E scenarios and the screenshots/);
+  // the default mock scenarios (src/engine/providers.js mockScenarios): 2 passed, 1 skipped by the
+  // time the test step's retries are done and its final output reaches this gate
+  assert.match(gate.message, /E2E scenarios \(written and run by the test writer\): 2 passed · 1 skipped/);
+  assert.match(gate.message, /- skipped: The filter is kept after a restart \(Environment:/);
 });
 
 test('software-development: validated mode — Ask for changes sends the feedback to the developer and reopens developer_check; Approve then moves on to code_review', { timeout: 120000 }, async () => {
@@ -1513,10 +1529,84 @@ test('local hero workflow: validated mode stops at developer_check with a local 
   assert.ok(gate);
   assert.equal(gate.diff_base, 'main');
   assert.equal(gate.work_dir, root);
+  // E2E scenarios (#143): local-hero points "none yet" readers to the run's summary, not a merge gate
+  assert.match(gate.message, /Dev\/QA: read the E2E scenarios and the screenshots/);
+  assert.match(gate.message, /E2E scenarios: none yet\. The test writer writes and runs them after the code review; they show in the run's summary\./);
   const transitions = events.filter((e) => e.type === 'step.transition').map((e) => `${e.from}>${e.to}`);
   assert.deepEqual(transitions.filter((x) => /developer_check|developer_screenshots/.test(x)), [
     'develop>developer_screenshots', 'developer_screenshots>developer_check', 'developer_check>code_review',
   ]);
+});
+
+// The `verify_failed` and `approve_merge`/`developer_check` gate templates rendered directly (no
+// full mock run needed: `render` shares the engine's own template env, including `e2e_scenarios`).
+test('local hero workflow: verify_failed\'s message has the Dev/QA line and the scenarios, or "none reported" without them', () => {
+  const wf = loadWorkflow(path.join(root, 'workflows', 'software-development-local-hero.yaml'));
+  const msg = wf.steps.find((s) => s.id === 'verify_failed').message;
+  const scope = { steps: { verify_change: { output: { claim: 'The filter persists', evidence: 'It did not, on reload' } }, test: { output: null } } };
+  const withoutScenarios = render(msg, scope);
+  assert.match(withoutScenarios, /Dev\/QA: read the E2E scenarios and the screenshots/);
+  assert.match(withoutScenarios, /E2E scenarios: none reported by the test writer\./);
+
+  const withScenarios = render(msg, {
+    ...scope,
+    steps: { ...scope.steps, test: { output: { scenarios: [{ name: 'Filter the runs', status: 'passed' }, { name: 'Empty filter result', status: 'failed', reason: 'no message shown' }] } } },
+  });
+  assert.match(withScenarios, /E2E scenarios \(written and run by the test writer\): 1 passed · 1 failed/);
+  assert.match(withScenarios, /- failed: Empty filter result \(no message shown\)/);
+});
+
+test('local hero workflow: a successful run saves <run>/e2e/scenarios.feature and scenarios.json, with the test step\'s failed-then-passed scenario across its two visits', { timeout: 120000 }, async () => {
+  const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'));
+  const run = new WorkflowRun({ file: path.join(root, 'workflows', 'software-development-local-hero.yaml'), inputs: { task: 'Engine test', repo_path: root }, mock: true, runsDir });
+  const events = [];
+  run.on('event', (ev) => {
+    events.push(ev);
+    if (ev.type === 'approval.requested') setImmediate(() => run.resolveApproval(ev.approval_id, ev.choices ? ev.choices[0].id : true));
+  });
+  await run.start();
+  const finished = events.find((e) => e.type === 'workflow.finished');
+  assert.equal(finished.status, 'success', finished.error);
+
+  const testOutputs = events.filter((e) => e.type === 'step.finished' && e.step_id === 'test').map((e) => e.output);
+  assert.equal(testOutputs.length, 2, 'tests_status fails once by default, then passes on retry');
+  assert.equal(testOutputs[0].scenarios.find((s) => s.name === 'An empty filter result explains itself').status, 'failed');
+  assert.equal(testOutputs[1].scenarios.find((s) => s.name === 'An empty filter result explains itself').status, 'passed');
+
+  assert.ok(events.some((e) => e.type === 'file.saved' && e.step_id === 'test' && /e2e[\\/]scenarios\.feature$/.test(e.path)));
+  const saved = JSON.parse(fs.readFileSync(path.join(run.runDir, 'e2e', 'scenarios.json'), 'utf8'));
+  assert.equal(saved.scenarios.find((s) => s.name === 'An empty filter result explains itself').status, 'passed');
+  assert.equal(saved.counts.passed, 2);
+  assert.equal(saved.counts.skipped, 1);
+  fs.rmSync(runsDir, { recursive: true, force: true });
+});
+
+test('recordEvidence captions an E2E scenario\'s screenshots "Scenario: <name>", an explicit screenshots[].caption winning on the same file (#143)', (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'recordEvidence-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const putFile = (rel) => {
+    const file = path.join(dir, ...rel.split('/'));
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, 'PNG');
+  };
+  putFile('evidence/test/round-1/143-e2e-filter-by-status-1.modified.png');
+  putFile('evidence/test/round-1/143-e2e-empty-result-1.modified.png');
+
+  const run = Object.create(WorkflowRun.prototype);
+  Object.assign(run, { runDir: dir, worktree: null, worktreeHead: () => null, worktreeBranch: () => null, emitEvent: () => {} });
+
+  run.recordEvidence({ id: 'test' }, { visits: 1 }, {
+    scenarios: [
+      { name: 'Filter the runs by status', status: 'passed', screenshots: ['143-e2e-filter-by-status-1.modified.png'] },
+      { name: 'An empty filter result explains itself', status: 'failed', screenshots: ['evidence/test/round-1/143-e2e-empty-result-1.modified.png'] },
+    ],
+    screenshots: [{ path: '143-e2e-filter-by-status-1.modified.png', caption: 'Explicit caption wins' }],
+  });
+
+  const manifest = JSON.parse(fs.readFileSync(evidence.manifestPath(dir), 'utf8'));
+  const byPath = Object.fromEntries(manifest.images.map((i) => [i.path, i.caption]));
+  assert.equal(byPath['evidence/test/round-1/143-e2e-filter-by-status-1.modified.png'], 'Explicit caption wins');
+  assert.equal(byPath['evidence/test/round-1/143-e2e-empty-result-1.modified.png'], 'Scenario: An empty filter result explains itself');
 });
 
 // A small workflow file in a temp folder; returns its path.

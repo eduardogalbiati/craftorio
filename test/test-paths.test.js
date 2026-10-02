@@ -41,10 +41,15 @@ test('the default test paths match the usual test files of every language', () =
     'lib/util.test.mjs', 'pkg/tests/test_models.py', 'app/test_views.py', 'app/views_test.py', 'conftest.py',
     'internal/store/store_test.go', 'internal/store/testdata/in.json', 'service/src/test/java/com/acme/AppTest.java',
     'src/main/java/com/acme/LegacyTests.java', 'App.Tests/LoginTests.cs', 'src/Acme/ParserTest.cs', 'spec/models/user_spec.rb',
+    // end-to-end / BDD (#143): feature files and their step definitions
+    'features/143-dashboard-filter.feature', 'features/steps/dashboard_steps.js', 'features/step_definitions/dashboard.js',
+    'e2e/dashboard.spec.ts', 'src/e2e/login.py', 'cypress/e2e/login.cy.js', 'StepDefinitions/DashboardSteps.cs', 'App.E2E/LoginTests.cs',
   ]) assert.equal(isTest(f), true, f);
   for (const f of [
     'src/engine/workflow.js', 'scripts/test.js', 'src/testing.py', 'cmd/main.go', 'src/main/java/com/acme/App.java',
     'src/Acme/Latest.cs', 'docs/testing.md', 'contest/entry.py', 'package.json', 'src/attest/sign.js',
+    'src/features/dashboard.js', // "features" alone, with no steps/ folder, is production code
+    'src/engine/scenarios.js',
   ]) assert.equal(isTest(f), false, f);
 });
 

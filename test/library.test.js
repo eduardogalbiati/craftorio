@@ -217,6 +217,7 @@ test('language and platform skill families are complete', () => {
   const ids = skills.listSkills(path.join(__dirname, '..', 'skills')).map((s) => s.id);
   const families = {
     'unit-test-writer': ['js', 'python', 'go', 'java', 'csharp'],
+    'e2e-test-writer': ['js', 'python', 'go', 'java', 'csharp'],
     'build-audit': ['js', 'python', 'go', 'java', 'csharp'],
     'ci-pipeline': ['gh', 'gl'],
     'pr-babysitter': ['gh', 'gl'],
