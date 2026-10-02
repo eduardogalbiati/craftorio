@@ -14,7 +14,7 @@
 //   confirm dialog, toasts.
 // Shared pieces with a file of their own: start-drawer.js, usage-widget.js, gate-panel.js,
 // run-list.js, artifact-render.js, supervisor-drawer.js, resume-dialog.js, code-banner.js,
-// term-dock.js, account.js, chat-models.js.
+// term-dock.js, account.js, chat-models.js, kept-work-dialog.js.
 const $ = (sel) => document.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const fmtNum = (n) => (n || 0).toLocaleString('en-US');
@@ -474,46 +474,6 @@ function confirmDialog(title, message, yes = 'Confirm') {
     $('#btn-confirm-yes').onclick = () => { closeModal('#confirm-modal'); resolve(true); };
     $('#btn-confirm-no').onclick = () => { closeModal('#confirm-modal'); resolve(false); };
   });
-}
-
-// A question with several named answers, in the confirm modal: choices [{ id, label, line, primary }]
-// (line: what the choice does, listed under the message; primary: the recommended one). Resolves the
-// chosen id, or null on Cancel.
-function choiceDialog(title, message, choices) {
-  $('#confirm-title').textContent = title;
-  $('#confirm-message').textContent = message;
-  const details = $('#confirm-details');
-  details.innerHTML = choices.filter((c) => c.line).map((c) => `<li>${esc(c.line)}</li>`).join('');
-  details.classList.toggle('hidden', !details.children.length);
-  const yes = $('#btn-confirm-yes');
-  yes.classList.add('hidden');
-  const buttons = choices.map((c) => {
-    const b = document.createElement('button');
-    b.className = `btn ${c.primary ? 'primary' : 'ghost'}`;
-    b.textContent = c.label;
-    b.dataset.choice = c.id;
-    yes.before(b);
-    return b;
-  });
-  openModal('#confirm-modal');
-  return new Promise((resolve) => {
-    const done = (id) => {
-      closeModal('#confirm-modal');
-      for (const b of buttons) b.remove();
-      yes.classList.remove('hidden');
-      resolve(id);
-    };
-    for (const b of buttons) b.onclick = () => done(b.dataset.choice);
-    $('#btn-confirm-no').onclick = () => done(null);
-  });
-}
-
-// The kept-work question (#170) of a start that would redo an ended run's work: Resume the old run
-// (opens Resume from step… for it) or Start from scratch. Resolves 'scratch', 'resume' or null.
-async function keptWorkDialog(kept) {
-  const id = await choiceDialog(kept.title, kept.message, kept.choices);
-  if (id === 'resume') window.openResumeDialog?.(kept.runId);
-  return id;
 }
 
 function renderWorkspacePaths() {
