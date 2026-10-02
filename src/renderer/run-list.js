@@ -5,50 +5,115 @@
 // their agents' robots) and renderRunListsSoon (run events). Uses app.js globals ($, esc, state,
 // fmtDur, fmtNum, dateOf, runTitleHtml, prBadge…), fmtTok / fmtUsd (usage-widget.js), termAction
 // (term-dock.js), canResume (resume-dialog.js), WATCH_TITLE (supervisor-drawer.js), openArtifactsAt.
+//
+// The lists come in pages from the service (#200: runs:list / projects:runs with { offset, limit,
+// filter, showSim, q, upTo }): the filter chips, "Show simulated" and the search ask the service
+// again, the next page loads when the "Loading more…" row scrolls into view (loadRunListPage), and a
+// row's artifacts load when it opens (artifacts:list { runId }), grouped by step, ART_PAGE at a time.
+// A run event updates its own row (refreshRunRow: runs:list { ids }).
 
+// The filter chips; the service filters and counts (src/service/areas/run-lists.js RUN_FILTERS).
 const RUN_FILTERS = [
-  ['all', 'All', () => true],
-  ['running', 'Running', (r) => r.status === 'running'],
-  ['success', 'Success', (r) => r.status === 'success'],
-  ['failed', 'Failed', (r) => ['failed', 'cancelled', 'interrupted'].includes(r.status)],
+  ['all', 'All'],
+  ['running', 'Running'],
+  ['success', 'Success'],
+  ['failed', 'Failed'],
 ];
+const RUN_PAGE = 30;
+const ART_PAGE = 50;
+
+// Loads the list's runs: mode 'reset' (the first page: opening the list, a filter or the search
+// changed), 'more' (the next page) or 'refresh' (the pages already loaded, again: live updates keep
+// the scroll and the open rows). fetchPage(opts) is the service call; returns its answer, null when it
+// failed or a newer load replaced it.
+async function loadRunListPage(rl, fetchPage, mode = 'reset') {
+  const seq = (rl.seq = (rl.seq || 0) + 1);
+  const opts = { filter: rl.filter || 'all', showSim: !!rl.showSim, q: rl.q || '', offset: 0, limit: RUN_PAGE };
+  if (mode === 'more') opts.offset = rl.nextOffset || 0;
+  if (mode === 'refresh') opts.limit = Math.max(RUN_PAGE, rl.nextOffset || 0);
+  if (mode === 'reset' && rl.upTo) opts.upTo = rl.upTo;
+  if (mode === 'more') rl.moreError = null;
+  try {
+    const res = await fetchPage(opts);
+    if (seq !== rl.seq) return null;
+    const got = res.runs || [];
+    if (mode === 'more') {
+      const have = new Set((rl.runs || []).map((r) => r.runId));
+      rl.runs = [...(rl.runs || []), ...got.filter((r) => !have.has(r.runId))];
+    } else rl.runs = got;
+    rl.counts = res.counts || null;
+    rl.hiddenSim = res.hiddenSim || 0;
+    rl.hasMore = !!res.hasMore;
+    rl.nextOffset = res.nextOffset || 0;
+    rl.error = null;
+    return res;
+  } catch (e) {
+    if (seq !== rl.seq) return null;
+    if (mode === 'more') rl.moreError = errMsg(e);
+    else rl.error = errMsg(e);
+    return null;
+  }
+}
 
 // Run list shared by Projects > Project and Workflows > Runs. `rl` is the list state
-// ({ runs, error, filter, showSim, expanded, msgs, id? }), `id` being the project when the
-// list belongs to one; otherwise each run shows its own project.
-function renderRunList(rl, { prefix, box: boxSel, empty, start, rerender }) {
+// ({ runs, error, filter, showSim, q, expanded, msgs, counts, hiddenSim, hasMore, arts, id? }), `id`
+// being the project when the list belongs to one; otherwise each run shows its own project.
+// reload(): the first page again (filters changed); loadMore(): the next page.
+function renderRunList(rl, { prefix, box: boxSel, empty, start, rerender, reload, loadMore }) {
   $(`#${prefix}-show-sim`).checked = rl.showSim;
+  const search = $(`#${prefix}-run-search`);
+  if (search && document.activeElement !== search) search.value = rl.q || '';
   $(`#${prefix}-runs-error`).textContent = rl.error ? `Could not load runs: ${rl.error}` : '';
 
-  const all = rl.runs || [];
-  const visible = all.filter((r) => rl.showSim || !r.mock);
   const filters = $(`#${prefix}-run-filters`);
-  filters.innerHTML = RUN_FILTERS.map(([id, label, fn]) =>
-    `<button type="button" class="chip ${rl.filter === id ? 'active' : ''}" data-filter="${id}" ${id === 'failed' ? 'title="Failed, cancelled or interrupted"' : ''}>${label} <span class="muted">${visible.filter(fn).length}</span></button>`).join('');
-  filters.querySelectorAll('[data-filter]').forEach((b) => (b.onclick = () => { rl.filter = b.dataset.filter; rerender(); }));
+  filters.innerHTML = RUN_FILTERS.map(([id, label]) =>
+    `<button type="button" class="chip ${rl.filter === id ? 'active' : ''}" data-filter="${id}" ${id === 'failed' ? 'title="Failed, cancelled or interrupted"' : ''}>${label} <span class="muted">${rl.counts ? rl.counts[id] ?? 0 : ''}</span></button>`).join('');
+  filters.querySelectorAll('[data-filter]').forEach((b) => (b.onclick = () => { rl.filter = b.dataset.filter; rerender(); reload(); }));
 
   const box = $(boxSel);
   // a run's title being edited stays until it is saved or cancelled (which renders again)
   if (box.contains(document.activeElement) && document.activeElement.classList.contains('run-title-input')) return;
+  rl.observer?.disconnect();
   if (rl.runs == null) {
     box.innerHTML = rl.error ? '' : '<p class="muted">Loading…</p>';
     return;
   }
-  const hiddenSim = all.length - visible.length;
+  const hiddenSim = rl.hiddenSim || 0;
   const simNote = hiddenSim ? `<p class="muted small">${hiddenSim} simulated run${hiddenSim > 1 ? 's' : ''} hidden.</p>` : '';
-  if (!all.length || !visible.length) {
+  if (!rl.runs.length && !rl.counts?.all && !rl.q) {
     box.innerHTML = `<div class="empty-state"><b>${esc(empty)}</b>${simNote}<button class="btn primary" data-empty-start>Start workflow</button></div>`;
     box.querySelector('[data-empty-start]').onclick = start;
     return;
   }
-  const fn = RUN_FILTERS.find(([id]) => id === rl.filter)?.[2] || (() => true);
-  const runs = visible.filter(fn);
-  box.innerHTML = (nestChildRuns(runs).map((r) => runListRow(r, rl)).join('') || '<p class="muted pr-none">No runs match this filter.</p>') + simNote;
+  const runs = rl.runs;
+  // the open rows' artifacts load (again when their count changed) before the rows are drawn
+  for (const r of runs) if (rl.expanded.has(r.runId)) ensureRunArtifacts(rl, r, rerender);
+  const more = !rl.hasMore ? '' : rl.moreError
+    ? `<div class="pr-more" data-more><span class="error small">Could not load more runs: ${esc(rl.moreError)}</span> <button type="button" class="btn sm ghost" data-more-retry>Retry</button></div>`
+    : '<div class="pr-more muted small" data-more>Loading more…</div>';
+  box.innerHTML = (nestChildRuns(runs).map((r) => runListRow(r, rl)).join('') || `<p class="muted pr-none">${rl.q ? 'No runs match this search.' : 'No runs match this filter.'}</p>`) + more + simNote;
   askPrStates(runs);
+
+  // infinite scroll: the next page when the "Loading more…" row comes near the screen
+  const sentinel = box.querySelector('[data-more]');
+  if (sentinel && !rl.moreError && typeof IntersectionObserver === 'function') {
+    rl.observer = new IntersectionObserver((entries) => { if (entries.some((e) => e.isIntersecting)) loadMore(); }, { rootMargin: '300px' });
+    rl.observer.observe(sentinel);
+  }
+  box.querySelector('[data-more-retry]')?.addEventListener('click', () => { rl.moreError = null; rerender(); loadMore(); });
 
   box.querySelectorAll('.pr-row').forEach((row) => (row.onclick = () => {
     const id = row.closest('.pr-run').dataset.run;
     rl.expanded.has(id) ? rl.expanded.delete(id) : rl.expanded.add(id);
+    rerender();
+  }));
+  box.querySelectorAll('[data-art-more]').forEach((b) => (b.onclick = () => {
+    const e = rl.arts?.get(b.closest('.pr-run').dataset.run);
+    if (e) e.shown += ART_PAGE;
+    rerender();
+  }));
+  box.querySelectorAll('[data-art-retry]').forEach((b) => (b.onclick = () => {
+    rl.arts?.delete(b.closest('.pr-run').dataset.run);
     rerender();
   }));
   box.querySelectorAll('[data-run-act]').forEach((b) => (b.onclick = () => {
@@ -161,15 +226,7 @@ function projectRunBody(r, pv) {
     </div>
     ${r.error ? `<pre class="pr-error">${esc(r.error)}</pre>` : ''}
     ${runTaskBlock(r)}
-    ${r.artifacts?.length ? `<div class="pr-arts">
-      <div class="pr-arts-head">Artifacts <span class="muted">${r.artifacts.length}</span></div>
-      <div class="pr-arts-list">${r.artifacts.map((a) => `
-        <button class="pr-art ${a.exists ? '' : 'missing'}" data-art="${esc(a.path)}" title="${esc(a.path)}">
-          ${artKindIcon(a.kind)}<span class="pr-art-name">${esc(a.name)}</span>
-          ${a.location === 'external' ? '<span class="badge">project copy</span>' : ''}${a.exists ? '' : '<span class="muted small">deleted</span>'}
-          <span class="muted small">${esc(fmtSize(a.size))}</span>
-        </button>`).join('')}</div>
-    </div>` : ''}
+    ${runArtifactsBlock(r, pv)}
     ${sessions.length ? `<table class="u-table pr-sessions">
       <thead><tr><th>Agent</th><th>Provider · model</th><th>Status</th><th class="num">Turns</th><th class="num">Tokens</th><th class="num">Cost</th><th></th></tr></thead>
       <tbody>${[...sessions].sort((a, b) => isOrchSession(b) - isOrchSession(a)).map((s) => {
@@ -191,6 +248,75 @@ function projectRunBody(r, pv) {
       ${sessionsTotalRow(sessions)}
     </table>` : '<p class="muted small">No agent sessions in this run.</p>'}
   </div>`;
+}
+
+// An open row's artifacts (#200): loaded once (artifacts:list { runId }), again when the row's count
+// changes; the entry { status: loading | ok | error, files, error, count, shown } lives in rl.arts.
+function ensureRunArtifacts(rl, r, rerender) {
+  if (!r.artifactCount) return;
+  const arts = rl.arts || (rl.arts = new Map());
+  const cur = arts.get(r.runId);
+  if (cur && (cur.pending || cur.status === 'error' || cur.count === r.artifactCount)) return;
+  // a reload keeps showing the files it has until the new list arrives
+  const entry = { status: cur?.status === 'ok' ? 'ok' : 'loading', files: cur?.files || null, error: null, count: r.artifactCount, shown: cur?.shown || ART_PAGE, pending: true };
+  arts.set(r.runId, entry);
+  api.listArtifacts({ runId: r.runId })
+    .then(([x] = []) => { entry.files = x?.artifacts || []; entry.status = 'ok'; }, (e) => { entry.status = 'error'; entry.error = errMsg(e); })
+    .finally(() => { entry.pending = false; if (arts.get(r.runId) === entry) rerender(); });
+}
+
+// Artifacts by the step that saved them (in their order), then the run folder's other files and the
+// project copies: [[label, files]].
+function groupArtifacts(files) {
+  const groups = new Map();
+  for (const f of files) {
+    const label = f.step || (f.location === 'external' ? 'Project copies' : 'Other files');
+    (groups.get(label) || groups.set(label, []).get(label)).push(f);
+  }
+  const last = ['Other files', 'Project copies'];
+  return [...groups].sort((a, b) => last.indexOf(a[0]) - last.indexOf(b[0]));
+}
+
+function runArtifactsBlock(r, pv) {
+  if (!r.artifactCount) return '';
+  const e = pv.arts?.get(r.runId);
+  const head = `<div class="pr-arts-head">Artifacts <span class="muted">${r.artifactCount}</span>${r.imageCount ? ` <span class="badge" title="Images, e.g. the evidence step's screenshots">${r.imageCount} image${r.imageCount === 1 ? '' : 's'}</span>` : ''}</div>`;
+  if (!e || e.status === 'loading') return `<div class="pr-arts">${head}<p class="muted small">Loading…</p></div>`;
+  if (e.status === 'error') return `<div class="pr-arts">${head}<p class="error small">Could not load the artifacts: ${esc(e.error)} <button type="button" class="btn sm ghost" data-art-retry>Retry</button></p></div>`;
+  const shown = e.files.slice(0, e.shown);
+  const left = e.files.length - shown.length;
+  return `<div class="pr-arts">${head}
+    ${groupArtifacts(shown).map(([label, files]) => `<div class="pr-arts-group">
+      <div class="pr-arts-step muted small"><span class="${label === 'Other files' || label === 'Project copies' ? '' : 'mono'}">${esc(label)}</span> <span>${files.length}</span></div>
+      <div class="pr-arts-list">${files.map((a) => `
+        <button class="pr-art ${a.exists ? '' : 'missing'}" data-art="${esc(a.path)}" title="${esc(a.path)}">
+          ${artKindIcon(a.kind)}<span class="pr-art-name">${esc(a.name)}</span>
+          ${a.location === 'external' ? '<span class="badge">project copy</span>' : ''}${a.exists ? '' : '<span class="muted small">deleted</span>'}
+          <span class="muted small">${esc(fmtSize(a.size))}</span>
+        </button>`).join('')}</div>
+    </div>`).join('')}
+    ${left > 0 ? `<button type="button" class="btn sm ghost pr-arts-more" data-art-more>Show ${Math.min(left, ART_PAGE)} more${left > ART_PAGE ? ` <span class="muted">(${left} left)</span>` : ''}</button>` : ''}
+  </div>`;
+}
+
+// A run event updates that run's row (#200): the row again from the service (runs:list { ids }), at
+// most once a second per run, in whichever list has it loaded; the full reloads are throttled apart.
+const rowTimers = new Map();
+function refreshRunRow(runId) {
+  if (!runId || rowTimers.has(runId)) return;
+  if (![state.wr, state.pv].some((rl) => rl?.runs?.some((r) => r.runId === runId))) return;
+  rowTimers.set(runId, setTimeout(async () => {
+    rowTimers.delete(runId);
+    let item = null;
+    try { [item = null] = (await api.listRuns({ ids: [runId] })).runs || []; } catch { return; }
+    if (!item) return;
+    for (const rl of [state.wr, state.pv]) {
+      const i = rl?.runs ? rl.runs.findIndex((r) => r.runId === runId) : -1;
+      if (i >= 0) rl.runs[i] = item;
+    }
+    noteRunMeta([item]);
+    renderRunListsSoon();
+  }, 1000));
 }
 
 // A session's tokens (sessionView: input + output + cache read + cache write, as on the Usage

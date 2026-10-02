@@ -29,7 +29,8 @@ function showWorkflowsTab(tab) {
   $('#workflows-keep-awake').classList.toggle('hidden', tab === 'builder');
   if (tab !== 'builder') refreshKeepAwake();
   if (tab === 'definitions') refreshWorkflows();
-  if (tab === 'runs') { renderWorkflowRuns(); loadWorkflowRuns(); }
+  // back on the list: the pages it had, again (a deep link starts over to reach its run)
+  if (tab === 'runs') { renderWorkflowRuns(); loadWorkflowRuns(state.wr.runs && !state.wr.upTo ? 'refresh' : 'reset'); }
   if (tab === 'builder') window.showBuilder?.();
 }
 
@@ -40,35 +41,42 @@ function renderWorkflowRuns() {
   renderRunList(state.wr, {
     prefix: 'workflow', box: '#workflow-runs', empty: 'No workflows have run yet.',
     start: () => openDrawer(), rerender: renderWorkflowRuns,
+    reload: () => loadWorkflowRuns(), loadMore: () => loadWorkflowRuns('more'),
   });
 }
 
+// mode: 'reset' (first page), 'more' (next page), 'refresh' (the loaded pages again): run-list.js
+// loadRunListPage. A reset replaces a load in flight; 'more' and 'refresh' wait for it.
 let wrLoading = null;
 let wrLastLoad = 0;
 let wrTimer = null;
-function loadWorkflowRuns() {
-  if (wrLoading) return wrLoading;
+function loadWorkflowRuns(mode = 'reset') {
+  if (wrLoading && mode !== 'reset') return wrLoading;
   const wr = state.wr;
-  wrLoading = (async () => {
-    try {
-      wr.runs = (await api.listRuns()).runs || [];
-      wr.error = null;
-      noteRunMeta(wr.runs);
-    } catch (e) {
-      wr.error = errMsg(e);
-    }
-    wrLoading = null;
+  const p = (async () => {
+    const res = await loadRunListPage(wr, (opts) => api.listRuns(opts), mode);
+    if (res) noteRunMeta(res.runs || []);
+    if (wrLoading === p) wrLoading = null;
     wrLastLoad = Date.now();
-    if (workflowRunsVisible()) renderWorkflowRuns();
+    if (!workflowRunsVisible()) return;
+    renderWorkflowRuns();
+    // a deep link to a run (showRunInList): the page reached it, scroll there
+    if (res && wr.upTo && mode === 'reset') {
+      const id = wr.upTo;
+      wr.upTo = null;
+      document.querySelector(`.pr-run[data-run="${CSS.escape(id)}"]`)?.scrollIntoView({ block: 'center' });
+    }
   })();
-  return wrLoading;
+  wrLoading = p;
+  return p;
 }
 
-// At most one reload every 3 s from run events while the tab is visible.
+// At most one reload of the loaded pages every 10 s from run events while the tab is visible (a run's
+// own row follows its events: refreshRunRow).
 function loadWorkflowRunsThrottled() {
   if (wrTimer || !workflowRunsVisible()) return;
-  const wait = Math.max(0, 3000 - (Date.now() - wrLastLoad));
-  wrTimer = setTimeout(() => { wrTimer = null; if (workflowRunsVisible()) loadWorkflowRuns(); }, wait);
+  const wait = Math.max(0, 10000 - (Date.now() - wrLastLoad));
+  wrTimer = setTimeout(() => { wrTimer = null; if (workflowRunsVisible()) loadWorkflowRuns('refresh'); }, wait);
 }
 
 // Definitions (#137): the workflows in sections by category (metadata.category; unknown → Other),
@@ -319,14 +327,16 @@ function originBadge(w) {
   return (badges[w.origin] || '') + update;
 }
 
-// Opens a run in Workflows › Runs, expanded.
+// Opens a run in Workflows › Runs, expanded: the list loads up to it (an older run is past the first
+// page) and scrolls there.
 function showRunInList(runId) {
   state.workflowsTab = 'runs';
   state.wr.filter = 'all';
   state.wr.showSim = true;
+  state.wr.q = '';
+  state.wr.upTo = runId;
   state.wr.expanded.add(runId);
   showView('workflows');
-  setTimeout(() => document.querySelector(`.pr-run[data-run="${CSS.escape(runId)}"]`)?.scrollIntoView({ block: 'center' }), 600);
 }
 
 // Opens a workflow in Workflows › Definitions, scrolled to and focused (the Agents menu's
@@ -373,6 +383,7 @@ registerView({
           <div class="pr-toolbar">
             <div id="workflow-run-filters" class="chips"></div>
             <span class="spacer"></span>
+            <input type="text" id="workflow-run-search" class="pr-search" placeholder="Search runs" aria-label="Search runs" spellcheck="false" />
             <label class="check small"><input type="checkbox" id="workflow-show-sim" /><span>Show simulated</span></label>
             <button id="btn-workflow-runs-refresh" class="btn sm ghost">Refresh</button>
           </div>
@@ -451,7 +462,12 @@ registerView({
     $('#btn-workflows-folder').onclick = () => api.openPath(state.ws.workflows);
     document.querySelectorAll('[data-wtab]').forEach((b) => (b.onclick = () => { state.workflowsTab = b.dataset.wtab; showView('workflows'); }));
     $('#btn-workflow-runs-refresh').onclick = () => loadWorkflowRuns();
-    $('#workflow-show-sim').onchange = (e) => { state.wr.showSim = e.target.checked; renderWorkflowRuns(); };
+    $('#workflow-show-sim').onchange = (e) => { state.wr.showSim = e.target.checked; loadWorkflowRuns(); };
+    let wrSearchTimer = null;
+    $('#workflow-run-search').oninput = (e) => {
+      clearTimeout(wrSearchTimer);
+      wrSearchTimer = setTimeout(() => { state.wr.q = e.target.value.trim(); loadWorkflowRuns(); }, 250);
+    };
     $('#wf-search').oninput = (e) => { wfDefs.query = e.target.value; renderWorkflowDefinitions(); };
   },
   show: () => showWorkflowsTab(state.workflowsTab),

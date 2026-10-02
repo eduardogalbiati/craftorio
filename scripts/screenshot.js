@@ -564,6 +564,39 @@ function demoChildRuns(ws, projectId) {
   }));
 }
 
+// A long run history (#200): 40 finished runs, so the run lists load in pages (the "Loading more…" row
+// at the end); the newest (id ending in -demohist00) saved 72 files over four steps, so its open row
+// shows its artifacts grouped by step and "Show more" (--click '[data-run$="-demohist00"] .pr-row').
+function demoRunHistory(ws, projectId) {
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
+  const statuses = ['success', 'success', 'failed', 'success', 'cancelled'];
+  for (let i = 0; i < 40; i++) {
+    const started = new Date(Date.now() - (i ? i * 0.7 * 864e5 : 36e5));
+    const runId = `${started.toISOString().slice(0, 10).replace(/-/g, '')}-0900${String(i).padStart(2, '0')}-demohist${String(i).padStart(2, '0')}`;
+    const dir = path.join(ws.runs, runId);
+    fs.mkdirSync(dir, { recursive: true });
+    const task = ['Add pagination to the API', 'Fix the flaky login test', 'Export the run report as PDF', 'Dark theme for the Backlog'][i % 4];
+    const events = [{ seq: 1, ts: started.toISOString(), type: 'workflow.started', run_id: runId, workflow: 'software-development', project_id: projectId, inputs: { task } }];
+    const files = !i ? [
+      ...Array.from({ length: 12 }, (_, k) => [`handoffs/developer-${k + 1}.md`, 'develop', 'developer']),
+      ...Array.from({ length: 8 }, (_, k) => [`reviews/review-${k + 1}.md`, 'review', 'reviewer']),
+      ...Array.from({ length: 48 }, (_, k) => [`evidence/round-1/screen-${String(k + 1).padStart(2, '0')}.png`, 'evidence', 'tester']),
+      ['documents/plan.md', 'plan', 'planner'], ['documents/test-report.md', 'test', 'tester'], ['decisions.tsv', null, null], ['notes.txt', null, null],
+    ] : [['documents/summary.md', 'develop', 'developer']];
+    for (const [rel, step, agent] of files) {
+      const file = path.join(dir, ...rel.split('/'));
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, rel.endsWith('.png') ? png : `# ${path.basename(rel)}\n`);
+      if (step) events.push({ seq: events.length + 1, ts: started.toISOString(), type: 'file.saved', run_id: runId, step_id: step, agent, path: file });
+    }
+    fs.writeFileSync(path.join(dir, 'events.jsonl'), events.map((e) => JSON.stringify(e)).join('\n') + '\n');
+    fs.writeFileSync(path.join(dir, 'summary.json'), JSON.stringify({
+      run_id: runId, workflow: 'software-development', project_id: projectId, status: statuses[i % statuses.length], mock: false,
+      started_at: started.toISOString(), finished_at: new Date(started.getTime() + 27e5).toISOString(), duration_ms: 27e5, inputs: { task }, sessions: [],
+    }, null, 2));
+  }
+}
+
 // Analytics › Repository performance (#159): the project's folder becomes a git repository and three
 // nights of four parallel runs merge into it locally (one PR run whose `gh pr merge` failed), some
 // through resolve_merge with the files their conflict named; the last night edits the shared files less,
@@ -967,6 +1000,8 @@ function main() {
     if (args.view === 'analytics') demoAnalyticsRuns(ws, project.id);
     // a parent run with its child runs nested under it (#174)
     if (['project', 'workflows'].includes(args.view)) demoChildRuns(ws, project.id);
+    // enough runs for the lists' pages, and a run with many artifacts (#200)
+    if (['artifacts', 'project', 'workflows'].includes(args.view)) demoRunHistory(ws, project.id);
     if (args.view === 'workflows') demoPipelines(ws, appDir);
     if (args.view === 'analytics' && args.tab === 'performance') demoPerformanceRuns(ws, project.folder, project.id);
     // the Night watch's nights (#172): its screen, and the Dashboard's morning summary (an app before it: nothing)

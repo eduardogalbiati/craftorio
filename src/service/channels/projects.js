@@ -12,6 +12,7 @@ module.exports = (ctx) => [
   { channel: 'projects:create', method: 'createProject', params: 'data', fn: (data) => projects.createProject(ctx.ws.projects, data, { reposDir: ctx.ws.repos }) },
   { channel: 'projects:update', method: 'updateProject', params: ['id', 'patch'], fn: ({ id, patch }) => projects.updateProject(ctx.ws.projects, id, patch) },
   { channel: 'projects:remove', method: 'removeProject', params: 'id', fn: (id) => projects.removeProject(ctx.ws.projects, id) },
-  { channel: 'projects:runs', method: 'listProjectRuns', params: ['id'], fn: (opts) => ctx.projectRuns(opts) },
+  // the page options of runs:list (#200) as the second argument
+  { channel: 'projects:runs', method: 'listProjectRuns', params: ['id', '...opts'], fn: (opts) => ctx.projectRuns(opts) },
   { channel: 'projects:inputHints', method: 'projectInputHints', params: 'id', fn: (id) => projectInputs.inputHints(folderOf(ctx, id)) },
 ];

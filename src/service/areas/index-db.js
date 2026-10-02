@@ -25,7 +25,7 @@ module.exports = (ctx) => {
       }
     } catch (e) { console.error('index.db gates:', e.message); }
     // the run index catches up with runs/ (a new or rebuilt index reads every run once)
-    setTimeout(() => { try { if (ctx.ws) runs.listRuns(ctx.ws.runs); } catch (e) { console.error('run index:', e.message); } }, 0);
+    setTimeout(() => { if (ctx.ws) runs.listRunsAsync(ctx.ws.runs).catch((e) => console.error('run index:', e.message)); }, 0);
   }
 
   function closeIndex() {

@@ -63,6 +63,7 @@ the packaged app). WAL mode, `busy_timeout` 5 s, schema in `MIGRATIONS` (`PRAGMA
 | `gates` | one row per `approval.requested`; `open` → `resolved` / `withdrawn` / `closed` (run end) / `interrupted` (startup) | no: history only, the live gates are in the engine |
 | `notifications` | every notice (`type` = `<kind>.<event>`, run/project/issue, title, body, target, created/read at) | no: deleting `index.db` loses the history |
 | `run_files` | the files each run's own commits changed, keyed by the commit range read (`src/repo-performance.js`) | yes: read again from the clone's git history when missing |
+| `run_artifacts`, `artifact_paths` | each run's artifact list (`src/run-artifacts.js`, #200), keyed by `events.jsonl`'s and the run folder's size + mtime, with how far `events.jsonl` was read (a live run reads only what was appended); the project copies' paths → their runs (finding one artifact checks only its run) | yes: computed again from the run folder when missing |
 
 Why: listing runs read every run folder on each call; the queue files were read-modify-written by
 concurrent runs without a lock; gates and notifications lived only in memory.

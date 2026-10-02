@@ -74,7 +74,7 @@ const state = {
   art: { runs: null, error: null, projectId: "", q: "", showSim: false, sel: null, doc: null, mode: "rendered", reveal: null },
   sup: { runId: null, question: '', loading: false, result: null, error: null, recMsgs: {}, watch: null, watchError: null }, // supervisor panel
   pv: null,           // project detail view: { id, project, runs, error, filter, showSim, expanded, msgs }
-  wr: { runs: null, error: null, filter: 'all', showSim: false, expanded: new Set(), msgs: new Map() }, // Workflows > Runs
+  wr: { runs: null, error: null, filter: 'all', showSim: false, q: '', expanded: new Set(), msgs: new Map() }, // Workflows > Runs
   usageScope: (() => { try { return localStorage.getItem(USAGE_SCOPE_KEY) === 'machine' ? 'machine' : 'orchestrator'; } catch { return 'orchestrator'; } })(),
   // how runs open: 'details' (the Run screen) or 'chat' (the run chat), the last one the owner picked
   runView: (() => { try { return localStorage.getItem(RUN_VIEW_KEY) === 'chat' ? 'chat' : 'details'; } catch { return 'details'; } })(),
@@ -852,6 +852,7 @@ function onEvent(ev) {
   // a replay (hydrateRun) reloads and renders once, at its end
   if (replaying) return;
   if (PROJECT_REFRESH_EVENTS.has(ev.type)) { loadProjectRunsThrottled(); loadWorkflowRunsThrottled(); }
+  if (RUN_ROW_EVENTS.has(ev.type)) refreshRunRow(ev.run_id);
   if (ev.type === 'workflow.finished' || ev.type === 'file.saved') loadArtifactsThrottled();
   if (ARTIFACT_EVENTS.has(ev.type)) window.ArtifactsPanel?.refreshRun(ev.run_id);
   if (ev.type.startsWith('local_preview.')) paintGateApps();
@@ -860,7 +861,9 @@ function onEvent(ev) {
   scheduleRender();
 }
 
-const PROJECT_REFRESH_EVENTS = new Set(['workflow.started', 'workflow.finished', 'session.opened', 'session.closed', 'session.status', 'step.started']);
+// a run starting or ending reloads the lists' loaded pages (throttled); the rest updates the run's own row (#200)
+const PROJECT_REFRESH_EVENTS = new Set(['workflow.started', 'workflow.finished']);
+const RUN_ROW_EVENTS = new Set(['session.closed', 'session.opened', 'session.status', 'step.finished', 'step.started', 'workflow.finished']);
 
 function orch(ev, text, level = '') {
   viewOf(ev).orchLog.push({ ts: ev.ts, text, level });

@@ -312,8 +312,8 @@ ipcMain.handle('run:openDir', (_e, arg) => {
 });
 
 // Opens an artifact with the default app, or shows it in the file explorer.
-ipcMain.handle('artifacts:open', (_e, { path: file, reveal }) => {
-  const found = service.findArtifact(file);
+ipcMain.handle('artifacts:open', async (_e, { path: file, reveal }) => {
+  const found = await service.findArtifact(file);
   if (!found?.exists) throw new Error('Artifact not found.');
   if (reveal) { shell.showItemInFolder(found.path); return ''; }
   return shell.openPath(found.path);
@@ -328,7 +328,7 @@ ipcMain.handle('clipboard:write', async (_e, { text }) => { await clipboard.writ
 // its folder or its recorded project copy) is accepted: service.existingArtifact refuses the rest.
 // The image goes as PNG data (writeImage was removed in Electron 44, #139).
 ipcMain.handle('clipboard:writeImage', async (_e, { path: file }) => {
-  const found = service.existingArtifact(file);
+  const found = await service.existingArtifact(file);
   const img = nativeImage.createFromPath(found.path);
   if (img.isEmpty()) throw new Error(`Not an image the clipboard can hold: ${path.basename(found.path)}`);
   await clipboard.write([new ClipboardItem({ 'image/png': new Blob([img.toPNG()], { type: 'image/png' }) })]);
@@ -340,7 +340,7 @@ ipcMain.handle('clipboard:writeImage', async (_e, { path: file }) => {
 // macOS / Linux: the file URL as a ClipboardItem (public.file-url as a raw macOS format, text/uri-list
 // on Linux), checked with clipboard.has afterwards: a platform that drops the type gets a clear error.
 ipcMain.handle('clipboard:writeFile', async (_e, { path: file }) => {
-  const found = service.existingArtifact(file);
+  const found = await service.existingArtifact(file);
   if (process.platform === 'win32') {
     const literal = `'${found.path.replace(/'/g, "''")}'`;
     await new Promise((resolve, reject) => execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `Set-Clipboard -LiteralPath ${literal}`],

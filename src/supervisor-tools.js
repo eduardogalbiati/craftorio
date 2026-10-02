@@ -58,8 +58,8 @@ function supervisorTools(ctx) {
         projectId: str('Only the runs of this project'),
         status: str('Only the runs with this status (e.g. failed, succeeded, interrupted)'),
       }),
-      run: ({ limit, projectId, status } = {}) => {
-        let list = ctx.listAllRuns().runs;
+      run: async ({ limit, projectId, status } = {}) => {
+        let list = (await ctx.listAllRuns()).runs;
         if (projectId) list = list.filter((r) => r.project?.id === projectId);
         if (status) list = list.filter((r) => r.status === status);
         return json({ active: ctx.activeRuns(), runs: list.slice(0, Math.max(1, Math.min(200, Number(limit) || 30))) });

@@ -38,7 +38,8 @@ module.exports = (ctx) => [
   },
   // each run with its pending gates: the source of truth of "waiting for you" in every view
   { channel: 'runs:active', method: 'listActiveRuns', fn: () => ctx.activeRuns() },
-  { channel: 'runs:list', method: 'listRuns', fn: () => ctx.listAllRuns() },
+  // opts (#200): { offset, limit, filter, showSim, q, upTo } for one page, or { ids } for just those rows
+  { channel: 'runs:list', method: 'listRuns', params: ['...opts'], fn: (opts) => ctx.listAllRuns(opts || {}) },
   // activity: also the agents' tool calls and thinking, compacted (the run chat shows them)
   {
     channel: 'runs:events',

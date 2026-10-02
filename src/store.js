@@ -12,6 +12,10 @@
 //   run_files      the files each run's own commits changed (src/repo-performance.js, Analytics'
 //                  Repository performance and the Product Owner's conflict map), keyed by the commit
 //                  range they were read from (commits never change); rebuilt from git when missing.
+//   run_artifacts, artifact_paths
+//                  each run's artifact list (src/run-artifacts.js, #200) with the size + mtime it was
+//                  read at and how far its events.jsonl was read; artifact_paths maps a project copy's
+//                  path to the runs that saved it. Rebuilt from runs/ when missing.
 //   queues, queue_items, queue_claims
 //                  the Backlog queues (src/backlog.js): every change is one IMMEDIATE transaction, and
 //                  a dispatcher claims the item it starts so two never take the same issue. The
@@ -70,6 +74,11 @@ const MIGRATIONS = [
      issue TEXT, title TEXT NOT NULL, body TEXT, target TEXT, created_at TEXT NOT NULL, read_at TEXT);
    CREATE INDEX notifications_created ON notifications(created_at);`,
   `CREATE TABLE run_files (run_id TEXT PRIMARY KEY, range_key TEXT NOT NULL, files TEXT NOT NULL);`,
+  `CREATE TABLE run_artifacts (
+     run_id TEXT PRIMARY KEY, quick TEXT NOT NULL, finished INTEGER NOT NULL DEFAULT 0, events_offset INTEGER NOT NULL DEFAULT 0,
+     saved TEXT NOT NULL, files TEXT NOT NULL, count INTEGER NOT NULL DEFAULT 0, images INTEGER NOT NULL DEFAULT 0);
+   CREATE TABLE artifact_paths (path TEXT NOT NULL, run_id TEXT NOT NULL, PRIMARY KEY (path, run_id));
+   CREATE INDEX artifact_paths_run ON artifact_paths(run_id);`,
 ];
 
 const open = new Map(); // workspace root → store
@@ -169,11 +178,18 @@ function openStore(ws) {
         info.mock ? 1 : 0, info.startedAt ?? null, info.finishedAt ?? null, Math.round(info.durationMs || 0), info.tokens?.total || 0,
         info.costUsd || 0, info.pr?.url ?? null, info.resumedFrom ?? null, sig ?? null, JSON.stringify(info), summary, now());
     },
+    /** { sig, info } of one indexed run, or null. */
+    runEntry(runId) {
+      const r = db.prepare('SELECT run_id, sig, info FROM runs WHERE run_id = ?').get(String(runId));
+      return r ? runRow(r) : null;
+    },
     deleteRuns(ids) {
       const del = db.prepare('DELETE FROM runs WHERE run_id = ?');
-      transaction(() => { for (const id of ids) del.run(id); });
+      const delArts = db.prepare('DELETE FROM run_artifacts WHERE run_id = ?');
+      const delPaths = db.prepare('DELETE FROM artifact_paths WHERE run_id = ?');
+      transaction(() => { for (const id of ids) { del.run(id); delArts.run(id); delPaths.run(id); } });
     },
-    clearRuns() { db.exec('DELETE FROM runs'); },
+    clearRuns() { db.exec('DELETE FROM runs; DELETE FROM run_artifacts; DELETE FROM artifact_paths;'); },
     /** The indexed list rows (no `info`), newest first: what Analytics and lists can query without the files. */
     runRows({ projectId } = {}) {
       const rows = projectId ? db.prepare('SELECT * FROM runs WHERE project_id = ? ORDER BY started_at DESC').all(projectId)
@@ -197,6 +213,28 @@ function openStore(ws) {
     putRunFiles(runId, key, files) {
       db.prepare(`INSERT INTO run_files (run_id, range_key, files) VALUES (?, ?, ?)
         ON CONFLICT(run_id) DO UPDATE SET range_key = excluded.range_key, files = excluded.files`).run(String(runId), String(key), JSON.stringify(files || []));
+    },
+    /** A run's cached artifact index (src/run-artifacts.js): { quick, finished, offset, saved, files, count, images }, or null. */
+    runArtifacts(runId) {
+      const r = db.prepare('SELECT * FROM run_artifacts WHERE run_id = ?').get(String(runId));
+      return r ? { quick: r.quick, finished: !!r.finished, offset: r.events_offset, saved: parse(r.saved, []), files: parse(r.files, []), count: r.count, images: r.images } : null;
+    },
+    /** Stores a run's artifact index and the paths of its project copies (`norm` paths, for artifactRunIds). */
+    putRunArtifacts(runId, e) {
+      const id = String(runId);
+      transaction(() => {
+        db.prepare(`INSERT INTO run_artifacts (run_id, quick, finished, events_offset, saved, files, count, images) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(run_id) DO UPDATE SET quick = excluded.quick, finished = excluded.finished, events_offset = excluded.events_offset,
+            saved = excluded.saved, files = excluded.files, count = excluded.count, images = excluded.images`).run(
+          id, String(e.quick), e.finished ? 1 : 0, Math.max(0, Math.floor(e.offset || 0)), JSON.stringify(e.saved || []), JSON.stringify(e.files || []), e.count || 0, e.images || 0);
+        db.prepare('DELETE FROM artifact_paths WHERE run_id = ?').run(id);
+        const add = db.prepare('INSERT OR IGNORE INTO artifact_paths (path, run_id) VALUES (?, ?)');
+        for (const f of e.files || []) if (f.location === 'external') add.run(norm(f.path), id);
+      });
+    },
+    /** The runs whose artifact index lists `file` as a project copy. */
+    artifactRunIds(file) {
+      return db.prepare('SELECT run_id FROM artifact_paths WHERE path = ? ORDER BY run_id DESC').all(norm(file)).map((r) => r.run_id);
     },
 
     // ---- Backlog queues ------------------------------------------------------------------------

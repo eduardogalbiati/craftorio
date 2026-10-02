@@ -10,6 +10,7 @@
 //
 // With the service's index open (src/store.js) listRuns reads unchanged runs from it (`indexRun`,
 // `rebuildIndex`, `runSummaries` for Usage and Analytics); deleting index.db loses nothing.
+// The run lists use listRunsAsync (#200: async stats, never blocking the process) and findRun (one run).
 
 const fs = require('fs');
 const path = require('path');
@@ -17,6 +18,7 @@ const { trailOf } = require('./renderer/run-progress-model');
 const { defaultTitle, prOfEvents, readMeta } = require('./run-pr');
 const { ownerAlive, readOwner } = require('./run-owner');
 const { storeFor } = require('./store');
+const { kindOf, walkFiles } = require('./run-artifacts');
 
 const SESSION_EVENTS = new Set(['session.opened', 'session.message_received', 'session.closed']);
 
@@ -246,12 +248,78 @@ function runSignature(dir) {
 const readSummaryText = (dir) => { try { return fs.readFileSync(path.join(dir, 'summary.json'), 'utf8'); } catch { return null; } };
 
 // Reads one run folder into the index; returns its RunInfo (null when it is not a run).
+const readAt = new Map(); // run id → when indexRunIn last read it
 function indexRunIn(store, runsDir, runId) {
   const dir = path.join(runsDir, runId);
   const sig = runSignature(dir);
   const info = readRun(runsDir, runId);
   if (info) store.putRun(info, sig, readSummaryText(dir));
+  readAt.set(runId, Date.now());
   return info;
+}
+
+// A run without an end keeps aging while its files stay the same, and its owner's heartbeat
+// decides between running (elsewhere) and interrupted (#112).
+function listedRow(runsDir, id, info) {
+  if (info.finishedAt || !info.startedAt || !['interrupted', 'running'].includes(info.status)) return info;
+  const live = liveStatus(path.join(runsDir, id));
+  return { ...info, status: live.status, runningElsewhere: live.elsewhere, durationMs: Date.now() - Date.parse(info.startedAt) };
+}
+
+// A run this process runs (`live`) whose events.jsonl alone changed keeps its row for LIVE_REREAD_MS
+// (#200): reading it again parses its whole events.jsonl, and the service lays the engine's live
+// state (status, steps, sessions, cost) over the row anyway; workflow.finished indexes it again.
+const LIVE_REREAD_MS = 20000;
+const onlyEventsChanged = (a, b) => String(a).split('|').slice(1).join('|') === String(b).split('|').slice(1).join('|');
+
+// The row of a run when it is current (or a live run's recent one), else null: the run is read again.
+function currentRow(runsDir, id, row, sig, live) {
+  if (!row?.info) return null;
+  if (row.sig === sig) return listedRow(runsDir, id, row.info);
+  if (live?.has(id) && onlyEventsChanged(row.sig, sig) && Date.now() - (readAt.get(id) || 0) < LIVE_REREAD_MS) return listedRow(runsDir, id, row.info);
+  return null;
+}
+
+const statSignature = async (dir) => (await Promise.all(SIG_FILES.map((f) => fs.promises.stat(path.join(dir, f))
+  .then((st) => `${st.mtimeMs}:${st.size}`, () => '-')))).join('|');
+const nextTick = () => new Promise((resolve) => setImmediate(resolve));
+
+/**
+ * listRuns without blocking the process (#200), newest first: the folders' signatures are read with
+ * async stats, and a run read again (changed, or not indexed yet) lets other work in after it.
+ * `live`: ids of the runs this process runs (see LIVE_REREAD_MS).
+ */
+async function listRunsAsync(runsDir, { live } = {}) {
+  let ids = [];
+  try { ids = await fs.promises.readdir(runsDir); } catch { return []; }
+  const sigs = [];
+  for (let i = 0; i < ids.length; i += 64) sigs.push(...await Promise.all(ids.slice(i, i + 64).map((id) => statSignature(path.join(runsDir, id)))));
+  const store = storeFor(runsDir);
+  const rows = store ? store.runEntries() : new Map();
+  const list = [];
+  for (let i = 0; i < ids.length; i++) {
+    const row = currentRow(runsDir, ids[i], rows.get(ids[i]), sigs[i], live);
+    if (row) { list.push(row); continue; }
+    const s = storeFor(runsDir); // the workspace may have changed meanwhile
+    list.push(s ? indexRunIn(s, runsDir, ids[i]) : readRun(runsDir, ids[i]));
+    await nextTick();
+  }
+  if (store && storeFor(runsDir) === store) {
+    const present = new Set(ids);
+    const gone = [...rows.keys()].filter((id) => !present.has(id));
+    if (gone.length) store.deleteRuns(gone);
+  }
+  return list.filter(Boolean).sort((a, b) => String(b.startedAt).localeCompare(String(a.startedAt)));
+}
+
+/** One run as the lists show it (its index row when current, else read from its folder), null: not a run. */
+function findRun(runsDir, runId, { live } = {}) {
+  const id = path.basename(String(runId || ''));
+  if (!id || id === '.' || id === '..') return null;
+  const store = storeFor(runsDir);
+  const row = currentRow(runsDir, id, store?.runEntry(id), runSignature(path.join(runsDir, id)), live);
+  if (row) return row;
+  return store ? indexRunIn(store, runsDir, id) : readRun(runsDir, id);
 }
 
 /** Re-reads one run into the index (the service calls it as the run's events are written). */
@@ -279,11 +347,7 @@ function listRuns(runsDir) {
     list = store.transaction(() => ids.map((id) => {
       const row = rows.get(id);
       if (!row?.info || row.sig !== runSignature(path.join(runsDir, id))) return indexRunIn(store, runsDir, id);
-      // a run without an end keeps aging while its files stay the same, and its owner's heartbeat
-      // decides between running (elsewhere) and interrupted (#112)
-      if (row.info.finishedAt || !row.info.startedAt || !['interrupted', 'running'].includes(row.info.status)) return row.info;
-      const live = liveStatus(path.join(runsDir, id));
-      return { ...row.info, status: live.status, runningElsewhere: live.elsewhere, durationMs: Date.now() - Date.parse(row.info.startedAt) };
+      return listedRow(runsDir, id, row.info);
     }));
     const present = new Set(ids);
     const gone = [...rows.keys()].filter((id) => !present.has(id));
@@ -324,23 +388,11 @@ function projectOf(run, projectList) {
 // ---------------------------------------------------------------------------
 // Artifacts: files a run produced. Those written by the engine (`save_as`, `file.saved`
 // events, possibly outside the run folder, e.g. docs/arena in the project) plus any other file
-// in the run folder, except the run's own logs.
+// in the run folder, except the run's own logs. The lists and the Artifacts screen read them from
+// the cached, asynchronous index of src/run-artifacts.js (#200); runArtifacts reads one run at once.
 // ---------------------------------------------------------------------------
-const INTERNAL = new Set(['events.jsonl', 'meta.json', 'summary.json']);
-const KINDS = { '.md': 'markdown', '.markdown': 'markdown', '.json': 'json', '.jsonl': 'json', '.tsv': 'table', '.csv': 'table', '.txt': 'text', '.log': 'text', '.yaml': 'text', '.yml': 'text', '.html': 'text', '.patch': 'text', '.diff': 'text', '.png': 'image', '.jpg': 'image', '.jpeg': 'image', '.gif': 'image', '.webp': 'image' };
-const kindOf = (file) => KINDS[path.extname(file).toLowerCase()] || 'other';
 
-function walkFiles(dir, rel = '') {
-  let entries = [];
-  try { entries = fs.readdirSync(path.join(dir, rel), { withFileTypes: true }); } catch { return []; }
-  return entries.flatMap((e) => {
-    const r = rel ? path.join(rel, e.name) : e.name;
-    if (e.isDirectory()) return rel === '' && e.name === 'sessions' ? [] : walkFiles(dir, r);
-    return rel === '' && INTERNAL.has(e.name) ? [] : [r];
-  });
-}
-
-/** Files produced by a run: [{ path, name, rel, location, kind, size, mtime, step, agent, exists }] */
+/** Files produced by a run, read now (sync): [{ path, name, rel, location, kind, size, mtime, step, agent, exists }] */
 function runArtifacts(runDir) {
   const byPath = new Map();
   const add = (file, extra = {}) => {
@@ -409,9 +461,11 @@ function runEvents(runDir, { activity = false } = {}) {
 }
 
 module.exports = {
+  findRun,
   indexRun,
   kindOf,
   listRuns,
+  listRunsAsync,
   projectOf,
   readChain,
   readRun,

@@ -6,21 +6,42 @@
 // (run events) and renderArtifactList (developer mode) stay globals for app.js and the shared modules.
 // Registers itself with registerView (view-registry.js); uses app.js globals ($, esc, state, api,
 // errMsg, ART_KIND, artKindIcon, fmtSize, markdownHtml, sanitizeHtml, slugify, renderJsonText,
-// renderDelimited) and window.ArtifactMenu / window.ArtifactsPanel.
+// renderDelimited), run-list.js (groupArtifacts, ART_PAGE) and window.ArtifactMenu / window.ArtifactsPanel.
+//
+// Lazily loaded (#200): the list is the runs that produced files, with their counts, filtered by the
+// service (project, search, simulated); a run's files load when its group opens (artifacts:list
+// { runId }), grouped by step, ART_PAGE at a time. A search brings the first matching files of each
+// matching run along. state.art.files: run id → { status: loading | ok | error, files, total, count, q, shown }.
 
 let artLoading = null;
 let artLastLoad = 0;
 let artTimer = null;
+let artSeq = 0;
 function loadArtifacts() {
-  if (artLoading) return artLoading;
   const a = state.art;
+  const seq = ++artSeq;
+  const q = a.q.trim();
   artLoading = (async () => {
     try {
-      const [runs, projects] = await Promise.all([api.listArtifacts({}), state.projects.length ? state.projects : api.listProjects()]);
-      a.runs = runs || [];
+      const [res, projects] = await Promise.all([
+        api.listArtifacts({ summary: true, projectId: a.projectId || undefined, q: q || undefined, showSim: artShowSim() }),
+        state.projects.length ? state.projects : api.listProjects(),
+      ]);
+      if (seq !== artSeq) return;
+      a.runs = res.runs || [];
+      a.hiddenSim = res.hiddenSim || 0;
+      a.loadedQ = q;
       state.projects = projects;
       a.error = null;
+      // a run's files load again when its count or the search changed; a search seeds them
+      a.files ||= new Map();
+      for (const r of a.runs) {
+        const e = a.files.get(r.runId);
+        if (e && !e.pending && (e.count !== r.artifactCount || e.q !== q)) a.files.delete(r.runId);
+        if (q && r.artifacts && !a.files.has(r.runId)) a.files.set(r.runId, { status: 'ok', files: r.artifacts, total: r.matchCount || r.artifacts.length, count: r.artifactCount, q, shown: ART_PAGE });
+      }
     } catch (e) {
+      if (seq !== artSeq) return;
       a.error = errMsg(e);
     }
     artLoading = null;
@@ -30,6 +51,30 @@ function loadArtifacts() {
   return artLoading;
 }
 
+// One run's files (all, or those matching the search the list was loaded with).
+function ensureArtFiles(r) {
+  const a = state.art;
+  a.files ||= new Map();
+  if (a.files.has(r.runId)) return;
+  const entry = { status: 'loading', files: [], total: 0, count: r.artifactCount, q: a.loadedQ || '', shown: ART_PAGE, error: null };
+  a.files.set(r.runId, entry);
+  fetchArtFiles(r.runId, entry);
+}
+function fetchArtFiles(runId, entry) {
+  entry.pending = true;
+  api.listArtifacts({ runId, q: entry.q || undefined })
+    .then(([x] = []) => { entry.files = x?.artifacts || []; entry.total = entry.files.length; entry.status = 'ok'; }, (e) => { entry.status = 'error'; entry.error = errMsg(e); })
+    .finally(() => { entry.pending = false; if (state.art.files.get(runId) === entry && state.view === 'artifacts') renderArtifactList(); });
+}
+
+// The run a path belongs to when it is inside the workspace's runs folder (a deep link without its run).
+function runIdOfPath(p) {
+  const base = String(state.ws?.runs || '').replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+  const file = String(p || '').replace(/\\/g, '/');
+  if (!base || !file.toLowerCase().startsWith(`${base}/`)) return null;
+  return file.slice(base.length + 1).split('/')[0] || null;
+}
+
 function loadArtifactsThrottled() {
   if (artTimer || state.view !== 'artifacts') return;
   const wait = Math.max(0, 2000 - (Date.now() - artLastLoad));
@@ -37,12 +82,12 @@ function loadArtifactsThrottled() {
 }
 
 // Opens the Artifacts view focused on one file (from the project view).
-function openArtifactsAt({ projectId, path, mock }) {
+function openArtifactsAt({ projectId, runId, path, mock }) {
   const a = state.art;
   a.projectId = projectId || '';
   a.q = '';
   if (mock) a.showSim = true;
-  a.reveal = path; // opens the file's group once the list knows which run it belongs to
+  a.reveal = runId || runIdOfPath(path); // opens the file's group once the list has its run
   showView('artifacts');
   selectArtifact(path);
 }
@@ -63,45 +108,14 @@ function renderArtifacts() {
 // Simulated runs only exist for developer mode: without it they are never listed nor counted.
 const artShowSim = () => devMode() && state.art.showSim;
 
+// The listed runs: the service already applied the project, the search and the simulated filter.
 function artifactRunsFiltered() {
-  const a = state.art;
-  const q = a.q.trim().toLowerCase();
-  return (a.runs || [])
-    .filter((r) => artShowSim() || !r.mock)
-    .filter((r) => !a.projectId || r.project?.id === a.projectId)
-    .map((r) => {
-      if (!q) return r;
-      const runHit = [r.workflow, r.task, r.project?.name].some((x) => String(x || '').toLowerCase().includes(q));
-      return runHit ? r : { ...r, artifacts: r.artifacts.filter((f) => `${f.name} ${f.rel}`.toLowerCase().includes(q)) };
-    })
-    .filter((r) => r.artifacts.length);
+  return state.art.runs || [];
 }
 
-function renderArtifactList() {
+function artFileHtml(f) {
   const a = state.art;
-  const box = $('#art-list');
-  if (a.runs == null) { box.innerHTML = a.error ? '' : '<p class="muted small art-pad">Loading…</p>'; paintArtToggleAll([], false); return; }
-  const runs = artifactRunsFiltered();
-  const hiddenSim = devMode() ? (a.runs || []).filter((r) => r.mock && !a.showSim).length : 0;
-  if (!runs.length) {
-    paintArtToggleAll([], false);
-    box.innerHTML = `<div class="art-pad muted small">${a.runs.length ? 'No artifacts match these filters.' : 'No run has produced documents or files yet.'}${hiddenSim ? `<br>${hiddenSim} simulated run${hiddenSim > 1 ? 's' : ''} hidden.` : ''}</div>`;
-    return;
-  }
-  if (a.reveal) {
-    const owner = runs.find((r) => r.artifacts.some((f) => f.path === a.reveal));
-    if (owner) { setArtGroupOpen(owner.runId, true); a.reveal = null; }
-  }
-  const searching = !!a.q.trim();
-  box.innerHTML = runs.map((r, i) => {
-    const open = searching || artGroupOpen(r.runId, i === 0);
-    return `
-    <div class="art-run ${open ? 'open' : ''}" data-run="${esc(r.runId)}">
-      <button class="art-run-head" title="${esc(r.task || '')}" aria-expanded="${open}">
-        <div class="row"><span class="art-chev" aria-hidden="true">${open ? '▾' : '▸'}</span><b class="art-run-name">${esc(r.workflow || 'workflow')}</b><span class="pill pill-${esc(r.status)}">${esc(r.status)}</span>${r.mock ? '<span class="badge p-mock">simulated</span>' : ''}</div>
-        <div class="muted small art-run-sub">${r.project ? `${esc(r.project.name)} · ` : ''}${r.startedAt ? esc(dateOf(r.startedAt)) : ''} · ${r.artifacts.length} file${r.artifacts.length > 1 ? 's' : ''}</div>
-      </button>
-      ${!open ? '' : r.artifacts.map((f) => `
+  return `
         <button class="art-file ${a.sel === f.path ? 'active' : ''} ${f.exists ? '' : 'missing'}" data-path="${esc(f.path)}" title="${esc(f.path)}">
           ${artKindIcon(f.kind)}
           <span class="art-file-main">
@@ -109,7 +123,45 @@ function renderArtifactList() {
             <span class="art-file-sub muted">${esc(f.rel || '')}${f.step ? ` · ${esc(f.step)}${f.agent ? ` · ${esc(f.agent)}` : ''}` : f.agent ? ` · ${esc(f.agent)}` : ''}</span>
           </span>
           <span class="art-file-size muted">${esc(fmtSize(f.size))}</span>
-        </button>`).join('')}
+        </button>`;
+}
+
+// An open group's files: loading, error (Retry), or grouped by step with "Show more".
+function artFilesHtml(e) {
+  if (!e || e.status === 'loading') return '<p class="muted small art-pad">Loading…</p>';
+  if (e.status === 'error') return `<p class="error small art-pad">Could not load the files: ${esc(e.error)} <button type="button" class="btn sm ghost" data-art-retry>Retry</button></p>`;
+  const shown = e.files.slice(0, e.shown);
+  const left = Math.max(0, e.total - shown.length);
+  const groups = groupArtifacts(shown);
+  return groups.map(([label, files]) => (groups.length > 1 ? `<div class="art-step muted">${esc(label)} · ${files.length}</div>` : '') + files.map(artFileHtml).join('')).join('')
+    + (left > 0 ? `<button type="button" class="btn sm ghost art-more" data-art-more ${e.pending ? 'disabled' : ''}>${e.pending ? 'Loading…' : `Show ${Math.min(left, ART_PAGE)} more${left > ART_PAGE ? ` <span class="muted">(${left} left)</span>` : ''}`}</button>` : '');
+}
+
+function renderArtifactList() {
+  const a = state.art;
+  const box = $('#art-list');
+  if (a.runs == null) { box.innerHTML = a.error ? '' : '<p class="muted small art-pad">Loading…</p>'; paintArtToggleAll([], false); return; }
+  const runs = artifactRunsFiltered();
+  const hiddenSim = devMode() ? a.hiddenSim || 0 : 0;
+  const filtered = !!(a.loadedQ || a.projectId);
+  if (!runs.length) {
+    paintArtToggleAll([], false);
+    box.innerHTML = `<div class="art-pad muted small">${filtered ? 'No artifacts match these filters.' : 'No run has produced documents or files yet.'}${hiddenSim ? `<br>${hiddenSim} simulated run${hiddenSim > 1 ? 's' : ''} hidden.` : ''}</div>`;
+    return;
+  }
+  if (a.reveal && runs.some((r) => r.runId === a.reveal)) { setArtGroupOpen(a.reveal, true); a.reveal = null; }
+  const searching = !!a.loadedQ;
+  box.innerHTML = runs.map((r, i) => {
+    const open = searching || artGroupOpen(r.runId, i === 0);
+    if (open) ensureArtFiles(r);
+    const files = searching ? `${r.matchCount} of ${r.artifactCount} file${r.artifactCount > 1 ? 's' : ''}` : `${r.artifactCount} file${r.artifactCount > 1 ? 's' : ''}`;
+    return `
+    <div class="art-run ${open ? 'open' : ''}" data-run="${esc(r.runId)}">
+      <button class="art-run-head" title="${esc(r.task || '')}" aria-expanded="${open}">
+        <div class="row"><span class="art-chev" aria-hidden="true">${open ? '▾' : '▸'}</span><b class="art-run-name">${esc(r.workflow || 'workflow')}</b><span class="pill pill-${esc(r.status)}">${esc(r.status)}</span>${r.mock ? '<span class="badge p-mock">simulated</span>' : ''}</div>
+        <div class="muted small art-run-sub">${r.project ? `${esc(r.project.name)} · ` : ''}${r.startedAt ? esc(dateOf(r.startedAt)) : ''} · ${files}${r.imageCount ? ` · ${r.imageCount} image${r.imageCount === 1 ? '' : 's'}` : ''}</div>
+      </button>
+      ${open ? artFilesHtml(a.files.get(r.runId)) : ''}
     </div>`;
   }).join('') + (hiddenSim ? `<p class="muted small art-pad">${hiddenSim} simulated run${hiddenSim > 1 ? 's' : ''} hidden.</p>` : '');
   box.querySelectorAll('.art-file').forEach((b) => {
@@ -121,6 +173,19 @@ function renderArtifactList() {
     if (searching) return; // every matching group is shown open while searching
     const g = b.closest('.art-run');
     setArtGroupOpen(g.dataset.run, !g.classList.contains('open'));
+    renderArtifactList();
+  }));
+  box.querySelectorAll('[data-art-more]').forEach((b) => (b.onclick = () => {
+    const runId = b.closest('.art-run').dataset.run;
+    const e = a.files.get(runId);
+    if (!e) return;
+    e.shown += ART_PAGE;
+    // a search brought only the first matches: the rest come now
+    if (e.files.length < Math.min(e.total, e.shown)) fetchArtFiles(runId, e);
+    renderArtifactList();
+  }));
+  box.querySelectorAll('[data-art-retry]').forEach((b) => (b.onclick = () => {
+    a.files.delete(b.closest('.art-run').dataset.run);
     renderArtifactList();
   }));
   paintArtToggleAll(runs, searching);
@@ -168,8 +233,9 @@ function artGroupOpen(runId, fallback) {
 function setArtGroupOpen(runId, open) {
   const g = artGroupsState();
   g[runId] = open;
-  // Forget runs that no longer have artifacts so the stored map doesn't grow forever.
-  if (state.art.runs) {
+  // Forget runs that no longer have artifacts so the stored map doesn't grow forever (only from the
+  // unfiltered list: a filter hides runs that still have them).
+  if (state.art.runs && !state.art.loadedQ && !state.art.projectId) {
     const live = new Set(state.art.runs.map((r) => r.runId));
     for (const id of Object.keys(g)) if (!live.has(id)) delete g[id];
   }
@@ -196,8 +262,14 @@ async function selectArtifact(path) {
 }
 
 function findArtifactMeta(path) {
-  for (const r of state.art.runs || []) for (const f of r.artifacts) if (f.path === path) return f;
+  for (const e of state.art.files?.values() || []) for (const f of e.files || []) if (f.path === path) return f;
   return null;
+}
+
+// The run whose loaded files include `path`, else the run of its folder.
+function artifactRunOf(path) {
+  for (const [runId, e] of state.art.files || []) if ((e.files || []).some((f) => f.path === path)) return runId;
+  return runIdOfPath(path);
 }
 
 function renderArtifactViewer() {
@@ -246,7 +318,7 @@ function renderArtifactViewer() {
     const img = body.querySelector('.art-image img');
     img.oncontextmenu = (e) => ArtifactMenu.open(e, { path: d.path, name, image: true });
     // the shared viewer (#145), with the screenshot's original/modified pair when it has one (#146)
-    const runId = (a.runs || []).find((r) => r.artifacts.some((f) => f.path === d.path))?.runId || null;
+    const runId = artifactRunOf(d.path);
     img.onclick = () => ArtifactsPanel.openImage({ runId, file: d.path, src: d.image, title: name });
     img.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); img.click(); } };
     return;
@@ -331,10 +403,16 @@ registerView({
       </section>`,
   mount() {
     $('#btn-art-refresh').onclick = () => loadArtifacts();
-    $('#art-project').onchange = (e) => { state.art.projectId = e.target.value; renderArtifactList(); };
-    $('#art-search').oninput = (e) => { state.art.q = e.target.value; renderArtifactList(); };
+    $('#art-project').onchange = (e) => { state.art.projectId = e.target.value; loadArtifacts(); };
+    // the service searches every run's files (#200): asked once the typing pauses
+    let searchTimer = null;
+    $('#art-search').oninput = (e) => {
+      state.art.q = e.target.value;
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(loadArtifacts, 250);
+    };
     $('#art-toggle-all').onclick = toggleAllArtGroups;
-    $('#art-show-sim').onchange = (e) => { state.art.showSim = e.target.checked; renderArtifactList(); };
+    $('#art-show-sim').onchange = (e) => { state.art.showSim = e.target.checked; loadArtifacts(); };
   },
   show() {
     renderArtifacts();
