@@ -21,7 +21,10 @@
 //                      analytics: usage | performance (performance: a demo git repository and a marker)
 //   --mode <name>      backlog: list | kanban | roadmap | epics
 //   --run <mock|dir>   run-chat: a simulated software-development run (default) or a copy of a run folder
-//   --workflow <file>  the workflow of the simulated run (default software-development.yaml)
+//   --workflow <file>  the workflow of the simulated run (default software-development.yaml); run:
+//                      `pipe:<file>` starts a saved pipeline (#135, e.g. pipe:develop-to-retrospective.yaml)
+//   --then <file>      run: the workflow the run's chain starts when it finishes (#134), set in the
+//                      Start panel; its Run screen offers "Save as pipeline" (--click "[data-chain=save-pipe-open]")
 //   --input <k=v>      run: a workflow input of the Start panel (repeatable), e.g. mode=validated
 //   --stop-at <step>   run: approves every gate but this step's and captures once it waits there
 //                      (e.g. --input mode=validated --stop-at developer_check: the two-column gate
@@ -104,6 +107,7 @@ function parseArgs(argv) {
     else if (k === '--mode') a.mode = next();
     else if (k === '--run') a.run = next();
     else if (k === '--workflow') { a.workflow = next(); a.workflowGiven = true; }
+    else if (k === '--then') a.then = next();
     else if (k === '--click') a.clicks.push(next());
     else if (k === '--context') a.contexts.push(next());
     else if (k === '--paste') a.pastes.push({ sel: next(), big: false });
@@ -367,27 +371,20 @@ function demoPipelines(ws, appDir) {
   const retro = fs.readFileSync(wf('run-retrospective.yaml'), 'utf8');
   fs.writeFileSync(wf('weekly-digest.yaml'), retro.replace('name: run-retrospective', 'name: weekly-digest').replace(/description: .*/, 'description: Summarizes the week\'s retrospectives into one digest of what to change first.').replace('\n  findings:\n', '\n  digest:\n'));
   fs.writeFileSync(wf('release-notes.yaml'), retro.replace('name: run-retrospective', 'name: release-notes').replace('category: monitor', 'category: ops').replace(/description: .*/, 'description: Drafts the release notes of the merged pull requests since the last tag.').replace('\n  findings:\n', '\n  notes:\n'));
+  // the bundled pipelines (#135), one of them edited (modified: Restore default), plus two of the
+  // owner's: a valid one and one whose mapping names an output its workflow doesn't declare (refused)
   const dir = path.join(ws.root, 'pipelines');
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, 'issue-to-merge.yaml'), [
-    'name: Issue to merge',
-    'description: Files a triaged issue, then develops it up to the merge.',
-    'category: build',
-    'stages:',
-    '  - workflow: issue-tracker.yaml',
-    '  - workflow: software-development.yaml',
-    '    when: success',
-    '    map: { issues: issues }',
-    '',
-  ].join('\n'));
+  require(path.join(appDir, 'src', 'pipelines')).seedPipelines(path.join(appDir, 'pipelines'), dir);
+  const rfc = path.join(dir, 'rfc-to-issues.yaml');
+  if (fs.existsSync(rfc)) fs.writeFileSync(rfc, fs.readFileSync(rfc, 'utf8').replace('description: AI Arena writes an RFC', 'description: AI Arena writes our quarterly RFC'));
   fs.writeFileSync(path.join(dir, 'ship-and-learn.yaml'), [
     'name: Ship and learn',
     'description: Develops a task, then runs a retrospective on that run.',
     'stages:',
     '  - workflow: software-development.yaml',
     '  - workflow: run-retrospective.yaml',
-    '    when: finished',
-    '    map: { run_id: run_id }',
+    '    on: success',
+    '    map: { run_id: "@run" }',
     '',
   ].join('\n'));
   fs.writeFileSync(path.join(dir, 'weekly-review.yaml'), [
@@ -397,7 +394,17 @@ function demoPipelines(ws, appDir) {
     'stages:',
     '  - workflow: run-retrospective.yaml',
     '  - workflow: weekly-digest.yaml',
-    '    map: { report: retrospectives }',
+    '    map: { focus: findings }',
+    '',
+  ].join('\n'));
+  fs.writeFileSync(path.join(dir, 'issue-to-merge.yaml'), [
+    'name: Issue to merge',
+    'description: Files a triaged issue, then develops it up to the merge.',
+    'category: build',
+    'stages:',
+    '  - workflow: issue-tracker.yaml',
+    '  - workflow: software-development.yaml',
+    '    map: { task: findings }',
     '',
   ].join('\n'));
 }
@@ -996,6 +1003,7 @@ function main() {
           el.value = val;
         }
         document.querySelector('#mock-toggle').checked = true;
+        if (${JSON.stringify(args.then || '')}) drawerChain().set({ action: 'workflow', workflow: ${JSON.stringify(args.then || '')} });
         if (!document.body.classList.contains('dev-mode')) throw new Error('developer mode is off: refusing to start a real run');
         document.querySelector('#btn-start').click();`);
       // --stop-at: that step's gate stays open and the capture happens once it shows

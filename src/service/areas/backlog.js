@@ -44,7 +44,14 @@ module.exports = (ctx) => {
   // backlog is one project's, so a group never mixes projects.
   // allowKeptWork: the owner answered the kept-work question with Start from scratch (#170).
   // then: what happens with each run's result when it finishes (#134, chain-model normalizeThen).
-  async function assignWorkflow({ projectId, numbers, workflow, inputs, mock, group = false, allowKeptWork = false, then = null }) {
+  // pipeline: a saved pipeline's file (#135): its first workflow (with its fixed inputs under the
+  // owner's) receives the issues and the rest of the pipeline is each run's then.
+  async function assignWorkflow({ projectId, numbers, workflow, inputs, mock, group = false, allowKeptWork = false, then = null, pipeline = null }) {
+    if (pipeline) {
+      const first = ctx.pipelineAssign(pipeline);
+      ({ workflow, then } = first);
+      inputs = { ...first.inputs, ...(inputs || {}) };
+    }
     const { ws } = ctx;
     const project = projects.readProject(ws.projects, path.basename(String(projectId)));
     const data = backlog.readBacklog(ws.backlog, project.id);

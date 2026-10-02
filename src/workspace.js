@@ -111,6 +111,8 @@ function layout(root) {
     agents: path.join(root, 'agents'),
     // editable workflow YAML files (bundled defaults are seeded here, see src/workflows.js)
     workflows: path.join(root, 'workflows'),
+    // saved pipelines, one YAML file each (bundled defaults are seeded here, see src/pipelines.js, #135)
+    pipelines: path.join(root, 'pipelines'),
     // one git worktree per run (orchestrator.worktree), created on demand
     worktrees: path.join(root, 'worktrees'),
     // Run locally at a gate: per run, the scratch workspace and user data of the copy (src/local-preview.js)

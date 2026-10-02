@@ -128,6 +128,12 @@
 .chain-banner-title { font-weight: 600; font-size: 12px; }
 .chain-banner-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chain-banner-edit { margin-top: 8px; max-width: 720px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel-2); }
+/* a saved pipeline's run (#135) and the Save as pipeline form */
+.chain-banner-pipe { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 6px; }
+.pipe-save-form { display: grid; grid-template-columns: minmax(0, 2fr) minmax(120px, 1fr); gap: 8px 12px; align-items: end; }
+.pipe-save-form .field { margin: 0; }
+.pipe-save-form .pipe-save-desc, .pipe-save-form .hint { grid-column: 1 / -1; }
+.pipe-save-form .hint { margin: 0; }
 .orch-log .line.supervisor { color: var(--purple); }
 /* a gate waiting in the run shown: asked inline above the steps, never in a dialog over the app
    (the cards, .run-gate*, are in style.css: the gate panel's wide variant builds on them) */

@@ -44,8 +44,12 @@ module.exports = (ctx) => {
   }
 
   // What the next step needs of a finished run, from the live run or its folder.
-  function previous({ runId, runDir, workflow, file, outputs, outputDefs, inputs, projectId, mock, status }) {
-    return { runId, runDir, workflow, file, outputs: outputs || {}, outputDefs: outputDefs || {}, inputs: inputs || {}, projectId: projectId || null, mock: !!mock, status };
+  // pipelineId: the saved pipeline (#135) the run is a stage of, from its `from`
+  function previous({ runId, runDir, workflow, file, outputs, outputDefs, inputs, projectId, mock, status, from }) {
+    return {
+      runId, runDir, workflow, file, outputs: outputs || {}, outputDefs: outputDefs || {}, inputs: inputs || {}, projectId: projectId || null, mock: !!mock, status,
+      pipelineId: from?.pipeline?.id || null,
+    };
   }
 
   function notice(prev, state, message, nextRunId = null) {
@@ -63,7 +67,7 @@ module.exports = (ctx) => {
     if (!run.then) return;
     const prev = previous({
       runId: run.runId, runDir: run.runDir, workflow: run.wf.metadata?.name || path.basename(run.file), file: path.basename(run.file),
-      outputs: ev.outputs, outputDefs: run.wf.outputs, inputs: run.inputs, projectId: run.projectId, mock: run.mock, status: ev.status,
+      outputs: ev.outputs, outputDefs: run.wf.outputs, inputs: run.inputs, projectId: run.projectId, mock: run.mock, status: ev.status, from: run.from,
     });
     const blocked = chain.blockedReason({ status: ev.status, outputs: prev.outputs, outputDefs: prev.outputDefs, mock: prev.mock });
     if (blocked) { pause(prev, blocked); return; }
@@ -87,15 +91,19 @@ module.exports = (ctx) => {
     }
   }
 
-  // Start workflow X: its inputs from the previous run's outputs; the produced issues stay linked.
+  // Start workflow X: its inputs from the previous run's outputs; the produced issues stay linked. A
+  // saved pipeline's stage (#135) hands the rest of the pipeline to the run it starts, with the
+  // pipeline run's id (its first run's) stamped on it.
   async function startNext(prev, then) {
     const wf = loadWorkflow(ctx.workflowPath(then.workflow).file);
     const inputs = chain.nextInputs(then, prev, wf.inputs);
     const issues = wf.inputs?.issues || wf.inputs?.issue ? backlog.recordedIssues(chain.producedIssues(prev.outputs)) : [];
+    const stamped = chain.withPipelineId(then, then.pipeline?.id || prev.pipelineId || prev.runId);
     const started = await ctx.startWorkflowRun({
       file: then.workflow, inputs, mock: prev.mock, projectId: prev.projectId,
-      issues: issues.length ? issues : null, from: { run_id: prev.runId, workflow: prev.workflow },
-      notices: [{ level: 'info', message: `Started by the chain of run ${prev.runId} (${prev.workflow}).` }],
+      issues: issues.length ? issues : null, then: stamped.then || null,
+      from: { run_id: prev.runId, workflow: prev.workflow, ...(stamped.pipeline ? { pipeline: stamped.pipeline } : {}) },
+      notices: [{ level: 'info', message: `Started by the chain of run ${prev.runId} (${prev.workflow})${stamped.pipeline ? `: stage ${stamped.pipeline.stage + 1} of ${stamped.pipeline.stages} of pipeline "${stamped.pipeline.name}"` : ''}.` }],
     });
     const message = `${wf.metadata?.name || then.workflow} started (${started.runId}).`;
     write(prev.runDir, { state: 'started', reason: message, nextRunId: started.runId });
@@ -201,7 +209,7 @@ module.exports = (ctx) => {
       info,
       prev: previous({
         runId: info.runId, runDir: dir, workflow: info.workflow, file: info.file, outputs: info.outputs, outputDefs,
-        inputs: info.inputs, projectId: info.projectId, mock: info.mock, status: info.status,
+        inputs: info.inputs, projectId: info.projectId, mock: info.mock, status: info.status, from: info.chain?.from,
       }),
     };
   }
@@ -212,12 +220,19 @@ module.exports = (ctx) => {
    * what was dropped). A chain that already went on is final.
    */
   function setRunChain({ runId, then }) {
-    const next = chain.normalizeThen(then);
+    const edited = chain.normalizeThen(then);
+    // an edit of a pipeline's next stage (#135) that keeps its workflow keeps the stages after it
+    const keepRest = (old) => (edited && old?.pipeline && edited.action === old.action && edited.workflow === old.workflow
+      ? { ...edited, pipeline: old.pipeline, ...(old.then ? { then: old.then } : {}) } : edited);
     const run = ctx.liveRun(runId);
-    if (run) return { chain: { then: run.setThen(next), state: next ? 'waiting' : undefined } };
+    if (run) {
+      const next = keepRest(run.then);
+      return { chain: { then: run.setThen(next), state: next ? 'waiting' : undefined } };
+    }
     const { info, prev } = finishedRun(runId);
     if (!info.chain?.then) throw new Error(`Run ${runId} has finished without a chain: start the next workflow by hand.`);
     if (info.chain.state !== 'paused') throw new Error(`The chain of run ${runId} is ${info.chain.state}: it can no longer be changed.`);
+    const next = keepRest(info.chain.then);
     const patch = next ? { then: next, state: 'paused' } : { state: 'dropped', reason: 'Dropped by the owner.' };
     return { chain: write(prev.runDir, patch) };
   }

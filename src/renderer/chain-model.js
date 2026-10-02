@@ -9,6 +9,10 @@
 //   { action: 'queue', workflow: '<file>', inputs } the produced issues are queued (the Backlog's Assign)
 // A source is the name of one of the previous run's declared `outputs:`, or RUN_SOURCE (the previous
 // run itself, for a `type: run` input). Nothing (`action: 'none'`, or no then) is null.
+// A saved pipeline (#135, src/pipelines.js) is the same chain, longer: a `workflow` then carries the
+// rest in its own `then`, and each then of a pipeline its `pipeline: { id, file, name, stage, stages }`
+// (`stage`: the index of the stage it starts; `id`: the pipeline run's, its first run's id). The runs
+// it starts get it in `from.pipeline`.
 // Any load order: read only when a screen draws or an event comes in.
 (function (root) {
   const ACTIONS = ['none', 'workflow', 'product_owner', 'queue'];
@@ -25,24 +29,56 @@
   const TEXT_INPUTS = ['task', 'prompt', 'request'];
   const TEXT_SOURCES = ['document', 'issues', 'issue', 'findings'];
 
+  // the most stages a chain carries (a pipeline nests one then per stage)
+  const MAX_DEPTH = 20;
+
   const plain = (v) => v && typeof v === 'object' && !Array.isArray(v);
   const fileOf = (w) => String(w || '').split(/[\\/]/).pop();
 
+  /** A then's or a run's pipeline ({ id, file, name, stage, stages }), or null when it has none. */
+  function normalizePipeline(p) {
+    if (!plain(p) || !p.file) return null;
+    const out = { file: fileOf(p.file), name: String(p.name || fileOf(p.file)), stage: Math.max(0, Number(p.stage) || 0), stages: Math.max(0, Number(p.stages) || 0) };
+    return p.id ? { id: String(p.id), ...out } : out;
+  }
+
   /** A then as given (UI, YAML gate choice, API) → its normalized form, or null for nothing. Throws on a bad one. */
-  function normalizeThen(then) {
+  function normalizeThen(then, depth = 0) {
     if (then == null || then === '' || then === 'none') return null;
     if (!plain(then)) throw new Error('then must be an object with an action.');
+    if (depth >= MAX_DEPTH) throw new Error(`A chain carries at most ${MAX_DEPTH} stages.`);
     const action = then.action || 'none';
     if (!ACTIONS.includes(action)) throw new Error(`then.action must be one of ${ACTIONS.join(', ')}.`);
     if (action === 'none') return null;
-    if (action === 'product_owner') return { action };
+    const pipeline = normalizePipeline(then.pipeline);
+    const withPipeline = (t) => (pipeline ? { ...t, pipeline } : t);
+    if (action === 'product_owner') return withPipeline({ action });
     const workflow = fileOf(then.workflow);
     if (!workflow) throw new Error(`then: "${action}" needs a workflow.`);
     const inputs = plain(then.inputs) ? { ...then.inputs } : {};
-    if (action === 'queue') return { action, workflow, inputs };
+    if (action === 'queue') return withPipeline({ action, workflow, inputs });
     const map = {};
     for (const [k, v] of Object.entries(plain(then.map) ? then.map : {})) if (v) map[k] = String(v);
-    return { action, workflow, map, inputs };
+    const rest = normalizeThen(then.then, depth + 1);
+    return { ...withPipeline({ action, workflow, map, inputs }), ...(rest ? { then: rest } : {}) };
+  }
+
+  /** The then with the pipeline run's id stamped on it and on the rest of the chain it carries. */
+  function withPipelineId(then, id) {
+    if (!then || !then.pipeline || !id) return then;
+    return { ...then, pipeline: { ...then.pipeline, id: then.pipeline.id || String(id) }, ...(then.then ? { then: withPipelineId(then.then, id) } : {}) };
+  }
+
+  /**
+   * The pipeline a run belongs to (#135), from its chain: the one that started it (`from.pipeline`),
+   * else, for a pipeline's first run, its then's (stage 1 → this run is stage 0, its id the run's).
+   */
+  function pipelineOf(chain, runId) {
+    const from = normalizePipeline(chain?.from?.pipeline);
+    if (from) return from;
+    const p = normalizePipeline(chain?.then?.pipeline);
+    if (p && p.stage === 1) return { ...p, id: p.id || (runId ? String(runId) : undefined), stage: 0 };
+    return null;
   }
 
   /**
@@ -161,9 +197,10 @@
     return '';
   }
 
-  /** The workflows a then runs after the first one (file names; the PO adds roadmap items, it starts none). */
-  function chainWorkflows(then) {
-    return then && (then.action === 'workflow' || then.action === 'queue') ? [then.workflow] : [];
+  /** The workflows a then runs after the first one (file names; the PO adds roadmap items, it starts none), a pipeline's rest included. */
+  function chainWorkflows(then, depth = 0) {
+    if (!then || depth >= MAX_DEPTH || (then.action !== 'workflow' && then.action !== 'queue')) return [];
+    return [then.workflow, ...chainWorkflows(then.then, depth + 1)];
   }
 
   /**
@@ -222,6 +259,8 @@
   function chainBadgesHtml(chain) {
     if (!chain) return '';
     const out = [];
+    const pipe = pipelineOf(chain);
+    if (pipe) out.push(`<span class="badge chain-badge pipe" title="${esc(`Pipeline ${pipe.name} (${pipe.file})${pipe.id ? `\npipeline run: ${pipe.id}` : ''}`)}">⛓ ${esc(pipe.name)}${pipe.stages ? ` · ${pipe.stage + 1}/${pipe.stages}` : ''}</span>`);
     if (chain.then) {
       const state = chain.state && chain.state !== 'waiting' ? ` · ${CHAIN_STATES[chain.state] || chain.state}` : '';
       const tip = [`When it finishes: ${ACTION_LABELS[chain.then.action] || chain.then.action}`, chain.then.workflow ? fileOf(chain.then.workflow) : '', chain.reason || '', chain.nextRunId ? `next run: ${chain.nextRunId}` : ''].filter(Boolean).join('\n');
@@ -247,10 +286,35 @@
     return { ...(chain || {}), then: then || null, state: then ? 'waiting' : undefined };
   }
 
+  const STAGE_TARGETS = { product_owner: 'Product Owner (roadmap)', queue: 'Queue (Backlog)' };
+  const STATUS_PILLS = ['cancelled', 'failed', 'interrupted', 'running', 'success'];
+
+  /**
+   * A pipeline's stages as a strip (#135): the Start drawer and the Assign dialog before it starts
+   * (each arrow with its mapping), the Run screen once it runs (each stage's run and its status).
+   * @param {{ stages: { workflow?: string, target?: string, map?: object, inputs?: object }[] }} p
+   * @param {{ names?: object, runs?: ({ runId?: string, status?: string }|null)[], current?: number }} opts
+   *   names: workflow file → its name; runs: per stage, the run (a link) and its status
+   */
+  function pipelineStagesHtml(p, { names = {}, runs = null, current = -1 } = {}) {
+    const stages = p?.stages || [];
+    return `<ol class="pipe-strip">${stages.map((s, i) => {
+      const label = s.target && s.target !== 'workflow' && s.target !== 'queue' ? STAGE_TARGETS[s.target] : `${s.target === 'queue' ? 'Queue for ' : ''}${names[s.workflow] || fileOf(s.workflow).replace(/\.ya?ml$/i, '')}`;
+      const map = i ? Object.entries(s.map || {}).map(([input, output]) => `<span class="badge" title="${esc(`Input "${input}" ← output "${output}" of the previous stage`)}">${esc(output === RUN_SOURCE ? 'the run' : output)} → ${esc(input)}</span>`).join('') : '';
+      const fixed = Object.entries(s.inputs || {}).map(([k, v]) => `${k}: ${typeof v === 'object' ? JSON.stringify(v) : v}`).join('\n');
+      const run = runs?.[i];
+      const status = run?.status && STATUS_PILLS.includes(run.status) ? run.status : run ? 'idle' : '';
+      const pill = run ? `<span class="pill pill-${status}">${esc(run.status || 'queued')}</span>` : '';
+      const head = run?.runId ? `<button type="button" class="link-btn pipe-stage-name" data-run-link="${esc(run.runId)}" title="${esc(`Open run ${run.runId}`)}">${esc(label)}</button>` : `<span class="pipe-stage-name" title="${esc(s.workflow || label)}">${esc(label)}</span>`;
+      return `${i ? `<li class="pipe-arrow" aria-hidden="true">→${map ? `<span class="pipe-map">${map}</span>` : ''}</li>` : ''}<li class="pipe-stage${i === current ? ' current' : ''}"${fixed ? ` title="${esc(`Fixed inputs:\n${fixed}`)}"` : ''}><span class="pipe-stage-n">${i + 1}</span>${head}${pill}</li>`;
+    }).join('')}</ol>`;
+  }
+
   const api = {
     ACTION_LABELS,
     ACTIONS,
     CHAIN_STATES,
+    MAX_DEPTH,
     RUN_SOURCE,
     blockedReason,
     chainBadgesHtml,
@@ -260,11 +324,15 @@
     estimateCost,
     estimateText,
     nextInputs,
+    normalizePipeline,
     normalizeThen,
+    pipelineOf,
+    pipelineStagesHtml,
     producedIssues,
     queueBatches,
     runChain,
     thenLabel,
+    withPipelineId,
     withThen,
   };
   if (typeof module === 'object' && module.exports) module.exports = api;

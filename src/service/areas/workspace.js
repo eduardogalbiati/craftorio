@@ -6,6 +6,7 @@
 const fs = require('fs');
 const path = require('path');
 const backlog = require('../../backlog');
+const pipelines = require('../../pipelines');
 const skills = require('../../skills');
 const workflows = require('../../workflows');
 const { BUNDLED_SKILLS_DIR, BUNDLED_WORKFLOWS_DIR } = require('../common');
@@ -18,10 +19,11 @@ module.exports = (ctx) => {
     return ws;
   };
 
-  // Copies/updates the bundled skills and workflows into the workspace.
+  // Copies/updates the bundled skills, workflows and pipelines (#135) into the workspace.
   function seedDefaults() {
     try { skills.seedSkills(BUNDLED_SKILLS_DIR, ws.skills); } catch (e) { console.error('skill seeding:', e); }
     try { workflows.seedWorkflows(BUNDLED_WORKFLOWS_DIR, ws.workflows); } catch (e) { console.error('workflow seeding:', e); }
+    try { pipelines.seedPipelines(pipelines.BUNDLED_PIPELINES_DIR, ws.pipelines); } catch (e) { console.error('pipeline seeding:', e); }
   }
 
   function setWorkspace(next) {

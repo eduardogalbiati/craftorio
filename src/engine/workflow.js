@@ -588,7 +588,8 @@ class WorkflowRun extends EventEmitter {
   //   step whose prompt uses that input (stepAttachments). A resume passes the previous run's copies.
   // then: what happens with the run's result when it finishes (#134, src/renderer/chain-model.js), recorded in
   //   workflow.started and summary.json; a gate choice with `then` or the owner (setThen) can change it while it runs.
-  // from: { run_id, workflow } the run whose chain started this one (workflow.started.from, summary.from).
+  // from: { run_id, workflow, pipeline? } the run whose chain started this one (workflow.started.from,
+  //   summary.from); `pipeline` when a saved pipeline's stage (#135, chain-model normalizePipeline).
   constructor({ file, inputs, mock, runsDir, skillsDirs, budget, prices, projectId, issues, issue, resume, worktreesDir, mockSequences, notices, stopProcesses, probe, actionsQuota, peerSessions, idleWarnMs, personas, localPreview, attachments, then, from }) {
     super();
     refreshWindowsPath(); // actions (e.g. gh pr merge) need the refreshed PATH
@@ -603,7 +604,8 @@ class WorkflowRun extends EventEmitter {
     this.projectId = projectId || null;
     this.issues = issues?.length ? issues : issue ? [issue] : null;
     this.then = chain.normalizeThen(then);
-    this.from = from?.run_id ? { run_id: String(from.run_id), workflow: from.workflow ? String(from.workflow) : undefined } : null;
+    const pipeline = chain.normalizePipeline(from?.pipeline);
+    this.from = from?.run_id ? { run_id: String(from.run_id), workflow: from.workflow ? String(from.workflow) : undefined, ...(pipeline ? { pipeline } : {}) } : null;
     this.worktreesDir = worktreesDir || null;
     this.worktree = null; // see setupWorktree
     this.stopProcesses = stopProcesses === undefined ? (this.mock ? null : stopProcessesIn) : stopProcesses;

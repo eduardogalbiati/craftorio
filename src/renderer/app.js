@@ -909,7 +909,7 @@ function renderHeader() {
   $('#btn-stop').title = st === 'running' ? `Stop ${runLabel(r)} (only this run)` : '';
   const blocked = oneRunAtATime();
   setStartDisabled(blocked || !state.wf || !!state.wf.error);
-  $('#btn-start').textContent = blocked ? 'A workflow is already running' : 'Start workflow';
+  $('#btn-start').textContent = blocked ? 'A workflow is already running' : state.pipeline ? 'Start pipeline' : 'Start workflow';
   if (state.view === 'dashboard') renderDashboard();
 }
 

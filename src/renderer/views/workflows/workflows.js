@@ -207,27 +207,34 @@ function workflowCard(w) {
     </article>`;
 }
 
-// A pipeline (#135): its workflows connected, each arrow with the outputs it maps and its condition.
+// A pipeline (#135): its workflows connected, each arrow with the outputs it maps into the next
+// workflow's inputs (map: { input: output }) and its condition; a Product Owner or queue stage ends it.
 function pipelineCard(p) {
   const stages = p.stages.map((s, i) => {
-    const w = wfByFile(s.workflow);
-    const map = Object.entries(s.map || {}).map(([from, to]) => `<span class="badge" title="${esc(`Output "${from}" of the previous workflow → input "${to}"`)}">${esc(from)} → ${esc(to)}</span>`).join('');
-    const link = i ? `<div class="wf-link"><span class="wf-link-arrow" aria-hidden="true">→</span>${map}<span class="muted small">on ${esc(s.when || 'success')}</span></div>` : '';
-    return `${link}<button class="wf-stage" data-goto="${esc(s.workflow)}" title="${esc(w ? `${w.name} (${s.workflow})` : `${s.workflow}: not in the workflows folder`)}">
-      <b>${esc(w?.name || s.workflow)}</b>
+    const w = s.workflow ? wfByFile(s.workflow) : null;
+    const map = Object.entries(s.map || {}).map(([input, output]) => `<span class="badge" title="${esc(`Output "${output}" of the previous workflow → input "${input}"`)}">${esc(output === '@run' ? 'the run' : output)} → ${esc(input)}</span>`).join('');
+    const link = i ? `<div class="wf-link"><span class="wf-link-arrow" aria-hidden="true">→</span>${map}<span class="muted small">on ${esc(s.on || s.when || 'success')}</span></div>` : '';
+    if (s.target === 'product_owner') {
+      return `${link}<span class="wf-stage wf-stage-target" title="The Product Owner places the produced issues in the project's roadmap as planned stages"><b>Product Owner</b><span class="badge">roadmap</span></span>`;
+    }
+    return `${link}<button class="wf-stage" data-goto="${esc(s.workflow)}" title="${esc(w ? `${s.target === 'queue' ? 'The produced issues are queued for ' : ''}${w.name} (${s.workflow})` : `${s.workflow}: not in the workflows folder`)}">
+      <b>${s.target === 'queue' ? 'Queue: ' : ''}${esc(w?.name || s.workflow)}</b>
       ${w ? `<span class="badge cat-${esc(wfSectionOf(w.category))}">${esc(wfSectionName(wfSectionOf(w.category)))}</span>` : '<span class="badge warn">missing</span>'}
     </button>`;
   }).join('');
   return `
-    <article class="wf-pipe" data-pipe="${esc(p.file)}" data-files="${esc(p.stages.map((s) => s.workflow).join('|'))}" tabindex="-1">
+    <article class="wf-pipe" data-pipe="${esc(p.file)}" data-files="${esc(p.stages.map((s) => s.workflow || '').join('|'))}" tabindex="-1">
       <div class="wf-pipe-head">
         <span class="badge">pipeline</span>
         <h3 title="${esc(p.name)}">${esc(p.name)}</h3>
         <span class="muted small wf-desc" title="${esc(p.error ? `Error: ${p.error}` : p.description || '')}">${esc(p.error ? `Error: ${p.error}` : p.description || '')}</span>
         <span class="spacer"></span>
+        ${p.origin ? originBadge(p) : ''}
         <span class="badge mono wf-file" title="${esc(p.file)}">${esc(p.file)}</span>
-        <button class="btn primary sm" data-run-pipe ${p.error || !wfByFile(p.stages[0]?.workflow) ? 'disabled' : ''} title="${esc(api.runPipeline ? 'Run every stage, each fed by the previous one' : 'Opens the Start drawer on its first workflow')}">Run pipeline</button>
+        ${p.restorable ? '<button class="btn ghost sm" data-restore-pipe title="Move your edited copy to the trash and use the default bundled with the app">Restore default</button>' : ''}
+        <button class="btn primary sm" data-run-pipe ${p.error || !wfByFile(p.stages[0]?.workflow) ? 'disabled' : ''} title="Opens the Start drawer on the pipeline: it asks for the first stage's inputs, then runs every stage, each fed by the previous one">Run pipeline</button>
       </div>
+      ${p.error ? `<p class="error small wf-pipe-error">${esc(p.error)}</p>` : ''}
       ${stages ? `<div class="wf-pipe-stages">${stages}</div>` : ''}
     </article>`;
 }
@@ -251,10 +258,16 @@ function wireWorkflowDefinitions(box) {
   }));
   box.querySelectorAll('[data-goto-pipe]').forEach((b) => (b.onclick = () => focus(box.querySelector(`.wf-pipe[data-pipe="${CSS.escape(b.dataset.gotoPipe)}"]`))));
   box.querySelectorAll('[data-goto]').forEach((b) => (b.onclick = () => focus(box.querySelector(`.wf-card[data-file="${CSS.escape(b.dataset.goto)}"]`))));
-  box.querySelectorAll('[data-run-pipe]').forEach((b) => (b.onclick = async () => {
+  // the Start drawer on the pipeline (#135): it asks for the first stage's inputs, then runPipeline
+  box.querySelectorAll('[data-run-pipe]').forEach((b) => (b.onclick = () => {
     const p = wfDefs.pipelines.find((x) => x.file === b.closest('.wf-pipe').dataset.pipe);
-    if (!api.runPipeline) return openDrawer({ workflow: p.stages[0].workflow });
-    try { await api.runPipeline(p.file); } catch (e) { showToast('Pipeline failed to start', errMsg(e)); }
+    return api.runPipeline ? openDrawer({ pipeline: p.file }) : openDrawer({ workflow: p.stages[0].workflow });
+  }));
+  box.querySelectorAll('[data-restore-pipe]').forEach((b) => (b.onclick = async () => {
+    const file = b.closest('.wf-pipe').dataset.pipe;
+    if (!(await confirmDialog('Restore default', `Move your edited "${file}" to the trash and restore the pipeline bundled with the app?`, 'Restore'))) return;
+    try { await api.restorePipeline(file); } catch (e) { showToast('Restore failed', errMsg(e)); }
+    refreshWorkflows();
   }));
   // hovering a workflow lights up its pipelines, hovering a pipeline (or a "Used in" link) its workflows
   const light = (on, files, pipes) => {

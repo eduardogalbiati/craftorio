@@ -49,5 +49,9 @@
 .wf-stage { font: inherit; color: inherit; cursor: pointer; display: grid; gap: 4px; justify-items: start; padding: 8px 12px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; min-width: 150px; }
 .wf-stage:hover { border-color: rgba(124,156,255,.45); }
 .wf-stage:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* a stage that ends a pipeline (#135): the Product Owner places the issues, nothing to open */
+.wf-stage.wf-stage-target { cursor: default; border-style: dashed; }
+.wf-stage.wf-stage-target:hover { border-color: var(--border); }
+.wf-pipe-error { margin: 4px 0 0; }
 .wf-link { display: flex; align-items: center; gap: 5px; }
 .wf-link-arrow { color: var(--accent); font-size: 18px; line-height: 1; }

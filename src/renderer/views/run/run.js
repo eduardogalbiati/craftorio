@@ -251,7 +251,22 @@ function renderRunBanner() {
 // goes (or "+ When it finishes" to add one), Resume / Edit / Drop when it paused. Edit opens the
 // ChainPicker (chain-picker.js) in the banner with Save / Cancel. A finished run's chain is read
 // from the service (api.runChain) a moment after it ends: the service acts on it then.
-const chainUi = { editing: null, picker: null, busy: false, error: '', workflows: null };
+// A saved pipeline's run (#135) also shows the pipeline: each stage with its run and status
+// (api.pipelineRun, read again when the run's status or chain changes). A chain set up by hand can
+// be saved as a pipeline ("Save as pipeline": name, category, description, then Save / Cancel).
+const chainUi = { editing: null, picker: null, busy: false, error: '', workflows: null, savingPipe: null, savedPipe: null, pipes: new Map() };
+const PIPE_CATEGORIES = [['build', 'Build'], ['plan', 'Plan'], ['monitor', 'Monitor']];
+
+// The pipeline run a run belongs to, read once per run status and chain state.
+function pipelineRunOf(r, pipe) {
+  const key = JSON.stringify([pipe.id, r.status, r.chain?.state, r.chain?.nextRunId]);
+  const got = chainUi.pipes.get(pipe.id);
+  if (got?.key === key || typeof api.pipelineRun !== 'function') return got?.info || null;
+  chainUi.pipes.set(pipe.id, { key, info: got?.info || null });
+  api.pipelineRun(pipe.id).then((info) => { chainUi.pipes.set(pipe.id, { key, info }); renderChainBanner(); }).catch(() => {});
+  return got?.info || null;
+}
+
 function renderChainBanner() {
   const v = selectedView();
   const r = v.run;
@@ -265,18 +280,27 @@ function renderChainBanner() {
   const c = r.chain;
   const running = r.status === 'running';
   const editing = chainUi.editing === r.id;
+  const savingPipe = chainUi.savingPipe === r.id;
   const show = !!(c?.then || c?.from) || editing || running;
   box.classList.toggle('hidden', !show);
   if (!show) return;
-  const key = JSON.stringify([r.id, r.status, c, editing, chainUi.busy, chainUi.error]);
+  const pipe = c ? ChainModel.pipelineOf(c, r.id) : null;
+  const pipeRun = pipe?.id ? pipelineRunOf(r, pipe) : null;
+  const saved = chainUi.savedPipe?.runId === r.id ? chainUi.savedPipe : null;
+  const key = JSON.stringify([r.id, r.status, c, editing, savingPipe, saved, pipeRun, chainUi.busy, chainUi.error]);
   if (box.dataset.key === key) return;
   box.dataset.key = key;
   const then = c?.then || null;
   const btn = (act, label, cls = 'ghost') => `<button type="button" class="btn sm ${cls}" data-chain="${act}"${chainUi.busy ? ' disabled' : ''}>${esc(label)}</button>`;
+  // a chain set up by hand (not already a pipeline's) can be saved as a pipeline
+  const savePipe = then && !pipe && !savingPipe && !saved && typeof api.savePipeline === 'function'
+    ? '<button type="button" class="link-btn small" data-chain="save-pipe-open" title="Save this run\'s workflow and its chain as a pipeline you can start like a workflow">Save as pipeline</button>' : '';
   let actions = '';
   let text = '';
   if (editing) {
     actions = `${btn('cancel-edit', 'Cancel')}${btn('save', 'Save', 'primary')}`;
+  } else if (savingPipe) {
+    actions = `${btn('cancel-pipe', 'Cancel')}${btn('save-pipe', 'Save pipeline', 'primary')}`;
   } else if (running) {
     actions = then ? `${btn('edit', 'Edit')}${btn('clear', 'Cancel chain')}` : '<button type="button" class="link-btn small" data-chain="edit">+ When it finishes…</button>';
     if (then) text = 'Starts only if this run succeeds. Its gates still wait for you.';
@@ -288,13 +312,28 @@ function renderChainBanner() {
     if (c.nextRunId) actions = `<button type="button" class="link-btn small" data-run-link="${esc(c.nextRunId)}">Open the next run</button>`;
   }
   const badges = c ? ChainModel.chainBadgesHtml(c) : '';
+  const names = Object.fromEntries((chainUi.workflows || []).map((w) => [w.file, w.name]));
+  const strip = pipeRun ? `<div class="chain-banner-pipe"><span class="muted small">Pipeline <b>${esc(pipeRun.name)}</b>${pipeRun.state === 'paused' ? ' · <span class="warn-text">paused</span>' : ''}</span>
+      ${ChainModel.pipelineStagesHtml(pipeRun, { names, runs: pipeRun.runs, current: pipe.stage })}</div>` : '';
+  // what the owner typed survives a redraw (busy, an error)
+  const draft = chainUi.pipeDraft?.runId === r.id ? chainUi.pipeDraft : { name: then ? `${r.workflow || 'Run'} → ${ChainModel.thenLabel(then)}` : '', category: 'build', description: '' };
+  const pipeForm = savingPipe ? `<div class="chain-banner-edit pipe-save-form">
+      <div class="field"><label for="pipe-save-name">Name</label><input type="text" id="pipe-save-name" value="${esc(draft.name)}" spellcheck="false" /></div>
+      <div class="field"><label for="pipe-save-category">Category</label><select id="pipe-save-category">${PIPE_CATEGORIES.map(([v, l]) => `<option value="${v}"${v === draft.category ? ' selected' : ''}>${l}</option>`).join('')}</select></div>
+      <div class="field pipe-save-desc"><label for="pipe-save-description">Description</label><input type="text" id="pipe-save-description" value="${esc(draft.description)}" placeholder="What the pipeline does (shown when you start it)" /></div>
+      <p class="hint">Saved in the workspace's pipelines folder: this run's workflow, then each step of its chain with its mapping. Start it from the Start drawer or Workflows › Definitions.</p>
+    </div>` : '';
+  if (saved) text = `Saved as the pipeline "${saved.name}" (${saved.file}).`;
   box.innerHTML = `<div class="chain-banner-head">
       <span class="chain-banner-title">${then || editing ? 'When it finishes' : 'Chain'}</span>${badges}
       ${text ? `<span class="muted small chain-banner-text" title="${esc(text)}">${esc(text)}</span>` : ''}
-      <span class="spacer"></span>${actions}
+      <span class="spacer"></span>${savePipe}${actions}
     </div>
+    ${strip}
     ${editing ? '<div class="chain-banner-edit" data-chain-picker></div>' : ''}
+    ${pipeForm}
     ${chainUi.error ? `<p class="error small">${esc(chainUi.error)}</p>` : ''}`;
+  if (savingPipe) box.querySelector('#pipe-save-name').focus();
   if (editing) {
     const source = () => (chainUi.workflows || []).find((w) => w.name === r.workflow || w.file === r.file) || null;
     chainUi.picker = ChainPicker.mount(box.querySelector('[data-chain-picker]'), { workflows: () => chainUi.workflows || [], source, value: then });
@@ -316,10 +355,20 @@ async function onChainBannerClick(e) {
     return;
   }
   if (act === 'cancel-edit') { chainUi.editing = null; renderChainBanner(); return; }
+  if (act === 'save-pipe-open') { chainUi.savingPipe = r.id; chainUi.editing = null; renderChainBanner(); return; }
+  if (act === 'cancel-pipe') { chainUi.savingPipe = null; chainUi.pipeDraft = null; renderChainBanner(); return; }
+  // the form's values before the banner redraws as busy
+  const form = act === 'save-pipe' ? { runId: r.id, name: $('#pipe-save-name').value, category: $('#pipe-save-category').value, description: $('#pipe-save-description').value } : null;
+  if (form) chainUi.pipeDraft = form;
   chainUi.busy = true;
   renderChainBanner();
   try {
-    if (act === 'save' || act === 'clear') {
+    if (act === 'save-pipe') {
+      const out = await api.savePipeline(r.id, form.name, form.description, form.category);
+      chainUi.savedPipe = { runId: r.id, ...out };
+      chainUi.savingPipe = null;
+      chainUi.pipeDraft = null;
+    } else if (act === 'save' || act === 'clear') {
       const out = await api.setRunChain(r.id, act === 'save' ? chainUi.picker?.value() || null : null);
       r.chain = { ...(r.chain || {}), ...(out?.chain || {}), from: r.chain?.from || null };
       chainUi.editing = null;

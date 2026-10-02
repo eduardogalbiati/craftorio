@@ -222,9 +222,15 @@
 
   // The workflow's inputs (WorkflowInputs, #116): human labels, pills / switches, show_if; the values
   // remembered for this project and workflow, else the project's detected language and default branch.
+  // A saved pipeline (#135) is an option `pipe:<file>`: its first workflow receives the issues (its
+  // inputs drawn here, its fixed ones set), the rest of the pipeline follows each run instead of
+  // "When it finishes".
+  const PIPE = 'pipe:';
+  const assignPipeline = () => (bl.pipelines || []).find((p) => PIPE + p.file === $b('#assign-workflow').value) || null;
   function renderAssignInputs() {
-    const wf = bl.workflows.find((w) => w.file === $b('#assign-workflow').value);
-    const about = wf?.description || '';
+    const pipe = assignPipeline();
+    const wf = bl.workflows.find((w) => w.file === (pipe ? pipe.stages[0].workflow : $b('#assign-workflow').value));
+    const about = (pipe ? pipe.description : wf?.description) || '';
     $b('#assign-wf-desc').textContent = firstSentence(about);
     $b('#assign-wf-desc').title = about;
     $b('#assign-wf-about-text').textContent = about;
@@ -235,7 +241,20 @@
     box.innerHTML = WorkflowInputs.formHtml(defs, { values: saved, id: (k) => `ai-${k}`, attrs: (k) => `data-input="${esc(k)}"` });
     $b('#assign-settings').classList.toggle('hidden', !Object.keys(defs).length);
     WorkflowInputs.applyHints(box, defs, bl.projectId, { keep: Object.keys(saved) });
+    for (const [k, v] of Object.entries(pipe?.stages[0].inputs || {})) if (defs[k]) WorkflowInputs.set(box, k, v);
     assignChain().refresh();
+    $b('#assign-chain').classList.toggle('hidden', !!pipe);
+    const strip = $b('#assign-pipeline');
+    strip.classList.toggle('hidden', !pipe);
+    strip.innerHTML = pipe ? `<div class="drawer-pipeline-head"><span class="chain-banner-title">Pipeline</span><span class="badge">${pipe.stages.length} stages</span></div>
+      ${ChainModel.pipelineStagesHtml(pipe, { names: Object.fromEntries((bl.chainWorkflows || []).map((w) => [w.file, w.name])), current: 0 })}
+      <p class="hint">Each issue's run is the first stage; the next stages follow it when it succeeds. A failed or stopped stage pauses its pipeline.</p>` : '';
+    // a roadmap stage runs one workflow: a pipeline is assigned, not planned
+    const toRoadmap = $b('#btn-assign-roadmap');
+    if (toRoadmap) {
+      toRoadmap.disabled = !!pipe;
+      toRoadmap.title = pipe ? 'A roadmap stage runs one workflow: assign the pipeline instead' : 'Plan it instead: a new stage at the end of the roadmap, started with the roadmap';
+    }
     updateAssignNote();
   }
   // The dialog's "When it finishes" (#134): every workflow can follow, not only those with a task.
@@ -305,14 +324,20 @@
     try {
       bl.chainWorkflows = (await api.listWorkflows()).filter((w) => !w.error);
       bl.workflows = bl.chainWorkflows.filter((w) => w.inputs?.task);
+      // the pipelines whose first workflow can receive the issues (#135)
+      const pipes = api.listPipelines ? await api.listPipelines().catch(() => []) : [];
+      bl.pipelines = pipes.filter((p) => !p.error && bl.workflows.some((w) => w.file === p.stages[0]?.workflow));
     } catch (e) { bl.error = errMsg(e); render(); return; }
     if (!bl.workflows.length) { bl.error = 'No workflow has a task input to receive the issues.'; render(); return; }
     // in the order selected (the order the runs start, or the order of a group's task)
     const issues = shownSelected().map((n) => (bl.data?.issues || []).find((i) => i.number === n)).filter(Boolean);
     $b('#assign-issues').innerHTML = issues.map((i) => `<li title="${esc(`#${i.number} ${i.title}`)}"><span class="num">#${i.number}</span><span class="title">${esc(i.title)}</span></li>`).join('');
     const sel = $b('#assign-workflow');
-    sel.innerHTML = bl.workflows.map((w) => `<option value="${esc(w.file)}">${esc(w.name)}</option>`).join('');
-    const files = bl.workflows.map((w) => w.file);
+    const options = bl.workflows.map((w) => `<option value="${esc(w.file)}">${esc(w.name)}</option>`).join('');
+    sel.innerHTML = bl.pipelines.length
+      ? `<optgroup label="Workflows">${options}</optgroup><optgroup label="Pipelines">${bl.pipelines.map((p) => `<option value="${esc(PIPE + p.file)}">⛓ ${esc(p.name)}</option>`).join('')}</optgroup>`
+      : options;
+    const files = [...bl.workflows.map((w) => w.file), ...bl.pipelines.map((p) => PIPE + p.file)];
     sel.value = [prefill?.workflow, load(WORKFLOW_KEY), 'software-development.yaml', files[0]].find((f) => f && files.includes(f));
     // real runs by default: Simulation is opt-in (checked only where real runs are refused anyway)
     $b('#assign-mock').checked = !!state.simulationOnly;
@@ -381,7 +406,9 @@
   const planned = (numbers) => (bl.data?.issues || []).filter((i) => numbers.includes(i.number) && ['planned', 'failed'].includes(i.roadmap?.status));
   async function submitAssign(e) {
     e.preventDefault();
-    const workflow = $b('#assign-workflow').value;
+    const choice = $b('#assign-workflow').value;
+    const pipe = assignPipeline();
+    const workflow = pipe ? pipe.stages[0].workflow : choice;
     const inputs = assignInputs();
     const numbers = assignNumbers();
     if (!numbers.length) return;
@@ -391,16 +418,18 @@
     btn.disabled = true;
     try {
       const mock = wantsSimulation($b('#assign-mock'));
-      const then = assignChain().value();
-      let data = await api.assignWorkflow(bl.projectId, numbers, workflow, inputs, mock, grouped(), false, then);
+      // a pipeline's chain is the service's (pipeline: its file), not the dialog's "When it finishes"
+      const then = pipe ? null : assignChain().value();
+      const pipeline = pipe?.file || null;
+      let data = await api.assignWorkflow(bl.projectId, numbers, workflow, inputs, mock, grouped(), false, then, pipeline);
       // an ended run kept work for these issues (#170): resume that run, or start from scratch
       if (data?.kept) {
-        const choice = await keptWorkDialog(data.kept);
-        if (choice === 'resume') closeModal('#assign-modal');
-        if (choice !== 'scratch') return;
-        data = await api.assignWorkflow(bl.projectId, numbers, workflow, inputs, mock, grouped(), true, then);
+        const kept = await keptWorkDialog(data.kept);
+        if (kept === 'resume') closeModal('#assign-modal');
+        if (kept !== 'scratch') return;
+        data = await api.assignWorkflow(bl.projectId, numbers, workflow, inputs, mock, grouped(), true, then, pipeline);
       }
-      save(WORKFLOW_KEY, workflow);
+      save(WORKFLOW_KEY, choice);
       bl.selected.clear();
       setData(data);
       closeModal('#assign-modal');
@@ -1170,6 +1199,7 @@
           <div id="assign-inputs" class="wi-grid" data-wi-scope></div>
         </fieldset>
         <div id="assign-chain"></div>
+        <div id="assign-pipeline" class="drawer-pipeline hidden"></div>
         <label class="check dev-only"><input type="checkbox" id="assign-mock" /><span>Simulation (no CLI is called, nothing is spent)</span></label>
       </div>
       <div class="assign-foot">

@@ -225,6 +225,18 @@ body:not(.dev-mode) .dev-only { display: none !important; }
 .badge.chain-badge { color: var(--accent); font-family: inherit; white-space: nowrap; }
 .badge.chain-badge.warn { color: var(--yellow); }
 .badge.chain-badge.muted { color: var(--muted); }
+/* a saved pipeline's stages (#135, chain-model pipelineStagesHtml): the Start drawer, the Assign dialog, the Run screen */
+.drawer-pipeline { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel-2); }
+.drawer-pipeline-head { display: flex; align-items: center; gap: 8px; }
+.drawer-pipeline .hint { margin: 0; }
+.pipe-strip { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
+.pipe-stage { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border: 1px solid var(--border); border-radius: 999px; background: var(--panel); font-size: 12px; max-width: 260px; min-width: 0; }
+.pipe-stage.current { border-color: var(--accent); }
+.pipe-stage-n { color: var(--muted); font-variant-numeric: tabular-nums; }
+.pipe-stage-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pipe-stage .pill { flex: none; }
+.pipe-arrow { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); }
+.pipe-map { display: inline-flex; flex-wrap: wrap; gap: 3px; }
 /* "When it finishes" (chain-picker.js): the Start drawer, the Assign dialog, the roadmap item's Edit form */
 .chain-picker { display: flex; flex-direction: column; gap: 6px; }
 .chain-picker .cp-map, .chain-picker .cp-own { padding-left: 10px; border-left: 2px solid var(--border); }

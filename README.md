@@ -684,6 +684,47 @@ local hero `branch`, `merged_commit`, `issues`, `pr_url`; run-retrospective `fin
 lists and the run chat show "→ then: <workflow>" on a chained run. Engine details:
 [docs/agents/engine.md](docs/agents/engine.md#chaining-declared-outputs-and-then-134).
 
+### Pipelines: saved chains
+
+A chain you use again and again can be saved as a **pipeline** and started like a workflow. A
+pipeline is a YAML file in `<workspace>/pipelines/`:
+
+```yaml
+name: RFC → Issues
+description: AI Arena writes an RFC, then the issue tracker files the issues of the final document.
+category: plan            # plan | build | monitor, like workflows
+stages:
+  - workflow: ai-arena.yaml
+    inputs: { document_skill: rfc-writing }   # fixed values; the rest is asked when it starts
+  - workflow: issue-tracker.yaml
+    map: { request: document }               # <input of this workflow>: <output of the previous one>
+    inputs: { mode: validated }
+    on: success                              # the default, and the only condition
+```
+
+- A stage is a workflow, or a **target** that ends the pipeline: `target: product_owner` (the
+  Product Owner places the produced issues in the roadmap) or `target: queue` with a `workflow` (the
+  produced issues are queued on the Backlog). `map` may be left out: the mapping is then the one the
+  Start panel proposes for the pair; `"@run"` hands over the previous run itself (`run_id`).
+- Loading checks every mapping: a pipeline that maps an output the previous workflow doesn't declare
+  (or an input the workflow doesn't have) is refused, with the stage, the workflow and the missing
+  name. Workflows › Definitions shows it with its error.
+- Bundled pipelines, seeded like the workflows (editable, **Restore default** on an edited copy):
+  **Issue → Roadmap** (issue tracker, then the Product Owner), **Enrich → Save → Develop** (Write &
+  Review; accept with "Accept and save to issue" at its gate; then the local hero implements the
+  document), **RFC → Issues** (AI Arena, then the issue tracker) and **Develop → Retrospective**
+  (the local hero, then run-retrospective on that run).
+- **Start one**: the Start panel lists the pipelines after the workflows (⛓), and **Run pipeline** on
+  Workflows › Definitions opens it there. It asks only for the first stage's inputs and shows the
+  whole chain with a rough cost estimate. The Backlog's **Assign** dialog lists the pipelines whose
+  first workflow takes a task: each issue's run starts the pipeline.
+- **A pipeline run** groups its runs under one id (its first run's): each run shows "⛓ <pipeline> ·
+  2/3", and the Run screen's chain banner shows every stage with its run and status. It goes on
+  only after a success; a stage that fails, is cancelled or stops at a gate pauses it, like any
+  chain (Resume / Edit / Drop). Every workflow's gates still wait for you.
+- **Save as pipeline**: on the Run screen, a run whose chain you set up by hand offers **Save as
+  pipeline** (name, category, description): its workflow, then each step of its chain.
+
 ### Resuming a run from a step
 
 A finished, failed, cancelled or interrupted run (e.g. by an app restart) can go on from any step

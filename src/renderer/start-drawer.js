@@ -7,21 +7,31 @@
 // inputs other than the main one are drawn by WorkflowInputs (workflow-inputs.js, #116): human
 // labels, pills / switches, show_if, and the chosen project's detected language and branches.
 // "When it finishes" (#134) is the ChainPicker (chain-picker.js) under the inputs: its then goes with the start.
+// Saved pipelines (#135) are listed after the workflows (option value `pipe:<file>`): picking one
+// asks for its first stage's inputs (its fixed ones set), shows the whole chain with a cost estimate
+// instead of the ChainPicker, and Start calls api.runPipeline.
 
 const LS_KEY = 'multiagent.inputs';
+const PIPE = 'pipe:';
 // Inputs filled with the chosen project's folder.
 const isPathInput = (key) => /path|dir/i.test(key);
+// The select's value for what is chosen: a workflow file, or `pipe:<file>` for a pipeline.
+const drawerChoice = () => (state.pipeline ? `${PIPE}${state.pipeline.file}` : state.wf?.file);
 
 // Right drawer: start workflow
 // `inputs` prefills fields of the picked workflow (e.g. the Backlog's New issue sets git_platform).
-async function openDrawer({ category = null, workflow = null, project = null, inputs = null } = {}) {
+// `pipeline`: a saved pipeline's file to start (Workflows › Definitions' Run pipeline).
+async function openDrawer({ category = null, workflow = null, project = null, inputs = null, pipeline = null } = {}) {
   state.category = category;
   state.pendingProject = project;
-  [state.workflows, state.projects, state.settings] = await Promise.all([api.listWorkflows(), api.listProjects(), api.getSettings()]);
+  [state.workflows, state.projects, state.settings, state.pipelines] = await Promise.all([
+    api.listWorkflows(), api.listProjects(), api.getSettings(),
+    (api.listPipelines ? api.listPipelines() : Promise.resolve([])).catch(() => []),
+  ]);
   applyDeveloperMode();
   $('#start-error').textContent = '';
   renderDrawerCategories();
-  renderWorkflowOptions(workflow || state.settings.lastWorkflow);
+  renderWorkflowOptions(pipeline ? `${PIPE}${pipeline}` : workflow || state.settings.lastWorkflow);
   if (inputs && (!workflow || state.wf?.file === workflow)) {
     for (const [k, v] of Object.entries(inputs)) WorkflowInputs.set($('#drawer'), k, v);
   }
@@ -57,17 +67,26 @@ function renderDrawerCategories() {
   $('#drawer-categories').querySelectorAll('.chip').forEach((c) => (c.onclick = () => {
     state.category = c.dataset.cat || null;
     renderDrawerCategories();
-    renderWorkflowOptions(state.wf?.file);
+    renderWorkflowOptions(drawerChoice());
   }));
 }
 
+// The pipelines that can start here: loaded without error, their first workflow in the list.
+const startablePipelines = () => (state.pipelines || []).filter((p) => !p.error && state.workflows.some((w) => w.file === p.stages[0]?.workflow && !w.error));
+
 function renderWorkflowOptions(preferred) {
   const list = state.workflows.filter((w) => !state.category || w.category === state.category);
+  const pipes = startablePipelines().filter((p) => !state.category || p.category === state.category);
   const sel = $('#wf-select');
-  sel.disabled = !list.length;
-  sel.innerHTML = list.map((w) => `<option value="${esc(w.file)}">${esc(w.name)}${w.version ? ' v' + esc(w.version) : ''}${w.error ? ' (error)' : ''}</option>`).join('');
-  if (!list.length) {
+  sel.disabled = !list.length && !pipes.length;
+  const options = list.map((w) => `<option value="${esc(w.file)}">${esc(w.name)}${w.version ? ' v' + esc(w.version) : ''}${w.error ? ' (error)' : ''}</option>`).join('');
+  sel.innerHTML = pipes.length
+    ? `<optgroup label="Workflows">${options}</optgroup><optgroup label="Pipelines">${pipes.map((p) => `<option value="${esc(PIPE + p.file)}">⛓ ${esc(p.name)}</option>`).join('')}</optgroup>`
+    : options;
+  if (!list.length && !pipes.length) {
     state.wf = null;
+    state.pipeline = null;
+    $('#drawer-pipeline').classList.add('hidden');
     $('#wf-desc').textContent = state.category
       ? `No ${CATEGORIES[state.category]} workflows yet. Add a .yaml with "category: ${state.category}" to workflows/.`
       : 'No .yaml files found in workflows/.';
@@ -79,9 +98,10 @@ function renderWorkflowOptions(preferred) {
     setStartDisabled(true);
     return;
   }
-  const pick = list.find((w) => w.file === preferred) || list[0];
-  sel.value = pick.file;
-  selectWorkflow(pick.file);
+  const values = [...list.map((w) => w.file), ...pipes.map((p) => PIPE + p.file)];
+  const pick = values.includes(preferred) ? preferred : values[0];
+  sel.value = pick;
+  selectWorkflow(pick);
 }
 
 function renderProjectOptions(preferred) {
@@ -99,10 +119,14 @@ function renderProjectInfo() {
   applyProjectHints();
 }
 
+// `file`: a workflow file, or `pipe:<file>` for a pipeline (its first stage's workflow is drawn).
 function selectWorkflow(file) {
-  const wf = state.workflows.find((w) => w.file === file);
+  const pipeline = String(file || '').startsWith(PIPE) ? (state.pipelines || []).find((p) => PIPE + p.file === file) || null : null;
+  state.pipeline = pipeline;
+  const wf = state.workflows.find((w) => w.file === (pipeline ? pipeline.stages[0].workflow : file));
   state.wf = wf;
-  $('#wf-desc').textContent = wf.error ? `Error: ${wf.error}` : wf.description || '';
+  $('#drawer .drawer-title').textContent = pipeline ? 'Start pipeline' : 'Start workflow';
+  $('#wf-desc').textContent = pipeline ? pipeline.description || '' : wf.error ? `Error: ${wf.error}` : wf.description || '';
   $('#wf-steps-mini').innerHTML = (wf.steps || []).map((s) =>
     `<span class="step-chip ${s.type === 'human_approval' ? 'human' : ''}" title="${esc(s.type === 'human_approval' ? 'human approval' : s.agent)}">${esc(s.id)}</span>`).join('<span class="arrow">›</span>');
   // what each agent may use (capabilities) and how its conversation is kept (session)
@@ -139,11 +163,35 @@ function selectWorkflow(file) {
   $('#project-req').classList.toggle('hidden', !needsProject);
   setStartDisabled(!!wf.error || oneRunAtATime());
   drawerChain().refresh();
+  renderDrawerPipeline();
 }
 
 // The drawer's "When it finishes" (#134), mounted once; it follows the chosen workflow.
 let chainPicker = null;
 const drawerChain = () => (chainPicker ??= ChainPicker.mount($('#drawer-chain'), { workflows: () => state.workflows, source: () => state.wf }));
+
+// A pipeline (#135) instead of "When it finishes": its fixed first-stage inputs set, its stages
+// with what each one maps, and a rough cost from past runs (an estimate, api.pipelineEstimate).
+function renderDrawerPipeline() {
+  const p = state.pipeline;
+  const box = $('#drawer-pipeline');
+  if (!oneRunAtATime()) $('#btn-start').textContent = p ? 'Start pipeline' : 'Start workflow';
+  $('#drawer-chain').classList.toggle('hidden', !!p);
+  box.classList.toggle('hidden', !p);
+  if (!p) { box.innerHTML = ''; return; }
+  for (const [k, v] of Object.entries(p.stages[0].inputs || {})) WorkflowInputs.set($('#drawer'), k, v);
+  const names = Object.fromEntries(state.workflows.map((w) => [w.file, w.name]));
+  box.innerHTML = `<div class="drawer-pipeline-head"><span class="chain-banner-title">Pipeline</span><span class="badge">${p.stages.length} stages</span></div>
+    ${ChainModel.pipelineStagesHtml(p, { names, current: 0 })}
+    <p class="hint">You give the first stage's inputs; each next stage takes the previous one's outputs. A stage that fails or stops pauses the pipeline, and every gate still waits for you.</p>
+    <p class="hint" data-pipe-estimate>Estimating the cost…</p>`;
+  if (!api.pipelineEstimate) { box.querySelector('[data-pipe-estimate]').remove(); return; }
+  api.pipelineEstimate(p.file).then((est) => {
+    const el = box.querySelector('[data-pipe-estimate]');
+    if (!el || state.pipeline !== p) return;
+    el.textContent = `${est.text || 'No past runs to estimate from.'}${est.productOwner ? ' The Product Owner places the issues: nothing starts until you press Start on the roadmap.' : ''}`;
+  }).catch(() => box.querySelector('[data-pipe-estimate]')?.remove());
+}
 
 // Without concurrent runs (Settings › Execution) a second run can't start; with them, the engine
 // says when the limit is reached.
@@ -196,8 +244,11 @@ async function startRun({ keepOpen = false } = {}) {
   state.starting = true;
   setStartDisabled(true);
   try {
+    const mock = wantsSimulation($('#mock-toggle'));
     const attachments = await pastedImages();
-    const { runId } = await api.startRun({ file: wf.file, inputs, mock: wantsSimulation($('#mock-toggle')), then: drawerChain().value(), ...(attachments ? { attachments } : {}) });
+    const { runId } = state.pipeline
+      ? await api.runPipeline(state.pipeline.file, inputs, mock, project?.id || null)
+      : await api.startRun({ file: wf.file, inputs, mock, then: drawerChain().value(), ...(attachments ? { attachments } : {}) });
     state.settings = await api.setSettings({ lastWorkflow: wf.file, lastProject: project?.id || null });
     const view = state.runs.get(runId);
     if (view?.run && project) view.run.project = project.name;

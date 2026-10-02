@@ -1,12 +1,11 @@
 // Service area: the workspace's workflows (Workflows screen). The list with each file's origin
-// (default, modified or custom), its declared outputs and what the visual builder can draw; the
-// saved pipelines (read-only, pipelines/*.yaml); the builder's load, save and
+// (default, modified or custom), its declared outputs and what the visual builder can draw (the
+// saved pipelines are areas/pipelines.js's); the builder's load, save and
 // clone; and restoring a bundled default over an edited copy (the copy goes to the trash), for a
 // workflow or a skill.
 
 const fs = require('fs');
 const path = require('path');
-const yaml = require('js-yaml');
 const { loadWorkflow } = require('../../engine/workflow');
 const capabilities = require('../../engine/capabilities');
 const workflows = require('../../workflows');
@@ -70,28 +69,6 @@ module.exports = (ctx) => {
       });
   }
 
-
-  // Saved pipelines (#135), read-only: <workspace>/pipelines/*.yaml, each { name, description,
-  // category, stages: [{ workflow, when, map: { output: input } }] }. Workflows › Definitions shows
-  // them connected; a file that fails to load comes back with its error.
-  function listPipelines() {
-    const dir = path.join(ctx.ws.root, 'pipelines');
-    if (!fs.existsSync(dir)) return [];
-    return fs.readdirSync(dir).filter((f) => /\.ya?ml$/i.test(f)).sort().map((file) => {
-      try {
-        const p = yaml.load(fs.readFileSync(path.join(dir, file), 'utf8')) || {};
-        const stages = (Array.isArray(p.stages) ? p.stages : []).map((s) => ({
-          workflow: String(s?.workflow || ''),
-          when: s?.when ? String(s.when) : null,
-          map: s?.map && typeof s.map === 'object' ? Object.fromEntries(Object.entries(s.map).map(([k, v]) => [k, String(v)])) : {},
-        }));
-        if (!stages.length || stages.some((s) => !s.workflow)) throw new Error('Pipeline needs "stages", each with a "workflow".');
-        return { file, name: String(p.name || file.replace(/\.ya?ml$/i, '')), description: p.description ? String(p.description) : '', category: p.category ? String(p.category) : null, stages };
-      } catch (e) {
-        return { file, name: file, error: e.message, stages: [] };
-      }
-    });
-  }
 
   // Visual builder (Workflows > Builder): a workflow as the builder's spec, and back to YAML.
   // mode: 'full' (drawn by the builder: everything editable), 'fixed' (uses what the builder doesn't
@@ -175,7 +152,6 @@ module.exports = (ctx) => {
 
   return {
     cloneBuilderWorkflow,
-    listPipelines,
     listWorkflows,
     loadBuilderWorkflow,
     restoreSkill,
