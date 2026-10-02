@@ -292,7 +292,9 @@ function nightMetrics({ night, log = [], runs = [], usage = [], now = Date.now()
   const n = incidents.length;
   const resolved = incidents.filter((i) => i.resolved);
   const ttd = incidents.map((i) => i.detectedAt - i.since);
-  const ttr = resolved.map((i) => i.resumedAt - i.detectedAt);
+  // TTR: every incident whose item progressed again in W, whoever unblocked it
+  const resumed = incidents.filter((i) => i.resumedAt != null);
+  const ttr = resumed.map((i) => i.resumedAt - i.detectedAt);
 
   // idle hours by cause: W minus the active time, each moment given to its first cause
   const blocked = incidents.filter((i) => i.kind !== 'roadmap-empty').map((i) => clip([i.since, i.resumedAt ?? w1]));
@@ -346,14 +348,14 @@ function nightMetrics({ night, log = [], runs = [], usage = [], now = Date.now()
   return {
     window: { from: new Date(w0).toISOString(), to: new Date(w1).toISOString(), hours: span / 36e5, by: night.by || null, ongoing: !night.endedAt && ms(night.until) > now },
     incidents: { count: n, byKind: Object.fromEntries(Object.keys(INCIDENT_KINDS).map((k) => [k, incidents.filter((i) => i.kind === k).length])), list: incidents },
-    autonomy: ratio(new Set(incidents.filter((i) => i.actionId).map((i) => i.id)).size, n),
+    autonomy: ratio(auto.length, n),
     escalation: ratio(incidents.filter((i) => i.escalated).length, n),
     escalations: escalations.length,
     resolution: ratio(resolved.length, n),
     resolved: resolved.length,
     ttd: stats(ttd),
     ttr: stats(ttr),
-    blockedTime: stats(resolved.map((i) => i.resumedAt - i.since)),
+    blockedTime: stats(resumed.map((i) => i.resumedAt - i.since)),
     activeHours: activeMs / 36e5,
     idleHours: { total: (span - activeMs) / 36e5, noWork: idle.noWork / 36e5, blocked: idle.blocked / 36e5, gate: idle.gate / 36e5, other: idle.other / 36e5 },
     hoursSaved,

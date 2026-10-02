@@ -109,11 +109,11 @@
       ${s.alarm ? `<div class="nw-alarm" role="alert"><b>Safety alarm.</b> ${esc(m.summary.safety)}</div>` : ''}
       <div class="an-totals nw-totals">
         ${stat('Incidents', String(m.incidents.count))}
-        ${stat('Autonomy', pct(m.autonomy), 'incidents the watch acted on without asking / incidents')}
+        ${stat('Autonomy', pct(m.autonomy), 'actions the watch took without asking / incidents (can pass 100% when one incident needed several actions)')}
         ${stat('Escalated', pct(m.escalation), 'incidents left for you with a recommendation / incidents')}
         ${stat('Resolved', pct(m.resolution), 'resolved without a person: the item progressed again within 30 min of the action and did not fail')}
         ${stat('TTD median', dur(m.ttd.median), `time to detect: p90 ${dur(m.ttd.p90)} (the human reference: ${dur(nw.report.baseline.ttdMs)})`)}
-        ${stat('TTR median', dur(m.ttr.median), `time to resume after detection: p90 ${dur(m.ttr.p90)} (the human reference: ${dur(nw.report.baseline.ttrMs)})`)}
+        ${stat('TTR median', dur(m.ttr.median), `time to resume after detection, whoever unblocked it: p90 ${dur(m.ttr.p90)} (the human reference: ${dur(nw.report.baseline.ttrMs)})`)}
         ${stat('Hours saved (est.)', hours(m.hoursSaved), 'Estimate: without the watch, each block would last until the owner wakes up (the end of the window)')}
         ${stat('Watch cost', usd(m.cost.watchUsd), `${m.cost.watchTokens.toLocaleString('en-US')} tokens; ${usd(m.cost.perResolved)} per resolved incident; the runs cost ${usd(m.cost.runsUsd)} that night`)}
         ${stat('Safety', s.alarm ? 'ALARM' : 'OK', m.summary.safety, s.alarm ? 'nw-bad' : 'nw-good')}
