@@ -1541,11 +1541,15 @@ steps:
         (the orchestrator then watches that run itself and calls you when it ends)
       - success → success, with release_url; then clean up the preview as the skill says
       - failed → failed, with error_summary and failure_class (code | infra | unknown, see the skill)
+      In every answer, report `merge_commit`: the full SHA of the commit the merge created on
+      {{ inputs.base_branch }}, read from the platform ({% if inputs.git_platform == 'gl' %}`glab mr view {{ steps.ci.output.pr_number }} --output json`, field `merge_commit_sha` or, for a squash, `squash_commit_sha`{% else %}`gh pr view {{ steps.ci.output.pr_number }} --repo {{ steps.ci.output.pr_url | github_repo }} --json mergeCommit`, field `mergeCommit.oid`{% endif %}).
+      It is the run's `merged_commit` output, handed to a chained run: never the branch's commit.
     output_schema:
       type: object
-      required: [deploy_status]
+      required: [deploy_status, merge_commit]
       properties:
         deploy_status: { type: string, enum: [pending, success, failed] }
+        merge_commit:  { type: string }
         failure_class: { type: string, enum: [code, infra, unknown] }
         run_url:       { type: string }
         release_url:   { type: string }
@@ -1592,8 +1596,8 @@ outputs:
     value: "{{ steps.develop.output.branch }}"
   merged_commit:
     type: string
-    description: "The branch's last commit once the owner approved the merge (the PR/MR is squash-merged: the merge commit itself is on the platform). Empty when nothing was merged."
-    value: "{% if steps.approve_merge.output and steps.approve_merge.output.approved %}{{ steps.develop.output.commit_sha }}{% endif %}"
+    description: "The commit the squash merge created on the base branch, read from the platform by the deployer. Empty when nothing was merged."
+    value: "{{ steps.deploy_prod.output.merge_commit if steps.deploy_prod.output else '' }}"
   issues:
     type: array
     description: "The issues the run implemented (number, url, title)."
