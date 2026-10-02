@@ -14,7 +14,7 @@ const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'app.j
 function loadOpenNotificationTarget() {
   const fn = /function openNotificationTarget\(t\) \{[\s\S]*?\n\}/.exec(src)[0];
   assert.ok(fn, 'openNotificationTarget not found in app.js: the source moved');
-  const calls = { showRun: [], showView: [], focusTerminal: [], focusProject: [] };
+  const calls = { showRun: [], showView: [], focusTerminal: [], focusProject: [], openPO: [] };
   const sandbox = {
     showRun: (...a) => calls.showRun.push(a),
     showView: (...a) => calls.showView.push(a),
@@ -22,6 +22,7 @@ function loadOpenNotificationTarget() {
   sandbox.window = {
     SessionsView: { focusTerminal: (...a) => calls.focusTerminal.push(a) },
     BacklogActions: { focusProject: (...a) => calls.focusProject.push(a) },
+    BacklogPO: { open: (...a) => calls.openPO.push(a) },
   };
   vm.createContext(sandbox);
   vm.runInContext(`${fn}\nthis.openNotificationTarget = openNotificationTarget;`, sandbox);
@@ -69,5 +70,19 @@ test('openNotificationTarget: a terminal id wins over a run id (a session notice
 test('openNotificationTarget: an empty target (none of terminalId, backlog view or runId) does nothing', () => {
   const { openNotificationTarget, calls } = loadOpenNotificationTarget();
   openNotificationTarget({});
-  assert.deepEqual(calls, { showRun: [], showView: [], focusTerminal: [], focusProject: [] });
+  assert.deepEqual(calls, { showRun: [], showView: [], focusTerminal: [], focusProject: [], openPO: [] });
+});
+
+test('openNotificationTarget: a Product Owner answer (#149, openPO) selects the project, switches to Backlog and opens its drawer', () => {
+  const { openNotificationTarget, calls } = loadOpenNotificationTarget();
+  openNotificationTarget({ view: 'backlog', projectId: 'proj-1', openPO: true });
+  assert.deepEqual(calls.focusProject, [['proj-1']]);
+  assert.deepEqual(calls.showView, [['backlog']]);
+  assert.deepEqual(calls.openPO, [[]]);
+});
+
+test('openNotificationTarget: a plain backlog target (a push conflict, #69) never opens the Product Owner drawer', () => {
+  const { openNotificationTarget, calls } = loadOpenNotificationTarget();
+  openNotificationTarget({ view: 'backlog', projectId: 'proj-1' });
+  assert.deepEqual(calls.openPO, []);
 });

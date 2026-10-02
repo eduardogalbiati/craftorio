@@ -240,6 +240,78 @@ test('normalizeAnswer without a selection drops a suggested issue that is closed
   assert.equal('closed' in out, false);
 });
 
+// ---- #148: a group's synthesized applied state (groups scenario) survives normalizeAnswer ----------
+
+test('normalizeAnswer (mock only): keeps a group\'s simulated marker, its covered issues filtered to what the group actually kept, the stage defaulting to 1 when the proposed one is not a positive integer', () => {
+  const issues = [{ number: 1, state: 'open' }, { number: 2, state: 'open' }];
+  const raw = {
+    summary: 'ok',
+    groups: [{ name: 'G', issues: [1, 2], workflow: 'software-development.yaml', reason: 'r', simulated: { covered: [1, 999], stage: 0 } }],
+  };
+  const out = productOwner.normalizeAnswer(raw, { issues, history: [], workflows: [{ file: 'software-development.yaml' }], mock: true });
+  assert.deepEqual(out.groups[0].simulated, { covered: [1], stage: 1 }); // #999 is unknown to the backlog: dropped
+});
+
+test('normalizeAnswer: a simulated marker is dropped without `mock` (a real answer never carries one), and when its covered issues are not among the group\'s own', () => {
+  const issues = [{ number: 1, state: 'open' }, { number: 2, state: 'open' }, { number: 3, state: 'open' }];
+  const simulated = { covered: [1], stage: 2 };
+  const withoutMock = productOwner.normalizeAnswer(
+    { summary: 'ok', groups: [{ name: 'G', issues: [1, 2], workflow: 'software-development.yaml', reason: 'r', simulated }] },
+    { issues, history: [], workflows: [{ file: 'software-development.yaml' }] },
+  );
+  assert.equal('simulated' in withoutMock.groups[0], false);
+
+  const outsideGroup = productOwner.normalizeAnswer(
+    { summary: 'ok', groups: [{ name: 'G', issues: [1, 2], workflow: 'software-development.yaml', reason: 'r', simulated: { covered: [3], stage: 2 } }] },
+    { issues, history: [], workflows: [{ file: 'software-development.yaml' }], mock: true },
+  );
+  assert.equal('simulated' in outsideGroup.groups[0], false); // #3 exists, but is not one of this group's issues
+});
+
+// ---- #148: mockScenario, the drawer's simulation-only scenario picker -------------------------------
+
+test('mockScenario refuses an id outside MOCK_SCENARIOS', () => {
+  assert.throws(() => productOwner.mockScenario('nope', { data: { issues: ISSUES } }), /Unknown simulated scenario: nope\./);
+});
+
+test('mockScenario(\'error\') throws a simulated error naming the scenario; nothing is spent (no message is returned to record)', () => {
+  assert.throws(() => productOwner.mockScenario('error', { data: { issues: ISSUES } }), /Simulated error \(scenario "error"\): the Product Owner could not answer\./);
+});
+
+test('mockScenario(\'groups\'): on a backlog with no roadmap, queue or runs, synthesizes "Already applied" (its one issue covered at stage 1) and "Partly applied" (two issues, only the first covered)', () => {
+  const out = productOwner.mockScenario('groups', { data: { issues: ISSUES } }); // 3 open, plannable issues: #1, #2, #3
+  assert.equal(out.groups[0].name, 'Already applied');
+  assert.deepEqual(out.groups[0].issues, [1]);
+  assert.deepEqual(out.groups[0].simulated, { covered: [1], stage: 1 });
+  assert.equal(out.groups[1].name, 'Partly applied');
+  assert.deepEqual(out.groups[1].issues, [2, 3]);
+  assert.deepEqual(out.groups[1].simulated, { covered: [2], stage: 1 });
+});
+
+test('mockScenario(\'groups\'): with one plannable issue only the "Already applied" group is produced', () => {
+  const out = productOwner.mockScenario('groups', { data: { issues: ISSUES.slice(0, 1) } });
+  assert.equal(out.groups.length, 1);
+  assert.equal(out.groups[0].name, 'Already applied');
+});
+
+test('mockScenario(\'groups\'): with two plannable issues, "Partly applied" covers its only issue, so the group reads as fully applied (no issue left out)', () => {
+  const out = productOwner.mockScenario('groups', { data: { issues: ISSUES.slice(0, 2) } });
+  assert.equal(out.groups.length, 2);
+  assert.equal(out.groups[1].name, 'Partly applied');
+  assert.deepEqual(out.groups[1].issues, [2]);
+  assert.deepEqual(out.groups[1].simulated.covered, [2]);
+});
+
+test('mockScenario(\'large-answer\'): up to 12 further groups (vs 4 for every other plan scenario), a long summary to scroll through, and issues to enrich', () => {
+  const many = Array.from({ length: 30 }, (_, n) => ({ number: n + 1, state: 'open', title: `Issue ${n + 1}`, labels: [], body: 'x' }));
+  const groups = productOwner.mockScenario('groups', { data: { issues: many } });
+  const large = productOwner.mockScenario('large-answer', { data: { issues: many } });
+  assert.ok(large.groups.length > groups.groups.length);
+  assert.match(large.summary, /Paragraph 1\./);
+  assert.ok(large.enrich.length > 0);
+  assert.deepEqual(groups.enrich, []); // only the large-answer scenario proposes issues to enrich
+});
+
 test('backlogReport with a selection gives the attached issues first and whole (even past the usual clip), marks a closed one to leave out, and excludes them from "Other open issues"', () => {
   const longBody = 'x'.repeat(5000);
   const data = {

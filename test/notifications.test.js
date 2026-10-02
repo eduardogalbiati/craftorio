@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { runNotice, interruptedNotice, sessionNotice, shouldNotify, attentionSignal, promptLine, WaitDetector } = require('../src/notifications');
+const { runNotice, interruptedNotice, sessionNotice, productOwnerNotice, shouldNotify, attentionSignal, promptLine, WaitDetector } = require('../src/notifications');
 const { setupWorkspace } = require('../src/workspace');
 const { createService } = require('../src/service');
 
@@ -66,6 +66,33 @@ test('notices respect the per-kind setting and what the focused window shows', (
   assert.equal(shouldNotify(started, { context: { focused: true, runId: null } }), true);
   assert.equal(shouldNotify(started, { context: { focused: true, runId: 'r1' } }), false);
   assert.equal(shouldNotify(null, {}), false);
+});
+
+// ---- Product Owner (#149): a notice for an answer the owner has not seen yet -------------------
+
+test('productOwnerNotice: names the project, previews a draft\'s title when the answer drafted an issue, else the answer\'s own text; an error gets its own title', () => {
+  const ok = productOwnerNotice({ project: { id: 'demo', name: 'Demo' }, message: { text: 'Here is the plan.', mode: 'plan' } });
+  assert.equal(ok.kind, 'po');
+  assert.equal(ok.event, 'answered');
+  assert.equal(ok.title, 'The Product Owner answered: Demo');
+  assert.equal(ok.body, 'Here is the plan.');
+  assert.deepEqual(ok.target, { view: 'backlog', projectId: 'demo', openPO: true });
+
+  const draft = productOwnerNotice({ project: { id: 'demo' }, message: { mode: 'issue', issue: { draft: { title: 'Fix the crash' } } } });
+  assert.equal(draft.body, 'Draft: Fix the crash');
+
+  const failed = productOwnerNotice({ project: { id: 'demo' }, message: { error: true, text: 'Budget exceeded' } });
+  assert.equal(failed.event, 'failed');
+  assert.equal(failed.title, 'The Product Owner could not answer: demo');
+});
+
+test('shouldNotify: a po notice stays quiet while the window shows that project\'s Product Owner drawer, but is shown for any other project, no project, or while unfocused', () => {
+  const notice = productOwnerNotice({ project: { id: 'demo' }, message: { text: 'ok' } });
+  assert.equal(shouldNotify(notice, { context: { focused: true, poProjectId: 'demo' } }), false);
+  assert.equal(shouldNotify(notice, { context: { focused: true, poProjectId: 'other' } }), true);
+  assert.equal(shouldNotify(notice, { context: { focused: true, poProjectId: null } }), true);
+  assert.equal(shouldNotify(notice, { context: { focused: false, poProjectId: 'demo' } }), true);
+  assert.equal(shouldNotify(notice, { settings: { notifyPO: false }, context: null }), false);
 });
 
 test('spots the attention signals CLIs write to a terminal', () => {
