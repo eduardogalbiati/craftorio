@@ -144,11 +144,17 @@ body:not(.dev-mode) .dev-only { display: none !important; }
 .nav-run-item { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 8px 6px 14px; border: none; border-radius: 7px; background: none; color: var(--muted); font: inherit; font-size: 12px; cursor: pointer; text-align: left; }
 .nav-run-item:hover { background: var(--panel-2); color: var(--text); }
 .nav-run-item.selected { background: rgba(124,156,255,.12); color: var(--text); }
-.nav-run-item .status-dot { flex: none; }
-.nav-run-text { display: flex; flex-direction: column; min-width: 0; }
-.nav-run-wf, .nav-run-sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.nav-run-wf { font-weight: 600; }
-.nav-run-sub { font-size: 11px; color: var(--muted); }
+.nav-run-item .status-dot { flex: none; align-self: flex-start; margin-top: 5px; }
+.nav-run-text { display: flex; flex-direction: column; gap: 1px; flex: 1; min-width: 0; }
+/* the count of runs listed (several), before the gates badge */
+.nav-run-count { margin-left: auto; min-width: 18px; padding: 0 5px; border-radius: 9px; background: var(--panel-2); border: 1px solid var(--border); color: var(--text); font-size: 11px; font-weight: 700; text-align: center; line-height: 16px; }
+.nav-run-count:not(.hidden) + .nav-gates { margin-left: 4px; }
+.nav-run-title, .nav-run-sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nav-run-title { font-weight: 600; }
+.nav-run-issues { flex: none; color: var(--accent); }
+.nav-run-sub { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--muted); }
+.nav-run-wf { min-width: 0; overflow: hidden; text-overflow: ellipsis; padding: 0 4px; border-radius: 4px; background: var(--panel-2); border: 1px solid var(--border); font-size: 10px; }
+.nav-run-at { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .nav-run-item .nav-gates { cursor: inherit; }
 .nav-run-item .run-pr { flex: none; }
 

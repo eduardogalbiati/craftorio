@@ -866,7 +866,6 @@ function renderHeader() {
   pill.textContent = statusLabel(r);
   $('#run-meta').classList.toggle('clickable', !!r);
   $('#run-meta').title = r ? `View ${runLabel(r)}` : 'View the current run';
-  $('#nav-run-dot').parentElement.className = `nav-item nav-run st-${runSessionStatus(st)}${state.view === 'run' ? ' active' : ''}${r ? '' : ' hidden'}`;
   renderNavRuns();
   $('#run-id').textContent = r?.id || '';
   $('#kpi-time').textContent = r ? fmtDur((r.finishedAt || Date.now()) - r.startedAt) : '—';
@@ -893,32 +892,57 @@ function renderHeader() {
   if (state.view === 'dashboard') renderDashboard();
 }
 
-// The Run menu item: the runs in progress (and the one shown), each with its status dot,
-// workflow, project/issue and gates waiting; the badge counts the gates across runs. A run waiting
-// at a gate is always listed, in the "waiting for you" state with the gate's step, until the
-// engine no longer lists the gate (loadActiveRuns); clicking it opens the gate in its run.
+// The runs the sidebar lists under Run: in progress, or failed/interrupted (they need attention:
+// resume, supervisor, and are otherwise unreachable here), or waiting at a gate. A run that
+// finished leaves the list, even when it is the one shown in the top bar.
+const navRunsList = () => [...state.runs.values()].filter((v) => v.run && (['running', 'failed', 'interrupted'].includes(v.run.status) || v.approvals.size));
+// The Run item's dot (#142): what is in progress across runs, not the run shown in the top bar.
+// A gate wins (it needs the owner), then a running run, then a failed/interrupted one still listed.
+function navRunState(list) {
+  const waiting = list.filter((v) => v.approvals.size).length;
+  const running = list.filter((v) => v.run.status === 'running').length;
+  const failed = list.length - list.filter((v) => v.approvals.size || v.run.status === 'running').length;
+  const n = (k, what) => `${k} run${k === 1 ? '' : 's'} ${what}`;
+  if (waiting) return { status: 'waiting', title: n(waiting, 'waiting for you') };
+  if (running) return { status: 'active', title: n(running, 'in progress') };
+  if (failed) return { status: 'failed', title: n(failed, 'failed or interrupted: open it to resume') };
+  return { status: 'idle', title: 'No run in progress' };
+}
+
+// The Run menu item and the runs listed under it (navRunsList), even a single one (#113): each
+// row has its status dot, its title (#84) and issues, its workflow and the step it is at or the
+// gate it waits at; the selected run is highlighted. The Run item's dot sums them up (navRunState),
+// a count badge shows when several are listed and the gates badge counts the gates across runs.
+// A run waiting at a gate is listed until the engine no longer lists the gate (loadActiveRuns);
+// clicking it opens the gate in its run. The rows are rebuilt only when their markup changes.
 function renderNavRuns() {
   const gates = pendingGates().length;
   const badge = $('#nav-run-gates');
   badge.classList.toggle('hidden', !gates);
   badge.textContent = String(gates);
   badge.title = `${gates} approval${gates === 1 ? '' : 's'} waiting: click to review`;
-  // failed or interrupted runs stay listed: they need attention (resume, supervisor) and are otherwise unreachable here
-  const list = [...state.runs.values()].filter((v) => v.run && (['running', 'failed', 'interrupted'].includes(v.run.status) || v.run.id === state.runId));
+  const list = navRunsList();
   askPrStates(list.map((v) => v.run));
+  const sum = navRunState(list);
+  const item = $('#nav-run');
+  item.className = `nav-item nav-run st-${sum.status}${state.view === 'run' ? ' active' : ''}${state.run || list.length ? '' : ' hidden'}`;
+  item.title = sum.title;
+  const count = $('#nav-run-count');
+  count.classList.toggle('hidden', list.length < 2);
+  count.textContent = String(list.length);
+  count.title = `${list.length} runs listed below`;
   const box = $('#nav-runs');
-  const show = list.length > 1 || !!gates;
-  box.classList.toggle('hidden', !show);
-  if (!show) { box.innerHTML = ''; return; }
-  const html = list.map(({ run: r, approvals }) => {
+  box.classList.toggle('hidden', !list.length);
+  if (!list.length) { box.innerHTML = ''; box.dataset.html = ''; return; }
+  const html = list.map(({ run: r, approvals, steps }) => {
     const gate = [...approvals.values()][0];
-    const where = [r.project, issueRefs(r) || null].filter(Boolean).join(' · ');
-    // the run's title first (#84), its workflow in the second line
-    const sub = gate ? `waiting for you · ${gate.step_id}` : `${[r.workflow, r.project].filter(Boolean).join(' · ') || statusLabel(r)} · ${new Date(r.startedAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`;
-    const title = gate ? `${runLabel(r)} — waiting for you at ${gate.step_id}: click to answer` : `${runLabel(r)} — ${statusLabel(r)}`;
-    return `<button type="button" class="nav-run-item st-${gate ? 'waiting' : runSessionStatus(r.status)}${r.id === state.runId ? ' selected' : ''}" data-run="${esc(r.id)}"${gate ? ' data-gate="1"' : ''} title="${esc(title)}">
-      <span class="status-dot"></span>${prBadge(r, { compact: true })}
-      <span class="nav-run-text"><span class="nav-run-wf">${esc(gate && where ? `${runTitle(r)} · ${where}` : runTitle(r))}</span><span class="nav-run-sub">${esc(sub)}</span></span>
+    const refs = issueRefs(r);
+    const step = [...steps].filter(([, s]) => s.status === 'running').map(([id]) => id).join(', ');
+    const at = gate ? `waiting for you · ${gate.step_id}` : r.status === 'running' ? step || 'starting' : statusLabel(r);
+    const title = gate ? `${runLabel(r)} — waiting for you at ${gate.step_id}: click to answer` : `${runLabel(r)} — ${statusLabel(r)}${step && r.status === 'running' ? ` at ${step}` : ''}`;
+    return `<button type="button" class="nav-run-item st-${gate ? 'waiting' : runSessionStatus(r.status)}${r.id === state.runId ? ' selected' : ''}" data-run="${esc(r.id)}"${gate ? ' data-gate="1"' : ''} title="${esc(refs ? `${title} · ${refs}` : title)}">
+      <span class="status-dot"></span>
+      <span class="nav-run-text"><span class="nav-run-title">${esc(runTitle(r))}</span><span class="nav-run-sub">${refs ? `<span class="nav-run-issues">${esc(refs)}</span>` : ''}<span class="nav-run-at">${esc(at)}</span></span>${r.workflow || runPr(r) ? `<span class="nav-run-sub">${r.workflow ? `<span class="nav-run-wf">${esc(r.workflow.replace(/\.ya?ml$/i, ''))}</span>` : ''}${prBadge(r, { compact: true })}</span>` : ''}</span>
       ${approvals.size ? `<span class="nav-gates" title="Approval waiting">${approvals.size}</span>` : ''}
     </button>`;
   }).join('');
