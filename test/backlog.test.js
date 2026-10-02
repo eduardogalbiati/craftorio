@@ -775,3 +775,143 @@ test('a queued issue becomes the run inputs: task, project folder and issue', ()
   // no `issue` input: the URL is only in the task
   assert.equal(backlog.runInputs(item, { inputs: { task: {} } }, 'C:/repo').issue, undefined);
 });
+
+// ---- the platform is the source of truth (#168): a fresh read right before a start ---------------
+
+// A fake `gh issue view <n>` runner: `byNumber[n]` answers the call, or it throws when `byNumber[n]`
+// is an Error; unlisted numbers throw "no such issue".
+function issueViewExec(byNumber) {
+  const calls = [];
+  const exec = async (cli, args) => {
+    calls.push([cli, ...args]);
+    const n = Number(args[2]);
+    const a = byNumber[n];
+    if (a === undefined) throw new Error(`no such issue: ${n}`);
+    if (a instanceof Error) throw a;
+    return JSON.stringify({ number: n, state: 'OPEN', labels: [], ...a });
+  };
+  return { exec, calls };
+}
+
+test('freshIssues: the platform read wins over a stale, closed cache (the platform is the source of truth)', async () => {
+  const item = { number: 1, url: 'https://github.com/o/r/issues/1', title: 'Old title', body: 'Old body', updatedAt: '2026-09-01T00:00:00Z', knownPullRequests: ['https://github.com/o/r/pull/9'] };
+  const cache = { syncedAt: '2026-09-20T08:00:00Z', issues: [{ number: 1, state: 'closed', title: 'Cached title', body: 'Cached body', url: 'https://github.com/o/r/issues/1', updatedAt: '2026-09-15T00:00:00Z' }] };
+  const { exec } = issueViewExec({ 1: { title: 'Fresh title', body: 'Fresh body', state: 'OPEN', url: 'https://github.com/o/r/issues/1', updatedAt: '2026-10-01T12:00:00Z' } });
+  const { issues, warnings } = await backlog.freshIssues({ item, platform: 'github', repo: 'https://github.com/o/r', cache, fromPlatform: true, exec });
+  assert.deepEqual(warnings, []);
+  assert.deepEqual(issues, [{
+    number: 1, url: 'https://github.com/o/r/issues/1', title: 'Fresh title', body: 'Fresh body', labels: [],
+    updatedAt: '2026-10-01T12:00:00Z', knownPullRequests: ['https://github.com/o/r/pull/9'], state: 'open',
+  }]);
+});
+
+test('freshIssues: a platform read that fails falls back to the synced cache when it is newer than the item\'s copy, and warns', async () => {
+  const item = { number: 1, url: 'u', title: 'Copy title', body: 'Copy body', updatedAt: '2026-09-10T00:00:00Z', knownPullRequests: [] };
+  const cache = { syncedAt: '2026-09-20T08:30:00Z', issues: [{ number: 1, state: 'open', title: 'Synced title', body: 'Synced body', url: 'https://github.com/o/r/issues/1', updatedAt: '2026-09-25T00:00:00Z' }] };
+  const { exec } = issueViewExec({ 1: new Error('gh: not authenticated') });
+  const { issues, warnings } = await backlog.freshIssues({ item, platform: 'github', repo: 'https://github.com/o/r', cache, fromPlatform: true, exec });
+  assert.deepEqual(issues, [{
+    number: 1, url: 'https://github.com/o/r/issues/1', title: 'Synced title', body: 'Synced body', labels: [],
+    updatedAt: '2026-09-25T00:00:00Z', knownPullRequests: [], state: 'open', fallback: 'cache', cachedAt: '2026-09-20T08:30:00Z',
+  }]);
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0], /^Issue #1 read from the cache of \d{2}:\d{2}: gh: not authenticated$/);
+});
+
+test('freshIssues: a platform read that fails falls back to the item\'s own copy when the cache has no newer version', async () => {
+  const item = { number: 1, url: 'u', title: 'Copy title', body: 'Copy body', updatedAt: '2026-09-25T00:00:00Z', knownPullRequests: [] };
+  const cache = { syncedAt: '2026-09-20T08:00:00Z', issues: [{ number: 1, state: 'open', title: 'Stale cached', body: 'Stale body', url: 'https://github.com/o/r/issues/1', updatedAt: '2026-09-10T00:00:00Z' }] };
+  const { exec } = issueViewExec({ 1: new Error('offline') });
+  const { issues, warnings } = await backlog.freshIssues({ item, platform: 'github', repo: 'https://github.com/o/r', cache, fromPlatform: true, exec });
+  assert.deepEqual(issues, [{
+    number: 1, url: 'u', title: 'Copy title', body: 'Copy body', labels: [],
+    updatedAt: '2026-09-25T00:00:00Z', knownPullRequests: [], state: 'open', fallback: 'copy',
+  }]);
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0], /^Issue #1 read from the copy saved with the planned item \(the cache has no newer version\): offline$/);
+});
+
+test('freshIssues: fromPlatform false (a simulation, or a project with no repository) never calls the CLI; no warning, no fallback marker', async () => {
+  const item = { number: 1, url: 'u', title: 'Copy', body: 'copy body', updatedAt: '2026-09-10T00:00:00Z', knownPullRequests: [] };
+  const cache = { syncedAt: 'x', issues: [{ number: 1, state: 'closed', title: 'Cached', body: 'cached body', url: 'ucached', updatedAt: '2026-09-20T00:00:00Z' }] };
+  let called = false;
+  const exec = async () => { called = true; throw new Error('should not be called'); };
+  const { issues, warnings } = await backlog.freshIssues({ item, platform: 'github', repo: 'r', cache, fromPlatform: false, exec });
+  assert.equal(called, false);
+  assert.deepEqual(warnings, []);
+  assert.deepEqual(issues, [{ number: 1, url: 'ucached', title: 'Cached', body: 'cached body', labels: [], updatedAt: '2026-09-20T00:00:00Z', knownPullRequests: [], state: 'closed' }]);
+});
+
+test('freshIssues: a group\'s issues are read independently, each with its own fallback', async () => {
+  const item = {
+    number: 1, url: 'u1', title: 't1', body: 'b1', updatedAt: null,
+    issues: [
+      { number: 1, url: 'u1', title: 'Old1', body: 'Old body1', knownPullRequests: [] },
+      { number: 2, url: 'u2', title: 'Old2', body: 'Old body2', updatedAt: '2026-09-01T00:00:00Z', knownPullRequests: [] },
+    ],
+  };
+  const cache = { syncedAt: '2026-09-20T00:00:00Z', issues: [{ number: 2, state: 'open', title: 'Cached2', body: 'Cached body2', url: 'u2', updatedAt: '2026-09-15T00:00:00Z' }] };
+  const { exec } = issueViewExec({ 1: { title: 'Fresh1', body: 'Fresh body1', state: 'OPEN', url: 'u1', updatedAt: '2026-10-01T00:00:00Z' }, 2: new Error('offline') });
+  const { issues, warnings } = await backlog.freshIssues({ item, platform: 'github', repo: 'https://github.com/o/r', cache, fromPlatform: true, exec });
+  assert.deepEqual(issues.map((i) => i.title), ['Fresh1', 'Cached2']);
+  assert.equal(issues[0].fallback, undefined);
+  assert.equal(issues[1].fallback, 'cache');
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0], /^Issue #2 read from the cache/);
+});
+
+test('recordedIssues: number/url/title/updatedAt only, plus fallback and cachedAt when there was a fallback', () => {
+  const issues = [
+    { number: 1, url: 'u1', title: 't1', body: 'b', labels: [], state: 'open', updatedAt: '2026-10-01T00:00:00Z' },
+    { number: 2, url: 'u2', title: 't2', body: 'b', labels: [], state: 'open', updatedAt: '2026-09-01T00:00:00Z', fallback: 'cache', cachedAt: '2026-09-20T00:00:00Z' },
+  ];
+  assert.deepEqual(backlog.recordedIssues(issues), [
+    { number: 1, url: 'u1', title: 't1', updatedAt: '2026-10-01T00:00:00Z' },
+    { number: 2, url: 'u2', title: 't2', updatedAt: '2026-09-01T00:00:00Z', fallback: 'cache', cachedAt: '2026-09-20T00:00:00Z' },
+  ]);
+});
+
+test('withSyncedText: a copy takes the synced title/body/labels/updatedAt (its own url when the sync has none); without a sync it is unchanged', () => {
+  const copy = { number: 1, url: 'old-url', title: 'Old', body: 'old body', labels: [{ name: 'a' }], updatedAt: '2026-09-01T00:00:00Z', knownPullRequests: ['p'] };
+  const synced = { title: 'New', body: 'new body', labels: [{ name: 'b' }], updatedAt: '2026-10-01T00:00:00Z' }; // no url
+  assert.deepEqual(backlog.withSyncedText(copy, synced), { ...copy, title: 'New', body: 'new body', labels: [{ name: 'b' }], updatedAt: '2026-10-01T00:00:00Z' });
+  assert.deepEqual(backlog.withSyncedText(copy, null), copy);
+});
+
+test('refreshQueuedCopies: brings the queued copies up to a sync; a no-op (no write) once they already match', (t) => {
+  const dir = tmp(t);
+  backlog.enqueue(dir, 'p', {
+    workflow: 'w.yaml',
+    issues: [{ number: 1, url: 'u1', title: 'Old', body: 'old' }, { number: 2, url: 'u2', title: 'Old2', body: 'old2' }],
+  });
+  const synced = [
+    { number: 1, title: 'New title', body: 'new body', url: 'u1', labels: [], updatedAt: '2026-10-01T00:00:00Z' },
+    { number: 2, title: 'New2', body: 'new2', url: 'u2', labels: [], updatedAt: '2026-10-01T00:00:00Z' },
+  ];
+  assert.equal(backlog.refreshQueuedCopies(dir, 'p', synced), true);
+  const q = backlog.readQueue(dir, 'p');
+  assert.deepEqual(q.items.map((i) => i.title), ['New title', 'New2']);
+  assert.equal(backlog.refreshQueuedCopies(dir, 'p', synced), false); // already up to date: nothing written
+});
+
+test('the platform is the source of truth: a sync and a fresh pre-start read never write back to it (no edit/create/close/comment call)', async (t) => {
+  const dir = tmp(t);
+  const calls = [];
+  const exec = async (cli, args) => {
+    calls.push([cli, ...args]);
+    if (args[0] === 'issue' && args[1] === 'list') return JSON.stringify([GH_ISSUE]);
+    if (args[0] === 'pr' && args[1] === 'list') return JSON.stringify([]);
+    if (args[0] === 'issue' && args[1] === 'view') return JSON.stringify(GH_ISSUE);
+    return '[]'; // epics / sub-issues reads (gh api ...)
+  };
+  const project = { id: 'p', repo: 'https://github.com/o/r' };
+  await backlog.syncBacklog({ dir, project, platform: 'github', exec });
+  const cache = backlog.readBacklog(dir, 'p');
+  await backlog.freshIssues({
+    item: { number: GH_ISSUE.number, url: GH_ISSUE.url, title: GH_ISSUE.title, body: GH_ISSUE.body },
+    platform: 'github', repo: project.repo, cache, fromPlatform: true, exec,
+  });
+  assert.ok(calls.length > 0);
+  const writeVerbs = ['edit', 'create', 'close', 'comment', 'update', 'note'];
+  assert.ok(!calls.some(([, , verb]) => writeVerbs.includes(verb)), JSON.stringify(calls));
+});

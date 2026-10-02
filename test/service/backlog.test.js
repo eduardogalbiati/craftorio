@@ -65,7 +65,8 @@ test('backlog: assigned issues run one at a time, each run records its issue', a
   assert.deepEqual([by()[1].column, by()[2].column], ['todo', 'todo']); // simulated: succeeded, but still just todo
   const list = api['runs:list']().runs;
   const run2 = list.find((r) => r.issues?.[0].number === 2);
-  assert.deepEqual(run2.issues, [{ number: 2, url: 'https://github.com/o/r/issues/2', title: 'Issue 2' }]);
+  // #168: a run records the version of each issue it starts from (here none, the cache has no updatedAt)
+  assert.deepEqual(run2.issues, [{ number: 2, url: 'https://github.com/o/r/issues/2', title: 'Issue 2', updatedAt: null }]);
   const started = JSON.parse(fs.readFileSync(path.join(run2.runDir, 'events.jsonl'), 'utf8').split('\n')[0]);
   assert.equal(started.inputs.issue, 'https://github.com/o/r/issues/2');
   assert.equal(started.inputs.language, 'go');
@@ -263,6 +264,116 @@ test('backlog: the dispatcher re-checks for an open PR right before starting a q
   assert.deepEqual(data.queue.skipped.map((s) => [s.number, s.reason]), [[1, 'open PR #9 since it was queued']]);
   assert.ok(!service.isRunning());
   assert.deepEqual(api['runs:list']().runs, []);
+});
+
+// A real-capable fixture (no agent steps, so `mock: false` never calls a model): used to prove the
+// dispatcher reads the platform right before a real start (#168) without any cost or CLI dependency.
+const REAL_QUEUE_WORKFLOW = `apiVersion: multiagent/v1
+kind: Workflow
+metadata:
+  name: fixture-real-queue
+inputs:
+  task: { type: string, required: true }
+  repo_path: { type: string, required: true }
+  issue: { type: string, default: "" }
+agents: {}
+steps:
+  - id: review
+    type: human_approval
+    message: "Accept?"
+`;
+
+function realQueueProject(api, ws, t, name) {
+  return (async () => {
+    const folder = fs.mkdtempSync(path.join(os.tmpdir(), `service-${name}-`));
+    fs.writeFileSync(path.join(folder, 'README.md'), 'x'); // preflight needs a non-empty folder for a real run
+    t.after(() => fs.rmSync(folder, { recursive: true, force: true }));
+    const p = await api['projects:create']({ name: 'demo', folder });
+    api['projects:update']({ id: p.id, patch: { repo: 'https://github.com/o/r' } });
+    return p;
+  })();
+}
+
+test('backlog: #168 the dispatcher reads a queued issue again from the platform right before its real start; the task and the recorded issue use what was read, not the stale cache', async (t) => {
+  const { service, api } = makeService(t);
+  const ws = service.workspace();
+  fs.writeFileSync(path.join(ws.workflows, 'fixture-real-queue.yaml'), REAL_QUEUE_WORKFLOW);
+  const p = await realQueueProject(api, ws, t, 'fresh-queue');
+  fs.mkdirSync(ws.backlog, { recursive: true });
+  fs.writeFileSync(path.join(ws.backlog, `${p.id}.json`), JSON.stringify({
+    projectId: p.id, platform: 'github', repo: 'https://github.com/o/r',
+    issues: [{ number: 1, title: 'Cached title', state: 'open', url: 'https://github.com/o/r/issues/1', body: 'Cached body', labels: [], assignees: [], tasks: { done: 0, total: 0 }, updatedAt: '2026-09-01T00:00:00Z' }],
+  }));
+  t.mock.method(backlog, 'freshIssues', async ({ item }) => ({
+    issues: [{ number: item.number, url: item.url, title: 'Fresh title', body: 'Fresh body', labels: [], state: 'open', updatedAt: '2026-10-01T12:00:00Z' }],
+    warnings: [],
+  }));
+
+  delete process.env.MULTIAGENT_SIMULATION_ONLY;
+  t.after(() => { process.env.MULTIAGENT_SIMULATION_ONLY = '1'; });
+  await api['backlog:assign']({ projectId: p.id, numbers: [1], workflow: 'fixture-real-queue.yaml', mock: false });
+
+  const run = api['runs:active']()[0];
+  assert.ok(run, 'the real run started');
+  assert.match(run.inputs.task, /^Fresh title\n\nIssue: https:\/\/github\.com\/o\/r\/issues\/1\n\nFresh body$/);
+  assert.deepEqual(run.issues, [{ number: 1, url: 'https://github.com/o/r/issues/1', title: 'Fresh title', updatedAt: '2026-10-01T12:00:00Z' }]);
+});
+
+test('backlog: #168 an issue closed on the platform since it was queued is skipped at its start, although the cache and the queue still show it open; the slot frees for the next one', async (t) => {
+  const { service, api } = makeService(t);
+  const ws = service.workspace();
+  fs.writeFileSync(path.join(ws.workflows, 'fixture-real-queue.yaml'), REAL_QUEUE_WORKFLOW);
+  const p = await realQueueProject(api, ws, t, 'closed-queue');
+  const issue = (number) => ({ number, title: `Issue ${number}`, state: 'open', url: `https://github.com/o/r/issues/${number}`, body: `Body ${number}`, labels: [], assignees: [], tasks: { done: 0, total: 0 } });
+  fs.mkdirSync(ws.backlog, { recursive: true });
+  fs.writeFileSync(path.join(ws.backlog, `${p.id}.json`), JSON.stringify({ projectId: p.id, platform: 'github', repo: 'https://github.com/o/r', issues: [issue(1), issue(2)] }));
+  t.mock.method(backlog, 'freshIssues', async ({ item }) => (item.number === 1
+    ? { issues: [{ number: 1, url: item.url, title: item.title, body: item.body, labels: [], state: 'closed', updatedAt: '2026-10-01T00:00:00Z' }], warnings: [] }
+    : { issues: [{ number: item.number, url: item.url, title: 'Fresh 2', body: 'Fresh body 2', labels: [], state: 'open', updatedAt: '2026-10-01T00:00:00Z' }], warnings: [] }));
+
+  delete process.env.MULTIAGENT_SIMULATION_ONLY;
+  t.after(() => { process.env.MULTIAGENT_SIMULATION_ONLY = '1'; });
+  const data = await api['backlog:assign']({ projectId: p.id, numbers: [1, 2], workflow: 'fixture-real-queue.yaml', mock: false });
+
+  assert.deepEqual(data.queue.skipped.map((s) => [s.number, s.reason]), [[1, 'closed on the platform']]);
+  const run = api['runs:active']()[0];
+  assert.ok(run, 'the next item started right away, in the same dispatch');
+  assert.deepEqual(run.issues.map((i) => i.number), [2]);
+  assert.match(run.inputs.task, /^Fresh 2/);
+});
+
+test('backlog: #168 a platform read that fails when a queued issue starts falls back to the synced cache; the run records it with a warning', async (t) => {
+  const { service, api } = makeService(t);
+  const ws = service.workspace();
+  fs.writeFileSync(path.join(ws.workflows, 'fixture-real-queue.yaml'), REAL_QUEUE_WORKFLOW);
+  const p = await realQueueProject(api, ws, t, 'fallback-queue');
+  fs.mkdirSync(ws.backlog, { recursive: true });
+  fs.writeFileSync(path.join(ws.backlog, `${p.id}.json`), JSON.stringify({
+    projectId: p.id, platform: 'github', repo: 'https://github.com/o/r',
+    issues: [{ number: 1, title: 'Cached title', state: 'open', url: 'https://github.com/o/r/issues/1', body: 'Cached body', labels: [], assignees: [], tasks: { done: 0, total: 0 }, updatedAt: '2026-09-01T00:00:00Z' }],
+  }));
+  t.mock.method(backlog, 'freshIssues', async () => ({
+    issues: [{
+      number: 1, url: 'https://github.com/o/r/issues/1', title: 'Cached title', body: 'Cached body', labels: [],
+      state: 'open', updatedAt: '2026-09-01T00:00:00Z', fallback: 'cache', cachedAt: '2026-09-20T08:00:00Z',
+    }],
+    warnings: ['Issue #1 read from the cache of 08:00: gh: not authenticated'],
+  }));
+  const logs = [];
+  service.events.on('run:event', (ev) => { if (ev.type === 'log') logs.push(ev); });
+
+  delete process.env.MULTIAGENT_SIMULATION_ONLY;
+  t.after(() => { process.env.MULTIAGENT_SIMULATION_ONLY = '1'; });
+  await api['backlog:assign']({ projectId: p.id, numbers: [1], workflow: 'fixture-real-queue.yaml', mock: false });
+
+  const run = api['runs:active']()[0];
+  assert.ok(run, 'the cache let the run start instead of a silent failure');
+  assert.deepEqual(run.issues, [{
+    number: 1, url: 'https://github.com/o/r/issues/1', title: 'Cached title', updatedAt: '2026-09-01T00:00:00Z', fallback: 'cache', cachedAt: '2026-09-20T08:00:00Z',
+  }]);
+  const warn = logs.find((e) => e.level === 'warn');
+  assert.ok(warn, 'a warn log was recorded in the run');
+  assert.match(warn.message, /^Issue #1 read from the cache of 08:00: gh: not authenticated$/);
 });
 
 test('backlog: the dispatcher fills free slots from the queues, oldest first, within the limit per project', async (t) => {

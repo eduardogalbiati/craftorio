@@ -218,6 +218,17 @@ test('an item whose issues are all closed becomes skipped', () => {
   assert.deepEqual(start.map((x) => x.id), ['i2']);
 });
 
+test('advance passes the item to `closed` (#168): a callback that keys off the item, not just the issue number, skips only that item', () => {
+  // two items happen to share an issue number (advance itself never enforces uniqueness): a callback
+  // that only looked at the number would skip both, so this proves the item argument is what decides
+  const roadmap = mkRoadmap([{ id: 's1', items: [mkItem('i1', 5), mkItem('i2', 5)] }]);
+  const { roadmap: after, start } = roadmaps.advance(roadmap, { runOf: () => null, closed: (n, item) => n === 5 && item.id === 'i1' });
+  const [item1, item2] = after.stages[0].items;
+  assert.equal(item1.status, 'skipped');
+  assert.equal(item2.status, 'planned');
+  assert.deepEqual(start.map((x) => x.id), ['i2']);
+});
+
 test('canStart returning false keeps the item planned instead of starting it', () => {
   const roadmap = mkRoadmap([{ id: 's1', items: [mkItem('i1', 1)] }]);
   const { roadmap: after, start } = roadmaps.advance(roadmap, { runOf: () => null, canStart: () => false });
@@ -499,6 +510,36 @@ test('readRoadmap normalizes items stored in the single-issue shape from before 
   assert.deepEqual(item1.issues.map((i) => i.number), [155]);
   assert.deepEqual(item2.issues.map((i) => i.number), [156]);
   assert.equal(item1.number, 155); // the top-level fields stay, for older readers
+});
+
+// ---- refreshCopies (#168: the platform is the source of truth, read-only copies) --------------
+
+test('refreshCopies brings a planned item\'s copy up to a sync; an item with a run or already finished keeps its own text', (t) => {
+  const dir = tmp(t);
+  const synced = [issue(1, 'Fix crash', 'https://github.com/o/r/issues/1'), issue(2, 'Old title 2', 'https://github.com/o/r/issues/2'), issue(3, 'Old title 3', 'https://github.com/o/r/issues/3')];
+  roadmaps.saveStages(dir, 'p', [{ items: [{ workflow: 'w.yaml', number: 1 }, { workflow: 'w.yaml', number: 2 }, { workflow: 'w.yaml', number: 3 }] }], { issues: synced });
+  const [item1, item2, item3] = roadmaps.readRoadmap(dir, 'p').stages[0].items;
+  roadmaps.markStarted(dir, 'p', item2.id, { runId: 'run-1' }); // item2 has a run: its copy is frozen
+  roadmaps.itemAction(dir, 'p', item3.id, 'skip'); // item3 is finished: its copy is frozen too
+
+  const fresh = [
+    { number: 1, title: 'Fix crash v2', body: 'new body', url: 'https://github.com/o/r/issues/1', labels: [], updatedAt: '2026-10-01T00:00:00Z' },
+    { number: 2, title: 'Should not apply', body: 'nope', url: 'https://github.com/o/r/issues/2', labels: [], updatedAt: '2026-10-01T00:00:00Z' },
+    { number: 3, title: 'Should not apply either', body: 'nope', url: 'https://github.com/o/r/issues/3', labels: [], updatedAt: '2026-10-01T00:00:00Z' },
+  ];
+  assert.equal(roadmaps.refreshCopies(dir, 'p', fresh), true);
+  const after = roadmaps.readRoadmap(dir, 'p').stages[0].items;
+  assert.equal(after.find((x) => x.id === item1.id).title, 'Fix crash v2'); // planned, no run: refreshed
+  assert.equal(after.find((x) => x.id === item2.id).title, 'Old title 2'); // has a run: kept
+  assert.equal(after.find((x) => x.id === item3.id).title, 'Old title 3'); // finished: kept
+
+  // nothing left to change: a no-op (no write)
+  assert.equal(roadmaps.refreshCopies(dir, 'p', fresh), false);
+});
+
+test('refreshCopies does nothing to a project with no roadmap file', (t) => {
+  const dir = tmp(t);
+  assert.equal(roadmaps.refreshCopies(dir, 'no-such-project', [issue(1, 'T', 'u')]), false);
 });
 
 // ---- mergedPullRequest ------------------------------------------------------------------------

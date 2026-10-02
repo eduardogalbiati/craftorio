@@ -1,10 +1,45 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
+const os = require('os');
 const { createService } = require('../../src/service');
 const roadmapModel = require('../../src/roadmap');
+const backlog = require('../../src/backlog');
 const { ISSUE_WORKFLOW, makeService, roadmapIssue, roadmapProject, until, watchRuns } = require('./helpers');
 const path = require('path');
+
+// A real-capable fixture (no agent steps, so `mock: false` never calls a model): used to prove the
+// roadmap reads the platform right before a real start (#168) without any cost or CLI dependency.
+const REAL_ROADMAP_WORKFLOW = `apiVersion: multiagent/v1
+kind: Workflow
+metadata:
+  name: fixture-real-roadmap
+inputs:
+  task: { type: string, required: true }
+  repo_path: { type: string, required: true }
+  issue: { type: string, default: "" }
+agents: {}
+steps:
+  - id: review
+    type: human_approval
+    message: "Accept?"
+`;
+
+// A project with a repository and a non-empty folder (preflight needs one for a real run), and a
+// synced backlog cache of `issues` (full shape, so a stale/closed cache can differ from the fresh read).
+function realRoadmapProject(api, ws, t, issues, name) {
+  return (async () => {
+    const folder = fs.mkdtempSync(path.join(os.tmpdir(), `service-${name}-`));
+    fs.writeFileSync(path.join(folder, 'README.md'), 'x');
+    t.after(() => fs.rmSync(folder, { recursive: true, force: true }));
+    const p = await api['projects:create']({ name: 'demo', folder });
+    api['projects:update']({ id: p.id, patch: { repo: 'https://github.com/o/r' } });
+    fs.mkdirSync(ws.backlog, { recursive: true });
+    fs.writeFileSync(path.join(ws.backlog, `${p.id}.json`), JSON.stringify({ projectId: p.id, platform: 'github', repo: 'https://github.com/o/r', issues }));
+    return p;
+  })();
+}
+const cachedIssue = (number, state, title, body) => ({ number, title, state, url: `https://github.com/o/r/issues/${number}`, body, labels: [], assignees: [], tasks: { done: 0, total: 0 }, updatedAt: '2026-09-01T00:00:00Z' });
 
 test('roadmap: stage 2 starts only after every stage-1 item succeeds and merges', async (t) => {
   const { service, api } = makeService(t);
@@ -257,4 +292,98 @@ test('roadmap: reordering stages on save persists the new order', async (t) => {
   });
   assert.deepEqual(reordered.roadmap.stages.map((s) => s.items[0].number), [3, 1, 2]);
   assert.deepEqual(api['roadmap:get']({ projectId: p.id }).stages.map((s) => s.items[0].number), [3, 1, 2]);
+});
+
+// ---- #168: the platform is the source of truth, read again right before a real start -----------
+
+test('roadmap: #168 a real item reads the platform right before it starts; the cache said its issue was closed, but the fresh read is what decides and what the run and the item\'s copy get', async (t) => {
+  const { service, api } = makeService(t);
+  const ws = service.workspace();
+  fs.writeFileSync(path.join(ws.workflows, 'fixture-real-roadmap.yaml'), REAL_ROADMAP_WORKFLOW);
+  const p = await realRoadmapProject(api, ws, t, [cachedIssue(1, 'closed', 'Cached title', 'Cached body')], 'fresh-roadmap');
+  await api['roadmap:save']({ projectId: p.id, stages: [{ items: [{ workflow: 'fixture-real-roadmap.yaml', number: 1, mock: false }] }] });
+  t.mock.method(backlog, 'freshIssues', async ({ item }) => ({
+    issues: [{ number: item.number, url: item.url, title: 'Fresh title', body: 'Fresh body', labels: [], state: 'open', updatedAt: '2026-10-01T12:00:00Z' }],
+    warnings: [],
+  }));
+
+  delete process.env.MULTIAGENT_SIMULATION_ONLY;
+  t.after(() => { process.env.MULTIAGENT_SIMULATION_ONLY = '1'; });
+  await api['roadmap:start']({ projectId: p.id, simulated: false });
+
+  const run = api['runs:active']()[0];
+  assert.ok(run, 'the cache said closed, but the fresh read said open: it started');
+  assert.match(run.inputs.task, /^Fresh title\n\nIssue: https:\/\/github\.com\/o\/r\/issues\/1\n\nFresh body$/);
+  assert.deepEqual(run.issues, [{ number: 1, url: 'https://github.com/o/r/issues/1', title: 'Fresh title', updatedAt: '2026-10-01T12:00:00Z' }]);
+  const item = api['roadmap:get']({ projectId: p.id }).stages[0].items[0];
+  assert.equal(item.title, 'Fresh title'); // the item's read-only copy was brought up to date too
+  assert.equal(item.body, 'Fresh body');
+});
+
+test('roadmap: #168 an issue found closed on the fresh read is skipped at start, although the cache (and the item) still show it open; the freed slot starts the next item right away', async (t) => {
+  const { service, api } = makeService(t);
+  const ws = service.workspace();
+  fs.writeFileSync(path.join(ws.workflows, 'fixture-real-roadmap.yaml'), REAL_ROADMAP_WORKFLOW);
+  const p = await realRoadmapProject(api, ws, t, [cachedIssue(1, 'open', 'Issue 1', 'Body 1'), cachedIssue(2, 'open', 'Issue 2', 'Body 2')], 'closed-roadmap');
+  await api['roadmap:save']({
+    projectId: p.id,
+    stages: [{ items: [{ workflow: 'fixture-real-roadmap.yaml', number: 1, mock: false }, { workflow: 'fixture-real-roadmap.yaml', number: 2, mock: false }] }],
+  });
+  t.mock.method(backlog, 'freshIssues', async ({ item }) => (item.number === 1
+    ? { issues: [{ number: 1, url: item.url, title: item.title, body: item.body, labels: [], state: 'closed', updatedAt: '2026-10-01T00:00:00Z' }], warnings: [] }
+    : { issues: [{ number: item.number, url: item.url, title: 'Fresh 2', body: 'Fresh body 2', labels: [], state: 'open', updatedAt: '2026-10-01T00:00:00Z' }], warnings: [] }));
+
+  delete process.env.MULTIAGENT_SIMULATION_ONLY;
+  t.after(() => { process.env.MULTIAGENT_SIMULATION_ONLY = '1'; });
+  await api['roadmap:start']({ projectId: p.id, simulated: false });
+
+  const roadmap = api['roadmap:get']({ projectId: p.id });
+  const [item1, item2] = roadmap.stages[0].items;
+  assert.equal(item1.status, 'skipped');
+  assert.equal(item1.error, 'Every issue is closed.');
+  assert.equal(item2.status, 'running'); // the freed slot started it in the same dispatch
+  const run = api['runs:active']()[0];
+  assert.ok(run);
+  assert.deepEqual(run.issues.map((i) => i.number), [2]);
+  assert.match(run.inputs.task, /^Fresh 2/);
+});
+
+test('roadmap: #168 a simulated roadmap (or a project with no repository) skips a cached-closed issue from the cache alone; the platform is never read', async (t) => {
+  const { service, api } = makeService(t);
+  const ws = service.workspace();
+  fs.writeFileSync(path.join(ws.workflows, 'fixture-issue.yaml'), ISSUE_WORKFLOW);
+  const p = await realRoadmapProject(api, ws, t, [cachedIssue(1, 'closed', 'Cached title', 'Cached body')], 'simulated-roadmap');
+  await api['roadmap:save']({ projectId: p.id, stages: [{ items: [{ workflow: 'fixture-issue.yaml', number: 1, mock: false }] }] });
+  t.mock.method(backlog, 'freshIssues', async () => { throw new Error('the platform must never be read for a simulated roadmap'); });
+
+  delete process.env.MULTIAGENT_SIMULATION_ONLY;
+  t.after(() => { process.env.MULTIAGENT_SIMULATION_ONLY = '1'; });
+  await api['roadmap:start']({ projectId: p.id, simulated: true });
+
+  const roadmap = api['roadmap:get']({ projectId: p.id });
+  assert.equal(roadmap.state, 'done');
+  assert.equal(roadmap.stages[0].items[0].status, 'skipped');
+  assert.equal(roadmap.stages[0].items[0].error, 'Every issue is closed.');
+  assert.deepEqual(api['runs:active'](), []);
+});
+
+test('roadmap: #168 a project with no repository skips a cached-closed issue from the cache alone; the platform is never read', async (t) => {
+  const { service, api } = makeService(t);
+  const ws = service.workspace();
+  fs.writeFileSync(path.join(ws.workflows, 'fixture-issue.yaml'), ISSUE_WORKFLOW);
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'service-no-repo-roadmap-'));
+  t.after(() => fs.rmSync(folder, { recursive: true, force: true }));
+  const p = await api['projects:create']({ name: 'demo', folder }); // no repo set
+  fs.mkdirSync(ws.backlog, { recursive: true });
+  fs.writeFileSync(path.join(ws.backlog, `${p.id}.json`), JSON.stringify({ projectId: p.id, platform: 'github', issues: [cachedIssue(1, 'closed', 'Cached title', 'Cached body')] }));
+  await api['roadmap:save']({ projectId: p.id, stages: [{ items: [{ workflow: 'fixture-issue.yaml', number: 1, mock: false }] }] });
+  t.mock.method(backlog, 'freshIssues', async () => { throw new Error('the platform must never be read without a project repository'); });
+
+  delete process.env.MULTIAGENT_SIMULATION_ONLY;
+  t.after(() => { process.env.MULTIAGENT_SIMULATION_ONLY = '1'; });
+  await api['roadmap:start']({ projectId: p.id, simulated: false });
+
+  const roadmap = api['roadmap:get']({ projectId: p.id });
+  assert.equal(roadmap.stages[0].items[0].status, 'skipped');
+  assert.deepEqual(api['runs:active'](), []);
 });
