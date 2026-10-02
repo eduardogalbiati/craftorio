@@ -29,7 +29,7 @@ const TYPES = {
 };
 const COOKIE = 'multiagent_token';
 const MAX_BODY = 5 * 1024 * 1024;
-const PUSHED = ['notifications:changed', 'run:event', 'run:meta', 'supervisor:watch', 'term:data', 'term:exit'];
+const PUSHED = ['notifications:changed', 'oracle:changed', 'run:event', 'run:meta', 'supervisor:watch', 'term:data', 'term:exit'];
 
 class HttpError extends Error {
   constructor(status, message) { super(message); this.status = status; }

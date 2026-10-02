@@ -142,7 +142,8 @@ const DEFAULT_SETTINGS = {
   openRunOnStart: true,   // when a workflow starts, switch to the run screen
   confirmStop: true,      // ask for confirmation before stopping a workflow
   // desktop notifications (see src/notifications.js): run status changes, CLI sessions waiting for you,
-  // the Product Owner's answers (#149)
+  // the Product Owner's answers (#149), the Oracle's actions under Night watch (#123)
+  notifyOracle: true,
   notifyPO: true,
   notifyRuns: true,
   notifySessions: true,
@@ -164,8 +165,9 @@ const DEFAULT_SETTINGS = {
   // monthly limits per provider (see src/usage.js); null = no limit
   budgets: {},
   // the Oracle (src/oracle.js): its daily spend limit in USD (0 = no cap) and the context size
-  // (tokens) past which its next turn starts a new session from a handoff note
-  oracle: { dailyBudgetUsd: 20, compactAtTokens: 150000 },
+  // (tokens) past which its next turn starts a new session from a handoff note; what wakes it (#123,
+  // src/oracle-wake.js): wakeScope all | watched | off, wakeOn the event kinds
+  oracle: { dailyBudgetUsd: 20, compactAtTokens: 150000, wakeScope: 'all', wakeOn: ['finished', 'gate', 'interrupted', 'invalid', 'limit', 'merge', 'stall'] },
   // USD per 1M tokens, for CLIs that do not report cost: { model: { input, output, cache_read } }
   prices: {},
   // GitHub Actions quota minutes included per month (GitHub Free: 2,000), see src/actions-usage.js

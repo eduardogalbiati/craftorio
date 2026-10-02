@@ -34,6 +34,7 @@ async function renderSettings() {
   $('#set-notif-retention').value = state.settings.notificationRetentionDays ?? 30;
   renderConcurrency();
   renderOracleSettings();
+  renderOracleWake();
   refreshKeepAwake();
   renderVoice();
   renderIndexStatus();
@@ -80,6 +81,36 @@ async function saveOracleSettings() {
   };
   state.settings = await api.setSettings({ oracle });
   renderOracleSettings();
+}
+
+// The Oracle's wake-ups (#123, src/oracle-wake.js): which runs wake it and on which events, saved
+// with the rest of settings.oracle. The kinds (oracle-wake.js WAKE_KINDS), in display order.
+const ORACLE_WAKE_KINDS = [
+  ['gate', 'Human gates waiting'],
+  ['finished', 'Runs that finish'],
+  ['merge', 'Merge conflicts'],
+  ['limit', 'Limits and budgets'],
+  ['stall', 'Stalls, supervisor decisions'],
+  ['invalid', 'Repeated invalid outputs'],
+  ['interrupted', 'Interrupted runs'],
+];
+function renderOracleWake() {
+  const o = state.settings.oracle || {};
+  const scope = ['all', 'watched', 'off'].includes(o.wakeScope) ? o.wakeScope : 'all';
+  $('#set-oracle-wake').value = scope;
+  const on = Array.isArray(o.wakeOn) ? o.wakeOn : ORACLE_WAKE_KINDS.map(([k]) => k);
+  $('#set-oracle-wake-on').innerHTML = ORACLE_WAKE_KINDS.map(([k, label]) => `<label class="check small"><input type="checkbox" data-oracle-wake-kind="${k}"${on.includes(k) ? ' checked' : ''}${scope === 'off' ? ' disabled' : ''} /> ${esc(label)}</label>`).join('');
+  $('#set-oracle-wake-on').querySelectorAll('[data-oracle-wake-kind]').forEach((el) => (el.onchange = saveOracleWake));
+}
+
+async function saveOracleWake() {
+  const oracle = {
+    ...(state.settings.oracle || {}),
+    wakeScope: $('#set-oracle-wake').value || 'all',
+    wakeOn: [...$('#set-oracle-wake-on').querySelectorAll('[data-oracle-wake-kind]')].filter((el) => el.checked).map((el) => el.dataset.oracleWakeKind),
+  };
+  state.settings = await api.setSettings({ oracle });
+  renderOracleWake();
 }
 
 // Settings › General › Voice input (#82): the whisper.cpp CLI, the model and the language (src/speech.js).
@@ -285,6 +316,10 @@ registerView({
                   <label class="switch"><input type="checkbox" data-setting="notifyPO" /><span></span></label>
                 </div>
                 <div class="s-row">
+                  <div class="s-label"><b>Notify when the Oracle acts under Night watch</b><span>A desktop notification for each repair the Oracle makes without asking while its Night watch is on.</span></div>
+                  <label class="switch"><input type="checkbox" data-setting="notifyOracle" /><span></span></label>
+                </div>
+                <div class="s-row">
                   <div class="s-label"><b>Keep notifications</b><span>Days the notification center (the bell in the sidebar) keeps notifications; older ones are deleted. 0: keep them all.</span></div>
                   <div class="s-ctrl"><input type="number" id="set-notif-retention" min="0" max="3650" step="1" class="s-num" aria-label="Days to keep notifications" /></div>
                 </div>
@@ -317,6 +352,14 @@ registerView({
                 <div class="s-row">
                   <div class="s-label"><b>Compact past (tokens)</b><span>When a turn's context passes this size, the next question starts a new session from the skill, the memory and a handoff note. The history is kept.</span></div>
                   <div class="s-ctrl"><input type="number" id="set-oracle-compact" min="10000" max="1000000" step="10000" class="s-num" aria-label="Oracle compaction threshold in tokens" /></div>
+                </div>
+                <div class="s-row">
+                  <div class="s-label"><b>Wake on run events</b><span>Which runs' events wake the Oracle: every run (except the runs you mute from its chat), only the runs and roadmaps it watches, or none. Each wake-up is one short model call, batched over 30 seconds.</span></div>
+                  <div class="s-ctrl"><select id="set-oracle-wake" aria-label="Which runs wake the Oracle"><option value="all">Every run</option><option value="watched">Watched runs only</option><option value="off">Off</option></select></div>
+                </div>
+                <div class="s-row">
+                  <div class="s-label"><b>Events that wake it</b><span>Routine events (agent output, tool calls, steps starting) never wake it.</span></div>
+                  <div class="s-ctrl oracle-wake-kinds" id="set-oracle-wake-on"></div>
                 </div>
               </div>
             </div>
@@ -358,6 +401,7 @@ registerView({
     };
     for (const sel of ['#set-cr-enabled', '#set-cr-max', '#set-cr-project', '#set-cr-sims']) $(sel).onchange = saveConcurrency;
     for (const sel of ['#set-oracle-budget', '#set-oracle-compact']) $(sel).onchange = saveOracleSettings;
+    $('#set-oracle-wake').onchange = saveOracleWake;
   },
   show: renderSettings,
 });

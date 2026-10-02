@@ -53,9 +53,11 @@ module.exports = (ctx) => {
     let list = null;
     try { list = [].concat(JSON.parse(fs.readFileSync(ws.activeRun, 'utf8'))); } catch { return null; }
     fs.rmSync(ws.activeRun, { force: true });
-    const notices = list.filter((info) => info?.runId && runs.readRun(ws.runs, path.basename(String(info.runId)))?.status === 'interrupted')
-      .map((info) => notifier.interruptedNotice(info));
+    const interrupted = list.filter((info) => info?.runId && runs.readRun(ws.runs, path.basename(String(info.runId)))?.status === 'interrupted');
+    const notices = interrupted.map((info) => notifier.interruptedNotice(info));
     notices.forEach((n) => ctx.notify(n));
+    // the Oracle's wake-ups (#123, src/oracle-wake.js)
+    interrupted.forEach((info) => events.emit('run:interrupted', info));
     return notices[0] || null;
   }
 

@@ -1780,7 +1780,7 @@ class WorkflowRun extends EventEmitter {
       } catch (e) {
         errs = [e.message];
       }
-      this.emitEvent('log', { level: 'warn', message: `Invalid output in ${step.id}${step.agents ? ` (${agentName})` : ''}: ${errs.join('; ')}` });
+      this.emitEvent('log', { level: 'warn', kind: 'invalid_output', step_id: step.id, message: `Invalid output in ${step.id}${step.agents ? ` (${agentName})` : ''}: ${errs.join('; ')}` });
       if (attempt >= 2) throw new Error(`Output of step "${step.id}" failed validation: ${errs.join('; ')}`);
       res = await this.sendToAgent(agentName, this.retryPrompt(agentName, prompt, res.text, schema, errs), { ...opts, retry: true });
       countTools(res);

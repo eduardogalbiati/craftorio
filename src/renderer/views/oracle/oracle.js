@@ -9,6 +9,11 @@
 // (oracle-chat-model.js). Messages reuse .sup-wmsg and markdownHtml; run ids, #issues and run
 // files in an answer open in the app, other paths are copyable. Developer mode asks the simulated
 // Oracle (no model call). Exposes window.OracleChat (open, ask, attach, reload) for the screenshot script.
+// Part 2 (#123): an action card (what changes, where, the backup, who asked) runs only on its
+// "Do it" (oracle:act), Dismiss drops it, Undo puts its backup back; a wake-up shows its run events
+// folded, with Mute per run; a delegation shows the agent asked and its cost. The head's Night
+// watch opens its form (end time, Start / Cancel); while on, a strip shows it with Turn off, and the
+// runs or roadmaps watched and the runs muted (Unwatch, Unmute). oracle:changed reloads the chat.
 // Uses app.js globals ($, esc, state, api, errMsg, devMode, fmtCost, markdownHtml, confirmDialog,
 // selectRun, showView, openArtifactsAt, showSettingsTab, registerView, viewRegistry, Robots).
 (() => {
@@ -16,6 +21,7 @@
   const or = {
     messages: [], service: null, pending: null, error: null, loaded: false, drawer: false,
     drafts: { text: '', images: [] }, pasteError: null, memory: M.memoryForm(''), memoryOpen: false, refilledFor: null,
+    wake: null, nightForm: null, acting: new Set(),
   };
   const SURFACES = ['dock', 'drawer'];
   const SUGGESTIONS = [
@@ -34,9 +40,62 @@
 
   async function load() {
     try {
-      [or.messages, or.service] = await Promise.all([api.oracleHistory(), api.oracleState()]);
+      [or.messages, or.service, or.wake] = await Promise.all([api.oracleHistory(), api.oracleState(), api.oracleWakeState().catch(() => null)]);
       or.loaded = true;
     } catch (e) { or.error = errMsg(e); }
+    render();
+  }
+  // a wake-up, a card or a result arrived (oracle:changed): reload once the burst is over
+  let reloadTimer = null;
+  function reloadSoon() {
+    clearTimeout(reloadTimer);
+    reloadTimer = setTimeout(() => { if (!or.pending) load(); }, 300);
+  }
+
+  // ---- action cards, the Night watch, watches and mutes (#123) --------------------------------
+  // the result of a card's button: the conversation and the state come back
+  async function cardAction(id, call) {
+    or.acting.add(id);
+    render();
+    try {
+      const out = await call();
+      if (out?.messages) or.messages = out.messages;
+      if (out?.state) or.service = out.state;
+      or.error = null;
+    } catch (e) { or.error = errMsg(e); }
+    or.acting.delete(id);
+    await load();
+  }
+  const doAction = (id) => cardAction(id, () => api.oracleAct({ actionId: id, mock: devMode() }));
+  const dismissAction = (id) => cardAction(id, () => api.oracleDismiss({ actionId: id }));
+  async function undoAction(id) {
+    if (!await confirmDialog('Undo this action', 'The backup taken before the action is put back.', 'Undo')) return;
+    cardAction(id, () => api.oracleUndo({ actionId: id }));
+  }
+  async function startNightWatch() {
+    const f = or.nightForm;
+    const until = f.until ? new Date(f.until) : null;
+    if (!until || !(until > new Date())) { or.nightForm = { ...f, error: 'Pick an end time in the future.' }; render(); return; }
+    or.nightForm = { ...f, saving: true, error: null };
+    render();
+    try {
+      const out = await api.setOracleNightWatch({ on: true, until: until.toISOString() });
+      or.messages = out.messages;
+      or.service = out.state;
+      or.nightForm = null;
+    } catch (e) { or.nightForm = { ...f, saving: false, error: errMsg(e) }; }
+    render();
+  }
+  async function stopNightWatch() {
+    try {
+      const out = await api.setOracleNightWatch({ on: false });
+      or.messages = out.messages;
+      or.service = out.state;
+    } catch (e) { or.error = errMsg(e); }
+    render();
+  }
+  async function setWatch(call) {
+    try { or.wake = { ...or.wake, ...(await call()) }; } catch (e) { or.error = errMsg(e); }
     render();
   }
 
@@ -207,12 +266,79 @@
       loadAttachments(m.attachments);
       return `<div class="sup-wmsg user"><div class="sup-wmsg-meta oracle-meta">You · ${esc(time(m.ts))}${m.screen ? ` · <span class="oracle-cut" title="${esc(m.screen)}">${esc(m.screen)}</span>` : ''}${m.unanswered ? ' · <span class="badge warn">no answer</span>' : ''}</div><div class="oracle-text">${esc(m.text)}</div>${thumbsHtml(m.attachments)}</div>`;
     }
+    if (m.kind === 'action' && m.action) return cardHtml(m);
+    if (m.kind === 'delegation') {
+      return `<div class="sup-wmsg system oracle-delegation${m.failed ? ' error' : ''}"><div class="sup-wmsg-meta oracle-meta">${M.delegationParts(m, { fmtTime: time, fmtCost }).map(esc).join(' · ')}${m.failed ? ' · <span class="pill pill-failed">Failed</span>' : ''}</div>
+        <div class="oracle-cut small" title="${esc(m.question)}">${esc(m.question)}</div>
+        <details class="oracle-fold"><summary>Answer${m.ref ? ` <span class="muted small">(${esc(m.ref)})</span>` : ''}</summary><div class="md md-compact oracle-md">${markdownHtml(m.text || '')}</div></details></div>`;
+    }
+    if (m.kind === 'wake') {
+      const mutes = (m.runIds || []).map((id) => {
+        const muted = (or.wake?.muted || []).includes(id);
+        return `<button class="btn ghost sm" type="button" data-oracle-mute="${esc(id)}" data-on="${muted ? '0' : '1'}" title="${muted ? 'Its events wake the Oracle again' : 'Its events no longer wake the Oracle'}">${muted ? 'Unmute' : 'Mute'} ${esc(id)}</button>`;
+      }).join('');
+      return `<div class="sup-wmsg system oracle-wake"><details class="oracle-fold"><summary><span class="sup-wmsg-meta">${esc(time(m.ts))}</span> ${esc(m.text)}</summary>
+        <ul class="oracle-events small">${(m.events || []).map((l) => `<li>${esc(l)}</li>`).join('')}</ul>${mutes ? `<div class="row oracle-card-actions">${mutes}</div>` : ''}</details></div>`;
+    }
     if (m.role === 'system') return `<div class="sup-wmsg system${m.error ? ' error' : ''}"><div class="sup-wmsg-meta">${esc(time(m.ts))}</div><div>${esc(m.text)}</div></div>`;
     const meta = M.metaParts(m, { fmtTime: time, fmtCost }).map(esc).join(' · ');
-    return `<div class="sup-wmsg oracle-msg"><div class="sup-wmsg-meta oracle-meta">${avatar('xs')} Oracle · ${meta}</div><div class="md md-compact oracle-md">${markdownHtml(m.text || '')}</div></div>`;
+    const tag = m.wake ? ' · <span class="badge">wake-up</span>' : m.kind === 'night-summary' ? ' · <span class="badge warn">Night watch</span>' : '';
+    return `<div class="sup-wmsg oracle-msg"><div class="sup-wmsg-meta oracle-meta">${avatar('xs')} Oracle · ${meta}${tag}</div><div class="md md-compact oracle-md">${markdownHtml(m.text || '')}</div>${m.kind === 'night-summary' ? summaryUndoHtml(m) : ''}</div>`;
+  }
+  // a card: the title leads; what changes, where, the backup and why; who asked; its buttons
+  function cardHtml(m) {
+    const a = m.action;
+    const v = M.actionView({ ...a, status: or.acting.has(a.id) ? 'running' : a.status }, { unavailable: view().state === 'unavailable' });
+    const field = (label, value) => (value ? `<dt>${label}</dt><dd>${esc(value)}</dd>` : '');
+    return `<div class="sup-wmsg oracle-msg oracle-card${v.fromContent ? ' from-content' : ''}" data-oracle-card="${esc(a.id)}">
+      <div class="sup-wmsg-meta oracle-meta">${avatar('xs')} Oracle · ${esc(time(m.ts))}</div>
+      <div class="oracle-card-head"><span class="oracle-card-title" title="${esc(a.title)}">${esc(a.title)}</span><span class="pill pill-${esc(v.pill)}">${esc(v.label)}</span></div>
+      <dl class="oracle-card-fields small">${field('Change', a.change)}${field('Where', a.where)}${field('Backup', a.backup)}${field('Why', a.why)}</dl>
+      <div class="oracle-card-from small${v.fromContent ? ' warn' : ' muted'}">${v.auto ? '<span class="badge warn">Night watch</span> Done without asking. ' : ''}${esc(v.requester)}</div>
+      ${a.result ? `<div class="oracle-card-result small${a.result.ok ? '' : ' error'}">${esc(a.result.text)}</div>` : ''}
+      ${v.canDo || v.canUndo ? `<div class="row oracle-card-actions">
+        ${v.canDo ? `<button class="btn primary sm" type="button" data-oracle-act="${esc(a.id)}">Do it</button><button class="btn ghost sm" type="button" data-oracle-dismiss="${esc(a.id)}">Dismiss</button>` : ''}
+        ${v.canUndo ? `<button class="btn ghost sm" type="button" data-oracle-undo="${esc(a.id)}" title="Put back the backup taken before the action">Undo</button>` : ''}
+      </div>` : ''}
+    </div>`;
+  }
+  // the morning summary's Undo buttons, for the actions that can still be undone
+  function summaryUndoHtml(m) {
+    const cards = or.messages.filter((x) => x.kind === 'action' && (m.actions || []).includes(x.action?.id) && x.action.result?.undoable);
+    return cards.length ? `<div class="row oracle-card-actions">${cards.map((x) => `<button class="btn ghost sm oracle-cut" type="button" data-oracle-undo="${esc(x.action.id)}" title="Undo: ${esc(x.action.title)}">Undo: ${esc(x.action.title)}</button>`).join('')}</div>` : '';
+  }
+  // the Night watch (its form, or its strip while on) and the runs watched or muted
+  function opsHtml(w) {
+    const nw = M.nightWatchView(or.service?.nightWatch, { fmtTime: time });
+    const parts = [];
+    if (or.nightForm) {
+      const f = or.nightForm;
+      parts.push(`<form class="oracle-night-form" data-oracle-night-form>
+        <div class="field">
+          <label for="oracle-night-until-${w}">Night watch until</label>
+          <input type="datetime-local" id="oracle-night-until-${w}" class="oracle-night-until" value="${esc(f.until || '')}"${f.saving ? ' disabled' : ''} />
+          <div class="hint">Until then the Oracle fixes what stops the roadmap without asking: it retries or skips a failed item, regroups or reorders planned items, refreshes issue text, restores a workflow or skill default and restarts the dispatch. Each action is logged with its backup and sent as a notification. Gates stay yours; it never closes issues or pushes.</div>
+          ${f.error ? `<p class="error small">${esc(f.error)}</p>` : ''}
+        </div>
+        <div class="row"><button class="btn primary sm" type="submit"${f.saving ? ' disabled' : ''}>Start</button><button class="btn ghost sm" type="button" data-oracle-night-cancel>Cancel</button></div>
+      </form>`);
+    } else if (nw.active) {
+      parts.push(`<div class="row oracle-ops-row"><span class="badge warn" title="Repairs that keep the roadmap going run without asking; everything else waits for you">${esc(nw.label)}</span><span class="spacer"></span><button class="btn ghost sm" type="button" data-oracle-night-off>Turn off</button></div>`);
+    }
+    // the runs and roadmaps watched, the runs muted: one compact row (the full id on hover)
+    const watching = (or.wake?.watching || []).map((x) => {
+      const name = x.runId ? x.runId : `roadmap of ${x.projectId}`;
+      return `<button class="btn ghost sm oracle-cut" type="button" data-oracle-unwatch="${esc(JSON.stringify(x.runId ? { runId: x.runId } : { projectId: x.projectId }))}" title="Watching ${esc(name)}: its events wake the Oracle until it ends. Click to stop watching.">${esc(name)} ×</button>`;
+    });
+    const muted = (or.wake?.muted || []).map((id) => `<button class="btn ghost sm oracle-cut" type="button" data-oracle-mute="${esc(id)}" data-on="0" title="Muted: ${esc(id)}'s events do not wake the Oracle. Click to unmute.">${esc(id)} ×</button>`);
+    if (watching.length || muted.length) {
+      parts.push(`<div class="row oracle-ops-row small">${watching.length ? `<span class="muted">Watching</span>${watching.join('')}` : ''}${muted.length ? `<span class="muted">Muted</span>${muted.join('')}` : ''}</div>`);
+    }
+    if (or.wake?.wakeScope === 'off') parts.push('<div class="muted small">Run events do not wake the Oracle (Settings › Execution › Oracle).</div>');
+    return parts.join('');
   }
   function logHtml(v) {
-    return (v.state === 'empty' ? '<div class="svc-empty muted small">The Oracle keeps one conversation for the whole app. It reads your runs (events, sessions, decisions, costs), the roadmaps and the Backlog, the workflows and skills, and your projects\' repositories, read-only. Ask it why a run failed, where the tokens go or what to do next. It changes nothing yet: it proposes.</div>' : '')
+    return (v.state === 'empty' ? '<div class="svc-empty muted small">The Oracle keeps one conversation for the whole app. It reads your runs (events, sessions, decisions, costs), the roadmaps and the Backlog, the workflows and skills, and your projects\' repositories, read-only. Ask it why a run failed, where the tokens go or what to do next. Run events wake it when they need you. It changes nothing on its own: each change is a card you confirm with Do it.</div>' : '')
       + or.messages.map(messageHtml).join('')
       + (or.pending ? `<div class="sup-wmsg user"><div class="sup-wmsg-meta">You</div><div class="oracle-text">${esc(or.pending)}</div>${or.drafts.images.length ? `<div class="oracle-thumbs">${or.drafts.images.map((i) => `<span class="oracle-thumb"><img src="${esc(i.dataUrl)}" alt="" /></span>`).join('')}</div>` : ''}</div>` : '')
       + (v.state === 'answering' ? '<div class="sup-loading"><span class="spinner"></span><span>The Oracle is reading…</span></div>' : '')
@@ -272,6 +398,16 @@
         memBox.dataset.error = or.memory.error || '';
       }
       memBox.classList.toggle('hidden', !or.memoryOpen);
+      // the Night watch form is redrawn on its own changes only, never while picking the time
+      const ops = $(`#oracle-ops-${w}`);
+      const nf = or.nightForm;
+      const key = nf ? `form:${nf.saving ? 1 : 0}:${nf.error || ''}` : 'strip';
+      if (!nf || !(ops.querySelector('[data-oracle-night-form]') && ops.dataset.key === key)) ops.innerHTML = opsHtml(w);
+      ops.dataset.key = key;
+      ops.classList.toggle('hidden', !ops.innerHTML.trim());
+      // while on, the strip's Turn off is the control
+      const nightOn = M.nightWatchView(or.service?.nightWatch).active;
+      document.querySelectorAll('[data-oracle-night]').forEach((b) => (b.disabled = nightOn || v.state === 'unavailable'));
       $(`#oracle-screen-${w}`).textContent = where;
       $(`#oracle-screen-${w}`).title = where;
       $(`#oracle-notice-${w}`).innerHTML = noticeHtml(v);
@@ -324,6 +460,7 @@
         </div>
       </div>
       <div class="row">
+        <button class="btn ghost sm" type="button" data-oracle-night title="Let the Oracle fix what stops the roadmap without asking, until a time you choose">Night watch</button>
         <button class="btn ghost sm" type="button" data-oracle-memory title="The owner's standing decisions, read at every session start">Memory</button>
         <button class="btn ghost sm" type="button" data-oracle-reset title="A new session from a handoff note; the conversation and the memory are kept">New session</button>
         ${w === 'drawer' ? '<button id="btn-oracle-close" class="icon-btn" type="button" title="Close (Esc)"><svg viewBox="0 0 24 24" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" /></svg></button>' : ''}
@@ -331,6 +468,7 @@
     </div>
     <div class="drawer-body svc-body oracle-body">
       <div id="oracle-memory-${w}" class="oracle-memory hidden"></div>
+      <div id="oracle-ops-${w}" class="oracle-ops hidden"></div>
       <div id="oracle-log-${w}" class="svc-log oracle-log"></div>
       <div id="oracle-notice-${w}" class="oracle-notice"></div>
       <div id="oracle-chips-${w}" class="svc-chips"></div>
@@ -385,8 +523,21 @@
         input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ask(); } });
         input.addEventListener('paste', onPaste);
       });
-      document.addEventListener('input', (e) => { if (e.target.classList?.contains('oracle-mem-input')) or.memory = { ...or.memory, draft: e.target.value }; });
-      document.addEventListener('submit', (e) => { if (e.target.matches?.('[data-oracle-mem-form]')) { e.preventDefault(); saveMemory(); } });
+      document.querySelectorAll('[data-oracle-night]').forEach((b) => (b.onclick = () => {
+        if (M.nightWatchView(or.service?.nightWatch).active) return;
+        or.nightForm = or.nightForm ? null : { until: M.defaultNightEnd(), saving: false, error: null };
+        render();
+        if (or.nightForm) document.querySelector(`#oracle-night-until-${or.drawer ? 'drawer' : 'dock'}`)?.focus();
+      }));
+      document.addEventListener('input', (e) => {
+        if (e.target.classList?.contains('oracle-mem-input')) or.memory = { ...or.memory, draft: e.target.value };
+        if (e.target.classList?.contains('oracle-night-until') && or.nightForm) or.nightForm = { ...or.nightForm, until: e.target.value };
+      });
+      document.addEventListener('submit', (e) => {
+        if (e.target.matches?.('[data-oracle-mem-form]')) { e.preventDefault(); saveMemory(); }
+        if (e.target.matches?.('[data-oracle-night-form]')) { e.preventDefault(); startNightWatch(); }
+      });
+      api.onOracleChanged?.(reloadSoon);
       document.addEventListener('click', (e) => {
         const t = e.target;
         const chip = t.closest('[data-oracle-q]');
@@ -396,6 +547,18 @@
         if (t.closest('[data-oracle-mem-cancel]')) { or.memory = M.cancelMemory(or.memory); or.memoryOpen = false; render(); return; }
         if (t.closest('[data-oracle-mem-close]')) { or.memoryOpen = false; render(); return; }
         if (t.closest('[data-oracle-mem-edit]')) { or.memory = M.editMemory(or.memory); render(); return; }
+        const act = t.closest('[data-oracle-act]');
+        if (act) { act.disabled = true; doAction(act.dataset.oracleAct); return; }
+        const dismiss = t.closest('[data-oracle-dismiss]');
+        if (dismiss) { dismissAction(dismiss.dataset.oracleDismiss); return; }
+        const undoBtn = t.closest('[data-oracle-undo]');
+        if (undoBtn) { undoAction(undoBtn.dataset.oracleUndo); return; }
+        const mute = t.closest('[data-oracle-mute]');
+        if (mute) { setWatch(() => api.muteOracleRun({ runId: mute.dataset.oracleMute, on: mute.dataset.on === '1' })); return; }
+        const unwatch = t.closest('[data-oracle-unwatch]');
+        if (unwatch) { setWatch(() => api.oracleWatch({ ...JSON.parse(unwatch.dataset.oracleUnwatch), on: false })); return; }
+        if (t.closest('[data-oracle-night-cancel]')) { or.nightForm = null; render(); return; }
+        if (t.closest('[data-oracle-night-off]')) { stopNightWatch(); return; }
         if (t.closest('[data-oracle-settings]')) {
           e.preventDefault();
           closeDrawer();

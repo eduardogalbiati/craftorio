@@ -415,9 +415,10 @@ window.reportNotifyContext = reportNotifyContext;
 
 // Where a notification leads (desktop click or the notification center): its terminal, the
 // project's Backlog (a push conflict; with the Product Owner's drawer open for its answer, #149),
-// or its run.
+// or its run; an Oracle's action under Night watch (#123) opens the Oracle.
 function openNotificationTarget(t) {
   if (t.terminalId) { window.SessionsView?.focusTerminal(t.terminalId); return; }
+  if (t.openOracle) { window.OracleChat?.open(); return; }
   if (t.view === 'backlog') {
     window.BacklogActions?.focusProject(t.projectId);
     showView('backlog');

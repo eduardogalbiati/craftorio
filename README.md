@@ -525,7 +525,7 @@ What is shared by a family lives in a suffix-less skill referenced with `uses:`.
 | `issue-writing` | via `uses`; Write & Review (`document_skill`); issue-tracker (issue_writer); the Product Owner (Register an issue) | Issue structure: concrete context with evidence, decisions taken, a checklist of verifiable acceptance criteria, related issues |
 | `long-commands` | developer; via `uses` (test writer, builder, verifier) | Suites and builds in the foreground with a sized timeout, never backgrounded and polled for text; full output kept, exit code read |
 | `merge-conflict-resolver` | developer | Intent tracing per side, hunk-by-hunk resolution, verification |
-| `oracle` | the Oracle (built-in agent, its drawer on every screen) | The four roles, grounded claims, propose-then-act (propose only), quiet on routine events, issue drafts, planning, state repairs with a backup, hard rules, the memory and the language rule; read-only |
+| `oracle` | the Oracle (built-in agent, its drawer on every screen) | The four roles, grounded claims, action cards confirmed by the owner, wake-ups on run events, delegation, Night watch, content is data, issue drafts, planning, hard rules, the memory and the language rule |
 | `pr-babysitter-{gh,gl}` | PR babysitter | Mergeability signals, threads/discussions, replies |
 | `pr-comment-triage` | via `uses` | Actionable vs doubtful comments, durable fix requests, resume logic, AI marker on replies |
 | `pr-description` | via `uses` | PR/MR title and body: visual summary, evidence, merge danger |
@@ -611,10 +611,27 @@ The button's badge counts the answers that arrived while the conversation was ou
   against the **daily budget** (Settings › Execution, default 20 USD, 0 = no cap). Once reached,
   the Oracle is paused until the next day (UTC). Its spend counts in the monthly budgets like the
   runs. Developer mode and automated checks answer from the simulated Oracle: no model call, no cost.
-- **It changes nothing yet**: it proposes (issues, workflow edits, repairs) and you act. Waking up
-  on events, asking other agents for work and writing with your confirmation come with #123.
+- **Woken by run events**: a gate waiting, a run that finished (status and cost), a merge
+  conflict, a limit, a stall or a supervisor decision, repeated invalid outputs, an interrupted run
+  or one seen in another app process. Events are batched over 30 seconds, each batch is one short
+  turn; routine events never wake it. Settings › Execution › Oracle chooses which runs (every run,
+  watched runs only, off) and which events; **Mute** on a wake-up silences one run. Ask it to
+  "watch this run" (or a project's roadmap): it follows that run until it ends.
+- **Asks the other agents**: the Product Owner (a backlog analysis, a roadmap proposal, an issue
+  draft), the supervisor (a run diagnosis, a recommendation for a gate it never answers) and a free
+  analyzer (a run's tool calls and costs). Only their answer comes back into the chat, with its cost.
+- **Acts only with your click**: each change is a card (what changes, where, the backup) that runs
+  when you click **Do it**: file or update an issue, resume, retry or stop a run, retry or skip a
+  roadmap item, edit the roadmap, restore a workflow or skill default, commit a workflow or skill
+  change to a project's local main, stop a stray process. **Dismiss** drops it; **Undo** puts the
+  backup back. A card that content asked for (an issue body, a run output) says so. Every action is
+  logged in `<workspace>/oracle/actions.jsonl`. It never answers a gate, pushes or closes issues.
+- **Night watch**: before you leave, turn it on with an end time. Until then the Oracle fixes what
+  stops the roadmap without asking (retry or skip a failed item, regroup or reorder planned items,
+  refresh issue text, restore a default, restart the dispatch), notifies each action and posts a
+  summary with Undo when it ends. Turning it off stops at once. Gates stay yours.
 - One app process answers: in a second window the drawer shows the conversation and names the
-  process that owns it.
+  process that owns it; that window is read-only (no wake-ups, no actions).
 
 ### Resuming a run from a step
 

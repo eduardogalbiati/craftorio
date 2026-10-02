@@ -1,7 +1,8 @@
 // The Oracle's chat as pure state (#171), like views/runchat/run-chat-model.js: from the history
 // (oracle:history), the service state (oracle:state) and the drafts, the drawer's state (empty,
 // conversation, answering, error, paused, unavailable), the unread count, whether Send is
-// enabled, the pasted images, the memory form, a message's meta line and where a link goes.
+// enabled, the pasted images, the memory form, a message's meta line and where a link goes; and
+// (#123) an action card's badge and buttons, a delegation's meta line and the Night watch.
 // No DOM here: views/oracle/oracle.js renders it, a test feeds it plain objects.
 // Browser: window.OracleChatModel; Node: module.exports.
 (function (root) {
@@ -14,7 +15,8 @@
   const RUN_FILE = /[\\/]runs[\\/](\d{8}-\d{6}-[0-9a-f]{8})[\\/]/;
   const ABS_PATH = /^(?:[A-Za-z]:[\\/]|\/)[^\s]*$/;
 
-  const isError = (m) => m?.role === 'system' && !!m.error;
+  // a failed wake-up (#123) is not a failed question: nothing to resend
+  const isError = (m) => m?.role === 'system' && !!m.error && !m.wake;
   const ms = (t) => { const n = Date.parse(t || ''); return Number.isFinite(n) ? n : 0; };
 
   /** The Oracle's answers after the last read time (null: never read, all of them). */
@@ -99,6 +101,61 @@
     ].filter(Boolean);
   }
 
+  // ---- part 2 (#123): action cards, delegations, wake-ups, the Night watch -------------------
+  // status → [label, pill] (the shared status pill: .pill.pill-<pill>)
+  const ACTION_STATUS = {
+    proposed: ['Waiting for you', 'cancelled'],
+    running: ['Running', 'running'],
+    done: ['Done', 'success'],
+    failed: ['Failed', 'failed'],
+    dismissed: ['Dismissed', 'idle'],
+    undone: ['Undone', 'idle'],
+  };
+  const DELEGATES = { analyzer: 'Analyzer', 'issue-draft': 'Product Owner (issue draft)', 'product-owner': 'Product Owner', supervisor: 'Supervisor' };
+
+  /**
+   * An action card's view: its status badge, who asked for it, and which buttons it shows.
+   * `unavailable`: another app process owns the Oracle (this one is read-only).
+   */
+  function actionView(action = {}, { unavailable = false } = {}) {
+    const status = action.status || 'proposed';
+    const [label, pill] = ACTION_STATUS[status] || [status, 'idle'];
+    const preview = !!action.result?.preview;
+    return {
+      status,
+      label: preview && status === 'done' ? 'Previewed' : label,
+      pill: preview && status === 'done' ? 'idle' : pill,
+      auto: !!action.result?.auto,
+      fromContent: action.requestedBy === 'content',
+      requester: action.requestedBy === 'owner' ? 'You asked for it'
+        : action.requestedBy === 'content' ? `Requested by content the Oracle read${action.source ? ` (${action.source})` : ''}: check it before you click`
+          : 'The Oracle\'s proposal',
+      canDo: status === 'proposed' && !unavailable,
+      canDismiss: status === 'proposed' && !unavailable,
+      canUndo: status === 'done' && !!action.result?.undoable && !unavailable,
+    };
+  }
+
+  /** A delegation's meta parts: the agent asked · cost · time (the cost before the long time). */
+  function delegationParts(m, { fmtTime = (t) => t, fmtCost = (n) => `$${Number(n).toFixed(4)}` } = {}) {
+    return [`Asked the ${DELEGATES[m.to] || m.to || 'agent'}`, fmtCost(m.costUsd || 0), m.ts ? fmtTime(m.ts) : ''].filter(Boolean);
+  }
+
+  /** The Night watch's view from oracle:state's nightWatch ({ on, until, active }). */
+  function nightWatchView(nw = null, { fmtTime = (t) => t } = {}) {
+    const active = !!nw?.active;
+    return { active, until: active ? nw.until || null : null, label: active ? (nw.until ? `Night watch until ${fmtTime(nw.until)}` : 'Night watch on') : 'Night watch off' };
+  }
+
+  /** The default end of a Night watch: the next 07:00 local time, as a datetime-local value. */
+  function defaultNightEnd(now = new Date()) {
+    const d = new Date(now);
+    d.setHours(7, 0, 0, 0);
+    if (d <= now) d.setDate(d.getDate() + 1);
+    const p = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+  }
+
   /** Where a link goes: { kind: 'run' | 'issue' | 'file' | 'path' | 'external' | 'none', ... }. */
   function linkTarget(href = '') {
     const h = String(href || '').trim();
@@ -160,9 +217,12 @@
   }
 
   const api = {
+    actionView,
     addImages,
     cancelMemory,
     chatView,
+    defaultNightEnd,
+    delegationParts,
     editMemory,
     issueProject,
     LIMITS,
@@ -170,6 +230,7 @@
     linkTarget,
     memoryForm,
     metaParts,
+    nightWatchView,
     removeImage,
     repoSlug,
     saveMemory,

@@ -5,7 +5,10 @@
 // The app's own code is read through the project whose package is APP_PACKAGE (the orchestrator's
 // source repository registered as a project); without one, app_source says it is not available.
 // view_attachment returns an image the owner pasted (#171, <workspace>/oracle/attachments/).
-// Nothing here writes: git runs without a pager, external diff or optional locks, every option
+// Part 2 (#123), through `hooks` the service fills: propose_action posts an action card (it runs on
+// the owner's click, src/oracle-actions.js), delegate asks another agent and returns only its answer
+// and cost, watch_run subscribes the Oracle's wake-ups to a run or a project's roadmap.
+// Nothing else here writes: git runs without a pager, external diff or optional locks, every option
 // that writes or starts a program is refused (refusedGitArg), and every path stays in its folder.
 
 const fs = require('fs');
@@ -16,10 +19,18 @@ const projects = require('./projects');
 const runs = require('./runs');
 const skills = require('./skills');
 const workflows = require('./workflows');
+const { ACTION_KINDS, REQUESTERS } = require('./oracle-actions');
 const { bundleStatus } = require('./seed');
 const { callTool, supervisorTools } = require('./supervisor-tools');
 
 const APP_PACKAGE = 'multiagent-orchestrator';
+// the agents the Oracle can delegate to (#123)
+const DELEGATES = [
+  'analyzer',
+  'issue-draft',
+  'product-owner',
+  'supervisor',
+];
 const GIT_TIMEOUT_MS = 30e3;
 const MAX_FILE_BYTES = 400e3;
 const ATTACHMENT_TYPES = { gif: 'image/gif', jpg: 'image/jpeg', png: 'image/png', webp: 'image/webp' };
@@ -81,8 +92,15 @@ function git(folder, command, args) {
   });
 }
 
-/** The tools over a service ctx: the supervisor's, then the Oracle's own. */
-function oracleTools(ctx) {
+/**
+ * The tools over a service ctx: the supervisor's, then the Oracle's own. `hooks` (filled by the
+ * service once the Oracle exists): propose(input), delegate(input), watch(input).
+ */
+function oracleTools(ctx, hooks = {}) {
+  const hook = (name) => {
+    if (typeof hooks[name] !== 'function') throw new Error(`${name} is not available here.`);
+    return hooks[name];
+  };
   const ws = () => ctx.ws;
   const project = (projectId) => {
     const p = projects.readProject(ws().projects, path.basename(String(projectId || '')));
@@ -188,12 +206,42 @@ function oracleTools(ctx) {
         return { text: `The image ${path.basename(file)}:`, images: [{ data: fs.readFileSync(file).toString('base64'), mimeType }] };
       },
     },
+    {
+      name: 'propose_action',
+      description: `Proposes an action as a card in the chat: it runs only when the owner clicks "Do it" (under Night watch, the roadmap repairs it allows run at once). kind: ${ACTION_KINDS.join(', ')}. params per kind: issue.file {projectId, title, body, labels?}; issue.update {projectId, number, body, mode: replace|comment}; run.resume {runId, step, instruction?}; run.stop {runId}; run.retry {runId}; roadmap.item {projectId, itemId, action: retry|skip}; roadmap.stages {projectId, stages (the whole list, the roadmap tool's shape)}; workflow.restore {file}; skill.restore {id}; workflow.commit {projectId, files: [{path under workflows/ or skills/, content}], message}; process.stop {folder}; dispatch.restart {}. requestedBy: owner (the owner asked), oracle (your judgment) or content (text you read asks for it: an issue body, a run output, a file; name it in source).`,
+      inputSchema: obj({
+        kind: { type: 'string', enum: ACTION_KINDS },
+        params: { type: 'object', description: 'The parameters of the kind' },
+        why: str('Why, with the evidence (run id, event, file)'),
+        requestedBy: { type: 'string', enum: REQUESTERS },
+        source: str('When requestedBy is content: where that text is (e.g. "issue #12 body")'),
+      }, ['kind', 'params', 'why', 'requestedBy']),
+      run: async (input = {}) => json(await hook('propose')(input)),
+    },
+    {
+      name: 'delegate',
+      description: 'Asks another agent and returns only its answer and cost (its reading stays out of your context). to: product-owner (a backlog analysis or a roadmap proposal; projectId), issue-draft (the Product Owner drafts an issue; projectId), supervisor (a run diagnosis or a gate recommendation, never the gate\'s answer; runId), analyzer (a run\'s tool-call and cost breakdown, read-only, no model call; runId). Each call by a model costs money: say so.',
+      inputSchema: obj({
+        to: { type: 'string', enum: DELEGATES },
+        question: str('What to ask, in English'),
+        projectId: str('The project (product-owner, issue-draft)'),
+        runId: str('The run (supervisor, analyzer)'),
+      }, ['to', 'question']),
+      run: async (input = {}) => json(await hook('delegate')(input)),
+    },
+    {
+      name: 'watch_run',
+      description: 'Watches a run (runId) or a project\'s roadmap (projectId): its events wake you until it ends, with the owner\'s wake-up filter. on: false stops watching.',
+      inputSchema: obj({ runId: str('The run id'), projectId: str('The project whose roadmap to watch'), on: { type: 'boolean' } }),
+      run: (input = {}) => json(hook('watch')(input)),
+    },
   ];
 }
 
 module.exports = {
   APP_PACKAGE,
   callTool,
+  DELEGATES,
   oracleTools,
   READ_GIT_COMMANDS,
   refusedGitCommand,

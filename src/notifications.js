@@ -7,10 +7,11 @@
 //            (event `conflict`); target = { view: 'backlog', projectId }
 //   session  an AI CLI in a Sessions terminal stopped and waits for the user; target = { terminalId }
 //   po       the Backlog's Product Owner answered a question (#149); target = { view: 'backlog', projectId, openPO: true }
+//   oracle   the Oracle acted on its own under the owner's Night watch (#123); target = { openOracle: true }
 //
 // Nothing is shown while the window is focused on the notice's run, session or Product Owner drawer.
 
-const SETTING = { po: 'notifyPO', run: 'notifyRuns', session: 'notifySessions' };
+const SETTING = { oracle: 'notifyOracle', po: 'notifyPO', run: 'notifyRuns', session: 'notifySessions' };
 const STATUS_LABEL = { success: 'succeeded', failed: 'failed', cancelled: 'cancelled', interrupted: 'interrupted' };
 
 const clip = (s, n = 180) => {
@@ -79,6 +80,17 @@ function productOwnerNotice({ project = {}, message = {} } = {}) {
     title: message.error ? `The Product Owner could not answer: ${name}` : `The Product Owner answered: ${name}`,
     body: clip(draft ? `Draft: ${draft}` : message.text) || 'Open the Backlog to read the answer.',
     target: { view: 'backlog', projectId: project.id || null, openPO: true },
+  };
+}
+
+// The notice for an action the Oracle took without asking, under the Night watch (#123):
+// { title, body, ok } from src/oracle.js.
+function oracleNotice({ title, body, ok = true } = {}) {
+  return {
+    kind: 'oracle', event: ok ? 'acted' : 'failed',
+    title: clip(title || 'Oracle', 120),
+    body: clip(body) || 'Open the Oracle to see what it did.',
+    target: { openOracle: true },
   };
 }
 
@@ -224,6 +236,7 @@ module.exports = {
   attentionSignal,
   interruptedNotice,
   normalizeContext,
+  oracleNotice,
   productOwnerNotice,
   promptLine,
   pushConflictNotice,

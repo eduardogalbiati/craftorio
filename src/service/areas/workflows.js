@@ -1,6 +1,7 @@
 // Service area: the workspace's workflows (Workflows screen). The list with each file's origin
 // (default, modified or custom) and what the visual builder can draw; the builder's load, save and
-// clone; and restoring a bundled default over an edited copy (the copy goes to the trash).
+// clone; and restoring a bundled default over an edited copy (the copy goes to the trash), for a
+// workflow or a skill.
 
 const fs = require('fs');
 const path = require('path');
@@ -8,7 +9,9 @@ const { loadWorkflow } = require('../../engine/workflow');
 const capabilities = require('../../engine/capabilities');
 const workflows = require('../../workflows');
 const builder = require('../../workflow-builder');
+const skills = require('../../skills');
 const { BUNDLED_WORKFLOWS_DIR } = require('../common');
+const { bundleStatus, restoreBundled } = require('../../seed');
 
 module.exports = (ctx) => {
   const { host } = ctx;
@@ -133,10 +136,21 @@ module.exports = (ctx) => {
     return true;
   }
 
+  // The same for a skill (the Oracle's action, #123): the edited copy goes to the trash.
+  async function restoreSkill(id) {
+    const { ws } = ctx;
+    const name = path.basename(String(id || ''));
+    if (!bundleStatus(ctx.BUNDLED_SKILLS_DIR, ws.skills, skills.SKILL_KIND)[name]?.restorable) throw new Error(`"${name}" has no bundled default to restore.`);
+    await host.trashItem(path.join(ws.skills, name));
+    restoreBundled(ctx.BUNDLED_SKILLS_DIR, ws.skills, skills.SKILL_KIND, name);
+    return true;
+  }
+
   return {
     cloneBuilderWorkflow,
     listWorkflows,
     loadBuilderWorkflow,
+    restoreSkill,
     restoreWorkflow,
     saveBuilderWorkflow,
   };
