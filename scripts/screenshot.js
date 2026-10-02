@@ -346,6 +346,54 @@ function demoRoadmap(ws, projectId, live = 'off') {
   }, null, 2));
 }
 
+// Workflows › Definitions (#137): declared outputs on an edited default (modified, Restore
+// default), two custom workflows (one in Monitor & Improve, one with an unknown category: Other)
+// and three saved pipelines, connected with their mappings and conditions.
+function demoPipelines(ws, appDir) {
+  // seeded now (the app would at start) so the edited default counts as modified, not custom
+  require(path.join(appDir, 'src', 'workflows')).seedWorkflows(path.join(appDir, 'workflows'), ws.workflows);
+  const wf = (f) => path.join(ws.workflows, f);
+  const tracker = fs.readFileSync(wf('issue-tracker.yaml'), 'utf8');
+  fs.writeFileSync(wf('issue-tracker.yaml'), tracker.replace('description: "The issues created:', 'description: "The filed issues:'));
+  // the retrospective declares `findings` (#134): the copies rename it instead of adding a second `outputs:`
+  const retro = fs.readFileSync(wf('run-retrospective.yaml'), 'utf8');
+  fs.writeFileSync(wf('weekly-digest.yaml'), retro.replace('name: run-retrospective', 'name: weekly-digest').replace(/description: .*/, 'description: Summarizes the week\'s retrospectives into one digest of what to change first.').replace('\n  findings:\n', '\n  digest:\n'));
+  fs.writeFileSync(wf('release-notes.yaml'), retro.replace('name: run-retrospective', 'name: release-notes').replace('category: monitor', 'category: ops').replace(/description: .*/, 'description: Drafts the release notes of the merged pull requests since the last tag.').replace('\n  findings:\n', '\n  notes:\n'));
+  const dir = path.join(ws.root, 'pipelines');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'issue-to-merge.yaml'), [
+    'name: Issue to merge',
+    'description: Files a triaged issue, then develops it up to the merge.',
+    'category: build',
+    'stages:',
+    '  - workflow: issue-tracker.yaml',
+    '  - workflow: software-development.yaml',
+    '    when: success',
+    '    map: { issues: issues }',
+    '',
+  ].join('\n'));
+  fs.writeFileSync(path.join(dir, 'ship-and-learn.yaml'), [
+    'name: Ship and learn',
+    'description: Develops a task, then runs a retrospective on that run.',
+    'stages:',
+    '  - workflow: software-development.yaml',
+    '  - workflow: run-retrospective.yaml',
+    '    when: finished',
+    '    map: { run_id: run_id }',
+    '',
+  ].join('\n'));
+  fs.writeFileSync(path.join(dir, 'weekly-review.yaml'), [
+    'name: Weekly review',
+    'description: The latest retrospective feeds the weekly digest.',
+    'category: monitor',
+    'stages:',
+    '  - workflow: run-retrospective.yaml',
+    '  - workflow: weekly-digest.yaml',
+    '    map: { report: retrospectives }',
+    '',
+  ].join('\n'));
+}
+
 // An accepted, simulated Write & Review run that enriched #12 (#103): the Backlog card shows
 // "enriched", its chat (click the badge) has Save to issue, whose preview is all a screenshot does.
 const DEMO_ENRICH_RUN = '20260119-090000-demo0012';
@@ -798,6 +846,7 @@ function main() {
     // also on Artifacts: a second run group (its document.md) for Collapse all / Expand all (#126)
     if (['artifacts', 'backlog', 'duo'].includes(args.view)) demoEnrichRun(ws, project.id);
     if (args.view === 'analytics') demoAnalyticsRuns(ws, project.id);
+    if (args.view === 'workflows') demoPipelines(ws, appDir);
     if (args.view === 'analytics' && args.tab === 'performance') demoPerformanceRuns(ws, project.folder, project.id);
     // the Night watch's nights (#172): its screen, and the Dashboard's morning summary (an app before it: nothing)
     if (['dashboard', 'nightwatch'].includes(args.view)) {
