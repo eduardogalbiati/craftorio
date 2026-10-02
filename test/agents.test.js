@@ -180,6 +180,7 @@ test('listAgents(dir, { workflowsDir }) lists every agent of every workflow afte
     'workflow:ai-arena.yaml:contender_5',
     'workflow:ai-arena.yaml:synthesizer',
     'workflow:ai-arena.yaml:verifier',
+    'workflow:backlog-refresh.yaml:refresher',
     'workflow:issue-tracker.yaml:code_analyzer',
     'workflow:issue-tracker.yaml:issue_writer',
     'workflow:issue-tracker.yaml:issue_filer',

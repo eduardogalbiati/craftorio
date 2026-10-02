@@ -367,6 +367,70 @@ test('roadmap: #168 a simulated roadmap (or a project with no repository) skips 
   assert.deepEqual(api['runs:active'](), []);
 });
 
+// ---- #161: a workflow that never merges (metadata.merges: false, e.g. backlog-refresh) ----------
+
+// No agent steps, so `mock: false` never calls a model (same trick as REAL_ROADMAP_WORKFLOW); the
+// run succeeds on its own gate without ever merging anything.
+const NEVER_MERGES_WORKFLOW = `apiVersion: multiagent/v1
+kind: Workflow
+metadata:
+  name: fixture-never-merges
+  merges: false
+inputs:
+  task: { type: string, required: true }
+  repo_path: { type: string, required: true }
+  issue: { type: string, default: "" }
+agents: {}
+steps:
+  - id: review
+    type: human_approval
+    message: "Accept?"
+`;
+
+test('roadmap: #161 a real item of a workflow with metadata.merges: false ends done once its run succeeds, although it never merged', async (t) => {
+  const { service, api } = makeService(t);
+  const ws = service.workspace();
+  fs.writeFileSync(path.join(ws.workflows, 'fixture-never-merges.yaml'), NEVER_MERGES_WORKFLOW);
+  const p = await realRoadmapProject(api, ws, t, [cachedIssue(1, 'open', 'Issue 1', 'Body 1')], 'never-merges-roadmap');
+  await api['roadmap:save']({ projectId: p.id, stages: [{ items: [{ workflow: 'fixture-never-merges.yaml', number: 1, mock: false }] }] });
+  const { gates, finished } = watchRuns(service);
+
+  delete process.env.MULTIAGENT_SIMULATION_ONLY;
+  t.after(() => { process.env.MULTIAGENT_SIMULATION_ONLY = '1'; });
+  await api['roadmap:start']({ projectId: p.id, simulated: false });
+
+  const runId = api['runs:active']()[0].runId;
+  await until(() => gates.has(runId));
+  api['approval:resolve']({ runId, id: gates.get(runId), answer: true });
+  await until(() => finished.has(runId));
+  await until(() => api['roadmap:get']({ projectId: p.id }).state === 'done');
+  const roadmap = api['roadmap:get']({ projectId: p.id });
+  assert.equal(roadmap.stages[0].items[0].status, 'done');
+  assert.equal(roadmap.stages[0].items[0].error, null);
+});
+
+test('roadmap: #161 a real item of an ordinary workflow (no metadata.merges) still fails as "finished without merging"', async (t) => {
+  const { service, api } = makeService(t);
+  const ws = service.workspace();
+  fs.writeFileSync(path.join(ws.workflows, 'fixture-real-roadmap.yaml'), REAL_ROADMAP_WORKFLOW);
+  const p = await realRoadmapProject(api, ws, t, [cachedIssue(1, 'open', 'Issue 1', 'Body 1')], 'still-merges-roadmap');
+  await api['roadmap:save']({ projectId: p.id, stages: [{ items: [{ workflow: 'fixture-real-roadmap.yaml', number: 1, mock: false }] }] });
+  const { gates, finished } = watchRuns(service);
+
+  delete process.env.MULTIAGENT_SIMULATION_ONLY;
+  t.after(() => { process.env.MULTIAGENT_SIMULATION_ONLY = '1'; });
+  await api['roadmap:start']({ projectId: p.id, simulated: false });
+
+  const runId = api['runs:active']()[0].runId;
+  await until(() => gates.has(runId));
+  api['approval:resolve']({ runId, id: gates.get(runId), answer: true });
+  await until(() => finished.has(runId));
+  await until(() => api['roadmap:get']({ projectId: p.id }).state === 'paused');
+  const roadmap = api['roadmap:get']({ projectId: p.id });
+  assert.equal(roadmap.stages[0].items[0].status, 'failed');
+  assert.match(roadmap.stages[0].items[0].error, /finished without merging/);
+});
+
 test('roadmap: #168 a project with no repository skips a cached-closed issue from the cache alone; the platform is never read', async (t) => {
   const { service, api } = makeService(t);
   const ws = service.workspace();

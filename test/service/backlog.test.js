@@ -4,7 +4,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const backlog = require('../../src/backlog');
-const { ISSUE_WORKFLOW, makeService, until, untilTrue, watchRuns } = require('./helpers');
+const { ISSUE_WORKFLOW, gitRepo, makeService, until, untilTrue, watchRuns } = require('./helpers');
 
 test('backlog: with simulation only, a real assignment is refused and nothing is queued', async (t) => {
   const { service, api } = makeService(t);
@@ -472,4 +472,118 @@ test('backlog:save-doc: a run still in progress is refused', async (t) => {
   await until(() => api['runs:active']().some((r) => r.runId === runId && r.waiting > 0));
   await assert.rejects(api['backlog:save-doc']({ runId, mode: 'replace', preview: true }), /still in progress/);
   api['run:stop']({ runId });
+});
+
+// ---- Backlog Refresh banner and badge (#161) ---------------------------------------------------
+
+// A hand-built run folder for backlog-refresh.yaml, the shape src/runs.js reads (events.jsonl's
+// first line for `file`, summary.json for status/timing), plus the skill's own applied-safe.json.
+function writeRefreshRun(ws, { runId, projectId, startedAt, finishedAt, results = [] }) {
+  const runDir = path.join(ws.runs, runId);
+  fs.mkdirSync(runDir, { recursive: true });
+  const summary = { run_id: runId, workflow: 'backlog-refresh', project_id: projectId, status: 'success', mock: false, started_at: startedAt, finished_at: finishedAt, inputs: {}, sessions: [] };
+  const events = [
+    { seq: 1, ts: startedAt, run_id: runId, type: 'workflow.started', workflow: 'backlog-refresh', file: 'backlog-refresh.yaml', project_id: projectId, inputs: {}, mock: false, run_dir: runDir },
+    { seq: 2, ts: finishedAt, run_id: runId, type: 'workflow.finished', status: 'success', summary },
+  ];
+  fs.writeFileSync(path.join(runDir, 'events.jsonl'), `${events.map((e) => JSON.stringify(e)).join('\n')}\n`);
+  fs.writeFileSync(path.join(runDir, 'summary.json'), JSON.stringify(summary));
+  fs.writeFileSync(path.join(runDir, 'applied-safe.json'), JSON.stringify({ repo: 'o/r', platform: 'gh', mode: 'safe', at: finishedAt, results }));
+  return runDir;
+}
+
+test('backlog: withIssueRuns marks only the open issues the last refresh updated as "refreshed", for a day', async (t) => {
+  const { service, api } = makeService(t);
+  const ws = service.workspace();
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'service-refresh-badge-'));
+  t.after(() => fs.rmSync(folder, { recursive: true, force: true }));
+  const p = await api['projects:create']({ name: 'demo', folder });
+  api['settings:set']({ backlogRefreshHours: 0 }); // off: the banner never calls git for this test
+  const issue = (number, state) => ({ number, title: `Issue ${number}`, state, url: `https://github.com/o/r/issues/${number}`, body: '', labels: [], assignees: [], tasks: { done: 0, total: 0 } });
+  fs.mkdirSync(ws.backlog, { recursive: true });
+  fs.writeFileSync(path.join(ws.backlog, `${p.id}.json`), JSON.stringify({ projectId: p.id, platform: 'github', repo: 'https://github.com/o/r', issues: [issue(2, 'open'), issue(5, 'closed')] }));
+  writeRefreshRun(ws, {
+    runId: '20260101-000000-refresh0001', projectId: p.id,
+    startedAt: '2026-01-01T00:00:00Z', finishedAt: new Date(Date.now() - 2 * 3600e3).toISOString(),
+    results: [{ number: 2, result: 'updated', changes: ['body (1 edit)'] }, { number: 5, result: 'updated', changes: ['body (1 edit)'] }],
+  });
+
+  const data = api['backlog:get']({ projectId: p.id });
+  const by = Object.fromEntries(data.issues.map((i) => [i.number, i]));
+  assert.equal(by[2].refreshed, true); // open: badge shown
+  assert.equal(by[5].refreshed, undefined); // closed: no badge, although the run also updated it
+  assert.deepEqual(data.refresh.refreshed.slice().sort(), [2, 5]); // the banner's own list has both
+});
+
+test('backlog: the refresh banner counts merges since the last refresh only once it is stale, and "Dismiss for today" turns it off', async (t) => {
+  const { service, api } = makeService(t);
+  const ws = service.workspace();
+  const repo = gitRepo(t); // a throwaway git repo with 2 commits already on main
+  const p = await api['projects:create']({ name: 'demo', folder: repo.dir });
+  api['settings:set']({ backlogRefreshHours: 1 });
+  fs.mkdirSync(ws.backlog, { recursive: true });
+  fs.writeFileSync(path.join(ws.backlog, `${p.id}.json`), JSON.stringify({ projectId: p.id, platform: 'github', repo: 'https://github.com/o/r', issues: [] }));
+  writeRefreshRun(ws, {
+    runId: '20260101-000000-refresh0002', projectId: p.id,
+    startedAt: new Date(Date.now() - 2 * 3600e3).toISOString(), // 2h ago: stale at a 1h interval
+    finishedAt: new Date(Date.now() - 1.9 * 3600e3).toISOString(),
+  });
+
+  let data = api['backlog:get']({ projectId: p.id });
+  assert.equal(data.refresh.hoursAgo, 2);
+  assert.equal(data.refresh.merges, 2); // both of the repo's commits were made after the last refresh started
+  assert.equal(data.refresh.due, true);
+
+  data = api['backlog:dismiss-refresh']({ projectId: p.id });
+  assert.equal(data.refresh.dismissed, true);
+  assert.equal(data.refresh.due, false);
+});
+
+test('backlog: afterBacklogRefresh syncs the project only for a real (non-mock) finished run of backlog-refresh.yaml with a projectId', async (t) => {
+  const { service, api } = makeService(t);
+  const ws = service.workspace();
+  fs.writeFileSync(path.join(ws.workflows, 'backlog-refresh.yaml'), `apiVersion: multiagent/v1
+kind: Workflow
+metadata:
+  name: fixture-backlog-refresh
+agents: {}
+steps:
+  - id: review
+    type: human_approval
+    message: "Accept?"
+`);
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'service-refresh-sync-'));
+  t.after(() => fs.rmSync(folder, { recursive: true, force: true }));
+  const p = await api['projects:create']({ name: 'demo', folder });
+  const calls = [];
+  t.mock.method(backlog, 'syncBacklog', async (args) => { calls.push(args); return null; });
+  const { gates, finished } = watchRuns(service);
+
+  delete process.env.MULTIAGENT_SIMULATION_ONLY;
+  t.after(() => { process.env.MULTIAGENT_SIMULATION_ONLY = '1'; });
+
+  // a real run with a projectId: syncs
+  const real = await api['run:start']({ file: 'backlog-refresh.yaml', inputs: {}, mock: false, projectId: p.id });
+  await until(() => gates.has(real.runId));
+  api['approval:resolve']({ runId: real.runId, id: gates.get(real.runId), answer: true });
+  await until(() => finished.has(real.runId));
+  await until(() => calls.length === 1);
+  assert.equal(calls[0].project.id, p.id);
+  assert.equal(calls[0].platform, 'github');
+
+  // a mock run: no sync
+  const mockRun = await api['run:start']({ file: 'backlog-refresh.yaml', inputs: {}, mock: true, projectId: p.id });
+  await until(() => gates.has(mockRun.runId));
+  api['approval:resolve']({ runId: mockRun.runId, id: gates.get(mockRun.runId), answer: true });
+  await until(() => finished.has(mockRun.runId));
+  await new Promise((r) => setTimeout(r, 80));
+  assert.equal(calls.length, 1); // still just the one, from the real run
+
+  // a real run without a projectId: no sync
+  const noProject = await api['run:start']({ file: 'backlog-refresh.yaml', inputs: {}, mock: false });
+  await until(() => gates.has(noProject.runId));
+  api['approval:resolve']({ runId: noProject.runId, id: gates.get(noProject.runId), answer: true });
+  await until(() => finished.has(noProject.runId));
+  await new Promise((r) => setTimeout(r, 80));
+  assert.equal(calls.length, 1);
 });

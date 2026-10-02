@@ -223,6 +223,7 @@ test('language and platform skill families are complete', () => {
     'pr-screenshots': ['gh', 'gl'],
     deploy: ['gh', 'gl'],
     'issue-creator': ['gh', 'gl'],
+    'backlog-refresh': ['gh', 'gl'],
   };
   for (const [cap, suffixes] of Object.entries(families)) {
     for (const s of suffixes) assert.ok(ids.includes(`${cap}-${s}`), `missing ${cap}-${s}`);

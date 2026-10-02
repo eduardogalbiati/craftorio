@@ -691,7 +691,7 @@ test('loadWorkflow validates groups: known steps, one group per step, unique nam
 });
 
 test('the bundled workflows group every step', () => {
-  for (const f of ['software-development.yaml', 'software-development-local-hero.yaml', 'ai-arena.yaml', 'writer-reviewer.yaml', 'multi-model-review.yaml', 'run-retrospective.yaml']) {
+  for (const f of ['software-development.yaml', 'software-development-local-hero.yaml', 'ai-arena.yaml', 'writer-reviewer.yaml', 'multi-model-review.yaml', 'run-retrospective.yaml', 'backlog-refresh.yaml']) {
     const wf = loadWorkflow(path.join(root, 'workflows', f));
     assert.ok(wf.groups?.length, `${f} has groups`);
     assert.deepEqual(wf.groups.flatMap((g) => g.steps).sort(), wf.steps.map((s) => s.id).sort(), f);
@@ -1334,6 +1334,58 @@ test('the renderer shuffle (arena-shuffle.js) gives the same order as the engine
     const list = ['contender_1', 'contender_2', 'contender_3', 'contender_4', 'contender_5'];
     assert.deepEqual(shuffle(list, seed), render('{{ l | shuffle(s) | join(",") }}', { l: list, s: seed }).split(','));
   }
+});
+
+// ---------------------------------------------------------------------------
+// backlog-refresh (#161): review -> apply safe fixes -> scope gate (decision gate) -> apply closes
+function backlogRefreshRun(inputs = {}, mockSequences) {
+  const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'));
+  const cleanup = () => fs.rmSync(runsDir, { recursive: true, force: true });
+  try {
+    return { run: new WorkflowRun({ file: path.join(root, 'workflows', 'backlog-refresh.yaml'), inputs: { project_path: 'C:/proj', ...inputs }, mock: true, runsDir, mockSequences }), cleanup };
+  } catch (e) { cleanup(); throw e; }
+}
+
+test('backlog-refresh: a mock run reaches the scope gate (a decision gate), the safe-mode apply.js action is skipped, and Apply runs the scope-mode action too', { timeout: 60000 }, async () => {
+  const { run, cleanup } = backlogRefreshRun({ git_platform: 'gh' });
+  const events = [];
+  run.on('event', (ev) => {
+    events.push(ev);
+    if (ev.type === 'approval.requested') setImmediate(() => run.resolveApproval(ev.approval_id, 'apply', 'user'));
+  });
+  try {
+    await run.start();
+    const finished = events.find((e) => e.type === 'workflow.finished');
+    assert.equal(finished.status, 'success', finished.error);
+    const transitions = events.filter((e) => e.type === 'step.transition').map((e) => `${e.from}>${e.to}`);
+    assert.deepEqual(transitions, ['review>scope', 'scope>end']);
+    const gate = events.find((e) => e.type === 'approval.requested');
+    assert.deepEqual(gate.choices.map((c) => c.id), ['apply', 'skip']); // the supervisor never answers this gate
+    const actions = events.filter((e) => e.type === 'action.executed');
+    assert.equal(actions.length, 2); // safe mode before the gate, scope mode after Apply
+    assert.ok(actions.every((a) => a.skipped), 'mock mode never runs the action');
+    assert.match(actions[0].command, /apply\.js" --platform gh --mode safe --file ".*refresh\.json" --project "C:\/proj" --run-id /);
+    assert.match(actions[1].command, /apply\.js" --platform gh --mode scope --file ".*refresh\.json" --project "C:\/proj" --run-id /);
+  } finally { cleanup(); }
+});
+
+test('backlog-refresh: Skip at the scope gate ends the run without the scope-mode action; git_platform picks the glab command', { timeout: 60000 }, async () => {
+  const { run, cleanup } = backlogRefreshRun({ git_platform: 'gl' });
+  const events = [];
+  run.on('event', (ev) => {
+    events.push(ev);
+    if (ev.type === 'approval.requested') setImmediate(() => run.resolveApproval(ev.approval_id, 'skip', 'user'));
+  });
+  try {
+    await run.start();
+    const finished = events.find((e) => e.type === 'workflow.finished');
+    assert.equal(finished.status, 'success', finished.error);
+    const transitions = events.filter((e) => e.type === 'step.transition').map((e) => `${e.from}>${e.to}`);
+    assert.deepEqual(transitions, ['review>scope', 'scope>end']);
+    const actions = events.filter((e) => e.type === 'action.executed');
+    assert.equal(actions.length, 1); // only the safe-mode action; Skip runs no scope-mode action
+    assert.match(actions[0].command, /apply\.js" --platform gl --mode safe/);
+  } finally { cleanup(); }
 });
 
 test('ai-arena: attached documents reach the contenders, the synthesizer and the verifier', async () => {
