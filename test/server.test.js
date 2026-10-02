@@ -87,6 +87,32 @@ test('unknown channels, wrong methods, bad bodies and channel errors', async (t)
   assert.deepEqual([err.status, err.json.error], [500, 'Project not found: missing']);
 });
 
+// #130: a pasted image (up to 10 MB) travels as base64, about 1/3 bigger; MAX_BODY (15 MB) was
+// raised from the previous 5 MB limit to fit it. Over the limit, readJson's `req.destroy()` tears
+// down the socket before the 413 response can flush (the same pre-existing mechanism as the old
+// 5 MB limit, only the threshold moved): the client sees the connection reset rather than a clean
+// 413 body, so this checks the request is refused one way or the other, never accepted.
+test('the body limit lets a ~14 MB pasted image through as base64, and refuses a much bigger body', async (t) => {
+  const { base } = await start(t);
+  const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(10 * 1024 * 1024 - 8)]);
+  const ok = await callApi(base, 'clipboard:saveImage', { data: png.toString('base64'), name: 'shot.png' });
+  assert.equal(ok.status, 200, ok.text);
+  assert.ok(ok.json.result.path);
+
+  const tooBig = JSON.stringify({ arg: { data: Buffer.alloc(16 * 1024 * 1024).toString('base64'), name: 'big.png' } });
+  const outcome = await new Promise((resolve) => {
+    const u = new URL(base);
+    const req = http.request({ host: u.hostname, port: u.port, method: 'POST', path: '/api/clipboard:saveImage', headers: bearer }, (res) => {
+      const chunks = [];
+      res.on('data', (c) => chunks.push(c));
+      res.on('end', () => resolve({ status: res.statusCode }));
+    });
+    req.on('error', (e) => resolve({ status: null, code: e.code }));
+    req.end(tooBig);
+  });
+  assert.ok(outcome.status === 413 || outcome.status === null, JSON.stringify(outcome));
+});
+
 test('refuses requests from another origin', async (t) => {
   const { base } = await start(t);
   const r = await callApi(base, 'projects:list', null, { ...bearer, Origin: 'https://evil.example' });

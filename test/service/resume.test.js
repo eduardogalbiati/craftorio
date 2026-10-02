@@ -38,6 +38,27 @@ test('runs:resume restarts a run from a step with no supervisor call; supervisor
   assert.deepEqual(alias.events.find((e) => e.type === 'workflow.started').resumed_from, { run_id: first.runId, step: 'plan' });
 });
 
+// #130: images pasted into the resume instruction pass through resumeRun to the engine (src/engine/workflow.js).
+const PNG_1PX = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64');
+
+test('runs:resume: an image pasted into the instruction reaches the first resumed agent step, copied into <run_dir>/attachments/<step>-instruction/', async (t) => {
+  const { service, api } = makeResumeService(t);
+  const first = await runToEnd(service, api, 'run:start', { file: 'fixture-resume.yaml', inputs: {}, mock: true });
+  assert.equal(first.end.status, 'success');
+
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'resume-img-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const png = path.join(dir, 'shot.png');
+  fs.writeFileSync(png, PNG_1PX);
+
+  const resumed = await runToEnd(service, api, 'runs:resume', { runId: first.runId, step: 'plan', images: [png] });
+  assert.equal(resumed.end.status, 'success');
+  const sent = resumed.events.find((e) => e.type === 'session.message_sent' && e.step_id === 'plan');
+  assert.equal(sent.attachments?.length, 1);
+  assert.ok(fs.existsSync(sent.attachments[0].path));
+  assert.ok(sent.attachments[0].path.startsWith(path.join(resumed.runDir, 'attachments', 'plan-instruction')), sent.attachments[0].path);
+});
+
 test('runs:resume refuses to go past a human gate the previous run already decided', async (t) => {
   const { service, api } = makeResumeService(t);
   const first = await runToEnd(service, api, 'run:start', { file: 'fixture-resume.yaml', inputs: {}, mock: true });

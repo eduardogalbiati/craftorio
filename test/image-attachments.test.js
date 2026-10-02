@@ -262,6 +262,51 @@ test('a mock run of issue-tracker with an image attached to an input copies it i
   }
 });
 
+// ---------------------------------------------------------------------------
+// Integration: images pasted into a resume instruction (#130, src/engine/workflow.js resume.images).
+// ---------------------------------------------------------------------------
+
+test('resume: an invalid image in resume.images throws when the run is constructed, before anything starts', (t) => {
+  const dir = tmpDir(t, 'img-resume-bad-');
+  const invalid = path.join(dir, 'notes.txt');
+  fs.writeFileSync(invalid, 'not an image');
+  assert.throws(() => new WorkflowRun({
+    file: path.join(root, 'workflows', 'issue-tracker.yaml'),
+    inputs: { request: 'x', project_path: root },
+    mock: true,
+    runsDir: path.join(dir, 'runs'),
+    resume: { runId: 'prev-run', fromStep: 'analyze', steps: {}, sessions: {}, handoffs: {}, images: [invalid] },
+  }), /is not a supported image/);
+});
+
+test('resume: an image pasted into the instruction is copied into <run_dir>/attachments/<step>-instruction/ and reaches the first resumed agent step', { timeout: 30000 }, async (t) => {
+  const dir = tmpDir(t, 'img-resume-');
+  const png = writePng(path.join(dir, 'shot.png'));
+  const run = new WorkflowRun({
+    file: path.join(root, 'workflows', 'issue-tracker.yaml'),
+    inputs: { request: 'x', project_path: root },
+    mock: true,
+    runsDir: path.join(dir, 'runs'),
+    resume: { runId: 'prev-run', fromStep: 'analyze', steps: {}, sessions: {}, handoffs: {}, images: [png] },
+  });
+  const events = [];
+  run.on('event', (ev) => {
+    events.push(ev);
+    if (ev.type === 'approval.requested') setImmediate(() => run.resolveApproval(ev.approval_id, ev.choices[0].id, 'user'));
+  });
+  await run.start();
+  const finished = events.find((e) => e.type === 'workflow.finished');
+  assert.equal(finished.status, 'success', finished.error);
+
+  const sent = events.find((e) => e.type === 'session.message_sent' && e.step_id === 'analyze');
+  assert.equal(sent.attachments?.length, 1);
+  assert.ok(fs.existsSync(sent.attachments[0].path), 'the copy survives in the run folder');
+  assert.ok(sent.attachments[0].path.startsWith(path.join(run.runDir, 'attachments', 'analyze-instruction')), sent.attachments[0].path);
+
+  const next = events.find((e) => e.type === 'session.message_sent' && e.step_id === 'write');
+  assert.equal(next?.attachments?.length ?? 0, 0, 'only the first resumed step gets the instruction\'s images');
+});
+
 test('attachments_unsupported: a provider that cannot read images gets one warning per step and agent, and the step still succeeds', { timeout: 30000 }, async (t) => {
   const dir = tmpDir(t, 'img-unsupported-');
   const png = writePng(path.join(dir, 'bug.png'));
