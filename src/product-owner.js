@@ -11,6 +11,9 @@
 // Add to roadmap buttons apply a proposal only on the owner's click.
 // Simulated (developer mode, MULTIAGENT_SIMULATION_ONLY): mockAnswer builds the answer from the
 // backlog itself, with no model call and no cost.
+// Calibration (#189, src/renderer/po-calibration.js): a plan question is planned with the agent's saved
+// Speed ↔ Quality step, or a step for that question only; the prompt states its parameters, the simulated
+// answer follows them, normalizeAnswer caps the runs per stage, and the answer records the step.
 // Live progress (#180, src/chat-progress.js): ask's `onItem` gets the turn's items as they arrive
 // (a simulated turn streams fake steps first); its `signal` stops the turn, keeping what was written.
 // The conversation is kept per project in <workspace>/backlog/<projectId>.po.jsonl until cleared.
@@ -49,6 +52,7 @@ const fs = require('fs');
 const path = require('path');
 const backlog = require('./backlog');
 const epics = require('./epics');
+const poCalibration = require('./renderer/po-calibration');
 const poSplit = require('./po-split');
 const { mockSteps, partialText } = require('./chat-progress');
 const { conflictsOf, sharedFiles } = require('./repo-performance');
@@ -260,7 +264,10 @@ function sizeGroup(numbers, issues, history) {
  * issues are listed in `closed`.
  */
 // `mock`: a simulated answer, whose groups may carry a synthesized applied state (`simulated`, #148).
-function normalizeAnswer(answer, { issues, history, workflows, epics: epicList = [], selection = [], mock = false }) {
+// `calibration` (#189, 1..5): the step it was planned with, recorded on the answer; a stage with more
+// groups than the step's parallel runs is cut into consecutive stages (the later stages move down),
+// and a group over the step's max complexity gets a warning.
+function normalizeAnswer(answer, { issues, history, workflows, epics: epicList = [], selection = [], mock = false, calibration = null }) {
   const numbers = new Set((issues || []).map((i) => i.number));
   const byNumber = new Map((issues || []).map((i) => [i.number, i]));
   const files = (workflows || []).map((w) => w.file);
@@ -296,15 +303,36 @@ function normalizeAnswer(answer, { issues, history, workflows, epics: epicList =
       ...(simulated.length ? { simulated: { covered: simulated, stage: Number.isInteger(g.simulated.stage) && g.simulated.stage > 0 ? g.simulated.stage : 1 } } : {}),
     };
   }).filter((g) => g.issues.length);
+  const level = calibration == null ? null : poCalibration.clamp(calibration);
   return {
     summary: String(answer.summary || ''),
-    groups,
+    ...(level ? { calibration: level } : {}),
+    groups: level ? calibrateGroups(groups, poCalibration.step(level)) : groups,
     ...(closed.length ? { closed } : {}),
     conflicts: (answer.conflicts || []).map((c) => ({ issues: keep(c.issues), reason: String(c.reason || ''), files: (c.files || []).map(String).slice(0, 20) })).filter((c) => c.issues.length > 1),
     enrich: (answer.enrich || []).filter((e) => numbers.has(Number(e.issue))).map((e) => ({ issue: Number(e.issue), reason: String(e.reason || ''), link: ENRICH_ISSUE })),
     splits: normalizeSplits(answer.splits, byNumber, history),
     epics: normalizeEpics(answer.epics, byNumber, epicList),
   };
+}
+
+// #189: the groups kept to a calibration step: at most `maxRuns` groups per stage (in the answer's
+// order; the rest of a stage goes to the next stages, renumbered 1..n) and a warning on a group over
+// `maxComplexity`.
+function calibrateGroups(groups, step) {
+  const stages = [...new Set(groups.map((g) => g.stage))].sort((a, b) => a - b);
+  const out = [];
+  let next = 1;
+  for (const s of stages) {
+    const of = groups.filter((g) => g.stage === s);
+    const per = step.maxRuns || of.length;
+    of.forEach((g, n) => {
+      const over = g.complexity > step.maxComplexity ? [`Complexity ${g.complexity}: over ${step.maxComplexity}, the most a group gets at ${step.name}.`] : [];
+      out.push({ ...g, stage: next + Math.floor(n / per), warnings: [...new Set([...g.warnings, ...over])] });
+    });
+    next += Math.ceil(of.length / per);
+  }
+  return out;
 }
 
 // One proposal per issue, kept to the split rules (po-split normalizeSplit): an issue without split signals is never split.
@@ -400,12 +428,15 @@ function backlogReport({ data, activeRuns = [], history = [], workflows = [], qu
 }
 
 /**
- * The simulated answer: groups of to-do issues that share a label (complexity at most 6 per group),
+ * The simulated answer: groups of to-do issues that share a label (complexity at most the calibration's per group),
  * the issues that look like a repo-wide refactor kept apart from the others, and the issues with a
  * short description to enrich first. With a `selection` (#169): only the attached issues to do are
  * planned, and each group suggests up to two other issues to do of its topic.
  */
-function mockAnswer({ data, question = '', selection = [] }) {
+// `calibration` (#189): the step's max complexity per group and parallel runs per stage (Speed: every
+// group of a stage at once, after the refactors; Quality: two per stage).
+function mockAnswer({ data, question = '', selection = [], calibration = poCalibration.DEFAULT }) {
+  const step = poCalibration.step(calibration);
   const backlogTodo = (data?.issues || []).filter(plannable);
   const attached = new Set(selection.map(Number));
   const todo = attached.size ? backlogTodo.filter((i) => attached.has(i.number)) : backlogTodo;
@@ -422,7 +453,7 @@ function mockAnswer({ data, question = '', selection = [] }) {
   const groups = [];
   for (const i of others) {
     const c = complexityOf(i) ?? DEFAULT_COMPLEXITY;
-    const g = topic(i) && groups.find((x) => x.topic === topic(i) && x.size + c <= 6);
+    const g = topic(i) && groups.find((x) => x.topic === topic(i) && x.size + c <= step.maxComplexity);
     if (g) { g.issues.push(i.number); g.size += c; } else groups.push({ topic: topic(i), issues: [i.number], size: c });
   }
   const group = (g, stage) => ({
@@ -438,17 +469,18 @@ function mockAnswer({ data, question = '', selection = [] }) {
   });
   const splits = todo.map((i) => poSplit.proposeSplit(i, { complexity: complexityOf(i) })).filter(Boolean);
   const epicPlan = attached.size ? { place: [], create: [], merge: [], split: [] } : mockEpics(data);
+  const perStage = step.maxRuns || Math.max(1, groups.length);
   return {
     summary: [
-      `**Simulated answer** (developer or simulated mode: no model was called)${question ? ` to: “${clip(question, 120)}”` : ''}.`,
-      `${todo.length} ${attached.size ? 'attached ' : ''}issues to do:${groups.length + refactor.length} proposed run${groups.length + refactor.length === 1 ? '' : 's'}, grouped by epic, else by shared label; repo-wide changes first and alone, then stages of at most two runs.`,
+      `**Simulated answer** (developer or simulated mode: no model was called)${question ? ` to: “${clip(question, 120)}”` : ''}. Planned for ${poCalibration.label(calibration)}.`,
+      `${todo.length} ${attached.size ? 'attached ' : ''}issues to do:${groups.length + refactor.length} proposed run${groups.length + refactor.length === 1 ? '' : 's'}, grouped by epic, else by shared label (complexity ${step.maxComplexity} at most per run); repo-wide changes first and alone, then ${step.maxRuns ? `stages of at most ${step.maxRuns} runs` : 'one stage with every other run'}.`,
       `${splits.length ? `${splits.length} issue${splits.length > 1 ? 's are' : ' is'} too big for one run: see the proposed splits.` : 'No issue is too big for one run.'} ${epicPlan.place.length + epicPlan.create.length ? `Epics: ${epicPlan.place.length} issue${epicPlan.place.length === 1 ? '' : 's'} to place, ${epicPlan.create.length} epic${epicPlan.create.length === 1 ? '' : 's'} to create.` : ''}`.trim(),
     ].join('\n\n'),
     splits,
     epics: epicPlan,
     groups: [
       ...refactor.map((i, n) => group({ issues: [i.number], refactor: true }, n + 1)),
-      ...groups.map((g, n) => group(g, refactor.length + Math.floor(n / 2) + 1)),
+      ...groups.map((g, n) => group(g, refactor.length + Math.floor(n / perStage) + 1)),
     ],
     conflicts: refactor.flatMap((r) => others.slice(0, 2).map((o) => ({ issues: [r.number, o.number], reason: `#${r.number} looks like a repo-wide change: run it alone, with no other run open.`, files: [] }))),
     enrich: todo.filter((i) => String(i.body || '').trim().length < 120).map((i) => ({ issue: i.number, reason: 'The description is too short to implement without guessing.' })),
@@ -1026,12 +1058,18 @@ function checkBudget(budget) {
  *                  streams fake steps (MOCK_STEPS) and its text first
  * @param signal    #180: an AbortSignal that stops the turn; the prose written so far is recorded,
  *                  marked `stopped` (a failure keeps it too, after the error)
+ * @param calibration #189: a step (1..5) for this question only; else one the question asks for
+ *                  ("plan this one for quality"), else the agent's saved `calibration`. A plan answer
+ *                  and its question record the step used (`calibration`, `calibrationOverride` when not the saved one).
  * @returns { message, messages }  the answer ({ role: 'po', text, answer | issue, model, costUsd }) and the whole conversation
  */
-async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns, runs, workflows, folder, agent, skillsDirs, resolveCommand, budget, mock, mode = 'plan', attachments = [], selection = [], scenario = null, onItem = null, signal = null }) {
+async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns, runs, workflows, folder, agent, skillsDirs, resolveCommand, budget, mock, mode = 'plan', attachments = [], selection = [], scenario = null, onItem = null, signal = null, calibration = null }) {
   const q = String(question || '').trim();
   if (!q) throw new Error('Ask a question.');
   const issueMode = mode === 'issue';
+  const saved = poCalibration.clamp(agent?.calibration);
+  const level = poCalibration.clamp(calibration, null) ?? poCalibration.fromQuestion(q) ?? saved;
+  const calib = issueMode ? {} : { calibration: level, ...(level !== saved ? { calibrationOverride: true } : {}) };
   // #169: the attached issues the backlog knows (plan mode only)
   const known = new Set((data?.issues || []).map((i) => i.number));
   const selected = issueMode ? [] : [...new Set((selection || []).map(Number))].filter((n) => known.has(n));
@@ -1043,7 +1081,7 @@ async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns,
   const record = (message) => (issueMode ? recordIssueMessage(where, message) : appendMessage(backlogDir, projectId, message));
   const staged = issueMode ? (attachments || []).filter((f) => isAttachment(backlogDir, projectId, f)).map((f) => path.resolve(f)) : [];
   const files = moveAttachments(where, thread, staged);
-  record({ role: 'user', text: q, ...tag, ...(files.length ? { attachments: files } : {}), ...(selected.length ? { issues: selected } : {}) });
+  record({ role: 'user', text: q, ...tag, ...calib, ...(files.length ? { attachments: files } : {}), ...(selected.length ? { issues: selected } : {}) });
   const questionsLeft = MAX_QUESTIONS - questionsAsked(previous);
   let raw;
   let costUsd = 0;
@@ -1065,7 +1103,7 @@ async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns,
           raw = mockScenario(scenario, { data, question: q, previous, files });
           analysis = `Simulated (scenario "${scenario}"): no model was called, no code was read.`;
         } else {
-          raw = issueMode ? mockIssueAnswer({ data, question: q, previous }) : mockAnswer({ data, question: q, selection: selected });
+          raw = issueMode ? mockIssueAnswer({ data, question: q, previous }) : mockAnswer({ data, question: q, selection: selected, calibration: level });
           analysis = 'Simulated: no model was called, no code was read.';
         }
       } catch (e) { failure = e; }
@@ -1083,7 +1121,7 @@ async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns,
       const shared = issueMode ? null : await sharedFiles({ runs: (runs || []).filter((r) => !r.mock).slice(0, SHARED_FILE_RUNS), repo: folder, store: storeFor(runsDir), limit: SHARED_FILES });
       const report = (issueMode ? issueReport : backlogReport)({ data, activeRuns, history, workflows, question: q, selection: selected, shared });
       ({ raw, costUsd, model, invalid, tokens, text: analysis } = await callAgent({
-        mode, question: q, report, previous, attachments: files, selection: selected, folder, agent: issueMode ? ISSUE_AGENT : agent, skillsDirs, resolveCommand, onItem: seen, signal,
+        mode, question: q, report, previous, attachments: files, selection: selected, folder, agent: issueMode ? ISSUE_AGENT : agent, skillsDirs, resolveCommand, onItem: seen, signal, calibration: level,
       }));
       recordUsage(backlogDir, { projectId, model, tokens, costUsd });
     }
@@ -1103,9 +1141,9 @@ async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns,
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, `${message.ts.replace(/[:.]/g, '-')}.md`), `${String(analysis || '').trim()}\n\n\`\`\`json\n${JSON.stringify(raw, null, 2)}\n\`\`\`\n`);
   } else {
-    const answer = normalizeAnswer(raw, { issues: data?.issues, history, workflows, epics: data?.epics, selection: selected, mock: !!mock });
+    const answer = normalizeAnswer(raw, { issues: data?.issues, history, workflows, epics: data?.epics, selection: selected, mock: !!mock, calibration: level });
     message = appendMessage(backlogDir, projectId, {
-      role: 'po', text: answer.summary, answer, model, costUsd, ...(invalid ? { invalid } : {}),
+      role: 'po', text: answer.summary, answer, model, costUsd, ...calib, ...(invalid ? { invalid } : {}),
     });
   }
   return { message, messages: readConversation(backlogDir, projectId) };
@@ -1113,8 +1151,8 @@ async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns,
 
 // One read-only Claude Code turn in the project folder. An answer that does not validate is kept as
 // prose (no second call: one call per question). Mode 'issue': the issue skills, ISSUE_SCHEMA, and
-// read access to the attachments' folder.
-async function callAgent({ mode = 'plan', question, report, previous, attachments = [], selection = [], folder, agent, skillsDirs, resolveCommand, onItem = () => {}, signal = null }) {
+// read access to the attachments' folder. A plan turn states its calibration (#189) after the rules.
+async function callAgent({ mode = 'plan', question, report, previous, attachments = [], selection = [], folder, agent, skillsDirs, resolveCommand, onItem = () => {}, signal = null, calibration = null }) {
   const { extractJson, validateSchema, render } = require('./engine/workflow');
   const { runTurn, isImagePath } = require('./engine/providers');
   const { resolveSkill, skillPrompt } = require('./skills');
@@ -1136,6 +1174,7 @@ async function callAgent({ mode = 'plan', question, report, previous, attachment
   const prompt = [
     ...skills.map(skillPrompt),
     issueMode ? ISSUE_RULES : RULES,
+    issueMode ? '' : poCalibration.promptSection(calibration ?? agent?.calibration),
     selection.length ? SELECTION_RULES : '',
     report,
     issueMode ? issueContext(previous) : previousExchanges(previous),

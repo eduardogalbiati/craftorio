@@ -13,6 +13,7 @@
 // po:ask's `scenario` (#148, simulated only): forces the simulated answer (MOCK_SCENARIOS). Every
 // real answer raises a `po` notice (#149, src/notifications.js); a simulated or stopped one does not.
 // po:ask's progress is pushed on chat:progress ('po', the project id) and chat:cancel stops it (#180).
+// po:ask's `calibration` (#189): a Speed ↔ Quality step for this question only (the saved one is unchanged).
 
 const path = require('path');
 const agents = require('../../agents');
@@ -51,8 +52,8 @@ module.exports = (ctx) => {
     {
       channel: 'po:ask',
       method: 'askProductOwner',
-      params: ['projectId', 'question', 'mock', 'mode', 'attachments', 'issues', 'scenario'],
-      fn: async ({ projectId, question, mock, mode, attachments, issues, scenario }) => {
+      params: ['projectId', 'question', 'mock', 'mode', 'attachments', 'issues', 'scenario', 'calibration'],
+      fn: async ({ projectId, question, mock, mode, attachments, issues, scenario, calibration }) => {
         const id = project(projectId);
         const p = projects.readProject(ctx.ws.projects, id);
         const data = ctx.withIssueRuns(backlog.readBacklog(ctx.ws.backlog, id));
@@ -85,6 +86,8 @@ module.exports = (ctx) => {
             selection: Array.isArray(issues) ? issues : [],
             // #148: the drawer's simulation-only scenario picker (ignored for a real call)
             scenario: simulated && typeof scenario === 'string' && scenario ? scenario : null,
+            // #189: the drawer's calibration chip, for this question only (null: the saved one)
+            calibration: calibration ?? null,
             onItem: turn.onItem,
             signal: turn.signal,
           });

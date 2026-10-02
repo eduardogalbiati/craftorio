@@ -963,6 +963,10 @@
           </div>
         </div>
         <div class="row">
+          <select id="po-calib-chip" class="po-calib-chip" aria-label="Calibration of the next answer"></select>
+          <button id="btn-po-settings" class="icon-btn" type="button" title="Calibrate the Product Owner" aria-label="Calibrate the Product Owner">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h3M11 7h9M4 17h9M17 17h3" /><circle cx="9" cy="7" r="2" /><circle cx="15" cy="17" r="2" /></svg>
+          </button>
           <button id="btn-po-clear" class="btn sm ghost" type="button" title="Forget this project's conversation">Clear</button>
           <button id="btn-po-close" class="icon-btn" title="Close (Esc)">
             <svg viewBox="0 0 24 24" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" /></svg>
@@ -990,6 +994,34 @@
           <input id="po-file-input" type="file" multiple hidden />
         </div>
         <p id="po-note" class="muted small"></p>
+      </div>
+      <!-- #189: the Product Owner's settings (backlog-po-settings.js), over the conversation -->
+      <div id="po-settings" class="po-settings hidden" role="region" aria-label="Calibrate the Product Owner">
+        <div class="po-settings-head">
+          <button id="btn-po-settings-back" class="icon-btn" type="button" title="Back to the conversation" aria-label="Back to the conversation">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6" /></svg>
+          </button>
+          <h2 class="drawer-title">Calibrate the Product Owner</h2>
+        </div>
+        <div class="po-settings-body">
+          <div class="field">
+            <label for="po-set-calibration">Speed ↔ Quality</label>
+            <div id="po-set-calibration-box"></div>
+            <p class="hint">What this changes: how many runs share a stage, how big a run gets, which issues stop for your look and where an issue goes, in every plan answer and live roadmap refill.</p>
+          </div>
+          <div class="row">
+            <div class="field">
+              <label for="po-set-model">Model <span class="muted">(Claude Code)</span></label>
+              <input type="text" id="po-set-model" list="po-set-model-list" maxlength="80" placeholder="claude-opus-5-5" />
+              <datalist id="po-set-model-list"></datalist>
+            </div>
+            <div class="field">
+              <label>Effort</label>
+              <div id="po-set-effort" class="seg sm" role="group" aria-label="Effort"></div>
+            </div>
+          </div>
+          <p id="po-set-status" class="po-settings-status muted small">Applies to the next answer.</p>
+        </div>
       </div>
     </aside>
 `;

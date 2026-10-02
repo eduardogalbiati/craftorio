@@ -41,6 +41,8 @@
 // what the Product Owner does (activity line, timer, the last steps) and its answer as it is written,
 // from the service's chat:progress events ('po', the project id); Stop (api.cancelChatTurn) ends the
 // turn and the service records what was written, marked as stopped. The cards come from the final answer.
+// Calibration (#189, backlog-po-settings.js): the header's chip and settings button; a plan question
+// sends the chip's step for that question only, and each answer shows the step it was planned with.
 // Its button and drawer are part of the Backlog's markup (backlog.js registerView): wired as it loads.
 // load: after robots.js views/backlog/backlog.js (the button's robot is drawn and the drawer wired as it loads)
 /* global api, Robots */
@@ -126,6 +128,7 @@
   }
 
   function close() {
+    window.BacklogPoSettings?.close();
     po.open = false;
     $p('#po-drawer').classList.remove('open');
     $p('#po-drawer').setAttribute('aria-hidden', 'true');
@@ -147,6 +150,9 @@
     const files = mode === 'issue' ? po.files.map((f) => f.path) : [];
     // #169: the attached issues go with every plan question until the owner removes them
     const issues = mode === 'plan' ? [...po.attached] : [];
+    // #189: the chip's step for this question only; the next question uses the saved one again
+    const calibration = mode === 'plan' ? window.BacklogPoSettings?.override() ?? null : null;
+    if (mode === 'plan') window.BacklogPoSettings?.clearOverride();
     Object.assign(po, { busy: true, pending: q, error: null, live: window.LiveTurn.create({ agent: 'Product Owner' }) });
     $p('#po-question').value = '';
     render();
@@ -154,7 +160,7 @@
     const tick = setInterval(renderLive, 1000);
     try {
       // #148: the simulation-only scenario picker forces the simulated answer
-      const out = await api.askProductOwner(projectId, q, devMode(), mode, files, issues, devMode() ? po.scenario || null : null);
+      const out = await api.askProductOwner(projectId, q, devMode(), mode, files, issues, devMode() ? po.scenario || null : null, calibration);
       if (po.projectId === projectId) {
         po.messages = out.messages;
         if (mode === 'issue') po.files = [];
@@ -435,9 +441,12 @@
     const time = msg.ts ? new Date(msg.ts).toLocaleTimeString() : '';
     if (msg.role === 'user') {
       const files = [...(msg.issues || []).map(issueRef), ...(msg.attachments || []).map((f) => `<span class="badge" title="${esc(f)}">${esc(f.split(/[\\/]/).pop())}</span>`)].join(' ');
-      return `<div class="sup-wmsg user"><div class="sup-wmsg-meta">You · ${esc(time)}</div><div>${esc(msg.text)}</div>${files ? `<div class="po-files">${files}</div>` : ''}</div>`;
+      const once = msg.calibrationOverride ? ` · <span class="badge" title="For this question only: the saved calibration is unchanged">for ${esc(window.PoCalibration.step(msg.calibration).name)}</span>` : '';
+      return `<div class="sup-wmsg user"><div class="sup-wmsg-meta">You · ${esc(time)}${once}</div><div>${esc(msg.text)}</div>${files ? `<div class="po-files">${files}</div>` : ''}</div>`;
     }
-    const meta = `Product Owner · ${esc(time)}${msg.model ? ` · ${esc(msg.model)}` : ''} · ${esc(fmtCost(msg.costUsd || 0))}${msg.stopped ? ' <span class="badge warn" title="You stopped this turn: the answer is what was written until then">Stopped</span>' : ''}`;
+    // #189: the calibration it planned with (marked when it was for this question only)
+    const calib = msg.calibration ? ` <span class="badge" title="${esc(`${msg.calibrationOverride ? 'For this question only. ' : ''}${window.PoCalibration.tooltip(msg.calibration)}`)}">Planned for ${esc(window.PoCalibration.step(msg.calibration).name)}${msg.calibrationOverride ? ' · this question' : ''}</span>` : '';
+    const meta = `Product Owner · ${esc(time)}${msg.model ? ` · ${esc(msg.model)}` : ''} · ${esc(fmtCost(msg.costUsd || 0))}${calib}${msg.stopped ? ' <span class="badge warn" title="You stopped this turn: the answer is what was written until then">Stopped</span>' : ''}`;
     return `<div class="sup-wmsg po-msg${msg.error ? ' error' : ''}" data-msg="${m}"><div class="sup-wmsg-meta">${meta}</div>
       <div class="md md-compact">${msg.error ? esc(msg.text) : markdownHtml(msg.text || '')}</div>
       ${msg.invalid ? `<p class="small muted">The answer had no valid ${msg.mode === 'issue' ? 'draft' : 'proposal'} (${esc(msg.invalid)}): shown as text only.</p>` : ''}
@@ -512,6 +521,8 @@
     $p('#btn-po-ask').textContent = issueMode ? 'Send' : 'Ask';
     $p('#btn-po-ask').disabled = po.busy;
     $p('#btn-po-clear').disabled = po.busy || !po.messages.length;
+    // #189: the calibration chip (backlog-po-settings.js)
+    window.BacklogPoSettings?.renderChip({ busy: po.busy, issueMode });
     $p('#po-note').textContent = `${simulated ? `Simulated: no model is called and nothing is spent.${issueMode ? ' Filing only previews: nothing reaches GitHub/GitLab.' : ''}` : 'Each question is one call to the model: it uses your Claude Code subscription.'}${cost ? ` Conversation cost ${fmtCost(cost)}.` : ''}`;
     // last: the footer above may have changed the log's height
     log.scrollTop = toEnd ? log.scrollHeight : top;
@@ -693,8 +704,11 @@
   };
   // capture: runs before app.js's Esc handler closes a dialog over the drawer
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && po.open && !document.querySelector('.modal:not(.hidden)')) close();
+    // the settings panel (#189) goes back to the conversation first
+    if (e.key === 'Escape' && po.open && !document.querySelector('.modal:not(.hidden)') && !window.BacklogPoSettings?.close()) close();
   }, true);
+  // #189: the saved calibration, model or effort changed (the settings panel): the chip and the model line follow
+  document.addEventListener('po:settings', () => render());
   // #180: the turn in flight for this project, as the service reports it
   api.onChatProgress?.((p) => {
     if (p?.chat !== 'po' || p.key !== po.projectId || !po.live) return;

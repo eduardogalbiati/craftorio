@@ -6,8 +6,8 @@
 // instructions (the run-supervisor skill) can't be changed here; only its look is saved
 // (agents/supervisor.json).
 // The Backlog's Product Owner (#105, src/product-owner.js) is built in the same way, listed second:
-// its instructions are the backlog-product-owner skill; its look, model and effort are saved
-// (agents/product-owner.json).
+// its instructions are the backlog-product-owner skill; its look, model, effort and its Speed ↔ Quality
+// calibration (#189, `calibration` 1..5, src/renderer/po-calibration.js) are saved (agents/product-owner.json).
 // The Oracle (#122, src/oracle.js), the app-wide master agent, is built in the same way, listed third:
 // its instructions are the oracle skill; its look, model and effort are saved (agents/oracle.json).
 // The workflows' own agents (the `agents:` of each YAML in <workspace>/workflows/, #68) are listed
@@ -17,6 +17,7 @@
 const fs = require('fs');
 const path = require('path');
 const capabilities = require('./engine/capabilities');
+const calibration = require('./renderer/po-calibration');
 const { displayName } = require('./renderer/display-name');
 const { loadWorkflow, render } = require('./engine/workflow');
 const { slugify } = require('./projects');
@@ -118,6 +119,7 @@ function tunableAgent(dir, id) {
     model: MODEL.test(saved.model || '') ? saved.model : def.model,
     effort: EFFORTS.includes(saved.effort) ? saved.effort : def.effort,
     appearance: normalizeAppearance(saved.appearance, look),
+    ...(id === PRODUCT_OWNER_ID ? { calibration: calibration.clamp(saved.calibration) } : {}),
     updatedAt: saved.updatedAt || null,
   };
 }
@@ -290,8 +292,9 @@ function createAgent(dir, data) {
 }
 
 /**
- * The supervisor only takes `appearance`, the Product Owner and the Oracle `appearance`, `model` and `effort`;
- * everything else about them is fixed.
+ * The supervisor only takes `appearance`, the Product Owner and the Oracle `appearance`, `model` and `effort`
+ * (the Product Owner also its `calibration`, 1..5: a missing one keeps the saved value); everything else
+ * about them is fixed.
  */
 function saveAgent(dir, id, data, { workflowsDir } = {}) {
   if (isWorkflowAgent(id)) return saveWorkflowAgent(dir, workflowsDir, id, data);
@@ -303,10 +306,13 @@ function saveAgent(dir, id, data, { workflowsDir } = {}) {
     const model = String(data?.model || '').trim();
     if (model && !MODEL.test(model)) throw new Error(`Not a model name: ${model}`);
     if (data?.effort && !EFFORTS.includes(data.effort)) throw new Error(`Pick the effort (${EFFORTS.join(', ')}).`);
+    const level = data?.calibration;
+    if (id === PRODUCT_OWNER_ID && level != null && !calibration.clamp(level, 0)) throw new Error(`Pick a calibration from ${calibration.MIN} (Speed) to ${calibration.MAX} (Quality).`);
     return write(dir, id, {
       appearance: normalizeAppearance(data?.appearance, look),
       model: model || def.model,
       effort: data?.effort || def.effort,
+      ...(id === PRODUCT_OWNER_ID ? { calibration: calibration.clamp(level, tunableAgent(dir, id).calibration) } : {}),
       updatedAt: new Date().toISOString(),
     });
   }

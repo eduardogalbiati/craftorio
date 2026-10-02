@@ -1,14 +1,15 @@
 // Agents screen: the list of agents (the built-in supervisor and Product Owner first) and the editor:
 // the robot's look (colors, eyes, emblem) with a live preview, the prompt (what the agent is for) and
-// its skills; for the Product Owner, its model and effort instead.
+// its skills; for the Product Owner, its model and effort instead, and its Planning section (#189): the
+// Speed ↔ Quality slider (window.PoCalibration, po-calibration.js), each control with a "What this changes" line.
 // The workflows' own agents follow, one section per workflow (#68): read-only (View shows their
 // prompt, skills, model, capabilities and steps; only the look is saved), "Open in workflow" and
 // "Duplicate as my agent". Their saved looks are shared through window.AgentLooks.
 // Registers itself with registerView (view-registry.js), with the agent editor dialog.
 // Storage and validation are in src/agents.js. Uses app.js globals ($, esc, state, openModal,
 // closeModal, confirmDialog, errMsg, dateOf, showToast, showWorkflowDefinition) and window.Robots (robots.js).
-// load: after robots.js (the agents' robots)
-/* global api, Robots */
+// load: after robots.js po-calibration.js (the agents' robots, the Product Owner's slider)
+/* global api, Robots, PoCalibration */
 (() => {
   const SUPERVISOR = 'supervisor';
   const PRODUCT_OWNER = 'product-owner';
@@ -27,6 +28,16 @@
     [PRODUCT_OWNER]: 'the Product Owner appears (its Backlog button and drawer)',
     [ORACLE]: 'the Oracle appears (its button and drawer)',
   };
+  // what each built-in agent's owner may change (the editor's note) and what its model and effort change (#189)
+  const CAN_CHANGE = {
+    [PRODUCT_OWNER]: 'its model, its effort, how it plans (Speed ↔ Quality) and how it looks',
+    [ORACLE]: 'its model, its effort and how it looks',
+  };
+  const MODEL_HINT = {
+    [PRODUCT_OWNER]: 'What this changes: the model of every plan answer, Add to roadmap proposal and live roadmap refill (registering an issue uses claude-sonnet-5). A larger model reads more of the code and costs more per answer.',
+    [ORACLE]: 'What this changes: the model of every Oracle answer. A larger model costs more per answer.',
+  };
+  const EFFORT_HINT = 'What this changes: how long it thinks before answering. Higher weighs dependencies and conflicts more carefully, and is slower and costs more.';
   const COLORS = [
     { key: 'body', label: 'Main color', hint: 'body and shoulder plate',
       swatches: ['#7C5CFF', '#3D7BF7', '#0EA5E9', '#14B8A6', '#10B981', '#84CC16', '#F59E0B', '#F97316', '#EF4444', '#EC4899', '#64748B', '#18181B'] },
@@ -115,7 +126,8 @@
           <button class="btn sm ghost" data-act="open-workflow">Open in workflow</button>
           <button class="btn sm ghost" data-act="duplicate">Duplicate</button>
         </div>` : actions ? `<div class="card-actions">
-          <span class="muted small">${a.system ? (a.model ? `Look and model · ${esc(a.model)}` : 'Look only') : a.updatedAt ? `updated ${esc(dateOf(a.updatedAt))}` : ''}</span>
+          <span class="muted small">${a.system ? (a.calibration ? `Look, model and planning · ${esc(a.model)}` : a.model ? `Look and model · ${esc(a.model)}` : 'Look only') : a.updatedAt ? `updated ${esc(dateOf(a.updatedAt))}` : ''}</span>
+          ${a.calibration ? `<span class="badge" title="${esc(PoCalibration.tooltip(a.calibration))}">${esc(PoCalibration.step(a.calibration).name)}</span>` : ''}
           <span class="spacer"></span>
           <button class="btn sm ghost" data-act="edit">${a.system ? 'Customize' : 'Edit'}</button>
           ${a.system ? '' : '<button class="btn sm ghost danger" data-act="remove">Remove</button>'}
@@ -203,11 +215,18 @@
     ed.state = 'idle';
     ed.filter = '';
     ed.effort = a?.effort || 'high';
+    ed.calibration = a?.calibration || null;
     const system = isReadOnly();
     const workflow = isWorkflow();
     $a('#agent-modal-title').textContent = a ? (workflow ? `${a.name} · ${a.workflow.name}` : isSystem() ? `Customize the ${a.id === SUPERVISOR ? 'supervisor' : a.name}` : `Edit ${a.name}`) : 'New agent';
     $a('#ag-system-note').classList.toggle('hidden', !isSystem());
     $a('#ag-system-where').textContent = SHOWN_IN[a?.id] || '';
+    $a('#ag-system-can').textContent = CAN_CHANGE[a?.id] || 'how it looks';
+    $a('#ag-model-hint').textContent = MODEL_HINT[a?.id] || '';
+    $a('#ag-effort-hint').textContent = EFFORT_HINT;
+    // #189: the Product Owner's Planning section
+    $a('#ag-planning').classList.toggle('hidden', !ed.calibration);
+    $a('#ag-calibration-box').innerHTML = ed.calibration ? PoCalibration.sliderHtml({ id: 'ag-calibration', value: ed.calibration }) : '';
     $a('#ag-workflow-note').classList.toggle('hidden', !workflow);
     $a('#ag-workflow-name').textContent = workflow ? a.workflow.name : '';
     $a('#ag-workflow-facts').classList.toggle('hidden', !workflow);
@@ -317,7 +336,7 @@
   async function saveAgent(e) {
     e.preventDefault();
     const data = isTunable()
-      ? { appearance: ed.look, model: $a('#ag-model').value.trim(), effort: ed.effort }
+      ? { appearance: ed.look, model: $a('#ag-model').value.trim(), effort: ed.effort, ...(ed.calibration ? { calibration: ed.calibration } : {}) }
       : isWorkflow()
       // only the look; null = back to the provider's robot
       ? { appearance: ed.custom ? ed.look : null }
@@ -360,6 +379,8 @@
       if (isWorkflow()) { ed.custom = false; renderPreview(); }
     };
     $a('#ag-effort').onclick = (e) => { const b = e.target.closest('[data-effort]'); if (b) { ed.effort = b.dataset.effort; renderEffort(); } };
+    // saved with the form's Save, like the model and the effort
+    PoCalibration.bindSlider($a('#ag-calibration-box'), (v) => { ed.calibration = v; });
     $a('#ag-name').addEventListener('input', renderPreview);
     $a('#ag-states').onclick = (e) => {
       const b = e.target.closest('[data-state]');
@@ -424,7 +445,7 @@
       </aside>
       <div class="ag-form">
         <h3 id="agent-modal-title">New agent</h3>
-        <p id="ag-system-note" class="ag-note hidden">Built into the platform: its prompt and skills can't be changed. You can change how it looks; the new look shows wherever <span id="ag-system-where">the supervisor appears (e.g. Write &amp; Review)</span>.</p>
+        <p id="ag-system-note" class="ag-note hidden">Built into the platform: its prompt and skills can't be changed. You can change <span id="ag-system-can">how it looks</span>; the new look shows wherever <span id="ag-system-where">the supervisor appears (e.g. Write &amp; Review)</span>.</p>
         <p id="ag-workflow-note" class="ag-note hidden">Defined in the <b id="ag-workflow-name"></b> workflow: its prompt, skills, model and tools are changed there (Open in workflow). You can change how it looks; the new look shows in this workflow's runs, its chat and Write &amp; Review.</p>
         <div class="field">
           <label for="ag-name">Name <span class="req" id="ag-name-req">*</span></label>
@@ -433,6 +454,15 @@
         <div class="field">
           <label for="ag-description">Description <span class="muted">(one line, shown on the card)</span></label>
           <input type="text" id="ag-description" maxlength="200" placeholder="e.g. Reviews diffs for injection, secrets and unsafe defaults" />
+        </div>
+        <!-- the Product Owner only (#189): how it trades speed for quality when it plans (first: its main setting) -->
+        <div id="ag-planning" class="hidden">
+          <h4 class="ag-section">Planning</h4>
+          <div class="field">
+            <label for="ag-calibration">Speed ↔ Quality</label>
+            <div id="ag-calibration-box"></div>
+            <p class="hint">What this changes: how many runs share a stage, how big a run gets, which issues stop for your look (validated mode) and where an issue goes in the roadmap, in every plan answer, Add to roadmap proposal and live roadmap refill. The same setting is in the Product Owner's drawer (the settings button next to Clear).</p>
+          </div>
         </div>
 
         <h4 class="ag-section">Look</h4>
@@ -462,10 +492,12 @@
             <label for="ag-model">Model <span class="muted">(Claude Code)</span></label>
             <input type="text" id="ag-model" list="ag-model-list" maxlength="80" placeholder="claude-opus-5-5" />
             <datalist id="ag-model-list"></datalist>
+            <p id="ag-model-hint" class="hint"></p>
           </div>
           <div class="field">
             <label>Effort</label>
             <div id="ag-effort" class="seg sm" role="group" aria-label="Effort"></div>
+            <p id="ag-effort-hint" class="hint"></p>
           </div>
         </div>
         <!-- a workflow's agent only (#68): what the workflow's YAML says, read-only -->

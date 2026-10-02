@@ -68,6 +68,15 @@ Use the parallelism: put every group that conflicts with nothing in the same sta
 its own run), so the roadmap has as few stages as possible; the owner wants runs producing day and
 night. Give a group a stage of its own only when it depends on another or shares files with it.
 
+### The calibration decides the trade-off
+
+The owner calibrates you between **Speed** and **Quality** (the prompt's "Calibration" section, set
+in the app). Its parameters replace this skill's defaults for the same points: parallel runs per
+stage, the most complexity a group gets, the mode of issues with a screen and where an issue is
+placed. Plan within them, and start the summary with the calibration you planned with. At the
+Speed end, use the parallelism above to the full; at the Quality end, keep each stage to one or two
+runs, place an issue after the most stable work it builds on, and use validated mode for any screen.
+
 ### Dependencies are per task, not only per file
 
 Two issues that touch different files can still depend on each other through one task. Before

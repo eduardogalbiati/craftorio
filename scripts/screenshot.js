@@ -293,7 +293,7 @@ function demoPoConversation(ws, projectId, po = null) {
     // (In roadmap · Stage 2), #11 its done stage 1, planned before (Already in the roadmap), #10 + #8
     // only partly planned (Add the rest)
     { ts: at(90), role: 'user', mode: 'plan', text: 'Analyze the backlog and propose runs' },
-    { ts: at(110), role: 'po', mode: 'plan', model: 'claude-opus-5-5', costUsd: 0.21, text: 'Three runs: the rename crash first, then the server work together, then the small UI and docs fixes.', answer: {
+    { ts: at(110), role: 'po', mode: 'plan', model: 'claude-opus-5-5', costUsd: 0.21, calibration: 2, text: 'Three runs: the rename crash first, then the server work together, then the small UI and docs fixes.', answer: {
       summary: 'Three runs.',
       groups: [
         { name: 'Rename crash', issues: [11], workflow: 'software-development-local-hero.yaml', inputs: { mode: 'auto' }, reason: 'It blocks the rest.', files: ['src/workspace.js'], stage: 1, complexity: 4, guessed: false, estimate: null, warnings: [] },
@@ -311,9 +311,9 @@ function demoPoConversation(ws, projectId, po = null) {
       },
     } },
     // #169: issues sent from the Backlog's selection (#8 closed meanwhile: left out), a group with a
-    // suggested extra issue (#10, unchecked until the owner keeps it)
-    { ts: at(130), role: 'user', mode: 'plan', text: 'What is the best strategy to put these issues in the roadmap? Should any other open issue join them?', issues: [16, 8] },
-    { ts: at(150), role: 'po', mode: 'plan', model: 'claude-opus-5-5', costUsd: 0.09, text: 'One validated run for #16; **#10** touches the same styles and could join it. #8 is closed: left out.', answer: {
+    // suggested extra issue (#10, unchecked until the owner keeps it); #189: planned for Quality, for this question only
+    { ts: at(130), role: 'user', mode: 'plan', text: 'What is the best strategy to put these issues in the roadmap? Should any other open issue join them?', issues: [16, 8], calibration: 5, calibrationOverride: true },
+    { ts: at(150), role: 'po', mode: 'plan', model: 'claude-opus-5-5', costUsd: 0.09, calibration: 5, calibrationOverride: true, text: 'One validated run for #16; **#10** touches the same styles and could join it. #8 is closed: left out.', answer: {
       summary: 'One run.',
       groups: [
         { name: 'Keyboard focus', issues: [16], workflow: 'software-development.yaml', inputs: { mode: 'validated' }, modeReason: 'A behaviour the owner can try in the app.', reason: 'A small UI fix on its own.', files: ['src/renderer/app.js'], stage: 1, complexity: 1, guessed: false, estimate: null, warnings: [],

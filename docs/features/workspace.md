@@ -10,7 +10,7 @@ order: 100
   projects/  projects (one .json per project)
   skills/    skills (one folder with SKILL.md per skill)
   backlog/   last issue sync of each project (one .json per project; <id>.po.jsonl = the Product Owner's conversation)
-  agents/    user-defined agents (one .json per agent; supervisor.json = the supervisor's look, product-owner.json = the Product Owner's look, model and effort)
+  agents/    user-defined agents (one .json per agent; supervisor.json = the supervisor's look, product-owner.json = the Product Owner's look, model, effort and Speed ↔ Quality calibration)
   workflows/ workflow definitions (one .yaml per workflow)
   settings.json  app preferences, budgets and prices
 
