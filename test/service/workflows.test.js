@@ -58,28 +58,55 @@ outputs:
   assert.deepEqual(list.find((w) => w.file === 'fixture-service.yaml').outputs, {}); // no outputs: declared
 });
 
-test('listPipelines: a valid pipeline returns its stages, each with its "when" and "map"', (t) => {
+test('workflows:pipelines (#135): a valid pipeline returns its stages, each with its target, condition, inputs and map', (t) => {
   const { api, service } = makeService(t);
-  const dir = path.join(service.workspace().root, 'pipelines');
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, 'p1.yaml'), `name: Issue to dev
+  const ws = service.workspace();
+  fs.writeFileSync(path.join(ws.workflows, 'fixture-pipe-a.yaml'), `apiVersion: multiagent/v1
+kind: Workflow
+metadata:
+  name: fixture-pipe-a
+agents:
+  a: { provider: claude, model: m, session: ephemeral }
+steps:
+  - id: work
+    agent: a
+    prompt: "do it"
+outputs:
+  issues:
+    type: array
+    value: "{{ steps.work.output.issues }}"
+`);
+  fs.writeFileSync(path.join(ws.workflows, 'fixture-pipe-b.yaml'), `apiVersion: multiagent/v1
+kind: Workflow
+metadata:
+  name: fixture-pipe-b
+inputs:
+  issues: { type: array, default: [] }
+agents:
+  a: { provider: claude, model: m, session: ephemeral }
+steps:
+  - id: work
+    agent: a
+    prompt: "do it"
+`);
+  fs.mkdirSync(ws.pipelines, { recursive: true });
+  fs.writeFileSync(path.join(ws.pipelines, 'p1.yaml'), `name: Issue to dev
 description: From the tracker to a development run
 category: build
 stages:
-  - workflow: fixture-service.yaml
-  - workflow: fixture-service.yaml
-    when: success
+  - workflow: fixture-pipe-a.yaml
+  - workflow: fixture-pipe-b.yaml
+    on: success
     map: { issues: issues }
 `);
-  const pipelines = api['workflows:pipelines']();
-  assert.equal(pipelines.length, 1);
-  const p = pipelines[0];
+  const p = api['workflows:pipelines']().find((x) => x.file === 'p1.yaml');
+  assert.ok(p, 'the pipeline loads without error');
   assert.equal(p.name, 'Issue to dev');
   assert.equal(p.description, 'From the tracker to a development run');
   assert.equal(p.category, 'build');
   assert.equal(p.stages.length, 2);
-  assert.deepEqual(p.stages[0], { workflow: 'fixture-service.yaml', when: null, map: {} });
-  assert.deepEqual(p.stages[1], { workflow: 'fixture-service.yaml', when: 'success', map: { issues: 'issues' } });
+  assert.deepEqual(p.stages[0], { workflow: 'fixture-pipe-a.yaml', target: 'workflow', on: 'success', inputs: {}, map: {} });
+  assert.deepEqual(p.stages[1], { workflow: 'fixture-pipe-b.yaml', target: 'workflow', on: 'success', inputs: {}, map: { issues: 'issues' } });
 });
 
 test('listPipelines: a pipeline without stages, or a stage missing its workflow, comes back as an error entry', (t) => {
@@ -97,7 +124,10 @@ test('listPipelines: a pipeline without stages, or a stage missing its workflow,
   assert.deepEqual(bad.stages, []);
 });
 
-test('listPipelines: a missing pipelines folder returns no pipelines', (t) => {
+test('workflows:pipelines (#135): a fresh workspace already lists the bundled default pipelines, seeded like the workflows', (t) => {
   const { api } = makeService(t);
-  assert.deepEqual(api['workflows:pipelines'](), []);
+  const pipelines = api['workflows:pipelines']();
+  assert.ok(pipelines.length >= 4, 'the 4 bundled pipelines (#135) are seeded into a fresh workspace');
+  assert.ok(pipelines.every((p) => !p.error), pipelines.map((p) => p.error).filter(Boolean).join('; '));
+  assert.ok(pipelines.every((p) => p.origin === 'default'));
 });

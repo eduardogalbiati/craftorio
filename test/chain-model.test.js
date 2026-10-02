@@ -114,11 +114,12 @@ test('nextInputs: the map pulls from the previous run\'s outputs, converted for 
   assert.deepEqual(chain.nextInputs(then, prev, defs), { issues: ['https://x/9'], task: 'Implement #9 T (https://x/9)' });
 });
 
-test('nextInputs: a `type: run` source (@run) passes the previous run\'s folder, else its id', () => {
+test('nextInputs: a `type: run` source (@run) passes the previous run\'s id (the engine refuses a folder path), falling back to its folder\'s name without one', () => {
   const then = chain.normalizeThen({ action: 'workflow', workflow: 'x.yaml', map: { base: chain.RUN_SOURCE } });
   const defs = { base: { type: 'run' } };
-  assert.deepEqual(chain.nextInputs(then, { runDir: 'C:/runs/r1', runId: 'r1' }, defs), { base: 'C:/runs/r1' });
+  assert.deepEqual(chain.nextInputs(then, { runDir: 'C:/runs/r1', runId: 'r1' }, defs), { base: 'r1' });
   assert.deepEqual(chain.nextInputs(then, { runId: 'r1' }, defs), { base: 'r1' });
+  assert.deepEqual(chain.nextInputs(then, { runDir: 'C:/runs/r2' }, defs), { base: 'r2' });
 });
 
 test('nextInputs: then.inputs (the owner\'s own choices for the next run) win over the mapped and carried values', () => {

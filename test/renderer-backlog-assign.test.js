@@ -56,14 +56,42 @@ test('submitAssign: assigning an issue the roadmap already plans asks first, and
 
 test('submitAssign: an ended run\'s kept work (assignWorkflow\'s `kept`) opens the kept-work dialog; "resume" also closes the Assign modal; only "scratch" assigns again, confirmed', () => {
   const fn = /async function submitAssign\(e\)[\s\S]*?\n  \}/.exec(src)[0];
-  // then (#134): what happens with the run's result when it finishes, from the Assign dialog's chain picker
-  assert.match(fn, /const then = assignChain\(\)\.value\(\);/);
-  assert.match(fn, /let data = await api\.assignWorkflow\(bl\.projectId, numbers, workflow, inputs, mock, grouped\(\), false, then\);/);
+  // then (#134): what happens with the run's result when it finishes, from the Assign dialog's chain picker;
+  // a pipeline (#135) brings its own chain instead, so `then` is null and its file goes as `pipeline`
+  assert.match(fn, /const then = pipe \? null : assignChain\(\)\.value\(\);/);
+  assert.match(fn, /const pipeline = pipe\?\.file \|\| null;/);
+  assert.match(fn, /let data = await api\.assignWorkflow\(bl\.projectId, numbers, workflow, inputs, mock, grouped\(\), false, then, pipeline\);/);
   assert.match(fn, /if \(data\?\.kept\) \{/);
-  assert.match(fn, /const choice = await keptWorkDialog\(data\.kept\);/);
-  assert.match(fn, /if \(choice === 'resume'\) closeModal\('#assign-modal'\);/);
-  assert.match(fn, /if \(choice !== 'scratch'\) return;/);
-  assert.match(fn, /data = await api\.assignWorkflow\(bl\.projectId, numbers, workflow, inputs, mock, grouped\(\), true, then\);/);
+  assert.match(fn, /const kept = await keptWorkDialog\(data\.kept\);/);
+  assert.match(fn, /if \(kept === 'resume'\) closeModal\('#assign-modal'\);/);
+  assert.match(fn, /if \(kept !== 'scratch'\) return;/);
+  assert.match(fn, /data = await api\.assignWorkflow\(bl\.projectId, numbers, workflow, inputs, mock, grouped\(\), true, then, pipeline\);/);
+});
+
+// ---- Assign a saved pipeline (#135): the dropdown lists it, its first workflow receives the issues ---
+
+test('submitAssign: a pipeline picked in the dropdown runs its first stage\'s workflow, not the dialog\'s own "When it finishes"', () => {
+  const fn = /async function submitAssign\(e\)[\s\S]*?\n  \}/.exec(src)[0];
+  assert.match(fn, /const pipe = assignPipeline\(\);/);
+  assert.match(fn, /const workflow = pipe \? pipe\.stages\[0\]\.workflow : choice;/);
+});
+
+test('assignPipeline: the selected pipeline, found by its `pipe:<file>` option value', () => {
+  assert.match(src, /const PIPE = 'pipe:';/);
+  assert.match(src, /const assignPipeline = \(\) => \(bl\.pipelines \|\| \[\]\)\.find\(\(p\) => PIPE \+ p\.file === \$b\('#assign-workflow'\)\.value\) \|\| null;/);
+});
+
+test('openAssign: only pipelines whose first workflow can receive the issues are listed, after the workflows in their own optgroup', () => {
+  const fn = /async function openAssign\(prefill = null\)[\s\S]*?\n  \}/.exec(src)[0];
+  assert.match(fn, /bl\.pipelines = pipes\.filter\(\(p\) => !p\.error && bl\.workflows\.some\(\(w\) => w\.file === p\.stages\[0\]\?\.workflow\)\);/);
+  assert.match(fn, /<optgroup label="Workflows">\$\{options\}<\/optgroup><optgroup label="Pipelines">/);
+});
+
+test('renderAssignInputs: a pipeline sets its first stage\'s fixed inputs, shows its stages instead of "When it finishes", and disables "Plan it" (a roadmap stage runs one workflow)', () => {
+  const fn = /function renderAssignInputs\(\)[\s\S]*?\n  \}/.exec(src)[0];
+  assert.match(fn, /for \(const \[k, v\] of Object\.entries\(pipe\?\.stages\[0\]\.inputs \|\| \{\}\)\) if \(defs\[k\]\) WorkflowInputs\.set\(box, k, v\);/);
+  assert.match(fn, /\$b\('#assign-chain'\)\.classList\.toggle\('hidden', !!pipe\);/);
+  assert.match(fn, /toRoadmap\.disabled = !!pipe;/);
 });
 
 test('queue resume (data-pause="off"): an ended run\'s kept work opens the kept-work dialog; only "scratch" resumes the queue again, confirmed', () => {

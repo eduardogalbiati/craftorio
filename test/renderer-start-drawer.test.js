@@ -59,7 +59,7 @@ function makeEl() {
 // reimplemented), a fake DOM (one element per id used by these functions) and stubs for api and
 // the few app.js functions that are out of scope here (selectRun, renderHeader, applyProjectHints
 // elsewhere; WorkflowInputs itself is the real module, #116, not reimplemented either).
-function loadStartDrawer({ workflows = [], projects = [], settings = {}, runs = new Map(), api = {} } = {}) {
+function loadStartDrawer({ workflows = [], projects = [], settings = {}, runs = new Map(), api = {}, pipelines = [] } = {}) {
   const defs = {
     LS_KEY: /const LS_KEY = [^\n]+;/,
     esc: /const esc = \(s\) => [^\n]+;/,
@@ -75,6 +75,10 @@ function loadStartDrawer({ workflows = [], projects = [], settings = {}, runs = 
     // ChainPicker; out of scope here (see sandbox.ChainPicker below), only its wiring is loaded.
     chainPickerDecl: /let chainPicker = null;/,
     drawerChain: /const drawerChain = \(\) => [^\n]+;/,
+    // Saved pipelines (#135): selectWorkflow picks state.pipeline off a `pipe:<file>` value, then
+    // renderDrawerPipeline draws its stages instead of the ChainPicker.
+    PIPE: /const PIPE = 'pipe:';/,
+    renderDrawerPipeline: /function renderDrawerPipeline\(\) \{[\s\S]*?\n\}/,
   };
   const code = {};
   for (const [name, re] of Object.entries(defs)) {
@@ -94,8 +98,11 @@ function loadStartDrawer({ workflows = [], projects = [], settings = {}, runs = 
   const calls = { selectRun: [], renderHeader: 0 };
 
   const sandbox = {
-    state: { wf: null, mainKey: null, projects, settings, runs, starting: false, workflows },
-    api: { startRun: async () => ({ runId: 'r-new' }), setSettings: async (s) => ({ ...settings, ...s }), ...api },
+    state: { wf: null, pipeline: null, mainKey: null, projects, settings, runs, starting: false, workflows, pipelines },
+    api: {
+      startRun: async () => ({ runId: 'r-new' }), runPipeline: async () => ({ runId: 'r-new' }),
+      pipelineEstimate: async () => ({ text: '', productOwner: false }), setSettings: async (s) => ({ ...settings, ...s }), ...api,
+    },
     document: { getElementById: (id) => getEl(id) },
     localStorage: {
       setItem: (k, v) => storage.set(k, v),
@@ -111,12 +118,14 @@ function loadStartDrawer({ workflows = [], projects = [], settings = {}, runs = 
     // "When it finishes" (#134): the drawer's chain picker itself is out of scope here (chain-picker.js,
     // test/chain-model.test.js); this stub only gives drawerChain() something to call. Nothing chosen.
     ChainPicker: { mount: () => ({ refresh: () => {}, value: () => null, set: () => {} }) },
+    // A pipeline's stages strip (#135, chain-model.js): out of scope here, only the wiring that calls it.
+    ChainModel: { pipelineStagesHtml: () => '' },
   };
   sandbox.$ = (sel) => getEl(sel.slice(1));
   sandbox.window = sandbox; // WorkflowInputs (browser build) attaches itself to window
   vm.createContext(sandbox);
   vm.runInContext(workflowInputsSrc, sandbox);
-  vm.runInContext(Object.values(code).join('\n') + '\nthis.helpers = { startRun, selectWorkflow, setStartDisabled, closeDrawer, mainField, oneRunAtATime };', sandbox);
+  vm.runInContext(Object.values(code).join('\n') + '\nthis.helpers = { startRun, selectWorkflow, setStartDisabled, closeDrawer, mainField, oneRunAtATime, renderDrawerPipeline };', sandbox);
   return { sandbox, helpers: sandbox.helpers, getEl, storage, calls };
 }
 
@@ -315,4 +324,54 @@ test('startRun: api.startRun rejecting keeps the typed text and shows the error,
   assert.equal(mainEl.value, 'Do not lose this', 'a failed start never clears the main field');
   assert.equal(getEl('drawer').classList.contains('open'), true);
   assert.equal(calls.selectRun.length, 0);
+});
+
+// ---------------------------------------------------------------------------
+// Saved pipelines (#135): a `pipe:<file>` value picks the pipeline's first stage; Start runs the
+// whole pipeline (api.runPipeline) instead of the single workflow.
+// ---------------------------------------------------------------------------
+test('selectWorkflow: a pipeline value (pipe:<file>) shows its first stage\'s workflow and the pipeline box, hiding "When it finishes"', () => {
+  const workflows = [{ file: 'a.yaml', inputs: { task: { required: true } }, agents: {} }];
+  const pipelines = [{ file: 'p1.yaml', name: 'Pipe', description: 'a chain', stages: [{ workflow: 'a.yaml', inputs: {} }, { workflow: 'b.yaml', map: {} }] }];
+  const { sandbox, helpers, getEl } = loadStartDrawer({ workflows, pipelines });
+
+  helpers.selectWorkflow('pipe:p1.yaml');
+
+  assert.equal(sandbox.state.pipeline.file, 'p1.yaml');
+  assert.equal(sandbox.state.wf.file, 'a.yaml');
+  assert.equal(getEl('drawer-pipeline').classList.contains('hidden'), false);
+  assert.equal(getEl('drawer-chain').classList.contains('hidden'), true);
+  assert.equal(getEl('btn-start').textContent, 'Start pipeline');
+});
+
+test('selectWorkflow: a plain workflow value clears state.pipeline and hides the pipeline box again', () => {
+  const workflows = [{ file: 'a.yaml', inputs: { task: { required: true } }, agents: {} }];
+  const pipelines = [{ file: 'p1.yaml', name: 'Pipe', stages: [{ workflow: 'a.yaml' }, { workflow: 'b.yaml' }] }];
+  const { sandbox, helpers, getEl } = loadStartDrawer({ workflows, pipelines });
+  helpers.selectWorkflow('pipe:p1.yaml');
+
+  helpers.selectWorkflow('a.yaml');
+
+  assert.equal(sandbox.state.pipeline, null);
+  assert.equal(getEl('drawer-pipeline').classList.contains('hidden'), true);
+  assert.equal(getEl('btn-start').textContent, 'Start workflow');
+});
+
+test('startRun: with a pipeline selected, Start calls api.runPipeline with the pipeline\'s file and the owner\'s inputs, never api.startRun', async () => {
+  const workflows = [{ file: 'a.yaml', inputs: { task: { required: true } }, agents: {} }];
+  const pipelines = [{ file: 'p1.yaml', name: 'Pipe', stages: [{ workflow: 'a.yaml' }, { workflow: 'b.yaml' }] }];
+  const runPipeline = [];
+  const startRun = [];
+  const api = { runPipeline: async (...a) => { runPipeline.push(a); return { runId: 'rp-1' }; }, startRun: async (...a) => { startRun.push(a); return { runId: 'x' }; } };
+  const { getEl, helpers } = loadStartDrawer({ workflows, pipelines, api });
+  helpers.selectWorkflow('pipe:p1.yaml');
+  getEl('inputs-form')._fields = [['task', 'Do the thing']];
+
+  await helpers.startRun({});
+
+  assert.equal(startRun.length, 0, 'a pipeline never starts through api.startRun');
+  assert.equal(runPipeline.length, 1);
+  assert.equal(runPipeline[0][0], 'p1.yaml');
+  assert.equal(runPipeline[0][1].task, 'Do the thing');
+  assert.equal(runPipeline[0][3], null, 'no project was selected');
 });

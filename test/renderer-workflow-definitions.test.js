@@ -252,6 +252,26 @@ test('pipelineCard: Run pipeline is disabled when the pipeline failed to load or
   assert.match(missing, /data-run-pipe disabled/);
 });
 
+test('pipelineCard: a target stage (Product Owner → roadmap) ends the chain with a "roadmap" badge, not a workflow card', () => {
+  const { helpers, sandbox } = loadDefs();
+  sandbox.state.workflows = [{ file: 'a.yaml', name: 'Alpha', category: 'plan' }];
+  const p = { file: 'p1.yaml', name: 'Pipe', stages: [{ workflow: 'a.yaml', when: null, map: {} }, { target: 'product_owner', when: 'success', map: {} }] };
+  const html = helpers.pipelineCard(p);
+  assert.match(html, /<b>Product Owner<\/b>/);
+  assert.match(html, /<span class="badge">roadmap<\/span>/);
+});
+
+test('pipelineCard: an origin badge and "Restore default" (data-restore-pipe) show only for a restorable pipeline', () => {
+  const { helpers, sandbox } = loadDefs();
+  sandbox.state.workflows = [{ file: 'a.yaml', name: 'Alpha' }];
+  const stages = [{ workflow: 'a.yaml', when: null, map: {} }];
+  const plain = helpers.pipelineCard({ file: 'p1.yaml', name: 'P', stages });
+  assert.doesNotMatch(plain, /data-restore-pipe/);
+  const modified = helpers.pipelineCard({ file: 'p1.yaml', name: 'P', stages, origin: 'modified', restorable: true });
+  assert.match(modified, />modified</);
+  assert.match(modified, /data-restore-pipe/);
+});
+
 // ---------------------------------------------------------------------------
 // renderWorkflowDefinitions: grouping, counts, the section pills, search, sorting, empty state
 // ---------------------------------------------------------------------------
@@ -337,16 +357,16 @@ function wireBoxWithRunPipe(btn) {
   return { querySelectorAll: (sel) => (sel === '[data-run-pipe]' ? [btn] : []), querySelector: () => null };
 }
 
-test('wireWorkflowDefinitions: Run pipeline calls api.runPipeline with the pipeline\'s file when it exists', async () => {
-  const runPipeline = [];
-  const { helpers } = loadDefs({ api: { runPipeline: async (file) => runPipeline.push(file) } });
+test('wireWorkflowDefinitions: Run pipeline opens the Start drawer on the pipeline when api.runPipeline exists (the drawer itself starts every stage)', async () => {
+  const { helpers, calls } = loadDefs({ api: { runPipeline: async () => {} } });
   helpers.wfDefs.pipelines = [{ file: 'p1.yaml', stages: [{ workflow: 'a.yaml' }] }];
   const btn = fakePipeButton('p1.yaml');
   helpers.wireWorkflowDefinitions(wireBoxWithRunPipe(btn));
 
   await btn.onclick();
 
-  assert.deepEqual(runPipeline, ['p1.yaml']);
+  assert.equal(calls.openDrawer.length, 1);
+  assert.equal(calls.openDrawer[0][0].pipeline, 'p1.yaml');
 });
 
 test('wireWorkflowDefinitions: without api.runPipeline, Run pipeline opens the Start drawer on the pipeline\'s first workflow', async () => {
