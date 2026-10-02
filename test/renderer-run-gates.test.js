@@ -33,6 +33,15 @@ test('renderRunGates: the gate card names the run (workflow/project/issue via ru
   assert.match(renderRunGates, /run-gate-feedback/, 'the optional feedback field');
 });
 
+// #181: the Run screen's gate choices sit side by side in one row (shared .gate-choices with the
+// run chat and Write & Review), not stacked one under the other.
+test('renderRunGates: the choice buttons sit in one .row.gate-choices.run-gate-actions row, the first one primary', () => {
+  const renderRunGates = /function renderRunGates\(\) \{[\s\S]*?\n\}/.exec(runSrc)[0];
+  assert.match(renderRunGates, /<div class="row gate-choices run-gate-actions">\$\{buttons\}<\/div>/, 'the buttons share one row, not one per line');
+  assert.match(renderRunGates, /class="btn sm \$\{i === 0 \? 'primary' : 'ghost'\}"/, 'the first choice is the primary one, the rest are ghost');
+  assert.match(renderRunGates, /c\.feedback_required \? ' data-needs-text="1"' : ''/, 'feedback_required still marks the choice as needing text');
+});
+
 test('showToast: dismissable (a close button) and never blocks: a gate still waiting opens its run, it does not re-ask itself', () => {
   const showToast = /function showToast\([^)]*\) \{[\s\S]*?\n\}/.exec(src)[0];
   assert.match(showToast, /class="toast-close"/);

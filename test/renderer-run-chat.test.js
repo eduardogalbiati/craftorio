@@ -143,3 +143,13 @@ test('scrolledUp(): true once more than 240px of messages are below the visible 
   assert.equal(sandbox.scrolledUp({ scrollHeight: 1000, scrollTop: 500, clientHeight: 200 }), true); // 300px below
   assert.equal(sandbox.scrolledUp({ scrollHeight: 1000, scrollTop: 800, clientHeight: 200 }), false); // at the bottom
 });
+
+// #181: the gate card spans the conversation's full width (runchat.css's .rc-gate), and its choice
+// buttons sit side by side in one row, the first (primary) one first, not stacked.
+test('gateHtml: the choice buttons sit in one .row.gate-choices row, the first one primary while open', () => {
+  const gateHtml = /function gateHtml\(it\) \{[\s\S]*?\n  \}/.exec(src)[0];
+  assert.match(gateHtml, /<div class="row gate-choices">\$\{buttons\}<\/div>/, 'the buttons share one row, not one per line');
+  assert.match(gateHtml, /class="btn sm \$\{!it\.resolved && i === 0 \? 'primary' : ''\}/, 'the first, unresolved choice is the primary one');
+  assert.match(gateHtml, /c\.feedback_required \? ' data-needs-text="1"' : ''/, 'feedback_required still marks the choice as needing text');
+  assert.match(gateHtml, /<div class="rc-gate" data-item="\$\{it\.id\}">/, 'the gate card keeps its rc-gate class (full width is runchat.css, not markup)');
+});

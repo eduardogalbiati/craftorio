@@ -18,3 +18,11 @@ test('startRun: an ended run\'s kept work for this issue (#112, #170) opens the 
   assert.doesNotMatch(fn, /Earlier work on this issue/);
   assert.doesNotMatch(fn, /confirmDialog\('Start a new run'/);
 });
+
+// #181: Write & Review's gate choices sit side by side in one row too, through the shared
+// .gate-choices class (run chat, Run screen and Write & Review all use it).
+test('onApproval: the gate\'s choice buttons sit in one .row.gate-choices row, the first one primary', () => {
+  const fn = /function onApproval\(ev\) \{[\s\S]*?\n  \}/.exec(src)[0];
+  assert.match(fn, /<div class="row gate-choices">\$\{buttons\}<\/div>/, 'the buttons share one row, not one per line');
+  assert.match(fn, /class="btn sm \$\{i === 0 \? 'primary' : ''\}"/, 'the first choice is the primary one');
+});
