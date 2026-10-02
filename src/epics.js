@@ -200,14 +200,16 @@ async function applyEpic({ platform, repo, epic, issues = [], epics = [], dir, p
 
 /**
  * The epic an issue-tracker run (#81) places its created issues in when it ends: the analyzer's
- * `epic` with a `clear` match, after the owner chose create or create_assign at the review gate.
+ * `epic` with a `clear` match, after the owner chose create or create_assign at the review gate, or
+ * without the gate (`mode: auto`, #133: the review never ran, the drafts were created as they were).
  * Only an existing epic: the issue tracker never creates one. Null otherwise. The service applies it
  * only when the project's autoEpic option is on and the epic is in the synced cache.
  * @returns {{ epic: string, numbers: number[] } | null}
  */
 function filedToEpic({ workflow, status, steps } = {}) {
   if (workflow !== 'issue-tracker' || status !== 'success') return null;
-  if (!['create', 'create_assign'].includes(steps?.review?.output?.choice)) return null;
+  const choice = steps?.review?.output ? steps.review.output.choice : steps?.file?.output ? 'create' : null;
+  if (!['create', 'create_assign'].includes(choice)) return null;
   const epic = steps.analyze?.output?.epic;
   const id = String(epic?.id || '').trim();
   if (epic?.match !== 'clear' || !/^[#&]\d+$/.test(id)) return null;

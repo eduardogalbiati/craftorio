@@ -2,8 +2,16 @@
 # Workflow: Issue Tracker
 # -----------------------------------------------------------------------------
 #   analyze ──► write ──► review (you) ──► file ──► end
-#                 ▲          │
-#                 └──────────┘ revise (your feedback, limited rounds)
+#                 ▲   │      │               ▲
+#                 └───┼──────┘ revise        │
+#                     └──────────────────────┘ mode: auto (no duplicate found)
+#
+# Mode (`mode`, #133): `validated` (default) stops at the review gate, as above. `auto` files the
+# first draft as soon as it is written, without the gate: the owner chose so at start, nobody
+# answers the gate for them. In auto, a draft that found a duplicate (`existing_issue` not 0) still
+# stops at the review (nothing is added to an existing issue without the owner), no missing label is
+# created (the filer files with the existing labels and lists the skipped ones in its summary), and
+# nothing is queued for `assign_workflow` (queueing stays a choice at the gate).
 #
 # Intake: the inputs. `request` is free text in any language (the owner's few words); the
 # project, the platform, optional files (screenshots, logs) and an optional "related to #n".
@@ -21,7 +29,7 @@
 # 4. file:    the issue filer (gh/glab only) creates the issue(s) or comments on/edits the
 #             existing one, with the labels, and reports the URLs. Missing impact/complexity/kind/
 #             area labels are created only here, after your choice at the gate: no agent before
-#             the gate can create anything.
+#             the gate can create anything (in auto, none is created).
 #
 # "Create and queue" (`create_assign`): when the run ends, the app syncs the project's Backlog and
 # queues the created issues for `assign_workflow` (src/backlog.js filedToQueue, the service's
@@ -39,7 +47,7 @@ kind: Workflow
 metadata:
   name: issue-tracker
   version: 0.1.0
-  description: Turns a request in a few words into a triaged GitHub/GitLab issue - the code involved, the files to change, impact and complexity 1-5 as labels, duplicates and grouping advice - and files it after you approve the draft.
+  description: Turns a request in a few words into a triaged GitHub/GitLab issue - the code involved, the files to change, impact and complexity 1-5 as labels, duplicates and grouping advice - and files it after you approve the draft (Validated) or as soon as it is written (Automatic).
   tags: [issues, triage, backlog, github, gitlab]
   category: plan
 
@@ -53,11 +61,20 @@ inputs:
     type: string
     required: true
     description: Local repository the issue is about (read-only for the analyzer and the writer). Needs a GitHub or GitLab remote.
+  mode:
+    type: string
+    enum: [auto, validated]
+    default: validated
+    options: { auto: Automatic, validated: Validated }
+    description: "Validated: the run stops at the review so you approve, revise or discard the draft before anything is filed. Automatic: the drafts are filed as soon as they are written, with no review (a possible duplicate still stops for review, and no new label is created)."
   git_platform:
     type: string
     enum: [gh, gl]
     default: gh
-    description: "gh = GitHub (gh CLI), gl = GitLab (glab CLI). Picks the issue-creator skill."
+    label: Platform
+    options: { gh: GitHub, gl: GitLab }
+    # gh = GitHub (gh CLI), gl = GitLab (glab CLI): picks the issue-creator skill.
+    description: Where the issue is filed.
   related:
     type: string
     required: false
@@ -351,6 +368,13 @@ steps:
         follow_ups:
           type: array
           items: { type: string }
+    # auto: the first draft goes straight to the filer, unless it found a duplicate (the owner
+    # decides what is added to an existing issue); once the owner has seen a draft, it is reviewed.
+    transitions:
+      - when: "inputs.mode == 'auto' and steps.review.visits == 0 and not (output.existing_issue | int)"
+        goto: file
+      - when: "true"
+        goto: review
 
   # The owner decides; the supervisor never answers this gate (a decision gate).
   - id: review
@@ -359,7 +383,8 @@ steps:
       label: Your note (needed to revise; optional otherwise)
       placeholder: "e.g. Split the badges from the button; the owner decided: no new step type."
     message: |
-      Impact {{ steps.analyze.output.impact.score }}/5: {{ steps.analyze.output.impact.reason }}
+      {% if inputs.mode == 'auto' and steps.review.visits == 1 %}Automatic mode stopped here: the writer found an existing issue (#{{ steps.write.output.existing_issue }}) this may duplicate, and nothing is added to an existing issue without you.
+      {% endif %}Impact {{ steps.analyze.output.impact.score }}/5: {{ steps.analyze.output.impact.reason }}
       Complexity {{ steps.analyze.output.complexity.score }}/5: {{ steps.analyze.output.complexity.reason }}
       Files to change (estimate): {{ steps.analyze.output.files_count }}. Grouping: {{ steps.analyze.output.grouping }} ({{ steps.analyze.output.grouping_reason }}).
       {% for d in steps.analyze.output.duplicates %}Possible {{ d.relation }}: #{{ d.number }} {{ d.title }} ({{ d.state }}).
@@ -395,19 +420,27 @@ steps:
 
   - id: file
     agent: issue_filer
+    # without the review (mode: auto) the choice is `create` and no person confirmed new labels
     prompt: |
+      {% set reviewed = steps.review.output and steps.review.output.choice %}
+      {% set choice = steps.review.output.choice if reviewed else 'create' %}
       Repository: {{ steps.analyze.output.repo }} (pass it with --repo on every command).
-      The owner chose: {{ steps.review.output.choice }}.
-      {% if steps.review.output.feedback %}The owner's note: {{ steps.review.output.feedback }}
+      {% if reviewed %}The owner chose: {{ choice }}.
+      {% else %}Automatic mode: the owner chose at start to file the drafts without a review. Do: create.
       {% endif %}
-      {% if steps.analyze.output.labels_missing | length %}
+      {% if reviewed and steps.review.output.feedback %}The owner's note: {{ steps.review.output.feedback }}
+      {% endif %}
+      {% if not reviewed and steps.analyze.output.labels_missing | length %}
+      Create no label: nobody confirmed creating new ones. File with the existing labels only (drop
+      these missing ones from the issues) and list them as skipped in your `summary`: {{ steps.analyze.output.labels_missing | join(', ') }}.
+      {% elif steps.analyze.output.labels_missing | length %}
       The owner confirmed creating these missing labels, once each, before filing (skip any that
       exists by now): {{ steps.analyze.output.labels_missing | join(', ') }}. Create no other label.
       Colors: impact:* d93f0b, complexity:* 5319e7, area:* 0e8a16.
       {% else %}
       Use the existing labels only; create none.
       {% endif %}
-      {% if steps.review.output.choice == 'add_to' %}
+      {% if choice == 'add_to' %}
       Do not create a new issue. Add this to the existing issue
       {% if steps.write.output.existing_issue %}#{{ steps.write.output.existing_issue }}{% else %}named in the owner's note{% endif %}
       (the owner's note wins when it names another number): post a comment with

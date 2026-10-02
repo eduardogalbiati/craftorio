@@ -3,7 +3,9 @@
 // (remembered per workflow, the project's folder filling the path inputs) and Start / Start
 // another (startRun). openDrawer opens it, prefilled or not: the top bar, Projects, Project,
 // Backlog and Workflows. initStartDrawer() wires it from app.js's init(). Uses app.js globals ($,
-// esc, state, api, errMsg, CATEGORIES, liveRuns, renderHeader, selectRun, wantsSimulation…).
+// esc, state, api, errMsg, CATEGORIES, liveRuns, renderHeader, selectRun, wantsSimulation…). The
+// inputs other than the main one are drawn by WorkflowInputs (workflow-inputs.js, #116): human
+// labels, pills / switches, show_if, and the chosen project's detected language and branches.
 
 const LS_KEY = 'multiagent.inputs';
 // Inputs filled with the chosen project's folder.
@@ -20,10 +22,7 @@ async function openDrawer({ category = null, workflow = null, project = null, in
   renderDrawerCategories();
   renderWorkflowOptions(workflow || state.settings.lastWorkflow);
   if (inputs && (!workflow || state.wf?.file === workflow)) {
-    for (const [k, v] of Object.entries(inputs)) {
-      const el = document.getElementById(`in-${k}`);
-      if (el) el.value = v;
-    }
+    for (const [k, v] of Object.entries(inputs)) WorkflowInputs.set($('#drawer'), k, v);
   }
   renderProjectOptions(project || state.settings.lastProject);
   $('#drawer').classList.add('open');
@@ -96,6 +95,7 @@ function renderProjectOptions(preferred) {
 function renderProjectInfo() {
   const p = state.projects.find((x) => x.id === $('#project-select').value);
   $('#project-info').textContent = p ? `${p.folder}${p.repo ? `\n${p.repo}` : ''}` : '';
+  applyProjectHints();
 }
 
 function selectWorkflow(file) {
@@ -118,28 +118,20 @@ function selectWorkflow(file) {
   const textual = entries.filter(([, d]) => d.type !== 'run' && !d.enum);
   const mainKey = textual.find(([k]) => k === 'task')?.[0] || textual.find(([, d]) => d.required)?.[0] || textual[0]?.[0];
   state.mainKey = mainKey || null;
-  const field = ([key, def], main) => {
-    // a run id is not remembered: the default ("latest") is usually what is wanted next time;
-    // nor is the main field: each run starts from an empty task (entries saved before included)
-    const val = (def.type === 'run' || main ? null : saved[key]) ?? def.default ?? '';
-    const label = `<label for="in-${key}">${main ? 'Input' : esc(key)} ${def.required ? '<span class="req">*</span>' : ''}</label>`;
-    const hint = def.description ? `<div class="hint">${esc(def.description)}</div>` : '';
-    let control;
-    if (def.enum) {
-      control = `<select id="in-${key}" name="${key}">${def.enum.map((o) => `<option ${o === val ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>`;
-    } else if (def.type === 'run') {
-      control = `<input type="text" id="in-${key}" name="${key}" value="${esc(val)}" placeholder="latest" spellcheck="false" class="mono" />`;
-    } else if (main || def.multiline) {
-      control = `<textarea id="in-${key}" name="${key}" rows="${main ? 7 : 4}" placeholder="${main ? 'Describe what needs to be done…' : ''}">${esc(val)}</textarea>`;
-    } else {
-      control = `<input type="text" id="in-${key}" name="${key}" value="${esc(val)}" />`;
-    }
-    return `<div class="field">${label}${control}${hint}</div>`;
-  };
+  // a run id is not remembered: the default ("latest") is usually what is wanted next time;
+  // nor is the main field: each run starts from an empty task (entries saved before included)
+  const values = {};
+  for (const [key, def] of entries) values[key] = (def.type === 'run' || key === mainKey ? null : saved[key]) ?? def.default ?? '';
+  // the other inputs: human labels and the control that fits each (workflow-inputs.js, #116)
+  const field = ([key, def]) => WorkflowInputs.fieldHtml(key, def, { value: values[key], id: `in-${key}`, attrs: `name="${esc(key)}"`, context: values });
+  const mainHtml = ([key, def]) => `<div class="field"><label for="in-${key}">Input ${def.required ? '<span class="req">*</span>' : ''}</label>`
+    + `<textarea id="in-${key}" name="${key}" data-wi-input="${esc(key)}" rows="7" placeholder="Describe what needs to be done…">${esc(values[key])}</textarea>`
+    + `${def.description ? `<div class="hint">${esc(def.description)}</div>` : ''}</div>`;
   // a workflow's `mode` (e.g. auto | validated) changes how the run goes: shown next to the task, not in Advanced
   const upfront = (k) => k === 'mode' && k !== mainKey;
-  $('#inputs-form').innerHTML = entries.filter(([k]) => k === mainKey || upfront(k)).map((e) => field(e, e[0] === mainKey)).join('');
-  $('#adv-form').innerHTML = entries.filter(([k]) => k !== mainKey && !upfront(k)).map((e) => field(e, false)).join('');
+  $('#inputs-form').innerHTML = entries.filter(([k]) => k === mainKey || upfront(k)).map((e) => (e[0] === mainKey ? mainHtml(e) : field(e))).join('');
+  $('#adv-form').innerHTML = entries.filter(([k]) => k !== mainKey && !upfront(k)).map(field).join('');
+  applyProjectHints();
 
   // a folder input with `required: false` (e.g. writer-reviewer's project_path) makes the project optional
   const needsProject = Object.entries(wf.inputs || {}).some(([k, def]) => isPathInput(k) && def.required !== false);
@@ -151,10 +143,17 @@ function selectWorkflow(file) {
 // says when the limit is reached.
 const oneRunAtATime = () => !state.settings.concurrentRuns?.enabled && liveRuns().length > 0;
 
+// The inputs as the workflow takes them: enum values, switches as true/false (workflow-inputs.js).
 function readInputs() {
-  const out = {};
-  for (const form of ['#inputs-form', '#adv-form']) new FormData($(form)).forEach((v, k) => (out[k] = String(v).trim()));
-  return out;
+  return { ...WorkflowInputs.read($('#inputs-form'), { all: true }), ...WorkflowInputs.read($('#adv-form'), { all: true }) };
+}
+
+// What the app knows about the chosen project (its detected language, its local branches) fills
+// the inputs the owner has not changed; the drawer's remembered values are per workflow, not per
+// project, so the project's own language wins over them.
+function applyProjectHints() {
+  const projectId = $('#project-select').value;
+  if (state.wf && projectId) WorkflowInputs.applyHints($('#drawer'), state.wf.inputs, projectId);
 }
 
 // `keepOpen` (Start and create another): the drawer stays open on the same workflow, project and
@@ -205,6 +204,8 @@ async function startRun({ keepOpen = false } = {}) {
 }
 
 function initStartDrawer() {
+  // show_if reads the inputs of both forms (the mode next to the task, the rest in Advanced)
+  $('#drawer').setAttribute('data-wi-scope', '');
   $('#btn-drawer-close').onclick = closeDrawer;
   $('#drawer-backdrop').onclick = closeDrawer;
   $('#wf-select').onchange = () => selectWorkflow($('#wf-select').value);

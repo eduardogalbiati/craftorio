@@ -1,0 +1,20 @@
+/* Workflow input fields (workflow-inputs.js, #116): pills, switches, compact boxes. Stacked by
+   default (label above, the Start drawer); `.wi-grid` aligns the labels in a column (Assign, Roadmap). */
+.wi-field[hidden] { display: none !important; }
+.wi-field .wi-control { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.wi-field .wi-pills { flex-wrap: wrap; max-width: 100%; }
+.wi-field .wi-pills button { font-size: 12px; padding: 4px 11px; }
+.wi-field .wi-pills button:focus-visible { outline: var(--focus-ring); outline-offset: 1px; }
+.wi-field input.wi-compact, .wi-field select { max-width: 20rem; }
+.wi-field input.wi-number { max-width: 7rem; }
+.wi-field .wi-badge { font-size: 10px; font-weight: 500; margin-left: 6px; vertical-align: 1px; }
+/* a switch: the switch, then its label, on one line (the help under them) */
+.wi-field.wi-kind-switch { display: flex; flex-wrap: wrap; align-items: center; column-gap: 10px; }
+.wi-field.wi-kind-switch > label { order: 2; margin: 0; }
+.wi-field.wi-kind-switch > .wi-control { order: 1; }
+.wi-field.wi-kind-switch > .hint { order: 3; flex-basis: 100%; }
+
+.wi-grid .wi-field, .wi-grid .wi-field.wi-kind-switch { display: grid; grid-template-columns: minmax(7rem, 10rem) minmax(0, 1fr); column-gap: 14px; row-gap: 2px; align-items: center; margin-bottom: 10px; }
+.wi-grid .wi-field > label { order: 0; margin: 0; }
+.wi-grid .wi-field > .wi-control { order: 0; grid-column: 2; }
+.wi-grid .wi-field > .hint { order: 0; grid-column: 2; margin-top: 0; }

@@ -145,7 +145,7 @@ the worktree**, **Terminal there**), then:
 - **Stop**: ends the run (`cancelled`), worktree kept to resume.
 
 Only the first implementation and your own change requests stop there; the reviewer's, the tests',
-the build's and the verifier's fix rounds go on without it, unless `validate_every_round: "true"`.
+the build's and the verifier's fix rounds go on without it, unless **Validate every round** is on (`validate_every_round: true`, a switch shown under Validated).
 It is a human gate: no timeout, no supervisor, no retry ever answers it. The time a run waits for
 you at its gates is recorded apart from agent time (`summary.timing.gate_wait_ms`, the Details
 panel and the Time tooltip).
@@ -390,15 +390,23 @@ steps in). Without developer mode every run is real.
 
 Plan & Design. Turns a request in a few words (any language) into a triaged GitHub/GitLab issue.
 Start it from the Backlog's **New issue…** button (the selected project and platform are filled in)
-or from the Start panel. Inputs: `request`, `project_path`, `git_platform` (`gh`/`gl`), and the
-optional `related` ("#41, #79"), `attachments` (screenshots, logs), `max_revisions` and `assign_workflow`.
+or from the Start panel. Inputs: `request`, `project_path`, `mode` (**Validated**, the default, or
+**Automatic**, shown next to the request), `git_platform` (`gh`/`gl`), and the optional `related`
+("#41, #79"), `attachments` (screenshots, logs), `max_revisions` and `assign_workflow`.
 
 | Step | Agent | What it does |
 |---|---|---|
 | `analyze` | `code_analyzer` (Sonnet, read-only: git and gh/glab to read) | Finds the code involved and today's behaviour (file:line), estimates the files to change, rates **impact** and **complexity** 1–5 (`issue-triage` rubric), searches issues and open PRs/MRs for duplicates and work in flight, advises running it alone or grouped with #n, lists the labels the repository lacks. |
 | `write` | `issue_writer` (Opus, read-only) | Drafts the issue(s) in English with `issue-writing`: evidence, "Decision (owner): …", tasks as acceptance criteria, a Triage section, labels. Independent parts become cross-linked issues. |
-| `review` | you | The scores, the grouping advice and the draft(s), in the run chat. **Create**, **Create and queue** (the new issues go to the Backlog queue for `assign_workflow`, as one run when grouping was advised), **Revise** (your note goes back to the writer, `max_revisions` rounds), **Add to #n instead** (comment on the existing issue), **Discard**. |
+| `review` | you (Validated; Automatic skips it) | The scores, the grouping advice and the draft(s), in the run chat. **Create**, **Create and queue** (the new issues go to the Backlog queue for `assign_workflow`, as one run when grouping was advised), **Revise** (your note goes back to the writer, `max_revisions` rounds), **Add to #n instead** (comment on the existing issue), **Discard**. |
 | `file` | `issue_filer` (Sonnet, gh/glab only) | Creates the issue(s) or comments on the existing one, with the labels, and reports the URLs. |
+
+**Automatic mode** (`mode: auto`): `write` goes straight to `file`, which creates the drafts as
+they are: no review, no revise rounds, nothing queued for `assign_workflow` (the issues show on the
+Backlog after its next sync). You chose it at start, so no gate is skipped on your behalf. Two
+cases still need you: a draft that found an existing issue (a possible duplicate) stops at the
+review, with a line saying why; and missing labels are not created (the filer uses the existing
+ones and lists the skipped ones in its summary), since only a person confirms new labels.
 
 **Labels**: `impact:1`…`impact:5`, `complexity:1`…`complexity:5`, the kind (`bug`, `enhancement`,
 `documentation`) and optional `area:engine`, `area:renderer`, `area:workflows`, `area:docs`. The ones

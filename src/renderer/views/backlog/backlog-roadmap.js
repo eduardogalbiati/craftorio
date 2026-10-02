@@ -4,8 +4,8 @@
 // done / failed / skipped), the workflow's short name, the mode (a one-click toggle on planned and
 // failed items, saved at once), the complexity total of its `complexity:n` labels, a link to the
 // run; and the Product Owner's reason (#105) under the titles. The other inputs are edited in an
-// Edit form built from the workflow's input definitions (api.listWorkflows, loaded once: a select
-// for an enum, a checkbox for a flag, text otherwise), with Save / Cancel. The plan is edited too:
+// Edit form built from the workflow's input definitions (api.listWorkflows, loaded once) by
+// WorkflowInputs (workflow-inputs.js, #116: human labels, pills, switches, show_if), with Save / Cancel. The plan is edited too:
 // stages and items up/down or by drag, an issue dragged from one item to another, items removed, a
 // stage renamed or given a note ("add note"). Start (optionally simulated), Pause, Stop, Clear;
 // Retry / Skip on a failed item; Run this stage on a stage's head (#141: only its items, then the
@@ -28,7 +28,6 @@
     failed: ['failed', 'failed'],
     skipped: ['interrupted', 'skipped'],
   };
-  const MODE_LABEL = { auto: 'Auto', validated: 'Validated' };
   const ICON = {
     validated: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>',
     auto: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 3 14h9l-1 8 10-12h-9z"/></svg>',
@@ -40,8 +39,6 @@
   const clone = (stages) => JSON.parse(JSON.stringify(stages || []));
   // inputs the Backlog fills itself when the run starts (as backlog.js's skipInput): never edited here
   const skipInput = (k, def) => k === 'task' || k === 'issue' || k === 'issues' || def.type === 'run' || ((def.type || 'string') === 'string' && /path|dir/i.test(k));
-  // a flag: a boolean, or an enum of the strings "false"/"true" (e.g. validate_every_round)
-  const isFlag = (def) => def.type === 'boolean' || (Array.isArray(def.enum) && def.enum.length === 2 && def.enum.map(String).sort().join() === 'false,true');
 
   // The workflows' input definitions (file → workflow), loaded once when the Roadmap is first drawn.
   let workflows = null;
@@ -88,9 +85,10 @@
     const values = Array.isArray(def?.enum) ? def.enum.map(String) : x.inputs?.mode != null ? [String(x.inputs.mode)] : [];
     if (!values.length) return '';
     const value = String(x.inputs?.mode ?? def?.default ?? values[0]);
-    const label = (v) => `${ICON[v] || ''}${esc(MODE_LABEL[v] || v)}`;
+    // the workflow's labels for its values (`options`, e.g. auto → Automatic; WorkflowInputs, #116)
+    const label = (v) => `${ICON[v] || ''}${esc(WorkflowInputs.optionLabel(def || {}, v))}`;
     const help = def?.description ? `. ${def.description}` : '';
-    if (locked || values.length < 2) return `<span class="badge rm-mode rm-mode-${esc(value)}" title="${esc(`Mode: ${value}${help}`)}">${label(value)}</span>`;
+    if (locked || values.length < 2) return `<span class="badge rm-mode rm-mode-${esc(value)}" title="${esc(`Mode: ${WorkflowInputs.optionLabel(def || {}, value)}${help}`)}">${label(value)}</span>`;
     return `<span class="seg sm rm-mode-seg" role="group" aria-label="Mode" title="${esc(`Mode (saved at once)${help}`)}">${values.map((v) =>
       `<button type="button" class="rm-mode-${esc(v)}${v === value ? ' active' : ''}" data-rm-mode="${esc(v)}" aria-pressed="${v === value}">${label(v)}</button>`).join('')}</span>`;
   }
@@ -103,31 +101,26 @@
       ${x.reason && x.modeReason ? `<p><span class="muted">Mode:</span> ${esc(x.modeReason)}</p>` : ''}</details>`;
   }
 
-  // The Edit form: the workflow's inputs (but the mode, which has its toggle) with proper controls.
+  // The Edit form: the workflow's inputs (but the mode, which has its toggle) drawn by WorkflowInputs
+  // (#116: human labels, pills / switches, show_if against the item's mode); inputs the workflow
+  // does not define (added with "add input") as text.
   function formHtml(x) {
     const defs = inputDefs(x);
-    const fields = Object.entries(defs).filter(([k, def]) => k !== 'mode' && !skipInput(k, def || {}));
-    const extra = Object.keys(x.inputs || {}).filter((k) => k !== 'mode' && !defs[k]);
-    let first = !adding; // the new input's name takes the focus when it was just opened
-    const focus = () => { const f = first; first = false; return f ? ' autofocus' : ''; };
-    const field = (k, def = {}) => {
-      const value = x.inputs?.[k] ?? def.default ?? '';
-      const id = `rm-f-${esc(x.id)}-${esc(k)}`;
-      const help = def.description ? `<div class="hint">${esc(def.description)}</div>` : '';
-      if (isFlag(def)) {
-        return `<div class="field"><div><label class="check small"><input type="checkbox" data-rm-field="${esc(k)}" data-flag="${def.type === 'boolean' ? 'bool' : 'text'}"${String(value) === 'true' ? ' checked' : ''}${focus()} /><span>${esc(k)}</span></label></div>${help}</div>`;
-      }
-      const ctrl = Array.isArray(def.enum)
-        ? `<select id="${id}" data-rm-field="${esc(k)}"${focus()}>${def.enum.map((o) => `<option value="${esc(o)}"${String(o) === String(value) ? ' selected' : ''}>${esc(o)}</option>`).join('')}</select>`
-        : `<input type="text" id="${id}" data-rm-field="${esc(k)}" value="${esc(value)}"${focus()} />`;
-      return `<div class="field"><label for="${id}">${esc(k)}</label>${ctrl}${help}</div>`;
-    };
+    const fields = Object.fromEntries(Object.entries(defs).filter(([k, def]) => k !== 'mode' && !skipInput(k, def || {})));
+    for (const k of Object.keys(x.inputs || {})) if (k !== 'mode' && !defs[k]) fields[k] = {};
+    const mode = x.inputs?.mode ?? defs.mode?.default;
+    const grid = Object.keys(fields).length
+      ? WorkflowInputs.formHtml(fields, {
+        values: x.inputs || {}, context: { mode }, autofocus: !adding,
+        id: (k) => `rm-f-${x.id}-${k}`, attrs: (k) => `data-rm-field="${esc(k)}"`,
+      })
+      : '<p class="small muted">This workflow has no other inputs.</p>';
     const add = adding
       ? `<div class="field rm-add"><label>New input</label><div class="row"><input type="text" data-rm-newname placeholder="name" aria-label="New input name" autofocus /><input type="text" data-rm-newvalue placeholder="value" aria-label="New input value" /></div></div>`
       : '<button class="link-btn small" type="button" data-rm-addinput>+ add input</button>';
     return `
-      <div class="rm-form" role="group" aria-label="Edit the inputs of this item">
-        <div class="rm-form-grid">${[...fields.map(([k, def]) => field(k, def || {})), ...extra.map((k) => field(k))].join('') || '<p class="small muted">This workflow has no other inputs.</p>'}</div>
+      <div class="rm-form" role="group" aria-label="Edit the inputs of this item"${WorkflowInputs.scopeAttrs({ mode })}>
+        <div class="rm-form-grid wi-grid">${grid}</div>
         ${add}
         <div class="rm-form-actions">
           <label class="check small dev-only"><input type="checkbox" data-rm-field-mock${x.mock ? ' checked' : ''} /><span>Simulation</span></label>
@@ -331,7 +324,8 @@
     const inputs = { ...item.inputs };
     for (const el of form.querySelectorAll('[data-rm-field]')) {
       const k = el.dataset.rmField;
-      if (el.type === 'checkbox') inputs[k] = el.dataset.flag === 'bool' ? el.checked : String(el.checked);
+      // a switch: true/false for a boolean, "true"/"false" for an enum of those strings
+      if (el.type === 'checkbox') inputs[k] = el.dataset.wiFlag === 'text' ? String(el.checked) : el.checked;
       else if (el.value.trim() === '') delete inputs[k];
       else inputs[k] = el.value.trim();
     }

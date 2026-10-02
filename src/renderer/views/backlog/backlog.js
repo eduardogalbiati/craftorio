@@ -215,21 +215,28 @@
   // ---- assign a workflow -------------------------------------------------------------------
   const skipInput = (k, def) => k === 'task' || k === 'issue' || k === 'issues' || def.type === 'run' || ((def.type || 'string') === 'string' && /path|dir/i.test(k));
 
+  // The workflow's one-line summary (its first sentence) under the select; all of it in "About this workflow".
+  const firstSentence = (s) => (String(s || '').match(/^.*?[.!?](?=\s|$)/)?.[0] || String(s || '')).trim();
+
+  // The workflow's inputs (WorkflowInputs, #116): human labels, pills / switches, show_if; the values
+  // remembered for this project and workflow, else the project's detected language and default branch.
   function renderAssignInputs() {
     const wf = bl.workflows.find((w) => w.file === $b('#assign-workflow').value);
-    $b('#assign-wf-desc').textContent = wf?.description || '';
+    const about = wf?.description || '';
+    $b('#assign-wf-desc').textContent = firstSentence(about);
+    $b('#assign-wf-desc').title = about;
+    $b('#assign-wf-about-text').textContent = about;
+    $b('#assign-wf-about').classList.toggle('hidden', !about || firstSentence(about) === about.trim());
     const saved = bl.data?.queue?.inputs?.[wf?.file] || {};
-    const fields = Object.entries(wf?.inputs || {}).filter(([k, def]) => !skipInput(k, def || {}));
-    $b('#assign-inputs').innerHTML = fields.map(([k, def = {}]) => {
-      const value = saved[k] ?? def.default ?? '';
-      const label = `<label for="ai-${esc(k)}">${esc(k)}${def.required ? ' <span class="req">*</span>' : ''}</label>`;
-      const ctrl = Array.isArray(def.enum)
-        ? `<select id="ai-${esc(k)}" data-input="${esc(k)}">${def.enum.map((o) => `<option value="${esc(o)}"${String(o) === String(value) ? ' selected' : ''}>${esc(o)}</option>`).join('')}</select>`
-        : `<input type="text" id="ai-${esc(k)}" data-input="${esc(k)}" value="${esc(value)}" />`;
-      return `<div class="field">${label}${ctrl}${def.description ? `<div class="hint">${esc(def.description)}</div>` : ''}</div>`;
-    }).join('');
+    const defs = Object.fromEntries(Object.entries(wf?.inputs || {}).filter(([k, def]) => !skipInput(k, def || {})));
+    const box = $b('#assign-inputs');
+    box.innerHTML = WorkflowInputs.formHtml(defs, { values: saved, id: (k) => `ai-${k}`, attrs: (k) => `data-input="${esc(k)}"` });
+    $b('#assign-settings').classList.toggle('hidden', !Object.keys(defs).length);
+    WorkflowInputs.applyHints(box, defs, bl.projectId, { keep: Object.keys(saved) });
     updateAssignNote();
   }
+  // The values to send: the YAML values (an enum's value, a switch as true/false).
+  const assignInputs = () => WorkflowInputs.read($b('#assign-inputs'));
 
   // Selected issues that already have work in flight: an open PR/MR, or a run in progress or waiting.
   const prName = (p) => `${bl.data?.platform === 'gitlab' ? 'MR !' : 'PR #'}${p.number}`;
@@ -291,7 +298,7 @@
     if (!bl.workflows.length) { bl.error = 'No workflow has a task input to receive the issues.'; render(); return; }
     // in the order selected (the order the runs start, or the order of a group's task)
     const issues = shownSelected().map((n) => (bl.data?.issues || []).find((i) => i.number === n)).filter(Boolean);
-    $b('#assign-issues').textContent = issues.map((i) => `#${i.number} ${i.title}`).join(' · ');
+    $b('#assign-issues').innerHTML = issues.map((i) => `<li title="${esc(`#${i.number} ${i.title}`)}"><span class="num">#${i.number}</span><span class="title">${esc(i.title)}</span></li>`).join('');
     const sel = $b('#assign-workflow');
     sel.innerHTML = bl.workflows.map((w) => `<option value="${esc(w.file)}">${esc(w.name)}</option>`).join('');
     const files = bl.workflows.map((w) => w.file);
@@ -301,10 +308,7 @@
     document.querySelector(`input[name="assign-group"][value="${prefill?.group ? 'group' : 'separate'}"]`).checked = true;
     renderAssignBusy();
     renderAssignInputs();
-    for (const [k, v] of Object.entries(prefill?.inputs || {})) {
-      const el = document.querySelector(`#assign-inputs [data-input="${CSS.escape(k)}"]`);
-      if (el && v != null) el.value = String(v);
-    }
+    for (const [k, v] of Object.entries(prefill?.inputs || {})) WorkflowInputs.set($b('#assign-inputs'), k, v);
     openModal('#assign-modal');
   }
 
@@ -366,8 +370,7 @@
   async function submitAssign(e) {
     e.preventDefault();
     const workflow = $b('#assign-workflow').value;
-    const inputs = {};
-    document.querySelectorAll('#assign-inputs [data-input]').forEach((el) => { if (el.value.trim() !== '') inputs[el.dataset.input] = el.value.trim(); });
+    const inputs = assignInputs();
     const numbers = assignNumbers();
     if (!numbers.length) return;
     const inRoadmap = planned(numbers);
@@ -400,8 +403,7 @@
   // roadmap's Start runs it after the stages before it).
   async function addToRoadmap() {
     const workflow = $b('#assign-workflow').value;
-    const inputs = {};
-    document.querySelectorAll('#assign-inputs [data-input]').forEach((el) => { if (el.value.trim() !== '') inputs[el.dataset.input] = el.value.trim(); });
+    const inputs = assignInputs();
     const numbers = assignNumbers();
     if (!numbers.length) return;
     const issues = numbers.map((n) => (bl.data?.issues || []).find((i) => i.number === n)).filter(Boolean);
@@ -1117,26 +1119,34 @@
   <div id="assign-modal" class="modal hidden">
     <form id="assign-form" class="modal-card">
       <h3 id="assign-title">Assign a workflow</h3>
-      <p id="assign-issues" class="muted small"></p>
-      <div id="assign-busy" class="bl-busy hidden"></div>
-      <fieldset id="assign-grouping" class="bl-grouping hidden">
-        <legend class="small">Send them as</legend>
-        <label class="check"><input type="radio" name="assign-group" value="separate" checked /><span>Separate runs: one per issue (one branch and one PR/MR each), in the order selected</span></label>
-        <label class="check"><input type="radio" name="assign-group" value="group" /><span>One run for all: one branch and one PR/MR that closes every issue</span></label>
-      </fieldset>
-      <div class="field">
-        <label for="assign-workflow">Workflow</label>
-        <select id="assign-workflow"></select>
-        <div id="assign-wf-desc" class="hint"></div>
+      <div class="assign-body">
+        <ul id="assign-issues" class="assign-issues" aria-label="Issues"></ul>
+        <div id="assign-busy" class="bl-busy hidden"></div>
+        <fieldset id="assign-grouping" class="bl-grouping hidden">
+          <legend class="small">Send them as</legend>
+          <label class="check"><input type="radio" name="assign-group" value="separate" checked /><span>Separate runs: one per issue (one branch and one PR/MR each), in the order selected</span></label>
+          <label class="check"><input type="radio" name="assign-group" value="group" /><span>One run for all: one branch and one PR/MR that closes every issue</span></label>
+        </fieldset>
+        <div class="field">
+          <label for="assign-workflow">Workflow</label>
+          <select id="assign-workflow"></select>
+          <div id="assign-wf-desc" class="hint"></div>
+          <details id="assign-wf-about" class="assign-about"><summary>About this workflow</summary><p id="assign-wf-about-text"></p></details>
+        </div>
+        <fieldset id="assign-settings" class="assign-settings">
+          <legend>Settings</legend>
+          <div id="assign-inputs" class="wi-grid" data-wi-scope></div>
+        </fieldset>
+        <label class="check dev-only"><input type="checkbox" id="assign-mock" /><span>Simulation (no CLI is called, nothing is spent)</span></label>
       </div>
-      <div id="assign-inputs"></div>
-      <label class="check dev-only"><input type="checkbox" id="assign-mock" /><span>Simulation (no CLI is called, nothing is spent)</span></label>
-      <p id="assign-note" class="small"></p>
-      <p id="assign-error" class="error small"></p>
-      <div class="modal-actions">
-        <button type="button" id="btn-assign-cancel" class="btn ghost">Cancel</button>
-        <button type="button" id="btn-assign-roadmap" class="btn ghost" title="Plan it instead: a new stage at the end of the roadmap, started with the roadmap">Add to roadmap</button>
-        <button type="submit" id="btn-assign-ok" class="btn primary">Start</button>
+      <div class="assign-foot">
+        <p id="assign-note" class="small"></p>
+        <p id="assign-error" class="error small"></p>
+        <div class="modal-actions">
+          <button type="button" id="btn-assign-cancel" class="btn ghost">Cancel</button>
+          <button type="button" id="btn-assign-roadmap" class="btn ghost" title="Plan it instead: a new stage at the end of the roadmap, started with the roadmap">Add to roadmap</button>
+          <button type="submit" id="btn-assign-ok" class="btn primary">Start</button>
+        </div>
       </div>
     </form>
   </div>`,

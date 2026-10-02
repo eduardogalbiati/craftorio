@@ -606,8 +606,9 @@ function main() {
     if (['artifacts', 'backlog', 'duo'].includes(args.view)) demoEnrichRun(ws, project.id);
     if (args.view === 'analytics') demoAnalyticsRuns(ws, project.id);
     if (args.view === 'analytics' && args.tab === 'performance') demoPerformanceRuns(ws, project.folder, project.id);
-    // Run App's setup at a gate is prefilled from the worktree's package.json (#108)
-    if (args.view === 'run' && project.folder) {
+    // Run App's setup at a gate is prefilled from the worktree's package.json (#108); the Backlog's
+    // Assign dialog shows the language detected from it (#116)
+    if (['run', 'backlog'].includes(args.view) && project.folder) {
       fs.mkdirSync(project.folder, { recursive: true });
       fs.writeFileSync(path.join(project.folder, 'package.json'), JSON.stringify({ name: 'demo-app', private: true, scripts: { start: 'node server.js' } }, null, 2));
     }

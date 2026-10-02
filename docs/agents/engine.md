@@ -24,6 +24,11 @@ same features for users; this is the implementer's summary.
 - Inputs with `type: run` take another run's id: empty/`latest` → the most recent run of another
   workflow; an id with no `runs/<id>/events.jsonl` is refused when the run is created (the UI shows
   it before anything starts). Used by `run-retrospective`.
+- Inputs with `type: boolean` take true/false; `resolveInputs` also accepts their text ("true",
+  "false", "yes", "no", "1", "0", "": saved inputs, the CLI's `--input`), so a condition reads
+  `inputs.x`, not `inputs.x == 'true'`. UI-only keys the engine ignores (#116, rendered by
+  `src/renderer/workflow-inputs.js`): `label` (else derived from the key), `options` (`{ value:
+  label }` for an enum), `show_if` (`"mode == 'validated'"`: hidden while false, value kept).
 - Agent `provider`/`model`/`effort` can be templates over the inputs (resolved once in the constructor);
   `cli_args` can be a map keyed by provider; providers' `effort_args` get `{{ effort }}`.
   `max_visits` / `loop.max_iterations` accept templates. `agents.<name>.enabled` (bool or template)
@@ -117,7 +122,7 @@ same features for users; this is the implementer's summary.
   ends with success the UI opens the Save to issue preview: nothing is written before it is confirmed.
 - Validated mode (`inputs.mode == 'validated'` in both software-development workflows):
   `develop` → `developer_check` while `vars.owner_validated != 'yes'` (set by the gate's
-  approve/changes transitions) or `inputs.validate_every_round == 'true'`; the developer's
+  approve/changes transitions) or `inputs.validate_every_round` (a boolean); the developer's
   prompt shows the change request when `previous_step == 'developer_check'`. Template filter
   `git_commits(base)` lists a folder's commits for a gate message (empty without a folder).
 - `orchestrator.supervisor: { enabled, max_interventions }` — per step 2, per run 6.

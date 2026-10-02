@@ -102,7 +102,7 @@ async function refreshWorkflows() {
         <div>
           <h3>${esc(w.name)} ${w.version ? `<span class="muted small">v${esc(w.version)}</span>` : ''}</h3>
           <p class="muted small">${esc(w.error ? `Error: ${w.error}` : w.description || '')}</p>
-          ${Array.isArray(w.inputs?.mode?.enum) ? `<p class="small wf-modes"><b>Modes:</b> ${w.inputs.mode.enum.map((m) => `<span class="badge mono">${esc(m)}${m === w.inputs.mode.default ? ' (default)' : ''}</span>`).join(' ')} <span class="muted">${esc(w.inputs.mode.description || '')}</span></p>` : ''}
+          ${Array.isArray(w.inputs?.mode?.enum) ? `<p class="small wf-modes"><b>Modes:</b> ${w.inputs.mode.enum.map((m) => `<span class="badge">${esc(WorkflowInputs.optionLabel(w.inputs.mode, m))}${m === w.inputs.mode.default ? ' (default)' : ''}</span>`).join(' ')} <span class="muted">${esc(w.inputs.mode.description || '')}</span></p>` : ''}
           <div class="badges">
             <span class="badge cat-${esc(w.category)}">${esc(CATEGORIES[w.category] || w.category)}</span>
             <span class="badge">${(w.steps || []).length} steps</span>

@@ -79,6 +79,7 @@ inputs:
     type: string
     enum: [low, medium, high, xhigh]
     default: high
+    options: { xhigh: Extra high }
   reviewer_provider:
     type: string
     enum: [claude, codex, grok]
@@ -91,6 +92,7 @@ inputs:
     type: string
     enum: [low, medium, high, xhigh]
     default: high
+    options: { xhigh: Extra high }
 
 # -----------------------------------------------------------------------------
 providers:

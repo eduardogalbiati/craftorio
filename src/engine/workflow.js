@@ -114,6 +114,15 @@ tpl.addFilter('git_commits', (dir, base) => {
 const render = (s, scope) => (s == null ? '' : tpl.renderString(String(s), scope));
 const evalExpr = (expr, scope) => render(`{% if ${expr} %}1{% else %}0{% endif %}`, scope).trim() === '1';
 
+// A `type: boolean` input's value: true/false, or their text ("true", "yes", "1" / "false", "no", "0", "").
+function toBoolean(key, v) {
+  if (typeof v === 'boolean') return v;
+  const s = String(v).trim().toLowerCase();
+  if (['true', 'yes', 'on', '1'].includes(s)) return true;
+  if (['false', 'no', 'off', '0', ''].includes(s)) return false;
+  throw new Error(`Input "${key}" must be true or false`);
+}
+
 function parseDuration(v, def) {
   if (v == null) return def;
   if (typeof v === 'number') return v;
@@ -633,6 +642,8 @@ class WorkflowRun extends EventEmitter {
       let v = given[k];
       if (v === undefined || v === '') v = def.default;
       if (def.required && (v === undefined || v === '')) throw new Error(`Required input not provided: ${k}`);
+      // a yes/no: a boolean, or its text from a form, the CLI or inputs saved before it was one ("true"/"false")
+      if (def.type === 'boolean' && v !== undefined) v = toBoolean(k, v);
       if (def.enum && v !== undefined && !def.enum.includes(v)) throw new Error(`Input "${k}" must be one of ${def.enum.join(', ')}`);
       if (def.type === 'run') v = this.resolveRunInput(k, v);
       // a list typed in a form arrives as text: one item per line or comma

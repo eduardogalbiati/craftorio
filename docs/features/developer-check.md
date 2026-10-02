@@ -22,7 +22,7 @@ the worktree**, **Terminal there**), then:
 - **Stop**: ends the run (`cancelled`), worktree kept to resume.
 
 Only the first implementation and your own change requests stop there; the reviewer's, the tests',
-the build's and the verifier's fix rounds go on without it, unless `validate_every_round: "true"`.
+the build's and the verifier's fix rounds go on without it, unless **Validate every round** is on (`validate_every_round: true`, a switch shown under Validated).
 It is a human gate: no timeout, no supervisor, no retry ever answers it. The time a run waits for
 you at its gates is recorded apart from agent time (`summary.timing.gate_wait_ms`, the Details
 panel and the Time tooltip).

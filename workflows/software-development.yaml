@@ -18,7 +18,7 @@
 #   validated: develop ─► developer_check (human gate) ─► code_review. The owner tries the worktree
 #   (Run locally when a local_preview is set, see below), then approves, asks for changes (back to
 #   develop with the text, then back to the gate) or stops. Only the first implementation and the
-#   owner's own change requests stop there; review fix rounds too with validate_every_round: "true".
+#   owner's own change requests stop there; review fix rounds too with validate_every_round: true.
 #   Before the gate, developer_screenshots (no agent, #144) captures the UI states develop listed in
 #   `screenshots`, original and modified, into evidence/developer/round-<n>/; the gate shows them.
 #
@@ -103,37 +103,51 @@ inputs:
     type: string
     required: true
     description: Local repository path or git URL (cloned into <workspace>/repos). Needs a GitHub or GitLab remote.
+  # Picks the unit-test-writer-<language> and build-audit-<language> skills. The app prefills it
+  # from the project's files (package.json, pyproject.toml, go.mod, pom.xml, *.csproj).
   language:
     type: string
     enum: [js, python, go, java, csharp]
     default: js
-    description: Main language of the repository. Picks the unit-test-writer-<language> and build-audit-<language> skills.
+    options: { js: JavaScript, python: Python, go: Go, java: Java, csharp: "C#" }
+    description: The project's main language, for its tests and build checks.
+  # gh = GitHub (gh CLI), gl = GitLab (glab CLI): picks the ci-pipeline, pr-babysitter and deploy skills.
   git_platform:
     type: string
     enum: [gh, gl]
     default: gh
-    description: "gh = GitHub (gh CLI), gl = GitLab (glab CLI). Picks the ci-pipeline, pr-babysitter and deploy skills."
+    label: Platform
+    options: { gh: GitHub, gl: GitLab }
+    description: Where the pull request (GitHub) or merge request (GitLab) is opened.
   base_branch:
     type: string
     default: main
+    description: The branch the work starts from and is merged into.
+  # GitHub only: Actions workflow that publishes the PR preview (pre-release). GitLab uses
+  # DEPLOY_TARGET=preview (see deploy-gl).
   preview_workflow:
     type: string
     default: preview.yml
-    description: "GitHub only: Actions workflow that publishes the PR preview (pre-release). GitLab uses DEPLOY_TARGET=preview (see deploy-gl)."
+    label: Preview workflow
+    description: "GitHub only: the Actions workflow that publishes a preview of the pull request."
   deploy_workflow:
     type: string
     default: deploy.yml
-    description: "GitHub only: Actions workflow triggered by the merge into base_branch."
+    label: Deploy workflow
+    description: "GitHub only: the Actions workflow that runs after the merge."
+  # validated: the run stops at developer_check after the developer.
   mode:
     type: string
     enum: [auto, validated]
     default: auto
-    description: "auto = straight from the developer to review and tests. validated = the run stops after the developer (developer_check) so you try the change and approve it or ask for changes before any review or test is paid for."
+    options: { auto: Automatic, validated: Validated }
+    description: "Automatic: the change goes straight from the developer to review and tests. Validated: the run stops after the developer so you can try the change before review and tests are paid for."
+  # A boolean; saved inputs "true"/"false" (before #116) are accepted by the engine.
   validate_every_round:
-    type: string
-    enum: ["false", "true"]
-    default: "false"
-    description: "Validated mode only: \"true\" also stops at developer_check after the developer's review fix rounds, not only after the first implementation and your own change requests."
+    type: boolean
+    default: false
+    show_if: "mode == 'validated'"
+    description: "Also stop for you after each round of review fixes, not only after the first change and your own change requests."
 
 # -----------------------------------------------------------------------------
 # Final command line = args + capability and isolation flags + agent.cli_args + (resume_args if
@@ -515,7 +529,7 @@ steps:
       # validated mode: the owner tries the first implementation and every round they asked for
       # (vars.owner_validated is "yes" once they approved; a review fix round goes on without them,
       # unless validate_every_round)
-      - when: "inputs.mode == 'validated' and output.committed and (vars.owner_validated != 'yes' or inputs.validate_every_round == 'true')"
+      - when: "inputs.mode == 'validated' and output.committed and (vars.owner_validated != 'yes' or inputs.validate_every_round)"
         goto: developer_screenshots
       # the review findings needed no production change (e.g. they ask for tests, which the test
       # writer owns): the reviewer gets the answer; a disagreement ends at human_review, never in a loop

@@ -173,10 +173,15 @@ which the software-development developer and evidence agents load (#111). In thi
   (label above the control, `.hint` for the help line, `.row` for a pair); `.s-group`/`.s-row` for
   settings-like lists; `.switch` and `.check` for flags; `.seg` (`.sm`) for a small set of choices;
   `.empty-state`; the standard `select` / `input[type=text]` styles (their focus is on the control).
-- **Controls follow the data**: a workflow input with `enum` is a select or a `.seg` toggle, a
-  boolean (or an enum of `"false"`/`"true"`) a checkbox, everything else text, with the input's
-  `description` as `.hint` (`renderAssignInputs` in `views/backlog/backlog.js` and the Roadmap's Edit
-  form in `views/backlog/backlog-roadmap.js` are the models). Short values never get a full-width box.
+- **Controls follow the data**: workflow inputs are always drawn by `WorkflowInputs`
+  (`workflow-inputs.js`, #116), never by hand: the input's `label` (or one derived from the key; a
+  YAML slug is never shown), its `options` labels, pills (`.seg`) for an enum of up to 5 short
+  values, a select for a longer one, a `.switch` for a boolean (or an enum of `"false"`/`"true"`), a
+  compact box for text, the local branches for a `*branch` input, `show_if`, and the `description`
+  as `.hint`. Read the values with `WorkflowInputs.read`, set one with `.set`, prefill the project's
+  language and branches with `.applyHints`. Add `.wi-grid` to the container for aligned labels.
+  Elsewhere, an enum is a select or a `.seg` toggle and a flag a switch or a checkbox. Short values
+  never get a full-width box.
 - **What leads**: titles (issue, run, project) are the headline; workflow files, ids and run ids
   are small badges or links with the full value in `title`. Long titles ellipsize.
 - **Edits**: several fields → an Edit form with Save / Cancel; one obvious choice (a mode) → a

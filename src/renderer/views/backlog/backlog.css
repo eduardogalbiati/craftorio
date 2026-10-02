@@ -163,7 +163,22 @@ button.bl-label { font-family: inherit; background: none; cursor: pointer; }
 .bl-card-run .bl-run > span:not(.pill):not(.badge) { overflow: hidden; text-overflow: ellipsis; }
 .bl-queue { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 8px 12px; margin-bottom: 12px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; }
 .bl-queue .error { margin: 0; }
-#assign-issues { max-height: 90px; overflow: auto; }
+/* Assign (#116): the issues lead (a list, one line each), the middle scrolls, the cost note and the buttons stay at the bottom */
+#assign-form { display: flex; flex-direction: column; width: 560px; overflow: hidden; }
+#assign-form > h3 { margin-bottom: 8px; }
+.assign-body { flex: 1 1 auto; min-height: 0; overflow: auto; margin: 0 -4px; padding: 0 4px; }
+.assign-issues { list-style: none; margin: 0 0 12px; padding: 0; max-height: 132px; overflow: auto; display: grid; gap: 3px; }
+.assign-issues li { display: flex; gap: 8px; min-width: 0; font-size: 13px; }
+.assign-issues .num { color: var(--muted); font-family: var(--mono); flex: none; }
+.assign-issues .title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+#assign-wf-desc { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.assign-about { margin-top: 4px; font-size: 12px; }
+.assign-about > summary { color: var(--muted); cursor: pointer; }
+.assign-about p { margin: 6px 0 0; color: var(--muted); }
+.assign-settings { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px 2px; margin: 0 0 12px; }
+.assign-settings > legend { font-size: 12px; font-weight: 600; color: var(--muted); padding: 0 4px; }
+.assign-foot { flex: none; border-top: 1px solid var(--border); padding-top: 10px; margin-top: 4px; }
+.assign-foot #assign-note { margin: 0 0 6px; }
 .bl-pr { color: var(--green); text-decoration: none; }
 .bl-pr:hover { text-decoration: underline; }
 .bl-pr.draft { color: var(--muted); }
