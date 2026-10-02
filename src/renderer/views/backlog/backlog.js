@@ -173,9 +173,10 @@
     if (!visible() || runTimer) return;
     runTimer = setTimeout(() => { runTimer = null; reload(); }, 1500);
   });
-  // The queue also changes without run events (a start that fails, the next issue starting).
+  // The queue also changes without run events (a start that fails, the next issue starting), and a
+  // live roadmap's refill (#164) with none.
   setInterval(() => {
-    const busy = bl.data?.queue?.items?.length || bl.data?.issues?.some((i) => i.runs?.[0]?.status === 'running');
+    const busy = bl.data?.queue?.items?.length || bl.data?.issues?.some((i) => i.runs?.[0]?.status === 'running') || bl.data?.roadmap?.live;
     if (visible() && busy) reload();
   }, 5000);
 
@@ -693,6 +694,14 @@
       <button class="btn sm${q.paused ? ' primary' : ' ghost'}" type="button" data-pause="${q.paused ? 'off' : 'on'}">${q.paused ? 'Resume' : 'Pause'}</button>`;
   }
 
+  // The live roadmap's banner (#164, backlog-roadmap.js liveBanner): on top of every view while it is on.
+  function renderLive() {
+    const box = $b('#bl-live');
+    const html = window.BacklogRoadmap?.liveBanner(bl.data?.roadmap) || '';
+    box.classList.toggle('hidden', !html);
+    box.innerHTML = html;
+  }
+
   // ---- local merges not pushed (software-development-local-hero) ---------------------------
   // The project's local <base> has commits origin/<base> has not: what they close, Push, auto-push.
   const issueRefs = (numbers) => numbers.map((n) => `#${n}`).join(', ');
@@ -822,6 +831,7 @@
     $b('#bl-synced').textContent = bl.syncing ? 'Syncing…' : bl.data ? `Synced ${dateOf(bl.data.syncedAt)} from ${PLATFORMS[bl.data.platform]?.label || bl.data.platform}` : '';
     const prError = bl.data?.pullRequestsError ? `Open ${bl.data.platform === 'gitlab' ? 'MRs' : 'PRs'} could not be read: ${bl.data.pullRequestsError}` : '';
     $b('#bl-error').textContent = bl.error || prError;
+    renderLive();
     renderLocal();
     renderQueue();
 
@@ -962,6 +972,13 @@
       } catch (err) { bl.error = errMsg(err); }
       render();
     };
+    $b('#bl-live').onclick = async (e) => {
+      const off = e.target.closest('[data-live-off]');
+      if (!off) return;
+      off.disabled = true;
+      try { setData(await api.setRoadmapLive(bl.projectId, false)); } catch (err) { bl.error = errMsg(err); }
+      render();
+    };
     $b('#bl-local').onclick = async (e) => {
       if (e.target.closest('[data-push]')) { openPush(); return; }
       const auto = e.target.closest('[data-autopush]');
@@ -1083,6 +1100,7 @@
           <span class="spacer"></span>
           <span id="bl-synced" class="muted small"></span>
         </div>
+        <div id="bl-live" class="bl-live hidden" role="status"></div>
         <div id="bl-local" class="bl-queue bl-local hidden"></div>
         <div id="bl-queue" class="bl-queue hidden"></div>
         <p id="bl-error" class="error small"></p>

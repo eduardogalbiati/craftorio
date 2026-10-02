@@ -33,6 +33,10 @@
 //   --missing-clis     usage, settings: Claude Code, Grok, gh and glab not installed, no speech-to-text
 //                      CLI and gh without the "user" scope (the install commands and their play
 //                      buttons, #147)
+//   --live <state>     backlog: the demo roadmap's Live roadmap (#164): off (planned, the switch off) |
+//                      on (running, simulated, last refill 03:12 +3 stages) | refilling (the Product
+//                      Owner picking) | empty (done: nothing left under complexity 2) | budget (done:
+//                      the daily budget reached); the banner shows on every --mode, the box on roadmap
 //   --click <css>      clicks this element once the view is open (repeatable, in order)
 //   --context <css>    then right-clicks this element (repeatable): e.g. an artifact's copy menu
 //   --theme <t>        dark | light | system: the theme Electron reports (prefers-color-scheme)
@@ -81,6 +85,7 @@ const VIEWS = {
 };
 const THEMES = ['dark', 'light', 'system'];
 const KEEP_AWAKE = ['off', 'idle', 'active', 'error'];
+const LIVE_STATES = ['off', 'on', 'refilling', 'empty', 'budget'];
 
 function parseArgs(argv) {
   const a = { view: 'dashboard', tab: null, mode: null, run: 'mock', workflow: 'software-development.yaml', clicks: [], contexts: [], inputs: {}, stopAt: null, keepAwake: null, theme: null, size: [1400, 900], ref: null, out: null, name: null, side: null, caption: null, wait: null, timeout: 90000, demoShots: true };
@@ -117,6 +122,7 @@ function parseArgs(argv) {
     else if (k === '--timeout') a.timeout = ms();
     else if (k === '--no-demo-shots') a.demoShots = false;
     else if (k === '--oracle') a.oracle = next();
+    else if (k === '--live') a.live = next();
     else throw new Error(`Unknown argument: ${k}`);
   }
   const v = VIEWS[a.view];
@@ -126,6 +132,8 @@ function parseArgs(argv) {
   if (a.theme && !THEMES.includes(a.theme)) throw new Error(`--theme takes ${THEMES.join(' | ')}`);
   if (a.keepAwake && !KEEP_AWAKE.includes(a.keepAwake)) throw new Error(`--keep-awake takes ${KEEP_AWAKE.join(' | ')}`);
   if (a.oracle && !ORACLE_STATES.includes(a.oracle)) throw new Error(`--oracle takes ${ORACLE_STATES.join(' | ')}`);
+  if (a.live && !LIVE_STATES.includes(a.live)) throw new Error(`--live takes ${LIVE_STATES.join(' | ')}`);
+  if (a.live && a.view !== 'backlog') throw new Error('--live applies to --view backlog');
   if ((a.stopAt || Object.keys(a.inputs).length) && a.view !== 'run') throw new Error('--stop-at and --input apply to --view run');
   a.wait ??= v.live ? 20000 : 1500;
   a.name ??= [a.view, a.tab, a.mode, a.oracle && `oracle-${a.oracle}`, a.theme].filter(Boolean).join('-');
@@ -299,7 +307,20 @@ function demoPoConversation(ws, projectId) {
 // group of two issues (with the Product Owner's reasons, mode auto), then one UI issue (mode
 // validated, no stage note); planned, so nothing starts. `--click "[data-rm-edit]"` opens the first
 // planned item's Edit form (the workflow's inputs: select, checkbox, text).
-function demoRoadmap(ws, projectId) {
+// `live` (#164, --live): on / refilling run it simulated with the live switch on and a last refill;
+// empty / budget end it done (every item done) with live still on and why refills stopped.
+function demoRoadmap(ws, projectId, live = 'off') {
+  const at = (h, m) => { const d = new Date(); d.setHours(h, m, 0, 0); return d.toISOString(); };
+  const ended = live === 'empty' || live === 'budget';
+  const refill = {
+    on: { status: 'added', at: at(3, 12), added: 3, costUsd: 0.42, message: 'Added by the live roadmap at 03:12, Product Owner answer US$ 0.42. +3 stages.' },
+    refilling: { status: 'refilling', at: at(3, 12), added: 0, costUsd: 0, message: 'The Product Owner is picking the next issues.' },
+    empty: { status: 'empty', at: at(3, 12), added: 0, costUsd: 0.31, message: 'Live roadmap: nothing left under complexity 2. Start tries again.' },
+    budget: { status: 'budget', at: at(3, 12), added: 0, costUsd: 0, message: 'Live roadmap: the daily budget of US$ 50.00 is reached (US$ 51.20 over the last 24 h): no more refills until it frees up.' },
+  }[live];
+  const liveFields = refill ? {
+    state: ended ? 'done' : 'running', simulated: true, live: true, liveSince: at(1, 5), liveBy: 'owner', liveRefill: refill, liveRefills: refill.costUsd ? [{ at: refill.at, costUsd: refill.costUsd }] : [],
+  } : {};
   const issue = (n) => {
     const i = DEMO_ISSUES.find((x) => x.number === n);
     return { number: n, url: `${DEMO_REPO}/issues/${n}`, title: i.title, body: i.body, knownPullRequests: [] };
@@ -307,9 +328,10 @@ function demoRoadmap(ws, projectId) {
   const item = (id, workflow, numbers, extra = {}) => ({
     id, workflow, workflowName: workflow.replace(/\.yaml$/, ''), inputs: { language: 'js', mode: 'auto' }, mock: false,
     ...issue(numbers[0]), ...(numbers.length > 1 ? { issues: numbers.map(issue) } : {}), status: 'planned', runId: null, runs: [], error: null, ...extra,
+    ...(ended ? { status: 'done' } : {}),
   });
   fs.writeFileSync(path.join(ws.backlog, `${projectId}.roadmap.json`), JSON.stringify({
-    state: 'planned', simulated: false, error: null, pausedBy: null, updatedAt: new Date().toISOString(),
+    state: 'planned', simulated: false, error: null, pausedBy: null, updatedAt: new Date().toISOString(), ...liveFields,
     stages: [
       { id: 'stage-1', name: 'Stability first', note: 'The rename crash blocks the rest.', items: [item('item-1', 'software-development-local-hero.yaml', [11], { status: 'done', runId: '20260118-120000-demo0011', runs: ['20260118-120000-demo0011'] })] },
       { id: 'stage-2', name: 'Reports and health', note: 'Both touch the server: one run, no conflict.', items: [item('item-2', 'software-development-local-hero.yaml', [12, 9], {
@@ -771,7 +793,7 @@ function main() {
     fs.writeFileSync(path.join(ws.backlog, `${project.id}.json`), JSON.stringify(demoBacklog(project.id, src('backlog').taskProgress), null, 2));
     // also on Project: its run list shows the run's "issue from cache" badge (#168)
     if (['backlog', 'project'].includes(args.view)) demoLocalMerge(ws, project.id);
-    if (args.view === 'backlog') demoRoadmap(ws, project.id);
+    if (args.view === 'backlog') demoRoadmap(ws, project.id, args.live);
     if (args.view === 'backlog') demoPoConversation(ws, project.id);
     // also on Artifacts: a second run group (its document.md) for Collapse all / Expand all (#126)
     if (['artifacts', 'backlog', 'duo'].includes(args.view)) demoEnrichRun(ws, project.id);

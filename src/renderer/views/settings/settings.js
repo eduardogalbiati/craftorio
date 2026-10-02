@@ -34,6 +34,7 @@ async function renderSettings() {
   $('#set-notif-retention').value = state.settings.notificationRetentionDays ?? 30;
   renderConcurrency();
   renderOracleSettings();
+  renderLiveSettings();
   renderOracleWake();
   refreshKeepAwake();
   renderVoice();
@@ -60,6 +61,34 @@ async function saveConcurrency() {
   state.settings = await api.setSettings({ concurrentRuns });
   renderConcurrency();
   renderHeader();
+}
+
+// Settings › General › Live roadmap (settings.liveRoadmap, read by src/live-roadmap.js, #164): every
+// field is saved together, since setSettings replaces the whole object.
+function renderLiveSettings() {
+  const l = state.settings.liveRoadmap || {};
+  $('#set-live-cap').value = l.complexityCap ?? 2;
+  $('#set-live-stages').value = l.maxStages ?? 3;
+  $('#set-live-budget').value = l.dailyBudgetUsd ?? 50;
+  $('#set-live-refresh').checked = l.refreshFirst !== false;
+}
+
+async function saveLiveSettings() {
+  const prev = state.settings.liveRoadmap || {};
+  const int = (sel, min, max, fallback) => {
+    const n = Math.floor(Number($(sel).value));
+    return $(sel).value !== '' && Number.isFinite(n) && n >= min ? Math.min(n, max) : fallback;
+  };
+  const budget = Number($('#set-live-budget').value);
+  const liveRoadmap = {
+    ...prev,
+    complexityCap: int('#set-live-cap', 1, 10, prev.complexityCap ?? 2),
+    maxStages: int('#set-live-stages', 1, 10, prev.maxStages ?? 3),
+    dailyBudgetUsd: $('#set-live-budget').value !== '' && Number.isFinite(budget) && budget >= 0 ? Math.min(budget, 10000) : (prev.dailyBudgetUsd ?? 50),
+    refreshFirst: $('#set-live-refresh').checked,
+  };
+  state.settings = await api.setSettings({ liveRoadmap });
+  renderLiveSettings();
 }
 
 // Settings › Execution › Oracle (settings.oracle, read by src/oracle.js): both fields are saved
@@ -247,6 +276,25 @@ registerView({
                   <div class="s-ctrl"><input type="number" id="set-backlog-group" min="2" max="20" aria-label="Most issues in one run" /></div>
                 </div>
               </div>
+              <h3 class="s-subtitle">Live roadmap</h3>
+              <div id="set-live" class="s-group">
+                <div class="s-row">
+                  <div class="s-label"><b>Highest complexity</b><span>A refill picks open issues with a complexity:n label up to this value, lowest first; issues without one are left out.</span></div>
+                  <div class="s-ctrl"><input type="number" id="set-live-cap" min="1" max="10" class="s-num" aria-label="Highest complexity a refill picks" /></div>
+                </div>
+                <div class="s-row">
+                  <div class="s-label"><b>Stages per refill</b><span>The most stages the Product Owner adds each time the roadmap's last stage ends.</span></div>
+                  <div class="s-ctrl"><input type="number" id="set-live-stages" min="1" max="10" class="s-num" aria-label="Most stages per refill" /></div>
+                </div>
+                <div class="s-row">
+                  <div class="s-label"><b>Daily budget (USD)</b><span>The live roadmap's runs and refills over the last 24 hours; once reached, it ends after its current stages and adds nothing more. 0: no cap.</span></div>
+                  <div class="s-ctrl"><input type="number" id="set-live-budget" min="0" max="10000" step="1" class="s-num" aria-label="Live roadmap daily budget in USD" /></div>
+                </div>
+                <div class="s-row">
+                  <div class="s-label"><b>Sync before a refill</b><span>Sync the backlog from its platform before the Product Owner reads it, so it picks from current issues.</span></div>
+                  <div class="s-ctrl"><label class="switch"><input type="checkbox" role="switch" id="set-live-refresh" aria-label="Sync the backlog before a refill" /><span></span></label></div>
+                </div>
+              </div>
               <h3 class="s-subtitle">Voice input</h3>
               <p class="muted small">Dictate into any field with the OS: <b>Win+H</b> on Windows, <b>Dictation</b> on macOS (press Fn twice). Or use the mic button on the long text fields (or Ctrl+Shift+M): the recording is transcribed on this machine by whisper.cpp, inserted at the cursor for review, and deleted right after. Nothing leaves the machine.</p>
               <div id="set-voice" class="s-group">
@@ -401,6 +449,7 @@ registerView({
     };
     for (const sel of ['#set-cr-enabled', '#set-cr-max', '#set-cr-project', '#set-cr-sims']) $(sel).onchange = saveConcurrency;
     for (const sel of ['#set-oracle-budget', '#set-oracle-compact']) $(sel).onchange = saveOracleSettings;
+    for (const sel of ['#set-live-cap', '#set-live-stages', '#set-live-budget', '#set-live-refresh']) $(sel).onchange = saveLiveSettings;
     $('#set-oracle-wake').onchange = saveOracleWake;
   },
   show: renderSettings,

@@ -155,6 +155,10 @@ const DEFAULT_SETTINGS = {
   backlogPlatform: 'github',
   // the most issues the Backlog sends as one run (one branch, one PR/MR)
   backlogMaxGroup: 5,
+  // Live roadmap (#164, src/live-roadmap.js): the highest complexity:n a refill picks, the most stages
+  // per refill, the spend over 24 h (USD, runs and refills; 0 = no cap) past which refills stop, and
+  // whether the backlog is synced before the Product Owner reads it
+  liveRoadmap: { complexityCap: 2, maxStages: 3, dailyBudgetUsd: 50, refreshFirst: true },
   // several workflows at the same time (Settings › Execution); disabled = one run at a time.
   // perProject: null = no limit per project; simulations count toward the limits only if countSimulations.
   concurrentRuns: { enabled: false, max: 2, perProject: null, countSimulations: false },

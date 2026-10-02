@@ -16,6 +16,9 @@
 // The items' issue texts are read-only copies (#168): each sync refreshes the items not started yet
 // (`refreshCopies`), and the service reads the issues again right before a start (an item whose
 // issues are all closed then is skipped, `skipClosed`).
+// Live roadmap (#164, `live`, src/live-roadmap.js): when the last stage of a live roadmap ends,
+// `advance` asks for a refill (`refill: true`) instead of ending it; the service adds the Product
+// Owner's next stages (`propose` with `keepRunning`) and the roadmap goes on.
 // Screen: src/renderer/views/backlog/backlog-roadmap.js; channels: src/service/channels/roadmap.js.
 
 const fs = require('fs');
@@ -52,6 +55,7 @@ function roadmapProblem(r) {
   if (!STATES.includes(r.state)) return `unknown state ${JSON.stringify(r.state)}`;
   if (!Array.isArray(r.stages)) return 'stages is not a list';
   if (r.scope != null && typeof r.scope.stage !== 'string') return 'scope has no stage id';
+  if (r.live != null && typeof r.live !== 'boolean') return 'live is not true or false';
   for (const s of r.stages) {
     if (!s || !Array.isArray(s.items)) return 'a stage has no items list';
     for (const x of s.items) {
@@ -231,10 +235,11 @@ function plannedNumbers(roadmap) {
  * The Product Owner's roadmap (#105), as planned stages: `replace` swaps the roadmap (refused while
  * one of its runs is in progress), else the stages are added at the end, without the issues the
  * roadmap already plans (listed in `dropped`). It never starts by itself: a running roadmap is paused
- * so the owner reviews the new stages and presses Start.
+ * so the owner reviews the new stages and presses Start. `keepRunning` (a live roadmap's refill, #164):
+ * the state is kept, so a running roadmap goes on with the new stages.
  * @param {{ stages: object[], note?: string } | object[]} proposal
  */
-function propose(dir, projectId, proposal, { replace = false, issues = [], alive = null } = {}) {
+function propose(dir, projectId, proposal, { replace = false, issues = [], alive = null, keepRunning = false } = {}) {
   const stages = Array.isArray(proposal) ? proposal : proposal?.stages;
   let dropped = [];
   const roadmap = updateRoadmap(dir, projectId, (r) => {
@@ -253,6 +258,7 @@ function propose(dir, projectId, proposal, { replace = false, issues = [], alive
       }).filter((x) => x.issues.length),
     }));
     const added = cleanStages(fresh, { issues });
+    if (keepRunning) return { ...r, stages: [...r.stages, ...added] };
     const state = r.state === 'running' ? 'paused' : r.state === 'done' ? 'planned' : r.state;
     return { ...r, state, error: r.state === 'running' && added.length ? `${added.length} stage(s) added from a proposal: press Start to continue.` : r.error, stages: [...r.stages, ...added] };
   });
@@ -290,6 +296,7 @@ function fromQueue(queueItems, name = 'From the queue') {
 // Owner actions on the roadmap: start (running; `simulated` starts every item as a simulation),
 // pause (nothing new starts, runs in progress go on), stop (back to a plan). `stage` (a stage id, with
 // running): run only that stage (#141); a start without it runs the whole roadmap, a pause keeps the scope.
+// Stop also turns a live roadmap off (#164): a plan never refills itself.
 function setState(dir, projectId, state, { simulated, stage = null } = {}) {
   if (!STATES.includes(state)) throw new Error(`Unknown roadmap state: ${state}`);
   return updateRoadmap(dir, projectId, (r) => {
@@ -301,7 +308,19 @@ function setState(dir, projectId, state, { simulated, stage = null } = {}) {
       if (!s.items.some((x) => !FINISHED.has(x.status))) throw new Error('Every item of this stage is done or skipped.');
       scope = { stage: s.id };
     }
-    return { ...r, state, scope, error: null, pausedBy: null, ...(simulated !== undefined ? { simulated: !!simulated } : {}) };
+    return {
+      ...r, state, scope, error: null, pausedBy: null, ...(simulated !== undefined ? { simulated: !!simulated } : {}), ...(state === 'planned' && r.live ? { live: false } : {}),
+    };
+  });
+}
+
+// The Live roadmap switch (#164): on only while the roadmap runs (Start first), with when and who;
+// off any time (the current stages finish, nothing more is added).
+function setLive(dir, projectId, on, { by = 'owner', now = new Date() } = {}) {
+  return updateRoadmap(dir, projectId, (r) => {
+    if (!on) return r.live ? { ...r, live: false } : null;
+    if (r.state !== 'running') throw new Error('Start the roadmap first: only a running roadmap can go live.');
+    return r.live ? null : { ...r, live: true, liveSince: now.toISOString(), liveBy: String(by || 'owner'), liveRefill: null };
   });
 }
 
@@ -382,7 +401,9 @@ function stageStep(r, at, { closed, canStart }) {
  * A roadmap running one stage (`scope`, #141) only works on that stage, and pauses when it is over.
  * @param {object} roadmap
  * @param {{ runOf: (runId) => ({ status, waiting?, merged? } | null), closed?: (number, item) => boolean, canStart?: (item) => boolean }} env
- * @returns {{ roadmap: object, start: object[] }} the items to start (still `planned`: the caller marks them)
+ * A live roadmap (#164) whose last stage ends stays running and asks for a refill (`refill: true`):
+ * the caller adds the next stages, or ends it (src/live-roadmap.js applyRefill).
+ * @returns {{ roadmap: object, start: object[], refill?: true }} the items to start (still `planned`: the caller marks them)
  */
 function advance(roadmap, { runOf, closed = () => false, canStart = () => true }) {
   // Statuses follow the runs whatever the roadmap state (#112): `runOf` reports a run another live
@@ -404,7 +425,7 @@ function advance(roadmap, { runOf, closed = () => false, canStart = () => true }
   }
   for (;;) {
     const at = currentStage(r);
-    if (at < 0) return { roadmap: finished, start: [] };
+    if (at < 0) return r.live ? { roadmap: r, start: [], refill: true } : { roadmap: finished, start: [] };
     const step = stageStep(r, at, { closed, canStart });
     if (step) return step;
   }
@@ -459,6 +480,7 @@ module.exports = {
   refreshCopies,
   roadmapProjects,
   saveStages,
+  setLive,
   setState,
   skipClosed,
   updateRoadmap,

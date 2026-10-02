@@ -14,6 +14,9 @@
 // stages (api.saveRoadmap); the service keeps each item's runs by id.
 // "Group by epic" (#138, shown when the backlog has epics) lists the items under their issues' epics,
 // each with its stage and the epic's items done.
+// Live roadmap (#164): a box under the last stage with its switch (on only while running: turning it
+// on otherwise asks to start the roadmap) and the last refill; `liveBanner` is the banner backlog.js
+// shows on top of every view while it is on.
 // Rendered into #bl-list by backlog.js (mode 'roadmap'), which passes `ctx`
 // ({ projectId, setData, render, setError }). Uses app.js globals (esc, state, errMsg, devMode, confirmDialog).
 /* global api */
@@ -206,6 +209,70 @@
       </section>`;
   }
 
+  // ---- Live roadmap (#164, src/live-roadmap.js) ----------------------------------------------------
+  const clock = (at) => {
+    const d = new Date(at);
+    return Number.isNaN(d.getTime()) ? '' : `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  };
+  const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+  // the last refill in a few words: [text, tone] (tone: '' | 'warn' | 'error')
+  function refillText(r) {
+    const f = r.liveRefill;
+    if (!f) return [r.state === 'running' ? 'no refill yet: it comes when the last stage ends' : 'no refill yet', ''];
+    if (f.status === 'refilling') return ['refilling now: the Product Owner is picking the next issues…', ''];
+    if (f.status === 'added') return [`last refill ${clock(f.at)} (+${plural(f.added || 0, 'stage')})`, ''];
+    if (f.status === 'budget') return ['daily budget reached: no more refills', 'warn'];
+    if (f.status === 'failed') return [`the last refill failed (${clock(f.at)})`, 'error'];
+    return [String(f.message || '').replace(/^Live roadmap: /, ''), ''];
+  }
+
+  /** The banner at the top of the Backlog (every view) while the roadmap is live; '' when it is not. */
+  function liveBanner(r) {
+    if (!r?.live) return '';
+    const [text, tone] = refillText(r);
+    const idle = r.state !== 'running';
+    return `<span class="bl-live-dot${idle ? ' idle' : ''}" aria-hidden="true"></span>
+      <span class="bl-live-text"><b>Live roadmap</b>: refills itself from the backlog · <span class="${tone ? `${tone}-text` : ''}" title="${esc(r.liveRefill?.message || '')}">${esc(text)}</span>${idle ? ` · <span class="muted">roadmap ${esc(STATE_LABEL[r.state] || r.state)}</span>` : ''}</span>
+      <span class="spacer"></span>
+      <button class="btn sm ghost" type="button" data-live-off title="The current stages finish; nothing more is added">Turn off</button>`;
+  }
+
+  // The box under the last stage: the switch, what it does, and its state.
+  function liveBox(r) {
+    const [text, tone] = refillText(r);
+    const since = r.live && r.liveSince ? ` · on since ${clock(r.liveSince)}${r.liveBy ? ` by ${esc(r.liveBy)}` : ''}` : '';
+    const hint = r.live ? `${esc(text)}${since}` : r.state === 'running' ? 'Off: the roadmap ends with its last stage.' : 'Off. Turning it on starts the roadmap first.';
+    return `
+      <div class="rm-live${r.live ? ' on' : ''}" role="group" aria-label="Live roadmap">
+        <label class="switch" title="${r.live ? 'Turn off: the current stages finish, nothing more is added' : 'Turn on: the roadmap refills itself from the backlog'}"><input type="checkbox" role="switch" data-rm-live aria-label="Live roadmap"${r.live ? ' checked' : ''} /><span></span></label>
+        <div class="rm-live-body">
+          <div><b>Live roadmap</b>${r.live ? ' <span class="badge rm-live-badge">LIVE</span>' : ''}</div>
+          <div class="small muted">When the last stage ends, the Product Owner adds the next issues from the backlog and the roadmap goes on.</div>
+          <div class="small ${tone ? `${tone === 'error' ? 'error' : 'warn-text'}` : 'muted'} rm-live-state" title="${esc(r.liveRefill?.message || '')}">${hint}</div>
+        </div>
+      </div>`;
+  }
+
+  // The switch: on asks to start a roadmap that is not running (live works on a running roadmap)
+  // and says what a real refill costs; off goes at once.
+  async function setLive(ctx, r, on) {
+    try {
+      if (on) {
+        const simulated = r.state === 'running' ? !!r.simulated || !!state.simulationOnly : !!document.querySelector('#rm-simulate')?.checked && devMode();
+        const cost = simulated ? 'Simulated: the Product Owner answers without a model call.' : 'Each refill is a Product Owner answer and real runs: they cost money (Settings › Live roadmap caps the daily spend).';
+        if (r.state !== 'running') {
+          if (!await confirmDialog('Start the roadmap and go live', `Only a running roadmap can go live: start it now? When its last stage ends, the Product Owner adds the next issues from the backlog, again and again. ${cost} Human gates still wait for you.`, 'Start and go live')) return;
+          ctx.setData(await api.startRoadmap(ctx.projectId, simulated, null));
+        } else if (!simulated && !await confirmDialog('Go live', `When the last stage ends, the Product Owner adds the next issues from the backlog, again and again. ${cost} Human gates still wait for you.`, 'Go live')) return;
+      }
+      ctx.setData(await api.setRoadmapLive(ctx.projectId, on));
+    } catch (err) {
+      failed(ctx, 'live', err);
+    } finally {
+      ctx.render();
+    }
+  }
+
   /** The Roadmap view (into #bl-list): its bar, the plain queue's items, the stages in order. `rerender` redraws once the workflows are loaded. */
   function html(data, rerender) {
     loadWorkflows(rerender);
@@ -243,7 +310,8 @@
       ? '<div class="empty-state"><b>No roadmap yet</b><p class="muted">Select issues, Assign workflow…, then Add to roadmap: each addition is a stage that starts when the previous one has finished and merged.</p></div>'
       : grouped ? byEpicHtml(r, epics, byNumber)
         : r.stages.map((s, n) => stageHtml(s, n, r.stages.length, current, byNumber, scoped, r)).join('');
-    return `<div class="rm">${bar.replace('<span class="spacer"></span>', `<span class="spacer"></span>${toggle}`)}${queued}${stages}${importBox}</div>`;
+    const liveHtml = r.stages.length ? liveBox(r) : '';
+    return `<div class="rm">${bar.replace('<span class="spacer"></span>', `<span class="spacer"></span>${toggle}`)}${queued}${stages}${liveHtml}${importBox}</div>`;
   }
 
   // #138: the items under their issues' epics (an item of issues in two epics shows under both; "No
@@ -465,6 +533,10 @@
   async function onChange(e, ctx, data) {
     const r = data?.roadmap;
     const el = e.target;
+    if (r && el.matches('[data-rm-live]')) {
+      await setLive(ctx, r, el.checked);
+      return true;
+    }
     if (el.matches('[data-rm-by-epic]')) {
       byEpic = el.checked;
       try { localStorage.setItem(BY_EPIC_KEY, byEpic ? '1' : ''); } catch { /* storage unavailable */ }
@@ -588,6 +660,7 @@
     badge,
     dropProblem,
     html,
+    liveBanner,
     moveIssue,
     onChange,
     onClick,

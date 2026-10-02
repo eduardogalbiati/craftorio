@@ -1,7 +1,7 @@
 // Service area: roadmaps (src/roadmap.js). Settles each started roadmap from its runs and starts
 // the current stage's items while there are free run slots; called after every run and when a
 // workspace opens. Also the roadmap as the Backlog shows it (item statuses from their runs, #112)
-// and Start (the whole roadmap, or one stage, #141).
+// and Start (the whole roadmap, or one stage, #141). A live roadmap's refill (#164): areas/live-roadmap.js.
 
 const path = require('path');
 const { loadWorkflow } = require('../../engine/workflow');
@@ -75,7 +75,7 @@ module.exports = (ctx) => {
     // an item that reads its issues from the platform at its start (#168) is never skipped on the
     // cache's state (an issue reopened since the sync still runs): the fresh read decides below
     const fromPlatform = (item) => !mockOf(item) && !!known?.repo;
-    const { roadmap, start } = roadmaps.advance(before, {
+    const { roadmap, start, refill } = roadmaps.advance(before, {
       runOf: roadmapRun, closed: (n, item) => !fromPlatform(item) && closed.has(n), canStart: (item) => !ctx.slotProblem({ mock: mockOf(item), projectId }),
     });
     // derived statuses are not stored (roadmaps.persisted): only a stored change is written
@@ -88,6 +88,9 @@ module.exports = (ctx) => {
       ctx.notify({ kind: 'run', event: 'failed', title: 'Roadmap paused', body: String(roadmap.error || '').slice(0, 180) });
     }
     if (roadmap.state === 'done' && before.state === 'running') ctx.notify({ kind: 'run', event: 'succeeded', title: 'Roadmap finished', body: `Every stage of ${projectId} is done.` });
+    // a live roadmap's last stage ended (#164): the Product Owner adds the next stages (not awaited:
+    // its answer takes minutes; the refill dispatches the roadmap again)
+    if (refill) ctx.refillRoadmap(projectId);
     for (const item of start) {
       // a slot may have been taken by the previous start
       if (ctx.slotProblem({ mock: mockOf(item), projectId })) break;

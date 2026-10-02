@@ -4,7 +4,8 @@
 // Two kinds, each with its own setting:
 //   run      a workflow run changed status (started, waiting on a human gate, succeeded, failed,
 //            cancelled, interrupted); target = { runId, workflow }; or a push met a merge conflict
-//            (event `conflict`); target = { view: 'backlog', projectId }
+//            (event `conflict`); target = { view: 'backlog', projectId }; or a live roadmap refilled
+//            itself or stopped refilling (#164, events refilled | empty | budget | failed)
 //   session  an AI CLI in a Sessions terminal stopped and waits for the user; target = { terminalId }
 //   po       the Backlog's Product Owner answered a question (#149); target = { view: 'backlog', projectId, openPO: true }
 //   oracle   the Oracle acted on its own under the owner's Night watch (#123); target = { openOracle: true };
@@ -103,6 +104,24 @@ function nightWatchNotice({ ran, did, waits, safety, alarm = false } = {}) {
     title: alarm ? 'Night watch ended: safety alarm' : 'Night watch ended',
     body: clip([did, waits, alarm ? safety : ran].filter(Boolean).join(' '), 240) || 'Open the Night watch to see the night.',
     target: { view: 'nightwatch' },
+  };
+}
+
+// The notice for a live roadmap's refill (#164): `refill` is the roadmap's liveRefill ({ status,
+// added, message }, src/live-roadmap.js); opens the project's Backlog.
+const LIVE_TITLE = {
+  added: (r) => `Live roadmap: +${r.added} stage${r.added === 1 ? '' : 's'}`,
+  budget: () => 'Live roadmap stopped: daily budget reached',
+  empty: () => 'Live roadmap: nothing left to pick',
+  failed: () => 'Live roadmap paused: the refill failed',
+};
+function liveRoadmapNotice({ project = {}, refill = {} } = {}) {
+  const title = (LIVE_TITLE[refill.status] || (() => 'Live roadmap'))(refill);
+  return {
+    kind: 'run', event: refill.status === 'added' ? 'refilled' : refill.status || 'refilled',
+    title: `${title}: ${clip(project.name || project.id || 'project', 60)}`,
+    body: clip(refill.message) || 'Open the Backlog to see the roadmap.',
+    target: { view: 'backlog', projectId: project.id || null },
   };
 }
 
@@ -247,6 +266,7 @@ class WaitDetector {
 module.exports = {
   attentionSignal,
   interruptedNotice,
+  liveRoadmapNotice,
   nightWatchNotice,
   normalizeContext,
   oracleNotice,

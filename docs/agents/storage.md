@@ -34,6 +34,12 @@ owner actions write to the platform (Save to issue, create, close, epics: `src/b
   `knownPullRequests`) so the screen and the Product Owner can show it. Each sync refreshes the
   copies of the items not started yet (`refreshQueuedCopies`, `roadmap.refreshCopies`); an item
   with a run keeps the text its run used.
+- The roadmap file also holds the **Live roadmap** switch (#164, `src/live-roadmap.js`): `live`
+  (true/false), `liveSince` and `liveBy` (when and who turned it on), `liveRefill` (the last refill:
+  `status` refilling | added | empty | budget | failed | off, `at`, `added`, `costUsd`, `message`)
+  and `liveRefills` (`[{ at, costUsd }]` of the last 24 h, for the daily budget). It is a file
+  field like the state, so it survives a restart: the next dispatch refills a live roadmap whose
+  last stage ended. Stop and Clear turn it off.
 - Right before a queued or roadmap item starts, the service reads its issues again
   (`backlog.freshIssues`: `gh issue view` / `glab issue view`), builds the task from them, updates
   the item's copy, and skips issues found closed. If the read fails, the latest cache (or the copy,

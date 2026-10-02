@@ -65,6 +65,18 @@ module.exports = (ctx) => {
         return current(projectId);
       },
     },
+    // Live roadmap (#164): on (only while running) the Product Owner refills it from the backlog when
+    // its last stage ends; off lets the current stages finish and adds nothing more
+    {
+      channel: 'roadmap:live',
+      method: 'setRoadmapLive',
+      params: ['projectId', 'on'],
+      fn: async ({ projectId, on }) => {
+        roadmaps.setLive(ctx.ws.backlog, project(projectId), !!on, { by: 'owner' });
+        await ctx.dispatchRoadmaps();
+        return current(projectId);
+      },
+    },
     {
       channel: 'roadmap:clear',
       method: 'clearRoadmap',
