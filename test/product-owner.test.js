@@ -165,6 +165,166 @@ test('RULES states the rule for mode_reason (validated for a change the owner ca
   assert.match(rules, /auto/);
 });
 
+// ---- Send to Product Owner (#169): the Backlog's selection attached to a plan question -------------
+
+test('normalizeAnswer with a selection keeps only the open attached issues in a group; another issue it named moves to `suggested`, and a closed attached issue is listed in `closed`', () => {
+  const issues = [
+    { number: 1, state: 'open', title: 'A', labels: [] },
+    { number: 2, state: 'open', title: 'B', labels: [] },
+    { number: 3, state: 'closed', title: 'C', labels: [] }, // attached, but closed
+    { number: 4, state: 'open', title: 'D', labels: [] }, // open, not attached: named for the group, moved out
+  ];
+  const raw = {
+    summary: 'ok',
+    groups: [{ name: 'G', issues: [1, 2, 4], workflow: 'software-development.yaml', reason: 'r' }],
+  };
+  const out = productOwner.normalizeAnswer(raw, {
+    issues, history: [], workflows: [{ file: 'software-development.yaml' }], selection: [1, 2, 3],
+  });
+  assert.deepEqual(out.groups[0].issues, [1, 2]); // #4 is not attached: never in a group's issues
+  assert.deepEqual(out.groups[0].suggested, [{ issue: 4, reason: 'Named by the Product Owner for this group.' }]);
+  assert.deepEqual(out.closed, [3]);
+});
+
+test('normalizeAnswer with a selection drops a suggested issue that is closed, already attached, or duplicated, keeping the rest', () => {
+  const issues = [
+    { number: 1, state: 'open' },
+    { number: 2, state: 'open' },
+    { number: 3, state: 'closed' },
+    { number: 5, state: 'open' },
+  ];
+  const raw = {
+    summary: 'ok',
+    groups: [{
+      name: 'G',
+      issues: [1],
+      workflow: 'software-development.yaml',
+      reason: 'r',
+      suggested: [
+        { issue: 3, reason: 'closed, dropped' },
+        { issue: 2, reason: 'attached, dropped' },
+        { issue: 5, reason: 'kept' },
+        { issue: 5, reason: 'duplicate, dropped' },
+      ],
+    }],
+  };
+  const out = productOwner.normalizeAnswer(raw, {
+    issues, history: [], workflows: [{ file: 'software-development.yaml' }], selection: [1, 2],
+  });
+  assert.deepEqual(out.groups[0].suggested, [{ issue: 5, reason: 'kept' }]);
+});
+
+test('normalizeAnswer without a selection drops a suggested issue that is closed, already in the group, or duplicated; nothing is reported as closed', () => {
+  const issues = [
+    { number: 1, state: 'open' },
+    { number: 2, state: 'closed' },
+    { number: 3, state: 'open' },
+  ];
+  const raw = {
+    summary: 'ok',
+    groups: [{
+      name: 'G',
+      issues: [1],
+      workflow: 'software-development.yaml',
+      reason: 'r',
+      suggested: [
+        { issue: 2, reason: 'closed, dropped' },
+        { issue: 1, reason: 'already in the group, dropped' },
+        { issue: 3, reason: 'kept' },
+        { issue: 3, reason: 'duplicate, dropped' },
+      ],
+    }],
+  };
+  const out = productOwner.normalizeAnswer(raw, { issues, history: [], workflows: [{ file: 'software-development.yaml' }] });
+  assert.deepEqual(out.groups[0].suggested, [{ issue: 3, reason: 'kept' }]);
+  assert.equal('closed' in out, false);
+});
+
+test('backlogReport with a selection gives the attached issues first and whole (even past the usual clip), marks a closed one to leave out, and excludes them from "Other open issues"', () => {
+  const longBody = 'x'.repeat(5000);
+  const data = {
+    projectId: 'demo',
+    issues: [
+      { number: 1, state: 'open', title: 'Attached A', labels: [], body: longBody },
+      { number: 2, state: 'closed', title: 'Attached closed', labels: [], body: 'y' },
+      { number: 3, state: 'open', title: 'Other open issue', labels: [], body: 'z' },
+    ],
+  };
+  const report = productOwner.backlogReport({ data, workflows: [], selection: [1, 2] });
+  assert.match(report, /## Attached issues \(the owner's selection, in full\)/);
+  assert.ok(report.includes(longBody)); // not clipped at the usual 600-character limit
+  assert.match(report, /### #2 Attached closed \(closed: leave it out\)/);
+  assert.match(report, /## Other open issues/);
+  const otherSection = report.split('## Other open issues')[1];
+  assert.doesNotMatch(otherSection, /#1 Attached A/);
+  assert.doesNotMatch(otherSection, /#2 Attached closed/);
+  assert.match(otherSection, /#3 Other open issue/);
+});
+
+test('backlogReport: the attached issues\' size does not count toward the context cap, so other open issues still fit', () => {
+  const data = {
+    projectId: 'demo',
+    issues: [
+      { number: 1, state: 'open', title: 'Big attached', labels: [], body: 'x'.repeat(70000) }, // alone over the 60000-character cap
+      { number: 2, state: 'open', title: 'Small other', labels: [], body: 'short' },
+    ],
+  };
+  const report = productOwner.backlogReport({ data, workflows: [], selection: [1] });
+  assert.match(report, /#2 Small other/);
+  assert.doesNotMatch(report, /more issues left out \(context cap\)/);
+});
+
+test('mockAnswer with a selection plans only the attached to-do issues, and suggests up to two other to-do issues of the same topic per group', () => {
+  const data = {
+    issues: [
+      { number: 1, state: 'open', title: 'One', labels: [{ name: 'area:ui' }], column: 'todo' },
+      { number: 2, state: 'open', title: 'Two', labels: [{ name: 'area:ui' }], column: 'todo' },
+      { number: 3, state: 'open', title: 'Three', labels: [{ name: 'area:ui' }], column: 'todo' },
+      { number: 4, state: 'open', title: 'Four', labels: [{ name: 'area:ui' }], column: 'todo' }, // same topic, 3rd candidate: left out (cap 2)
+      { number: 5, state: 'open', title: 'Five', labels: [{ name: 'area:server' }], column: 'todo' }, // different topic: never suggested
+    ],
+  };
+  const answer = productOwner.mockAnswer({ data, selection: [1] });
+  assert.deepEqual(answer.groups.flatMap((g) => g.issues), [1]); // only the attached issue is planned
+  assert.deepEqual(answer.groups[0].suggested.map((s) => s.issue), [2, 3]);
+});
+
+test('ask (mock, plan mode) with a selection: the user message records the attached issues the backlog knows (an unknown number dropped), and the answer carries `closed`', async (t) => {
+  const dir = tmp(t);
+  const issues = [
+    { number: 1, state: 'open', title: 'A', labels: [], column: 'todo' },
+    { number: 2, state: 'closed', title: 'B', labels: [] },
+  ];
+  const out = await productOwner.ask({
+    backlogDir: dir,
+    projectId: 'demo',
+    question: 'Plan these',
+    data: { projectId: 'demo', issues },
+    workflows: [{ file: 'software-development.yaml', name: 'Software development' }],
+    mock: true,
+    mode: 'plan',
+    selection: [1, 2, 999],
+  });
+  const userMessage = out.messages.find((m) => m.role === 'user');
+  assert.deepEqual(userMessage.issues, [1, 2]); // #999 is unknown to the backlog: dropped
+  assert.deepEqual(out.message.answer.closed, [2]); // #2 is closed: left out of the groups, reported
+});
+
+test('ask (mock, issue mode) ignores a selection: it is not recorded on the user message', async (t) => {
+  const dir = tmp(t);
+  const runsDir = tmp(t);
+  const out = await productOwner.ask({
+    backlogDir: dir, projectId: 'demo', runsDir, question: 'Login button broken', data: emptyBacklog([{ number: 1, state: 'open' }]), mock: true, mode: 'issue', selection: [1],
+  });
+  const userMessage = out.messages.find((m) => m.role === 'user');
+  assert.equal('issues' in userMessage, false);
+});
+
+test('callAgent includes SELECTION_RULES in the prompt only when a selection is given (checked on the source: callAgent needs a real CLI to run for real)', () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'product-owner.js'), 'utf8');
+  assert.match(src, /selection\.length \? SELECTION_RULES : '',/);
+});
+
 test('sizeGroup warns at a complexity known to hit the context limit, and at a lower one for several issues', () => {
   assert.deepEqual(productOwner.sizeGroup([1], ISSUES, []).warnings, []); // complexity 2 alone: no warning
   const overContext = productOwner.sizeGroup([1, 2], ISSUES, []); // complexity 7: a group this size hit the context limit

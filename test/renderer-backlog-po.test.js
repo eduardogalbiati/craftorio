@@ -195,25 +195,27 @@ test('apply: Assign and Add to roadmap act on one proposed group through window.
   assert.match(fn, /None of these issues is To do any more\./); // every issue in the group was skipped
 });
 
-test('apply: Add all to the roadmap plans every group as a stage, ordered by its proposed stage number, each item carrying the group\'s reason, modeReason and the answer\'s origin (#140)', () => {
+test('apply: Add all to the roadmap plans every group as a stage, ordered by its proposed stage number, each item carrying the group\'s reason, modeReason, the answer\'s origin (#140) and its checked suggested extras (#169)', () => {
   const fn = /async function apply\(act, el\)[\s\S]*?\n  \}/.exec(src)[0];
   assert.match(fn, /const origin = po\.messages\[m\]\.ts;/);
   assert.match(fn, /const stages = \[\.\.\.new Set\(answer\.groups\.map\(\(g\) => g\.stage\)\)\]\.sort\(\(a, b\) => a - b\)/);
-  assert.match(fn, /items: answer\.groups\.filter\(\(g\) => g\.stage === s\)\.map\(\(g\) => \(\{ workflow: g\.workflow, issues: g\.issues, inputs: g\.inputs, mock: !!state\.simulationOnly, reason: g\.reason, modeReason: g\.modeReason, origin \}\)\)/);
+  assert.match(fn, /items: answer\.groups\.map\(\(g, n\) => \(\{ g, n \}\)\)\.filter\(\(\{ g \}\) => g\.stage === s\)\.map\(\(\{ g, n \}\) => \(\{ workflow: g\.workflow, issues: withExtras\(g\.issues, `\$\{m\}:\$\{n\}`\), inputs: g\.inputs, mock: !!state\.simulationOnly, reason: g\.reason, modeReason: g\.modeReason, origin \}\)\)/);
   assert.match(fn, /await api\.proposeRoadmap\(po\.projectId, \{ stages \}, false\);/);
 });
 
-test('apply: a group already applied is never applied again; a partly applied one sends only the issues not yet covered, both carrying the answer\'s origin (#140)', () => {
+test('apply: a group already applied is never applied again; a partly applied one sends only the issues not yet covered, both carrying the answer\'s origin (#140) and its checked suggested extras (#169)', () => {
   const fn = /async function apply\(act, el\)[\s\S]*?\n  \}/.exec(src)[0];
   assert.match(fn, /const st = groupState\(answer\.groups\[n\]\);/);
   assert.match(fn, /if \(applied\(st\)\) return;/);
-  assert.match(fn, /const g = \{ \.\.\.answer\.groups\[n\], \.\.\.\(st\.kind === 'partly' \? \{ issues: st\.rest \} : \{\}\), origin \};/);
+  assert.match(fn, /const key = `\$\{m\}:\$\{n\}`;/);
+  assert.match(fn, /const g = \{ \.\.\.answer\.groups\[n\], issues: withExtras\(st\.kind === 'partly' \? st\.rest : answer\.groups\[n\]\.issues, key\), origin \};/);
 });
 
-test('ask: a question is refused while another is pending, and the simulated flag (devMode), the mode and any staged attachments are sent with it', () => {
+test('ask: a question is refused while another is pending, and the simulated flag (devMode), the mode, any staged attachments and the attached issues (#169, plan mode only) are sent with it', () => {
   const fn = /async function ask\(question\)[\s\S]*?\n  \}/.exec(src)[0];
   assert.match(fn, /if \(!q \|\| po\.busy \|\| !po\.projectId\) return;/);
-  assert.match(fn, /await api\.askProductOwner\(projectId, q, devMode\(\), mode, files\);/);
+  assert.match(fn, /const issues = mode === 'plan' \? \[\.\.\.po\.attached\] : \[\];/);
+  assert.match(fn, /await api\.askProductOwner\(projectId, q, devMode\(\), mode, files, issues\);/);
 });
 
 test('the conversation and the applied-group notes reset when the drawer switches to another project', () => {
@@ -268,4 +270,86 @@ test('the "Place in epic" checkbox only shows next to the open draft, and toggli
   const click = /\$p\('#po-log'\)\.onclick = \(e\) => \{[\s\S]*?\n  \};/.exec(src)[0];
   assert.match(click, /const epic = e\.target\.closest\('\[data-po-epic\]'\);/);
   assert.match(click, /if \(epic\) \{ po\.placeEpic\[Number\(epic\.closest\('\[data-msg\]'\)\.dataset\.msg\)\] = epic\.checked; return; \}/);
+});
+
+// ---- Send to Product Owner (#169): the Backlog's selection attached to a plan question -----------
+
+test('SELECTION_QUESTION suggests the best roadmap strategy and whether other open issues should join', () => {
+  assert.match(src, /const SELECTION_QUESTION = 'What is the best strategy to put these issues in the roadmap\? Should any other open issue join them\?';/);
+});
+
+test('attach (the Backlog\'s Send to Product Owner button): opens the drawer in plan mode with the numbers deduplicated, fills an empty question box with the suggested one (keeping a typed one), focuses it, and asks nothing by itself', () => {
+  const fn = /async function attach\(numbers\)[\s\S]*?\n  \}/.exec(src)[0];
+  assert.match(fn, /if \(po\.busy \|\| !numbers\?\.length\) return;/); // refused while busy, or with nothing to attach
+  assert.match(fn, /await open\(\);/);
+  assert.match(fn, /if \(po\.mode !== 'plan'\) setMode\('plan'\);/);
+  assert.match(fn, /po\.attached = \[\.\.\.new Set\(numbers\)\];/);
+  assert.match(fn, /if \(!box\.value\.trim\(\)\) box\.value = SELECTION_QUESTION;/);
+  assert.match(fn, /box\.focus\(\);/);
+  assert.doesNotMatch(fn, /\bask\(/); // nothing is sent until the owner presses Ask
+});
+
+test('window.BacklogPO exposes attach next to ask, for the Backlog\'s button', () => {
+  assert.match(src, /window\.BacklogPO = \{[\s\S]*?attach,[\s\S]*?\};/);
+});
+
+test('render: #po-attached shows a removable chip per attached issue, struck through (closed) when the issue closed meanwhile, hidden outside plan mode', () => {
+  const fn = /function render\(\)[\s\S]*?\n  \}/.exec(src)[0];
+  assert.match(fn, /const attached = !issueMode && po\.attached\.length;/);
+  assert.match(fn, /\$p\('#po-attached'\)\.classList\.toggle\('hidden', !attached\);/);
+  assert.match(fn, /const closed = i\?\.state === 'closed';/);
+  assert.match(fn, /class="badge po-file\$\{closed \? ' closed' : ''\}"/);
+  assert.match(fn, /data-po-unattach-issue="\$\{n\}"/);
+  assert.match(fn, /data-po-unattach-all/);
+});
+
+test('#po-attached\'s click removes one attached issue, or clears them all, then refocuses the question box', () => {
+  const fn = /\$p\('#po-attached'\)\.onclick = \(e\) => \{[\s\S]*?\n  \};/.exec(src)[0];
+  assert.match(fn, /po\.attached = po\.attached\.filter\(\(n\) => n !== Number\(one\.dataset\.poUnattachIssue\)\);/);
+  assert.match(fn, /else if \(e\.target\.closest\('\[data-po-unattach-all\]'\)\) po\.attached = \[\];/);
+  assert.match(fn, /\$p\('#po-question'\)\.focus\(\);/);
+});
+
+test('Clear conversation forgets the attached issues and their checked extras, like the files and notes', () => {
+  const fn = /\$p\('#btn-po-clear'\)\.onclick = async \(\) => \{[\s\S]*?\n  \};/.exec(src)[0];
+  assert.match(fn, /Object\.assign\(po, \{ notes: \{\}, files: \[\], attached: \[\], extras: \{\} \}\);/);
+});
+
+test('open: switching project drops attachments not sent yet, including the Backlog\'s selection and its checked extras', () => {
+  const fn = /async function open\(\)[\s\S]*?\n  \}/.exec(src)[0];
+  assert.match(fn, /if \(po\.projectId !== projectId\) Object\.assign\(po, \{ attached: \[\], extras: \{\} \}\);/);
+});
+
+test('syncSendButton disables the Backlog\'s Send to Product Owner button and names it "Product Owner is answering…" while busy, its count once the answer lands', () => {
+  const fn = /function syncSendButton\(\)[\s\S]*?\n  \}/.exec(src)[0];
+  assert.match(fn, /b\.disabled = po\.busy;/);
+  assert.match(fn, /b\.textContent = po\.busy \? 'Product Owner is answering…' : `Send to Product Owner \(\$\{b\.dataset\.n \|\| 0\}\)`;/);
+});
+
+test('suggestedHtml: an unchecked checkbox per group.suggested issue, "suggested, not selected", disabled once the group is already applied', () => {
+  const fn = /function suggestedHtml\(g, key, done\)[\s\S]*?\n  \}/.exec(src)[0];
+  assert.match(fn, /if \(!g\.suggested\?\.length\) return '';/);
+  assert.match(fn, /Could join \(suggested, not selected\)/);
+  assert.match(fn, /data-po-extra="\$\{s\.issue\}"\$\{extrasOf\(key\)\.includes\(s\.issue\) \? ' checked' : ''\}\$\{done \? ' disabled' : ''\}/);
+});
+
+test('#po-log\'s click toggles a suggested issue in or out of its group\'s checked extras (po.extras), keyed by message and group index', () => {
+  const fn = /const extra = e\.target\.closest\('\[data-po-extra\]'\);[\s\S]*?\n    \}/.exec(src)[0];
+  assert.match(fn, /const key = `\$\{box\.dataset\.msg\}:\$\{box\.dataset\.group\}`;/);
+  assert.match(fn, /po\.extras\[key\] = extra\.checked \? \[\.\.\.extrasOf\(key\)\.filter\(\(y\) => y !== x\), x\] : extrasOf\(key\)\.filter\(\(y\) => y !== x\);/);
+});
+
+test('withExtras adds only the checked suggested issues not already in the group, dropping one closed meanwhile', () => {
+  const fn = /const withExtras = \(issues, key\) => [^\n]+/.exec(src)[0];
+  assert.match(fn, /\[\.\.\.issues, \.\.\.extrasOf\(key\)\.filter\(\(x\) => !issues\.includes\(x\) && issueOf\(x\)\?\.state !== 'closed'\)\]/);
+});
+
+test('answerHtml: attached issues closed meanwhile are left out of every group, shown as "Left out (closed)"', () => {
+  const fn = /function answerHtml\(a, m\)[\s\S]*?\n  \}/.exec(src)[0];
+  assert.match(fn, /if \(a\.closed\?\.length\) parts\.push\(`<div class="small muted">Left out \(closed\): \$\{a\.closed\.map\(issueRef\)\.join\(' '\)\}<\/div>`\);/);
+});
+
+test('messageHtml: a user message shows its attached issues as badges, alongside any file attachments', () => {
+  const fn = /function messageHtml\(msg, m\)[\s\S]*?\n  \}/.exec(src)[0];
+  assert.match(fn, /const files = \[\.\.\.\(msg\.issues \|\| \[\]\)\.map\(issueRef\), \.\.\./);
 });

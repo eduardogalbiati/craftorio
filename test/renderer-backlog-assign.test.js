@@ -72,3 +72,25 @@ test('openStage (the Product Owner drawer\'s badge, #140): switches to the Roadm
   assert.match(fn, /el\.scrollIntoView\(\{ block: 'start', behavior: 'smooth' \}\);/);
   assert.match(fn, /el\.classList\.add\('flash'\);/);
 });
+
+// ---- Send to Product Owner (#169): next to Assign workflow…, with the same selection ---------------
+
+test('render: Assign workflow… and Send to Product Owner (n) toggle together from the same shown selection, in list and kanban alike (one shared toolbar)', () => {
+  const fn = /function render\(\)[\s\S]*?\n  \}/.exec(src)[0];
+  assert.match(fn, /const n = shownSelected\(\)\.length;/);
+  assert.match(fn, /\$b\('#btn-bl-assign'\)\.classList\.toggle\('hidden', !n\);/);
+  assert.match(fn, /\$b\('#btn-bl-assign'\)\.textContent = `Assign workflow… \(\$\{n\}\)`;/);
+  assert.match(fn, /\$b\('#btn-bl-send-po'\)\.classList\.toggle\('hidden', !n\);/);
+  assert.match(fn, /\$b\('#btn-bl-send-po'\)\.dataset\.n = String\(n\);/);
+  assert.match(fn, /\$b\('#btn-bl-send-po'\)\.textContent = `Send to Product Owner \(\$\{n\}\)`;/);
+  assert.match(fn, /window\.BacklogPO\?\.syncSendButton\(\);/); // backlog-po.js keeps it disabled while busy
+});
+
+test('checkbox: the same bl.selected drives the selection checkbox in both the list row (issueRow) and the kanban card, so a selection made in one view is the other\'s too', () => {
+  assert.equal((src.match(/\$\{checkbox\(i\)\}/g) || []).length, 2);
+});
+
+test('#btn-bl-send-po opens the Product Owner drawer with the shown selection attached, keeping the Backlog\'s own selection (unlike #btn-bl-clear, which clears it)', () => {
+  assert.match(src, /\$b\('#btn-bl-send-po'\)\.onclick = \(\) => window\.BacklogPO\.attach\(shownSelected\(\)\);/);
+  assert.match(src, /\$b\('#btn-bl-clear'\)\.onclick = \(\) => \{ bl\.selected\.clear\(\); render\(\); \};/);
+});
