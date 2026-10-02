@@ -433,11 +433,13 @@ function sessionsReportMarkdown(r, { from, to, scope, model } = {}) {
  * what they were used for, complexity, patterns, suggestions. Read-only; no run folder, so it uses the
  * default supervisor (Claude Code) unless `mock`. The report is saved as <reportsDir>/sessions-<time>.md.
  * @param report  the text digest of the range (analytics.analyticsReport)
+ * @param attachments images for this question (#129), copied into <reportsDir>/attachments/
  * @returns { report, reportPath, markdown, model, costUsd }
  */
-async function analyzeSessions({ report, from, to, scope, question, reportsDir, skillsDirs, resolveCommand, mock = false, provider: forced, model: forcedModel }) {
+async function analyzeSessions({ report, from, to, scope, question, reportsDir, skillsDirs, resolveCommand, mock = false, provider: forced, model: forcedModel, attachments = [] }) {
   const { extractJson, validateSchema, render } = require('./engine/workflow');
-  const { runTurn } = require('./engine/providers');
+  const { runTurn, storeAttachments } = require('./engine/providers');
+  const images = storeAttachments(attachments, path.join(reportsDir, 'attachments'));
   const { resolveSkill, skillPrompt } = require('./skills');
   const skill = resolveSkill(skillsDirs, 'run-supervisor');
   const schema = SESSIONS_REPORT_SCHEMA;
@@ -458,7 +460,7 @@ async function analyzeSessions({ report, from, to, scope, question, reportsDir, 
   const readOnly = providerArgs(provider.type, { caps: normalize({ tools: ['read'] }) }).args;
   const extraArgs = dedupeFlags([...readOnly, ...(provider.skill_args || []).map((x) => render(x, { skill_dir: skill.path }))], provider.args || []);
   const turn = (text) => runTurn({
-    provider, model, prompt: text, cwd: reportsDir, extraArgs, timeoutMs: 15 * 60e3, render,
+    provider, model, prompt: text, cwd: reportsDir, extraArgs, timeoutMs: 15 * 60e3, render, attachments: images,
     hint: { stepId: 'supervisor', visit: 1, schema }, onItem: () => {},
   });
   let res = await turn(prompt);

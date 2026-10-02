@@ -70,11 +70,13 @@ module.exports = (ctx) => {
   }
 
   // The supervisor's report on the range; it calls a real model unless `mock` (the UI asks first).
-  async function analyzeAnalytics({ scope, from, to, question, mock } = {}) {
+  // attachments: images for the question (#129)
+  async function analyzeAnalytics({ scope, from, to, question, mock, attachments } = {}) {
     if (!mock) simulation.refuseReal('the supervisor\'s CLI (claude)');
     const a = analyticsSnapshot({ scope, from, to });
     return supervisor.analyzeSessions({
       report: analytics.analyticsReport(a), from: a.from, to: a.to, scope: a.scope, question, mock: !!mock,
+      attachments: Array.isArray(attachments) ? attachments : [],
       reportsDir: ctx.ws.reports, skillsDirs: [ctx.ws.skills, BUNDLED_SKILLS_DIR], resolveCommand,
     });
   }
