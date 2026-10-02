@@ -63,11 +63,17 @@ module.exports = (ctx) => {
     },
     { channel: 'backlog:unpushed', method: 'listUnpushed', fn: () => ctx.unpushedProjects() },
     // Assign a workflow to issues: they are queued and start while there are free run slots (see dispatchQueue).
+    // When an ended run kept work for them, the answer is the kept-work question { confirm, kept, runId }
+    // (nothing queued) until `confirmed` (#170: Start from scratch).
     {
       channel: 'backlog:assign',
       method: 'assignWorkflow',
-      params: ['projectId', 'numbers', 'workflow', 'inputs', 'mock', 'group'],
-      fn: (opts) => ctx.assignWorkflow(opts),
+      params: ['projectId', 'numbers', 'workflow', 'inputs', 'mock', 'group', 'confirmed'],
+      fn: ({ confirmed, ...opts }) => {
+        const kept = confirmed ? null : ctx.keptWorkForIssues(opts.numbers);
+        if (kept) return { confirm: kept.text, kept, runId: kept.runId };
+        return ctx.assignWorkflow({ ...opts, allowKeptWork: !!confirmed });
+      },
     },
     // Save to issue (#103): a Write & Review run started from an issue saves its accepted document
     // back to it (mode: replace | comment). The owner confirms in the screen; agents never call this.
@@ -105,11 +111,20 @@ module.exports = (ctx) => {
         return current(projectId);
       },
     },
+    // Resuming a queue whose next item would redo an ended run's kept work answers the kept-work
+    // question { confirm, kept, runId } (the queue stays paused) until `confirmed` (#170).
     {
       channel: 'backlog:pause',
       method: 'pauseQueue',
-      params: ['projectId', 'paused'],
-      fn: async ({ projectId, paused }) => {
+      params: ['projectId', 'paused', 'confirmed'],
+      fn: async ({ projectId, paused, confirmed }) => {
+        const head = paused ? null : backlog.readQueue(ctx.ws.backlog, project(projectId)).items[0];
+        if (head) {
+          const issues = backlog.itemIssues(head);
+          const kept = confirmed ? null : ctx.keptWorkForIssues(issues);
+          if (kept) return { ...current(projectId), confirm: kept.text, kept, runId: kept.runId };
+          if (confirmed) ctx.allowQueuedKeptWork(project(projectId), issues);
+        }
         backlog.setPaused(ctx.ws.backlog, project(projectId), !!paused);
         if (!paused) await ctx.dispatchQueue();
         return current(projectId);

@@ -10,14 +10,14 @@ module.exports = (ctx) => [
     method: 'startRun',
     params: 'payload',
     // projectId/issues: a run started from a Backlog issue (Write & Review's "Enrich"), recorded in workflow.started.
-    // When an ended run of those issues kept a worktree with commits, the answer is { confirm, runId }
-    // (that run can be resumed instead) until `confirmed` (#112: no duplicate work).
+    // When an ended run of those issues kept a worktree with commits, the answer is the kept-work
+    // question { confirm, kept, runId } (that run can be resumed instead) until `confirmed` (#112, #170).
     fn: ({ file, inputs, mock, mockSequences, projectId, issues, confirmed }) => {
       const list = Array.isArray(issues) && issues.length
         ? issues.map((i) => ({ number: Number(i.number), url: String(i.url || ''), title: String(i.title || '') }))
         : undefined;
       const kept = list && !confirmed ? ctx.keptWorkForIssues(list) : null;
-      if (kept) return { confirm: kept.message, runId: kept.runId };
+      if (kept) return { confirm: kept.text, kept, runId: kept.runId };
       return ctx.startWorkflowRun({ file, inputs, mock, mockSequences, projectId: projectId || undefined, issues: list, allowKeptWork: true });
     },
   },

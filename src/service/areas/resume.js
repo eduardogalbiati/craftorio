@@ -1,6 +1,7 @@
 // Service area: resuming a run from a step (Resume from step…, the supervisor's recommendations)
-// and the work an ended run kept (#112): the commits of its kept worktree, and whether the owner
-// may confirm a human gate's earlier approval. Never goes past a human gate on its own.
+// and the work an ended run kept (#112): the commits of its kept worktree and the kept-work question
+// (#170: its own commits, how stale they are, Resume the old run / Start from scratch), and whether
+// the owner may confirm a human gate's earlier approval. Never goes past a human gate on its own.
 
 const fs = require('fs');
 const path = require('path');
@@ -10,22 +11,89 @@ const supervisor = require('../../supervisor');
 const { gitOut } = require('../common');
 
 module.exports = (ctx) => {
-  // Commits a run's kept worktree has on top of its base (0: none, or no worktree left).
-  function runWorktreeCommits(runId) {
-    const runDir = ctx.runFolder(runId);
-    const ready = supervisor.readEvents(runDir).find((e) => e.type === 'worktree.ready');
+  // The work a run's kept worktree holds (#170), or null when no worktree is left:
+  // commits: the run's own commits, i.e. not reachable from the local base branch, its remote one or
+  // the commit the worktree started from (merged or unpushed commits of the base are not the run's);
+  // behind: how many commits the local base has gained since the run's fork point;
+  // conflicts: the files the run changed that the base changed too since then.
+  function runWorktreeWork(runId) {
+    const ready = supervisor.readEvents(ctx.runFolder(runId)).find((e) => e.type === 'worktree.ready');
     const dir = ready?.dir;
-    if (!dir || !fs.existsSync(dir)) return 0;
-    for (const base of [ready.base && `origin/${ready.base}`, ready.base].filter(Boolean)) {
-      const n = gitOut(dir, ['rev-list', '--count', `${base}..HEAD`]);
-      if (n !== null) return Number(n) || 0;
-    }
-    return 0;
+    if (!dir || !fs.existsSync(dir)) return null;
+    const name = String(ready.base || '').replace(/^origin\//, '');
+    const exists = (ref) => gitOut(dir, ['rev-parse', '--verify', '--quiet', `${ref}^{commit}`]) !== null;
+    const local = name && exists(`refs/heads/${name}`) ? `refs/heads/${name}` : null;
+    const exclude = [local, name && `refs/remotes/origin/${name}`, !ready.reused && ready.commit].filter((ref) => ref && exists(ref));
+    if (!exclude.length) return null;
+    const commits = Number(gitOut(dir, ['rev-list', '--count', 'HEAD', '--not', ...exclude])) || 0;
+    const fork = local ? gitOut(dir, ['merge-base', 'HEAD', local]) : null;
+    if (!fork) return { commits, base: name || 'main', behind: 0, conflicts: [] };
+    const files = (args) => (gitOut(dir, ['diff', '--name-only', ...args]) || '').split('\n').filter(Boolean);
+    const behind = Number(gitOut(dir, ['rev-list', '--count', `${fork}..${local}`])) || 0;
+    const onBase = behind ? new Set(files([fork, local])) : new Set();
+    return { commits, base: name, behind, conflicts: files([fork, 'HEAD']).filter((f) => onBase.has(f)) };
   }
 
-  // The newest ended run of one of these issues whose kept worktree still has commits, or null
-  // (#112: starting the same issues again would redo that work; resuming that run keeps it).
-  // { runId, commits, issues, message }
+  // The commits a run made itself in its kept worktree (0: none, or no worktree left).
+  function runWorktreeCommits(runId) {
+    return runWorktreeWork(runId)?.commits || 0;
+  }
+
+  // When a run started, from its id (YYYYMMDD-HHMMSS-…): "10:38" today, "2026-09-30 10:38" before.
+  function runTime(runId) {
+    const m = String(runId).match(/^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})/);
+    if (!m) return null;
+    const now = new Date();
+    const today = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+    return `${m[1] + m[2] + m[3] === today ? '' : `${m[1]}-${m[2]}-${m[3]} `}${m[4]}:${m[5]}`;
+  }
+
+  // The kept-work question for a run (#170), the same wherever a start would redo its work (roadmap
+  // Retry and pause, the queue, Start on an issue): what the old work is, how old, whether resuming
+  // would conflict or leave issues out, and what each choice does. The recommended choice is Start
+  // from scratch when the work is stale (its base moved on and changed the files it touched).
+  // { runId, commits, issues, title, message, choices: [{ id, label, line, primary }], recommended, text }
+  function keptWorkQuestion(r, asked, work) {
+    const numbers = asked.map((i) => Number(i?.number ?? i)).filter(Boolean);
+    const own = new Set((r.issues || []).map((i) => Number(i.number)));
+    const names = (list) => list.map((n) => `#${n}`).join(' + ');
+    const covered = numbers.filter((n) => own.has(n));
+    const missing = numbers.filter((n) => !own.has(n));
+    const when = runTime(r.runId);
+    const { commits, base, behind, conflicts } = work;
+    const stale = behind > 0 && conflicts.length > 0;
+    const age = behind
+      ? `It is based on ${base}${when ? ` from ${when}` : ''}, ${behind} commit${behind === 1 ? '' : 's'} behind today's ${base}${conflicts.length
+        ? `; files it touched changed since (${conflicts.slice(0, 3).join(', ')}${conflicts.length > 3 ? `, +${conflicts.length - 3} more` : ''}): resuming will likely conflict.`
+        : '; the files it touched did not change since.'}`
+      : `It is based on today's ${base}.`;
+    const message = [
+      `Run ${r.runId} (${r.status}${when ? `, ${when}` : ''}) made ${commits} commit${commits === 1 ? '' : 's'} of its own for ${names(covered.length ? covered : numbers)}, still in its worktree.`,
+      age,
+      missing.length && covered.length ? `The old run only covers ${names(covered)}: resuming it leaves ${names(missing)} out.` : '',
+    ].filter(Boolean).join(' ');
+    const recommended = stale ? 'scratch' : 'resume';
+    const choices = [
+      { id: 'resume', label: 'Resume the old run', line: 'Resume the old run: continues from those commits (opens Resume from step… for that run).' },
+      { id: 'scratch', label: 'Start from scratch', line: `Start from scratch: a new run from today's ${base}; the old commits stay in their worktree, untouched.` },
+    ].map((c) => ({ ...c, primary: c.id === recommended }));
+    return {
+      runId: r.runId, commits, issues: r.issues, recommended, choices, message,
+      title: `${names(numbers)} already ha${numbers.length > 1 ? 've' : 's'} work from ${/^[aeiou]/i.test(r.status) ? 'an' : 'a'} ${r.status} run`,
+      text: [message, ...choices.map((c) => c.line)].join(' '),
+    };
+  }
+
+  // The kept-work question for this run when its worktree still holds commits of its own, else null.
+  function keptWorkOfRun(runId, issues) {
+    const r = ctx.ws && runs.listRuns(ctx.ws.runs).find((x) => x.runId === runId);
+    const work = r && runWorktreeWork(runId);
+    return work?.commits ? keptWorkQuestion(r, issues || r.issues || [], work) : null;
+  }
+
+  // The newest ended run of one of these issues whose kept worktree still has commits of its own, as
+  // its kept-work question (keptWorkQuestion), or null (#112: starting the same issues again would
+  // redo that work; resuming that run keeps it).
   function keptWorkForIssues(issues) {
     const numbers = new Set((issues || []).map((i) => Number(i?.number ?? i)).filter(Boolean));
     if (!numbers.size || !ctx.ws) return null;
@@ -33,13 +101,8 @@ module.exports = (ctx) => {
       .filter((r) => r.status !== 'running' && !ctx.runAlive(r.runId) && (r.issues || []).some((i) => numbers.has(Number(i.number))))
       .sort((a, b) => String(b.runId).localeCompare(String(a.runId)));
     for (const r of ended) {
-      const commits = runWorktreeCommits(r.runId);
-      if (!commits) continue;
-      const names = r.issues.filter((i) => numbers.has(Number(i.number))).map((i) => `#${i.number}`).join(', ');
-      return {
-        runId: r.runId, commits, issues: r.issues,
-        message: `Run ${r.runId} (${r.status}) still has ${commits} commit(s) in its worktree for ${names}. Resuming that run keeps its work; a new run starts it again from scratch.`,
-      };
+      const work = runWorktreeWork(r.runId);
+      if (work?.commits) return keptWorkQuestion(r, issues, work);
     }
     return null;
   }
@@ -149,6 +212,7 @@ module.exports = (ctx) => {
 
   return {
     keptWorkForIssues,
+    keptWorkOfRun,
     resumeOptions,
     resumeRun,
     runWorktreeCommits,

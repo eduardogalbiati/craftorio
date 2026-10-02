@@ -375,7 +375,15 @@
     const btn = $b('#btn-assign-ok');
     btn.disabled = true;
     try {
-      const data = await api.assignWorkflow(bl.projectId, numbers, workflow, inputs, wantsSimulation($b('#assign-mock')), grouped());
+      const mock = wantsSimulation($b('#assign-mock'));
+      let data = await api.assignWorkflow(bl.projectId, numbers, workflow, inputs, mock, grouped());
+      // an ended run kept work for these issues (#170): resume that run, or start from scratch
+      if (data?.kept) {
+        const choice = await keptWorkDialog(data.kept);
+        if (choice === 'resume') closeModal('#assign-modal');
+        if (choice !== 'scratch') return;
+        data = await api.assignWorkflow(bl.projectId, numbers, workflow, inputs, mock, grouped(), true);
+      }
       save(WORKFLOW_KEY, workflow);
       bl.selected.clear();
       setData(data);
@@ -944,7 +952,12 @@
       const b = e.target.closest('[data-pause]');
       if (!b) return;
       b.disabled = true;
-      try { setData(await api.pauseQueue(bl.projectId, b.dataset.pause === 'on')); } catch (err) { bl.error = errMsg(err); }
+      try {
+        let out = await api.pauseQueue(bl.projectId, b.dataset.pause === 'on');
+        // the next item would redo an ended run's kept work (#170): resume that run, or start it from scratch
+        if (out?.kept && await keptWorkDialog(out.kept) === 'scratch') out = await api.pauseQueue(bl.projectId, false, true);
+        setData(out);
+      } catch (err) { bl.error = errMsg(err); }
       render();
     };
     $b('#bl-local').onclick = async (e) => {

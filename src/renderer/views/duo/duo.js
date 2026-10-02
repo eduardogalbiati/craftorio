@@ -115,11 +115,10 @@
         ? { projectId: fromIssue.projectId, issues: [{ number: fromIssue.issue.number, url: fromIssue.issue.url, title: fromIssue.issue.title }] } : {};
       const payload = { file: FILE, inputs, mock, mockSequences: mock ? SCENARIOS[scenario]?.seq : null, ...forIssue };
       let out = await api.startRun(payload);
-      // an ended run of this issue kept commits in its worktree (#112): resume it, or start anyway
-      if (out?.confirm) {
+      // an ended run of this issue kept commits in its worktree (#112, #170): resume it, or start from scratch
+      if (out?.kept) {
         starting = false;
-        if (await confirmDialog('Earlier work on this issue', out.confirm, 'Resume that run')) { window.openResumeDialog?.(out.runId); return; }
-        if (!await confirmDialog('Start a new run', `Start a new run anyway? Run ${out.runId} keeps its worktree.`, 'Start anyway')) return;
+        if (await keptWorkDialog(out.kept) !== 'scratch') return;
         starting = true;
         out = await api.startRun({ ...payload, confirmed: true });
       }

@@ -76,8 +76,9 @@ module.exports = (ctx) => {
     },
     // retry (the item runs again) or skip (it counts as finished) an item, usually the one that paused the roadmap.
     // A retry is refused while the item's run is alive (in any app process, #112); when its worktree,
-    // or an ended run's of the same issues, still has commits, the answer is { confirm } (the work it
-    // would start again) until `confirmed`, which lets the item's next start go past that work.
+    // or an ended run's of the same issues, still has commits of its own, the answer is the kept-work
+    // question { confirm, kept, runId } (#170: Resume the old run / Start from scratch) until
+    // `confirmed` (Start from scratch), which lets the item's next start go past that work.
     {
       channel: 'roadmap:item',
       method: 'roadmapItem',
@@ -87,10 +88,9 @@ module.exports = (ctx) => {
         const item = roadmaps.findItem(roadmaps.readRoadmap(ctx.ws.backlog, id), String(itemId));
         if (action === 'retry' && item && !(item.runId && ctx.runAlive(item.runId))) {
           if (!confirmed) {
-            const commits = item.runId ? ctx.runWorktreeCommits(item.runId) : 0;
-            if (commits) return { ...current(projectId), confirm: `Run ${item.runId} still has ${commits} commit(s) in its worktree. Retry starts the item again from scratch; resuming that run keeps its work. Retry anyway?`, runId: item.runId };
-            const kept = ctx.keptWorkForIssues(backlog.itemIssues(item));
-            if (kept) return { ...current(projectId), confirm: `${kept.message} Retry anyway?`, runId: kept.runId };
+            const issues = backlog.itemIssues(item);
+            const kept = (item.runId && ctx.keptWorkOfRun(item.runId, issues)) || ctx.keptWorkForIssues(issues);
+            if (kept) return { ...current(projectId), confirm: kept.text, kept, runId: kept.runId };
           } else ctx.allowKeptWork(id, item.id);
         }
         roadmaps.itemAction(ctx.ws.backlog, id, String(itemId), String(action), { alive: ctx.runAlive });

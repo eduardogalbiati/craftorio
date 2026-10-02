@@ -41,7 +41,8 @@ module.exports = (ctx) => {
   // are free run slots. Only open issues; the workflow needs a `task` input (the issue goes there).
   // group: the issues go as one run (one branch, one PR/MR), up to the backlogMaxGroup setting; a
   // backlog is one project's, so a group never mixes projects.
-  async function assignWorkflow({ projectId, numbers, workflow, inputs, mock, group = false }) {
+  // allowKeptWork: the owner answered the kept-work question with Start from scratch (#170).
+  async function assignWorkflow({ projectId, numbers, workflow, inputs, mock, group = false, allowKeptWork = false }) {
     const { ws } = ctx;
     const project = projects.readProject(ws.projects, path.basename(String(projectId)));
     const data = backlog.readBacklog(ws.backlog, project.id);
@@ -59,6 +60,7 @@ module.exports = (ctx) => {
       await host.assertCanRun?.({ mock: false });
     }
     backlog.enqueue(ws.backlog, project.id, { issues, workflow: file, workflowName: wf.metadata?.name || file, inputs: inputs || {}, mock: !!mock, group: !!group });
+    if (allowKeptWork) allowQueuedKeptWork(project.id, issues);
     // an issue belongs to one plan: assigned here (the screen asked first), it leaves the roadmap's items not started
     roadmaps.dropIssues(ws.backlog, project.id, issues.map((i) => i.number), { alive: ctx.runAlive });
     await dispatchQueue();
@@ -97,6 +99,13 @@ module.exports = (ctx) => {
     if (!list.some((e) => e.id === plan.epic)) return;
     await epics.applyEpic({ platform, repo: project.repo, epic: { id: plan.epic }, issues: plan.numbers, epics: list });
     await backlog.syncBacklog({ dir: ws.backlog, project, platform });
+  }
+
+  // Queued issues the owner chose to start from scratch although an ended run kept work for them
+  // (#170: Start on the issue, Resume on the queue); in memory, used by their next start.
+  const keptWorkAllowed = new Set();
+  function allowQueuedKeptWork(projectId, issues) {
+    for (const i of issues || []) keptWorkAllowed.add(`${projectId}:${Number(i?.number ?? i)}`);
   }
 
   // Starts queued issues while there are free run slots: the oldest first across projects, a
@@ -142,10 +151,13 @@ module.exports = (ctx) => {
             continue;
           }
           const run = { ...item, ...read[0], issues: read.length > 1 ? read : undefined };
+          const keys = backlog.itemIssues(item).map((i) => `${projectId}:${i.number}`);
           await ctx.startWorkflowRun({
             file: item.workflow, inputs: backlog.runInputs(run, wf, project.folder), mock: item.mock,
             projectId, issues: backlog.recordedIssues(read), notices: warnings.map((message) => ({ level: 'warn', message })),
+            allowKeptWork: keys.some((k) => keptWorkAllowed.has(k)),
           });
+          for (const k of keys) keptWorkAllowed.delete(k);
           backlog.unqueue(ws.backlog, projectId, item.number, { cancelGroup: true });
         } catch (e) {
           backlog.setPaused(ws.backlog, projectId, true, `Could not start ${backlog.itemIssues(item).map((i) => `#${i.number}`).join(', ')}: ${e.message}`);
@@ -158,6 +170,7 @@ module.exports = (ctx) => {
   }
 
   return {
+    allowQueuedKeptWork,
     assignWorkflow,
     dispatchQueue,
     placeFiledInEpic,

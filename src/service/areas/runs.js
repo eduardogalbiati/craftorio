@@ -143,7 +143,7 @@ module.exports = (ctx) => {
     // automation (queue, roadmap) cannot ask: it stops and names the run that holds the same work (#112)
     const kept = resume || allowKeptWork ? null : ctx.keptWorkForIssues(issues);
     if (kept) {
-      const err = new Error(`${kept.message} Resume that run, or start the issues again on purpose (Retry on the roadmap item, Start on the issue).`);
+      const err = new Error(`${kept.title}. ${kept.text} Choose with Retry on the roadmap item, Resume on the queue or Start on the issue.`);
       err.runId = kept.runId;
       throw err;
     }

@@ -76,12 +76,12 @@ calls, a step far slower than usual). Try to solve it first:
 
 When a person asks why the Backlog or the roadmap stopped, check these first (each one happened):
 
-- **Kept work** (#112): a roadmap paused with "Run X still has N commit(s) in its worktree": an
-  ended run of the same issue left commits. *Retry* starts a new run from today's base (the old
-  commits stay in their worktree, untouched); *Resume* continues the old run from those commits.
-  Recommend *Retry* when the old work is far behind the base or its files moved since (it would
-  mostly conflict), *Resume* when it is recent. The count may include merged commits that are not
-  the run's own (#170).
+- **Kept work** (#112, #170): a roadmap or queue paused with "… already have work from a cancelled
+  run": an ended run of the same issues left commits of its own. *Start from scratch* (Retry on the
+  roadmap item) starts a new run from today's base (the old commits stay in their worktree,
+  untouched); *Resume the old run* continues it from those commits. The text says how far behind
+  the base it is and whether its files changed since: recommend *Start from scratch* when it is
+  stale (it would mostly conflict) or covers fewer issues than the item, *Resume* when it is recent.
 - **Nothing starts by itself**: the app starts queued and roadmap items only when a run finishes or
   when it opens. A roadmap paused with no run active waits for the person's Start or Retry.
 - **A frozen copy**: a workflow or skill the user edited in the workspace is "modified" and stops

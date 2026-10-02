@@ -405,9 +405,9 @@
         const box = e.target.closest('[data-item]');
         const action = e.target.closest('[data-rm-item]').dataset.rmItem;
         let out = await api.roadmapItem(ctx.projectId, box.dataset.item, action);
-        // a retry whose previous run still has commits in its worktree asks first (#112)
-        if (out?.confirm) {
-          if (!await confirmDialog('Retry the item', out.confirm, 'Retry')) return true;
+        // a retry that would redo an ended run's kept work asks first (#112, #170): resume that run or start from scratch
+        if (out?.kept) {
+          if (await keptWorkDialog(out.kept) !== 'scratch') return true;
           out = await api.roadmapItem(ctx.projectId, box.dataset.item, action, true);
         }
         ctx.setData(out);
