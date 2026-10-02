@@ -2,7 +2,8 @@
 // the nights' metrics (src/night-watch.js), and the morning summary. While the watch is on it also
 // detects the anomalies (oracle.detected): from the run events (a failed, interrupted, stalled or
 // limit-paused run; a human gate is escalated, never answered) and once a minute from the roadmap
-// files (paused, dispatch idle with items left, nothing left). When a watch ends (src/oracle.js
+// files (paused, dispatch idle with items left, nothing left) and the runs in progress (no progress
+// event for T_stall, night-watch.js STALL_MS: stalled). When a watch ends (src/oracle.js
 // onNightEnd → `nightwatch:ended`) the morning summary goes out as a notification.
 // Screen: src/renderer/views/nightwatch/; the switch itself is the Oracle's (oracle:nightWatch).
 
@@ -39,6 +40,7 @@ module.exports = (ctx) => {
   let openFor = null; // the startedAt of the watch the open incidents belong to
   const lastProgress = new Map(); // run id → ts of its last progress event (a stall's start)
   const factsCache = new Map(); // events.jsonl → { sig, facts }
+  const watchingSince = new Date().toISOString(); // a run's stall floor when none of its events was seen
 
   const watch = () => {
     const w = actions.nightWatch(dir());
@@ -54,7 +56,11 @@ module.exports = (ctx) => {
 
   function onRunEvent(ev) {
     if (!ev?.run_id || !ctx.ws) return;
-    if (night.PROGRESS_EVENTS.has(ev.type)) lastProgress.set(ev.run_id, ev.ts);
+    if (night.PROGRESS_EVENTS.has(ev.type)) {
+      lastProgress.set(ev.run_id, ev.ts);
+      // progress again: the next stall of this run is a new incident
+      open.delete(`stalled ${ev.run_id}`);
+    }
     const kind = night.incidentOf(ev);
     const gate = ev.type === 'approval.requested';
     if (ev.type === 'workflow.finished') lastProgress.delete(ev.run_id);
@@ -86,7 +92,8 @@ module.exports = (ctx) => {
       const w = watch();
       if (!w.active) return;
       const files = roadmaps.roadmapProjects(ctx.ws.backlog).map((projectId) => ({ projectId, roadmap: roadmaps.readRoadmap(ctx.ws.backlog, projectId) }));
-      const found = night.roadmapIncidents(files, ctx.activeRuns());
+      const active = ctx.activeRuns();
+      const found = night.roadmapIncidents(files, active);
       const key = (f) => `${f.kind} ${f.projectId || 'all'}`;
       const now = new Set(found.map(key));
       // a cleared condition closes its incident: the next one is a new incident
@@ -95,6 +102,11 @@ module.exports = (ctx) => {
       for (const f of found) {
         const since = f.kind === 'roadmap-paused' ? files.find((x) => x.projectId === f.projectId)?.roadmap.updatedAt : lastEnd();
         detect({ kind: f.kind, projectId: f.projectId, since: floor(since), key: key(f) });
+      }
+      // a run that went quiet without a stall log: no progress event for T_stall (since this
+      // process started watching, when it saw none of the run's events)
+      for (const s of night.stalledRuns(active, lastProgress, { floor: watchingSince })) {
+        detect({ kind: 'stalled', runId: s.runId, projectId: s.projectId, since: floor(s.since), key: `stalled ${s.runId}` });
       }
     } catch (e) { console.error('Night watch check:', e.message); }
   }
@@ -156,13 +168,14 @@ module.exports = (ctx) => {
   }
 
   function state() {
-    const svc = ctx.oracleService;
-    let watchState = null;
-    try { watchState = svc ? svc().state().nightWatch : actions.nightWatch(dir()); } catch { watchState = actions.nightWatch(dir()); }
+    // the Oracle is there when its service answers with its state (no Oracle channel in this
+    // process, or an Oracle that cannot start in this workspace: the screen's empty state)
+    let oracleState = null;
+    try { oracleState = ctx.oracleService?.().state() || null; } catch { oracleState = null; }
     const active = ctx.activeRuns();
     return {
-      oracle: !!svc,
-      watch: watchState,
+      oracle: !!oracleState?.nightWatch,
+      watch: oracleState?.nightWatch || actions.nightWatch(dir()),
       permissions: { catalog: night.PERMISSIONS, never: night.NEVER_ALLOWED, ...night.readPermissions(dir()) },
       runs: { active: active.length, waiting: active.filter((r) => r.waiting).length },
       loopCap: night.LOOP_CAP,

@@ -55,6 +55,8 @@ const INCIDENT_KINDS = {
 const LOG_TYPES = ['oracle.action', 'oracle.blocked', 'oracle.detected', 'oracle.escalated', 'oracle.undone', 'oracle.watch'];
 const STALL_LOGS = new Set(['agent_idle', 'loop_blocked', 'stall']);
 const PROGRESS_EVENTS = new Set(['step.finished', 'step.started', 'workflow.started']);
+// T_stall: a run in progress (not at a gate) without a progress event for this long is stalled
+const STALL_MS = 30 * 60e3;
 // an item with more watch actions than this in one night: the next one is escalated instead
 const LOOP_CAP = 3;
 // resolved = the item progresses again within this time of the action
@@ -158,6 +160,22 @@ function roadmapIncidents(roadmaps = [], active = []) {
   }
   const left = roadmaps.some(({ roadmap: r }) => r && ['paused', 'running'].includes(r.state) && unfinished(r).length);
   if (!active.length && !left) out.push({ kind: 'roadmap-empty', projectId: null });
+  return out;
+}
+
+/**
+ * The runs in progress without a progress event for `stallMs`: `active` [{ runId, projectId,
+ * startedAt, waiting }] (a run at a human gate is escalated, not stalled), `lastProgress` Map run id →
+ * ts of its last progress event, `floor` the ts used when none was seen (the run's start, if later).
+ * → [{ runId, projectId, since }]
+ */
+function stalledRuns(active = [], lastProgress = new Map(), { now = Date.now(), floor = null, stallMs = STALL_MS } = {}) {
+  const out = [];
+  for (const r of active) {
+    if (r.waiting || r.status === 'waiting') continue;
+    const since = lastProgress.get(r.runId) || [r.startedAt, floor].filter(Boolean).sort().at(-1);
+    if (since && now - ms(since) >= stallMs) out.push({ runId: r.runId, projectId: r.projectId || null, since });
+  }
   return out;
 }
 
@@ -405,5 +423,7 @@ module.exports = {
   roadmapIncidents,
   runFacts,
   savePermissions,
+  STALL_MS,
+  stalledRuns,
   targetOf,
 };
