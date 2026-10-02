@@ -3,6 +3,9 @@
 // with MULTIAGENT_SIMULATION_ONLY=1 (see docs/agents/testing.md), so a "real" answer is exercised by
 // stubbing src/product-owner.js's own ask() and forcing simulation.simulationOnly() false just for
 // that call: no model or CLI is ever started here.
+// Live progress (#180): po:ask's turn is pushed on chat:progress and chat:cancel stops it; mockSteps'
+// delays are scaled down (like the mock provider) so these tests stay fast.
+process.env.MULTIAGENT_MOCK_DELAY_SCALE ??= '0.05';
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const productOwner = require('../../src/product-owner');
@@ -48,4 +51,44 @@ test('po:ask: MULTIAGENT_SIMULATION_ONLY forces the simulated path (no notice) e
   const out = await api['po:ask']({ projectId: p.id, question: 'Analyze the backlog', mock: false, mode: 'plan', attachments: [], issues: [] });
   assert.ok(out.message);
   assert.deepEqual(shown, []);
+});
+
+// ---- #180: live progress (chat:progress, chat:cancel) --------------------------------------------
+
+test('po:ask (mock): the turn streams chat:progress start/items/end for chat "po" keyed by the project id', async (t) => {
+  const { service, api } = makeService(t);
+  const ws = service.workspace();
+  const p = await roadmapProject(api, ws, t, [1], 'po-progress');
+  const events = [];
+  service.events.on('chat:progress', (ev) => events.push(ev));
+
+  await api['po:ask']({ projectId: p.id, question: 'Analyze the backlog', mock: true, mode: 'plan', attachments: [], issues: [] });
+
+  assert.equal(events[0].phase, 'start');
+  assert.equal(events[0].chat, 'po');
+  assert.equal(events[0].key, p.id);
+  assert.equal(events.at(-1).phase, 'end');
+  assert.equal(events.at(-1).status, 'done');
+  assert.ok(events.some((e) => e.phase === 'items' && e.items.some((it) => it.kind === 'tool_call')));
+});
+
+test('chat:cancel(\'po\', projectId) stops a po:ask turn in flight: the answer is kept, marked stopped, raises no notice, and chat:progress ends "stopped"', async (t) => {
+  const { service, api } = makeService(t);
+  const ws = service.workspace();
+  const p = await roadmapProject(api, ws, t, [1, 2], 'po-cancel');
+  const shown = [];
+  service.events.on('notify', (n) => shown.push(n));
+  const events = [];
+  service.events.on('chat:progress', (ev) => events.push(ev));
+
+  // the turn's AbortController is wired synchronously, before productOwner.ask's first real wait
+  // (src/chat-progress.js's mockSteps): cancelling right after the call races it early, not at the end
+  const asking = api['po:ask']({ projectId: p.id, question: 'Analyze the backlog', mock: true, mode: 'plan', attachments: [], issues: [] });
+  assert.equal(await api['chat:cancel']({ chat: 'po', key: p.id }), true);
+
+  const out = await asking;
+  assert.equal(out.message.stopped, true);
+  assert.deepEqual(shown, []); // a stopped answer raises no `po` notice
+  assert.equal(events.at(-1).phase, 'end');
+  assert.equal(events.at(-1).status, 'stopped');
 });

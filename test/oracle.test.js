@@ -4,6 +4,9 @@
 // way test/supervisor-chat.test.js does for the app-wide Supervisor chat; a couple of unit-level
 // tests call createOracle directly for what the channel's own simulation guard would hide
 // (refuseReal outside MULTIAGENT_SIMULATION_ONLY).
+// Live progress (#180): oracle:ask's turn is pushed on chat:progress and chat:cancel stops it;
+// mockSteps' delays are scaled down (like the mock provider) so these tests stay fast.
+process.env.MULTIAGENT_MOCK_DELAY_SCALE ??= '0.05';
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
@@ -111,6 +114,39 @@ test('oracle:ask: a second message sent before the first answers throws "still a
   const first = api['oracle:ask']({ question: 'first', mock: true });
   await assert.rejects(() => api['oracle:ask']({ question: 'second', mock: true }), /still answering/);
   await first;
+});
+
+// ---- #180: live progress (chat:progress, chat:cancel) -------------------------------------------
+
+test('oracle:ask (mock): the turn streams chat:progress start/items/end for chat "oracle"', async (t) => {
+  const { service, api } = makeService(t);
+  const events = [];
+  service.events.on('chat:progress', (ev) => events.push(ev));
+
+  await api['oracle:ask']({ question: 'What is going on?', mock: true });
+
+  assert.equal(events[0].phase, 'start');
+  assert.equal(events[0].chat, 'oracle');
+  assert.equal(events.at(-1).phase, 'end');
+  assert.equal(events.at(-1).status, 'done');
+  assert.ok(events.some((e) => e.phase === 'items' && e.items.some((it) => it.kind === 'tool_call')));
+});
+
+test('chat:cancel(\'oracle\') stops an oracle:ask turn in flight: the answer is kept, marked stopped, and chat:progress ends "stopped"', async (t) => {
+  const { service, api } = makeService(t);
+  const events = [];
+  service.events.on('chat:progress', (ev) => events.push(ev));
+
+  // the turn's AbortController is wired synchronously, before the mock turn's first real wait
+  // (src/chat-progress.js's mockSteps): cancelling right after the call races it early, not at the end
+  const asking = api['oracle:ask']({ question: 'What is going on?', mock: true });
+  assert.equal(await api['chat:cancel']({ chat: 'oracle', key: '' }), true);
+
+  const out = await asking;
+  assert.equal(out.message.role, 'oracle');
+  assert.equal(out.message.stopped, true);
+  assert.equal(events.at(-1).phase, 'end');
+  assert.equal(events.at(-1).status, 'stopped');
 });
 
 // ---- persistence across restarts (task 2) -------------------------------------------------------

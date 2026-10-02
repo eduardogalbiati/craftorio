@@ -53,6 +53,18 @@ test('--keep-awake takes off, idle, active or error; anything else is refused', 
   assert.throws(() => parseArgs(['--view', 'workflows', '--keep-awake', 'nope']), /--keep-awake takes off \| idle \| active \| error/);
 });
 
+// #180: --po working | writing | stopped | failed, the Product Owner's drawer with its live turn.
+test('--po takes working, writing, stopped or failed, and only applies to --view backlog', () => {
+  assert.equal(parseArgs(['--view', 'backlog']).po, undefined);
+  for (const v of ['working', 'writing', 'stopped', 'failed']) {
+    const a = parseArgs(['--view', 'backlog', '--po', v]);
+    assert.equal(a.po, v);
+    assert.equal(a.name, `backlog-po-${v}`);
+  }
+  assert.throws(() => parseArgs(['--view', 'backlog', '--po', 'nope']), /--po takes working \| writing \| stopped \| failed/);
+  assert.throws(() => parseArgs(['--view', 'dashboard', '--po', 'working']), /--po applies to --view backlog/);
+});
+
 test('--side takes original or modified, and is inferred from --ref (original) or --caption (modified) when not given', () => {
   assert.equal(parseArgs(['--view', 'dashboard']).side, null);
   assert.equal(parseArgs(['--view', 'dashboard', '--side', 'original']).side, 'original');

@@ -2,6 +2,9 @@
 // answer, sizing/estimates, the monthly usage ledger that budgets the conversation itself, and
 // registering an issue in the conversation (#117): the question cap per thread, each thread's
 // folder in the runs folder, filing and discarding a draft.
+// Live progress (#180): ask's onItem/signal stream and stop a mock turn fast (mockSteps' delays
+// scaled down, like the mock provider).
+process.env.MULTIAGENT_MOCK_DELAY_SCALE ??= '0.05';
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
@@ -390,6 +393,65 @@ test('ask (mock, issue mode) ignores a selection: it is not recorded on the user
   });
   const userMessage = out.messages.find((m) => m.role === 'user');
   assert.equal('issues' in userMessage, false);
+});
+
+// ---- #180: live progress (ask's onItem/signal) --------------------------------------------------
+
+test('ask (mock, onItem set): the simulated turn streams its fake steps and the answer\'s text, ending in the hidden ```json block, before the final message is recorded', async (t) => {
+  const dir = tmp(t);
+  const items = [];
+  const out = await productOwner.ask({
+    backlogDir: dir, projectId: 'demo', question: 'Analyze the backlog',
+    data: { projectId: 'demo', issues: ISSUES }, workflows: [], mock: true, mode: 'plan',
+    onItem: (it) => items.push(it),
+  });
+  assert.equal(items[0].kind, 'thinking');
+  assert.deepEqual(items.filter((it) => it.kind === 'tool_call').map((it) => it.name), ['Read', 'Grep', 'Bash']);
+  assert.ok(items.some((it) => it.kind === 'text'));
+  assert.match(items.at(-1).text, /^```json\n\{\n {2}"simulated": true\n\}\n```$/);
+  assert.ok(out.message.answer); // the recorded answer is unaffected by the streaming
+});
+
+test('ask (mock, no onItem): the simulated turn streams nothing, behaving as before #180', async (t) => {
+  const dir = tmp(t);
+  const out = await productOwner.ask({
+    backlogDir: dir, projectId: 'demo', question: 'Analyze the backlog',
+    data: { projectId: 'demo', issues: ISSUES }, workflows: [], mock: true, mode: 'plan',
+  });
+  assert.ok(out.message.answer);
+});
+
+test('ask (mock, aborted mid-stream): the message is recorded as stopped (not an error), with whatever prose was written so far', async (t) => {
+  const dir = tmp(t);
+  const controller = new AbortController();
+  const items = [];
+  const out = await productOwner.ask({
+    backlogDir: dir, projectId: 'demo', question: 'Analyze the backlog',
+    data: { projectId: 'demo', issues: ISSUES }, workflows: [], mock: true, mode: 'plan',
+    signal: controller.signal,
+    onItem: (it) => { items.push(it); if (it.kind === 'tool_call' && it.name === 'Grep') controller.abort(); },
+  });
+  assert.equal(out.message.role, 'po');
+  assert.equal(out.message.stopped, true);
+  assert.equal(out.message.error, undefined);
+  assert.ok(!items.some((it) => it.kind === 'text')); // aborted before any text was streamed
+  assert.equal(out.message.text, 'Stopped before answering.'); // nothing was written yet
+});
+
+test('ask (mock, scenario "error"): the fake steps and a partial line stream first; the failure is then recorded carrying what was written', async (t) => {
+  const dir = tmp(t);
+  const items = [];
+  const out = await productOwner.ask({
+    backlogDir: dir, projectId: 'demo', question: 'Analyze the backlog',
+    data: { projectId: 'demo', issues: ISSUES }, workflows: [], mock: true, mode: 'plan', scenario: 'error',
+    onItem: (it) => items.push(it),
+  });
+  assert.deepEqual(items.filter((it) => it.kind === 'tool_call').map((it) => it.name), ['Read', 'Grep', 'Bash']);
+  assert.ok(items.some((it) => it.kind === 'text' && it.text.includes('the answer had started')));
+  assert.equal(items.some((it) => it.kind === 'text' && it.text.includes('```json')), false); // a failure carries no json block
+  assert.equal(out.message.error, true);
+  assert.match(out.message.text, /Simulated error \(scenario "error"\): the Product Owner could not answer\./);
+  assert.match(out.message.text, /Written before the error:\n\nSimulated: the answer had started when the error came\./);
 });
 
 test('callAgent includes SELECTION_RULES in the prompt only when a selection is given (checked on the source: callAgent needs a real CLI to run for real)', () => {

@@ -1,6 +1,9 @@
 // The app-wide Supervisor chat (#28, src/supervisor-chat.js): one conversation per workspace, kept
 // in <workspace>/supervisor, reached through the supervisor:chat* channels (src/service/channels/
 // supervisor.js), the way the drawer and the Supervisor page call it.
+// Live progress (#180): supervisor:chat's turn is pushed on chat:progress and chat:cancel stops it;
+// mockSteps' delays are scaled down (like the mock provider) so these tests stay fast.
+process.env.MULTIAGENT_MOCK_DELAY_SCALE ??= '0.05';
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
@@ -71,6 +74,39 @@ test('supervisor:chat: a second message sent before the first answers throws "st
   const first = api['supervisor:chat']({ question: 'first', mock: true });
   await assert.rejects(() => api['supervisor:chat']({ question: 'second', mock: true }), /still answering/);
   await first;
+});
+
+// ---- #180: live progress (chat:progress, chat:cancel) -------------------------------------------
+
+test('supervisor:chat (mock): the turn streams chat:progress start/items/end for chat "supervisor"', async (t) => {
+  const { service, api } = makeService(t);
+  const events = [];
+  service.events.on('chat:progress', (ev) => events.push(ev));
+
+  await api['supervisor:chat']({ question: 'What am I looking at?', screen: '', mock: true });
+
+  assert.equal(events[0].phase, 'start');
+  assert.equal(events[0].chat, 'supervisor');
+  assert.equal(events.at(-1).phase, 'end');
+  assert.equal(events.at(-1).status, 'done');
+  assert.ok(events.some((e) => e.phase === 'items' && e.items.some((it) => it.kind === 'tool_call')));
+});
+
+test('chat:cancel(\'supervisor\') stops a supervisor:chat turn in flight: the answer is kept, marked stopped, and chat:progress ends "stopped"', async (t) => {
+  const { service, api } = makeService(t);
+  const events = [];
+  service.events.on('chat:progress', (ev) => events.push(ev));
+
+  // the turn's AbortController is wired synchronously, before the mock turn's first real wait
+  // (src/chat-progress.js's mockSteps): cancelling right after the call races it early, not at the end
+  const asking = api['supervisor:chat']({ question: 'What am I looking at?', screen: '', mock: true });
+  assert.equal(await api['chat:cancel']({ chat: 'supervisor', key: '' }), true);
+
+  const out = await asking;
+  assert.equal(out.message.role, 'supervisor');
+  assert.equal(out.message.stopped, true);
+  assert.equal(events.at(-1).phase, 'end');
+  assert.equal(events.at(-1).status, 'stopped');
 });
 
 test('questionText: prefixes "[Screen] ..." only when the screen is non-empty', () => {

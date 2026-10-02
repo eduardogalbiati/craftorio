@@ -238,19 +238,26 @@ function loadAsk() {
   for (const [name, code] of Object.entries({ poLit, watchingFn, askFn })) assert.ok(code, `${name} not found in backlog-po.js: the source moved`);
   const calls = { askProductOwner: [], render: [] };
   let settle;
+  let fail;
   const sandbox = {
     $p: () => ({ value: '', focus() {} }),
-    api: { askProductOwner: (...a) => { calls.askProductOwner.push(a); return new Promise((resolve) => { settle = resolve; }); } },
+    api: { askProductOwner: (...a) => { calls.askProductOwner.push(a); return new Promise((resolve, reject) => { settle = resolve; fail = reject; }); } },
     devMode: () => false,
     errMsg: (e) => e.message,
     render: () => calls.render.push(true),
+    // #180: ask() starts a live turn (window.LiveTurn.create) and a 1 s ticker (renderLive); the
+    // real live-turn.js runs here too, so po.live has its real shape
+    window: { LiveTurn: require('../src/renderer/live-turn') },
+    renderLive: () => {},
+    setInterval: () => 0,
+    clearInterval: () => {},
     state: { view: 'backlog' },
     document: { hidden: false },
   };
   vm.createContext(sandbox);
   vm.runInContext(`${poLit}\n${watchingFn}\n${askFn}\nthis.ask = ask; this.po = po;`, sandbox);
   Object.assign(sandbox.po, { projectId: 'demo', open: true });
-  return { ask: sandbox.ask, po: sandbox.po, calls, settle: (out) => settle(out) };
+  return { ask: sandbox.ask, po: sandbox.po, calls, settle: (out) => settle(out), fail: (e) => fail(e) };
 }
 
 test('ask (#148): a second call fired in the same tick (double click, or a click racing Enter) while the first is still in flight sends the question only once', () => {
@@ -270,6 +277,43 @@ test('ask (#148): once the answer lands, busy clears and a genuinely new questio
   assert.equal(po.busy, false);
   ask('A follow-up question'); // left unresolved on purpose: nothing in this test awaits it
   assert.equal(calls.askProductOwner.length, 2);
+});
+
+test('ask (#180): starts a live turn (window.LiveTurn.create) while the question is in flight, and clears it once the turn ends (success or failure)', async () => {
+  const { ask, po, settle } = loadAsk();
+  const asking = ask('Analyze the backlog');
+  assert.equal(po.live.agent, 'Product Owner');
+  assert.equal(po.live.status, 'starting');
+  settle({ messages: [{ role: 'user', text: 'Analyze the backlog' }, { role: 'po', text: 'ok' }] });
+  await asking;
+  assert.equal(po.live, null);
+
+  const { ask: ask2, po: po2, fail } = loadAsk();
+  const asking2 = ask2('Analyze the backlog');
+  assert.ok(po2.live);
+  fail(new Error('boom'));
+  await asking2;
+  assert.equal(po2.live, null);
+  assert.equal(po2.error, 'boom');
+});
+
+test('stopTurn: ends the turn in flight through api.cancelChatTurn(\'po\', projectId) (#180)', () => {
+  const fn = /function stopTurn\(\)[\s\S]*?\n  \}/.exec(src)[0];
+  assert.match(fn, /api\.cancelChatTurn\('po', projectId\)/);
+});
+
+test('the live turn follows this project\'s chat:progress events only, applying each payload and redrawing (#180)', () => {
+  const listener = /api\.onChatProgress\?\.\(\(p\) => \{[\s\S]*?\n  \}\);/.exec(src)[0];
+  assert.ok(listener, 'api.onChatProgress listener not found in backlog-po.js: the source moved');
+  assert.match(listener, /if \(p\?\.chat !== 'po' \|\| p\.key !== po\.projectId \|\| !po\.live\) return;/);
+  assert.match(listener, /window\.LiveTurn\.apply\(po\.live, p\);/);
+  assert.match(listener, /renderLive\(\);/);
+});
+
+test('messageHtml: a stopped answer shows a "Stopped" badge in its meta line (#180)', () => {
+  const metaLine = /const meta = `Product Owner[\s\S]*?`;/.exec(src)[0];
+  assert.ok(metaLine, 'the message meta line not found in backlog-po.js: the source moved');
+  assert.match(metaLine, /msg\.stopped \? ' <span class="badge warn" title="You stopped this turn: the answer is what was written until then">Stopped<\/span>' : ''/);
 });
 
 test('the conversation and the applied-group notes reset when the drawer switches to another project', () => {
