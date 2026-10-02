@@ -77,7 +77,7 @@ kind: Workflow
 
 metadata:
   name: software-development
-  version: 0.19.0
+  version: 0.19.1
   description: Implements, reviews, tests, builds, watches CI and the PR/MR, publishes a preview and, once approved, merges and tracks the production deploy. Works with several languages on GitHub or GitLab.
   tags: [dev, review, test, build, ci, pr, deploy, github, gitlab]
   # Dashboard category: plan (Plan & Design), build (Code & Build) or monitor (Monitor & Improve).
@@ -417,7 +417,10 @@ steps:
       the screenshot demo data cover the fields the change introduces (ui-conventions skill).
       In `left_out`, list each requirement of the task (its acceptance criteria, each task of the
       issue) that you did not implement, with the reason: never leave one only in prose; an empty
-      list when everything was done. A list that is not empty sends you back here, not to the review.{% if inputs.issues | length > 1 %}
+      list when everything was done. A list that is not empty sends you back here, not to the review.
+      Tasks that are not yours never go in `left_out`: tests (the test writer writes and runs them
+      after the review; describe them in `test_notes`) and measurements that need real runs or the
+      owner (say in `summary` what to measure and how).{% if inputs.issues | length > 1 %}
       A whole issue you could not do goes in `issues` (`done: false`), not in `left_out`.{% endif %}
       {% if vars.accepted_gaps %}
       The owner chose to continue without these requirements; do not list them again: {{ vars.accepted_gaps }}
