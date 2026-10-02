@@ -315,6 +315,31 @@ test('pr_url filter passes GitHub PR and GitLab MR URLs and rejects anything els
   ]) assert.throws(() => render(t, { url }), /not a pull\/merge request URL/, url);
 });
 
+// #173: a declared gap (`left_out`) led by "Tests" or "Measure" is the test writer's or the
+// owner's task, never the developer's: developer_gaps drops it before the return-to-develop and
+// requirements_left_out gate conditions see the list.
+test('developer_gaps filter drops Tests/Measure entries, keeps real gaps', () => {
+  const t = '{{ gaps | developer_gaps | to_json }}';
+  const dropped = [
+    '**Tests**: unit tests of the change',
+    'Measure: real before/after runs',
+    '- [ ] **Measure**: count requirements_left_out gates',
+    'Tests',
+    'Measurement (owner)',
+  ];
+  const kept = [
+    'Test coverage of X',
+    'Testsuite fix',
+    'Guard in the engine',
+    'Add the retry option',
+  ];
+  const gaps = [...dropped, ...kept].map((requirement) => ({ requirement, reason: 'r' }));
+  const result = JSON.parse(render(t, { gaps }));
+  assert.deepEqual(result.map((g) => g.requirement), kept);
+  assert.equal(render(t, { gaps: 'not-an-array' }), '[]');
+  assert.equal(render(t, { gaps: undefined }), '[]');
+});
+
 async function runConditionalAction(t, cleanup) {
   const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'));
   t.after(() => fs.rmSync(runsDir, { recursive: true, force: true }));
@@ -913,6 +938,38 @@ for (const file of ['software-development.yaml', 'software-development-local-her
     assert.equal((accepted.match(/\(simulated\) requirement/g) || []).length, 2, accepted);
     // the two accepted requirements must stay distinguishable, not run together into one word
     assert.match(accepted, /requirement;\s+\(simulated\) requirement;|requirement,\s*\(simulated\) requirement;/, accepted);
+  });
+
+  // #173: the issue's Tests and Measure tasks are never the developer's, so declaring only those
+  // (mockSequences.left_out_not_mine) never sends the run back nor stops it at the human gate.
+  test(`${file}: declaring only the Tests and Measure tasks never returns to develop nor opens the gate`, { timeout: 120000 }, async () => {
+    const { transitions, events } = await runSoftwareDevelopment({ file, mockSequences: { left_out_not_mine: true, verdict: ['approved'], ...toEnd } });
+    assert.deepEqual(groupBy(transitions, DEV_RE), ['develop>code_review']);
+    assert.ok(!events.some((e) => e.type === 'approval.requested' && e.step_id === 'requirements_left_out'));
+  });
+
+  test(`${file}: a real gap still returns to develop and reaches the gate even with Tests/Measure also declared`, { timeout: 120000 }, async () => {
+    const { transitions, events } = await runSoftwareDevelopment({
+      file, mockSequences: { left_out: [1], left_out_not_mine: true, verdict: ['approved'], ...toEnd }, answers: { requirements_left_out: 'continue' },
+    });
+    assert.deepEqual(groupBy(transitions, DEV_RE), ['develop>develop', 'develop>requirements_left_out', 'requirements_left_out>code_review']);
+    const gate = events.find((e) => e.type === 'approval.requested' && e.step_id === 'requirements_left_out');
+    assert.match(gate.message, /\(simulated\) requirement/);
+    assert.ok(!/Tests|Measure/.test(gate.message), gate.message);
+    const reviewPrompts = events.filter((e) => e.type === 'session.message_sent' && e.step_id === 'code_review').map((e) => e.prompt);
+    const accepted = reviewPrompts.at(-1).match(/accepted that the run goes on without these requirements \(not blocking\): (.*)/)[1];
+    assert.match(accepted, /\(simulated\) requirement/);
+    assert.ok(!/Tests|Measure/.test(accepted), accepted);
+  });
+
+  test(`${file}: Tests/Measure never count toward the second visit's gap either, so a 2nd clean visit goes straight to the review`, { timeout: 120000 }, async () => {
+    const { transitions, events } = await runSoftwareDevelopment({ file, mockSequences: { left_out: [1, 0], left_out_not_mine: true, verdict: ['approved'], ...toEnd } });
+    assert.deepEqual(groupBy(transitions, DEV_RE), ['develop>develop', 'develop>code_review']);
+    assert.ok(!events.some((e) => e.type === 'approval.requested' && e.step_id === 'requirements_left_out'));
+    const developPrompts = events.filter((e) => e.type === 'session.message_sent' && e.step_id === 'develop').map((e) => e.prompt);
+    const listed = developPrompts[1].match(/so the review was not called:\n([\s\S]*?)\nFinish them/)[1];
+    assert.match(listed, /\(simulated\) requirement/, listed);
+    assert.ok(!/Tests|Measure/.test(listed), listed);
   });
 }
 
