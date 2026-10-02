@@ -47,4 +47,17 @@
 .an-cx.cx-medium { color: var(--yellow); }
 .an-cx.cx-high { color: var(--red); }
 .an-empty { padding: 12px 14px; margin: 0; }
+
+/* Repository performance tab */
+#view-analytics .page-tabs { margin: -4px 0 14px; }
+.an-marker { width: 130px; }
+.an-files .an-file { display: inline-block; max-width: 520px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; font-family: var(--mono); font-size: 12px; }
+.an-compare { margin-bottom: 12px; }
+.an-compare .an-better { color: var(--green); font-weight: 600; }
+.an-compare .an-worse { color: var(--red); font-weight: 600; }
+.an-hours { display: grid; grid-template-columns: repeat(24, 1fr); gap: 3px; height: 110px; padding-bottom: 16px; }
+.an-hours span { position: relative; display: flex; align-items: flex-end; background: var(--panel-2); border-radius: 3px; }
+.an-hours i { display: block; width: 100%; border-radius: 3px; background: var(--accent); }
+.an-hours em { position: absolute; bottom: -15px; left: 0; font-style: normal; font-family: var(--mono); font-size: 10px; color: var(--muted); }
+#view-analytics .an-card + .table-wrap { margin-top: 0; }
 .an-report .md { max-width: none; }

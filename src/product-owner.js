@@ -48,12 +48,17 @@ const path = require('path');
 const backlog = require('./backlog');
 const epics = require('./epics');
 const poSplit = require('./po-split');
+const { conflictsOf, sharedFiles } = require('./repo-performance');
+const { storeFor } = require('./store');
 const { readEvents } = require('./supervisor');
 
 const MAX_REPORT = 60000;
 const BODY_CLIP = 600;
 const BODY_NAMED = 4000;
 const HISTORY_RUNS = 20;
+// the runs whose commits make the conflict map (#150: the files most runs edit, src/repo-performance.js)
+const SHARED_FILE_RUNS = 50;
+const SHARED_FILES = 15;
 const PREVIOUS_EXCHANGES = 3;
 // Past evidence (30 Sep 2026): a group of complexity 7 hit the context limit, grouped runs hit the test time budget.
 const CONTEXT_WARN_AT = 7;
@@ -174,19 +179,6 @@ function complexityOf(issue) {
     if (m) return Number(m[1]);
   }
   return null;
-}
-
-// Merge conflicts a run hit, and the files they name, from its events.jsonl.
-function conflictsOf(runDir) {
-  const messages = [];
-  const files = new Set();
-  for (const e of readEvents(runDir)) {
-    const msg = e.type === 'log' ? e.message : e.type === 'workflow.finished' ? e.error : null;
-    if (!msg || !/conflict/i.test(msg)) continue;
-    messages.push(clip(msg, 200));
-    for (const m of String(msg).matchAll(/[\w@.-]+(?:\/[\w@.-]+)*\.[a-z]{1,5}\b/gi)) files.add(m[0]);
-  }
-  return { count: messages.length, files: [...files].slice(0, 10), messages: messages.slice(0, 3) };
 }
 
 // Whether a run hit the context limit (the engine's "context limit: ..." logs) or a test step ran out
@@ -355,7 +347,7 @@ const plannable = (i) => i.state === 'open' && (!i.column || i.column === 'todo'
  * workflows. Capped at MAX_REPORT characters. The issues the owner attached (`selection`, #169) come
  * first and whole, closed ones included (marked), outside the cap; the open issues then skip them.
  */
-function backlogReport({ data, activeRuns = [], history = [], workflows = [], question = '', selection = [] }) {
+function backlogReport({ data, activeRuns = [], history = [], workflows = [], question = '', selection = [], shared = null }) {
   const named = new Set([...String(question).matchAll(/#(\d+)/g)].map((m) => Number(m[1])));
   const all = data?.issues || [];
   const attached = [...new Set(selection.map(Number))].map((n) => all.find((i) => i.number === n)).filter(Boolean);
@@ -387,6 +379,8 @@ function backlogReport({ data, activeRuns = [], history = [], workflows = [], qu
     `## Epics (id: title · members · open/closed)\n${epicList.map((e) => `- ${e.id}: ${e.title}${e.state === 'open' ? '' : ' (closed)'} · ${e.members.map((n) => `#${n}`).join(', ') || 'no members'} · ${e.progress?.open ?? 0} open, ${e.progress?.closed ?? 0} closed`).join('\n') || '(none)'}${data?.epicsError ? `\n(${data.epicsError})` : ''}`,
     `## Roadmap\n${stages.map((s, n) => `- stage ${n + 1}${s.name ? ` ${s.name}` : ''}: ${s.items.map((x) => `${(x.issues || []).map((i) => `#${i.number ?? i}`).join(' + ')} ${x.status}`).join('; ')}`).join('\n') || '(empty)'}`,
     `## Finished runs (newest first; agent time without gate waits)\n${history.map((h) => `- ${h.runId} ${h.workflow || ''} ${h.status} · issues ${h.issues.map((n) => `#${n}`).join(', ') || '-'} · complexity ${h.complexity ?? '?'} · ${h.agentMinutes} min · $${h.costUsd.toFixed(2)} · ${Math.round(h.tokens / 1e3)}k tokens${h.conflicts.count ? ` · ${h.conflicts.count} merge conflict(s)${h.conflicts.files.length ? ` in ${h.conflicts.files.join(', ')}` : ''}` : ''}`).join('\n') || '(none)'}`,
+    // the conflict map (#150): parallel runs that edit the same file conflict when they merge
+    ...(shared?.files?.length ? [`## Files most runs edit (of the last ${shared.runs} runs with commits; parallel runs that edit the same file conflict)\n${shared.files.map((f) => `- ${f.file}: ${f.runs} runs (${Math.round(f.share * 100)}%)`).join('\n')}`] : []),
   ];
   const whole = attached.length ? `## Attached issues (the owner's selection, in full)\n\n${attached.map((i) => issueText(i, true)).join('\n\n')}` : '';
   const head = [...sections, ...(whole ? [whole] : [])].join('\n\n');
@@ -1054,7 +1048,8 @@ async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns,
     } else {
       checkBudget(budget);
       let tokens;
-      const report = (issueMode ? issueReport : backlogReport)({ data, activeRuns, history, workflows, question: q, selection: selected });
+      const shared = issueMode ? null : await sharedFiles({ runs: (runs || []).filter((r) => !r.mock).slice(0, SHARED_FILE_RUNS), repo: folder, store: storeFor(runsDir), limit: SHARED_FILES });
+      const report = (issueMode ? issueReport : backlogReport)({ data, activeRuns, history, workflows, question: q, selection: selected, shared });
       ({ raw, costUsd, model, invalid, tokens, text: analysis } = await callAgent({
         mode, question: q, report, previous, attachments: files, selection: selected, folder, agent: issueMode ? ISSUE_AGENT : agent, skillsDirs, resolveCommand,
       }));

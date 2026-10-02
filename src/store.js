@@ -9,6 +9,9 @@
 //                  with its list fields, the readRun object (`info`), its summary.json and the file
 //                  signature it was read at; a row whose signature no longer matches is read again.
 //                  Deleting index.db loses nothing: the next listing rebuilds it.
+//   run_files      the files each run's own commits changed (src/repo-performance.js, Analytics'
+//                  Repository performance and the Product Owner's conflict map), keyed by the commit
+//                  range they were read from (commits never change); rebuilt from git when missing.
 //   queues, queue_items, queue_claims
 //                  the Backlog queues (src/backlog.js): every change is one IMMEDIATE transaction, and
 //                  a dispatcher claims the item it starts so two never take the same issue. The
@@ -66,6 +69,7 @@ const MIGRATIONS = [
      id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT NOT NULL, kind TEXT, run_id TEXT, project_id TEXT,
      issue TEXT, title TEXT NOT NULL, body TEXT, target TEXT, created_at TEXT NOT NULL, read_at TEXT);
    CREATE INDEX notifications_created ON notifications(created_at);`,
+  `CREATE TABLE run_files (run_id TEXT PRIMARY KEY, range_key TEXT NOT NULL, files TEXT NOT NULL);`,
 ];
 
 const open = new Map(); // workspace root → store
@@ -184,6 +188,15 @@ function openStore(ws) {
     runSummaries({ mock } = {}) {
       const rows = db.prepare('SELECT summary, mock FROM runs WHERE summary IS NOT NULL').all();
       return rows.filter((r) => mock === undefined || !!r.mock === mock).map((r) => parse(r.summary)).filter(Boolean);
+    },
+    /** The files a run's commits changed ({ key, files }, src/repo-performance.js), or null. */
+    runFiles(runId) {
+      const r = db.prepare('SELECT range_key, files FROM run_files WHERE run_id = ?').get(String(runId));
+      return r ? { key: r.range_key, files: parse(r.files, []) } : null;
+    },
+    putRunFiles(runId, key, files) {
+      db.prepare(`INSERT INTO run_files (run_id, range_key, files) VALUES (?, ?, ?)
+        ON CONFLICT(run_id) DO UPDATE SET range_key = excluded.range_key, files = excluded.files`).run(String(runId), String(key), JSON.stringify(files || []));
     },
 
     // ---- Backlog queues ------------------------------------------------------------------------

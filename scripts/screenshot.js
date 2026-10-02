@@ -6,7 +6,8 @@
 //   --view <name>      dashboard, sessions, projects, project, backlog, artifacts, workflows, agents,
 //                      skills, usage, analytics, supervisor, settings, duo, arena, run-chat, run
 //                      (default dashboard)
-//   --tab <name>       settings: general | agents | execution | about; workflows: runs | definitions
+//   --tab <name>       settings: general | agents | execution | about; workflows: runs | definitions;
+//                      analytics: usage | performance (performance: a demo git repository and a marker)
 //   --mode <name>      backlog: list | kanban | roadmap | epics
 //   --run <mock|dir>   run-chat: a simulated software-development run (default) or a copy of a run folder
 //   --workflow <file>  the workflow of the simulated run (default software-development.yaml)
@@ -53,8 +54,9 @@ const { spawnSync, execFileSync } = require('child_process');
 const evidence = require('../src/evidence');
 
 const VIEWS = {
-  dashboard: {}, sessions: {}, projects: {}, project: {}, artifacts: {}, agents: {}, skills: {}, usage: {}, analytics: {}, duo: {}, arena: {},
+  dashboard: {}, sessions: {}, projects: {}, project: {}, artifacts: {}, agents: {}, skills: {}, usage: {}, duo: {}, arena: {},
   supervisor: {},
+  analytics: { tabs: ['usage', 'performance'] },
   backlog: { modes: ['list', 'kanban', 'roadmap', 'epics'] },
   workflows: { tabs: ['runs', 'definitions'] },
   settings: { tabs: ['general', 'agents', 'execution', 'about'] },
@@ -356,6 +358,91 @@ function demoAnalyticsRuns(ws, projectId) {
   }
 }
 
+// Analytics › Repository performance (#159): the project's folder becomes a git repository and three
+// nights of four parallel runs merge into it locally (one PR run whose `gh pr merge` failed), some
+// through resolve_merge with the files their conflict named; the last night edits the shared files less,
+// so a marker on its date shows the before/after difference.
+function demoPerformanceRuns(ws, folder, projectId) {
+  fs.mkdirSync(folder, { recursive: true });
+  const git = (args, at) => execFileSync('git', ['-c', 'user.name=Demo', '-c', 'user.email=demo@example.com', ...args], {
+    cwd: folder, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], env: { ...process.env, ...(at ? { GIT_AUTHOR_DATE: at, GIT_COMMITTER_DATE: at } : {}) },
+  }).trim();
+  const write = (file, text) => { fs.mkdirSync(path.dirname(path.join(folder, file)), { recursive: true }); fs.writeFileSync(path.join(folder, file), text); };
+  const lines = (n, what) => Array.from({ length: n }, (_, i) => `${what} ${i + 1}`).join('\n') + '\n';
+  git(['init', '-q', '-b', 'main']);
+  write('src/renderer/index.html', lines(320, '<div>line'));
+  write('README.md', `# demo-app\n\n<!-- generated:skills -->\n${lines(40, '| skill')}<!-- /generated:skills -->\n`);
+  write('src/renderer/style.css', lines(900, '.rule'));
+  write('src/service/manifest.js', lines(120, '// channel'));
+  git(['add', '-A']);
+  git(['commit', '-q', '-m', 'Initial commit'], new Date(Date.now() - 20 * 864e5).toISOString());
+  const initial = git(['rev-parse', 'HEAD']);
+  const titles = ['Export the run report as PDF', 'Rename crash on Windows paths', 'Keyboard shortcuts for gates', 'Dark theme for the Backlog', 'Retry a failed step', 'Search in artifacts', 'Queue pause and resume', 'Cost per issue in Usage', 'Roadmap stage notes', 'Supervisor chat history', 'Workflow YAML validation', 'Per-project budgets'];
+  const runs = [];
+  [9, 5, 2].forEach((ago, night) => {
+    const day = new Date(Date.now() - ago * 864e5);
+    day.setHours(22, 0, 0, 0);
+    for (let k = 0; k < 4; k++) {
+      const n = night * 4 + k;
+      const start = new Date(day.getTime() + k * 25 * 6e4);
+      const finish = new Date(start.getTime() + (95 + k * 20) * 6e4);
+      const shared = night < 2 ? ['src/renderer/index.html', 'README.md', ...(k % 2 ? ['src/renderer/style.css'] : [])] : (k === 0 ? ['src/renderer/style.css'] : []);
+      runs.push({
+        n, start, finish, title: titles[n], pr: night === 1 && k === 3,
+        files: [...shared, `src/features/${titles[n].toLowerCase().replace(/[^a-z]+/g, '-')}.js`, ...(k === 1 ? ['src/service/manifest.js'] : [])],
+        conflict: night === 0 && k >= 2 ? 'resolve_merge' : night === 1 && k === 2 ? 'resolve_merge' : null,
+        stage: `Stage ${night + 1}`,
+      });
+    }
+  });
+  const merged = []; // [finish, tip]
+  for (const r of [...runs].sort((a, b) => a.finish - b.finish)) {
+    const before = merged.filter(([f]) => f < r.start).pop();
+    r.base = before ? before[1] : initial;
+    for (const f of r.files) {
+      fs.mkdirSync(path.dirname(path.join(folder, f)), { recursive: true });
+      fs.appendFileSync(path.join(folder, f), `// ${r.title}\n`);
+    }
+    git(['add', '-A']);
+    const message = r.pr ? `${r.title} (#${40 + r.n})` : `${r.title}\n\nCloses #${40 + r.n}`;
+    git(['commit', '-q', '-m', message], new Date(r.finish.getTime() - 5 * 6e4).toISOString());
+    r.tip = git(['rev-parse', 'HEAD']);
+    merged.push([r.finish, r.tip]);
+  }
+  for (const r of runs) {
+    const runId = `${r.start.toISOString().slice(0, 10).replace(/-/g, '')}-22${String(r.n).padStart(2, '0')}00-perf${String(r.n).padStart(4, '0')}`;
+    const dir = path.join(ws.runs, runId);
+    fs.mkdirSync(dir, { recursive: true });
+    const workflow = r.pr ? 'software-development' : 'software-development-local-hero';
+    const ev = (ts, type, extra = {}) => JSON.stringify({ ts: new Date(ts).toISOString(), type, ...extra });
+    const t = r.start.getTime();
+    const conflictText = `local merge: run/${runId} conflicts with the local main in ${r.files.filter((f) => !f.startsWith('src/features/')).join(', ')}. The branch was left as it was; resolve the conflict on it and merge again.`;
+    fs.writeFileSync(path.join(dir, 'events.jsonl'), [
+      ev(t, 'workflow.started', { workflow, project_id: projectId, inputs: { task: r.title } }),
+      ev(t + 1e3, 'worktree.ready', { dir: path.join(folder, '..', runId), repo: folder, base: 'main', ref: 'main', commit: r.base, reused: false }),
+      ev(t + 2e3, 'step.started', { step_id: 'implement' }),
+      ...(r.conflict ? [ev(r.finish - 30 * 6e4, 'log', { level: 'warn', message: `merge failed: ${conflictText} → resolve_merge` }), ev(r.finish - 29 * 6e4, 'step.started', { step_id: 'resolve_merge' })] : []),
+      ...(r.pr ? [ev(r.finish - 9e4, 'step.finished', { step_id: 'open_pr', output: { pr_number: 40 + r.n, pr_url: `https://github.com/demo/demo-app/pull/${40 + r.n}` } }), ev(r.finish - 6e4, 'action.executed', { command: `gh pr merge ${40 + r.n} --squash`, exit_code: 1, output: 'Pull request is not mergeable: the merge commit cannot be cleanly created (conflict in src/renderer/index.html).' }), ev(r.finish - 6e4 + 1, 'log', { level: 'error', message: 'gh pr merge failed: merge conflict in src/renderer/index.html' })] : []),
+      ev(r.finish, 'workflow.finished', { status: 'success' }),
+    ].join('\n') + '\n');
+    const cost = +(r.conflict ? 4.2 + r.n * 0.1 : 2.1 + r.n * 0.15).toFixed(2);
+    fs.writeFileSync(path.join(dir, 'summary.json'), JSON.stringify({
+      run_id: runId, workflow, project_id: projectId, status: 'success', mock: false, inputs: { task: r.title },
+      started_at: r.start.toISOString(), finished_at: r.finish.toISOString(), duration_ms: r.finish - r.start, timing: { waiting_ms: 0 },
+      worktree: { repo: folder, base: 'main', ref: 'main', commit: r.base, branch: `run/${runId}` },
+      local_merge: r.pr ? null : { branch: `run/${runId}`, base: 'main', commit: r.tip },
+      sessions: [{ id: 's0', agent: 'developer', provider: 'claude', model: 'claude-opus-5-5', step_id: 'implement', opened_at: r.start.toISOString(), closed_at: r.finish.toISOString(), duration_ms: r.finish - r.start, tokens: { input: 9000, output: 30000, cache_read: 900000, cache_write: 40000, reasoning: 0 }, cost_usd: cost, status: 'success' }],
+    }, null, 2));
+    r.runId = runId;
+  }
+  fs.mkdirSync(ws.backlog, { recursive: true });
+  fs.writeFileSync(path.join(ws.backlog, `${projectId}.roadmap.json`), JSON.stringify({
+    state: 'done', simulated: false, error: null, pausedBy: null, scope: null, updatedAt: new Date().toISOString(),
+    stages: [0, 1, 2].map((s) => ({ id: `stage-${s + 1}`, name: `Night ${s + 1}`, items: runs.filter((r) => r.stage === `Stage ${s + 1}`).map((r) => ({ id: `item-${r.n}`, workflow: 'software-development-local-hero.yaml', status: 'done', number: 40 + r.n, title: r.title, issues: [{ number: 40 + r.n, title: r.title }], runId: r.runId, runs: [r.runId] })) })),
+  }, null, 2));
+  return new Date(Date.now() - 2 * 864e5).toISOString().slice(0, 10);
+}
+
 // Simulation: the Backlog's sync answers with the cached demo issues instead of calling gh, and the
 // Usage screen's GitHub Actions minutes are demo data. `keepAwake`: a demo state of Keep awake, or null.
 function simulateChannels(ipcMain, keepAwake = null, missing = null) {
@@ -516,6 +603,7 @@ function main() {
     // also on Artifacts: a second run group (its document.md) for Collapse all / Expand all (#126)
     if (['artifacts', 'backlog', 'duo'].includes(args.view)) demoEnrichRun(ws, project.id);
     if (args.view === 'analytics') demoAnalyticsRuns(ws, project.id);
+    if (args.view === 'analytics' && args.tab === 'performance') demoPerformanceRuns(ws, project.folder, project.id);
     // Run App's setup at a gate is prefilled from the worktree's package.json (#108)
     if (args.view === 'run' && project.folder) {
       fs.mkdirSync(project.folder, { recursive: true });
@@ -663,6 +751,14 @@ function main() {
     await pause(500);
     if (args.tab && v === 'settings') await click(`.settings-tab[data-stab="${args.tab}"]`);
     if (args.tab && v === 'workflows') await click(`[data-wtab="${args.tab}"]`);
+    if (args.tab && v === 'analytics') await click(`[data-an-tab="${args.tab}"]`);
+    // the demo's last night started after this marker: the before/after table shows the difference
+    if (args.tab === 'performance') {
+      const d = new Date(Date.now() - 2 * 864e5);
+      const marker = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      await js(`const m = document.querySelector('#an-marker'); m.value = ${JSON.stringify(marker)}; m.dispatchEvent(new Event('change'));`);
+      await pause(1500);
+    }
     if (args.mode) await click(`#view-backlog [data-mode="${args.mode}"]`);
     // the demo runs are simulated, which Artifacts hides by default
     if (v === 'artifacts') await js(`const c = document.querySelector('#art-show-sim'); if (c && !c.checked) c.click();`);

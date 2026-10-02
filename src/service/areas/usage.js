@@ -1,5 +1,6 @@
 // Service area: usage, budgets and prices (the Usage screen, src/usage.js) and analytics (tokens
-// and session metrics over a date range, src/analytics.js), with the supervisor's report on it.
+// and session metrics over a date range, src/analytics.js), with the supervisor's report on it, and
+// Analytics' Repository performance tab (src/repo-performance.js, #159).
 
 const { resolveCommand } = require('../../engine/providers');
 const simulation = require('../../engine/simulation');
@@ -7,7 +8,11 @@ const workspace = require('../../workspace');
 const projects = require('../../projects');
 const usage = require('../../usage');
 const analytics = require('../../analytics');
+const repoPerformance = require('../../repo-performance');
+const roadmap = require('../../roadmap');
+const runs = require('../../runs');
 const { readLocalUsage } = require('../../local-usage');
+const { storeFor } = require('../../store');
 const supervisor = require('../../supervisor');
 const {
   BUNDLED_SKILLS_DIR,
@@ -37,6 +42,29 @@ module.exports = (ctx) => {
       runsDir: ctx.ws.runs, local: readLocalUsage(), settings: workspace.readSettings(ctx.ws), projects: projectList, projectOf,
       scope: scope === 'machine' ? 'machine' : 'orchestrator', from, to,
     });
+  }
+
+  // Analytics' Repository performance tab (#159): one project's runs in a range, from the run folders,
+  // the index and the project's local clone. Default project: the one with the latest run.
+  async function repositoryPerformance({ projectId, from, to, marker } = {}) {
+    const started = Date.now();
+    const projectList = projects.listProjects(ctx.ws.projects);
+    const all = runs.listRuns(ctx.ws.runs).filter((r) => !r.mock);
+    const project = projectList.find((p) => p.id === projectId)
+      || projectList.find((p) => all.some((r) => runs.projectOf(r, projectList)?.id === p.id)) || projectList[0] || null;
+    const list = project ? runs.runsForProject(all, project) : [];
+    const stages = project ? roadmap.readRoadmap(ctx.ws.backlog, project.id).stages.map((s, i) => ({
+      name: s.name || `Stage ${i + 1}`, runIds: s.items.flatMap((x) => [x.runId, ...(x.runs || [])].filter(Boolean)),
+    })) : [];
+    const perf = await repoPerformance.repositoryPerformance({
+      runs: list, repo: project?.isGit ? project.folder : null, store: storeFor(ctx.ws.runs), from, to, marker, stages,
+    });
+    return {
+      ...perf,
+      projects: projectList.map((p) => ({ id: p.id, name: p.name })),
+      project: project ? { id: project.id, name: project.name, folder: project.folder, isGit: !!project.isGit } : null,
+      elapsedMs: Date.now() - started,
+    };
   }
 
   // The supervisor's report on the range; it calls a real model unless `mock` (the UI asks first).
@@ -73,6 +101,7 @@ module.exports = (ctx) => {
   return {
     analyticsSnapshot,
     analyzeAnalytics,
+    repositoryPerformance,
     setBudget,
     setPrice,
     usageSnapshot,

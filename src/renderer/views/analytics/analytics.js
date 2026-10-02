@@ -1,8 +1,11 @@
 // Analytics: tokens and session metrics over a date range (default the last 30 days), for the
 // orchestrator's runs or every CLI session on this machine (the same scopes as Usage). Charts are
 // plain SVG/CSS. "Ask the supervisor" writes a report on the range (a real model call: it asks first).
+// Two tabs (the selected one is remembered with the scope and range): Usage (the above) and Repository
+// performance (#159: per project, the files most runs edit, the runs that hit a merge conflict, the
+// runs at once, split before/after a marker; channel analytics:performance, src/repo-performance.js).
 // Registers itself with registerView (view-registry.js).
-// Uses app.js globals: api, esc, fmtTok, fmtUsd, fmtDur, fmtNum, dateOf, errMsg, markdownHtml, state.
+// Uses app.js globals: api, esc, fmtTok, fmtUsd, fmtDur, fmtNum, dateOf, errMsg, markdownHtml, state, window.showRun.
 (() => {
   const $a = (sel) => document.querySelector(sel);
   const LS = 'multiagent.analytics';
@@ -18,8 +21,11 @@
     data: null, error: null, loading: false,
     report: null, reportError: null, analyzing: false,
     sortKey: 'tokens',
+    tab: saved.tab === 'performance' ? 'performance' : 'usage',
+    project: saved.project || null, marker: saved.marker || '',
+    perf: null, perfError: null, perfLoading: false, perfSort: 'runs',
   };
-  const persist = () => { try { localStorage.setItem(LS, JSON.stringify({ scope: ax.scope, days: ax.days })); } catch { /* ignore */ } };
+  const persist = () => { try { localStorage.setItem(LS, JSON.stringify({ scope: ax.scope, days: ax.days, tab: ax.tab, project: ax.project, marker: ax.marker })); } catch { /* ignore */ } };
   const today = () => new Date().toISOString().slice(0, 10);
   const daysBack = (n) => new Date(Date.now() - (n - 1) * DAY).toISOString().slice(0, 10);
   const pct = (x) => (x == null ? '—' : `${Math.round(x * 100)}%`);
@@ -31,6 +37,7 @@
   }
 
   async function load() {
+    if (ax.tab === 'performance') return loadPerf();
     ax.loading = true;
     renderControls();
     try {
@@ -52,8 +59,40 @@
     renderReport(); renderControls();
   }
 
+  async function loadPerf() {
+    ax.perfLoading = true;
+    renderControls();
+    try {
+      ax.perf = await api.getRepositoryPerformance({ projectId: ax.project, marker: ax.marker, ...range() });
+      ax.project = ax.perf.project?.id || null;
+      ax.perfError = null;
+    } catch (e) { ax.perfError = errMsg(e); }
+    ax.perfLoading = false;
+    render();
+  }
+
   function renderControls() {
     const r = range();
+    const perf = ax.tab === 'performance';
+    document.querySelectorAll('#view-analytics [data-an-tab]').forEach((b) => {
+      b.classList.toggle('active', b.dataset.anTab === ax.tab);
+      b.setAttribute('aria-selected', String(b.dataset.anTab === ax.tab));
+    });
+    document.querySelectorAll('#view-analytics .an-usage-only').forEach((el) => el.classList.toggle('hidden', perf));
+    document.querySelectorAll('#view-analytics .an-perf-only').forEach((el) => el.classList.toggle('hidden', !perf));
+    if (perf) {
+      const sel = $a('#an-project');
+      const list = ax.perf?.projects || [];
+      sel.innerHTML = list.length ? list.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('') : '<option value="">No projects</option>';
+      sel.value = ax.project || '';
+      sel.disabled = !list.length;
+      if (document.activeElement !== $a('#an-marker')) $a('#an-marker').value = ax.marker;
+      $a('#an-from').value = r.from;
+      $a('#an-to').value = r.to;
+      $a('#an-refresh').disabled = ax.perfLoading;
+      $a('#an-sub').textContent = `Files runs collide on and merge conflicts${ax.perf?.project ? ` in ${ax.perf.project.name}` : ''}, ${r.from} to ${r.to}${ax.perfLoading ? ' — loading…' : ''}`;
+      return;
+    }
     document.querySelectorAll('#view-analytics [data-an-scope]').forEach((b) => b.classList.toggle('active', b.dataset.anScope === ax.scope));
     document.querySelectorAll('#view-analytics [data-an-days]').forEach((b) => b.classList.toggle('active', +b.dataset.anDays === ax.days));
     $a('#an-from').value = r.from;
@@ -109,6 +148,7 @@
 
   function render() {
     renderControls();
+    if (ax.tab === 'performance') { renderPerf(); return; }
     const body = $a('#an-body');
     if (ax.error) { body.innerHTML = `<div class="usage-unavailable">Could not load analytics: ${esc(ax.error)}</div>`; return; }
     const a = ax.data;
@@ -186,6 +226,99 @@
       <p class="muted small">Saved in ${esc(r.reportPath)}${r.costUsd ? ` · ${fmtUsd(r.costUsd)}` : ''}</p></div>`;
   }
 
+  // ---- Repository performance (#159) ------------------------------------------------------
+  const PERF_SORTS = { runs: (f) => f.runs, lines: (f) => f.lines ?? -1, file: null };
+  function filesTable(files, limit) {
+    if (!files.length) return '<p class="muted small an-empty">No run with commits in this range.</p>';
+    const sort = PERF_SORTS[ax.perfSort];
+    const rows = [...files].sort(sort ? (a, b) => sort(b) - sort(a) || a.file.localeCompare(b.file) : (a, b) => a.file.localeCompare(b.file));
+    const th = (key, label, num = true) => `<th class="${num ? 'num ' : ''}an-sort${ax.perfSort === key ? ' active' : ''}" data-an-psort="${key}">${label}</th>`;
+    return `<table class="u-table an-sessions an-files"><thead><tr>${th('file', 'File', false)}${th('runs', 'Runs that edited it')}<th class="num">% of runs</th>${th('lines', 'Lines now')}</tr></thead><tbody>
+      ${rows.map((f) => `<tr>
+        <td class="an-title"><span class="an-file" title="${esc(f.file)}">${esc(f.file)}</span>${f.generated ? ' <span class="badge" title="A tool writes this file (a generated list): runs edit it through the generator">generated</span>' : ''}${f.lines == null ? ' <span class="badge" title="No longer in the repository">deleted</span>' : ''}</td>
+        <td class="num">${f.runs}</td>
+        <td class="num">${f.runs > 1 && f.share > limit ? `<span class="badge warn" title="More than ${pct(limit)} of the runs edit it">${pct(f.share)}</span>` : pct(f.share)}</td>
+        <td class="num">${f.lines == null ? '—' : fmtNum(f.lines)}</td>
+      </tr>`).join('')}</tbody></table>`;
+  }
+
+  function conflictsTable(list) {
+    if (!list.length) return '<p class="muted small an-empty">No run hit a merge conflict in this range.</p>';
+    return `<table class="u-table an-sessions"><thead><tr><th>Run</th><th class="num">Started</th><th>Through</th><th class="num">Cost</th><th>Files the conflict named</th></tr></thead><tbody>
+      ${list.map((c) => `<tr>
+        <td class="an-title"><button type="button" class="link-btn" data-an-run="${esc(c.runId)}" data-workflow="${esc(c.workflow || '')}" title="${esc(c.title)}">${esc(c.title)}</button>
+          <div class="muted small">${esc(c.runId)} · ${esc(c.status || '')}</div></td>
+        <td class="num nowrap">${c.startedAt ? esc(dateOf(c.startedAt)) : '—'}</td>
+        <td><span class="badge${c.via === 'failed PR/MR merge' ? ' warn' : ''}">${esc(c.via)}</span></td>
+        <td class="num">${fmtUsd(c.costUsd)}</td>
+        <td class="small">${c.files.length ? c.files.map((f) => `<code>${esc(f)}</code>`).join(' ') : '<span class="muted">not named</span>'}</td>
+      </tr>`).join('')}</tbody></table>`;
+  }
+
+  function parallelCard(par) {
+    const maxH = Math.max(1, ...par.hours);
+    const hours = `<div class="an-hours" role="img" aria-label="Runs active per hour of the day">${par.hours.map((n, h) => `<span title="${String(h).padStart(2, '0')}:00 — ${n} run${n === 1 ? '' : 's'} active"><i style="height:${Math.max(n ? 4 : 0, (n / maxH) * 100)}%"></i><em>${h % 3 === 0 ? h : ''}</em></span>`).join('')}</div>`;
+    const days = par.days.length ? `<table class="u-table an-sessions"><thead><tr><th>Day</th><th class="num">Runs started</th><th class="num" title="The most runs active at the same moment">At once (peak)</th><th class="num" title="Roadmap stages among the runs at the peak">Roadmap stages</th><th class="num">Hit a conflict</th></tr></thead><tbody>
+      ${[...par.days].reverse().map((d) => `<tr><td class="nowrap">${esc(d.day)}</td><td class="num">${d.runs}</td><td class="num">${d.peak}</td><td class="num">${d.stages || '—'}</td><td class="num">${d.conflicts ? `<span class="badge warn">${d.conflicts}</span>` : 0}</td></tr>`).join('')}</tbody></table>`
+      : '<p class="muted small an-empty">No runs in this range.</p>';
+    return `<div class="card an-card"><h3>Hours runs were active <span class="muted small">(local time, runs per hour of the day)</span></h3>${hours}</div>
+      <div class="card table-wrap">${days}</div>`;
+  }
+
+  // Before/after the marker: [label, key, format, better when lower]
+  const COMPARE = [
+    ['Runs', 'runs', (x) => fmtNum(x), null],
+    ['Runs with commits', 'runsWithCommits', (x) => fmtNum(x), null],
+    ['Busiest file (% of runs)', (s) => s.topFile?.share ?? null, pct, true],
+    ['Files edited by more than the limit', 'filesOverLimit', (x) => fmtNum(x), true],
+    ['Runs that hit a conflict', 'conflictShare', pct, true],
+    ['Their share of the cost', 'conflictCostShare', pct, true],
+    ['Peak of runs at once', 'peak', (x) => fmtNum(x), null],
+  ];
+  function compareCard(c, limit) {
+    if (!c) return '';
+    if (c.error) return `<div class="usage-unavailable">${esc(c.error)}</div>`;
+    const get = (s, key) => (typeof key === 'function' ? key(s) : s[key]);
+    const rows = COMPARE.map(([label, key, f, lower]) => {
+      const b = get(c.before, key);
+      const a = get(c.after, key);
+      const d = a != null && b != null ? a - b : null;
+      const cls = d && lower != null ? ((d < 0) === lower ? ' an-better' : ' an-worse') : '';
+      const diff = d == null ? '—' : f === pct ? `${d > 0 ? '+' : ''}${Math.round(d * 100)} pts` : `${d > 0 ? '+' : ''}${fmtNum(d)}`;
+      return `<tr><td>${esc(label === 'Files edited by more than the limit' ? `Files edited by more than ${pct(limit)} of the runs` : label)}</td><td class="num">${b == null ? '—' : f(b)}</td><td class="num">${a == null ? '—' : f(a)}</td><td class="num${cls}">${diff}</td></tr>`;
+    }).join('');
+    return `<div class="card table-wrap an-compare"><table class="u-table"><thead><tr><th>Split at ${esc(c.commit ? `${c.marker} (${c.commit.slice(0, 8)})` : c.marker)} · ${esc(dateOf(c.at))}</th><th class="num">Before</th><th class="num">After</th><th class="num">Difference</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  }
+
+  function renderPerf() {
+    const body = $a('#an-body');
+    if (ax.perfError) { body.innerHTML = `<div class="usage-unavailable">Could not load repository performance: ${esc(ax.perfError)}</div>`; return; }
+    const p = ax.perf;
+    if (!p) { body.innerHTML = '<p class="muted">Loading…</p>'; return; }
+    if (!p.project) { body.innerHTML = '<div class="empty-state"><b>No projects yet</b><p class="muted">Add a project with a git repository: its runs\' commits are measured here.</p></div>'; return; }
+    const notGit = p.project.isGit ? '' : `<div class="usage-unavailable">${esc(p.project.name)}'s folder is not a git repository: the files runs edit cannot be read.</div>`;
+    if (p.empty) {
+      body.innerHTML = `${notGit}<div class="empty-state"><b>No runs with commits on this repository in this range</b><p class="muted">Runs count once their work is merged (a local merge or a merged PR/MR). Try a longer range.</p></div>`;
+      return;
+    }
+    body.innerHTML = `${notGit}
+      <div class="an-totals">
+        ${stat('Runs', fmtNum(p.runs), `${p.runsWithCommits} with commits on ${p.project.name}`)}
+        ${stat('Busiest file', p.topFile ? pct(p.topFile.share) : '—', p.topFile ? `${p.topFile.file}: edited by ${pct(p.topFile.share)} of the runs with commits` : '')}
+        ${stat(`Files over ${pct(p.sharedLimit)}`, fmtNum(p.filesOverLimit), `Files edited by more than ${pct(p.sharedLimit)} of the runs with commits (the epic's target: none)`)}
+        ${stat('Runs that hit a conflict', `${pct(p.conflictShare)} <span class="muted small">(${p.conflictRuns})</span>`, 'Went through the conflict step (resolve_merge / resolve_conflict) or a failed gh pr merge / glab mr merge')}
+        ${stat('Their share of the cost', pct(p.conflictCostShare), `${fmtUsd(p.costUsd)} in total`)}
+        ${stat('Peak of runs at once', fmtNum(p.peak))}
+      </div>
+      ${compareCard(p.compare, p.sharedLimit)}
+      <h3 class="s-subtitle">Files most runs edit <span class="muted small">(of ${p.runsWithCommits} runs with commits; each run counts once per file)</span></h3>
+      <div class="card table-wrap" id="an-files">${filesTable(p.files, p.sharedLimit)}</div>
+      <h3 class="s-subtitle">Merge conflicts</h3>
+      <div class="card table-wrap">${conflictsTable(p.conflicts)}</div>
+      <h3 class="s-subtitle">Parallel work</h3>
+      ${parallelCard(p.parallel)}`;
+  }
+
   function wire() {
     const view = $a('#view-analytics');
     if (!view || view.dataset.wired) return;
@@ -194,6 +327,15 @@
       const scope = e.target.closest('[data-an-scope]');
       const days = e.target.closest('[data-an-days]');
       const sort = e.target.closest('[data-an-sort]');
+      const tab = e.target.closest('[data-an-tab]');
+      const psort = e.target.closest('[data-an-psort]');
+      const run = e.target.closest('[data-an-run]');
+      if (tab && tab.dataset.anTab !== ax.tab) { ax.tab = tab.dataset.anTab; persist(); render(); load(); }
+      if (psort && ax.perf) {
+        ax.perfSort = psort.dataset.anPsort;
+        $a('#an-files').innerHTML = filesTable(ax.perf.files, ax.perf.sharedLimit);
+      }
+      if (run) window.showRun(run.dataset.anRun, { workflow: run.dataset.workflow || undefined });
       if (scope) { ax.scope = scope.dataset.anScope; ax.report = null; persist(); load(); }
       if (days) { ax.days = +days.dataset.anDays; ax.report = null; persist(); load(); }
       if (sort && ax.data) {
@@ -211,6 +353,8 @@
     };
     $a('#an-from').addEventListener('change', onDate);
     $a('#an-to').addEventListener('change', onDate);
+    $a('#an-project').addEventListener('change', (e) => { ax.project = e.target.value || null; persist(); load(); });
+    $a('#an-marker').addEventListener('change', (e) => { ax.marker = e.target.value.trim(); persist(); load(); });
     $a('#an-refresh').addEventListener('click', load);
     $a('#an-analyze').addEventListener('click', analyze);
   }
@@ -226,14 +370,17 @@
             <p class="muted small" id="an-sub">Tokens and session metrics</p>
           </div>
           <div class="row an-controls">
-            <div class="seg" role="group" aria-label="Analytics scope"><button type="button" data-an-scope="orchestrator">Orchestrator</button><button type="button" data-an-scope="machine">This machine</button></div>
+            <div class="seg an-usage-only" role="group" aria-label="Analytics scope"><button type="button" data-an-scope="orchestrator">Orchestrator</button><button type="button" data-an-scope="machine">This machine</button></div>
+            <label class="an-date small muted an-perf-only hidden">Repository <select id="an-project" aria-label="Project"></select></label>
             <div class="seg sm" role="group" aria-label="Quick range"><button type="button" data-an-days="7">7 days</button><button type="button" data-an-days="30">30 days</button><button type="button" data-an-days="90">90 days</button></div>
             <label class="an-date small muted">From <input type="date" id="an-from" /></label>
             <label class="an-date small muted">To <input type="date" id="an-to" /></label>
+            <label class="an-date small muted an-perf-only hidden" title="A date (YYYY-MM-DD) or a commit of the repository: every number is split into before and after it">Before/after <input type="text" id="an-marker" class="an-marker" placeholder="date or commit" /></label>
             <button class="btn" id="an-refresh" type="button">Refresh</button>
-            <button class="btn primary" id="an-analyze" type="button" title="The supervisor writes a report on these sessions (a real model call)">Ask the supervisor</button>
+            <button class="btn primary an-usage-only" id="an-analyze" type="button" title="The supervisor writes a report on these sessions (a real model call)">Ask the supervisor</button>
           </div>
         </div>
+        <div class="tabs page-tabs" role="tablist" aria-label="Analytics"><button type="button" class="tab" role="tab" data-an-tab="usage">Usage</button><button type="button" class="tab" role="tab" data-an-tab="performance">Repository performance</button></div>
         <div id="an-body"></div>
       </section>`,
     mount: wire,
@@ -245,6 +392,7 @@
   // what the Supervisor is told about this screen (supervisor-chat.js)
   window.analyticsContext = () => {
     const r = range();
+    if (ax.tab === 'performance') return `Repository performance tab, ${ax.perf?.project?.name || 'no project'}, range ${r.from} to ${r.to}${ax.marker ? `, split before/after ${ax.marker}` : ''}`;
     return `range ${r.from} to ${r.to}, ${ax.scope === 'machine' ? 'every CLI session on this machine' : 'the orchestrator\'s runs'}`;
   };
 })();
