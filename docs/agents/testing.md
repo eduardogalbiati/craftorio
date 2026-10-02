@@ -49,6 +49,12 @@ creates a commit needs its own `-c user.name/email`.
   of `WorkflowRun` injects a fake (`test/probes.test.js`). A mock run never calls `gh`/`glab`.
 - Its context grows 30k per turn of the same conversation (start 20k, peak +20k): `max_context`
   rotations are deterministic (`test/fixtures/handoff.yaml`).
+- E2E scenarios (#143): an output schema's `scenarios` array (items with a `status`) gets three
+  sample scenarios (`mockScenarios` in `src/engine/providers.js`): on a visit whose `tests_status`
+  fails (the 1st by default) one passed, one failed and one skipped; on later visits the failed one
+  passes. The engine saves them in `<run_dir>/e2e/` (`src/engine/scenarios.js`) and the gates show
+  them; `npm run screenshot -- --view run --stop-at approve_merge` shows the gate with them (the
+  demo writes the UI scenario's screenshot).
 - `run:start` takes `mockSequences` (simulation only): the Write & Review scenario picker uses it.
 - The Backlog's Product Owner drawer has its own scenario picker (#148, `#po-scenario`, orange,
   shown only in developer or simulation-only mode): `po:ask`'s `scenario` forces the simulated

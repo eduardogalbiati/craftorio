@@ -563,6 +563,8 @@ What is shared by a family lives in a suffix-less skill referenced with `uses:`.
 | `deploy-{gh,gl}` | deployer | Preview and production deploy tracking and cleanup |
 | `design-doc-writing` | arena, Write & Review (`document_skill`) | Design doc (after Google's practice): context, goals/non-goals, design with trade-offs, alternatives, failure modes, cross-cutting concerns, rollout, rubric |
 | `design-sketch` | arena (`document_skill: design-sketch`) | Usage-first design: usage snippets, types and signatures, trade-offs, alternatives, design red-flag screen, rubric |
+| `e2e-scenarios` | via `uses` | Scenarios from the task and its acceptance criteria, one per verifiable behaviour; per-scenario status with reason; screenshots at key steps; only the run's scenarios locally |
+| `e2e-test-writer-{js,python,go,java,csharp}` | test writer | E2E/BDD framework detection, feature folder, commands to run only the run's scenarios |
 | `implementation-evidence` | evidence | Evidence by kind of change (screenshots, HTTP request/response, CLI output, logs), local and simulated only, one list per issue |
 | `issue-creator-{gh,gl}` | issue-tracker (code_analyzer, issue_filer), backlog planner (#30), any agent that files issues | Search for duplicates, create/comment/edit issues with gh or glab, existing labels only (new ones only when a person confirmed them) |
 | `issue-triage` | issue-tracker (code_analyzer, issue_writer); the Product Owner (Register an issue) | Rubric for impact 1-5 and complexity 1-5, estimated files, duplicates, run alone vs group with #n |

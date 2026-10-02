@@ -1,7 +1,8 @@
 /* global api */
 // The gate panel every run screen shares (#108, #115, #119): the Run screen's gate cards
 // (views/run/), the run chat (views/runchat/) and Write & Review (views/duo/). A gate's choices
-// (gateChoices), the developer's brief instead of the long message (gateBriefHtml), the Artifacts
+// (gateChoices), the developer's brief instead of the long message (gateBriefHtml) with the test
+// writer's E2E scenarios for the Dev/QA (gateScenariosHtml, mountGateScenarios, #143), the Artifacts
 // side panel of a gate that tries the change (gateSideHtml, mountGateSides) and the gate's tools
 // (gateToolsHtml, onGateTool): Run App with its one-click confirmation and its fields, the
 // terminal toggle, Show the diff (the diff viewer, diff-viewer.js, #118) and the worktree's folder
@@ -43,6 +44,7 @@ function lastCapture(runId) {
 // gate with diff_base the changed files (each opens the diff viewer at that file) and the developer's notes. Right
 // after a screenshots step (developer_check), that step's latest round leads the panel.
 function mountGateSides(root) {
+  mountGateScenarios(root);
   if (!window.ArtifactsPanel) return;
   root.querySelectorAll('[data-gate-side]').forEach((el) => {
     if (el.classList.contains('ap')) return; // already mounted
@@ -76,15 +78,86 @@ window.mountGateSides = mountGateSides;
 function gateBriefHtml(runId, g, fullHtml) {
   if (!gateTriesChange(g)) return '';
   const out = lastOutput(runId, (o) => Array.isArray(o.issues) || (o.summary && o.files_changed));
-  if (!out) return '';
+  const scenarios = gateScenariosHtml(runId, g);
+  if (!out && !scenarios) return '';
   const first = (s) => String(s || '').trim().split(/(?<=[.!?])\s+|\n/)[0];
   const ref = (u) => { const m = /\/(?:issues|pull|merge_requests)\/(\d+)/.exec(String(u)); return m ? `#${m[1]}` : String(u); };
-  const issues = (out.issues || []).map((i) => `<li class="${i.done ? 'ok' : 'not'}"><span class="gate-issue-state">${i.done ? '✔ done' : '✖ not done'}</span>
+  const issues = (out?.issues || []).map((i) => `<li class="${i.done ? 'ok' : 'not'}"><span class="gate-issue-state">${i.done ? '✔ done' : '✖ not done'}</span>
     <b title="${esc(i.issue)}">${esc(ref(i.issue))}</b> ${esc(first(i.summary))}</li>`).join('');
-  return `<div class="run-gate-brief">${out.summary ? `<p>${esc(first(out.summary))}</p>` : ''}${issues ? `<ul class="gate-issues">${issues}</ul>` : ''}
+  return `<div class="run-gate-brief">${out?.summary ? `<p>${esc(first(out.summary))}</p>` : ''}${issues ? `<ul class="gate-issues">${issues}</ul>` : ''}${scenarios}
     <details class="run-gate-full"><summary class="small">Full message</summary>${fullHtml}</details></div>`;
 }
 window.gateBriefHtml = gateBriefHtml;
+
+// The test writer's E2E scenarios (#143), for the Dev/QA at a gate that tries the change: the
+// counts, then one row per scenario (status pill, name, the reason of a failed or skipped one),
+// each expanding to its Given/When/Then and its screenshots (read by mountGateScenarios). Before
+// the test step ran (developer_check's first visits) it says when they come. '' when no step
+// output has `scenarios` and the gate's message does not mention them (a workflow without E2E).
+const SCENARIO_PILL = { passed: 'pill-success', failed: 'pill-failed', skipped: 'pill-cancelled' };
+function gateScenariosHtml(runId, g = {}) {
+  const out = lastOutput(runId, (o) => Array.isArray(o.scenarios));
+  const head = (extra) => `<div class="gate-scenarios-head"><b>E2E scenarios</b> <span class="muted small">for the Dev/QA</span>${extra}</div>`;
+  if (!out) {
+    const expected = /E2E scenarios/.test(String(g.message || ''));
+    return expected ?`<div class="gate-scenarios">${head('')}<p class="muted small">None yet: the test writer writes and runs them after the code review.</p></div>` : '';
+  }
+  const list = out.scenarios.filter((s) => s && typeof s === 'object' && s.name);
+  const note = out.e2e_note ? `<p class="muted small gate-scenarios-note" title="${esc(out.e2e_note)}">${esc(out.e2e_note)}</p>` : '';
+  if (!list.length) return `<div class="gate-scenarios">${head('')}<p class="muted small">No scenario for this change.</p>${note}</div>`;
+  const count = (k) => list.filter((s) => s.status === k).length;
+  const counts = Object.keys(SCENARIO_PILL).filter(count).map((k) => `<span class="pill ${SCENARIO_PILL[k]}">${count(k)} ${k}</span>`).join(' ');
+  const runDir = state.runs.get(runId)?.events?.find((e) => e.type === 'workflow.started')?.run_dir || '';
+  const file = (p) => (/^([a-zA-Z]:)?[\\/]/.test(p) || !runDir ? p : `${runDir.replace(/[\\/]+$/, '')}/${p}`);
+  const step = (t) => {
+    const m = /^(Given|When|Then|And|But)\b\s*(.*)$/i.exec(String(t).trim());
+    return `<li>${m ? `<b>${esc(m[1])}</b> ${esc(m[2])}` : esc(t)}</li>`;
+  };
+  const rows = list.map((s) => {
+    const status = SCENARIO_PILL[s.status] ? s.status : 'skipped';
+    const shots = (Array.isArray(s.screenshots) ? s.screenshots : []).map((p) => String(typeof p === 'object' && p ? p.path : p || '')).filter(Boolean);
+    const imgs = shots.length ? `<div class="gate-scenario-shots">${shots.map((p) => `<img ${window.ImageViewer?.THUMB || 'tabindex="0"'} alt="${esc(`${s.name}: ${p.split('/').pop()}`)}" data-gate-shot="${esc(file(p))}" data-gate-scenario="${esc(s.name)}" />`).join('')}</div>` : '';
+    const key = `${runId}\n${s.feature || ''}\n${s.name}`;
+    return `<details class="gate-scenario st-${status}" data-scenario-key="${esc(key)}"${openScenarios.has(key) ? ' open' : ''}><summary><span class="pill ${SCENARIO_PILL[status]}">${status}</span>
+      <span class="gate-scenario-name" title="${esc(s.feature ? `${s.name} (${s.feature})` : s.name)}">${esc(s.name)}</span>${s.reason ? `<span class="muted small gate-scenario-reason" title="${esc(s.reason)}">${esc(s.reason)}</span>` : ''}${shots.length ? `<span class="badge">${shots.length} screenshot${shots.length === 1 ? '' : 's'}</span>` : ''}</summary>
+      <ol class="gate-scenario-steps">${(s.steps || []).map(step).join('')}</ol>${s.feature ? `<div class="muted small" title="${esc(s.feature)}">${esc(s.feature)}</div>` : ''}${imgs}</details>`;
+  }).join('');
+  return `<div class="gate-scenarios">${head(` ${counts}`)}${rows}${note}</div>`;
+}
+
+// The scenarios' screenshots in root (gateScenariosHtml): read once found (artifacts:read), each
+// opening the image viewer with the other screenshots of its scenario; a missing file says so.
+const scenarioShots = new Map(); // file -> data URL
+const openScenarios = new Set(); // the expanded ones (data-scenario-key), kept when a gate is drawn again
+function mountGateScenarios(root) {
+  root.querySelectorAll('details[data-scenario-key]').forEach((d) => {
+    d.ontoggle = () => (d.open ? openScenarios.add(d.dataset.scenarioKey) : openScenarios.delete(d.dataset.scenarioKey));
+  });
+  root.querySelectorAll('img[data-gate-shot]').forEach(async (img) => {
+    const box = img.closest('.gate-scenario-shots');
+    if (box && !box.onclick) {
+      const open = (el) => {
+        const all = [...box.querySelectorAll('img[data-gate-shot]')];
+        ImageViewer.open({ title: `Scenario: ${el.dataset.gateScenario}`, images: all.map((i) => ({ file: i.dataset.gateShot, src: i.getAttribute('src') || undefined, label: i.alt })), index: all.indexOf(el) });
+      };
+      box.onclick = (e) => { const el = e.target.closest('img[data-gate-shot]'); if (el) open(el); };
+      box.onkeydown = (e) => { const el = e.target.closest('img[data-gate-shot]'); if (el && e.key === 'Enter') open(el); };
+    }
+    if (img.getAttribute('src')) return;
+    let src = scenarioShots.get(img.dataset.gateShot);
+    if (!src) {
+      try { src = (await api.readArtifact(img.dataset.gateShot))?.image || null; } catch { src = null; }
+      if (src) scenarioShots.set(img.dataset.gateShot, src);
+    }
+    // a missing file: the image stays hidden (a later mount retries it) behind a line that says so
+    const missing = img.nextElementSibling?.classList.contains('gate-scenario-missing') ? img.nextElementSibling : null;
+    img.hidden = !src;
+    if (src) { img.src = src; missing?.remove(); } else if (!missing) {
+      img.after(Object.assign(document.createElement('span'), { className: 'muted small gate-scenario-missing', textContent: `Screenshot not found: ${img.dataset.gateShot.split(/[\\/]/).pop()}`, title: img.dataset.gateShot }));
+    }
+  });
+}
+window.mountGateScenarios = mountGateScenarios;
 
 // A gate's choices (Run screen, run chat, Write & Review chat). A gate with save_to_issue in a run
 // about an issue (#125) also offers "Accept and save to issue #n", right after the choice it

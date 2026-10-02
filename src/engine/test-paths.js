@@ -30,6 +30,9 @@ const TESTS_PATHS = [
   '**/src/test/**', '*Test.java', '*Tests.java', '*Test.kt', '*Tests.kt',
   // C# / .NET
   '*Tests.cs', '*Test.cs', '**/*.Tests/**', '**/*.Test/**',
+  // end-to-end / BDD (#143): feature files and their step definitions (e2e-test-writer-<language>)
+  '*.feature', '**/e2e/**', '**/cypress/**', '**/features/steps/**', '**/features/step_definitions/**',
+  '**/StepDefinitions/**', '**/*.E2E/**',
 ];
 
 function globToRegExp(pattern) {

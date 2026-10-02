@@ -66,9 +66,15 @@
 #     `edits_tests: false` makes the engine refuse any of its turns that changes a test file
 #     (`tests_paths`, default: the usual test folders and file names of every language). The
 #     builder and the verifier do not run the full suite; CI runs it on every platform.
+#   - End-to-end BDD scenarios (#143): the test writer also derives Given/When/Then scenarios from
+#     the task and the issue's acceptance criteria, writes the feature files and step definitions
+#     (under `tests_paths`), runs the run's scenarios and reports each one (`scenarios`: passed,
+#     failed or skipped with the reason, screenshots per UI scenario). The engine saves them in
+#     <run_dir>/e2e/scenarios.feature; developer_check and approve_merge show them to the Dev/QA.
 #
 # Language and platform:
-#   - `language` picks unit-test-writer-<language> (test writer) and build-audit-<language> (builder).
+#   - `language` picks unit-test-writer-<language> and e2e-test-writer-<language> (test writer)
+#     and build-audit-<language> (builder).
 #   - `git_platform` picks ci-pipeline-<platform>, pr-babysitter-<platform> and
 #     deploy-<platform> (gh = GitHub/gh CLI, gl = GitLab/glab CLI).
 #   The YAML keeps the contract (who, when, output schema, transitions); the skills
@@ -80,7 +86,7 @@ kind: Workflow
 
 metadata:
   name: software-development
-  version: 0.20.1
+  version: 0.21.0
   description: Implements, reviews, tests, builds, watches CI and the PR/MR, publishes a preview and, once approved, merges and tracks the production deploy. Works with several languages on GitHub or GitLab.
   tags: [dev, review, test, build, ci, pr, deploy, github, gitlab]
   # Dashboard category: plan (Plan & Design), build (Code & Build) or monitor (Monitor & Improve).
@@ -104,7 +110,7 @@ inputs:
     type: string
     required: true
     description: Local repository path or git URL (cloned into <workspace>/repos). Needs a GitHub or GitLab remote.
-  # Picks the unit-test-writer-<language> and build-audit-<language> skills. The app prefills it
+  # Picks the unit-test-writer-<language>, e2e-test-writer-<language> and build-audit-<language> skills. The app prefills it
   # from the project's files (package.json, pyproject.toml, go.mod, pom.xml, *.csproj).
   language:
     type: string
@@ -283,11 +289,13 @@ agents:
     # edits test files only (a convention of its role: the tools can't tell tests from code)
     # subagents: exploration sub-agents map the behaviours and tests, so the main context stays small
     capabilities: { tools: [read, edit, write, *toolchains], web: false, subagents: true }
-    skills: ["unit-test-writer-{{ inputs.language }}", context-economy]
+    skills: ["unit-test-writer-{{ inputs.language }}", "e2e-test-writer-{{ inputs.language }}", context-economy]
     system_prompt: |
       You are the test writer, the only agent of this workflow that writes tests. You write
       and update them (including tests an intended behaviour change makes obsolete) and run
-      the full suite, following the test skill for this language. You do NOT fix production
+      the full suite, following the test skill for this language. You also write the
+      end-to-end acceptance scenarios (Given/When/Then feature files and their step
+      definitions) and run them, following the E2E test skill. You do NOT fix production
       code: when a test fails because of a bug in the code, describe the failure precisely
       (test, file, error, probable cause) so the orchestrator can hand it to the developer.
       Commit test files only.
@@ -569,6 +577,7 @@ steps:
     diff_base: "origin/{{ inputs.base_branch }}"
     message: |
       The developer finished {% if previous_step == 'developer_screenshots' and steps.developer_check.output and steps.developer_check.output.choice == 'changes' %}your change request {{ steps.developer_check.visits - 1 }}{% else %}the implementation{% endif %}. Try it before the review and the tests run.
+      Dev/QA: read the E2E scenarios and the screenshots; run the app and test by hand only what they do not cover.
       Branch `{{ steps.develop.output.branch }}`{% if worktree_dir %} in the worktree {{ worktree_dir }}{% endif %}.
       {% if local_preview %}Run App starts `{{ local_preview.command }}` there.{% else %}To try it: Run App proposes a command from the worktree (package.json, the README) and saves it as the project's Local preview.{% endif %} Try it with Run App, not by starting it by hand in the worktree.
 
@@ -585,6 +594,7 @@ steps:
       Test notes: {{ steps.develop.output.test_notes }}
       {% if steps.developer_screenshots.output %}Screenshots: {{ steps.developer_screenshots.output.message }}{% endif %}
       {% if steps.develop.output.evidence_plan %}Evidence plan: {{ steps.develop.output.evidence_plan }}{% endif %}
+      {% set e2e = steps.test.output | e2e_scenarios %}{% if e2e %}{{ e2e }}{% else %}E2E scenarios: none yet. The test writer writes and runs them after the code review; they show at the merge approval.{% endif %}
     feedback: { label: "Your change request for the developer (required with \"Ask for changes\")", placeholder: "What to change, point by point" }
     choices:
       - { id: approve, label: "Approve: go on to the code review" }
@@ -752,7 +762,7 @@ steps:
       {% if delegate_result %}
       The developer fixed the production code you reported (it does not touch the tests):
       {{ delegate_result.text }}
-      Run the full suite again and confirm.
+      Run the full suite and this run's E2E scenarios again and confirm.
       {% elif vars.recheck == 'resolution' %}
       Your tests already passed on this change. Since then `origin/{{ inputs.base_branch }}` moved and the
       developer merged it into the branch, resolving a conflict (commit `{{ steps.resolve_conflict.output.merge_commit }}`):
@@ -770,9 +780,22 @@ steps:
          once per round, filtered to the tests you are writing (e.g. `--test-name-pattern`). Then
          run the full suite once, at the end, with the project's test command. Never start a full
          mock run of a workflow (`scripts/run.js`): the suite already includes one.
+      3. End-to-end acceptance scenarios, following the E2E test skill: derive Given/When/Then
+         scenarios from the original task and the issue's acceptance criteria (one per verifiable
+         behaviour, with the failure and edge cases the issue names), write the feature file and
+         the step definitions in the project's usual feature folder, and run only this run's
+         scenarios. A purely internal change with no user-visible behaviour may have none: say
+         why in `e2e_note`.
       {% endif %}
-      Screenshots and other evidence of the change are collected after the build (evidence
-      step): capture none.
+      Report every scenario in `scenarios` (feature file, name, its Given/When/Then lines, status
+      passed / failed / skipped, reason for failed and skipped, screenshots). A scenario that fails
+      because of the production code makes `tests_status` fail and goes in `failure_report`; one
+      that cannot run because of the environment (no browser, the app does not start) is
+      `skipped` with the reason in `e2e_note` and does not fail the step. The Dev/QA reads these
+      scenarios at the approval gates.
+      Screenshots: only those of the UI scenarios, at their key steps, into {{ evidence_dir }}
+      (`<issue>-e2e-<scenario-slug>-<n>.modified.png`). Every other screenshot and evidence of
+      the change is collected after the build (evidence step).
       If the suite fails, first check whether the same tests fail on
       `origin/{{ inputs.base_branch }}`, following the test skill (pre-existing failures): run
       only the failing files on a temporary worktree of the base. A test that also fails there is
@@ -800,6 +823,21 @@ steps:
               test:   { type: string }
               file:   { type: string }
               reason: { type: string }
+        # E2E BDD scenarios (#143): saved by the engine in <run_dir>/e2e/, shown at the gates
+        scenarios:
+          type: array
+          items:
+            type: object
+            required: [name, steps, status]
+            properties:
+              feature:     { type: string }
+              name:        { type: string }
+              steps:       { type: array, items: { type: string } }
+              status:      { type: string, enum: [passed, failed, skipped] }
+              reason:      { type: string }
+              screenshots: { type: array, items: { type: string } }
+        # why there are no scenarios, the framework assumed, an environment problem
+        e2e_note: { type: string }
     transitions:
       # after a merge conflict: the build and the verification already passed on the change; CI
       # builds the merged result, then the PR check, the preview and the owner's approval again
@@ -1426,6 +1464,8 @@ steps:
       {% endif %}
       {% if steps.test.output.preexisting_failures %}Tests that also fail on {{ inputs.base_branch }} (not caused by this change, worth a follow-up issue): {% for f in steps.test.output.preexisting_failures %}{{ f.test }} ({{ f.file }}){% if not loop.last %} · {% endif %}{% endfor %}
       {% endif %}
+      Dev/QA: read the E2E scenarios and the screenshots; run the app and test by hand only what they do not cover.
+      {% set e2e = steps.test.output | e2e_scenarios %}{% if e2e %}{{ e2e }}{% else %}E2E scenarios: none reported by the test writer.{% endif %}
       Approve the merge into {{ inputs.base_branch }}? This produces the production release.
     # The action runs in the run's worktree, where the PR branch is checked out. `--repo` makes gh
     # merge and delete the remote branch server side only: without it gh would also check out the

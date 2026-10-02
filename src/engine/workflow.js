@@ -12,7 +12,7 @@
 // `contextSummary` → `summary.context`). `sendToAgent` builds one turn; `invokeTurn` runs it against
 // the provider (templated `timeout` via `turnTimeout`; a failed attempt's tool calls go to the next
 // one, `attemptSummary`). Exports `render` (nunjucks, autoescape off, filters `to_yaml`, `to_json`,
-// `shuffle(seed)`, `clamp(lo, hi)`), `takeHandoff`, `parseTokens`. Steps without an agent: gates
+// `shuffle(seed)`, `clamp(lo, hi)`, `e2e_scenarios`), `takeHandoff`, `parseTokens`. Steps without an agent: gates
 // (`type: human_approval`) and `type: screenshots` (`runScreenshots`, #144). Chaining (#134): the
 // declared `outputs:` (`computeOutputs`, in workflow.finished and summary.json), the run's `then`
 // (option, a gate choice's `then`, `setThen`) and `from`; the service starts what comes next.
@@ -56,6 +56,7 @@ const evidence = require('../evidence');
 const { scratchWorkspace } = require('../local-preview');
 const { stopProcessesIn } = require('./processes');
 const { PROBES, runProbe, parseTarget } = require('./probes');
+const scenarios = require('./scenarios');
 const { captureScreenshots } = require('./screenshot-step');
 const mergeQueue = require('./merge-queue');
 const { IdleWatch } = require('./idle');
@@ -134,6 +135,11 @@ tpl.addFilter('filed_issues', (filed, analysis) => {
 // nor to the requirements_left_out gate; it stays in the develop output of the run's summary.
 const NOT_DEVELOPER_TASK = /^[\s>*_#[\]x-]*(?:tests?|measures?|measurements?)\b[*_\s]*(?::|-|–|—|\(|$)/i;
 tpl.addFilter('developer_gaps', (gaps) => (Array.isArray(gaps) ? gaps : []).filter((g) => !NOT_DEVELOPER_TASK.test(String(g?.requirement ?? ''))));
+
+// The E2E scenarios of a step output for a gate's message (#143): counts, one line per scenario
+// with its status and reason, the note; '' when the output has no `scenarios` (src/engine/scenarios.js).
+//   {{ steps.test.output | e2e_scenarios }}
+tpl.addFilter('e2e_scenarios', (output) => scenarios.scenariosMessage(output));
 
 const render = (s, scope) => (s == null ? '' : tpl.renderString(String(s), scope));
 const evalExpr = (expr, scope) => render(`{% if ${expr} %}1{% else %}0{% endif %}`, scope).trim() === '1';
@@ -1450,6 +1456,7 @@ class WorkflowRun extends EventEmitter {
     this.emitEvent('step.finished', { step_id: step.id, visit: st.visits, iteration: st.iteration, output, duration_ms: Date.now() - t0, ...extra });
     this.notePreexistingFailures(step.id, output);
     this.recordEvidence(step, st, output);
+    this.saveScenarios(step, output);
 
     if (step.goal) {
       const met = evalExpr(step.goal.until, scope);
@@ -2751,11 +2758,29 @@ class WorkflowRun extends EventEmitter {
         const p = rel.split(/[\\/]/).join('/');
         captions[p.includes('/') ? p : `evidence/${step.id}/round-${st.visits}/${p}`] = { caption: String(s.caption) };
       }
+      // an E2E scenario's screenshots (#143): captioned with the scenario's name
+      for (const s of scenarios.normalizeScenarios(output?.scenarios, this.runDir)) {
+        for (const p of s.screenshots) {
+          const key = p.includes('/') ? p : `evidence/${step.id}/round-${st.visits}/${p}`;
+          if (!captions[key]) captions[key] = { caption: `Scenario: ${s.name}` };
+        }
+      }
       evidence.writeManifest(this.runDir, {
         captions, commit: this.worktreeHead(), baseCommit: this.worktree?.commit || null, base: this.worktree?.base || null, branch: this.worktreeBranch(),
       });
     } catch (e) {
       this.emitEvent('log', { level: 'warn', message: `evidence manifest: ${e.message}` });
+    }
+  }
+
+  // A step output's E2E `scenarios` (#143): <run_dir>/e2e/scenarios.feature + scenarios.json
+  // (src/engine/scenarios.js), the copy the gates' Dev/QA reads; never blocks the step.
+  saveScenarios(step, output) {
+    try {
+      const saved = scenarios.recordScenarios(this.runDir, step.id, output);
+      if (saved) this.emitEvent('file.saved', { step_id: step.id, path: saved.feature });
+    } catch (e) {
+      this.emitEvent('log', { level: 'warn', message: `e2e scenarios: ${e.message}` });
     }
   }
 

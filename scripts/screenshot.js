@@ -990,7 +990,8 @@ function main() {
 
   // Demo screenshots of a simulated run (#146, #145): captures of this window saved as two rounds
   // (developer round 1 in History, evidence round 1 the final set) with original/modified pairs, a
-  // modified-only state and a small image (opens at 100% in the viewer), then the manifest.
+  // modified-only state and a small image (opens at 100% in the viewer), the test step's E2E
+  // scenario screenshot (#143), then the manifest.
   async function demoEvidence(win, runDir) {
     const shot = await grab(win);
     const { width, height } = shot.getSize();
@@ -1003,6 +1004,8 @@ function main() {
     save('developer', 1, '144-dashboard-default.original.png', shot.crop({ x: 0, y: 0, width: Math.round(width * 0.6), height: Math.round(height * 0.6) }));
     save('developer', 1, '144-dashboard-default.modified.png', shot.crop({ x: 0, y: 0, width: Math.round(width * 0.7), height: Math.round(height * 0.7) }));
     save('developer', 1, '146-artifacts-panel-default.modified.png', shot.crop({ x: 0, y: 0, width: Math.round(width * 0.8), height: Math.round(height * 0.8) }));
+    // the mock test writer's UI scenario (#143, providers.js mockScenarios), one per test visit
+    for (const round of [1, 2]) save('test', round, '143-e2e-filter-by-status-1.modified.png', shot.crop({ x: 0, y: 0, width: Math.round(width * 0.5), height: Math.round(height * 0.5) }));
     await new Promise((r) => setTimeout(r, 50)); // the final round captures last
     save('evidence', 1, '146-artifacts-panel-default.original.png', shot.crop({ x: 0, y: 0, width: Math.round(width * 0.8), height: Math.round(height * 0.8) }));
     save('evidence', 1, '146-artifacts-panel-default.modified.png', shot);
@@ -1013,6 +1016,7 @@ function main() {
       captions: {
         [rel('developer', '144-dashboard-default.modified.png')]: { caption: 'The dashboard with the developer\'s change' },
         [rel('developer', '146-artifacts-panel-default.modified.png')]: { caption: 'Artifacts panel (first try)' },
+        [rel('test', '143-e2e-filter-by-status-1.modified.png')]: { caption: 'Scenario: Filter the runs by status' },
         [rel('evidence', '146-artifacts-panel-default.modified.png')]: { caption: 'Artifacts panel with the run\'s screenshots' },
         [rel('evidence', '145-image-viewer-small.modified.png')]: { caption: 'A small image (opens at 100%)' },
       },
@@ -1108,7 +1112,7 @@ function main() {
           const live = runDirs()[0];
           if (live && args.demoShots) {
             await demoEvidence(win, live);
-            await js(`ArtifactsPanel.refreshRun(${JSON.stringify(path.basename(live))})`);
+            await js(`ArtifactsPanel.refreshRun(${JSON.stringify(path.basename(live))}); window.mountGateScenarios?.(document)`);
           }
           await pause(2500); // the gate's Artifacts panel and changed files load
         } else await pause(args.wait);

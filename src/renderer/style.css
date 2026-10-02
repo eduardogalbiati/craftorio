@@ -751,6 +751,20 @@ body.resizing-dock .term-body { pointer-events: none; }
 .gate-issues li.not .gate-issue-state { color: var(--red); }
 .run-gate-full summary { cursor: pointer; color: var(--muted); }
 .run-gate-full .run-gate-message, .run-gate-full .rc-body { margin-top: 4px; }
+/* E2E scenarios for the Dev/QA at a gate (#143, gateScenariosHtml) */
+.gate-scenarios { margin: 6px 0; display: flex; flex-direction: column; gap: 2px; }
+.gate-scenarios-head { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 2px; }
+.gate-scenarios > p { margin: 0; }
+.gate-scenario > summary { display: flex; align-items: center; gap: 6px; cursor: pointer; min-width: 0; padding: 2px 0; }
+.gate-scenario > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-radius: 4px; }
+.gate-scenario > summary .pill { flex: none; min-width: 52px; text-align: center; }
+.gate-scenario-name { flex: none; max-width: 50%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gate-scenario-reason { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gate-scenario[open] { background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px; padding: 2px 8px 8px; }
+.gate-scenario-steps { margin: 4px 0; padding-left: 20px; }
+.gate-scenario-steps b { color: var(--accent); }
+.gate-scenario-shots { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+.gate-scenario-shots img { max-width: 220px; max-height: 140px; border: 1px solid var(--border); border-radius: 4px; cursor: zoom-in; }
 /* Run App's state on the gate */
 .gate-tools { flex-wrap: wrap; align-items: center; }
 .gate-app-state { font-size: 12px; color: var(--muted); }

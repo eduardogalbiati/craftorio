@@ -485,6 +485,7 @@ function mockString(key) {
     question: 'A reviewer suggested switching the YAML library. Does that make sense in this PR?',
     failure_log: 'test/engine.test.js:12 AssertionError: expected "approved"',
     failure_report: 'npm test: 1 failure in test/engine.test.js (validateSchema accepts an invalid enum).',
+    e2e_note: 'Simulated: the run\'s scenarios only, with the project\'s E2E framework; one skipped because of the environment.',
     file: 'src/auth/login.ts',
     summary: 'Simulated implementation of the feature with tests.',
     message: 'Simulated draft: I covered the request and applied the latest notes.',
@@ -510,6 +511,35 @@ const MOCK_SEQUENCES = {
   // writer-reviewer: the draft is approved on the 3rd review (threshold 8)
   score: [5.5, 7, 8.6],
 };
+
+// The test writer's E2E scenarios (#143), mixed statuses for the gates: a visit whose tests_status
+// fails (the 1st by default) has a failed scenario, the next ones pass it; one is always skipped
+// (environment). The UI scenario's screenshot is under the visit's evidence folder (the screenshot
+// demo writes it; a plain mock run has no image).
+function mockScenarios(h) {
+  const seq = h.sequences?.tests_status || MOCK_SEQUENCES.tests_status;
+  const failing = seq[Math.min(h.visit - 1, seq.length - 1)] === 'fail';
+  const feature = 'features/143-dashboard-filter.feature';
+  return [
+    {
+      feature, name: 'Filter the runs by status', status: 'passed',
+      steps: ['Given the dashboard lists 3 runs, one of them failed', 'When I pick "Failed" in the status filter', 'Then only the failed run is listed'],
+      screenshots: [`evidence/test/round-${h.visit}/143-e2e-filter-by-status-1.modified.png`],
+    },
+    {
+      feature, name: 'An empty filter result explains itself', status: failing ? 'failed' : 'passed',
+      ...(failing ? { reason: 'Then "No run matches this filter" is shown: the list was empty without a message (simulated)' } : {}),
+      steps: ['Given the dashboard lists 2 runs, none of them failed', 'When I pick "Failed" in the status filter', 'Then I see "No run matches this filter"'],
+      screenshots: [],
+    },
+    {
+      feature, name: 'The filter is kept after a restart', status: 'skipped',
+      reason: 'Environment: the app could not be restarted headless in this run (simulated)',
+      steps: ['Given I filtered the dashboard by "Failed"', 'When I restart the app', 'Then the dashboard is still filtered by "Failed"'],
+      screenshots: [],
+    },
+  ];
+}
 
 // h.sequences (WorkflowRun's mockSequences) overrides the defaults per field
 function mockValue(s, key, h) {
@@ -546,6 +576,7 @@ function mockValue(s, key, h) {
       if (key === 'ui_findings' && !h.sequences?.ui_findings) return [];
       // the developer's screens to capture (#144): one valid entry of the screenshot command
       if (key === 'screenshots' && s.items?.properties?.args) return [{ name: '144-dashboard-default', caption: 'The dashboard (simulated)', args: ['--view', 'dashboard'] }];
+      if (key === 'scenarios' && s.items?.properties?.status) return mockScenarios(h);
       if (key === 'left_out') {
         const seq = h.sequences?.left_out;
         const count = Array.isArray(seq) && seq.length ? +seq[Math.min(h.visit - 1, seq.length - 1)] || 0 : 0;
