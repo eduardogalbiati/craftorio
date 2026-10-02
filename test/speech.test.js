@@ -8,6 +8,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const speech = require('../src/speech');
+const { installCommand } = require('../src/install-commands');
 const { encodeWav } = require('../src/renderer/voice.js');
 
 const FAKE_CLI = process.platform === 'win32'
@@ -145,6 +146,15 @@ test('status(): modelReady and models[].downloaded follow the files written in m
   assert.equal(st.modelReady, true);
   assert.equal(st.models.find((m) => m.id === 'tiny').downloaded, true);
   assert.equal(st.models.find((m) => m.id === 'base').downloaded, false);
+});
+
+test('status(): installCommand (#147\'s play button) is only offered for the default whisper-cli command, never a custom one', (t) => {
+  const dir = tmp(t);
+  const custom = speech.status({ voiceCommand: 'my-custom-whisper' }, dir);
+  assert.equal(custom.installCommand, null);
+  const def = speech.status({}, dir); // no voiceCommand set: falls back to DEFAULT_COMMAND
+  assert.equal(def.command, speech.DEFAULT_COMMAND);
+  assert.equal(def.installCommand, installCommand(speech.DEFAULT_COMMAND));
 });
 
 test('modelPath(): an absolute .bin path is used as is, ignoring dataDir', (t) => {
