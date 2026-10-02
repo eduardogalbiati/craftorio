@@ -56,12 +56,14 @@ test('submitAssign: assigning an issue the roadmap already plans asks first, and
 
 test('submitAssign: an ended run\'s kept work (assignWorkflow\'s `kept`) opens the kept-work dialog; "resume" also closes the Assign modal; only "scratch" assigns again, confirmed', () => {
   const fn = /async function submitAssign\(e\)[\s\S]*?\n  \}/.exec(src)[0];
-  assert.match(fn, /let data = await api\.assignWorkflow\(bl\.projectId, numbers, workflow, inputs, mock, grouped\(\)\);/);
+  // then (#134): what happens with the run's result when it finishes, from the Assign dialog's chain picker
+  assert.match(fn, /const then = assignChain\(\)\.value\(\);/);
+  assert.match(fn, /let data = await api\.assignWorkflow\(bl\.projectId, numbers, workflow, inputs, mock, grouped\(\), false, then\);/);
   assert.match(fn, /if \(data\?\.kept\) \{/);
   assert.match(fn, /const choice = await keptWorkDialog\(data\.kept\);/);
   assert.match(fn, /if \(choice === 'resume'\) closeModal\('#assign-modal'\);/);
   assert.match(fn, /if \(choice !== 'scratch'\) return;/);
-  assert.match(fn, /data = await api\.assignWorkflow\(bl\.projectId, numbers, workflow, inputs, mock, grouped\(\), true\);/);
+  assert.match(fn, /data = await api\.assignWorkflow\(bl\.projectId, numbers, workflow, inputs, mock, grouped\(\), true, then\);/);
 });
 
 test('queue resume (data-pause="off"): an ended run\'s kept work opens the kept-work dialog; only "scratch" resumes the queue again, confirmed', () => {

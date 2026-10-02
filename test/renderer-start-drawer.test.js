@@ -71,6 +71,10 @@ function loadStartDrawer({ workflows = [], projects = [], settings = {}, runs = 
     readInputs: /function readInputs\(\) \{[\s\S]*?\n\}/,
     startRun: /async function startRun\(\{ keepOpen = false \} = \{\}\) \{[\s\S]*?\n\}/,
     selectWorkflow: /function selectWorkflow\(file\) \{[\s\S]*?\n\}/,
+    // "When it finishes" (#134): selectWorkflow and startRun both call drawerChain(), the drawer's
+    // ChainPicker; out of scope here (see sandbox.ChainPicker below), only its wiring is loaded.
+    chainPickerDecl: /let chainPicker = null;/,
+    drawerChain: /const drawerChain = \(\) => [^\n]+;/,
   };
   const code = {};
   for (const [name, re] of Object.entries(defs)) {
@@ -104,6 +108,9 @@ function loadStartDrawer({ workflows = [], projects = [], settings = {}, runs = 
     errMsg: (e) => String(e?.message || e),
     liveRuns: () => [...runs.values()].filter((v) => v.run?.status === 'running'),
     applyProjectHints: () => {}, // the project's detected language/branches (#116): out of scope here
+    // "When it finishes" (#134): the drawer's chain picker itself is out of scope here (chain-picker.js,
+    // test/chain-model.test.js); this stub only gives drawerChain() something to call. Nothing chosen.
+    ChainPicker: { mount: () => ({ refresh: () => {}, value: () => null, set: () => {} }) },
   };
   sandbox.$ = (sel) => getEl(sel.slice(1));
   sandbox.window = sandbox; // WorkflowInputs (browser build) attaches itself to window

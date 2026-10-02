@@ -43,6 +43,33 @@ test('every workflow in workflows/ is valid', () => {
   }
 });
 
+// ---- outputs (#134): every bundled workflow declares the result contract the issue lists ---------
+test('each bundled workflow declares its outputs: contract', () => {
+  const outputsOf = (f) => Object.keys(loadWorkflow(path.join(root, 'workflows', f)).outputs || {}).sort();
+  assert.deepEqual(outputsOf('issue-tracker.yaml'), ['issues']);
+  assert.deepEqual(outputsOf('writer-reviewer.yaml'), ['document', 'issue']);
+  assert.deepEqual(outputsOf('ai-arena.yaml'), ['document']);
+  assert.deepEqual(outputsOf('software-development.yaml'), ['branch', 'issues', 'merged_commit', 'pr_url']);
+  assert.deepEqual(outputsOf('software-development-local-hero.yaml'), ['branch', 'issues', 'merged_commit', 'pr_url']);
+  assert.deepEqual(outputsOf('run-retrospective.yaml'), ['findings']);
+});
+
+test('computeOutputs: each declared output is the template rendered over the finished run, parsed for its type; empty or unparsable stays null (with a warning)', async () => {
+  const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'));
+  const run = new WorkflowRun({
+    file: path.join(__dirname, 'fixtures', 'outputs.yaml'), inputs: {}, mock: true, runsDir, mockSequences: { count: [7] },
+  });
+  const events = [];
+  run.on('event', (ev) => events.push(ev));
+  await run.start();
+  fs.rmSync(runsDir, { recursive: true, force: true });
+  const finished = events.find((e) => e.type === 'workflow.finished');
+  assert.equal(finished.status, 'success', finished.error);
+  assert.deepEqual(finished.outputs, { doc: '(simulated) items', total: 7, empty: null, broken: null });
+  assert.deepEqual(finished.summary.outputs, finished.outputs);
+  assert.ok(events.some((e) => e.type === 'log' && e.level === 'warn' && e.message.startsWith('Output broken could not be filled:')));
+});
+
 test('loadWorkflow rejects a transition to an unknown step', () => {
   const tmp = path.join(os.tmpdir(), `wf-invalid-${process.pid}.yaml`);
   fs.writeFileSync(tmp, 'agents: { a: { provider: claude, model: m } }\nsteps:\n  - id: s1\n    agent: a\n    transitions:\n      - { when: "true", goto: missing_step }\n');
@@ -740,10 +767,26 @@ test('software-development: a code build failure still goes to the developer fir
   assert.ok(!transitions.includes('build>build_failed'));
 });
 
-test('software-development: rejecting the merge ends the run as cancelled', { timeout: 120000 }, async () => {
+test('software-development: rejecting the merge ends the run as cancelled; deploy_prod never ran, so merged_commit is empty', { timeout: 120000 }, async () => {
   const { finished } = await runSoftwareDevelopment({ mockSequences: { preview_status: ['success'] }, answers: { approve_merge: false } });
   assert.equal(finished.status, 'cancelled');
   assert.match(finished.error, /ended as cancelled at step "approve_merge" \(rejected\)/);
+  assert.equal(finished.summary.steps.deploy_prod.visits, 0);
+  // the template renders empty (no steps.deploy_prod.output): computeOutputs keeps an empty text as
+  // null, like any other output the run never set (#134: still falsy, blockedReason treats it the same).
+  assert.equal(finished.summary.outputs.merged_commit, null);
+});
+
+// #134 (fixed by 3a5e236): the squash merge's commit the deployer reads from the platform, never the
+// branch's own last commit (develop.output.commit_sha), which is not what the base branch received.
+test('software-development: merged_commit is the deploy step\'s merge_commit, not the branch\'s own commit_sha', { timeout: 120000 }, async () => {
+  const wf = loadWorkflow(path.join(root, 'workflows', 'software-development.yaml'));
+  assert.deepEqual(wf.steps.find((s) => s.id === 'deploy_prod').output_schema.required, ['deploy_status', 'merge_commit']);
+
+  const { finished } = await runSoftwareDevelopment({ mockSequences: { preview_status: ['success'] } });
+  assert.equal(finished.status, 'success', finished.error);
+  assert.equal(finished.summary.outputs.merged_commit, finished.summary.steps.deploy_prod.output.merge_commit);
+  assert.notEqual(finished.summary.outputs.merged_commit, finished.summary.steps.develop.output.commit_sha);
 });
 
 const GROUP = [53, 65, 77].map((n) => ({ number: n, url: `https://github.com/o/r/issues/${n}`, title: `T${n}` }));
