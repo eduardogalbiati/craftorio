@@ -117,6 +117,46 @@ test('readRun gives the issues a run implements; a run recorded with one `issue`
   assert.equal(runs.readRun(root, 'none').issues, null);
 });
 
+test('readRun exposes parentRun and childRuns (#174): from summary.json when there is one', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-children-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const parentRun = { run_id: 'parent', workflow: 'parent.yaml', step_id: 'child', index: 1, depth: 1 };
+  const childRuns = [
+    { run_id: 'c1', step_id: 'child', index: 0, workflow: 'child.yaml', status: 'success' },
+    { run_id: 'c2', step_id: 'child', index: 1, workflow: 'child.yaml', status: 'running' },
+  ];
+  fs.mkdirSync(path.join(root, 'parent'));
+  fs.writeFileSync(path.join(root, 'parent', 'events.jsonl'), jl({ ts: '2026-09-27T10:00:00Z', type: 'workflow.started', workflow: 'parent.yaml' }));
+  fs.writeFileSync(path.join(root, 'parent', 'summary.json'), JSON.stringify({ run_id: 'parent', workflow: 'parent.yaml', status: 'running', started_at: '2026-09-27T10:00:00Z', sessions: [], child_runs: childRuns }));
+  fs.mkdirSync(path.join(root, 'c1'));
+  fs.writeFileSync(path.join(root, 'c1', 'events.jsonl'), jl({ ts: '2026-09-27T10:00:01Z', type: 'workflow.started', workflow: 'child.yaml', parent_run: parentRun }));
+  fs.writeFileSync(path.join(root, 'c1', 'summary.json'), JSON.stringify({ run_id: 'c1', workflow: 'child.yaml', status: 'success', started_at: '2026-09-27T10:00:01Z', sessions: [], parent_run: parentRun }));
+  assert.deepEqual(runs.readRun(root, 'parent').childRuns, childRuns);
+  assert.equal(runs.readRun(root, 'parent').parentRun, null);
+  assert.deepEqual(runs.readRun(root, 'c1').parentRun, parentRun);
+  assert.equal(runs.readRun(root, 'c1').childRuns, null); // no child_runs: null, not []
+});
+
+test('readRun derives parentRun and childRuns from events.jsonl when there is no summary yet (#174)', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-children-live-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const parentRun = { run_id: 'parent', workflow: 'parent.yaml', step_id: 'child', index: 0, depth: 1 };
+  fs.mkdirSync(path.join(root, 'parent'));
+  fs.writeFileSync(path.join(root, 'parent', 'events.jsonl'), jl(
+    { ts: '2026-09-27T10:00:00Z', type: 'workflow.started', workflow: 'parent.yaml' },
+    { ts: '2026-09-27T10:00:01Z', type: 'workflow.child_started', child_run_id: 'c1', step_id: 'child', index: 0, workflow: 'child.yaml' },
+    { ts: '2026-09-27T10:00:01Z', type: 'workflow.child_started', child_run_id: 'c2', step_id: 'child', index: 1, workflow: 'child.yaml' },
+    { ts: '2026-09-27T10:00:05Z', type: 'workflow.child_finished', child_run_id: 'c1', status: 'success' },
+  ));
+  fs.mkdirSync(path.join(root, 'c1'));
+  fs.writeFileSync(path.join(root, 'c1', 'events.jsonl'), jl({ ts: '2026-09-27T10:00:01Z', type: 'workflow.started', workflow: 'child.yaml', parent_run: parentRun }));
+  assert.deepEqual(runs.readRun(root, 'parent').childRuns, [
+    { run_id: 'c1', step_id: 'child', index: 0, workflow: 'child.yaml', status: 'success' },
+    { run_id: 'c2', step_id: 'child', index: 1, workflow: 'child.yaml', status: 'running' },
+  ]);
+  assert.deepEqual(runs.readRun(root, 'c1').parentRun, parentRun);
+});
+
 test('readRun exposes the saves of its document to its issue (issue-saves.json), [] when there are none', (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-issue-saves-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));

@@ -137,6 +137,38 @@ test('concurrent runs: simulations do not count unless the setting says so', asy
   await until(() => !service.isRunning());
 });
 
+// #174: a `type: workflow` step's child run ignores Settings > Execution entirely, even the
+// default of one run at a time (its parent holds that slot and waits for the child, so counting
+// the child too would deadlock every such workflow forever).
+test('concurrent runs: a `type: workflow` step\'s child run takes no execution slot, even with the default limit of one', async (t) => {
+  const { service, api } = makeService(t);
+  const { gates, finished } = watchRuns(service);
+  fs.writeFileSync(path.join(service.workspace().workflows, 'fixture-parent.yaml'), `apiVersion: multiagent/v1
+kind: Workflow
+metadata:
+  name: fixture-parent
+agents:
+  a: { provider: claude, model: m, session: ephemeral }
+steps:
+  - id: child
+    type: workflow
+    workflow: fixture-service.yaml
+`);
+  const { runId: parentId } = await api['run:start']({ file: 'fixture-parent.yaml', inputs: {}, mock: true });
+  // a plain second run is still refused: the default limit of one is still in force for normal runs
+  await assert.rejects(api['run:start']({ file: 'fixture-service.yaml', inputs: {}, mock: true }), /already running/);
+  // yet the child reaches its own gate: starting it never hit the same limit as the rejected run above
+  await until(() => api['runs:active']().length === 2);
+  const [childInfo] = api['runs:active']().filter((r) => r.runId !== parentId);
+  assert.ok(childInfo, 'the child shows up in runs:active next to its parent');
+
+  await until(() => gates.has(childInfo.runId));
+  assert.equal(api['approval:resolve']({ runId: childInfo.runId, id: gates.get(childInfo.runId), answer: true }), true);
+  await until(() => finished.has(parentId));
+  assert.equal(finished.get(parentId), 'success');
+  assert.equal(finished.get(childInfo.runId), 'success');
+});
+
 // Resolves the fixture workflow's human gate and waits for the run to leave runs:active, so no
 // mock step keeps writing to the workspace after the test (and its t.after cleanup) is done.
 async function finishPendingRun(api, runId) {

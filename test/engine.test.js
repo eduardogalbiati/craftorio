@@ -1804,3 +1804,255 @@ steps:
   assert.equal(stop.finished.status, 'cancelled');
   assert.ok(!stop.events.some((e) => e.type === 'step.started' && e.step_id === 'three'));
 });
+
+// ---- #174: `type: workflow` step - a child run, once or for each item of a list --------------
+// Pure scheduling/templating pieces (validateWorkflowStep, resolveValue, itemFiles, schedule,
+// file-overlap grouping, nesting depth) are unit-tested directly in test/workflow-step.test.js,
+// with fake startChild promises. These tests exercise the real wiring through WorkflowRun: the
+// events a `type: workflow` step emits, on_error/transitions reading output.status, a child's
+// human gate blocking the parent, and the parent/child summary links.
+
+async function until(fn, timeoutMs = 20000) {
+  const start = Date.now();
+  while (!fn()) {
+    if (Date.now() - start > timeoutMs) throw new Error('timed out waiting for the condition');
+    await new Promise((r) => setTimeout(r, 10));
+  }
+}
+
+const CHILD_ECHO_YAML = `apiVersion: multiagent/v1
+kind: Workflow
+metadata: { name: child-echo }
+inputs:
+  n: { type: number, default: 0 }
+agents:
+  a: { provider: claude, model: m, session: ephemeral }
+steps:
+  - id: work
+    agent: a
+    prompt: "echo {{ inputs.n }}"
+outputs:
+  n:
+    type: number
+    value: "{{ inputs.n }}"
+`;
+
+// A single step with no on_error: the missing skill fails the step, and nothing catches it, so
+// the whole child run ends failed (same mechanism as the fanout/on-error fixtures).
+const CHILD_FAIL_YAML = `apiVersion: multiagent/v1
+kind: Workflow
+metadata: { name: child-fail }
+agents:
+  a: { provider: claude, model: m, session: ephemeral }
+steps:
+  - id: work
+    agent: a
+    skills: [does-not-exist]
+    prompt: "do it"
+`;
+
+const CHILD_GATE_YAML = `apiVersion: multiagent/v1
+kind: Workflow
+metadata: { name: child-gate }
+agents:
+  a: { provider: claude, model: m, session: ephemeral }
+steps:
+  - id: work
+    agent: a
+    prompt: "do it"
+  - id: review
+    type: human_approval
+    message: "ok?"
+`;
+
+test('type: workflow step: without foreach, the output is { status, run_id, outputs } from the child\'s declared outputs', async (t) => {
+  const { dir, file } = tempWorkflow(t, `apiVersion: multiagent/v1
+kind: Workflow
+metadata: { name: parent-once }
+agents:
+  a: { provider: claude, model: m, session: ephemeral }
+steps:
+  - id: child
+    type: workflow
+    workflow: child-echo.yaml
+    inputs: { n: 7 }
+`);
+  fs.writeFileSync(path.join(dir, 'child-echo.yaml'), CHILD_ECHO_YAML);
+  const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'));
+  t.after(() => fs.rmSync(runsDir, { recursive: true, force: true }));
+  const run = new WorkflowRun({ file, inputs: {}, mock: true, runsDir });
+  const events = [];
+  run.on('event', (ev) => events.push(ev));
+  await run.start();
+  const finished = events.find((e) => e.type === 'workflow.finished');
+  assert.equal(finished.status, 'success', finished.error);
+  const step = events.find((e) => e.type === 'step.finished' && e.step_id === 'child');
+  assert.equal(step.output.status, 'success');
+  assert.ok(step.output.run_id);
+  assert.deepEqual(step.output.outputs, { n: 7 });
+});
+
+test('type: workflow step: foreach runs one child per item, at most max_parallel at a time; outputs come back as an ordered list', async (t) => {
+  const { dir, file } = tempWorkflow(t, `apiVersion: multiagent/v1
+kind: Workflow
+metadata: { name: parent-foreach }
+agents:
+  a: { provider: claude, model: m, session: ephemeral }
+steps:
+  - id: children
+    type: workflow
+    workflow: child-echo.yaml
+    inputs: { n: "{{ item }}" }
+    foreach: [1, 2, 3]
+    max_parallel: 2
+`);
+  fs.writeFileSync(path.join(dir, 'child-echo.yaml'), CHILD_ECHO_YAML);
+  const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'));
+  t.after(() => fs.rmSync(runsDir, { recursive: true, force: true }));
+  const run = new WorkflowRun({ file, inputs: {}, mock: true, runsDir });
+  const events = [];
+  run.on('event', (ev) => events.push(ev));
+  await run.start();
+  const finished = events.find((e) => e.type === 'workflow.finished');
+  assert.equal(finished.status, 'success', finished.error);
+
+  let active = 0;
+  let peak = 0;
+  for (const ev of events) {
+    if (ev.type === 'workflow.child_started') { active++; peak = Math.max(peak, active); }
+    if (ev.type === 'workflow.child_finished') active--;
+  }
+  assert.equal(peak, 2, 'never more than max_parallel children at once');
+  assert.equal(events.filter((e) => e.type === 'workflow.child_started').length, 3);
+
+  const step = events.find((e) => e.type === 'step.finished' && e.step_id === 'children');
+  assert.equal(step.output.status, 'success');
+  assert.deepEqual(step.output.outputs, [{ n: 1 }, { n: 2 }, { n: 3 }]);
+  assert.equal(step.output.succeeded, 3);
+  assert.equal(step.output.failed, 0);
+  assert.deepEqual(run.childRuns.map((c) => c.status), ['success', 'success', 'success']);
+  assert.deepEqual(finished.summary.child_runs.map((c) => c.step_id), ['children', 'children', 'children']);
+});
+
+test('on_error: a failing child workflow routes the step to its on_error step, with output.status failed', async (t) => {
+  const { dir, file } = tempWorkflow(t, `apiVersion: multiagent/v1
+kind: Workflow
+metadata: { name: parent-onerror }
+agents:
+  a: { provider: claude, model: m, session: ephemeral }
+steps:
+  - id: child
+    type: workflow
+    workflow: child-fail.yaml
+    on_error: after
+  - id: after
+    agent: a
+    prompt: "child failed: {{ steps.child.output.error }}"
+`);
+  fs.writeFileSync(path.join(dir, 'child-fail.yaml'), CHILD_FAIL_YAML);
+  const { events, finished } = await runWith(file, { mock: true, answer: () => true, cwd: dir });
+  assert.equal(finished.status, 'success', finished.error);
+  const step = events.find((e) => e.type === 'step.finished' && e.step_id === 'child');
+  assert.equal(step.output.status, 'failed');
+  assert.equal(step.error, true);
+  assert.ok(events.some((e) => e.type === 'step.transition' && e.from === 'child' && e.to === 'after' && e.when === 'on_error'));
+  const sent = events.find((e) => e.type === 'session.message_sent' && e.step_id === 'after');
+  assert.match(sent.prompt, /child failed: Skill not found: "does-not-exist"/);
+});
+
+test('without on_error, a step\'s transitions can read output.status; without either, a failed child fails the run', async (t) => {
+  const { dir, file } = tempWorkflow(t, `apiVersion: multiagent/v1
+kind: Workflow
+metadata: { name: parent-transitions }
+agents:
+  a: { provider: claude, model: m, session: ephemeral }
+steps:
+  - id: child
+    type: workflow
+    workflow: child-fail.yaml
+    transitions:
+      - when: "status == 'failed'"
+        goto: handle
+      - when: "status == 'success'"
+        goto: end
+  - id: handle
+    agent: a
+    prompt: "handling: {{ steps.child.output.error }}"
+`);
+  fs.writeFileSync(path.join(dir, 'child-fail.yaml'), CHILD_FAIL_YAML);
+  const { events, finished } = await runWith(file, { mock: true, answer: () => true, cwd: dir });
+  assert.equal(finished.status, 'success', finished.error);
+  assert.ok(events.some((e) => e.type === 'step.transition' && e.from === 'child' && e.to === 'handle'));
+  const sent = events.find((e) => e.type === 'session.message_sent' && e.step_id === 'handle');
+  assert.match(sent.prompt, /handling: Skill not found: "does-not-exist"/);
+
+  // neither on_error nor transitions: the run itself fails with the reason named
+  fs.writeFileSync(file, `apiVersion: multiagent/v1
+kind: Workflow
+metadata: { name: parent-no-handler }
+agents:
+  a: { provider: claude, model: m, session: ephemeral }
+steps:
+  - id: child
+    type: workflow
+    workflow: child-fail.yaml
+`);
+  const noHandler = await runWith(file, { mock: true, answer: () => true, cwd: dir });
+  assert.equal(noHandler.finished.status, 'failed');
+  assert.match(noHandler.finished.error, /the child workflow child-fail\.yaml ended failed/);
+});
+
+test('a child\'s human gate keeps the parent waiting; the parent never answers it, and never finishes the step', async (t) => {
+  const { dir, file } = tempWorkflow(t, `apiVersion: multiagent/v1
+kind: Workflow
+metadata: { name: parent-gate }
+agents:
+  a: { provider: claude, model: m, session: ephemeral }
+steps:
+  - id: child
+    type: workflow
+    workflow: child-gate.yaml
+`);
+  fs.writeFileSync(path.join(dir, 'child-gate.yaml'), CHILD_GATE_YAML);
+  const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'));
+  t.after(() => fs.rmSync(runsDir, { recursive: true, force: true }));
+  const run = new WorkflowRun({ file, inputs: {}, mock: true, runsDir });
+  let child = null;
+  const childEvents = [];
+  run.on('child', (c) => {
+    child = c;
+    c.on('event', (ev) => childEvents.push(ev));
+  });
+  const events = [];
+  run.on('event', (ev) => events.push(ev));
+  const startP = run.start();
+  await until(() => child && childEvents.some((e) => e.type === 'approval.requested'));
+  assert.equal(run.orchestrator.status, 'waiting');
+  assert.ok(!events.some((e) => e.type === 'approval.requested'));
+  assert.ok(!events.some((e) => e.type === 'step.finished' && e.step_id === 'child'));
+
+  const gateEv = childEvents.find((e) => e.type === 'approval.requested');
+  child.resolveApproval(gateEv.approval_id, true);
+  await startP;
+  const finished = events.find((e) => e.type === 'workflow.finished');
+  assert.equal(finished.status, 'success', finished.error);
+});
+
+test('loadWorkflow validates a `type: workflow` step: agent present, missing workflow, and a workflow naming itself', () => {
+  const tmp = path.join(os.tmpdir(), `wf-workflow-step-${process.pid}.yaml`);
+  const onStep = (extra) => `apiVersion: multiagent/v1
+kind: Workflow
+metadata: { name: wf-workflow-step-${process.pid} }
+agents: { a: { provider: claude, model: m } }
+steps:
+  - id: child
+    type: workflow
+    ${extra}
+`;
+  fs.writeFileSync(tmp, onStep('agent: a\n    workflow: other.yaml'));
+  try { assert.throws(() => loadWorkflow(tmp), /has no agent/); } finally { fs.rmSync(tmp, { force: true }); }
+  fs.writeFileSync(tmp, onStep('inputs: {}'));
+  try { assert.throws(() => loadWorkflow(tmp), /workflow must name/); } finally { fs.rmSync(tmp, { force: true }); }
+  fs.writeFileSync(tmp, onStep(`workflow: ${path.basename(tmp)}`));
+  try { assert.throws(() => loadWorkflow(tmp), /cannot run itself/); } finally { fs.rmSync(tmp, { force: true }); }
+});
