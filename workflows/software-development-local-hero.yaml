@@ -60,7 +60,7 @@ kind: Workflow
 
 metadata:
   name: software-development-local-hero
-  version: 0.7.0
+  version: 0.7.1
   description: Implements, reviews, tests, builds and verifies a change in its own worktree, then merges it into the local base branch automatically, resolving conflicts on the way. No push, no PR, no CI; push when you want.
   tags: [dev, review, test, build, local, worktree]
   # Dashboard category: plan (Plan & Design), build (Code & Build) or monitor (Monitor & Improve).
@@ -231,8 +231,9 @@ agents:
       {% endif %}When you finish a requested fix, report the commit hash.
 
   reviewer:
-    provider: codex
-    model: gpt-6-luna
+    provider: claude
+    model: claude-sonnet-5-5
+    effort: high
     session: persistent
     capabilities: { tools: [read, bash:git], web: false }
     # Criteria, severities and per-language rules live in the skill

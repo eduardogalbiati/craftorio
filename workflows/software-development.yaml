@@ -79,7 +79,7 @@ kind: Workflow
 
 metadata:
   name: software-development
-  version: 0.20.0
+  version: 0.20.1
   description: Implements, reviews, tests, builds, watches CI and the PR/MR, publishes a preview and, once approved, merges and tracks the production deploy. Works with several languages on GitHub or GitLab.
   tags: [dev, review, test, build, ci, pr, deploy, github, gitlab]
   # Dashboard category: plan (Plan & Design), build (Code & Build) or monitor (Monitor & Improve).
@@ -263,8 +263,9 @@ agents:
       requested fix, report the commit hash.
 
   reviewer:
-    provider: codex
-    model: gpt-6-luna
+    provider: claude
+    model: claude-sonnet-5-5
+    effort: high
     session: persistent
     capabilities: { tools: [read, bash:git], web: false }
     # Criteria, severities and per-language rules live in the skill
