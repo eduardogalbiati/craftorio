@@ -208,6 +208,21 @@ test('removeWorktree: deletes a squash-merged branch, keeps an unmerged one', as
   assert.match(lines.join('\n'), /not merged .* kept/);
 });
 
+test('removeWorktree: a node_modules linking the shared dependency cache (#198) is unlinked first; removal never follows it into the cache', async (t) => {
+  const f = fixture(t);
+  const dir = path.join(f.worktrees, 'run1');
+  await prepareWorktree({ repo: f.repo, base: 'main', dir });
+  const cacheEntry = path.join(f.tmp, 'cache-entry');
+  fs.mkdirSync(path.join(cacheEntry, 'node_modules'), { recursive: true });
+  fs.writeFileSync(path.join(cacheEntry, 'node_modules', 'kept.txt'), 'kept');
+  fs.symlinkSync(path.join(cacheEntry, 'node_modules'), path.join(dir, 'node_modules'), process.platform === 'win32' ? 'junction' : 'dir');
+
+  const r = await removeWorktree({ repo: f.repo, dir, base: 'main' });
+  assert.equal(r.removed, true);
+  assert.ok(!fs.existsSync(dir));
+  assert.ok(fs.existsSync(path.join(cacheEntry, 'node_modules', 'kept.txt')), 'the shared cache entry is untouched');
+});
+
 test('prepareWorktree: resume recreates a deleted worktree from the run branch', async (t) => {
   const f = fixture(t);
   const dir = path.join(f.worktrees, 'run1');

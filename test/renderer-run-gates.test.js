@@ -200,16 +200,18 @@ function loadGateBrief() {
   const lastOutput = /function lastOutput\(runId, match\) \{[\s\S]*?\n\}/.exec(gateSrc)[0];
   // gateBriefHtml calls gateScenariosHtml (#143): both must be in the sandbox, with its own deps.
   const scenarioPill = /const SCENARIO_PILL = [^\n]+/.exec(gateSrc)[0];
+  // pending (#199): written and checked by the run, run at release by the E2E release workflow
+  const scenarioLabel = /const SCENARIO_LABEL = [^\n]+/.exec(gateSrc)[0];
   const openScenarios = /const openScenarios = new Set\(\);[^\n]*/.exec(gateSrc)[0];
   const gateScenariosHtml = /function gateScenariosHtml\(runId, g = \{\}\) \{[\s\S]*?\n\}/.exec(gateSrc)[0];
   const gateBriefHtml = /function gateBriefHtml\(runId, g, fullHtml\) \{[\s\S]*?\n\}/.exec(gateSrc)[0];
-  for (const [name, code] of Object.entries({ gateTriesChange, gateSideHtml, lastOutput, scenarioPill, openScenarios, gateScenariosHtml, gateBriefHtml })) {
+  for (const [name, code] of Object.entries({ gateTriesChange, gateSideHtml, lastOutput, scenarioPill, scenarioLabel, openScenarios, gateScenariosHtml, gateBriefHtml })) {
     assert.ok(code, `${name} not found in gate-panel.js: the source moved`);
   }
   const sandbox = { state: { runs: new Map() }, window: {} };
   vm.createContext(sandbox);
   vm.runInContext(
-    `${esc}\n${gateTriesChange}\n${gateSideHtml}\n${lastOutput}\n${scenarioPill}\n${openScenarios}\n${gateScenariosHtml}\n${gateBriefHtml}\n`
+    `${esc}\n${gateTriesChange}\n${gateSideHtml}\n${lastOutput}\n${scenarioPill}\n${scenarioLabel}\n${openScenarios}\n${gateScenariosHtml}\n${gateBriefHtml}\n`
     + 'this.helpers = { gateTriesChange, gateSideHtml, gateScenariosHtml, gateBriefHtml };',
     sandbox,
   );
@@ -268,7 +270,7 @@ test('gateScenariosHtml: a "None yet" placeholder when the gate message already 
   sandbox.state.runs.set('r1', { events: [] });
   const html = gateScenariosHtml('r1', { approval_id: 'a1', message: 'E2E scenarios: none yet.' });
   assert.match(html, /<b>E2E scenarios<\/b>/);
-  assert.match(html, /None yet: the test writer writes and runs them after the code review\./);
+  assert.match(html, /None yet: the test writer writes them after the code review \(they run at release\)\./);
 });
 
 test('gateScenariosHtml: an output with an empty scenarios list says "No scenario for this change.", with the note shown', () => {
@@ -307,6 +309,14 @@ test('gateScenariosHtml: an unknown status renders as skipped (pill and text), n
   const html = gateScenariosHtml('r1', { approval_id: 'a1' });
   assert.match(html, /class="gate-scenario st-skipped"/);
   assert.match(html, /<span class="pill pill-cancelled">skipped<\/span>/);
+});
+
+test('gateScenariosHtml: a pending scenario (#199, written by the run, run at release) gets its own pill and label, both on the count and the row', () => {
+  const { gateScenariosHtml, sandbox } = loadGateBrief();
+  sandbox.state.runs.set('r1', { events: [{ type: 'step.finished', output: { scenarios: [{ name: 'Open the dashboard', status: 'pending' }] } }] });
+  const html = gateScenariosHtml('r1', { approval_id: 'a1' });
+  assert.match(html, /<span class="pill pill-idle">1 written, run at release<\/span>/);
+  assert.match(html, /class="gate-scenario st-pending"[^]*?<span class="pill pill-idle">written, run at release<\/span>[^]*?Open the dashboard/);
 });
 
 test('gateScenariosHtml: a relative screenshot resolves against the run folder; an already-absolute one is kept as-is', () => {

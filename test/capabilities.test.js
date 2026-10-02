@@ -113,6 +113,32 @@ test('edits_tests: false → Claude refuses edits to the test paths; the other C
   assert.match(caps.providerArgs('grok-cli', { caps: writer, denyEdits }).notes.join(), /test paths .* not refused by the tools/);
 });
 
+// ---- #198: denyCommands (DEPS_DENIED_COMMANDS) on a worktree whose node_modules is linked -----
+
+test('denyCommands: Claude refuses them as Bash(<cmd>:*), combined with Edit(...) rules in one --disallowedTools', () => {
+  const writer = caps.normalize({ tools: ['read', 'edit', 'write', TOOLCHAINS] });
+  const denyEdits = ['**/test/**'];
+  const denyCommands = ['npm ci', 'rm -rf node_modules'];
+  const claude = caps.providerArgs('claude-code', { caps: writer, denyEdits, denyCommands });
+  assert.equal(argAfter(claude.args, '--disallowedTools'), 'Edit(**/test/**) Bash(npm ci:*) Bash(rm -rf node_modules:*)');
+  assert.deepEqual(claude.notes, []);
+});
+
+test('denyCommands: no bash capability means nothing to refuse (no --disallowedTools Bash rule, no note)', () => {
+  const noBash = caps.normalize({ tools: ['read', 'edit', 'write'] });
+  const denyCommands = ['npm ci'];
+  const claude = caps.providerArgs('claude-code', { caps: noBash, denyCommands });
+  assert.ok(!(claude.args.includes('--disallowedTools') && argAfter(claude.args, '--disallowedTools').includes('Bash')));
+  assert.deepEqual(caps.providerArgs('codex-cli', { caps: noBash, denyCommands }).notes, []);
+});
+
+test('denyCommands: codex and grok cannot refuse a command, so they get a note when the agent has bash', () => {
+  const writer = caps.normalize({ tools: ['read', 'bash:npm'] });
+  const denyCommands = ['npm ci'];
+  assert.match(caps.providerArgs('codex-cli', { caps: writer, denyCommands }).notes.join(), /npm ci.*not refused by this CLI.*cache entry after the turn/);
+  assert.match(caps.providerArgs('grok-cli', { caps: writer, denyCommands }).notes.join(), /npm ci.*not refused by this CLI.*cache entry after the turn/);
+});
+
 test('claude: isolated by default (no user MCP servers, settings, Chrome, skill listing or auto-memory)', () => {
   const { args } = caps.providerArgs('claude-code', { caps: null });
   assert.deepEqual(args, ['--strict-mcp-config', '--no-chrome', '--setting-sources', 'project,local', '--disable-slash-commands', '--settings', '{"autoMemoryEnabled":false}']);

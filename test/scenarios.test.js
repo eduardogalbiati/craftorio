@@ -60,12 +60,17 @@ test('normalizeScenarios: drops entries with no name, non-objects and falsy item
 
 test('scenarioCounts: counts total and each status', () => {
   const list = [{ name: 'A', status: 'passed' }, { name: 'B', status: 'failed' }, { name: 'C', status: 'skipped' }, { name: 'D', status: 'passed' }];
-  assert.deepEqual(scenarios.scenarioCounts(list), { total: 4, passed: 2, failed: 1, skipped: 1 });
+  assert.deepEqual(scenarios.scenarioCounts(list), { total: 4, passed: 2, failed: 1, skipped: 1, pending: 0 });
+});
+
+test('scenarioCounts: a pending scenario (#199, written by a development run, run at release) is counted on its own', () => {
+  const list = [{ name: 'A', status: 'pending' }, { name: 'B', status: 'pending' }];
+  assert.deepEqual(scenarios.scenarioCounts(list), { total: 2, passed: 0, failed: 0, skipped: 0, pending: 2 });
 });
 
 test('scenarioCounts: an empty or invalid list counts all zero', () => {
-  assert.deepEqual(scenarios.scenarioCounts([]), { total: 0, passed: 0, failed: 0, skipped: 0 });
-  assert.deepEqual(scenarios.scenarioCounts(null), { total: 0, passed: 0, failed: 0, skipped: 0 });
+  assert.deepEqual(scenarios.scenarioCounts([]), { total: 0, passed: 0, failed: 0, skipped: 0, pending: 0 });
+  assert.deepEqual(scenarios.scenarioCounts(null), { total: 0, passed: 0, failed: 0, skipped: 0, pending: 0 });
 });
 
 // ---- featureText --------------------------------------------------------------------------------
@@ -133,11 +138,19 @@ test('scenariosMessage: mixed statuses list counts (non-zero only) and one line 
     ],
     e2e_note: 'One skipped because of the environment',
   });
-  assert.match(msg, /^E2E scenarios \(written and run by the test writer\): 1 passed · 1 failed · 1 skipped$/m);
+  assert.match(msg, /^E2E scenarios \(written by the test writer\): 1 passed · 1 failed · 1 skipped$/m);
   assert.match(msg, /^- passed: Filter the runs$/m);
   assert.match(msg, /^- failed: Empty filter result \(no message shown\)$/m);
   assert.match(msg, /^- skipped: Restart keeps the filter \(no headless browser\)$/m);
   assert.match(msg, /^Note: One skipped because of the environment$/m);
+});
+
+test('scenariosMessage: a pending scenario (#199) is shown as "written, run at release", and the header says "run at release" when every scenario is pending', () => {
+  const msg = scenarios.scenariosMessage({
+    scenarios: [{ name: 'Open the dashboard', status: 'pending' }],
+  });
+  assert.match(msg, /^E2E scenarios \(written by the test writer, run at release\): 1 written, run at release$/m);
+  assert.match(msg, /^- written, run at release: Open the dashboard$/m);
 });
 
 // ---- recordScenarios ----------------------------------------------------------------------------
@@ -155,7 +168,7 @@ test('recordScenarios: writes <run>/e2e/scenarios.feature and scenarios.json, ev
   assert.equal(saved.json, path.join(dir, 'e2e', 'scenarios.json'));
   assert.match(fs.readFileSync(saved.feature, 'utf8'), /# No scenario\.\n$/);
   const json = JSON.parse(fs.readFileSync(saved.json, 'utf8'));
-  assert.deepEqual(json, { step: 'test', counts: { total: 0, passed: 0, failed: 0, skipped: 0 }, note: 'Docs-only change', scenarios: [] });
+  assert.deepEqual(json, { step: 'test', counts: { total: 0, passed: 0, failed: 0, skipped: 0, pending: 0 }, note: 'Docs-only change', scenarios: [] });
 });
 
 test('recordScenarios: scenarios.json keeps screenshot paths relative to the run folder', (t) => {

@@ -1008,10 +1008,11 @@ test('software-development: approve_merge\'s message shows the Dev/QA line and t
   const gate = events.find((e) => e.type === 'approval.requested' && e.step_id === 'approve_merge');
   assert.ok(gate);
   assert.match(gate.message, /Dev\/QA: read the E2E scenarios and the screenshots/);
-  // the default mock scenarios (src/engine/providers.js mockScenarios): 2 passed, 1 skipped by the
-  // time the test step's retries are done and its final output reaches this gate
-  assert.match(gate.message, /E2E scenarios \(written and run by the test writer\): 2 passed · 1 skipped/);
-  assert.match(gate.message, /- skipped: The filter is kept after a restart \(Environment:/);
+  // the test step's schema has no `passed` status (#199): the default mock scenarios
+  // (src/engine/providers.js mockScenarios) are written, not run, whatever the visit
+  assert.match(gate.message, /E2E scenarios \(written by the test writer, run at release\): 2 written, run at release/);
+  assert.match(gate.message, /- written, run at release: Filter the runs by status/);
+  assert.match(gate.message, /- written, run at release: An empty filter result explains itself/);
 });
 
 test('software-development: validated mode — Ask for changes sends the feedback to the developer and reopens developer_check; Approve then moves on to code_review', { timeout: 120000 }, async () => {
@@ -1490,6 +1491,87 @@ steps:
   }
 });
 
+// ---- #198: base_worktree (the test writer's temporary checkout of the base, from the shared cache) --
+
+test('loadWorkflow validates base_worktree: boolean, on an agent step only, needs orchestrator.worktree', () => {
+  const tmp = path.join(os.tmpdir(), `wf-base-worktree-${process.pid}.yaml`);
+  const write = (extra, { worktree = true } = {}) => fs.writeFileSync(tmp, `apiVersion: multiagent/v1
+kind: Workflow
+metadata: { name: m }
+${worktree ? 'orchestrator:\n  worktree: { repo: ".", base: main }\n' : ''}agents:
+  a: { provider: claude, model: m }
+steps:
+  - id: s1
+    agent: a
+    prompt: do it
+    ${extra}
+`);
+  try {
+    write('base_worktree: "yes"');
+    assert.throws(() => loadWorkflow(tmp), /base_worktree must be true or false, on an agent step of a workflow with orchestrator\.worktree/);
+    write('base_worktree: true', { worktree: false });
+    assert.throws(() => loadWorkflow(tmp), /base_worktree must be true or false, on an agent step of a workflow with orchestrator\.worktree/);
+    write('base_worktree: true');
+    assert.doesNotThrow(() => loadWorkflow(tmp));
+    write('base_worktree: false');
+    assert.doesNotThrow(() => loadWorkflow(tmp));
+  } finally {
+    fs.unlinkSync(tmp);
+  }
+});
+
+test('loadWorkflow rejects base_worktree on a human_approval (gate) step', () => {
+  const tmp = path.join(os.tmpdir(), `wf-base-worktree-gate-${process.pid}.yaml`);
+  fs.writeFileSync(tmp, `apiVersion: multiagent/v1
+kind: Workflow
+metadata: { name: m }
+orchestrator:
+  worktree: { repo: ".", base: main }
+agents:
+  a: { provider: claude, model: m }
+steps:
+  - id: g
+    type: human_approval
+    message: ok?
+    base_worktree: true
+`);
+  try {
+    assert.throws(() => loadWorkflow(tmp), /base_worktree must be true or false, on an agent step of a workflow with orchestrator\.worktree/);
+  } finally {
+    fs.unlinkSync(tmp);
+  }
+});
+
+test('e2e-release.yaml loads', () => {
+  assert.doesNotThrow(() => loadWorkflow(path.join(root, 'workflows', 'e2e-release.yaml')));
+});
+
+test('e2e-release workflow: a simulated run fails once, fixes it (developer, review), passes, and approves the merge', { timeout: 60000 }, async () => {
+  const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'));
+  const run = new WorkflowRun({
+    file: path.join(root, 'workflows', 'e2e-release.yaml'),
+    inputs: { task: 'Release check', repo_path: root },
+    mock: true, runsDir,
+    mockSequences: { verdict: ['approved'] },
+  });
+  const events = [];
+  run.on('event', (ev) => {
+    events.push(ev);
+    if (ev.type === 'approval.requested') setImmediate(() => run.resolveApproval(ev.approval_id, ev.choices ? ev.choices[0].id : true));
+  });
+  await run.start();
+  fs.rmSync(runsDir, { recursive: true, force: true });
+  const finished = events.find((e) => e.type === 'workflow.finished');
+  assert.equal(finished.status, 'success', finished.error);
+
+  const visited = events.filter((e) => e.type === 'step.finished').map((e) => e.step_id);
+  assert.deepEqual(visited, ['e2e', 'fix', 'review', 'e2e', 'approve_fixes']);
+  const e2eOutputs = events.filter((e) => e.type === 'step.finished' && e.step_id === 'e2e').map((e) => e.output);
+  assert.deepEqual(e2eOutputs.map((o) => o.e2e_status), ['fail', 'pass']);
+  // the developer only went through the fix loop once (max_rounds default: 2)
+  assert.ok(!events.some((e) => e.type === 'approval.requested' && e.step_id === 'e2e_failed'));
+});
+
 test('local hero workflow: a simulated run merges right after verify_change and ends as success', { timeout: 120000 }, async () => {
   const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'));
   const run = new WorkflowRun({ file: path.join(root, 'workflows', 'software-development-local-hero.yaml'), inputs: { task: 'Engine test', repo_path: root }, mock: true, runsDir });
@@ -1552,11 +1634,11 @@ test('local hero workflow: verify_failed\'s message has the Dev/QA line and the 
     ...scope,
     steps: { ...scope.steps, test: { output: { scenarios: [{ name: 'Filter the runs', status: 'passed' }, { name: 'Empty filter result', status: 'failed', reason: 'no message shown' }] } } },
   });
-  assert.match(withScenarios, /E2E scenarios \(written and run by the test writer\): 1 passed · 1 failed/);
+  assert.match(withScenarios, /E2E scenarios \(written by the test writer\): 1 passed · 1 failed/);
   assert.match(withScenarios, /- failed: Empty filter result \(no message shown\)/);
 });
 
-test('local hero workflow: a successful run saves <run>/e2e/scenarios.feature and scenarios.json, with the test step\'s failed-then-passed scenario across its two visits', { timeout: 120000 }, async () => {
+test('local hero workflow: a successful run saves <run>/e2e/scenarios.feature and scenarios.json; the test step reports them pending, never run (#199)', { timeout: 120000 }, async () => {
   const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'));
   const run = new WorkflowRun({ file: path.join(root, 'workflows', 'software-development-local-hero.yaml'), inputs: { task: 'Engine test', repo_path: root }, mock: true, runsDir });
   const events = [];
@@ -1570,14 +1652,16 @@ test('local hero workflow: a successful run saves <run>/e2e/scenarios.feature an
 
   const testOutputs = events.filter((e) => e.type === 'step.finished' && e.step_id === 'test').map((e) => e.output);
   assert.equal(testOutputs.length, 2, 'tests_status fails once by default, then passes on retry');
-  assert.equal(testOutputs[0].scenarios.find((s) => s.name === 'An empty filter result explains itself').status, 'failed');
-  assert.equal(testOutputs[1].scenarios.find((s) => s.name === 'An empty filter result explains itself').status, 'passed');
+  for (const output of testOutputs) {
+    assert.ok(output.scenarios.length, 'the test step still reports scenarios');
+    assert.ok(output.scenarios.every((s) => s.status === 'pending'), 'a development run writes scenarios, it never runs them (#199)');
+  }
 
   assert.ok(events.some((e) => e.type === 'file.saved' && e.step_id === 'test' && /e2e[\\/]scenarios\.feature$/.test(e.path)));
+  assert.match(fs.readFileSync(path.join(run.runDir, 'e2e', 'scenarios.feature'), 'utf8'), /# pending/);
   const saved = JSON.parse(fs.readFileSync(path.join(run.runDir, 'e2e', 'scenarios.json'), 'utf8'));
-  assert.equal(saved.scenarios.find((s) => s.name === 'An empty filter result explains itself').status, 'passed');
-  assert.equal(saved.counts.passed, 2);
-  assert.equal(saved.counts.skipped, 1);
+  assert.ok(saved.scenarios.every((s) => s.status === 'pending'));
+  assert.equal(saved.counts.pending, saved.counts.total);
   fs.rmSync(runsDir, { recursive: true, force: true });
 });
 

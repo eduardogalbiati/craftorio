@@ -9,6 +9,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { captureScreenshots, checkEntry, splitArgs } = require('../src/engine/screenshot-step');
+const { acquireSlot, SCREENSHOT_SLOT_ENV } = require('../src/engine/machine-slot');
 
 function tmpDir(t, prefix) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -125,4 +126,50 @@ test('captureScreenshots: a successful command that writes the image is counted 
   assert.equal(out.screenshots[0].caption, 'The dashboard');
   assert.ok(Number.isInteger(out.screenshots[0].duration_ms));
   assert.match(out.message, /1 screenshot of 1 screen taken in round 1/);
+});
+
+// ---- captureScreenshots: the machine-wide screenshot slot (#199) -----------------------------
+
+test('captureScreenshots: takes the slot, gives its token to run via MULTIAGENT_SCREENSHOT_SLOT, and releases it', async (t) => {
+  let released = false;
+  let seenName;
+  const slot = async (name) => { seenName = name; return { token: 'tok-123', release: () => { released = true; } }; };
+  let seenToken;
+  const run = async ({ env }) => { seenToken = env[SCREENSHOT_SLOT_ENV]; return { code: 0, output: '', timedOut: false }; };
+  await captureScreenshots(captureOpts(t, { base: null, run, slot }));
+  assert.equal(seenName, 'screenshot');
+  assert.equal(seenToken, 'tok-123');
+  assert.equal(released, true);
+});
+
+test('captureScreenshots: a slot that cannot be acquired reports the wait as the capture\'s own error', async (t) => {
+  const slot = async () => { throw new Error('the screenshot slot is still held by pid 42 after 1200 s'); };
+  const out = await captureScreenshots(captureOpts(t, { base: null, slot }));
+  assert.equal(out.taken, 0);
+  assert.equal(out.errors.length, 1);
+  assert.match(out.errors[0].error, /waiting for the screenshot slot: the screenshot slot is still held by pid 42/);
+});
+
+test('captureScreenshots: two captures competing for the same machine-wide slot never run at the same time; the second waits', async (t) => {
+  const locksDir = tmpDir(t, 'locks-');
+  const slot = (name, opts) => acquireSlot(name, { ...opts, dir: locksDir });
+  const order = [];
+  const run = async ({ args }) => {
+    const name = args[args.indexOf('--name') + 1];
+    order.push(`start:${name}`);
+    await new Promise((r) => setTimeout(r, 50));
+    order.push(`end:${name}`);
+    return { code: 0, output: '', timedOut: false };
+  };
+  let waited = false;
+  const onSlotWait = () => { waited = true; };
+  const optsA = captureOpts(t, { base: null, run, slot, onSlotWait, entries: [{ name: 'a-shot', args: [] }] });
+  const optsB = captureOpts(t, { base: null, run, slot, onSlotWait, entries: [{ name: 'b-shot', args: [] }] });
+  await Promise.all([captureScreenshots(optsA), captureScreenshots(optsB)]);
+  assert.equal(waited, true);
+  const aStart = order.indexOf('start:a-shot');
+  const aEnd = order.indexOf('end:a-shot');
+  const bStart = order.indexOf('start:b-shot');
+  const bEnd = order.indexOf('end:b-shot');
+  assert.ok(aEnd < bStart || bEnd < aStart, `expected no interleaving, got ${order.join(',')}`);
 });
