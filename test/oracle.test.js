@@ -399,6 +399,7 @@ test('act: a Night watch auto action already running on the same id is rejected 
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'oracle-act-night-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   fs.writeFileSync(path.join(dir, 'night-watch.json'), JSON.stringify({ on: true, until: new Date(Date.now() + 3600e3).toISOString(), startedAt: new Date().toISOString() }));
+  fs.writeFileSync(path.join(dir, 'night-permissions.json'), JSON.stringify({ allowed: ['dispatch'], updatedAt: new Date().toISOString() }));
   const perform = deferredPerform();
   const o = oracle.createOracle({
     dir: () => dir, tools: () => [], bridge: { start: async () => { throw new Error('not needed'); } },

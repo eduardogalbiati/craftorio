@@ -14,10 +14,10 @@ const indexHtml = fs.readFileSync(path.join(rendererDir, 'index.html'), 'utf8');
 const viewIds = fs.readdirSync(path.join(rendererDir, 'views'), { withFileTypes: true })
   .filter((d) => d.isDirectory()).map((d) => d.name);
 
-test('views/: all 18 screens have moved into their own folders', () => {
+test('views/: all 19 screens have moved into their own folders', () => {
   assert.deepEqual(viewIds.sort(), [
-    'agents', 'analytics', 'arena', 'artifacts', 'backlog', 'dashboard', 'duo', 'oracle', 'project',
-    'projects', 'run', 'runchat', 'sessions', 'settings', 'skills', 'supervisor', 'usage', 'workflows',
+    'agents', 'analytics', 'arena', 'artifacts', 'backlog', 'dashboard', 'duo', 'nightwatch', 'oracle',
+    'project', 'projects', 'run', 'runchat', 'sessions', 'settings', 'skills', 'supervisor', 'usage', 'workflows',
   ]);
 });
 
