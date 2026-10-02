@@ -31,25 +31,11 @@ test('builder: bundled workflows open read-only and clone into an editable copy'
   assert.equal(api['builder:load'](made.file).mode, 'full');
 });
 
-// ---- #137: declared outputs (top-level `outputs:`) and saved pipelines -----------------------
+// ---- #137: declared outputs (top-level `outputs:`, #134) and saved pipelines ------------------
 
-test('listWorkflows: declared outputs are the top-level "outputs:", a list or a map, by name', (t) => {
+test('listWorkflows: declared outputs are the engine\'s own map (name -> { type, description, value }); none declared is {}', (t) => {
   const { api, service } = makeService(t);
-  const listYaml = `apiVersion: multiagent/v1
-kind: Workflow
-metadata:
-  name: out-list
-agents:
-  a: { provider: claude, model: m, session: ephemeral }
-steps:
-  - id: work
-    agent: a
-    prompt: "do it"
-outputs:
-  - summary
-  - { name: pr_url }
-`;
-  const mapYaml = `apiVersion: multiagent/v1
+  const yaml = `apiVersion: multiagent/v1
 kind: Workflow
 metadata:
   name: out-map
@@ -60,15 +46,16 @@ steps:
     agent: a
     prompt: "do it"
 outputs:
-  summary: { type: string }
-  pr_url: { type: string }
+  summary: { type: string, description: "What changed", value: "{{ steps.work.output.summary }}" }
+  pr_url: { type: string, value: "{{ steps.work.output.pr_url }}" }
 `;
-  fs.writeFileSync(path.join(service.workspace().workflows, 'out-list.yaml'), listYaml);
-  fs.writeFileSync(path.join(service.workspace().workflows, 'out-map.yaml'), mapYaml);
+  fs.writeFileSync(path.join(service.workspace().workflows, 'out-map.yaml'), yaml);
   const list = api['workflows:list']();
-  assert.deepEqual(list.find((w) => w.file === 'out-list.yaml').outputs, ['summary', 'pr_url']);
-  assert.deepEqual(list.find((w) => w.file === 'out-map.yaml').outputs, ['summary', 'pr_url']);
-  assert.deepEqual(list.find((w) => w.file === 'fixture-service.yaml').outputs, []); // no outputs: declared
+  const withOutputs = list.find((w) => w.file === 'out-map.yaml');
+  assert.deepEqual(Object.keys(withOutputs.outputs), ['summary', 'pr_url']);
+  assert.equal(withOutputs.outputs.summary.description, 'What changed');
+  assert.equal(withOutputs.outputs.summary.type, 'string');
+  assert.deepEqual(list.find((w) => w.file === 'fixture-service.yaml').outputs, {}); // no outputs: declared
 });
 
 test('listPipelines: a valid pipeline returns its stages, each with its "when" and "map"', (t) => {

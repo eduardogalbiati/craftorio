@@ -114,7 +114,7 @@ test('wfMatches: an empty query always matches; a query matches the name, descri
   const { helpers } = loadDefs();
   const w = {
     name: 'Software development', description: 'Write, review and ship', file: 'software-development.yaml',
-    tags: ['team'], outputs: ['pr_url'], steps: [{ id: 'develop' }, { id: 'review' }],
+    tags: ['team'], outputs: { pr_url: { type: 'string', value: '{{ steps.merge.output.pr_url }}' } }, steps: [{ id: 'develop' }, { id: 'review' }],
     agents: { dev: { model: 'claude-opus-5-5', provider: 'claude' } },
   };
   assert.equal(helpers.wfMatches(w, ''), true);
@@ -164,17 +164,17 @@ test('originBadge: default/modified/custom text, and a "newer default" badge onl
 // workflowCard: modes, outputs, Restore default, "Used in", the collapsed/expanded flow
 // ---------------------------------------------------------------------------
 
-test('workflowCard: modes render as pills and declared outputs as chips', () => {
+test('workflowCard: modes render as pills and declared outputs (a map, #134) as chips, the description in the chip\'s title', () => {
   const { helpers } = loadDefs();
   const w = {
     file: 'wf.yaml', name: 'WF', agents: {}, steps: [],
     inputs: { mode: { enum: ['auto', 'validated'], default: 'auto' } },
-    outputs: ['summary', 'pr_url'],
+    outputs: { summary: { type: 'string', description: 'What changed', value: '{{ steps.write.output.summary }}' }, pr_url: { type: 'string', value: '{{ steps.merge.output.pr_url }}' } },
   };
   const html = helpers.workflowCard(w);
   assert.match(html, /class="pill pill-idle"[^>]*>Auto</);
   assert.match(html, /class="pill pill-idle"[^>]*>Validated</);
-  assert.match(html, /class="badge wf-out"[^>]*>⇢ summary</);
+  assert.match(html, /class="badge wf-out" title="What changed Declared output[^"]*">⇢ summary</);
   assert.match(html, /class="badge wf-out"[^>]*>⇢ pr_url</);
 });
 
