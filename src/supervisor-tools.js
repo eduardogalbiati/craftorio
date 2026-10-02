@@ -27,7 +27,10 @@ function supervisorTools(ctx) {
       name: 'list_workflows',
       description: 'The workflows of the workspace: file, name, description, inputs, agents (provider, model, skills, capabilities) and steps.',
       inputSchema: obj(),
-      run: () => json(ctx.listWorkflows()),
+      // The fields the description names, not the screen's extras (builderProblems alone is a fifth of
+      // the payload): the whole list must stay under MAX_CHARS, or clip() cuts the JSON mid-string.
+      run: () => json(ctx.listWorkflows().map(({ file, origin, name, version, description, category, tags, inputs, outputs, agents: a, steps }) => (
+        { file, origin, name, version, description, category, tags, inputs, outputs, agents: a, steps }))),
     },
     {
       name: 'read_workflow',
