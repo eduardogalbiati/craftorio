@@ -14,6 +14,8 @@
 // folded, with Mute per run; a delegation shows the agent asked and its cost. The head's Night
 // watch opens its form (end time, Start / Cancel); while on, a strip shows it with Turn off, and the
 // runs or roadmaps watched and the runs muted (Unwatch, Unmute). oracle:changed reloads the chat.
+// Live progress (#180, window.LiveTurn, live-turn.js): while it answers, what the Oracle does and its
+// answer as it is written (chat:progress 'oracle'); Stop (api.cancelChatTurn) keeps what was written.
 // Uses app.js globals ($, esc, state, api, errMsg, devMode, fmtCost, markdownHtml, confirmDialog,
 // selectRun, showView, openArtifactsAt, showSettingsTab, registerView, viewRegistry, Robots).
 (() => {
@@ -21,7 +23,7 @@
   const or = {
     messages: [], service: null, pending: null, error: null, loaded: false, drawer: false,
     drafts: { text: '', images: [] }, pasteError: null, memory: M.memoryForm(''), memoryOpen: false, refilledFor: null,
-    wake: null, nightForm: null, acting: new Set(),
+    wake: null, nightForm: null, acting: new Set(), live: null,
   };
   const SURFACES = ['dock', 'drawer'];
   const SUGGESTIONS = [
@@ -113,8 +115,10 @@
     const images = or.drafts.images;
     const v = view();
     if ((!q && !images.length) || !v.chipsEnabled) return;
-    Object.assign(or, { pending: q || `(${images.length} image${images.length > 1 ? 's' : ''})`, error: null, pasteError: null });
+    Object.assign(or, { pending: q || `(${images.length} image${images.length > 1 ? 's' : ''})`, error: null, pasteError: null, live: window.LiveTurn.create({ agent: 'Oracle' }) });
     render();
+    // #180: the timer and "Still working" move even when no item arrives
+    const tick = setInterval(renderLive, 1000);
     try {
       const out = await api.askOracle({ question: q, screen: screen(), images: images.map((i) => ({ dataUrl: i.dataUrl })), mock: devMode() });
       or.messages = out.messages;
@@ -128,9 +132,20 @@
     } catch (e) {
       or.error = errMsg(e); // the question stays in the input, to resend
     } finally {
-      or.pending = null;
+      clearInterval(tick);
+      Object.assign(or, { pending: null, live: null });
       render();
     }
+  }
+
+  // #180: only the live turn is redrawn on each event and each second
+  function renderLive() {
+    if (!or.live) return;
+    document.querySelectorAll('.oracle-live').forEach((el) => {
+      el.innerHTML = window.LiveTurn.html(or.live);
+      const log = el.parentElement;
+      if (log) log.scrollTop = log.scrollHeight;
+    });
   }
 
   async function reset() {
@@ -282,7 +297,7 @@
     }
     if (m.role === 'system') return `<div class="sup-wmsg system${m.error ? ' error' : ''}"><div class="sup-wmsg-meta">${esc(time(m.ts))}</div><div>${esc(m.text)}</div></div>`;
     const meta = M.metaParts(m, { fmtTime: time, fmtCost }).map(esc).join(' · ');
-    const tag = m.wake ? ' · <span class="badge">wake-up</span>' : m.kind === 'night-summary' ? ' · <span class="badge warn">Night watch</span>' : '';
+    const tag = m.wake ? ' · <span class="badge">wake-up</span>' : m.kind === 'night-summary' ? ' · <span class="badge warn">Night watch</span>' : m.stopped ? ' · <span class="badge warn" title="You stopped this turn: the answer is what was written until then">Stopped</span>' : '';
     return `<div class="sup-wmsg oracle-msg"><div class="sup-wmsg-meta oracle-meta">${avatar('xs')} Oracle · ${meta}${tag}</div><div class="md md-compact oracle-md">${markdownHtml(m.text || '')}</div>${m.kind === 'night-summary' ? summaryUndoHtml(m) : ''}</div>`;
   }
   // a card: the title leads; what changes, where, the backup and why; who asked; its buttons
@@ -341,7 +356,7 @@
     return (v.state === 'empty' ? '<div class="svc-empty muted small">The Oracle keeps one conversation for the whole app. It reads your runs (events, sessions, decisions, costs), the roadmaps and the Backlog, the workflows and skills, and your projects\' repositories, read-only. Ask it why a run failed, where the tokens go or what to do next. Run events wake it when they need you. It changes nothing on its own: each change is a card you confirm with Do it.</div>' : '')
       + or.messages.map(messageHtml).join('')
       + (or.pending ? `<div class="sup-wmsg user"><div class="sup-wmsg-meta">You</div><div class="oracle-text">${esc(or.pending)}</div>${or.drafts.images.length ? `<div class="oracle-thumbs">${or.drafts.images.map((i) => `<span class="oracle-thumb"><img src="${esc(i.dataUrl)}" alt="" /></span>`).join('')}</div>` : ''}</div>` : '')
-      + (v.state === 'answering' ? '<div class="sup-loading"><span class="spinner"></span><span>The Oracle is reading…</span></div>' : '')
+      + (or.live ? `<div class="oracle-live">${window.LiveTurn.html(or.live)}</div>` : v.state === 'answering' ? '<div class="sup-loading"><span class="spinner"></span><span>The Oracle is reading…</span></div>' : '')
       + (or.error ? `<div class="sup-wmsg system error"><div class="sup-wmsg-meta">now</div><div>${esc(or.error)}</div></div>` : '');
   }
   function noticeHtml(v) {
@@ -538,8 +553,16 @@
         if (e.target.matches?.('[data-oracle-night-form]')) { e.preventDefault(); startNightWatch(); }
       });
       api.onOracleChanged?.(reloadSoon);
+      // #180: the question in flight, as the service reports it
+      api.onChatProgress?.((p) => {
+        if (p?.chat !== 'oracle' || !or.live) return;
+        window.LiveTurn.apply(or.live, p);
+        renderLive();
+      });
       document.addEventListener('click', (e) => {
         const t = e.target;
+        // #180: the live turn's Stop and its steps' toggle
+        if (t.closest('.oracle-live') && window.LiveTurn.onClick(e, or.live, { onStop: () => api.cancelChatTurn('oracle', '').catch((err) => { or.error = errMsg(err); render(); }), render: renderLive })) return;
         const chip = t.closest('[data-oracle-q]');
         if (chip) { ask(chip.dataset.oracleQ); return; }
         const un = t.closest('[data-oracle-unpaste]');

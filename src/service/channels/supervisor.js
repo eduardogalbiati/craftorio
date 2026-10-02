@@ -63,7 +63,17 @@ module.exports = (ctx) => {
       channel: 'supervisor:chat',
       method: 'askSupervisorChat',
       params: 'opts',
-      fn: (opts) => chat().ask({ ...opts, mock: !!opts?.mock || simulation.simulationOnly() }),
+      fn: async (opts) => {
+        // #180: its progress is pushed on chat:progress; chat:cancel ('supervisor') stops it
+        const turn = ctx.chatTurns.start('supervisor');
+        let out;
+        try {
+          out = await chat().ask({ ...opts, mock: !!opts?.mock || simulation.simulationOnly(), onItem: turn.onItem, signal: turn.signal });
+        } finally {
+          turn.end(turn.stopped() ? 'stopped' : out?.message?.error || !out ? 'failed' : 'done');
+        }
+        return out;
+      },
     },
     { channel: 'supervisor:chatHistory', method: 'supervisorChatHistory', fn: () => chat().history() },
     { channel: 'supervisor:chatClear', method: 'clearSupervisorChat', fn: () => chat().clear() },

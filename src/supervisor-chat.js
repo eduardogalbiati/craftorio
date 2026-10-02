@@ -10,13 +10,21 @@
 // human gate and never prescribes code fixes (it routes them to the workflow's agents).
 // `mock` (and MULTIAGENT_SIMULATION_ONLY) answers from the simulated supervisor: no model call, no
 // cost, but the same tools, called in-process.
+// Live progress (#180, src/chat-progress.js): ask's `onItem` and `signal` stream and stop a question.
 
 const fs = require('fs');
 const path = require('path');
+const { mockSteps, partialText } = require('./chat-progress');
 
 const DEFAULT_MODEL = 'claude-opus-5-5';
 const MCP_NAME = 'orchestrator';
 const TIMEOUT_MS = 10 * 60e3;
+// #180: the fake steps a simulated turn streams to the live view before its answer
+const MOCK_STEPS = [
+  { name: `mcp__${MCP_NAME}__list_runs`, input: { limit: 200 } },
+  { name: `mcp__${MCP_NAME}__list_workflows`, input: {} },
+  { name: `mcp__${MCP_NAME}__list_projects`, input: {} },
+];
 
 const RULES = [
   'You are the Supervisor of the Multiagent Orchestrator, a desktop app that runs multi-agent workflows defined in YAML. You are the person\'s companion on every screen of the app, in a chat.',
@@ -80,7 +88,7 @@ function createSupervisorChat({ dir, tools, bridge, mcpCommand, skillsDirs, reso
   }
 
   // attachments: this question's images (#129), already stored in the chat's attachments/ folder
-  async function realTurn(text, model, attachments = []) {
+  async function realTurn(text, model, attachments = [], { onItem = () => {}, signal = null } = {}) {
     refuseReal('the supervisor\'s CLI (claude)');
     const { runTurn } = require('./engine/providers');
     const { render } = require('./engine/workflow');
@@ -111,7 +119,7 @@ function createSupervisorChat({ dir, tools, bridge, mcpCommand, skillsDirs, reso
     fs.mkdirSync(dir(), { recursive: true });
     const res = await runTurn({
       provider, model, providerSessionId: sessionId, prompt, cwd: dir(), extraArgs, timeoutMs: TIMEOUT_MS, render, attachments,
-      hint: { stepId: 'supervisor-chat', visit: 1, agent: 'supervisor' }, onItem: () => {},
+      hint: { stepId: 'supervisor-chat', visit: 1, agent: 'supervisor' }, onItem, signal,
     });
     saveState({ sessionId: res.providerSessionId || sessionId, model });
     return res;
@@ -124,8 +132,10 @@ function createSupervisorChat({ dir, tools, bridge, mcpCommand, skillsDirs, reso
      * { question, screen, mock, model, attachments } → { message, messages } (the answer and the whole
      * conversation). attachments: images for this question only (#129, paths or { path, name }), copied
      * into the chat's attachments/ folder first; the simulated supervisor lists them without opening them.
+     * #180: `onItem` gets the turn's items as they arrive (a simulated turn streams fake steps);
+     * `signal` stops it: the prose written so far is posted as the answer, marked `stopped`.
      */
-    async ask({ question, screen, mock, model, attachments = [] } = {}) {
+    async ask({ question, screen, mock, model, attachments = [], onItem = null, signal = null } = {}) {
       const q = String(question || '').trim();
       if (!q) throw new Error('Type a message for the supervisor.');
       if (busy) throw new Error('The supervisor is still answering the previous message.');
@@ -135,17 +145,25 @@ function createSupervisorChat({ dir, tools, bridge, mcpCommand, skillsDirs, reso
       try {
         post({ role: 'user', text: q, screen: String(screen || '').trim() || null, ...(images.length ? { attachments: images } : {}) });
         let message;
+        // #180: the prose written so far, kept when the turn fails or is stopped
+        const written = [];
+        const seen = (it) => { if (it?.kind === 'text') written.push(String(it.text || '')); onItem?.(it); };
         try {
           if (mock) {
-            const seen = images.length ? `\n\nAttached images (simulated: not opened): ${images.map((f) => f.name).join(', ')}.` : '';
-            message = post({ role: 'supervisor', text: `${await mockAnswer(String(screen || '').trim())}${seen}`, simulated: true, costUsd: 0 });
+            const opened = images.length ? `\n\nAttached images (simulated: not opened): ${images.map((f) => f.name).join(', ')}.` : '';
+            const text = `${await mockAnswer(String(screen || '').trim())}${opened}`;
+            if (onItem) await mockSteps(seen, { steps: MOCK_STEPS, text, signal });
+            message = post({ role: 'supervisor', text, simulated: true, costUsd: 0 });
           } else {
             const m = String(model || state().model || DEFAULT_MODEL);
-            const res = await realTurn(questionText(q, screen), m, images);
+            const res = await realTurn(questionText(q, screen), m, images, { onItem: seen, signal });
             message = post({ role: 'supervisor', text: String(res.text || '').trim() || '(no answer)', model: m, costUsd: res.costUsd ?? null });
           }
         } catch (e) {
-          message = post({ role: 'system', text: `The supervisor could not answer: ${e.message || e}`, error: true });
+          const partial = partialText(written);
+          message = signal?.aborted
+            ? post({ role: 'supervisor', text: partial || 'Stopped before answering.', stopped: true })
+            : post({ role: 'system', text: `The supervisor could not answer: ${e.message || e}${partial ? `\n\nWritten before the error:\n\n${partial}` : ''}`, error: true });
         }
         return { message, messages: history() };
       } finally {

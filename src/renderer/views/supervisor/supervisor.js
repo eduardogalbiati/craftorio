@@ -5,10 +5,12 @@
 // "Analytics, range 2026-09-01 to 2026-09-30"), so requests need not repeat it. The supervisor reads the
 // app's data with its read-only MCP tools (src/supervisor-tools.js); it cannot change anything yet.
 // Developer or simulated mode asks the simulated supervisor (no model call).
+// Live progress (#180, window.LiveTurn, live-turn.js): while it answers, what the supervisor does and
+// its answer as it is written (chat:progress 'supervisor'); Stop (api.cancelChatTurn) keeps what was written.
 // Uses app.js globals ($, esc, state, api, errMsg, devMode, fmtCost, markdownHtml, confirmDialog,
 // shownRunId, registerView).
 (() => {
-  const sv = { messages: [], busy: false, pending: null, error: null, loaded: false, drawer: false, tools: [] };
+  const sv = { messages: [], busy: false, pending: null, error: null, loaded: false, drawer: false, tools: [], live: null };
   const SUGGESTIONS = [
     'What am I looking at?',
     'Which runs failed recently, and why?',
@@ -58,19 +60,32 @@
   async function ask(question, screen, field = null) {
     const q = String(question || '').trim();
     if (!q || sv.busy) return;
-    Object.assign(sv, { busy: true, pending: q, error: null });
+    Object.assign(sv, { busy: true, pending: q, error: null, live: window.LiveTurn.create({ agent: 'supervisor' }) });
     const attachments = await PasteImage.collect(field);
     document.querySelectorAll('.svc-input').forEach((el) => { el.value = ''; PasteImage.clear(el); });
     render();
+    // #180: the timer and "Still working" move even when no item arrives
+    const tick = setInterval(renderLive, 1000);
     try {
       const out = await api.askSupervisorChat({ question: q, screen, mock: devMode(), ...(attachments.length ? { attachments } : {}) });
       sv.messages = out.messages;
     } catch (e) {
       sv.error = errMsg(e);
     } finally {
-      Object.assign(sv, { busy: false, pending: null });
+      clearInterval(tick);
+      Object.assign(sv, { busy: false, pending: null, live: null });
       render();
     }
+  }
+
+  // #180: only the live turn is redrawn on each event and each second
+  function renderLive() {
+    if (!sv.live) return;
+    document.querySelectorAll('.svc-live').forEach((el) => {
+      el.innerHTML = window.LiveTurn.html(sv.live);
+      const log = el.parentElement;
+      if (log) log.scrollTop = log.scrollHeight;
+    });
   }
 
   async function clear() {
@@ -103,7 +118,7 @@
       return `<div class="sup-wmsg user"><div class="sup-wmsg-meta">You · ${esc(time)}${msg.screen ? ` · <span title="What the supervisor was told about the screen">${esc(msg.screen)}</span>` : ''}</div><div>${esc(msg.text)}</div></div>`;
     }
     if (msg.role === 'system') return `<div class="sup-wmsg system${msg.error ? ' error' : ''}"><div class="sup-wmsg-meta">${esc(time)}</div><div>${esc(msg.text)}</div></div>`;
-    const meta = `Supervisor · ${esc(time)}${msg.simulated ? ' · simulated' : msg.model ? ` · ${esc(msg.model)}` : ''} · ${esc(fmtCost(msg.costUsd || 0))}`;
+    const meta = `Supervisor · ${esc(time)}${msg.simulated ? ' · simulated' : msg.model ? ` · ${esc(msg.model)}` : ''} · ${esc(fmtCost(msg.costUsd || 0))}${msg.stopped ? ' · <span class="badge warn" title="You stopped this turn: the answer is what was written until then">Stopped</span>' : ''}`;
     return `<div class="sup-wmsg svc-msg"><div class="sup-wmsg-meta"><span class="sup-mark">◆</span> ${meta}</div><div class="md md-compact">${markdownHtml(msg.text || '')}</div></div>`;
   }
 
@@ -111,7 +126,8 @@
     return (messages.length || sv.pending ? '' : `<div class="svc-empty muted small">Ask about anything in the app: workflows, projects, runs, skills, agents, usage. I know which screen you are on, and I read the app's data (never your repositories' code). I cannot change anything yet: I tell you what to change and where.</div>`)
       + messages.map(messageHtml).join('')
       + (sv.pending ? `<div class="sup-wmsg user"><div class="sup-wmsg-meta">You</div><div>${esc(sv.pending)}</div></div>` : '')
-      + (sv.busy ? '<div class="sup-loading"><span class="spinner"></span><span>The supervisor is reading the app\'s data…</span></div>' : '')
+      + (sv.live ? `<div class="svc-live">${window.LiveTurn.html(sv.live)}</div>` : '')
+      + (sv.busy && !sv.live ? '<div class="sup-loading"><span class="spinner"></span><span>The supervisor is reading the app\'s data…</span></div>' : '')
       + (sv.error ? `<p class="error small">${esc(sv.error)}</p>` : '');
   }
 
@@ -216,7 +232,15 @@
         form.onsubmit = (e) => { e.preventDefault(); ask(input.value, screenFor(where), input); };
         input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ask(input.value, screenFor(where), input); } });
       });
+      // #180: the question in flight, as the service reports it
+      api.onChatProgress?.((p) => {
+        if (p?.chat !== 'supervisor' || !sv.live) return;
+        window.LiveTurn.apply(sv.live, p);
+        renderLive();
+      });
       document.addEventListener('click', (e) => {
+        // #180: the live turn's Stop and its steps' toggle
+        if (e.target.closest('.svc-live') && window.LiveTurn.onClick(e, sv.live, { onStop: () => api.cancelChatTurn('supervisor', '').catch((err) => { sv.error = errMsg(err); render(); }), render: renderLive })) return;
         const chip = e.target.closest('[data-svc-q]');
         if (!chip) return;
         const where = chip.closest('#svc-drawer') ? 'drawer' : 'page';

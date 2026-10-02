@@ -1,0 +1,20 @@
+/* The agent chats' live turn (#180, live-turn.js): the activity line (spinner, what the agent does,
+   the timer, Stop), the last steps and the answer as it is written. Shared by the Product Owner's
+   drawer, the Oracle drawer and the Supervisor chat. */
+.live-turn { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border: 1px dashed rgba(192,132,252,.45); border-radius: 10px; }
+.live-turn.stale { border-color: var(--yellow); }
+.live-turn-status { display: flex; align-items: center; gap: 10px; min-width: 0; color: var(--muted); }
+.live-turn-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+.live-turn.stale .live-turn-label { color: var(--yellow); }
+.live-turn-time { flex: none; font-variant-numeric: tabular-nums; }
+.live-turn-steps { display: flex; flex-direction: column; gap: 4px; }
+.live-turn-steps > .link-btn { align-self: flex-start; }
+.live-turn-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 2px; font-size: 12px; color: var(--muted); }
+.live-step { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.live-step > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.live-step-mark { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--muted); opacity: .6; }
+.live-step.running .live-step-mark { background: var(--purple); opacity: 1; animation: live-pulse 1s ease-in-out infinite; }
+.live-step.done .live-step-mark { background: var(--green); }
+.live-step.error .live-step-mark { background: var(--red); opacity: 1; }
+.live-turn-text { border-top: 1px solid var(--border); padding-top: 8px; }
+@keyframes live-pulse { 50% { opacity: .35; } }

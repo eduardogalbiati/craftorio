@@ -11,7 +11,8 @@
 // issue too big for one run (#124); po:epic creates an epic or places issues in one (#138). Both
 // run only on the owner's click, preview like po:file, and sync the backlog after a real write.
 // po:ask's `scenario` (#148, simulated only): forces the simulated answer (MOCK_SCENARIOS). Every
-// real answer raises a `po` notice (#149, src/notifications.js); a simulated one does not.
+// real answer raises a `po` notice (#149, src/notifications.js); a simulated or stopped one does not.
+// po:ask's progress is pushed on chat:progress ('po', the project id) and chat:cancel stops it (#180).
 
 const path = require('path');
 const agents = require('../../agents');
@@ -58,32 +59,41 @@ module.exports = (ctx) => {
         if (!data) throw new Error('Sync the backlog first: the Product Owner reads the synced issues.');
         const simulated = !!mock || simulation.simulationOnly();
         const settings = workspace.readSettings(ctx.ws);
-        const out = await productOwner.ask({
-          backlogDir: ctx.ws.backlog,
-          projectId: id,
-          runsDir: ctx.ws.runs,
-          question,
-          data,
-          activeRuns: ctx.activeRuns().filter((r) => r.projectId === id),
-          runs: runs.runsForProject(runs.listRuns(ctx.ws.runs), p),
-          workflows: ctx.listWorkflows().filter((w) => !w.error && w.inputs?.task),
-          folder: p.folder,
-          agent: agents.readAgent(ctx.ws.agents, agents.PRODUCT_OWNER_ID),
-          skillsDirs: [ctx.ws.skills, ctx.BUNDLED_SKILLS_DIR],
-          resolveCommand,
-          // its own past calls and the Oracle's are in no run: add them to what the runs used this month
-          budget: simulated ? null : usage.withPeerUsage(usage.budgetBaseline({ runsDir: ctx.ws.runs, settings, extraRuns: oracle.usageRuns(ctx.ws.oracle) }), productOwner.monthUsage(ctx.ws.backlog), settings.prices),
-          mock: simulated,
-          mode: mode === 'issue' ? 'issue' : 'plan',
-          attachments: Array.isArray(attachments) ? attachments : [],
-          // #169: the Backlog's selection sent to the Product Owner (plan mode)
-          selection: Array.isArray(issues) ? issues : [],
-          // #148: the drawer's simulation-only scenario picker (ignored for a real call)
-          scenario: simulated && typeof scenario === 'string' && scenario ? scenario : null,
-        });
+        // #180: its progress is pushed on chat:progress; chat:cancel ('po', id) stops it
+        const turn = ctx.chatTurns.start('po', id);
+        let out;
+        try {
+          out = await productOwner.ask({
+            backlogDir: ctx.ws.backlog,
+            projectId: id,
+            runsDir: ctx.ws.runs,
+            question,
+            data,
+            activeRuns: ctx.activeRuns().filter((r) => r.projectId === id),
+            runs: runs.runsForProject(runs.listRuns(ctx.ws.runs), p),
+            workflows: ctx.listWorkflows().filter((w) => !w.error && w.inputs?.task),
+            folder: p.folder,
+            agent: agents.readAgent(ctx.ws.agents, agents.PRODUCT_OWNER_ID),
+            skillsDirs: [ctx.ws.skills, ctx.BUNDLED_SKILLS_DIR],
+            resolveCommand,
+            // its own past calls and the Oracle's are in no run: add them to what the runs used this month
+            budget: simulated ? null : usage.withPeerUsage(usage.budgetBaseline({ runsDir: ctx.ws.runs, settings, extraRuns: oracle.usageRuns(ctx.ws.oracle) }), productOwner.monthUsage(ctx.ws.backlog), settings.prices),
+            mock: simulated,
+            mode: mode === 'issue' ? 'issue' : 'plan',
+            attachments: Array.isArray(attachments) ? attachments : [],
+            // #169: the Backlog's selection sent to the Product Owner (plan mode)
+            selection: Array.isArray(issues) ? issues : [],
+            // #148: the drawer's simulation-only scenario picker (ignored for a real call)
+            scenario: simulated && typeof scenario === 'string' && scenario ? scenario : null,
+            onItem: turn.onItem,
+            signal: turn.signal,
+          });
+        } finally {
+          turn.end(turn.stopped() ? 'stopped' : out?.message?.error ? 'failed' : 'done');
+        }
         // #149: the bell and a desktop notice for a real answer only (not while the window shows this
         // project's drawer); a simulated one shows the avatar's unread dot only
-        if (!simulated) ctx.notify?.(notifier.productOwnerNotice({ project: { id, name: p?.name }, message: out.message }), { projectId: id });
+        if (!simulated && !out.message?.stopped) ctx.notify?.(notifier.productOwnerNotice({ project: { id, name: p?.name }, message: out.message }), { projectId: id });
         return out;
       },
     },

@@ -41,6 +41,11 @@
 //                      on (running, simulated, last refill 03:12 +3 stages) | refilling (the Product
 //                      Owner picking) | empty (done: nothing left under complexity 2) | budget (done:
 //                      the daily budget reached); the banner shows on every --mode, the box on roadmap
+//   --po <state>       backlog: the Product Owner's drawer open with its live turn (#180): working (the
+//                      activity line, timer, Stop and the last steps) | writing (the answer as it is
+//                      written, its JSON block hidden) | stopped (an answer stopped by the owner) |
+//                      failed (an error with what was written kept); Stop: --click "#po-log [data-live-stop]",
+//                      the steps folded: --click "#po-log [data-live-steps]"
 //   --click <css>      clicks this element once the view is open (repeatable, in order)
 //   --context <css>    then right-clicks this element (repeatable): e.g. an artifact's copy menu
 //   --paste <css>      then pastes a demo screenshot into this prompt field (repeatable, #130): the
@@ -96,6 +101,7 @@ const VIEWS = {
 const THEMES = ['dark', 'light', 'system'];
 const KEEP_AWAKE = ['off', 'idle', 'active', 'error'];
 const LIVE_STATES = ['off', 'on', 'refilling', 'empty', 'budget'];
+const PO_STATES = ['working', 'writing', 'stopped', 'failed'];
 
 function parseArgs(argv) {
   const a = { view: 'dashboard', tab: null, mode: null, run: 'mock', workflow: 'software-development.yaml', clicks: [], contexts: [], pastes: [], inputs: {}, stopAt: null, keepAwake: null, theme: null, size: [1400, 900], ref: null, out: null, name: null, side: null, caption: null, wait: null, timeout: 90000, demoShots: true };
@@ -137,6 +143,7 @@ function parseArgs(argv) {
     else if (k === '--no-demo-shots') a.demoShots = false;
     else if (k === '--oracle') a.oracle = next();
     else if (k === '--live') a.live = next();
+    else if (k === '--po') a.po = next();
     else throw new Error(`Unknown argument: ${k}`);
   }
   const v = VIEWS[a.view];
@@ -148,9 +155,11 @@ function parseArgs(argv) {
   if (a.oracle && !ORACLE_STATES.includes(a.oracle)) throw new Error(`--oracle takes ${ORACLE_STATES.join(' | ')}`);
   if (a.live && !LIVE_STATES.includes(a.live)) throw new Error(`--live takes ${LIVE_STATES.join(' | ')}`);
   if (a.live && a.view !== 'backlog') throw new Error('--live applies to --view backlog');
+  if (a.po && !PO_STATES.includes(a.po)) throw new Error(`--po takes ${PO_STATES.join(' | ')}`);
+  if (a.po && a.view !== 'backlog') throw new Error('--po applies to --view backlog');
   if ((a.stopAt || Object.keys(a.inputs).length) && a.view !== 'run') throw new Error('--stop-at and --input apply to --view run');
   a.wait ??= v.live ? 20000 : 1500;
-  a.name ??= [a.view, a.tab, a.mode, a.oracle && `oracle-${a.oracle}`, a.theme].filter(Boolean).join('-');
+  a.name ??= [a.view, a.tab, a.mode, a.oracle && `oracle-${a.oracle}`, a.po && `po-${a.po}`, a.theme].filter(Boolean).join('-');
   if (!/^[\w.-]+$/.test(a.name)) throw new Error(`--name must be a plain file name: ${a.name}`);
   if (a.side && !SIDES.includes(a.side)) throw new Error(`--side takes ${SIDES.join(' | ')}`);
   if (a.caption && !(a.out && runOfRound(path.resolve(a.out)))) throw new Error('--caption needs --out <run_dir>/evidence/<step>/round-<n>');
@@ -255,7 +264,7 @@ function demoLocalMerge(ws, projectId) {
 // answer whose groups the demo roadmap already holds (#140), then a question about issues sent from
 // the selection with a suggested extra issue (#169). Shown with `--click "#btn-bl-po"`;
 // `--click "[data-po-act=create]"` previews the filing (po:file previews here).
-function demoPoConversation(ws, projectId) {
+function demoPoConversation(ws, projectId, po = null) {
   const at = (s) => new Date(Date.UTC(2026, 0, 20, 10, 0, s)).toISOString();
   const shot = path.join(ws.backlog, `${projectId}.po`, 'attachments', '1768903200000-run-report.png');
   fs.mkdirSync(path.dirname(shot), { recursive: true });
@@ -314,7 +323,40 @@ function demoPoConversation(ws, projectId) {
       conflicts: [], enrich: [], splits: [], epics: { place: [], create: [], merge: [], split: [] },
     } },
   ];
+  // --po stopped | failed (#180): the last answer stopped by the owner, or failed, with what was written kept
+  const partial = 'Two runs so far: **#16** on its own (validated), then **#10** with the dock styles.\n\nI was checking whether #15 fits under complexity 5';
+  const roadmapQ = { ts: at(170), role: 'user', mode: 'plan', text: 'Build a roadmap' };
+  if (po === 'stopped') messages.push(roadmapQ, { ts: at(230), role: 'po', mode: 'plan', costUsd: 0, stopped: true, text: partial });
+  if (po === 'failed') messages.push(roadmapQ, { ts: at(230), role: 'po', mode: 'plan', costUsd: 0, error: true, text: `Timed out after 900s\n\nWritten before the error:\n\n${partial}` });
   fs.writeFileSync(path.join(ws.backlog, `${projectId}.po.jsonl`), messages.map((m) => JSON.stringify(m)).join('\n') + '\n');
+}
+
+// --po working | writing (#180): po:ask never answers; its turn's progress is pushed to the window as
+// the service would (chat:progress): a few steps done, one running, and with writing the answer's
+// first paragraphs and its JSON block (which the drawer hides).
+function demoPoTurn(sender, which, projectId) {
+  const send = (phase, items = []) => sender.send('chat:progress', { chat: 'po', key: projectId, turnId: 'demo-turn', phase, items });
+  send('start');
+  const call = (id, name, input) => ({ kind: 'tool_call', id, name, input });
+  const done = (id) => ({ kind: 'tool_result', id, is_error: false });
+  send('items', [
+    { kind: 'thinking' },
+    call('t1', 'Read', { file_path: 'C:/projects/demo-app/src/roadmap.js' }), done('t1'),
+    call('t2', 'Grep', { pattern: 'dispatchRoadmaps' }), done('t2'),
+    call('t3', 'Read', { file_path: 'C:/projects/demo-app/src/server/routes.js' }), done('t3'),
+    call('t4', 'Bash', { command: 'git log --oneline -20 -- src/server' }), done('t4'),
+    call('t5', 'Bash', { command: 'gh issue view 15 --json body' }), done('t5'),
+    call('t6', 'Bash', { command: 'gh issue list --state open --limit 100' }),
+  ]);
+  if (which === 'writing') {
+    send('items', [
+      done('t6'),
+      { kind: 'text', text: '## Proposal\n\nThree runs: the **rename crash** (#11) first, since it blocks the rest; then **#12** and **#9** together: both add a server route, and one run avoids a merge conflict in `src/server`.' },
+      { kind: 'text', text: 'Then the small UI fixes, **#10** and **#16**, in one validated run you can check in the app.' },
+      { kind: 'text', text: '```json\n{ "summary": "Three runs.", "groups": [] }\n```' },
+    ]);
+  }
+  return new Promise(() => {});
 }
 
 // A roadmap (Backlog › Roadmap, src/roadmap.js): stage 1 done (the local-hero run of #11), then a
@@ -681,8 +723,9 @@ function demoOracleActions(dir, at, run) {
 
 // Simulation: the Backlog's sync answers with the cached demo issues instead of calling gh, and the
 // Usage screen's GitHub Actions minutes are demo data. `keepAwake`: a demo state of Keep awake, or null.
-// `holdOracle`: the Oracle's answer never comes (--oracle answering).
-function simulateChannels(ipcMain, keepAwake = null, missing = null, holdOracle = false) {
+// `holdOracle`: the Oracle's answer never comes (--oracle answering). `po`: --po working | writing,
+// the Product Owner's answer never comes and its live turn is demoPoTurn (#180).
+function simulateChannels(ipcMain, keepAwake = null, missing = null, holdOracle = false, po = null) {
   const handle = ipcMain.handle.bind(ipcMain);
   const handlers = {};
   ipcMain.handle = (channel, fn) => {
@@ -693,7 +736,7 @@ function simulateChannels(ipcMain, keepAwake = null, missing = null, holdOracle 
     // the supervisor's report on the sessions (Analytics) uses the mock provider
     if (channel === 'analytics:analyze') return handle(channel, (e, arg) => fn(e, { ...arg, mock: true }));
     // the Backlog's Product Owner answers from its simulated self (no model call)
-    if (channel === 'po:ask') return handle(channel, (e, arg) => fn(e, { ...arg, mock: true }));
+    if (channel === 'po:ask') return handle(channel, ['working', 'writing'].includes(po) ? (e, arg) => demoPoTurn(e.sender, po, arg?.projectId) : (e, arg) => fn(e, { ...arg, mock: true }));
     // and its filing of a drafted issue (#117) only previews: never calls gh/glab
     if (channel === 'po:file') return handle(channel, (e, arg) => fn(e, { ...arg, preview: true }));
     // a split (#124) and an epic (#138) applied from a plan answer only preview too
@@ -894,7 +937,7 @@ function main() {
     // also on Project: its run list shows the run's "issue from cache" badge (#168)
     if (['backlog', 'project'].includes(args.view)) demoLocalMerge(ws, project.id);
     if (args.view === 'backlog') demoRoadmap(ws, project.id, args.live);
-    if (args.view === 'backlog') demoPoConversation(ws, project.id);
+    if (args.view === 'backlog') demoPoConversation(ws, project.id, args.po);
     if (args.view === 'backlog' && project.folder) demoBacklogRefresh(ws, project.folder, project.id);
     // also on Artifacts: a second run group (its document.md) for Collapse all / Expand all (#126)
     if (['artifacts', 'backlog', 'duo'].includes(args.view)) demoEnrichRun(ws, project.id);
@@ -1108,6 +1151,9 @@ function main() {
       await pause(1500);
     }
     if (args.mode) await click(`#view-backlog [data-mode="${args.mode}"]`);
+    // --po (#180): the Product Owner's drawer, asking (working, writing) or with its last answer
+    if (['working', 'writing'].includes(args.po)) await js('window.BacklogPO.ask(\'Analyze the backlog and propose runs\'); await new Promise((r) => setTimeout(r, 500));');
+    else if (args.po) await js('await window.BacklogPO.open();');
     // the demo runs are simulated, which Artifacts hides by default
     if (v === 'artifacts') await js(`const c = document.querySelector('#art-show-sim'); if (c && !c.checked) c.click();`);
     for (const sel of args.clicks) { await click(sel); await pause(500); }
@@ -1144,7 +1190,7 @@ function main() {
     }
   }
 
-  simulateChannels(ipcMain, demoKeepAwake(appDir, args.keepAwake), demoMissingClis(appDir, args.missingClis), args.oracle === 'answering');
+  simulateChannels(ipcMain, demoKeepAwake(appDir, args.keepAwake), demoMissingClis(appDir, args.missingClis), args.oracle === 'answering', args.po);
   require(path.join(appDir, 'src', 'main'));
 }
 

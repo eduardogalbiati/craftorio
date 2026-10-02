@@ -39,12 +39,14 @@
 // resumesAt } }; a blocking Claude Code monthly budget refuses with reason 'monthly-budget'.
 // One app process answers: a question from another live process is refused with its pid and host.
 // `mock` answers from the simulated Oracle (same tools, called in-process; no model, cost 0).
+// Live progress (#180, src/chat-progress.js): ask's `onItem` and `signal` stream and stop a question.
 
 const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const actions = require('./oracle-actions');
+const { mockSteps, partialText } = require('./chat-progress');
 const night = require('./night-watch');
 const { hold, ownerAlive } = require('./run-owner');
 
@@ -55,6 +57,12 @@ const SKILL_ID = 'oracle';
 const TIMEOUT_MS = 20 * 60e3;
 const MAX_MEMORY = 20000;
 const RECENT_EXCHANGES = 3;
+// #180: the fake steps a simulated turn streams to the live view before its answer
+const MOCK_STEPS = [
+  { name: `mcp__${MCP_NAME}__active_runs`, input: {} },
+  { name: `mcp__${MCP_NAME}__list_runs`, input: {} },
+  { name: `mcp__${MCP_NAME}__list_workflows`, input: {} },
+];
 // pasted screenshots (#171): per image and per message
 const ATTACHMENT_LIMITS = Object.freeze({ maxBytes: 5 * 1048576, maxCount: 4 });
 const IMAGE_TYPES = Object.freeze({ 'image/gif': 'gif', 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' });
@@ -277,7 +285,7 @@ function createOracle({
   }
 
   // ---- the model, real or simulated ----------------------------------------------------------
-  async function realTurn({ prompt, sessionId, model, effort }) {
+  async function realTurn({ prompt, sessionId, model, effort, onItem = null, signal = null }) {
     refuseReal('the Oracle\'s CLI (claude)');
     const { runTurn } = require('./engine/providers');
     const { render } = require('./engine/workflow');
@@ -293,8 +301,8 @@ function createOracle({
     const res = await runTurn({
       provider, model, effort: effort && effort !== 'default' ? effort : undefined, providerSessionId: sessionId, prompt, cwd: dir(),
       extraArgs: dedupeFlags(readOnlyArgs(server), provider.args || []), timeoutMs: TIMEOUT_MS, render,
-      hint: { stepId: 'oracle', visit: 1, agent: 'oracle' },
-      onItem: (it) => { if (it?.kind === 'context' && Number(it.tokens)) contextTokens = Number(it.tokens); },
+      hint: { stepId: 'oracle', visit: 1, agent: 'oracle' }, signal,
+      onItem: (it) => { if (it?.kind === 'context' && Number(it.tokens)) contextTokens = Number(it.tokens); onItem?.(it); },
     });
     const u = res.usage || {};
     const sid = res.providerSessionId || sessionId;
@@ -411,7 +419,7 @@ function createOracle({
 
   // One turn of the conversation (a question or a wake-up): compacts first when due, then answers.
   // → the Oracle's message. `extra`: fields recorded on that message (e.g. { wake: true }).
-  async function exchange({ text, heading, mock, mockContextTokens, screen = null, attachments = [], wake = null, extra = {} }) {
+  async function exchange({ text, heading, mock, mockContextTokens, screen = null, attachments = [], wake = null, extra = {}, onItem = null, signal = null }) {
     const a = agent();
     const model = String(a.model || DEFAULT_MODEL);
     let st = state();
@@ -431,7 +439,9 @@ function createOracle({
     const prompt = fresh ? openingPrompt(text, heading) : text;
     const res = mock
       ? await mockTurn({ prompt, sessionId: st.sessionId, screen, mockContextTokens, fresh, attachments, wake })
-      : await realTurn({ prompt, sessionId: st.sessionId, model, effort: a.effort });
+      : await realTurn({ prompt, sessionId: st.sessionId, model, effort: a.effort, onItem, signal });
+    // #180: with a live view, the simulated turn streams fake steps and its text
+    if (mock && onItem) await mockSteps(onItem, { steps: MOCK_STEPS, text: res.text, signal });
     const { compactAtTokens } = oracleSettings(settings());
     saveState({
       sessionId: res.sessionId || st.sessionId || null, model: mock ? st.model || model : model,
@@ -516,8 +526,10 @@ function createOracle({
      * { question, screen, images, mock, mockContextTokens } → { message, messages, state }, or
      * { refused: { reason, text, ... }, message: null, messages, state } when a budget refuses it.
      * `images`: pasted screenshots (decodeImages), saved in attachments/ before the turn.
+     * #180: `onItem` gets the turn's items as they arrive (a simulated turn streams fake steps);
+     * `signal` stops it: the prose written so far is posted as the answer, marked `stopped`.
      */
-    async ask({ question, screen, images, mock, mockContextTokens } = {}) {
+    async ask({ question, screen, images, mock, mockContextTokens, onItem = null, signal = null } = {}) {
       const pasted = decodeImages(images);
       const q = String(question || '').trim() || (pasted.length ? 'See the attached image.' : '');
       if (!q) throw new Error('Type a message for the Oracle.');
@@ -532,10 +544,20 @@ function createOracle({
         const attachments = saveAttachments(pasted);
         post({ role: 'user', text: q, screen: where, ...(attachments.length ? { attachments } : {}) });
         let message;
+        // #180: the prose written so far, kept when the turn fails or is stopped
+        const written = [];
+        const seen = onItem && ((it) => { if (it?.kind === 'text') written.push(String(it.text || '')); onItem(it); });
         try {
-          message = await exchange({ text: questionText(q, where, attachments), mock, mockContextTokens, screen: where, attachments });
+          message = await exchange({ text: questionText(q, where, attachments), mock, mockContextTokens, screen: where, attachments, onItem: seen, signal });
         } catch (e) {
-          message = post({ role: 'system', text: `The Oracle could not answer: ${e.message || e}`, error: true });
+          const partial = partialText(written);
+          message = signal?.aborted
+            ? post({ role: 'oracle', text: partial || 'Stopped before answering.', stopped: true })
+            : post({ role: 'system', text: `The Oracle could not answer: ${e.message || e}${partial ? `
+
+Written before the error:
+
+${partial}` : ''}`, error: true });
         }
         return { message, messages: history(), state: status() };
       } finally {

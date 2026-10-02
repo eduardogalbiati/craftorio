@@ -11,6 +11,8 @@
 // Add to roadmap buttons apply a proposal only on the owner's click.
 // Simulated (developer mode, MULTIAGENT_SIMULATION_ONLY): mockAnswer builds the answer from the
 // backlog itself, with no model call and no cost.
+// Live progress (#180, src/chat-progress.js): ask's `onItem` gets the turn's items as they arrive
+// (a simulated turn streams fake steps first); its `signal` stops the turn, keeping what was written.
 // The conversation is kept per project in <workspace>/backlog/<projectId>.po.jsonl until cleared.
 // Each real call's cost and tokens also go to <workspace>/backlog/product-owner.usage.jsonl, which
 // clearing does not touch: monthUsage feeds them to the monthly budget check (they are in no run).
@@ -48,6 +50,7 @@ const path = require('path');
 const backlog = require('./backlog');
 const epics = require('./epics');
 const poSplit = require('./po-split');
+const { mockSteps, partialText } = require('./chat-progress');
 const { conflictsOf, sharedFiles } = require('./repo-performance');
 const { storeFor } = require('./store');
 const { readEvents } = require('./supervisor');
@@ -749,6 +752,12 @@ const MOCK_SCENARIOS = {
   'large-answer': 'plan',
   error: null,
 };
+// #180: the fake steps a simulated turn streams to the live view before its answer
+const MOCK_STEPS = [
+  { name: 'Read', input: { file_path: 'README.md' } },
+  { name: 'Grep', input: { pattern: 'roadmap' } },
+  { name: 'Bash', input: { command: 'gh issue list --state open' } },
+];
 
 /**
  * The simulated answer of a forced scenario (no model call), in the mode's raw shape (ANSWER_SCHEMA or
@@ -1013,9 +1022,13 @@ function checkBudget(budget) {
  * @param mode      'plan' (default) or 'issue' (#117: register an issue; `attachments`: paths saved by saveAttachment,
  *                  moved to the thread's folder in `runsDir`, which also keeps the thread and each turn's analysis)
  * @param scenario  with `mock` only: a MOCK_SCENARIOS id forcing the simulated answer (#148)
+ * @param onItem    #180: the turn's items as they arrive (src/chat-progress.js); a simulated turn then
+ *                  streams fake steps (MOCK_STEPS) and its text first
+ * @param signal    #180: an AbortSignal that stops the turn; the prose written so far is recorded,
+ *                  marked `stopped` (a failure keeps it too, after the error)
  * @returns { message, messages }  the answer ({ role: 'po', text, answer | issue, model, costUsd }) and the whole conversation
  */
-async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns, runs, workflows, folder, agent, skillsDirs, resolveCommand, budget, mock, mode = 'plan', attachments = [], selection = [], scenario = null }) {
+async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns, runs, workflows, folder, agent, skillsDirs, resolveCommand, budget, mock, mode = 'plan', attachments = [], selection = [], scenario = null, onItem = null, signal = null }) {
   const q = String(question || '').trim();
   if (!q) throw new Error('Ask a question.');
   const issueMode = mode === 'issue';
@@ -1037,26 +1050,48 @@ async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns,
   let model = 'simulated';
   let invalid = null;
   let analysis = '';
+  // #180: the prose written so far, kept when the turn fails or is stopped
+  const written = [];
+  const seen = (item) => {
+    if (item?.kind === 'text') written.push(String(item.text || ''));
+    onItem?.(item);
+  };
   try {
-    // a scenario of the other mode is ignored (the default simulated answer)
-    if (mock && scenario && (MOCK_SCENARIOS[scenario] ?? mode) === mode) {
-      raw = mockScenario(scenario, { data, question: q, previous, files });
-      analysis = `Simulated (scenario "${scenario}"): no model was called, no code was read.`;
-    } else if (mock) {
-      raw = issueMode ? mockIssueAnswer({ data, question: q, previous }) : mockAnswer({ data, question: q, selection: selected });
-      analysis = 'Simulated: no model was called, no code was read.';
+    if (mock) {
+      let failure = null;
+      try {
+        // a scenario of the other mode is ignored (the default simulated answer)
+        if (scenario && (MOCK_SCENARIOS[scenario] ?? mode) === mode) {
+          raw = mockScenario(scenario, { data, question: q, previous, files });
+          analysis = `Simulated (scenario "${scenario}"): no model was called, no code was read.`;
+        } else {
+          raw = issueMode ? mockIssueAnswer({ data, question: q, previous }) : mockAnswer({ data, question: q, selection: selected });
+          analysis = 'Simulated: no model was called, no code was read.';
+        }
+      } catch (e) { failure = e; }
+      // #180: with a live view, the simulated turn streams fake steps and its text first
+      if (onItem) {
+        await mockSteps(seen, {
+          steps: MOCK_STEPS, signal, json: failure ? null : { simulated: true },
+          text: failure ? 'Simulated: the answer had started when the error came.' : raw.summary || raw.reply || '',
+        });
+      }
+      if (failure) throw failure;
     } else {
       checkBudget(budget);
       let tokens;
       const shared = issueMode ? null : await sharedFiles({ runs: (runs || []).filter((r) => !r.mock).slice(0, SHARED_FILE_RUNS), repo: folder, store: storeFor(runsDir), limit: SHARED_FILES });
       const report = (issueMode ? issueReport : backlogReport)({ data, activeRuns, history, workflows, question: q, selection: selected, shared });
       ({ raw, costUsd, model, invalid, tokens, text: analysis } = await callAgent({
-        mode, question: q, report, previous, attachments: files, selection: selected, folder, agent: issueMode ? ISSUE_AGENT : agent, skillsDirs, resolveCommand,
+        mode, question: q, report, previous, attachments: files, selection: selected, folder, agent: issueMode ? ISSUE_AGENT : agent, skillsDirs, resolveCommand, onItem: seen, signal,
       }));
       recordUsage(backlogDir, { projectId, model, tokens, costUsd });
     }
   } catch (e) {
-    const message = record({ role: 'po', ...tag, text: e.message, error: true, costUsd });
+    const partial = partialText(written);
+    const message = signal?.aborted
+      ? record({ role: 'po', ...tag, text: partial || 'Stopped before answering.', stopped: true, costUsd })
+      : record({ role: 'po', ...tag, text: partial ? `${e.message}\n\nWritten before the error:\n\n${partial}` : e.message, error: true, costUsd });
     return { message, messages: readConversation(backlogDir, projectId) };
   }
   let message;
@@ -1079,7 +1114,7 @@ async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns,
 // One read-only Claude Code turn in the project folder. An answer that does not validate is kept as
 // prose (no second call: one call per question). Mode 'issue': the issue skills, ISSUE_SCHEMA, and
 // read access to the attachments' folder.
-async function callAgent({ mode = 'plan', question, report, previous, attachments = [], selection = [], folder, agent, skillsDirs, resolveCommand }) {
+async function callAgent({ mode = 'plan', question, report, previous, attachments = [], selection = [], folder, agent, skillsDirs, resolveCommand, onItem = () => {}, signal = null }) {
   const { extractJson, validateSchema, render } = require('./engine/workflow');
   const { runTurn, isImagePath } = require('./engine/providers');
   const { resolveSkill, skillPrompt } = require('./skills');
@@ -1110,7 +1145,7 @@ async function callAgent({ mode = 'plan', question, report, previous, attachment
   ].filter(Boolean).join('\n\n');
   const res = await runTurn({
     provider, model: agent.model, effort: agent.effort && agent.effort !== 'default' ? agent.effort : undefined, prompt, cwd: folder, extraArgs, attachments: images,
-    timeoutMs: 15 * 60e3, render, hint: { stepId: issueMode ? 'product-owner-issue' : 'product-owner', visit: 1, agent: 'product-owner', schema }, onItem: () => {},
+    timeoutMs: 15 * 60e3, render, hint: { stepId: issueMode ? 'product-owner-issue' : 'product-owner', visit: 1, agent: 'product-owner', schema }, onItem, signal,
   });
   let raw;
   let errs;

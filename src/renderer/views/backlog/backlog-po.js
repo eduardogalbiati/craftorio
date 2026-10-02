@@ -37,6 +37,10 @@
 // robot button until the drawer opens (#149, po.unread); the service also notifies it (`po` notice).
 // Uses app.js globals ($, esc, state, errMsg, devMode, fmtCost, fmtSize, markdownHtml, confirmDialog)
 // and window.Robots (robots.js).
+// Live progress (#180, window.LiveTurn, live-turn.js): while a question is in flight the drawer shows
+// what the Product Owner does (activity line, timer, the last steps) and its answer as it is written,
+// from the service's chat:progress events ('po', the project id); Stop (api.cancelChatTurn) ends the
+// turn and the service records what was written, marked as stopped. The cards come from the final answer.
 // Its button and drawer are part of the Backlog's markup (backlog.js registerView): wired as it loads.
 // load: after robots.js views/backlog/backlog.js (the button's robot is drawn and the drawer wired as it loads)
 /* global api, Robots */
@@ -57,7 +61,7 @@
   const SELECTION_QUESTION = 'What is the best strategy to put these issues in the roadmap? Should any other open issue join them?';
   // attached: issue numbers sent from the Backlog (#169); extras: `${m}:${n}` → the suggested issues checked in a group
   // unread: an answer the owner has not seen yet (#149); scenario: the simulated answer forced (#148)
-  const po = { open: false, busy: false, projectId: null, messages: [], pending: null, error: null, notes: {}, mode: 'plan', files: [], placeEpic: {}, attached: [], extras: {}, unread: false, scenario: '' };
+  const po = { open: false, busy: false, projectId: null, messages: [], pending: null, error: null, notes: {}, mode: 'plan', files: [], placeEpic: {}, attached: [], extras: {}, unread: false, scenario: '', live: null };
   const $p = (sel) => document.querySelector(sel);
   const actions = () => window.BacklogActions;
   const issueOf = (n) => (actions()?.data()?.issues || []).find((i) => i.number === n);
@@ -143,9 +147,11 @@
     const files = mode === 'issue' ? po.files.map((f) => f.path) : [];
     // #169: the attached issues go with every plan question until the owner removes them
     const issues = mode === 'plan' ? [...po.attached] : [];
-    Object.assign(po, { busy: true, pending: q, error: null });
+    Object.assign(po, { busy: true, pending: q, error: null, live: window.LiveTurn.create({ agent: 'Product Owner' }) });
     $p('#po-question').value = '';
     render();
+    // #180: the timer and "Still working" move even when no item arrives
+    const tick = setInterval(renderLive, 1000);
     try {
       // #148: the simulation-only scenario picker forces the simulated answer
       const out = await api.askProductOwner(projectId, q, devMode(), mode, files, issues, devMode() ? po.scenario || null : null);
@@ -158,9 +164,26 @@
     } catch (e) {
       if (po.projectId === projectId) po.error = errMsg(e);
     } finally {
-      Object.assign(po, { busy: false, pending: null });
+      clearInterval(tick);
+      Object.assign(po, { busy: false, pending: null, live: null });
       render();
     }
+  }
+
+  // #180: only the live turn is redrawn on each event and each second (the conversation above keeps
+  // its inputs and selection); an owner at the end of the log stays there as the answer grows
+  function renderLive() {
+    const el = $p('#po-live');
+    if (!el || !po.live || !po.open) return;
+    const log = $p('#po-log');
+    const end = atEnd(log);
+    el.innerHTML = window.LiveTurn.html(po.live);
+    if (end) log.scrollTop = log.scrollHeight;
+  }
+
+  function stopTurn() {
+    const projectId = po.projectId;
+    api.cancelChatTurn('po', projectId).catch((e) => { if (po.projectId === projectId) { po.error = errMsg(e); render(); } });
   }
 
   // #148: the "long attachments list" scenario attaches simulated screenshots through the real path
@@ -414,7 +437,7 @@
       const files = [...(msg.issues || []).map(issueRef), ...(msg.attachments || []).map((f) => `<span class="badge" title="${esc(f)}">${esc(f.split(/[\\/]/).pop())}</span>`)].join(' ');
       return `<div class="sup-wmsg user"><div class="sup-wmsg-meta">You · ${esc(time)}</div><div>${esc(msg.text)}</div>${files ? `<div class="po-files">${files}</div>` : ''}</div>`;
     }
-    const meta = `Product Owner · ${esc(time)}${msg.model ? ` · ${esc(msg.model)}` : ''} · ${esc(fmtCost(msg.costUsd || 0))}`;
+    const meta = `Product Owner · ${esc(time)}${msg.model ? ` · ${esc(msg.model)}` : ''} · ${esc(fmtCost(msg.costUsd || 0))}${msg.stopped ? ' <span class="badge warn" title="You stopped this turn: the answer is what was written until then">Stopped</span>' : ''}`;
     return `<div class="sup-wmsg po-msg${msg.error ? ' error' : ''}" data-msg="${m}"><div class="sup-wmsg-meta">${meta}</div>
       <div class="md md-compact">${msg.error ? esc(msg.text) : markdownHtml(msg.text || '')}</div>
       ${msg.invalid ? `<p class="small muted">The answer had no valid ${msg.mode === 'issue' ? 'draft' : 'proposal'} (${esc(msg.invalid)}): shown as text only.</p>` : ''}
@@ -455,7 +478,8 @@
         <p class="muted small">${empty}</p></div>`)
       + po.messages.map(messageHtml).join('')
       + (pendingShown() ? `<div class="sup-wmsg user"><div class="sup-wmsg-meta">You</div><div>${esc(po.pending)}</div></div>` : '')
-      + (po.busy ? `<div class="sup-loading"><span class="spinner"></span><span>${issueMode ? 'The Product Owner is reading the code and the backlog…' : 'The Product Owner is reading the backlog…'}</span></div>` : '')
+      + (po.live ? `<div id="po-live">${window.LiveTurn.html(po.live)}</div>` : '')
+      + (po.busy && !po.live ? `<div class="sup-loading"><span class="spinner"></span><span>${issueMode ? 'The Product Owner is reading the code and the backlog…' : 'The Product Owner is reading the backlog…'}</span></div>` : '')
       + (po.error ? `<p class="error small">${esc(po.error)}</p>` : '');
     // #148: the simulation-only scenario picker (never in the production UI)
     $p('#po-sim').classList.toggle('hidden', !simulated);
@@ -635,6 +659,8 @@
   };
   const DRAFT_ACTS = ['append', 'comment', 'create', 'create-assign', 'create-roadmap', 'discard', 'revise'];
   $p('#po-log').onclick = (e) => {
+    // #180: the live turn's Stop and its steps' toggle
+    if (window.LiveTurn.onClick(e, po.live, { onStop: stopTurn, render: renderLive })) return;
     // an applied group's badge (#140): the Roadmap at its stage, or its run
     const stage = e.target.closest('[data-po-stage]');
     if (stage) { close(); actions().openStage(Number(stage.dataset.poStage)); return; }
@@ -669,6 +695,12 @@
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && po.open && !document.querySelector('.modal:not(.hidden)')) close();
   }, true);
+  // #180: the turn in flight for this project, as the service reports it
+  api.onChatProgress?.((p) => {
+    if (p?.chat !== 'po' || p.key !== po.projectId || !po.live) return;
+    window.LiveTurn.apply(po.live, p);
+    renderLive();
+  });
   document.addEventListener('robots:changed', (e) => { if (e.detail?.name === 'product-owner') renderButton(); });
   // the roadmap, queue or runs changed (backlog.js setData): the groups' applied state follows (#140),
   // the conversation keeps its scroll position (render's default)
