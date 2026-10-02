@@ -1,4 +1,6 @@
-/* Voice input (#82, voice.js): the mic button in the bottom-right corner of a long text field. */
+/* Voice input (#82, voice.js): the mic button in the bottom-right corner of a long text field.
+   While a recording is transcribed (#131) the field glows purple (.voice-transcribing) and a
+   "Transcribing…" badge (.voice-busy) sits in its bottom-left corner. */
 .voice-host { position: relative; }
 textarea.voice-field { padding-right: 46px; }
 .voice-mic {
@@ -23,3 +25,28 @@ textarea.voice-field { padding-right: 46px; }
 .voice-mic.hidden { display: none; }
 .voice-time { font-size: 11px; font-variant-numeric: tabular-nums; }
 @keyframes voice-pulse { 50% { box-shadow: 0 0 0 4px rgba(192, 57, 43, .25); } }
+/* the transcribing state: a border and a glow (no layout change), the badge over the last line */
+textarea.voice-field.voice-transcribing { border-color: var(--purple, #c084fc); animation: voice-glow 1.6s ease-in-out infinite; }
+@keyframes voice-glow { 50% { box-shadow: 0 0 0 3px rgba(192, 132, 252, .22); } }
+.voice-busy {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 20px;
+  padding: 0 8px;
+  border: 1px solid var(--border, #262b37);
+  border-radius: 10px;
+  background: rgba(21, 24, 32, .72);
+  color: var(--muted, #8a91a3);
+  font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 2;
+}
+.voice-busy.hidden { display: none; }
+.voice-busy-spin { width: 10px; height: 10px; border-radius: 50%; border: 2px solid rgba(192, 132, 252, .25); border-top-color: var(--purple, #c084fc); animation: spin .8s linear infinite; }
+@media (prefers-reduced-motion: reduce) {
+  textarea.voice-field.voice-transcribing, .voice-busy-spin { animation: none; }
+}

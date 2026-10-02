@@ -961,7 +961,9 @@ The app shows in Settings whether it found each command on the PATH.
   task and issue intake, Write & Review and Arena prompts, the resume instruction): click to
   record and click again to stop, or hold it and release to stop (push-to-talk). `Ctrl+Shift+M`
   toggles it in the focused field and `Escape` discards a recording. It records up to 2 minutes.
-  The transcript is inserted at the cursor for you to review; it is never sent by itself.
+  While the recording is transcribed, the field shows "Transcribing..." and stays editable until
+  the text is inserted. The transcript is inserted at the cursor for you to review; it is never
+  sent by itself.
 - **Local and private**: the page records the audio, converts it to a 16 kHz mono WAV and sends it
   to the engine (`audio:transcribe`), which runs [whisper.cpp](https://github.com/ggml-org/whisper.cpp)
   (`whisper-cli`). The audio goes to a temp folder for the CLI and is deleted right after; nothing

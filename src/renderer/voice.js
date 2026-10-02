@@ -4,7 +4,8 @@
 // field, Escape discards a recording. The audio is recorded here (MediaRecorder), converted to a
 // 16 kHz mono WAV (OfflineAudioContext, no ffmpeg) and transcribed by the service
 // ('audio:transcribe', src/speech.js). The transcript is inserted at the cursor for review, never
-// sent. Fields rendered later (gate cards, chats) get their button from a MutationObserver.
+// sent. While it is transcribed the field shows a "Transcribing…" badge (class voice-transcribing,
+// aria-busy) and stays editable. Fields rendered later (gate cards, chats) get their button from a MutationObserver.
 // Pure helpers (encodeWav, insertText, formatElapsed) are exported for the tests; the DOM part
 // uses app.js globals when present (showToast, errMsg).
 (function (root) {
@@ -81,15 +82,41 @@
     place(btn);
   }
 
-  // the button sits in the field's bottom-right corner (its parent is the positioning box)
+  // While its recording is transcribed, the field says so (#131): a `voice-transcribing` class,
+  // aria-busy and a "Transcribing…" badge in its bottom-left corner. The field stays enabled (a
+  // disabled field hides the mic) so the user can keep typing.
+  function setTranscribing(ta, on) {
+    ta.classList.toggle('voice-transcribing', on);
+    if (on) ta.setAttribute('aria-busy', 'true'); else ta.removeAttribute('aria-busy');
+    let ind = ta._voiceInd;
+    if (on && !ind && ta.parentElement) {
+      ind = document.createElement('span');
+      ind.className = 'voice-busy';
+      ind.setAttribute('role', 'status');
+      ind.innerHTML = '<span class="voice-busy-spin" aria-hidden="true"></span>Transcribing…';
+      ta._voiceInd = ind;
+      ta._voiceBtn.after(ind);
+    }
+    if (!ind) return;
+    ind.classList.toggle('hidden', !on);
+    if (on) place(ta._voiceBtn);
+  }
+
+  // the button sits in the field's bottom-right corner, the transcribing badge in its bottom-left
+  // one (their parent is the positioning box)
   function place(btn) {
     const ta = btn._voiceField;
     const parent = ta.parentElement;
     const shown = ta.offsetParent !== null && !ta.disabled;
     btn.classList.toggle('hidden', !shown);
     if (!shown || ta.offsetParent !== parent) return;
+    const bottom = `${parent.clientHeight - (ta.offsetTop + ta.offsetHeight) + 6}px`;
     btn.style.right = `${parent.clientWidth - (ta.offsetLeft + ta.offsetWidth) + 16}px`; // clear of the resize grip
-    btn.style.bottom = `${parent.clientHeight - (ta.offsetTop + ta.offsetHeight) + 6}px`;
+    btn.style.bottom = bottom;
+    if (ta._voiceInd) {
+      ta._voiceInd.style.left = `${ta.offsetLeft + 8}px`;
+      ta._voiceInd.style.bottom = bottom;
+    }
   }
 
   let starting = false;
@@ -140,8 +167,10 @@
     try {
       if (r.cancelled || !r.chunks.length) return setState(r.btn, 'idle');
       setState(r.btn, 'busy');
+      setTranscribing(r.ta, true);
       const wav = await toWav(new Blob(r.chunks, { type: r.recorder.mimeType }));
       const { text } = await api.transcribeAudio(toBase64(wav));
+      setTranscribing(r.ta, false);
       setState(r.btn, 'idle');
       if (!String(text || '').trim()) return notify('Voice input', 'Nothing was recognised in the recording.');
       const ta = r.ta;
@@ -154,6 +183,7 @@
       ta.setSelectionRange(out.caret, out.caret);
       ta.dispatchEvent(new Event('input', { bubbles: true }));
     } catch (e) {
+      setTranscribing(r.ta, false);
       setState(r.btn, 'idle');
       notify('Voice input', message(e));
     } finally {
