@@ -24,9 +24,12 @@ used_by: "test writer"
 - While iterating run single files, filtered to the tests you write (`--test-name-pattern`, `-t`,
   `--grep`), a slow file at most once per round; run the full suite once at the end (see
   testing-principles: time budget, pre-existing failures).
-- Dependencies first: a fresh checkout (each run has its own worktree) has no `node_modules`.
-  When it is missing or the lockfile changed, install with the lockfile's manager
-  (`npm ci` · `pnpm install --frozen-lockfile` · `yarn install --frozen-lockfile`) before running tests.
+- Dependencies are ready: the engine links each run's `node_modules` from a shared cache,
+  installed once per lockfile. Never run `npm ci` (or a frozen pnpm/yarn install) and never delete
+  `node_modules`: through the link it would empty the cache for every run. Adding a test
+  dependency with the package manager (`npm install -D <pkg>`) is fine: the engine installs the
+  new lockfile into the cache after your turn. Only when your prompt says the dependencies are not
+  cached for this project, install them yourself with the lockfile's manager when missing.
 
 ## Idioms
 
@@ -41,8 +44,9 @@ used_by: "test writer"
 
 ## UI checks and long-running programs (Electron, dev servers)
 
-A program left running from the worktree locks its files: the next `npm ci` fails with EBUSY/EPERM
-and the run cannot recover by itself.
+A program left running from the worktree locks its files (EBUSY/EPERM for the next install or
+build) and the run cannot recover by itself. `npm run screenshot` waits for the machine's
+screenshot slot (one Electron screenshot at a time across all runs): waiting is normal.
 - Electron UI checks quit on their own: the script calls `app.quit()` when done **and** after a hard
   timeout (`setTimeout(() => app.exit(1), 60000)`), on errors too, as `scripts/smoke.js` does when the
   project has one.

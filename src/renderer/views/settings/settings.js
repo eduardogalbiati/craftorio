@@ -40,6 +40,7 @@ async function renderSettings() {
   refreshKeepAwake();
   renderVoice();
   renderIndexStatus();
+  renderDepsCache();
   if (!document.querySelector('[data-spage="agents"]').classList.contains('hidden')) renderTools();
 }
 
@@ -208,6 +209,32 @@ async function rebuildIndex() {
   } finally { btn.disabled = false; }
 }
 
+// The dependency cache (#198): size, entries, and Clear (the entries a worktree links stay)
+const fmtCacheSize = (n) => (n >= 1024 ** 3 ? `${(n / 1024 ** 3).toFixed(1)} GB` : `${Math.round(n / 1024 ** 2)} MB`);
+async function renderDepsCache(note) {
+  const el = $('#set-deps-status');
+  try {
+    const c = await api.depsCacheInfo();
+    $('#set-deps-path').textContent = c.dir;
+    $('#set-deps-size').textContent = c.entries ? fmtCacheSize(c.bytes) : 'Empty';
+    el.textContent = note || (c.entries ? `${c.entries} entr${c.entries === 1 ? 'y' : 'ies'}, ${c.linked} in use by a worktree.` : 'Nothing cached yet: the first run of a project installs once.');
+    $('#btn-deps-clear').disabled = !c.entries;
+  } catch (e) { el.textContent = errMsg(e); }
+}
+
+async function clearDepsCache() {
+  const btn = $('#btn-deps-clear');
+  btn.disabled = true;
+  $('#set-deps-status').textContent = 'Clearing…';
+  try {
+    const r = await api.clearDepsCache();
+    await renderDepsCache(`Cleared ${r.removed} entr${r.removed === 1 ? 'y' : 'ies'} (${fmtCacheSize(r.freedBytes)})${r.kept ? `; ${r.kept} kept: in use by a worktree or an install` : ''}.`);
+  } catch (e) {
+    $('#set-deps-status').textContent = errMsg(e);
+    btn.disabled = false;
+  }
+}
+
 async function renderTools() {
   const box = $('#set-tools');
   box.innerHTML = '<div class="s-row"><div class="s-label"><span>Checking…</span></div></div>';
@@ -329,6 +356,13 @@ registerView({
                 <div class="s-row">
                   <div class="s-label"><b>index.db</b><span>A SQLite index next to the files: the runs list cache, the Backlog queues, the gates waiting for you and the notifications. The files stay the source of truth: rebuilding reads every run again from runs/. <span id="set-index-status"></span></span><code id="set-index-path"></code></div>
                   <div class="s-ctrl"><button id="btn-index-rebuild" class="btn sm">Rebuild index</button></div>
+                </div>
+              </div>
+              <h3 class="s-subtitle">Dependency cache</h3>
+              <div class="s-group">
+                <div class="s-row">
+                  <div class="s-label"><b>Dependencies <span id="set-deps-size" class="badge">…</span></b><span>Each project's dependencies are installed once per lockfile and linked into the runs' worktrees. Entries no worktree uses are removed after 14 days or above 20 GB; clearing keeps the ones in use. <span id="set-deps-status"></span></span><code id="set-deps-path"></code></div>
+                  <div class="s-ctrl"><button id="btn-deps-clear" class="btn sm">Clear dependency cache</button></div>
                 </div>
               </div>
             </div>
@@ -454,6 +488,7 @@ registerView({
     $('#set-voice-language').onchange = async (e) => { state.settings = await api.setSettings({ voiceLanguage: e.target.value }); };
     $('#btn-voice-download').onclick = downloadVoiceModel;
     $('#btn-index-rebuild').onclick = rebuildIndex;
+    $('#btn-deps-clear').onclick = clearDepsCache;
     $('#set-notif-retention').onchange = async (e) => {
       const n = Math.floor(Number(e.target.value));
       state.settings = await api.setSettings({ notificationRetentionDays: Number.isFinite(n) && n >= 0 ? Math.min(n, 3650) : 30 });

@@ -1,21 +1,23 @@
 ---
 name: e2e-test-writer-csharp
-description: Writes and runs end-to-end BDD scenarios (Given/When/Then) for C#/.NET projects with the framework the project already uses (Reqnroll, SpecFlow, LightBDD); default Reqnroll with xUnit (+ Microsoft.Playwright for a web UI). Use to add acceptance scenarios for a change and report each one's result.
+description: Writes end-to-end BDD scenarios (Given/When/Then) for C#/.NET projects with the framework the project already uses (Reqnroll, SpecFlow, LightBDD); default Reqnroll with xUnit (+ Microsoft.Playwright for a web UI). Development runs write them and check that they parse (pending, run at release); the E2E release workflow runs the whole suite and reports each result.
 uses: [e2e-scenarios, long-commands]
-summary: "E2E/BDD framework detection, feature folder, commands to run only the run's scenarios"
-used_by: "test writer"
+summary: "E2E/BDD framework detection, feature folder, the parse check of a development run and the release run's commands"
+used_by: "test writer, E2E runner"
 ---
 
 # E2E scenarios: C# / .NET
 
 ## Framework and commands (never switch frameworks)
 
-| Signal in the repository | Framework | Feature folder | Only this run's scenarios |
+| Signal in the repository | Framework | Feature folder | Release run (one file, or by tag) |
 |---|---|---|---|
 | `Reqnroll` package reference | Reqnroll | `Features/` of the test project | `dotnet test <project> --filter "Category=issue-<n>"` |
 | `SpecFlow` package reference | SpecFlow (keep it, do not migrate) | `Features/` | `dotnet test <project> --filter "Category=issue-<n>"` |
 | `LightBDD` package reference | LightBDD | the test project's feature classes | `dotnet test <project> --filter "<FeatureClass>"` |
 
+- **Development run**: write the scenarios and check that they parse, never run them (no app,
+  no browser): `dotnet build <E2E project>` (the feature files generate code); check that every step phrase of the new scenarios has a binding. Each is reported `pending`; the E2E release workflow runs the suite.
 - **No E2E framework yet**: default to **Reqnroll** with the test framework the solution already
   uses (xUnit when none), in a separate `<Solution>.E2E` test project with `Features/` and
   `StepDefinitions/`; a web UI with `Microsoft.Playwright`. Record the assumption in `e2e_note` and

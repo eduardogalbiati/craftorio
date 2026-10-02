@@ -1,7 +1,10 @@
 // The workspace's index (src/store.js, #76): the notification center (history, unread count, mark
 // as read; 'notifications:changed' is pushed on each new one), the gates of runs that did not
 // survive a restart, and Settings' index status and "Rebuild index" (the runs cache, from runs/).
+// Also the dependency cache's size and "Clear dependency cache" (#198).
 
+const path = require('path');
+const depsCache = require('../../engine/deps-cache');
 const runs = require('../../runs');
 
 const noIndex = (ctx) => new Error(`The workspace index is not available${ctx.storeError ? `: ${ctx.storeError}` : '.'}`);
@@ -44,6 +47,18 @@ module.exports = (ctx) => [
     fn: () => {
       if (!ctx.store) throw noIndex(ctx);
       return { path: ctx.ws.index, runs: runs.rebuildIndex(ctx.ws.runs) };
+    },
+  },
+  // the dependency cache (#198, src/engine/deps-cache.js): { dir, entries, bytes, linked } for Settings
+  { channel: 'depsCache:info', method: 'depsCacheInfo', fn: () => depsCache.cacheInfo(path.join(ctx.ws.cache, 'deps')) },
+  // Clear dependency cache: every entry no worktree links (the linked ones stay); { removed, freedBytes, kept, ...info }
+  {
+    channel: 'depsCache:clear',
+    method: 'clearDepsCache',
+    fn: () => {
+      const dir = path.join(ctx.ws.cache, 'deps');
+      const r = depsCache.pruneDepsCache({ cacheDir: dir, maxAgeDays: 0 });
+      return { removed: r.removed.length, freedBytes: r.freedBytes, kept: r.kept, ...depsCache.cacheInfo(dir) };
     },
   },
 ];

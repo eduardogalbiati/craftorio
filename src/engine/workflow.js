@@ -49,11 +49,13 @@ const {
   currentBranch,
   git,
   mergeLocally,
+  prepareBaseWorktree,
   prepareWorktree,
   removeScratch,
   removeWorktree,
 } = require('./worktree');
 const capabilities = require('./capabilities');
+const depsCache = require('./deps-cache');
 const evidence = require('../evidence');
 const { scratchWorkspace } = require('../local-preview');
 const { stopProcessesIn } = require('./processes');
@@ -233,6 +235,7 @@ function loadWorkflow(file) {
       if (w.grace !== undefined && parseDuration(w.grace, null) == null) throw new Error(`Step "${s.id}": wait.grace must be a duration such as 10m.`);
     }
     if (s.choices && s.type !== 'human_approval') throw new Error(`Step "${s.id}": choices is only valid for human_approval.`);
+    if (s.base_worktree !== undefined && (typeof s.base_worktree !== 'boolean' || ['human_approval', 'screenshots', 'workflow'].includes(s.type) || !wf.orchestrator?.worktree)) throw new Error(`Step "${s.id}": base_worktree must be true or false, on an agent step of a workflow with orchestrator.worktree.`);
     if (s.local_preview !== undefined && (s.type !== 'human_approval' || typeof s.local_preview !== 'boolean')) throw new Error(`Step "${s.id}": local_preview must be true or false, on a human_approval step.`);
     if (s.diff_base !== undefined && (s.type !== 'human_approval' || typeof s.diff_base !== 'string' || !s.diff_base.trim())) throw new Error(`Step "${s.id}": diff_base must be a ref (e.g. "origin/{{ inputs.base_branch }}"), on a human_approval step.`);
     if (s.save_to_issue !== undefined && (s.type !== 'human_approval' || !(s.choices || []).some((c) => c.id === s.save_to_issue))) throw new Error(`Step "${s.id}": save_to_issue must be the id of one of the step's choices (e.g. accept), on a human_approval step.`);
@@ -1049,6 +1052,84 @@ class WorkflowRun extends EventEmitter {
       dir: info.dir, work_dir: info.workDir, repo: info.repo, base: info.base, ref: info.ref, commit: info.commit, reused: info.reused, recreated: info.recreated,
     });
     log('info', `worktree: ${how} ${info.dir} at ${info.ref || 'its branch'} (${String(info.commit || '').slice(0, 8)})`);
+    await this.prepareDeps('worktree', info.workDir, 'worktree ready');
+  }
+
+  // ---- dependencies from the shared cache (#198, src/engine/deps-cache.js) ---------------------
+  // Installed once per lockfile content in <workspace>/cache/deps and linked into the worktree when
+  // it is ready, again after each agent step (a lockfile the step changed: the new key is installed
+  // once), and into the base worktree. Records `deps.ready`; agents are told in their command guide.
+  // which: 'worktree' | 'base'. A simulated run has no worktree, so nothing is installed.
+  async prepareDeps(which, dir, after) {
+    if (this.mock || !dir) return null;
+    this.deps ??= {};
+    const previous = this.deps[which] || null;
+    let r;
+    try {
+      r = await depsCache.ensureDeps({
+        workDir: dir,
+        cacheDir: path.join(path.dirname(path.dirname(this.runDir)), 'cache', 'deps'),
+        project: this.projectId || path.basename(this.worktree?.repo || dir),
+        env: capabilities.AGENT_ENV,
+        signal: this.abort.signal,
+        previous,
+        log: (level, message) => this.emitEvent('log', { level, message }),
+      });
+    } catch (e) {
+      if (this.abort.signal.aborted) throw e;
+      r = { status: 'failed', reason: e.message };
+    }
+    this.deps[which] = r.status === 'none' ? null : r;
+    // nothing to say: no lockfile, or the folder already links its key
+    if (r === previous || r.status === 'none' || (r.status === 'linked' && previous?.key === r.key) || (r.status === previous?.status && r.status === 'not_cached')) return r;
+    const hit = r.status === 'hit' || r.status === 'linked';
+    this.emitEvent('deps.ready', {
+      for: which, dir, after, status: r.status, hit, lockfile: r.lockfile || null, manager: r.manager || null, key: r.key || null,
+      entry: r.entry || null, seconds: r.seconds != null ? Math.round(r.seconds * 10) / 10 : null, waited: !!r.waited, reason: r.reason || null,
+    });
+    const what = {
+      hit: `linked from the cache (key ${r.key})`, linked: `linked from the cache (key ${r.key})`, miss: `installed once into the cache (key ${r.key})`,
+      local: `installed in the worktree only: ${r.reason}`, failed: `not ready: ${r.reason}`, not_cached: `not cached: ${r.reason}`,
+    }[r.status];
+    this.emitEvent('log', { level: r.status === 'failed' || r.status === 'local' ? 'warn' : 'info', message: `dependencies (${which}, ${r.lockfile}): ${what}${r.seconds != null ? ` in ${r.seconds.toFixed(1)} s` : ''}` });
+    return r;
+  }
+
+  // The lines of an agent's command guide about dependencies: what is ready and what never to run
+  depsGuide() {
+    const w = this.deps?.worktree;
+    const b = this.deps?.base;
+    const lines = [];
+    if (w?.entry && ['hit', 'linked', 'miss'].includes(w.status)) {
+      lines.push(`- Dependencies are ready: \`node_modules\` links to the shared dependency cache (installed once per ${w.lockfile} content). Never run ${w.manager === 'npm' ? '`npm ci`' : `a clean ${w.manager} install`} and never delete \`node_modules\`: it would empty the cache for every run. Adding a package with the package manager (\`${w.manager} ${w.manager === 'npm' ? 'install' : 'add'} <pkg>\`) is fine: the engine installs the new lockfile into the cache after your turn. To check that the dependencies match package.json, use \`npm ls --all\`.`);
+    } else if (w && w.status !== 'none') {
+      lines.push(`- Dependencies are not linked from the shared cache (${w.reason || w.status}): install them yourself when they are missing.`);
+    }
+    if (b && this.ctx.base_worktree_dir) {
+      lines.push(`- The base worktree \`${this.ctx.base_worktree_dir}\` (for a pre-existing-failure check) is ready${b.entry ? ' with its dependencies' : ''}: use it, never create another one${b.entry ? ' and never install in it' : ''}.`);
+    }
+    return lines.join('\n');
+  }
+
+  // `base_worktree: true` on a step: the run's checkout of the base, <worktreesDir>/<run_id>-base,
+  // refreshed to the current base on each visit, with its dependencies from the same cache;
+  // `base_worktree_dir` in the templates (empty without a worktree). Removed with the run's worktree.
+  async setupBaseWorktree() {
+    const wt = this.worktree;
+    if (!wt || !this.worktreesDir) { this.ctx.base_worktree_dir = ''; return; }
+    const log = (level, message) => this.emitEvent('log', { level, message });
+    try {
+      const info = await prepareBaseWorktree({ repo: wt.repo, base: wt.base, dir: path.join(this.worktreesDir, `${this.runId}-base`), log, remote: wt.remote !== false });
+      if (!info) return;
+      this.baseWorktree = info;
+      this.ctx.base_worktree_dir = info.workDir;
+      this.emitEvent('log', { level: 'info', message: `worktree: base checkout ${info.dir} at ${info.ref} (${String(info.commit || '').slice(0, 8)})` });
+      await this.prepareDeps('base', info.workDir, 'base worktree ready');
+    } catch (e) {
+      if (this.abort.signal.aborted) throw e;
+      this.ctx.base_worktree_dir = '';
+      log('warn', `worktree: could not prepare the base checkout: ${e.message}`);
+    }
   }
 
   // The run's scratch workspace (#120), { workspace, userData } under <run>/scratch: a copy of the
@@ -1068,6 +1149,12 @@ class WorkflowRun extends EventEmitter {
     const wt = this.worktree;
     if (!wt) return;
     const log = (level, message) => this.emitEvent('log', { level, message });
+    // the base checkout (base_worktree) is recreated when needed: it goes whatever the status
+    if (this.baseWorktree) {
+      const b = this.baseWorktree;
+      await removeWorktree({ repo: b.repo, dir: b.dir, base: null, log, remote: false }).catch((e) => log('warn', `worktree: could not remove the base checkout: ${e.message}`));
+      this.baseWorktree = null;
+    }
     try {
       if (status === 'success') {
         const r = await removeWorktree({ repo: wt.repo, dir: wt.dir, base: wt.base, log, remote: wt.remote !== false });
@@ -1089,7 +1176,11 @@ class WorkflowRun extends EventEmitter {
   // dev server) hold its files: every later `npm ci` fails with EBUSY and no agent may stop them.
   // Stopped after each agent turn and at the end of the run; see src/engine/processes.js.
   async stopWorktreeProcesses(after) {
-    const dir = this.worktree?.dir;
+    if (this.baseWorktree?.dir) await this.stopProcessesIn(this.baseWorktree.dir, after);
+    await this.stopProcessesIn(this.worktree?.dir, after);
+  }
+
+  async stopProcessesIn(dir, after) {
     if (!dir || !this.stopProcesses) return;
     let found;
     try {
@@ -1206,6 +1297,7 @@ class WorkflowRun extends EventEmitter {
       }
       scope = { ...this.ctx, output, status: output.status, iteration: st.iteration };
     } else {
+      if (step.base_worktree) await this.setupBaseWorktree();
       const slow = this.watchSlowStep(step, st);
       try {
         output = step.agents ? await this.runFanOut(step, st) : await this.runAgentStep(step, st, step.agent);
@@ -1225,6 +1317,9 @@ class WorkflowRun extends EventEmitter {
       } finally {
         slow?.stop();
         await this.stopWorktreeProcesses(`step ${step.id}`);
+        // a lockfile the step changed (a package added): its key is installed once and linked; an
+        // entry the agent changed or emptied through the link is no longer given to new worktrees
+        if (this.worktree && !this.abort.signal.aborted) await this.prepareDeps('worktree', this.ctx.worktree_dir, `step ${step.id}`).catch(() => {});
       }
       if (output === undefined) {
         const e = new Error(this.lastStepError || `Step "${step.id}" failed.`);
@@ -2355,7 +2450,10 @@ class WorkflowRun extends EventEmitter {
     for (const dir of runDirs) fs.mkdirSync(dir, { recursive: true });
     const agentEnv = capabilities.agentEnv(this.scratchWorkspace());
     const shotsDir = hint?.visit ? evidence.roundDir(this.runDir, stepId, hint.visit) : null;
-    const guide = capabilities.commandGuide(caps, this.runDir, agentEnv, shotsDir);
+    const commands = capabilities.commandGuide(caps, this.runDir, agentEnv, shotsDir);
+    const guide = commands && [commands, this.depsGuide()].filter(Boolean).join('\n');
+    // node_modules linked from the shared cache (#198): Claude refuses `npm ci` and deleting it
+    const depsLinked = !!this.deps?.worktree?.entry;
     if (turn === 1 && (agent.system_prompt || agentSkills.length || guide)) {
       const system = [render(agent.system_prompt, this.ctx).trim(), guide, ...agentSkills.map(skillPrompt)].filter(Boolean).join('\n\n');
       parts.push(`<system>\n${system}\n</system>`);
@@ -2372,7 +2470,8 @@ class WorkflowRun extends EventEmitter {
     const providerType = this.wf.providers?.[agent.provider]?.type;
     const isolated = agent.isolation !== false;
     const denyEdits = guarded ? this.wf.tests_paths || testPaths.TESTS_PATHS : [];
-    const { args: capArgs, notes } = capabilities.providerArgs(providerType, { caps, isolated, mcpServers: this.wf.mcp_servers || {}, denyEdits, runDir: runDirs.length ? this.runDir : null, env: agentEnv });
+    const denyCommands = depsLinked ? capabilities.DEPS_DENIED_COMMANDS : [];
+    const { args: capArgs, notes } = capabilities.providerArgs(providerType, { caps, isolated, mcpServers: this.wf.mcp_servers || {}, denyEdits, denyCommands, runDir: runDirs.length ? this.runDir : null, env: agentEnv });
     const capsKey = `${agentName}|${capabilities.describe(caps)}|${guarded}`;
     if (!this.capsLogged.has(capsKey)) {
       this.capsLogged.add(capsKey);
@@ -2844,6 +2943,11 @@ class WorkflowRun extends EventEmitter {
         signal: this.abort.signal,
         timeoutMs: parseDuration(step.timeout, undefined),
         log: (level, message) => this.emitEvent('log', { level, message }),
+        // another run (or agent) is capturing: one Electron screenshot at a time on the machine (#199)
+        onSlotWait: (holder) => {
+          this.emitEvent('screenshots.waiting', { step_id: step.id, holder_pid: holder?.pid ?? null, holder: holder?.holder || null });
+          this.emitEvent('log', { level: 'info', kind: 'screenshot_slot', message: `${step.id}: waiting for the screenshot slot (held by pid ${holder?.pid ?? '?'}${holder?.holder ? `, ${holder.holder}` : ''})` });
+        },
       });
     } catch (e) {
       const reason = `the capture failed: ${e.message}`;

@@ -17,7 +17,15 @@ From the lockfile: `package-lock.json` → npm · `pnpm-lock.yaml` → pnpm · `
 
 No test suite here (`npm test` and the like): the test writer already ran it, and CI runs it on every platform.
 
-1. Clean install: `npm ci` · `pnpm install --frozen-lockfile` · `yarn install --frozen-lockfile` (Berry: `yarn install --immutable`).
+1. Dependencies are ready: the engine links `node_modules` from a shared cache, installed once per
+   lockfile. **Never reinstall** (`npm ci`, a frozen pnpm/yarn install) and never delete
+   `node_modules`: through the link it would empty the cache for every run. Instead check that the
+   lockfile matches `package.json`: npm `npm ls --all` (any `npm ci` is refused, `--dry-run` too; errors such as
+   `missing`, `invalid` or `ELSPROBLEMS` = out of sync: `failure_class: code`) · pnpm
+   `pnpm install --frozen-lockfile --lockfile-only` · yarn 1 `yarn check --integrity` · Berry
+   `yarn install --immutable --mode=update-lockfile`.
+   Only when your prompt says the dependencies are not cached for this project, run the clean
+   install yourself (`npm ci` · `pnpm install --frozen-lockfile` · `yarn install --frozen-lockfile`).
 2. If `package.json` has `scripts.build`, run it (`npm run build`).
 3. No build script: TS project → `npx tsc --noEmit`; plain JS → build is OK, say so in the report.
 4. Also run `scripts.typecheck`/`scripts.lint` if they exist and CI does not already run them; report (do not block on) lint findings.
@@ -34,6 +42,8 @@ No test suite here (`npm test` and the like): the test writer already ran it, an
   started from the run's folder; a human decides when to build again.
   An interrupted `npm ci` leaves `node_modules` incomplete (missing packages): later `npm test` or
   `npm run build` errors such as `Cannot find module` are a consequence, not a separate code failure.
+- **infra** too: the build tool fails on the linked `node_modules` itself (it refuses a directory
+  junction or symlink): name the tool and the error in the report; the owner decides.
 
 ## Audit
 

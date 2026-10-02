@@ -8,12 +8,18 @@
 // a timeout or a crash end up in the output (`errors`, `reason`, `message`), and the run goes on to
 // the next step (the developer_check gate, which says what failed). Nothing is retried by an agent.
 // Output: { kind: 'screenshots', folder, round, dir, taken, screens, screenshots, errors, reason, message }.
+// Each capture waits for the machine-wide screenshot slot (#199): one Electron screenshot at a time.
 
 const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
 const evidence = require('../evidence');
 const { killTree, quoteCmd, resolveCommand } = require('./providers');
+const {
+  acquireSlot,
+  SCREENSHOT_SLOT,
+  SCREENSHOT_SLOT_ENV,
+} = require('./machine-slot');
 
 const MAX_SCREENS = 8;
 const SHOT_TIMEOUT_MS = 180000;
@@ -93,9 +99,23 @@ function runShot({ cwd, args, env, timeoutMs, signal }) {
 const lastLine = (s) => String(s || '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean).pop() || '';
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
+// One Electron screenshot at a time on the machine (#199): each capture takes the machine-wide slot
+// (src/engine/machine-slot.js) and gives it to its `npm run screenshot` child (SCREENSHOT_SLOT_ENV),
+// which then does not wait for it. onSlotWait(holder) is called when a capture has to wait.
+async function withSlot({ signal, onSlotWait, slot }, fn) {
+  let held;
+  try {
+    held = await slot(SCREENSHOT_SLOT, { signal, holder: 'screenshots step', onWait: onSlotWait });
+  } catch (e) {
+    return { code: null, output: `waiting for the screenshot slot: ${e.message}`, timedOut: false };
+  }
+  try { return await fn(held.token); } finally { held.release(); }
+}
+
 // entries: the developer's list; cwd: the worktree; base: the ref of the "original" side (none: modified
-// only); env: the agents' environment (simulation only, scratch workspace); run: runShot (replaceable)
-async function captureScreenshots({ entries, cwd, runDir, folder, round, base, env, mock, signal, timeoutMs = SHOT_TIMEOUT_MS, run = runShot, log = () => {} }) {
+// only); env: the agents' environment (simulation only, scratch workspace); run: runShot (replaceable);
+// slot: acquireSlot (replaceable); onSlotWait(holder): a capture waits for another run's screenshot
+async function captureScreenshots({ entries, cwd, runDir, folder, round, base, env, mock, signal, timeoutMs = SHOT_TIMEOUT_MS, run = runShot, log = () => {}, slot = acquireSlot, onSlotWait = () => {} }) {
   const dir = runDir ? evidence.roundDir(runDir, folder, round) : null;
   const out = {
     kind: 'screenshots', folder, round, dir: dir ? path.relative(runDir, dir).split(path.sep).join('/') : null,
@@ -133,7 +153,7 @@ async function captureScreenshots({ entries, cwd, runDir, folder, round, base, e
       const args = [...e.args, '--out', dir, '--name', e.name, '--side', side, ...(side === 'original' ? ['--ref', base] : [])];
       const t0 = Date.now();
       log('info', `screenshots: ${command} -- ${args.join(' ')}`);
-      const r = await run({ cwd, args, env, timeoutMs, signal });
+      const r = await withSlot({ signal, onSlotWait, slot }, (token) => run({ cwd, args, env: { ...env, [SCREENSHOT_SLOT_ENV]: token }, timeoutMs, signal }));
       const file = path.join(dir, `${e.name}.${side}.png`);
       if (r.code === 0 && fs.existsSync(file)) {
         out.taken++;

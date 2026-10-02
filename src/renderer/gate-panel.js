@@ -94,19 +94,21 @@ window.gateBriefHtml = gateBriefHtml;
 // each expanding to its Given/When/Then and its screenshots (read by mountGateScenarios). Before
 // the test step ran (developer_check's first visits) it says when they come. '' when no step
 // output has `scenarios` and the gate's message does not mention them (a workflow without E2E).
-const SCENARIO_PILL = { passed: 'pill-success', failed: 'pill-failed', skipped: 'pill-cancelled' };
+const SCENARIO_PILL = { passed: 'pill-success', failed: 'pill-failed', skipped: 'pill-cancelled', pending: 'pill-idle' };
+// pending (#199): written and checked by the run, run at release by the E2E release workflow
+const SCENARIO_LABEL = { pending: 'written, run at release' };
 function gateScenariosHtml(runId, g = {}) {
   const out = lastOutput(runId, (o) => Array.isArray(o.scenarios));
   const head = (extra) => `<div class="gate-scenarios-head"><b>E2E scenarios</b> <span class="muted small">for the Dev/QA</span>${extra}</div>`;
   if (!out) {
     const expected = /E2E scenarios/.test(String(g.message || ''));
-    return expected ?`<div class="gate-scenarios">${head('')}<p class="muted small">None yet: the test writer writes and runs them after the code review.</p></div>` : '';
+    return expected ?`<div class="gate-scenarios">${head('')}<p class="muted small">None yet: the test writer writes them after the code review (they run at release).</p></div>` : '';
   }
   const list = out.scenarios.filter((s) => s && typeof s === 'object' && s.name);
   const note = out.e2e_note ? `<p class="muted small gate-scenarios-note" title="${esc(out.e2e_note)}">${esc(out.e2e_note)}</p>` : '';
   if (!list.length) return `<div class="gate-scenarios">${head('')}<p class="muted small">No scenario for this change.</p>${note}</div>`;
   const count = (k) => list.filter((s) => s.status === k).length;
-  const counts = Object.keys(SCENARIO_PILL).filter(count).map((k) => `<span class="pill ${SCENARIO_PILL[k]}">${count(k)} ${k}</span>`).join(' ');
+  const counts = Object.keys(SCENARIO_PILL).filter(count).map((k) => `<span class="pill ${SCENARIO_PILL[k]}">${count(k)} ${SCENARIO_LABEL[k] || k}</span>`).join(' ');
   const runDir = state.runs.get(runId)?.events?.find((e) => e.type === 'workflow.started')?.run_dir || '';
   const file = (p) => (/^([a-zA-Z]:)?[\\/]/.test(p) || !runDir ? p : `${runDir.replace(/[\\/]+$/, '')}/${p}`);
   const step = (t) => {
@@ -118,7 +120,7 @@ function gateScenariosHtml(runId, g = {}) {
     const shots = (Array.isArray(s.screenshots) ? s.screenshots : []).map((p) => String(typeof p === 'object' && p ? p.path : p || '')).filter(Boolean);
     const imgs = shots.length ? `<div class="gate-scenario-shots">${shots.map((p) => `<img ${window.ImageViewer?.THUMB || 'tabindex="0"'} alt="${esc(`${s.name}: ${p.split('/').pop()}`)}" data-gate-shot="${esc(file(p))}" data-gate-scenario="${esc(s.name)}" />`).join('')}</div>` : '';
     const key = `${runId}\n${s.feature || ''}\n${s.name}`;
-    return `<details class="gate-scenario st-${status}" data-scenario-key="${esc(key)}"${openScenarios.has(key) ? ' open' : ''}><summary><span class="pill ${SCENARIO_PILL[status]}">${status}</span>
+    return `<details class="gate-scenario st-${status}" data-scenario-key="${esc(key)}"${openScenarios.has(key) ? ' open' : ''}><summary><span class="pill ${SCENARIO_PILL[status]}">${SCENARIO_LABEL[status] || status}</span>
       <span class="gate-scenario-name" title="${esc(s.feature ? `${s.name} (${s.feature})` : s.name)}">${esc(s.name)}</span>${s.reason ? `<span class="muted small gate-scenario-reason" title="${esc(s.reason)}">${esc(s.reason)}</span>` : ''}${shots.length ? `<span class="badge">${shots.length} screenshot${shots.length === 1 ? '' : 's'}</span>` : ''}</summary>
       <ol class="gate-scenario-steps">${(s.steps || []).map(step).join('')}</ol>${s.feature ? `<div class="muted small" title="${esc(s.feature)}">${esc(s.feature)}</div>` : ''}${imgs}</details>`;
   }).join('');

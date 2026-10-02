@@ -80,10 +80,13 @@ A test turn has a time limit; a killed turn loses its answer and the next attemp
 
 When the suite fails, first find out whether the failure is this change's:
 
-1. Run **only the failing files** on the base commit: a temporary worktree
-   (`git worktree add --detach <temp folder> <base>`, install its dependencies if the runner needs
-   them, run the files, then `git worktree remove --force <temp folder>`). Never use a bare
-   `git stash` (the stash is shared with other worktrees and runs).
+1. Run **only the failing files** on the base commit. When your prompt gives a base checkout (the
+   orchestrator prepares one, with its dependencies linked from the shared cache), run them there
+   and never install anything in it. Otherwise a temporary worktree
+   (`git worktree add --detach <temp folder> <base>`, run the files, then
+   `git worktree remove --force <temp folder>`); when it lacks dependencies, say so in the
+   reason rather than running a second full install. Never use a bare `git stash` (the stash is
+   shared with other worktrees and runs).
 2. A test that **also fails on the base** is pre-existing: list it in `preexisting_failures`
    (`test`, `file`, `reason` in one line) and move on. It does not make the step fail, and it is not
    investigated or fixed in this run (no log digging, no reproduction runs), unless the fix is

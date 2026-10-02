@@ -1,16 +1,18 @@
 // End-to-end BDD scenarios (#143): a step output's `scenarios` ([{ feature, name, steps, status,
 // reason, screenshots }], the test writer's, skills e2e-test-writer-<language>) and `e2e_note`.
-// `normalizeScenarios` keeps the valid entries (status passed / failed / skipped, steps as
+// `normalizeScenarios` keeps the valid entries (status passed / failed / skipped / pending, steps as
 // "Given …" lines, screenshot paths relative to the run folder), `scenarioCounts` counts them,
 // `featureText` writes them back as Gherkin (one Feature per feature file, the status and reason
 // as comments), `scenariosMessage` gives a gate message's lines (filter `e2e_scenarios`) and
 // `recordScenarios` saves <run_dir>/e2e/scenarios.feature + scenarios.json after
 // the step (WorkflowRun.finishStep), the run folder's copy the Dev/QA reads at the gates.
+// `pending` (#199): written and checked (they parse) by a development run, run at release by the
+// E2E release workflow (workflows/e2e-release.yaml), never in each run.
 
 const fs = require('fs');
 const path = require('path');
 
-const STATUSES = ['passed', 'failed', 'skipped'];
+const STATUSES = ['passed', 'failed', 'skipped', 'pending'];
 const KEYWORDS = /^(Given|When|Then|And|But|\*)\b/i;
 
 // A screenshot path as the run folder knows it: relative, forward slashes
@@ -37,7 +39,7 @@ function normalizeScenarios(list, runDir = null) {
 }
 
 function scenarioCounts(list) {
-  const counts = { total: 0, passed: 0, failed: 0, skipped: 0 };
+  const counts = { total: 0, passed: 0, failed: 0, skipped: 0, pending: 0 };
   for (const s of normalizeScenarios(list)) { counts.total++; counts[s.status]++; }
   return counts;
 }
@@ -45,7 +47,7 @@ function scenarioCounts(list) {
 // Gherkin of the scenarios, grouped by feature file; a step without its keyword gets `*`.
 function featureText(list, { title = 'Acceptance scenarios', note = '' } = {}) {
   const all = normalizeScenarios(list);
-  const head = [`# ${title}: written and run by the test writer. Status and reason of each scenario in comments.`];
+  const head = [`# ${title}: written by the test writer (pending: run at release by the E2E release workflow). Status and reason of each scenario in comments.`];
   if (note) head.push(`# Note: ${String(note).replace(/\s*\r?\n\s*/g, ' ')}`);
   if (!all.length) return `${head.join('\n')}\n# No scenario${note ? '' : ' reported'}.\n`;
   const features = [...new Set(all.map((s) => s.feature))];
@@ -69,9 +71,9 @@ function scenariosMessage(output) {
   const note = String(output.e2e_note || '').trim();
   if (!all.length) return `E2E scenarios: none${note ? ` (${note})` : ''}.`;
   const c = scenarioCounts(all);
-  const counts = STATUSES.filter((k) => c[k]).map((k) => `${c[k]} ${k}`).join(' · ');
-  const lines = all.map((s) => `- ${s.status}: ${s.name}${s.reason ? ` (${s.reason})` : ''}`);
-  return [`E2E scenarios (written and run by the test writer): ${counts}`, ...lines, ...(note ? [`Note: ${note}`] : [])].join('\n');
+  const counts = STATUSES.filter((k) => c[k]).map((k) => `${c[k]} ${k === 'pending' ? 'written, run at release' : k}`).join(' · ');
+  const lines = all.map((s) => `- ${s.status === 'pending' ? 'written, run at release' : s.status}: ${s.name}${s.reason ? ` (${s.reason})` : ''}`);
+  return [`E2E scenarios (${c.pending === c.total ? 'written by the test writer, run at release' : 'written by the test writer'}): ${counts}`, ...lines, ...(note ? [`Note: ${note}`] : [])].join('\n');
 }
 
 // Saves the run folder's copy when the output has `scenarios` (even empty: the note says why).

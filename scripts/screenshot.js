@@ -76,6 +76,9 @@
 // rounds, an original/modified pair) for the Artifacts panel and the image viewer, e.g.
 // `--view run --input mode=validated --stop-at developer_check --click ".run-gate-side [data-iv-thumb]"`
 // opens the viewer (then `--click '.iv [data-iv-zoom="in"]'` zooms).
+// One capture at a time on the machine (#199): it first takes the machine-wide screenshot slot
+// (src/engine/machine-slot.js) and prints `screenshot: waiting for the screenshot slot` while
+// another run's capture holds it; a slot held by a dead process is freed.
 // Prints `screenshot: <path>` and exits 0, or exits 1 with the error.
 
 const fs = require('fs');
@@ -83,6 +86,7 @@ const os = require('os');
 const path = require('path');
 const { spawnSync, execFileSync } = require('child_process');
 const evidence = require('../src/evidence');
+const machineSlot = require('../src/engine/machine-slot');
 
 const VIEWS = {
   dashboard: {}, sessions: {}, projects: {}, project: {}, artifacts: {}, agents: {}, skills: {}, usage: {}, duo: {}, arena: {},
@@ -400,6 +404,20 @@ function demoRoadmap(ws, projectId, live = 'off') {
       })] },
     ],
   }, null, 2));
+}
+
+// Settings › General › Dependency cache (#198): two complete entries of the demo project (sizes
+// recorded in entry.json, as after an install), so the row shows a size and Clear is enabled.
+function demoDepsCache(ws, projectId) {
+  if (!ws.cache) return; // an app before the cache
+  const day = 864e5;
+  [['3f9a1c2e7b4d5a6c8e0f1a2b', 412 * 1024 ** 2, 1], ['8c2d4e6f0a1b3c5d7e9f1a2b', 1.3 * 1024 ** 3, 6]].forEach(([key, bytes, daysAgo]) => {
+    const entry = path.join(ws.cache, 'deps', projectId, key);
+    fs.mkdirSync(path.join(entry, 'node_modules'), { recursive: true });
+    fs.writeFileSync(path.join(entry, 'node_modules', '.package-lock.json'), '{}');
+    const at = new Date(Date.now() - daysAgo * day).toISOString();
+    fs.writeFileSync(path.join(entry, 'entry.json'), JSON.stringify({ key, lockfile: 'package-lock.json', manager: 'npm', sentinel: '.package-lock.json', bytes, created_at: at, last_used: at }));
+  });
 }
 
 // Workflows › Definitions (#137): declared outputs on an edited default (modified, Restore
@@ -946,8 +964,22 @@ function main() {
     return;
   }
   const repo = path.join(__dirname, '..');
+  // one Electron screenshot at a time on the machine (#199): wait for the slot (inherited when the
+  // engine's screenshots step started this process), freed at exit or when this process dies
+  let slot;
+  try {
+    slot = machineSlot.acquireSlotSync(machineSlot.SCREENSHOT_SLOT, {
+      holder: `npm run screenshot (${args.view})`,
+      onWait: (h) => console.log(`screenshot: waiting for the screenshot slot (held by pid ${h?.pid ?? '?'}${h?.holder ? `, ${h.holder}` : ''})`),
+    });
+  } catch (e) {
+    console.error(`screenshot: ${e.message}`);
+    app.exit(1);
+    return;
+  }
+  process.on('exit', () => slot.release());
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'multiagent-shot-'));
-  const cleanup = () => removeScratch(scratch);
+  const cleanup = () => { removeScratch(scratch); slot.release(); };
   const fail = (e) => {
     console.error(`screenshot: ${e?.message || e}`);
     cleanup();
@@ -1003,6 +1035,7 @@ function main() {
     // enough runs for the lists' pages, and a run with many artifacts (#200)
     if (['artifacts', 'project', 'workflows'].includes(args.view)) demoRunHistory(ws, project.id);
     if (args.view === 'workflows') demoPipelines(ws, appDir);
+    if (args.view === 'settings') demoDepsCache(ws, project.id);
     if (args.view === 'analytics' && args.tab === 'performance') demoPerformanceRuns(ws, project.folder, project.id);
     // the Night watch's nights (#172): its screen, and the Dashboard's morning summary (an app before it: nothing)
     if (['dashboard', 'nightwatch'].includes(args.view)) {

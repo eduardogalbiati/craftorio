@@ -1,0 +1,375 @@
+# =============================================================================
+# Workflow: E2E release (#199)
+# -----------------------------------------------------------------------------
+#   e2e ──(all green, nothing fixed)──► end  (records the commit as the last green E2E)
+#    │
+#    ├──(a scenario failed)──► fix (developer) ──► review ──(approved)──► e2e (again)
+#    │                          ▲                   │
+#    │                          └───────────────────┘ (changes requested)
+#    │        at most max_rounds fixes, then e2e_failed (you)
+#    ├──(green after fixes)──► approve_fixes (you) ──merge: local──► end
+#    └──(could not run: environment)──► e2e_blocked (you)
+#
+# Where E2E runs: development runs (software-development, software-development-local-hero) only
+# WRITE the issue's BDD scenarios and check that they parse (reported `pending`, "written, run at
+# release"); this workflow runs the project's WHOLE E2E suite, once, at release time, so several
+# runs never start the app or a browser at the same time. Their local merges never wait for it.
+#
+# 1. e2e:     in its own worktree of the LOCAL base, the E2E runner runs every feature file, one at
+#             a time, within the time budget, and records each scenario's result and screenshots
+#             (evidence/e2e/round-<n>/). It lists what changed since the last green E2E run
+#             (commits, issues, runs) for the developer.
+# 2. fix:     a failed scenario goes to the developer, with the scenario, its screenshots and the
+#             changes since the last green run; the developer fixes the production code on its
+#             branch (tests and scenarios stay the E2E runner's).
+# 3. review:  the reviewer checks the fix; then the failed scenarios run again (step e2e).
+# 4. Green after fixes: you approve, then the fix branch merges into the local base (merge: local).
+#    Green with nothing fixed: the run ends and records the tested commit as the last green E2E
+#    (`refs/multiagent/e2e-last-green` in the repository, a local ref: never pushed, never a tag).
+# Never pushes, tags or publishes, and never crosses a human gate. Each `npm run screenshot` waits
+# for the machine's screenshot slot (one Electron screenshot at a time across all runs).
+# Start it by hand from Workflows, from the Backlog (any issue: its scenarios are in the suite) or
+# as a roadmap item.
+# =============================================================================
+
+apiVersion: multiagent/v1
+kind: Workflow
+
+metadata:
+  name: e2e-release
+  version: 0.1.0
+  description: Runs the project's whole end-to-end suite once, before a release, in its own worktree of the local base; a failing scenario goes to the developer and back to the suite, then you approve the fix. Never pushes or tags.
+  tags: [test, e2e, bdd, release, local, worktree]
+  # Dashboard category: plan (Plan & Design), build (Code & Build) or monitor (Monitor & Improve).
+  category: build
+
+# -----------------------------------------------------------------------------
+inputs:
+  task:
+    type: string
+    required: true
+    default: "Run the whole E2E suite before a release."
+    description: What this E2E run is for (e.g. the release it checks). The Backlog fills it with the issues.
+  issue:
+    type: string
+    default: ""
+    description: "URL of an issue this run is about (set by the Backlog screen)."
+  issues:
+    type: array
+    default: []
+    description: "URLs of the issues this run is about (set by the Backlog screen; one per line)."
+  repo_path:
+    type: string
+    required: true
+    description: Local repository path (a git repository; no remote needed).
+  # Picks the e2e-test-writer-<language> skill (the framework and its commands).
+  language:
+    type: string
+    enum: [js, python, go, java, csharp]
+    default: js
+    options: { js: JavaScript, python: Python, go: Go, java: Java, csharp: "C#" }
+    description: The project's main language, for its E2E framework and commands.
+  base_branch:
+    type: string
+    default: main
+    description: The local branch the suite runs on, and where an approved fix is merged.
+  time_budget_minutes:
+    type: integer
+    default: 60
+    description: The time the whole suite may take in one pass; feature files left when it is spent are reported as skipped.
+  max_rounds:
+    type: integer
+    default: 2
+    description: Fix rounds (developer, review, the failed scenarios again) before you are asked.
+
+# -----------------------------------------------------------------------------
+providers:
+  claude:
+    type: claude-code
+    command: claude
+    args: ["-p", "--output-format", "stream-json", "--verbose", "--model", "{{ model }}"]
+    resume_args: ["--resume", "{{ session_id }}"]
+    skill_args: ["--add-dir", "{{ skill_dir }}"]
+
+x-tools:
+  # every supported language toolchain: the language skill says which one to use
+  toolchains: &toolchains [bash:git, bash:npm, bash:npx, bash:node, bash:pnpm, bash:yarn, bash:python, bash:python3, bash:py, bash:pip, bash:pytest, bash:uv, bash:poetry, bash:behave, bash:robot, bash:go, bash:mvn, bash:./mvnw, bash:mvnw.cmd, bash:gradle, bash:./gradlew, bash:gradlew.bat, bash:dotnet]
+
+defaults:
+  # the run's own git worktree of the local base
+  working_dir: "{{ worktree_dir }}"
+  timeout: 30m
+  max_context: 150k
+  retry:
+    max_attempts: 2
+    backoff: exponential
+    initial_delay: 10s
+
+orchestrator:
+  provider: claude
+  model: claude-sonnet-5
+  # <workspace>/worktrees/<run_id>, detached at the LOCAL <base> (remote: false: no fetch);
+  # dependencies linked from the shared cache (#198)
+  worktree:
+    repo: "{{ inputs.repo_path }}"
+    base: "{{ inputs.base_branch }}"
+    remote: false
+  supervisor:
+    enabled: true
+    on_call: true
+    max_interventions: 2
+    max_cost_usd: 5
+  limits:
+    max_total_duration: 8h
+    max_total_cost_usd: 40
+    max_total_context: 30M
+
+# -----------------------------------------------------------------------------
+agents:
+  e2e_runner:
+    provider: claude
+    model: claude-sonnet-5
+    session: persistent
+    # the suite's pass is long: the budget plus time to report
+    timeout: "{{ (inputs.time_budget_minutes | int) + 15 }}m"
+    capabilities: { tools: [read, edit, write, *toolchains], web: false, subagents: true }
+    skills: ["e2e-test-writer-{{ inputs.language }}", long-commands, context-economy]
+    system_prompt: |
+      You are the E2E runner of a release check. You run the project's end-to-end BDD suite
+      (all of it, one feature file at a time) following the E2E test skill, and report every
+      scenario's result with the evidence a developer needs. You never fix production code.
+      The scenarios are yours: when the developer shows that a scenario is wrong (an intended
+      behaviour change), you update the scenario and commit it on the run's branch.
+      Never push, tag or publish anything.
+
+  developer:
+    provider: claude
+    model: claude-opus-5-5
+    session: handoff
+    capabilities: { tools: [read, edit, write, *toolchains], web: false, subagents: true }
+    # the scenarios and tests belong to the E2E runner
+    edits_tests: false
+    skills: [long-commands, bug-diagnosis, context-economy, decision-log]
+    system_prompt: |
+      You are a senior software engineer fixing what a release's end-to-end suite found. Make
+      the smallest production-code fix that addresses the root cause, following the existing
+      architecture. Never create, edit or delete tests or scenarios (the orchestrator refuses a
+      turn that changes one): when a scenario is wrong, say why in your answer. Run a focused
+      check, not the whole suite (the E2E runner runs the failed scenarios again).
+      Work on your own branch in this worktree (it starts detached at the LOCAL
+      {{ inputs.base_branch }}): `git switch -c e2e-fix-{{ run_id }}` once, then commit there.
+      Never fetch, pull, push or tag: the orchestrator merges the branch into the local
+      {{ inputs.base_branch }} after the owner approves. The dependencies are linked from a
+      shared cache: never run `npm ci` and never delete `node_modules`.
+
+  reviewer:
+    provider: claude
+    model: claude-sonnet-5-5
+    effort: high
+    session: persistent
+    capabilities: { tools: [read, bash:git], web: false }
+    skills: [code-review]
+    system_prompt: |
+      You are the code reviewer of a release fix. Follow the code-review skill: detect the
+      languages in the diff and read the rules for each one before the verdict.
+
+groups:
+  - name: E2E
+    steps: [e2e, e2e_blocked]
+  - name: Fix
+    steps: [fix, review, e2e_failed]
+  - name: Merge
+    steps: [approve_fixes]
+
+# -----------------------------------------------------------------------------
+steps:
+
+  - id: e2e
+    agent: e2e_runner
+    prompt: |
+      {{ inputs.task }}
+      {% if steps.fix.visits %}
+      The developer fixed the failed scenarios (round {{ steps.fix.visits }}) on branch
+      `{{ steps.fix.output.branch }}`: {{ steps.fix.output.summary }}
+      {% if steps.fix.output.scenario_notes %}The developer thinks these scenarios are wrong (update them only if the
+      behaviour change was intended): {{ steps.fix.output.scenario_notes }}{% endif %}
+      Run again only the feature files that failed, then report every scenario of the suite
+      (the ones that passed before keep their result).
+      {% else %}
+      Run the project's whole E2E suite on the local `{{ inputs.base_branch }}`, following the
+      E2E test skill (release run): every feature file, one at a time, each with its own
+      timeout, within {{ inputs.time_budget_minutes }} minutes in total. A file left when the
+      budget is spent: its scenarios are `skipped` with reason "time budget".
+      {% endif %}
+      Screenshots of the UI scenarios go to {{ evidence_dir }} (`<issue>-e2e-<scenario-slug>-<n>.modified.png`);
+      `npm run screenshot` may wait for the machine's screenshot slot (another run is capturing).
+      The commands' output goes to the run's logs folder ({{ run_dir }}/logs), one log per feature file.
+
+      What changed since the last green E2E run, for the developer (at most 30 commits, one line each):
+      the commits of `git log --oneline refs/multiagent/e2e-last-green..HEAD` (when that ref does not
+      exist: the last 30 commits), with the issues their messages close (`Closes #n`), and the runs
+      that merged them: the `summary.json` files under {{ runs_dir }} whose local merge commit is in
+      that range (run id, workflow, issues, title), at most 20.
+
+      Set `e2e_status`: pass (no scenario failed), fail (a scenario failed because of the
+      application) or blocked (nothing could run: the app does not start, no browser, no framework).
+    output_schema:
+      type: object
+      required: [e2e_status, scenarios, summary]
+      properties:
+        e2e_status: { type: string, enum: [pass, fail, blocked] }
+        summary:    { type: string }
+        # the failed scenarios, for the developer: scenario, step, error, probable cause
+        failure_report: { type: string }
+        # the feature files run, in order, with their duration
+        files_run:  { type: array, items: { type: string } }
+        # commits, issues and runs since the last green E2E run (one line each)
+        since_last_green: { type: array, items: { type: string } }
+        scenarios:
+          type: array
+          items:
+            type: object
+            required: [name, steps, status]
+            properties:
+              feature:     { type: string }
+              name:        { type: string }
+              steps:       { type: array, items: { type: string } }
+              status:      { type: string, enum: [passed, failed, skipped] }
+              reason:      { type: string }
+              screenshots: { type: array, items: { type: string } }
+        e2e_note: { type: string }
+    transitions:
+      - when: "output.e2e_status == 'pass' and not steps.fix.visits"
+        # the tested commit becomes the last green E2E (a local ref, skipped in simulation)
+        action: "git update-ref refs/multiagent/e2e-last-green HEAD"
+        goto: end
+      - when: "output.e2e_status == 'pass'"
+        goto: approve_fixes
+      - when: "output.e2e_status == 'blocked'"
+        goto: e2e_blocked
+      - when: "output.e2e_status == 'fail'"
+        goto: fix
+        max_visits: "{{ inputs.max_rounds }}"
+        on_exhausted: e2e_failed
+
+  - id: fix
+    agent: developer
+    prompt: |
+      The release's E2E suite found failures on the local `{{ inputs.base_branch }}`:
+      {{ steps.e2e.output.failure_report }}
+      {{ steps.e2e.output | e2e_scenarios }}
+      Each failed scenario's screenshots are listed with it (paths relative to {{ run_dir }}).
+      {% if steps.e2e.output.since_last_green | length %}
+      What changed since the last green E2E run (start from the change that touches the failing behaviour):
+      {% for l in steps.e2e.output.since_last_green %}- {{ l }}
+      {% endfor %}{% endif %}
+      {% if steps.review.output and steps.review.output.verdict == 'changes_requested' %}
+      The reviewer asked for changes on your previous fix:
+      {{ steps.review.output.summary }}
+      {% endif %}
+      Diagnose following bug-diagnosis, fix the production code on your branch, run a focused
+      check, commit and report the commit hash. A scenario you think is wrong goes in
+      `scenario_notes` with why; do not change it.
+    output_schema:
+      type: object
+      required: [branch, summary, committed]
+      properties:
+        branch:         { type: string }
+        summary:        { type: string }
+        committed:      { type: boolean }
+        commit_sha:     { type: string }
+        scenario_notes: { type: string }
+    transitions:
+      - when: "true"
+        goto: review
+
+  - id: review
+    agent: reviewer
+    prompt: |
+      Review the fix on branch `{{ steps.fix.output.branch }}` against the local `{{ inputs.base_branch }}`
+      (`git diff {{ inputs.base_branch }}...{{ steps.fix.output.branch }}`).
+      What it fixes: {{ steps.e2e.output.failure_report }}
+      The developer's summary: {{ steps.fix.output.summary }}
+    output_schema:
+      type: object
+      required: [verdict, summary]
+      properties:
+        verdict: { type: string, enum: [approved, changes_requested] }
+        summary: { type: string }
+    transitions:
+      - when: "output.verdict == 'approved'"
+        goto: e2e
+      - when: "output.verdict == 'changes_requested'"
+        goto: fix
+        max_visits: "{{ (inputs.max_rounds | int) + 1 }}"
+        on_exhausted: e2e_failed
+
+  - id: approve_fixes
+    type: human_approval
+    message: |
+      The whole E2E suite passes after {{ steps.fix.visits }} fix round(s) on branch `{{ steps.fix.output.branch }}`:
+      {{ steps.fix.output.summary }}
+      {{ steps.e2e.output | e2e_scenarios }}
+      Approve: merge the fix into the local {{ inputs.base_branch }} (nothing is pushed). Reject: stop; the worktree and the branch are kept.
+    diff_base: "{{ inputs.base_branch }}"
+    transitions:
+      - when: "approved"
+        # the tested commit becomes the last green E2E (a local ref, skipped in simulation)
+        action: "git update-ref refs/multiagent/e2e-last-green HEAD"
+        merge: local
+        goto: end
+      - when: "rejected"
+        goto: end
+        status: cancelled
+
+  - id: e2e_failed
+    type: human_approval
+    kind: escalation   # the supervisor on call tries first
+    message: |
+      E2E scenarios still fail after {{ inputs.max_rounds }} fix round(s):
+      {{ steps.e2e.output.failure_report }}
+      {{ steps.e2e.output | e2e_scenarios }}
+      Approve: one more fix round. Reject: stop the run as failed (the worktree is kept to resume it).
+    transitions:
+      - when: "approved"
+        goto: fix
+      - when: "rejected"
+        goto: end
+        status: failed
+
+  - id: e2e_blocked
+    type: human_approval
+    kind: escalation   # the supervisor on call tries first
+    message: |
+      The E2E suite could not run: {{ steps.e2e.output.e2e_note or steps.e2e.output.summary }}
+      Approve: run it again (after you fixed the environment). Reject: stop the run as failed.
+    transitions:
+      - when: "approved"
+        goto: e2e
+      - when: "rejected"
+        goto: end
+        status: failed
+
+# -----------------------------------------------------------------------------
+outputs:
+  e2e_status:
+    type: string
+    description: "pass, fail or blocked: the last pass of the suite."
+    value: "{{ steps.e2e.output.e2e_status }}"
+  scenarios:
+    type: array
+    description: Every scenario of the suite with its result.
+    value: "{{ steps.e2e.output.scenarios | to_json }}"
+
+# -----------------------------------------------------------------------------
+observability:
+  storage:
+    type: jsonl
+    path: "./runs/{{ run_id }}/"
+  capture:
+    prompts: true
+    outputs: true
+    thinking: true
+    tool_calls: true
+    redact:
+      - pattern: "(?i)(api[_-]?key|token|secret|password)\\s*[:=]\\s*\\S+"

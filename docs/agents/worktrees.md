@@ -11,7 +11,36 @@ actions, or any code that deletes or checks out branches.
   `worktree_dir`. Falls back to the repo path when it isn't a git repo; mock runs never create
   worktrees. `software-development` and `software-development-local-hero` use it (`multi-model-review` reviews the checked-out branch).
 - **Local workflows**: `orchestrator.worktree.remote: false` starts the worktree from the **local** `<base>` without fetching (it may hold local merges never pushed), and `removeWorktree` checks "merged" against the local base. A transition with `merge: local` (validated by `loadWorkflow`; needs `orchestrator.worktree`) calls `mergeLocally`: the run's worktree must be on a branch with everything committed; the branch is rebased onto the local base when it moved (a conflict aborts the rebase, leaves the branch untouched and fails with the files); then the base is fast-forwarded with `merge --ff-only` where it is checked out (refused when that checkout has uncommitted changes to tracked files) or by `update-ref` (compare-and-swap) when it is checked out nowhere. No push, no fetch; simulated runs skip it (`action.executed` skipped). Emits `worktree.merged`. Used by `software-development-local-hero`.
-- Starts without `node_modules`: the language skills install dependencies when missing.
+- **Dependencies from a shared cache (#198, `src/engine/deps-cache.js`)**: after `worktree.ready`
+  the engine (`prepareDeps`) links the worktree's `node_modules` to
+  `<workspace>/cache/deps/<project>/<key>/node_modules` (a junction on Windows, a symlink elsewhere)
+  and records `deps.ready` (`for`, `status` hit | linked | miss | local | failed | not_cached, `key`,
+  `seconds`, `waited`). key = sha256 of the lockfile + package manager and version + Node version
+  + platform/arch (a project's Electron is in its lockfile). Miss: `npm ci` / `pnpm install
+  --frozen-lockfile` / `yarn install --frozen-lockfile` runs in the worktree (its lifecycle scripts
+  see the project), then `node_modules` is renamed into the cache and linked back; `entry.json` is
+  written last (an entry without it, a crash or a cancel, is never used and is replaced). One
+  installer per key: `<key>.lock` (pid, host; a dead holder's is taken over); the second run waits
+  and gets a hit. After each agent step the same call runs again: a changed lockfile installs its
+  new key once (the old entry stays for the runs that link it); an entry changed through the link
+  (its hidden lockfile changed) or emptied is marked `unusable` in entry.json and never given to a
+  new worktree. A move or link that fails (EBUSY, another volume) keeps the install in the worktree
+  (`local`) and the cache untouched. Not cached (agents install as before, told by the command
+  guide): npm/yarn/pnpm workspaces, `file:`/`link:` dependencies, and the other languages
+  (`NOT_CACHED`: poetry/uv/requirements, go.sum, Gemfile.lock). Agents are told in their command
+  guide (`depsGuide`); Claude refuses `npm ci` and `rm -rf node_modules` (`DEPS_DENIED_COMMANDS`
+  in capabilities.js; Codex/Grok: the after-step check). `removeWorktree` and `cleanupWorktrees`
+  unlink the links first (`unlinkDeps`), so no delete follows one into the cache. At app start
+  (`cleanupRunWorktrees`) `pruneDepsCache` removes the entries no worktree links: unusable or
+  incomplete ones, unused for 14 days, then the least recently used above 20 GB. Settings ›
+  General › Dependency cache shows the size and clears the unlinked entries (`depsCache:info`,
+  `depsCache:clear`). Simulated runs have no worktree: nothing is installed.
+- **The base checkout (#198)**: a step with `base_worktree: true` (the test step of both
+  development workflows) gets `<worktreesDir>/<run_id>-base`, detached at the current base
+  (refreshed on each visit) with its dependencies from the same cache, as `base_worktree_dir` in
+  its prompt, for the pre-existing-failure check (`setupBaseWorktree`, `prepareBaseWorktree`).
+  Removed in `finishWorktree` whatever the status; `cleanupWorktrees` removes an orphan once its run
+  has a `summary.json`.
 - **Run locally at a gate (#70)**: a gate with `local_preview: true` (developer_check, human_review,
   approve_merge) whose run has a config (the project's `localPreview`, else
   `orchestrator.local_preview: { install, command, url }`) carries `local_preview` and `work_dir`

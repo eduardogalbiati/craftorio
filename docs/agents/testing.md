@@ -49,15 +49,29 @@ creates a commit needs its own `-c user.name/email`.
   of `WorkflowRun` injects a fake (`test/probes.test.js`). A mock run never calls `gh`/`glab`.
 - Its context grows 30k per turn of the same conversation (start 20k, peak +20k): `max_context`
   rotations are deterministic (`test/fixtures/handoff.yaml`).
-- E2E scenarios (#143): an output schema's `scenarios` array (items with a `status`) gets three
-  sample scenarios (`mockScenarios` in `src/engine/providers.js`): on a visit whose `tests_status`
-  fails (the 1st by default) one passed, one failed and one skipped; on later visits the failed one
-  passes. The engine saves them in `<run_dir>/e2e/` (`src/engine/scenarios.js`) and the gates show
-  them; `npm run screenshot -- --view run --stop-at approve_merge` shows the gate with them (the
-  demo writes the UI scenario's screenshot). Local hero has no merge approval: the run's summary
-  (`renderRunSummary`, views/run/run.js) shows them. Real runs keep E2E cheap (skill
-  `e2e-scenarios`): user-visible issues only, at most 3 scenarios per issue, only the
-  `@issue-<n>` tag run; the full E2E suite runs in the release workflow.
+- E2E scenarios (#143): an output schema's `scenarios` array (items with a `status`) gets sample
+  scenarios (`mockScenarios` in `src/engine/providers.js`). A schema whose status enum has no
+  `passed` (the development workflows' test step, #199) gets two `pending` ones (written, run at
+  release). Otherwise (e2e-release's `e2e` step): on a visit whose `tests_status` fails (the 1st by
+  default) one passed, one failed and one skipped; on later visits the failed one passes; e2e-release's
+  `e2e_status` follows `['fail', 'pass']`. The engine saves them in `<run_dir>/e2e/`
+  (`src/engine/scenarios.js`) and the gates show them ("written, run at release" for pending);
+  `npm run screenshot -- --view run --stop-at approve_merge` shows the gate with them. Local hero
+  has no merge approval: the run's summary (`renderRunSummary`, views/run/run.js) shows them.
+- **Where E2E runs (#199)**: development runs write the issue's scenarios (user-visible issues only,
+  at most 3, `@issue-<n>`) and check that they parse (a dry run), never start the app or a browser
+  for them; the whole suite runs once, at release, in the bundled `e2e-release.yaml` (its own
+  worktree of the local base, one feature file at a time within `time_budget_minutes`, a failed
+  scenario → developer → review → the scenario again, at most `max_rounds`, then a human gate; a
+  green pass records `refs/multiagent/e2e-last-green`). Development runs merge locally without
+  waiting for it.
+- **One Electron screenshot at a time (#199)**: `scripts/screenshot.js` and the screenshots step
+  take the machine-wide slot of `src/engine/machine-slot.js` (`<os tmp>/multiagent-orchestrator/locks/screenshot.slot`,
+  or `MULTIAGENT_LOCKS_DIR`): a second capture waits ("waiting for the screenshot slot"), a dead
+  holder's slot is freed. Tests use their own `dir`.
+- **Dependencies (#198)**: run worktrees get `node_modules` linked from `<workspace>/cache/deps`
+  (`src/engine/deps-cache.js`); tests of it pass a fake `run` (the installer and `--version`) and
+  temp folders, never a real install. Mock runs have no worktree, so nothing is installed.
 - `run:start` takes `mockSequences` (simulation only): the Write & Review scenario picker uses it.
 - The Backlog's Product Owner drawer has its own scenario picker (#148, `#po-scenario`, orange,
   shown only in developer or simulation-only mode): `po:ask`'s `scenario` forces the simulated

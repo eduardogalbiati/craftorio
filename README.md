@@ -318,6 +318,18 @@ The same develop → code review → test → build → verify pipeline as `soft
 
 Engine options behind it: `orchestrator.worktree.remote: false`, a transition with `merge: local` and `on_error`, and `orchestrator.limits.max_total_context` (see `docs/agents/worktrees.md` and `docs/agents/engine.md`).
 
+## E2E release (`workflows/e2e-release.yaml`)
+
+Code & Build. Runs the project's whole end-to-end BDD suite once, before a release, in its own
+worktree of the local base: one feature file at a time within `time_budget_minutes`, each
+scenario's result and screenshots recorded in the run. A failed scenario goes to the developer
+with its screenshots and what changed since the last green E2E run (commits, issues, runs), then
+to review and the failed scenarios again, at most `max_rounds`, then a human gate. Green with
+nothing fixed: the tested commit is recorded as the last green E2E (`refs/multiagent/e2e-last-green`,
+a local ref). Green after fixes: you approve, then the fix merges into the local base. Development
+runs only write their issue's scenarios and check that they parse ("written, run at release"); they
+never wait for this workflow. It never pushes, tags or publishes.
+
 ## AI Arena (`workflows/ai-arena.yaml`)
 
 Up to five models write the same document (default: a PRD) and an orchestrator merges them. The
@@ -564,8 +576,8 @@ What is shared by a family lives in a suffix-less skill referenced with `uses:`.
 | `deploy-{gh,gl}` | deployer | Preview and production deploy tracking and cleanup |
 | `design-doc-writing` | arena, Write & Review (`document_skill`) | Design doc (after Google's practice): context, goals/non-goals, design with trade-offs, alternatives, failure modes, cross-cutting concerns, rollout, rubric |
 | `design-sketch` | arena (`document_skill: design-sketch`) | Usage-first design: usage snippets, types and signatures, trade-offs, alternatives, design red-flag screen, rubric |
-| `e2e-scenarios` | via `uses` | User-visible changes only, at most 3 scenarios per issue reusing existing steps; run only the @issue-<n> tag; per-scenario status with reason; screenshots at key steps |
-| `e2e-test-writer-{js,python,go,java,csharp}` | test writer | E2E/BDD framework detection, feature folder, commands to run only the run's scenarios |
+| `e2e-scenarios` | via `uses` | User-visible changes only, at most 3 scenarios per issue reusing existing steps; development runs write and parse-check them (pending); the release workflow runs them all; per-scenario status with reason |
+| `e2e-test-writer-{js,python,go,java,csharp}` | test writer, E2E runner | E2E/BDD framework detection, feature folder, the parse check of a development run and the release run's commands |
 | `implementation-evidence` | evidence | Evidence by kind of change (screenshots, HTTP request/response, CLI output, logs), local and simulated only, one list per issue |
 | `issue-creator-{gh,gl}` | issue-tracker (code_analyzer, issue_filer), backlog planner (#30), any agent that files issues | Search for duplicates, create/comment/edit issues with gh or glab, existing labels only (new ones only when a person confirmed them) |
 | `issue-triage` | issue-tracker (code_analyzer, issue_writer); the Product Owner (Register an issue) | Rubric for impact 1-5 and complexity 1-5, estimated files, duplicates, run alone vs group with #n |

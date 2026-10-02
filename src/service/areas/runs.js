@@ -11,6 +11,7 @@ const { Recorder } = require('../../engine/recorder');
 const { resolveCommand } = require('../../engine/providers');
 const simulation = require('../../engine/simulation');
 const { cleanupWorktrees } = require('../../engine/worktree');
+const { pruneDepsCache } = require('../../engine/deps-cache');
 const workspace = require('../../workspace');
 const projects = require('../../projects');
 const backlog = require('../../backlog');
@@ -325,11 +326,16 @@ module.exports = (ctx) => {
   }
 
   // run worktrees left behind: succeeded runs whose removal failed, or unused for 14 days
-  // (call at startup; the worktrees of runs in progress are never touched)
-  const cleanupRunWorktrees = () => cleanupWorktrees({
-    worktreesDir: ctx.ws.worktrees, runsDir: ctx.ws.runs,
-    active: [...active.values()].flatMap((r) => [r.worktree?.dir, r.resume?.worktree?.dir, path.join(ctx.ws.worktrees, r.runId)]).filter(Boolean),
-  });
+  // (call at startup; the worktrees of runs in progress are never touched); then the dependency
+  // cache's entries no worktree links any more (#198: unused for 14 days, or over the size cap)
+  const cleanupRunWorktrees = async () => {
+    const removed = await cleanupWorktrees({
+      worktreesDir: ctx.ws.worktrees, runsDir: ctx.ws.runs,
+      active: [...active.values()].flatMap((r) => [r.worktree?.dir, r.resume?.worktree?.dir, path.join(ctx.ws.worktrees, r.runId), path.join(ctx.ws.worktrees, `${r.runId}-base`)]).filter(Boolean),
+    });
+    try { pruneDepsCache({ cacheDir: path.join(ctx.ws.cache, 'deps') }); } catch (e) { console.error('dependency cache cleanup:', e.message); }
+    return removed;
+  };
 
   return {
     active,

@@ -115,6 +115,8 @@ function layout(root) {
     pipelines: path.join(root, 'pipelines'),
     // one git worktree per run (orchestrator.worktree), created on demand
     worktrees: path.join(root, 'worktrees'),
+    // dependencies installed once per lockfile hash, linked into run worktrees (#198, src/engine/deps-cache.js)
+    cache: path.join(root, 'cache'),
     // Run locally at a gate: per run, the scratch workspace and user data of the copy (src/local-preview.js)
     localPreviews: path.join(root, 'local-previews'),
     // last issue sync of each project (see src/backlog.js)

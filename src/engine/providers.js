@@ -485,7 +485,7 @@ function mockString(key) {
     question: 'A reviewer suggested switching the YAML library. Does that make sense in this PR?',
     failure_log: 'test/engine.test.js:12 AssertionError: expected "approved"',
     failure_report: 'npm test: 1 failure in test/engine.test.js (validateSchema accepts an invalid enum).',
-    e2e_note: 'Simulated: the run\'s scenarios only, with the project\'s E2E framework; one skipped because of the environment.',
+    e2e_note: 'Simulated: the run\'s scenarios written and checked with a dry run; they run at release (E2E release workflow).',
     file: 'src/auth/login.ts',
     summary: 'Simulated implementation of the feature with tests.',
     message: 'Simulated draft: I covered the request and applied the latest notes.',
@@ -501,6 +501,8 @@ function mockString(key) {
 const MOCK_SEQUENCES = {
   verdict: ['changes_requested', 'approved'],
   tests_status: ['fail', 'pass'],
+  // e2e-release (#199): the whole suite fails once, the developer fixes it, then it passes
+  e2e_status: ['fail', 'pass'],
   build_status: ['success'],
   ci_status: ['pending', 'failed', 'pending', 'success'],
   state: ['waiting', 'needs_human', 'needs_fix', 'ready_to_merge'],
@@ -516,10 +518,18 @@ const MOCK_SEQUENCES = {
 // fails (the 1st by default) has a failed scenario, the next ones pass it; one is always skipped
 // (environment). The UI scenario's screenshot is under the visit's evidence folder (the screenshot
 // demo writes it; a plain mock run has no image).
-function mockScenarios(h) {
+// A schema whose status has no `passed` (a development run's test step, #199): the scenarios are
+// written, not run: pending (run at release by e2e-release), one skipped (not writable here).
+function mockScenarios(h, statuses = []) {
   const seq = h.sequences?.tests_status || MOCK_SEQUENCES.tests_status;
   const failing = seq[Math.min(h.visit - 1, seq.length - 1)] === 'fail';
   const feature = 'features/143-dashboard-filter.feature';
+  if (statuses.length && !statuses.includes('passed')) {
+    return [
+      { feature, name: 'Filter the runs by status', status: 'pending', steps: ['Given the dashboard lists 3 runs, one of them failed', 'When I pick "Failed" in the status filter', 'Then only the failed run is listed'], screenshots: [] },
+      { feature, name: 'An empty filter result explains itself', status: 'pending', steps: ['Given the dashboard lists 2 runs, none of them failed', 'When I pick "Failed" in the status filter', 'Then I see "No run matches this filter"'], screenshots: [] },
+    ];
+  }
   return [
     {
       feature, name: 'Filter the runs by status', status: 'passed',
@@ -576,7 +586,7 @@ function mockValue(s, key, h) {
       if (key === 'ui_findings' && !h.sequences?.ui_findings) return [];
       // the developer's screens to capture (#144): one valid entry of the screenshot command
       if (key === 'screenshots' && s.items?.properties?.args) return [{ name: '144-dashboard-default', caption: 'The dashboard (simulated)', args: ['--view', 'dashboard'] }];
-      if (key === 'scenarios' && s.items?.properties?.status) return mockScenarios(h);
+      if (key === 'scenarios' && s.items?.properties?.status) return mockScenarios(h, s.items.properties.status.enum || []);
       if (key === 'left_out') {
         const seq = h.sequences?.left_out;
         const count = Array.isArray(seq) && seq.length ? +seq[Math.min(h.visit - 1, seq.length - 1)] || 0 : 0;

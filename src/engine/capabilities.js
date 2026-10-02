@@ -68,6 +68,19 @@ const RUN_DIRS = [
   'scratch',
 ];
 
+// Commands refused when the worktree's node_modules links the shared dependency cache (#198): a
+// clean install or a delete would empty the cache entry through the link, for every run using it.
+// Claude refuses them (deny rules win over allow rules); Codex and Grok cannot: the engine checks
+// the entry after each turn (an emptied entry is never given to a new worktree).
+const DEPS_DENIED_COMMANDS = [
+  'npm ci',
+  'npm clean-install',
+  'npm install-clean',
+  'rm -fr node_modules',
+  'rm -r node_modules',
+  'rm -rf node_modules',
+];
+
 // The environment of an agent of a run: AGENT_ENV, plus the run's scratch workspace (#120) when it
 // has one ({ workspace, userData }, see WorkflowRun.scratchWorkspace), so `npm run run`, `npm run
 // screenshot` and the app started from the worktree never open the owner's workspace or user data.
@@ -180,9 +193,10 @@ const claudePath = (p) => {
  * Claude's edit tools can refuse them, the engine checks every CLI's turn afterwards anyway.
  * runDir: the run's folder; its RUN_DIRS go to Claude with --add-dir when the agent has commands.
  * env: the agent's environment (agentEnv), accepted as a command prefix by Claude's allow rules.
+ * denyCommands: command prefixes the agent may not run (DEPS_DENIED_COMMANDS); only Claude refuses them.
  * Returns { args, notes }: notes say what this CLI could not enforce (logged once per agent).
  */
-function providerArgs(type, { caps = null, isolated = true, mcpServers = {}, denyEdits = [], runDir = null, env = AGENT_ENV } = {}) {
+function providerArgs(type, { caps = null, isolated = true, mcpServers = {}, denyEdits = [], denyCommands = [], runDir = null, env = AGENT_ENV } = {}) {
   const args = [];
   const notes = [];
   const mcp = caps ? pick(mcpServers, caps.mcp) : {};
@@ -209,7 +223,11 @@ function providerArgs(type, { caps = null, isolated = true, mcpServers = {}, den
       allowed.push(...Object.keys(mcp).map((n) => `mcp__${n}`));
       args.push('--tools', offered.join(','), '--allowedTools', allowed.join(' '));
       // deny rules win over allow rules; Edit(...) covers every built-in tool that edits files
-      if (writes(caps) && denyEdits.length) args.push('--disallowedTools', denyEdits.map((p) => `Edit(${claudePath(p)})`).join(' '));
+      const denied = [
+        ...(writes(caps) ? denyEdits.map((p) => `Edit(${claudePath(p)})`) : []),
+        ...(bash.length ? denyCommands.map((c) => `Bash(${c}:*)`) : []),
+      ];
+      if (denied.length) args.push('--disallowedTools', denied.join(' '));
       // file edits (and mkdir/redirects) are refused headless without acceptEdits
       if (writes(caps)) args.push('--permission-mode', 'acceptEdits');
       for (const dir of runDirs(caps, runDir)) args.push('--add-dir', dir);
@@ -242,6 +260,7 @@ function providerArgs(type, { caps = null, isolated = true, mcpServers = {}, den
       break;
   }
   if (denyEdits.length && type !== 'claude-code' && (!caps || !readOnly(caps))) notes.push('test paths (edits_tests: false) are not refused by the tools: the engine checks the turn\'s changes');
+  if (denyCommands.length && type !== 'claude-code' && (!caps || bashRules(caps).length)) notes.push('`npm ci` on the shared node_modules is not refused by this CLI: the engine checks the cache entry after the turn');
   return { args, notes };
 }
 
@@ -276,6 +295,7 @@ module.exports = {
   CODEX_FEATURES_OFF,
   commandGuide,
   dedupeFlags,
+  DEPS_DENIED_COMMANDS,
   describe,
   merge,
   normalize,

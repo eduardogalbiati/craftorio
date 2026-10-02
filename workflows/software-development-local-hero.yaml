@@ -56,11 +56,15 @@
 #   - `language` picks unit-test-writer-<language> and e2e-test-writer-<language> (test writer)
 #     and build-audit-<language> (builder).
 #   - End-to-end BDD scenarios (#143), kept cheap: only for user-visible behaviour, at most 3 per
-#     issue, run by their issue tag (`@issue-<n>`), never the whole E2E suite (the release workflow
-#     runs it). The test step reports them (`scenarios`, `e2e_note`); the engine saves them in
+#     issue, tagged `@issue-<n>`, written and checked (they parse) but never run here (#199): the
+#     E2E release workflow (e2e-release.yaml) runs the whole suite at release time, and the local
+#     merge does not wait for it. The test step reports them as `pending` (`scenarios`,
+#     `e2e_note`); the engine saves them in
 #     <run_dir>/e2e/scenarios.feature. developer_check and verify_failed (the gate before the local
 #     merge on its failure path) list them for the Dev/QA; the run's summary shows them otherwise
 #     (no merge approval here).
+#   - Dependencies (#198): the engine links the worktree's node_modules from the shared cache
+#     (installed once per lockfile) and prepares the test step's base checkout (base_worktree).
 # =============================================================================
 
 apiVersion: multiagent/v1
@@ -230,9 +234,9 @@ agents:
       merges that were never pushed. Start your branch right where the worktree is:
       `git switch -c <branch>`. Never fetch, pull or branch from origin, and never push: the
       orchestrator merges your branch into the local {{ inputs.base_branch }} after approval.
-      A fresh worktree has no installed dependencies: install them
-      when they are missing or the lockfile changed (e.g. `npm ci` when node_modules is missing
-      or package-lock.json differs from the previous HEAD).
+      The engine gives the worktree its dependencies (linked from a shared cache, installed
+      once per lockfile): never run `npm ci` and never delete `node_modules`. Adding a package
+      with the package manager is fine: the engine installs the new lockfile after your turn.
       {% if inputs.issue or (inputs.issues | length) %}End every commit message with one line per issue this run implements,
       `Closes #<number>` (the numbers from: {{ inputs.issue }}{% for u in inputs.issues %} {{ u }}{% endfor %}):
       GitHub closes them when the local {{ inputs.base_branch }} is pushed.
@@ -264,7 +268,8 @@ agents:
       and update them (including tests an intended behaviour change makes obsolete) and run
       the full suite, following the test skill for this language. You also write the
       end-to-end acceptance scenarios (Given/When/Then feature files and their step
-      definitions) and run them, following the E2E test skill. You do NOT fix production
+      definitions) and check that they parse, following the E2E test skill: they run at
+      release (E2E release workflow), never here. You do NOT fix production
       code: when a test fails because of a bug in the code, describe the failure precisely
       (test, file, error, probable cause) so the orchestrator can hand it to the developer.
       Commit test files only.
@@ -363,8 +368,8 @@ steps:
       {% endif %}
       {% if not steps.develop.output %}
       Before changing code: create your branch where the worktree starts (the local
-      {{ inputs.base_branch }}): `git switch -c <branch>`, then make sure dependencies are
-      installed for that base.
+      {{ inputs.base_branch }}): `git switch -c <branch>`; the engine already
+      linked the dependencies of that base.
       {% endif %}
       Change production code only: the test writer writes and runs the tests after the review.
       In `test_notes`, tell it what should be tested: the behaviours you changed, the edge cases
@@ -668,6 +673,8 @@ steps:
   # tells the test writer when it is fixed.
   - id: test
     agent: test_writer
+    # the run's checkout of the base with its dependencies, for the pre-existing-failure check (#198)
+    base_worktree: true
     prompt: |
       Branch `{{ steps.develop.output.branch }}` (already reviewed).
       Original task: {{ inputs.task }}
@@ -720,21 +727,21 @@ steps:
            Given/When/Then from the original task and the issue's acceptance criteria, tagged
            `@issue-<n>`, in the project's usual feature folder, reusing the existing step
            definitions before writing new ones;
-         - run only this run's scenarios by their issue tag, never the whole E2E suite (the
-           release workflow runs it).
+         - write them, do not run them: check that they parse (e.g. `npx cucumber-js --dry-run
+           --tags "@issue-<n>"`) and never start Electron, the app or a browser for them. The
+           E2E release workflow (e2e-release.yaml) runs the whole suite at release time.
       {% endif %}
       Report every scenario in `scenarios` (feature file, name, its Given/When/Then lines, status
-      passed / failed / skipped, reason for failed and skipped, screenshots). A scenario that fails
-      because of the production code makes `tests_status` fail and goes in `failure_report`; one
-      that cannot run because of the environment (no browser, the app does not start) is
-      `skipped` with the reason in `e2e_note` and does not fail the step. The Dev/QA reads these
+      `pending` = written and parsed, run at release; `skipped` with the reason when it could not
+      be written, e.g. no E2E framework). Scenarios never make `tests_status` fail; say in
+      `e2e_note` how you checked that they parse. The Dev/QA reads these
       scenarios in the run's summary and at the gates.
-      Screenshots: only those of the UI scenarios, at their key steps, into {{ evidence_dir }}
-      (`<issue>-e2e-<scenario-slug>-<n>.modified.png`). Every other screenshot and evidence of
-      the change is collected after the build (evidence step).
+      No screenshots here: the scenarios do not run in this workflow, and the evidence of the
+      change is collected after the build (evidence step).
       If the suite fails, first check whether the same tests fail on the local
       `{{ inputs.base_branch }}`, following the test skill (pre-existing failures): run only the
-      failing files on a temporary worktree of the base. A test that also fails there is not this
+      failing files in the base checkout the engine prepared ({{ base_worktree_dir or "a
+      temporary worktree of the base" }}, dependencies already there). A test that also fails there is not this
       run's: list it in `preexisting_failures` (test, file, reason), do not investigate or fix it
       (unless it is trivial and in files this change touches), and it does not make
       `tests_status` fail. The owner gets the list as a follow-up.
@@ -769,7 +776,7 @@ steps:
               feature:     { type: string }
               name:        { type: string }
               steps:       { type: array, items: { type: string } }
-              status:      { type: string, enum: [passed, failed, skipped] }
+              status:      { type: string, enum: [pending, skipped] }
               reason:      { type: string }
               screenshots: { type: array, items: { type: string } }
         # why there are no scenarios, the issue tag run, the framework assumed, an environment problem
@@ -820,7 +827,7 @@ steps:
         code = a commit on the branch can fix it (code, tests, lockfile, build scripts);
         infra = no commit can (a file locked by a running process, e.g. EBUSY/EPERM under
         node_modules, missing permissions, network, disk): say what holds it in the report
-        and do not retry the install in a loop;
+        and never reinstall (`npm ci`): node_modules links the shared dependency cache;
         unknown = you could not tell.
     output_schema:
       type: object
