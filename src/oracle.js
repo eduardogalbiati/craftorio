@@ -456,6 +456,12 @@ function createOracle({
 
   // ---- actions and the Night watch (#123) -----------------------------------------------------
   const card = (id) => history().find((m) => m.kind === 'action' && m.action?.id === id)?.action || null;
+  // The id a card button sent (#187): anything but a string is a caller bug, never "not in the conversation".
+  const actionIdOf = (actionId) => {
+    if (actionId == null || typeof actionId === 'string') return actionId || '';
+    const got = Array.isArray(actionId) ? 'an array' : typeof actionId === 'object' ? 'an object' : `a ${typeof actionId}`;
+    throw new Error(`Expected an action id, got ${got}.`);
+  };
 
   // The Night watch, ended when its end time passed (its summary is posted then, once).
   function nightState() {
@@ -643,7 +649,7 @@ ${partial}` : ''}`, error: true });
     /** The owner clicked "Do it": performs exactly that card, once (runAction reserves its id). → { ok, text, messages, state } */
     async act(actionId, { mock } = {}) {
       claim();
-      const id = String(actionId || '');
+      const id = actionIdOf(actionId);
       if (acting.has(id)) throw new Error('This action is already running.');
       const a = card(id);
       if (!a) throw new Error('This action is not in the conversation.');
@@ -655,7 +661,7 @@ ${partial}` : ''}`, error: true });
     /** The owner dismissed a card: it can no longer run. */
     dismiss(actionId) {
       claim();
-      const a = card(String(actionId || ''));
+      const a = card(actionIdOf(actionId));
       if (!a) throw new Error('This action is not in the conversation.');
       if (a.status !== 'proposed') throw new Error(`This action is already ${a.status}.`);
       post({ role: 'system', kind: 'action-result', actionId: a.id, status: 'dismissed', ok: true, text: 'Dismissed by the owner.' });
@@ -666,7 +672,7 @@ ${partial}` : ''}`, error: true });
     /** Undo of a done action that kept a backup: puts the backup back. */
     async undo(actionId) {
       claim();
-      const a = card(String(actionId || ''));
+      const a = card(actionIdOf(actionId));
       if (!a?.result?.undoable) throw new Error('This action cannot be undone.');
       const result = raw().filter((m) => m.kind === 'action-result' && m.actionId === a.id).at(-1);
       const out = await restore(a, result.backup.undo);

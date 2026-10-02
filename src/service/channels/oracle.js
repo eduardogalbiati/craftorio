@@ -385,6 +385,8 @@ module.exports = (ctx) => {
   hooks.watch = (input) => wake.watch(input || {});
 
   const withState = (out) => ({ ...out, messages: get().history(), state: get().state() });
+  // Every oracle channel with input takes one object (`params: 'opts'`), the way the renderer calls
+  // them (`api.oracleAct({ actionId, mock })`): positional params would wrap that object again (#187).
   return [
     // { question, screen, images, mock, mockContextTokens } → { message, messages, state } or { refused, ... };
     // images: pasted screenshots ({ dataUrl }, oracle.ATTACHMENT_LIMITS); mockContextTokens (simulated
@@ -407,31 +409,31 @@ module.exports = (ctx) => {
       },
     },
     // the owner's "Do it" on an action card (#123): performs exactly that card, once → { ok, text, messages, state }
-    { channel: 'oracle:act', method: 'oracleAct', params: ['actionId', 'mock'], fn: ({ actionId, mock }) => get().act(actionId, { mock: simulated({ mock }) }) },
+    { channel: 'oracle:act', method: 'oracleAct', params: 'opts', fn: ({ actionId, mock } = {}) => get().act(actionId, { mock: simulated({ mock }) }) },
     // a pasted image of the conversation (its file name in a user message's attachments) → data: URL or null
     { channel: 'oracle:attachment', method: 'oracleAttachment', params: 'name', fn: (name) => get().attachment(name) },
     // asks another agent (product-owner, issue-draft, supervisor, analyzer) → { to, text, costUsd, error, ref }; recorded in the chat
     {
       channel: 'oracle:delegate',
       method: 'oracleDelegate',
-      params: ['to', 'question', 'projectId', 'runId', 'mock'],
-      fn: ({ mock, ...input }) => delegate(input, { mock }),
+      params: 'opts',
+      fn: ({ mock, ...input } = {}) => delegate(input, { mock }),
     },
-    { channel: 'oracle:dismiss', method: 'oracleDismiss', params: ['actionId'], fn: ({ actionId }) => get().dismiss(actionId) },
+    { channel: 'oracle:dismiss', method: 'oracleDismiss', params: 'opts', fn: ({ actionId } = {}) => get().dismiss(actionId) },
     { channel: 'oracle:history', method: 'oracleHistory', fn: () => get().history() },
     // the owner read the conversation up to { at } (default now) → { readAt }: the unread badge counts after it
     { channel: 'oracle:markRead', method: 'markOracleRead', params: 'opts', fn: (opts) => get().markRead(opts?.at) },
     { channel: 'oracle:memory', method: 'oracleMemory', fn: () => get().memory() },
     // mutes (on) or unmutes one run's wake-ups → the wake-up state
-    { channel: 'oracle:mute', method: 'muteOracleRun', params: ['runId', 'on'], fn: ({ runId, on }) => wake.mute(runId, on !== false) },
+    { channel: 'oracle:mute', method: 'muteOracleRun', params: 'opts', fn: ({ runId, on } = {}) => wake.mute(runId, on !== false) },
     // the Night watch: { on, until (ISO, at most 24 h ahead), from (the screen it was turned on from) } → { nightWatch, messages, state }
-    { channel: 'oracle:nightWatch', method: 'setOracleNightWatch', params: ['on', 'until', 'from'], fn: ({ on, until, from }) => get().setNightWatch({ on, until, by: nightBy(from) }) },
+    { channel: 'oracle:nightWatch', method: 'setOracleNightWatch', params: 'opts', fn: ({ on, until, from } = {}) => get().setNightWatch({ on, until, by: nightBy(from) }) },
     // the owner proposes a card themselves (or a check): { kind, params, why } → { id, status, ... }
     {
       channel: 'oracle:propose',
       method: 'oracleProposeAction',
-      params: ['kind', 'params', 'why', 'requestedBy', 'source'],
-      fn: async (input) => withState(await get().propose(input, { mock: simulation.simulationOnly() })),
+      params: 'opts',
+      fn: async (input = {}) => withState(await get().propose(input, { mock: simulation.simulationOnly() })),
     },
     // a new session from a handoff note; the messages and the memory are kept
     { channel: 'oracle:reset', method: 'resetOracle', params: 'opts', fn: (opts) => get().reset({ mock: simulated(opts) }) },
@@ -439,9 +441,9 @@ module.exports = (ctx) => {
     // { busy, paused, today, owner, model, effort, contextTokens, compactAtTokens, nightWatch, ... }
     { channel: 'oracle:state', method: 'oracleState', fn: () => get().state() },
     { channel: 'oracle:tools', method: 'listOracleTools', fn: () => tools.map(({ name, description }) => ({ name, description })) },
-    { channel: 'oracle:undo', method: 'oracleUndo', params: ['actionId'], fn: ({ actionId }) => get().undo(actionId) },
+    { channel: 'oracle:undo', method: 'oracleUndo', params: 'opts', fn: ({ actionId } = {}) => get().undo(actionId) },
     // watch a run ({ runId }) or a project's roadmap ({ projectId }) until it ends; on: false stops
-    { channel: 'oracle:watch', method: 'oracleWatch', params: ['runId', 'projectId', 'on'], fn: (input) => wake.watch(input || {}) },
+    { channel: 'oracle:watch', method: 'oracleWatch', params: 'opts', fn: (input) => wake.watch(input || {}) },
     // the batch waiting for the wake-up window now (the owner's "wake now", checks) → the wake's answer or null
     { channel: 'oracle:wakeNow', method: 'wakeOracleNow', fn: () => wake.flush() },
     // { muted, watching, wakeScope, wakeOn, pending }
