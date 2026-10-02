@@ -17,6 +17,7 @@ const backlog = require('../../backlog');
 const roadmaps = require('../../roadmap');
 const agents = require('../../agents');
 const usage = require('../../usage');
+const oracle = require('../../oracle');
 const actionsUsage = require('../../actions-usage');
 const { readLocalUsage } = require('../../local-usage');
 const runs = require('../../runs');
@@ -169,7 +170,8 @@ module.exports = (ctx) => {
       // budgets that count usage outside the orchestrator need the CLIs' own logs
       const needsLocal = Object.values(settings.budgets || {}).some((b) => b?.countOutside);
       const baselineAt = Date.now();
-      const budget = usage.budgetBaseline({ runsDir: ws.runs, settings, local: needsLocal ? readLocalUsage() : null });
+      // the Oracle's spend (in no run folder) counts too
+      const budget = usage.budgetBaseline({ runsDir: ws.runs, settings, local: needsLocal ? readLocalUsage() : null, extraRuns: oracle.usageRuns(ws.oracle) });
       const wfFile = ctx.workflowPath(file);
       const notices = [...(startNotices || [])];
       if (wfFile.fallback) {

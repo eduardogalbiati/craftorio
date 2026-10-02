@@ -10,7 +10,9 @@ user-facing doc; the topic docs below are read on demand.
 ## Hard rules
 
 - **Everything in the app is English**: UI, YAML, skills, README, comments, logs, errors, test
-  names, and every message an agent writes (step outputs, handoffs, final answers).
+  names, and every message an agent writes (step outputs, handoffs, final answers). One exception:
+  the Oracle's chat replies follow the owner's language (skill `oracle`); what it writes for the
+  product stays English.
 - **Skill naming**: language/platform skills are `<capability>-<suffix>`, one per suffix in every
   family (a test enforces it). Languages: `js`, `python`, `go`, `java`, `csharp`; platforms: `gh`,
   `gl`. What a family shares is a suffix-less skill referenced with `uses:`. `code-review` is one

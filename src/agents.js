@@ -8,6 +8,8 @@
 // The Backlog's Product Owner (#105, src/product-owner.js) is built in the same way, listed second:
 // its instructions are the backlog-product-owner skill; its look, model and effort are saved
 // (agents/product-owner.json).
+// The Oracle (#122, src/oracle.js), the app-wide master agent, is built in the same way, listed third:
+// its instructions are the oracle skill; its look, model and effort are saved (agents/oracle.json).
 // The workflows' own agents (the `agents:` of each YAML in <workspace>/workflows/, #68) are listed
 // after the user's agents, grouped by workflow, read-only: only their look is saved
 // (agents/workflows/<file>/<agent>.json); the rest is changed in the workflow.
@@ -22,6 +24,7 @@ const { isWorkflowFile } = require('./workflows');
 
 const SUPERVISOR_ID = 'supervisor';
 const PRODUCT_OWNER_ID = 'product-owner';
+const ORACLE_ID = 'oracle';
 // Keep in sync with EYES and the generic emblems of src/renderer/robots.js.
 const EYES = ['dots', 'bars', 'arcs', 'slits'];
 const EMBLEMS = ['none', 'bolt', 'clipboard', 'heart', 'shield', 'leaf', 'gear', 'code', 'rocket', 'eye', 'crown', 'flask', 'star5'];
@@ -35,6 +38,8 @@ const MODEL = /^[\w.:/@-]{1,80}$/;
 const DEFAULT_APPEARANCE = Object.freeze({ body: '#7C5CFF', shell: '#F4F4F6', visor: '#15161A', glow: '#C9B8FF', eyes: 'dots', emblem: 'none' });
 // The Product Owner's look: teal, with a clipboard (the product-owner variant of robots.js).
 const PRODUCT_OWNER_APPEARANCE = Object.freeze({ body: '#0F9F8F', shell: '#F4F4F6', visor: '#15161A', glow: '#9FF5E6', eyes: 'arcs', emblem: 'clipboard' });
+// The Oracle's look: deep blue and gold, an eye on the chest (the oracle variant of robots.js).
+const ORACLE_APPEARANCE = Object.freeze({ body: '#1E3A8A', shell: '#F4F4F6', visor: '#15161A', glow: '#FCD34D', eyes: 'slits', emblem: 'eye' });
 
 const SUPERVISOR = Object.freeze({
   id: SUPERVISOR_ID,
@@ -56,7 +61,20 @@ const PRODUCT_OWNER = Object.freeze({
   effort: 'high',
 });
 
-const SYSTEM = { [SUPERVISOR_ID]: SUPERVISOR, [PRODUCT_OWNER_ID]: PRODUCT_OWNER };
+const ORACLE = Object.freeze({
+  id: ORACLE_ID,
+  name: 'Oracle',
+  system: true,
+  description: 'The app-wide master agent: one persistent conversation that plays Product Owner, supervisor, reliability engineer and operator\'s assistant across runs, the backlog, workflows and code.',
+  prompt: 'Built into the platform. It follows the oracle skill and is read-only: it reads the workspace, the runs and the repositories, and proposes what to change, where, and the exact command; it never writes anything itself and never crosses a human approval gate. It keeps one conversation across restarts, a memory you edit, and starts a new session from a handoff note when the context grows too large.',
+  skills: ['oracle'],
+  model: 'claude-opus-5-5',
+  effort: 'high',
+});
+
+const SYSTEM = { [SUPERVISOR_ID]: SUPERVISOR, [PRODUCT_OWNER_ID]: PRODUCT_OWNER, [ORACLE_ID]: ORACLE };
+// the built-in agents whose model and effort the owner picks: [definition, default look]
+const TUNABLE = { [PRODUCT_OWNER_ID]: [PRODUCT_OWNER, PRODUCT_OWNER_APPEARANCE], [ORACLE_ID]: [ORACLE, ORACLE_APPEARANCE] };
 const isSystem = (id) => Object.hasOwn(SYSTEM, path.basename(String(id)));
 
 const isDir = (p) => { try { return fs.statSync(p).isDirectory(); } catch { return false; } };
@@ -89,22 +107,24 @@ function supervisorAgent(dir) {
   return { ...SUPERVISOR, skills: [...SUPERVISOR.skills], appearance: normalizeAppearance(saved.appearance), updatedAt: saved.updatedAt || null };
 }
 
-function productOwnerAgent(dir) {
+// The Product Owner or the Oracle, with the look, model and effort saved for it.
+function tunableAgent(dir, id) {
+  const [def, look] = TUNABLE[id];
   let saved = {};
-  try { saved = readJson(agentFile(dir, PRODUCT_OWNER_ID)); } catch { saved = {}; }
+  try { saved = readJson(agentFile(dir, id)); } catch { saved = {}; }
   return {
-    ...PRODUCT_OWNER,
-    skills: [...PRODUCT_OWNER.skills],
-    model: MODEL.test(saved.model || '') ? saved.model : PRODUCT_OWNER.model,
-    effort: EFFORTS.includes(saved.effort) ? saved.effort : PRODUCT_OWNER.effort,
-    appearance: normalizeAppearance(saved.appearance, PRODUCT_OWNER_APPEARANCE),
+    ...def,
+    skills: [...def.skills],
+    model: MODEL.test(saved.model || '') ? saved.model : def.model,
+    effort: EFFORTS.includes(saved.effort) ? saved.effort : def.effort,
+    appearance: normalizeAppearance(saved.appearance, look),
     updatedAt: saved.updatedAt || null,
   };
 }
 
 function readAgent(dir, id) {
   if (id === SUPERVISOR_ID) return supervisorAgent(dir);
-  if (id === PRODUCT_OWNER_ID) return productOwnerAgent(dir);
+  if (Object.hasOwn(TUNABLE, id)) return tunableAgent(dir, id);
   const a = readJson(agentFile(dir, id));
   return {
     id,
@@ -227,7 +247,7 @@ function saveWorkflowAgent(dir, workflowsDir, id, data) {
 }
 
 /**
- * The supervisor first, then the Product Owner, then the user's agents by name, then (with
+ * The supervisor first, then the Product Owner and the Oracle, then the user's agents by name, then (with
  * `workflowsDir`) the workflows' agents grouped by workflow.
  */
 function listAgents(dir, { workflowsDir } = {}) {
@@ -240,7 +260,7 @@ function listAgents(dir, { workflowsDir } = {}) {
       })
       .sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id))
     : [];
-  return [supervisorAgent(dir), productOwnerAgent(dir), ...custom, ...listWorkflowAgents(dir, workflowsDir)];
+  return [supervisorAgent(dir), tunableAgent(dir, PRODUCT_OWNER_ID), tunableAgent(dir, ORACLE_ID), ...custom, ...listWorkflowAgents(dir, workflowsDir)];
 }
 
 function fields(data) {
@@ -260,7 +280,7 @@ function write(dir, id, agent) {
 
 function createAgent(dir, data) {
   const f = fields(data);
-  // "supervisor" and "product-owner" are taken by the built-in agents
+  // "supervisor", "product-owner" and "oracle" are taken by the built-in agents
   // (slugify falls back to "project" for names with no letters or digits)
   const base = /[a-z0-9]/i.test(f.name.normalize('NFD')) ? slugify(f.name) : 'agent';
   let id = base;
@@ -270,7 +290,7 @@ function createAgent(dir, data) {
 }
 
 /**
- * The supervisor only takes `appearance`, the Product Owner `appearance`, `model` and `effort`;
+ * The supervisor only takes `appearance`, the Product Owner and the Oracle `appearance`, `model` and `effort`;
  * everything else about them is fixed.
  */
 function saveAgent(dir, id, data, { workflowsDir } = {}) {
@@ -278,14 +298,15 @@ function saveAgent(dir, id, data, { workflowsDir } = {}) {
   if (id === SUPERVISOR_ID) {
     return write(dir, SUPERVISOR_ID, { appearance: normalizeAppearance(data?.appearance), updatedAt: new Date().toISOString() });
   }
-  if (id === PRODUCT_OWNER_ID) {
+  if (Object.hasOwn(TUNABLE, id)) {
+    const [def, look] = TUNABLE[id];
     const model = String(data?.model || '').trim();
     if (model && !MODEL.test(model)) throw new Error(`Not a model name: ${model}`);
     if (data?.effort && !EFFORTS.includes(data.effort)) throw new Error(`Pick the effort (${EFFORTS.join(', ')}).`);
-    return write(dir, PRODUCT_OWNER_ID, {
-      appearance: normalizeAppearance(data?.appearance, PRODUCT_OWNER_APPEARANCE),
-      model: model || PRODUCT_OWNER.model,
-      effort: data?.effort || PRODUCT_OWNER.effort,
+    return write(dir, id, {
+      appearance: normalizeAppearance(data?.appearance, look),
+      model: model || def.model,
+      effort: data?.effort || def.effort,
       updatedAt: new Date().toISOString(),
     });
   }
@@ -312,6 +333,8 @@ module.exports = {
   listAgents,
   listWorkflowAgents,
   normalizeAppearance,
+  ORACLE_APPEARANCE,
+  ORACLE_ID,
   PRODUCT_OWNER_APPEARANCE,
   PRODUCT_OWNER_ID,
   readAgent,

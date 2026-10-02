@@ -4,12 +4,23 @@
 // carries a random bearer token that only the MCP config of that turn knows.
 //   POST /tools/list                          → { tools: [{ name, description, inputSchema }] }
 //   POST /tools/call { name, arguments }      → { text, isError }
+// The Oracle (src/oracle.js) has its own bridge over its own tools; mcpCommand serves both.
 
 const crypto = require('crypto');
 const http = require('http');
+const path = require('path');
 const { callTool, describeTools } = require('./supervisor-tools');
 
 const MAX_BODY = 1024 * 1024;
+
+// How `claude` starts the MCP server. Dev: Electron itself as node. Packaged: the RunAsNode fuse is
+// off, so the system node runs the unpacked copy (node can't read app.asar), like session-tail.js.
+function mcpCommand(isPackaged, resolveCommand) {
+  const script = path.join(__dirname, 'supervisor-mcp.js').replace(/app\.asar([\\/])/, 'app.asar.unpacked$1');
+  const node = isPackaged ? resolveCommand('node') : { file: process.execPath };
+  if (!node) throw new Error('The supervisor\'s tools need Node.js on the PATH.');
+  return { command: node.file, args: [script], env: { ELECTRON_RUN_AS_NODE: '1' } };
+}
 
 /** `tools()` returns the tool list at call time. start() resolves { url, token }; close() stops it. */
 function createBridge({ tools }) {
@@ -54,4 +65,5 @@ function createBridge({ tools }) {
 
 module.exports = {
   createBridge,
+  mcpCommand,
 };

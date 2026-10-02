@@ -12,13 +12,21 @@
 (() => {
   const SUPERVISOR = 'supervisor';
   const PRODUCT_OWNER = 'product-owner';
+  const ORACLE = 'oracle';
   // Must match DEFAULT_APPEARANCE in src/agents.js (the supervisor's own look).
   const DEFAULT_LOOK = { body: '#7C5CFF', shell: '#F4F4F6', visor: '#15161A', glow: '#C9B8FF', eyes: 'dots', emblem: 'none' };
-  // Must match PRODUCT_OWNER_APPEARANCE in src/agents.js.
-  const PRODUCT_OWNER_LOOK = { body: '#0F9F8F', shell: '#F4F4F6', visor: '#15161A', glow: '#9FF5E6', eyes: 'arcs', emblem: 'clipboard' };
-  const defaultLook = () => (ed.agent?.id === PRODUCT_OWNER ? PRODUCT_OWNER_LOOK : DEFAULT_LOOK);
+  // Must match PRODUCT_OWNER_APPEARANCE and ORACLE_APPEARANCE in src/agents.js.
+  const BUILT_IN_LOOKS = {
+    [PRODUCT_OWNER]: { body: '#0F9F8F', shell: '#F4F4F6', visor: '#15161A', glow: '#9FF5E6', eyes: 'arcs', emblem: 'clipboard' },
+    [ORACLE]: { body: '#1E3A8A', shell: '#F4F4F6', visor: '#15161A', glow: '#FCD34D', eyes: 'slits', emblem: 'eye' },
+  };
+  const defaultLook = () => BUILT_IN_LOOKS[ed.agent?.id] || DEFAULT_LOOK;
   // where each built-in agent's look shows (the editor's note)
-  const SHOWN_IN = { [SUPERVISOR]: 'the supervisor appears (e.g. Write & Review)', [PRODUCT_OWNER]: 'the Product Owner appears (its Backlog button and drawer)' };
+  const SHOWN_IN = {
+    [SUPERVISOR]: 'the supervisor appears (e.g. Write & Review)',
+    [PRODUCT_OWNER]: 'the Product Owner appears (its Backlog button and drawer)',
+    [ORACLE]: 'the Oracle appears (its button and drawer)',
+  };
   const COLORS = [
     { key: 'body', label: 'Main color', hint: 'body and shoulder plate',
       swatches: ['#7C5CFF', '#3D7BF7', '#0EA5E9', '#14B8A6', '#10B981', '#84CC16', '#F59E0B', '#F97316', '#EF4444', '#EC4899', '#64748B', '#18181B'] },
@@ -48,7 +56,8 @@
   const isSystem = () => !!ed.agent?.system;
   const isWorkflow = () => !!ed.agent?.workflow;
   const isReadOnly = () => isSystem() || isWorkflow();
-  const isProductOwner = () => ed.agent?.id === PRODUCT_OWNER;
+  // the built-in agents whose model and effort are picked here
+  const isTunable = () => [PRODUCT_OWNER, ORACLE].includes(ed.agent?.id);
 
   // The built-in agents' saved looks replace their default robots everywhere (Write & Review, the
   // Backlog's Product Owner). The Product Owner's model and effort are read by backlog-po.js.
@@ -214,7 +223,7 @@
     ].map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('') : '';
     $a('#btn-ag-open-workflow').classList.toggle('hidden', !workflow);
     $a('#btn-ag-duplicate').classList.toggle('hidden', !workflow);
-    $a('#ag-model-row').classList.toggle('hidden', !isProductOwner());
+    $a('#ag-model-row').classList.toggle('hidden', !isTunable());
     $a('#ag-model').value = a?.model || '';
     $a('#ag-model-list').innerHTML = (window.ChatModels?.PROVIDERS['claude-code']?.models || []).map((m) => `<option value="${esc(m)}"></option>`).join('');
     renderEffort();
@@ -307,7 +316,7 @@
 
   async function saveAgent(e) {
     e.preventDefault();
-    const data = isProductOwner()
+    const data = isTunable()
       ? { appearance: ed.look, model: $a('#ag-model').value.trim(), effort: ed.effort }
       : isWorkflow()
       // only the look; null = back to the provider's robot

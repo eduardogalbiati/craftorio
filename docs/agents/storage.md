@@ -12,6 +12,12 @@ Read this before touching run listings, the Backlog queue, pending gates, notifi
 - `runs/po-<project>-<stamp>/`: a Product Owner issue thread (#117: `conversation.jsonl`,
   `analysis/`, `attachments/`, `filed/`), not a run; it has no `events.jsonl` or `summary.json`,
   so run listings skip it.
+- `oracle/` (#122, `src/oracle.js`): the Oracle's conversation `messages.jsonl` (kept across
+  resets), `state.json` (provider session, context size, compaction due), `memory.md` (saved only
+  by the owner), `session.md` (the current session's opening prompt), `handoffs/<stamp>-<reason>.md`,
+  `usage.jsonl` (one line per real answer; added to Usage and the monthly budgets as one
+  summary-like run per day, `usageRuns`) and `owner.json` (the one app process that answers, a
+  run-owner heartbeat). Written by the service, never by the model.
 - Never make the database the only copy of something a run produced.
 
 ## Issues: the git platform is the source of truth (#168)

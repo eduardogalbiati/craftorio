@@ -8,6 +8,7 @@ const workspace = require('../../workspace');
 const projects = require('../../projects');
 const usage = require('../../usage');
 const analytics = require('../../analytics');
+const oracle = require('../../oracle');
 const repoPerformance = require('../../repo-performance');
 const roadmap = require('../../roadmap');
 const runs = require('../../runs');
@@ -27,7 +28,8 @@ module.exports = (ctx) => {
     }));
     const installed = Object.fromEntries(usage.PROVIDERS.map((p) => [p.id, !!resolveCommand(p.command)]));
     const local = scope === 'machine' ? readLocalUsage() : null;
-    return usage.computeUsage({ runsDir: ctx.ws.runs, settings: workspace.readSettings(ctx.ws), live, installed, scope, local });
+    // the Oracle's spend is in no run folder: its days are added as runs (src/oracle.js)
+    return usage.computeUsage({ runsDir: ctx.ws.runs, settings: workspace.readSettings(ctx.ws), live, installed, scope, local, extraRuns: oracle.usageRuns(ctx.ws.oracle) });
   }
 
   // The CLIs' transcripts are read in both scopes: they add tool calls, prompts, files... to run sessions.

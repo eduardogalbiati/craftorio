@@ -121,6 +121,8 @@ function layout(root) {
     reports: path.join(root, 'reports'),
     // the app-wide Supervisor chat (src/supervisor-chat.js), created on demand
     supervisor: path.join(root, 'supervisor'),
+    // the Oracle (src/oracle.js): its conversation, memory, handoff notes and usage, created on demand
+    oracle: path.join(root, 'oracle'),
     settings: path.join(root, 'settings.json'),
     // titles the user gave to CLI sessions on the Sessions screen ({ "<provider>:<id>": title })
     sessionTitles: path.join(root, 'session-titles.json'),
@@ -161,6 +163,9 @@ const DEFAULT_SETTINGS = {
   idleWarningMinutes: 5,
   // monthly limits per provider (see src/usage.js); null = no limit
   budgets: {},
+  // the Oracle (src/oracle.js): its daily spend limit in USD (0 = no cap) and the context size
+  // (tokens) past which its next turn starts a new session from a handoff note
+  oracle: { dailyBudgetUsd: 20, compactAtTokens: 150000 },
   // USD per 1M tokens, for CLIs that do not report cost: { model: { input, output, cache_read } }
   prices: {},
   // GitHub Actions quota minutes included per month (GitHub Free: 2,000), see src/actions-usage.js

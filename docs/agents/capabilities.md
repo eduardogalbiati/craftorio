@@ -129,3 +129,20 @@ in the app (`src/supervisor-bridge.js`, 127.0.0.1, per-process bearer token) tha
 tools of `src/supervisor-tools.js` over the service. So it sees the app's data (workflows, projects,
 runs, skills, agents, usage, analytics) and never the repositories' code. New tools go in
 `supervisor-tools.js`; write tools must preview and apply only on the user's click.
+
+## The Oracle (#122)
+
+The Oracle (`src/oracle.js`, the built-in `oracle` agent) runs `claude` the same way: isolated,
+`--tools ""`, one MCP server `orchestrator` allowed as `mcp__orchestrator`, over its own bridge.
+Its tools are `src/oracle-tools.js`: the supervisor's, plus `active_runs`, `run_events`,
+`run_file`, `roadmap`, `backlog` (with the queue), `unpushed`, `seed_status`, and the repositories
+read-only: `repo_read` (a file or a listing, the path kept inside the project folder) and
+`repo_git`, which runs only `READ_GIT_COMMANDS` (blame, diff, grep, log, ls-files, ls-tree,
+rev-parse, shortlog, show, status) with `--no-pager --no-optional-locks`, no external diff or
+textconv, and refuses options that write or start a program (`--output`, `-O`, `--ext-diff`,
+`--exec`...). Any other command (checkout, commit, reset, push) is refused, and with no built-in
+tool there is no shell or file write to try: read-only is enforced, not a convention. `app_source`
+points at the project holding the orchestrator's source (its `package.json` name), the only way to
+read the app's code (the packaged app's is in app.asar). The service, not the model, writes its
+files (storage.md). The Oracle's chat replies are in the owner's language, a deliberate exception
+to the English rule; everything it writes for the product is in English (skill `oracle`).

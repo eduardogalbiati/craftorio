@@ -233,6 +233,14 @@ ${flip(v.overlay || '')}
       chestLogo: '#FFFFFF', plateLogo: '#FFFFFF',
       bg1: lighten('#0F9F8F', .88), bg2: lighten('#0F9F8F', .6),
     },
+    // The app-wide Oracle (#122): deep blue and gold, an eye on the chest, slit eyes.
+    oracle: {
+      label: 'Oracle', logo: 'eye',
+      head: '#F4F4F6', body: '#1E3A8A', limb: '#F4F4F6', plate: '#1E3A8A', base: darken('#1E3A8A', .55),
+      screen: '#15161A', accent: '#FCD34D', eyes: 'slits', outline: darken('#1E3A8A', .65),
+      chestLogo: '#FCD34D', plateLogo: '#FCD34D',
+      bg1: lighten('#1E3A8A', .88), bg2: lighten('#1E3A8A', .6),
+    },
   };
 
   // ---------- states of a turn ----------

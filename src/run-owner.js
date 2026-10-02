@@ -2,7 +2,8 @@
 // few seconds by the process that runs it, and is removed when the run ends. A run without
 // summary.json is "running" (maybe in another app process) while its owner is alive, and only
 // "interrupted" once the owner is gone (dead pid on this host, or a stale heartbeat).
-// Also the workspace lock (<workspace>/.lock, same shape): one app process per workspace.
+// Also the workspace lock (<workspace>/.lock, same shape): one app process per workspace, and
+// hold() for other one-process records (the Oracle's owner.json, src/oracle.js).
 
 const fs = require('fs');
 const os = require('os');
@@ -98,6 +99,7 @@ function lockWorkspace(workspace, extra = {}) {
 module.exports = {
   claimRun,
   HEARTBEAT_MS,
+  hold,
   lockWorkspace,
   ownerAlive,
   pidAlive,

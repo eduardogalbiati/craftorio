@@ -17,6 +17,7 @@ const path = require('path');
 const agents = require('../../agents');
 const backlog = require('../../backlog');
 const notifier = require('../../notifications');
+const oracle = require('../../oracle');
 const productOwner = require('../../product-owner');
 const projects = require('../../projects');
 const runs = require('../../runs');
@@ -70,8 +71,8 @@ module.exports = (ctx) => {
           agent: agents.readAgent(ctx.ws.agents, agents.PRODUCT_OWNER_ID),
           skillsDirs: [ctx.ws.skills, ctx.BUNDLED_SKILLS_DIR],
           resolveCommand,
-          // its own past calls are in no run: add them to what the runs used this month
-          budget: simulated ? null : usage.withPeerUsage(usage.budgetBaseline({ runsDir: ctx.ws.runs, settings }), productOwner.monthUsage(ctx.ws.backlog), settings.prices),
+          // its own past calls and the Oracle's are in no run: add them to what the runs used this month
+          budget: simulated ? null : usage.withPeerUsage(usage.budgetBaseline({ runsDir: ctx.ws.runs, settings, extraRuns: oracle.usageRuns(ctx.ws.oracle) }), productOwner.monthUsage(ctx.ws.backlog), settings.prices),
           mock: simulated,
           mode: mode === 'issue' ? 'issue' : 'plan',
           attachments: Array.isArray(attachments) ? attachments : [],

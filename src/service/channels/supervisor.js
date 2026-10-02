@@ -5,20 +5,11 @@
 const path = require('path');
 const simulation = require('../../engine/simulation');
 const supervisor = require('../../supervisor');
-const { createBridge } = require('../../supervisor-bridge');
+const { createBridge, mcpCommand } = require('../../supervisor-bridge');
 const { createSupervisorChat } = require('../../supervisor-chat');
 const { createWatches } = require('../../supervisor-watch');
 const { resolveCommand } = require('../../engine/providers');
 const { supervisorTools } = require('../../supervisor-tools');
-
-// How `claude` starts the MCP server. Dev: Electron itself as node. Packaged: the RunAsNode fuse is
-// off, so the system node runs the unpacked copy (node can't read app.asar), like session-tail.js.
-function mcpCommand(isPackaged) {
-  const script = path.join(__dirname, '..', '..', 'supervisor-mcp.js').replace(/app\.asar([\\/])/, 'app.asar.unpacked$1');
-  const node = isPackaged ? resolveCommand('node') : { file: process.execPath };
-  if (!node) throw new Error('The supervisor\'s tools need Node.js on the PATH.');
-  return { command: node.file, args: [script], env: { ELECTRON_RUN_AS_NODE: '1' } };
-}
 
 module.exports = (ctx) => {
   const watches = createWatches({
@@ -33,7 +24,7 @@ module.exports = (ctx) => {
     if (!chats.has(root)) {
       chats.set(root, createSupervisorChat({
         dir: () => ctx.ws.supervisor || path.join(ctx.ws.root, 'supervisor'),
-        tools: () => tools, bridge, mcpCommand: () => mcpCommand(!!ctx.host?.isPackaged),
+        tools: () => tools, bridge, mcpCommand: () => mcpCommand(!!ctx.host?.isPackaged, resolveCommand),
         skillsDirs: () => [ctx.ws.skills, ctx.BUNDLED_SKILLS_DIR], resolveCommand, refuseReal: simulation.refuseReal,
       }));
     }

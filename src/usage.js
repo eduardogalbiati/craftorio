@@ -86,8 +86,9 @@ const recordAsSession = (r) => ({ provider: r.provider, model: r.model, tokens: 
  *                    or a list of them (concurrent runs)
  * @param installed   { claude: bool, codex: bool, grok: bool }
  * @param now         Date (tests)
+ * @param extraRuns   summary-like spend that is in no run folder, e.g. the Oracle's days (src/oracle.js usageRuns)
  */
-function computeUsage({ runsDir, settings = {}, live = null, installed = {}, now = new Date(), scope = 'orchestrator', local = null }) {
+function computeUsage({ runsDir, settings = {}, live = null, installed = {}, now = new Date(), scope = 'orchestrator', local = null, extraRuns = [] }) {
   const prices = settings.prices || {};
   const budgets = settings.budgets || {};
   const month = monthKey(now);
@@ -96,6 +97,7 @@ function computeUsage({ runsDir, settings = {}, live = null, installed = {}, now
   const liveIds = new Set(lives.map((l) => l.run_id));
   const runs = readRuns(runsDir).filter((r) => !liveIds.has(r.run_id));
   for (const l of lives) runs.push({ ...l, status: 'running' });
+  runs.push(...(extraRuns || []));
 
   const byProvider = Object.fromEntries(PROVIDERS.map((p) => [p.id, { month: emptyTotals(), today: emptyTotals(), models: {} }]));
   const totals = { month: emptyTotals(), today: emptyTotals() };
@@ -207,9 +209,9 @@ function computeUsage({ runsDir, settings = {}, live = null, installed = {}, now
  * Budget state the engine checks before each turn: what each provider already used this
  * month in finished runs (the run itself adds its own sessions on top).
  */
-function budgetBaseline({ runsDir, settings = {}, now = new Date(), local = null }) {
-  const orch = computeUsage({ runsDir, settings, now });
-  const all = local ? computeUsage({ runsDir, settings, now, scope: 'machine', local }) : null;
+function budgetBaseline({ runsDir, settings = {}, now = new Date(), local = null, extraRuns = [] }) {
+  const orch = computeUsage({ runsDir, settings, now, extraRuns });
+  const all = local ? computeUsage({ runsDir, settings, now, scope: 'machine', local, extraRuns }) : null;
   return Object.fromEntries(orch.providers.map((o, i) => {
     const p = o.budget.countOutside && all ? all.providers[i] : o;
     return [p.id, {
