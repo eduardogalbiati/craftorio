@@ -361,7 +361,7 @@ const stageName = (r, at) => r.stages[at].name || `Stage ${at + 1}`;
 function stageStep(r, at, { closed, canStart }) {
   const stage = r.stages[at];
   for (const item of stage.items) {
-    if (item.status === 'planned' && itemIssues(item).every((i) => closed(i.number))) {
+    if (item.status === 'planned' && itemIssues(item).every((i) => closed(i.number, item))) {
       Object.assign(item, { status: 'skipped', error: 'Every issue is closed.' });
     }
   }
@@ -381,7 +381,7 @@ function stageStep(r, at, { closed, canStart }) {
  * a failure, moves to the next stage when every item is done or skipped, and lists the items to start.
  * A roadmap running one stage (`scope`, #141) only works on that stage, and pauses when it is over.
  * @param {object} roadmap
- * @param {{ runOf: (runId) => ({ status, waiting?, merged? } | null), closed?: (number) => boolean, canStart?: (item) => boolean }} env
+ * @param {{ runOf: (runId) => ({ status, waiting?, merged? } | null), closed?: (number, item) => boolean, canStart?: (item) => boolean }} env
  * @returns {{ roadmap: object, start: object[] }} the items to start (still `planned`: the caller marks them)
  */
 function advance(roadmap, { runOf, closed = () => false, canStart = () => true }) {

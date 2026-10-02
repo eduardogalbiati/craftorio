@@ -69,8 +69,14 @@ module.exports = (ctx) => {
     const cache = backlog.readBacklog(ws.backlog, projectId);
     const closed = new Set((cache?.issues || []).filter((i) => i.state === 'closed').map((i) => i.number));
     const mockOf = (item) => !!item.mock || !!before.simulated;
+    // a missing project fails each start below (the item records the error), not the whole step
+    let known = null;
+    try { known = projects.readProject(ws.projects, projectId); } catch { /* reported at the start */ }
+    // an item that reads its issues from the platform at its start (#168) is never skipped on the
+    // cache's state (an issue reopened since the sync still runs): the fresh read decides below
+    const fromPlatform = (item) => !mockOf(item) && !!known?.repo;
     const { roadmap, start } = roadmaps.advance(before, {
-      runOf: roadmapRun, closed: (n) => closed.has(n), canStart: (item) => !ctx.slotProblem({ mock: mockOf(item), projectId }),
+      runOf: roadmapRun, closed: (n, item) => !fromPlatform(item) && closed.has(n), canStart: (item) => !ctx.slotProblem({ mock: mockOf(item), projectId }),
     });
     // derived statuses are not stored (roadmaps.persisted): only a stored change is written
     const changed = JSON.stringify({ ...roadmaps.persisted(roadmap), updatedAt: null }) !== JSON.stringify({ ...before, updatedAt: null });
@@ -91,12 +97,14 @@ module.exports = (ctx) => {
         // the platform is the source of truth (#168): the issues are read again now, the task is built
         // from what was read and the item's copy updated (a simulation reads the synced cache only)
         const platform = cache?.platform || workspace.readSettings(ws).backlogPlatform || backlog.DEFAULT_PLATFORM;
-        const { issues: read, warnings } = await backlog.freshIssues({ item, platform, repo: project.repo, cache, fromPlatform: !mockOf(item) && !!project.repo });
+        const { issues: read, warnings } = await backlog.freshIssues({ item, platform, repo: project.repo, cache, fromPlatform: fromPlatform(item) });
         roadmaps.refreshCopies(ws.backlog, projectId, read);
         // a closed issue of a group is left out; the others start
         const open = read.filter((i) => i.state !== 'closed');
         if (!open.length) {
           roadmaps.skipClosed(ws.backlog, projectId, item.id);
+          // its slot is free again: the next step starts the following item (or the next stage)
+          roadmapAgain = true;
           continue;
         }
         const run = { ...item, ...open[0], ...(open.length > 1 ? { issues: open } : { issues: undefined }) };
