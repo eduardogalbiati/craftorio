@@ -129,6 +129,13 @@
     if (target.kind === 'run') { closeDrawer(); selectRun(target.runId); }
     else if (target.kind === 'issue') {
       closeDrawer();
+      // the issue's own project: the link's repository, or the run named in the same answer
+      const projectId = M.issueProject(target, {
+        projects: state.projects || [],
+        runProject: target.runId ? state.runs.get(target.runId)?.run?.project : null,
+        currentId: window.BacklogActions?.projectId?.(),
+      });
+      window.BacklogActions?.focusProject?.(projectId);
       window.BacklogActions?.focusIssue?.(target.number);
       showView('backlog');
     } else if (target.kind === 'file') {
@@ -154,8 +161,11 @@
       }
       node.replaceWith(frag);
     }
+    // a #<number> without a repository belongs to the project of the first run the answer names
+    const contextRun = box.textContent.match(/\b\d{8}-\d{6}-[0-9a-f]{8}\b/)?.[0];
     box.querySelectorAll('a[href]').forEach((a) => {
       const t = M.linkTarget(a.getAttribute('href'));
+      if (t.kind === 'issue' && !t.repo && contextRun) t.runId = contextRun;
       if (t.kind === 'external') { a.target = '_blank'; a.rel = 'noopener'; return; }
       if (t.kind === 'none' || t.kind === 'path') return;
       a.classList.add('oracle-link');

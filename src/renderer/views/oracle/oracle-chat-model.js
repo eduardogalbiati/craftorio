@@ -104,8 +104,11 @@
     const h = String(href || '').trim();
     let m = /^(?:run:)?(\d{8}-\d{6}-[0-9a-f]{8})$/.exec(h);
     if (m) return { kind: 'run', runId: m[1] };
-    m = /^#(\d+)$/.exec(h) || /\/(?:issues|pull|merge_requests)\/(\d+)\/?$/.exec(h);
+    m = /^#(\d+)$/.exec(h);
     if (m) return { kind: 'issue', number: Number(m[1]) };
+    // https://github.com/o/n/issues/5, https://gitlab.com/g/n/-/merge_requests/5: the repository too
+    m = /^(?:https?:\/\/[^/]+\/(.+?)|.*?)(?:\/-)?\/(?:issues|pull|merge_requests)\/(\d+)\/?$/.exec(h);
+    if (m) return m[1] ? { kind: 'issue', number: Number(m[2]), repo: repoSlug(m[1]) } : { kind: 'issue', number: Number(m[2]) };
     if (/^https?:\/\//i.test(h)) return { kind: 'external', url: h };
     const p = h.replace(/^file:\/\/\/?/i, '');
     m = RUN_FILE.exec(p);
@@ -135,17 +138,40 @@
     return out;
   }
 
+  /** owner/name of a repository (https://github.com/o/n.git, git@github.com:o/n, o/n), lower case. */
+  function repoSlug(repo = '') {
+    const m = /([^/:\s]+)\/([^/\s]+?)(?:\.git)?\/?$/.exec(String(repo || '').trim());
+    return m ? `${m[1]}/${m[2]}`.toLowerCase() : '';
+  }
+
+  /**
+   * The project whose Backlog a #<number> link opens: the one with the link's repository, else the
+   * project of the run named in the same message (runProject: its id or name), else the only
+   * project with a repository, else the current one (currentId).
+   */
+  function issueProject(target = {}, { projects = [], runProject = null, currentId = null } = {}) {
+    const withRepo = projects.filter((p) => p.repo);
+    const byRepo = target.repo && withRepo.find((p) => repoSlug(p.repo) === target.repo);
+    if (byRepo) return byRepo.id;
+    const byRun = runProject && projects.find((p) => p.id === runProject || p.name === runProject);
+    if (byRun) return byRun.id;
+    if (withRepo.length === 1) return withRepo[0].id;
+    return currentId || null;
+  }
+
   const api = {
     addImages,
     cancelMemory,
     chatView,
     editMemory,
+    issueProject,
     LIMITS,
     linkPieces,
     linkTarget,
     memoryForm,
     metaParts,
     removeImage,
+    repoSlug,
     saveMemory,
     tokenTotal,
     unreadCount,
