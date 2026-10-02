@@ -139,24 +139,25 @@ function actionCard({ kind, params, why, requestedBy, source } = {}) {
 
 const nightFile = (dir) => path.join(dir, 'night-watch.json');
 
-/** The Night watch: { on, until, startedAt, active } (active = on and before its end time). */
+/** The Night watch: { on, until, startedAt, active } (active = on and before its end time; never without one). */
 function nightWatch(dir, now = Date.now()) {
   let j = {};
   try { j = JSON.parse(fs.readFileSync(nightFile(dir), 'utf8')); } catch { /* off */ }
   const until = j.until || null;
   const on = !!j.on;
-  return { on, until, startedAt: j.startedAt || null, active: on && (!until || Date.parse(until) > now) };
+  return { on, until, startedAt: j.startedAt || null, active: on && !!until && Date.parse(until) > now };
 }
 
-/** Turns the Night watch on (with an end time, ISO) or off. → the new state. */
+/** Turns the Night watch on (with a required end time, ISO, within 24 hours) or off. → the new state. */
 function setNightWatch(dir, { on, until } = {}, now = Date.now()) {
   if (on) {
     const t = until ? Date.parse(until) : NaN;
-    if (until && !(t > now)) throw new Error('The end time of the Night watch must be in the future.');
-    if (until && t - now > 24 * 3600e3) throw new Error('The Night watch lasts at most 24 hours.');
+    if (!until || Number.isNaN(t)) throw new Error('The Night watch needs an end time.');
+    if (!(t > now)) throw new Error('The end time of the Night watch must be in the future.');
+    if (t - now > 24 * 3600e3) throw new Error('The Night watch lasts at most 24 hours.');
   }
   const prev = nightWatch(dir, now);
-  const next = on ? { on: true, until: until ? new Date(Date.parse(until)).toISOString() : null, startedAt: prev.active ? prev.startedAt : new Date(now).toISOString() } : { on: false, until: null, startedAt: prev.startedAt };
+  const next = on ? { on: true, until: new Date(Date.parse(until)).toISOString(), startedAt: prev.active ? prev.startedAt : new Date(now).toISOString() } : { on: false, until: null, startedAt: prev.startedAt };
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(nightFile(dir), JSON.stringify(next, null, 2));
   return nightWatch(dir, now);

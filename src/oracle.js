@@ -465,9 +465,16 @@ function createOracle({
     });
   }
 
+  // Reserves the card before anything is awaited: a second request for the same id is refused,
+  // so a double click or two windows never perform an action twice.
+  function reserve(id) {
+    if (acting.has(id)) throw new Error('This action is already running.');
+    acting.add(id);
+  }
+
   async function runAction(a, { mock, auto }) {
     if (!perform) throw new Error('Actions are not available here.');
-    acting.add(a.id);
+    reserve(a.id);
     let out;
     try {
       try { out = (await perform(a, { mock })) || {}; } catch (e) { out = { ok: false, text: e.message || String(e) }; }
@@ -585,10 +592,12 @@ function createOracle({
       return { id, status: 'proposed', title: c.title, auto: false };
     },
 
-    /** The owner clicked "Do it": performs exactly that card, once. → { ok, text, messages, state } */
+    /** The owner clicked "Do it": performs exactly that card, once (runAction reserves its id). → { ok, text, messages, state } */
     async act(actionId, { mock } = {}) {
       claim();
-      const a = card(String(actionId || ''));
+      const id = String(actionId || '');
+      if (acting.has(id)) throw new Error('This action is already running.');
+      const a = card(id);
       if (!a) throw new Error('This action is not in the conversation.');
       if (a.status !== 'proposed') throw new Error(`This action is already ${a.status}.`);
       const out = await runAction(a, { mock, auto: false });
