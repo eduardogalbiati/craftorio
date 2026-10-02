@@ -8,6 +8,10 @@
 //                            skills/*/SKILL.md frontmatter: name, summary, used_by) and the screens
 //                            (docs/screens/*.md: menu, order, text). Committed (GitHub readers);
 //                            a test fails when they are out of date.
+//   README.md sections       (#157) the parts features used to edit by hand (the workflows, the
+//                            engine features, the workspace, the structure) also sit between
+//                            markers, built from docs/features/<feature>.md: each fragment holds
+//                            its feature's pieces of one or more sections (see featurePieces).
 //   src/renderer/index.html  the renderer's own stylesheets and scripts, between
 //                            `<!-- generated:styles -->` / `<!-- generated:scripts -->` markers
 //                            (#152): adding a screen or a module adds files, never a hand-edited
@@ -41,6 +45,7 @@ const FOLDERS = [
   ['workflows/*.yaml', 'The bundled workflows (seeded into `<workspace>/workflows/`). See [engine.md](engine.md).'],
   ['skills/', 'The bundled skills, one folder each (`SKILL.md` + support files, seeded into `<workspace>/skills/`); the README table is generated from their frontmatter.'],
   ['docs/screens/', 'One fragment per screen (`menu`, `order`, text): the README\'s screens table.'],
+  ['docs/features/', 'One fragment per feature (`order`, then `<!-- section:<name> -->` pieces): the README\'s generated workflows, engine, workspace and structure sections.'],
   ['docs/agents/', 'These topic docs, indexed by `CLAUDE.md` (`test/claude-md.test.js` keeps the index small and its links valid).'],
   ['supabase/migrations/', '`accounts` table and `entitlement()` (trial and plan). Applied by pasting into the Supabase SQL editor.'],
 ];
@@ -119,6 +124,9 @@ function codeMap(root = ROOT) {
     '  a `load: early` or `load: after <file>` line in its header when it needs others as it loads.',
     '- **A skill**: a folder `skills/<name>/SKILL.md` with `name`, `description`, `summary` and `used_by`',
     '  in its frontmatter; run `npm run docs` for the README table.',
+    '- **A README paragraph** (a workflow, an engine feature, a workspace file, a source file in Structure):',
+    '  a fragment `docs/features/<feature>.md` (`order` in its frontmatter, then one `<!-- section:<name> [order:<n>] -->`',
+    '  line per piece; sections: `FEATURE_SECTIONS` in `scripts/docs.js`) instead of editing the README; run `npm run docs`.',
     '- **Something in the workspace index** (`<workspace>/index.db`, `src/store.js`): append a migration to',
     '  `MIGRATIONS` (never edit a shipped one: `PRAGMA user_version` counts them) and a helper next to its',
     '  table\'s; only the service writes (the engine emits). The files stay the source of truth: a cache',
@@ -173,7 +181,59 @@ function screensTable(root = ROOT) {
   return ['| Menu | What it has |', '|---|---|', ...screens.map((s) => `| ${s.menu} | ${s.text} |`)].join('\n');
 }
 
-const SECTIONS = { skills: skillsTable, screens: screensTable };
+// README sections built from feature fragments (#157), in the order they are rendered: a section
+// whose markers sit inside another section's fragments comes after it. `join`: what goes between
+// two pieces (a blank line for prose, a newline for list items or lines); `fence`: the pieces form
+// one code block (the markers stay outside it).
+const FEATURE_SECTIONS = {
+  workflows: { join: '\n\n' },
+  'local-hero': { join: '\n' },
+  engine: { join: '\n\n' },
+  'workspace-tree': { join: '\n', fence: true },
+  workspace: { join: '\n\n' },
+  structure: { join: '\n', fence: true },
+};
+const FEATURES = path.join('docs', 'features');
+const PIECE = /^<!-- section:([\w-]+)(?:\s+order:(\d+))?\s*-->$/;
+
+// Every piece of docs/features/*.md: { section, order, file, text }. A fragment is frontmatter
+// (`order`) and one or more pieces, each opened by a `<!-- section:<name> [order:<n>] -->` line
+// (the piece's own order wins over the file's), sorted by order, then file, then position.
+function featurePieces(root = ROOT) {
+  const dir = path.join(root, FEATURES);
+  if (!fs.existsSync(dir)) return [];
+  const pieces = [];
+  for (const f of fs.readdirSync(dir).filter((n) => n.endsWith('.md')).sort()) {
+    const { meta, body } = frontmatter(read(root, path.join(FEATURES, f)));
+    const file = posix(path.join(FEATURES, f));
+    let current = null;
+    for (const line of body.split('\n')) {
+      const m = PIECE.exec(line.trim());
+      if (m) {
+        if (!FEATURE_SECTIONS[m[1]]) throw new Error(`${file}: unknown README section "${m[1]}" (one of: ${Object.keys(FEATURE_SECTIONS).join(', ')}).`);
+        current = { section: m[1], order: Number(m[2] ?? meta.order) || 999, file, index: pieces.length, lines: [] };
+        pieces.push(current);
+      } else if (current) current.lines.push(line);
+      else if (line.trim()) throw new Error(`${file}: text before the first <!-- section:<name> --> line.`);
+    }
+    if (!current) throw new Error(`${file}: no <!-- section:<name> --> line.`);
+  }
+  return pieces
+    .map((p) => ({ section: p.section, order: p.order, file: p.file, index: p.index, text: p.lines.join('\n').replace(/^\n+|\s+$/g, '') }))
+    .sort((a, b) => a.order - b.order || a.file.localeCompare(b.file) || a.index - b.index);
+}
+
+function featureSection(name, root = ROOT) {
+  const { join, fence } = FEATURE_SECTIONS[name];
+  const text = featurePieces(root).filter((p) => p.section === name && p.text).map((p) => p.text).join(join);
+  return fence ? ['```', text, '```'].join('\n') : text;
+}
+
+const SECTIONS = {
+  skills: skillsTable,
+  screens: screensTable,
+  ...Object.fromEntries(Object.keys(FEATURE_SECTIONS).map((name) => [name, (root) => featureSection(name, root)])),
+};
 
 // `text` with every `<!-- generated:<name> -->` section of `sections` replaced (the markers stay).
 function renderSections(text, sections, file) {
@@ -281,13 +341,15 @@ if (require.main === module) process.exit(main());
 
 module.exports = {
   codeMap,
+  featurePieces,
+  featureSection,
   headerOf,
-  main,
   loadRule,
+  main,
   missingHeaders,
+  rendererAssets,
   renderIndexHtml,
   renderReadme,
-  rendererAssets,
   screensTable,
   skillsTable,
 };

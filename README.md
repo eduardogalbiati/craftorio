@@ -92,6 +92,7 @@ HttpOnly cookie after the first visit; API clients send `Authorization: Bearer <
 
 Local build: `npm run build` (writes `build/`) or `npm run package` (writes `dist/`, used by the deploy).
 
+<!-- generated:workflows -->
 ## Software development flow (`workflows/software-development.yaml`)
 
 | Stage | Agent | Model | What it does | Skills |
@@ -274,6 +275,7 @@ use what its `capabilities` declare (e.g. the CI pusher: read, `git`, `gh`, `gla
 
 The same develop → code review → test → build → verify pipeline as `software-development`, for working fast on your machine without GitHub or GitLab: no push, no PR/MR, no CI, no preview, no deploy.
 
+<!-- generated:local-hero -->
 - Each run still gets its own git worktree, started from your **local** `base_branch` (nothing is fetched, so a run sees the local merges of earlier runs you haven't pushed).
 - **No merge approval**: once `verify_change` passes, the engine merges the run's branch into the local `base_branch` automatically: rebased onto it first if it moved (another run merged meanwhile), fast-forward only (linear history), never pushed. The run's worktree and branch are then removed.
 - **Conflicts are resolved automatically**: a failed merge goes to `resolve_merge`, where the developer rebases onto the local base and resolves the conflicts (skill `merge-conflict-resolver`). Then only what the resolution changed is checked again: the review covers the rebase against the last approved commit (`git range-diff`; findings on untouched code are not blocking), the tests are the ones related to the files the resolution touched plus a smoke check (the full suite when it touched more than 5 files), the build runs, the verifier re-checks only the claims whose files were touched, and the merge is attempted right after. A resolution that changes behaviour (the developer answers `behaviour_changed: true`) goes through the full review, suite and verification. Merges of concurrent runs go one at a time. At most 3 rounds; what the developer can't fix, such as uncommitted changes in the checkout where the base is checked out (your work), stops at the `merge_blocked` gate (retry / stop).
@@ -284,6 +286,7 @@ The same develop → code review → test → build → verify pipeline as `soft
 - **When `origin` moved** (a PR merged meanwhile), the push is rejected: **Update and push** runs `git pull --rebase origin <base>` where the base is checked out (a temporary worktree when it is checked out nowhere), then pushes. A conflict undoes the update (the local base keeps every local commit), lists the files, and offers **Resolve in a run**: a run of the local workflow whose developer merges `origin/<base>` into the local commits and resolves the conflict; after review, tests and the local merge, **Push** goes through as a fast-forward. The run calls the agents' CLIs (real cost) unless simulated.
 - **Auto-push** (per project, off by default): the checkbox on the Backlog's bar pushes the base after every successful local merge; a rejected push only notifies you.
 - Or push yourself: `git push origin main` from the repository.
+<!-- /generated:local-hero -->
 
 Engine options behind it: `orchestrator.worktree.remote: false`, a transition with `merge: local` and `on_error`, and `orchestrator.limits.max_total_context` (see `docs/agents/worktrees.md` and `docs/agents/engine.md`).
 
@@ -442,6 +445,7 @@ and an optional `project_path` (the folder the agents work in; empty = the run f
   in the file is kept;
 - workflows made with the builder are fully editable. Hand edits to `providers`, `defaults`,
   `orchestrator` and `observability` are kept when the builder saves again.
+<!-- /generated:workflows -->
 
 ## Skills
 
@@ -532,6 +536,7 @@ What is shared by a family lives in a suffix-less skill referenced with `uses:`.
 All of them are rewritten for agents that run unattended: where the originals ask the user, ours
 record an assumption or a recommended default instead.
 
+<!-- generated:engine -->
 ### AI supervisor
 
 The engine is deterministic (same graph, same gates, auditable); an AI **supervisor** (skill
@@ -760,6 +765,7 @@ defaults:
 
 Enabled in `software-development`. The other bundled workflows only read a folder
 (`multi-model-review` reviews whatever branch the given checkout has) and do not use it.
+<!-- /generated:engine -->
 
 ## CI/CD
 
@@ -767,7 +773,8 @@ Enabled in `software-development`. The other bundled workflows only read a folde
   (checks `test (<os>)`), plus a production `npm audit`. macOS runs too when the PR touches a
   platform-sensitive path (worktrees, processes, terminals, packaging, dependencies, CI) or has the
   `ci:macos` label (from the next push), every Monday on `main`, and on manual runs. A docs-only PR
-  (`.md` files other than `CLAUDE.md`, `docs/agents/` and `skills/`, which the tests read) runs no
+  (`.md` files other than `CLAUDE.md`, `docs/agents/`, `skills/`, `docs/screens/` and `docs/features/`,
+  which the tests read) runs no
   tests. A new push to a PR cancels the previous run. The `test` check is green only when every
   planned OS is: use that name in branch protection. Each run records a `ci/tested` commit status
   on the PR head (a PR's checks belong to GitHub's merge commit, not the head): pending when it
@@ -969,6 +976,7 @@ The app shows in Settings whether it found each command on the PATH.
 
 Everything the app produces lives in a local workspace folder:
 
+<!-- generated:workspace-tree -->
 ```
 <workspace>/
   runs/      logs of each run (see Observability)
@@ -983,7 +991,9 @@ Everything the app produces lives in a local workspace folder:
   index.db   SQLite index next to the files: runs cache, Backlog queues, pending gates, notifications
   .lock      the app that has the workspace open (pid, host, heartbeat)
 ```
+<!-- /generated:workspace-tree -->
 
+<!-- generated:workspace -->
 - **One app per workspace.** The app locks the workspace it opens. A second copy on the same
   workspace (or on the same user data folder) says so and offers a **scratch copy** (your agents,
   skills, workflows and settings copied to a new workspace, simulations only) or to quit; it never
@@ -1033,6 +1043,7 @@ Everything the app produces lives in a local workspace folder:
   `repos/<owner>-<repo>` (or runs `git fetch` if already cloned) and runs the workflow on that copy.
 - `MULTIAGENT_WORKSPACE=<folder>` overrides the workspace without writing to the registry (used by `npm test`).
 - `scripts/run.js` uses the same workspace; with nothing stored, it creates the default folder.
+<!-- /generated:workspace -->
 
 ## Structuring your repository's CLAUDE.md for unattended agents
 
@@ -1072,6 +1083,7 @@ Notes:
 
 ## Structure
 
+<!-- generated:structure -->
 ```
 src/main.js              Electron main process + IPC
 src/preload.js           safe API exposed to the renderer
@@ -1101,3 +1113,4 @@ scripts/                 terminal runner, tests, build, UI smoke test and UI scr
 test/                    unit tests (node:test) and fixtures
 CLAUDE.md, docs/agents/  context for coding agents working on this repository (short index + topic docs)
 ```
+<!-- /generated:structure -->
