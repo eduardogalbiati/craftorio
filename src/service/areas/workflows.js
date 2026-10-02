@@ -60,6 +60,8 @@ module.exports = (ctx) => {
               skills: s.skills || [],
               goal: !!s.goal,
               loop: !!s.loop,
+              // `type: workflow` (#174): the child workflow, once or for each item
+              ...(s.type === 'workflow' ? { workflow: s.workflow, foreach: s.foreach !== undefined, max_parallel: s.max_parallel ?? null } : {}),
               next: [...new Set((s.transitions || []).map((t) => t.goto).filter(Boolean))],
             })),
           };

@@ -528,6 +528,8 @@ details[open] > summary .label::after { content: " ▾"; }
 .pr-list > .muted { margin: 4px 0 0; }
 .pr-run { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; }
 .pr-run.open { border-color: #3a4152; }
+/* a child run of a `type: workflow` step (#174), right under its parent */
+.pr-run.pr-child { margin-left: calc(24px * var(--nest, 1)); border-left: 3px solid #3a4152; }
 .pr-row {
   display: grid; grid-template-columns: 96px minmax(0, 1fr) 130px 76px 70px 70px 16px;
   align-items: center; gap: 14px; padding: 10px 14px; cursor: pointer;

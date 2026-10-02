@@ -43,7 +43,7 @@ function renderRunList(rl, { prefix, box: boxSel, empty, start, rerender }) {
   }
   const fn = RUN_FILTERS.find(([id]) => id === rl.filter)?.[2] || (() => true);
   const runs = visible.filter(fn);
-  box.innerHTML = (runs.map((r) => runListRow(r, rl)).join('') || '<p class="muted pr-none">No runs match this filter.</p>') + simNote;
+  box.innerHTML = (nestChildRuns(runs).map((r) => runListRow(r, rl)).join('') || '<p class="muted pr-none">No runs match this filter.</p>') + simNote;
   askPrStates(runs);
 
   box.querySelectorAll('.pr-row').forEach((row) => (row.onclick = () => {
@@ -87,17 +87,46 @@ function issueFallbackBadge(r) {
   return ` <span class="badge warn" title="${esc(`The platform could not be read when this run started, so it used ${what}. See the run's log.`)}">issue from cache</span>`;
 }
 
+// Child runs of a `type: workflow` step (#174) right under their parent (by item, then start), marked
+// `nested`; a child whose parent is not in the list stays where it is.
+function nestChildRuns(list) {
+  const ids = new Set(list.map((r) => r.runId));
+  const under = new Map();
+  for (const r of list) {
+    const p = r.parentRun?.run_id;
+    if (p && p !== r.runId && ids.has(p)) (under.get(p) || under.set(p, []).get(p)).push(r);
+  }
+  const order = (a, b) => (a.parentRun.index ?? 0) - (b.parentRun.index ?? 0) || String(a.startedAt).localeCompare(String(b.startedAt));
+  const out = [];
+  const add = (r, depth) => {
+    out.push(depth ? { ...r, nested: depth } : r);
+    if (depth < 3) (under.get(r.runId) || []).sort(order).forEach((c) => add(c, depth + 1));
+  };
+  list.filter((r) => !(r.parentRun?.run_id && ids.has(r.parentRun.run_id) && r.parentRun.run_id !== r.runId)).forEach((r) => add(r, 0));
+  return out;
+}
+
+// The badges of a run linked by a `type: workflow` step (#174): its parent, or how many runs it started.
+function childRunBadges(r) {
+  const p = r.parentRun;
+  const kids = r.childRuns || [];
+  const parent = p?.run_id ? ` <span class="badge" title="${esc(`Started by run ${p.run_id}${p.workflow ? ` (${p.workflow})` : ''}, step ${p.step_id || '?'}`)}">child${Number.isInteger(p.index) ? ` · item ${p.index + 1}` : ''}</span>` : '';
+  const waiting = kids.filter((c) => c.status === 'running').length;
+  const children = kids.length ? ` <span class="badge" title="${esc(kids.map((c) => `${c.run_id}: ${c.status}`).join('\n'))}">${kids.length} child run${kids.length === 1 ? '' : 's'}${waiting ? ` · ${waiting} running` : ''}</span>` : '';
+  return parent + children;
+}
+
 function runListRow(r, pv) {
   const open = pv.expanded.has(r.runId);
   const task = String(r.task || '').trim();
   const firstLine = task.split('\n')[0];
   const dur = r.status === 'running' && r.startedAt ? Date.now() - Date.parse(r.startedAt) : r.durationMs;
   return `
-    <div class="pr-run ${open ? 'open' : ''}" data-run="${esc(r.runId)}">
+    <div class="pr-run ${open ? 'open' : ''}${r.nested ? ' pr-child' : ''}" data-run="${esc(r.runId)}"${r.nested ? ` style="--nest:${r.nested}"` : ''}>
       <div class="pr-row" title="${open ? 'Hide' : 'Show'} sessions">
         <span class="pill pill-${esc(r.status)}">${esc(r.status)}</span>
         <div class="pr-main">
-          <div><b>${runTitleHtml(r)}</b> ${prBadge(r)} <span class="muted small" title="workflow">${esc(r.workflow || r.file || 'workflow')}${r.version ? ` v${esc(r.version)}` : ''}</span>${r.mock ? ' <span class="badge p-mock">simulated</span>' : ''}${r.current ? ' <span class="badge live">this window</span>' : ''}${r.runningElsewhere ? ' <span class="badge" title="Another app process on this workspace runs it: stop or resume it there">another window</span>' : ''}${r.retryOf ? ` <span class="badge" title="Started by a retry of the same roadmap item: the two runs do the same work">retry of ${esc(String(r.retryOf).slice(9))}</span>` : ''}${issueFallbackBadge(r)}${r.chain && window.ChainModel ? ` ${ChainModel.chainBadgesHtml(r.chain)}` : ''}${!pv.id && r.project ? ` <span class="badge" title="project">${esc(r.project.name)}</span>` : ''}</div>
+          <div><b>${runTitleHtml(r)}</b> ${prBadge(r)} <span class="muted small" title="workflow">${esc(r.workflow || r.file || 'workflow')}${r.version ? ` v${esc(r.version)}` : ''}</span>${r.mock ? ' <span class="badge p-mock">simulated</span>' : ''}${r.current ? ' <span class="badge live">this window</span>' : ''}${r.runningElsewhere ? ' <span class="badge" title="Another app process on this workspace runs it: stop or resume it there">another window</span>' : ''}${r.retryOf ? ` <span class="badge" title="Started by a retry of the same roadmap item: the two runs do the same work">retry of ${esc(String(r.retryOf).slice(9))}</span>` : ''}${issueFallbackBadge(r)}${r.chain && window.ChainModel ? ` ${ChainModel.chainBadgesHtml(r.chain)}` : ''}${childRunBadges(r)}${!pv.id && r.project ? ` <span class="badge" title="project">${esc(r.project.name)}</span>` : ''}</div>
           <div class="muted small pr-task" title="${esc(task)}">${esc(firstLine || 'No task')}</div>
         </div>
         <span class="pr-meta"><label>started</label>${r.startedAt ? esc(dateOf(r.startedAt)) : '—'}</span>

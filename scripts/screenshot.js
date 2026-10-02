@@ -541,6 +541,29 @@ function demoAnalyticsRuns(ws, projectId) {
   }
 }
 
+// A `type: workflow` step's runs (#174): a delivery run whose step ran software-development for three
+// issues, two at a time (two succeeded, one failed), so the run lists show the children under it.
+function demoChildRuns(ws, projectId) {
+  const at = Date.now() - 2 * 36e5;
+  const parentId = `${new Date(at).toISOString().slice(0, 10).replace(/-/g, '')}-100000-demopar0`;
+  const items = [['#201', 'Add a /health endpoint', 'success'], ['#202', 'Rate-limit the login form with a very long title that is cut', 'failed'], ['#203', 'Show the build version in the footer', 'success']];
+  const kids = items.map(([n, title, status], i) => ({ run_id: `${parentId.slice(0, 9)}10${i}000-demokid${i}`, step_id: 'develop', visit: 1, index: i, workflow: 'software-development', status, n, title }));
+  const write = (runId, summary) => {
+    fs.mkdirSync(path.join(ws.runs, runId), { recursive: true });
+    fs.writeFileSync(path.join(ws.runs, runId, 'summary.json'), JSON.stringify({ run_id: runId, project_id: projectId, mock: false, sessions: [], ...summary }, null, 2));
+  };
+  write(parentId, {
+    workflow: 'backlog-delivery', status: 'failed', started_at: new Date(at).toISOString(), finished_at: new Date(at + 54e5).toISOString(), duration_ms: 54e5,
+    inputs: { task: 'Deliver the planned issues #201, #202 and #203' },
+    child_runs: kids.map(({ n, title, ...k }) => k),
+  });
+  kids.forEach((k, i) => write(k.run_id, {
+    workflow: 'software-development', status: k.status, started_at: new Date(at + (i + 1) * 6e4).toISOString(), finished_at: new Date(at + (i + 1) * 6e4 + 18e5).toISOString(), duration_ms: 18e5,
+    inputs: { task: `${k.n} ${k.title}` },
+    parent_run: { run_id: parentId, workflow: 'backlog-delivery', step_id: 'develop', index: i, depth: 1 },
+  }));
+}
+
 // Analytics › Repository performance (#159): the project's folder becomes a git repository and three
 // nights of four parallel runs merge into it locally (one PR run whose `gh pr merge` failed), some
 // through resolve_merge with the files their conflict named; the last night edits the shared files less,
@@ -942,6 +965,8 @@ function main() {
     // also on Artifacts: a second run group (its document.md) for Collapse all / Expand all (#126)
     if (['artifacts', 'backlog', 'duo'].includes(args.view)) demoEnrichRun(ws, project.id);
     if (args.view === 'analytics') demoAnalyticsRuns(ws, project.id);
+    // a parent run with its child runs nested under it (#174)
+    if (['project', 'workflows'].includes(args.view)) demoChildRuns(ws, project.id);
     if (args.view === 'workflows') demoPipelines(ws, appDir);
     if (args.view === 'analytics' && args.tab === 'performance') demoPerformanceRuns(ws, project.folder, project.id);
     // the Night watch's nights (#172): its screen, and the Dashboard's morning summary (an app before it: nothing)

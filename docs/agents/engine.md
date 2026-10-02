@@ -294,6 +294,29 @@ same features for users; this is the implementer's summary.
   chain → `fromChain` → a new file, never over an existing one), `pipelines:restore`; `backlog:assign`
   takes `pipeline` (its first workflow, fixed inputs and chain for each queued issue).
 
+## A workflow as a step: `type: workflow` (#174)
+
+- `{ type: workflow, workflow: <file>, inputs: {...}, foreach?, max_parallel?, on_error?, transitions? }`
+  (src/engine/workflow-step.js, `runChildWorkflows` in workflow.js). `inputs` are templates over the
+  run, plus `item` / `index` with `foreach`; a whole `{{ expr }}` keeps its type (a list stays a list).
+  `foreach` (a list or a template giving one) starts one child per item, at most `max_parallel`
+  (default 1) at a time, and never two items whose `files` overlap.
+- Output: once `{ kind: 'workflow', workflow, status, run_id, outputs, error }`; foreach `{ ..., status,
+  runs: [{ index, item, run_id, status, error, outputs }], outputs: [per item], succeeded, failed }`.
+  `status` is success when every child succeeded. Not a success: `on_error` (a route or a gate) when
+  set, else the transitions (they see `output.status`), else the run fails. Children run to the end
+  even when one fails.
+- Children are normal runs, started through the `startChild` option: the service starts them with
+  `startWorkflowRun({ parent, onFinished })` (no Settings › Execution slot: the parent holds one and
+  waits); without it (CLI, engine tests) `startChildRun` builds a `WorkflowRun` and emits it as
+  `'child'` (record its events, answer its gates). Their gates wait for the owner, the parent waits
+  too (orchestrator session `waiting`) and never answers them. Stopping the parent stops its children.
+- Links: `parent_run: { run_id, workflow, step_id, index?, depth }` in the child's workflow.started and
+  summary; the parent's `workflow.child_started` / `workflow.child_finished` events and
+  `summary.child_runs: [{ run_id, step_id, visit, index?, workflow, status }]` (readRun `parentRun` /
+  `childRuns`). Run lists nest children under their parent; the Run screen's chain banner links both
+  ways. Children nest at most 3 deep; a workflow cannot name itself.
+
 ## Worktrees and template context
 
 - `orchestrator.worktree: { repo, base }` + `defaults.working_dir: "{{ worktree_dir }}"`: see [worktrees.md](worktrees.md).

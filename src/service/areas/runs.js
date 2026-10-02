@@ -125,6 +125,8 @@ module.exports = (ctx) => {
         ...ctx.liveTitle(r), pr: ctx.withPrState(r.pr, r.mock), passedGates: passedGates(r),
         // what happens with its result when it finishes, and the run whose chain started it (#134)
         chain: r.then || r.from ? { then: r.then, from: r.from, state: r.then ? 'waiting' : undefined } : null,
+        // `type: workflow` steps (#174): the run that started this one, the runs this one started
+        parentRun: r.parent || null, childRuns: r.childRuns.length ? r.childRuns : null,
       };
     });
   }
@@ -137,7 +139,10 @@ module.exports = (ctx) => {
   // notices: [{ level, message }] the starter logs in the run (e.g. an issue read from the cache, #168)
   // attachments: { <input>: [path | { path, name }] } images attached to inputs (#129, WorkflowRun)
   // then / from: the run's chain (#134, WorkflowRun): what follows it, and the run whose chain started it
-  async function startWorkflowRun({ file, inputs, mock, mockSequences = null, resume = null, projectId: forcedProject = null, issues = null, allowKeptWork = false, notices: startNotices = [], attachments = null, then = null, from = null }) {
+  // parent: the run whose `type: workflow` step starts this one (#174, WorkflowRun): it takes no slot of
+  // Settings › Execution (its parent holds one and waits for it, so a limit of 1 would never free one)
+  // onFinished: (workflow.finished event) => void, called when the run ends (the parent's step waits on it)
+  async function startWorkflowRun({ file, inputs, mock, mockSequences = null, resume = null, projectId: forcedProject = null, issues = null, allowKeptWork = false, notices: startNotices = [], attachments = null, then = null, from = null, parent = null, onFinished = null }) {
     // simulation-only (automated checks): a real run is refused, never turned into a simulation
     if (!mock) simulation.refuseReal('a real run');
     // the same issues never get a second live run, from this app or another one (#112): resume that run instead
@@ -156,7 +161,7 @@ module.exports = (ctx) => {
     }
     const { ws } = ctx;
     const slot = { mock: !!mock, projectId: forcedProject };
-    const busy = slotProblem(slot);
+    const busy = parent ? '' : slotProblem(slot);
     if (busy) throw new Error(busy);
     reserved.add(slot);
     let run;
@@ -171,7 +176,7 @@ module.exports = (ctx) => {
       const projectId = forcedProject || projects.listProjects(ws.projects).find((p) => p.folder && folders.includes(path.resolve(p.folder).toLowerCase()))?.id || null;
       // the project is known now: its own limit applies
       slot.projectId = projectId;
-      const busyProject = slotProblem(slot, slot);
+      const busyProject = parent ? '' : slotProblem(slot, slot);
       if (busyProject) throw new Error(busyProject);
       // budgets that count usage outside the orchestrator need the CLIs' own logs
       const needsLocal = Object.values(settings.budgets || {}).some((b) => b?.countOutside);
@@ -191,6 +196,8 @@ module.exports = (ctx) => {
         // Run locally at gates: the project's override of the workflow's orchestrator.local_preview
         localPreview: project?.localPreview?.command ? project.localPreview : null,
         budget, prices: settings.prices, projectId, issues, resume, attachments, mockSequences: mock ? mockSequences : null, then, from,
+        // `type: workflow` steps (#174): each child is a normal run of this service, linked to this one
+        parent, startChild: (spec) => startChildRun(run, spec),
         // simulation runs never touch git: the agents are mocked and work in the repository folder
         worktreesDir: mock ? null : ws.worktrees,
         // concurrent runs share the monthly budgets
@@ -238,6 +245,9 @@ module.exports = (ctx) => {
       events.emit('run:event', ev);
       if (ev.type === 'workflow.started') markActiveRun(run.runId, runInfo);
       if (ev.type === 'workflow.finished') markActiveRun(run.runId, null);
+      if (ev.type === 'workflow.finished' && onFinished) {
+        try { onFinished(ev); } catch (e) { console.error('run finished:', e.message); }
+      }
       ctx.notify(notifier.runNotice(ev, runInfo), { projectId: run.projectId, issue: run.issues?.map((i) => `#${i.number}`).join(', ') || null });
       // the next issues waiting in a Backlog queue start once this run is over; a queued issue whose
       // run failed pauses its queue (a failure that repeats would otherwise burn through it)
@@ -260,6 +270,19 @@ module.exports = (ctx) => {
     }
     run.start();
     return { runId: run.runId, runDir: run.runDir };
+  }
+
+  // A child run of a `type: workflow` step (#174, WorkflowRun startChild): started like any run of the
+  // parent's project and mode, its gates waiting for the owner; resolves `finished` when it ends.
+  async function startChildRun(parentRun, { file, inputs, parent, label }) {
+    let done;
+    const finished = new Promise((resolve) => { done = resolve; });
+    const started = await startWorkflowRun({
+      file, inputs, mock: parentRun.mock, projectId: parentRun.projectId, parent,
+      onFinished: (ev) => done({ status: ev.status, outputs: ev.outputs || {}, error: ev.error }),
+      notices: [{ level: 'info', message: `Child run of ${parentRun.runId} (${parentRun.wf.metadata?.name || path.basename(parentRun.file)}, step ${parent.step_id}${label ? `: ${label}` : ''}).` }],
+    });
+    return { runId: started.runId, finished, stop: () => active.get(started.runId)?.stop() };
   }
 
   // Provider config of a run's workflow: the live one, or the workflow file named in its events.

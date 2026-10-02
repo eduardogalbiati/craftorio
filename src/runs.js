@@ -52,7 +52,7 @@ function chainOf(dir, summary, started) {
 const derived = new Map(); // events.jsonl path → { key, sessions, progress, localMerge, recovery, pr }
 function fromEvents(file) {
   let st;
-  try { st = fs.statSync(file); } catch { return { sessions: [], progress: [], localMerge: null, recovery: null, pr: null }; }
+  try { st = fs.statSync(file); } catch { return { sessions: [], progress: [], localMerge: null, recovery: null, pr: null, childRuns: [] }; }
   const key = `${st.mtimeMs}:${st.size}`;
   const hit = derived.get(file);
   if (hit?.key === key) return hit;
@@ -66,8 +66,14 @@ function fromEvents(file) {
   const localMerge = merged ? { branch: merged.branch, base: merged.base, commit: merged.commit } : null;
   // the supervisor's latest recovery from a failed merge/action ("went back to develop at 00:10 because ...")
   const recovery = events.findLast((e) => e.type === 'supervisor.decision' && e.kind === 'action_error')?.record || null;
+  // the child runs its `type: workflow` steps started (#174), for a run without summary.child_runs yet
+  const children = new Map();
+  for (const ev of events) {
+    if (ev.type === 'workflow.child_started') children.set(ev.child_run_id, { run_id: ev.child_run_id, step_id: ev.step_id, ...(ev.index !== undefined ? { index: ev.index } : {}), workflow: ev.workflow, status: 'running' });
+    else if (ev.type === 'workflow.child_finished' && children.has(ev.child_run_id)) children.get(ev.child_run_id).status = ev.status;
+  }
   // the PR the run opened (#84): the latest step output with pr_url / pr_number
-  const out = { key, sessions: [...byId.values()], progress: trailOf(events), localMerge, recovery, pr: prOfEvents(events) };
+  const out = { key, sessions: [...byId.values()], progress: trailOf(events), localMerge, recovery, pr: prOfEvents(events), childRuns: [...children.values()] };
   derived.set(file, out);
   return out;
 }
@@ -173,6 +179,7 @@ function readRun(runsDir, runId) {
   const issues = issuesOf(summary) || issuesOf(started);
   const task = firstText(inputs);
   const resumedFrom = started?.resumed_from?.run_id || null;
+  const childRuns = summary ? summary.child_runs : fromEvents(path.join(dir, 'events.jsonl')).childRuns;
   const { title, customTitle } = runTitle(runsDir, runId, { issues, task });
   return {
     runId,
@@ -206,6 +213,10 @@ function readRun(runsDir, runId) {
     chain: chainOf(dir, summary, started),
     // the declared outputs it finished with (#134), null before it finished or without a contract
     outputs: summary?.outputs || null,
+    // `type: workflow` steps (#174): { run_id, workflow, step_id, index?, depth } of the run that started
+    // this one, and [{ run_id, step_id, index?, workflow, status }] of the runs this one started (null: none)
+    parentRun: summary?.parent_run || started?.parent_run || null,
+    childRuns: childRuns?.length ? childRuns : null,
     recovery: fromEvents(path.join(dir, 'events.jsonl')).recovery,
     error,
     // a run without an end that another live app process runs (#112): { pid, host }, else null

@@ -284,13 +284,14 @@ function renderChainBanner() {
   const running = r.status === 'running';
   const editing = chainUi.editing === r.id;
   const savingPipe = chainUi.savingPipe === r.id;
-  const show = !!(c?.then || c?.from) || editing || running;
+  const family = r.parentRun?.run_id || r.childRuns?.length;
+  const show = !!(c?.then || c?.from) || editing || running || !!family;
   box.classList.toggle('hidden', !show);
   if (!show) return;
   const pipe = c ? ChainModel.pipelineOf(c, r.id) : null;
   const pipeRun = pipe?.id ? pipelineRunOf(r, pipe) : null;
   const saved = chainUi.savedPipe?.runId === r.id ? chainUi.savedPipe : null;
-  const key = JSON.stringify([r.id, r.status, c, editing, savingPipe, saved, pipeRun, chainUi.busy, chainUi.error]);
+  const key = JSON.stringify([r.id, r.status, c, editing, savingPipe, saved, pipeRun, chainUi.busy, chainUi.error, r.parentRun, r.childRuns]);
   if (box.dataset.key === key) return;
   box.dataset.key = key;
   const then = c?.then || null;
@@ -328,11 +329,12 @@ function renderChainBanner() {
     </div>` : '';
   if (saved) text = `Saved as the pipeline "${saved.name}" (${saved.file}).`;
   box.innerHTML = `<div class="chain-banner-head">
-      <span class="chain-banner-title">${then || editing ? 'When it finishes' : 'Chain'}</span>${badges}
+      <span class="chain-banner-title">${then || editing ? 'When it finishes' : !c?.from && family && !running ? 'Linked runs' : 'Chain'}</span>${badges}
       ${text ? `<span class="muted small chain-banner-text" title="${esc(text)}">${esc(text)}</span>` : ''}
       <span class="spacer"></span>${savePipe}${actions}
     </div>
     ${strip}
+    ${childRunsStrip(r)}
     ${editing ? '<div class="chain-banner-edit" data-chain-picker></div>' : ''}
     ${pipeForm}
     ${chainUi.error ? `<p class="error small">${esc(chainUi.error)}</p>` : ''}`;
@@ -341,6 +343,23 @@ function renderChainBanner() {
     const source = () => (chainUi.workflows || []).find((w) => w.name === r.workflow || w.file === r.file) || null;
     chainUi.picker = ChainPicker.mount(box.querySelector('[data-chain-picker]'), { workflows: () => chainUi.workflows || [], source, value: then });
   }
+}
+
+// A `type: workflow` step's links (#174): the run that started this one, and each child run with its
+// item and status (a child's gate waits for the owner on the child's own Run screen).
+function childRunsStrip(r) {
+  const p = r.parentRun;
+  const kids = r.childRuns || [];
+  if (!p?.run_id && !kids.length) return '';
+  const link = (id, text, tip) => `<button type="button" class="link-btn small" data-run-link="${esc(id)}" title="${esc(tip)}">${esc(text)}</button>`;
+  const parent = p?.run_id ? `<span class="muted small">Child run of</span> ${link(p.run_id, p.workflow || p.run_id, `Open run ${p.run_id} (step ${p.step_id || '?'})`)}${Number.isInteger(p.index) ? ` <span class="badge">item ${p.index + 1}</span>` : ''}` : '';
+  const children = kids.length ? `<span class="muted small">Child runs</span> ${kids.map((k) => {
+    const name = k.label || (Number.isInteger(k.index) ? `item ${k.index + 1}` : k.workflow || k.run_id);
+    return k.run_id
+      ? `<span class="child-run">${link(k.run_id, name, `Open run ${k.run_id} (${k.workflow || 'workflow'}, step ${k.step_id})`)} <span class="pill pill-${esc(k.status)}">${esc(k.status)}</span></span>`
+      : `<span class="child-run muted small">${esc(name)} <span class="pill pill-${esc(k.status)}">${esc(k.status)}</span></span>`;
+  }).join('')}` : '';
+  return `<div class="chain-banner-pipe child-runs">${parent}${children}</div>`;
 }
 
 async function onChainBannerClick(e) {
@@ -400,7 +419,7 @@ function renderSteps() {
   const item = (s) => `
     <li class="${s.status}">
       <span class="dot"></span>
-      <span>${esc(s.id)}<br><span class="kind"${s.agent ? ` title="${esc(s.agent)}"` : ''}>${s.type === 'human_approval' ? 'human approval' : s.type === 'screenshots' ? 'screenshots (no agent)' : esc(agentLabel(s.agent, v.run?.agentNames))}</span></span>
+      <span>${esc(s.id)}<br><span class="kind"${s.agent ? ` title="${esc(s.agent)}"` : ''}>${s.type === 'human_approval' ? 'human approval' : s.type === 'screenshots' ? 'screenshots (no agent)' : s.type === 'workflow' ? 'child workflow runs' : esc(agentLabel(s.agent, v.run?.agentNames))}</span></span>
       <span class="visits">${s.visits ? '×' + s.visits : ''}</span>
     </li>`;
   // in the workflow's step order: a group where its first shown step is

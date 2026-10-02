@@ -130,6 +130,8 @@
 .chain-banner-edit { margin-top: 8px; max-width: 720px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel-2); }
 /* a saved pipeline's run (#135) and the Save as pipeline form */
 .chain-banner-pipe { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 6px; }
+/* a `type: workflow` step's parent and child runs (#174) */
+.child-runs .child-run { display: inline-flex; align-items: center; gap: 4px; }
 .pipe-save-form { display: grid; grid-template-columns: minmax(0, 2fr) minmax(120px, 1fr); gap: 8px 12px; align-items: end; }
 .pipe-save-form .field { margin: 0; }
 .pipe-save-form .pipe-save-desc, .pipe-save-form > p { grid-column: 1 / -1; }

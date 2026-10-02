@@ -620,6 +620,8 @@ function runInfo(x) {
     version: x.version, inputs, issues: issuesOfRun(x), project: project?.name || null,
     agentNames: x.agent_names || null, // agents from the Agents menu: key → their own name
     chain: ChainModel.runChain(x), // its chain (#134)
+    // `type: workflow` steps (#174): the run that started this one, the runs this one started
+    parentRun: x.parent_run || x.parentRun || null, childRuns: [...(x.childRuns || [])],
   };
 }
 
@@ -679,6 +681,20 @@ function onEvent(ev) {
     case 'run.then':
       if (v.run) v.run.chain = ChainModel.withThen(v.run.chain, ev.then);
       break;
+
+    // a `type: workflow` step's child runs (#174): the Run screen links them
+    case 'workflow.child_started':
+      if (v.run && ev.child_run_id) {
+        v.run.childRuns = [...(v.run.childRuns || []).filter((c) => c.run_id !== ev.child_run_id), { run_id: ev.child_run_id, step_id: ev.step_id, index: ev.index, label: ev.label, workflow: ev.workflow, status: 'running' }];
+      }
+      orch(ev, `child run ${ev.child_run_id} started (${ev.workflow}${ev.label ? `: ${ev.label}` : ''})`, 'transition');
+      break;
+    case 'workflow.child_finished': {
+      const c = v.run?.childRuns?.find((x) => x.run_id && x.run_id === ev.child_run_id);
+      if (c) c.status = ev.status;
+      orch(ev, `child run ${ev.child_run_id || '(not started)'} ${ev.status}${ev.label ? ` (${ev.label})` : ''}${ev.error ? `: ${ev.error}` : ''}`, ev.status === 'success' ? 'transition' : 'error');
+      break;
+    }
 
     case 'workflow.finished':
       v.run.status = ev.status;

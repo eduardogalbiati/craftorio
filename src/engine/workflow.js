@@ -13,9 +13,11 @@
 // the provider (templated `timeout` via `turnTimeout`; a failed attempt's tool calls go to the next
 // one, `attemptSummary`). Exports `render` (nunjucks, autoescape off, filters `to_yaml`, `to_json`,
 // `shuffle(seed)`, `clamp(lo, hi)`, `e2e_scenarios`), `takeHandoff`, `parseTokens`. Steps without an agent: gates
-// (`type: human_approval`) and `type: screenshots` (`runScreenshots`, #144). Chaining (#134): the
-// declared `outputs:` (`computeOutputs`, in workflow.finished and summary.json), the run's `then`
-// (option, a gate choice's `then`, `setThen`) and `from`; the service starts what comes next.
+// (`type: human_approval`), `type: screenshots` (`runScreenshots`, #144) and `type: workflow`
+// (`runChildWorkflows`, #174: child runs, once or `foreach` item, src/engine/workflow-step.js).
+// Chaining (#134): the declared `outputs:` (`computeOutputs`, in workflow.finished and summary.json),
+// the run's `then` (option, a gate choice's `then`, `setThen`) and `from`; the service starts what
+// comes next. Child runs (#174): `parent_run` in workflow.started and summary, `child_runs` in the summary.
 
 const fs = require('fs');
 const path = require('path');
@@ -58,6 +60,10 @@ const { stopProcessesIn } = require('./processes');
 const { PROBES, runProbe, parseTarget } = require('./probes');
 const scenarios = require('./scenarios');
 const { captureScreenshots } = require('./screenshot-step');
+const {
+  runWorkflowStep,
+  validateWorkflowStep,
+} = require('./workflow-step');
 const mergeQueue = require('./merge-queue');
 const { IdleWatch } = require('./idle');
 const testPaths = require('./test-paths');
@@ -203,6 +209,9 @@ function loadWorkflow(file) {
       if (!ids.has(s.from)) throw new Error(`Step "${s.id}": from must be the step whose output lists the screenshots.`);
       if (s.folder !== undefined && !/^[\w-]+$/.test(String(s.folder))) throw new Error(`Step "${s.id}": folder must be a plain folder name (e.g. developer).`);
       if (s.timeout !== undefined && parseDuration(s.timeout, null) == null) throw new Error(`Step "${s.id}": timeout must be a duration such as 3m.`);
+    } else if (s.type === 'workflow') {
+      // `type: workflow` (#174): a child run of another workflow, once or per `foreach` item
+      validateWorkflowStep(s, file);
     } else if (s.type !== 'human_approval') {
       // `agents: [...]` = fan-out: the same prompt goes to several agents in parallel
       if (s.agents && (!Array.isArray(s.agents) || !s.agents.length)) throw new Error(`Step "${s.id}": agents must be a non-empty list.`);
@@ -603,7 +612,12 @@ class WorkflowRun extends EventEmitter {
   //   workflow.started and summary.json; a gate choice with `then` or the owner (setThen) can change it while it runs.
   // from: { run_id, workflow, pipeline? } the run whose chain started this one (workflow.started.from,
   //   summary.from); `pipeline` when a saved pipeline's stage (#135, chain-model normalizePipeline).
-  constructor({ file, inputs, mock, runsDir, skillsDirs, budget, prices, projectId, issues, issue, resume, worktreesDir, mockSequences, notices, stopProcesses, probe, actionsQuota, peerSessions, idleWarnMs, personas, localPreview, attachments, then, from }) {
+  // parent: { run_id, workflow, step_id, index?, depth } the run whose `type: workflow` step started this one
+  //   (#174), recorded as `parent_run` in workflow.started and summary.json.
+  // startChild: ({ file, inputs, parent, label }) => Promise<{ runId, finished: Promise<{ status, outputs, error }>, stop }>,
+  //   starts a child run for a `type: workflow` step (the service: a normal run, src/service/areas/runs.js).
+  //   Default: startChildRun, a WorkflowRun of its own, emitted as 'child' (its events are the listener's to record).
+  constructor({ file, inputs, mock, runsDir, skillsDirs, budget, prices, projectId, issues, issue, resume, worktreesDir, mockSequences, notices, stopProcesses, probe, actionsQuota, peerSessions, idleWarnMs, personas, localPreview, attachments, then, from, parent, startChild }) {
     super();
     refreshWindowsPath(); // actions (e.g. gh pr merge) need the refreshed PATH
     this.file = file;
@@ -619,6 +633,13 @@ class WorkflowRun extends EventEmitter {
     this.then = chain.normalizeThen(then);
     const pipeline = chain.normalizePipeline(from?.pipeline);
     this.from = from?.run_id ? { run_id: String(from.run_id), workflow: from.workflow ? String(from.workflow) : undefined, ...(pipeline ? { pipeline } : {}) } : null;
+    this.parent = parent?.run_id ? {
+      run_id: String(parent.run_id), workflow: parent.workflow ? String(parent.workflow) : undefined, step_id: parent.step_id ? String(parent.step_id) : undefined,
+      ...(Number.isInteger(parent.index) ? { index: parent.index } : {}), depth: Math.max(1, Number(parent.depth) || 1),
+    } : null;
+    this.startChild = startChild || ((spec) => this.startChildRun(spec));
+    this.children = new Map(); // run id -> WorkflowRun started by the default startChild
+    this.childRuns = []; // [{ run_id, step_id, index?, workflow, status }] (summary.child_runs)
     this.worktreesDir = worktreesDir || null;
     this.worktree = null; // see setupWorktree
     this.stopProcesses = stopProcesses === undefined ? (this.mock ? null : stopProcessesIn) : stopProcesses;
@@ -760,7 +781,7 @@ class WorkflowRun extends EventEmitter {
       if (!enabled) delete this.wf.agents[name];
     }
     for (const s of this.wf.steps) {
-      if (s.type === 'human_approval' || s.type === 'screenshots') continue;
+      if (s.type === 'human_approval' || s.type === 'screenshots' || s.type === 'workflow') continue;
       if (!s.agents) {
         if (!this.wf.agents[s.agent]) throw new Error(`Step "${s.id}" uses agent "${s.agent}", which is disabled for this run.`);
         continue;
@@ -946,6 +967,7 @@ class WorkflowRun extends EventEmitter {
       resumed_from: this.resume ? { run_id: this.resume.runId, step: this.resume.fromStep } : undefined,
       then: this.then || undefined,
       from: this.from || undefined,
+      parent_run: this.parent || undefined,
       personas: Object.keys(this.personas).length ? this.personas : undefined,
       agent_names: this.agentNames(),
       steps: this.wf.steps.map((s) => ({ id: s.id, type: s.type || 'agent', agent: stepAgentLabel(s) })),
@@ -1165,6 +1187,24 @@ class WorkflowRun extends EventEmitter {
       }
       st.output = output;
       scope = { ...this.ctx, output, iteration: st.iteration };
+    } else if (step.type === 'workflow') {
+      // child runs (#174): their gates wait for the owner, and so does this run; no supervisor here
+      output = await this.runChildWorkflows(step, st);
+      if (this.abort.signal.aborted) throw new Error('Cancelled');
+      st.output = output;
+      if (output.status !== 'success') {
+        const reason = `the child workflow ${output.workflow} ${output.runs ? `failed for ${output.failed} of ${output.runs.length} items` : `ended ${output.status}${output.error ? `: ${output.error}` : ''}`}`;
+        // `on_error: <step>` (a route or a gate) takes a child that failed or stopped; without it the
+        // transitions decide (they see output.status), and a step with none fails the run
+        if (step.on_error) {
+          this.emitEvent('log', { level: 'error', message: `${step.id}: ${reason} → ${step.on_error}` });
+          this.emitEvent('step.finished', { step_id: step.id, visit: st.visits, iteration: st.iteration, output, duration_ms: Date.now() - t0, error: true });
+          this.emitEvent('step.transition', { from: step.id, to: step.on_error, when: 'on_error' });
+          return step.on_error;
+        }
+        if (!step.transitions?.length) throw new Error(`Step "${step.id}": ${reason}.`);
+      }
+      scope = { ...this.ctx, output, status: output.status, iteration: st.iteration };
     } else {
       const slow = this.watchSlowStep(step, st);
       try {
@@ -1202,7 +1242,7 @@ class WorkflowRun extends EventEmitter {
       if (step.wait) await this.afterAgentTurn(step, st);
     }
     const next = await this.finishStep(step, st, output, scope, t0);
-    return step.type === 'human_approval' || step.type === 'screenshots' ? next : this.checkStalls(step, st, output, t0, next, again);
+    return step.type === 'human_approval' || step.type === 'screenshots' || step.type === 'workflow' ? next : this.checkStalls(step, st, output, t0, next, again);
   }
 
   // ---- stall detection and the supervisor on call (#41) ---------------------------------------
@@ -2811,6 +2851,52 @@ class WorkflowRun extends EventEmitter {
     }
   }
 
+  // `type: workflow` (#174): the child runs of the step (src/engine/workflow-step.js), started through
+  // startChild; the run shows as waiting while they go. Each one lands in `child_runs` (summary).
+  async runChildWorkflows(step, st) {
+    this.setStatus(this.orchestrator, 'waiting');
+    const emit = (type, data) => {
+      if (type === 'workflow.child_started') this.childRuns.push({ run_id: data.child_run_id, step_id: step.id, visit: st.visits, ...(data.index !== undefined ? { index: data.index } : {}), workflow: data.workflow, status: 'running' });
+      if (type === 'workflow.child_finished') {
+        const c = this.childRuns.find((x) => x.run_id && x.run_id === data.child_run_id);
+        if (c) c.status = data.status;
+      }
+      this.emitEvent(type, data);
+    };
+    try {
+      return await runWorkflowStep({
+        step, render, emit, startChild: this.startChild, signal: this.abort.signal,
+        scope: { ...this.ctx, iteration: st.iteration },
+        parent: { run_id: this.runId, workflow: this.wf.metadata?.name || path.basename(this.file), depth: this.parent?.depth || 0 },
+      });
+    } finally {
+      this.setStatus(this.orchestrator, 'active');
+    }
+  }
+
+  // The default startChild (the CLI, engine tests): a WorkflowRun of its own in the same runs folder,
+  // with this run's settings, emitted as 'child' before it starts (record its events, answer its gates).
+  // The child's workflow file: next to this run's, else the bundled one.
+  async startChildRun({ file, inputs, parent, label }) {
+    const bundled = path.join(__dirname, '..', '..', 'workflows');
+    const dirs = [path.dirname(path.resolve(this.file)), bundled];
+    const found = path.isAbsolute(file) ? file : dirs.map((d) => path.join(d, file)).find((f) => fs.existsSync(f));
+    if (!found) throw new Error(`Workflow not found: "${file}" (searched in ${dirs.join(', ')})`);
+    const child = new WorkflowRun({
+      file: found, inputs, mock: this.mock, runsDir: this.ctx.runs_dir, skillsDirs: this.skillsDirs.filter((d) => d !== BUNDLED_SKILLS),
+      budget: this.budget, prices: this.prices, projectId: this.projectId, worktreesDir: this.worktreesDir, parent,
+      ...(this.stopProcesses === null ? { stopProcesses: null } : {}), idleWarnMs: this.idleWarnMs,
+      notices: [{ level: 'info', message: `Child run of ${this.runId} (step ${parent.step_id}${label ? `, ${label}` : ''}).` }],
+    });
+    const finished = new Promise((resolve) => child.on('event', (ev) => {
+      if (ev.type === 'workflow.finished') resolve({ status: ev.status, outputs: ev.outputs || {}, error: ev.error });
+    }));
+    this.children.set(child.runId, child);
+    this.emit('child', child);
+    child.start();
+    return { runId: child.runId, finished, stop: () => child.stop() };
+  }
+
   // answer: boolean (approve/reject) or the id of one of the step's choices; feedback: optional text;
   // intent: 'save_to_issue' with the gate's save_to_issue choice (#125), recorded on the answer
   // images: pictures attached to the feedback (#129), checked (an error names the file and the limit),
@@ -2911,6 +2997,9 @@ ${stderr || stdout}`.slice(0, 1500)));
         ...(outputs ? { outputs } : {}),
         ...(this.then ? { then: this.then } : {}),
         ...(this.from ? { from: this.from } : {}),
+        // `type: workflow` steps (#174): the run that started this one, the runs this one started
+        ...(this.parent ? { parent_run: this.parent } : {}),
+        ...(this.childRuns.length ? { child_runs: this.childRuns } : {}),
         sessions,
       },
     });
