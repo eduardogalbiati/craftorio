@@ -245,7 +245,7 @@ test('roadmap: a Product Owner proposal is added as planned and does not start b
   assert.equal(data.roadmap.state, 'planned');
   assert.equal(data.roadmap.stages[0].items[0].status, 'planned');
   assert.equal(service.isRunning(), false);
-  assert.deepEqual(api['runs:list']().runs, []);
+  assert.deepEqual((await api['runs:list']()).runs, []);
 });
 
 test('roadmap: assigning a planned issue elsewhere removes it from the roadmap', async (t) => {

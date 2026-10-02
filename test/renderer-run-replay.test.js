@@ -35,6 +35,7 @@ const PATTERNS = {
   onEvent: /function onEvent\(ev\) \{[\s\S]*?\n\}/,
   orch: /function orch\(ev, text, level = ''\) \{[\s\S]*?\n\}/,
   PROJECT_REFRESH_EVENTS: /const PROJECT_REFRESH_EVENTS = new Set\(\[[^\]]+\]\);/,
+  RUN_ROW_EVENTS: /const RUN_ROW_EVENTS = new Set\(\[[^\]]+\]\);/,
   ARTIFACT_EVENTS: /const ARTIFACT_EVENTS = new Set\(\[[^\]]+\]\);/,
   SUP_ACTIONS: /const SUP_ACTIONS = \{[^\n]+\};/,
   openPastRun: /async function openPastRun\(runId\) \{[\s\S]*?\n\}/,
@@ -65,6 +66,7 @@ function loadHelpers({ api = {}, view = 'dashboard' } = {}) {
     loadArtifactsThrottled: () => {},
     refreshUnpushed: () => {},
     renderRunListsSoon: () => {},
+    refreshRunRow: () => {}, // its own seam: src/renderer/run-list.js, a global in the renderer
     scheduleRender: () => {},
     scheduleActiveSync: () => {},
     reportNotifyContext: () => {},

@@ -15,6 +15,7 @@ const renderSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 
 const artifactsSrc = fs.readFileSync(
   path.join(__dirname, '..', 'src', 'renderer', 'views', 'artifacts', 'artifacts.js'), 'utf8',
 );
+const runListSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'run-list.js'), 'utf8');
 
 function extract(name, re, src = artifactsSrc) {
   const m = re.exec(src);
@@ -56,8 +57,14 @@ function load({ runs = [], q = '', projectId = '', showSim = false, developerMod
     extract('ART_KIND', /const ART_KIND = \{[^\n]+\};/, renderSrc),
     extract('artKindIcon', /const artKindIcon = [^\n]+/, renderSrc),
     extract('fmtSize', /function fmtSize\(n\) \{[\s\S]*?\n\}/, renderSrc),
+    extract('ART_PAGE', /const ART_PAGE = \d+;/, runListSrc),
+    extract('groupArtifacts', /function groupArtifacts\(files\) \{[\s\S]*?\n\}/, runListSrc),
     extract('artShowSim', /const artShowSim = [^\n]+/),
     extract('artifactRunsFiltered', /function artifactRunsFiltered\(\) \{[\s\S]*?\n\}/),
+    extract('ensureArtFiles', /function ensureArtFiles\(r\) \{[\s\S]*?\n\}/),
+    extract('fetchArtFiles', /function fetchArtFiles\(runId, entry\) \{[\s\S]*?\n\}/),
+    extract('artFileHtml', /function artFileHtml\(f\) \{[\s\S]*?\n\}/),
+    extract('artFilesHtml', /function artFilesHtml\(e\) \{[\s\S]*?\n\}/),
     extract('renderArtifactList', /function renderArtifactList\(\) \{[\s\S]*?\n\}/),
     extract('paintArtToggleAll', /function paintArtToggleAll\(runs, searching\) \{[\s\S]*?\n\}/),
     extract('toggleAllArtGroups', /function toggleAllArtGroups\(\) \{[\s\S]*?\n\}/),
@@ -71,13 +78,18 @@ function load({ runs = [], q = '', projectId = '', showSim = false, developerMod
   const listBox = fakeListBox();
   const toggleBtn = fakeToggleButton();
   const store = { ...storage };
+  // A run's files load through api.listArtifacts({ runId }), same array-wrapped shape as the real
+  // service (src/service/areas/artifacts.js): the fixture's own files (run()'s `_files`), never empty
+  // by surprise so a test that opens a group doesn't see a silent "ReferenceError: api is not defined".
   const sandbox = {
-    state: { art: { runs, q, projectId, showSim, sel: null }, settings: { developerMode }, simulationOnly: false, projects: [] },
+    state: { art: { runs, q, loadedQ: q, projectId, showSim, sel: null }, settings: { developerMode }, simulationOnly: false, projects: [] },
     document: { querySelector: (sel) => (sel === '#art-list' ? listBox : sel === '#art-toggle-all' ? toggleBtn : null) },
     localStorage: {
       getItem: (k) => (k in store ? store[k] : null),
       setItem: (k, v) => { store[k] = v; },
     },
+    api: { listArtifacts: (opts) => Promise.resolve([{ artifacts: runs.find((r) => r.runId === opts.runId)?._files || [] }]) },
+    errMsg: (e) => String(e?.message || e),
   };
   vm.createContext(sandbox);
   vm.runInContext(
@@ -87,8 +99,10 @@ function load({ runs = [], q = '', projectId = '', showSim = false, developerMod
   return { ...sandbox.fns, listBox, toggleBtn, sandbox, store };
 }
 
-function run(id, { mock = false, artifacts = [{ name: 'a.md', rel: 'a.md', path: `${id}/a.md`, kind: 'markdown', size: 10 }] } = {}) {
-  return { runId: id, workflow: 'wf', status: 'success', task: 't', startedAt: '2026-01-01T00:00:00Z', mock, project: null, artifacts };
+// #200: a run row no longer carries its file list (`artifacts`); only a count. The files it would
+// return from artifacts:list { runId } are kept on `_files` for the sandbox's fake api.listArtifacts.
+function run(id, { mock = false, files = [{ name: 'a.md', rel: 'a.md', path: `${id}/a.md`, kind: 'markdown', size: 10, exists: true }] } = {}) {
+  return { runId: id, workflow: 'wf', status: 'success', task: 't', startedAt: '2026-01-01T00:00:00Z', mock, project: null, artifactCount: files.length, imageCount: 0, _files: files };
 }
 
 test('paintArtToggleAll: "Collapse all" while any listed group is open, "Expand all" once every one is closed', () => {
@@ -157,11 +171,14 @@ test('while searching, the toggle is disabled with a tooltip explaining why, and
 test('clearing the search restores the remembered open/closed states, not every group open', () => {
   const { renderArtifactList, toggleAllArtGroups, toggleBtn, sandbox } = load({ runs: [run('r1'), run('r2')] });
   toggleAllArtGroups(); // remembers both closed
+  // the search box text and the committed (loaded) search move together, as a finished loadArtifacts() does
   sandbox.state.art.q = 'a.md';
+  sandbox.state.art.loadedQ = 'a.md';
   renderArtifactList();
   assert.equal(toggleBtn.disabled, true, 'both groups show open while searching, but the toggle is disabled, not relabelled');
 
   sandbox.state.art.q = '';
+  sandbox.state.art.loadedQ = '';
   renderArtifactList();
   assert.equal(toggleBtn.disabled, false);
   assert.equal(toggleBtn._span.textContent, 'Expand all', 'the remembered collapsed state is back');

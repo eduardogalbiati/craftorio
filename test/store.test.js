@@ -91,6 +91,42 @@ test('putRun indexes exactly the fields the run lists and Usage/Analytics read',
   assert.deepEqual(store.runRows(), []);
 });
 
+// ---- A run's cached artifact index (src/run-artifacts.js, #200) -------------------------------
+
+test('MIGRATIONS has one entry per schema version; the current schema (run_artifacts, artifact_paths) is 3', () => {
+  assert.equal(MIGRATIONS.length, 3);
+});
+
+test('putRunArtifacts writes run_artifacts and, for each external file, artifact_paths; artifactRunIds finds the run; deleteRuns and clearRuns remove both tables\' rows', (t) => {
+  const ws = tempWorkspace();
+  const store = openStore(ws);
+  closeAndRemove(t, ws, store);
+  const copy = path.join(os.tmpdir(), 'never-really-created.md'); // only the path is read here
+  const entry = {
+    quick: '10:1700000000000|1700000000000', finished: true, offset: 10, saved: [],
+    files: [
+      { path: path.join(ws.runs, 'r1', 'out.md'), rel: 'out.md', location: 'run' },
+      { path: copy, rel: 'out.md', location: 'external' },
+    ],
+    count: 2, images: 0,
+  };
+  store.putRunArtifacts('r1', entry);
+  assert.deepEqual(store.runArtifacts('r1'), entry);
+  assert.deepEqual(store.artifactRunIds(copy), ['r1']);
+  assert.deepEqual(store.artifactRunIds(path.join(ws.runs, 'r1', 'out.md')), [], 'a run-folder file is not recorded in artifact_paths: only its external (project) copies are');
+
+  store.putRunArtifacts('r2', { ...entry, files: [{ path: copy, rel: 'out.md', location: 'external' }], count: 1 });
+  assert.deepEqual(store.artifactRunIds(copy), ['r2', 'r1'], 'both runs recorded it as a project copy, newest run id first');
+
+  store.deleteRuns(['r1']);
+  assert.equal(store.runArtifacts('r1'), null);
+  assert.deepEqual(store.artifactRunIds(copy), ['r2'], 'r1\'s row in artifact_paths went with it');
+
+  store.clearRuns();
+  assert.equal(store.runArtifacts('r2'), null);
+  assert.deepEqual(store.artifactRunIds(copy), []);
+});
+
 test('closing and reopening the store (an already-migrated, existing workspace) keeps the runs cache, a queue, open gates and notifications', (t) => {
   const ws = tempWorkspace();
   const first = openStore(ws);

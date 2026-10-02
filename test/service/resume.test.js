@@ -331,7 +331,7 @@ test('run:start: an ended run\'s kept worktree commits for the same issue ask fi
   assert.deepEqual(asked.kept.choices.map((c) => c.id), ['resume', 'scratch']);
   assert.deepEqual(asked.kept.choices.map((c) => c.label), ['Resume the old run', 'Start from scratch']);
   assert.deepEqual(asked.kept.choices.map((c) => c.primary), [true, false]);
-  assert.deepEqual(api['runs:list']().runs.map((r) => r.runId), ['20260930-100000-keptstart1'], 'no duplicate run was started');
+  assert.deepEqual((await api['runs:list']()).runs.map((r) => r.runId), ['20260930-100000-keptstart1'], 'no duplicate run was started');
 
   const started = await api['run:start']({
     file: 'fixture-issue.yaml', inputs: { task: 't', repo_path: folder }, mock: true, projectId: p.id, issues: [issue], confirmed: true,
@@ -441,7 +441,7 @@ test('backlog:assign: an ended run\'s kept work asks first (confirm/kept/runId) 
   assert.equal(asked.confirm, asked.kept.text);
   assert.equal(service.isRunning(), false, 'no duplicate run was started');
   assert.deepEqual(api['backlog:get']({ projectId: p.id }).queue.items, [], 'nothing was queued before the owner answers');
-  assert.deepEqual(api['runs:list']().runs.map((r) => r.runId), ['20260930-100000-keptqueue1']);
+  assert.deepEqual((await api['runs:list']()).runs.map((r) => r.runId), ['20260930-100000-keptqueue1']);
 
   const started = await api['backlog:assign']({ projectId: p.id, numbers: [22], workflow: 'fixture-issue.yaml', mock: true, confirmed: true });
   assert.equal(started.kept, undefined);

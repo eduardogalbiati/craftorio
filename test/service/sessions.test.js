@@ -8,10 +8,11 @@ const { makeResumeService } = require('./helpers');
 test('the agents table carries each session\'s tokens, live while the run goes and from disk once recorded', async (t) => {
   const { service, api } = makeResumeService(t);
   let live;
+  let liveP = Promise.resolve();
   const finished = new Promise((resolve) => {
     service.events.on('run:event', (ev) => {
       if (ev.type === 'session.message_received' && ev.session.agent === 'a' && !live) {
-        live = api['runs:list']().runs.find((r) => r.status === 'running')?.sessions.find((s) => s.agent === 'a');
+        liveP = api['runs:list']().then((list) => { live = list.runs.find((r) => r.status === 'running')?.sessions.find((s) => s.agent === 'a'); });
       }
       if (ev.type === 'approval.requested') setImmediate(() => api['approval:resolve']({ id: ev.approval_id, answer: true }));
       if (ev.type === 'workflow.finished') resolve();
@@ -19,11 +20,12 @@ test('the agents table carries each session\'s tokens, live while the run goes a
   });
   const { runId } = await api['run:start']({ file: 'fixture-resume.yaml', inputs: {}, mock: true });
   await finished;
+  await liveP;
 
   assert.ok(live?.tokens, 'a live session already carries its tokens');
   assert.equal(live.tokens.total, live.tokens.input + live.tokens.output + live.tokens.cache_read + live.tokens.cache_write, 'reasoning is not counted twice');
 
-  const recorded = api['runs:list']().runs.find((r) => r.runId === runId).sessions.find((s) => s.agent === 'a');
+  const recorded = (await api['runs:list']()).runs.find((r) => r.runId === runId).sessions.find((s) => s.agent === 'a');
   assert.ok(recorded.tokens.total > 0, 'the finished run still carries the tokens, read back from disk');
   assert.deepEqual(Object.keys(recorded.tokens).sort(), ['cache_read', 'cache_write', 'input', 'output', 'reasoning', 'total'].sort());
 });
@@ -45,7 +47,7 @@ test('a session with no tokens shows null; non-numeric token values never become
     ],
   }));
 
-  const sessions = api['runs:list']().runs.find((r) => r.runId === runId).sessions;
+  const sessions = (await api['runs:list']()).runs.find((r) => r.runId === runId).sessions;
   assert.equal(sessions.find((s) => s.agent === 'orchestrator').tokens, null);
   assert.deepEqual(sessions.find((s) => s.agent === 'a').tokens, { input: 12, output: 0, cache_read: 0, cache_write: 0, reasoning: 5, total: 12 });
 });

@@ -29,7 +29,7 @@ test('runs a mock workflow, pushes its events and resolves the human gate', asyn
   assert.equal(end.status, 'success');
   assert.ok(events.includes('step.finished') && events.includes('approval.resolved'));
   assert.ok(fs.existsSync(path.join(runDir, 'events.jsonl')));
-  assert.equal(api['runs:list']().runs[0].runId, runId);
+  assert.equal((await api['runs:list']()).runs[0].runId, runId);
 });
 
 // #75: a run parked at a human gate is never only known from the events a client happened to see
@@ -65,7 +65,7 @@ test('with simulation only, real runs and CLI terminals are refused', async (t) 
   assert.throws(() => host.api['term:open']({ kind: 'cli-new', provider: 'claude' }), /Simulation only .*claude CLI/);
   assert.deepEqual(asked, []); // refused before the account check: nothing real was attempted
   assert.equal(host.isRunning(), false);
-  assert.deepEqual(api['runs:list']().runs, []);
+  assert.deepEqual((await api['runs:list']()).runs, []);
   assert.equal(api['app:info']().simulationOnly, true);
   // shares the index with `service`'s workspace: close it here, before makeService's own
   // teardown (registered earlier) removes the workspace folder.
@@ -83,7 +83,7 @@ test('a run starts only if the host allows it (account / free trial)', async (t)
   await assert.rejects(blocked.api['run:start']({ file: 'fixture-service.yaml', inputs: {}, mock: false }), /trial has ended/);
   assert.deepEqual(asked, [{ mock: false }]);
   assert.equal(blocked.isRunning(), false);
-  assert.deepEqual(api['runs:list']().runs, []);
+  assert.deepEqual((await api['runs:list']()).runs, []);
   // shares the index with `service`'s workspace: close it here, before makeService's own
   // teardown (registered earlier) removes the workspace folder.
   blocked.shutdown();
@@ -113,7 +113,7 @@ test('concurrent runs: each run resolves its own gates, stop affects only its ru
   await until(() => finished.has(first.runId));
   assert.equal(finished.get(first.runId), 'success');
   assert.ok(!finished.has(second.runId));
-  assert.equal(api['runs:list']().runs.find((r) => r.runId === second.runId).status, 'running');
+  assert.equal((await api['runs:list']()).runs.find((r) => r.runId === second.runId).status, 'running');
 
   // a slot is free again
   const third = await start();
@@ -271,7 +271,7 @@ test('two services on one workspace: the second sees the first\'s active run as 
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   b.setWorkspace(setupWorkspace(dir, { persist: false }));
 
-  const seenByB = b.api['runs:list']().runs.find((r) => r.runId === runId);
+  const seenByB = (await b.api['runs:list']()).runs.find((r) => r.runId === runId);
   assert.equal(seenByB.status, 'running');
   assert.deepEqual(seenByB.runningElsewhere, { pid: process.ppid, host: owner.host });
   assert.deepEqual(b.api['runs:active'](), [], 'b never started or tracks this run itself');

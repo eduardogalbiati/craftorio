@@ -13,6 +13,7 @@ const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'run-l
 const PATTERNS = {
   nestChildRuns: /function nestChildRuns\(list\) \{[\s\S]*?\n\}/,
   childRunBadges: /function childRunBadges\(r\) \{[\s\S]*?\n\}/,
+  groupArtifacts: /function groupArtifacts\(files\) \{[\s\S]*?\n\}/,
 };
 
 function loadHelpers() {
@@ -24,7 +25,7 @@ function loadHelpers() {
   }
   const sandbox = { esc: (s) => s };
   vm.createContext(sandbox);
-  vm.runInContext(Object.values(code).join('\n') + '\nthis.helpers = { nestChildRuns, childRunBadges };', sandbox);
+  vm.runInContext(Object.values(code).join('\n') + '\nthis.helpers = { nestChildRuns, childRunBadges, groupArtifacts };', sandbox);
   return sandbox.helpers;
 }
 
@@ -68,4 +69,30 @@ test('childRunBadges shows the parent badge with its item number, and the count 
 test('childRunBadges is empty for a run with neither a parent nor child runs', () => {
   const { childRunBadges } = loadHelpers();
   assert.equal(childRunBadges(run('solo')), '');
+});
+
+// #200: groupArtifacts groups an open row's (or the Artifacts screen's) files for display.
+const art = (step, location, name) => ({ step, location, name, rel: name });
+
+test('groupArtifacts: steps come first, in the order they first appear, each keeping its files in order', () => {
+  const { groupArtifacts } = loadHelpers();
+  const files = [
+    art('review', 'run', 'r1.md'),
+    art('develop', 'run', 'd1.md'),
+    art('review', 'run', 'r2.md'),
+    art('develop', 'run', 'd2.md'),
+  ];
+  const groups = Array.from(groupArtifacts(files), ([label, group]) => [label, Array.from(group, (f) => f.name)]);
+  assert.deepEqual(groups, [['review', ['r1.md', 'r2.md']], ['develop', ['d1.md', 'd2.md']]]);
+});
+
+test('groupArtifacts: a step-less file inside the run folder is "Other files", outside it (a project copy) is "Project copies", both after every step', () => {
+  const { groupArtifacts } = loadHelpers();
+  const files = [
+    art(null, 'external', 'prd.md'),
+    art('plan', 'run', 'plan.md'),
+    art(null, 'run', 'notes.txt'),
+  ];
+  const labels = Array.from(groupArtifacts(files), ([label]) => label);
+  assert.deepEqual(labels, ['plan', 'Other files', 'Project copies']);
 });

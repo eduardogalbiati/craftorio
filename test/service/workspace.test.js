@@ -23,7 +23,7 @@ test('seeds the bundled workflows and answers the UI channels', async (t) => {
   t.after(() => fs.rmSync(folder, { recursive: true, force: true }));
   const p = await api['projects:create']({ name: 'demo', folder });
   assert.deepEqual(api['projects:list']().map((x) => x.id), [p.id]);
-  assert.deepEqual(api['projects:runs']({ id: p.id }).runs, []);
+  assert.deepEqual((await api['projects:runs']({ id: p.id })).runs, []);
 });
 
 test('the workspace cannot change while a run is in progress', async (t) => {

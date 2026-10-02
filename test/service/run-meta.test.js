@@ -42,7 +42,7 @@ test('runs:list and runs:active expose the PR a mock run opened; a simulated run
   const [gate] = active.gates;
   api['approval:resolve']({ runId, id: gate.approval_id, answer: true });
   await untilTrue(() => !service.isRunning());
-  const run = api['runs:list']().runs.find((r) => r.runId === runId);
+  const run = (await api['runs:list']()).runs.find((r) => r.runId === runId);
   assert.equal(run.pr.number, 42);
   assert.equal(run.pr.url, 'https://github.com/acme/app/pull/42');
   assert.equal(run.pr.state, 'unknown');
@@ -88,7 +88,7 @@ test('runs:setTitle persists the owner\'s title in meta.json (never touching eve
 
   service = createService({ host });
   service.setWorkspace(setupWorkspace(dir, { persist: false }));
-  const run = service.api['runs:list']().runs.find((r) => r.runId === runId);
+  const run = (await service.api['runs:list']()).runs.find((r) => r.runId === runId);
   assert.equal(run.title, 'Notifications, 2nd try');
   assert.equal(run.customTitle, 'Notifications, 2nd try');
   service.shutdown();

@@ -42,7 +42,7 @@ test('backlog: work merged locally shows as not pushed until the Backlog pushes 
   assert.deepEqual([checked.local.ahead, checked.local.base, checked.local.issues], [1, 'main', [1]]);
   assert.equal(checked.backlog.issues[0].column, 'local');
   assert.deepEqual(api['backlog:unpushed'](), [{ projectId: p.id, name: 'local', base: 'main', ahead: 1, issues: [1] }]);
-  assert.equal(api['projects:runs']({ id: p.id }).local.ahead, 1);
+  assert.equal((await api['projects:runs']({ id: p.id })).local.ahead, 1);
 
   const pushed = await api['backlog:push']({ projectId: p.id });
   assert.deepEqual([pushed.pushed, pushed.issues, pushed.local.ahead], [true, [1], 0]);
@@ -134,6 +134,6 @@ steps:
   assert.deepEqual([first.inputs.repo_path, first.inputs.base_branch, first.inputs.language], [folder, 'main', 'go']);
   assert.match(first.inputs.task, /git merge origin\/main/);
   assert.match(first.inputs.task, /conflicted in: a\.txt/);
-  assert.equal(api['runs:list']().runs.find((r) => r.runId === started.runId).projectId, p.id);
+  assert.equal((await api['runs:list']()).runs.find((r) => r.runId === started.runId).projectId, p.id);
   assert.equal(git(folder, 'rev-parse', 'main'), mine); // a simulated run touches no git
 });

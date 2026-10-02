@@ -17,7 +17,7 @@ test('backlog: with simulation only, a real assignment is refused and nothing is
   fs.writeFileSync(path.join(ws.backlog, `${p.id}.json`), JSON.stringify({ projectId: p.id, platform: 'github', repo: 'https://github.com/o/r', issues: [{ number: 1, title: 'Issue 1', state: 'open', url: 'https://github.com/o/r/issues/1', body: '', labels: [], assignees: [], tasks: { done: 0, total: 0 } }] }));
   await assert.rejects(api['backlog:assign']({ projectId: p.id, numbers: [1], workflow: 'fixture-issue.yaml', mock: false }), /Simulation only .*real runs from the Backlog/);
   assert.equal(fs.existsSync(path.join(ws.backlog, `${p.id}.queue.json`)), false);
-  assert.deepEqual(api['runs:list']().runs, []);
+  assert.deepEqual((await api['runs:list']()).runs, []);
 });
 
 test('backlog: assigned issues run one at a time, each run records its issue', async (t) => {
@@ -63,7 +63,7 @@ test('backlog: assigned issues run one at a time, each run records its issue', a
   data = api['backlog:get']({ projectId: p.id });
   assert.deepEqual(data.queue.items, []);
   assert.deepEqual([by()[1].column, by()[2].column], ['todo', 'todo']); // simulated: succeeded, but still just todo
-  const list = api['runs:list']().runs;
+  const list = (await api['runs:list']()).runs;
   const run2 = list.find((r) => r.issues?.[0].number === 2);
   // #168: a run records the version of each issue it starts from (here none, the cache has no updatedAt)
   assert.deepEqual(run2.issues, [{ number: 2, url: 'https://github.com/o/r/issues/2', title: 'Issue 2', updatedAt: null }]);
@@ -119,7 +119,7 @@ test('backlog: issues assigned as one run queue one item, start one run for all 
   api['approval:resolve']({ runId: run.runId, id: gates.get(run.runId), answer: true });
   await until(() => !service.isRunning());
   assert.deepEqual([65, 53, 77].map((n) => by()[n].column), ['todo', 'todo', 'todo']); // simulated: succeeded, but still just todo
-  const recorded = api['runs:list']().runs.find((r) => r.runId === run.runId);
+  const recorded = (await api['runs:list']()).runs.find((r) => r.runId === run.runId);
   assert.deepEqual(recorded.issues.map((i) => i.number), [65, 53, 77]);
 });
 
@@ -263,7 +263,7 @@ test('backlog: the dispatcher re-checks for an open PR right before starting a q
   assert.deepEqual(data.queue.items, []); // taken out instead of started
   assert.deepEqual(data.queue.skipped.map((s) => [s.number, s.reason]), [[1, 'open PR #9 since it was queued']]);
   assert.ok(!service.isRunning());
-  assert.deepEqual(api['runs:list']().runs, []);
+  assert.deepEqual((await api['runs:list']()).runs, []);
 });
 
 // A real-capable fixture (no agent steps, so `mock: false` never calls a model): used to prove the
