@@ -252,6 +252,78 @@ test('a blocking monthly Claude Code budget refuses the question, even with the 
   assert.match(out.refused.text, /already reached its monthly budget/);
 });
 
+// ---- pasted screenshots (#171, task 4) -----------------------------------------------------------
+
+const PNG_DATA_URL = 'data:image/png;base64,iVBORw0KGgo=';
+
+test('oracle:ask with a pasted image: saved under <workspace>/oracle/attachments/, and oracle:attachment reads it back', async (t) => {
+  const { service, api } = makeService(t);
+  const out = await api['oracle:ask']({ question: 'What is this?', images: [{ dataUrl: PNG_DATA_URL }], mock: true });
+  assert.match(out.message.text, /You pasted 1 image\(s\)/);
+
+  const [userMsg] = await api['oracle:history']();
+  assert.equal(userMsg.attachments.length, 1);
+  const file = userMsg.attachments[0];
+  assert.match(file, /\.png$/);
+  assert.ok(fs.existsSync(path.join(oracleDir(service), 'attachments', file)));
+
+  assert.equal(await api['oracle:attachment'](file), PNG_DATA_URL);
+});
+
+test('oracle:ask: an unknown attachment name (removed, or never sent) gives null, not an error', async (t) => {
+  const { api } = makeService(t);
+  assert.equal(await api['oracle:attachment']('does-not-exist.png'), null);
+});
+
+test('oracle:ask: more than 4 pasted images is refused, and nothing is saved', async (t) => {
+  const { service, api } = makeService(t);
+  const images = Array.from({ length: 5 }, () => ({ dataUrl: PNG_DATA_URL }));
+  await assert.rejects(() => api['oracle:ask']({ question: 'many', images, mock: true }), /At most 4 images/);
+  assert.equal((await api['oracle:history']()).length, 0); // refused before anything is posted
+  assert.equal(fs.existsSync(path.join(oracleDir(service), 'attachments')), false);
+});
+
+test('oracle:ask: a pasted image over the 5 MB cap is refused, naming the cap', async (t) => {
+  const { api } = makeService(t);
+  const big = Buffer.from('A'.repeat(oracle.ATTACHMENT_LIMITS.maxBytes + 100)).toString('base64');
+  await assert.rejects(() => api['oracle:ask']({ question: 'big', images: [{ dataUrl: `data:image/png;base64,${big}` }], mock: true }), /over 5 MB/);
+});
+
+test('oracle:ask: a pasted file of a type the model cannot read is refused, naming the allowed types', async (t) => {
+  const { api } = makeService(t);
+  await assert.rejects(() => api['oracle:ask']({ question: 'x', images: [{ dataUrl: 'data:application/pdf;base64,Zg==' }], mock: true }), /Only PNG, JPEG, GIF or WebP/);
+});
+
+// ---- the unread badge survives a reload (#171, task 2) --------------------------------------------
+
+test('oracle:markRead: readAt persists across a restart', async (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'oracle-read-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  process.env.MULTIAGENT_SIMULATION_ONLY = '1';
+
+  const service1 = createService({ host: { trashItem: async () => {}, appVersion: '9.9.9', isPackaged: false } });
+  service1.setWorkspace(setupWorkspace(dir, { persist: false }));
+  await service1.api['oracle:ask']({ question: 'Hi', mock: true });
+  const { ts } = (await service1.api['oracle:history']()).at(-1);
+  const { readAt } = await service1.api['oracle:markRead']({ at: ts });
+  assert.equal(readAt, ts);
+  service1.shutdown();
+
+  const service2 = createService({ host: { trashItem: async () => {}, appVersion: '9.9.9', isPackaged: false } });
+  service2.setWorkspace(setupWorkspace(dir, { persist: false }));
+  const state = await service2.api['oracle:state']();
+  assert.equal(state.readAt, readAt);
+  service2.shutdown();
+});
+
+test('oracle:markRead: an earlier "at" than what is already recorded is ignored (the badge never un-clears)', async (t) => {
+  const { api } = makeService(t);
+  const later = new Date().toISOString();
+  await api['oracle:markRead']({ at: later });
+  const earlier = new Date(Date.now() - 60000).toISOString();
+  assert.equal((await api['oracle:markRead']({ at: earlier })).readAt, later);
+});
+
 // ---- simulation (task 5) -----------------------------------------------------------------------
 
 test('createOracle: without mock, outside a mocked run, refuseReal is consulted before any CLI, bridge or MCP setup', async (t) => {
