@@ -1,7 +1,8 @@
-// src/renderer/app.js: the confirm modal's named-choice variant (#170), choiceDialog, and the
-// kept-work question it serves, keptWorkDialog. Pure DOM glue, no main-process calls, so it is
-// pulled out of the source and run in a vm sandbox against a minimal fake DOM, the way
-// test/renderer-run-view.test.js checks app.js as a seam.
+// src/renderer/kept-work-dialog.js: the confirm modal's named-choice variant (#170),
+// choiceDialog, and the kept-work question it serves, keptWorkDialog ($, esc, openModal,
+// closeModal and confirmDialog come from src/renderer/app.js, which the dialog file relies on).
+// Pure DOM glue, no main-process calls, so it is pulled out of the source and run in a vm sandbox
+// against a minimal fake DOM, the way test/renderer-run-view.test.js checks app.js as a seam.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
@@ -9,6 +10,7 @@ const path = require('path');
 const vm = require('vm');
 
 const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'app.js'), 'utf8');
+const dialogSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'kept-work-dialog.js'), 'utf8');
 
 // A minimal element: classList (add/remove/toggle/contains), dataset, textContent, and an innerHTML
 // that fakes just enough of the DOM to make `children.length` reflect the <li> tags written to it
@@ -62,10 +64,13 @@ function loadDialogs() {
   const closeModal = /function closeModal\(sel\) \{[^\n]*\}/.exec(src)[0];
   const esc = /const esc = \(s\) => [^\n]+;/.exec(src)[0];
   const confirmDialog = /function confirmDialog\(title, message, yes = 'Confirm'\) \{[\s\S]*?\n\}/.exec(src)[0];
-  const choiceDialog = /function choiceDialog\(title, message, choices\) \{[\s\S]*?\n\}/.exec(src)[0];
-  const keptWorkDialog = /async function keptWorkDialog\(kept\) \{[\s\S]*?\n\}/.exec(src)[0];
-  for (const [name, code] of Object.entries({ dollar, openModal, closeModal, esc, confirmDialog, choiceDialog, keptWorkDialog })) {
+  for (const [name, code] of Object.entries({ dollar, openModal, closeModal, esc, confirmDialog })) {
     assert.ok(code, `${name} not found in app.js: the source moved`);
+  }
+  const choiceDialog = /function choiceDialog\(title, message, choices\) \{[\s\S]*?\n\}/.exec(dialogSrc)[0];
+  const keptWorkDialog = /async function keptWorkDialog\(kept\) \{[\s\S]*?\n\}/.exec(dialogSrc)[0];
+  for (const [name, code] of Object.entries({ choiceDialog, keptWorkDialog })) {
+    assert.ok(code, `${name} not found in kept-work-dialog.js: the source moved`);
   }
   vm.runInContext(
     `${dollar}\n${esc}\n${openModal}\n${closeModal}\n${confirmDialog}\n${choiceDialog}\n${keptWorkDialog}\n`
