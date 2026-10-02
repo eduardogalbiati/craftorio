@@ -30,8 +30,17 @@ const roadmapFile = (dir, projectId) => path.join(dir, `${path.basename(String(p
 const emptyRoadmap = () => ({ state: 'planned', simulated: false, error: null, pausedBy: null, scope: null, stages: [], updatedAt: null });
 const newId = (prefix) => `${prefix}-${crypto.randomBytes(4).toString('hex')}`;
 
+// One item shape (#163): every item has an `issues` list (one issue or more), and the first issue's
+// fields (`number`, `url`, `title`, `body`) stay on the item for older readers. Files written before
+// stored a single issue as the item itself, with no list: they are normalized when read and written.
+const normalizeItem = (x) => (!x || typeof x !== 'object' || (Array.isArray(x.issues) && x.issues.length) || !x.number ? x : { ...x, issues: itemIssues(x) });
+const normalizeStages = (stages) => (Array.isArray(stages) ? stages.map((s) => (s && Array.isArray(s.items) ? { ...s, items: s.items.map(normalizeItem) } : s)) : stages);
+
 function readRoadmap(dir, projectId) {
-  try { return { ...emptyRoadmap(), ...JSON.parse(fs.readFileSync(roadmapFile(dir, projectId), 'utf8')) }; } catch { return emptyRoadmap(); }
+  try {
+    const r = { ...emptyRoadmap(), ...JSON.parse(fs.readFileSync(roadmapFile(dir, projectId), 'utf8')) };
+    return { ...r, stages: normalizeStages(r.stages) };
+  } catch { return emptyRoadmap(); }
 }
 
 // What a roadmap file must look like (#112: a write that breaks it is refused, src/state-file.js).
@@ -58,7 +67,7 @@ function roadmapProblem(r) {
 function persisted(roadmap) {
   return {
     ...roadmap,
-    stages: (roadmap.stages || []).map((s) => ({
+    stages: normalizeStages(roadmap.stages || []).map((s) => ({
       ...s,
       items: (s.items || []).map(({ waiting: _w, ...x }) => (FINISHED.has(x.status) ? x : { ...x, status: 'planned', error: x.runId ? null : x.error || null })),
     })),
@@ -147,7 +156,7 @@ function cleanItem(raw, known, previous) {
     id: old ? old.id : newId('item'), workflow, workflowName: raw.workflowName || old?.workflowName || workflow,
     inputs: raw.inputs && typeof raw.inputs === 'object' ? raw.inputs : {}, mock: !!raw.mock,
     ...(reason ? { reason } : {}), ...(modeReason ? { modeReason } : {}), ...(origin ? { origin } : {}),
-    ...issues[0], ...(issues.length > 1 ? { issues } : {}),
+    ...issues[0], issues,
     status: ITEM_STATES.includes(state.status) ? state.status : 'planned', runId: state.runId || null, runs: state.runs || [], error: state.error || null,
   };
 }
@@ -241,7 +250,7 @@ function dropIssues(dir, projectId, numbers, { alive = null } = {}) {
         const left = itemIssues(x).filter((i) => !out.has(i.number));
         if (left.length === itemIssues(x).length) return [x];
         const { issues: _old, ...rest } = x;
-        return left.length ? [{ ...rest, ...left[0], ...(left.length > 1 ? { issues: left } : {}) }] : [];
+        return left.length ? [{ ...rest, ...left[0], issues: left }] : [];
       }),
     })).filter((s) => s.items.length),
   }));
@@ -414,6 +423,7 @@ module.exports = {
   itemAction,
   markStarted,
   mergedPullRequest,
+  normalizeItem,
   persisted,
   propose,
   readRoadmap,

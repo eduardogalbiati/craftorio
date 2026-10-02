@@ -34,7 +34,8 @@
     auto: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 3 14h9l-1 8 10-12h-9z"/></svg>',
   };
   const COMPLEXITY = /^complexity\s*[:=/-]?\s*(\d+)/i;
-  const refs = (x) => (x.issues?.length ? x.issues : [x]);
+  // an item's issues: its `issues` list, or (an item stored before #163) the item itself as one issue
+  const refs = (x) => (x.issues?.length ? x.issues : x.number ? [{ number: x.number, url: x.url, title: x.title, body: x.body, knownPullRequests: x.knownPullRequests }] : []);
   const editable = (x) => x.status === 'planned' || x.status === 'failed';
   const clone = (stages) => JSON.parse(JSON.stringify(stages || []));
   // inputs the Backlog fills itself when the run starts (as backlog.js's skipInput): never edited here
@@ -292,17 +293,30 @@
     if (dir < 0) stages[t].items.push(item); else stages[t].items.unshift(item);
   }
 
-  // Moves issue `number` from item `fromId` into item `toId` (a group while it has two or more).
+  // Why issue `d.issue` of item `d.from` can't join item `toId` ('' when it can; #163).
+  function dropProblem(stages, d, toId) {
+    const items = (stages || []).flatMap((s) => s.items || []);
+    const from = items.find((x) => x.id === d.from);
+    const to = items.find((x) => x.id === toId);
+    if (!from || !refs(from).some((i) => i.number === d.issue)) return `#${d.issue} is no longer in that item: the roadmap changed.`;
+    if (!to) return 'Drop the issue on another item to run them together.';
+    if (to === from) return `#${d.issue} is already in this item.`;
+    if (!editable(to)) return `This item is ${to.waiting ? 'waiting at a gate' : to.status}: only planned or failed items take issues.`;
+    return '';
+  }
+
+  // Moves issue `number` from item `fromId` into item `toId` (a group while it has two or more); the
+  // emptied item goes. Items of either shape (an `issues` list, or a single issue stored as the item).
   function moveIssue(stages, number, fromId, toId) {
+    if (dropProblem(stages, { issue: number, from: fromId }, toId)) return false;
     const items = stages.flatMap((s) => s.items);
     const from = items.find((x) => x.id === fromId);
     const to = items.find((x) => x.id === toId);
-    if (!from || !to || from === to || !editable(to)) return false;
     const issue = refs(from).find((i) => i.number === number);
-    if (!issue) return false;
-    from.issues = refs(from).filter((i) => i.number !== number);
+    const left = refs(from).filter((i) => i.number !== number);
     to.issues = [...refs(to), issue];
-    for (const s of stages) s.items = s.items.filter((x) => x.issues.length);
+    if (left.length) from.issues = left;
+    else for (const s of stages) s.items = s.items.filter((x) => x !== from);
     return true;
   }
 
@@ -325,8 +339,14 @@
     if (mock) item.mock = mock.checked;
   }
 
+  // An edit's error: in the screen's error line and the console, never an unhandled rejection (#163).
+  function failed(ctx, what, err) {
+    console.error(`roadmap ${what}:`, err);
+    ctx.setError(errMsg(err));
+  }
+
   async function save(ctx, stages) {
-    try { ctx.setData(await api.saveRoadmap(ctx.projectId, stages)); } catch (e) { ctx.setError(errMsg(e)); }
+    try { ctx.setData(await api.saveRoadmap(ctx.projectId, stages)); } catch (e) { failed(ctx, 'save', e); }
     ctx.render();
   }
 
@@ -433,7 +453,7 @@
         return false;
       }
     } catch (err) {
-      ctx.setError(errMsg(err));
+      failed(ctx, 'edit', err);
     }
     ctx.render();
     // the form or note just opened: its first control gets the focus
@@ -452,16 +472,37 @@
       return true;
     }
     if (!r || !el.closest('.rm-stage')) return false;
-    const stages = clone(r.stages);
-    const { s } = locate(stages, el);
-    if (el.matches('[data-rm-name]')) stages[s].name = el.value;
-    else if (el.matches('[data-rm-note]')) { stages[s].note = el.value; noteEditing = null; } else return false;
-    await save(ctx, stages);
+    const name = el.matches('[data-rm-name]');
+    if (!name && !el.matches('[data-rm-note]')) return false;
+    try {
+      const stages = clone(r.stages);
+      const { s } = locate(stages, el);
+      if (name) stages[s].name = el.value;
+      else { stages[s].note = el.value; noteEditing = null; }
+      await save(ctx, stages);
+    } catch (err) {
+      failed(ctx, 'edit', err);
+      ctx.render();
+    }
     return true;
   }
 
-  // Drag: an item onto another stage (or item: before it), an issue onto another item.
+  // Drag: an item onto another stage (or item: before it), an issue onto another item. While
+  // dragging, the target under the cursor is marked (#163): the item an issue joins, the line where
+  // an item lands, or a refused item with its reason (`data-drop-why`).
   let dragging = null;
+  let over = null; // { key, ok }: the target marked last
+  let marked = [];
+  function clearMarks() {
+    for (const el of marked) { el.classList.remove('rm-drop-target', 'rm-drop-before', 'rm-drop-end', 'rm-drop-denied'); delete el.dataset.dropWhy; }
+    marked = [];
+    over = null;
+  }
+  function mark(el, cls, why) {
+    el.classList.add(cls);
+    if (why) el.dataset.dropWhy = why;
+    marked.push(el);
+  }
   function onDragStart(e) {
     const issue = e.target.closest('[data-drag-issue]');
     const item = e.target.closest('[data-drag-item]');
@@ -472,29 +513,65 @@
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', JSON.stringify(dragging));
   }
-  function onDragOver(e) {
-    if (dragging && e.target.closest('[data-drop-stage]')) e.preventDefault();
+  function onDragOver(e, data) {
+    const stageEl = dragging ? e.target.closest('[data-drop-stage]') : null;
+    if (!stageEl) { clearMarks(); return; }
+    const itemEl = e.target.closest('[data-item]');
+    const key = itemEl ? `item:${itemEl.dataset.item}` : `stage:${stageEl.dataset.dropStage}`;
+    if (over?.key !== key) {
+      clearMarks();
+      let ok = true;
+      if (dragging.issue) {
+        const why = dropProblem(data?.roadmap?.stages, dragging, itemEl?.dataset.item);
+        ok = !why;
+        // its own item stays unmarked: the drag has just started there
+        if (itemEl?.dataset.item !== dragging.from) mark(itemEl || stageEl, ok ? 'rm-drop-target' : 'rm-drop-denied', why);
+      } else if (itemEl?.dataset.item === dragging.item) {
+        ok = false;
+      } else if (itemEl) {
+        mark(itemEl, 'rm-drop-before');
+      } else {
+        mark(stageEl, 'rm-drop-end');
+      }
+      over = { key, ok };
+    }
+    if (over.ok) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }
+  }
+  // The drag ended (dropped or cancelled): the marks go.
+  function onDragEnd() {
+    dragging = null;
+    clearMarks();
   }
   async function onDrop(e, ctx, data) {
     const d = dragging;
-    dragging = null;
+    onDragEnd();
     const r = data?.roadmap;
     const stageEl = e.target.closest('[data-drop-stage]');
     if (!d || !r || !stageEl) return;
     e.preventDefault();
-    const stages = clone(r.stages);
-    const targetItem = e.target.closest('[data-item]')?.dataset.item;
-    if (d.issue) {
-      if (!targetItem || !moveIssue(stages, d.issue, d.from, targetItem)) return;
-    } else {
-      const s = stages.findIndex((st) => st.items.some((x) => x.id === d.item));
-      if (s < 0 || targetItem === d.item) return;
-      const [item] = stages[s].items.splice(stages[s].items.findIndex((x) => x.id === d.item), 1);
-      const t = Number(stageEl.dataset.dropStage);
-      const at = targetItem ? stages[t].items.findIndex((x) => x.id === targetItem) : -1;
-      stages[t].items.splice(at < 0 ? stages[t].items.length : at, 0, item);
+    try {
+      const stages = clone(r.stages);
+      const targetItem = e.target.closest('[data-item]')?.dataset.item;
+      if (d.issue) {
+        const why = dropProblem(stages, d, targetItem);
+        if (why) {
+          if (targetItem !== d.from) { ctx.setError(why); ctx.render(); }
+          return;
+        }
+        moveIssue(stages, d.issue, d.from, targetItem);
+      } else {
+        const s = stages.findIndex((st) => st.items.some((x) => x.id === d.item));
+        if (s < 0 || targetItem === d.item) return;
+        const [item] = stages[s].items.splice(stages[s].items.findIndex((x) => x.id === d.item), 1);
+        const t = Number(stageEl.dataset.dropStage);
+        const at = targetItem ? stages[t].items.findIndex((x) => x.id === targetItem) : -1;
+        stages[t].items.splice(at < 0 ? stages[t].items.length : at, 0, item);
+      }
+      await save(ctx, stages);
+    } catch (err) {
+      failed(ctx, 'drop', err);
+      ctx.render();
     }
-    await save(ctx, stages);
   }
 
   /** A new stage at the end with the assign dialog's issues: one item (group) or one per issue; `reason`/`modeReason`/`origin`: the Product Owner's. */
@@ -506,5 +583,17 @@
     ctx.setData(await api.saveRoadmap(ctx.projectId, stages));
   }
 
-  window.BacklogRoadmap = { addStage, badge, html, onChange, onClick, onDragOver, onDragStart, onDrop };
+  window.BacklogRoadmap = {
+    addStage,
+    badge,
+    dropProblem,
+    html,
+    moveIssue,
+    onChange,
+    onClick,
+    onDragEnd,
+    onDragOver,
+    onDragStart,
+    onDrop,
+  };
 })();

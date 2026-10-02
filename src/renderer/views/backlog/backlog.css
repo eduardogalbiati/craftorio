@@ -195,6 +195,13 @@ input[type=text].rm-note { max-width: 520px; }
 .rm-item[draggable="true"] { cursor: grab; }
 .rm-item.rm-failed { border-color: var(--red); }
 .rm-item.rm-waiting { border-color: var(--yellow); }
+/* drop feedback while dragging (#163): the item an issue joins, the place an item lands (before an
+   item, or at the end of a stage), and a refused target with its reason */
+.rm-item.rm-drop-target { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); background: var(--panel-2); }
+.rm-item.rm-drop-before { box-shadow: 0 -3px 0 0 var(--accent); }
+.rm-stage.rm-drop-end .rm-items::after { content: ''; display: block; height: 3px; border-radius: 2px; background: var(--accent); }
+.rm-drop-denied { border-color: var(--red); border-style: dashed; }
+.rm-drop-denied[data-drop-why]::after { content: attr(data-drop-why); color: var(--red); font-size: 12px; }
 /* an item leads with its issues' titles, one line each (ellipsis, the full title on hover) */
 .rm-item-head { display: flex; align-items: flex-start; gap: 8px; }
 .rm-titles { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; flex: 1; min-width: 0; }
