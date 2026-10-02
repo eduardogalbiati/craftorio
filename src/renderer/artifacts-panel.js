@@ -171,8 +171,10 @@
   }
 
   // An image with its pair: { key, issue, caption, sides: { original?, modified? } }
-  function shotOf(ev, x) {
-    const pair = x.pair_file ? imageOf(ev, x.pair_file) : null;
+  // (pairOk: which pair images may join it; default any)
+  function shotOf(ev, x, pairOk = () => true) {
+    const found = x.pair_file ? imageOf(ev, x.pair_file) : null;
+    const pair = found && pairOk(found) ? found : null;
     const sides = { [x.side]: x };
     if (pair && !sides[pair.side]) sides[pair.side] = pair;
     return { key: x.key, issue: x.issue, caption: x.caption || pair?.caption || '', sides };
@@ -181,12 +183,12 @@
   // The final set, one shot per name (an original kept from an earlier round included)
   const finalShots = (ev) => pairShots(ev, (ev?.images || []).filter((i) => i.final));
 
-  // Images → one shot per name, each with its pair
-  function pairShots(ev, images) {
+  // Images → one shot per name, each with its pair (pairOk: see shotOf)
+  function pairShots(ev, images, pairOk) {
     const shots = new Map();
     for (const x of images) {
       const s = shots.get(x.key);
-      if (!s) shots.set(x.key, shotOf(ev, x));
+      if (!s) shots.set(x.key, shotOf(ev, x, pairOk));
       else s.sides[x.side] = x;
     }
     return [...shots.values()];
@@ -205,10 +207,11 @@
 
   // The gate right after a screenshots step (#144, extras.capture: its output): only that step's
   // round, original/modified side by side with captions, the failed captures listed; every other
-  // round in History (no stale screenshots of an older commit); "No screenshots: <reason>".
+  // round in History (no stale screenshots of an older commit, not even as a failed side's pair);
+  // "No screenshots: <reason>".
   function captureHtml(p, ev, cap) {
     const latest = (x) => x.step === cap.folder && x.round === cap.round;
-    const shots = pairShots(ev, (ev?.images || []).filter(latest));
+    const shots = pairShots(ev, (ev?.images || []).filter(latest), latest);
     const failed = (cap.errors || []).map((e) => `${e.name}${e.side ? ` (${e.side})` : ''}: ${e.error}`);
     const errors = failed.map((t) => `<p class="error small ap-pad" title="${esc(t)}">${esc(t)}</p>`).join('');
     const body = shots.length ? shots.map((s) => shotCardHtml(ev, s)).join('')
