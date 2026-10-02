@@ -113,7 +113,10 @@
       // started from a Backlog issue: the run records it (workflow.started `issues`) and can save to it
       const forIssue = fromIssue
         ? { projectId: fromIssue.projectId, issues: [{ number: fromIssue.issue.number, url: fromIssue.issue.url, title: fromIssue.issue.title }] } : {};
-      const payload = { file: FILE, inputs, mock, mockSequences: mock ? SCENARIOS[scenario]?.seq : null, ...forIssue };
+      // images pasted into the prompt and the goal (#130), for the steps that read those inputs
+      const pasted = { prompt: await PasteImage.collect($d('#duo-prompt')), goal: await PasteImage.collect($d('#duo-goal')) };
+      const attachments = Object.fromEntries(Object.entries(pasted).filter(([, list]) => list.length));
+      const payload = { file: FILE, inputs, mock, mockSequences: mock ? SCENARIOS[scenario]?.seq : null, ...forIssue, ...(Object.keys(attachments).length ? { attachments } : {}) };
       let out = await api.startRun(payload);
       // an ended run of this issue kept commits in its worktree (#112, #170): resume it, or start from scratch
       if (out?.kept) {
@@ -122,6 +125,8 @@
         starting = true;
         out = await api.startRun({ ...payload, confirmed: true });
       }
+      PasteImage.clear($d('#duo-prompt'));
+      PasteImage.clear($d('#duo-goal'));
       bindLive(out.runId);
     } catch (e) {
       starting = false;
@@ -705,8 +710,10 @@
       const b = e.target.closest('[data-approval]');
       if (b && chat.live) {
         const v = b.dataset.choice;
-        const text = b.closest('.duo-ask')?.querySelector('textarea')?.value || '';
-        api.resolveApproval(b.dataset.approval, v === 'true' ? true : v === 'false' ? false : v, text, chat.runId, b.dataset.intent || null);
+        const field = b.closest('.duo-ask')?.querySelector('textarea');
+        const text = field?.value || '';
+        // images pasted into the feedback (#130) go with it
+        PasteImage.collect(field).then((images) => api.resolveApproval(b.dataset.approval, v === 'true' ? true : v === 'false' ? false : v, text, chat.runId, b.dataset.intent || null, ...(images.length ? [images] : [])));
       }
     });
     api.onEvent(onEvent);

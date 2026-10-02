@@ -79,6 +79,7 @@ const service = createService({
 });
 service.setWorkspace(ws);
 service.cleanupWorktrees().catch((e) => console.error('worktree cleanup:', e.message));
+service.clearPastedImages();
 
 const token = process.env.MULTIAGENT_SERVER_TOKEN || crypto.randomBytes(24).toString('base64url');
 const server = createServer({ service, auth, token });

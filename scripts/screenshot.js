@@ -39,6 +39,12 @@
 //                      the daily budget reached); the banner shows on every --mode, the box on roadmap
 //   --click <css>      clicks this element once the view is open (repeatable, in order)
 //   --context <css>    then right-clicks this element (repeatable): e.g. an artifact's copy menu
+//   --paste <css>      then pastes a demo screenshot into this prompt field (repeatable, #130): the
+//                      chip row under it, saved in the scratch workspace like a real Ctrl+V; e.g. the
+//                      Start drawer on issue-tracker: --view dashboard --workflow issue-tracker.yaml
+//                      --click "#btn-quick-start" --paste "#in-request" --paste "#in-request"
+//   --paste-big <css>  the same with a 12 MB image: the red "Image too large" chip
+//                      (--workflow on a view other than run: the workflow the Start drawer opens on)
 //   --theme <t>        dark | light | system: the theme Electron reports (prefers-color-scheme)
 //   --size <WxH>       window content size (default 1400x900)
 //   --ref <git ref>    captures the app as it is at this ref (e.g. main, for the "original" shots)
@@ -88,7 +94,7 @@ const KEEP_AWAKE = ['off', 'idle', 'active', 'error'];
 const LIVE_STATES = ['off', 'on', 'refilling', 'empty', 'budget'];
 
 function parseArgs(argv) {
-  const a = { view: 'dashboard', tab: null, mode: null, run: 'mock', workflow: 'software-development.yaml', clicks: [], contexts: [], inputs: {}, stopAt: null, keepAwake: null, theme: null, size: [1400, 900], ref: null, out: null, name: null, side: null, caption: null, wait: null, timeout: 90000, demoShots: true };
+  const a = { view: 'dashboard', tab: null, mode: null, run: 'mock', workflow: 'software-development.yaml', clicks: [], contexts: [], pastes: [], inputs: {}, stopAt: null, keepAwake: null, theme: null, size: [1400, 900], ref: null, out: null, name: null, side: null, caption: null, wait: null, timeout: 90000, demoShots: true };
   for (let i = 0; i < argv.length; i++) {
     const k = argv[i];
     const next = () => { const v = argv[++i]; if (v === undefined) throw new Error(`${k} needs a value`); return v; };
@@ -97,9 +103,11 @@ function parseArgs(argv) {
     else if (k === '--tab') a.tab = next();
     else if (k === '--mode') a.mode = next();
     else if (k === '--run') a.run = next();
-    else if (k === '--workflow') a.workflow = next();
+    else if (k === '--workflow') { a.workflow = next(); a.workflowGiven = true; }
     else if (k === '--click') a.clicks.push(next());
     else if (k === '--context') a.contexts.push(next());
+    else if (k === '--paste') a.pastes.push({ sel: next(), big: false });
+    else if (k === '--paste-big') a.pastes.push({ sel: next(), big: true });
     else if (k === '--stop-at') a.stopAt = next();
     else if (k === '--keep-awake') a.keepAwake = next();
     else if (k === '--missing-clis') a.missingClis = true;
@@ -950,8 +958,26 @@ function main() {
       el.scrollIntoView({ block: 'center' });
       const r = el.getBoundingClientRect();
       el.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 }));`);
+    // a prompt field gets a demo screenshot through a real paste event (#130): the chip, the save
+    // through clipboard:saveImage; `big`: 12 MB, refused before anything is saved
+    const paste = ({ sel, big }) => js(`
+      const sel = ${JSON.stringify(sel)};
+      for (let i = 0; i < 100 && !document.querySelector(sel); i++) await new Promise((r) => setTimeout(r, 100));
+      const el = document.querySelector(sel);
+      if (!el) throw new Error('nothing matches ' + sel);
+      const n = (el._paste?.seq || 0) + 1;
+      const c = document.createElement('canvas'); c.width = 640; c.height = 400;
+      const g = c.getContext('2d'); g.fillStyle = '#1f2937'; g.fillRect(0, 0, 640, 400);
+      g.fillStyle = n % 2 ? '#7c9cff' : '#34d399'; g.fillRect(30, 30, 360, 40); g.fillStyle = '#f87171'; g.fillRect(30, 100, 580, 260);
+      const png = await new Promise((r) => c.toBlob(r, 'image/png'));
+      const file = new File(${big ? '[new Uint8Array(12 * 1024 * 1024)]' : '[png]'}, 'image.png', { type: 'image/png' });
+      if (!el.value) { el.value = 'The gate card hides its buttons when the window is narrow (see the screenshots).'; el.dispatchEvent(new Event('input', { bubbles: true })); }
+      const dt = new DataTransfer(); dt.items.add(file);
+      el.focus();
+      el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));`);
     await pause(1500); // the app's first load (account, settings, workflows)
     const v = args.view;
+    if (args.workflowGiven && v !== 'run') await js(`await api.setSettings({ lastWorkflow: ${JSON.stringify(args.workflow)} });`);
     if (v === 'project') await js(`openProjectView(${JSON.stringify(project.id)})`);
     else if (v === 'run-chat') {
       if (!run) throw new Error('no run to show');
@@ -1038,6 +1064,7 @@ function main() {
     if (v === 'artifacts') await js(`const c = document.querySelector('#art-show-sim'); if (c && !c.checked) c.click();`);
     for (const sel of args.clicks) { await click(sel); await pause(500); }
     for (const sel of args.contexts) { await context(sel); await pause(500); }
+    for (const p of args.pastes) { await paste(p); await pause(500); }
     if (v !== 'run') await pause(args.wait);
 
     const out = path.resolve(args.out || path.join(repo, 'runs', 'screenshots'));

@@ -50,8 +50,11 @@ async function analyzeRun() {
   Object.assign(sup, { loading: true, error: null, recMsgs: {} });
   renderSupervisor();
   try {
-    const res = await api.askSupervisor(runId, sup.question.trim() || undefined);
+    // images pasted into the question (#130) go with it
+    const images = await PasteImage.collect($('#sup-question'));
+    const res = await api.askSupervisor(runId, sup.question.trim() || undefined, ...(images.length ? [images] : []));
     if (sup.runId !== runId) return;
+    if (images.length) PasteImage.clear($('#sup-question'));
     sup.result = res;
   } catch (e) {
     if (sup.runId !== runId) return;
@@ -229,7 +232,9 @@ async function runRecommendation(i) {
   if (btn) btn.disabled = true;
   sup.recMsgs[i] = { text: 'Starting…', error: false };
   try {
-    const { runId } = await api.resumeRun(sup.runId, step, instruction || undefined);
+    // images pasted into the instruction (#130), for the first resumed step
+    const images = r.action === 'resume' ? await PasteImage.collect($(`#rec-${i}-ins`)) : [];
+    const { runId } = await api.resumeRun(sup.runId, step, instruction || undefined, ...(images.length ? [undefined, undefined, images] : []));
     sup.recMsgs = {};
     closeSupervisor();
     showRun(runId, { running: true });

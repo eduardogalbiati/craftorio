@@ -402,6 +402,7 @@ app.whenReady().then(async () => {
   restrictPermissions(session.defaultSession);
   createWindow();
   service.cleanupWorktrees().catch((e) => console.error('worktree cleanup:', e));
+  service.clearPastedImages();
   // the trial can end while the app is open
   const checkAccount = () => auth.refresh().catch((e) => console.error('account:', e.message));
   checkAccount();

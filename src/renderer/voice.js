@@ -262,6 +262,7 @@
     });
   }
 
-  root.voice = { ...helpers, attach, stop };
+  // place: paste-image.js (#130) re-places the button when its chip row changes the field's box
+  root.voice = { ...helpers, attach, place, stop };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
 })(typeof window !== 'undefined' ? window : globalThis);

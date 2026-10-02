@@ -679,5 +679,6 @@ module.exports = {
   resolveCommand,
   runTurn,
   sleep,
+  sniffImage,
   storeAttachments,
 };

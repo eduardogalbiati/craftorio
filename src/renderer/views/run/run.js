@@ -52,8 +52,13 @@ function onRunGateClick(e) {
   if (b.dataset.needsText && !text?.value.trim()) { showToast('Write your request first', `"${b.textContent}" sends the text to the agent.`); text?.focus(); return; }
   const buttons = card.querySelectorAll('button');
   buttons.forEach((x) => (x.disabled = true));
-  // intent: "Accept and save to issue #n" (#125)
-  Promise.resolve(api.resolveApproval(card.dataset.approval, answer, text?.value || '', card.dataset.run, ...(b.dataset.intent ? [b.dataset.intent] : [])))
+  // intent: "Accept and save to issue #n" (#125); images pasted into the feedback (#130)
+  PasteImage.settle(text)
+    .then(() => {
+      const images = PasteImage.attachments(text);
+      const extra = images.length ? [b.dataset.intent || null, images] : b.dataset.intent ? [b.dataset.intent] : [];
+      return api.resolveApproval(card.dataset.approval, answer, text?.value || '', card.dataset.run, ...extra);
+    })
     .then((ok) => { if (ok === false) { buttons.forEach((x) => (x.disabled = false)); showToast('The gate did not accept the answer', 'It needs a text, or it was already answered.'); } })
     .catch((err) => { buttons.forEach((x) => (x.disabled = false)); showToast('Could not answer the gate', errMsg(err)); });
 }
@@ -127,6 +132,7 @@ function renderRunSummary() {
     ${(r.issueSaves || []).map((s) => `<div class="small" title="The accepted document was saved to the issue (Save to issue, Write & Review)">Saved to issue: <a href="${esc(s.commentUrl || s.url)}" target="_blank" rel="noopener">#${esc(s.number)}</a> · ${s.mode === 'comment' ? 'as a comment' : 'description replaced'} · ${esc(new Date(s.at).toLocaleString('en-US'))}</div>`).join('')}
     ${r.gateWaitMs ? `<div class="small" title="Time the run waited for your answers at its human gates: no agent works (or costs) meanwhile">Waiting for you at gates: <b>${esc(fmtDur(r.gateWaitMs))}</b></div>` : ''}
     <dl class="kv run-inputs">${inputs.map(([k, v]) => `<dt title="${esc(k)}">${esc(k)}</dt>${inputValueCell(v)}`).join('')}</dl>
+    ${inputImagesHtml()}
     <div class="row">
       <button class="btn sm ghost sup-btn" id="btn-run-sup" title="Ask the AI supervisor to explain this run and suggest how to continue"><span class="sup-mark">◆</span> Ask the supervisor</button>
       ${r.status === 'running' ? `<button class="btn sm ghost sup-btn" id="btn-run-watch" title="${WATCH_TITLE}"><span class="sup-mark">◆</span> Watch</button>` : ''}
@@ -139,6 +145,7 @@ function renderRunSummary() {
   if (box._html === html || box.querySelector('.run-title-input') === document.activeElement) return;
   box._html = html;
   box.innerHTML = html;
+  mountInputImages(box);
   $('#btn-run-sup').onclick = () => openSupervisorForCurrent();
   if ($('#btn-run-watch')) $('#btn-run-watch').onclick = () => openSupervisorForCurrent({ watch: true });
   if ($('#btn-run-resume')) $('#btn-run-resume').onclick = () => openResumeDialog(r.id);
@@ -146,6 +153,28 @@ function renderRunSummary() {
   if ($('#btn-run-save-issue')) {
     $('#btn-run-save-issue').onclick = () => window.openDuoSaveToIssue({ runId: r.id, issue: saveIssue, mock: !!r.mock, docSkill: r.inputs?.document_skill || '' });
   }
+}
+
+// The images attached to the run's inputs (#129, pasted in the Start drawer #130): read-only
+// thumbnails under the inputs (no remove button), read from the run folder (artifacts:read) and
+// opened in the image viewer.
+function inputImagesHtml() {
+  const recorded = selectedView().events?.find((e) => e.type === 'workflow.started')?.attachments || {};
+  const files = Object.entries(recorded).flatMap(([input, list]) => (list || []).map((f) => ({ ...f, input })));
+  if (!files.length) return '';
+  return `<div class="ar-chips paste-chips run-input-images">${files.map((f) => `<span class="ar-chip paste-chip" title="${esc(`${f.input}: ${f.name}`)}">`
+    + `<img class="paste-thumb" ${ImageViewer.THUMB} alt="${esc(f.name)}" data-run-image="${esc(f.path)}" /><span>${esc(f.name)}</span><small>${esc(f.input)}</small></span>`).join('')}</div>`;
+}
+function mountInputImages(box) {
+  const imgs = [...box.querySelectorAll('[data-run-image]')];
+  if (!imgs.length) return;
+  imgs.forEach(async (img) => {
+    try { const src = (await api.readArtifact(img.dataset.runImage))?.image; if (src) img.src = src; } catch { /* deleted since */ }
+  });
+  const open = (img) => ImageViewer.open({ title: 'Input images', images: imgs.map((i) => ({ file: i.dataset.runImage, src: i.getAttribute('src') || undefined, label: i.alt })), index: imgs.indexOf(img) });
+  const row = box.querySelector('.run-input-images');
+  row.onclick = (e) => { const img = e.target.closest('[data-run-image]'); if (img) open(img); };
+  row.onkeydown = (e) => { const img = e.target.closest('[data-run-image]'); if (img && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); open(img); } };
 }
 
 // A run input in the Details panel: one line cut with an ellipsis (paths keep their end), the full

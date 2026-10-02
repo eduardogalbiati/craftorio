@@ -62,7 +62,8 @@ module.exports = (ctx) => [
   },
   // resume a run from a step (a new run, no supervisor call) and what the dialog offers;
   // confirmGate: the decided gate the owner approves again in the dialog (#112)
-  { channel: 'runs:resume', method: 'resumeRun', params: ['runId', 'step', 'instruction', 'mock', 'confirmGate'], fn: (opts) => ctx.resumeRun(opts) },
+  // images: pictures pasted into the instruction (#130), given to the first resumed agent step
+  { channel: 'runs:resume', method: 'resumeRun', params: ['runId', 'step', 'instruction', 'mock', 'confirmGate', 'images'], fn: (opts) => ctx.resumeRun(opts) },
   { channel: 'runs:resumeOptions', method: 'resumeOptions', params: ['runId'], fn: (opts) => ctx.resumeOptions(opts) },
   // the PR a run opened, with its state read with gh/glab (cached), and the owner's title of a run (#84)
   { channel: 'runs:prState', method: 'runPrState', params: ['runId'], fn: (opts) => ctx.runPrState(opts) },

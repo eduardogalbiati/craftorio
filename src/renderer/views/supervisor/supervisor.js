@@ -54,14 +54,16 @@
     render();
   }
 
-  async function ask(question, screen) {
+  // field: the input the question was typed in, whose pasted images go with it (#130)
+  async function ask(question, screen, field = null) {
     const q = String(question || '').trim();
     if (!q || sv.busy) return;
     Object.assign(sv, { busy: true, pending: q, error: null });
-    document.querySelectorAll('.svc-input').forEach((el) => (el.value = ''));
+    const attachments = await PasteImage.collect(field);
+    document.querySelectorAll('.svc-input').forEach((el) => { el.value = ''; PasteImage.clear(el); });
     render();
     try {
-      const out = await api.askSupervisorChat({ question: q, screen, mock: devMode() });
+      const out = await api.askSupervisorChat({ question: q, screen, mock: devMode(), ...(attachments.length ? { attachments } : {}) });
       sv.messages = out.messages;
     } catch (e) {
       sv.error = errMsg(e);
@@ -211,8 +213,8 @@
       document.querySelectorAll('[data-svc-form]').forEach((form) => {
         const where = form.dataset.svcForm;
         const input = form.querySelector('textarea');
-        form.onsubmit = (e) => { e.preventDefault(); ask(input.value, screenFor(where)); };
-        input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ask(input.value, screenFor(where)); } });
+        form.onsubmit = (e) => { e.preventDefault(); ask(input.value, screenFor(where), input); };
+        input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ask(input.value, screenFor(where), input); } });
       });
       document.addEventListener('click', (e) => {
         const chip = e.target.closest('[data-svc-q]');

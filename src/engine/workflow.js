@@ -655,6 +655,8 @@ class WorkflowRun extends EventEmitter {
         if (this.ctx.steps[id] && id !== resume.fromStep) Object.assign(this.ctx.steps[id], { output: v.output ?? null, visits: v.visits || 1 });
       }
       if (resume.instruction) this.ctx.steps[resume.fromStep].supervisorNote = resume.instruction;
+      // images pasted into the instruction (#130): checked here, copied at start, given to the first agent step
+      this.resumeImages = checkAttachments(resume.images || []);
     }
     this.recent = []; // last events, for the supervisor's timeline
     this.trail = new StepTrail(); // step visits with their agents, for the progress views (summary.progress)
@@ -920,6 +922,7 @@ class WorkflowRun extends EventEmitter {
     this.startedAt = Date.now();
     this.status = 'running';
     this.storeInputAttachments();
+    if (this.resumeImages?.length) this.gateImages = this.copyAttachments(this.resumeImages, `${this.resume.fromStep}-instruction`);
     this.emitEvent('workflow.started', {
       workflow: this.wf.metadata?.name, version: this.wf.metadata?.version, project_id: this.projectId,
       issues: this.issues || undefined,

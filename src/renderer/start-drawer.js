@@ -154,6 +154,19 @@ function readInputs() {
   return { ...WorkflowInputs.read($('#inputs-form'), { all: true }), ...WorkflowInputs.read($('#adv-form'), { all: true }) };
 }
 
+// The images pasted into the inputs' text fields (#130, paste-image.js), as run:start takes them:
+// { <input>: [{ path, name }] }, or null when nothing was pasted (the request stays as before).
+const pasteFields = () => [...$('#drawer').querySelectorAll('textarea[id^="in-"]')];
+async function pastedImages() {
+  const out = {};
+  for (const ta of pasteFields()) {
+    await PasteImage.settle(ta);
+    const list = PasteImage.attachments(ta);
+    if (list.length) out[ta.id.slice('in-'.length)] = list;
+  }
+  return Object.keys(out).length ? out : null;
+}
+
 // What the app knows about the chosen project (its detected language, its local branches) fills
 // the inputs the owner has not changed; the drawer's remembered values are per workflow, not per
 // project, so the project's own language wins over them.
@@ -183,12 +196,14 @@ async function startRun({ keepOpen = false } = {}) {
   state.starting = true;
   setStartDisabled(true);
   try {
-    const { runId } = await api.startRun({ file: wf.file, inputs, mock: wantsSimulation($('#mock-toggle')), then: drawerChain().value() });
+    const attachments = await pastedImages();
+    const { runId } = await api.startRun({ file: wf.file, inputs, mock: wantsSimulation($('#mock-toggle')), then: drawerChain().value(), ...(attachments ? { attachments } : {}) });
     state.settings = await api.setSettings({ lastWorkflow: wf.file, lastProject: project?.id || null });
     const view = state.runs.get(runId);
     if (view?.run && project) view.run.project = project.name;
     const main = mainField();
     if (main) main.value = state.wf?.inputs?.[state.mainKey]?.default ?? '';
+    pasteFields().forEach(PasteImage.clear);
     if (!keepOpen) {
       closeDrawer();
       // the run started here is the one shown

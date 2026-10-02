@@ -138,7 +138,10 @@
     $a('#arena-run').disabled = true;
     try {
       starting = true; // the run's first events may arrive before startRun resolves
-      const { runId } = await api.startRun({ file: FILE, inputs, mock, mockSequences: mock ? SCENARIOS[scenario]?.seq : null });
+      // images pasted into the request (#130): the run's `attachments`, not the text input of that name
+      const images = await PasteImage.collect($a('#arena-task'));
+      const { runId } = await api.startRun({ file: FILE, inputs, mock, mockSequences: mock ? SCENARIOS[scenario]?.seq : null, ...(images.length ? { attachments: { task: images } } : {}) });
+      PasteImage.clear($a('#arena-task'));
       bindLive(runId);
     } catch (e) {
       starting = false;
@@ -806,8 +809,10 @@
       const b = e.target.closest('[data-approval]');
       if (b && chat.live) {
         const v = b.dataset.choice;
-        const text = b.closest('.duo-ask')?.querySelector('textarea')?.value || '';
-        api.resolveApproval(b.dataset.approval, v === 'true' ? true : v === 'false' ? false : v, text, chat.runId);
+        const field = b.closest('.duo-ask')?.querySelector('textarea');
+        const text = field?.value || '';
+        // images pasted into the feedback (#130) go with it
+        PasteImage.collect(field).then((images) => api.resolveApproval(b.dataset.approval, v === 'true' ? true : v === 'false' ? false : v, text, chat.runId, ...(images.length ? [null, images] : [])));
       }
     });
     api.onEvent(onEvent);

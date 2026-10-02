@@ -205,6 +205,18 @@ Artifacts links (`openArtifactsAt`) and other absolute paths into copy-on-click 
 `--view oracle` (Projects with the drawer open) and `--oracle <state>` on any view (see
 `scripts/screenshot.js --help`).
 
+## Pasted images in the prompt fields (#130)
+
+`paste-image.js` (`window.PasteImage`, loaded after `voice.js`) shares voice.js's `VOICE_FIELDS`
+and its scan/attach pattern (a MutationObserver), so a new AI prompt field gets the mic and image
+paste from one selector. One document-level `paste` listener takes the clipboard's images (none
+when it holds text) and saves each through `clipboard:saveImage` (a service channel, so the browser
+UI works too; `src/pasted-images.js` writes `<workspace>/attachments/pending/`). Fields with their
+own image paste (`#po-question`, `.oracle-input`) are skipped. A screen that submits a field calls
+`await PasteImage.collect(field)` (`[{ path, name }]`, empty when nothing was pasted: send the
+request unchanged) and `PasteImage.clear(field)` with the text. Chips are Arena's `.ar-chip` plus
+`.paste-chip` (`paste-image.css`). Screenshots: `--paste <css>` / `--paste-big <css>`.
+
 ## UI conventions
 
 The general rules (and the visual review of the screenshots) are in the `ui-conventions` skill,

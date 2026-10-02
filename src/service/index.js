@@ -32,6 +32,7 @@
 const fs = require('fs');
 const path = require('path');
 const { EventEmitter } = require('events');
+const pastedImages = require('../pasted-images');
 const projects = require('../projects');
 const { createCodeVersion } = require('../code-version');
 const { BUNDLED_SKILLS_DIR, BUNDLED_WORKFLOWS_DIR } = require('./common');
@@ -95,6 +96,8 @@ function createService({ host }) {
     terminalSpec: ctx.terminalSpec,
     // run worktrees left behind (call at startup; the worktrees of runs in progress are never touched)
     cleanupWorktrees: ctx.cleanupRunWorktrees,
+    // images pasted into prompt fields and never submitted (#130; call at startup)
+    clearPastedImages: () => { if (ctx.ws?.attachments) pastedImages.clearPending(pastedImages.pendingDir(ctx.ws)); },
     // the runs the app had in progress when it last closed, as notifications (call at startup)
     notifyInterruptedRun: ctx.notifyInterruptedRun,
     // before a restart (the code changed on disk, #83), see src/service/areas/runs.js

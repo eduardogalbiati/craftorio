@@ -1103,6 +1103,23 @@ The app shows in Settings whether it found each command on the PATH.
 - The microphone is allowed only for the app's own page (audio only); every other web permission
   is denied. In the browser UI (`npm run serve`) the browser asks, and only on `localhost` or HTTPS.
 
+### Paste images
+
+- **Ctrl+V with an image** (a `Win+Shift+S` screenshot, an image copied in a browser) in the same
+  fields as the mic button, above all the Start drawer's input, adds it under the field as a chip:
+  a thumbnail (click it to enlarge), `image-1.png · 240 KB` and × to remove it. A clipboard that
+  holds text pastes the text as before, even when it also holds an image (a copy from Office).
+- PNG, JPEG, GIF or WebP, at most 10 MB each and 10 per field; a refused image shows a red chip
+  with the reason and the field keeps its text.
+- Pasting sends nothing. The images go with the field when you send it: starting a workflow (the
+  steps whose prompt uses that input see them), answering a gate (the next agent step), asking the
+  Supervisor, resuming a run (the first resumed step). The run keeps a copy in
+  `runs/<id>/attachments/`, shown as thumbnails under the run's inputs.
+- Until then they wait in `<workspace>/attachments/pending/`; a removed chip deletes its file and
+  what was never sent is cleared at the next start. Nothing is uploaded except through the provider
+  CLI of the step (see `docs/agents/capabilities.md` for which CLIs open images). The browser UI
+  pastes the same way.
+
 ## Workspace
 
 Everything the app produces lives in a local workspace folder:
@@ -1120,6 +1137,7 @@ Everything the app produces lives in a local workspace folder:
   workflows/ workflow definitions (one .yaml per workflow)
   settings.json  app preferences, budgets and prices
   index.db   SQLite index next to the files: runs cache, Backlog queues, pending gates, notifications
+  attachments/pending/  images pasted into prompt fields, until sent (cleared at the next start)
   .lock      the app that has the workspace open (pid, host, heartbeat)
 ```
 <!-- /generated:workspace-tree -->

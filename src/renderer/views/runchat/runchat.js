@@ -303,7 +303,8 @@
       const text = b.closest('.duo-ask')?.querySelector('textarea')?.value || '';
       if (b.dataset.needsText && !text.trim()) { showToast('Write your request first', `"${b.textContent}" sends the text to the agent.`); b.closest('.duo-ask')?.querySelector('textarea')?.focus(); return; }
       b.closest('.duo-ask').querySelectorAll('button').forEach((x) => { x.disabled = true; });
-      api.resolveApproval(b.dataset.approval, v === 'true' ? true : v === 'false' ? false : v, text, chat.runId, b.dataset.intent || null);
+      // images pasted into the feedback (#130) go with it
+      PasteImage.collect(b.closest('.duo-ask').querySelector('textarea')).then((images) => api.resolveApproval(b.dataset.approval, v === 'true' ? true : v === 'false' ? false : v, text, chat.runId, b.dataset.intent || null, ...(images.length ? [images] : [])));
     });
     $c('#rc-stop').onclick = () => api.stopRun(chat.runId);
     $c('#rc-logs').onclick = () => chat.model.run.runDir && api.openPath(chat.model.run.runDir);

@@ -97,7 +97,9 @@ async function openResumeDialog(runId) {
     msg.textContent = 'Starting…';
     try {
       const confirmGate = gateBox()?.checked ? gateBox().dataset.gate : undefined;
-      const { runId } = await api.resumeRun(o.runId, sel.value, $('#resume-ins').value.trim() || undefined, o.mock || wantsSimulation(box), confirmGate);
+      // images pasted into the instruction (#130), for the first resumed step
+      const images = await PasteImage.collect($('#resume-ins'));
+      const { runId } = await api.resumeRun(o.runId, sel.value, $('#resume-ins').value.trim() || undefined, o.mock || wantsSimulation(box), confirmGate, ...(images.length ? [images] : []));
       closeModal('#resume-modal');
       showRun(runId, { running: true });
     } catch (e) {

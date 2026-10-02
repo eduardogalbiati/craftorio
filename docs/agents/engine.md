@@ -120,6 +120,9 @@ same features for users; this is the implementer's summary.
   `approval:resolve` also takes `images` (#129): copied into `<run_dir>/attachments/<gate>-feedback/`,
   recorded in `approval.resolved.attachments`, and given to the next agent step only (all agents of
   a fan-out). They never decide anything: the answer stays the owner's choice.
+  `runs:resume` takes `images` too (#130, pasted into the instruction): `resume.images`, checked in
+  the constructor, copied into `<run_dir>/attachments/<step>-instruction/` at start and given to
+  the first agent step like gate feedback images.
 - A gate choice with `feedback_required: true` (needs the step's `feedback`) is refused without a
   text: `resolveApproval` returns false and the gate stays open. `local_preview: true` on a gate
   offers Run locally (see worktrees.md); `diff_base: <ref>` (a template) offers Show the diff

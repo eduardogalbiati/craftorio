@@ -28,7 +28,8 @@ const TYPES = {
   '.json': 'application/json', '.map': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.woff2': 'font/woff2',
 };
 const COOKIE = 'multiagent_token';
-const MAX_BODY = 5 * 1024 * 1024;
+// a pasted image of up to 10 MB travels as base64 (clipboard:saveImage, #130)
+const MAX_BODY = 15 * 1024 * 1024;
 const PUSHED = ['notifications:changed', 'oracle:changed', 'run:event', 'run:meta', 'supervisor:watch', 'term:data', 'term:exit'];
 
 class HttpError extends Error {
