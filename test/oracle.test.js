@@ -384,7 +384,7 @@ test('createOracle: without mock, outside a mocked run, refuseReal is consulted 
 
 // ---- actions and the Night watch: one run each, never twice (#123) ------------------------------
 
-function makeActingOracle(t, { perform } = {}) {
+function makeActingOracle(t, { perform, restore } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'oracle-act-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   return oracle.createOracle({
@@ -398,6 +398,7 @@ function makeActingOracle(t, { perform } = {}) {
     agent: () => ({ model: 'claude-opus-5-5', effort: 'high' }),
     settings: () => ({}),
     perform,
+    restore,
   });
 }
 
@@ -471,6 +472,38 @@ test('dismiss: a card being performed cannot be dismissed', async (t) => {
   await acting;
 });
 
+// #187: a renderer call built with the manifest's old positional params reached act/dismiss/undo as
+// an object ({ actionId, mock }), String()'d into "[object Object]" and failing with the misleading
+// "This action is not in the conversation." The id is validated instead: a non-string throws a clear
+// error, and a missing id (null/undefined/'') still gets the original message (never a caller bug
+// and "not in the conversation" at once).
+test('act/dismiss/undo: a non-string id (an object, an array, a number) throws "Expected an action id", not "not in the conversation"', async (t) => {
+  const o = makeActingOracle(t, {
+    perform: async () => ({ text: 'done', backup: { undo: { type: 'file' } } }),
+    restore: async () => ({ text: 'restored' }),
+  });
+  const { id } = await o.propose({ kind: 'dispatch.restart', params: {}, requestedBy: 'owner' });
+
+  for (const [bad, got] of [[{ actionId: id }, 'an object'], [[id], 'an array'], [42, 'a number']]) {
+    await assert.rejects(() => o.act(bad), new RegExp(`Expected an action id, got ${got}\\.`));
+    assert.throws(() => o.dismiss(bad), new RegExp(`Expected an action id, got ${got}\\.`));
+    await assert.rejects(() => o.undo(bad), new RegExp(`Expected an action id, got ${got}\\.`));
+  }
+
+  // a missing id is still just "not in the conversation" / "cannot be undone": not a caller-bug message
+  await assert.rejects(() => o.act(undefined), /This action is not in the conversation\./);
+  assert.throws(() => o.dismiss(null), /This action is not in the conversation\./);
+  assert.throws(() => o.dismiss(''), /This action is not in the conversation\./);
+  await assert.rejects(() => o.undo(undefined), /This action cannot be undone\./);
+
+  // the real id (a string) still works end-to-end: act performs it, undo puts its backup back
+  const acted = await o.act(id);
+  assert.equal(acted.ok, true);
+  assert.equal((await o.history()).find((m) => m.action?.id === id).action.status, 'done');
+  await o.undo(id);
+  assert.equal((await o.history()).find((m) => m.action?.id === id).action.status, 'undone');
+});
+
 // ---- one process answers (#112, open question default) -------------------------------------------
 
 test('a question from another live app process is refused, naming its pid and host', async (t) => {
@@ -480,4 +513,68 @@ test('a question from another live app process is refused, naming its pid and ho
     pid: 999999, host: 'another-machine', started_at: new Date().toISOString(), heartbeat_at: new Date().toISOString(),
   }));
   await assert.rejects(() => api['oracle:ask']({ question: 'Hi', mock: true }), /answers in another app process \(pid 999999 on another-machine/);
+});
+
+// ---- the renderer calls these channels with one object, through the real manifest (#187) --------
+// Before the fix, every oracle channel with input declared positional params (e.g.
+// params: ['actionId', 'mock']), so the client-side payload() builder (src/preload.js,
+// src/renderer/api-http.js), given the renderer's single object (api.oracleAct({ actionId, mock })),
+// wrapped it again into { actionId: { actionId, mock }, mock: undefined }: act() then saw an object,
+// String()'d into "[object Object]", and "This action is not in the conversation." `service.api`
+// alone (used elsewhere in this file) calls the channel's fn directly and never exercises that
+// wrapping; building window.api from the real manifest the way src/preload.js does (stubbing
+// 'electron' only) and dispatching into the real service is what actually re-creates the bug's path.
+function loadPreloadApi(manifest, dispatch) {
+  const electronPath = require.resolve('electron');
+  const preloadPath = require.resolve('../src/preload.js');
+  let exposed = null;
+  require.cache[electronPath] = {
+    id: electronPath, filename: electronPath, loaded: true,
+    exports: {
+      contextBridge: { exposeInMainWorld: (_name, api) => { exposed = api; } },
+      ipcRenderer: { sendSync: (channel) => (channel === 'api:manifest' ? manifest : undefined), invoke: (channel, arg) => dispatch(channel, arg) },
+    },
+  };
+  delete require.cache[preloadPath];
+  try { require(preloadPath); } finally { delete require.cache[preloadPath]; delete require.cache[electronPath]; }
+  return exposed;
+}
+
+test('manifest: every oracle:* channel that takes input declares a single object (params: "opts"), never positional params that would re-wrap the renderer\'s object literal (#187)', (t) => {
+  const { service } = makeService(t);
+  const oracleEntries = service.manifest.filter((e) => (e.channel || '').startsWith('oracle:') && e.params);
+  assert.ok(oracleEntries.length > 5, 'expected several oracle:* channels with params');
+  for (const e of oracleEntries) assert.equal(typeof e.params, 'string', `${e.channel} declares params ${JSON.stringify(e.params)}, expected a single 'opts'-style string`);
+});
+
+test('the renderer\'s oracleAct/oracleDismiss/oracleUndo/setOracleNightWatch/muteOracleRun calls reach the service correctly, through the real manifest + preload payload (#187)', async (t) => {
+  const { service } = makeService(t);
+  const dispatch = (channel, arg) => {
+    if (service.api[channel]) return service.api[channel](arg);
+    if (service.notifications[channel]) return service.notifications[channel](arg);
+    throw new Error(`no such channel: ${channel}`);
+  };
+  const api = loadPreloadApi(service.manifest, dispatch);
+  const propose = async (why) => (await api.oracleProposeAction({ kind: 'dispatch.restart', params: {}, why, requestedBy: 'owner' })).id;
+
+  // "Do it" (mock: true, the way the drawer calls it in developer mode): used to throw "not in the
+  // conversation" because the service received { actionId: { actionId, mock }, mock: undefined }.
+  const id1 = await propose('Do it, through the manifest');
+  const acted = await api.oracleAct({ actionId: id1, mock: true });
+  assert.equal(acted.ok, true);
+
+  // Dismiss
+  const id2 = await propose('Dismiss, through the manifest');
+  await api.oracleDismiss({ actionId: id2 });
+  const history = await api.oracleHistory();
+  assert.equal(history.find((m) => m.action?.id === id2).action.status, 'dismissed');
+
+  // Undo rejects a card that cannot be undone with the real error, not "not in the conversation"
+  await assert.rejects(() => api.oracleUndo({ actionId: id1 }), /This action cannot be undone\./);
+
+  // The Night watch switch and mute (#172, nightwatch.js): broken by the same positional-params bug
+  const nw = await api.setOracleNightWatch({ on: false });
+  assert.equal(nw.nightWatch.on, false);
+  const wake = await api.muteOracleRun({ runId: 'run-1', on: true });
+  assert.ok(wake.muted.includes('run-1'));
 });

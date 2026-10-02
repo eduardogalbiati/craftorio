@@ -192,3 +192,33 @@ test('refuses an unknown view without opening the app', { skip, timeout: 60000 }
   assert.equal(r.code, 2);
   assert.match(r.out, /Unknown view: nope/);
 });
+
+// #187 (E2E, @issue-187): the Oracle drawer's --oracle actions demo data (scripts/screenshot.js
+// demoOracleActions) has a proposed card 'c1' and a done+undoable card 'c3'; clicking their real
+// buttons drives the real preload.js + the real service, the way the owner does. The screenshot is
+// evidence for the gate reviewer; the assertion here is that the real app does not crash or hang on
+// the click (a regression that threw "not in the conversation" synchronously, before any await,
+// would still leave the renderer running, but a thrown promise rejection the renderer never awaits
+// can surface as an uncaught exception at the Electron process level, which the pass/fail here would
+// still have caught via `r.code`). The service-level test in test/oracle.test.js is what proves the
+// id reaches the service as a string, not an object.
+test('Oracle drawer: clicking "Do it" on a proposed card does not crash the app (#187, @issue-187)', { skip, timeout: 60000 }, async (t) => {
+  const out = tmp(t);
+  const r = await shoot(['--view', 'oracle', '--oracle', 'actions', '--click', '[data-oracle-act="c1"]', '--wait', '1500', '--out', out, '--name', '187-do-it'], 50000);
+  assert.equal(r.code, 0, r.out);
+  assert.ok(isPng(path.join(out, '187-do-it.png')));
+});
+
+test('Oracle drawer: clicking "Dismiss" on a proposed card does not crash the app (#187, @issue-187)', { skip, timeout: 60000 }, async (t) => {
+  const out = tmp(t);
+  const r = await shoot(['--view', 'oracle', '--oracle', 'actions', '--click', '[data-oracle-dismiss="c2"]', '--wait', '1500', '--out', out, '--name', '187-dismiss'], 50000);
+  assert.equal(r.code, 0, r.out);
+  assert.ok(isPng(path.join(out, '187-dismiss.png')));
+});
+
+test('Oracle drawer: clicking "Undo" on a done, undoable card (after confirming) does not crash the app (#187, @issue-187)', { skip, timeout: 60000 }, async (t) => {
+  const out = tmp(t);
+  const r = await shoot(['--view', 'oracle', '--oracle', 'actions', '--click', '[data-oracle-undo="c3"]', '--click', '#btn-confirm-yes', '--wait', '1500', '--out', out, '--name', '187-undo'], 50000);
+  assert.equal(r.code, 0, r.out);
+  assert.ok(isPng(path.join(out, '187-undo.png')));
+});
