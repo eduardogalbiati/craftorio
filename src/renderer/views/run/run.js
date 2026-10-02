@@ -30,7 +30,7 @@ function renderRunGates() {
       <textarea class="duo-ask-text run-gate-feedback" rows="3" placeholder="${esc(g.feedback.placeholder || '')}"></textarea>` : '';
     const message = `<pre class="run-gate-message">${esc(g.message || '')}</pre>`;
     const main = `<div class="run-gate-head"><b>Approval required</b><span class="muted small mono">${esc(`${v.run ? `${runLabel(v.run)} · ` : ''}step: ${g.step_id}`)}</span></div>
-      ${gateBriefHtml(g.run_id, g, message) || message}${gateToolsHtml(g)}${field}<div class="row run-gate-actions">${buttons}</div>`;
+      ${gateBriefHtml(g.run_id, g, message) || message}${gateToolsHtml(g)}${field}<div class="row gate-choices run-gate-actions">${buttons}</div>`;
     const side = gateSideHtml(g);
     return `<div class="run-gate${side ? ' run-gate-wide' : ''}" data-approval="${esc(g.approval_id)}" data-run="${esc(g.run_id)}">${side ? `<div class="run-gate-main">${main}</div>${side}` : main}</div>`;
   }).join('');

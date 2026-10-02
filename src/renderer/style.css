@@ -745,6 +745,10 @@ body.resizing-dock .term-body { pointer-events: none; }
   .run-gate-wide { grid-template-columns: minmax(0, 1fr); }
   .run-gate-side { border-left: none; padding-left: 0; border-top: 1px solid var(--border); padding-top: 8px; max-height: 36vh; }
 }
+/* a gate's choices (Run screen, run chat, Write & Review): side by side in their order, the primary
+   first, each on one line; they wrap to a second line only when the card is too narrow (#181) */
+.gate-choices { display: flex; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 8px; }
+.gate-choices .btn { white-space: nowrap; flex: none; }
 .run-gate-brief p { margin: 0 0 4px; }
 .gate-issues { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 2px; }
 .gate-issues li { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

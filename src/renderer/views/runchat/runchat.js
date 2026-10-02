@@ -106,7 +106,7 @@
     const brief = open ? window.gateBriefHtml?.(chat.runId, it, full) : '';
     const side = open && typeof gateSideHtml === 'function' ? gateSideHtml(it, chat.runId) : '';
     const main = `<div class="duo-meta"><b>Human gate</b>${stepTag(it.stepId)}<span class="time">${clock(it.ts)}</span></div>
-      ${brief || full}${tools}${field}<div class="row">${buttons}</div>${state}`;
+      ${brief || full}${tools}${field}<div class="row gate-choices">${buttons}</div>${state}`;
     return `<div class="rc-gate" data-item="${it.id}"><div class="duo-ask${side ? ' run-gate-wide' : ''}" data-gate="${esc(it.approvalId)}">
       ${side ? `<div class="run-gate-main">${main}</div>${side}` : main}</div></div>`;
   }

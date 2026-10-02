@@ -68,8 +68,12 @@
 .rc-sys.error span { color: var(--red); white-space: pre-wrap; }
 .rc-sys.supervisor span { color: var(--supervisor); }
 
-/* human gates */
-.rc-gate { align-self: center; width: min(720px, 92%); }
+/* human gates: the full width of the conversation (#181), the message kept at a readable width and
+   the extra room going to the right column (Changed files, From the developer, Run files) */
+.rc-gate { align-self: stretch; width: 100%; min-width: 0; }
+.rc-gate .duo-ask > .rc-body.md, .rc-gate .run-gate-main > .rc-body.md, .rc-gate .run-gate-brief { max-width: 760px; }
+.rc-gate .run-gate-wide { grid-template-columns: minmax(0, 760px) minmax(260px, 1fr); }
+@media (max-width: 1100px) { .rc-gate .run-gate-wide { grid-template-columns: minmax(0, 1fr); } }
 .rc-gate .duo-ask { background: var(--panel); border: 1px solid rgba(250, 204, 21, .45); border-radius: 14px; padding: 10px 14px; box-shadow: 0 0 0 3px rgba(250, 204, 21, .06); }
 .rc-gate .duo-meta b { color: var(--yellow); }
 .rc-gate .rc-body.md { max-height: 360px; margin-bottom: 8px; }
