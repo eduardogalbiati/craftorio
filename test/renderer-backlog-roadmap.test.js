@@ -22,10 +22,11 @@ const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'views
 const workflowInputsSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'workflow-inputs.js'), 'utf8');
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
-function loadRoadmap({ listWorkflows, confirmDialog, keptWorkDialog, roadmapItem, querySelector, devMode } = {}) {
+function loadRoadmap({ listWorkflows, confirmDialog, keptWorkDialog, roadmapItem, querySelector, devMode, setRoadmapLive } = {}) {
   const savedCalls = [];
   const startCalls = [];
   const roadmapItemCalls = [];
+  const liveCalls = [];
   const sandbox = {
     esc,
     state: {},
@@ -48,13 +49,17 @@ function loadRoadmap({ listWorkflows, confirmDialog, keptWorkDialog, roadmapItem
         roadmapItemCalls.push({ projectId, itemId, action, confirmed });
         return (roadmapItem || (() => ({ roadmap: { state: 'planned', stages: [] } })))(roadmapItemCalls.length, confirmed);
       },
+      setRoadmapLive: async (projectId, on) => {
+        liveCalls.push({ projectId, on });
+        return (setRoadmapLive || (() => ({ roadmap: { state: 'running', stages: [], live: on } })))(projectId, on);
+      },
     },
   };
   sandbox.window = sandbox;
   vm.createContext(sandbox);
   vm.runInContext(workflowInputsSrc, sandbox); // the real WorkflowInputs module (#116), not reimplemented
   vm.runInContext(src, sandbox);
-  return { BacklogRoadmap: sandbox.window.BacklogRoadmap, savedCalls, startCalls, roadmapItemCalls };
+  return { BacklogRoadmap: sandbox.window.BacklogRoadmap, savedCalls, startCalls, roadmapItemCalls, liveCalls };
 }
 
 const settle = () => new Promise((r) => setTimeout(r, 0));
@@ -715,4 +720,124 @@ test('a Product Owner proposal, then two of its items grouped by dropping one ch
   assert.equal(savedCalls.length, 1);
   assert.equal(savedCalls[0].stages[0].items.length, 1);
   assert.deepEqual(Array.from(savedCalls[0].stages[0].items[0].issues, (i) => i.number).sort(), [155, 156]);
+});
+
+// ---- Live roadmap (#164): the box under the last stage, and the top banner -----------------
+
+// A one-stage roadmap (so `r.stages.length` is truthy and the live box is drawn): `over` patches the roadmap.
+function liveData(over = {}) {
+  return { roadmap: { state: 'running', scope: null, stages: [{ id: 'st1', name: 'Stage 1', note: '', items: [{ id: 'it1', status: 'running', workflow: 'w.yaml', mock: false, issues: [{ number: 1, title: '#1', url: 'u' }] }] }], ...over }, issues: [] };
+}
+
+test('liveBox: off shows a plain switch, no LIVE badge, and says the roadmap ends with its last stage while it runs', () => {
+  const { BacklogRoadmap } = loadRoadmap();
+  const html = BacklogRoadmap.html(liveData({ live: false }), () => {});
+  assert.match(html, /<div class="rm-live" role="group" aria-label="Live roadmap">/); // no " on" class
+  assert.doesNotMatch(html, /rm-live-badge/);
+  assert.doesNotMatch(html, /data-rm-live[^>]*checked/);
+  assert.match(html, /rm-live-state"[^>]*>Off: the roadmap ends with its last stage\.</);
+});
+
+test('liveBox: off on a roadmap that is not running says turning it on starts the roadmap first', () => {
+  const { BacklogRoadmap } = loadRoadmap();
+  const html = BacklogRoadmap.html(liveData({ live: false, state: 'planned' }), () => {});
+  assert.match(html, /rm-live-state"[^>]*>Off\. Turning it on starts the roadmap first\.</);
+});
+
+test('liveBox: on with no refill yet shows the LIVE badge, a checked switch, and "on since" with who turned it on', () => {
+  const { BacklogRoadmap } = loadRoadmap();
+  const html = BacklogRoadmap.html(liveData({ live: true, liveSince: '2026-10-02T03:12:00.000Z', liveBy: 'owner' }), () => {});
+  assert.match(html, /<div class="rm-live on" role="group" aria-label="Live roadmap">/);
+  assert.match(html, /<b>Live roadmap<\/b> <span class="badge rm-live-badge">LIVE<\/span>/);
+  assert.match(html, /data-rm-live[^>]*checked/);
+  assert.match(html, /no refill yet: it comes when the last stage ends · on since \d\d:12 by owner</);
+});
+
+test('liveBox: "refilling" and "added" outcomes, in muted tone', () => {
+  const { BacklogRoadmap } = loadRoadmap();
+  const refilling = BacklogRoadmap.html(liveData({ live: true, liveRefill: { status: 'refilling' } }), () => {});
+  assert.match(refilling, /rm-live-state"[^>]*>refilling now: the Product Owner is picking the next issues…/);
+
+  const added = BacklogRoadmap.html(liveData({ live: true, liveRefill: { status: 'added', at: '2026-10-02T03:12:00.000Z', added: 2 } }), () => {});
+  assert.match(added, /rm-live-state"[^>]*>last refill \d\d:12 \(\+2 stages\)/);
+});
+
+test('liveBox: "budget" (warn-text) and "failed" (error) outcomes get their tone class', () => {
+  const { BacklogRoadmap } = loadRoadmap();
+  const budget = BacklogRoadmap.html(liveData({ live: true, liveRefill: { status: 'budget', message: 'Live roadmap: no more refills today.' } }), () => {});
+  assert.match(budget, /class="small warn-text rm-live-state" title="Live roadmap: no more refills today\."[^>]*>daily budget reached: no more refills</);
+
+  const failed = BacklogRoadmap.html(liveData({ live: true, liveRefill: { status: 'failed', at: '2026-10-02T03:12:00.000Z', message: 'boom' } }), () => {});
+  assert.match(failed, /class="small error rm-live-state" title="boom"[^>]*>the last refill failed \(\d\d:12\)</);
+});
+
+test('liveBox: "empty" (nothing left) shows its message with the "Live roadmap: " prefix stripped', () => {
+  const { BacklogRoadmap } = loadRoadmap();
+  const html = BacklogRoadmap.html(liveData({ live: true, liveRefill: { status: 'empty', message: 'Live roadmap: nothing left under complexity 2. Start tries again.' } }), () => {});
+  assert.match(html, /rm-live-state"[^>]*>nothing left under complexity 2\. Start tries again\.</);
+});
+
+test('liveBanner: not live renders nothing', () => {
+  const { BacklogRoadmap } = loadRoadmap();
+  assert.equal(BacklogRoadmap.liveBanner({ live: false, state: 'running' }), '');
+  assert.equal(BacklogRoadmap.liveBanner(null), '');
+});
+
+test('liveBanner: live and running shows the last refill, a non-idle dot, and a Turn off button; no "roadmap …" suffix', () => {
+  const { BacklogRoadmap } = loadRoadmap();
+  const html = BacklogRoadmap.liveBanner({ live: true, state: 'running', liveRefill: { status: 'added', at: '2026-10-02T03:12:00.000Z', added: 3 } });
+  assert.match(html, /<span class="bl-live-dot" aria-hidden="true"><\/span>/); // no "idle" class
+  assert.match(html, /<b>Live roadmap<\/b>: refills itself from the backlog · <span class="" title="">last refill \d\d:12 \(\+3 stages\)<\/span>/);
+  assert.doesNotMatch(html, /roadmap running/);
+  assert.match(html, /<button class="btn sm ghost" type="button" data-live-off title="The current stages finish; nothing more is added">Turn off<\/button>/);
+});
+
+test('liveBanner: live but paused (or done) marks the dot idle and names the roadmap\'s state', () => {
+  const { BacklogRoadmap } = loadRoadmap();
+  const html = BacklogRoadmap.liveBanner({ live: true, state: 'paused' });
+  assert.match(html, /<span class="bl-live-dot idle" aria-hidden="true"><\/span>/);
+  assert.match(html, /· <span class="muted">roadmap paused<\/span>/);
+});
+
+test('onChange [data-rm-live]: turning on a running, simulated roadmap goes live at once, with no confirmation', async () => {
+  const confirmCalls = [];
+  const { BacklogRoadmap, liveCalls } = loadRoadmap({ confirmDialog: async (...a) => { confirmCalls.push(a); return true; } });
+  const data = liveData({ live: false, simulated: true });
+  const ctx = makeCtx();
+  const target = { matches: (sel) => sel === '[data-rm-live]', checked: true };
+  const handled = await BacklogRoadmap.onChange({ target }, ctx, data);
+  assert.equal(handled, true);
+  assert.equal(confirmCalls.length, 0);
+  assert.deepEqual(liveCalls, [{ projectId: ctx.projectId, on: true }]);
+  assert.equal(ctx._calls.setData.length, 1);
+});
+
+test('onChange [data-rm-live]: turning on a running, real roadmap asks to confirm first; declining goes live nowhere', async () => {
+  const { BacklogRoadmap, liveCalls } = loadRoadmap({ confirmDialog: async () => false });
+  const data = liveData({ live: false, simulated: false });
+  const ctx = makeCtx();
+  const target = { matches: (sel) => sel === '[data-rm-live]', checked: true };
+  await BacklogRoadmap.onChange({ target }, ctx, data);
+  assert.deepEqual(liveCalls, []);
+});
+
+test('onChange [data-rm-live]: turning on a roadmap that is not running asks to start it first; accepting starts it, then goes live', async () => {
+  const confirmCalls = [];
+  const { BacklogRoadmap, startCalls, liveCalls } = loadRoadmap({ confirmDialog: async (title, ...rest) => { confirmCalls.push(title); return true; } });
+  const data = liveData({ live: false, state: 'planned' });
+  const ctx = makeCtx();
+  const target = { matches: (sel) => sel === '[data-rm-live]', checked: true };
+  await BacklogRoadmap.onChange({ target }, ctx, data);
+  assert.deepEqual(confirmCalls, ['Start the roadmap and go live']);
+  assert.equal(startCalls.length, 1);
+  assert.deepEqual(liveCalls, [{ projectId: ctx.projectId, on: true }]);
+});
+
+test('onChange [data-rm-live]: turning off never asks for confirmation', async () => {
+  const { BacklogRoadmap, liveCalls } = loadRoadmap({ confirmDialog: async () => { throw new Error('must not be asked'); } });
+  const data = liveData({ live: true });
+  const ctx = makeCtx();
+  const target = { matches: (sel) => sel === '[data-rm-live]', checked: false };
+  await BacklogRoadmap.onChange({ target }, ctx, data);
+  assert.deepEqual(liveCalls, [{ projectId: ctx.projectId, on: false }]);
 });

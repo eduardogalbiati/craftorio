@@ -245,6 +245,115 @@ test('advance does nothing to a roadmap that is planned or paused', () => {
   }
 });
 
+// ---- Live roadmap (#164): advance asks for a refill instead of ending it -------------------
+
+test('advance on a live roadmap whose last stage ends asks for a refill (refill: true) instead of finishing it', () => {
+  const roadmap = mkRoadmap([{ id: 's1', items: [mkItem('i1', 1, { status: 'running', runId: 'r1' })] }], { live: true });
+  const { roadmap: after, start, refill } = roadmaps.advance(roadmap, { runOf: () => ({ status: 'success', merged: true }) });
+  assert.equal(refill, true);
+  assert.equal(after.state, 'running'); // stays running: the caller (service) decides via live.applyRefill
+  assert.deepEqual(start, []);
+});
+
+test('advance on a non-live roadmap whose last stage ends still finishes it, with no refill', () => {
+  const roadmap = mkRoadmap([{ id: 's1', items: [mkItem('i1', 1, { status: 'running', runId: 'r1' })] }]);
+  const { roadmap: after, refill } = roadmaps.advance(roadmap, { runOf: () => ({ status: 'success', merged: true }) });
+  assert.equal(refill, undefined);
+  assert.equal(after.state, 'done');
+});
+
+test('advance on a live roadmap with an earlier stage still unfinished never asks for a refill', () => {
+  const roadmap = mkRoadmap([
+    { id: 's1', items: [mkItem('i1', 1)] },
+    { id: 's2', items: [mkItem('i2', 2)] },
+  ], { live: true });
+  const { refill, start } = roadmaps.advance(roadmap, { runOf: () => null });
+  assert.equal(refill, undefined);
+  assert.deepEqual(start.map((x) => x.id), ['i1']);
+});
+
+test('a live roadmap that is paused or planned asks for no refill (advance does nothing while it is not running)', () => {
+  for (const state of ['planned', 'paused']) {
+    const roadmap = mkRoadmap([{ id: 's1', items: [mkItem('i1', 1, { status: 'done' })] }], { live: true, state });
+    const { refill, start } = roadmaps.advance(roadmap, { runOf: () => null });
+    assert.equal(refill, undefined, state);
+    assert.deepEqual(start, [], state);
+  }
+});
+
+test('a scoped stage (Run this stage) ending never asks for a refill, even on a live roadmap: it finishes or pauses as usual', () => {
+  const onlyStage = mkRoadmap([{ id: 's1', items: [mkItem('i1', 1, { status: 'running', runId: 'r1' })] }], { live: true, scope: { stage: 's1' } });
+  const { roadmap: after1, refill: refill1 } = roadmaps.advance(onlyStage, { runOf: () => ({ status: 'success', merged: true }) });
+  assert.equal(refill1, undefined);
+  assert.equal(after1.state, 'done'); // the only stage, scoped: finishes the whole roadmap
+
+  const withMore = mkRoadmap([
+    { id: 's1', items: [mkItem('i1', 1, { status: 'running', runId: 'r1' })] },
+    { id: 's2', items: [mkItem('i2', 2)] },
+  ], { live: true, scope: { stage: 's1' } });
+  const { roadmap: after2, refill: refill2 } = roadmaps.advance(withMore, { runOf: () => ({ status: 'success', merged: true }) });
+  assert.equal(refill2, undefined);
+  assert.equal(after2.state, 'paused');
+  assert.match(after2.error, /Stage 1 done/);
+});
+
+// ---- setLive (#164: the Live roadmap switch) -----------------------------------------------
+
+test('setLive: turning on requires a running roadmap; records when and by whom', (t) => {
+  const dir = tmp(t);
+  roadmaps.writeRoadmap(dir, 'proj', mkRoadmap([{ id: 's1', items: [mkItem('i1', 1)] }], { state: 'planned' }));
+  assert.throws(() => roadmaps.setLive(dir, 'proj', true), /Start the roadmap first/);
+
+  roadmaps.writeRoadmap(dir, 'proj', mkRoadmap([{ id: 's1', items: [mkItem('i1', 1)] }], { state: 'running' }));
+  const on = roadmaps.setLive(dir, 'proj', true, { by: 'owner', now: new Date('2026-10-02T03:12:00.000Z') });
+  assert.equal(on.live, true);
+  assert.equal(on.liveSince, '2026-10-02T03:12:00.000Z');
+  assert.equal(on.liveBy, 'owner');
+  assert.equal(on.liveRefill, null);
+
+  // survives a restart: a fresh read off disk still has it
+  const reread = roadmaps.readRoadmap(dir, 'proj');
+  assert.equal(reread.live, true);
+  assert.equal(reread.liveSince, '2026-10-02T03:12:00.000Z');
+  assert.equal(reread.liveBy, 'owner');
+});
+
+test('setLive: turning on again while already live changes nothing (idempotent, keeps the original liveSince)', (t) => {
+  const dir = tmp(t);
+  roadmaps.writeRoadmap(dir, 'proj', mkRoadmap([{ id: 's1', items: [mkItem('i1', 1)] }], { state: 'running' }));
+  const first = roadmaps.setLive(dir, 'proj', true, { now: new Date('2026-10-02T03:00:00.000Z') });
+  const second = roadmaps.setLive(dir, 'proj', true, { now: new Date('2026-10-02T04:00:00.000Z') });
+  assert.equal(first.liveSince, '2026-10-02T03:00:00.000Z');
+  assert.equal(second.liveSince, '2026-10-02T03:00:00.000Z');
+});
+
+test('setLive: off works any time (running or not), leaving the stages as they are; off while already off is a no-op', (t) => {
+  const dir = tmp(t);
+  roadmaps.writeRoadmap(dir, 'proj', mkRoadmap([{ id: 's1', items: [mkItem('i1', 1)] }], { state: 'running', live: true, liveSince: '2026-10-02T03:00:00.000Z', liveBy: 'owner' }));
+  const off = roadmaps.setLive(dir, 'proj', false);
+  assert.equal(off.live, false);
+  assert.equal(off.state, 'running'); // the current stages are left to finish
+
+  const stillOff = roadmaps.setLive(dir, 'proj', false);
+  assert.equal(stillOff.live, false);
+});
+
+test('setState to planned (Stop) also turns a live roadmap off', (t) => {
+  const dir = tmp(t);
+  roadmaps.writeRoadmap(dir, 'proj', mkRoadmap([{ id: 's1', items: [mkItem('i1', 1)] }], { state: 'running', live: true, liveSince: '2026-10-02T03:00:00.000Z', liveBy: 'owner' }));
+  const stopped = roadmaps.setState(dir, 'proj', 'planned');
+  assert.equal(stopped.live, false);
+});
+
+test('setState to paused or running keeps a live roadmap live', (t) => {
+  const dir = tmp(t);
+  roadmaps.writeRoadmap(dir, 'proj', mkRoadmap([{ id: 's1', items: [mkItem('i1', 1)] }], { state: 'running', live: true, liveSince: '2026-10-02T03:00:00.000Z', liveBy: 'owner' }));
+  const paused = roadmaps.setState(dir, 'proj', 'paused');
+  assert.equal(paused.live, true);
+  const running = roadmaps.setState(dir, 'proj', 'running');
+  assert.equal(running.live, true);
+});
+
 // ---- Run this stage (#141: `scope: { stage: <id> }`) --------------------------------------
 
 test('setState with a stage id scopes the run to that stage; refuses a stage not in the roadmap or with nothing left to plan', (t) => {
