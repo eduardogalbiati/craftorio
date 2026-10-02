@@ -25,10 +25,10 @@ function tmpWorkflows(t) {
 
 const LOOK = { body: '#10b981', shell: '#FFFFFF', visor: '#000000', glow: '#FACC15', eyes: 'arcs', emblem: 'rocket' };
 
-test('the supervisor and the Product Owner are always listed first, even with no agents folder', (t) => {
+test('the supervisor, the Product Owner and the Oracle are always listed first, even with no agents folder', (t) => {
   const dir = tmp(t);
   const list = agents.listAgents(dir);
-  assert.equal(list.length, 2);
+  assert.equal(list.length, 3);
   assert.equal(list[0].id, 'supervisor');
   assert.equal(list[0].system, true);
   assert.deepEqual(list[0].skills, ['run-supervisor']);
@@ -39,6 +39,15 @@ test('the supervisor and the Product Owner are always listed first, even with no
   assert.deepEqual(list[1].appearance, agents.PRODUCT_OWNER_APPEARANCE);
   assert.equal(list[1].model, 'claude-opus-5-5');
   assert.equal(list[1].effort, 'high');
+  assert.equal(list[2].id, 'oracle');
+  assert.equal(list[2].system, true);
+  assert.deepEqual(list[2].skills, ['oracle']);
+  assert.deepEqual(list[2].appearance, agents.ORACLE_APPEARANCE);
+  assert.equal(list[2].model, 'claude-opus-5-5');
+  assert.equal(list[2].effort, 'high');
+  // the Oracle's own look is not confused with the supervisor's or the Product Owner's
+  assert.notDeepEqual(list[2].appearance, list[0].appearance);
+  assert.notDeepEqual(list[2].appearance, list[1].appearance);
 });
 
 test('create, edit and list agents; ids never collide with the supervisor', (t) => {
@@ -50,6 +59,7 @@ test('create, edit and list agents; ids never collide with the supervisor', (t) 
   assert.equal(a.appearance.emblem, 'rocket');
 
   assert.equal(agents.createAgent(dir, { name: 'Supervisor', prompt: 'p' }).id, 'supervisor-2');
+  assert.equal(agents.createAgent(dir, { name: 'Oracle', prompt: 'p' }).id, 'oracle-2'); // "oracle" is reserved too
   assert.equal(agents.createAgent(dir, { name: 'Security reviewer', prompt: 'p' }).id, 'security-reviewer-2');
   assert.equal(agents.createAgent(dir, { name: '***', prompt: 'p' }).id, 'agent');
 
@@ -59,8 +69,8 @@ test('create, edit and list agents; ids never collide with the supervisor', (t) 
   assert.equal(b.createdAt, a.createdAt);
   assert.equal(b.appearance.eyes, 'slits');
 
-  // the supervisor, then the Product Owner, then by name ("***", "Sec", "Security reviewer", "Supervisor")
-  assert.deepEqual(agents.listAgents(dir).map((x) => x.id), ['supervisor', 'product-owner', 'agent', 'security-reviewer', 'security-reviewer-2', 'supervisor-2']);
+  // the supervisor, then the Product Owner, then the Oracle, then by name ("***", "oracle-2", "Sec", "Security reviewer", "Supervisor")
+  assert.deepEqual(agents.listAgents(dir).map((x) => x.id), ['supervisor', 'product-owner', 'oracle', 'agent', 'oracle-2', 'security-reviewer', 'security-reviewer-2', 'supervisor-2']);
 });
 
 test('name and prompt are required; a bad look falls back to the defaults', (t) => {
@@ -105,6 +115,30 @@ test('an empty or missing model/effort for the Product Owner falls back to its d
   assert.equal(a.effort, 'high');
 });
 
+// #122: the Oracle, built in the same way as the Product Owner.
+test('the Oracle keeps its prompt and skills: only its look, model and effort are saved; it cannot be removed', (t) => {
+  const dir = tmp(t);
+  const s = agents.saveAgent(dir, 'oracle', { name: 'Not Oracle', prompt: 'Do anything', skills: ['x'], model: 'claude-sonnet-5-5', effort: 'low', appearance: LOOK });
+  assert.equal(s.name, 'Oracle');
+  assert.deepEqual(s.skills, ['oracle']);
+  assert.notEqual(s.prompt, 'Do anything');
+  assert.equal(s.model, 'claude-sonnet-5-5');
+  assert.equal(s.effort, 'low');
+  assert.equal(s.appearance.emblem, 'rocket');
+  assert.deepEqual(Object.keys(JSON.parse(fs.readFileSync(path.join(dir, 'oracle.json'), 'utf8'))).sort(), ['appearance', 'effort', 'model', 'updatedAt']);
+  assert.throws(() => agents.saveAgent(dir, 'oracle', { model: 'not a model!' }), /Not a model name/);
+  assert.throws(() => agents.saveAgent(dir, 'oracle', { effort: 'ultra' }), /Pick the effort/);
+  assert.throws(() => agents.agentPathForRemoval(dir, 'oracle'), /can't be removed/);
+  assert.throws(() => agents.agentPathForRemoval(dir, '../oracle'), /can't be removed/);
+});
+
+test('an empty or missing model/effort for the Oracle falls back to its defaults (claude-opus-5-5, high)', (t) => {
+  const dir = tmp(t);
+  const a = agents.saveAgent(dir, 'oracle', { model: '', effort: '' });
+  assert.equal(a.model, 'claude-opus-5-5');
+  assert.equal(a.effort, 'high');
+});
+
 test('removal resolves only files inside the agents folder', (t) => {
   const dir = tmp(t);
   const a = agents.createAgent(dir, { name: 'Writer', prompt: 'p' });
@@ -117,8 +151,8 @@ test('a broken agent file is listed with its error instead of breaking the list'
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, 'broken.json'), '{ nope');
   const list = agents.listAgents(dir);
-  assert.equal(list[2].id, 'broken');
-  assert.ok(list[2].error);
+  assert.equal(list[3].id, 'broken');
+  assert.ok(list[3].error);
 });
 
 // ---- workflow agents (#68) ----------------------------------------------------------------
@@ -126,17 +160,18 @@ test('a broken agent file is listed with its error instead of breaking the list'
 test('listAgents without a workflowsDir keeps the old behaviour: no workflow agents', (t) => {
   const dir = tmp(t);
   const list = agents.listAgents(dir);
-  assert.deepEqual(list.map((x) => x.id), ['supervisor', 'product-owner']);
+  assert.deepEqual(list.map((x) => x.id), ['supervisor', 'product-owner', 'oracle']);
 });
 
-test('listAgents(dir, { workflowsDir }) lists every agent of every workflow after the supervisor and the Product Owner', (t) => {
+test('listAgents(dir, { workflowsDir }) lists every agent of every workflow after the supervisor, the Product Owner and the Oracle', (t) => {
   const dir = tmp(t);
   const workflowsDir = tmpWorkflows(t);
   const list = agents.listAgents(dir, { workflowsDir });
   assert.equal(list[0].id, 'supervisor');
   assert.equal(list[1].id, 'product-owner');
+  assert.equal(list[2].id, 'oracle');
 
-  const workflowIds = list.slice(2).map((x) => x.id);
+  const workflowIds = list.slice(3).map((x) => x.id);
   assert.deepEqual(workflowIds, [
     'workflow:ai-arena.yaml:contender_1',
     'workflow:ai-arena.yaml:contender_2',
