@@ -36,6 +36,24 @@ test('submitAssign: assigning an issue the roadmap already plans asks first, and
   assert.match(fn, /takes \$\{inRoadmap\.length > 1 \? 'them' : 'it'\} out of the roadmap and into the queue/);
 });
 
+// ---- The kept-work question (#170): assign and queue resume share the same two named choices ---
+
+test('submitAssign: an ended run\'s kept work (assignWorkflow\'s `kept`) opens the kept-work dialog; "resume" also closes the Assign modal; only "scratch" assigns again, confirmed', () => {
+  const fn = /async function submitAssign\(e\)[\s\S]*?\n  \}/.exec(src)[0];
+  assert.match(fn, /let data = await api\.assignWorkflow\(bl\.projectId, numbers, workflow, inputs, mock, grouped\(\)\);/);
+  assert.match(fn, /if \(data\?\.kept\) \{/);
+  assert.match(fn, /const choice = await keptWorkDialog\(data\.kept\);/);
+  assert.match(fn, /if \(choice === 'resume'\) closeModal\('#assign-modal'\);/);
+  assert.match(fn, /if \(choice !== 'scratch'\) return;/);
+  assert.match(fn, /data = await api\.assignWorkflow\(bl\.projectId, numbers, workflow, inputs, mock, grouped\(\), true\);/);
+});
+
+test('queue resume (data-pause="off"): an ended run\'s kept work opens the kept-work dialog; only "scratch" resumes the queue again, confirmed', () => {
+  const fn = /\$b\('#bl-queue'\)\.onclick = async \(e\) => \{[\s\S]*?\n    \};/.exec(src)[0];
+  assert.match(fn, /let out = await api\.pauseQueue\(bl\.projectId, b\.dataset\.pause === 'on'\);/);
+  assert.match(fn, /if \(out\?\.kept && await keptWorkDialog\(out\.kept\) === 'scratch'\) out = await api\.pauseQueue\(bl\.projectId, false, true\);/);
+});
+
 test('openAssign: a prefill from the Product Owner picks its workflow, groups its issues into one run, and fills its inputs', () => {
   const fn = /async function openAssign\(prefill = null\)[\s\S]*?\n  \}/.exec(src)[0];
   // the proposed workflow wins over the last-used one when it exists among the project's workflows

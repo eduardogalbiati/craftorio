@@ -21,15 +21,17 @@ function tmp(t) {
 const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'views', 'backlog', 'backlog-roadmap.js'), 'utf8');
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
-function loadRoadmap({ listWorkflows, confirmDialog, querySelector, devMode } = {}) {
+function loadRoadmap({ listWorkflows, confirmDialog, keptWorkDialog, roadmapItem, querySelector, devMode } = {}) {
   const savedCalls = [];
   const startCalls = [];
+  const roadmapItemCalls = [];
   const sandbox = {
     esc,
     state: {},
     errMsg: (e) => String(e?.message || e),
     devMode: devMode || (() => false),
     confirmDialog: confirmDialog || (async () => true),
+    keptWorkDialog: keptWorkDialog || (async () => null),
     document: { querySelector: querySelector || (() => null) },
     api: {
       listWorkflows: listWorkflows || (async () => []),
@@ -41,12 +43,16 @@ function loadRoadmap({ listWorkflows, confirmDialog, querySelector, devMode } = 
         startCalls.push({ projectId, simulated, stage });
         return { roadmap: { state: 'running', stages: [] } };
       },
+      roadmapItem: async (projectId, itemId, action, confirmed) => {
+        roadmapItemCalls.push({ projectId, itemId, action, confirmed });
+        return (roadmapItem || (() => ({ roadmap: { state: 'planned', stages: [] } })))(roadmapItemCalls.length, confirmed);
+      },
     },
   };
   sandbox.window = sandbox;
   vm.createContext(sandbox);
   vm.runInContext(src, sandbox);
-  return { BacklogRoadmap: sandbox.window.BacklogRoadmap, savedCalls, startCalls };
+  return { BacklogRoadmap: sandbox.window.BacklogRoadmap, savedCalls, startCalls, roadmapItemCalls };
 }
 
 const settle = () => new Promise((r) => setTimeout(r, 0));
@@ -134,6 +140,18 @@ function startButtonTarget() {
   const btn = {};
   btn.closest = (sel) => (sel === '[data-rm]' ? btn : null);
   btn.dataset = { rm: 'start' };
+  return btn;
+}
+
+// Retry/Skip on a failed item: a [data-rm-item] control inside its [data-item] box.
+function itemActionButtonTarget(action, itemId) {
+  const box = { dataset: { item: itemId } };
+  const btn = { dataset: { rmItem: action } };
+  btn.closest = (sel) => {
+    if (sel === '[data-rm-item]') return btn;
+    if (sel === '[data-item]') return box;
+    return null;
+  };
   return btn;
 }
 
@@ -446,6 +464,51 @@ test('onClick [data-rm=start]: resuming a paused, scoped roadmap passes that sta
   const plain = threeStageData(['planned', 'planned', 'planned'], { state: 'planned' });
   await BacklogRoadmap.onClick({ target: startButtonTarget() }, ctx, plain);
   assert.equal(startCalls[1].stage, null);
+});
+
+// ---- Retry on a failed item: the kept-work question (#170) --------------------------------
+
+test('onClick [data-rm-item=retry]: a plain retry (no kept work) calls roadmapItem once, unconfirmed, and never opens the kept-work dialog', async () => {
+  const keptCalls = [];
+  const { BacklogRoadmap, roadmapItemCalls } = loadRoadmap({ keptWorkDialog: async (kept) => { keptCalls.push(kept); return 'scratch'; } });
+  const data = threeStageData(['failed', 'planned', 'planned']);
+  const ctx = makeCtx('proj-k');
+  const handled = await BacklogRoadmap.onClick({ target: itemActionButtonTarget('retry', 'it1') }, ctx, data);
+  assert.equal(handled, true);
+  assert.deepEqual(roadmapItemCalls, [{ projectId: 'proj-k', itemId: 'it1', action: 'retry', confirmed: undefined }]);
+  assert.equal(keptCalls.length, 0);
+});
+
+test('onClick [data-rm-item=retry]: a retry whose previous run kept work opens the kept-work dialog; "scratch" retries once more, confirmed', async () => {
+  const kept = { title: '#1 already has work from a cancelled run', message: 'made 1 commit of its own for #1, still in its worktree.', choices: [], runId: 'r1' };
+  const keptCalls = [];
+  const { BacklogRoadmap, roadmapItemCalls } = loadRoadmap({
+    keptWorkDialog: async (k) => { keptCalls.push(k); return 'scratch'; },
+    roadmapItem: (callNumber) => (callNumber === 1 ? { kept, roadmap: { state: 'planned', stages: [] } } : { roadmap: { state: 'planned', stages: [] } }),
+  });
+  const data = threeStageData(['failed', 'planned', 'planned']);
+  const ctx = makeCtx('proj-k');
+  const handled = await BacklogRoadmap.onClick({ target: itemActionButtonTarget('retry', 'it1') }, ctx, data);
+  assert.equal(handled, true);
+  assert.deepEqual(keptCalls, [kept]);
+  assert.equal(roadmapItemCalls.length, 2);
+  assert.deepEqual(roadmapItemCalls[0], { projectId: 'proj-k', itemId: 'it1', action: 'retry', confirmed: undefined });
+  assert.deepEqual(roadmapItemCalls[1], { projectId: 'proj-k', itemId: 'it1', action: 'retry', confirmed: true });
+});
+
+test('onClick [data-rm-item=retry]: kept work, but "resume" (or Cancel) never retries again', async () => {
+  const kept = { title: '#1 already has work from a cancelled run', message: 'm', choices: [], runId: 'r1' };
+  for (const answer of ['resume', null]) {
+    const { BacklogRoadmap, roadmapItemCalls } = loadRoadmap({
+      keptWorkDialog: async () => answer,
+      roadmapItem: () => ({ kept, roadmap: { state: 'planned', stages: [] } }),
+    });
+    const data = threeStageData(['failed', 'planned', 'planned']);
+    const ctx = makeCtx('proj-k');
+    const handled = await BacklogRoadmap.onClick({ target: itemActionButtonTarget('retry', 'it1') }, ctx, data);
+    assert.equal(handled, true, `answer: ${answer}`);
+    assert.equal(roadmapItemCalls.length, 1, `answer: ${answer}: only the first, unconfirmed call`);
+  }
 });
 
 test('addStage (Product Owner, #140): a new stage\'s item carries the origin it was added with', async () => {

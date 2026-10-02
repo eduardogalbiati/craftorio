@@ -4,6 +4,8 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
+const backlogModule = require('../../src/backlog');
+const roadmapModule = require('../../src/roadmap');
 const { ISSUE_WORKFLOW, makeService, makeResumeService, roadmapProject, until } = require('./helpers');
 
 // Starts a run through the given channel, auto-approves every gate it meets, and resolves with
@@ -226,20 +228,43 @@ test('resumeOptions/resumeRun: a plain gate (no choices) needs approved:true; ap
 
 // ---- No duplicate work: an ended run's kept worktree commits refuse a start (#112) --------------
 
-// A repo whose checked-out branch ('feature') is one commit ahead of 'main': what a run's worktree
-// looks like when it ended without merging (kept so a resume can continue it).
-function keptWorkRepo(t) {
+// A repo whose checked-out branch ('feature') is `own` commits ahead of the local `base` branch
+// ('main'): what a run's worktree looks like when it ended without merging (kept so a resume can
+// continue it). `refs/remotes/origin/<base>` is set to the first commit, so it can lag behind the
+// local base by `localOnly` commits (merges not yet pushed, #170) without affecting the result: the
+// run's own commits are counted against the local base, never origin's. `baseAfter` commits land on
+// `base` after `feature` branches off it (so its base moved on since); each touches `file` (the
+// same file `own` commits touch) when `touch` is true, a different file otherwise.
+function keptWorkRepo(t, { base = 'main', own = 1, localOnly = 0, baseAfter = 0, touch = true, file = 'a.txt' } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'svc-kept-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const git = (...args) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'init.defaultBranch=main', ...args], { cwd: dir, stdio: ['ignore', 'pipe', 'pipe'] }).toString().trim();
   git('init', '-q');
-  fs.writeFileSync(path.join(dir, 'a.txt'), 'one\n');
+  fs.writeFileSync(path.join(dir, file), 'one\n');
   git('add', '.');
   git('commit', '-q', '-m', 'first');
+  const originSha = git('rev-parse', 'HEAD');
+  git('update-ref', `refs/remotes/origin/${base}`, originSha);
+  for (let i = 0; i < localOnly; i++) {
+    fs.writeFileSync(path.join(dir, `local${i}.txt`), String(i));
+    git('add', '.');
+    git('commit', '-q', '-m', `local merge ${i} (not pushed)`);
+  }
   git('checkout', '-q', '-b', 'feature');
-  fs.writeFileSync(path.join(dir, 'a.txt'), 'one\ntwo\n');
-  git('add', '.');
-  git('commit', '-q', '-m', 'work');
+  for (let i = 0; i < own; i++) {
+    fs.writeFileSync(path.join(dir, file), `one\nown${i}\n`);
+    git('add', '.');
+    git('commit', '-q', '-m', `own ${i}`);
+  }
+  if (baseAfter) {
+    git('checkout', '-q', base);
+    for (let i = 0; i < baseAfter; i++) {
+      fs.writeFileSync(path.join(dir, touch ? file : `base${i}.txt`), touch ? `one\nbase${i}\n` : String(i));
+      git('add', '.');
+      git('commit', '-q', '-m', `base ${i}`);
+    }
+    git('checkout', '-q', 'feature');
+  }
   return dir;
 }
 
@@ -275,7 +300,16 @@ test('run:start: an ended run\'s kept worktree commits for the same issue ask fi
     file: 'fixture-issue.yaml', inputs: { task: 't', repo_path: folder }, mock: true, projectId: p.id, issues: [issue],
   });
   assert.equal(asked.runId, '20260930-100000-keptstart1');
-  assert.match(asked.confirm, /still has 1 commit\(s\) in its worktree for #21/);
+  assert.match(asked.confirm, /made 1 commit of its own for #21, still in its worktree\./);
+  assert.equal(asked.confirm, asked.kept.text);
+  assert.equal(asked.kept.commits, 1);
+  assert.equal(asked.kept.runId, '20260930-100000-keptstart1');
+  assert.equal(asked.kept.title, '#21 already has work from a cancelled run');
+  assert.match(asked.kept.message, /It is based on today's main\./);
+  assert.equal(asked.kept.recommended, 'resume');
+  assert.deepEqual(asked.kept.choices.map((c) => c.id), ['resume', 'scratch']);
+  assert.deepEqual(asked.kept.choices.map((c) => c.label), ['Resume the old run', 'Start from scratch']);
+  assert.deepEqual(asked.kept.choices.map((c) => c.primary), [true, false]);
   assert.deepEqual(api['runs:list']().runs.map((r) => r.runId), ['20260930-100000-keptstart1'], 'no duplicate run was started');
 
   const started = await api['run:start']({
@@ -285,7 +319,89 @@ test('run:start: an ended run\'s kept worktree commits for the same issue ask fi
   api['run:stop']({ runId: started.runId });
 });
 
-test('backlog:assign: an ended run\'s kept worktree commits pause the queue instead of starting a duplicate; the item stays queued', async (t) => {
+// ---- Own commits only, excluding local merges not yet pushed (#170) -----------------------------
+
+test('run:start: the kept-work count is the old run\'s own commits, excluding merges the local base has that it never made (and origin never saw)', async (t) => {
+  const { service, api } = makeService(t);
+  const ws = service.workspace();
+  fs.writeFileSync(path.join(ws.workflows, 'fixture-issue.yaml'), ISSUE_WORKFLOW);
+  // origin/main stays at the first commit; local main gains 2 unpushed merges before `feature` (the
+  // run's own worktree) branches off it and makes 3 commits of its own
+  const repo = keptWorkRepo(t, { own: 3, localOnly: 2 });
+  const issue = { number: 25, url: 'https://github.com/o/r/issues/25', title: 'Issue 25' };
+  fabricateKeptRun(ws, '20260930-100000-keptown0001', { issue, worktreeDir: repo });
+
+  const asked = await api['run:start']({ file: 'fixture-issue.yaml', inputs: { task: 't', repo_path: '.' }, mock: true, issues: [issue] });
+  assert.equal(asked.kept.commits, 3, 'the old code gave 3 + 2 = 5: the 2 local merges are not the run\'s own');
+});
+
+test('run:start: no resolvable base ref for the kept worktree (its base branch no longer exists locally or on origin) asks no question', async (t) => {
+  const { service, api } = makeService(t);
+  const ws = service.workspace();
+  fs.writeFileSync(path.join(ws.workflows, 'fixture-issue.yaml'), ISSUE_WORKFLOW);
+  const repo = keptWorkRepo(t); // only 'main' and 'feature' exist in this repo
+  const issue = { number: 26, url: 'https://github.com/o/r/issues/26', title: 'Issue 26' };
+  fabricateKeptRun(ws, '20260930-100000-keptnobase1', { issue, worktreeDir: repo, base: 'gone' });
+
+  const started = await api['run:start']({ file: 'fixture-issue.yaml', inputs: { task: 't', repo_path: '.' }, mock: true, issues: [issue] });
+  assert.equal(started.confirm, undefined, 'no base to compare against: no kept-work question, the run starts');
+  assert.ok(started.runId && started.runId !== '20260930-100000-keptnobase1');
+  api['run:stop']({ runId: started.runId });
+});
+
+// ---- How old the work is: stale (behind + its files changed since) vs. still fresh (#170) -------
+
+test('run:start: the kept-work message says how far behind today\'s base the old run is, and warns when the files it touched changed there since (stale: Start from scratch is recommended)', async (t) => {
+  const { service, api } = makeService(t);
+  const ws = service.workspace();
+  fs.writeFileSync(path.join(ws.workflows, 'fixture-issue.yaml'), ISSUE_WORKFLOW);
+  const repo = keptWorkRepo(t, { baseAfter: 2, touch: true }); // base moved on and touched the same file
+  const issue = { number: 27, url: 'https://github.com/o/r/issues/27', title: 'Issue 27' };
+  fabricateKeptRun(ws, '20260930-100000-keptstale01', { issue, worktreeDir: repo });
+
+  const asked = await api['run:start']({ file: 'fixture-issue.yaml', inputs: { task: 't', repo_path: '.' }, mock: true, issues: [issue] });
+  assert.match(asked.kept.message, /2 commits behind today's main/);
+  assert.match(asked.kept.message, /files it touched changed since \(a\.txt\): resuming will likely conflict\./);
+  assert.equal(asked.kept.recommended, 'scratch');
+  assert.deepEqual(asked.kept.choices.map((c) => c.primary), [false, true]);
+});
+
+test('run:start: behind today\'s base, but on files the old run never touched: no conflict warning, Resume is still recommended', async (t) => {
+  const { service, api } = makeService(t);
+  const ws = service.workspace();
+  fs.writeFileSync(path.join(ws.workflows, 'fixture-issue.yaml'), ISSUE_WORKFLOW);
+  const repo = keptWorkRepo(t, { baseAfter: 1, touch: false }); // base moved on, but a different file
+  const issue = { number: 28, url: 'https://github.com/o/r/issues/28', title: 'Issue 28' };
+  fabricateKeptRun(ws, '20260930-100000-keptfresh01', { issue, worktreeDir: repo });
+
+  const asked = await api['run:start']({ file: 'fixture-issue.yaml', inputs: { task: 't', repo_path: '.' }, mock: true, issues: [issue] });
+  assert.match(asked.kept.message, /1 commit behind today's main; the files it touched did not change since\./);
+  assert.equal(asked.kept.recommended, 'resume');
+});
+
+// ---- Fewer issues than the item/request asks about (#170) ---------------------------------------
+
+test('run:start: the old run covering fewer issues than asked says so, names the "ha(s|ve)" and "a/an <status>" wording correctly', async (t) => {
+  const { service, api } = makeService(t);
+  const ws = service.workspace();
+  fs.writeFileSync(path.join(ws.workflows, 'fixture-issue.yaml'), ISSUE_WORKFLOW);
+  const repo = keptWorkRepo(t);
+  const issue113 = { number: 113, url: 'https://github.com/o/r/issues/113', title: 'Issue 113' };
+  const issue142 = { number: 142, url: 'https://github.com/o/r/issues/142', title: 'Issue 142' };
+  fabricateKeptRun(ws, '20260930-100000-keptpart001', { issue: issue113, worktreeDir: repo });
+
+  const asked = await api['run:start']({ file: 'fixture-issue.yaml', inputs: { task: 't', repo_path: '.' }, mock: true, issues: [issue113, issue142] });
+  assert.equal(asked.kept.title, '#113 + #142 already have work from a cancelled run');
+  assert.match(asked.kept.message, /The old run only covers #113: resuming it leaves #142 out\./);
+
+  const repo2 = keptWorkRepo(t);
+  const issue99 = { number: 99, url: 'https://github.com/o/r/issues/99', title: 'Issue 99' };
+  fabricateKeptRun(ws, '20260930-100000-keptvowel01', { issue: issue99, worktreeDir: repo2, status: 'interrupted' });
+  const askedVowel = await api['run:start']({ file: 'fixture-issue.yaml', inputs: { task: 't', repo_path: '.' }, mock: true, issues: [issue99] });
+  assert.equal(askedVowel.kept.title, '#99 already has work from an interrupted run');
+});
+
+test('backlog:assign: an ended run\'s kept work asks first (confirm/kept/runId) without queuing anything; confirmed, it queues and starts, redoing that run\'s own work', async (t) => {
   const { service, api } = makeService(t);
   const ws = service.workspace();
   fs.writeFileSync(path.join(ws.workflows, 'fixture-issue.yaml'), ISSUE_WORKFLOW);
@@ -299,12 +415,46 @@ test('backlog:assign: an ended run\'s kept worktree commits pause the queue inst
   const repo = keptWorkRepo(t);
   fabricateKeptRun(ws, '20260930-100000-keptqueue1', { issue: { number: 22, url: issue.url, title: issue.title }, worktreeDir: repo });
 
-  const data = await api['backlog:assign']({ projectId: p.id, numbers: [22], workflow: 'fixture-issue.yaml', mock: true });
+  const asked = await api['backlog:assign']({ projectId: p.id, numbers: [22], workflow: 'fixture-issue.yaml', mock: true });
+  assert.equal(asked.kept.runId, '20260930-100000-keptqueue1');
+  assert.equal(asked.confirm, asked.kept.text);
   assert.equal(service.isRunning(), false, 'no duplicate run was started');
-  assert.equal(data.queue.paused, true);
-  assert.match(data.queue.error, /Could not start #22.*still has 1 commit\(s\)/);
-  assert.deepEqual(data.queue.items.map((x) => x.number), [22], 'the item stays queued, not dropped');
+  assert.deepEqual(api['backlog:get']({ projectId: p.id }).queue.items, [], 'nothing was queued before the owner answers');
   assert.deepEqual(api['runs:list']().runs.map((r) => r.runId), ['20260930-100000-keptqueue1']);
+
+  const started = await api['backlog:assign']({ projectId: p.id, numbers: [22], workflow: 'fixture-issue.yaml', mock: true, confirmed: true });
+  assert.equal(started.kept, undefined);
+  await until(() => api['runs:active']().length === 1);
+  const active = api['runs:active']()[0];
+  assert.notEqual(active.runId, '20260930-100000-keptqueue1');
+  api['run:stop']({ runId: active.runId });
+});
+
+test('backlog:pause: resuming a queue whose next item would redo an ended run\'s kept work asks first; the queue stays paused until confirmed', async (t) => {
+  const { service, api } = makeService(t);
+  const ws = service.workspace();
+  fs.writeFileSync(path.join(ws.workflows, 'fixture-issue.yaml'), ISSUE_WORKFLOW);
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'service-kept-pause-'));
+  t.after(() => fs.rmSync(folder, { recursive: true, force: true }));
+  const p = await api['projects:create']({ name: 'demo', folder });
+  const issue = { number: 29, title: 'Issue 29', state: 'open', url: 'https://github.com/o/r/issues/29', body: 'Do it', labels: [], assignees: [], tasks: { done: 0, total: 0 } };
+  fs.mkdirSync(ws.backlog, { recursive: true });
+  fs.writeFileSync(path.join(ws.backlog, `${p.id}.json`), JSON.stringify({ projectId: p.id, platform: 'github', repo: 'https://github.com/o/r', issues: [issue] }));
+  const repo = keptWorkRepo(t);
+  fabricateKeptRun(ws, '20260930-100000-keptpause01', { issue: { number: 29, url: issue.url, title: issue.title }, worktreeDir: repo });
+  backlogModule.enqueue(ws.backlog, p.id, { issues: [issue], workflow: 'fixture-issue.yaml', inputs: { task: 't', repo_path: folder }, mock: true });
+  backlogModule.setPaused(ws.backlog, p.id, true, 'paused earlier');
+
+  const asked = await api['backlog:pause']({ projectId: p.id, paused: false });
+  assert.equal(asked.kept.runId, '20260930-100000-keptpause01');
+  assert.equal(asked.queue.paused, true, 'stays paused: the owner has not answered yet');
+  assert.equal(service.isRunning(), false);
+
+  const resumed = await api['backlog:pause']({ projectId: p.id, paused: false, confirmed: true });
+  assert.equal(resumed.kept, undefined);
+  assert.equal(resumed.queue.paused, false);
+  await until(() => api['runs:active']().length === 1);
+  api['run:stop']({ runId: api['runs:active']()[0].runId });
 });
 
 test('roadmap: an ended run\'s kept worktree commits fail the item and pause the roadmap; a confirmed Retry starts it anyway', async (t) => {
@@ -322,13 +472,16 @@ test('roadmap: an ended run\'s kept worktree commits fail the item and pause the
 
   let roadmap = api['roadmap:get']({ projectId: p.id });
   assert.equal(roadmap.stages[0].items[0].status, 'failed');
-  assert.match(roadmap.error, /still has 1 commit\(s\)/);
+  assert.match(roadmap.error, /made 1 commit of its own for #23, still in its worktree\./);
+  assert.match(roadmap.error, /Choose with Retry on the roadmap item, Resume on the queue or Start on the issue\./);
   assert.equal(service.isRunning(), false);
   const itemId = roadmap.pausedBy;
 
   const unconfirmed = await api['roadmap:item']({ projectId: p.id, itemId, action: 'retry' });
-  assert.match(unconfirmed.confirm, /still has 1 commit\(s\) in its worktree for #23/);
+  assert.match(unconfirmed.confirm, /made 1 commit of its own for #23, still in its worktree\./);
   assert.equal(unconfirmed.runId, '20260930-100000-keptroad01');
+  assert.equal(unconfirmed.kept.runId, '20260930-100000-keptroad01');
+  assert.deepEqual(unconfirmed.kept.choices.map((c) => c.id), ['resume', 'scratch']);
   assert.equal(api['roadmap:get']({ projectId: p.id }).stages[0].items[0].status, 'failed', 'an unconfirmed retry changes nothing');
 
   await api['roadmap:item']({ projectId: p.id, itemId, action: 'retry', confirmed: true });
@@ -337,6 +490,48 @@ test('roadmap: an ended run\'s kept worktree commits fail the item and pause the
   assert.equal(roadmap.state, 'running');
   assert.notEqual(roadmap.stages[0].items[0].runId, '20260930-100000-keptroad01');
   api['run:stop']({ runId: api['runs:active']()[0].runId });
+});
+
+test('roadmap:item retry: the kept-work question prefers the item\'s own run (keptWorkOfRun) over another ended run of the same issue (keptWorkForIssues)', async (t) => {
+  const { service, api } = makeService(t);
+  const ws = service.workspace();
+  fs.writeFileSync(path.join(ws.workflows, 'fixture-issue.yaml'), ISSUE_WORKFLOW);
+  const p = await roadmapProject(api, ws, t, [60], 'roadmap-prefer');
+  await api['roadmap:save']({ projectId: p.id, stages: [{ items: [{ workflow: 'fixture-issue.yaml', number: 60, mock: true }] }] });
+  const itemId = api['roadmap:get']({ projectId: p.id }).stages[0].items[0].id;
+
+  const issue = { number: 60, url: 'https://github.com/o/r/issues/60', title: 'Issue 60' };
+  const ownRunId = '20260930-090000-keptownrun01';
+  fabricateKeptRun(ws, ownRunId, { issue, worktreeDir: keptWorkRepo(t), status: 'failed' });
+  roadmapModule.markStarted(ws.backlog, p.id, itemId, { runId: ownRunId });
+
+  // a newer ended run of the same issue also kept commits, but the item's own run (ownRunId) wins
+  const otherRunId = '20260930-110000-keptotherun1';
+  fabricateKeptRun(ws, otherRunId, { issue, worktreeDir: keptWorkRepo(t) });
+
+  const out = await api['roadmap:item']({ projectId: p.id, itemId, action: 'retry' });
+  assert.equal(out.kept.runId, ownRunId);
+});
+
+test('roadmap:item retry: when the item\'s own run kept no commits of its own, the question falls back to another ended run of the same issue', async (t) => {
+  const { service, api } = makeService(t);
+  const ws = service.workspace();
+  fs.writeFileSync(path.join(ws.workflows, 'fixture-issue.yaml'), ISSUE_WORKFLOW);
+  const p = await roadmapProject(api, ws, t, [61], 'roadmap-fallback');
+  await api['roadmap:save']({ projectId: p.id, stages: [{ items: [{ workflow: 'fixture-issue.yaml', number: 61, mock: true }] }] });
+  const itemId = api['roadmap:get']({ projectId: p.id }).stages[0].items[0].id;
+
+  const issue = { number: 61, url: 'https://github.com/o/r/issues/61', title: 'Issue 61' };
+  // the item's own run's worktree has no divergence from 'main' (0 own commits): keptWorkOfRun(ownRunId) is null
+  const ownRunId = '20260930-090000-keptemptyr1';
+  fabricateKeptRun(ws, ownRunId, { issue, worktreeDir: keptWorkRepo(t, { own: 0 }), status: 'failed' });
+  roadmapModule.markStarted(ws.backlog, p.id, itemId, { runId: ownRunId });
+
+  const otherRunId = '20260930-100000-keptotherun2';
+  fabricateKeptRun(ws, otherRunId, { issue, worktreeDir: keptWorkRepo(t) });
+
+  const out = await api['roadmap:item']({ projectId: p.id, itemId, action: 'retry' });
+  assert.equal(out.kept.runId, otherRunId);
 });
 
 test('runs:resume is never refused for kept work, even for a run of its own issue', async (t) => {
