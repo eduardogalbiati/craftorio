@@ -203,8 +203,30 @@ suggestion says where it came from. **Run** saves a detected command as the proj
 shows what the folder declares or is detected to run with (**Use it**), before any gate. For this
 app itself it proposes `npm ci` and `npm start`. In a simulation (no git worktree) the gate's
 **Changed files** are the ones the simulated developer reported, labelled "simulated".
-`developer_check` also offers **Show the diff**: the branch's changes since the base branch, in an
-embedded terminal.
+`developer_check` also offers **Show the diff**: the branch's changes since the base branch, in the
+diff viewer (see Reviewing a run's changes).
+
+### Reviewing a run's changes
+
+The diff viewer shows a run's changed files the way GitHub's "Files changed" does. It opens from a
+gate's **Show the diff**, from a **Changed files** entry of the gate's Artifacts panel (on that
+file), and from **Review changes** on the Run screen of any run with a worktree or reported files.
+The changes are `git diff --find-renames <base>...HEAD` in the run's worktree: everything since
+the merge base with the run's base branch. They are read-only: nothing is checked out or written.
+
+- **Files** on the left are grouped by folder. Each has an added / modified / deleted / renamed
+  icon and `+n −m` counts, and a filter box narrows the list. Mark a file **Viewed** to track your
+  progress ("n of m viewed", remembered per run). ↑ / ↓ or j / k move between files.
+- **The diff** is **Split** (before | after, aligned, line numbers on both sides) or **Unified**,
+  switchable at any time and remembered. Both modes have syntax highlighting, word-level
+  highlights and **Wrap lines**. Unchanged regions are collapsed; ↑ 20 / ↓ 20 / **Expand all**
+  shows them.
+- **Binary files** say "Binary file changed", and images show before and after previews (click to
+  enlarge). Huge files such as lockfiles are collapsed with **Load diff**.
+- **Commits** shows all the branch's changes or only one of its commits, e.g. the developer's new
+  commit after *Ask for changes*.
+- **Esc** or ✕ closes it, and the gate is still there. A simulated run (no worktree) lists the files
+  the developer reported, with a "Simulated: no diff" note.
 
 Failure gates (a step that ran out of fix rounds, or a failure no commit can fix) only offer what
 can change the outcome:

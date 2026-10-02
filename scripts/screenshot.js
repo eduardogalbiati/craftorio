@@ -583,8 +583,63 @@ function simulateChannels(ipcMain, keepAwake = null, missing = null, holdOracle 
     if (channel === 'oracle:reset') return handle(channel, (e, arg) => fn(e, { ...arg, mock: true }));
     // Save to issue (Write & Review) only previews: never calls gh/glab
     if (channel === 'backlog:save-doc') return handle(channel, (e, arg) => fn(e, { ...arg, preview: true }));
+    // the diff viewer (#118): a demo branch, since a simulated run has no diff of its own
+    if (channel === 'run:diff') return handle(channel, (e, arg) => demoRunDiff(arg?.commit));
+    if (channel === 'run:diffFile') return handle(channel, (e, arg) => demoRunDiffFile(arg?.file));
     return handle(channel, channel === 'backlog:sync' ? (e, arg) => handlers['backlog:get'](e, { projectId: arg?.projectId }) : fn);
   };
+}
+
+// The diff viewer's demo branch (#118): an added, a modified (two hunks, a word-level change, a long
+// line), a deleted, a renamed file, an image, a binary and a huge lockfile, over two commits;
+// `--click "#btn-run-diff"` opens it on the Run screen, `--click '.dv [data-dv-mode="unified"]'`
+// switches the layout, `--click '.dv [data-dv-expand]'` expands the first collapsed region.
+const DEMO_DIFF_BEFORE = [
+  "const path = require('path');", '', '// Reads the run\'s settings, with defaults.', 'function loadSettings(dir) {',
+  "  const file = path.join(dir, 'settings.json');", '  return { retries: 2, ...readJson(file) };', '}', '',
+  ...Array.from({ length: 24 }, (_, i) => `// helper ${i + 1}: unchanged context the viewer collapses`),
+  'function retryDelay(attempt) {', '  return 1000 * attempt;', '}', '', 'module.exports = { loadSettings, retryDelay };',
+].join('\n');
+const DEMO_DIFF_AFTER = DEMO_DIFF_BEFORE
+  .replace('  return { retries: 2, ...readJson(file) };', "  // a missing file is not an error: the defaults apply\n  return { retries: 3, timeoutMs: 30000, ...readJson(file, {}) };")
+  .replace('  return 1000 * attempt;', '  return Math.min(30000, 1000 * 2 ** attempt); // exponential backoff, capped so a long outage never waits more than thirty seconds per attempt');
+const demoSvg = (fill, text) => `data:image/svg+xml;base64,${Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="240" height="140"><rect width="240" height="140" rx="12" fill="${fill}"/><text x="120" y="80" font-family="sans-serif" font-size="22" fill="#fff" text-anchor="middle">${text}</text></svg>`).toString('base64')}`;
+// A unified patch from hunks [oldStart, newStart, lines (' x' / '-x' / '+x')], counts computed.
+function demoPatch(file, hunks) {
+  const head = `diff --git a/${file} b/${file}\n--- a/${file}\n+++ b/${file}\n`;
+  return head + hunks.map(([o, n, lines]) => {
+    const old = lines.filter((l) => l[0] !== '+').length;
+    const neu = lines.filter((l) => l[0] !== '-').length;
+    return `@@ -${old ? o : 0},${old} +${neu ? n : 0},${neu} @@\n${lines.join('\n')}\n`;
+  }).join('');
+}
+const helper = (i) => ` // helper ${i}: unchanged context the viewer collapses`;
+function demoRunDiff(commit) {
+  const commits = [
+    { sha: 'b7e1c2d9a0f4b7e1c2d9a0f4b7e1c2d9a0f4b7e1', short: 'b7e1c2d', subject: 'Retry with exponential backoff (review fixes)', author: 'developer', date: '2026-10-01T10:42:00Z' },
+    { sha: '4f0a9e3c1b2d4f0a9e3c1b2d4f0a9e3c1b2d4f0a', short: '4f0a9e3', subject: 'Settings: defaults when the file is missing', author: 'developer', date: '2026-10-01T09:15:00Z' },
+  ];
+  const file = (f) => ({ oldFile: null, added: 0, deleted: 0, binary: false, image: false, large: false, patch: null, ...f });
+  const settings = file({ file: 'src/settings.js', status: 'modified', added: 3, deleted: 2, patch: demoPatch('src/settings.js', [
+    [3, 3, [" // Reads the run's settings, with defaults.", ' function loadSettings(dir) {', "   const file = path.join(dir, 'settings.json');", '-  return { retries: 2, ...readJson(file) };', '+  // a missing file is not an error: the defaults apply', '+  return { retries: 3, timeoutMs: 30000, ...readJson(file, {}) };', ' }', ' ', helper(1)]],
+    [31, 32, [helper(23), helper(24), ' function retryDelay(attempt) {', '-  return 1000 * attempt;', '+  return Math.min(30000, 1000 * 2 ** attempt); // exponential backoff, capped so a long outage never waits more than thirty seconds per attempt', ' }', ' ', ' module.exports = { loadSettings, retryDelay };']],
+  ]) });
+  const files = commit ? [settings] : [
+    settings,
+    file({ file: 'src/retry/policy.js', status: 'added', added: 4, patch: demoPatch('src/retry/policy.js', [[0, 1, ['+// The retry policy of a failed step.', '+const MAX_ATTEMPTS = 5;', '+', '+module.exports = { MAX_ATTEMPTS };']]]) }),
+    file({ file: 'src/legacy-retry.js', status: 'deleted', deleted: 2, patch: demoPatch('src/legacy-retry.js', [[1, 0, ['-// Old fixed delay.', '-module.exports = () => 1000;']]]) }),
+    file({ file: 'docs/retries.md', oldFile: 'docs/retry.md', status: 'renamed', added: 1, deleted: 1, patch: demoPatch('docs/retries.md', [[1, 1, [' # Retry', ' ', '-A failed step retries twice.', '+A failed step retries up to five times.']]]) }),
+    file({ file: 'docs/images/backoff.svg', status: 'modified', added: null, deleted: null, binary: true, image: true }),
+    file({ file: 'assets/icon.ico', status: 'added', added: null, deleted: null, binary: true }),
+    file({ file: 'package-lock.json', status: 'modified', added: 1840, deleted: 1203, large: true }),
+  ];
+  return { simulated: false, unavailable: null, base: 'main', mergeBase: 'c0ffee0', commits, commit: commit || null, files };
+}
+function demoRunDiffFile(file) {
+  if (file === 'docs/images/backoff.svg') return { file, image: true, patch: null, before: demoSvg('#3b4a7a', 'fixed 1s'), after: demoSvg('#2f7a52', 'backoff 1s → 30s') };
+  if (file === 'src/settings.js') return { file, image: false, patch: null, before: DEMO_DIFF_BEFORE, after: DEMO_DIFF_AFTER };
+  if (file === 'package-lock.json') return { file, image: false, patch: demoPatch(file, [[1, 1, [' {', '-  "version": "1.0.0",', '+  "version": "1.1.0",', '   "lockfileVersion": 3,']]]), before: null, after: null };
+  return { file, image: false, patch: null, before: null, after: null };
 }
 
 // --missing-clis: what the Usage and Settings channels answer when CLIs are missing, each built from

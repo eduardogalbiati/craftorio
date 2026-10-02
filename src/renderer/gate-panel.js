@@ -4,9 +4,9 @@
 // (gateChoices), the developer's brief instead of the long message (gateBriefHtml), the Artifacts
 // side panel of a gate that tries the change (gateSideHtml, mountGateSides) and the gate's tools
 // (gateToolsHtml, onGateTool): Run App with its one-click confirmation and its fields, the
-// terminal toggle, Show the diff and the worktree's folder and shell; paintGateApps keeps Run App's
-// state on every gate shown. Uses app.js globals ($, esc, state, api, errMsg, showToast) and
-// openTerminal (term-dock.js).
+// terminal toggle, Show the diff (the diff viewer, diff-viewer.js, #118) and the worktree's folder
+// and shell; paintGateApps keeps Run App's state on every gate shown. Uses app.js globals ($, esc,
+// state, api, errMsg, showToast), openTerminal (term-dock.js) and DiffViewer.
 
 // The gates that try the change (`local_preview: true` on the step) get Run App and the side panel.
 const gateTriesChange = (g) => !!(g.run_app || g.runApp || g.local_preview || g.localPreview) && !!(g.work_dir || g.workDir);
@@ -40,7 +40,7 @@ function lastCapture(runId) {
 }
 
 // Mounts the Artifacts panel of every gate side in root: the run's files newest first, and at a
-// gate with diff_base the changed files (each opens its diff) and the developer's notes. Right
+// gate with diff_base the changed files (each opens the diff viewer at that file) and the developer's notes. Right
 // after a screenshots step (developer_check), that step's latest round leads the panel.
 function mountGateSides(root) {
   if (!window.ArtifactsPanel) return;
@@ -50,8 +50,7 @@ function mountGateSides(root) {
     const dev = lastOutput(runId, (o) => o.test_notes || o.evidence_plan);
     const notes = [['Test notes', dev?.test_notes], ['Evidence plan', dev?.evidence_plan]]
       .filter(([, t]) => t).map(([title, t]) => ({ title, text: typeof t === 'string' ? t : JSON.stringify(t, null, 2) }));
-    const onChange = (file) => openTerminal({ kind: 'diff', runId, sessionId: `diff-${approval}-${file}`, label: `Diff ${file.split('/').pop()}`, open: (cols, rows) => api.termOpen({ kind: 'diff', runId, approvalId: approval, file, cols, rows }) })
-      .catch((e) => showToast('Could not show the diff', errMsg(e)));
+    const onChange = (file) => DiffViewer.open({ runId, approvalId: approval, file });
     const panel = ArtifactsPanel.mount(el, { runId, flat: true, extras: { notes, changes: diff ? 'Loading…' : null, onChange, capture: lastCapture(runId) } });
     if (diff) {
       // the files the developer reported: a simulated run's only changes (#115), whatever git says
@@ -126,7 +125,7 @@ function gateToolsHtml(g, { disabled = false, runId = g.run_id || g.runId || '' 
     <label class="muted small" title="The copy uses your real workspace (projects, runs, settings) instead of a scratch copy. Still simulation only."><input type="checkbox" data-gate-real${off}> real workspace</label>` : '';
   const open = dir ? `<button type="button" class="btn sm ghost" data-gate-tool="folder" title="${esc(dir)}"${off}>Open the worktree</button>
     <button type="button" class="btn sm ghost" data-gate-tool="shell" title="A terminal in ${esc(dir)}"${off}>Terminal there</button>` : '';
-  const diff = base ? `<button type="button" class="btn sm ghost" data-gate-tool="diff" title="${esc(`The branch's changes since ${base} (git diff ${base}...HEAD in the worktree)`)}"${off}>Show the diff</button>` : '';
+  const diff = base ? `<button type="button" class="btn sm ghost" data-gate-tool="diff" title="${esc(`Review the branch's changes since ${base} file by file, split or unified (git diff ${base}...HEAD in the worktree)`)}"${off}>Show the diff</button>` : '';
   const more = runApp ? '<div class="gate-app-error error small hidden" data-gate-app-error></div><div class="gate-app-setup hidden" data-gate-setup></div>' : '';
   return `<div class="row gate-tools" data-dir="${esc(dir || '')}" data-approval="${esc(g.approval_id || g.approvalId)}" data-run="${esc(runId)}">${run}${diff}${open}${more}</div>`;
 }
@@ -252,7 +251,7 @@ async function onGateTool(e, runId) {
     else if (b.dataset.gateTool === 'shell') {
       await openTerminal({ kind: 'shell', runId, sessionId: dir, label: 'Worktree', open: (cols, rows) => api.termOpen({ kind: 'shell', folder: dir, cols, rows }) });
     } else if (b.dataset.gateTool === 'diff') {
-      await openTerminal({ kind: 'diff', runId, sessionId: `diff-${approval}`, label: 'Diff', open: (cols, rows) => api.termOpen({ kind: 'diff', runId, approvalId: approval, cols, rows }) });
+      DiffViewer.open({ runId, approvalId: approval });
     } else if (b.dataset.gateTool === 'stop') {
       if (!await api.stopLocalPreview(runId)) showToast('No local preview', 'This run has no local preview running.');
     } else if (b.dataset.gateTool === 'app-term') {

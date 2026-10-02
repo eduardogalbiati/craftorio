@@ -147,7 +147,7 @@ Read this before changing anything in `src/renderer/`.
   summary (`gateBriefHtml`: the developer's summary and one line per issue, the full message under
   "Full message"), the tools (`gateToolsHtml`: Run App, Show the diff, the worktree) and the
   choices; on the right its Artifacts panel (`gateSideHtml` / `mountGateSides`: the run's files
-  newest first, the changed files from `gate:changes`, each opening its diff, and the developer's
+  newest first, the changed files from `gate:changes`, each opening the diff viewer, and the developer's
   test notes and evidence plan). Stacked under 1100 px. The Run screen and the run chat use the same
   helpers; the sidebar card only links to the run (no room). **Run App** asks `localPreview:info`:
   with a config it starts the preview (`localPreview:start`), without one it opens a setup
@@ -156,6 +156,19 @@ Read this before changing anything in `src/renderer/`.
   error) is painted by `paintGateApps` from the run view's `preview` (local_preview events).
   `npm run screenshot -- --view run --workflow software-development-local-hero.yaml --input
   mode=validated --stop-at developer_check` captures it.
+- **The diff viewer** (#118, `diff-viewer.js`, model `diff-viewer-model.js`, styles
+  `diff-viewer.css`) is a near-full-screen overlay: `DiffViewer.open({ runId, approvalId?, file?, title? })`.
+  Show the diff, the Changed files entries (`onChange` in `mountGateSides`) and the Run screen's
+  Review changes open it. Its data is `run:diff` (the files with their status, counts and patches,
+  and the branch's commits) and `run:diffFile` (one file's patch and both sides, used to expand
+  context, load a huge diff and preview images). Both are served by `src/service/areas/diff.js`,
+  which takes the folder and base from the open gate or the run's `worktree.ready`. The model is pure
+  and Node-testable: `parsePatch`, `rows` (gaps and expansion), `splitRows` (split and unified
+  share the hunks), `wordDiff`, `highlightHtml` and `groupByFolder`. In screenshots, `run:diff` /
+  `run:diffFile` answer with a demo branch (`demoRunDiff` in `scripts/screenshot.js`). Use
+  `--view run --input mode=validated --stop-at developer_check --click "#btn-run-diff"`, then
+  `--click ".dv [data-dv-mode=unified]"`, `--click ".dv [data-dv-expand=all]"` or
+  `--click ".dv [data-dv-file='docs/images/backoff.svg']"`.
 - Test changes with a temporary Electron script (see `scripts/smoke.js`:
   `npx electron scripts/smoke.js <out.png>` runs a mock run and takes a screenshot) and look at
   the screenshots. Never open real CLI terminals or start real runs in those checks. In a fresh

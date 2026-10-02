@@ -54,5 +54,5 @@ suggestion says where it came from. **Run** saves a detected command as the proj
 shows what the folder declares or is detected to run with (**Use it**), before any gate. For this
 app itself it proposes `npm ci` and `npm start`. In a simulation (no git worktree) the gate's
 **Changed files** are the ones the simulated developer reported, labelled "simulated".
-`developer_check` also offers **Show the diff**: the branch's changes since the base branch, in an
-embedded terminal.
+`developer_check` also offers **Show the diff**: the branch's changes since the base branch, in the
+diff viewer (see Reviewing a run's changes).

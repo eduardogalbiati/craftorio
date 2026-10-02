@@ -1,8 +1,8 @@
 /* global api */
 // Run screen (Run Details): the run shown in the top bar, its failure banner, the gates it waits at
 // (gate cards: renderRunGates, onRunGateClick; what a gate offers is gate-panel.js), its summary
-// (inputs, supervisor, watch, resume, Save to issue), its steps by group, its sessions and the
-// Session / Events / Artifacts tabs. No sidebar entry of its own: the Run item and the runs menu
+// (inputs, supervisor, watch, resume, Save to issue, Review changes: the diff viewer, #118), its
+// steps by group, its sessions and the Session / Events / Artifacts tabs. No sidebar entry of its own: the Run item and the runs menu
 // belong to the shell (app.js), which also keeps the run state it draws (state.runs, onEvent,
 // hydrateRun) and calls renderRunScreen() from render() while it shows. Registers itself with
 // registerView (view-registry.js); uses app.js globals ($, esc, state, api, selectedView…).
@@ -105,6 +105,11 @@ function liveDuration(s) {
   return Date.now() - (s.localOpenedAt || Date.parse(s.opened_at));
 }
 
+// Whether a run has changes to review (#118): a git worktree, or files its developer reported.
+function hasChanges(runId) {
+  return (state.runs.get(runId)?.events || []).some((e) => e.type === 'worktree.ready' || (e.type === 'step.finished' && Array.isArray(e.output?.files_changed)));
+}
+
 function renderRunSummary() {
   const r = state.run;
   if (!r) return;
@@ -124,6 +129,7 @@ function renderRunSummary() {
       <button class="btn sm ghost sup-btn" id="btn-run-sup" title="Ask the AI supervisor to explain this run and suggest how to continue"><span class="sup-mark">◆</span> Ask the supervisor</button>
       ${r.status === 'running' ? `<button class="btn sm ghost sup-btn" id="btn-run-watch" title="${WATCH_TITLE}"><span class="sup-mark">◆</span> Watch</button>` : ''}
       ${canResume(r) ? '<button class="btn sm ghost" id="btn-run-resume" title="Start a new run from a step of this one, keeping the previous outputs (no supervisor call)">Resume from step…</button>' : ''}
+      ${hasChanges(r.id) ? '<button class="btn sm ghost" id="btn-run-diff" title="The files this run changed on its branch, file by file, split or unified">Review changes</button>' : ''}
       ${saveIssue ? `<button class="btn sm ghost" id="btn-run-save-issue" title="Save the accepted document to its issue (preview first, then confirm)">Save to issue #${esc(saveIssue.number)}…</button>` : ''}
     </div>`;
   // rendered on every event: rebuilt only when it changes, so a hover popover over an input stays open
@@ -134,6 +140,7 @@ function renderRunSummary() {
   $('#btn-run-sup').onclick = () => openSupervisorForCurrent();
   if ($('#btn-run-watch')) $('#btn-run-watch').onclick = () => openSupervisorForCurrent({ watch: true });
   if ($('#btn-run-resume')) $('#btn-run-resume').onclick = () => openResumeDialog(r.id);
+  if ($('#btn-run-diff')) $('#btn-run-diff').onclick = () => DiffViewer.open({ runId: r.id, title: r.title || r.workflow || '' });
   if ($('#btn-run-save-issue')) {
     $('#btn-run-save-issue').onclick = () => window.openDuoSaveToIssue({ runId: r.id, issue: saveIssue, mock: !!r.mock, docSkill: r.inputs?.document_skill || '' });
   }
