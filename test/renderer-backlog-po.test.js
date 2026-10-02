@@ -181,6 +181,13 @@ test('the drawer re-renders (keeping its scroll position, #148: render() itself 
   assert.match(listener, /if \(po\.open\) render\(\);/);
 });
 
+test('messageHtml (#189): a user message with a per-question override shows "for <Step>"; a po answer shows "Planned for <Step>", adding "· this question" when it was an override', () => {
+  const fn = /function messageHtml\(msg, m\)[\s\S]*?\n  \}/.exec(src)[0];
+  assert.match(fn, /const once = msg\.calibrationOverride \? ` · <span class="badge" title="For this question only: the saved calibration is unchanged">for \$\{esc\(window\.PoCalibration\.step\(msg\.calibration\)\.name\)\}<\/span>` : '';/);
+  assert.match(fn, /const calib = msg\.calibration \? ` <span class="badge" title="\$\{esc\(`\$\{msg\.calibrationOverride \? 'For this question only\. ' : ''\}\$\{window\.PoCalibration\.tooltip\(msg\.calibration\)\}`\)\}">Planned for \$\{esc\(window\.PoCalibration\.step\(msg\.calibration\)\.name\)\}\$\{msg\.calibrationOverride \? ' · this question' : ''\}<\/span>` : '';/);
+  assert.match(fn, /const meta = `Product Owner · \$\{esc\(time\)\}\$\{msg\.model \? ` · \$\{esc\(msg\.model\)\}` : ''\} · \$\{esc\(fmtCost\(msg\.costUsd \|\| 0\)\)\}\$\{calib\}/);
+});
+
 test('sizeText marks the estimate as an estimate and warns when some complexities were guessed', () => {
   const fn = /const sizeText = \(g\) => \{[\s\S]*?\n  \};/.exec(src)[0];
   assert.match(fn, /\(estimate from \$\{esc\(g\.estimate\.basis\)\}\)/);
@@ -221,11 +228,13 @@ test('apply: a group already applied is never applied again; a partly applied on
   assert.match(fn, /const g = \{ \.\.\.answer\.groups\[n\], issues: withExtras\(st\.kind === 'partly' \? st\.rest : answer\.groups\[n\]\.issues, key\), origin \};/);
 });
 
-test('ask: a question is refused while another is pending, and the simulated flag (devMode), the mode, any staged attachments, the attached issues (#169, plan mode only) and the forced scenario (#148, simulated only) are sent with it', () => {
+test('ask: a question is refused while another is pending, and the simulated flag (devMode), the mode, any staged attachments, the attached issues (#169, plan mode only), the forced scenario (#148, simulated only) and the calibration override (#189, plan mode only, then cleared) are sent with it', () => {
   const fn = /async function ask\(question\)[\s\S]*?\n  \}/.exec(src)[0];
   assert.match(fn, /if \(!q \|\| po\.busy \|\| !po\.projectId\) return;/);
   assert.match(fn, /const issues = mode === 'plan' \? \[\.\.\.po\.attached\] : \[\];/);
-  assert.match(fn, /await api\.askProductOwner\(projectId, q, devMode\(\), mode, files, issues, devMode\(\) \? po\.scenario \|\| null : null\);/);
+  assert.match(fn, /const calibration = mode === 'plan' \? window\.BacklogPoSettings\?\.override\(\) \?\? null : null;/);
+  assert.match(fn, /if \(mode === 'plan'\) window\.BacklogPoSettings\?\.clearOverride\(\);/);
+  assert.match(fn, /await api\.askProductOwner\(projectId, q, devMode\(\), mode, files, issues, devMode\(\) \? po\.scenario \|\| null : null, calibration\);/);
 });
 
 // Runs ask() for real (po, watching and api stubbed): the busy flag is set synchronously, before the
@@ -236,9 +245,11 @@ function loadAsk() {
   const watchingFn = /const watching = \(\) => [^\n]+;/.exec(src)[0];
   const askFn = /async function ask\(question\)[\s\S]*?\n  \}/.exec(src)[0];
   for (const [name, code] of Object.entries({ poLit, watchingFn, askFn })) assert.ok(code, `${name} not found in backlog-po.js: the source moved`);
-  const calls = { askProductOwner: [], render: [] };
+  const calls = { askProductOwner: [], render: [], clearOverride: 0 };
   let settle;
   let fail;
+  // #189: the drawer's calibration chip (backlog-po-settings.js); stubbed here with a settable override
+  const settings = { override: null, clearOverride: () => { calls.clearOverride++; } };
   const sandbox = {
     $p: () => ({ value: '', focus() {} }),
     api: { askProductOwner: (...a) => { calls.askProductOwner.push(a); return new Promise((resolve, reject) => { settle = resolve; fail = reject; }); } },
@@ -247,7 +258,7 @@ function loadAsk() {
     render: () => calls.render.push(true),
     // #180: ask() starts a live turn (window.LiveTurn.create) and a 1 s ticker (renderLive); the
     // real live-turn.js runs here too, so po.live has its real shape
-    window: { LiveTurn: require('../src/renderer/live-turn') },
+    window: { LiveTurn: require('../src/renderer/live-turn'), BacklogPoSettings: { override: () => settings.override, clearOverride: settings.clearOverride } },
     renderLive: () => {},
     setInterval: () => 0,
     clearInterval: () => {},
@@ -257,7 +268,7 @@ function loadAsk() {
   vm.createContext(sandbox);
   vm.runInContext(`${poLit}\n${watchingFn}\n${askFn}\nthis.ask = ask; this.po = po;`, sandbox);
   Object.assign(sandbox.po, { projectId: 'demo', open: true });
-  return { ask: sandbox.ask, po: sandbox.po, calls, settle: (out) => settle(out), fail: (e) => fail(e) };
+  return { ask: sandbox.ask, po: sandbox.po, calls, settings, settle: (out) => settle(out), fail: (e) => fail(e) };
 }
 
 test('ask (#148): a second call fired in the same tick (double click, or a click racing Enter) while the first is still in flight sends the question only once', () => {
@@ -267,6 +278,24 @@ test('ask (#148): a second call fired in the same tick (double click, or a click
   assert.equal(calls.askProductOwner.length, 1, 'only the first call reached api.askProductOwner');
   assert.equal(po.busy, true);
   assert.equal(po.pending, 'Analyze the backlog');
+});
+
+test('ask (#189, plan mode): sends window.BacklogPoSettings.override() as the 8th argument, then clears the override so the next question uses the saved calibration again', () => {
+  const { ask, calls, settings } = loadAsk();
+  settings.override = 5;
+  ask('Plan this one for quality');
+  assert.equal(calls.askProductOwner[0].length, 8);
+  assert.equal(calls.askProductOwner[0][7], 5);
+  assert.equal(calls.clearOverride, 1);
+});
+
+test('ask (#189, issue mode): the calibration override never applies to registering an issue', () => {
+  const { ask, po, calls, settings } = loadAsk();
+  settings.override = 5;
+  po.mode = 'issue';
+  ask('Login button broken');
+  assert.equal(calls.askProductOwner[0][7], null);
+  assert.equal(calls.clearOverride, 0); // nothing to clear: the override is a plan-mode concern only
 });
 
 test('ask (#148): once the answer lands, busy clears and a genuinely new question is sent for real, not swallowed as a duplicate', async () => {

@@ -115,6 +115,41 @@ test('an empty or missing model/effort for the Product Owner falls back to its d
   assert.equal(a.effort, 'high');
 });
 
+// ---- #189: the Product Owner's Speed ↔ Quality calibration -----------------------------------------
+
+test('the Product Owner\'s calibration defaults to 2 (Speed-leaning) with no saved file', (t) => {
+  const dir = tmp(t);
+  assert.equal(agents.readAgent(dir, 'product-owner').calibration, 2);
+  assert.equal(agents.listAgents(dir)[1].calibration, 2);
+});
+
+test('saving a calibration of 5 persists it; a later save that omits it keeps 5', (t) => {
+  const dir = tmp(t);
+  const a = agents.saveAgent(dir, 'product-owner', { calibration: 5 });
+  assert.equal(a.calibration, 5);
+  assert.equal(agents.readAgent(dir, 'product-owner').calibration, 5);
+  // a later save (e.g. only the model) with no calibration keeps the one already saved
+  const b = agents.saveAgent(dir, 'product-owner', { model: 'claude-sonnet-5-5' });
+  assert.equal(b.calibration, 5);
+});
+
+test('a calibration outside 1..5 is refused; the saved one is unchanged', (t) => {
+  const dir = tmp(t);
+  agents.saveAgent(dir, 'product-owner', { calibration: 4 });
+  assert.throws(() => agents.saveAgent(dir, 'product-owner', { calibration: 9 }), /Pick a calibration from 1 \(Speed\) to 5 \(Quality\)\./);
+  assert.throws(() => agents.saveAgent(dir, 'product-owner', { calibration: 0 }), /Pick a calibration from 1 \(Speed\) to 5 \(Quality\)\./);
+  assert.equal(agents.readAgent(dir, 'product-owner').calibration, 4); // the refused save left it as it was
+});
+
+test('only the Product Owner carries a calibration: the Oracle and the supervisor have none', (t) => {
+  const dir = tmp(t);
+  agents.saveAgent(dir, 'oracle', { model: 'claude-sonnet-5-5' });
+  agents.saveAgent(dir, 'supervisor', { appearance: LOOK });
+  assert.equal('calibration' in agents.readAgent(dir, 'oracle'), false);
+  assert.equal('calibration' in agents.readAgent(dir, 'supervisor'), false);
+  assert.equal(Object.hasOwn(JSON.parse(fs.readFileSync(path.join(dir, 'oracle.json'), 'utf8')), 'calibration'), false);
+});
+
 // #122: the Oracle, built in the same way as the Product Owner.
 test('the Oracle keeps its prompt and skills: only its look, model and effort are saved; it cannot be removed', (t) => {
   const dir = tmp(t);

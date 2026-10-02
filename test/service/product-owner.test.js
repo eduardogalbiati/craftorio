@@ -53,6 +53,24 @@ test('po:ask: MULTIAGENT_SIMULATION_ONLY forces the simulated path (no notice) e
   assert.deepEqual(shown, []);
 });
 
+// ---- #189: the drawer's per-question calibration override reaches productOwner.ask -----------------
+
+test('po:ask passes `calibration` through to productOwner.ask (null when the caller sends none)', async (t) => {
+  const { service, api } = makeService(t);
+  const ws = service.workspace();
+  const p = await roadmapProject(api, ws, t, [1], 'po-calibration');
+  const realAsk = productOwner.ask;
+  const calls = [];
+  t.after(() => { productOwner.ask = realAsk; });
+  productOwner.ask = async (opts) => { calls.push(opts.calibration); return { message: { role: 'po', text: 'ok', answer: { summary: 'ok', groups: [] } }, messages: [] }; };
+
+  await api['po:ask']({ projectId: p.id, question: 'Plan this one for quality', mock: true, mode: 'plan', attachments: [], issues: [], calibration: 5 });
+  assert.equal(calls[0], 5);
+
+  await api['po:ask']({ projectId: p.id, question: 'Analyze the backlog', mock: true, mode: 'plan', attachments: [], issues: [] });
+  assert.equal(calls[1], null);
+});
+
 // ---- #180: live progress (chat:progress, chat:cancel) --------------------------------------------
 
 test('po:ask (mock): the turn streams chat:progress start/items/end for chat "po" keyed by the project id', async (t) => {

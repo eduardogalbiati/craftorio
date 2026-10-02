@@ -271,6 +271,40 @@ test('normalizeAnswer: a simulated marker is dropped without `mock` (a real answ
   assert.equal('simulated' in outsideGroup.groups[0], false); // #3 exists, but is not one of this group's issues
 });
 
+// ---- #189: normalizeAnswer with a calibration step (calibrateGroups) -------------------------------
+
+test('normalizeAnswer with a calibration caps the groups per stage to the step\'s maxRuns, cutting an oversized stage into consecutive stages and renumbering the stages after it', () => {
+  const issues = [1, 2, 3, 4, 5].map((n) => ({ number: n, state: 'open' }));
+  const g = (name, issue, stage) => ({ name, issues: [issue], workflow: 'software-development.yaml', reason: 'r', stage });
+  const raw = { summary: 'ok', groups: [g('G1', 1, 1), g('G2', 2, 1), g('G3', 3, 1), g('G4', 4, 2), g('G5', 5, 2)] };
+  // calibration 4 (Quality-leaning): maxRuns 2. Stage 1's three groups become stage 1 (G1, G2) and stage
+  // 2 (G3); stage 2's two groups become stage 3 (G4, G5): the renumbering never reuses a stage number.
+  const out = productOwner.normalizeAnswer(raw, { issues, history: [], workflows: [{ file: 'software-development.yaml' }], calibration: 4 });
+  const stageOf = (name) => out.groups.find((x) => x.name === name).stage;
+  assert.equal(stageOf('G1'), 1);
+  assert.equal(stageOf('G2'), 1);
+  assert.equal(stageOf('G3'), 2);
+  assert.equal(stageOf('G4'), 3);
+  assert.equal(stageOf('G5'), 3);
+  assert.equal(out.calibration, 4);
+});
+
+test('normalizeAnswer with a calibration warns on a group over the step\'s max complexity', () => {
+  const issues = [{ number: 1, state: 'open', labels: [{ name: 'complexity:5' }] }];
+  const raw = { summary: 'ok', groups: [{ name: 'G', issues: [1], workflow: 'software-development.yaml', reason: 'r', stage: 1 }] };
+  const out = productOwner.normalizeAnswer(raw, { issues, history: [], workflows: [{ file: 'software-development.yaml' }], calibration: 5 });
+  assert.match(out.groups[0].warnings[0], /Complexity 5: over 4, the most a group gets at Quality\./);
+});
+
+test('normalizeAnswer without a calibration leaves the groups\' stages and warnings untouched, and carries no `calibration`', () => {
+  const issues = [{ number: 1, state: 'open' }, { number: 2, state: 'open' }];
+  const raw = { summary: 'ok', groups: [{ name: 'G1', issues: [1], workflow: 'software-development.yaml', reason: 'r', stage: 5 }, { name: 'G2', issues: [2], workflow: 'software-development.yaml', reason: 'r', stage: 5 }] };
+  const out = productOwner.normalizeAnswer(raw, { issues, history: [], workflows: [{ file: 'software-development.yaml' }] });
+  assert.equal(out.groups[0].stage, 5);
+  assert.equal(out.groups[1].stage, 5); // both kept in the same stage: no calibration to cap them
+  assert.equal('calibration' in out, false);
+});
+
 // ---- #148: mockScenario, the drawer's simulation-only scenario picker -------------------------------
 
 test('mockScenario refuses an id outside MOCK_SCENARIOS', () => {
@@ -395,6 +429,54 @@ test('ask (mock, issue mode) ignores a selection: it is not recorded on the user
   assert.equal('issues' in userMessage, false);
 });
 
+// ---- #189: ask's calibration (the saved step, a per-question override, or a phrase in the question) --
+
+test('ask (mock, plan mode): an explicit `calibration` plans that question only (calibrationOverride on both messages); the next question with no override falls back to the saved one', async (t) => {
+  const dir = tmp(t);
+  const agent = { calibration: 2 };
+  const first = await productOwner.ask({
+    backlogDir: dir, projectId: 'demo', question: 'Plan this one for quality', data: { projectId: 'demo', issues: ISSUES },
+    workflows: [{ file: 'software-development.yaml', name: 'x' }], mock: true, mode: 'plan', agent, calibration: 5,
+  });
+  const userMsg1 = first.messages.find((m) => m.role === 'user');
+  assert.equal(userMsg1.calibration, 5);
+  assert.equal(userMsg1.calibrationOverride, true);
+  assert.equal(first.message.calibration, 5);
+  assert.equal(first.message.calibrationOverride, true);
+  assert.equal(first.message.answer.calibration, 5);
+
+  const second = await productOwner.ask({
+    backlogDir: dir, projectId: 'demo', question: 'Analyze the backlog', data: { projectId: 'demo', issues: ISSUES },
+    workflows: [{ file: 'software-development.yaml', name: 'x' }], mock: true, mode: 'plan', agent,
+  });
+  const userMsg2 = second.messages.filter((m) => m.role === 'user').at(-1);
+  assert.equal(userMsg2.calibration, 2); // the saved step: no override carried over from the previous question
+  assert.equal('calibrationOverride' in userMsg2, false);
+  assert.equal('calibrationOverride' in second.message, false);
+});
+
+test('ask (mock, plan mode): a phrase in the question ("...for quality") overrides the saved calibration with no explicit argument', async (t) => {
+  const dir = tmp(t);
+  const out = await productOwner.ask({
+    backlogDir: dir, projectId: 'demo', question: 'What should we build next? Favor quality for this one.', data: { projectId: 'demo', issues: ISSUES },
+    workflows: [{ file: 'software-development.yaml', name: 'x' }], mock: true, mode: 'plan', agent: { calibration: 2 },
+  });
+  assert.equal(out.message.calibration, 5);
+  assert.equal(out.message.calibrationOverride, true);
+});
+
+test('ask (mock, issue mode): a calibration (explicit or the agent\'s saved one) is never recorded: registering an issue is not planning', async (t) => {
+  const dir = tmp(t);
+  const runsDir = tmp(t);
+  const out = await productOwner.ask({
+    backlogDir: dir, projectId: 'demo', runsDir, question: 'Login button broken', data: emptyBacklog([{ number: 1, state: 'open' }]),
+    mock: true, mode: 'issue', agent: { calibration: 5 }, calibration: 5,
+  });
+  const userMessage = out.messages.find((m) => m.role === 'user');
+  assert.equal('calibration' in userMessage, false);
+  assert.equal('calibration' in out.message, false);
+});
+
 // ---- #180: live progress (ask's onItem/signal) --------------------------------------------------
 
 test('ask (mock, onItem set): the simulated turn streams its fake steps and the answer\'s text, ending in the hidden ```json block, before the final message is recorded', async (t) => {
@@ -457,6 +539,31 @@ test('ask (mock, scenario "error"): the fake steps and a partial line stream fir
 test('callAgent includes SELECTION_RULES in the prompt only when a selection is given (checked on the source: callAgent needs a real CLI to run for real)', () => {
   const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'product-owner.js'), 'utf8');
   assert.match(src, /selection\.length \? SELECTION_RULES : '',/);
+});
+
+test('callAgent (plan mode) states the calibration and its parameters in the prompt; issue mode has no Calibration section (runTurn stubbed: no real CLI is started)', async (t) => {
+  const providers = require('../src/engine/providers');
+  const original = providers.runTurn;
+  t.after(() => { providers.runTurn = original; });
+  const prompts = [];
+  providers.runTurn = async ({ prompt }) => { prompts.push(prompt); return { text: '```json\n{"summary":"ok","groups":[],"conflicts":[],"enrich":[]}\n```', costUsd: 0, usage: {} }; };
+  const folder = path.join(__dirname, '..');
+  const skillsDirs = [path.join(__dirname, '..', 'skills')];
+
+  await productOwner.ask({
+    backlogDir: tmp(t), projectId: 'demo', question: 'Analyze the backlog', data: { projectId: 'demo', issues: ISSUES },
+    workflows: [{ file: 'software-development.yaml', name: 'x' }], folder, skillsDirs, resolveCommand: () => 'claude',
+    agent: { model: 'claude-opus-5-5', effort: 'high' }, mock: false, calibration: 5,
+  });
+  assert.match(prompts[0], /## Calibration: Quality \(5\/5\)/);
+  assert.match(prompts[0], /- Max complexity per group: 4/);
+
+  prompts.length = 0;
+  await productOwner.ask({
+    backlogDir: tmp(t), projectId: 'demo', question: 'Login button broken', data: emptyBacklog([{ number: 1, state: 'open' }]),
+    folder, skillsDirs, resolveCommand: () => 'claude', agent: { model: 'claude-opus-5-5', effort: 'high' }, mock: false, mode: 'issue',
+  });
+  assert.doesNotMatch(prompts[0], /## Calibration:/);
 });
 
 test('sizeGroup warns at a complexity known to hit the context limit, and at a lower one for several issues', () => {
@@ -529,6 +636,58 @@ test('mockAnswer groups to-do issues sharing a label, up to complexity 6 per gro
   assert.equal(uiGroups.length, 2); // 1+2 fit in one group (complexity 6), 3 starts a new one
   assert.deepEqual(uiGroups[0].issues, [1, 2]);
   assert.deepEqual(uiGroups[1].issues, [3]);
+});
+
+// ---- #189: mockAnswer follows the calibration (parallel runs per stage, max complexity per group) ---
+
+// Six independent, single-topic to-do issues (no two share a label): mockAnswer gives each its own
+// group, so only the calibration's `maxRuns` decides how many stages they land in.
+function sixIndependentIssues() {
+  return {
+    issues: Array.from({ length: 6 }, (_, n) => ({ number: n + 1, state: 'open', title: `Issue ${n + 1}`, labels: [{ name: `area:${n + 1}` }], body: 'x'.repeat(200) })),
+  };
+}
+
+test('mockAnswer (Speed, 1): every independent group runs in stage 1 (as many parallel runs as do not share files)', () => {
+  const answer = productOwner.mockAnswer({ data: sixIndependentIssues(), calibration: 1 });
+  assert.equal(answer.groups.length, 6);
+  assert.ok(answer.groups.every((g) => g.stage === 1));
+  assert.match(answer.summary, /Planned for Speed \(1\/5\)\./);
+});
+
+test('mockAnswer (Speed-leaning, 2, the default): up to 4 groups per stage, 4 then 2', () => {
+  const answer = productOwner.mockAnswer({ data: sixIndependentIssues(), calibration: 2 });
+  assert.equal(answer.groups.filter((g) => g.stage === 1).length, 4);
+  assert.equal(answer.groups.filter((g) => g.stage === 2).length, 2);
+  assert.match(answer.summary, /Planned for Speed-leaning \(2\/5\)\./);
+});
+
+test('mockAnswer (Balanced, 3): up to 3 groups per stage, 3 then 3', () => {
+  const answer = productOwner.mockAnswer({ data: sixIndependentIssues(), calibration: 3 });
+  assert.equal(answer.groups.filter((g) => g.stage === 1).length, 3);
+  assert.equal(answer.groups.filter((g) => g.stage === 2).length, 3);
+});
+
+test('mockAnswer (Quality, 5): at most 2 groups per stage, 2 then 2 then 2', () => {
+  const answer = productOwner.mockAnswer({ data: sixIndependentIssues(), calibration: 5 });
+  assert.equal(answer.groups.filter((g) => g.stage === 1).length, 2);
+  assert.equal(answer.groups.filter((g) => g.stage === 2).length, 2);
+  assert.equal(answer.groups.filter((g) => g.stage === 3).length, 2);
+  assert.match(answer.summary, /Planned for Quality \(5\/5\)\./);
+});
+
+test('mockAnswer groups to-do issues sharing a label up to the calibration\'s max complexity: 6 at Speed-leaning (default), 4 at Quality', () => {
+  const data = {
+    issues: [
+      { number: 1, state: 'open', title: 'One', labels: [{ name: 'area:ui' }, { name: 'complexity:3' }], body: 'x'.repeat(200) },
+      { number: 2, state: 'open', title: 'Two', labels: [{ name: 'area:ui' }, { name: 'complexity:3' }], body: 'x'.repeat(200) },
+      { number: 3, state: 'open', title: 'Three', labels: [{ name: 'area:ui' }, { name: 'complexity:3' }], body: 'x'.repeat(200) },
+    ],
+  };
+  const quality = productOwner.mockAnswer({ data, calibration: 5 }); // maxComplexity 4: 3+3 (6) does not fit, every issue alone
+  const uiGroups = quality.groups.filter((g) => g.name === 'area:ui');
+  assert.equal(uiGroups.length, 3);
+  assert.deepEqual(uiGroups.map((g) => g.issues), [[1], [2], [3]]);
 });
 
 // ---- runHistory: past runs' merge conflicts feed the "do not run in parallel" section --------------
