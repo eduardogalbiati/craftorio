@@ -2184,7 +2184,7 @@ class WorkflowRun extends EventEmitter {
     const rec = {
       agent: agentName, step: stepId, visit, session: session.id, mode, fresh: turn === 1,
       context_start: res.context.start, context_peak: res.context.peak,
-      tokens: totalTokens(res.usage), cost_usd: res.costUsd || 0,
+      tokens: totalTokens(res.usage), cost_usd: res.costUsd || 0, subagent_calls: res.tools.subagents || 0,
       waste: res.tools.ran === 0 && res.tools.denials > 0 ? 'refused' : null,
     };
     this.turnLog.push(rec);
@@ -2287,13 +2287,15 @@ class WorkflowRun extends EventEmitter {
       const t0 = Date.now();
       this.setStatus(session, 'active');
       // tool calls of this turn: refused ones (allowlist) vs the ones that ran
-      const tools = { ran: 0, denials: 0, streak: 0, maxStreak: 0, denied: [] };
+      // subagents: the sub-agent calls of this turn (capabilities.subagents, Claude's Agent/Task tool)
+      const tools = { ran: 0, denials: 0, streak: 0, maxStreak: 0, denied: [], subagents: 0 };
       // context window of each model request: the first one and the largest
       const context = { start: null, peak: null };
       const calls = new Map();
       const track = (item) => {
         if (item.kind === 'context') { context.start ??= item.tokens; context.peak = Math.max(context.peak || 0, item.tokens); return; }
         if (item.kind === 'tool_call') calls.set(item.id, { ...item });
+        if (item.kind === 'tool_call' && capabilities.CLAUDE_SUBAGENT_TOOLS.includes(item.name)) tools.subagents++;
         if (item.kind !== 'tool_result') return;
         if (calls.has(item.id)) calls.get(item.id).result = item;
         if (!isPermissionDenial(item)) { tools.ran++; tools.streak = 0; return; }
@@ -2364,7 +2366,7 @@ class WorkflowRun extends EventEmitter {
         this.emitEvent('session.message_received', {
           session_id: session.id, turn, step_id: stepId, text: res.text, usage: res.usage,
           cost_usd: res.costUsd, duration_ms: dur, active_ms, waiting_ms, stalled_ms, session: this.snapshot(session),
-          context, ...(res.handoff ? { handoff: res.handoff } : {}),
+          context, ...(res.handoff ? { handoff: res.handoff } : {}), ...(tools.subagents ? { subagent_calls: tools.subagents } : {}),
         });
         this.recordDecisions(agentName, stepId, res.text);
         return res;
@@ -2444,17 +2446,22 @@ class WorkflowRun extends EventEmitter {
 
   // Per run and per agent: context at the start of each turn, its peak, tokens, and the tokens spent
   // on turns that could not progress ("waste": every tool call refused, or a blocked /loop iteration).
+  // subagent_calls: sub-agent calls per agent, in total and per step, to compare runs (#160).
   contextSummary() {
     const agents = {};
     let waste = 0;
     for (const r of this.turnLog) {
-      const a = (agents[r.agent] ??= { mode: r.mode, turns: 0, fresh_sessions: 0, tokens: 0, peak: null, waste_tokens: 0, per_turn: [] });
+      const a = (agents[r.agent] ??= { mode: r.mode, turns: 0, fresh_sessions: 0, tokens: 0, peak: null, waste_tokens: 0, subagent_calls: 0, subagent_calls_by_step: {}, per_turn: [] });
       a.turns++;
       if (r.fresh) a.fresh_sessions++;
       a.tokens += r.tokens;
       if (r.context_peak != null) a.peak = Math.max(a.peak || 0, r.context_peak);
       if (r.waste) { a.waste_tokens += r.tokens; waste += r.tokens; }
-      a.per_turn.push({ step: r.step, visit: r.visit, start: r.context_start, peak: r.context_peak, tokens: r.tokens, ...(r.waste ? { waste: r.waste } : {}) });
+      if (r.subagent_calls) {
+        a.subagent_calls += r.subagent_calls;
+        a.subagent_calls_by_step[r.step] = (a.subagent_calls_by_step[r.step] || 0) + r.subagent_calls;
+      }
+      a.per_turn.push({ step: r.step, visit: r.visit, start: r.context_start, peak: r.context_peak, tokens: r.tokens, ...(r.subagent_calls ? { subagent_calls: r.subagent_calls } : {}), ...(r.waste ? { waste: r.waste } : {}) });
       if (a.per_turn.length > 200) a.per_turn.shift();
     }
     return { agents, waste_tokens: waste };

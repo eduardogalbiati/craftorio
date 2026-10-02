@@ -358,6 +358,10 @@ function runEvents(runDir, { activity = false } = {}) {
       if (same && thinking === out.at(-1)) { thinking.item.text = cut(thinking.item.text + item.text, ACTIVITY_TEXT); continue; }
       thinking = { ...e, item: { kind: 'thinking', text: cut(String(item.text), ACTIVITY_TEXT) } };
       out.push(thinking);
+    } else if (item.kind === 'tool_call' && ['Agent', 'Task'].includes(item.name) && item.input && typeof item.input === 'object') {
+      // a sub-agent call keeps its type and description (the run chat shows them), not its long prompt
+      const { subagent_type, description } = item.input;
+      out.push({ ...e, item: { kind: 'tool_call', name: item.name, input: { subagent_type, description: cut(String(description || ''), ACTIVITY_INPUT) } } });
     } else if (item.kind === 'tool_call') {
       const input = typeof item.input === 'string' ? item.input : JSON.stringify(item.input ?? '');
       out.push({ ...e, item: { kind: 'tool_call', name: item.name, input: cut(input, ACTIVITY_INPUT) } });

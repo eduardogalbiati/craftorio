@@ -46,6 +46,9 @@
 
   const clip = (s, n = MAX_TEXT) => (s.length > n ? `${s.slice(0, n)}…` : s);
   const brief = (v) => clip(typeof v === 'string' ? v : JSON.stringify(v ?? ''), 600);
+  // a sub-agent call (Claude's Agent/Task tool, capabilities.subagents): its type and what it was asked
+  const subagentOf = (name, input) => (['Agent', 'Task'].includes(name) && input && typeof input === 'object'
+    ? { type: String(input.subagent_type || 'general-purpose'), description: clip(String(input.description || ''), 200) } : null);
 
   class RunChatModel {
     constructor() {
@@ -156,7 +159,8 @@
         if (last?.kind === 'thinking') last.text = clip(last.text + item.text);
         else t.activity.push({ kind: 'thinking', text: clip(String(item.text)) });
       } else if (item.kind === 'tool_call') {
-        t.activity.push({ kind: 'tool', name: item.name || 'tool', input: brief(item.input) });
+        const subagent = subagentOf(item.name, item.input);
+        t.activity.push({ kind: 'tool', name: item.name || 'tool', input: brief(item.input), ...(subagent ? { subagent } : {}) });
       } else if (item.kind === 'tool_result' && item.is_error && last?.kind === 'tool') {
         last.error = true;
       }

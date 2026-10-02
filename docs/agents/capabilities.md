@@ -50,6 +50,24 @@ check still holds.
 not used. Measured on this repo (first request of a Claude agent, Haiku, "reply OK"): **41.1k
 tokens with the user's setup → 22.0k isolated with the developer's capabilities**.
 
+## Sub-agents (who gets them and why)
+
+Every request of a turn re-sends the whole conversation, so the files an agent reads in its own
+context are paid again on every later request. An exploration sub-agent reads them in its own
+context and returns only a summary. In the software-development workflows the **developer** and
+the **test_writer** (the most expensive agent: a persistent session with long turns) have
+`subagents: true` and the `context-economy` skill (#160). Sub-agents are their default for code
+research: the first map before an edit (the test writer's maps the changed behaviours, the tests
+that cover them and the test helpers), a search across files they will not edit, a long output
+(a failing suite, a log, a long diff) and a finding in code they have not mapped. Edits, the
+checks that decide a step and anything that crosses a gate stay in the agent's own turn. Codex
+and Grok agents get no sub-agents and do the same research with focused searches.
+
+Each sub-agent call is visible: the run chat lists it under the turn's tool calls with its type
+and description (and counts them in the summary), the run's Events show `sub-agent <type>:
+<description>`, `session.message_received` carries `subagent_calls` and the `context` of
+`workflow.finished` has `subagent_calls` and `subagent_calls_by_step` per agent, to compare runs.
+
 ## Unattended commands (no refusals)
 
 Headless, Claude Code refuses any Bash call it would ask about, and the agent loses a model round

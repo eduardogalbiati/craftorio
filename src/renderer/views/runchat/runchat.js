@@ -69,9 +69,14 @@
     const tools = it.activity.filter((a) => a.kind === 'tool');
     const thinking = it.activity.filter((a) => a.kind === 'thinking');
     if (it.activity.length) {
-      const what = [tools.length ? `${tools.length} tool call${tools.length === 1 ? '' : 's'}` : '', thinking.length ? 'thinking' : ''].filter(Boolean).join(' · ');
+      const subagents = tools.filter((a) => a.subagent).length;
+      const what = [tools.length ? `${tools.length} tool call${tools.length === 1 ? '' : 's'}` : '', subagents ? `${subagents} sub-agent${subagents === 1 ? '' : 's'}` : '', thinking.length ? 'thinking' : ''].filter(Boolean).join(' · ');
+      // a sub-agent call shows its type and description, not its whole prompt
+      const toolHtml = (a) => (a.subagent
+        ? `<li class="rc-subagent${a.error ? ' err' : ''}"><b class="mono">${esc(a.name)}</b> <span class="tag">${esc(a.subagent.type)}</span> ${esc(a.subagent.description)}</li>`
+        : `<li class="${a.error ? 'err' : ''}"><b class="mono">${esc(a.name)}</b> <span class="mono muted">${esc(a.input)}</span></li>`);
       extras.push(`<details class="rc-more rc-activity"><summary>${what}</summary><ol>${it.activity.map((a) => (a.kind === 'tool'
-        ? `<li class="${a.error ? 'err' : ''}"><b class="mono">${esc(a.name)}</b> <span class="mono muted">${esc(a.input)}</span></li>`
+        ? toolHtml(a)
         : `<li class="think"><i>${esc(a.text)}</i></li>`)).join('')}</ol></details>`);
     }
     // context window: at the first request of the turn → its largest request (a fresh session starts small)

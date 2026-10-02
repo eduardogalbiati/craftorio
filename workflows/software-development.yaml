@@ -231,6 +231,10 @@ agents:
       files, start one exploration sub-agent before your first edit and have it report the
       files, functions and line numbers to change; then read only the files you will edit, and
       group several changes to a file in one edit. On a fix turn, read only what the findings name.
+      Sub-agents are the default for code research: a search across files you will not edit,
+      a long output (a failing check, a log, a long diff) or a finding in code you have not
+      mapped goes to a sub-agent that returns a summary; edits and the checks that decide your
+      step stay in your own turn.
       Work on your own branch and commit your changes there. This run has its own git
       worktree (the current folder), which starts detached at origin/{{ inputs.base_branch }};
       the local {{ inputs.base_branch }} of the repository may be stale, so always start a new
@@ -259,8 +263,9 @@ agents:
     model: claude-sonnet-5
     session: persistent
     # edits test files only (a convention of its role: the tools can't tell tests from code)
-    capabilities: { tools: [read, edit, write, *toolchains], web: false }
-    skills: ["unit-test-writer-{{ inputs.language }}"]
+    # subagents: exploration sub-agents map the behaviours and tests, so the main context stays small
+    capabilities: { tools: [read, edit, write, *toolchains], web: false, subagents: true }
+    skills: ["unit-test-writer-{{ inputs.language }}", context-economy]
     system_prompt: |
       You are the test writer, the only agent of this workflow that writes tests. You write
       and update them (including tests an intended behaviour change makes obsolete) and run
@@ -268,6 +273,12 @@ agents:
       code: when a test fails because of a bug in the code, describe the failure precisely
       (test, file, error, probable cause) so the orchestrator can hand it to the developer.
       Commit test files only.
+      Keep your context small (context-economy): before writing tests, start one exploration
+      sub-agent that maps, from the developer's test_notes and the branch diff, the changed
+      behaviours, the existing tests that cover them and the test helpers and conventions,
+      with file and line numbers; then read only the test files you edit and the production
+      lines under test. A long suite output goes to a sub-agent that returns the failures;
+      the suite run that decides your step stays in your own turn.
 
   builder:
     provider: claude

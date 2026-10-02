@@ -503,7 +503,7 @@ What is shared by a family lives in a suffix-less skill referenced with `uses:`.
 | `ci-pipeline-{gh,gl}` | CI pusher | Push, PR/MR, mergeability (conflicts fail fast), CI status, missing checks, fetching failed logs, retrying flaky jobs |
 | `claim-verification` | verifier | Falsifiable claim, baseline vs treatment with the same command, verified / not_verified / inconclusive |
 | `code-review` | reviewer | Correctness, spec and standards axes, severities, `rules/` per language (JS/TS, Python, Go, Java/Kotlin, C#, SQL, Shell/CI) and `rules/smells.md` |
-| `context-economy` | developer | Maps the code with exploration sub-agents, reads excerpts instead of whole files, writes handoff notes the next fresh session can act on |
+| `context-economy` | developer, test_writer | Does code research through exploration sub-agents, reads excerpts instead of whole files, writes handoff notes the next fresh session can act on |
 | `decision-log` | developer, PR babysitter | Agents end answers with a ```` ```decisions ```` block; the engine appends it to `<run>/decisions.tsv` |
 | `dependency-audit-policy` | via `uses` | Severity from CVSS, how to report blockers with a fix, redaction |
 | `deploy-{gh,gl}` | deployer | Preview and production deploy tracking and cleanup |

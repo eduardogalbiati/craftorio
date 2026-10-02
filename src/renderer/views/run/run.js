@@ -297,12 +297,19 @@ function detailsBlock(key, cls, label, body) {
     <summary><div class="label">${label}</div></summary><pre>${esc(body)}</pre></details>`;
 }
 
+// a sub-agent call (Claude's Agent/Task tool): its type and description in the label
+function subagentLabel(item) {
+  const input = item.input;
+  if (!['Agent', 'Task'].includes(item.name) || !input || typeof input !== 'object') return '';
+  return ` · sub-agent ${esc(input.subagent_type || 'general-purpose')}${input.description ? `: ${esc(input.description)}` : ''}`;
+}
+
 function renderItem(sid, turn, item, i) {
   const key = `${sid}:${turn}:${i}`;
   switch (item.kind) {
     case 'thinking': return detailsBlock(key, 'thinking', 'thinking', item.text);
     case 'text': return `<div class="item text"><div class="label">output</div><pre>${esc(item.text)}</pre></div>`;
-    case 'tool_call': return `<div class="item tool_call"><div class="label">tool · ${esc(item.name)}</div><pre>${esc(typeof item.input === 'string' ? item.input : JSON.stringify(item.input, null, 2))}</pre></div>`;
+    case 'tool_call': return `<div class="item tool_call"><div class="label">tool · ${esc(item.name)}${subagentLabel(item)}</div><pre>${esc(typeof item.input === 'string' ? item.input : JSON.stringify(item.input, null, 2))}</pre></div>`;
     case 'tool_result': return detailsBlock(key, 'tool_result', `result${item.is_error ? ' (error)' : ''}`, item.output);
     case 'stderr': return `<div class="item stderr"><div class="label">stderr</div><pre>${esc(item.text)}</pre></div>`;
     case 'spawn': return `<div class="item spawn"><div class="label">process</div><pre>${esc(item.command)} ${esc(item.args.join(' '))}\ncwd: ${esc(item.cwd)}</pre></div>`;
