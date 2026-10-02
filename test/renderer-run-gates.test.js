@@ -309,8 +309,9 @@ const plain = (v) => JSON.parse(JSON.stringify(v));
 
 function loadMountGateSides() {
   const lastOutput = /function lastOutput\(runId, match\) \{[\s\S]*?\n\}/.exec(gateSrc)[0];
+  const lastCapture = /function lastCapture\(runId\) \{[\s\S]*?\n\}/.exec(gateSrc)[0];
   const mountGateSides = /function mountGateSides\(root\) \{[\s\S]*?\n\}/.exec(gateSrc)[0];
-  for (const [name, code] of Object.entries({ lastOutput, mountGateSides })) {
+  for (const [name, code] of Object.entries({ lastOutput, lastCapture, mountGateSides })) {
     assert.ok(code, `${name} not found in gate-panel.js: the source moved`);
   }
   const mounted = []; // every ArtifactsPanel.mount({ el, opts }) call
@@ -332,7 +333,7 @@ function loadMountGateSides() {
     window: { ArtifactsPanel: artifactsPanel },
   };
   vm.createContext(sandbox);
-  vm.runInContext(`${lastOutput}\n${mountGateSides}\nthis.mountGateSides = mountGateSides;`, sandbox);
+  vm.runInContext(`${lastOutput}\n${lastCapture}\n${mountGateSides}\nthis.mountGateSides = mountGateSides;`, sandbox);
   return { mountGateSides: sandbox.mountGateSides, sandbox, mounted, gateChangesCalls: () => mounted };
 }
 
@@ -393,6 +394,33 @@ test('mountGateSides: a real run whose diff fails with nothing reported shows th
   mountGateSides(root);
   await new Promise((r) => setTimeout(r, 0));
   assert.match(mounted[0].panel.extras.changes, /Could not list them:.*not a git repository/);
+});
+
+// ---- lastCapture (#144): extras.capture, the screenshots step's output right before the gate ----
+
+test('mountGateSides: extras.capture is the last type: screenshots step\'s output, skipping the gates\' own answers', async () => {
+  const { mountGateSides, sandbox, mounted } = loadMountGateSides();
+  sandbox.state.runs.set('r1', {
+    run: { mock: true },
+    events: [
+      { type: 'step.finished', output: { kind: 'screenshots', folder: 'developer', round: 1, taken: 1, errors: [], reason: null } },
+      { type: 'step.finished', output: { approved: true } }, // a gate's own answer, never mistaken for a capture
+    ],
+  });
+  const root = { querySelectorAll: () => [fakeSide({ run: 'r1' })] };
+  mountGateSides(root);
+  await new Promise((r) => setTimeout(r, 0));
+  assert.equal(mounted[0].panel.extras.capture.folder, 'developer');
+  assert.equal(mounted[0].panel.extras.capture.round, 1);
+});
+
+test('mountGateSides: extras.capture is null when nothing before the gate was a screenshots step', async () => {
+  const { mountGateSides, sandbox, mounted } = loadMountGateSides();
+  sandbox.state.runs.set('r1', { run: { mock: true }, events: [{ type: 'step.finished', output: { summary: 'done' } }] });
+  const root = { querySelectorAll: () => [fakeSide({ run: 'r1' })] };
+  mountGateSides(root);
+  await new Promise((r) => setTimeout(r, 0));
+  assert.equal(mounted[0].panel.extras.capture, null);
 });
 
 // ---- Run App's one-click confirmation and Edit fields (#115) --------------------------------

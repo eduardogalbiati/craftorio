@@ -292,6 +292,78 @@ test('extras: an empty changes list without changesReported (a real run with no 
 });
 
 // ---------------------------------------------------------------------------------------------
+// extras.capture (#144): the gate right after a `type: screenshots` step (developer_check) leads
+// with that step's own round, original/modified side by side, older rounds in History.
+
+// A manifest with two rounds of the same step ("developer"): round 1 has a full pair, round 2 (the
+// latest) recaptured only the modified side (its original capture failed). buildManifest (src/evidence.js)
+// still points round 2's modified image at round 1's original as its `pair` (the newest earlier one
+// available) — the stale pairing the gate itself must ignore.
+function developerRoundsFixture() {
+  const r1mod = '/r/evidence/developer/round-1/144-dashboard-default.modified.png';
+  const r1orig = '/r/evidence/developer/round-1/144-dashboard-default.original.png';
+  const r2mod = '/r/evidence/developer/round-2/144-dashboard-default.modified.png';
+  return {
+    version: 1, base: 'main', branch: 'feat/144',
+    final: { step: 'developer', round: 2 },
+    rounds: [
+      { step: 'developer', round: 1, captured_at: '2026-01-01T00:00:00Z', final: false },
+      { step: 'developer', round: 2, captured_at: '2026-01-02T00:00:00Z', final: true },
+    ],
+    images: [
+      { path: 'evidence/developer/round-1/144-dashboard-default.modified.png', file: r1mod, pair: 'evidence/developer/round-1/144-dashboard-default.original.png', pair_file: r1orig, side: 'modified', key: '144-dashboard-default', issue: '144', caption: 'The dashboard', commit: 'aaa1111', step: 'developer', round: 1, final: false },
+      { path: 'evidence/developer/round-1/144-dashboard-default.original.png', file: r1orig, pair: 'evidence/developer/round-1/144-dashboard-default.modified.png', pair_file: r1mod, side: 'original', key: '144-dashboard-default', issue: '144', caption: 'The dashboard', commit: null, step: 'developer', round: 1, final: false },
+      { path: 'evidence/developer/round-2/144-dashboard-default.modified.png', file: r2mod, pair: 'evidence/developer/round-1/144-dashboard-default.original.png', pair_file: r1orig, side: 'modified', key: '144-dashboard-default', issue: '144', caption: 'The dashboard', commit: 'bbb2222', step: 'developer', round: 2, final: true },
+    ],
+  };
+}
+
+test('extras.capture: the gate shows only the latest round\'s screenshots, paired and captioned, with a "latest" badge', async () => {
+  const ev = developerRoundsFixture();
+  const files = ev.images.map((x) => fileEntry(x.file));
+  const cap = { kind: 'screenshots', folder: 'developer', round: 1, taken: 2, screens: 1, errors: [], reason: null };
+  // use round 1 here (its own full pair) so this case is unambiguous; round 2's partial pair is
+  // covered by the next test
+  const onlyRound1 = { ...ev, final: { step: 'developer', round: 1 }, images: ev.images.filter((x) => x.round === 1) };
+  const { ArtifactsPanel } = loadPanel({ listArtifacts: async () => [{ artifacts: files }], runEvidence: async () => onlyRound1 });
+  const { root } = fakeRoot();
+  ArtifactsPanel.mount(root, { runId: 'r1', flat: true, extras: { capture: cap } });
+  await waitTick();
+  assert.match(root.innerHTML, /Screenshots <span class="badge">latest<\/span>[\s\S]*developer · round 1/);
+  assert.match(root.innerHTML, /The dashboard/);
+  assert.equal((root.innerHTML.match(/<figure>/g) || []).length, 2, 'both sides of the one screen');
+  assert.doesNotMatch(root.innerHTML, /No screenshots/);
+});
+
+test('extras.capture: a side that failed in the latest round is not paired with an older round\'s stale image (shown "modified only", with the error listed)', async () => {
+  const ev = developerRoundsFixture();
+  const files = ev.images.map((x) => fileEntry(x.file));
+  const cap = { kind: 'screenshots', folder: 'developer', round: 2, taken: 1, screens: 1, errors: [{ name: '144-dashboard-default', side: 'original', error: 'exit 1: boom' }], reason: null };
+  const { ArtifactsPanel } = loadPanel({ listArtifacts: async () => [{ artifacts: files }], runEvidence: async () => ev });
+  const { root } = fakeRoot();
+  ArtifactsPanel.mount(root, { runId: 'r1', flat: true, extras: { capture: cap } });
+  await waitTick();
+  assert.match(root.innerHTML, /developer · round 2/);
+  // only the modified side of round 2 is rendered for this shot: one figure, "modified only" badge
+  assert.equal((root.innerHTML.match(/<figure>/g) || []).length, 1, 'the stale round-1 original is not shown as the pair');
+  assert.match(root.innerHTML, /modified only/);
+  assert.match(root.innerHTML, /exit 1: boom/);
+  // round 1's own pair (both sides) still shows up in History, not folded into the latest round
+  assert.match(root.innerHTML, /History <span class="muted">2<\/span>/);
+  assert.match(root.innerHTML, /developer · round 1/);
+});
+
+test('extras.capture: nothing captured shows "No screenshots: <reason>", not the run\'s other evidence', async () => {
+  const cap = { kind: 'screenshots', folder: 'developer', round: 1, taken: 0, screens: 0, errors: [], reason: 'the developer listed no screens (a change without UI)' };
+  const { ArtifactsPanel } = loadPanel({ listArtifacts: async () => [{ artifacts: [fileEntry('/r/a.md')] }], runEvidence: async () => ({ images: [] }) });
+  const { root } = fakeRoot();
+  ArtifactsPanel.mount(root, { runId: 'r1', flat: true, extras: { capture: cap } });
+  await waitTick();
+  assert.match(root.innerHTML, /No screenshots:.*the developer listed no screens \(a change without UI\)/);
+  assert.doesNotMatch(root.innerHTML, /No screenshots in this run\./);
+});
+
+// ---------------------------------------------------------------------------------------------
 // Right-click (or Shift+F10) on a file of the list, or on an open image: the copy menu (#114)
 
 test('onContextMenu: right-click on a file of the list opens the copy menu with its metadata', async () => {

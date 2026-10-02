@@ -877,7 +877,9 @@ test('software-development: validated mode stops at developer_check with the dif
   assert.match(gate.message, /Try it before the review and the tests run/);
   assert.match(gate.message, /Files changed:/);
   assert.match(gate.feedback.label, /Your change request for the developer/);
-  assert.deepEqual(validated.transitions.filter((x) => /developer_check/.test(x)), ['develop>developer_check', 'developer_check>code_review']);
+  assert.deepEqual(validated.transitions.filter((x) => /developer_check|developer_screenshots/.test(x)), [
+    'develop>developer_screenshots', 'developer_screenshots>developer_check', 'developer_check>code_review',
+  ]);
 
   const auto = await runSoftwareDevelopment({ mockSequences: { preview_status: ['success'] } }); // mode defaults to "auto"
   assert.equal(auto.finished.status, 'success', auto.finished.error);
@@ -893,8 +895,9 @@ test('software-development: validated mode — Ask for changes sends the feedbac
     feedback: { developer_check: ['Use snake_case for the new function.'] },
   });
   assert.equal(finished.status, 'success', finished.error);
-  assert.deepEqual(transitions.filter((x) => /developer_check|^develop>/.test(x)), [
-    'develop>developer_check', 'developer_check>develop', 'develop>developer_check', 'developer_check>code_review',
+  assert.deepEqual(transitions.filter((x) => /developer_check|developer_screenshots/.test(x)), [
+    'develop>developer_screenshots', 'developer_screenshots>developer_check', 'developer_check>develop',
+    'develop>developer_screenshots', 'developer_screenshots>developer_check', 'developer_check>code_review',
   ]);
   const gates = events.filter((e) => e.type === 'approval.requested' && e.step_id === 'developer_check');
   assert.equal(gates.length, 2);
@@ -912,7 +915,9 @@ test('software-development: validated mode — a review fix round does not reope
     mockSequences: { preview_status: ['success'], verdict: ['changes_requested', 'approved'] },
   });
   assert.equal(once.finished.status, 'success', once.finished.error);
-  assert.deepEqual(once.transitions.filter((x) => /developer_check/.test(x)), ['develop>developer_check', 'developer_check>code_review']);
+  assert.deepEqual(once.transitions.filter((x) => /developer_check|developer_screenshots/.test(x)), [
+    'develop>developer_screenshots', 'developer_screenshots>developer_check', 'developer_check>code_review',
+  ]);
   assert.ok(once.transitions.includes('code_review>develop'));
   assert.equal(once.transitions.filter((x) => x === 'develop>code_review').length, 1, once.transitions.join(' '));
 
@@ -921,8 +926,9 @@ test('software-development: validated mode — a review fix round does not reope
     mockSequences: { preview_status: ['success'], verdict: ['changes_requested', 'approved'] },
   });
   assert.equal(every.finished.status, 'success', every.finished.error);
-  assert.deepEqual(every.transitions.filter((x) => /developer_check/.test(x)), [
-    'develop>developer_check', 'developer_check>code_review', 'develop>developer_check', 'developer_check>code_review',
+  assert.deepEqual(every.transitions.filter((x) => /developer_check|developer_screenshots/.test(x)), [
+    'develop>developer_screenshots', 'developer_screenshots>developer_check', 'developer_check>code_review',
+    'develop>developer_screenshots', 'developer_screenshots>developer_check', 'developer_check>code_review',
   ]);
 });
 
@@ -933,6 +939,24 @@ test('software-development: validated mode — Stop ends the run as cancelled, t
   assert.equal(finished.status, 'cancelled');
   assert.match(finished.error, /ended as cancelled at step "developer_check"/);
   assert.ok(!transitions.includes('developer_check>code_review'));
+});
+
+// #144: developer_screenshots, right before developer_check, runs the develop step's `screenshots`
+// list through captureScreenshots (src/engine/screenshot-step.js). A mock run never captures: its
+// output says so (reason), and developer_check's message shows it.
+test('software-development: developer_screenshots captures the developer\'s UI list as simulated in a mock run, reported at developer_check', { timeout: 120000 }, async () => {
+  const { events, finished } = await runSoftwareDevelopment({
+    inputs: { mode: 'validated' }, mockSequences: { preview_status: ['success'] },
+  });
+  assert.equal(finished.status, 'success', finished.error);
+  const step = events.find((e) => e.type === 'step.finished' && e.step_id === 'developer_screenshots');
+  assert.ok(step, events.map((e) => e.type).join(' '));
+  assert.equal(step.output.kind, 'screenshots');
+  assert.equal(step.output.taken, 0);
+  assert.deepEqual(step.output.errors, []);
+  assert.match(step.output.reason, /simulated run \(the app is not captured\)/);
+  const gate = events.find((e) => e.type === 'approval.requested' && e.step_id === 'developer_check');
+  assert.match(gate.message, /Screenshots: No screenshots: simulated run \(the app is not captured\)/);
 });
 
 // `type: run` inputs (run-retrospective): "latest", a real id, or refused before the run starts.
@@ -1327,7 +1351,9 @@ test('local hero workflow: validated mode stops at developer_check with a local 
   assert.equal(gate.diff_base, 'main');
   assert.equal(gate.work_dir, root);
   const transitions = events.filter((e) => e.type === 'step.transition').map((e) => `${e.from}>${e.to}`);
-  assert.deepEqual(transitions.filter((x) => /developer_check/.test(x)), ['develop>developer_check', 'developer_check>code_review']);
+  assert.deepEqual(transitions.filter((x) => /developer_check|developer_screenshots/.test(x)), [
+    'develop>developer_screenshots', 'developer_screenshots>developer_check', 'developer_check>code_review',
+  ]);
 });
 
 // A small workflow file in a temp folder; returns its path.
@@ -1351,6 +1377,99 @@ async function runWith(file, { mock, answer, cwd }) {
   fs.rmSync(runsDir, { recursive: true, force: true });
   return { events, finished: events.find((e) => e.type === 'workflow.finished') };
 }
+
+// #144: a `type: screenshots` step (`from` a step whose output lists the screens) never blocks the
+// gate after it, whatever the list looks like. The mock provider always returns a valid entry for a
+// field named exactly `screenshots` with `items.properties.args` (src/engine/providers.js), so these
+// two fixtures shape develop's output_schema around that: without `args` the mock's generic object
+// filler produces a name the step rejects (a bad name, not a reserved option, but the same path:
+// checkEntry's error ends up in the step's `errors`); without a `screenshots` property at all,
+// develop's output simply has none (a change without UI).
+test('a screenshots step: an invalid entry (bad name) from the previous step still reaches the gate, with the error in the output', async (t) => {
+  const { file } = tempWorkflow(t, `apiVersion: multiagent/v1
+kind: Workflow
+metadata: { name: shots-bad-entry }
+inputs:
+  task: { type: string }
+  dir: { type: string }
+defaults:
+  working_dir: "{{ inputs.dir }}"
+agents:
+  dev: { provider: claude, model: mock-model, session: ephemeral }
+steps:
+  - id: develop
+    agent: dev
+    prompt: implement
+    output_schema:
+      type: object
+      properties:
+        screenshots:
+          type: array
+          items:
+            type: object
+            properties:
+              name: { type: string }
+              caption: { type: string }
+  - id: shots
+    type: screenshots
+    from: develop
+    folder: ui
+  - id: gate
+    type: human_approval
+    message: "{{ steps.shots.output.message }}"
+    transitions:
+      - when: "approved"
+        goto: end
+`);
+  const { events, finished } = await runWith(file, { mock: true, answer: () => true });
+  assert.equal(finished.status, 'success', finished.error);
+  const step = events.find((e) => e.type === 'step.finished' && e.step_id === 'shots');
+  assert.equal(step.output.taken, 0);
+  assert.equal(step.output.errors.length, 1);
+  assert.match(step.output.errors[0].error, /name must be a plain file name/);
+  assert.match(step.output.reason, /no valid entry in the developer's list/);
+  const gate = events.find((e) => e.type === 'approval.requested' && e.step_id === 'gate');
+  assert.match(gate.message, /No screenshots: no valid entry in the developer's list; 1 error: .*name must be a plain file name/);
+});
+
+test('a screenshots step: an empty (no UI) list from the previous step skips the capture and still reaches the gate', async (t) => {
+  const { file } = tempWorkflow(t, `apiVersion: multiagent/v1
+kind: Workflow
+metadata: { name: shots-empty }
+inputs:
+  task: { type: string }
+  dir: { type: string }
+defaults:
+  working_dir: "{{ inputs.dir }}"
+agents:
+  dev: { provider: claude, model: mock-model, session: ephemeral }
+steps:
+  - id: develop
+    agent: dev
+    prompt: implement
+    output_schema:
+      type: object
+      properties: {}
+  - id: shots
+    type: screenshots
+    from: develop
+    folder: ui
+  - id: gate
+    type: human_approval
+    message: "{{ steps.shots.output.message }}"
+    transitions:
+      - when: "approved"
+        goto: end
+`);
+  const { events, finished } = await runWith(file, { mock: true, answer: () => true });
+  assert.equal(finished.status, 'success', finished.error);
+  const step = events.find((e) => e.type === 'step.finished' && e.step_id === 'shots');
+  assert.equal(step.output.taken, 0);
+  assert.deepEqual(step.output.errors, []);
+  assert.match(step.output.reason, /the developer listed no screens \(a change without UI\)/);
+  const gate = events.find((e) => e.type === 'approval.requested' && e.step_id === 'gate');
+  assert.match(gate.message, /No screenshots: the developer listed no screens \(a change without UI\)/);
+});
 
 test('transition on_error: a failed action goes to the named step with action_error; without it the run fails', { timeout: 60000 }, async (t) => {
   const yaml = (onError) => `apiVersion: multiagent/v1
