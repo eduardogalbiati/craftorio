@@ -206,7 +206,7 @@
     // the run's title (editable) and PR (#84, app.js), its workflow next to them
     const run = { ...r, id: r.id };
     if (!$c('#rc-title .run-title-input')) $c('#rc-title').innerHTML = r.id
-      ? `<b>${window.runTitleHtml ? runTitleHtml(run) : esc(r.workflow)}</b> ${window.runPrBadge ? runPrBadge(run) : ''} <span class="muted small">${esc(r.workflow)}</span>${r.mock ? ' <span class="badge p-mock">simulated</span>' : ''} <span class="muted small mono">${esc(r.id)}</span>`
+      ? `<b>${window.runTitleHtml ? runTitleHtml(run) : esc(r.workflow)}</b> ${window.runPrBadge ? runPrBadge(run) : ''} <span class="muted small">${esc(r.workflow)}</span>${r.mock ? ' <span class="badge p-mock">simulated</span>' : ''}${r.chain && window.ChainModel ? ` ${ChainModel.chainBadgesHtml(r.chain)}` : ''} <span class="muted small mono">${esc(r.id)}</span>`
       : `<span class="muted mono">${esc(chat.runId || '')}</span>`;
     const status = chat.loading ? 'loading' : r.status === 'running' && !chat.live ? 'interrupted' : r.status || 'unknown';
     const waiting = chat.live && chat.model.pendingGates().length;

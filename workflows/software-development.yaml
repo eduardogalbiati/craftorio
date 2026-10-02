@@ -79,7 +79,7 @@ kind: Workflow
 
 metadata:
   name: software-development
-  version: 0.19.1
+  version: 0.20.0
   description: Implements, reviews, tests, builds, watches CI and the PR/MR, publishes a preview and, once approved, merges and tracks the production deploy. Works with several languages on GitHub or GitLab.
   tags: [dev, review, test, build, ci, pr, deploy, github, gitlab]
   # Dashboard category: plan (Plan & Design), build (Code & Build) or monitor (Monitor & Improve).
@@ -1582,6 +1582,26 @@ steps:
       - when: "choice == 'stop'"
         goto: end
         status: failed
+
+# -----------------------------------------------------------------------------
+# What the run hands to the next one when it finishes (#134): `then` at start, or a gate choice's.
+outputs:
+  branch:
+    type: string
+    description: The branch the developer worked on.
+    value: "{{ steps.develop.output.branch }}"
+  merged_commit:
+    type: string
+    description: "The branch's last commit once the owner approved the merge (the PR/MR is squash-merged: the merge commit itself is on the platform). Empty when nothing was merged."
+    value: "{% if steps.approve_merge.output and steps.approve_merge.output.approved %}{{ steps.develop.output.commit_sha }}{% endif %}"
+  issues:
+    type: array
+    description: "The issues the run implemented (number, url, title)."
+    value: "{{ run.issues | to_json }}"
+  pr_url:
+    type: string
+    description: The pull/merge request the run opened.
+    value: "{{ steps.ci.output.pr_url }}"
 
 # -----------------------------------------------------------------------------
 observability:

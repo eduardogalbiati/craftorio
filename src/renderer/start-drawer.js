@@ -6,6 +6,7 @@
 // esc, state, api, errMsg, CATEGORIES, liveRuns, renderHeader, selectRun, wantsSimulation…). The
 // inputs other than the main one are drawn by WorkflowInputs (workflow-inputs.js, #116): human
 // labels, pills / switches, show_if, and the chosen project's detected language and branches.
+// "When it finishes" (#134) is the ChainPicker (chain-picker.js) under the inputs: its then goes with the start.
 
 const LS_KEY = 'multiagent.inputs';
 // Inputs filled with the chosen project's folder.
@@ -137,7 +138,12 @@ function selectWorkflow(file) {
   const needsProject = Object.entries(wf.inputs || {}).some(([k, def]) => isPathInput(k) && def.required !== false);
   $('#project-req').classList.toggle('hidden', !needsProject);
   setStartDisabled(!!wf.error || oneRunAtATime());
+  drawerChain().refresh();
 }
+
+// The drawer's "When it finishes" (#134), mounted once; it follows the chosen workflow.
+let chainPicker = null;
+const drawerChain = () => (chainPicker ??= ChainPicker.mount($('#drawer-chain'), { workflows: () => state.workflows, source: () => state.wf }));
 
 // Without concurrent runs (Settings › Execution) a second run can't start; with them, the engine
 // says when the limit is reached.
@@ -177,7 +183,7 @@ async function startRun({ keepOpen = false } = {}) {
   state.starting = true;
   setStartDisabled(true);
   try {
-    const { runId } = await api.startRun({ file: wf.file, inputs, mock: wantsSimulation($('#mock-toggle')) });
+    const { runId } = await api.startRun({ file: wf.file, inputs, mock: wantsSimulation($('#mock-toggle')), then: drawerChain().value() });
     state.settings = await api.setSettings({ lastWorkflow: wf.file, lastProject: project?.id || null });
     const view = state.runs.get(runId);
     if (view?.run && project) view.run.project = project.name;

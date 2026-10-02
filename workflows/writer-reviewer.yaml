@@ -34,7 +34,7 @@ kind: Workflow
 
 metadata:
   name: writer-reviewer
-  version: 0.5.0
+  version: 0.6.0
   description: A writer drafts a document from your prompt, a reviewer scores it against your goal and sends notes back until it passes, and the supervisor checks it and asks you what to do.
   tags: [writing, review, documents]
   category: plan
@@ -382,6 +382,18 @@ steps:
       - when: "choice == 'stop'"
         goto: end
         status: cancelled
+
+# -----------------------------------------------------------------------------
+# What the run hands to the next one when it finishes (#134): `then` at start, or a gate choice's.
+outputs:
+  document:
+    type: string
+    description: The accepted document (also document.md in the run folder).
+    value: "{{ steps.write.output.document }}"
+  issue:
+    type: object
+    description: "The issue the document was written for (number, url, title), when started from one."
+    value: "{{ (run.issues[0] if run.issues | length else none) | to_json }}"
 
 # -----------------------------------------------------------------------------
 observability:

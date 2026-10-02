@@ -25,6 +25,27 @@ function readIssueSaves(dir) {
   try { return JSON.parse(fs.readFileSync(path.join(dir, 'issue-saves.json'), 'utf8')); } catch { return []; }
 }
 
+// A run's chain (#134): runs/<id>/chain.json, written by the service (src/service/areas/chain.js):
+// { then, state: waiting | started | paused | dropped | done, reason, nextRunId, at }. Its `then` wins
+// over the one recorded in the events (the owner edits the chain while the run goes and after it).
+function readChain(dir) {
+  try { return JSON.parse(fs.readFileSync(path.join(dir, 'chain.json'), 'utf8')) || null; } catch { return null; }
+}
+function writeChain(dir, patch) {
+  const next = { ...(readChain(dir) || {}), ...patch, at: new Date().toISOString() };
+  fs.writeFileSync(path.join(dir, 'chain.json'), `${JSON.stringify(next, null, 2)}\n`);
+  return next;
+}
+
+// What the run lists show of a run's chain: { then, from, state, reason, nextRunId }, null without one.
+function chainOf(dir, summary, started) {
+  const file = readChain(dir) || {};
+  const then = file.then !== undefined ? file.then : summary?.then || started?.then || null;
+  const from = summary?.from || started?.from || null;
+  if (!then && !from) return null;
+  return { then, from, state: then ? file.state || 'waiting' : undefined, reason: file.reason || null, nextRunId: file.nextRunId || null };
+}
+
 // What a run without a (complete) summary.json needs from its events.jsonl: its sessions, its
 // step trail (progress by group) and its local merge (runs recorded before summary.local_merge),
 // cached by mtime+size so an unchanged file is read once.
@@ -181,6 +202,10 @@ function readRun(runsDir, runId) {
     localMerge,
     // where the owner saved the run's document to its issue ([{ number, url, mode, at, platform, commentUrl? }], #103)
     issueSaves: readIssueSaves(dir),
+    // what happens with its result when it finishes, and the run whose chain started it (#134)
+    chain: chainOf(dir, summary, started),
+    // the declared outputs it finished with (#134), null before it finished or without a contract
+    outputs: summary?.outputs || null,
     recovery: fromEvents(path.join(dir, 'events.jsonl')).recovery,
     error,
     // a run without an end that another live app process runs (#112): { pid, host }, else null
@@ -200,7 +225,7 @@ function readRun(runsDir, runId) {
 // With the service's index open, a listing reads each run from its row and only stats its files:
 // a run whose files changed since it was indexed (signature below), or that has no row, is read
 // again and its row replaced; rows of deleted folders go. The files stay the source of truth.
-const SIG_FILES = ['events.jsonl', 'summary.json', 'meta.json', 'issue-saves.json'];
+const SIG_FILES = ['events.jsonl', 'summary.json', 'meta.json', 'issue-saves.json', 'chain.json'];
 function runSignature(dir) {
   return SIG_FILES.map((f) => {
     try { const st = fs.statSync(path.join(dir, f)); return `${st.mtimeMs}:${st.size}`; } catch { return '-'; }
@@ -377,6 +402,7 @@ module.exports = {
   kindOf,
   listRuns,
   projectOf,
+  readChain,
   readRun,
   rebuildIndex,
   runArtifacts,
@@ -385,4 +411,5 @@ module.exports = {
   runsForProject,
   runSummaries,
   runTitle,
+  writeChain,
 };

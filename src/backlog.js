@@ -15,8 +15,8 @@
 // locally while its commit is not on origin (`readLocal`/`writeLocal`: `<id>.local.json`).
 // Write & Review runs started from an issue (`enrich` on the linked run) never move its column; their
 // accepted document can be saved back to the issue (`saveRunToIssue`: replace the description or comment).
-// An issue-tracker run whose owner chose "create and queue" names the issues to queue (`filedToQueue`);
-// the service syncs the backlog and assigns them when the run ends.
+// An issue-tracker run whose owner chose "create and queue" is chained to a queue (#134): the service
+// (src/service/areas/chain.js) syncs the backlog and assigns its `issues` output when the run ends.
 // Each sync also reads the epics (#138, src/epics.js readEpics): `issue.epic` and the cache's `epics`.
 // The platform is the source of truth (#168): queue and roadmap items keep a read-only copy of their
 // issues, refreshed by each sync (`refreshQueuedCopies`) and read again right before a run starts
@@ -408,13 +408,14 @@ function queueStamp() {
  * `group`: the issues go as one item (one run, one branch, one PR/MR), in the order given.
  * @param {{ issues: { number, url, title, body, pullRequests? }[], workflow: string, workflowName?: string, inputs?: object, mock?: boolean, group?: boolean }} a
  */
-function enqueue(dir, projectId, { issues, workflow, workflowName = null, inputs = {}, mock = false, group = false }) {
+// then: what happens with each run's result when it finishes (#134, chain-model), given to its start
+function enqueue(dir, projectId, { issues, workflow, workflowName = null, inputs = {}, mock = false, group = false, then = null }) {
   return updateQueue(dir, projectId, (q) => {
     const have = new Set(q.items.flatMap((x) => itemIssues(x).map((i) => i.number)));
     const now = queueStamp();
     const fresh = issues.filter((i) => !have.has(i.number))
       .map((i) => issueFields({ ...i, knownPullRequests: (i.pullRequests || []).map((p) => p.url) }));
-    const base = { workflow, workflowName, inputs, mock: !!mock, addedAt: now };
+    const base = { workflow, workflowName, inputs, mock: !!mock, addedAt: now, ...(then ? { then } : {}) };
     const added = !fresh.length ? [] : group ? [withIssues(base, fresh)] : fresh.map((i) => withIssues(base, [i]));
     const numbers = new Set(fresh.map((x) => x.number));
     return {
@@ -798,39 +799,6 @@ function runInputs(item, wf, folder) {
   return inputs;
 }
 
-/**
- * What an issue-tracker run asks to queue when it ends: the issues its `file` step created, for
- * `inputs.assign_workflow`. When the analyzer advised grouping, the open issues it named
- * `group_with` (shown at the review gate) join them and they all run grouped (one run), when
- * that makes more than one issue. A group holds at most `maxGroup` issues (the backlogMaxGroup
- * setting, which the Backlog's assign enforces): the nearby issues only fill the room the created
- * ones leave (in the analyzer's order), and created issues beyond it go in further groups.
- * `batches` are the assign calls to make, each grouped when it has more than one issue. Null
- * unless the run succeeded and the owner chose `create_assign` at the review gate.
- * @param {{ workflow: string, status: string, steps: object, inputs: object, maxGroup?: number }} run
- * @returns {{ numbers: number[], workflow: string, group: boolean, batches: { numbers: number[], group: boolean }[] } | null}
- */
-function filedToQueue({ workflow, status, steps, inputs, maxGroup = 5 } = {}) {
-  if (workflow !== ISSUE_TRACKER_WORKFLOW || status !== 'success') return null;
-  if (steps?.review?.output?.choice !== 'create_assign') return null;
-  const valid = (n) => Number.isInteger(n) && n > 0;
-  const created = [...new Set((steps.file?.output?.filed || []).filter((f) => f?.action === 'created' && valid(f.number)).map((f) => f.number))];
-  if (!created.length) return null;
-  const analysis = steps.analyze?.output || {};
-  const advised = analysis.grouping === 'group';
-  const size = Math.max(2, Number(maxGroup) || 5);
-  const nearby = advised ? (analysis.nearby || []).filter((n) => n?.advice === 'group_with' && valid(n.number) && !created.includes(n.number)).map((n) => n.number) : [];
-  const numbers = [...created, ...[...new Set(nearby)].slice(0, Math.max(0, size - created.length))];
-  const group = advised && numbers.length > 1;
-  const batches = [];
-  if (!group) batches.push({ numbers, group: false });
-  else for (let i = 0; i < numbers.length; i += size) {
-    const part = numbers.slice(i, i + size);
-    batches.push({ numbers: part, group: part.length > 1 });
-  }
-  return { numbers, workflow: inputs?.assign_workflow || 'software-development.yaml', group, batches };
-}
-
 module.exports = {
   PLATFORMS, DEFAULT_PLATFORM, parseRepoUrl, platformOfHost, taskProgress, fetchIssues, readBacklog, syncBacklog, linkRuns,
   referencedIssues, fetchOpenPullRequests, attachPullRequests,
@@ -839,7 +807,6 @@ module.exports = {
   claimQueued,
   cliTarget,
   fetchIssue,
-  filedToQueue,
   freshIssues,
   issueAppendBody,
   issueCloseCommand,

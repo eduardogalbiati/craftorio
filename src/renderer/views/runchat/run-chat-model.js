@@ -124,12 +124,19 @@
         runDir: ev.run_dir, status: 'running', startedAt: ev.ts, issues,
         // agents from the Agents menu show their own name (runs recorded before agent_names: the personas)
         agentNames: { ...Object.fromEntries(Object.entries(ev.personas || {}).map(([k, p]) => [k, p?.name]).filter(([, n]) => n)), ...(ev.agent_names || {}) },
+        // its chain (#134): what follows it, and the run whose chain started it
+        chain: ev.then || ev.from ? { then: ev.then || null, from: ev.from || null, state: ev.then ? 'waiting' : undefined } : null,
       });
       const inputs = ev.inputs || {};
       this.add({
         kind: 'start', ts: ev.ts, workflow: this.run.workflow, version: ev.version, mock: !!ev.mock,
         task: String(inputs.task || '').trim(), inputs, issues, resumedFrom: ev.resumed_from || null,
       });
+    },
+
+    // the chain edited while the run goes (#134)
+    'run.then'(ev) {
+      this.run.chain = { ...(this.run.chain || {}), then: ev.then || null, state: ev.then ? 'waiting' : undefined };
     },
 
     'session.opened'(ev) {

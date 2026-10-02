@@ -115,6 +115,7 @@ module.exports = (ctx) => {
           file: item.workflow, inputs: backlog.runInputs(run, wf, project.folder), mock: mockOf(item),
           projectId, issues: backlog.recordedIssues(open), notices: warnings.map((message) => ({ level: 'warn', message })),
           allowKeptWork: keptWorkAllowed.has(`${projectId}:${item.id}`),
+          then: item.then || null,
         });
         keptWorkAllowed.delete(`${projectId}:${item.id}`);
         roadmaps.markStarted(ws.backlog, projectId, item.id, { runId: started.runId });

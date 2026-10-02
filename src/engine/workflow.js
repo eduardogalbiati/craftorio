@@ -13,7 +13,9 @@
 // the provider (templated `timeout` via `turnTimeout`; a failed attempt's tool calls go to the next
 // one, `attemptSummary`). Exports `render` (nunjucks, autoescape off, filters `to_yaml`, `to_json`,
 // `shuffle(seed)`, `clamp(lo, hi)`), `takeHandoff`, `parseTokens`. Steps without an agent: gates
-// (`type: human_approval`) and `type: screenshots` (`runScreenshots`, #144).
+// (`type: human_approval`) and `type: screenshots` (`runScreenshots`, #144). Chaining (#134): the
+// declared `outputs:` (`computeOutputs`, in workflow.finished and summary.json), the run's `then`
+// (option, a gate choice's `then`, `setThen`) and `from`; the service starts what comes next.
 
 const fs = require('fs');
 const path = require('path');
@@ -59,6 +61,7 @@ const mergeQueue = require('./merge-queue');
 const { IdleWatch } = require('./idle');
 const testPaths = require('./test-paths');
 const { StepTrail } = require('../renderer/run-progress-model');
+const chain = require('../renderer/chain-model');
 
 // Skills bundled with the app (skills/ folder at the root). Workspace skills take precedence.
 const BUNDLED_SKILLS = path.join(__dirname, '..', '..', 'skills');
@@ -112,6 +115,17 @@ tpl.addFilter('git_commits', (dir, base) => {
   try {
     return execFileSync('git', ['log', '--oneline', '--no-decorate', '-n', '30', `${base}..HEAD`], { cwd: String(dir), encoding: 'utf8', windowsHide: true, timeout: 10000, stdio: ['ignore', 'pipe', 'ignore'] }).trim();
   } catch { return ''; }
+});
+
+// The issues an issue-tracker run created, as its `issues` output (#134): the `file` step's created
+// issues with the analysis' complexity and grouping advice (`group_with`: the open issues it advised
+// to run with them), what a `queue` chain groups by (chain-model queueBatches).
+tpl.addFilter('filed_issues', (filed, analysis) => {
+  const a = analysis || {};
+  const groupWith = a.grouping === 'group' ? (a.nearby || []).filter((n) => n?.advice === 'group_with' && Number.isInteger(n.number)).map((n) => n.number) : [];
+  return (filed || []).filter((f) => f?.action === 'created' && Number.isInteger(f.number) && f.number > 0).map((f) => ({
+    number: f.number, url: f.url || '', title: f.title || '', complexity: a.complexity?.score ?? null, grouping: a.grouping || 'alone', group_with: groupWith,
+  }));
 });
 
 const render = (s, scope) => (s == null ? '' : tpl.renderString(String(s), scope));
@@ -201,6 +215,11 @@ function loadWorkflow(file) {
     if (s.diff_base !== undefined && (s.type !== 'human_approval' || typeof s.diff_base !== 'string' || !s.diff_base.trim())) throw new Error(`Step "${s.id}": diff_base must be a ref (e.g. "origin/{{ inputs.base_branch }}"), on a human_approval step.`);
     if (s.save_to_issue !== undefined && (s.type !== 'human_approval' || !(s.choices || []).some((c) => c.id === s.save_to_issue))) throw new Error(`Step "${s.id}": save_to_issue must be the id of one of the step's choices (e.g. accept), on a human_approval step.`);
     if ((s.choices || []).some((c) => c.feedback_required) && !s.feedback) throw new Error(`Step "${s.id}": a choice with feedback_required needs the step's feedback field.`);
+    // a choice's `then` (#134): picking it sets what happens with the run's result when it finishes
+    for (const c of s.choices || []) {
+      if (c.then === undefined) continue;
+      try { chain.normalizeThen(c.then); } catch (e) { throw new Error(`Step "${s.id}": choice "${c.id}": ${e.message}`); }
+    }
     // `kind: escalation`: a gate about a problem (a failure, an exhausted loop), where the supervisor on
     // call tries first; `decision` (default): a choice only the person makes, never answered by it
     if (s.kind !== undefined) {
@@ -267,7 +286,23 @@ function loadWorkflow(file) {
     if (sup.stall?.[k] !== undefined && !isAmount(sup.stall[k])) throw new Error(`orchestrator.supervisor.stall.${k} must be a number (0 = off).`);
   }
   validateGroups(wf.groups, ids);
+  validateOutputs(wf.outputs);
   return wf;
+}
+
+// `outputs:` (#134): the run's result contract, { <name>: { type, description, value } }. `value` is a
+// template over the run's context plus `run` ({ issues, local_merge }); a type other than string is
+// rendered as JSON (`| to_json`). Filled when the run finishes (WorkflowRun.computeOutputs).
+const OUTPUT_TYPES = ['string', 'number', 'integer', 'boolean', 'array', 'object'];
+function validateOutputs(outputs) {
+  if (outputs === undefined) return;
+  if (!outputs || typeof outputs !== 'object' || Array.isArray(outputs)) throw new Error('outputs must be a map of output names to { type, description, value }.');
+  for (const [name, o] of Object.entries(outputs)) {
+    if (!/^[a-z][a-z0-9_]*$/.test(name)) throw new Error(`outputs.${name}: the name must be lower case letters, digits and _.`);
+    if (!o || typeof o !== 'object') throw new Error(`outputs.${name} must be { type, description, value }.`);
+    if (!OUTPUT_TYPES.includes(o.type || 'string')) throw new Error(`outputs.${name}.type must be one of ${OUTPUT_TYPES.join(', ')}.`);
+    if (typeof o.value !== 'string' || !o.value.trim()) throw new Error(`outputs.${name}.value must be a template (e.g. "{{ steps.write.output.document }}").`);
+  }
 }
 
 // `groups:` names sets of steps for progress views (runs list, Run screen); the graph ignores it.
@@ -551,7 +586,10 @@ class WorkflowRun extends EventEmitter {
   // attachments: { <input>: [path | { path, name }] } images attached to inputs (#129), checked here (refused
   //   before anything runs), copied into <run_dir>/attachments/<input>/ at start and given to every turn of a
   //   step whose prompt uses that input (stepAttachments). A resume passes the previous run's copies.
-  constructor({ file, inputs, mock, runsDir, skillsDirs, budget, prices, projectId, issues, issue, resume, worktreesDir, mockSequences, notices, stopProcesses, probe, actionsQuota, peerSessions, idleWarnMs, personas, localPreview, attachments }) {
+  // then: what happens with the run's result when it finishes (#134, src/renderer/chain-model.js), recorded in
+  //   workflow.started and summary.json; a gate choice with `then` or the owner (setThen) can change it while it runs.
+  // from: { run_id, workflow } the run whose chain started this one (workflow.started.from, summary.from).
+  constructor({ file, inputs, mock, runsDir, skillsDirs, budget, prices, projectId, issues, issue, resume, worktreesDir, mockSequences, notices, stopProcesses, probe, actionsQuota, peerSessions, idleWarnMs, personas, localPreview, attachments, then, from }) {
     super();
     refreshWindowsPath(); // actions (e.g. gh pr merge) need the refreshed PATH
     this.file = file;
@@ -564,6 +602,8 @@ class WorkflowRun extends EventEmitter {
     this.skillsDirs = [...(skillsDirs || []), BUNDLED_SKILLS];
     this.projectId = projectId || null;
     this.issues = issues?.length ? issues : issue ? [issue] : null;
+    this.then = chain.normalizeThen(then);
+    this.from = from?.run_id ? { run_id: String(from.run_id), workflow: from.workflow ? String(from.workflow) : undefined } : null;
     this.worktreesDir = worktreesDir || null;
     this.worktree = null; // see setupWorktree
     this.stopProcesses = stopProcesses === undefined ? (this.mock ? null : stopProcessesIn) : stopProcesses;
@@ -798,6 +838,52 @@ class WorkflowRun extends EventEmitter {
     this.emitEvent('session.closed', { session_id: s.id, status, session: this.snapshot(s) });
   }
 
+  // What happens with the result when the run finishes (#134): the owner edits or cancels it while the
+  // run goes (null = nothing). Recorded as `run.then`; summary.json has the last one.
+  setThen(then, by = 'owner') {
+    this.then = chain.normalizeThen(then);
+    this.emitEvent('run.then', { then: this.then, by });
+    return this.then;
+  }
+
+  // A gate choice with `then` (e.g. the issue tracker's "Create and queue"): the owner's pick sets the
+  // chain; its workflow can be a template over the run (`{{ inputs.assign_workflow }}`).
+  thenFromChoice(step, choice) {
+    const t = choice.then && typeof choice.then === 'object' ? { ...choice.then } : choice.then;
+    try {
+      if (t?.workflow) t.workflow = render(t.workflow, this.ctx).trim();
+      this.setThen(t, `gate:${step.id}`);
+    } catch (e) {
+      this.emitEvent('log', { level: 'warn', message: `Gate ${step.id}: the choice's "then" was not set: ${e.message}` });
+    }
+  }
+
+  // The declared `outputs:` filled from the run (#134): each value template rendered over the context
+  // plus `run`, parsed as JSON for a type other than string; empty or unparsable → null (logged).
+  computeOutputs() {
+    const defs = this.wf.outputs;
+    if (!defs) return undefined;
+    const scope = { ...this.ctx, run: { issues: this.issues || [], local_merge: this.ctx.local_merge || null } };
+    const out = {};
+    for (const [name, def] of Object.entries(defs)) {
+      let value = null;
+      try {
+        const text = render(def.value, scope).trim();
+        const type = def.type || 'string';
+        if (text && text !== 'null') {
+          value = type === 'string' ? text : JSON.parse(text);
+          if (type === 'array' && !Array.isArray(value)) value = [value];
+          if ((type === 'number' || type === 'integer') && typeof value !== 'number') value = Number(value);
+        }
+      } catch (e) {
+        this.emitEvent('log', { level: 'warn', message: `Output ${name} could not be filled: ${e.message}` });
+        value = null;
+      }
+      out[name] = value;
+    }
+    return out;
+  }
+
   // The name of an agent imported from the Agents menu (or picked by `persona: random`), for
   // the UI; an agent written in the YAML has none and shows its key.
   agentNames() {
@@ -840,6 +926,8 @@ class WorkflowRun extends EventEmitter {
       file: path.basename(this.file), inputs: this.inputs, mock: this.mock, run_dir: this.runDir,
       attachments: Object.keys(this.attachments).length ? this.attachments : undefined,
       resumed_from: this.resume ? { run_id: this.resume.runId, step: this.resume.fromStep } : undefined,
+      then: this.then || undefined,
+      from: this.from || undefined,
       personas: Object.keys(this.personas).length ? this.personas : undefined,
       agent_names: this.agentNames(),
       steps: this.wf.steps.map((s) => ({ id: s.id, type: s.type || 'agent', agent: stepAgentLabel(s) })),
@@ -1043,6 +1131,8 @@ class WorkflowRun extends EventEmitter {
       if (step.choices) {
         output = { choice: answer, feedback, ...by };
         scope = { ...this.ctx, output, choice: answer, feedback };
+        const picked = step.choices.find((c) => c.id === answer);
+        if (picked?.then !== undefined) this.thenFromChoice(step, picked);
       } else {
         output = { approved: answer, feedback, ...by };
         scope = { ...this.ctx, output, approved: answer, rejected: !answer, feedback };
@@ -2759,8 +2849,12 @@ ${stderr || stdout}`.slice(0, 1500)));
     const sessions = [...this.sessions.values()].map((s) => this.snapshot(s));
     const tokens = emptyUsage();
     sessions.forEach((s) => addUsage(tokens, s.tokens));
+    const outputs = this.computeOutputs();
     this.emitEvent('workflow.finished', {
       status, error: err?.message || null,
+      // the declared outputs (#134) and the chain, for what starts next
+      ...(outputs ? { outputs } : {}),
+      ...(this.then ? { then: this.then } : {}),
       summary: {
         run_id: this.runId, workflow: this.wf.metadata?.name, project_id: this.projectId, issues: this.issues || undefined, status,
         started_at: new Date(this.startedAt).toISOString(), finished_at: new Date().toISOString(),
@@ -2777,6 +2871,9 @@ ${stderr || stdout}`.slice(0, 1500)));
         ...(this.preexisting.length ? { preexisting_failures: this.preexisting } : {}),
         // step visits in order with their agents (runs list); this event's own update lands in it
         groups: this.wf.groups, progress: this.trail.steps,
+        ...(outputs ? { outputs } : {}),
+        ...(this.then ? { then: this.then } : {}),
+        ...(this.from ? { from: this.from } : {}),
         sessions,
       },
     });

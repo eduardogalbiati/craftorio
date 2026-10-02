@@ -1,7 +1,7 @@
 // Service area: the runs in progress. Starts a run (concurrency limits, budgets, the project it
 // belongs to, no second live run of the same issues, #112), records what it emits (events.jsonl,
 // the index, notifications, 'run:event') and reacts as it ends (the Backlog queue, roadmaps, issue
-// tracker). Runs in progress live in `active` by run id (several with Settings › Execution ›
+// tracker, the run's chain #134). Runs in progress live in `active` by run id (several with Settings › Execution ›
 // Concurrent runs); a run leaves it when it finishes and is read from its folder from then on.
 
 const fs = require('fs');
@@ -123,6 +123,8 @@ module.exports = (ctx) => {
         projectId: r.projectId, issues: r.issues, startedAt: r.startedAt ? new Date(r.startedAt).toISOString() : null,
         status: r.status, waiting: gates.length, gates, inputs: r.inputs, agent_names: r.agentNames(),
         ...ctx.liveTitle(r), pr: ctx.withPrState(r.pr, r.mock), passedGates: passedGates(r),
+        // what happens with its result when it finishes, and the run whose chain started it (#134)
+        chain: r.then || r.from ? { then: r.then, from: r.from, state: r.then ? 'waiting' : undefined } : null,
       };
     });
   }
@@ -134,7 +136,8 @@ module.exports = (ctx) => {
   // for them (run:start's confirmation, a confirmed roadmap Retry); otherwise that start is refused (#112)
   // notices: [{ level, message }] the starter logs in the run (e.g. an issue read from the cache, #168)
   // attachments: { <input>: [path | { path, name }] } images attached to inputs (#129, WorkflowRun)
-  async function startWorkflowRun({ file, inputs, mock, mockSequences = null, resume = null, projectId: forcedProject = null, issues = null, allowKeptWork = false, notices: startNotices = [], attachments = null }) {
+  // then / from: the run's chain (#134, WorkflowRun): what follows it, and the run whose chain started it
+  async function startWorkflowRun({ file, inputs, mock, mockSequences = null, resume = null, projectId: forcedProject = null, issues = null, allowKeptWork = false, notices: startNotices = [], attachments = null, then = null, from = null }) {
     // simulation-only (automated checks): a real run is refused, never turned into a simulation
     if (!mock) simulation.refuseReal('a real run');
     // the same issues never get a second live run, from this app or another one (#112): resume that run instead
@@ -187,7 +190,7 @@ module.exports = (ctx) => {
         file: wfFile.file, inputs, mock, runsDir: ws.runs, skillsDirs: [ws.skills], notices,
         // Run locally at gates: the project's override of the workflow's orchestrator.local_preview
         localPreview: project?.localPreview?.command ? project.localPreview : null,
-        budget, prices: settings.prices, projectId, issues, resume, attachments, mockSequences: mock ? mockSequences : null,
+        budget, prices: settings.prices, projectId, issues, resume, attachments, mockSequences: mock ? mockSequences : null, then, from,
         // simulation runs never touch git: the agents are mocked and work in the repository folder
         worktreesDir: mock ? null : ws.worktrees,
         // concurrent runs share the monthly budgets
@@ -231,6 +234,7 @@ module.exports = (ctx) => {
         ctx.stopLocalPreview({ runId: run.runId, reason: ev.type === 'approval.resolved' ? 'the gate was answered' : 'the run ended' });
       }
       if (ev.type === 'worktree.merged') ctx.afterLocalMerge(run, ev).catch((e) => console.error('after local merge:', e));
+      if (ev.type === 'workflow.started' || ev.type === 'run.then') ctx.recordChain(run, ev);
       events.emit('run:event', ev);
       if (ev.type === 'workflow.started') markActiveRun(run.runId, runInfo);
       if (ev.type === 'workflow.finished') markActiveRun(run.runId, null);
@@ -241,8 +245,9 @@ module.exports = (ctx) => {
         if (run.issues && run.projectId && ev.status === 'failed' && !run.mock) {
           try { backlog.setPaused(ctx.ws.backlog, run.projectId, true, `${run.issues.map((i) => `#${i.number}`).join(', ')} failed: resume to start the next issues.`); } catch (e) { console.error('backlog queue:', e); }
         }
+        // the epic first (the chain may sync the backlog), then what the run's chain starts (#134)
         ctx.placeFiledInEpic(run, ev).catch((e) => console.error('issue tracker epic:', e.message))
-          .then(() => ctx.queueFiledIssues(run, ev)).catch((e) => console.error('issue tracker queue:', e.message));
+          .then(() => ctx.continueChain(run, ev)).catch((e) => console.error('run chain:', e.message));
         // a roadmap's next items first (its stage may be over), then the plain queue
         setTimeout(() => ctx.dispatchRoadmaps().catch((e) => console.error('roadmap dispatch:', e)).then(() => ctx.dispatchQueue()).catch((e) => console.error('backlog dispatch:', e)), 1000);
       }

@@ -13,13 +13,14 @@ module.exports = (ctx) => [
     // When an ended run of those issues kept a worktree with commits, the answer is the kept-work
     // question { confirm, kept, runId } (that run can be resumed instead) until `confirmed` (#112, #170).
     // attachments: { <input>: [path | { path, name }] } images attached to inputs (#129, WorkflowRun).
-    fn: ({ file, inputs, mock, mockSequences, projectId, issues, confirmed, attachments }) => {
+    // then: what happens with the run's result when it finishes (#134, chain-model normalizeThen).
+    fn: ({ file, inputs, mock, mockSequences, projectId, issues, confirmed, attachments, then }) => {
       const list = Array.isArray(issues) && issues.length
         ? issues.map((i) => ({ number: Number(i.number), url: String(i.url || ''), title: String(i.title || '') }))
         : undefined;
       const kept = list && !confirmed ? ctx.keptWorkForIssues(list) : null;
       if (kept) return { confirm: kept.text, kept, runId: kept.runId };
-      return ctx.startWorkflowRun({ file, inputs, mock, mockSequences, projectId: projectId || undefined, issues: list, allowKeptWork: true, attachments });
+      return ctx.startWorkflowRun({ file, inputs, mock, mockSequences, projectId: projectId || undefined, issues: list, allowKeptWork: true, attachments, then });
     },
   },
   // runId: the run to stop (without it, the only run in progress)

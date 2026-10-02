@@ -68,7 +68,8 @@ module.exports = (ctx) => {
     {
       channel: 'backlog:assign',
       method: 'assignWorkflow',
-      params: ['projectId', 'numbers', 'workflow', 'inputs', 'mock', 'group', 'confirmed'],
+      // then: what happens with each run's result when it finishes (#134)
+      params: ['projectId', 'numbers', 'workflow', 'inputs', 'mock', 'group', 'confirmed', 'then'],
       fn: ({ confirmed, ...opts }) => {
         const kept = confirmed ? null : ctx.keptWorkForIssues(opts.numbers);
         if (kept) return { confirm: kept.text, kept, runId: kept.runId };

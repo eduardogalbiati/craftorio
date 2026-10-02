@@ -1,7 +1,7 @@
 // Service area: a project's Backlog (src/backlog.js). The synced issues with their runs, queue,
-// roadmap stage and local status; Assign (queue issues for a workflow, alone or as one group run);
-// the queue's dispatch into free run slots; and the issue tracker's "create and queue" / epic
-// placement after a run filed issues (#81, #138).
+// roadmap stage and local status; Assign (queue issues for a workflow, alone or as one group run,
+// with an optional chain, #134); the queue's dispatch into free run slots; and the issue tracker's
+// epic placement after a run filed issues (#138). "Create and queue" is a chain (src/service/areas/chain.js).
 
 const path = require('path');
 const { loadWorkflow } = require('../../engine/workflow');
@@ -11,6 +11,7 @@ const projects = require('../../projects');
 const backlog = require('../../backlog');
 const epics = require('../../epics');
 const roadmaps = require('../../roadmap');
+const { normalizeThen } = require('../../renderer/chain-model');
 const runs = require('../../runs');
 
 module.exports = (ctx) => {
@@ -42,7 +43,8 @@ module.exports = (ctx) => {
   // group: the issues go as one run (one branch, one PR/MR), up to the backlogMaxGroup setting; a
   // backlog is one project's, so a group never mixes projects.
   // allowKeptWork: the owner answered the kept-work question with Start from scratch (#170).
-  async function assignWorkflow({ projectId, numbers, workflow, inputs, mock, group = false, allowKeptWork = false }) {
+  // then: what happens with each run's result when it finishes (#134, chain-model normalizeThen).
+  async function assignWorkflow({ projectId, numbers, workflow, inputs, mock, group = false, allowKeptWork = false, then = null }) {
     const { ws } = ctx;
     const project = projects.readProject(ws.projects, path.basename(String(projectId)));
     const data = backlog.readBacklog(ws.backlog, project.id);
@@ -54,34 +56,18 @@ module.exports = (ctx) => {
     if (group && issues.length > maxGroup) throw new Error(`One run takes at most ${maxGroup} issues (Settings › General › Backlog); ${issues.length} were selected.`);
     const file = path.basename(String(workflow || ''));
     const wf = loadWorkflow(ctx.workflowPath(file).file);
+    const chained = normalizeThen(then);
     if (!wf.inputs?.task) throw new Error(`Workflow ${wf.metadata?.name || file} has no task input to receive the issue.`);
     if (!mock) {
       simulation.refuseReal('real runs from the Backlog');
       await host.assertCanRun?.({ mock: false });
     }
-    backlog.enqueue(ws.backlog, project.id, { issues, workflow: file, workflowName: wf.metadata?.name || file, inputs: inputs || {}, mock: !!mock, group: !!group });
+    backlog.enqueue(ws.backlog, project.id, { issues, workflow: file, workflowName: wf.metadata?.name || file, inputs: inputs || {}, mock: !!mock, group: !!group, then: chained });
     if (allowKeptWork) allowQueuedKeptWork(project.id, issues);
     // an issue belongs to one plan: assigned here (the screen asked first), it leaves the roadmap's items not started
     roadmaps.dropIssues(ws.backlog, project.id, issues.map((i) => i.number), { alive: ctx.runAlive });
     await dispatchQueue();
     return withIssueRuns(backlog.readBacklog(ws.backlog, project.id));
-  }
-
-  // Issue tracker (#81), "create and queue": once the run filed its issues, the project's backlog is
-  // synced (the new issues are in it) and they are assigned like the Backlog's Assign does. A
-  // simulated run filed nothing real: nothing is queued. Groups respect backlogMaxGroup (one assign
-  // per batch), so a long group_with list never makes the assign refuse the whole queue.
-  async function queueFiledIssues(run, ev) {
-    const { ws } = ctx;
-    const maxGroup = workspace.readSettings(ws).backlogMaxGroup || workspace.DEFAULT_SETTINGS.backlogMaxGroup;
-    const plan = backlog.filedToQueue({ workflow: run.wf.metadata?.name, status: ev.status, steps: run.ctx.steps, inputs: run.inputs, maxGroup });
-    if (!plan || !run.projectId || run.mock) return;
-    const project = projects.readProject(ws.projects, run.projectId);
-    const platform = run.inputs.git_platform === 'gl' ? 'gitlab' : 'github';
-    await backlog.syncBacklog({ dir: ws.backlog, project, platform });
-    for (const batch of plan.batches) {
-      await assignWorkflow({ projectId: project.id, numbers: batch.numbers, workflow: plan.workflow, inputs: {}, mock: false, group: batch.group });
-    }
   }
 
   // Issue tracker (#81) and epics (#138): the created issues join the existing epic the analyzer
@@ -156,6 +142,7 @@ module.exports = (ctx) => {
             file: item.workflow, inputs: backlog.runInputs(run, wf, project.folder), mock: item.mock,
             projectId, issues: backlog.recordedIssues(read), notices: warnings.map((message) => ({ level: 'warn', message })),
             allowKeptWork: keys.some((k) => keptWorkAllowed.has(k)),
+            then: item.then || null,
           });
           for (const k of keys) keptWorkAllowed.delete(k);
           backlog.unqueue(ws.backlog, projectId, item.number, { cancelGroup: true });
@@ -174,7 +161,6 @@ module.exports = (ctx) => {
     assignWorkflow,
     dispatchQueue,
     placeFiledInEpic,
-    queueFiledIssues,
     withIssueRuns,
   };
 };

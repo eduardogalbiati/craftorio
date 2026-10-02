@@ -25,6 +25,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { itemIssues, withSyncedText } = require('./backlog');
+const { normalizeThen } = require('./renderer/chain-model');
 const { writeJsonSafe } = require('./state-file');
 
 // planned: edited, never started by itself · running · paused (a failure, the owner, a proposal) · done
@@ -178,10 +179,12 @@ function cleanItem(raw, known, previous) {
   const reason = String(raw.reason ?? old?.reason ?? '').trim();
   const modeReason = String(raw.modeReason ?? raw.mode_reason ?? old?.modeReason ?? '').trim();
   const origin = String(raw.origin ?? old?.origin ?? '').trim();
+  // what happens with the item's run result when it finishes (#134), given to its start
+  const then = normalizeThen(raw.then);
   return {
     id: old ? old.id : newId('item'), workflow, workflowName: raw.workflowName || old?.workflowName || workflow,
     inputs: raw.inputs && typeof raw.inputs === 'object' ? raw.inputs : {}, mock: !!raw.mock,
-    ...(reason ? { reason } : {}), ...(modeReason ? { modeReason } : {}), ...(origin ? { origin } : {}),
+    ...(reason ? { reason } : {}), ...(modeReason ? { modeReason } : {}), ...(origin ? { origin } : {}), ...(then ? { then } : {}),
     ...issues[0], issues,
     status: ITEM_STATES.includes(state.status) ? state.status : 'planned', runId: state.runId || null, runs: state.runs || [], error: state.error || null,
   };

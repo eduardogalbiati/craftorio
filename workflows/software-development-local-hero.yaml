@@ -60,7 +60,7 @@ kind: Workflow
 
 metadata:
   name: software-development-local-hero
-  version: 0.6.2
+  version: 0.7.0
   description: Implements, reviews, tests, builds and verifies a change in its own worktree, then merges it into the local base branch automatically, resolving conflicts on the way. No push, no PR, no CI; push when you want.
   tags: [dev, review, test, build, local, worktree]
   # Dashboard category: plan (Plan & Design), build (Code & Build) or monitor (Monitor & Improve).
@@ -1075,6 +1075,26 @@ steps:
       - when: "choice == 'stop'"
         goto: end
         status: failed
+
+# -----------------------------------------------------------------------------
+# What the run hands to the next one when it finishes (#134): `then` at start, or a gate choice's.
+outputs:
+  branch:
+    type: string
+    description: The branch the developer worked on.
+    value: "{{ steps.develop.output.branch }}"
+  merged_commit:
+    type: string
+    description: The commit the run merged into the local base branch (merge local). Empty when nothing was merged.
+    value: "{{ run.local_merge.commit if run.local_merge else '' }}"
+  issues:
+    type: array
+    description: "The issues the run implemented (number, url, title)."
+    value: "{{ run.issues | to_json }}"
+  pr_url:
+    type: string
+    description: Always empty here (the work is merged locally, no PR/MR); declared like software-development's.
+    value: "{{ '' }}"
 
 observability:
   storage:

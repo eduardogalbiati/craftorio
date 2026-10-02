@@ -221,6 +221,14 @@ body:not(.dev-mode) .dev-only { display: none !important; }
 .clamp { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .warn-text { color: var(--yellow); }
 .badge.warn { color: var(--yellow); }
+/* a run's chain (#134, chain-model.js): "→ then: …" / "← from …" */
+.badge.chain-badge { color: var(--accent); font-family: inherit; white-space: nowrap; }
+.badge.chain-badge.warn { color: var(--yellow); }
+.badge.chain-badge.muted { color: var(--muted); }
+/* "When it finishes" (chain-picker.js): the Start drawer, the Assign dialog, the roadmap item's Edit form */
+.chain-picker { display: flex; flex-direction: column; gap: 6px; }
+.chain-picker .cp-map, .chain-picker .cp-own { padding-left: 10px; border-left: 2px solid var(--border); }
+.chain-picker .cp-estimate { font-style: italic; }
 .empty-state { grid-column: 1 / -1; text-align: center; padding: 60px 20px; border: 1px dashed var(--border); border-radius: 12px; }
 .empty-state b { font-size: 15px; }
 

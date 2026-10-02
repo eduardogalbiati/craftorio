@@ -36,7 +36,7 @@ const databaseClass = () => (sqlite ??= require('node:sqlite')).DatabaseSync;
 
 // Bump when the readRun object (`runs.info`) changes shape: the runs cache is emptied at the next
 // start and rebuilt from runs/.
-const RUNS_CACHE = 1;
+const RUNS_CACHE = 2;
 // A claim older than this belongs to a dispatcher that died: its item can be taken again.
 const CLAIM_TTL_MS = 10 * 60 * 1000;
 const BUSY_TIMEOUT_MS = 5000;

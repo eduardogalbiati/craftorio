@@ -17,6 +17,8 @@
 // Live roadmap (#164): a box under the last stage with its switch (on only while running: turning it
 // on otherwise asks to start the roadmap) and the last refill; `liveBanner` is the banner backlog.js
 // shows on top of every view while it is on.
+// When it finishes (#134): an item's chain (its run's `then`) is a badge, and the Edit form has the
+// ChainPicker (chain-picker.js), mounted by mountChain once backlog.js drew the form.
 // Rendered into #bl-list by backlog.js (mode 'roadmap'), which passes `ctx`
 // ({ projectId, setData, render, setError }). Uses app.js globals (esc, state, errMsg, devMode, confirmDialog).
 /* global api */
@@ -125,6 +127,7 @@
       <div class="rm-form" role="group" aria-label="Edit the inputs of this item"${WorkflowInputs.scopeAttrs({ mode })}>
         <div class="rm-form-grid wi-grid">${grid}</div>
         ${add}
+        <div class="rm-chain" data-rm-chain="${esc(x.id)}"></div>
         <div class="rm-form-actions">
           <label class="check small dev-only"><input type="checkbox" data-rm-field-mock${x.mock ? ' checked' : ''} /><span>Simulation</span></label>
           <span class="spacer"></span>
@@ -164,6 +167,7 @@
           ${modeHtml(x, locked)}
           ${size != null ? `<span class="badge rm-size" title="The sum of the issues' complexity:n labels">complexity ${size}</span>` : ''}
           ${x.mock ? '<span class="badge p-mock">simulated</span>' : ''}
+          ${x.then ? ChainModel.chainBadgesHtml({ then: x.then }) : ''}
           ${others.map(([k, v]) => `<span class="badge rm-input" title="${esc(defs[k]?.description || k)}">${esc(k)}: ${esc(v)}</span>`).join('')}
           ${x.runId ? `<button class="bl-run link-btn small" type="button" data-run="${esc(x.runId)}" data-workflow="${esc(x.workflowName || '')}" title="Open the run (Resume from step… is there)">run ${esc(x.runId)}</button>` : ''}
           ${locked || open ? '' : '<button class="link-btn small" type="button" data-rm-edit title="Edit this item\'s inputs">Edit</button>'}
@@ -405,6 +409,24 @@
     item.inputs = inputs;
     const mock = form.querySelector('[data-rm-field-mock]');
     if (mock) item.mock = mock.checked;
+    if (chainPicker) {
+      const then = chainPicker.value();
+      if (then) item.then = then; else delete item.then;
+    }
+  }
+
+  // The Edit form's "When it finishes" (#134): mounted into the open form after each draw.
+  // A redraw of the same open form (e.g. "+ add input") keeps what was picked.
+  let chainPicker = null;
+  let chainFor = null;
+  function mountChain(data) {
+    const box = document.querySelector('#bl-list [data-rm-chain]');
+    const item = box && (data?.roadmap?.stages || []).flatMap((st) => st.items || []).find((x) => x.id === box.dataset.rmChain);
+    if (!item) { chainPicker = null; chainFor = null; return; }
+    const value = chainFor === item.id && chainPicker ? chainPicker.value() : item.then || null;
+    const list = () => [...(workflows?.values() || [])];
+    chainPicker = ChainPicker.mount(box, { workflows: list, source: () => workflows?.get(item.workflow) || null, value });
+    chainFor = item.id;
   }
 
   // An edit's error: in the screen's error line and the console, never an unhandled rejection (#163).
@@ -647,9 +669,10 @@
   }
 
   /** A new stage at the end with the assign dialog's issues: one item (group) or one per issue; `reason`/`modeReason`/`origin`: the Product Owner's. */
-  async function addStage(ctx, data, { issues, workflow, workflowName, inputs, mock, group, reason, modeReason, origin }) {
+  // then: the items' chain (#134), from the Assign dialog's "When it finishes"
+  async function addStage(ctx, data, { issues, workflow, workflowName, inputs, mock, group, reason, modeReason, origin, then }) {
     const stages = clone(data?.roadmap?.stages);
-    const why = { ...(reason ? { reason } : {}), ...(modeReason ? { modeReason } : {}), ...(origin ? { origin } : {}) };
+    const why = { ...(reason ? { reason } : {}), ...(modeReason ? { modeReason } : {}), ...(origin ? { origin } : {}), ...(then ? { then } : {}) };
     const items = group ? [{ workflow, workflowName, inputs, mock, issues, ...why }] : issues.map((n) => ({ workflow, workflowName, inputs, mock, issues: [n], ...why }));
     stages.push({ name: '', note: '', items });
     ctx.setData(await api.saveRoadmap(ctx.projectId, stages));
@@ -661,6 +684,7 @@
     dropProblem,
     html,
     liveBanner,
+    mountChain,
     moveIssue,
     onChange,
     onClick,

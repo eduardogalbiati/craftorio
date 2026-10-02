@@ -42,6 +42,8 @@ module.exports = (ctx) => {
             category: wf.metadata?.category || 'build',
             tags: wf.metadata?.tags || [],
             inputs: wf.inputs || {},
+            // the result contract a chain maps from (#134)
+            outputs: wf.outputs || {},
             agents: Object.fromEntries(Object.entries(wf.agents).map(([k, a]) => {
               const d = { ...(wf.defaults || {}), ...a };
               return [k, {

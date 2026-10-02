@@ -107,6 +107,18 @@ function nightWatchNotice({ ran, did, waits, safety, alarm = false } = {}) {
   };
 }
 
+// The notice for a run's chain (#134, src/service/areas/chain.js): `state` started | paused | done,
+// `message` what happened; opens the run (paused: to resume or drop the chain), or the next run.
+const CHAIN_TITLE = { done: 'Chain done', paused: 'Chain paused', started: 'Chain: next run started' };
+function chainNotice({ runId, workflow, state, message, nextRunId = null } = {}) {
+  return {
+    kind: 'run', event: state === 'paused' ? 'failed' : 'finished',
+    title: `${CHAIN_TITLE[state] || 'Chain'}: ${clip(workflow || runId || 'run', 60)}`,
+    body: clip(message) || 'Open the run to see its chain.',
+    target: { runId: nextRunId || runId, workflow: workflow || null },
+  };
+}
+
 // The notice for a live roadmap's refill (#164): `refill` is the roadmap's liveRefill ({ status,
 // added, message }, src/live-roadmap.js); opens the project's Backlog.
 const LIVE_TITLE = {
@@ -265,6 +277,7 @@ class WaitDetector {
 
 module.exports = {
   attentionSignal,
+  chainNotice,
   interruptedNotice,
   liveRoadmapNotice,
   nightWatchNotice,

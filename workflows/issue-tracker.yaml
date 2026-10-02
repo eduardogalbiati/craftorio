@@ -31,9 +31,10 @@
 #             area labels are created only here, after your choice at the gate: no agent before
 #             the gate can create anything (in auto, none is created).
 #
-# "Create and queue" (`create_assign`): when the run ends, the app syncs the project's Backlog and
-# queues the created issues for `assign_workflow` (src/backlog.js filedToQueue, the service's
-# queueFiledIssues), as one run when there are several and the analysis said `group`. Simulated runs
+# "Create and queue" (`create_assign`): the choice's `then` (#134) chains the run to a queue: when it
+# ends with success, the app syncs the project's Backlog and queues the created issues (the `issues`
+# output) for `assign_workflow` (src/service/areas/chain.js, chain-model queueBatches), as one run
+# when there are several and the analysis said `group`. Simulated runs
 # queue nothing. The Backlog's New issue button starts this workflow for the selected project.
 # Epics (#138): the analyzer names the existing epic the issue belongs to (`epic`). When the match is
 # `clear` and the project's "Auto-place new issues" option (project.autoEpic) is on, the app places
@@ -46,7 +47,7 @@ kind: Workflow
 
 metadata:
   name: issue-tracker
-  version: 0.1.0
+  version: 0.2.0
   description: Turns a request in a few words into a triaged GitHub/GitLab issue - the code involved, the files to change, impact and complexity 1-5 as labels, duplicates and grouping advice - and files it after you approve the draft (Validated) or as soon as it is written (Automatic).
   tags: [issues, triage, backlog, github, gitlab]
   category: plan
@@ -404,7 +405,7 @@ steps:
       {% endif %}What do you want to do?
     choices:
       - { id: create,        label: "Create {% if steps.write.output.issues | length > 1 %}the {{ steps.write.output.issues | length }} issues{% else %}the issue{% endif %}" }
-      - { id: create_assign, label: "Create and queue {{ inputs.assign_workflow }} now (Backlog)" }
+      - { id: create_assign, label: "Create and queue {{ inputs.assign_workflow }} now (Backlog)", then: { action: queue, workflow: "{{ inputs.assign_workflow }}" } }
       - { id: revise,        label: "Revise: send my note to the writer", feedback_required: true }
       - { id: add_to,        label: "Add to {% if steps.write.output.existing_issue %}#{{ steps.write.output.existing_issue }}{% else %}an existing issue (#n in your note){% endif %} instead" }
       - { id: discard,       label: "Discard" }
@@ -481,6 +482,14 @@ steps:
     transitions:
       - when: "true"
         goto: end
+
+# -----------------------------------------------------------------------------
+# What the run hands to the next one when it finishes (#134): `then` at start, or a gate choice's.
+outputs:
+  issues:
+    type: array
+    description: "The issues created: number, url, title, complexity and the grouping advice (grouping, group_with)."
+    value: "{{ steps.file.output.filed | filed_issues(steps.analyze.output) | to_json }}"
 
 # -----------------------------------------------------------------------------
 observability:

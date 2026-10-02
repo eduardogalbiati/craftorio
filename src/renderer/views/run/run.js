@@ -1,5 +1,6 @@
 /* global api */
-// Run screen (Run Details): the run shown in the top bar, its failure banner, the gates it waits at
+// Run screen (Run Details): the run shown in the top bar, its failure banner, its chain banner (#134:
+// renderChainBanner), the gates it waits at
 // (gate cards: renderRunGates, onRunGateClick; what a gate offers is gate-panel.js), its summary
 // (inputs, supervisor, watch, resume, Save to issue, Review changes: the diff viewer, #118), its
 // steps by group, its sessions and the Session / Events / Artifacts tabs. No sidebar entry of its own: the Run item and the runs menu
@@ -90,6 +91,7 @@ function runArtifactsPanel() {
 // What render() draws while the Run screen shows.
 function renderRunScreen() {
   renderRunBanner();
+  renderChainBanner();
   renderRunGates();
   renderRunSummary();
   renderSteps();
@@ -213,6 +215,97 @@ function renderRunBanner() {
   box.innerHTML = `<div class="fail-banner-text"><b>The workflow failed: ${esc(runLabel(r))}</b><span class="muted small mono">${esc(r.id)}</span>${r.error ? `<span class="mono small" title="${esc(r.error)}">${esc(r.error)}</span>` : ''}</div>
     <button class="btn sm sup-btn solid" id="btn-banner-sup"><span class="sup-mark">◆</span> Ask the supervisor</button>`;
   $('#btn-banner-sup').onclick = () => openSupervisorForCurrent();
+}
+
+// The run's chain (#134): "→ then: <workflow>" on the first run, "← from <run>" on the next one, the
+// chain's state once the run ended, and what the owner can do with it: Edit / Cancel while the run
+// goes (or "+ When it finishes" to add one), Resume / Edit / Drop when it paused. Edit opens the
+// ChainPicker (chain-picker.js) in the banner with Save / Cancel. A finished run's chain is read
+// from the service (api.runChain) a moment after it ends: the service acts on it then.
+const chainUi = { editing: null, picker: null, busy: false, error: '', workflows: null };
+function renderChainBanner() {
+  const v = selectedView();
+  const r = v.run;
+  const box = $('#run-chain');
+  if (!r) { box.classList.add('hidden'); return; }
+  if (r.status !== 'running' && !v.chainLoaded && typeof api.runChain === 'function') {
+    v.chainLoaded = true;
+    const wait = r.finishedAt && Date.now() - r.finishedAt < 3000 ? 1500 : 0;
+    setTimeout(() => api.runChain(r.id).then((c) => { r.chain = c; renderChainBanner(); }).catch(() => {}), wait);
+  }
+  const c = r.chain;
+  const running = r.status === 'running';
+  const editing = chainUi.editing === r.id;
+  const show = !!(c?.then || c?.from) || editing || running;
+  box.classList.toggle('hidden', !show);
+  if (!show) return;
+  const key = JSON.stringify([r.id, r.status, c, editing, chainUi.busy, chainUi.error]);
+  if (box.dataset.key === key) return;
+  box.dataset.key = key;
+  const then = c?.then || null;
+  const btn = (act, label, cls = 'ghost') => `<button type="button" class="btn sm ${cls}" data-chain="${act}"${chainUi.busy ? ' disabled' : ''}>${esc(label)}</button>`;
+  let actions = '';
+  let text = '';
+  if (editing) {
+    actions = `${btn('cancel-edit', 'Cancel')}${btn('save', 'Save', 'primary')}`;
+  } else if (running) {
+    actions = then ? `${btn('edit', 'Edit')}${btn('clear', 'Cancel chain')}` : '<button type="button" class="link-btn small" data-chain="edit">+ When it finishes…</button>';
+    if (then) text = 'Starts only if this run succeeds. Its gates still wait for you.';
+  } else if (then && c.state === 'paused') {
+    actions = `${btn('drop', 'Drop chain')}${btn('edit', 'Edit')}${btn('resume', 'Resume chain', 'primary')}`;
+    text = c.reason || 'The chain paused.';
+  } else if (then) {
+    text = c.reason || '';
+    if (c.nextRunId) actions = `<button type="button" class="link-btn small" data-run-link="${esc(c.nextRunId)}">Open the next run</button>`;
+  }
+  const badges = c ? ChainModel.chainBadgesHtml(c) : '';
+  box.innerHTML = `<div class="chain-banner-head">
+      <span class="chain-banner-title">${then || editing ? 'When it finishes' : 'Chain'}</span>${badges}
+      ${text ? `<span class="muted small chain-banner-text" title="${esc(text)}">${esc(text)}</span>` : ''}
+      <span class="spacer"></span>${actions}
+    </div>
+    ${editing ? '<div class="chain-banner-edit" data-chain-picker></div>' : ''}
+    ${chainUi.error ? `<p class="error small">${esc(chainUi.error)}</p>` : ''}`;
+  if (editing) {
+    const source = () => (chainUi.workflows || []).find((w) => w.name === r.workflow || w.file === r.file) || null;
+    chainUi.picker = ChainPicker.mount(box.querySelector('[data-chain-picker]'), { workflows: () => chainUi.workflows || [], source, value: then });
+  }
+}
+
+async function onChainBannerClick(e) {
+  const link = e.target.closest('[data-run-link]');
+  if (link) { showRun(link.dataset.runLink); return; }
+  const b = e.target.closest('[data-chain]');
+  const r = selectedView().run;
+  if (!b || !r) return;
+  const act = b.dataset.chain;
+  chainUi.error = '';
+  if (act === 'edit') {
+    try { chainUi.workflows ??= (await api.listWorkflows()).filter((w) => !w.error); } catch (err) { chainUi.error = errMsg(err); }
+    chainUi.editing = r.id;
+    renderChainBanner();
+    return;
+  }
+  if (act === 'cancel-edit') { chainUi.editing = null; renderChainBanner(); return; }
+  chainUi.busy = true;
+  renderChainBanner();
+  try {
+    if (act === 'save' || act === 'clear') {
+      const out = await api.setRunChain(r.id, act === 'save' ? chainUi.picker?.value() || null : null);
+      r.chain = { ...(r.chain || {}), ...(out?.chain || {}), from: r.chain?.from || null };
+      chainUi.editing = null;
+    } else if (act === 'resume') {
+      r.chain = await api.resumeChain(r.id);
+    } else if (act === 'drop') {
+      const out = await api.dropChain(r.id);
+      r.chain = { ...(r.chain || {}), ...(out?.chain || {}) };
+    }
+  } catch (err) {
+    chainUi.error = errMsg(err);
+  } finally {
+    chainUi.busy = false;
+    renderChainBanner();
+  }
 }
 
 // The Run screen's steps: only those that ran, one collapsible section per workflow group (the
@@ -405,6 +498,7 @@ registerView({
   markup: `
       <section id="view-run" class="view hidden">
         <div id="run-fail-banner" class="fail-banner hidden"></div>
+        <div id="run-chain" class="chain-banner hidden" aria-live="polite"></div>
         <div id="run-gates" class="run-gates hidden" aria-live="polite"></div>
         <div class="run-modebar">
           <div class="seg sm" role="group" aria-label="Run view">
@@ -447,6 +541,7 @@ registerView({
       </section>`,
   mount() {
     $('#run-gates').onclick = onRunGateClick;
+    $('#run-chain').onclick = onChainBannerClick;
     document.querySelectorAll('.tab[data-tab]').forEach((t) => (t.onclick = () => switchTab(t.dataset.tab)));
     $('#tab-detail').addEventListener('toggle', (e) => {
       const key = e.target.dataset?.key;

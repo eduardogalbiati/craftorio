@@ -122,6 +122,12 @@
 .fail-banner-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
 .fail-banner-text b { color: var(--red); }
 .fail-banner-text .mono { color: var(--text); opacity: .85; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* the run's chain (#134): what follows it, its state and actions; Edit opens the ChainPicker in it */
+.chain-banner { flex: none; padding: 8px 16px; border-bottom: 1px solid var(--border); background: var(--panel); }
+.chain-banner-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.chain-banner-title { font-weight: 600; font-size: 12px; }
+.chain-banner-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chain-banner-edit { margin-top: 8px; max-width: 720px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel-2); }
 .orch-log .line.supervisor { color: var(--purple); }
 /* a gate waiting in the run shown: asked inline above the steps, never in a dialog over the app
    (the cards, .run-gate*, are in style.css: the gate panel's wide variant builds on them) */

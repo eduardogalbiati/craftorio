@@ -4,7 +4,8 @@
 // Settings › General › Backlog and can be switched here.
 // Selected To do issues can be assigned to a workflow: they are queued and the service runs them
 // one at a time (the run records its issues), as separate runs or, when asked, as one run for all
-// of them (one branch, one PR/MR). Issues link to the runs working on them.
+// of them (one branch, one PR/MR). Issues link to the runs working on them. The Assign dialog's
+// "When it finishes" (#134, chain-picker.js) chains each run to what follows it.
 // Work a local workflow merged into the local base but did not push shows in "Merged locally"; the
 // bar above the list pushes it (and updates from origin first when origin moved); a conflict on
 // the update goes to a run of the local workflow, whose developer resolves it.
@@ -234,8 +235,14 @@
     box.innerHTML = WorkflowInputs.formHtml(defs, { values: saved, id: (k) => `ai-${k}`, attrs: (k) => `data-input="${esc(k)}"` });
     $b('#assign-settings').classList.toggle('hidden', !Object.keys(defs).length);
     WorkflowInputs.applyHints(box, defs, bl.projectId, { keep: Object.keys(saved) });
+    assignChain().refresh();
     updateAssignNote();
   }
+  // The dialog's "When it finishes" (#134): every workflow can follow, not only those with a task.
+  let chainPicker = null;
+  const assignChain = () => (chainPicker ??= ChainPicker.mount($b('#assign-chain'), {
+    workflows: () => bl.chainWorkflows || [], source: () => (bl.chainWorkflows || []).find((w) => w.file === $b('#assign-workflow').value) || null,
+  }));
   // The values to send: the YAML values (an enum's value, a switch as true/false).
   const assignInputs = () => WorkflowInputs.read($b('#assign-inputs'));
 
@@ -295,7 +302,10 @@
   async function openAssign(prefill = null) {
     if (!shownSelected().length) return;
     $b('#assign-error').textContent = '';
-    try { bl.workflows = (await api.listWorkflows()).filter((w) => !w.error && w.inputs?.task); } catch (e) { bl.error = errMsg(e); render(); return; }
+    try {
+      bl.chainWorkflows = (await api.listWorkflows()).filter((w) => !w.error);
+      bl.workflows = bl.chainWorkflows.filter((w) => w.inputs?.task);
+    } catch (e) { bl.error = errMsg(e); render(); return; }
     if (!bl.workflows.length) { bl.error = 'No workflow has a task input to receive the issues.'; render(); return; }
     // in the order selected (the order the runs start, or the order of a group's task)
     const issues = shownSelected().map((n) => (bl.data?.issues || []).find((i) => i.number === n)).filter(Boolean);
@@ -308,6 +318,7 @@
     $b('#assign-mock').checked = !!state.simulationOnly;
     document.querySelector(`input[name="assign-group"][value="${prefill?.group ? 'group' : 'separate'}"]`).checked = true;
     renderAssignBusy();
+    assignChain().set(null);
     renderAssignInputs();
     for (const [k, v] of Object.entries(prefill?.inputs || {})) WorkflowInputs.set($b('#assign-inputs'), k, v);
     openModal('#assign-modal');
@@ -380,13 +391,14 @@
     btn.disabled = true;
     try {
       const mock = wantsSimulation($b('#assign-mock'));
-      let data = await api.assignWorkflow(bl.projectId, numbers, workflow, inputs, mock, grouped());
+      const then = assignChain().value();
+      let data = await api.assignWorkflow(bl.projectId, numbers, workflow, inputs, mock, grouped(), false, then);
       // an ended run kept work for these issues (#170): resume that run, or start from scratch
       if (data?.kept) {
         const choice = await keptWorkDialog(data.kept);
         if (choice === 'resume') closeModal('#assign-modal');
         if (choice !== 'scratch') return;
-        data = await api.assignWorkflow(bl.projectId, numbers, workflow, inputs, mock, grouped(), true);
+        data = await api.assignWorkflow(bl.projectId, numbers, workflow, inputs, mock, grouped(), true, then);
       }
       save(WORKFLOW_KEY, workflow);
       bl.selected.clear();
@@ -413,7 +425,7 @@
     try {
       const wf = bl.workflows.find((w) => w.file === workflow);
       await window.BacklogRoadmap.addStage(roadmapCtx(), bl.data, {
-        issues, workflow, workflowName: wf?.name || workflow, inputs, mock: wantsSimulation($b('#assign-mock')), group: grouped(),
+        issues, workflow, workflowName: wf?.name || workflow, inputs, mock: wantsSimulation($b('#assign-mock')), group: grouped(), then: assignChain().value(),
       });
       save(WORKFLOW_KEY, workflow);
       bl.selected.clear();
@@ -846,6 +858,8 @@
       list.innerHTML = bl.syncing ? '<p class="muted">Loading issues…</p>' : '<p class="muted">Not synced yet.</p>';
     } else {
       list.innerHTML = bl.mode === 'roadmap' ? window.BacklogRoadmap.html(bl.data, render) : bl.mode === 'epics' ? renderEpics(issues) : bl.mode === 'kanban' ? renderKanban(issues) : renderList(issues);
+      // the open item's "When it finishes" (#134)
+      if (bl.mode === 'roadmap') window.BacklogRoadmap.mountChain(bl.data);
     }
   }
 
@@ -1155,6 +1169,7 @@
           <legend>Settings</legend>
           <div id="assign-inputs" class="wi-grid" data-wi-scope></div>
         </fieldset>
+        <div id="assign-chain"></div>
         <label class="check dev-only"><input type="checkbox" id="assign-mock" /><span>Simulation (no CLI is called, nothing is spent)</span></label>
       </div>
       <div class="assign-foot">
