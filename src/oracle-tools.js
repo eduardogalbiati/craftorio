@@ -4,6 +4,7 @@
 // and the projects' repositories read-only (git log/diff/show/... from READ_GIT_COMMANDS, files).
 // The app's own code is read through the project whose package is APP_PACKAGE (the orchestrator's
 // source repository registered as a project); without one, app_source says it is not available.
+// view_attachment returns an image the owner pasted (#171, <workspace>/oracle/attachments/).
 // Nothing here writes: git runs without a pager, external diff or optional locks, every option
 // that writes or starts a program is refused (refusedGitArg), and every path stays in its folder.
 
@@ -21,6 +22,7 @@ const { callTool, supervisorTools } = require('./supervisor-tools');
 const APP_PACKAGE = 'multiagent-orchestrator';
 const GIT_TIMEOUT_MS = 30e3;
 const MAX_FILE_BYTES = 400e3;
+const ATTACHMENT_TYPES = { gif: 'image/gif', jpg: 'image/jpeg', png: 'image/png', webp: 'image/webp' };
 // git subcommands the Oracle may run: they only read (checkout, commit, reset, branch... are refused)
 const READ_GIT_COMMANDS = [
   'blame',
@@ -172,6 +174,18 @@ function oracleTools(ctx) {
         return p
           ? json({ projectId: p.id, name: p.name, folder: p.folder })
           : 'The app\'s code is not available: register the orchestrator\'s source repository as a project to read it (the packaged app\'s code is inside app.asar).';
+      },
+    },
+    {
+      name: 'view_attachment',
+      description: 'An image the owner pasted into a message (the [Attachments] line of the message names them): returns the image.',
+      inputSchema: obj({ name: str('The attachment\'s file name, from the [Attachments] line') }, ['name']),
+      run: ({ name } = {}) => {
+        const dir = path.join(ws().oracle || path.join(ws().root, 'oracle'), 'attachments');
+        const file = insidePath(dir, path.basename(String(name || '')));
+        const mimeType = ATTACHMENT_TYPES[path.extname(file).slice(1).toLowerCase()];
+        if (!mimeType) throw new Error(`${name} is not an image attachment.`);
+        return { text: `The image ${path.basename(file)}:`, images: [{ data: fs.readFileSync(file).toString('base64'), mimeType }] };
       },
     },
   ];

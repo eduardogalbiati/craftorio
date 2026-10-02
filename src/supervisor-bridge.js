@@ -3,7 +3,7 @@
 // It listens on 127.0.0.1 only, on a free port, from the first real supervisor turn on; every request
 // carries a random bearer token that only the MCP config of that turn knows.
 //   POST /tools/list                          → { tools: [{ name, description, inputSchema }] }
-//   POST /tools/call { name, arguments }      → { text, isError }
+//   POST /tools/call { name, arguments }      → { text, isError, images? } (images: the Oracle's view_attachment)
 // The Oracle (src/oracle.js) has its own bridge over its own tools; mcpCommand serves both.
 
 const crypto = require('crypto');

@@ -40,18 +40,23 @@ module.exports = (ctx) => {
   };
   const simulated = (opts) => !!opts?.mock || simulation.simulationOnly();
   return [
-    // { question, screen, mock, mockContextTokens } → { message, messages, state } or { refused, ... };
-    // mockContextTokens (simulated only) makes the answer report that context size (compaction checks)
+    // { question, screen, images, mock, mockContextTokens } → { message, messages, state } or { refused, ... };
+    // images: pasted screenshots ({ dataUrl }, oracle.ATTACHMENT_LIMITS); mockContextTokens (simulated
+    // only) makes the answer report that context size (compaction checks)
     {
       channel: 'oracle:ask',
       method: 'askOracle',
       params: 'opts',
       fn: (opts = {}) => {
         const mock = simulated(opts);
-        return get().ask({ question: opts.question, screen: opts.screen, mock, mockContextTokens: mock ? opts.mockContextTokens : undefined });
+        return get().ask({ question: opts.question, screen: opts.screen, images: opts.images, mock, mockContextTokens: mock ? opts.mockContextTokens : undefined });
       },
     },
+    // a pasted image of the conversation (its file name in a user message's attachments) → data: URL or null
+    { channel: 'oracle:attachment', method: 'oracleAttachment', params: 'name', fn: (name) => get().attachment(name) },
     { channel: 'oracle:history', method: 'oracleHistory', fn: () => get().history() },
+    // the drawer was seen up to { at } (default now) → { readAt }: the unread badge counts after it
+    { channel: 'oracle:markRead', method: 'markOracleRead', params: 'opts', fn: (opts) => get().markRead(opts?.at) },
     // a new session from a handoff note; the messages and the memory are kept
     { channel: 'oracle:reset', method: 'resetOracle', params: 'opts', fn: (opts) => get().reset({ mock: simulated(opts) }) },
     { channel: 'oracle:memory', method: 'oracleMemory', fn: () => get().memory() },

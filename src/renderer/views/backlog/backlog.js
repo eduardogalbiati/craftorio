@@ -1160,6 +1160,15 @@
   window.BacklogActions = {
     assignGroup,
     data: () => bl.data,
+    // one issue in the list (a #<number> link in the Oracle's answers, #171): the search "#<n> "
+    // matches that number only
+    focusIssue: (number) => {
+      if (!number) return;
+      bl.q = `#${number} `;
+      if (bl.mode === 'roadmap') bl.mode = 'list';
+      const input = $b('#bl-search');
+      if (input) input.value = bl.q;
+    },
     // the project the next refresh shows (a notification's click, before showView('backlog'))
     focusProject: (id) => { if (id) bl.projectId = id; },
     openStage,

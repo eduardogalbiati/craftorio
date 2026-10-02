@@ -162,6 +162,36 @@ Read this before changing anything in `src/renderer/`.
   workspace Developer mode is off and the Simulation box is ignored: set
   `api.setSettings({ developerMode: true })` before clicking Start.
 
+## The Oracle's panel and drawer (#171)
+
+`views/oracle/oracle.js` registers a view with no screen of its own: it docks `#oracle-dock` inside
+`#view-dashboard` (class `oracle-docked`, a two-column grid) and adds `#oracle-drawer` (a `.drawer`
+like `#svc-drawer`) and the sidebar's `#nav-oracle` button, appended after the runs list. The
+button is a `.nav-item` without `data-view` (its click stops before the sidebar's navigation): on
+the Dashboard it focuses the dock, elsewhere it toggles the drawer. Both places render the same
+state from `OracleChatModel` (`views/oracle/oracle-chat-model.js`, pure, tested in Node):
+
+- **states**: `empty` (a line on what it reads, 4 `.chip` suggestions), `conversation`,
+  `answering` (`.sup-loading` "The Oracle is reading…", Send and chips disabled, input editable),
+  `error` (a `.sup-wmsg system error` line, the question back in the input), `paused` (daily budget:
+  a notice with spent/limit and a link to Settings › Execution, input and Send disabled),
+  `unavailable` (another live process owns `oracle/owner.json`: the form is replaced by a notice
+  naming it);
+- **unread**: the `.nav-badge.oracle-unread` counts Oracle answers newer than `oracle:state`'s
+  `readAt`; the conversation in view (dock on the Dashboard, or the open drawer) saves it with
+  `oracle:markRead`, so the count survives a reload;
+- **pasted images** (`addImages`/`removeImage`, 5 MB and 4 per message): thumbnails above the input,
+  an inline error under it; sent as data URLs to `oracle:ask`, shown in the log through
+  `oracle:attachment`;
+- **memory**: the Memory button opens a framed `.field` form (Save / Cancel); a save error keeps
+  the draft.
+
+Answers go through `markdownHtml`, then `decorate()` turns run ids and `#<n>` into links
+(`selectRun`, the Backlog's `BacklogActions.focusIssue`), absolute paths under `runs/<id>/` into
+Artifacts links (`openArtifactsAt`) and other absolute paths into copy-on-click code. Screenshots:
+`--view oracle` (Projects with the drawer open) and `--oracle <state>` on any view (see
+`scripts/screenshot.js --help`).
+
 ## UI conventions
 
 The general rules (and the visual review of the screenshots) are in the `ui-conventions` skill,

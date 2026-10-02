@@ -108,12 +108,17 @@ function supervisorTools(ctx) {
 /** The MCP view of the tools (tools/list). */
 const describeTools = (tools) => tools.map(({ name, description, inputSchema }) => ({ name, description, inputSchema }));
 
-/** Runs one tool: { text, isError } (an error is an answer the model can read, not a failure). */
+/**
+ * Runs one tool: { text, isError } (an error is an answer the model can read, not a failure). A
+ * tool may return { text, images: [{ data (base64), mimeType }] }: the images are passed on.
+ */
 async function callTool(tools, name, args) {
   const tool = tools.find((t) => t.name === name);
   if (!tool) return { text: `Unknown tool: ${name}`, isError: true };
   try {
-    return { text: clip(String(await tool.run(args || {}) ?? '')), isError: false };
+    const out = await tool.run(args || {});
+    if (out && typeof out === 'object' && Array.isArray(out.images)) return { text: clip(String(out.text ?? '')), images: out.images, isError: false };
+    return { text: clip(String(out ?? '')), isError: false };
   } catch (e) {
     return { text: e.message || String(e), isError: true };
   }

@@ -49,7 +49,8 @@ async function handle(msg) {
       return { tools: (await bridge('/tools/list')).tools };
     case 'tools/call': {
       const out = await bridge('/tools/call', { name: msg.params?.name, arguments: msg.params?.arguments || {} });
-      return { content: [{ type: 'text', text: out.text }], isError: !!out.isError };
+      const images = (out.images || []).map((i) => ({ type: 'image', data: i.data, mimeType: i.mimeType }));
+      return { content: [{ type: 'text', text: out.text }, ...images], isError: !!out.isError };
     }
     default: {
       const e = new Error(`Method not found: ${msg.method}`);

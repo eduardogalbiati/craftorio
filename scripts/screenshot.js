@@ -4,8 +4,13 @@
 //   npx electron scripts/screenshot.js --view <view> [options]      (or: npm run screenshot -- ...)
 //
 //   --view <name>      dashboard, sessions, projects, project, backlog, artifacts, workflows, agents,
-//                      skills, usage, analytics, supervisor, settings, duo, arena, run-chat, run
-//                      (default dashboard)
+//                      skills, usage, analytics, supervisor, oracle, settings, duo, arena, run-chat, run
+//                      (default dashboard; oracle: Projects with the Oracle's drawer open from its
+//                      sidebar button; the Dashboard shows its docked panel)
+//   --oracle <state>   the Oracle's demo state (#171), on any view: empty | conversation | answering |
+//                      error | paused | unavailable | unread | attachment (unread: on a view other
+//                      than the Dashboard, whose panel reads the answers; the Edit form of its
+//                      memory: --click "#oracle-dock [data-oracle-memory]")
 //   --tab <name>       settings: general | agents | execution | about; workflows: runs | definitions;
 //                      analytics: usage | performance (performance: a demo git repository and a marker)
 //   --mode <name>      backlog: list | kanban | roadmap | epics
@@ -57,6 +62,8 @@ const evidence = require('../src/evidence');
 const VIEWS = {
   dashboard: {}, sessions: {}, projects: {}, project: {}, artifacts: {}, agents: {}, skills: {}, usage: {}, duo: {}, arena: {},
   supervisor: {},
+  // the Oracle's drawer (#171), opened from its sidebar button on another screen (Projects)
+  oracle: {},
   analytics: { tabs: ['usage', 'performance'] },
   backlog: { modes: ['list', 'kanban', 'roadmap', 'epics'] },
   workflows: { tabs: ['runs', 'definitions'] },
@@ -101,6 +108,7 @@ function parseArgs(argv) {
     else if (k === '--wait') a.wait = ms();
     else if (k === '--timeout') a.timeout = ms();
     else if (k === '--no-demo-shots') a.demoShots = false;
+    else if (k === '--oracle') a.oracle = next();
     else throw new Error(`Unknown argument: ${k}`);
   }
   const v = VIEWS[a.view];
@@ -109,9 +117,10 @@ function parseArgs(argv) {
   if (a.mode && !v.modes?.includes(a.mode)) throw new Error(`--mode ${a.mode} does not apply to ${a.view}${v.modes ? ` (modes: ${v.modes.join(', ')})` : ''}`);
   if (a.theme && !THEMES.includes(a.theme)) throw new Error(`--theme takes ${THEMES.join(' | ')}`);
   if (a.keepAwake && !KEEP_AWAKE.includes(a.keepAwake)) throw new Error(`--keep-awake takes ${KEEP_AWAKE.join(' | ')}`);
+  if (a.oracle && !ORACLE_STATES.includes(a.oracle)) throw new Error(`--oracle takes ${ORACLE_STATES.join(' | ')}`);
   if ((a.stopAt || Object.keys(a.inputs).length) && a.view !== 'run') throw new Error('--stop-at and --input apply to --view run');
   a.wait ??= v.live ? 20000 : 1500;
-  a.name ??= [a.view, a.tab, a.mode, a.theme].filter(Boolean).join('-');
+  a.name ??= [a.view, a.tab, a.mode, a.oracle && `oracle-${a.oracle}`, a.theme].filter(Boolean).join('-');
   if (!/^[\w.-]+$/.test(a.name)) throw new Error(`--name must be a plain file name: ${a.name}`);
   if (a.side && !SIDES.includes(a.side)) throw new Error(`--side takes ${SIDES.join(' | ')}`);
   if (a.caption && !(a.out && runOfRound(path.resolve(a.out)))) throw new Error('--caption needs --out <run_dir>/evidence/<step>/round-<n>');
@@ -445,9 +454,59 @@ function demoPerformanceRuns(ws, folder, projectId) {
   return new Date(Date.now() - 2 * 864e5).toISOString().slice(0, 10);
 }
 
+// --oracle <state> (#171): the Oracle's files in the scratch workspace for one state of its dock and
+// drawer. `conversation` (and every state but empty, under it): a question with a pasted image, an
+// answer with a table, a run link, an issue link, a run file, a long heading and its cost meta, and
+// today's spend. error: a failed answer; paused: today's spend over a 2 USD daily budget;
+// unavailable: the conversation owned by a live process on another machine (its heartbeat is
+// kept fresh by the returned timer); unread: read before the last answer. answering (the answer
+// held) and attachment (a draft image) are set up in the window by capture().
+const ORACLE_STATES = ['empty', 'conversation', 'answering', 'error', 'paused', 'unavailable', 'unread', 'attachment'];
+const PNG_1PX = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+function demoOracle(ws, workspace, which, runId) {
+  if (!which || which === 'empty') return null;
+  const dir = ws.oracle || path.join(ws.root, 'oracle');
+  fs.mkdirSync(path.join(dir, 'attachments'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'attachments', 'demo-run-report-1.png'), Buffer.from(PNG_1PX, 'base64'));
+  const at = (minAgo) => new Date(Date.now() - minAgo * 60e3).toISOString();
+  const run = runId || '20260119-221500-4f3a9c2e';
+  const answer = [
+    `Run ${run} (software-development, #12) stopped at **test_writer** after 3 fix rounds.`, '',
+    '| Step | Agent | Duration | Tokens | Cost | Fix rounds | Refused commands |', '|---|---|---|---|---|---|---|',
+    '| developer | Claude Code | 14 min | 812,400 | $1.92 | 1 | 0 |',
+    '| code_review | Codex | 4 min | 120,300 | $0.31 | 0 | 0 |',
+    '| test_writer | Claude Code | 22 min | 1,904,000 | $3.40 | 3 | 4 |', '',
+    `### The test writer re-read the same file nine times before it ran out of fix rounds on the report export`, '',
+    `It read \`src/report.js\` 9 times (\`${path.join(ws.runs, run, 'summary.json')}\`). Its four refused commands were \`npm test -- --watch\`; your notes on it are in \`C:\\Users\\owner\\notes\\night.md\`.`, '',
+    'Proposal: file an issue to pass the developer\'s `test_notes` to the test writer. Nothing changes until you decide.',
+  ].join('\n');
+  const messages = [
+    { id: 'm1', ts: at(30), role: 'user', text: 'Why did last night\'s run on #12 stop?', screen: 'Backlog, project demo-app', attachments: ['demo-run-report-1.png'] },
+    { id: 'm2', ts: at(29), role: 'oracle', text: answer, model: 'claude-opus-5-5', costUsd: 0.4213, tokens: { input: 1200, output: 860, cache_read: 48000 }, contextTokens: 50060 },
+  ];
+  if (which === 'error') {
+    messages.push({ id: 'm3', ts: at(2), role: 'user', text: 'And which runs failed this week?', screen: 'Dashboard' });
+    messages.push({ id: 'm4', ts: at(1), role: 'system', error: true, text: 'The Oracle could not answer: claude exited with code 1 (the session could not be resumed).' });
+  }
+  fs.writeFileSync(path.join(dir, 'messages.jsonl'), `${messages.map((m) => JSON.stringify(m)).join('\n')}\n`);
+  fs.writeFileSync(path.join(dir, 'memory.md'), '- UI issues need UI acceptance criteria and screenshots.\n- Use the validated mode for UI changes.\n- Reply in Portuguese; everything for the product stays in English.\n');
+  const spent = which === 'paused' ? 2.4 : 3.12;
+  fs.writeFileSync(path.join(dir, 'usage.jsonl'), `${JSON.stringify({ ts: at(29), provider: 'claude', model: 'claude-opus-5-5', tokens: { input: 1200, output: 860 }, costUsd: spent, sessionId: 'demo' })}\n`);
+  if (which === 'paused') workspace.writeSettings(ws, { oracle: { dailyBudgetUsd: 2, compactAtTokens: 150000 } });
+  fs.writeFileSync(path.join(dir, 'read.json'), JSON.stringify({ readAt: which === 'unread' ? at(31) : at(0) }));
+  if (which !== 'unavailable') return null;
+  const owner = { pid: 4242, host: 'studio-pc', role: 'oracle', started_at: at(90) };
+  const beat = () => fs.writeFileSync(path.join(dir, 'owner.json'), JSON.stringify({ ...owner, heartbeat_at: new Date().toISOString() }));
+  beat();
+  const timer = setInterval(beat, 5000);
+  timer.unref?.();
+  return timer;
+}
+
 // Simulation: the Backlog's sync answers with the cached demo issues instead of calling gh, and the
 // Usage screen's GitHub Actions minutes are demo data. `keepAwake`: a demo state of Keep awake, or null.
-function simulateChannels(ipcMain, keepAwake = null, missing = null) {
+// `holdOracle`: the Oracle's answer never comes (--oracle answering).
+function simulateChannels(ipcMain, keepAwake = null, missing = null, holdOracle = false) {
   const handle = ipcMain.handle.bind(ipcMain);
   const handlers = {};
   ipcMain.handle = (channel, fn) => {
@@ -465,6 +524,9 @@ function simulateChannels(ipcMain, keepAwake = null, missing = null) {
     if (channel === 'po:split' || channel === 'po:epic') return handle(channel, (e, arg) => fn(e, { ...arg, preview: true }));
     // the app-wide Supervisor chat too (#28)
     if (channel === 'supervisor:chat') return handle(channel, (e, arg) => fn(e, { ...arg, mock: true }));
+    // and the Oracle (#171): simulated, or held for the answering state
+    if (channel === 'oracle:ask') return handle(channel, holdOracle ? () => new Promise(() => {}) : (e, arg) => fn(e, { ...arg, mock: true }));
+    if (channel === 'oracle:reset') return handle(channel, (e, arg) => fn(e, { ...arg, mock: true }));
     // Save to issue (Write & Review) only previews: never calls gh/glab
     if (channel === 'backlog:save-doc') return handle(channel, (e, arg) => fn(e, { ...arg, preview: true }));
     return handle(channel, channel === 'backlog:sync' ? (e, arg) => handlers['backlog:get'](e, { projectId: arg?.projectId }) : fn);
@@ -614,6 +676,7 @@ function main() {
     }
     let run = null;
     if (VIEWS[args.view].run || ['artifacts', 'workflows', 'project', 'usage', 'dashboard'].includes(args.view)) run = recordRun(project);
+    demoOracle(ws, workspace, args.oracle, run?.runId);
     return { project, run };
   })();
 
@@ -751,11 +814,31 @@ function main() {
       } finally {
         clearInterval(approve);
       }
+    } else if (v === 'oracle') {
+      await click('.nav-item[data-view="projects"]');
+      await pause(300);
+      await click('#nav-oracle');
     } else {
       if (v === 'artifacts' && run?.simulated && args.demoShots) await demoEvidence(win, run.dir);
       await click(`.nav-item[data-view="${v}"]`);
     }
     await pause(500);
+    // the Oracle's states set in the window: unread answers (the Dashboard, the start screen, read
+    // them: the read time goes back before the last answer), a question whose answer is held, a pasted image
+    if (args.oracle === 'unread') {
+      demoOracle(ws, workspace, 'unread', run?.runId);
+      await js('await window.OracleChat.reload();');
+    }
+    if (args.oracle === 'answering') await js('window.OracleChat.ask(\'What changed since yesterday?\'); await new Promise((r) => setTimeout(r, 300));');
+    if (args.oracle === 'attachment') {
+      await js(`
+        const c = document.createElement('canvas'); c.width = 320; c.height = 200;
+        const g = c.getContext('2d'); g.fillStyle = '#1f2937'; g.fillRect(0, 0, 320, 200);
+        g.fillStyle = '#7c9cff'; g.fillRect(20, 20, 180, 24); g.fillStyle = '#f87171'; g.fillRect(20, 60, 280, 110);
+        window.OracleChat.attach([{ type: 'image/png', size: 24000, name: 'failed-gate.png', dataUrl: c.toDataURL('image/png') }]);
+        const q = document.querySelector('#oracle-drawer.open #oracle-q-drawer') || document.querySelector('#oracle-q-dock');
+        if (q) { q.value = 'Why is this gate red?'; q.dispatchEvent(new Event('input')); }`);
+    }
     if (args.tab && v === 'settings') await click(`.settings-tab[data-stab="${args.tab}"]`);
     if (args.tab && v === 'workflows') await click(`[data-wtab="${args.tab}"]`);
     if (args.tab && v === 'analytics') await click(`[data-an-tab="${args.tab}"]`);
@@ -802,7 +885,7 @@ function main() {
     }
   }
 
-  simulateChannels(ipcMain, demoKeepAwake(appDir, args.keepAwake), demoMissingClis(appDir, args.missingClis));
+  simulateChannels(ipcMain, demoKeepAwake(appDir, args.keepAwake), demoMissingClis(appDir, args.missingClis), args.oracle === 'answering');
   require(path.join(appDir, 'src', 'main'));
 }
 

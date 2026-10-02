@@ -13,6 +13,8 @@
 //   handoffs/        one note per compaction or reset (<stamp>-<reason>.md)
 //   usage.jsonl      one line per real answer: tokens, cost, session (budgets and Usage)
 //   owner.json       the app process that answers (run-owner hold: pid, host, heartbeat)
+//   attachments/     the images pasted into questions (#171); the model reads them with view_attachment
+//   read.json        when the owner last read the conversation (the drawer's unread badge, #171)
 // A question whose answer never came (the app closed mid-turn) shows as `unanswered` and is noted
 // at the next question, which still resumes the same session.
 // Compaction: when a turn ends past settings.oracle.compactAtTokens, the next question first writes
@@ -37,6 +39,9 @@ const SKILL_ID = 'oracle';
 const TIMEOUT_MS = 20 * 60e3;
 const MAX_MEMORY = 20000;
 const RECENT_EXCHANGES = 3;
+// pasted screenshots (#171): per image and per message
+const ATTACHMENT_LIMITS = Object.freeze({ maxBytes: 5 * 1048576, maxCount: 4 });
+const IMAGE_TYPES = Object.freeze({ 'image/gif': 'gif', 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' });
 
 const HANDOFF_PROMPT = [
   'Your context is about to be reset: write your handoff note for the next session now, in English, as Markdown.',
@@ -84,10 +89,31 @@ function usageRuns(dir) {
   return [...days.values()];
 }
 
-/** The text sent for one question: the screen first, then the question. */
-function questionText(text, screen) {
+/** The text sent for one question: the screen first, then the pasted images, then the question. */
+function questionText(text, screen, attachments = []) {
   const s = String(screen || '').trim();
-  return s ? `[Screen] ${s}\n\n${text}` : text;
+  const a = attachments.length ? `[Attachments] ${attachments.join(', ')} (pasted images: read each with view_attachment)` : '';
+  return [s && `[Screen] ${s}`, a, text].filter(Boolean).join('\n\n');
+}
+
+/**
+ * Pasted images ({ dataUrl } or { type, data } in base64) → [{ ext, buf }]. Throws past
+ * ATTACHMENT_LIMITS (count, bytes per image) or for a type that is not an image the model reads.
+ */
+function decodeImages(images) {
+  const list = Array.isArray(images) ? images : [];
+  const { maxCount, maxBytes } = ATTACHMENT_LIMITS;
+  if (list.length > maxCount) throw new Error(`At most ${maxCount} images per message.`);
+  return list.map((img) => {
+    const m = /^data:([^;,]+);base64,(.*)$/s.exec(String(img?.dataUrl || ''));
+    const type = m ? m[1] : String(img?.type || '');
+    const ext = IMAGE_TYPES[type];
+    if (!ext) throw new Error(`Only PNG, JPEG, GIF or WebP images can be pasted (got ${type || 'an unknown type'}).`);
+    const buf = Buffer.from(m ? m[2] : String(img?.data || ''), 'base64');
+    if (!buf.length) throw new Error('A pasted image is empty.');
+    if (buf.length > maxBytes) throw new Error(`A pasted image is over ${maxBytes / 1048576} MB.`);
+    return { ext, buf };
+  });
 }
 
 /** Claude Code's flags for the Oracle: isolated, its MCP server only, no built-in tool (no file writes, no commands). */
@@ -124,8 +150,20 @@ function createOracle({ dir, tools, bridge, mcpCommand, skillsDirs, resolveComma
     return {
       log: path.join(d, 'messages.jsonl'), state: path.join(d, 'state.json'), memory: path.join(d, 'memory.md'),
       session: path.join(d, 'session.md'), handoffs: path.join(d, 'handoffs'), owner: path.join(d, 'owner.json'),
+      attachments: path.join(d, 'attachments'), read: path.join(d, 'read.json'),
     };
   };
+  // decoded images (decodeImages) → their file names in attachments/
+  function saveAttachments(pasted) {
+    if (!pasted.length) return [];
+    fs.mkdirSync(files().attachments, { recursive: true });
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    return pasted.map(({ ext, buf }, i) => {
+      const name = `${stamp}-${i + 1}-${crypto.randomBytes(3).toString('hex')}.${ext}`;
+      fs.writeFileSync(path.join(files().attachments, name), buf);
+      return name;
+    });
+  }
   const ensure = () => fs.mkdirSync(dir(), { recursive: true });
   const state = () => readJson(files().state, {});
   const saveState = (s) => { ensure(); fs.writeFileSync(files().state, JSON.stringify(s, null, 2)); };
@@ -223,7 +261,7 @@ function createOracle({ dir, tools, bridge, mcpCommand, skillsDirs, resolveComma
 
   // The simulated Oracle: what its tools see, the session it is in. `mockContextTokens` lets tests
   // report a large context (compaction without a model).
-  async function mockTurn({ prompt, sessionId, screen, mockContextTokens, fresh }) {
+  async function mockTurn({ prompt, sessionId, screen, mockContextTokens, fresh, attachments = [] }) {
     const { callTool } = require('./supervisor-tools');
     const count = async (name, pick = (x) => x) => {
       const out = await callTool(tools(), name, {});
@@ -238,10 +276,11 @@ function createOracle({ dir, tools, bridge, mcpCommand, skillsDirs, resolveComma
     const text = [
       'Simulated Oracle: no model was called.',
       screen ? `You are on: ${screen}.` : 'I was not told which screen you are on.',
+      attachments.length ? `You pasted ${attachments.length} image(s): ${attachments.join(', ')}.` : '',
       `Through my tools I see ${await count('list_runs', (r) => r.runs)} runs (${await count('active_runs')} in progress), ${await count('list_workflows')} workflows, ${await count('list_projects')} projects, ${await count('unpushed')} projects with local merges not pushed, and ${updates} workflows or skills with a newer default.`,
       fresh ? `This question started a new session from my skill, the memory (${mem} lines) and the last handoff note.` : 'This question continued the same session.',
       'Outside developer mode, the real Oracle reads them and answers (one model call per message).',
-    ].join('\n\n');
+    ].filter(Boolean).join('\n\n');
     const prev = fresh ? 0 : Number(state().contextTokens) || 0;
     return {
       text, costUsd: 0, tokens: {}, sessionId: sessionId || `mock-${crypto.randomUUID()}`, simulated: true,
@@ -317,7 +356,7 @@ function createOracle({ dir, tools, bridge, mcpCommand, skillsDirs, resolveComma
       busy, model: a.model || DEFAULT_MODEL, effort: a.effort || 'high', sessionId: st.sessionId || null,
       contextTokens: st.contextTokens || 0, compactAtTokens: s.compactAtTokens, compactNext: !!st.compactNext,
       paused: day.paused, today: { spentUsd: day.spentUsd, limitUsd: day.limitUsd, resumesAt: day.resumesAt },
-      owner: ownerInfo(), memoryChars: memory().text.length,
+      owner: ownerInfo(), memoryChars: memory().text.length, readAt: readJson(files().read, {}).readAt || null,
     };
   }
 
@@ -327,11 +366,13 @@ function createOracle({ dir, tools, bridge, mcpCommand, skillsDirs, resolveComma
     state: status,
 
     /**
-     * { question, screen, mock, mockContextTokens } → { message, messages, state }, or
+     * { question, screen, images, mock, mockContextTokens } → { message, messages, state }, or
      * { refused: { reason, text, ... }, message: null, messages, state } when a budget refuses it.
+     * `images`: pasted screenshots (decodeImages), saved in attachments/ before the turn.
      */
-    async ask({ question, screen, mock, mockContextTokens } = {}) {
-      const q = String(question || '').trim();
+    async ask({ question, screen, images, mock, mockContextTokens } = {}) {
+      const pasted = decodeImages(images);
+      const q = String(question || '').trim() || (pasted.length ? 'See the attached image.' : '');
       if (!q) throw new Error('Type a message for the Oracle.');
       claim();
       if (busy) throw new Error('The Oracle is still answering the previous message.');
@@ -341,7 +382,8 @@ function createOracle({ dir, tools, bridge, mcpCommand, skillsDirs, resolveComma
       try {
         if (raw().at(-1)?.role === 'user') post({ role: 'system', kind: 'unanswered', text: 'The previous question got no answer (the app closed during the turn). This question continues the same conversation.' });
         const where = String(screen || '').trim() || null;
-        post({ role: 'user', text: q, screen: where });
+        const attachments = saveAttachments(pasted);
+        post({ role: 'user', text: q, screen: where, ...(attachments.length ? { attachments } : {}) });
         const a = agent();
         const model = String(a.model || DEFAULT_MODEL);
         let message;
@@ -360,9 +402,10 @@ function createOracle({ dir, tools, bridge, mcpCommand, skillsDirs, resolveComma
             saveState(st);
           }
           const fresh = !st.sessionId;
-          const prompt = fresh ? openingPrompt(questionText(q, where)) : questionText(q, where);
+          const text = questionText(q, where, attachments);
+          const prompt = fresh ? openingPrompt(text) : text;
           const res = mock
-            ? await mockTurn({ prompt, sessionId: st.sessionId, screen: where, mockContextTokens, fresh })
+            ? await mockTurn({ prompt, sessionId: st.sessionId, screen: where, mockContextTokens, fresh, attachments })
             : await realTurn({ prompt, sessionId: st.sessionId, model, effort: a.effort });
           const { compactAtTokens } = oracleSettings(settings());
           saveState({
@@ -403,6 +446,24 @@ function createOracle({ dir, tools, bridge, mcpCommand, skillsDirs, resolveComma
       }
     },
 
+    /** The owner read the conversation up to `at` (default now): the drawer's unread badge counts after it. */
+    markRead(at) {
+      const t = Date.parse(at || '');
+      const readAt = new Date(Number.isFinite(t) ? t : Date.now()).toISOString();
+      const prev = readJson(files().read, {}).readAt;
+      if (prev && prev >= readAt) return { readAt: prev };
+      ensure();
+      fs.writeFileSync(files().read, JSON.stringify({ readAt }));
+      return { readAt };
+    },
+
+    /** A pasted image of the conversation as a data: URL (the drawer's thumbnails), or null. */
+    attachment(name) {
+      const file = path.join(files().attachments, path.basename(String(name || '')));
+      const type = Object.keys(IMAGE_TYPES).find((t) => `.${IMAGE_TYPES[t]}` === path.extname(file).toLowerCase());
+      try { return type ? `data:${type};base64,${fs.readFileSync(file).toString('base64')}` : null; } catch { return null; }
+    },
+
     /** Saves the memory (the owner's save only: the Oracle can only propose an entry). */
     saveMemory(text) {
       const t = String(text ?? '').replace(/\r\n/g, '\n');
@@ -418,7 +479,9 @@ function createOracle({ dir, tools, bridge, mcpCommand, skillsDirs, resolveComma
 }
 
 module.exports = {
+  ATTACHMENT_LIMITS,
   createOracle,
+  decodeImages,
   DEFAULT_MODEL,
   DEFAULTS,
   HANDOFF_PROMPT,

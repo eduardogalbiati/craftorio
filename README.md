@@ -30,6 +30,7 @@ Keep **Simulation mode** checked to try a flow without calling the CLIs.
 | Analytics | Two tabs over a date range (the selected tab, scope and range are remembered). **Usage**: tokens, cost and session metrics per day, provider, model and project, for the orchestrator's runs or every CLI session on this machine; "Ask the supervisor" writes a report on the range (a real model call). **Repository performance**: per project, how well its repository takes parallel runs: the files most runs edit (runs that edited each file, % of runs, its line count today; generated files marked), the share of runs that hit a merge conflict (the `resolve_merge` / `resolve_conflict` step or a failed `gh pr merge` / `glab mr merge`) and their share of the cost, with the list of those runs and the files their conflict named, the runs and roadmap stages active at once per day and the hours runs were active. A marker (a date or a commit) splits every number into before and after, to check the targets of a change such as epic #158. Computed offline from the run folders, the index and the local clone's `git log`: no model call, no network |
 | Settings | Workspace, voice input (**General › Voice input**: OS dictation, the whisper.cpp CLI, model download and language, see Voice input below), CLI status (Claude Code, Codex, Grok Build, GitHub CLI, GitLab CLI, Git) and run preferences (`<workspace>/settings.json`). **Execution › Keep awake**: the switch of the Workflows screen (see Workflows), off by default: no sleep while runs, a roadmap or a queue have work to do. **Execution › Concurrent runs**: off by default (one run at a time); on, several workflows run at the same time up to a **maximum** (default 2), with an optional **maximum per project**; simulations count toward the limits only if you say so. Each run has its own git worktree, and the monthly budgets count every run in progress. The **Run** menu item then lists the runs in progress (status, workflow, project/issue): click one to show it on the Run screen and in the top bar (whose **All runs** counter adds them up); a badge counts the human gates waiting across runs, and a gate never pops up over another screen: a toast names its run |
 | Supervisor | The Supervisor as a companion on every screen: the top bar's **Supervisor** button opens a chat drawer that knows the screen you are on (e.g. "Workflows, builder tab, editing workflow X", "Analytics, range 2026-09-01 to 2026-09-30"), and the Supervisor menu item shows the whole conversation full page. It reads the app's data through read-only tools (workflows, projects, runs, skills, agents, usage, analytics) served by its own MCP server, never the repositories' code; it never answers a human gate and routes code problems to the workflow's agents. Each message is one model call (developer mode: the simulated supervisor, no cost) |
+| Oracle | The Oracle's one conversation for the whole app (see The Oracle below): docked on the Dashboard, and a drawer on every other screen from the **Oracle** button at the bottom left of the sidebar, whose badge counts the answers that arrived while it was closed. Answers render Markdown and tables, with their time, model, cost and tokens; run ids, issues and run files open in the app; pasted screenshots are sent with the question; **Memory** edits its standing decisions and **New session** starts over from a handoff note. The footer shows today's spend against the daily budget (Settings › Execution); paused by budget or answering in another app process, the input is replaced by a notice |
 <!-- /generated:screens -->
 
 The **Start** button at the top (next to Stop) opens the right side panel: pick the workflow,
@@ -585,6 +586,35 @@ orchestrator:
   something only a person can change. The analysis is saved as `supervisor/analysis-*.md` in the
   run folder (an artifact). **Chat in terminal** opens the supervisor's CLI in the run folder,
   read-only, to ask follow-up questions.
+
+### The Oracle
+
+The Oracle is a built-in agent (Agents lists it; model and effort editable, default
+`claude-opus-5-5`, high) with **one persistent conversation for the whole app**: it plays Product
+Owner, supervisor, reliability engineer and operator's assistant in the same context. Its panel is
+docked on the **Dashboard**; on every other screen the **Oracle** button at the bottom left of the
+sidebar opens the same conversation as a drawer that knows the screen you are on (Esc closes it).
+The button's badge counts the answers that arrived while the conversation was out of view.
+
+- **What it reads**, read-only: the runs (events, summaries, sessions, decisions, handoff notes,
+  costs), the roadmaps, the Backlog caches and queues, local merges not pushed, the workflows and
+  skills (and whether a newer default exists), your projects' repositories (git log/diff/show,
+  files) and the app's own code when its repository is a project. Run ids, `#<number>` issues and
+  run files in an answer open in the app; other paths copy on click. Paste a screenshot into the
+  input (PNG, JPEG, GIF or WebP, up to 5 MB each and 4 per message): it is saved in
+  `<workspace>/oracle/attachments/` and the Oracle looks at it.
+- **Memory**: your standing decisions ("reply in Portuguese", "validated mode for UI changes"),
+  edited only by you from the drawer's **Memory** button and read at every session start.
+  **New session** starts over from a handoff note; the conversation and the memory are kept. Past
+  the context threshold it compacts on its own the same way.
+- **Cost**: each answer shows its time, model, cost and tokens; the footer shows today's spend
+  against the **daily budget** (Settings › Execution, default 20 USD, 0 = no cap). Once reached,
+  the Oracle is paused until the next day (UTC). Its spend counts in the monthly budgets like the
+  runs. Developer mode and automated checks answer from the simulated Oracle: no model call, no cost.
+- **It changes nothing yet**: it proposes (issues, workflow edits, repairs) and you act. Waking up
+  on events, asking other agents for work and writing with your confirmation come with #123.
+- One app process answers: in a second window the drawer shows the conversation and names the
+  process that owns it.
 
 ### Resuming a run from a step
 
