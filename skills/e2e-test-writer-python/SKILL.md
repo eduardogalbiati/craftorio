@@ -12,8 +12,8 @@ used_by: "test writer"
 
 | Signal in the repository | Framework | Feature folder | Only this run's scenarios |
 |---|---|---|---|
-| `pytest-bdd` in the dependencies | pytest-bdd | `tests/features/` (or `bdd_features_base_dir`) | `pytest tests/e2e -m issue_<n>` or `pytest <test_file>.py` |
-| `behave` in the dependencies | behave | `features/` | `behave features/<file>.feature` or `--tags=@issue-<n>` |
+| `pytest-bdd` in the dependencies | pytest-bdd | `tests/features/` (or `bdd_features_base_dir`) | `pytest tests/e2e -m issue_<n>` |
+| `behave` in the dependencies | behave | `features/` | `behave --tags=@issue-<n>` |
 | `robotframework` in the dependencies | Robot Framework (Gherkin style) | `tests/` (`*.robot`) | `robot --include issue-<n> tests/` |
 
 - **No E2E framework yet**: default to **pytest-bdd** (with `pytest-playwright` for a web UI),

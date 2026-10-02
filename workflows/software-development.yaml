@@ -780,12 +780,15 @@ steps:
          once per round, filtered to the tests you are writing (e.g. `--test-name-pattern`). Then
          run the full suite once, at the end, with the project's test command. Never start a full
          mock run of a workflow (`scripts/run.js`): the suite already includes one.
-      3. End-to-end acceptance scenarios, following the E2E test skill: derive Given/When/Then
-         scenarios from the original task and the issue's acceptance criteria (one per verifiable
-         behaviour, with the failure and edge cases the issue names), write the feature file and
-         the step definitions in the project's usual feature folder, and run only this run's
-         scenarios. A purely internal change with no user-visible behaviour may have none: say
-         why in `e2e_note`.
+      3. End-to-end acceptance scenarios, following the E2E test skill, kept cheap:
+         - only when the issue has user-visible behaviour (a screen, a dialog, a CLI output a
+           person reads); an engine, refactor or docs issue gets none: say why in `e2e_note`;
+         - at most 3 scenarios per issue (the main path and the failure cases the issue names),
+           Given/When/Then from the original task and the issue's acceptance criteria, tagged
+           `@issue-<n>`, in the project's usual feature folder, reusing the existing step
+           definitions before writing new ones;
+         - run only this run's scenarios by their issue tag, never the whole E2E suite (the
+           release workflow runs it).
       {% endif %}
       Report every scenario in `scenarios` (feature file, name, its Given/When/Then lines, status
       passed / failed / skipped, reason for failed and skipped, screenshots). A scenario that fails

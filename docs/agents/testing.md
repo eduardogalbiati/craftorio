@@ -54,7 +54,10 @@ creates a commit needs its own `-c user.name/email`.
   fails (the 1st by default) one passed, one failed and one skipped; on later visits the failed one
   passes. The engine saves them in `<run_dir>/e2e/` (`src/engine/scenarios.js`) and the gates show
   them; `npm run screenshot -- --view run --stop-at approve_merge` shows the gate with them (the
-  demo writes the UI scenario's screenshot).
+  demo writes the UI scenario's screenshot). Local hero has no merge approval: the run's summary
+  (`renderRunSummary`, views/run/run.js) shows them. Real runs keep E2E cheap (skill
+  `e2e-scenarios`): user-visible issues only, at most 3 scenarios per issue, only the
+  `@issue-<n>` tag run; the full E2E suite runs in the release workflow.
 - `run:start` takes `mockSequences` (simulation only): the Write & Review scenario picker uses it.
 - The Backlog's Product Owner drawer has its own scenario picker (#148, `#po-scenario`, orange,
   shown only in developer or simulation-only mode): `po:ask`'s `scenario` forces the simulated

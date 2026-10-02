@@ -13,7 +13,7 @@ used_by: "test writer"
 | Signal in the repository | Framework | Feature folder | Only this run's scenarios |
 |---|---|---|---|
 | `playwright-bdd` in devDependencies | playwright-bdd | `features/` (its config's `features`) | `npx bddgen && npx playwright test --grep "@issue-<n>"` |
-| `@cucumber/cucumber` in devDependencies | Cucumber.js (+ Playwright if present) | `features/` (`cucumber.js` config) | `npx cucumber-js <file>.feature` or `--tags "@issue-<n>"` |
+| `@cucumber/cucumber` in devDependencies | Cucumber.js (+ Playwright if present) | `features/` (`cucumber.js` config) | `npx cucumber-js --tags "@issue-<n>"` |
 | `@badeball/cypress-cucumber-preprocessor` | Cypress + Cucumber | `cypress/e2e/` | `npx cypress run --spec <file>.feature` |
 | an Electron app with `scripts/smoke.js` and no BDD framework | node:test steps driving the smoke/screenshot scripts | `test/e2e/` | `node --test test/e2e/<file>.test.js` |
 

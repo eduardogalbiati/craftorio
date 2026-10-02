@@ -124,6 +124,8 @@ function gateScenariosHtml(runId, g = {}) {
   }).join('');
   return `<div class="gate-scenarios">${head(` ${counts}`)}${rows}${note}</div>`;
 }
+// also the run's summary (views/run/), where a workflow without a merge approval shows them
+window.gateScenariosHtml = gateScenariosHtml;
 
 // The scenarios' screenshots in root (gateScenariosHtml): read once found (artifacts:read), each
 // opening the image viewer with the other screenshots of its scenario; a missing file says so.

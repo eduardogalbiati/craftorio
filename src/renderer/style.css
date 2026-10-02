@@ -758,7 +758,11 @@ body.resizing-dock .term-body { pointer-events: none; }
 .gate-scenario > summary { display: flex; align-items: center; gap: 6px; cursor: pointer; min-width: 0; padding: 2px 0; }
 .gate-scenario > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-radius: 4px; }
 .gate-scenario > summary .pill { flex: none; min-width: 52px; text-align: center; }
-.gate-scenario-name { flex: none; max-width: 50%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gate-scenario > summary .badge { flex: none; white-space: nowrap; }
+.gate-scenario-name { flex: 0 1 auto; min-width: 0; max-width: 50%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* the run's summary column is narrow (#143): the counts wrap under the title */
+.run-summary .gate-scenarios { margin-top: 10px; }
+.run-summary .gate-scenarios-head .pill { white-space: nowrap; }
 .gate-scenario-reason { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .gate-scenario[open] { background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px; padding: 2px 8px 8px; }
 .gate-scenario-steps { margin: 4px 0; padding-left: 20px; }

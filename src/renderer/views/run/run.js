@@ -133,6 +133,7 @@ function renderRunSummary() {
     ${r.gateWaitMs ? `<div class="small" title="Time the run waited for your answers at its human gates: no agent works (or costs) meanwhile">Waiting for you at gates: <b>${esc(fmtDur(r.gateWaitMs))}</b></div>` : ''}
     <dl class="kv run-inputs">${inputs.map(([k, v]) => `<dt title="${esc(k)}">${esc(k)}</dt>${inputValueCell(v)}`).join('')}</dl>
     ${inputImagesHtml()}
+    ${window.gateScenariosHtml ? window.gateScenariosHtml(r.id) : ''}
     <div class="row">
       <button class="btn sm ghost sup-btn" id="btn-run-sup" title="Ask the AI supervisor to explain this run and suggest how to continue"><span class="sup-mark">◆</span> Ask the supervisor</button>
       ${r.status === 'running' ? `<button class="btn sm ghost sup-btn" id="btn-run-watch" title="${WATCH_TITLE}"><span class="sup-mark">◆</span> Watch</button>` : ''}
@@ -146,6 +147,8 @@ function renderRunSummary() {
   box._html = html;
   box.innerHTML = html;
   mountInputImages(box);
+  // the test writer's E2E scenarios (#143): local-hero has no merge approval to show them at
+  if (window.mountGateScenarios) window.mountGateScenarios(box);
   $('#btn-run-sup').onclick = () => openSupervisorForCurrent();
   if ($('#btn-run-watch')) $('#btn-run-watch').onclick = () => openSupervisorForCurrent({ watch: true });
   if ($('#btn-run-resume')) $('#btn-run-resume').onclick = () => openResumeDialog(r.id);
