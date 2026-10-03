@@ -91,7 +91,7 @@
       ${o.nights.map((n) => `<tr><td class="nowrap">${esc(n.startedAt.slice(0, 10))}${n.watch ? '' : ' <span class="badge" title="No Night watch this night: 00:00-08:00 shown">no watch</span>'}</td>
         <td class="nowrap small">${esc(dateOf(n.window.from))} → ${esc(dateOf(n.window.to))}</td><td class="num">${occ(n.occupancy)}</td>
         <td class="num">${n.incidents == null ? '—' : n.incidents}</td><td class="num">${n.actions == null ? '—' : n.actions}</td><td class="num">${n.hoursSaved == null ? '—' : hours(n.hoursSaved)}</td>
-        <td class="num">${fmtUsd(n.costUsd || 0)}</td><td>${n.watch ? '<button type="button" class="link-btn" data-occ-night="${esc(n.startedAt)}">Night watch →</button>' : ''}</td></tr>`).join('')}</tbody></table>`
+        <td class="num">${fmtUsd(n.costUsd || 0)}</td><td>${n.watch ? `<button type="button" class="link-btn" data-occ-night="${esc(n.startedAt)}">Night watch →</button>` : ''}</td></tr>`).join('')}</tbody></table>`
       : '<p class="muted small an-empty">No night in this range.</p>';
     return `<div class="card table-wrap"><table class="u-table an-sessions" data-testid="an-occ-nightwatch"><thead><tr><th></th><th class="num">Hours</th><th class="num">Occupancy</th><th>Idle by cause</th><th class="num">Issues delivered</th><th class="num">Cost</th></tr></thead><tbody>
         ${row(`Under the Night watch <span class="muted small">(${nw.nights} night${nw.nights === 1 ? '' : 's'})</span>`, nw.inside)}${row('Outside it', nw.outside)}</tbody></table></div>
