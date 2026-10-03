@@ -179,10 +179,13 @@ module.exports = (ctx) => {
     }
     const { ws } = ctx;
     const slot = { mock: !!mock, projectId: forcedProject, parentRunId: parent?.run_id || null };
+    // a child waits for its slot (waitForSlot reserves it); any other run fails when none is free
     if (parent) await waitForSlot(slot, signal, onSlotWait);
-    const busy = parent ? '' : slotProblem(slot);
-    if (busy) throw new Error(busy);
-    reserved.add(slot);
+    else {
+      const busy = slotProblem(slot);
+      if (busy) throw new Error(busy);
+      reserved.add(slot);
+    }
     let run;
     try {
       await host.assertCanRun?.({ mock: !!mock });
@@ -193,10 +196,19 @@ module.exports = (ctx) => {
       const settings = workspace.readSettings(ws);
       const folders = Object.values(inputs || {}).filter((v) => typeof v === 'string' && /[\\/]/.test(v)).map((v) => path.resolve(v).toLowerCase());
       const projectId = forcedProject || projects.listProjects(ws.projects).find((p) => p.folder && folders.includes(path.resolve(p.folder).toLowerCase()))?.id || null;
-      // the project is known now: its own limit applies
+      // the project is known now: its own limit applies (a child already waited with its parent's
+      // project; one whose project only shows now waits again for a slot of that project)
+      const projectChanged = projectId !== slot.projectId;
       slot.projectId = projectId;
-      const busyProject = parent ? '' : slotProblem(slot, slot);
-      if (busyProject) throw new Error(busyProject);
+      if (parent) {
+        if (projectChanged) {
+          reserved.delete(slot);
+          await waitForSlot(slot, signal, onSlotWait);
+        }
+      } else {
+        const busyProject = slotProblem(slot, slot);
+        if (busyProject) throw new Error(busyProject);
+      }
       // budgets that count usage outside the orchestrator need the CLIs' own logs
       const needsLocal = Object.values(settings.budgets || {}).some((b) => b?.countOutside);
       const baselineAt = Date.now();
@@ -291,15 +303,18 @@ module.exports = (ctx) => {
     return { runId: run.runId, runDir: run.runDir };
   }
 
-  // A child run waits until slotProblem lets it start (#175); the parent's stop ends the wait.
+  // A child run waits until slotProblem lets it start (#175), the limit per project included, then
+  // reserves the slot in the same tick as the check that let it through: children of a foreach step
+  // start together and must see each other's reservation. The parent's stop ends the wait.
   async function waitForSlot(slot, signal, onWait) {
     let told = false;
-    for (let busy = slotProblem(slot); busy; busy = slotProblem(slot)) {
+    for (let busy = slotProblem(slot, slot); busy; busy = slotProblem(slot, slot)) {
       if (signal?.aborted) break;
       if (!told) { told = true; onWait?.(busy); }
       await new Promise((resolve) => setTimeout(resolve, SLOT_POLL_MS));
     }
     if (signal?.aborted) throw new Error('Cancelled: the parent run was stopped before this child run could start.');
+    reserved.add(slot);
   }
 
   // A child run of a `type: workflow` step (#174, WorkflowRun startChild): started like any run of the
