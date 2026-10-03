@@ -437,7 +437,7 @@ agents:
   # #223: called only when the orchestrator's E2E run (step e2e) has a red scenario (Playwright Test
   # Agents' generator/healer split: the test writer generates, this agent heals)
   healer:
-    color: "#E0559B" # #224: its role's colour in the run chat and the runs list
+    color: "#F0569B" # #224: its role's colour in the run chat and the runs list
     provider: claude
     model: claude-sonnet-5
     session: persistent

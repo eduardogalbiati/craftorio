@@ -20,6 +20,8 @@ const obj = (properties = {}, required = []) => ({ type: 'object', properties, r
 const str = (description) => ({ type: 'string', description });
 // Drops what only the UI shows (an input's label, an agent's colour) from list_workflows.
 const withoutUi = (map, field) => Object.fromEntries(Object.entries(map || {}).map(([k, { [field]: _, ...v }]) => [k, v]));
+// Drops a step's empty fields (agents null, goal/loop false, no skills): an absent field reads the same.
+const compactStep = (step) => Object.fromEntries(Object.entries(step || {}).filter(([, v]) => v != null && v !== false && !(Array.isArray(v) && !v.length)));
 
 /** The tools over a service ctx (src/service/index.js): [{ name, description, inputSchema, run(args) }]. */
 function supervisorTools(ctx) {
@@ -33,8 +35,9 @@ function supervisorTools(ctx) {
       // the payload): the whole list must stay under MAX_CHARS, or clip() cuts the JSON mid-string.
       // Compact JSON: the indented list of the bundled workflows alone passed MAX_CHARS.
       // Nor the inputs' labels and agents' colours (#216, #224): they pushed the bundled workflows over MAX_CHARS again.
+      // Nor the steps' empty fields (#223: the e2e and heal steps pushed them over again).
       run: () => JSON.stringify(ctx.listWorkflows().map(({ file, origin, name, version, description, category, tags, inputs, outputs, agents: a, steps }) => (
-        { file, origin, name, version, description, category, tags, inputs: withoutUi(inputs, 'label'), outputs, agents: withoutUi(a, 'color'), steps }))),
+        { file, origin, name, version, description, category, tags, inputs: withoutUi(inputs, 'label'), outputs, agents: withoutUi(a, 'color'), steps: (steps || []).map(compactStep) }))),
     },
     {
       name: 'read_workflow',
