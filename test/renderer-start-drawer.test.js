@@ -183,6 +183,33 @@ test('selectWorkflow: the main field ignores a previous save (even one from befo
   assert.match(inputsHtml, /data-wi-pill="validated" class="active"[^>]*>Validated<\/button>/);
 });
 
+// ---------------------------------------------------------------------------
+// #203: unit_tests / e2e_tests show next to Mode (upfront), not under Advanced
+// ---------------------------------------------------------------------------
+test('selectWorkflow: unit_tests and e2e_tests render next to the task/mode fields, not folded into Advanced', () => {
+  const workflows = [{
+    file: 'software-development.yaml',
+    inputs: {
+      task: { required: true },
+      mode: { enum: ['auto', 'validated'], default: 'auto' },
+      unit_tests: { enum: ['write_and_run', 'run_existing', 'off'], default: 'write_and_run', label: 'Unit tests', options: { write_and_run: 'Write and run', run_existing: 'Run existing', off: 'Off' } },
+      e2e_tests: { enum: ['off', 'write', 'write_and_run'], default: 'write', label: 'E2E tests', options: { off: 'Off', write: 'Write', write_and_run: 'Write and run' } },
+      base_branch: { type: 'string', default: 'main' },
+    },
+    agents: {},
+  }];
+  const { helpers, getEl } = loadStartDrawer({ workflows });
+  helpers.selectWorkflow('software-development.yaml');
+  const inputsHtml = getEl('inputs-form').innerHTML;
+  const advHtml = getEl('adv-form').innerHTML;
+  assert.match(inputsHtml, /data-wi-input="unit_tests"/);
+  assert.match(inputsHtml, /data-wi-input="e2e_tests"/);
+  assert.doesNotMatch(advHtml, /data-wi-input="unit_tests"/);
+  assert.doesNotMatch(advHtml, /data-wi-input="e2e_tests"/);
+  // a plain input with no such role stays in Advanced
+  assert.match(advHtml, /data-wi-input="base_branch"/);
+});
+
 test('openDrawer: an explicit inputs prefill is applied after the workflow is selected, so it can still set the main field', () => {
   const openDrawer = /async function openDrawer\(\{[\s\S]*?\n\}/.exec(drawerSrc)[0];
   const renderCallIndex = openDrawer.indexOf('renderWorkflowOptions(');

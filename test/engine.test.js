@@ -990,7 +990,8 @@ test('software-development: validated mode stops at developer_check with the dif
   assert.match(gate.message, /Files changed:/);
   // E2E scenarios (#143): the Dev/QA line is always there; the test step has not run yet here
   assert.match(gate.message, /Dev\/QA: read the E2E scenarios and the screenshots/);
-  assert.match(gate.message, /E2E scenarios: none yet\. The test writer writes and runs them after the code review; they show at the merge approval\./);
+  // #203: e2e_tests defaults to "write" (not "write_and_run"), so the test writer only writes them
+  assert.match(gate.message, /E2E scenarios: none yet\. The test writer writes them after the code review; they show at the merge approval\./);
   assert.match(gate.feedback.label, /Your change request for the developer/);
   assert.deepEqual(validated.transitions.filter((x) => /developer_check|developer_screenshots/.test(x)), [
     'develop>developer_screenshots', 'developer_screenshots>developer_check', 'developer_check>code_review',
@@ -1613,7 +1614,8 @@ test('local hero workflow: validated mode stops at developer_check with a local 
   assert.equal(gate.work_dir, root);
   // E2E scenarios (#143): local-hero points "none yet" readers to the run's summary, not a merge gate
   assert.match(gate.message, /Dev\/QA: read the E2E scenarios and the screenshots/);
-  assert.match(gate.message, /E2E scenarios: none yet\. The test writer writes and runs them after the code review; they show in the run's summary\./);
+  // #203: e2e_tests defaults to "write" (not "write_and_run"), so the test writer only writes them
+  assert.match(gate.message, /E2E scenarios: none yet\. The test writer writes them after the code review; they show in the run's summary\./);
   const transitions = events.filter((e) => e.type === 'step.transition').map((e) => `${e.from}>${e.to}`);
   assert.deepEqual(transitions.filter((x) => /developer_check|developer_screenshots/.test(x)), [
     'develop>developer_screenshots', 'developer_screenshots>developer_check', 'developer_check>code_review',
@@ -2139,4 +2141,175 @@ steps:
   try { assert.throws(() => loadWorkflow(tmp), /workflow must name/); } finally { fs.rmSync(tmp, { force: true }); }
   fs.writeFileSync(tmp, onStep(`workflow: ${path.basename(tmp)}`));
   try { assert.throws(() => loadWorkflow(tmp), /cannot run itself/); } finally { fs.rmSync(tmp, { force: true }); }
+});
+
+// =============================================================================
+// #177: a `type: suite` step runs the project's whole suite once per round, without an agent.
+// suite-step.js's own parsing/detection is in test/engine-suite-step.test.js; these tests cover
+// the engine's wiring (validation, mockSequences.suite, transitions, summary.suite_runs).
+// =============================================================================
+
+test('loadWorkflow validates a `type: suite` step: no agent, command must be a string, timeout a duration', () => {
+  const tmp = path.join(os.tmpdir(), `wf-suite-step-${process.pid}.yaml`);
+  const onStep = (extra) => `apiVersion: multiagent/v1
+kind: Workflow
+metadata: { name: wf-suite-step-${process.pid} }
+agents: { a: { provider: claude, model: m } }
+steps:
+  - id: suite
+    type: suite
+    ${extra}
+`;
+  try {
+    fs.writeFileSync(tmp, onStep('agent: a'));
+    assert.throws(() => loadWorkflow(tmp), /a suite step has no agent/);
+    fs.writeFileSync(tmp, onStep('command: 42'));
+    assert.throws(() => loadWorkflow(tmp), /command must be a string/);
+    fs.writeFileSync(tmp, onStep('timeout: not-a-duration'));
+    assert.throws(() => loadWorkflow(tmp), /timeout must be a duration/);
+    fs.writeFileSync(tmp, onStep('command: "npm test"\n    timeout: 30m'));
+    assert.doesNotThrow(() => loadWorkflow(tmp));
+  } finally {
+    fs.rmSync(tmp, { force: true });
+  }
+});
+
+test('loadWorkflow validates `full_suite`: only "warn", and only on an agent step', () => {
+  const tmp = path.join(os.tmpdir(), `wf-full-suite-${process.pid}.yaml`);
+  const onStep = (type, full_suite) => `apiVersion: multiagent/v1
+kind: Workflow
+metadata: { name: wf-full-suite-${process.pid} }
+agents: { a: { provider: claude, model: m } }
+steps:
+  - id: s1
+    ${type === 'suite' ? 'type: suite' : 'agent: a'}
+    full_suite: ${full_suite}
+`;
+  try {
+    fs.writeFileSync(tmp, onStep('agent', 'nope'));
+    assert.throws(() => loadWorkflow(tmp), /full_suite must be "warn"/);
+    fs.writeFileSync(tmp, onStep('suite', 'warn'));
+    assert.throws(() => loadWorkflow(tmp), /full_suite must be "warn"/); // not on a suite step
+    fs.writeFileSync(tmp, onStep('agent', 'warn'));
+    assert.doesNotThrow(() => loadWorkflow(tmp));
+  } finally {
+    fs.rmSync(tmp, { force: true });
+  }
+});
+
+test('software-development: a failing suite goes back to the test writer once with the failures, then passes; summary.suite_runs counts the engine\'s runs', { timeout: 120000 }, async () => {
+  const { events, finished, transitions } = await runSoftwareDevelopment({
+    mockSequences: { verdict: ['approved'], preview_status: ['success'], tests_status: ['pass'], suite: { suite: ['fail', 'pass'] } },
+  });
+  assert.equal(finished.status, 'success', finished.error);
+  const i = transitions.indexOf('test>suite');
+  assert.deepEqual(transitions.slice(i, i + 4), ['test>suite', 'suite>test', 'test>suite', 'suite>build'], transitions.join(' '));
+  const testPrompts = events.filter((e) => e.type === 'session.message_sent' && e.step_id === 'test').map((e) => e.prompt);
+  assert.equal(testPrompts.length, 2);
+  assert.match(testPrompts[1], /The orchestrator ran the whole suite after your last step and it failed/);
+  assert.match(testPrompts[1], /simulated failing test/);
+  assert.deepEqual(finished.summary.suite_runs, { engine: 2, agents: 0 });
+});
+
+test('software-development: pre-existing suite failures never loop back to the test writer', { timeout: 120000 }, async () => {
+  const { finished, transitions } = await runSoftwareDevelopment({
+    mockSequences: { verdict: ['approved'], preview_status: ['success'], tests_status: ['pass'], preexisting_failures: true, suite: { suite: ['preexisting'] } },
+  });
+  assert.equal(finished.status, 'success', finished.error);
+  assert.deepEqual(transitions.filter((x) => /^(test|suite)>/.test(x)), ['test>suite', 'suite>build']);
+  assert.deepEqual(finished.summary.suite_runs, { engine: 1, agents: 0 });
+});
+
+test('software-development: a suite that cannot run (blocked) goes straight to test_failed', { timeout: 120000 }, async () => {
+  const { finished, transitions } = await runSoftwareDevelopment({
+    mockSequences: { verdict: ['approved'], tests_status: ['pass'], suite: { suite: ['blocked'] } },
+    answers: { test_failed: false },
+  });
+  assert.deepEqual(transitions.filter((x) => /^(test|suite)>/.test(x)), ['test>suite', 'suite>test_failed']);
+  assert.equal(finished.status, 'failed');
+  assert.match(finished.error, /ended as failed at step "test_failed"/);
+});
+
+test('software-development: a suite that keeps failing exhausts its 2 retries (3 rounds total) and stops at test_failed, with the failures in the gate message', { timeout: 120000 }, async () => {
+  const { events, finished, transitions } = await runSoftwareDevelopment({
+    mockSequences: { verdict: ['approved'], tests_status: ['pass'], suite: { suite: ['fail'] } },
+    answers: { test_failed: false },
+  });
+  assert.deepEqual(transitions.filter((x) => /^(test|suite)>/.test(x)), ['test>suite', 'suite>test', 'test>suite', 'suite>test', 'test>suite', 'suite>test_failed']);
+  assert.equal(finished.status, 'failed');
+  const gate = events.find((e) => e.type === 'approval.requested' && e.step_id === 'test_failed');
+  assert.match(gate.message, /still fails after 3 round/);
+  assert.match(gate.message, /simulated failing test/);
+});
+
+test('software-development: unit_tests \'run_existing\' with a failing suite delegates to the developer instead of the test writer', { timeout: 120000 }, async () => {
+  const { events, transitions } = await runSoftwareDevelopment({
+    inputs: { unit_tests: 'run_existing', e2e_tests: 'off' },
+    mockSequences: { verdict: ['approved'], preview_status: ['success'], suite: { suite: ['fail', 'pass'] } },
+  });
+  assert.deepEqual(transitions.filter((x) => /^(code_review|test|suite)>/.test(x)), ['code_review>suite', 'suite>suite', 'suite>build']);
+  assert.ok(events.some((e) => e.type === 'log' && e.message === 'suite delegated to developer'));
+  assert.ok(!events.some((e) => e.type === 'session.message_sent' && e.step_id === 'test'), 'the test writer never runs with unit_tests: run_existing + e2e_tests: off');
+});
+
+// ---- #203: unit_tests x e2e_tests -----------------------------------------------------------
+
+for (const unit_tests of ['write_and_run', 'run_existing', 'off']) {
+  for (const e2e_tests of ['off', 'write', 'write_and_run']) {
+    const testVisited = e2e_tests !== 'off' || unit_tests === 'write_and_run';
+    const suiteVisited = unit_tests !== 'off';
+    test(`software-development: unit_tests=${unit_tests} x e2e_tests=${e2e_tests}: test visited=${testVisited}, suite visited=${suiteVisited}`, { timeout: 120000 }, async () => {
+      const { finished } = await runSoftwareDevelopment({
+        inputs: { unit_tests, e2e_tests },
+        mockSequences: { verdict: ['approved'], preview_status: ['success'], tests_status: ['pass'], suite: { suite: ['pass'] } },
+      });
+      assert.equal(finished.status, 'success', finished.error);
+      assert.equal(finished.summary.steps.test.visits > 0, testVisited, 'test step');
+      assert.equal(finished.summary.steps.suite.visits > 0, suiteVisited, 'suite step');
+    });
+  }
+}
+
+test('software-development: the test writer\'s skills follow unit_tests / e2e_tests (no unit skill unless write_and_run, no e2e skill when off)', { timeout: 120000 }, async () => {
+  const firstTestPrompt = (events) => events.find((e) => e.type === 'session.message_sent' && e.step_id === 'test').prompt;
+
+  const both = await runSoftwareDevelopment({
+    inputs: { unit_tests: 'write_and_run', e2e_tests: 'write' },
+    mockSequences: { verdict: ['approved'], preview_status: ['success'], tests_status: ['pass'], suite: { suite: ['pass'] } },
+  });
+  const bothPrompt = firstTestPrompt(both.events);
+  assert.match(bothPrompt, /<skill name="unit-test-writer-js"/);
+  assert.match(bothPrompt, /<skill name="e2e-test-writer-js"/);
+
+  const unitOnly = await runSoftwareDevelopment({
+    inputs: { unit_tests: 'write_and_run', e2e_tests: 'off' },
+    mockSequences: { verdict: ['approved'], preview_status: ['success'], tests_status: ['pass'], suite: { suite: ['pass'] } },
+  });
+  const unitOnlyPrompt = firstTestPrompt(unitOnly.events);
+  assert.match(unitOnlyPrompt, /<skill name="unit-test-writer-js"/);
+  assert.doesNotMatch(unitOnlyPrompt, /<skill name="e2e-test-writer-js"/);
+
+  const e2eOnly = await runSoftwareDevelopment({
+    inputs: { unit_tests: 'run_existing', e2e_tests: 'write' },
+    mockSequences: { verdict: ['approved'], preview_status: ['success'], tests_status: ['pass'], suite: { suite: ['pass'] } },
+  });
+  const e2eOnlyPrompt = firstTestPrompt(e2eOnly.events);
+  assert.doesNotMatch(e2eOnlyPrompt, /<skill name="unit-test-writer-js"/, 'run_existing never loads the unit-test-writer skill');
+  assert.match(e2eOnlyPrompt, /<skill name="e2e-test-writer-js"/);
+});
+
+test('software-development: tests_plan records whether a value is the workflow default or chosen for this run', { timeout: 120000 }, async () => {
+  const def = await runSoftwareDevelopment({ mockSequences: { verdict: ['approved'], preview_status: ['success'], tests_status: ['pass'], suite: { suite: ['pass'] } } });
+  const planOf = (f, k) => f.summary.tests_plan.find((p) => p.input === k);
+  assert.equal(planOf(def.finished, 'unit_tests').source, 'workflow default');
+  assert.equal(planOf(def.finished, 'unit_tests').value, 'write_and_run');
+  const startedPlan = def.events.find((e) => e.type === 'workflow.started').tests_plan;
+  assert.equal(planOf({ summary: { tests_plan: startedPlan } }, 'unit_tests').source, 'workflow default');
+
+  const chosen = await runSoftwareDevelopment({
+    inputs: { unit_tests: 'off', e2e_tests: 'off' },
+    mockSequences: { verdict: ['approved'], preview_status: ['success'] },
+  });
+  assert.equal(planOf(chosen.finished, 'unit_tests').source, 'chosen for this run');
+  assert.equal(planOf(chosen.finished, 'unit_tests').value_label, 'Off');
 });

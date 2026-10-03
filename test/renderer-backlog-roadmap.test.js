@@ -318,6 +318,37 @@ test('onClick [data-rm-save]: an invalid new-input name reports an error and sav
   assert.equal(savedCalls.length, 0);
 });
 
+// ---- #204: busy()/closeEdit(), so a live reload never disturbs an open Edit form, a drag or a note edit ----
+
+test('busy(): false with nothing open; true while an item\'s Edit form, a stage note edit or a drag is in progress; closeEdit() clears the first two', async () => {
+  const { BacklogRoadmap } = loadRoadmap();
+  const item = { id: 'it1', status: 'planned', workflow: 'w.yaml', issues: [{ number: 1, title: 'A', url: 'u' }], inputs: {} };
+  const stage = { id: 'st1', name: '', note: '', items: [item] };
+  const data = { roadmap: { state: 'planned', stages: [stage] }, issues: [] };
+  const ctx = makeCtx();
+  assert.equal(BacklogRoadmap.busy(), false);
+
+  // an open Edit form
+  await BacklogRoadmap.onClick({ target: editButtonTarget('it1', 0) }, ctx, data);
+  assert.equal(BacklogRoadmap.busy(), true);
+  BacklogRoadmap.closeEdit();
+  assert.equal(BacklogRoadmap.busy(), false);
+
+  // an open stage note edit
+  await BacklogRoadmap.onClick({ target: addNoteButtonTarget(0) }, ctx, data);
+  assert.equal(BacklogRoadmap.busy(), true);
+  BacklogRoadmap.closeEdit();
+  assert.equal(BacklogRoadmap.busy(), false);
+
+  // a drag in progress: not cleared by closeEdit (it ends on drop/dragend, not on a reload)
+  BacklogRoadmap.onDragStart({ target: { closest: (sel) => (sel === '[data-drag-item]' ? { dataset: { item: 'it1' } } : null) }, stopPropagation: () => {}, dataTransfer: { setData: () => {} } });
+  assert.equal(BacklogRoadmap.busy(), true);
+  BacklogRoadmap.closeEdit();
+  assert.equal(BacklogRoadmap.busy(), true, 'closeEdit never ends a drag');
+  BacklogRoadmap.onDragEnd();
+  assert.equal(BacklogRoadmap.busy(), false);
+});
+
 test('a stage note shows "add note" when empty, text + edit when set, and onChange saves the stage note', async () => {
   const { BacklogRoadmap, savedCalls } = loadRoadmap();
   const stage = { id: 'st1', name: '', note: '', items: [] };

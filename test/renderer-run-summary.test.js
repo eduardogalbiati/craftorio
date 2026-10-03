@@ -21,20 +21,21 @@ function loadHelpers() {
   const inputValueCell = /function inputValueCell\(v\) \{[\s\S]*?\n\}/.exec(runSrc)[0];
   const canResume = /const canResume = [^\n]+/.exec(resumeSrc)[0];
   const hasChanges = /function hasChanges\(runId\) \{[\s\S]*?\n\}/.exec(runSrc)[0];
-  for (const [name, code] of Object.entries({ esc, issueRe, inputText, looksLikePath, inputValueCell, canResume, hasChanges })) {
+  const testsPlanHtml = /function testsPlanHtml\(plan\) \{[\s\S]*?\n\}/.exec(runSrc)[0];
+  for (const [name, code] of Object.entries({ esc, issueRe, inputText, looksLikePath, inputValueCell, canResume, hasChanges, testsPlanHtml })) {
     assert.ok(code, `${name} not found in app.js, views/run/run.js or resume-dialog.js: the source moved`);
   }
   const sandbox = { state: { runs: new Map() } };
   vm.createContext(sandbox);
   vm.runInContext(
-    `${esc}\n${issueRe}\n${inputText}\n${looksLikePath}\n${inputValueCell}\n${canResume}\n${hasChanges}\n`
-    + 'this.helpers = { inputText, inputValueCell, canResume, hasChanges };',
+    `${esc}\n${issueRe}\n${inputText}\n${looksLikePath}\n${inputValueCell}\n${canResume}\n${hasChanges}\n${testsPlanHtml}\n`
+    + 'this.helpers = { inputText, inputValueCell, canResume, hasChanges, testsPlanHtml };',
     sandbox,
   );
   return { ...sandbox.helpers, sandbox };
 }
 
-const { inputText, inputValueCell, canResume, hasChanges, sandbox: runHelpersSandbox } = loadHelpers();
+const { inputText, inputValueCell, canResume, hasChanges, testsPlanHtml, sandbox: runHelpersSandbox } = loadHelpers();
 
 test('inputText: an array of issue/PR URLs reads as "#65, #61, #53"; other arrays join with ", "', () => {
   const issues = ['https://github.com/o/r/issues/65', 'https://github.com/o/r/pull/61', 'https://gitlab.com/o/r/-/issues/53'];
@@ -68,6 +69,29 @@ test('inputValueCell: a Windows path gets the start-ellipsis class, keeping its 
   const cell = inputValueCell('C:\\Users\\Eduardo\\multiagent-workspace\\worktrees\\20260930-082114-65af9824');
   assert.match(cell, /class="kv-path"/);
   assert.match(cell, /<bdi>/);
+});
+
+// ---- #203: testsPlanHtml (badges for the run's unit_tests / e2e_tests) --------------------------
+
+test('testsPlanHtml: empty (or not an array) renders nothing, for workflows without the test inputs', () => {
+  assert.equal(testsPlanHtml(null), '');
+  assert.equal(testsPlanHtml(undefined), '');
+  assert.equal(testsPlanHtml([]), '');
+});
+
+test('testsPlanHtml: one badge per entry, labelled "<label>: <value_label>"', () => {
+  const html = testsPlanHtml([
+    { input: 'unit_tests', label: 'Unit tests', value: 'write_and_run', value_label: 'Write and run', source: 'workflow default' },
+    { input: 'e2e_tests', label: 'E2E tests', value: 'write', value_label: 'Write', source: 'chosen for this run' },
+  ]);
+  assert.match(html, /<span class="badge"[^>]*>Unit tests: Write and run<\/span>/);
+  assert.match(html, /<span class="badge"[^>]*>E2E tests: Write<\/span>/);
+  assert.doesNotMatch(html, /badge warn/);
+});
+
+test('testsPlanHtml: a value of "off" gets the warn class and a title explaining nothing of it is tested', () => {
+  const html = testsPlanHtml([{ input: 'unit_tests', label: 'Unit tests', value: 'off', value_label: 'Off', source: 'workflow default' }]);
+  assert.match(html, /<span class="badge warn" title="[^"]*nothing of it is tested in this run[^"]*">Unit tests: Off<\/span>/);
 });
 
 test('renderRunSummary: an empty array input is hidden entirely, not shown as a blank line', () => {
