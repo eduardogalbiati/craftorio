@@ -1,0 +1,180 @@
+<!doctype html>
+<!--
+  Build-in-public page: the 24x7 software factory, told as a hobby project's diary, with a newsletter.
+  Static: index.html + style.css + main.js, no build. Copy in Brazilian Portuguese; numbers rounded on
+  purpose (the owner's choice: no prices, no availability, nothing for sale). Media come from the
+  full page's folder (../img/). Sign-ups go to Supabase (public.join_newsletter,
+  supabase/migrations/20261003000000_newsletter.sql).
+-->
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Escala 24x7 · Diário da fábrica</title>
+  <meta name="description" content="Um projeto pessoal: um time de IAs que desenvolve software 24 horas por dia, enquanto eu durmo. O diário do que estou aprendendo construindo essa fábrica.">
+  <meta property="og:title" content="Escala 6x1? Aqui é 24x7.">
+  <meta property="og:description" content="Um time de IAs que desenvolve software enquanto eu durmo. O diário de um projeto de hobby e o que ele está me ensinando.">
+  <meta property="og:type" content="article">
+  <meta name="theme-color" content="#0b1220">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230b1220'/%3E%3Cpath d='M21 19.5A8 8 0 1 1 12.5 9a6.2 6.2 0 0 0 8.5 10.5z' fill='%23f5b041'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@100..125,500..900&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top">
+    <div class="wrap top-in">
+      <a class="mark" href="#inicio"><span class="moon" aria-hidden="true"></span>Diário da fábrica</a>
+      <nav aria-label="Seções">
+        <a href="#historia">A história</a>
+        <a href="#dia">Um dia na fábrica</a>
+        <a href="#aprendizados">Aprendizados</a>
+      </nav>
+      <a class="btn btn-sm" href="#newsletter">Acompanhar</a>
+    </div>
+  </header>
+
+  <main id="inicio">
+    <!-- HERO -->
+    <section class="hero">
+      <div class="wrap">
+        <p class="kicker">Projeto pessoal · construído em público</p>
+        <h1>Escala 6x1?<br><span>Aqui é 24x7.</span></h1>
+        <p class="lead">Calma, não sou eu que trabalho 24 horas. É um time de IAs que eu montei por hobby: um escreve o código, outro testa, outro revisa, e nada vai para a main sem uma regra minha ou a minha aprovação. Enquanto eu durmo, ele continua.</p>
+        <div class="cta">
+          <a class="btn" href="#newsletter">Receber os próximos capítulos</a>
+          <a class="btn btn-ghost" href="#historia">Ler a história</a>
+        </div>
+
+        <figure class="clock" aria-label="Um dia de 24 horas: 22 de agentes trabalhando e 2 de decisão humana">
+          <div class="clock-bar" id="clock"></div>
+          <figcaption>
+            <span><i class="sw-agents"></i>22 h · os agentes constroem, revisam e testam</span>
+            <span><i class="sw-me"></i>2 h · eu aprovo e escolho o que vem</span>
+          </figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <!-- NUMBERS -->
+    <section class="numbers" aria-label="A primeira semana em números">
+      <div class="wrap nums">
+        <div><b>+200</b><span>commits na primeira semana</span></div>
+        <div><b>+90%</b><span>do trabalho dos agentes já sai da própria ferramenta, não de mim</span></div>
+        <div><b>10</b><span>tarefas entregues na primeira noite, sem eu digitar nada</span></div>
+        <div><b>1–2 h</b><span>de decisão humana por dia</span></div>
+      </div>
+    </section>
+
+    <!-- STORY -->
+    <section class="section" id="historia">
+      <div class="wrap narrow">
+        <p class="kicker">A história</p>
+        <h2>Começou com uma pergunta pequena.</h2>
+        <p class="body">"E se eu conseguisse abrir várias sessões de IA ao mesmo tempo?" Em poucos dias, a pergunta virou uma pequena fábrica de software. E aí aconteceu a parte mais curiosa: a ferramenta começou a desenvolver a si mesma.</p>
+
+        <ol class="timeline">
+          <li><span class="when">Dia 1</span><div><h3>Uma ideia de fim de semana</h3><p>Um app que orquestra Claude Code, Codex e Grok num fluxo de desenvolvimento de verdade, com revisão cruzada, testes e um portão onde só eu decido.</p></div></li>
+          <li><span class="when">Dia 2</span><div><h3>As primeiras execuções reais</h3><p>Uma IA implementa, outra de outra família revisa, uma terceira escreve os testes. E um supervisor que só entra quando algo falha.</p></div></li>
+          <li><span class="when">Dia 4</span><div><h3>A ferramenta entra no volante</h3><p>Anotei o backlog, e as issues começaram a ser implementadas pela própria ferramenta. A partir daí, eu passei a acompanhar em vez de escrever código.</p></div></li>
+          <li class="night"><span class="when">Dia 5</span><div><h3>A primeira noite inteira</h3><p>Um Product Owner de IA montou o roteiro em etapas, e o roadmap rodou até de manhã. Fui dormir e acordei com 10 tarefas entregues, testadas e integradas.</p></div></li>
+          <li><span class="when">Hoje</span><div><h3>Uma fábrica que não dorme</h3><p>De dia eu falo as ideias, à noite elas viram código. Um vigia noturno destrava o que pode, dentro do que eu permiti, e deixa as decisões para mim.</p></div></li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- A DAY -->
+    <section class="section section-dark" id="dia">
+      <div class="wrap">
+        <p class="kicker">Um dia na fábrica</p>
+        <h2>Uma ou duas horas de decisão. O resto, a fábrica trabalha.</h2>
+        <div class="day">
+          <div class="d-night"><span class="t">noite</span><h3>Turno dos agentes</h3><p>O roadmap roda etapa por etapa: implementar, revisar, testar, integrar. O que quebra, o vigia tenta destravar; o que precisa de mim, espera.</p></div>
+          <div class="d-me"><span class="t">manhã</span><h3>Aprovação</h3><p>Reviso o que ficou pronto pelo resultado: screenshots, evidências, custo. Aprovo, peço ajuste ou descarto.</p></div>
+          <div class="d-me"><span class="t">manhã</span><h3>Planejamento</h3><p>Converso com o Product Owner, que lê o código antes de opinar, e aceito o roteiro das próximas 24 horas.</p></div>
+          <div class="d-night"><span class="t">dia</span><h3>A fábrica continua</h3><p>Ideias novas entram por texto ou voz, são triadas e entram na fila sem esperar a próxima sprint.</p></div>
+        </div>
+
+        <div class="media-pair">
+          <figure class="frame">
+            <div class="frame-bar"><i></i><i></i><i></i><span>Product Owner montando o roadmap</span></div>
+            <video muted playsinline loop preload="metadata" poster="../img/product-owner.png" data-autoplay aria-label="O Product Owner de IA monta um roadmap em etapas a partir do backlog"><source src="../img/product-owner.webm" type="video/webm"></video>
+          </figure>
+          <figure class="frame">
+            <div class="frame-bar"><i></i><i></i><i></i><span>O vigia noturno</span></div>
+            <video muted playsinline loop preload="metadata" poster="../img/night-watch.png" data-autoplay aria-label="O vigia noturno: o que a IA pode fazer sem perguntar e como foi cada noite"><source src="../img/night-watch.webm" type="video/webm"></video>
+          </figure>
+        </div>
+        <p class="note">Gravações do app em modo simulação.</p>
+      </div>
+    </section>
+
+    <!-- LEARNINGS -->
+    <section class="section" id="aprendizados">
+      <div class="wrap">
+        <p class="kicker">O que aprendi até agora</p>
+        <h2>Os aprendizados valeram mais que os números.</h2>
+        <p class="body center">Cada um vai virar um capítulo, com os dados e os erros. Alguns me pegaram de surpresa.</p>
+        <div class="lessons">
+          <article><span class="n">01</span><h3>O gargalo não é escrever código. É testar.</h3><p>Somando o tempo das etapas, testar levou mais do que desenvolver. A próxima grande economia está no teste.</p><span class="soon">capítulo em breve</span></article>
+          <article><span class="n">02</span><h3>O token mais caro é o de uma IA esperando.</h3><p>A execução mais cara não entregou nada: uma IA consultando um status que não mudava. Esperar é trabalho de código.</p><span class="soon">capítulo em breve</span></article>
+          <article><span class="n">03</span><h3>O git foi feito para humanos.</h3><p>Dois agentes conflitam só por acrescentar uma linha no fim da mesma lista. Com IAs em paralelo, o formato dos arquivos vira arquitetura.</p><span class="soon">capítulo em breve</span></article>
+          <article><span class="n">04</span><h3>Reagir a algo pronto vale mais que prever tudo.</h3><p>Quando gerar fica barato, o incremento funcionando vira a especificação mais barata que existe.</p><span class="soon">capítulo em breve</span></article>
+          <article><span class="n">05</span><h3>O que eu peço três vezes vira uma etapa.</h3><p>"Rode para eu ver" virou a etapa de evidência. "Registre essa issue" virou um workflow de triagem.</p><span class="soon">capítulo em breve</span></article>
+          <article><span class="n">06</span><h3>Contexto não se limpa sozinho.</h3><p>Um agente persistente chegava a contextos enormes. Com notas de passagem, a mesma etapa recomeça com uma fração do contexto.</p><span class="soon">capítulo em breve</span></article>
+        </div>
+      </div>
+    </section>
+
+    <!-- NEWSLETTER -->
+    <section class="section section-dark" id="newsletter">
+      <div class="wrap news">
+        <div class="news-copy">
+          <p class="kicker">Newsletter</p>
+          <h2>Receba os próximos capítulos.</h2>
+          <p class="body">Um e-mail quando sair um capítulo novo: o que deu certo, o que quebrou e o que a fábrica aprendeu. Sem spam, e você sai quando quiser.</p>
+        </div>
+        <form class="form" id="news-form" novalidate>
+          <label class="field"><span>Nome <em>(opcional)</em></span>
+            <input name="name" type="text" autocomplete="name" placeholder="Como posso te chamar?" maxlength="120">
+            <small class="err" data-for="name"></small>
+          </label>
+          <label class="field"><span>E-mail</span>
+            <input name="email" type="email" autocomplete="email" inputmode="email" placeholder="voce@exemplo.com" required maxlength="254">
+            <small class="err" data-for="email"></small>
+          </label>
+          <!-- honeypot: people never see it, bots fill it -->
+          <div class="hp" aria-hidden="true"><label>Empresa <input name="company" type="text" tabindex="-1" autocomplete="off"></label></div>
+          <label class="consent"><input type="checkbox" name="consent" required><span>Quero receber os capítulos por e-mail.</span></label>
+          <small class="err" data-for="consent"></small>
+          <button class="btn btn-block" type="submit" id="news-submit"><span class="btn-label">Assinar</span></button>
+          <p class="form-msg" id="news-msg" role="status" aria-live="polite"></p>
+        </form>
+        <div class="done" id="news-done" hidden>
+          <div class="done-icon" aria-hidden="true">✓</div>
+          <h3>Pronto, você está na lista.</h3>
+          <p>O próximo capítulo chega no seu e-mail.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section more">
+      <div class="wrap narrow center">
+        <h2>Quer ver tudo o que a fábrica já faz?</h2>
+        <p class="body">Arena de IA, Write &amp; Review, workflows, Product Owner, vigia noturno, analytics: cada módulo com vídeo.</p>
+        <a class="btn btn-ghost" href="../index.html" data-full-page>Ver todas as funcionalidades →</a>
+      </div>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <div class="wrap foot-in">
+      <span>Diário da fábrica · um projeto de hobby, construído em público</span>
+      <span>© 2026 · Galbs Labs</span>
+    </div>
+  </footer>
+
+  <script src="main.js"></script>
+</body>
+</html>

@@ -48,6 +48,18 @@ function startRun() {
   tick();
 }
 
+// ---------------------------------------------------------------- the day bar
+// 24 blocks: the agents' hours, and the owner's two (08:00 and 09:00); the current hour is outlined
+function drawDay() {
+  const bar = document.getElementById('day-bar');
+  if (!bar) return;
+  const now = new Date().getHours();
+  bar.innerHTML = Array.from({ length: 24 }, (_, h) => {
+    const cls = [h === 8 || h === 9 ? 'you' : '', h === now ? 'now' : ''].filter(Boolean).join(' ');
+    return `<i class="${cls}" style="animation-delay:${h * 30}ms" title="${String(h).padStart(2, '0')}:00"></i>`;
+  }).join('');
+}
+
 // ---------------------------------------------------------------- reveal
 function startReveal() {
   const items = document.querySelectorAll('.benefit, .perk, .how li, .facts, .waitlist-grid, .faq details');
@@ -64,7 +76,6 @@ function startReveal() {
 // Desktop: the step in the middle of the viewport lights up and the pinned frame shows its media;
 // a video restarts from the beginning each time its step becomes active. Narrow screens: each
 // media moves into its own step and plays while visible.
-const LABELS = ['Arena de IA', 'Write & Review', 'Workflows', 'Criação de workflow', 'Criação de agentes', 'Backlog', 'Analytics'];
 
 function play(media, restart) {
   if (media.tagName !== 'VIDEO' || reducedMotion) return;
@@ -76,7 +87,11 @@ const pause = (media) => { if (media.tagName === 'VIDEO') media.pause(); };
 function startStory() {
   const steps = [...document.querySelectorAll('.story-step')];
   const media = [...document.querySelectorAll('.story-media')];
-  const dots = [...document.querySelectorAll('.story-dots li')];
+  // the frame's label is the step's tag; one dot per step
+  const labels = steps.map((s) => s.querySelector('.tag')?.textContent || '');
+  const dotList = document.querySelector('.story-dots');
+  dotList.innerHTML = steps.map(() => '<li></li>').join('');
+  const dots = [...dotList.children];
   const label = document.getElementById('story-label');
   const stage = document.querySelector('.story-stage .shot-stage');
   if (!steps.length || !('IntersectionObserver' in window)) return;
@@ -100,7 +115,7 @@ function startStory() {
       m.classList.toggle('active', n === i);
       if (n === i) play(m, true); else pause(m);
     });
-    label.textContent = LABELS[i];
+    label.textContent = labels[i];
   };
   const layout = () => {
     media.forEach((m, i) => (narrow.matches ? frames[i] : stage).append(m));
@@ -134,6 +149,8 @@ function startStory() {
   narrow.addEventListener('change', layout);
   layout();
   steps[0].classList.add('active'); // lit before the story is reached; its video starts when it is
+  dots[0]?.classList.add('active');
+  label.textContent = labels[0];
   // the next videos load while the first one plays
   if (!narrow.matches) media.forEach((m) => { if (m.tagName === 'VIDEO') m.preload = 'auto'; });
 }
@@ -260,6 +277,7 @@ function startForm() {
 }
 
 startRun();
+drawDay();
 startReveal();
 startStory();
 startForm();

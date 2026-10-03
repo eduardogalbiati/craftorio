@@ -28,6 +28,7 @@
 //                      Start panel; its Run screen offers "Save as pipeline" (--click "[data-chain=save-pipe-open]")
 //   --input <k=v>      run: a workflow input of the Start panel (repeatable), e.g. mode=validated
 //   --stop-at <step>   run: approves every gate but this step's and captures once it waits there
+//                      (with --record and no --steps the recording starts with the run instead)
 //                      (e.g. --input mode=validated --stop-at developer_check: the two-column gate
 //                      with Run App and its Artifacts panel)
 //   --no-demo-shots    artifacts, run: no demo screenshots (e.g. the gate's "No screenshots: …" state)
@@ -1410,7 +1411,9 @@ function main() {
         document.querySelector('#btn-quick-start').click();
         await new Promise((r) => setTimeout(r, 500));
         document.querySelector('#project-select').value = ${JSON.stringify(project.id)};
-        document.querySelector('#in-task').value = ${JSON.stringify(args.task || DEFAULT_TASK.run)};
+        // a workflow without a task input (issue-tracker: request) takes its text from --input
+        const task = document.querySelector('#in-task');
+        if (task) task.value = ${JSON.stringify(args.task || DEFAULT_TASK.run)};
         for (const [k, val] of Object.entries(${JSON.stringify(args.inputs)})) {
           const el = document.getElementById('in-' + k);
           if (!el) throw new Error('the workflow has no input ' + k);
@@ -1428,7 +1431,9 @@ function main() {
           break;
         }`).catch(() => {}), 1000);
       try {
-        if (args.stopAt) {
+        // --record --stop-at without --steps: the recording starts with the run and ends on the gate
+        // (the approver skips it); with --steps it starts once the gate shows, so the steps can use it
+        if (args.stopAt && !(args.record && !args.steps)) {
           let shown = false;
           for (const end = Date.now() + Math.max(args.wait, 45000); !shown && Date.now() < end;) {
             await pause(1000);

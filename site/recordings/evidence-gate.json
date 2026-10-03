@@ -1,0 +1,9 @@
+[
+  { "wait": 3500 },
+  { "click": ".run-gate-side [data-iv-thumb]" },
+  { "wait": 2200 },
+  { "click": ".iv [data-iv-tab]:not(.active)" },
+  { "wait": 2200 },
+  { "click": ".iv [data-iv-close]" },
+  { "wait": 3000 }
+]

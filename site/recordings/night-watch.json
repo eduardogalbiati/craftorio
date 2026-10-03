@@ -1,0 +1,11 @@
+[
+  { "wait": 2000 },
+  { "click": "#btn-nw-replay" },
+  { "wait": 2500 },
+  { "scroll": "#nw-body .nw-night" },
+  { "wait": 3000 },
+  { "scroll": "#nw-body .nw-tl" },
+  { "wait": 3500 },
+  { "scroll": "#nw-body .nw-baseline" },
+  { "wait": 3000 }
+]

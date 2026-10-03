@@ -81,6 +81,18 @@ h1 { font-size: clamp(38px, 5.4vw, 64px); margin: 22px 0 20px; }
 .hero-points { display: flex; flex-wrap: wrap; gap: 8px 22px; list-style: none; padding: 0; margin: 24px 0 0; color: var(--muted); font-size: 14px; }
 .hero-points li::before { content: '✓'; color: var(--lime); margin-right: 8px; font-weight: 700; }
 
+/* the day: 24 blocks under the hero's call to action */
+.day-clock { margin: 30px 0 0; max-width: 520px; }
+.day-bar { display: grid; grid-template-columns: repeat(24, 1fr); gap: 3px; }
+.day-bar i { height: 22px; border-radius: 3px; background: rgba(34, 211, 238, .35); position: relative; transform-origin: bottom; animation: rise .6s ease both; }
+.day-bar i.you { background: var(--human); }
+.day-bar i.now::after { content: ''; position: absolute; inset: -3px; border: 2px solid var(--text); border-radius: 5px; animation: pulse 1.6s infinite; }
+.day-clock figcaption { display: flex; flex-wrap: wrap; gap: 6px 20px; margin-top: 10px; font: 12px var(--mono); color: var(--muted); }
+.day-clock figcaption i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+.k-agents { background: rgba(34, 211, 238, .35); }
+.k-you { background: var(--human); }
+@keyframes rise { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+
 /* run card */
 .run-card {
   background: linear-gradient(180deg, rgba(21, 21, 36, .92), rgba(12, 12, 20, .92));

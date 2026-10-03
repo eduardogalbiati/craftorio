@@ -11,7 +11,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Multiagent Orchestrator · Lista de espera</title>
   <meta name="description" content="Orquestre Claude Code, Codex e Grok num fluxo determinístico de desenvolvimento. IA que entrega no seu repositório: revisada, testada e aprovada por você. Entre na lista de espera do beta.">
-  <meta property="og:title" content="IA que entrega no seu repositório, revisada, testada e aprovada por você">
+  <meta property="og:title" content="Uma fábrica de software que não dorme">
   <meta property="og:description" content="Várias IAs, as assinaturas que você já paga, um orquestrador determinístico e workflows de engenharia prontos. Entre na lista de espera do beta.">
   <meta property="og:type" content="website">
   <meta name="theme-color" content="#07070d">
@@ -47,8 +47,8 @@
       <div class="wrap hero-grid">
         <div class="hero-copy">
           <p class="eyebrow"><span class="dot"></span> Beta fechado · vagas limitadas</p>
-          <h1>IA que entrega no seu repositório.<br><span class="grad">Revisada, testada e aprovada por você.</span></h1>
-          <p class="lead">Coloque Claude Code, Codex e Grok para trabalhar juntos num fluxo de engenharia de verdade: um implementa, outro revisa, outro testa. Um orquestrador determinístico conduz cada passo e para nos portões onde só você decide.</p>
+          <h1>Uma fábrica de software<br><span class="grad">que não dorme.</span></h1>
+          <p class="lead">Você decide em uma ou duas horas por dia. Nas outras 22, Claude Code, Codex e Grok implementam, revisam, testam e integram no seu repositório, num roteiro que um Product Owner de IA monta lendo o seu código. Nos portões, só você decide.</p>
           <div class="hero-cta">
             <a class="btn btn-lg" href="#lista">Quero acesso antecipado <span aria-hidden="true">→</span></a>
             <a class="btn btn-ghost btn-lg" href="#recursos">Ver o que ele faz</a>
@@ -57,6 +57,11 @@
             <li>Usa as assinaturas de IA que você já paga</li>
             <li>Desktop para Windows · GitHub e GitLab</li>
           </ul>
+          <!-- the day: main.js draws 24 blocks, the owner's two hours in amber -->
+          <figure class="day-clock" aria-label="Um dia: 22 horas de agentes trabalhando e 2 de decisão humana">
+            <div class="day-bar" id="day-bar"></div>
+            <figcaption><span><i class="k-agents"></i>22 h · agentes constroem</span><span><i class="k-you"></i>2 h · você decide</span></figcaption>
+          </figure>
         </div>
 
         <!-- Live run mock: main.js walks the steps -->
@@ -139,6 +144,9 @@
 
         <h3 class="more-title">E ainda:</h3>
         <div class="perks">
+          <div class="perk"><span class="perk-i" aria-hidden="true">☾</span><div><b>Trabalha enquanto você dorme</b><p>O roadmap roda a noite toda, etapa por etapa, e um vigia destrava o que você permitiu. De manhã, o resumo da noite.</p></div></div>
+          <div class="perk"><span class="perk-i" aria-hidden="true">▣</span><div><b>Revise o resultado, não o diff</b><p>Screenshots de antes e depois, evidências e o app da branch rodando com um clique, direto no portão.</p></div></div>
+          <div class="perk"><span class="perk-i" aria-hidden="true">⇄</span><div><b>Conflito resolvido no plano</b><p>O Product Owner prevê os arquivos de cada grupo e separa em etapas o que conflitaria no merge.</p></div></div>
           <div class="perk"><span class="perk-i" aria-hidden="true">∑</span><div><b>Some os limites das suas assinaturas</b><p>Bateu o limite de uma IA? O trabalho segue nas outras que você já paga, sem chave de API nova.</p></div></div>
           <div class="perk"><span class="perk-i" aria-hidden="true">◎</span><div><b>Você no controle</b><p>Portões de aprovação humana que nenhuma automação atravessa, nem o supervisor de IA.</p></div></div>
           <div class="perk"><span class="perk-i" aria-hidden="true">$</span><div><b>Custo sob controle</b><p>Tokens e custo por sessão, orçamento mensal por CLI e bloqueio ao atingir o limite.</p></div></div>
@@ -163,7 +171,41 @@
 
         <div class="story">
           <div class="story-steps">
-            <article class="story-step" data-step="0">
+            <article class="story-step">
+              <span class="tag tag-cyan">Product Owner e Roadmap</span>
+              <h3>Um Product Owner que lê o código antes de opinar.</h3>
+              <p>Pergunte "monte um roadmap" e ele lê as issues, o código e o histórico das execuções. Ele agrupa o que mexe nos mesmos arquivos, separa o que não pode rodar em paralelo e ordena tudo em etapas, com tempo e custo estimados pelo que já rodou. O roadmap executa etapa por etapa, e no modo ao vivo ele mesmo puxa as próximas issues quando a última etapa termina.</p>
+              <ul class="ticks">
+                <li>Grupos, conflitos e estimativas baseados em execuções reais</li>
+                <li>Divide issues grandes demais e organiza épicos</li>
+                <li>Nada é aplicado sem o seu clique; ele nunca responde um portão</li>
+              </ul>
+              <div class="story-slot"></div>
+            </article>
+
+            <article class="story-step">
+              <span class="tag tag-amber">Turno da noite</span>
+              <h3>Vá dormir. O roadmap continua, e um vigia cuida dele.</h3>
+              <p>Ligue o vigia noturno até a hora que quiser e marque o que a IA pode fazer sem perguntar: tentar de novo um item que falhou, atualizar o texto de uma issue, restaurar um workflow. Responder um portão, fazer push ou apagar dados ficam bloqueados. Cada ação fica registrada com backup e botão de desfazer, e de manhã você recebe o resumo da noite.</p>
+              <ul class="ticks">
+                <li>Indicadores da noite: incidentes, autonomia, tempo para resolver, horas economizadas</li>
+                <li>Keep Awake: o computador não dorme enquanto há trabalho</li>
+              </ul>
+              <div class="story-slot"></div>
+            </article>
+
+            <article class="story-step">
+              <span class="tag tag-lime">Triagem</span>
+              <h3>Fale o pedido. A issue nasce com a análise do código.</h3>
+              <p>Escreva ou dite em poucas palavras, em qualquer idioma. Um analisador lê o repositório, encontra o código envolvido, estima os arquivos a mudar, dá nota de impacto e complexidade e procura duplicatas. Um redator escreve a issue com critérios de aceite, e você escolhe: criar, criar e já colocar na fila, revisar ou descartar.</p>
+              <ul class="ticks">
+                <li>Entrada por voz com transcrição local</li>
+                <li>Pedidos independentes viram issues separadas e ligadas</li>
+              </ul>
+              <div class="story-slot"></div>
+            </article>
+
+            <article class="story-step">
               <span class="tag tag-violet">Arena de IA</span>
               <h3>Até cinco modelos disputam a mesma tarefa. Você fica com o melhor de cada um.</h3>
               <p>O mesmo pedido vai em paralelo para os modelos que você escolher, e nenhum vê o trabalho do outro. Depois eles avaliam as propostas uns dos outros às cegas, um agente sintetiza a versão final a partir da melhor base, e um modelo de outra família verifica o resultado.</p>
@@ -175,7 +217,7 @@
               <div class="story-slot"></div>
             </article>
 
-            <article class="story-step" data-step="1">
+            <article class="story-step">
               <span class="tag tag-cyan">Write &amp; Review</span>
               <h3>Um escreve, outro revisa e dá nota. Só passa quando atinge o seu padrão.</h3>
               <p>Você descreve o documento e o critério de "bom o suficiente". O redator produz, o revisor dá nota de 0 a 10 contra o seu objetivo e devolve o que corrigir. O motor repete até passar da nota mínima ou acabarem as rodadas. No fim, a decisão é sua.</p>
@@ -187,7 +229,7 @@
               <div class="story-slot"></div>
             </article>
 
-            <article class="story-step" data-step="2">
+            <article class="story-step">
               <span class="tag tag-lime">Workflows</span>
               <h3>Da issue ao merge, com o processo de um time sênior.</h3>
               <p>Implementar, revisar, testar, fazer build, acompanhar o CI e o PR, publicar um preview e, com a sua aprovação, fazer o merge. Cada agente numa sessão própria, com modelo, tokens e custo à vista. O motor determinístico registra cada decisão, sem gastar IA para escolher o próximo passo.</p>
@@ -199,7 +241,18 @@
               <div class="story-slot"></div>
             </article>
 
-            <article class="story-step" data-step="3">
+            <article class="story-step">
+              <span class="tag tag-amber">Revise pelo resultado</span>
+              <h3>Aprove olhando a mudança funcionando, não lendo o diff.</h3>
+              <p>Uma etapa de evidência registra o que mudou: screenshots de antes e depois, requisições, saída de linha de comando. No portão, você vê as imagens lado a lado, os cenários de teste e, se quiser, roda o app da branch com um clique. Pede ajuste com texto ou com um print colado, e a mudança volta para quem implementou.</p>
+              <ul class="ticks">
+                <li>Run App: o app da branch rodando, sem configurar nada</li>
+                <li>Modo validado para o que é visual ou arriscado; automático para o resto</li>
+              </ul>
+              <div class="story-slot"></div>
+            </article>
+
+            <article class="story-step">
               <span class="tag tag-violet">Criação de workflow</span>
               <h3>Monte o seu processo mesa a mesa, sem escrever código.</h3>
               <p>No Builder, cada passo é uma mesa com um agente: o que ele faz, quem ele é, a CLI, o modelo, o esforço e se pode editar o projeto. Entre as mesas, portões de aprovação humana ou checagens feitas por outra IA. Salve e o workflow vira YAML, pronto para rodar.</p>
@@ -211,7 +264,7 @@
               <div class="story-slot"></div>
             </article>
 
-            <article class="story-step" data-step="4">
+            <article class="story-step">
               <span class="tag tag-cyan">Criação de agentes</span>
               <h3>Crie especialistas que você reaproveita em qualquer workflow.</h3>
               <p>Dê nome, um prompt com quem o agente é e as skills que ele sempre recebe. Escolha o visual do seu robô e pronto: ele aparece para ser importado em qualquer mesa, ou sorteado entre os seus agentes a cada execução.</p>
@@ -222,7 +275,7 @@
               <div class="story-slot"></div>
             </article>
 
-            <article class="story-step" data-step="5">
+            <article class="story-step">
               <span class="tag tag-amber">Backlog</span>
               <h3>Suas issues viram fila de execução.</h3>
               <p>O backlog do GitHub ou GitLab aparece num kanban. Escolha as issues, dispare o workflow e acompanhe cada uma até o merge, com o andamento das tarefas e o estado de cada execução.</p>
@@ -233,12 +286,24 @@
               <div class="story-slot"></div>
             </article>
 
-            <article class="story-step" data-step="6">
+            <article class="story-step">
+              <span class="tag tag-violet">Oráculo</span>
+              <h3>Pergunte o que aconteceu. Ele lê tudo e responde.</h3>
+              <p>Uma conversa única para o app inteiro: "o que mudou desde ontem?", "por que esse portão ficou vermelho?". O Oráculo lê as execuções, o roadmap e os arquivos, propõe ações com o que muda, onde e qual o backup, e só executa com o seu clique, ou sozinho de noite, dentro do que o vigia permite.</p>
+              <ul class="ticks">
+                <li>Memória das suas decisões, com orçamento diário</li>
+                <li>Cole um print junto com a pergunta</li>
+              </ul>
+              <div class="story-slot"></div>
+            </article>
+
+            <article class="story-step">
               <span class="tag tag-lime">Analytics</span>
               <h3>Saiba quanto cada IA custa e rende, sessão por sessão.</h3>
               <p>Tokens por dia empilhados por provedor, custo e taxa de acerto do cache, uso por modelo e por projeto, e métricas de cada sessão: tempo ativo, chamadas de ferramentas, falhas e complexidade. Escolha o período e, se quiser, peça ao supervisor um relatório com padrões e sugestões.</p>
               <ul class="ticks">
                 <li>Só o orquestrador ou tudo o que as CLIs fizeram na sua máquina</li>
+                <li>Performance do repositório: os arquivos que mais causam conflito, antes e depois de uma mudança</li>
                 <li>Orçamento mensal por CLI, com bloqueio ao atingir o limite</li>
               </ul>
               <div class="story-slot"></div>
@@ -249,16 +314,21 @@
             <figure class="shot-frame">
               <div class="shot-bar" aria-hidden="true"><span class="win-dots"><i></i><i></i><i></i></span><span class="shot-label" id="story-label">Arena de IA</span></div>
               <div class="shot-stage">
-                <video class="story-media active" data-step="0" muted playsinline loop preload="auto" poster="img/arena.png" aria-label="Arena de IA rodando: quatro modelos escrevem em paralelo, se avaliam às cegas e a síntese espera a sua decisão"><source src="img/arena.webm" type="video/webm"></video>
-                <video class="story-media" data-step="1" muted playsinline loop preload="none" poster="img/write-review.png" aria-label="Write & Review rodando: o redator entrega versões, o revisor dá nota até aprovar e o supervisor pergunta o que fazer"><source src="img/write-review.webm" type="video/webm"></video>
-                <video class="story-media" data-step="2" muted playsinline loop preload="none" poster="img/workflow-run.png" aria-label="Workflow de desenvolvimento rodando: passos, sessões de cada agente com tokens e custo, e o log do motor"><source src="img/workflow-run.webm" type="video/webm"></video>
-                <video class="story-media" data-step="3" muted playsinline loop preload="none" poster="img/workflow-builder.png" aria-label="Builder: um workflow é montado com uma mesa de desenvolvimento, uma de revisão com outro modelo e um portão de aprovação humana"><source src="img/workflow-builder.webm" type="video/webm"></video>
-                <video class="story-media" data-step="4" muted playsinline loop preload="none" poster="img/agent-create.png" aria-label="Criação de um agente: nome, prompt, visual do robô e skills, e ele aparece na lista de agentes"><source src="img/agent-create.webm" type="video/webm"></video>
-                <img class="story-media" data-step="5" src="img/backlog.png" width="1400" height="900" loading="lazy" alt="Backlog em kanban com as issues do GitHub e o andamento de cada execução">
-                <video class="story-media" data-step="6" muted playsinline loop preload="none" poster="img/analytics.png" aria-label="Analytics: tokens por dia por provedor, custo, uso por modelo e por projeto, e a tabela de sessões"><source src="img/analytics.webm" type="video/webm"></video>
+                <video class="story-media active" muted playsinline loop preload="auto" poster="img/product-owner.png" aria-label="O Product Owner monta um roadmap em etapas a partir do backlog, com o roadmap ao vivo rodando"><source src="img/product-owner.webm" type="video/webm"></video>
+                <video class="story-media" muted playsinline loop preload="none" poster="img/night-watch.png" aria-label="O vigia noturno: o que a IA pode fazer sem perguntar, a linha do tempo e os indicadores de cada noite"><source src="img/night-watch.webm" type="video/webm"></video>
+                <video class="story-media" muted playsinline loop preload="none" poster="img/triage.png" aria-label="Triagem: o analisador de código e o redator de issues trabalham até o portão de revisão"><source src="img/triage.webm" type="video/webm"></video>
+                <video class="story-media" muted playsinline loop preload="none" poster="img/arena.png" aria-label="Arena de IA rodando: quatro modelos escrevem em paralelo, se avaliam às cegas e a síntese espera a sua decisão"><source src="img/arena.webm" type="video/webm"></video>
+                <video class="story-media" muted playsinline loop preload="none" poster="img/write-review.png" aria-label="Write &amp; Review rodando: o redator entrega versões, o revisor dá nota até aprovar e o supervisor pergunta o que fazer"><source src="img/write-review.webm" type="video/webm"></video>
+                <video class="story-media" muted playsinline loop preload="none" poster="img/workflow-run.png" aria-label="Workflow de desenvolvimento rodando: passos, sessões de cada agente com tokens e custo, e o log do motor"><source src="img/workflow-run.webm" type="video/webm"></video>
+                <video class="story-media" muted playsinline loop preload="none" poster="img/evidence-gate.png" aria-label="O portão de validação com as screenshots de antes e depois, o Run App e o visualizador de imagens"><source src="img/evidence-gate.webm" type="video/webm"></video>
+                <video class="story-media" muted playsinline loop preload="none" poster="img/workflow-builder.png" aria-label="Builder: um workflow é montado com uma mesa de desenvolvimento, uma de revisão com outro modelo e um portão de aprovação humana"><source src="img/workflow-builder.webm" type="video/webm"></video>
+                <video class="story-media" muted playsinline loop preload="none" poster="img/agent-create.png" aria-label="Criação de um agente: nome, prompt, visual do robô e skills, e ele aparece na lista de agentes"><source src="img/agent-create.webm" type="video/webm"></video>
+                <img class="story-media" src="img/backlog.png" width="1400" height="900" loading="lazy" alt="Backlog em kanban com as issues do GitHub e o andamento de cada execução">
+                <img class="story-media" src="img/oracle.png" width="1400" height="900" loading="lazy" alt="O Oráculo propõe ações com o que muda, onde e o backup, e mostra o que fez durante a noite">
+                <video class="story-media" muted playsinline loop preload="none" poster="img/analytics.png" aria-label="Analytics: tokens por dia por provedor, custo, uso por modelo e por projeto, e a tabela de sessões"><source src="img/analytics.webm" type="video/webm"></video>
               </div>
             </figure>
-            <ol class="story-dots" aria-hidden="true"><li class="active"></li><li></li><li></li><li></li><li></li><li></li><li></li></ol>
+            <ol class="story-dots" aria-hidden="true"></ol>
           </div>
         </div>
       </div>
@@ -377,6 +447,10 @@
             <p>Não. Os workflows têm portões de aprovação humana e nenhuma automação os atravessa, nem mesmo o supervisor de IA. O merge só acontece quando você aprova.</p>
           </details>
           <details>
+            <summary>É seguro deixar rodando de madrugada?</summary>
+            <p>Você define o que a IA pode fazer sem perguntar, e o resto fica bloqueado: responder um portão, fazer push, fechar issues e apagar dados nunca acontecem sozinhos. Cada ação da noite fica registrada com backup e pode ser desfeita, e há orçamento diário para o que custa dinheiro.</p>
+          </details>
+          <details>
             <summary>Em quais plataformas funciona?</summary>
             <p>O beta é um app desktop para Windows, com GitHub e GitLab. Os workflows cobrem JavaScript/TypeScript, Python, Go, Java e C#.</p>
           </details>
@@ -399,6 +473,7 @@
   <footer class="footer">
     <div class="wrap footer-inner">
       <span class="brand"><span class="brand-mark" aria-hidden="true"></span> Multiagent Orchestrator</span>
+      <a class="muted" href="24x7/index.html" data-diary-link>Diário da fábrica: como ela foi construída →</a>
       <span class="muted">© 2026 · Feito no Brasil</span>
     </div>
   </footer>
