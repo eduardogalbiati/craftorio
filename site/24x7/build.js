@@ -8,6 +8,7 @@
 //   post.html                   the chapter page template (its strings come from STRINGS below)
 //   chapters.json               every chapter: number, date, status, and per language slug, title, teaser
 //   posts/<nn>.<lang>.md        a published chapter's text (Markdown); required when status is "published"
+//   media/                      the posts' images, copied as they are ({{base}}/media/<file> in Markdown)
 //   style.css, main.js          copied as they are
 // Placeholders: {{base}} {{media}} {{full}} {{lang}} {{alt}} (the same page in the other language),
 // {{chapters}} (the chapter cards), and in post.html the post's own ({{title}}, {{body}}…).
@@ -111,6 +112,9 @@ function build(o, dir = HERE) {
   fs.rmSync(out, { recursive: true, force: true });
   const write = (rel, text) => { const f = path.join(out, rel); fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, text); };
   for (const f of ['style.css', 'main.js']) write(f, fs.readFileSync(path.join(dir, f), 'utf8'));
+  // the posts' images: media/<file>, referenced in Markdown as {{base}}/media/<file>
+  const mediaDir = path.join(dir, 'media');
+  if (fs.existsSync(mediaDir)) fs.cpSync(mediaDir, path.join(out, 'media'), { recursive: true });
   const common = { base: o.base, media: o.media, full: o.full };
   const pages = [];
 

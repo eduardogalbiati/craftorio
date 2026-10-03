@@ -170,6 +170,8 @@ p { margin: 0; }
 .prose strong { font-weight: 600; background: linear-gradient(transparent 62%, rgba(245, 176, 65, .35) 0); }
 .prose a { color: #0d8a7f; text-underline-offset: 3px; }
 .prose blockquote { margin: 1.4em 0; padding: 4px 0 4px 18px; border-left: 3px solid var(--amber); color: var(--ink-soft); font-style: italic; }
+.prose img { display: block; width: 100%; height: auto; border-radius: 8px; box-shadow: 0 30px 60px -36px rgba(16, 24, 40, .6); }
+.prose p:has(> img:only-child) { margin: 0 0 1.6em; }
 .prose code { font: .88em var(--mono); background: var(--paper-2); padding: 2px 5px; border-radius: 4px; }
 .post-foot { display: grid; gap: 22px; padding: 24px 0 80px; }
 .next-card { display: grid; gap: 6px; padding: 22px 24px; border-radius: 8px; background: #fff; border: 1px solid var(--line-light); text-decoration: none; }
