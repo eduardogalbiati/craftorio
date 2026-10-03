@@ -248,6 +248,8 @@ function startForm() {
     button.insertAdjacentHTML('afterbegin', '<span class="spinner" aria-hidden="true"></span>');
     try {
       await joinWaitlist(data);
+      // Google Analytics (index.html's head): a sign-up the database accepted
+      window.gtag?.('event', 'waitlist_signup', { page_path: location.pathname });
       form.hidden = true;
       success.hidden = false;
       success.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'center' });

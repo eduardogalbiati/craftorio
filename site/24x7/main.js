@@ -125,6 +125,8 @@ function startForm() {
     button.insertAdjacentHTML('afterbegin', '<span class="spinner" aria-hidden="true"></span>');
     try {
       await subscribe(data);
+      // Google Analytics (the page's head): a subscription the database accepted
+      track('newsletter_signup', { page_path: location.pathname });
       form.hidden = true;
       done.hidden = false;
     } catch (err) {
@@ -142,7 +144,32 @@ function startForm() {
   });
 }
 
+// ---------------------------------------------------------------- analytics
+// Google Analytics 4 (loaded in each page's head); every event carries the page's language.
+function track(name, params = {}) {
+  window.gtag?.('event', name, { lang: LANG, ...params });
+}
+
+function startTracking() {
+  // the PT/EN switch in the top bar
+  document.querySelectorAll('a.lang').forEach((a) => a.addEventListener('click', () => {
+    track('language_switch', { from: LANG, to: LANG === 'en' ? 'pt' : 'en', page_path: location.pathname });
+  }));
+  // a chapter read to the end: its closing block (next chapter, back link) came into view, once
+  const article = document.querySelector('.prose[data-chapter]');
+  const end = document.querySelector('.post-foot');
+  if (article && end && 'IntersectionObserver' in window) {
+    const io = new IntersectionObserver((entries) => {
+      if (!entries.some((e) => e.isIntersecting)) return;
+      io.disconnect();
+      track('chapter_read', { chapter: Number(article.dataset.chapter), page_path: location.pathname });
+    });
+    io.observe(end);
+  }
+}
+
 drawClock();
+startTracking();
 startReveal();
 startVideos();
 startForm();
