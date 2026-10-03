@@ -415,6 +415,49 @@ test('parseCounts: node:test spec and TAP, Jest "Tests:", pytest summary; no sum
   assert.deepEqual(parseCounts('no summary here\n'), { passed: null, failed: null });
 });
 
+// #223: the AI Development workflow's e2e step runs `npm run test:e2e -- --grep ...` (playwright-bdd)
+const PLAYWRIGHT_RED = `Running 3 tests using 1 worker
+
+  ✓  1 .features-gen\\features\\app.feature.spec.js:6:7 › App › The app opens on the dashboard @smoke (2.1s)
+  ✘  2 .features-gen\\features\\backlog.feature.spec.js:7:7 › Backlog › Open the kanban board @issue-223 (5.3s)
+  ✓  3 .features-gen\\features\\run.feature.spec.js:6:7 › Run › A mock run finishes @smoke (8.0s)
+
+  1) .features-gen\\features\\backlog.feature.spec.js:7:7 › Backlog › Open the kanban board @issue-223
+
+    Error: Timed out 5000ms waiting for expect(locator).toBeVisible()
+
+    Locator: getByTestId('backlog-board')
+    Expected: visible
+    Received: <element(s) not found>
+
+       at features\\steps\\backlog.js:12:3
+
+    attachment #1: trace (application/zip) ─────────────────────────────────
+    .test-output\\e2e\\artifacts\\backlog-Open-the-kanban-board\\trace.zip
+    Usage:
+
+        npx playwright show-trace .test-output\\e2e\\artifacts\\backlog-Open-the-kanban-board\\trace.zip
+
+    ─────────────────────────────────────────────────────────────────────────
+
+  1 failed
+    .features-gen\\features\\backlog.feature.spec.js:7:7 › Backlog › Open the kanban board @issue-223
+  2 passed (15.4s)
+`;
+
+test('parseFailures: a Playwright (playwright-bdd) failure gives the scenario, its feature, the error and the trace kept for it', () => {
+  const failures = parseFailures(PLAYWRIGHT_RED);
+  assert.equal(failures.length, 1, JSON.stringify(failures));
+  assert.match(failures[0].test, /Open the kanban board/);
+  assert.match(failures[0].file, /backlog\.feature/);
+  assert.match(failures[0].error, /toBeVisible/);
+  assert.match(JSON.stringify(failures[0]), /trace\.zip/, 'the failure points to its trace');
+});
+
+test('parseCounts: the Playwright summary ("1 failed", "2 passed")', () => {
+  assert.deepEqual(parseCounts(PLAYWRIGHT_RED), { passed: 2, failed: 1 });
+});
+
 test('runSuite with files: runs the filtered command, reports scope files, records no duration', async (t) => {
   const runDir = tmp(t);
   const cwd = tmp(t);
