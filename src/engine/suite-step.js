@@ -32,6 +32,9 @@
 // base (the failures fail on the simulated base too: a pass) | mixed (2 failures, one on the base:
 // a fail with 1 failure) | blocked, and a simulated log is written.
 // `isFullSuiteCommand` tells the engine an agent started the whole suite itself (a warn, #177).
+// Affected tests (#212): with `files`, only those test files run (`scope: files`, the step's
+// `scope: affected` rounds and agents' test requests, see src/engine/affected-tests.js); the output
+// says which files and why (`selection`), and `passed` / `failed` are the runner's counts.
 
 const fs = require('fs');
 const os = require('os');
@@ -48,6 +51,7 @@ const HISTORY = 10;
 const MAX_FAILURES = 30;
 const ERROR_LINES = 3;
 const MOCK_BASE_FILE = 'test/simulated-base.test.js';
+const SELECTION_LINES = 20;
 
 const exists = (dir, f) => { try { return fs.existsSync(path.join(dir, f)); } catch { return false; } };
 const someFile = (dir, re) => { try { return fs.readdirSync(dir).some((f) => re.test(f)); } catch { return false; } };
@@ -406,22 +410,42 @@ function noteFailingOnMain(file, { project, base, commit, runId, failures }) {
   } catch { /* reported in the run anyway */ }
 }
 
+// The passed / failed counts a runner prints at the end (node:test, TAP, Jest, pytest), null when
+// none is recognized.
+function parseCounts(text) {
+  const t = clean(text);
+  const last = (re) => { const all = [...t.matchAll(re)]; return all.length ? Number(all[all.length - 1][1]) : null; };
+  const node = { passed: last(/^\s*(?:ℹ|#) pass (\d+)/gm), failed: last(/^\s*(?:ℹ|#) fail (\d+)/gm) };
+  if (node.passed != null || node.failed != null) return { passed: node.passed ?? 0, failed: node.failed ?? 0 };
+  const jest = t.match(/^Tests:\s+(.*)$/m)?.[1];
+  if (jest) return { passed: Number(jest.match(/(\d+) passed/)?.[1] || 0), failed: Number(jest.match(/(\d+) failed/)?.[1] || 0) };
+  const py = [...t.matchAll(/=+ (.*\b(?:passed|failed)\b.*) in [\d.]+s/g)].pop()?.[1];
+  if (py) return { passed: Number(py.match(/(\d+) passed/)?.[1] || 0), failed: Number(py.match(/(\d+) failed/)?.[1] || 0) };
+  return { passed: null, failed: null };
+}
+
 // command: rendered (empty: detected); cwd: the worktree; runDir: the run folder (log under logs/);
 // round: the step's visit; env: the engine's environment (suiteEnv cleans it);
 // preexisting: the run's known pre-existing failures [{ test, file, reason }]; mockResult: see above;
 // timeoutMs: the step's own timeout, else from history ({ file, project }: the recent durations of
 // the project's command); base: async () => { dir, commit } | null, the base checkout (#211);
-// baseCacheDir: the base results' cache; run: runCommand (replaceable)
-async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = 'pass', preexisting = [], signal, timeoutMs, history, base, baseCacheDir, run = runCommand, log = () => {} }) {
-  const logFile = runDir ? path.join(runDir, 'logs', `suite-${round}.log`) : null;
+// baseCacheDir: the base results' cache; run: runCommand (replaceable).
+// files (#212): only these test files (the affected tests, or the files an agent asked for), with
+// the command filtered to them (`filteredCommand`); an empty list passes without running anything,
+// and a command that cannot take files runs whole. selection: why these files (affected-tests.js),
+// kept in the output; logName: the log's name (default suite-<round>). Only whole-suite runs
+// measure the history the timeouts come from. Output adds scope (full | files), selection, passed, failed.
+async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = 'pass', preexisting = [], signal, timeoutMs, history, base, baseCacheDir, run = runCommand, log = () => {}, files = null, selection = null, logName = null }) {
+  const logFile = runDir ? path.join(runDir, 'logs', `${logName || `suite-${round}`}.log`) : null;
   const out = {
-    kind: 'suite', status: 'blocked', round, command: null, log: logFile ? path.relative(runDir, logFile).split(path.sep).join('/') : null,
-    exit_code: null, duration_ms: 0, timed_out: false, timeout_ms: null, running: [], failures: [], preexisting: [], preexisting_failures: [], base_check: null, reason: null, message: '',
+    kind: 'suite', status: 'blocked', round, scope: 'full', command: null, log: logFile ? path.relative(runDir, logFile).split(path.sep).join('/') : null,
+    exit_code: null, duration_ms: 0, timed_out: false, timeout_ms: null, running: [], passed: null, failed: null, failures: [], preexisting: [], preexisting_failures: [], base_check: null, selection, reason: null, message: '',
   };
+  const what = () => (out.scope === 'files' ? `The selected tests (${plural(out.selection?.files?.length ?? files.length, 'test file')})` : 'The suite');
   const finish = () => {
     const pre = out.preexisting.length ? ` (${plural(out.preexisting.length, 'pre-existing failure')} not counted: they fail on the base too)` : '';
-    out.message = out.status === 'pass' ? `The suite passed in round ${round}${out.command ? ` (\`${out.command}\`)` : ''}${pre}.`
-      : out.status === 'fail' ? `The suite failed in round ${round} (\`${out.command}\`): ${plural(out.failures.length, 'failing test')}${out.timed_out ? ', timed out' : ''}${pre}. Log: ${out.log}`
+    out.message = out.status === 'pass' ? `${what()} passed in round ${round}${out.command ? ` (\`${out.command}\`)` : ''}${pre}.`
+      : out.status === 'fail' ? `${what()} failed in round ${round} (\`${out.command}\`): ${plural(out.failures.length, 'failing test')}${out.timed_out ? ', timed out' : ''}${pre}. Log: ${out.log}`
         : `The suite could not run: ${out.reason}`;
     return out;
   };
@@ -433,6 +457,18 @@ async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = '
     if (out.reason) return finish();
   }
   const hist = history?.file && history.project ? { file: history.file, key: `${history.project}\n${out.command}` } : null;
+  let measure = true;
+  if (Array.isArray(files)) {
+    if (!files.length) {
+      out.scope = 'files';
+      out.status = 'pass';
+      out.message = `No test file to run in round ${round}: ${selection?.why || 'none selected'}.`;
+      return out;
+    }
+    const filtered = filteredCommand(out.command, files);
+    if (filtered) { out.scope = 'files'; out.command = filtered; measure = false; }
+    else if (out.selection) out.selection = { ...out.selection, why: `${out.selection.why}; \`${out.command}\` cannot run single test files: the whole suite ran` };
+  }
   const recent = mock ? [] : suiteDurations(hist);
   out.timeout_ms = timeoutMs || suiteTimeout(recent);
   const timeoutWhy = timeoutMs ? 'the step\'s timeout' : recent.length ? `${TIMEOUT_FACTOR}× the median of the last ${plural(recent.length, 'suite run')}` : 'the default, no suite run measured yet';
@@ -469,7 +505,8 @@ async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = '
   }
   out.duration_ms = Date.now() - t0;
   // a run that ended (not cut by the timeout, not cancelled) measures the suite for the next timeouts
-  if (!mock && !out.timed_out && !signal?.aborted) recordDuration(hist, out.duration_ms);
+  if (!mock && measure && !out.timed_out && !signal?.aborted) recordDuration(hist, out.duration_ms);
+  Object.assign(out, parseCounts(text));
   if (out.exit_code === 0 && !out.timed_out) { out.status = 'pass'; return finish(); }
   const failures = parseFailures(text, { cwd });
   out.preexisting = failures.filter((f) => preexisting.some((p) => sameTest(f, p)));
@@ -505,6 +542,15 @@ async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = '
 function suiteMessage(output) {
   if (output?.kind !== 'suite') return '';
   const lines = [output.message];
+  if (output.passed != null) lines.push(`Passed: ${output.passed}, failed: ${output.failed}.`);
+  // which files ran and why (#212: "test/a.test.js: imports src/a.js"), at most SELECTION_LINES
+  const sel = output.selection;
+  if (sel && output.scope === 'files') {
+    lines.push(`Chosen: ${sel.why}`);
+    for (const f of (sel.files || []).slice(0, SELECTION_LINES)) lines.push(`- ${f}${sel.reasons?.[f] ? `: ${sel.reasons[f]}` : ''}`);
+    if ((sel.files || []).length > SELECTION_LINES) lines.push(`- … and ${sel.files.length - SELECTION_LINES} more`);
+  } else if (sel?.why) lines.push(`Whole suite: ${sel.why}`);
+  if (output.failures?.length) lines.push('Failures:');
   for (const f of output.failures || []) lines.push(`- ${f.test}${f.file ? ` (${f.file})` : ''}${f.error ? `: ${String(f.error).split('\n')[0]}` : ''}`);
   if (output.preexisting?.length) {
     lines.push('Also failing on the base (reported, not chased):');
@@ -519,6 +565,7 @@ module.exports = {
   filteredCommand,
   isFullSuiteCommand,
   noteFailingOnMain,
+  parseCounts,
   parseFailures,
   runCommand,
   runningTestFiles,

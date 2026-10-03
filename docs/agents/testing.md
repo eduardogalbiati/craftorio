@@ -29,6 +29,32 @@ Read this before writing or changing tests, and before any check that could star
   has a step for it (after `node node_modules/electron/install.js`; the matrix sets
   `ELECTRON_SKIP_BINARY_DOWNLOAD`). Run it locally when you change the script or add a view.
 
+## Affected tests, the slow suite, who runs what (#212)
+
+- **Affected tests**: `src/engine/affected-tests.js` (no model) builds the import graph from
+  `require` / `import` and lists the test files that import, directly or transitively, a file
+  changed since the base (merge-base, uncommitted and untracked files included), plus the test
+  files changed themselves. A changed file nothing imports (a workflow YAML, a renderer script a
+  test reads with `fs`) reaches the test files whose code names its path. A shared root
+  (`package.json`, a lockfile, `scripts/test.js`) or a project without a JS/TS graph selects the
+  whole suite. `node scripts/affected-tests.js --base main` prints the files and why each was
+  chosen (`imports src/roadmap.js`); `--files` prints only the paths, for `npm test -- <files>`.
+- **Slow tests**: files under `test/slow/` or named `*.slow.test.js` (whole simulated runs) never
+  join the affected set; they run with the full suite only. Put a test that simulates a whole run
+  there, and keep big files split by area so `node --test` runs them in parallel (one file's tests
+  run in sequence).
+- **Who runs what**: the suite step with `scope: affected` (software-development and the local
+  hero) runs the affected files every round, and the whole suite once in the run, when the
+  affected files first pass (log `suite-<round>-full.log`); the files that failed in a round join
+  the next rounds' set. Without `scope` (test-batch, E2E release) a suite step runs the whole suite.
+  Agents never run suites in their turn: they end a turn with a ```` ```run-tests ```` block (one
+  test file per line, or `affected`), the engine runs them like the suite step (log
+  `logs/tests-<step>-<n>.log`) and resumes the agent with a summary only (counts, each failure's
+  test, file and first 3 lines, the log's path), at most 3 times per turn. One focused test file
+  inside a turn stays allowed, with a timeout.
+- **Mock runs in tests**: a test that runs the mock provider sets `MULTIAGENT_MOCK_DELAY_SCALE`
+  (0.05 or less) and waits on events (`workflow.finished`, `approval.requested`), not on timers.
+
 ## Machine-independent tests
 
 Git tests run with an empty `GIT_CONFIG_GLOBAL` and `GIT_CONFIG_NOSYSTEM`, passing identity,

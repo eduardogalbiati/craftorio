@@ -428,8 +428,20 @@ steps:
       {{ inputs.base_branch }}): `git switch -c <branch>`; the engine already
       linked the dependencies of that base.
       {% endif %}
+      {% if inputs.unit_tests == 'write_and_run' %}
       Change production code only: the test writer writes and runs the tests after the review.
-      In `test_notes`, tell it what should be tested: the behaviours you changed, the edge cases
+      {% else %}
+      Change production code only. No test writer runs in this run (unit_tests is {{ inputs.unit_tests }}):
+      nobody writes new tests, {% if inputs.unit_tests == 'run_existing' %}and the suite step runs the existing tests your change affects after you{% else %}and no suite step runs: the tests you ask for below are the only ones of this run{% endif %}.
+      {% endif %}
+      To check your change, ask the orchestrator instead of running tests yourself: end your turn
+      with a ```run-tests block, one test file per line (the existing tests of the files you changed)
+      or the word `affected` (the test files that import what you changed). The orchestrator runs them
+      in the background and resumes you with a summary: passed / failed, each failure's first lines and
+      the log's path. Never run the whole suite, nor slow test files that simulate whole runs unless
+      you changed what they cover. One focused test file in your turn stays allowed: with a timeout of
+      about 2 minutes, its output to a log, reading only the summary.
+      In `test_notes`, tell {{ 'the test writer' if inputs.unit_tests == 'write_and_run' else 'the owner' }} what should be tested: the behaviours you changed, the edge cases
       and the files (and the existing tests your change makes obsolete, if any).
       In `evidence_plan`, say per issue how to show the change working, for the evidence step (it
       does not read the code): the screen and the screenshot options (view, tab, clicks), or the
@@ -842,7 +854,9 @@ steps:
          intended behaviour change (not a bug). Commit only test files. Purely visual changes
          may not need a new test — justify it.
       2. While writing, run only the test files you touch (see above); the whole suite is the
-         orchestrator's.
+         orchestrator's. To run several files, or the tests the change affects, end your turn with
+         a ```run-tests block (one test file per line, or `affected`): the orchestrator runs them in
+         the background and resumes you with a summary (counts, failures, the log's path).
       {% else %}
       1. Check out the branch. Unit tests are {{ 'run without new tests' if inputs.unit_tests == 'run_existing' else 'off' }} in this run: write no unit
          tests and leave `tests_added` empty; `tests_status` is pass unless your scenarios'
@@ -947,8 +961,10 @@ steps:
             The test writer found failures caused by the production code on branch `{{ steps.develop.output.branch }}`:
             {{ output.failure_report }}
             Fix the production code only: never change the tests (if you think a test is wrong,
-            say why in your answer; the test writer owns it). Run only the failing tests, not the
-            full suite (the orchestrator runs it after the test writer), commit and report the commit hash.
+            say why in your answer; the test writer owns it). To check the fix, end your turn with a
+            ```run-tests block listing the failing test files (the orchestrator runs them and answers
+            with a summary), never the full suite (it runs after the test writer); then commit and
+            report the commit hash.
         goto: test
         max_visits: 3
         on_exhausted: test_failed
@@ -960,9 +976,12 @@ steps:
   # preexisting_failures, or the step's own rerun of the failing files on the base, #211) never
   # count. A suite that cannot run (no command) goes to test_failed. No timeout: it comes from the
   # project's recent suite durations (#210).
+  # scope affected (#212): each round runs the test files the change reaches (import graph since the
+  # base, plus the files that failed before); when they pass, the whole suite runs once in the run.
   - id: suite
     type: suite
     command: "{{ inputs.test_command }}"
+    scope: affected
     transitions:
       # build: after a merge-conflict resolution it goes on to verify_change (evidence kept)
       - when: "output.status == 'pass'"
@@ -982,8 +1001,10 @@ steps:
             {{ output | suite_failures }}
             The whole log: {{ run_dir }}/{{ output.log }} (read only the failing tests' part).
             Fix the production code only: never change the tests (if you think a test is wrong or
-            made obsolete by the intended change, say why in your answer). Run only the failing
-            tests, not the full suite (the orchestrator runs it next), commit and report the commit hash.
+            made obsolete by the intended change, say why in your answer). To check the fix, end
+            your turn with a ```run-tests block listing the failing test files (the orchestrator runs
+            them and answers with a summary), never the full suite (the suite step runs it next);
+            then commit and report the commit hash.
         goto: suite
         max_visits: 2
         on_exhausted: test_failed

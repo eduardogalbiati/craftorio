@@ -43,6 +43,18 @@ same features for users; this is the implementer's summary.
   (default pass; `preexisting` = only the run's pre-existing failures fail, so it passes; `base` =
   the failures fail on the simulated base too, a pass; `mixed` = 2 failures, one on the base, a
   fail; `blocked`), a simulated log is written.
+  - **`scope: affected`** (#212, default `full`): each visit runs only the affected test files
+    (`affectedSelection` → `src/engine/affected-tests.js`, plus the files that failed in an earlier
+    round, `suiteFailedFiles`), the command filtered to them (`filteredCommand`); when they pass and
+    the whole suite has not passed yet in the run (`fullSuitePassed`), the whole suite runs right after
+    (log `suite-<visit>-full.log`, the affected run in `output.affected`). Output adds `scope` (full |
+    files), `selection` ({ mode, files, reasons, why }: "imports src/roadmap.js"), `passed`, `failed`;
+    `summary.suite_runs.affected` counts the affected runs. Simulation: two simulated files.
+  - **Test requests** (#212, `serveTestRequests`): an agent turn that ends with a ```` ```run-tests ````
+    block (`parseTestRequest`: test files, or `affected`) has them run by the engine in the agent's
+    working folder (log `logs/tests-<step>-<n>.log`), then the agent resumes in the same step with a
+    summary only (`testResultsPrompt`: counts, failures with their first 3 lines, the log's path), at
+    most 3 per turn; `summary.suite_runs.requests` counts them.
   - **`full_suite: warn`** on an agent step: a tool call of its agent that starts the whole suite
     (`isFullSuiteCommand`: `npm test`, `pytest`, `go test ./...`, `dotnet test`, `mvn test`, the
     suite step's own command…) is noted, not refused: a `log` warn `kind: full_suite_by_agent`.

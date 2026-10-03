@@ -115,8 +115,12 @@
     if (project()?.repo && !PLATFORMS[bl.platform]?.soon) sync();
   }
 
+  // what the screen shows, to tell an automatic refresh that changes nothing (#214)
+  let shownData = '';
+  const dataKey = (id, data) => `${id}:${JSON.stringify(data ?? null)}`;
   function setData(data) {
     bl.data = data;
+    shownData = dataKey(bl.projectId, data);
     // selected issues that left To do (assigned, closed) are dropped from the selection
     const ok = new Set((data?.issues || []).filter(selectable).map((i) => i.number));
     for (const n of [...bl.selected]) if (!ok.has(n)) bl.selected.delete(n);
@@ -162,21 +166,32 @@
     }
   }
 
-  // Re-reads the cached issues with their runs and queue (cheap, no sync).
+  // Re-reads the cached issues with their runs and queue (cheap, no sync). An automatic refresh
+  // whose data is the same as what is shown renders nothing (#214: no flicker under the owner).
   async function reload() {
     const id = bl.projectId;
     if (!id || bl.syncing) return;
     try {
       const data = await api.getBacklog(id);
-      if (data && bl.projectId === id && !bl.syncing) { setData(data); render(); }
+      if (!data || bl.projectId !== id || bl.syncing) return;
+      if (dataKey(id, data) === shownData) return;
+      setData(data);
+      render();
     } catch { /* keep what is shown */ }
   }
 
-  // Runs start, stop at gates and end while the screen is open.
+  // Runs start, move between steps, stop at gates and end while the screen is open (#214): only the
+  // events that change an item's status, progress ring (#194) or waiting badge refresh the screen,
+  // at most once per RUN_THROTTLE_MS, and through liveReload (never under an open Edit form). The
+  // session messages agents send several times a second refresh nothing.
+  const RUN_THROTTLE_MS = 2000;
+  const RUN_STATUS_EVENTS = /^(workflow\.(started|finished)|step\.(started|finished|waiting)|approval\.(requested|resolved))$/;
   let runTimer = null;
-  api.onEvent(() => {
+  let runLast = 0;
+  api.onEvent((ev) => {
+    if (ev?.type && !RUN_STATUS_EVENTS.test(ev.type)) return;
     if (!visible() || runTimer) return;
-    runTimer = setTimeout(() => { runTimer = null; reload(); }, 1500);
+    runTimer = setTimeout(() => { runTimer = null; runLast = Date.now(); liveReload(); }, Math.max(0, runLast + RUN_THROTTLE_MS - Date.now()));
   });
   // The queue also changes without run events (a start that fails, the next issue starting), and a
   // live roadmap's refill (#164) with none. Also the fallback of the file watch (#204): while the
@@ -198,9 +213,13 @@
     const typing = el?.closest?.('#view-backlog') && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) && !el.closest('.modal');
     return !!typing || (bl.mode === 'roadmap' && !!window.BacklogRoadmap?.busy());
   };
+  // Every automatic refresh (run events, the 5 s poll, backlog:changed) goes through liveReload; a
+  // direct reload() is only for the owner's own actions (Sync, Reload, after Save). While the owner
+  // is busy nothing replaces the DOM (#214): the notice is added once, and only when the data differs.
   async function liveReload() {
     if (!visible() || document.hidden) return;
     if (ownerBusy()) {
+      if (!pendingReload && !(await backlogChanged())) return;
       staleNotice();
       pendingReload ??= setInterval(() => { if (!ownerBusy()) { clearInterval(pendingReload); pendingReload = null; liveReload(); } }, 1000);
       return;
@@ -209,6 +228,14 @@
     const top = view?.scrollTop;
     await reload();
     if (view && top != null) view.scrollTop = top;
+  }
+  async function backlogChanged() {
+    const id = bl.projectId;
+    if (!id) return false;
+    try {
+      const data = await api.getBacklog(id);
+      return !!data && bl.projectId === id && dataKey(id, data) !== shownData;
+    } catch { return false; }
   }
   // the open Edit form tells the owner the file changed under it; Reload drops the unsaved values
   function staleNotice() {
@@ -221,6 +248,7 @@
     p.querySelector('button').addEventListener('click', () => {
       window.BacklogRoadmap?.closeEdit();
       document.activeElement?.blur?.();
+      shownData = ''; // the closed form is re-rendered even when the data changed back
       liveReload();
     });
     form.prepend(p);

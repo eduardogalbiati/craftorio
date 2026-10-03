@@ -66,6 +66,10 @@ const scenarios = require('./scenarios');
 const { captureScreenshots } = require('./screenshot-step');
 const suiteStep = require('./suite-step');
 const {
+  affectedTests,
+  selectionLines,
+} = require('./affected-tests');
+const {
   runWorkflowStep,
   validateWorkflowStep,
 } = require('./workflow-step');
@@ -245,6 +249,8 @@ function loadWorkflow(file) {
       if (s.agent || s.agents) throw new Error(`Step "${s.id}": a suite step has no agent.`);
       if (s.command !== undefined && typeof s.command !== 'string') throw new Error(`Step "${s.id}": command must be a string (a template; empty = found from the project's files).`);
       if (s.timeout !== undefined && !String(s.timeout).includes('{{') && parseDuration(s.timeout, null) == null) throw new Error(`Step "${s.id}": timeout must be a duration such as 30m.`);
+      // #212: affected = the affected test files each visit, the whole suite once when they pass
+      if (s.scope !== undefined && !String(s.scope).includes('{{') && !['affected', 'full'].includes(s.scope)) throw new Error(`Step "${s.id}": scope must be affected or full.`);
     } else if (s.type === 'workflow') {
       // `type: workflow` (#174): a child run of another workflow, once or per `foreach` item
       validateWorkflowStep(s, file);
@@ -408,6 +414,19 @@ function extractJson(text) {
     try { return JSON.parse(b); } catch { /* try the next one */ }
   }
   throw new Error('No valid JSON block found in the response.');
+}
+
+// A test request at the end of an agent's answer (#212): a ```run-tests block with one test file per
+// line (project-relative) or `affected`. → { affected, files } or null. A path with `..`, an absolute
+// path or a character a shell would read is dropped (the files go on a command line).
+const MAX_TEST_REQUESTS = 3;
+function parseTestRequest(text) {
+  const m = [...String(text || '').matchAll(/```run-tests[^\n]*\n([\s\S]*?)```/g)].pop();
+  if (!m) return null;
+  const items = m[1].split('\n').map((l) => l.trim().replace(/^[-*]\s+/, '').replace(/^`|`$/g, '').replace(/\\/g, '/')).filter(Boolean);
+  const affected = items.some((l) => /^affected$/i.test(l));
+  const files = [...new Set(items.filter((l) => !/^affected$/i.test(l) && /^[\w@][\w./@+-]*$/.test(l) && !l.split('/').includes('..')))];
+  return affected || files.length ? { affected, files } : null;
 }
 
 const TYPE_CHECK = {
@@ -709,6 +728,10 @@ class WorkflowRun extends EventEmitter {
     this.inputs = this.resolveInputs(inputs || {});
     this.testsPlan = testsPlan(this.wf.inputs, inputs, this.inputs); // summary.tests_plan, ctx.tests_plan (#203)
     this.suiteRuns = { engine: 0, agents: 0 }; // whole-suite runs: suite steps vs agents' own commands (#177, summary.suite_runs)
+    // #212: the whole suite passed once in this run (scope: affected stops running it), and the
+    // test files that failed in a suite round (they join the next rounds' affected set)
+    this.fullSuitePassed = false;
+    this.suiteFailedFiles = [];
     this.testsAutocommitted = []; // [{ step_id, files, commit }] (#209, summary.tests_autocommitted)
     this.toolTimeouts = 0; // tool results cut by the tool's timeout (#178, summary.tool_timeouts)
     this.inputImages = this.checkInputAttachments(attachments || {});
@@ -1195,6 +1218,26 @@ class WorkflowRun extends EventEmitter {
   async suiteBase() {
     if (!this.baseWorktree) await this.setupBaseWorktree();
     return this.baseWorktree && this.ctx.base_worktree_dir ? { dir: this.ctx.base_worktree_dir, commit: this.baseWorktree.commit || null } : null;
+  }
+
+  // The test files the run's change can break (#212, src/engine/affected-tests.js), plus the files
+  // that failed in an earlier round (`this.suiteFailedFiles`): { mode, files, reasons, why, ... }.
+  // Simulation: two simulated files. A run without a worktree or a base: the whole suite.
+  affectedSelection() {
+    if (this.mock) {
+      const files = ['test/simulated.test.js', 'test/simulated-other.test.js'];
+      return { mode: 'affected', files, reasons: { [files[0]]: 'imports src/simulated.js', [files[1]]: 'imports src/simulated.js (through src/simulated-user.js)' }, changed: ['src/simulated.js'], slow: [], why: `${files.length} test file(s) reach the 1 changed file(s) (simulated)` };
+    }
+    const base = this.worktree?.base || render(this.wf.orchestrator?.worktree?.base || '', this.ctx).trim();
+    if (!this.ctx.worktree_dir || !base) return { mode: 'all', files: [], reasons: {}, changed: [], slow: [], why: 'the run has no worktree or base branch: the whole suite' };
+    const sel = affectedTests({ root: this.ctx.worktree_dir, base });
+    for (const f of this.suiteFailedFiles) {
+      if (sel.mode !== 'affected' || sel.files.includes(f) || !fs.existsSync(path.join(this.ctx.worktree_dir, f))) continue;
+      sel.files.push(f);
+      sel.reasons[f] = 'failed in an earlier round';
+    }
+    sel.files.sort();
+    return sel;
   }
 
   // The run's scratch workspace (#120), { workspace, userData } under <run>/scratch: a copy of the
@@ -2521,6 +2564,7 @@ class WorkflowRun extends EventEmitter {
     const snap = guarded ? await testPaths.snapshot(dir, this.wf.tests_paths)
       .catch((e) => { throw new Error(`Could not snapshot the test files before ${agentName}'s turn in ${opts.stepId || 'a delegated turn'} (edits_tests: false): ${e.message}`); }) : null;
     let res = await this.agentTurn(agentName, prompt, { ...opts, guarded });
+    res = await this.serveTestRequests(agentName, prompt, res, { ...opts, guarded });
     for (let attempt = 1; snap; attempt++) {
       // an unchecked turn fails the step: passing it would let test changes through the guard
       const files = await testPaths.changedTestFiles(snap, { bases: this.baseRefs() })
@@ -2533,6 +2577,75 @@ class WorkflowRun extends EventEmitter {
       res = await this.agentTurn(agentName, this.testsRefusedPrompt(agentName, prompt, res.text, files, snap.head), { ...opts, guarded, retry: true });
     }
     return res;
+  }
+
+  // Agents ask, the orchestrator runs (#212): a turn that ends with a ```run-tests block (one test
+  // file per line, or `affected` for the affected tests of the run's change) has them run by the
+  // engine in the agent's working folder (suite-step.js runSuite with files, log
+  // logs/tests-<step>-<n>.log), and the agent resumes in the same step with a summary only: the
+  // passed / failed counts, each failure's test, file and first lines, and the log's path. At most
+  // MAX_TEST_REQUESTS per turn; after that the last answer stands.
+  async serveTestRequests(agentName, prompt, res, opts) {
+    for (let n = 1; ; n++) {
+      const request = parseTestRequest(res?.text);
+      if (!request) return res;
+      if (n > MAX_TEST_REQUESTS) {
+        this.emitEvent('log', { level: 'warn', kind: 'test_request', agent: agentName, message: `[${agentName}] asked to run tests more than ${MAX_TEST_REQUESTS} times in ${opts.stepId || 'a delegated turn'}: its last answer stands` });
+        return res;
+      }
+      const summary = await this.runTestRequest(agentName, opts.stepId, request);
+      res = await this.agentTurn(agentName, this.testResultsPrompt(agentName, prompt, res.text, summary), { ...opts, retry: true });
+    }
+  }
+
+  // Runs one request → the summary for the agent's prompt (never the output itself).
+  async runTestRequest(agentName, stepId, request) {
+    const agent = { ...(this.wf.defaults || {}), ...this.wf.agents[agentName] };
+    const cwd = render(agent.working_dir || '', this.ctx).trim() || this.ctx.worktree_dir;
+    this.testRequests = (this.testRequests || 0) + 1;
+    const root = path.dirname(path.dirname(this.runDir));
+    let files = request.files.filter((f) => this.mock || (cwd && fs.existsSync(path.join(cwd, f))));
+    const missing = request.files.filter((f) => !files.includes(f));
+    const reasons = Object.fromEntries(files.map((f) => [f, `asked by ${agentName}`]));
+    let why = `asked by ${agentName}`;
+    if (request.affected) {
+      const sel = this.affectedSelection();
+      if (sel.mode !== 'affected') {
+        return `The orchestrator did not run the affected tests: ${sel.why}. The whole suite runs in the workflow's suite step, not in your turn; ask for given test files instead (one per line in the run-tests block).`;
+      }
+      for (const f of sel.files) if (!files.includes(f)) { files.push(f); reasons[f] = sel.reasons[f]; }
+      why = sel.why;
+    }
+    if (!files.length) return `The orchestrator ran no test: ${missing.length ? `these files do not exist in ${cwd}: ${missing.join(', ')}` : 'no test file reaches your change'}.`;
+    const name = `tests-${String(stepId || agentName).replace(/[^\w-]/g, '_')}-${this.testRequests}`;
+    this.emitEvent('log', { level: 'info', kind: 'test_request', agent: agentName, step_id: stepId || null, message: `[${agentName}] asked to run ${files.length} test file(s): the orchestrator runs them (log logs/${name}.log)` });
+    const output = await suiteStep.runSuite({
+      command: this.suiteCommand(), cwd, runDir: this.runDir, round: this.testRequests, logName: name,
+      env: { ...process.env, ...capabilities.agentEnv() }, mock: this.mock, preexisting: this.preexisting, signal: this.abort.signal,
+      base: () => this.suiteBase(), baseCacheDir: path.join(root, 'cache', 'base-tests'),
+      files, selection: { mode: 'affected', files, reasons, why },
+      log: (level, message) => this.emitEvent('log', { level, message }),
+    }).catch((e) => ({ status: 'blocked', reason: e.message, failures: [], preexisting: [] }));
+    if (output.log) this.emitEvent('file.saved', { step_id: stepId || null, path: path.join(this.runDir, output.log) });
+    this.suiteRuns.requests = (this.suiteRuns.requests || 0) + 1;
+    if (output.status === 'blocked') return `The orchestrator could not run the tests: ${output.reason}`;
+    const lines = [
+      `The orchestrator ran ${files.length} test file(s) for you (\`${output.command}\`): ${output.status === 'pass' ? 'they passed' : 'they failed'}.`,
+      `Passed: ${output.passed ?? '?'}, failed: ${output.failed ?? '?'}${output.timed_out ? ' (timed out)' : ''}. Log: ${path.join(this.runDir, output.log)} (read only the lines you need).`,
+    ];
+    if (missing.length) lines.push(`Not found, not run: ${missing.join(', ')}.`);
+    if (output.failures.length) lines.push('Failures:', ...output.failures.map((f) => `- ${f.test}${f.file ? ` (${f.file})` : ''}${f.error ? `\n  ${String(f.error).split('\n').slice(0, 3).join('\n  ')}` : ''}`));
+    if (output.preexisting?.length) lines.push('Also failing on the base (not yours, leave them):', ...output.preexisting.map((f) => `- ${f.test}${f.file ? ` (${f.file})` : ''}`));
+    return lines.join('\n');
+  }
+
+  // The follow-up turn with a test request's summary. As in retryPrompt, a handoff or ephemeral
+  // agent answers in a fresh session, so the task and its previous answer go along.
+  testResultsPrompt(agentName, prompt, previous, summary) {
+    const next = `${summary}\n\nGo on with your task from here. Answer in full, in the format you were asked for (another run-tests block only if you need another run).`;
+    const def = { ...(this.wf.defaults || {}), ...this.wf.agents[agentName] };
+    if ((def.session || 'persistent') === 'persistent') return next;
+    return `${prompt}\n\n---\nYou already answered this task:\n<previous_answer>\n${String(previous).slice(-20000)}\n</previous_answer>\n\n${next}`;
   }
 
   // The run's base branch, local and remote: commits reachable from it are not the agent's.
@@ -3162,33 +3275,60 @@ class WorkflowRun extends EventEmitter {
   // (#211: those failing there too become the run's pre-existing failures and go to the workspace's
   // failing-on-main.json). Without a step `timeout`, the timeout comes from the project's recent suite
   // durations (cache/suite-durations.json). Simulation: mockSequences.suite: { <step>: [...] }.
+  // `scope: affected` (#212): each visit runs only the affected test files (affectedSelection: the
+  // import graph since the base, plus the files that failed in an earlier round); when they pass and
+  // the whole suite has not passed yet in this run, the whole suite runs right after (log
+  // suite-<visit>-full.log), so it runs once before the merge. A shared root changed or a project
+  // without a JS graph: the whole suite. The output's `selection` says which files and why.
   async runSuiteStep(step, st) {
     const seq = this.mockSequences?.suite?.[step.id];
     const mockResult = Array.isArray(seq) && seq.length ? seq[Math.min(st.visits, seq.length) - 1] : 'pass';
     const root = path.dirname(path.dirname(this.runDir));
     const project = this.worktree?.repo || this.ctx.worktree_dir || '';
+    const scope = step.scope ? render(String(step.scope), this.ctx).trim() : 'full';
+    const once = async (extra = {}) => {
+      try {
+        return await suiteStep.runSuite({
+          command: step.command ? render(String(step.command), this.ctx).trim() : '',
+          cwd: this.ctx.worktree_dir,
+          runDir: this.runDir,
+          round: st.visits,
+          env: { ...process.env, ...capabilities.agentEnv() },
+          mock: this.mock,
+          mockResult,
+          preexisting: this.preexisting,
+          signal: this.abort.signal,
+          timeoutMs: step.timeout ? parseDuration(render(String(step.timeout), this.ctx).trim(), suiteStep.SUITE_TIMEOUT_MS) : null,
+          history: project ? { file: path.join(root, 'cache', 'suite-durations.json'), project } : null,
+          base: () => this.suiteBase(),
+          baseCacheDir: path.join(root, 'cache', 'base-tests'),
+          log: (level, message) => this.emitEvent('log', { level, message }),
+          ...extra,
+        });
+      } catch (e) {
+        return { kind: 'suite', status: 'blocked', round: st.visits, scope: 'full', command: null, log: null, exit_code: null, duration_ms: 0, timed_out: false, failures: [], preexisting: [], reason: e.message, message: `The suite could not run: ${e.message}` };
+      }
+    };
     let output;
-    try {
-      output = await suiteStep.runSuite({
-        command: step.command ? render(String(step.command), this.ctx).trim() : '',
-        cwd: this.ctx.worktree_dir,
-        runDir: this.runDir,
-        round: st.visits,
-        env: { ...process.env, ...capabilities.agentEnv() },
-        mock: this.mock,
-        mockResult,
-        preexisting: this.preexisting,
-        signal: this.abort.signal,
-        timeoutMs: step.timeout ? parseDuration(render(String(step.timeout), this.ctx).trim(), suiteStep.SUITE_TIMEOUT_MS) : null,
-        history: project ? { file: path.join(root, 'cache', 'suite-durations.json'), project } : null,
-        base: () => this.suiteBase(),
-        baseCacheDir: path.join(root, 'cache', 'base-tests'),
-        log: (level, message) => this.emitEvent('log', { level, message }),
-      });
-    } catch (e) {
-      output = { kind: 'suite', status: 'blocked', round: st.visits, command: null, log: null, exit_code: null, duration_ms: 0, timed_out: false, failures: [], preexisting: [], reason: e.message, message: `The suite could not run: ${e.message}` };
+    if (scope === 'affected') {
+      let selection;
+      try { selection = this.affectedSelection(); } catch (e) { selection = { mode: 'all', files: [], reasons: {}, changed: [], slow: [], why: `the affected tests could not be listed (${e.message}): the whole suite` }; }
+      this.emitEvent('log', { level: 'info', kind: 'suite', step_id: step.id, message: `${step.id}: ${selectionLines(selection).slice(0, 6).join('\n')}` });
+      output = await once(selection.mode === 'affected' ? { files: selection.files, selection } : { selection });
+      if (output.scope === 'files') this.suiteRuns.affected = (this.suiteRuns.affected || 0) + 1;
+      if (output.scope === 'files' && output.status === 'pass' && !this.fullSuitePassed) {
+        const affected = { command: output.command, log: output.log, passed: output.passed, failed: output.failed, duration_ms: output.duration_ms, files: selection.files };
+        if (output.log) this.emitEvent('file.saved', { step_id: step.id, path: path.join(this.runDir, output.log) });
+        output = await once({ selection: { ...selection, why: `the ${selection.files.length} affected test file(s) passed; the whole suite runs once before the merge` }, logName: `suite-${st.visits}-full` });
+        output.affected = affected;
+      }
+    } else {
+      output = await once();
     }
-    if (output.status !== 'blocked') this.suiteRuns.engine++;
+    if (output.status !== 'blocked' && output.scope !== 'files') this.suiteRuns.engine++;
+    if (output.status === 'pass' && output.scope !== 'files') this.fullSuitePassed = true;
+    // the files that failed come back in the next round's affected set
+    for (const f of output.failures || []) if (f.file && !this.suiteFailedFiles.includes(f.file)) this.suiteFailedFiles.push(f.file);
     if (output.preexisting_failures?.length && !this.mock) {
       suiteStep.noteFailingOnMain(path.join(root, 'failing-on-main.json'), { project, base: this.worktree?.base, commit: output.base_check?.commit, runId: this.runId, failures: output.preexisting_failures });
     }
@@ -3374,7 +3514,7 @@ ${stderr || stdout}`.slice(0, 1500)));
         // #203: the unit / E2E test inputs and where each value came from; #177: whole-suite runs
         // by the engine's suite steps and by the agents' own commands (the measure of the change)
         ...(this.testsPlan.length ? { tests_plan: this.testsPlan } : {}),
-        ...(this.suiteRuns.engine || this.suiteRuns.agents ? { suite_runs: this.suiteRuns } : {}),
+        ...(Object.values(this.suiteRuns).some(Boolean) ? { suite_runs: this.suiteRuns } : {}),
         // #209: test files the engine committed for the test writer; #178: commands cut by the tool's timeout
         ...(this.testsAutocommitted.length ? { tests_autocommitted: this.testsAutocommitted } : {}),
         ...(this.toolTimeouts ? { tool_timeouts: this.toolTimeouts } : {}),
@@ -3398,6 +3538,7 @@ module.exports = {
   evalExpr,
   extractJson,
   loadWorkflow,
+  parseTestRequest,
   parseTokens,
   render,
   repeatKey,

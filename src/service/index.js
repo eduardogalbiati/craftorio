@@ -105,6 +105,7 @@ function createService({ host }) {
     shutdown() {
       ctx.stopPrTimer();
       ctx.stopBacklogWatch();
+      ctx.stopDispatchTimers();
       ctx.waiting.closeAll();
       ctx.terminals.killAll();
       for (const run of ctx.active.values()) run.stop();

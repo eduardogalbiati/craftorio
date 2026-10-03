@@ -43,6 +43,12 @@ module.exports = (ctx) => {
   // their usage is not in the baseline of those runs, so the per-turn budget check adds it.
   const budgetAt = new Map();
   let finishedPeers = []; // [{ finishedAt, sessions }]
+  // the queue dispatches scheduled as runs end, cancelled by the service's shutdown (#186)
+  const dispatchTimers = new Set();
+  function stopDispatchTimers() {
+    for (const t of dispatchTimers) clearTimeout(t);
+    dispatchTimers.clear();
+  }
 
   // The runs in progress are written down until they end: still there at the next start = they
   // died with the app. The file holds a list (one object in older versions).
@@ -291,8 +297,15 @@ module.exports = (ctx) => {
           .then(() => ctx.continueChain(run, ev)).catch((e) => console.error('run chain:', e.message));
         // a Backlog Refresh run edited or closed issues: the Backlog syncs the project (#161)
         ctx.afterBacklogRefresh(run).catch((e) => console.error('backlog refresh sync:', e.message));
-        // a roadmap's next items first (its stage may be over), then the plain queue
-        setTimeout(() => ctx.dispatchRoadmaps().catch((e) => console.error('roadmap dispatch:', e)).then(() => ctx.dispatchQueue()).catch((e) => console.error('backlog dispatch:', e)), 1000);
+        // a roadmap's next items first (its stage may be over), then the plain queue; a shutdown
+        // cancels it (#186: it would run after the workspace was closed, e.g. a test's removed one)
+        const dispatch = setTimeout(() => {
+          dispatchTimers.delete(dispatch);
+          if (!ctx.ws) return;
+          Promise.resolve().then(() => ctx.dispatchRoadmaps()).catch((e) => console.error('roadmap dispatch:', e))
+            .then(() => ctx.dispatchQueue()).catch((e) => console.error('backlog dispatch:', e));
+        }, 1000);
+        dispatchTimers.add(dispatch);
       }
     });
     // a failed roadmap item's run resumed from a step (#100): the new run takes its place
@@ -420,5 +433,6 @@ module.exports = (ctx) => {
     runWorkflow,
     slotProblem,
     startWorkflowRun,
+    stopDispatchTimers,
   };
 };
