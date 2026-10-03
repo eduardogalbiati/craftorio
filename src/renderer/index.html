@@ -12,11 +12,13 @@
   <link rel="stylesheet" href="diff-viewer.css" />
   <link rel="stylesheet" href="live-turn.css" />
   <link rel="stylesheet" href="notification-center.css" />
+  <link rel="stylesheet" href="occupancy-chip.css" />
   <link rel="stylesheet" href="paste-image.css" />
   <link rel="stylesheet" href="po-calibration.css" />
   <link rel="stylesheet" href="voice.css" />
   <link rel="stylesheet" href="workflow-inputs.css" />
   <link rel="stylesheet" href="views/agents/agents.css" />
+  <link rel="stylesheet" href="views/analytics/analytics-insights.css" />
   <link rel="stylesheet" href="views/analytics/analytics.css" />
   <link rel="stylesheet" href="views/arena/arena.css" />
   <link rel="stylesheet" href="views/artifacts/artifacts.css" />
@@ -53,6 +55,11 @@
       <div id="kpi-all" class="kpi kpi-all hidden"><label>All runs</label><b id="kpi-all-value"></b></div>
     </div>
     <div class="actions">
+      <!-- the 24/7 chip (#188, occupancy-chip.js): the last 24 h occupancy; a click opens Analytics › 24/7 -->
+      <button id="occupancy-chip" class="btn ghost occupancy-chip hidden" type="button" data-testid="occupancy-chip" data-level="none">
+        <span class="occ-dot" data-dot="grey" aria-hidden="true"></span>
+        <span class="occ-text mono">24/7 · —</span>
+      </button>
       <div class="usage-wrap">
         <button id="usage-widget" class="btn ghost usage-widget" type="button" title="Usage this month" aria-haspopup="dialog" aria-expanded="false">
           <span id="usage-widget-dot" class="u-dot"></span>
@@ -326,6 +333,7 @@
   <script src="kept-work-dialog.js"></script>
   <script src="live-turn.js"></script>
   <script src="notification-center.js"></script>
+  <script src="occupancy-chip.js"></script>
   <script src="resume-dialog.js"></script>
   <script src="robots.js"></script>
   <script src="run-list.js"></script>
@@ -338,6 +346,8 @@
   <script src="paste-image.js"></script>
   <script src="workflow-inputs.js"></script>
   <script src="views/agents/agents.js"></script>
+  <script src="views/analytics/analytics-occupancy.js"></script>
+  <script src="views/analytics/analytics-run.js"></script>
   <script src="views/analytics/analytics.js"></script>
   <script src="views/arena/arena-shuffle.js"></script>
   <script src="views/arena/arena.js"></script>

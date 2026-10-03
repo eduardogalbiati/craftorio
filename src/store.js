@@ -79,6 +79,7 @@ const MIGRATIONS = [
      saved TEXT NOT NULL, files TEXT NOT NULL, count INTEGER NOT NULL DEFAULT 0, images INTEGER NOT NULL DEFAULT 0);
    CREATE TABLE artifact_paths (path TEXT NOT NULL, run_id TEXT NOT NULL, PRIMARY KEY (path, run_id));
    CREATE INDEX artifact_paths_run ON artifact_paths(run_id);`,
+  `CREATE TABLE run_figures (run_id TEXT PRIMARY KEY, sig TEXT NOT NULL, figures TEXT NOT NULL);`,
 ];
 
 const open = new Map(); // workspace root → store
@@ -187,9 +188,10 @@ function openStore(ws) {
       const del = db.prepare('DELETE FROM runs WHERE run_id = ?');
       const delArts = db.prepare('DELETE FROM run_artifacts WHERE run_id = ?');
       const delPaths = db.prepare('DELETE FROM artifact_paths WHERE run_id = ?');
-      transaction(() => { for (const id of ids) { del.run(id); delArts.run(id); delPaths.run(id); } });
+      const delFigures = db.prepare('DELETE FROM run_figures WHERE run_id = ?');
+      transaction(() => { for (const id of ids) { del.run(id); delArts.run(id); delPaths.run(id); delFigures.run(id); } });
     },
-    clearRuns() { db.exec('DELETE FROM runs; DELETE FROM run_artifacts; DELETE FROM artifact_paths;'); },
+    clearRuns() { db.exec('DELETE FROM runs; DELETE FROM run_artifacts; DELETE FROM artifact_paths; DELETE FROM run_figures;'); },
     /** The indexed list rows (no `info`), newest first: what Analytics and lists can query without the files. */
     runRows({ projectId } = {}) {
       const rows = projectId ? db.prepare('SELECT * FROM runs WHERE project_id = ? ORDER BY started_at DESC').all(projectId)
@@ -213,6 +215,15 @@ function openStore(ws) {
     putRunFiles(runId, key, files) {
       db.prepare(`INSERT INTO run_files (run_id, range_key, files) VALUES (?, ?, ?)
         ON CONFLICT(run_id) DO UPDATE SET range_key = excluded.range_key, files = excluded.files`).run(String(runId), String(key), JSON.stringify(files || []));
+    },
+    /** A run's figures (src/run-analysis.js runFigures, #228) for its events file's `sig`, or null. */
+    runFigures(runId, sig) {
+      const r = db.prepare('SELECT sig, figures FROM run_figures WHERE run_id = ?').get(String(runId));
+      return r && r.sig === String(sig) ? parse(r.figures) : null;
+    },
+    putRunFigures(runId, sig, figures) {
+      db.prepare(`INSERT INTO run_figures (run_id, sig, figures) VALUES (?, ?, ?)
+        ON CONFLICT(run_id) DO UPDATE SET sig = excluded.sig, figures = excluded.figures`).run(String(runId), String(sig), JSON.stringify(figures));
     },
     /** A run's cached artifact index (src/run-artifacts.js): { quick, finished, offset, saved, files, count, images }, or null. */
     runArtifacts(runId) {

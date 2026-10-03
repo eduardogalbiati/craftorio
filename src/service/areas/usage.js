@@ -67,7 +67,11 @@ module.exports = (ctx) => {
     });
     return {
       ...perf,
-      projects: projectList.map((p) => ({ id: p.id, name: p.name })),
+      // #197: the project picker: every project, one without a git folder listed with the reason
+      projects: projectList.map((p) => ({
+        id: p.id, name: p.name, folder: p.folder || null, isGit: !!p.isGit,
+        reason: p.isGit ? null : p.folder ? 'Its folder is not a git repository: no commits to count.' : 'It has no folder.',
+      })),
       project: project ? { id: project.id, name: project.name, folder: project.folder, isGit: !!project.isGit } : null,
       elapsedMs: Date.now() - started,
     };

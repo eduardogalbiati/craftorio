@@ -93,8 +93,8 @@ test('putRun indexes exactly the fields the run lists and Usage/Analytics read',
 
 // ---- A run's cached artifact index (src/run-artifacts.js, #200) -------------------------------
 
-test('MIGRATIONS has one entry per schema version; the current schema (run_artifacts, artifact_paths) is 3', () => {
-  assert.equal(MIGRATIONS.length, 3);
+test('MIGRATIONS has one entry per schema version; the current schema (run_figures, #228) is 4', () => {
+  assert.equal(MIGRATIONS.length, 4);
 });
 
 test('putRunArtifacts writes run_artifacts and, for each external file, artifact_paths; artifactRunIds finds the run; deleteRuns and clearRuns remove both tables\' rows', (t) => {

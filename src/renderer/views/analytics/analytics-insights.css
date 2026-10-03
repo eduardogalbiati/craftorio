@@ -1,0 +1,49 @@
+/* Analytics' Run (#228) and 24/7 (#188) tabs, and Repository performance's project picker and
+   recommendations (#197): analytics-run.js, analytics-occupancy.js, analytics.js. */
+
+/* the analysed project / the picked run, at the top of the tab */
+.an-project-pick { display: grid; grid-template-columns: minmax(220px, 340px) minmax(0, 1fr); align-items: end; gap: 16px; padding: 12px 14px; margin-bottom: 12px; }
+.an-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; margin: 0; }
+.an-project-summary { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding-bottom: 8px; }
+
+/* a file's recommendation */
+.an-files .an-rec-cell { min-width: 280px; max-width: 460px; }
+.an-rec { display: flex; flex-direction: column; gap: 3px; font-size: 12px; }
+.an-rec .badge { align-self: flex-start; }
+.an-rec-actions { margin-top: 2px; }
+
+/* the run's header and its comparison */
+.an-run-title { margin: 0; max-width: 70ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.an-verdict { font-size: 12px; }
+.an-verdict.green { color: var(--green); }
+.an-verdict.amber { color: var(--yellow); }
+.an-verdict.red { color: var(--red); }
+.an-verdict.neutral { color: var(--muted); }
+.an-agent { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.an-agent i { width: 9px; height: 9px; border-radius: 3px; display: inline-block; }
+.an-grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+/* the Gantt */
+.an-gantt { position: relative; padding-bottom: 18px; }
+.an-gantt svg { width: 100%; height: auto; display: block; }
+.an-gantt-label { font-size: 11px; fill: #0e1014; pointer-events: none; }
+.an-gantt-label.muted { fill: var(--muted); }
+.an-gantt-row { font-size: 11px; fill: var(--muted); }
+.an-gantt-gate { fill: url(#an-hatch); stroke: var(--yellow); stroke-opacity: .35; }
+.an-hatch-line { stroke: var(--yellow); stroke-opacity: .45; stroke-width: 2; }
+
+/* 24/7 */
+.an-occ[data-level="green"] { color: var(--green); }
+.an-occ[data-level="amber"] { color: var(--yellow); }
+.an-occ[data-level="red"] { color: var(--red); }
+.an-hint { border-left: 3px solid var(--yellow); display: block; text-align: left; }
+.an-hint .btn { margin-left: 8px; }
+.an-occ-note { margin: 6px 0 10px; }
+.an-heat { display: flex; flex-direction: column; gap: 2px; }
+.an-heat-row { display: grid; grid-template-columns: 52px repeat(24, 1fr); gap: 2px; align-items: center; }
+.an-heat-row i { height: 12px; border-radius: 2px; background: var(--green); }
+.an-heat-axis em { font-size: 10px; color: var(--muted); font-style: normal; }
+.an-heat-day { color: var(--muted); }
+.an-idle-cell { min-width: 160px; }
+.an-trend { fill: none; stroke: var(--accent); stroke-width: 2; vector-effect: non-scaling-stroke; }
+.an-trend-dot { fill: var(--accent); }

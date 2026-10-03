@@ -174,6 +174,61 @@ function fileNow(repo, file) {
   return { lines: text ? text.split('\n').length - (text.endsWith('\n') ? 1 : 0) : 0, generated: GENERATED.test(text.slice(0, 65536)) };
 }
 
+// #197: what to do with a file over the shared limit, from what is known about it (first rule that
+// matches). Deterministic and offline; "Ask for a plan" (analytics:plan) is the model's deeper answer.
+const LARGE_LINES = 1000;
+const RECOMMENDATIONS = [
+  { kind: 'generated', test: (f) => f.generated, text: 'A tool generates this file: edit the generator or its source list instead, and regenerate it after the merge.' },
+  { kind: 'test', test: (f) => /(^|\/)(test|tests|__tests__|spec)\//.test(f.file) || /\.(test|spec)\.[a-z]+$/.test(f.file), text: 'Every run adds its tests here: write one test file per feature, next to the existing ones.' },
+  { kind: 'stylesheet', test: (f) => /\.(css|scss|sass|less)$/.test(f.file), text: 'A shared stylesheet: move each screen\'s rules to a per-screen CSS file that the screen loads.' },
+  { kind: 'doc', test: (f) => /\.(md|mdx|rst|txt)$/i.test(f.file) || /(^|\/)docs?\//.test(f.file), text: 'A shared doc: split it into per-topic docs, or generate its tables from the code.' },
+  { kind: 'registry', test: (f) => /(registry|registries|manifest|routes|channels|screens|skills|views|index|list)[^/]*\.[a-z]+$/i.test(f.file) || /^package\.json$/.test(f.file), text: 'A shared registry or list: one file per entry that the registry discovers (a folder it lists), so a feature adds a file instead of editing this one.' },
+  { kind: 'large', test: (f) => f.lines >= LARGE_LINES, text: 'A large file touched for unrelated features: split it by area, one module per feature, so runs edit different files.' },
+  { kind: 'hotspot', test: () => true, text: 'Many runs edit this file: find which features touch it and move each one\'s part to its own module.' },
+];
+
+/** The recommendation for one file of `files` (with `conflicts`: the conflicts that named it), or null under the limit. */
+function recommendationOf(f) {
+  if (!f || !(f.share > SHARED_LIMIT) || !(f.runs > 1)) return null;
+  const rule = RECOMMENDATIONS.find((r) => r.test(f));
+  return { kind: rule.kind, text: rule.text, evidence: { share: f.share, runs: f.runs, lines: f.lines ?? null, conflicts: f.conflicts || 0, generated: !!f.generated } };
+}
+
+/**
+ * The runs split by the Product Owner's Speed ↔ Quality calibration (#189), for the 24/7 tab (#188).
+ * `runs` [{ runId, projectId, startedAt, issues, costUsd, conflict, reviewRounds }]; `answers` the
+ * Product Owner's plan answers [{ ts, projectId, calibration, groups: [{ issues, stage }] }]. A run
+ * takes the calibration of the latest answer before its start that planned one of its issues; runs no
+ * answer planned are left out. → [{ calibration, runs, issues, runsPerStage, resolveMergeShare,
+ * reviewRounds, costPerIssue, costUsd }] by calibration.
+ */
+function byCalibration({ runs = [], answers = [] }) {
+  const plans = answers.filter((a) => a.calibration && Array.isArray(a.groups)).sort((a, b) => String(b.ts).localeCompare(String(a.ts)));
+  const levels = new Map();
+  for (const r of runs) {
+    const nums = (r.issues || []).map((i) => Number(i?.number ?? i));
+    const plan = plans.find((a) => String(a.ts) <= String(r.startedAt) && (!a.projectId || !r.projectId || a.projectId === r.projectId)
+      && a.groups.some((g) => (g.issues || []).some((n) => nums.includes(Number(n)))));
+    if (!plan) continue;
+    if (!levels.has(plan.calibration)) levels.set(plan.calibration, { runs: [], plans: new Set() });
+    levels.get(plan.calibration).runs.push(r);
+    levels.get(plan.calibration).plans.add(plan);
+  }
+  return [...levels].sort(([a], [b]) => a - b).map(([calibration, { runs: list, plans: used }]) => {
+    const issues = list.reduce((s, r) => s + (r.issues || []).length, 0);
+    const costUsd = list.reduce((s, r) => s + (r.costUsd || 0), 0);
+    const groups = [...used].flatMap((a) => a.groups);
+    const stages = [...used].reduce((s, a) => s + new Set(a.groups.map((g) => g.stage || 1)).size, 0);
+    return {
+      calibration, runs: list.length, issues, costUsd,
+      runsPerStage: stages ? groups.length / stages : null,
+      resolveMergeShare: list.length ? list.filter((r) => r.conflict).length / list.length : 0,
+      reviewRounds: list.length ? list.reduce((s, r) => s + (r.reviewRounds || 0), 0) / list.length : 0,
+      costPerIssue: issues ? costUsd / issues : null,
+    };
+  });
+}
+
 const endOf = (r, now) => Date.parse(r.finishedAt || '') || (r.status === 'running' ? now : Date.parse(r.startedAt) + (r.durationMs || 0));
 const pad = (n) => String(n).padStart(2, '0');
 const localDay = (t) => { const d = new Date(t); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
@@ -252,7 +307,12 @@ async function repositoryPerformance({ runs, repo, store = null, from, to, marke
   const stageNames = new Map(stages.flatMap((s) => s.runIds.map((id) => [id, s.name])));
   const stageOf = (r) => stageNames.get(r.runId) || null;
 
-  const files = fileCounts(filesByRun).slice(0, TOP_FILES).map(({ runIds, ...c }) => ({ ...c, ...fileNow(repo, c.file) }));
+  const named = (file) => [...conflicted.values()].filter((f) => f.conflictFiles.some((x) => x === file || file.endsWith(`/${x}`))).length;
+  const files = fileCounts(filesByRun).slice(0, TOP_FILES).map(({ runIds, ...c }) => {
+    const row = { ...c, ...fileNow(repo, c.file) };
+    const recommendation = recommendationOf({ ...row, conflicts: named(c.file) });
+    return recommendation ? { ...row, recommendation } : row;
+  });
   const total = summarize(inRange, { filesByRun, conflicted, now });
   const hit = inRange.filter((r) => conflicted.has(r.runId));
 
@@ -296,10 +356,12 @@ async function repositoryPerformance({ runs, repo, store = null, from, to, marke
 }
 
 module.exports = {
+  byCalibration,
   CONFLICT_STEPS,
   conflictsOf,
   fileCounts,
   filesEditedByRuns,
+  recommendationOf,
   repositoryPerformance,
   runFacts,
   SHARED_LIMIT,

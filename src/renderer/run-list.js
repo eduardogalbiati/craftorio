@@ -127,6 +127,7 @@ function renderRunList(rl, { prefix, box: boxSel, empty, start, rerender, reload
       openSupervisor({ runId: r.runId, workflow: r.workflow, status: r.status, error: r.error, mock: r.mock, issues: issuesOfRun(r) }, { watch: b.dataset.runAct === 'watch' });
     }
     if (b.dataset.runAct === 'resume') openResumeDialog(r.runId);
+    if (b.dataset.runAct === 'analytics') window.openAnalytics?.({ tab: 'run', runId: r.runId });
   }));
   box.querySelectorAll('[data-art]').forEach((b) => (b.onclick = () => {
     const r = rl.runs.find((x) => x.runId === b.closest('.pr-run').dataset.run);
@@ -221,6 +222,7 @@ function projectRunBody(r, pv) {
       ${canResume(r) ? '<button class="btn sm ghost" data-run-act="resume" title="Start a new run from a step of this one, keeping the previous outputs (no supervisor call)">Resume from step…</button>' : ''}
       <button class="btn sm" data-run-act="chat" title="${esc(CHAT_TITLES[r.workflow] || 'See the agents, the orchestrator and the human gates as a chat')}">Open chat</button>
       <button class="btn sm" data-run-act="view" title="${r.current || state.runs.has(r.runId) ? 'Open its Run screen' : 'Open its Run screen, rebuilt from its recorded events (read-only)'}">View run</button>
+      <button class="btn sm ghost" data-run-act="analytics" title="Its timeline, cost and tokens per agent, compared with its workflow's runs (Analytics › Run)">Open in Analytics</button>
       <span class="spacer"></span>
       <span class="muted small mono">${esc(r.runId)}</span>
     </div>

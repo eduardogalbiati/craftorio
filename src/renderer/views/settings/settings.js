@@ -442,6 +442,10 @@ registerView({
                   <label class="switch"><input type="checkbox" data-setting="confirmStop" /><span></span></label>
                 </div>
                 <div class="s-row">
+                  <div class="s-label"><b>24/7 chip in the top bar</b><span>Shows the share of the last 24 h with at least one run active (green from 90%, amber from 60%, red below). A click opens Analytics › 24/7.</span></div>
+                  <label class="switch"><input type="checkbox" data-setting="showOccupancyChip" data-testid="setting-occupancy-chip" /><span></span></label>
+                </div>
+                <div class="s-row">
                   <div class="s-label"><b>Keep awake</b><span>Keeps this computer from sleeping while runs or a roadmap are active (this workspace; also on the Workflows screen). The display may still turn off; choosing Sleep, closing the lid and the Windows power plan still apply.</span>
                     <span class="keep-awake-line"><span class="badge keep-awake-status" data-keep-awake-status></span><span class="error small" data-keep-awake-error></span></span></div>
                   <label class="switch"><input type="checkbox" data-keep-awake-toggle aria-label="Keep awake" /><span></span></label>

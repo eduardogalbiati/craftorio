@@ -236,6 +236,22 @@ const covers = (list, t) => list.some(([a, b]) => t >= a && t < b);
 const total = (list) => list.reduce((n, [a, b]) => n + (b - a), 0);
 
 /**
+ * The active time of runs (runFacts) inside [w0, w1]: each run from its start to its end (w1 while it
+ * runs), minus the time it waited at a human gate. → { active, gates } merged intervals [a, b] (ms).
+ * One implementation for the Night watch and the 24/7 meter (src/occupancy.js).
+ */
+function activeIntervals(facts, w0, w1) {
+  const clip = ([a, b]) => [Math.max(a, w0), Math.min(b, w1)];
+  const gates = union(facts.flatMap((f) => f.gates.map((g) => clip([g.requested, g.resolved ?? f.end ?? w1]))));
+  const active = union(facts.map((f) => clip([f.start, f.end ?? w1])).flatMap(([a, b]) => {
+    let pieces = [[a, b]];
+    for (const [ga, gb] of gates) pieces = pieces.flatMap(([x, y]) => (gb <= x || ga >= y ? [[x, y]] : [[x, ga], [gb, y]]).filter(([p, q]) => q > p));
+    return pieces;
+  }));
+  return { active, gates };
+}
+
+/**
  * The metrics of one night. `night` from nightsOf; `log` the whole night log; `runs` [{ runId,
  * events }] (the runs' events.jsonl) or their runFacts; `usage` the Oracle's usage.jsonl lines.
  * Window W = startedAt → endedAt (or the
@@ -253,13 +269,7 @@ function nightMetrics({ night, log = [], runs = [], usage = [], now = Date.now()
   const clip = ([a, b]) => [Math.max(a, w0), Math.min(b, w1)];
 
   // active time: each run from its start to its end, minus the time it waited at a gate
-  const gateIntervals = union(facts.flatMap((f) => f.gates.map((g) => clip([g.requested, g.resolved ?? w1]))));
-  const runIntervals = facts.map((f) => clip([f.start, f.end ?? w1]));
-  const active = union(runIntervals.flatMap(([a, b]) => {
-    let pieces = [[a, b]];
-    for (const [ga, gb] of gateIntervals) pieces = pieces.flatMap(([x, y]) => (gb <= x || ga >= y ? [[x, y]] : [[x, ga], [gb, y]]).filter(([p, q]) => q > p));
-    return pieces;
-  }));
+  const { active, gates: gateIntervals } = activeIntervals(facts, w0, w1);
 
   // incidents: detected in W; progress resumed = the next progress event of the run, or a new run of its project
   const actions = of('oracle.action');
@@ -405,7 +415,9 @@ function morningSummary(m, { proposed = 0 } = {}) {
 }
 
 module.exports = {
+  activeIntervals,
   BASELINE,
+  covers,
   DEFAULT_PERMISSIONS,
   INCIDENT_KINDS,
   incidentOf,
@@ -428,4 +440,6 @@ module.exports = {
   STALL_MS,
   stalledRuns,
   targetOf,
+  total,
+  union,
 };

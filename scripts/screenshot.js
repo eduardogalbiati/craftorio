@@ -18,7 +18,8 @@
 //                      than the Dashboard, whose panel reads the answers; the Edit form of its
 //                      memory: --click "#oracle-dock [data-oracle-memory]")
 //   --tab <name>       settings: general | agents | execution | about; workflows: runs | definitions;
-//                      analytics: usage | performance (performance: a demo git repository and a marker)
+//                      analytics: usage | performance | run | occupancy (performance: a demo git repository and a
+//                      marker; run: AI Development runs, the newest shown; occupancy: 30 days of runs and nights)
 //   --mode <name>      backlog: list | kanban | roadmap | epics
 //   --run <mock|dir>   run-chat: a simulated software-development run (default) or a copy of a run folder
 //   --workflow <file>  the workflow of the simulated run (default software-development.yaml)
@@ -100,7 +101,8 @@ const VIEWS = {
   oracle: {},
   // the Night watch (#172): two replayed nights
   nightwatch: {},
-  analytics: { tabs: ['usage', 'performance'] },
+  // run: one AI Development run in depth against its workflow's runs (#228); occupancy: the 24/7 tab (#188)
+  analytics: { tabs: ['usage', 'performance', 'run', 'occupancy'] },
   backlog: { modes: ['list', 'kanban', 'roadmap', 'epics'] },
   workflows: { tabs: ['runs', 'definitions'] },
   settings: { tabs: ['general', 'agents', 'execution', 'about'] },
@@ -1189,6 +1191,13 @@ function main() {
     if (args.view === 'workflows') demoPipelines(ws, appDir);
     if (args.view === 'settings') demoDepsCache(ws, project.id);
     if (args.view === 'analytics' && args.tab === 'performance') demoPerformanceRuns(ws, project.folder, project.id);
+    // the Run (#228) and 24/7 (#188) tabs (an app before them: nothing)
+    if (args.view === 'analytics' && ['run', 'occupancy'].includes(args.tab)) {
+      try {
+        const demo = src('analytics-demo');
+        if (args.tab === 'run') demo.writeDemoRunInDepth(ws, project.id); else demo.writeDemoOccupancy(ws, project.id);
+      } catch (e) { if (e.code !== 'MODULE_NOT_FOUND') throw e; }
+    }
     // the Night watch's nights (#172): its screen, and the Dashboard's morning summary (an app before it: nothing)
     if (['dashboard', 'nightwatch'].includes(args.view)) {
       try { src('night-watch-demo').writeDemoNights(ws, project.id); } catch (e) { if (e.code !== 'MODULE_NOT_FOUND') throw e; }

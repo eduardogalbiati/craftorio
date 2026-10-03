@@ -4,11 +4,21 @@
 // Two tabs (the selected one is remembered with the scope and range): Usage (the above) and Repository
 // performance (#159: per project, the files most runs edit, the runs that hit a merge conflict, the
 // runs at once, split before/after a marker; channel analytics:performance, src/repo-performance.js).
+// #197: the analysed project is picked at the top of that tab (remembered per window), and each file
+// over the shared limit has a recommendation, "Create issue" (or its open issue) and "Ask for a plan".
+// More tabs register in window.AnalyticsTabs before this file loads: Run (#228, analytics-run.js) and
+// 24/7 (#188, analytics-occupancy.js), each { id, label, order, load(), render(body), sub(), context() }.
+// window.openAnalytics({ tab, runId }) opens a tab (the top bar's 24/7 chip, "Open in Analytics").
 // Registers itself with registerView (view-registry.js).
-// Uses app.js globals: api, esc, fmtTok, fmtUsd, fmtDur, fmtNum, dateOf, errMsg, markdownHtml, state, window.showRun.
+// Uses app.js globals: api, esc, fmtTok, fmtUsd, fmtDur, fmtNum, dateOf, errMsg, markdownHtml, state, window.showRun, openDrawer.
 (() => {
   const $a = (sel) => document.querySelector(sel);
   const LS = 'multiagent.analytics';
+  // the analysed project is remembered per window (#197)
+  const SS_PROJECT = 'multiagent.analytics.project';
+  const extraTabs = () => Object.values(window.AnalyticsTabs || {}).sort((a, b) => (a.order || 0) - (b.order || 0));
+  const extraTab = (id) => (window.AnalyticsTabs || {})[id] || null;
+  const TAB_IDS = () => ['usage', 'performance', ...extraTabs().map((t) => t.id)];
   const DAY = 864e5;
   const PROVIDER_COLOR = { claude: 'var(--orange)', codex: 'var(--green)', grok: 'var(--purple)' };
   const PROVIDER_LABEL = { claude: 'Claude', codex: 'Codex', grok: 'Grok' };
@@ -21,11 +31,18 @@
     data: null, error: null, loading: false,
     report: null, reportError: null, analyzing: false,
     sortKey: 'tokens',
-    tab: saved.tab === 'performance' ? 'performance' : 'usage',
-    project: saved.project || null, marker: saved.marker || '',
+    tab: TAB_IDS().includes(saved.tab) ? saved.tab : 'usage',
+    project: (() => { try { return sessionStorage.getItem(SS_PROJECT) || saved.project || null; } catch { return saved.project || null; } })(),
+    marker: saved.marker || '',
     perf: null, perfError: null, perfLoading: false, perfSort: 'runs',
+    perfIssues: null, plan: null, planError: null, planning: false,
   };
-  const persist = () => { try { localStorage.setItem(LS, JSON.stringify({ scope: ax.scope, days: ax.days, tab: ax.tab, project: ax.project, marker: ax.marker })); } catch { /* ignore */ } };
+  const persist = () => {
+    try {
+      localStorage.setItem(LS, JSON.stringify({ scope: ax.scope, days: ax.days, tab: ax.tab, project: ax.project, marker: ax.marker }));
+      if (ax.project) sessionStorage.setItem(SS_PROJECT, ax.project);
+    } catch { /* ignore */ }
+  };
   const today = () => new Date().toISOString().slice(0, 10);
   const daysBack = (n) => new Date(Date.now() - (n - 1) * DAY).toISOString().slice(0, 10);
   const pct = (x) => (x == null ? '—' : `${Math.round(x * 100)}%`);
@@ -38,6 +55,13 @@
 
   async function load() {
     if (ax.tab === 'performance') return loadPerf();
+    const extra = extraTab(ax.tab);
+    if (extra) {
+      renderControls();
+      await extra.load();
+      if (ax.tab === extra.id) render();
+      return;
+    }
     ax.loading = true;
     renderControls();
     try {
@@ -64,28 +88,44 @@
     renderControls();
     try {
       ax.perf = await api.getRepositoryPerformance({ projectId: ax.project, marker: ax.marker, ...range() });
+      if (ax.project !== (ax.perf.project?.id || null)) ax.plan = null;
       ax.project = ax.perf.project?.id || null;
       ax.perfError = null;
+      persist();
     } catch (e) { ax.perfError = errMsg(e); }
     ax.perfLoading = false;
     render();
+    loadPerfIssues();
+  }
+
+  // the project's open issues, so a file that already has one links to it instead of "Create issue"
+  async function loadPerfIssues() {
+    const id = ax.project;
+    if (!id || !ax.perf?.files?.some((f) => f.recommendation) || !api.getBacklog) return;
+    try {
+      const data = await api.getBacklog(id);
+      if (ax.project !== id) return;
+      ax.perfIssues = (data?.issues || []).filter((i) => !i.state || String(i.state).toLowerCase() === 'open');
+      if (ax.tab === 'performance' && $a('#an-files')) $a('#an-files').innerHTML = filesTable(ax.perf.files, ax.perf.sharedLimit);
+    } catch { ax.perfIssues = null; }
   }
 
   function renderControls() {
     const r = range();
     const perf = ax.tab === 'performance';
+    const extra = extraTab(ax.tab);
     document.querySelectorAll('#view-analytics [data-an-tab]').forEach((b) => {
       b.classList.toggle('active', b.dataset.anTab === ax.tab);
       b.setAttribute('aria-selected', String(b.dataset.anTab === ax.tab));
     });
-    document.querySelectorAll('#view-analytics .an-usage-only').forEach((el) => el.classList.toggle('hidden', perf));
+    document.querySelectorAll('#view-analytics .an-usage-only').forEach((el) => el.classList.toggle('hidden', perf || !!extra));
     document.querySelectorAll('#view-analytics .an-perf-only').forEach((el) => el.classList.toggle('hidden', !perf));
+    document.querySelectorAll('#view-analytics .an-range').forEach((el) => el.classList.toggle('hidden', !!extra));
+    if (extra) {
+      $a('#an-sub').textContent = extra.sub();
+      return;
+    }
     if (perf) {
-      const sel = $a('#an-project');
-      const list = ax.perf?.projects || [];
-      sel.innerHTML = list.length ? list.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('') : '<option value="">No projects</option>';
-      sel.value = ax.project || '';
-      sel.disabled = !list.length;
       if (document.activeElement !== $a('#an-marker')) $a('#an-marker').value = ax.marker;
       $a('#an-from').value = r.from;
       $a('#an-to').value = r.to;
@@ -149,6 +189,7 @@
   function render() {
     renderControls();
     if (ax.tab === 'performance') { renderPerf(); return; }
+    if (extraTab(ax.tab)) { extraTab(ax.tab).render($a('#an-body')); return; }
     const body = $a('#an-body');
     if (ax.error) { body.innerHTML = `<div class="usage-unavailable">Could not load analytics: ${esc(ax.error)}</div>`; return; }
     const a = ax.data;
@@ -233,13 +274,71 @@
     const sort = PERF_SORTS[ax.perfSort];
     const rows = [...files].sort(sort ? (a, b) => sort(b) - sort(a) || a.file.localeCompare(b.file) : (a, b) => a.file.localeCompare(b.file));
     const th = (key, label, num = true) => `<th class="${num ? 'num ' : ''}an-sort${ax.perfSort === key ? ' active' : ''}" data-an-psort="${key}">${label}</th>`;
-    return `<table class="u-table an-sessions an-files"><thead><tr>${th('file', 'File', false)}${th('runs', 'Runs that edited it')}<th class="num">% of runs</th>${th('lines', 'Lines now')}</tr></thead><tbody>
+    return `<table class="u-table an-sessions an-files"><thead><tr>${th('file', 'File', false)}${th('runs', 'Runs that edited it')}<th class="num">% of runs</th>${th('lines', 'Lines now')}<th>Recommendation</th></tr></thead><tbody>
       ${rows.map((f) => `<tr>
         <td class="an-title"><span class="an-file" title="${esc(f.file)}">${esc(f.file)}</span>${f.generated ? ' <span class="badge" title="A tool writes this file (a generated list): runs edit it through the generator">generated</span>' : ''}${f.lines == null ? ' <span class="badge" title="No longer in the repository">deleted</span>' : ''}</td>
         <td class="num">${f.runs}</td>
         <td class="num">${f.runs > 1 && f.share > limit ? `<span class="badge warn" title="More than ${pct(limit)} of the runs edit it">${pct(f.share)}</span>` : pct(f.share)}</td>
         <td class="num">${f.lines == null ? '—' : fmtNum(f.lines)}</td>
+        <td class="an-rec-cell">${recommendationCell(f)}</td>
       </tr>`).join('')}</tbody></table>`;
+  }
+
+  // #197: what to do with a file over the shared limit, its evidence, and its issue (open or to create)
+  const REC_LABEL = { generated: 'Generated', registry: 'Registry', large: 'Large file', stylesheet: 'Stylesheet', doc: 'Doc', test: 'Test file', hotspot: 'Hot spot' };
+  const evidenceText = (e) => `${pct(e.share)} of the runs (${e.runs})${e.lines != null ? ` · ${fmtNum(e.lines)} lines now` : ''} · ${e.conflicts ? `named by ${e.conflicts} merge conflict${e.conflicts === 1 ? '' : 's'}` : 'no conflict named it'}`;
+  function openIssueFor(file) {
+    return (ax.perfIssues || []).find((i) => `${i.title || ''}\n${i.body || ''}`.includes(file)) || null;
+  }
+  function recommendationCell(f) {
+    const r = f.recommendation;
+    if (!r) return '<span class="muted small">—</span>';
+    const issue = openIssueFor(f.file);
+    const action = issue
+      ? `<a href="#" class="link-btn" data-pr-url="${esc(issue.url || '')}" title="${esc(issue.title || '')}">Open issue #${esc(issue.number)}</a>`
+      : `<button type="button" class="btn sm ghost" data-an-issue="${esc(f.file)}" data-testid="an-create-issue">Create issue</button>`;
+    return `<div class="an-rec" data-testid="an-recommendation"><span class="badge warn">${esc(REC_LABEL[r.kind] || r.kind)}</span> <span>${esc(r.text)}</span>
+      <div class="muted small">${esc(evidenceText(r.evidence))}</div><div class="an-rec-actions">${action}</div></div>`;
+  }
+  function createIssue(file) {
+    const f = ax.perf?.files.find((x) => x.file === file);
+    if (!f?.recommendation || typeof openDrawer !== 'function') return;
+    const r = f.recommendation;
+    const request = `Stop parallel runs colliding on ${file}: ${r.text}\n\nEvidence (Analytics › Repository performance, ${ax.perf.from} to ${ax.perf.to}): edited by ${pct(r.evidence.share)} of the runs with commits (${r.evidence.runs} of ${ax.perf.runsWithCommits})${r.evidence.lines != null ? `, ${r.evidence.lines} lines now` : ''}, named by ${r.evidence.conflicts} merge conflict(s). The shared limit is ${pct(ax.perf.sharedLimit)} of the runs.`;
+    openDrawer({ workflow: 'issue-tracker.yaml', project: ax.project, inputs: { request } });
+  }
+
+  async function askPlan() {
+    const files = (ax.perf?.files || []).filter((f) => f.recommendation).map((f) => f.file);
+    if (!files.length || ax.planning) return;
+    if (!window.confirm(`The supervisor (Claude Code) will read the ${files.length} file(s) over the limit and their recommendations, and suggest a plan. This calls a real model and costs money. Continue?`)) return;
+    ax.planning = true; ax.planError = null;
+    renderPlan();
+    try { ax.plan = await api.askPerformancePlan({ projectId: ax.project, files, mock: false }); } catch (e) { ax.planError = errMsg(e); }
+    ax.planning = false;
+    renderPlan();
+  }
+  function renderPlan() {
+    const box = $a('#an-plan-box');
+    if (!box) return;
+    const btn = $a('#an-plan');
+    if (btn) { btn.disabled = ax.planning; btn.textContent = ax.planning ? 'Asking…' : 'Ask for a plan'; }
+    if (ax.planning) { box.innerHTML = '<div class="card an-card an-report"><p class="muted">The supervisor is reading the files over the limit… this can take a few minutes.</p></div>'; return; }
+    if (ax.planError) { box.innerHTML = `<div class="usage-unavailable" role="alert">The plan failed: ${esc(ax.planError)}</div>`; return; }
+    box.innerHTML = ax.plan ? `<div class="card an-card an-report"><div class="md">${markdownHtml(ax.plan.markdown || '')}</div>${ax.plan.reportPath ? `<p class="muted small">Saved in ${esc(ax.plan.reportPath)}${ax.plan.costUsd ? ` · ${fmtUsd(ax.plan.costUsd)}` : ''}</p>` : ''}</div>` : '';
+  }
+
+  // #197: the analysed project, at the top of the tab, and what the page counts
+  function projectHeader(p) {
+    const list = p.projects || [];
+    const options = list.map((x) => `<option value="${esc(x.id)}" title="${esc(x.folder || 'No folder')}"${x.isGit ? '' : ' disabled'}>${esc(x.name)}${x.isGit ? '' : ` — ${esc(x.reason || 'not a git repository')}`}</option>`).join('');
+    const pr = p.project;
+    const summary = pr ? `<b>${esc(pr.name)}</b> · ${fmtNum(p.runs || 0)} run${p.runs === 1 ? '' : 's'} · ${esc(p.from || '')} to ${esc(p.to || '')}` : '';
+    return `<div class="card an-project-pick">
+      <label class="an-field"><span class="small muted">Project analysed</span>
+        <select id="an-project" data-testid="an-project" aria-label="Project analysed" title="${esc(pr?.folder || '')}">${options || '<option value="">No projects</option>'}</select></label>
+      <div class="an-project-summary" data-testid="an-project-summary"><div>${summary}</div>${pr?.folder ? `<div class="muted small mono an-file" title="${esc(pr.folder)}">${esc(pr.folder)}</div>` : ''}</div>
+    </div>`;
   }
 
   function conflictsTable(list) {
@@ -297,11 +396,13 @@
     if (!p) { body.innerHTML = '<p class="muted">Loading…</p>'; return; }
     if (!p.project) { body.innerHTML = '<div class="empty-state"><b>No projects yet</b><p class="muted">Add a project with a git repository: its runs\' commits are measured here.</p></div>'; return; }
     const notGit = p.project.isGit ? '' : `<div class="usage-unavailable">${esc(p.project.name)}'s folder is not a git repository: the files runs edit cannot be read.</div>`;
+    const head = projectHeader(p);
     if (p.empty) {
-      body.innerHTML = `${notGit}<div class="empty-state"><b>No runs with commits on this repository in this range</b><p class="muted">Runs count once their work is merged (a local merge or a merged PR/MR). Try a longer range.</p></div>`;
+      body.innerHTML = `${head}${notGit}<div class="empty-state"><b>No runs with commits on this repository in this range</b><p class="muted">Runs count once their work is merged (a local merge or a merged PR/MR). Try a longer range.</p></div>`;
       return;
     }
-    body.innerHTML = `${notGit}
+    const over = p.files.filter((f) => f.recommendation).length;
+    body.innerHTML = `${head}${notGit}
       <div class="an-totals">
         ${stat('Runs', fmtNum(p.runs), `${p.runsWithCommits} with commits on ${p.project.name}`)}
         ${stat('Busiest file', p.topFile ? pct(p.topFile.share) : '—', p.topFile ? `${p.topFile.file}: edited by ${pct(p.topFile.share)} of the runs with commits` : '')}
@@ -311,12 +412,15 @@
         ${stat('Peak of runs at once', fmtNum(p.peak))}
       </div>
       ${compareCard(p.compare, p.sharedLimit)}
-      <h3 class="s-subtitle">Files most runs edit <span class="muted small">(of ${p.runsWithCommits} runs with commits; each run counts once per file)</span></h3>
+      <div class="row an-card-head"><h3 class="s-subtitle">Files most runs edit <span class="muted small">(of ${p.runsWithCommits} runs with commits; each run counts once per file)</span></h3>
+        ${over ? `<button type="button" class="btn" id="an-plan" data-testid="an-plan" title="The supervisor suggests a plan for the ${over} file(s) over ${pct(p.sharedLimit)} (a real model call: it asks first)">Ask for a plan</button>` : ''}</div>
+      <div id="an-plan-box"></div>
       <div class="card table-wrap" id="an-files">${filesTable(p.files, p.sharedLimit)}</div>
       <h3 class="s-subtitle">Merge conflicts</h3>
       <div class="card table-wrap">${conflictsTable(p.conflicts)}</div>
       <h3 class="s-subtitle">Parallel work</h3>
       ${parallelCard(p.parallel)}`;
+    renderPlan();
   }
 
   function wire() {
@@ -330,6 +434,9 @@
       const tab = e.target.closest('[data-an-tab]');
       const psort = e.target.closest('[data-an-psort]');
       const run = e.target.closest('[data-an-run]');
+      const issue = e.target.closest('[data-an-issue]');
+      if (issue) createIssue(issue.dataset.anIssue);
+      if (e.target.closest('#an-plan')) askPlan();
       if (tab && tab.dataset.anTab !== ax.tab) { ax.tab = tab.dataset.anTab; persist(); render(); load(); }
       if (psort && ax.perf) {
         ax.perfSort = psort.dataset.anPsort;
@@ -353,7 +460,12 @@
     };
     $a('#an-from').addEventListener('change', onDate);
     $a('#an-to').addEventListener('change', onDate);
-    $a('#an-project').addEventListener('change', (e) => { ax.project = e.target.value || null; persist(); load(); });
+    // the project select is redrawn with the tab (#197): one listener on the view
+    view.addEventListener('change', (e) => {
+      if (e.target.id !== 'an-project') return;
+      ax.project = e.target.value || null; ax.perfIssues = null; ax.plan = null; ax.planError = null;
+      persist(); load();
+    });
     $a('#an-marker').addEventListener('change', (e) => { ax.marker = e.target.value.trim(); persist(); load(); });
     $a('#an-refresh').addEventListener('click', load);
     $a('#an-analyze').addEventListener('click', analyze);
@@ -371,16 +483,15 @@
           </div>
           <div class="row an-controls">
             <div class="seg an-usage-only" role="group" aria-label="Analytics scope"><button type="button" data-an-scope="orchestrator">Orchestrator</button><button type="button" data-an-scope="machine">This machine</button></div>
-            <label class="an-date small muted an-perf-only hidden">Repository <select id="an-project" aria-label="Project"></select></label>
-            <div class="seg sm" role="group" aria-label="Quick range"><button type="button" data-an-days="7">7 days</button><button type="button" data-an-days="30">30 days</button><button type="button" data-an-days="90">90 days</button></div>
-            <label class="an-date small muted">From <input type="date" id="an-from" /></label>
-            <label class="an-date small muted">To <input type="date" id="an-to" /></label>
+            <div class="seg sm an-range" role="group" aria-label="Quick range"><button type="button" data-an-days="7">7 days</button><button type="button" data-an-days="30">30 days</button><button type="button" data-an-days="90">90 days</button></div>
+            <label class="an-date small muted an-range">From <input type="date" id="an-from" /></label>
+            <label class="an-date small muted an-range">To <input type="date" id="an-to" /></label>
             <label class="an-date small muted an-perf-only hidden" title="A date (YYYY-MM-DD) or a commit of the repository: every number is split into before and after it">Before/after <input type="text" id="an-marker" class="an-marker" placeholder="date or commit" /></label>
             <button class="btn" id="an-refresh" type="button">Refresh</button>
             <button class="btn primary an-usage-only" id="an-analyze" type="button" title="The supervisor writes a report on these sessions (a real model call)">Ask the supervisor</button>
           </div>
         </div>
-        <div class="tabs page-tabs" role="tablist" aria-label="Analytics"><button type="button" class="tab" role="tab" data-an-tab="usage">Usage</button><button type="button" class="tab" role="tab" data-an-tab="performance">Repository performance</button></div>
+        <div class="tabs page-tabs" role="tablist" aria-label="Analytics"><button type="button" class="tab" role="tab" data-an-tab="usage">Usage</button><button type="button" class="tab" role="tab" data-an-tab="performance">Repository performance</button>${extraTabs().map((t) => `<button type="button" class="tab" role="tab" data-an-tab="${t.id}" data-testid="an-tab-${t.id}">${t.label}</button>`).join('')}</div>
         <div id="an-body"></div>
       </section>`,
     mount: wire,
@@ -390,8 +501,16 @@
     },
   });
   // what the Supervisor is told about this screen (supervisor-chat.js)
+  // opens Analytics on a tab: the top bar's 24/7 chip, "Open in Analytics" of a run (#228)
+  window.openAnalytics = ({ tab = 'usage', runId = null } = {}) => {
+    if (TAB_IDS().includes(tab)) ax.tab = tab;
+    if (runId) extraTab('run')?.select?.(runId);
+    persist();
+    showView('analytics');
+  };
   window.analyticsContext = () => {
     const r = range();
+    if (extraTab(ax.tab)) return extraTab(ax.tab).context();
     if (ax.tab === 'performance') return `Repository performance tab, ${ax.perf?.project?.name || 'no project'}, range ${r.from} to ${r.to}${ax.marker ? `, split before/after ${ax.marker}` : ''}`;
     return `range ${r.from} to ${r.to}, ${ax.scope === 'machine' ? 'every CLI session on this machine' : 'the orchestrator\'s runs'}`;
   };

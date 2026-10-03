@@ -175,6 +175,8 @@ const DEFAULT_SETTINGS = {
   concurrentRuns: { enabled: false, max: 2, perProject: null, countSimulations: false },
   // Keep awake (#162, src/keep-awake.js): no sleep while runs, a roadmap or a queue have work to do
   keepAwake: false,
+  // the top bar's 24/7 chip (#188, src/renderer/occupancy-chip.js): the last 24 h occupancy
+  showOccupancyChip: true,
   // warn when an agent shows no output for this long while a command it started is waiting; 0 = off
   idleWarningMinutes: 5,
   // monthly limits per provider (see src/usage.js); null = no limit
