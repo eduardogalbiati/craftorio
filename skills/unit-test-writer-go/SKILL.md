@@ -19,7 +19,9 @@ used_by: "test writer"
 | Coverage (only when asked) | `go test -cover ./...` |
 
 Run only the tests you write (`-run`); the whole suite is the orchestrator's when the workflow has
-a suite step (see testing-principles: time budget).
+a suite step (see testing-principles: time budget). Which tests and how to read them: the code →
+tests map when the project has one, and failures-only output (`go test` without `-v`, read the
+`--- FAIL` lines), never the whole log (testing-principles: the code → tests map, agent mode).
 Also run `go vet ./...`: vet findings count as failures.
 Dependencies: a fresh checkout (each run has its own worktree) may lack modules; `go mod download`
 first if `go test` reports missing modules (the module cache is shared, so this is usually instant).

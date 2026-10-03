@@ -27,6 +27,8 @@ The prompt holds a backlog report:
 
 Your working directory is the project's repository, read-only. To estimate which files an issue
 touches, read `docs/agents/code-map.md` (or the README) and grep for the names the issue uses.
+The tests those files reach are in `docs/agents/test-map.md` (the code → tests map: grep it for the
+files, don't read it whole): issues whose files share many tests conflict in their test step too.
 Read only what you need: every file costs the owner money.
 
 ## Group what belongs together

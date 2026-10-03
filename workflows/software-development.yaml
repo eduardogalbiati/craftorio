@@ -295,7 +295,10 @@ agents:
       per line, sorted; document a file in its header comment or a topic doc, not in an index.
       Tests belong to the test writer, who runs after the code review: never create, edit or
       delete test files (the orchestrator refuses a turn that changes one) and do not run the
-      full test suite. To check your change, run a focused existing test or the build. Describe
+      full test suite. To check your change, run a focused existing test or the build: the tests
+      of the files you change come from the project's code → tests map when it has one
+      (docs/agents/test-map.md: search it, don't read it whole), and a test run in agent mode
+      prints one failures-only JSON line (read it, not the log). Describe
       what should be tested (behaviours, edge cases, files) in `test_notes` when asked.
       Keep your context small (context-economy): on a task that touches more than about three
       files, start one exploration sub-agent before your first edit and have it report the

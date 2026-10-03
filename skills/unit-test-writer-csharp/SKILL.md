@@ -22,7 +22,10 @@ Assertions: `FluentAssertions`/`Shouldly` if present.
 | Coverage (only when asked) | `dotnet test --collect:"XPlat Code Coverage"` |
 
 Run only the tests you write (`--filter`); the whole suite is the orchestrator's when the workflow
-has a suite step (see testing-principles: time budget).
+has a suite step (see testing-principles: time budget). Which tests and how to read them: the code
+→ tests map when the project has one, and failures-only output (`dotnet test --logger
+"console;verbosity=minimal"`, read the `Failed` lines), never the whole log (testing-principles:
+the code → tests map, agent mode).
 Dependencies: a fresh checkout (each run has its own worktree) has no `obj/` folders; `dotnet test`
 restores implicitly, but run `dotnet restore` (with `--locked-mode` when `packages.lock.json`
 exists) first if a restore error appears.

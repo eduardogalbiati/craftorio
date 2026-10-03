@@ -4,7 +4,11 @@
 //                            per screen folder (src/renderer/views/<view>/). Derived and
 //                            gitignored (nobody reads it at runtime): rebuilt by `prepare`,
 //                            `prestart`, `pretest` and `prebuild`, so a pull never leaves it stale.
-//   README.md tables         between `<!-- generated:<name> -->` markers: the bundled skills (each
+//   docs/agents/test-map.md  (#219) the static code → tests map: for every source file, the test
+//                            files that import it directly or transitively (the affected tests'
+//                            import graph, src/engine/affected-tests.js testMap). Derived and
+//                            gitignored like the code map; agents read it instead of guessing.
+//   README.md tables        between `<!-- generated:<name> -->` markers: the bundled skills (each
 //                            skills/*/SKILL.md frontmatter: name, summary, used_by) and the screens
 //                            (docs/screens/*.md: menu, order, text). Committed (GitHub readers);
 //                            a test fails when they are out of date.
@@ -32,9 +36,11 @@
 const fs = require('fs');
 const path = require('path');
 const yaml = require('js-yaml');
+const { testMap, testMapMarkdown } = require('../src/engine/affected-tests');
 
 const ROOT = path.join(__dirname, '..');
 const CODE_MAP = path.join('docs', 'agents', 'code-map.md');
+const TEST_MAP = path.join('docs', 'agents', 'test-map.md');
 const SUFFIXES = ['js', 'python', 'go', 'java', 'csharp', 'gh', 'gl'];
 // Source folders mapped file by file (their .js files, recursively).
 const SOURCE_DIRS = ['src', 'scripts'];
@@ -330,6 +336,9 @@ function main(argv = process.argv.slice(2), root = ROOT) {
     return problems.length ? 1 : 0;
   }
   fs.writeFileSync(path.join(root, CODE_MAP), codeMap(root));
+  // a project outside git or without tests gets a map that says why there is none
+  const map = testMap({ root });
+  fs.writeFileSync(path.join(root, TEST_MAP), testMapMarkdown(map, { generatedBy: '`npm run docs` (scripts/docs.js)' }));
   if (!derivedOnly) {
     fs.writeFileSync(path.join(root, 'README.md'), renderReadme(read(root, 'README.md'), root));
     if (hasIndex) fs.writeFileSync(path.join(root, INDEX_HTML), renderIndexHtml(read(root, INDEX_HTML), root));

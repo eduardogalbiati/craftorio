@@ -35,11 +35,16 @@
 // Affected tests (#212): with `files`, only those test files run (`scope: files`, the step's
 // `scope: affected` rounds and agents' test requests, see src/engine/affected-tests.js); the output
 // says which files and why (`selection`), and `passed` / `failed` are the runner's counts.
+// Agent mode (#219): the suite gets MULTIAGENT_AGENT_MODE=1 and MULTIAGENT_TEST_HUMAN_LOG (<log>.human.log);
+// a runner that knows them (this project's scripts/test.js) prints one failures-only JSON line,
+// which `parseFailures` / `parseCounts` read before any text format (`human_log`, `file_counts`).
+// Red check (#220): `redCheck` sorts the test files of a tests-first run into red / green / broken.
 
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
+const { parseAgentReport } = require('./agent-test-report');
 const { processTreeCommands } = require('./processes');
 const { killTree } = require('./providers');
 
@@ -91,7 +96,19 @@ function fileOf(loc, cwd) {
 }
 
 // The failing tests of a suite's output: [{ test, file, error }], at most MAX_FAILURES, deduplicated.
+// The agent reporter's JSON (#219) is read as is, with the failure's `line` and `kind` (file: a test
+// file that could not run); the runners' text formats are scraped otherwise.
 function parseFailures(text, { cwd } = {}) {
+  const report = parseAgentReport(clean(text));
+  if (report) {
+    return report.failures.slice(0, MAX_FAILURES).map((f) => ({
+      test: String(f.test || ''),
+      file: f.file ? fileOf(f.file, cwd) : '',
+      error: [f.error, f.expected !== undefined ? `expected: ${f.expected}, actual: ${f.actual}` : ''].filter(Boolean).join('\n'),
+      line: f.line ?? null,
+      kind: f.kind || 'test',
+    }));
+  }
   const lines = clean(text).split(/\r?\n/);
   const out = [];
   const add = (test, file, error) => {
@@ -196,8 +213,9 @@ function isFullSuiteCommand(cmd, suiteCommand) {
 // and Chromium's variables, npm's (the app started with `npm start`), the agents' CLI marker, a test
 // runner context, the app's own MULTIAGENT_* (the scratch workspace and user data every test process
 // would share, an inherited screenshot slot); inspector flags are cut from NODE_OPTIONS (node --test
-// runs one file at a time under an inspector). Set: MULTIAGENT_SIMULATION_ONLY=1 and, with locksDir,
-// MULTIAGENT_LOCKS_DIR (the suite's own screenshot slot). → { env, removed: [names] }
+// runs one file at a time under an inspector). Set: MULTIAGENT_SIMULATION_ONLY=1, MULTIAGENT_AGENT_MODE=1
+// (#219: a runner that knows it prints the failures-only JSON, src/engine/agent-test-report.js) and,
+// with locksDir, MULTIAGENT_LOCKS_DIR (the suite's own screenshot slot). → { env, removed: [names] }
 const DROP_ENV = /^(ELECTRON_|CHROME_CRASHPAD|NPM_|CLAUDECODE$|NODE_TEST_CONTEXT$|VSCODE_INSPECTOR_OPTIONS$|MULTIAGENT_)/i;
 function suiteEnv(env = {}, { locksDir } = {}) {
   const out = {};
@@ -214,8 +232,9 @@ function suiteEnv(env = {}, { locksDir } = {}) {
     out[k] = v;
   }
   out.MULTIAGENT_SIMULATION_ONLY = '1';
+  out.MULTIAGENT_AGENT_MODE = '1';
   if (locksDir) out.MULTIAGENT_LOCKS_DIR = locksDir;
-  return { env: out, removed: removed.filter((k) => !/^MULTIAGENT_(SIMULATION_ONLY|LOCKS_DIR)$/i.test(k)).sort() };
+  return { env: out, removed: removed.filter((k) => !/^MULTIAGENT_(SIMULATION_ONLY|AGENT_MODE|LOCKS_DIR)$/i.test(k)).sort() };
 }
 
 // The test files a list of processes runs, one per process (a runner listing many files is not one):
@@ -272,6 +291,8 @@ function runCommand({ command, cwd, env, timeoutMs, signal, logFile }) {
 }
 
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+// where a runner in agent mode writes its human-readable report (#219): next to the suite's log
+const humanLog = (logFile) => String(logFile || '').replace(/(\.log)?$/, '.human.log');
 
 // The simulated suite of a mock run: the log and its result
 function mockSuite(result, preexisting) {
@@ -414,6 +435,8 @@ function noteFailingOnMain(file, { project, base, commit, runId, failures }) {
 // none is recognized.
 function parseCounts(text) {
   const t = clean(text);
+  const report = parseAgentReport(t);
+  if (report) return { passed: report.passed ?? 0, failed: report.failed ?? 0 };
   const last = (re) => { const all = [...t.matchAll(re)]; return all.length ? Number(all[all.length - 1][1]) : null; };
   const node = { passed: last(/^\s*(?:ℹ|#) pass (\d+)/gm), failed: last(/^\s*(?:ℹ|#) fail (\d+)/gm) };
   if (node.passed != null || node.failed != null) return { passed: node.passed ?? 0, failed: node.failed ?? 0 };
@@ -477,7 +500,7 @@ async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = '
     fs.mkdirSync(path.dirname(logFile), { recursive: true });
     // what the suite gets, so a slow round can be compared with a shell (#210)
     const about = mock ? '' : `# engine: os.availableParallelism()=${os.availableParallelism()}, cpus=${os.cpus().length}; timeout ${Math.round(out.timeout_ms / 60e3)} min (${timeoutWhy})\n`
-      + `# env: removed ${childEnv.removed.join(', ') || 'nothing'}; set MULTIAGENT_SIMULATION_ONLY=1, MULTIAGENT_LOCKS_DIR=${childEnv.env.MULTIAGENT_LOCKS_DIR}\n`;
+      + `# env: removed ${childEnv.removed.join(', ') || 'nothing'}; set MULTIAGENT_SIMULATION_ONLY=1, MULTIAGENT_AGENT_MODE=1, MULTIAGENT_LOCKS_DIR=${childEnv.env.MULTIAGENT_LOCKS_DIR}, MULTIAGENT_TEST_HUMAN_LOG=${humanLog(logFile)}\n`;
     fs.writeFileSync(logFile, `$ ${out.command}${mock ? '   (simulated: nothing was run)' : ''}\n${about}`);
   }
   const t0 = Date.now();
@@ -490,11 +513,15 @@ async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = '
     if (logFile) fs.appendFileSync(logFile, text);
   } else {
     log('info', `suite: ${out.command} (round ${round}, timeout ${Math.round(out.timeout_ms / 60e3)} min, log ${out.log})`);
-    const r = await run({ command: out.command, cwd, env: childEnv.env, timeoutMs: out.timeout_ms, signal, logFile });
+    const r = await run({ command: out.command, cwd, env: { ...childEnv.env, MULTIAGENT_TEST_HUMAN_LOG: humanLog(logFile) }, timeoutMs: out.timeout_ms, signal, logFile });
     out.exit_code = r.code;
     out.timed_out = r.timedOut;
     out.running = r.running || [];
     try { text = fs.readFileSync(logFile, 'utf8'); } catch { text = ''; }
+    // agent mode (#219): the log holds the JSON, the human-readable report is next to it
+    const report = parseAgentReport(clean(text));
+    if (report?.files) out.file_counts = report.files;
+    if (report && fs.existsSync(humanLog(logFile))) out.human_log = path.relative(runDir, humanLog(logFile)).split(path.sep).join('/');
     // the shell's "not recognized" / "not found": the command itself is missing
     if (r.code == null && r.error && !r.timedOut) { out.reason = `the command could not start: ${r.error}`; out.duration_ms = Date.now() - t0; return finish(); }
     if ((r.code === 127 || (process.platform === 'win32' && r.code === 9009)) && !parseFailures(text, { cwd }).length) {
@@ -514,7 +541,8 @@ async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = '
   // the failures the run does not know yet: do they fail on the base too? (#211)
   if (!out.timed_out && out.failures.length && (base || mock) && !signal?.aborted) {
     const { onBase, info } = await checkOnBase({
-      command: out.command, failures: out.failures, base, mock, env: childEnv?.env, timeoutMs: out.timeout_ms, signal, run,
+      command: out.command, failures: out.failures, base, mock, signal, run,
+      env: childEnv ? { ...childEnv.env, MULTIAGENT_TEST_HUMAN_LOG: humanLog(path.join(runDir, 'logs', `suite-${round}-base.log`)) } : undefined, timeoutMs: out.timeout_ms,
       logFile: logFile ? path.join(runDir, 'logs', `suite-${round}-base.log`) : null, runDir, cacheDir: baseCacheDir, log,
     });
     out.base_check = info;
@@ -551,12 +579,45 @@ function suiteMessage(output) {
     if ((sel.files || []).length > SELECTION_LINES) lines.push(`- … and ${sel.files.length - SELECTION_LINES} more`);
   } else if (sel?.why) lines.push(`Whole suite: ${sel.why}`);
   if (output.failures?.length) lines.push('Failures:');
-  for (const f of output.failures || []) lines.push(`- ${f.test}${f.file ? ` (${f.file})` : ''}${f.error ? `: ${String(f.error).split('\n')[0]}` : ''}`);
+  for (const f of output.failures || []) lines.push(`- ${f.test}${f.file ? ` (${f.file}${f.line ? `:${f.line}` : ''})` : ''}${f.error ? `: ${String(f.error).split('\n')[0]}` : ''}`);
+  if (output.human_log && output.failures?.length) lines.push(`Human-readable report (read only the lines you need): ${output.human_log}`);
   if (output.preexisting?.length) {
     lines.push('Also failing on the base (reported, not chased):');
     for (const f of output.preexisting) lines.push(`- ${f.test}${f.file ? ` (${f.file})` : ''}`);
   }
   return lines.join('\n');
+}
+
+// The red check of tests written before the code (#220, a suite step's `files` + `expect: red`):
+// of the test `files` that ran, which fail as they should (red), which already pass (green: they
+// guard existing behaviour or are wrong; partly_green: a red file with some tests passing, from
+// the agent reporter's per-file counts) and which could not run (broken: a syntax error, a crash
+// before their tests, a run nothing could be read from). Simulation: mockResult pass = all green,
+// broken = all broken, anything else = all red. → { red, green, partly_green, broken: [{ file, error }] }
+function redCheck(output, files, { mock, mockResult } = {}) {
+  const out = { red: [], green: [], partly_green: [], broken: [] };
+  if (mock) {
+    if (mockResult === 'pass') out.green = [...files];
+    else if (mockResult === 'broken') out.broken = files.map((file) => ({ file, error: '(simulated) SyntaxError: Unexpected token' }));
+    else out.red = [...files];
+    return out;
+  }
+  const all = [...(output?.failures || []), ...(output?.preexisting || [])];
+  const unreadable = all.some((f) => /^\((unrecognized failure|the whole suite|the test runner)\)$/.test(f.test));
+  const countsOf = (file) => Object.entries(output?.file_counts || {}).find(([f]) => sameFile(f, file))?.[1];
+  for (const file of files) {
+    const fails = all.filter((f) => sameFile(f.file, file));
+    const crash = fails.find((f) => f.kind === 'file' || sameFile(f.test, file));
+    if (crash || (unreadable && !fails.length)) {
+      out.broken.push({ file, error: String(crash?.error || all[0]?.error || 'the run failed without a recognizable failure').split('\n')[0] });
+    } else if (!fails.length) out.green.push(file);
+    else {
+      out.red.push(file);
+      const c = countsOf(file);
+      if (c?.passed) out.partly_green.push({ file, passed: c.passed, failed: c.failed });
+    }
+  }
+  return out;
 }
 
 module.exports = {
@@ -567,6 +628,7 @@ module.exports = {
   noteFailingOnMain,
   parseCounts,
   parseFailures,
+  redCheck,
   runCommand,
   runningTestFiles,
   runSuite,

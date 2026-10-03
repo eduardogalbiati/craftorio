@@ -19,6 +19,9 @@ used_by: "test writer"
 
 - Run only the tests you write (the "One test" column); the whole suite is the orchestrator's when
   the workflow has a suite step (see testing-principles: time budget).
+- Which tests and how to read them: the code → tests map when the project has one, and
+  failures-only output (`pytest -q --tb=short -rf`, read the `FAILED` lines), never the whole log
+  (testing-principles: the code → tests map, agent mode).
 - Environment from the lockfile: `uv.lock` → prefix `uv run`; `poetry.lock` → `poetry run`; otherwise the active venv (`python -m ...`).
 - No framework yet: pytest.
 - Dependencies first: a fresh checkout (each run has its own worktree) has no environment.

@@ -67,7 +67,10 @@ const { captureScreenshots } = require('./screenshot-step');
 const suiteStep = require('./suite-step');
 const {
   affectedTests,
+  relatedTests,
   selectionLines,
+  testMap,
+  testMapMarkdown,
 } = require('./affected-tests');
 const {
   runWorkflowStep,
@@ -185,6 +188,17 @@ function testsPlan(defs, given, resolved) {
 const render = (s, scope) => (s == null ? '' : tpl.renderString(String(s), scope));
 const evalExpr = (expr, scope) => render(`{% if ${expr} %}1{% else %}0{% endif %}`, scope).trim() === '1';
 
+// A list of files in the YAML (`protect_files`, a suite step's `files`, #220): a template or a list of
+// them. Rendered, each item may hold several files (a rendered list reads "a,b"; one per line works too).
+function validateFileList(v, what) {
+  if (v === undefined) return;
+  if (!(typeof v === 'string' || (Array.isArray(v) && v.every((x) => typeof x === 'string')))) throw new Error(`${what} must be a file list: a template or a list of paths.`);
+}
+const renderFileList = (v, scope) => [...new Set([v ?? []].flat()
+  .flatMap((x) => render(String(x), scope).split(/[\n,]/))
+  .map((f) => f.trim().replace(/\\/g, '/').replace(/^\.\//, ''))
+  .filter(Boolean))];
+
 // A `type: boolean` input's value: true/false, or their text ("true", "yes", "1" / "false", "no", "0", "").
 function toBoolean(key, v) {
   if (typeof v === 'boolean') return v;
@@ -231,6 +245,7 @@ function loadWorkflow(file) {
     if (a.max_context !== undefined && !String(a.max_context).includes('{{') && !parseTokens(a.max_context)) throw new Error(`${name}: max_context must be a token count such as 150k.`);
     if (a.persona !== undefined && a.persona !== 'random') throw new Error(`${name}: persona must be "random".`);
     if (a.edits_tests !== undefined && typeof a.edits_tests !== 'boolean') throw new Error(`${name}: edits_tests must be true or false.`);
+    validateFileList(a.protect_files, `${name}: protect_files`);
     capabilities.validate(a.capabilities, name, mcpServers);
   }
   testPaths.validateTestsPaths(wf.tests_paths);
@@ -238,6 +253,11 @@ function loadWorkflow(file) {
   for (const s of wf.steps) {
     capabilities.validate(s.capabilities, `Step "${s.id}"`, mcpServers);
     if (s.edits_tests !== undefined && typeof s.edits_tests !== 'boolean') throw new Error(`Step "${s.id}": edits_tests must be true or false.`);
+    // #220: files its agent may not change (a template, e.g. another step's tests_added), and the
+    // code → tests map given to its prompt as {{ test_map }} (#219)
+    validateFileList(s.protect_files, `Step "${s.id}": protect_files`);
+    if (s.protect_files !== undefined && ['human_approval', 'screenshots', 'suite', 'workflow'].includes(s.type)) throw new Error(`Step "${s.id}": protect_files is only valid on an agent step.`);
+    if (s.test_map !== undefined && (typeof s.test_map !== 'boolean' || ['human_approval', 'screenshots', 'suite', 'workflow'].includes(s.type))) throw new Error(`Step "${s.id}": test_map must be true or false, on an agent step.`);
     if (s.type === 'screenshots') {
       // `type: screenshots` (#144): no agent; the screens listed in `from`'s `screenshots` output
       if (s.agent || s.agents) throw new Error(`Step "${s.id}": a screenshots step has no agent.`);
@@ -251,6 +271,11 @@ function loadWorkflow(file) {
       if (s.timeout !== undefined && !String(s.timeout).includes('{{') && parseDuration(s.timeout, null) == null) throw new Error(`Step "${s.id}": timeout must be a duration such as 30m.`);
       // #212: affected = the affected test files each visit, the whole suite once when they pass
       if (s.scope !== undefined && !String(s.scope).includes('{{') && !['affected', 'full'].includes(s.scope)) throw new Error(`Step "${s.id}": scope must be affected or full.`);
+      // #220: given test files only (a template, e.g. "{{ steps.acceptance_tests.output.tests_added }}"),
+      // and `expect: red` for tests written before the code (the red check)
+      validateFileList(s.files, `Step "${s.id}": files`);
+      if (s.files !== undefined && s.scope !== undefined) throw new Error(`Step "${s.id}": files and scope cannot be combined.`);
+      if (s.expect !== undefined && (s.expect !== 'red' || s.files === undefined)) throw new Error(`Step "${s.id}": expect must be "red", with files (the red check of tests written before the code).`);
     } else if (s.type === 'workflow') {
       // `type: workflow` (#174): a child run of another workflow, once or per `foreach` item
       validateWorkflowStep(s, file);
@@ -2149,6 +2174,8 @@ class WorkflowRun extends EventEmitter {
     const schema = step.output_schema;
     // evidence_dir: where this visit's screenshots go (#146), <run_dir>/evidence/<step>/round-<visit>
     const scope = { ...this.ctx, iteration: st.iteration, delegate_result: st.delegate_result, agent: agentName, evidence_dir: evidence.roundDir(this.runDir, step.id, visit) };
+    // `test_map: true` (#219): the code → tests map of the agent's checkout, as {{ test_map }}
+    if (step.test_map) scope.test_map = this.writeTestMap(agentName);
     let prompt = render(step.prompt, scope).trim();
     if (st.supervisorNote) {
       prompt += `\n\n---\nNote from the run supervisor (a previous attempt of this step failed):\n${st.supervisorNote}`;
@@ -2170,7 +2197,7 @@ class WorkflowRun extends EventEmitter {
     // images (#129): those of the inputs its prompt uses, and those of the last gate's feedback
     const attachments = [...this.stepAttachments(step.prompt), ...this.gateImages];
     if (!step.agents) this.gateImages = []; // consumed (in a fan-out, after all of them)
-    const opts = { stepId: step.id, hint, skills, capabilities: step.capabilities, editsTests: step.edits_tests, attachments };
+    const opts = { stepId: step.id, hint, skills, capabilities: step.capabilities, editsTests: step.edits_tests, protectFiles: step.protect_files, attachments };
     const countTools = (r) => {
       if (r.turnRec) st.turnRecs?.push(r.turnRec);
       if (!r.tools || !st.tools) return;
@@ -2557,14 +2584,20 @@ class WorkflowRun extends EventEmitter {
   // The engine checks the checkout after the turn and sends it back with the list of files, at most
   // twice; after that the turn fails (the supervisor or the step's on_error take over). A snapshot or
   // a check that cannot run (git error) fails the turn too; only a folder outside git is unchecked.
+  // `protect_files` (#220; opts.protectFiles: the step's over the agent's, rendered now): the same
+  // guard on exactly these files (e.g. the acceptance tests written before the code), whatever
+  // edits_tests says, so the agent may still add and edit its own tests.
   async sendToAgent(agentName, prompt, opts = {}) {
     const agent = { ...(this.wf.defaults || {}), ...this.wf.agents[agentName] };
     const guarded = !!this.wf.agents[agentName] && (opts.editsTests ?? agent.edits_tests) === false;
     const dir = guarded ? this.workingDir(agent) : null;
     const snap = guarded ? await testPaths.snapshot(dir, this.wf.tests_paths)
       .catch((e) => { throw new Error(`Could not snapshot the test files before ${agentName}'s turn in ${opts.stepId || 'a delegated turn'} (edits_tests: false): ${e.message}`); }) : null;
-    let res = await this.agentTurn(agentName, prompt, { ...opts, guarded });
-    res = await this.serveTestRequests(agentName, prompt, res, { ...opts, guarded });
+    const protect = this.wf.agents[agentName] ? renderFileList(opts.protectFiles ?? agent.protect_files, this.ctx) : [];
+    const psnap = protect.length ? await testPaths.snapshot(this.workingDir(agent), protect)
+      .catch((e) => { throw new Error(`Could not snapshot the protected files before ${agentName}'s turn in ${opts.stepId || 'a delegated turn'} (protect_files): ${e.message}`); }) : null;
+    let res = await this.agentTurn(agentName, prompt, { ...opts, guarded, protect });
+    res = await this.serveTestRequests(agentName, prompt, res, { ...opts, guarded, protect });
     for (let attempt = 1; snap; attempt++) {
       // an unchecked turn fails the step: passing it would let test changes through the guard
       const files = await testPaths.changedTestFiles(snap, { bases: this.baseRefs() })
@@ -2574,9 +2607,31 @@ class WorkflowRun extends EventEmitter {
       this.emitEvent('tests.refused', { agent: agentName, step_id: opts.stepId || null, files, attempt });
       this.emitEvent('log', { level: 'warn', kind: 'tests_refused', agent: agentName, message: `[${agentName}] changed test files in ${stepId}, which it may not edit (edits_tests: false): ${files.join(', ')}` });
       if (attempt > 2) throw new Error(`${agentName} changed test files in ${stepId} and did not put them back: ${files.join(', ')}. Only the test writer edits tests.`);
-      res = await this.agentTurn(agentName, this.testsRefusedPrompt(agentName, prompt, res.text, files, snap.head), { ...opts, guarded, retry: true });
+      res = await this.agentTurn(agentName, this.testsRefusedPrompt(agentName, prompt, res.text, files, snap.head), { ...opts, guarded, protect, retry: true });
+    }
+    for (let attempt = 1; psnap; attempt++) {
+      const files = await testPaths.changedTestFiles(psnap, { bases: this.baseRefs() })
+        .catch((e) => { throw new Error(`Could not check the protected files changed by ${agentName} in ${opts.stepId || 'a delegated turn'} (protect_files): ${e.message}`); });
+      if (!files.length) break;
+      const stepId = opts.stepId || 'a delegated turn';
+      this.emitEvent('tests.refused', { agent: agentName, step_id: opts.stepId || null, files, attempt, protected: true });
+      this.emitEvent('log', { level: 'warn', kind: 'protected_refused', agent: agentName, message: `[${agentName}] changed protected files in ${stepId} (protect_files): ${files.join(', ')}` });
+      if (attempt > 2) throw new Error(`${agentName} changed protected files in ${stepId} and did not put them back: ${files.join(', ')}.`);
+      res = await this.agentTurn(agentName, this.protectedRefusedPrompt(agentName, prompt, res.text, files, psnap.head), { ...opts, guarded, protect, retry: true });
     }
     return res;
+  }
+
+  // The code → tests map of an agent's checkout (#219, a step's `test_map: true`), written to
+  // <run_dir>/test-map.md for each turn (the graph of src/engine/affected-tests.js) → its path.
+  writeTestMap(agentName) {
+    const agent = { ...(this.wf.defaults || {}), ...this.wf.agents[agentName] };
+    const file = path.join(this.runDir, 'test-map.md');
+    let map;
+    try { map = testMap({ root: this.workingDir(agent) }); } catch (e) { map = { mode: 'none', why: e.message.split('\n')[0], sources: {} }; }
+    fs.mkdirSync(this.runDir, { recursive: true });
+    fs.writeFileSync(file, testMapMarkdown(map));
+    return file;
   }
 
   // Agents ask, the orchestrator runs (#212): a turn that ends with a ```run-tests block (one test
@@ -2662,6 +2717,19 @@ class WorkflowRun extends EventEmitter {
       + `Put them back as they were before your turn (\`git checkout ${head} -- <file>\` for a changed or deleted file, \`git rm\` for a new one)`
       + ' and commit, keeping your production changes. Describe what should be tested in your answer instead (in `test_notes` when the answer has it).'
       + ' Then answer again in full, in the format you were asked for.';
+    const def = { ...(this.wf.defaults || {}), ...this.wf.agents[agentName] };
+    if ((def.session || 'persistent') === 'persistent') return fix;
+    return `${prompt}\n\n---\nYou already answered this task:\n<previous_answer>\n${String(previous).slice(-20000)}\n</previous_answer>\n\n${fix}`;
+  }
+
+  // A turn refused because it changed protected files (#220, protect_files: e.g. the acceptance
+  // tests written before the code). Same shape as testsRefusedPrompt.
+  protectedRefusedPrompt(agentName, prompt, previous, files, head) {
+    const fix = 'The orchestrator refused your last turn: it changed files you may not change (written before your'
+      + ' turn, e.g. the acceptance tests your code must pass):\n' + files.map((f) => `- ${f}`).join('\n') + '\n'
+      + `Put them back as they were before your turn (\`git checkout ${head} -- <file>\` for a changed or deleted file)`
+      + ' and commit, keeping your other changes; make the code pass them instead. If one contradicts the task,'
+      + ' say why in your answer (the reviewer decides). Then answer again in full, in the format you were asked for.';
     const def = { ...(this.wf.defaults || {}), ...this.wf.agents[agentName] };
     if ((def.session || 'persistent') === 'persistent') return fix;
     return `${prompt}\n\n---\nYou already answered this task:\n<previous_answer>\n${String(previous).slice(-20000)}\n</previous_answer>\n\n${fix}`;
@@ -3280,9 +3348,15 @@ class WorkflowRun extends EventEmitter {
   // the whole suite has not passed yet in this run, the whole suite runs right after (log
   // suite-<visit>-full.log), so it runs once before the merge. A shared root changed or a project
   // without a JS graph: the whole suite. The output's `selection` says which files and why.
+  // `files` (#220): only these test files (a rendered list; those missing from the worktree are left
+  // out), never the whole suite after them. With `expect: red` (tests written before the code) the
+  // run is a red check: `red_check` sorts the files into red / green (already passing: they guard
+  // existing behaviour or are wrong) / broken (cannot run), the status is `broken` when one cannot
+  // run (else pass: failing is expected), and `affected_tests` lists the existing tests that reach
+  // the sources the new tests import (relatedTests, the code → tests graph). Simulation: default red.
   async runSuiteStep(step, st) {
     const seq = this.mockSequences?.suite?.[step.id];
-    const mockResult = Array.isArray(seq) && seq.length ? seq[Math.min(st.visits, seq.length) - 1] : 'pass';
+    const mockResult = Array.isArray(seq) && seq.length ? seq[Math.min(st.visits, seq.length) - 1] : step.expect === 'red' ? 'fail' : 'pass';
     const root = path.dirname(path.dirname(this.runDir));
     const project = this.worktree?.repo || this.ctx.worktree_dir || '';
     const scope = step.scope ? render(String(step.scope), this.ctx).trim() : 'full';
@@ -3310,7 +3384,17 @@ class WorkflowRun extends EventEmitter {
       }
     };
     let output;
-    if (scope === 'affected') {
+    if (step.files !== undefined) {
+      const cwd = this.ctx.worktree_dir;
+      const given = renderFileList(step.files, this.ctx);
+      const files = given.filter((f) => this.mock || (cwd && fs.existsSync(path.join(cwd, f))));
+      const missing = given.filter((f) => !files.includes(f));
+      const selection = { mode: 'affected', files, reasons: Object.fromEntries(files.map((f) => [f, `listed by ${step.id}`])), why: `the ${files.length} test file(s) the step lists${missing.length ? ` (not found: ${missing.join(', ')})` : ''}` };
+      // new tests are not on the base: no base check for a red check
+      output = await once({ files, selection, logName: `${step.id}-${st.visits}`, mockResult: step.expect === 'red' && mockResult === 'broken' ? 'fail' : mockResult, ...(step.expect === 'red' ? { base: null } : {}) });
+      output.missing = missing;
+      if (step.expect === 'red') output = this.redCheckOutput(output, files, mockResult);
+    } else if (scope === 'affected') {
       let selection;
       try { selection = this.affectedSelection(); } catch (e) { selection = { mode: 'all', files: [], reasons: {}, changed: [], slow: [], why: `the affected tests could not be listed (${e.message}): the whole suite` }; }
       this.emitEvent('log', { level: 'info', kind: 'suite', step_id: step.id, message: `${step.id}: ${selectionLines(selection).slice(0, 6).join('\n')}` });
@@ -3326,7 +3410,7 @@ class WorkflowRun extends EventEmitter {
       output = await once();
     }
     if (output.status !== 'blocked' && output.scope !== 'files') this.suiteRuns.engine++;
-    if (output.status === 'pass' && output.scope !== 'files') this.fullSuitePassed = true;
+    if (output.status === 'pass' && output.scope !== 'files' && step.files === undefined) this.fullSuitePassed = true;
     // the files that failed come back in the next round's affected set
     for (const f of output.failures || []) if (f.file && !this.suiteFailedFiles.includes(f.file)) this.suiteFailedFiles.push(f.file);
     if (output.preexisting_failures?.length && !this.mock) {
@@ -3336,6 +3420,35 @@ class WorkflowRun extends EventEmitter {
     if (output.base_check?.log) this.emitEvent('file.saved', { step_id: step.id, path: path.join(this.runDir, output.base_check.log) });
     this.emitEvent('log', { level: output.status === 'pass' ? 'info' : 'warn', kind: 'suite', step_id: step.id, status: output.status, failures: output.failures.length, message: `${step.id}: ${output.message}` });
     return output;
+  }
+
+  // A suite output turned into the red check of tests written before the code (#220): red_check,
+  // affected_tests (+ affected_reasons), status broken | pass (| blocked), and a message for the
+  // next prompt that names the already-green files.
+  redCheckOutput(output, files, mockResult) {
+    if (output.status === 'blocked') return output;
+    const check = suiteStep.redCheck(output, files, { mock: this.mock, mockResult });
+    let related = { files: [], reasons: {}, why: '' };
+    if (!this.mock && files.length) {
+      try { related = relatedTests({ root: this.ctx.worktree_dir, tests: files }); } catch (e) { related.why = `the related tests could not be listed (${e.message.split('\n')[0]})`; }
+    }
+    const lines = [`Red check of ${files.length} test file(s) written before the code (\`${output.command}\`):`];
+    if (check.red.length) lines.push(`- red, as expected: ${check.red.join(', ')}`);
+    for (const p of check.partly_green) lines.push(`- ${p.file}: ${p.passed} test(s) already pass, ${p.failed} fail`);
+    if (check.green.length) lines.push(`- already green (they pass before any code: they guard existing behaviour or are wrong): ${check.green.join(', ')}`);
+    for (const b of check.broken) lines.push(`- cannot run: ${b.file}: ${b.error}`);
+    if (output.missing?.length) lines.push(`- not found in the worktree: ${output.missing.join(', ')}`);
+    if (!files.length) lines.push('- no test file to check');
+    if (related.why) lines.push(`Existing tests related to them: ${related.why}${related.files.length ? `: ${related.files.join(', ')}` : ''}`);
+    if (output.human_log || output.log) lines.push(`Log: ${path.join(this.runDir, output.human_log || output.log)}`);
+    return {
+      ...output,
+      status: check.broken.length ? 'broken' : 'pass',
+      red_check: check,
+      affected_tests: related.files,
+      affected_reasons: related.reasons,
+      message: lines.join('\n'),
+    };
   }
 
   // `type: workflow` (#174): the child runs of the step (src/engine/workflow-step.js), started through

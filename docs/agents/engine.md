@@ -60,6 +60,26 @@ same features for users; this is the implementer's summary.
     suite step's own command…) is noted, not refused: a `log` warn `kind: full_suite_by_agent`.
   - `summary.suite_runs: { engine, agents }`: whole-suite runs by suite steps and by agents (the
     measure of #177).
+  - **`files` / `expect: red`** on a suite step (#220): only the listed test files (a template such
+    as `"{{ steps.acceptance_tests.output.tests_added }}"`; missing files are left out, log
+    `logs/<step>-<visit>.log`), never the whole suite after them. `expect: red` makes it a red check
+    (`redCheckOutput`, `suiteStep.redCheck`): `red_check { red, green, partly_green, broken }`,
+    status `broken` when a file cannot run (else `pass`), no base check, `affected_tests` /
+    `affected_reasons` from `relatedTests` (the existing tests reaching the sources the new tests
+    import) and a `message` for the next prompt. Simulation: default red; `mockSequences.suite`
+    `pass` = all green, `broken` = all broken.
+  - **`protect_files`** on an agent or an agent step (#220, the step's wins): a file list template
+    rendered before each turn; `sendToAgent` snapshots exactly those files (`testPaths.snapshot`
+    with the paths as patterns) and refuses a turn that changes one, like `edits_tests: false`
+    (`protectedRefusedPrompt`, event `tests.refused` with `protected: true`, log `kind:
+    protected_refused`, the turn fails after 2 retries), whatever `edits_tests` says.
+  - **`test_map: true`** on an agent step (#219): `writeTestMap` writes the code → tests map of the
+    agent's checkout to `<run_dir>/test-map.md` before each turn and passes its path as
+    `{{ test_map }}`.
+  - Agent mode (#219): `suiteEnv` sets `MULTIAGENT_AGENT_MODE=1`, and each run gets
+    `MULTIAGENT_TEST_HUMAN_LOG=<log>.human.log`; a runner that knows them (this project's
+    `scripts/test.js`) prints one failures-only JSON line, read first by `parseFailures` /
+    `parseCounts` (output `human_log`, `file_counts`, failures with `line` and `kind`).
   - software-development and local-hero: `test` (test writer, focused tests) → `suite` → build; a
     failing suite goes back to the test writer (its prompt gets the failures and the log path when
     `previous_step == 'suite'`), 2 rounds, then `test_failed`.

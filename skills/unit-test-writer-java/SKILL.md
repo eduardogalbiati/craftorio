@@ -16,7 +16,10 @@ used_by: "test writer"
 | Gradle (`build.gradle[.kts]`; prefer `./gradlew`) | `./gradlew test` | `./gradlew test --tests 'pkg.ClassTest.method'` |
 
 Run only the tests you write (the "One test" column); the whole suite is the orchestrator's when
-the workflow has a suite step (see testing-principles: time budget).
+the workflow has a suite step (see testing-principles: time budget). Which tests and how to read
+them: the code → tests map when the project has one, and failures-only output (Maven `-q`, Gradle
+`--quiet`; read the `[ERROR]` / `FAILED` lines), never the whole log (testing-principles: the code
+→ tests map, agent mode).
 On Windows use `mvnw.cmd`/`gradlew.bat` if the extensionless scripts do not run.
 Dependencies: a fresh checkout (each run has its own worktree) has no build output; the first
 `test` run resolves dependencies into the shared Maven/Gradle cache, so give it time and do not

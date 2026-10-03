@@ -6,3 +6,6 @@ build/
 .env.*
 # derived docs (npm run docs; rebuilt by prepare/prestart/pretest/prebuild): never committed, never conflicts
 docs/agents/code-map.md
+docs/agents/test-map.md
+# npm test in agent mode: the human-readable report and the JSON (scripts/test.js, #219)
+.test-output/

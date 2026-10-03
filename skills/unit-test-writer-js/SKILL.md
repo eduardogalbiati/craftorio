@@ -25,6 +25,11 @@ used_by: "test writer"
 - While iterating run single files, filtered to the tests you write (`--test-name-pattern`, `-t`,
   `--grep`), a slow file at most once per round; the whole suite is the orchestrator's (see
   testing-principles: time budget, pre-existing failures).
+- Which files: the code → tests map when the project has one (`docs/agents/test-map.md` here; see
+  testing-principles). Output for an agent: this orchestrator's `npm test -- <files>` prints one
+  failures-only JSON line in agent mode (`scripts/test-reporter-agent.js`, usable by hand with
+  `node --test --test-reporter=./scripts/test-reporter-agent.js <path>`); Vitest has its own
+  `--reporter=agent`; Jest: `--silent` and read only the `●` failures.
 - Dependencies are ready: the engine links each run's `node_modules` from a shared cache,
   installed once per lockfile. Never run `npm ci` (or a frozen pnpm/yarn install) and never delete
   `node_modules`: through the link it would empty the cache for every run. Adding a test
