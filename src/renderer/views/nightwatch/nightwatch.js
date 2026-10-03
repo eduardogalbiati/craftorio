@@ -32,6 +32,12 @@
       nw.state = s;
       nw.report = r;
       nw.error = null;
+      // a night asked for by another screen (Analytics › 24/7, #188): its window's start
+      if (nw.open) {
+        const i = (r?.nights || []).findIndex((m) => Date.parse(m.window?.from) === Date.parse(nw.open));
+        if (i >= 0) nw.night = i;
+        nw.open = null;
+      }
     } catch (e) { nw.error = errMsg(e); }
     render();
     renderBadge();
@@ -293,7 +299,15 @@
       <div class="row"><span class="spacer"></span><button class="btn sm ghost" type="button" id="dash-nw-open">Open Night watch</button></div>`;
     $('#dash-nw-open').onclick = () => showView('nightwatch');
   }
-  window.NightWatchView = { renderMorning };
+  // opens the view on the night that started at `startedAt` (ISO)
+  function openNight(startedAt) {
+    nw.open = startedAt || null;
+    showView('nightwatch');
+  }
+  window.NightWatchView = {
+    openNight,
+    renderMorning,
+  };
 
   registerView({
     id: 'nightwatch',

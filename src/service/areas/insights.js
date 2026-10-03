@@ -20,6 +20,10 @@ const poCalibration = require('../../renderer/po-calibration');
 const productOwner = require('../../product-owner');
 const projects = require('../../projects');
 const repoPerformance = require('../../repo-performance');
+const {
+  ownerAlive,
+  readOwner,
+} = require('../../run-owner');
 const runAnalysisLib = require('../../run-analysis');
 const runs = require('../../runs');
 const supervisor = require('../../supervisor');
@@ -58,7 +62,17 @@ module.exports = (ctx) => {
       if (st.mtimeMs < from) continue;
       const sig = `${st.size} ${st.mtimeMs}`;
       let c = factsCache.get(file);
-      if (c?.sig !== sig) { c = { sig, facts: night.runFacts(id, runs.runEvents(path.dirname(file))) }; factsCache.set(file, c); }
+      if (c?.sig !== sig) {
+        const events = runs.runEvents(path.dirname(file));
+        const last = events.reduce((m, e) => Math.max(m, Date.parse(e.ts) || 0), 0);
+        c = { sig, facts: night.runFacts(id, events), last };
+        factsCache.set(file, c);
+      }
+      // a run that died with the app has no workflow.finished: it ends at its last event, not now
+      if (c.facts.end == null && c.facts.start != null && !ownerAlive(readOwner(path.dirname(file)))) {
+        out.push({ ...c.facts, end: Math.max(c.facts.start, c.last), status: 'interrupted' });
+        continue;
+      }
       out.push(c.facts);
     }
     return out;

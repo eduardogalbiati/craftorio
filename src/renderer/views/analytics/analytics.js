@@ -331,7 +331,8 @@
   // #197: the analysed project, at the top of the tab, and what the page counts
   function projectHeader(p) {
     const list = p.projects || [];
-    const options = list.map((x) => `<option value="${esc(x.id)}" title="${esc(x.folder || 'No folder')}"${x.isGit ? '' : ' disabled'}>${esc(x.name)}${x.isGit ? '' : ` — ${esc(x.reason || 'not a git repository')}`}</option>`).join('');
+    const selected = p.project?.id || ax.project;
+    const options = list.map((x) => `<option value="${esc(x.id)}" title="${esc(x.folder || 'No folder')}"${x.id === selected ? ' selected' : ''}${x.isGit ? '' : ' disabled'}>${esc(x.name)}${x.isGit ? '' : ` — ${esc(x.reason || 'not a git repository')}`}</option>`).join('');
     const pr = p.project;
     const summary = pr ? `<b>${esc(pr.name)}</b> · ${fmtNum(p.runs || 0)} run${p.runs === 1 ? '' : 's'} · ${esc(p.from || '')} to ${esc(p.to || '')}` : '';
     return `<div class="card an-project-pick">

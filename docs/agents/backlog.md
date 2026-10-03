@@ -25,3 +25,8 @@ Read this when planning new work, to avoid redoing a discussion.
   next push is rejected again); auto-push is per project, not per workflow; the Update and push
   rebase runs in the checkout where the base is checked out, so it refuses when that checkout has
   uncommitted changes.
+- One run's figures (#228): `src/run-analysis.js` `runFigures` (cached in the index, `run_figures`)
+  feeds Analytics › Run; the roadmap estimates (#206, #215) still compute their own durations and
+  costs, so the two can disagree. Next: move the estimates onto `runFigures`.
+- 24/7 meter (#188): a paused roadmap or a stall counts as blocked only inside a Night watch window
+  (from its incident log); outside it, nothing records the pause, so that time counts as no work.
