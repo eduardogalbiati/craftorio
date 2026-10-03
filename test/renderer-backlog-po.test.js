@@ -202,8 +202,10 @@ test('the drawer re-renders (keeping its scroll position, #148: render() itself 
 
 test('messageHtml (#189): a user message with a per-question override shows "for <Step>"; a po answer shows "Planned for <Step>", adding "· this question" when it was an override', () => {
   const fn = /function messageHtml\(msg, m\)[\s\S]*?\n  \}/.exec(src)[0];
-  assert.match(fn, /const once = msg\.calibrationOverride \? ` · <span class="badge" title="For this question only: the saved calibration is unchanged">for \$\{esc\(window\.PoCalibration\.step\(msg\.calibration\)\.name\)\}<\/span>` : '';/);
-  assert.match(fn, /const calib = msg\.calibration \? ` <span class="badge" title="\$\{esc\(`\$\{msg\.calibrationOverride \? 'For this question only\. ' : ''\}\$\{window\.PoCalibration\.tooltip\(msg\.calibration\)\}`\)\}">Planned for \$\{esc\(window\.PoCalibration\.step\(msg\.calibration\)\.name\)\}\$\{msg\.calibrationOverride \? ' · this question' : ''\}<\/span>` : '';/);
+  assert.match(fn, /const once = \[msg\.calibrationOverride \? window\.PoCalibration\.step\(msg\.calibration\)\.name : '', msg\.costOverride \? window\.PoCalibration\.cost\.step\(msg\.cost\)\.name : ''\]\.filter\(Boolean\)/);
+  assert.match(fn, /\.map\(\(name\) => ` · <span class="badge" title="For this question only: the saved setting is unchanged">for \$\{esc\(name\)\}<\/span>`\)\.join\(''\);/);
+  assert.match(fn, /const once = msg\.calibrationOverride \|\| msg\.costOverride;/);
+  assert.match(fn, /const calib = msg\.calibration \? ` <span class="badge" title="\$\{esc\(`\$\{once \? 'For this question only\. ' : ''\}\$\{window\.PoCalibration\.tooltip\(msg\.calibration\)\}\$\{msg\.cost \? `\\n\\n\$\{window\.PoCalibration\.cost\.tooltip\(msg\.cost\)\}` : ''\}`\)\}">Planned for \$\{esc\(window\.PoCalibration\.plannedFor\(msg\.calibration, msg\.cost \?\? null\)\)\}\$\{once \? ' · this question' : ''\}<\/span>` : '';/);
   assert.match(fn, /const meta = `Product Owner · \$\{esc\(time\)\}\$\{msg\.model \? ` · \$\{esc\(msg\.model\)\}` : ''\} · \$\{esc\(fmtCost\(msg\.costUsd \|\| 0\)\)\}\$\{calib\}/);
 });
 
@@ -235,7 +237,7 @@ test('apply: Add all to the roadmap plans every group as a stage, ordered by its
   const fn = /async function apply\(act, el\)[\s\S]*?\n  \}/.exec(src)[0];
   assert.match(fn, /const origin = po\.messages\[m\]\.ts;/);
   assert.match(fn, /const stages = \[\.\.\.new Set\(answer\.groups\.map\(\(g\) => g\.stage\)\)\]\.sort\(\(a, b\) => a - b\)/);
-  assert.match(fn, /items: answer\.groups\.map\(\(g, n\) => \(\{ g, n \}\)\)\.filter\(\(\{ g \}\) => g\.stage === s\)\.map\(\(\{ g, n \}\) => \(\{ workflow: g\.workflow, issues: withExtras\(g\.issues, `\$\{m\}:\$\{n\}`\), inputs: g\.inputs, mock: !!state\.simulationOnly, reason: g\.reason, modeReason: g\.modeReason, origin \}\)\)/);
+  assert.match(fn, /items: answer\.groups\.map\(\(g, n\) => \(\{ g, n \}\)\)\.filter\(\(\{ g \}\) => g\.stage === s\)\.map\(\(\{ g, n \}\) => \(\{ workflow: g\.workflow, issues: withExtras\(g\.issues, `\$\{m\}:\$\{n\}`\), inputs: g\.inputs, mock: !!state\.simulationOnly, reason: g\.reason, modeReason: g\.modeReason, origin, \.\.\.\(g\.cost \? \{ cost: g\.cost \} : \{\}\) \}\)\)/);
   assert.match(fn, /await api\.proposeRoadmap\(po\.projectId, \{ stages \}, false\);/);
 });
 
@@ -252,8 +254,9 @@ test('ask: a question is refused while another is pending, and the simulated fla
   assert.match(fn, /if \(!q \|\| po\.busy \|\| !po\.projectId\) return;/);
   assert.match(fn, /const issues = mode === 'plan' \? \[\.\.\.po\.attached\] : \[\];/);
   assert.match(fn, /const calibration = mode === 'plan' \? window\.BacklogPoSettings\?\.override\(\) \?\? null : null;/);
+  assert.match(fn, /const cost = mode === 'plan' \? window\.BacklogPoSettings\?\.costOverride\?\.\(\) \?\? null : null;/);
   assert.match(fn, /if \(mode === 'plan'\) window\.BacklogPoSettings\?\.clearOverride\(\);/);
-  assert.match(fn, /await api\.askProductOwner\(projectId, q, devMode\(\), mode, files, issues, devMode\(\) \? po\.scenario \|\| null : null, calibration\);/);
+  assert.match(fn, /await api\.askProductOwner\(projectId, q, devMode\(\), mode, files, issues, devMode\(\) \? po\.scenario \|\| null : null, calibration, cost\);/);
 });
 
 // Runs ask() for real (po, watching and api stubbed): the busy flag is set synchronously, before the
@@ -268,7 +271,7 @@ function loadAsk() {
   let settle;
   let fail;
   // #189: the drawer's calibration chip (backlog-po-settings.js); stubbed here with a settable override
-  const settings = { override: null, clearOverride: () => { calls.clearOverride++; } };
+  const settings = { override: null, costOverride: null, clearOverride: () => { calls.clearOverride++; } };
   const sandbox = {
     $p: () => ({ value: '', focus() {} }),
     api: { askProductOwner: (...a) => { calls.askProductOwner.push(a); return new Promise((resolve, reject) => { settle = resolve; fail = reject; }); } },
@@ -277,7 +280,7 @@ function loadAsk() {
     render: () => calls.render.push(true),
     // #180: ask() starts a live turn (window.LiveTurn.create) and a 1 s ticker (renderLive); the
     // real live-turn.js runs here too, so po.live has its real shape
-    window: { LiveTurn: require('../src/renderer/live-turn'), BacklogPoSettings: { override: () => settings.override, clearOverride: settings.clearOverride } },
+    window: { LiveTurn: require('../src/renderer/live-turn'), BacklogPoSettings: { override: () => settings.override, costOverride: () => settings.costOverride, clearOverride: settings.clearOverride } },
     renderLive: () => {},
     setInterval: () => 0,
     clearInterval: () => {},
@@ -299,12 +302,14 @@ test('ask (#148): a second call fired in the same tick (double click, or a click
   assert.equal(po.pending, 'Analyze the backlog');
 });
 
-test('ask (#189, plan mode): sends window.BacklogPoSettings.override() as the 8th argument, then clears the override so the next question uses the saved calibration again', () => {
+test('ask (#189, plan mode): sends window.BacklogPoSettings.override() as the 8th argument and costOverride() as the 9th (#205), then clears the overrides so the next question uses the saved ones again', () => {
   const { ask, calls, settings } = loadAsk();
   settings.override = 5;
+  settings.costOverride = 1;
   ask('Plan this one for quality');
-  assert.equal(calls.askProductOwner[0].length, 8);
+  assert.equal(calls.askProductOwner[0].length, 9);
   assert.equal(calls.askProductOwner[0][7], 5);
+  assert.equal(calls.askProductOwner[0][8], 1);
   assert.equal(calls.clearOverride, 1);
 });
 

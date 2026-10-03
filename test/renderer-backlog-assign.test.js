@@ -121,11 +121,11 @@ test('assignGroup: a proposed group selects its To do issues, clears filters tha
   assert.match(fn, /return skipped;/);
 });
 
-test('roadmapGroup: a proposed group (and its Product Owner answer\'s origin, #140) is forwarded to BacklogRoadmap.addStage as a new stage', () => {
-  const fn = /async function roadmapGroup\(\{ issues, workflow, inputs, reason, modeReason, origin \}\)[\s\S]*?\n  \}/.exec(src)[0];
+test('roadmapGroup: a proposed group (its Product Owner answer\'s origin, #140, and its cost, #205) is forwarded to BacklogRoadmap.addStage as a new stage', () => {
+  const fn = /async function roadmapGroup\(\{ issues, workflow, inputs, reason, modeReason, origin, cost \}\)[\s\S]*?\n  \}/.exec(src)[0];
   assert.match(fn, /const skipped = issues\.filter\(\(n\) => !list\.some\(\(i\) => i\.number === n\)\);/);
   assert.match(fn, /if \(!list\.length\) return skipped;/);
-  assert.match(fn, /await window\.BacklogRoadmap\.addStage\(roadmapCtx\(\), bl\.data, \{\s*issues: list, workflow, workflowName: wf\?\.name \|\| workflow, inputs: inputs \|\| \{\}, mock: !!state\.simulationOnly, group: list\.length > 1, reason, modeReason, origin,/);
+  assert.match(fn, /await window\.BacklogRoadmap\.addStage\(roadmapCtx\(\), bl\.data, \{\s*issues: list, workflow, workflowName: wf\?\.name \|\| workflow, inputs: inputs \|\| \{\}, mock: !!state\.simulationOnly, group: list\.length > 1, reason, modeReason, origin, cost,/);
   assert.match(fn, /return skipped;/);
 });
 

@@ -24,13 +24,15 @@ function loadRenderChip() {
   const stLit = /const st = \{[\s\S]*?\};/.exec(src)[0];
   const agentFn = /const agent = \(\) => [^\n]+;/.exec(src)[0];
   const savedFn = /const saved = \(\) => [^\n]+;/.exec(src)[0];
+  const savedCostFn = /const savedCost = \(\) => [^\n]+;/.exec(src)[0];
   const renderChipFn = /function renderChip\([^)]*\) \{[\s\S]*?\n  \}/.exec(src)[0];
-  for (const [name, code] of Object.entries({ stLit, agentFn, savedFn, renderChipFn })) assert.ok(code, `${name} not found in backlog-po-settings.js: the source moved`);
+  const renderCostChipFn = /function renderCostChip\([^)]*\) \{[\s\S]*?\n  \}/.exec(src)[0];
+  for (const [name, code] of Object.entries({ stLit, agentFn, savedFn, savedCostFn, renderChipFn, renderCostChipFn })) assert.ok(code, `${name} not found in backlog-po-settings.js: the source moved`);
   const elements = {};
   const $s = (sel) => elements[sel] || (elements[sel] = fakeEl());
   const sandbox = { PoCalibration, esc, $s, window: {} };
   vm.createContext(sandbox);
-  vm.runInContext(`${stLit}\n${agentFn}\n${savedFn}\n${renderChipFn}\nthis.renderChip = renderChip; this.st = st;`, sandbox);
+  vm.runInContext(`${stLit}\n${agentFn}\n${savedFn}\n${savedCostFn}\n${renderChipFn}\n${renderCostChipFn}\nthis.renderChip = renderChip; this.st = st;`, sandbox);
   return { renderChip: sandbox.renderChip, st: sandbox.st, window: sandbox.window, chipEl: () => elements['#po-calib-chip'] };
 }
 
@@ -70,11 +72,12 @@ function loadSave({ saveAgent } = {}) {
   const stLit = /const st = \{[\s\S]*?\};/.exec(src)[0];
   const agentFn = /const agent = \(\) => [^\n]+;/.exec(src)[0];
   const savedFn = /const saved = \(\) => [^\n]+;/.exec(src)[0];
+  const savedCostFn = /const savedCost = \(\) => [^\n]+;/.exec(src)[0];
   const renderEffortFn = /function renderEffort\([^)]*\) \{[\s\S]*?\n  \}/.exec(src)[0];
   const statusFn = /function status\([^)]*\) \{[\s\S]*?\n  \}/.exec(src)[0];
   const saveFn = /async function save\(patch\) \{[\s\S]*?\n  \}/.exec(src)[0];
   const productOwnerConst = /const PRODUCT_OWNER = '[^']+';/.exec(src)[0];
-  for (const [name, code] of Object.entries({ stLit, agentFn, savedFn, renderEffortFn, statusFn, saveFn, productOwnerConst })) {
+  for (const [name, code] of Object.entries({ stLit, agentFn, savedFn, savedCostFn, renderEffortFn, statusFn, saveFn, productOwnerConst })) {
     assert.ok(code, `${name} not found in backlog-po-settings.js: the source moved`);
   }
   const elements = {};
@@ -85,14 +88,14 @@ function loadSave({ saveAgent } = {}) {
   const sandbox = {
     PoCalibration,
     $s,
-    window: { productOwnerAgent: { appearance: { body: '#000000' }, model: 'claude-opus-5-5', effort: 'high', calibration: 2 }, ChatModels: { EFFORTS: ['low', 'medium', 'high', 'xhigh'] } },
+    window: { productOwnerAgent: { appearance: { body: '#000000' }, model: 'claude-opus-5-5', effort: 'high', calibration: 2, cost: 1 }, ChatModels: { EFFORTS: ['low', 'medium', 'high', 'xhigh'] } },
     api: { saveAgent: saveAgent ? (...a) => { calls.push({ id: a[0], data: a[1] }); return saveAgent(...a); } : defaultSaveAgent },
     errMsg: (e) => e.message,
     document: { dispatchEvent: (ev) => events.push(ev) },
     CustomEvent: class CustomEvent { constructor(type) { this.type = type; } },
   };
   vm.createContext(sandbox);
-  vm.runInContext(`${productOwnerConst}\n${stLit}\n${agentFn}\n${savedFn}\n${renderEffortFn}\n${statusFn}\n${saveFn}\nthis.save = save;`, sandbox);
+  vm.runInContext(`${productOwnerConst}\n${stLit}\n${agentFn}\n${savedFn}\n${savedCostFn}\n${renderEffortFn}\n${statusFn}\n${saveFn}\nthis.save = save;`, sandbox);
   return { save: sandbox.save, window: sandbox.window, calls, events, statusEl: () => elements['#po-set-status'] };
 }
 
@@ -106,6 +109,7 @@ test('save sends the whole agent (appearance, model, effort) plus the saved cali
   assert.equal(calls[0].data.model, 'claude-opus-5-5');
   assert.equal(calls[0].data.effort, 'high');
   assert.equal(calls[0].data.calibration, 5);
+  assert.equal(calls[0].data.cost, 1); // the saved cost rides along with the calibration patch (#205)
   assert.equal(window.productOwnerAgent.calibration, 5); // applied locally from the save's own result
   assert.match(statusEl().textContent, /Saved\. Applies to the next answer \(Quality \(5\/5\)\)\./);
   assert.equal(events.length, 1);
@@ -117,6 +121,7 @@ test('save of the model only still carries the current calibration (unchanged), 
   await save({ model: 'claude-sonnet-5-5' });
   assert.equal(calls[0].data.model, 'claude-sonnet-5-5');
   assert.equal(calls[0].data.calibration, 2); // unchanged: the patch did not touch it
+  assert.equal(calls[0].data.cost, 1); // unchanged too (#205)
   assert.equal(statusEl().textContent, 'Saved. Applies to the next answer.');
 });
 
