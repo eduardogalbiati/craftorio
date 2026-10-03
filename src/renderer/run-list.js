@@ -197,7 +197,7 @@ function runListRow(r, pv) {
         <span class="pr-meta"><label>started</label>${r.startedAt ? esc(dateOf(r.startedAt)) : '—'}</span>
         <span class="pr-meta"><label>duration</label>${fmtDur(dur)}</span>
         <span class="pr-meta"><label>tokens</label>${fmtTok(r.tokens?.total)}</span>
-        <span class="pr-meta"><label>cost</label>${fmtUsd(r.costUsd)}</span>
+        <span class="pr-meta"><label>cost</label>${fmtUsd(r.costUsd)}${r.childrenCostUsd ? ` <span class="muted small" title="What its child runs cost (their own children included), not in its cost">+ ${fmtUsd(r.childrenCostUsd)} child runs</span>` : ''}</span>
         <span class="pr-chev" aria-hidden="true">${open ? '▾' : '▸'}</span>
         ${runProgressStrip(r)}
       </div>

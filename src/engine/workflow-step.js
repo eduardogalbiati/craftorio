@@ -12,7 +12,8 @@
 // Each child is a normal run (its own folder, worktree, sessions and gates), started through the
 // run's `startChild` hook (the service starts it like any run, linked by `parent_run`); its gates wait
 // for the owner, and so does this step: nothing here answers a gate. Stopping the parent stops its
-// children. It never throws for a child's outcome:
+// children; each `workflow.child_finished` carries the child's cost (its children's included, #175).
+// It never throws for a child's outcome:
 //   once:    { kind: 'workflow', workflow, status, run_id, outputs, error }
 //   foreach: { kind: 'workflow', workflow, status, runs: [{ index, item, run_id, status, error, outputs }],
 //              outputs: [<outputs per item>], succeeded, failed }
@@ -107,11 +108,14 @@ async function schedule(count, max, files, runOne, signal) {
 const overall = (statuses) => (statuses.every((s) => s === 'success') ? 'success' : statuses.includes('failed') ? 'failed' : 'cancelled');
 
 /**
- * Runs a `type: workflow` step. startChild({ file, inputs, parent, label }) → Promise<{ runId,
- * finished: Promise<{ status, outputs, error }>, stop() }>; emit(type, data) records an event on the
- * parent run; parent: { run_id, workflow, depth } of the run that holds the step.
+ * Runs a `type: workflow` step. startChild({ file, inputs, parent, label, signal, previous }) →
+ * Promise<{ runId, finished: Promise<{ status, outputs, error, cost_usd }>, stop(), resumedFrom?,
+ * reused? }>; emit(type, data) records an event on the parent run; parent: { run_id, workflow, depth }
+ * of the run that holds the step. previous: { <index>: { run_id, status } } the children a resumed
+ * parent's previous run started for this step (#175): startChild reuses a child that succeeded and
+ * resumes one that did not, from where it stopped; an item with another label starts afresh.
  */
-async function runWorkflowStep({ step, scope, render, startChild, emit, signal, parent }) {
+async function runWorkflowStep({ step, scope, render, startChild, emit, signal, parent, previous = null }) {
   const workflow = render(step.workflow, scope).trim();
   const foreach = step.foreach !== undefined;
   const items = foreach ? foreachItems(step, scope, render) : [null];
@@ -126,26 +130,35 @@ async function runWorkflowStep({ step, scope, render, startChild, emit, signal, 
     const item = items[index];
     const label = foreach ? itemLabel(item, index) : null;
     const base = { index, ...(foreach ? { item } : {}), run_id: null, status: 'failed', error: null, outputs: {} };
+    let cost = 0;
     try {
       if (depth > MAX_DEPTH) throw new Error(`child workflows nest at most ${MAX_DEPTH} deep.`);
       const itemScope = foreach ? { ...scope, item, index } : scope;
       const inputs = resolveValue(step.inputs || {}, itemScope, render);
+      const prev = previous?.[index];
       const child = await startChild({
-        file: workflow, inputs, label,
+        file: workflow, inputs, label, signal,
         parent: { run_id: parent.run_id, workflow: parent.workflow, step_id: step.id, depth, ...(foreach ? { index } : {}) },
+        ...(prev?.run_id && (prev.label ?? null) === label ? { previous: { run_id: prev.run_id, status: prev.status } } : {}),
       });
       base.run_id = child.runId;
       live.set(index, child.stop);
       if (signal?.aborted) child.stop();
-      emit('workflow.child_started', { step_id: step.id, child_run_id: child.runId, workflow, ...(foreach ? { index, label } : {}) });
+      emit('workflow.child_started', {
+        step_id: step.id, child_run_id: child.runId, workflow, ...(foreach ? { index, label } : {}),
+        ...(child.resumedFrom ? { resumed_from: child.resumedFrom } : {}), ...(child.reused ? { reused: true } : {}),
+      });
       const end = await child.finished;
       Object.assign(base, { status: end.status || 'failed', error: end.error || null, outputs: end.outputs || {} });
+      cost = +end.cost_usd || 0;
     } catch (e) {
       base.error = e.message;
+      // stopped while it waited for a slot of Settings › Execution (#175)
+      if (signal?.aborted) base.status = 'cancelled';
     } finally {
       live.delete(index);
     }
-    emit('workflow.child_finished', { step_id: step.id, child_run_id: base.run_id, workflow, status: base.status, error: base.error, ...(foreach ? { index, label } : {}) });
+    emit('workflow.child_finished', { step_id: step.id, child_run_id: base.run_id, workflow, status: base.status, error: base.error, cost_usd: cost, ...(foreach ? { index, label } : {}) });
     results[index] = base;
   };
 

@@ -142,7 +142,9 @@ module.exports = (ctx) => {
   // while the branch is still at the approved commit; it is recorded as their approval.
   // mock: true resumes as a simulation (a simulated run always resumes as one).
   // images: pictures pasted into the instruction (#130), for the first resumed agent step
-  function resumeRun({ runId, step, instruction, mock, confirmGate = null, images = [] }) {
+  // child: { parent, onFinished, notices, signal, onSlotWait } when a resumed parent resumes its child
+  // run (#175, startChildRun); never from a channel. The run's own child runs go with `childRuns`.
+  function resumeRun({ runId, step, instruction, mock, confirmGate = null, images = [] }, child = null) {
     const runDir = ctx.runFolder(runId);
     if (ctx.runIsLive(path.basename(runDir))) throw new Error('The run is still active: wait for it to end (or stop it) before resuming it.');
     if (ctx.runAlive(path.basename(runDir))) throw new Error(`Run ${path.basename(runDir)} is still running in another app window: resume it there, or stop it first.`);
@@ -163,7 +165,8 @@ module.exports = (ctx) => {
     if (confirmedGate) steps[gate] = spec.steps[gate];
     return ctx.startWorkflowRun({
       file: spec.file, inputs: spec.inputs, attachments: spec.attachments, mock: spec.mock || mock === true, projectId: spec.projectId, issues: spec.issues,
-      resume: { runId: spec.runId, fromStep, steps, sessions: spec.sessions, handoffs: spec.handoffs, instruction: instruction || null, images: Array.isArray(images) ? images : [], worktree: spec.worktree, confirmedGate },
+      resume: { runId: spec.runId, fromStep, steps, sessions: spec.sessions, handoffs: spec.handoffs, instruction: instruction || null, images: Array.isArray(images) ? images : [], worktree: spec.worktree, confirmedGate, childRuns: spec.childRuns },
+      ...(child ? { parent: child.parent, onFinished: child.onFinished, notices: child.notices, signal: child.signal, onSlotWait: child.onSlotWait } : {}),
     });
   }
 

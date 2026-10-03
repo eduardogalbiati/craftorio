@@ -72,7 +72,7 @@ function fromEvents(file) {
   const children = new Map();
   for (const ev of events) {
     if (ev.type === 'workflow.child_started') children.set(ev.child_run_id, { run_id: ev.child_run_id, step_id: ev.step_id, ...(ev.index !== undefined ? { index: ev.index } : {}), workflow: ev.workflow, status: 'running' });
-    else if (ev.type === 'workflow.child_finished' && children.has(ev.child_run_id)) children.get(ev.child_run_id).status = ev.status;
+    else if (ev.type === 'workflow.child_finished' && children.has(ev.child_run_id)) Object.assign(children.get(ev.child_run_id), { status: ev.status, ...(ev.cost_usd !== undefined ? { cost_usd: ev.cost_usd } : {}) });
   }
   // the PR the run opened (#84): the latest step output with pr_url / pr_number
   const out = { key, sessions: [...byId.values()], progress: trailOf(events), localMerge, recovery, pr: prOfEvents(events), childRuns: [...children.values()] };
@@ -219,9 +219,11 @@ function readRun(runsDir, runId) {
     // of the development workflows' unit_tests / e2e_tests (null: a workflow without them)
     testsPlan: summary?.tests_plan || started?.tests_plan || null,
     // `type: workflow` steps (#174): { run_id, workflow, step_id, index?, depth } of the run that started
-    // this one, and [{ run_id, step_id, index?, workflow, status }] of the runs this one started (null: none)
+    // this one, and [{ run_id, step_id, index?, workflow, status, cost_usd }] of the runs this one started (null: none)
     parentRun: summary?.parent_run || started?.parent_run || null,
     childRuns: childRuns?.length ? childRuns : null,
+    // what those child runs cost (#175, their own children included; not in costUsd), 0 without any
+    childrenCostUsd: summary?.children_cost_usd ?? (childRuns || []).reduce((a, c) => a + (+c.cost_usd || 0), 0),
     recovery: fromEvents(path.join(dir, 'events.jsonl')).recovery,
     error,
     // a run without an end that another live app process runs (#112): { pid, host }, else null

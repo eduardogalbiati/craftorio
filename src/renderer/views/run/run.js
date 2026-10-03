@@ -361,14 +361,20 @@ function childRunsStrip(r) {
   if (!p?.run_id && !kids.length) return '';
   const link = (id, text, tip) => `<button type="button" class="link-btn small" data-run-link="${esc(id)}" title="${esc(tip)}">${esc(text)}</button>`;
   const parent = p?.run_id ? `<span class="muted small">Child run of</span> ${link(p.run_id, p.workflow || p.run_id, `Open run ${p.run_id} (step ${p.step_id || '?'})`)}${Number.isInteger(p.index) ? ` <span class="badge">item ${p.index + 1}</span>` : ''}` : '';
-  const children = kids.length ? `<span class="muted small">Child runs</span> ${kids.map((k) => {
+  const cost = childRunsCost(r);
+  const children = kids.length ? `<span class="muted small">Child runs${cost ? ` · ${esc(fmtCost(cost))}` : ''}</span> ${kids.map((k) => {
     const name = k.label || (Number.isInteger(k.index) ? `item ${k.index + 1}` : k.workflow || k.run_id);
+    // a resumed parent's children (#175): reused when they had succeeded, else resumed
+    const how = k.reused ? `, reused from the previous run` : k.resumed_from ? `, resumes ${k.resumed_from}` : '';
     return k.run_id
-      ? `<span class="child-run">${link(k.run_id, name, `Open run ${k.run_id} (${k.workflow || 'workflow'}, step ${k.step_id})`)} <span class="pill pill-${esc(k.status)}">${esc(k.status)}</span></span>`
+      ? `<span class="child-run">${link(k.run_id, name, `Open run ${k.run_id} (${k.workflow || 'workflow'}, step ${k.step_id}${how}${k.cost_usd ? `, ${fmtCost(k.cost_usd)}` : ''})`)} <span class="pill pill-${esc(k.status)}">${esc(k.status)}</span>${k.reused ? ' <span class="badge">reused</span>' : k.resumed_from ? ' <span class="badge">resumed</span>' : ''}</span>`
       : `<span class="child-run muted small">${esc(name)} <span class="pill pill-${esc(k.status)}">${esc(k.status)}</span></span>`;
   }).join('')}` : '';
   return `<div class="chain-banner-pipe child-runs">${parent}${children}</div>`;
 }
+
+// What a run's child runs cost so far (#175): the finished ones, their own children included.
+const childRunsCost = (r) => (r?.childRuns || []).reduce((a, c) => a + (+c.cost_usd || 0), 0);
 
 async function onChainBannerClick(e) {
   const link = e.target.closest('[data-run-link]');
@@ -486,7 +492,8 @@ function renderSessions() {
         ${isOrch ? `
         <div class="metric"><label>steps</label><b>${[...state.steps.values()].reduce((a, x) => a + x.visits, 0)}</b></div>
         <div class="metric"><label>child sessions</label><b>${list.length - 1}</b></div>
-        <div class="metric"><label>total cost</label><b>${fmtCost(totals().cost)}</b></div>` : `
+        <div class="metric"><label>total cost</label><b>${fmtCost(totals().cost)}</b></div>${state.run?.childRuns?.length ? `
+        <div class="metric" title="What its child runs cost (their own children included), not in its total cost"><label>child runs cost</label><b>${fmtCost(childRunsCost(state.run))}</b></div>` : ''}` : `
         <div class="metric"><label>active</label><b>${fmtDur(s.active_ms)}</b></div>
         <div class="metric"><label>in / out</label><b>${fmtNum((t.input || 0) + (t.cache_read || 0))} / ${fmtNum(t.output)}</b></div>
         <div class="metric"><label>cost</label><b>${fmtCost(s.cost_usd)}</b></div>`}

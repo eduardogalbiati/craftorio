@@ -607,6 +607,9 @@ function addUsage(total, u) {
   for (const k of Object.keys(total)) total[k] += (u && u[k]) || 0;
 }
 
+// What a child run cost from its summary (#175): its own sessions and its own child runs.
+const childRunCost = (summary) => +((+summary?.cost_usd || 0) + (+summary?.children_cost_usd || 0)).toFixed(6);
+
 class WorkflowRun extends EventEmitter {
   // budget: { [provider id]: { name, limitUsd, limitTokens, blockOnLimit, usedUsd, usedTokens } }
   // (this month's usage before this run, see src/usage.js); prices: USD per 1M tokens by model.
@@ -1247,10 +1250,12 @@ class WorkflowRun extends EventEmitter {
       this.emitEvent('limit.exceeded', { limit: 'max_total_duration', value: lim.max_total_duration });
       throw new Error(`Maximum duration exceeded (${lim.max_total_duration}).`);
     }
-    const cost = [...this.sessions.values()].reduce((a, s) => a + s.costUsd, 0);
+    // its child runs' cost counts too (#175)
+    const children = this.childrenCostUsd();
+    const cost = [...this.sessions.values()].reduce((a, s) => a + s.costUsd, 0) + children;
     if (lim.max_total_cost_usd && cost > lim.max_total_cost_usd) {
-      this.emitEvent('limit.exceeded', { limit: 'max_total_cost_usd', value: lim.max_total_cost_usd, current: cost });
-      throw new Error(`Maximum cost exceeded (US$ ${lim.max_total_cost_usd}).`);
+      this.emitEvent('limit.exceeded', { limit: 'max_total_cost_usd', value: lim.max_total_cost_usd, current: cost, ...(children ? { children } : {}) });
+      throw new Error(`Maximum cost exceeded (US$ ${lim.max_total_cost_usd}${children ? `, of which US$ ${children.toFixed(2)} by its child runs` : ''}).`);
     }
   }
 
@@ -3045,16 +3050,21 @@ class WorkflowRun extends EventEmitter {
   async runChildWorkflows(step, st) {
     this.setStatus(this.orchestrator, 'waiting');
     const emit = (type, data) => {
-      if (type === 'workflow.child_started') this.childRuns.push({ run_id: data.child_run_id, step_id: step.id, visit: st.visits, ...(data.index !== undefined ? { index: data.index } : {}), workflow: data.workflow, status: 'running' });
+      if (type === 'workflow.child_started') {
+        this.childRuns.push({
+          run_id: data.child_run_id, step_id: step.id, visit: st.visits, ...(data.index !== undefined ? { index: data.index, label: data.label } : {}), workflow: data.workflow, status: 'running',
+          ...(data.resumed_from ? { resumed_from: data.resumed_from } : {}), ...(data.reused ? { reused: true } : {}),
+        });
+      }
       if (type === 'workflow.child_finished') {
         const c = this.childRuns.find((x) => x.run_id && x.run_id === data.child_run_id);
-        if (c) c.status = data.status;
+        if (c) Object.assign(c, { status: data.status, cost_usd: data.cost_usd || 0 });
       }
       this.emitEvent(type, data);
     };
     try {
       return await runWorkflowStep({
-        step, render, emit, startChild: this.startChild, signal: this.abort.signal,
+        step, render, emit, startChild: this.startChild, signal: this.abort.signal, previous: this.previousChildren(step),
         scope: { ...this.ctx, iteration: st.iteration },
         parent: { run_id: this.runId, workflow: this.wf.metadata?.name || path.basename(this.file), depth: this.parent?.depth || 0 },
       });
@@ -3063,10 +3073,37 @@ class WorkflowRun extends EventEmitter {
     }
   }
 
+  // A resumed run (#175): the children the previous run started for the step it resumes from, by item
+  // index ({ <index>: { run_id, status, label } }, the latest per index), the first time it runs that step
+  // only (a later visit starts its children afresh); null when there are none.
+  previousChildren(step) {
+    const r = this.resume;
+    if (!r?.childRuns?.length || r.fromStep !== step.id || this.previousChildrenUsed) return null;
+    this.previousChildrenUsed = true;
+    const out = {};
+    for (const c of r.childRuns) if (c.step_id === step.id && c.run_id) out[c.index ?? 0] = { run_id: c.run_id, status: c.status, label: c.label ?? null };
+    return Object.keys(out).length ? out : null;
+  }
+
+  // What this run's child runs cost (#175), their own children included: it counts toward this run's
+  // max_total_cost_usd and shows next to its cost; their context never counts toward its context limit.
+  childrenCostUsd() {
+    return this.childRuns.reduce((a, c) => a + (+c.cost_usd || 0), 0);
+  }
+
   // The default startChild (the CLI, engine tests): a WorkflowRun of its own in the same runs folder,
   // with this run's settings, emitted as 'child' before it starts (record its events, answer its gates).
-  // The child's workflow file: next to this run's, else the bundled one.
-  async startChildRun({ file, inputs, parent, label }) {
+  // The child's workflow file: next to this run's, else the bundled one. A resumed run reuses a child
+  // of its previous run that succeeded (`previous`, #175); any other child starts afresh (resuming a
+  // child from where it stopped is the service's, src/service/areas/runs.js).
+  async startChildRun({ file, inputs, parent, label, previous }) {
+    if (previous?.run_id) {
+      let summary = null;
+      try { summary = JSON.parse(fs.readFileSync(path.join(this.ctx.runs_dir, path.basename(previous.run_id), 'summary.json'), 'utf8')); } catch { /* not finished */ }
+      if (summary?.status === 'success') {
+        return { runId: summary.run_id || path.basename(previous.run_id), reused: true, stop: () => {}, finished: Promise.resolve({ status: 'success', outputs: summary.outputs || {}, error: null, cost_usd: childRunCost(summary) }) };
+      }
+    }
     const bundled = path.join(__dirname, '..', '..', 'workflows');
     const dirs = [path.dirname(path.resolve(this.file)), bundled];
     const found = path.isAbsolute(file) ? file : dirs.map((d) => path.join(d, file)).find((f) => fs.existsSync(f));
@@ -3078,7 +3115,7 @@ class WorkflowRun extends EventEmitter {
       notices: [{ level: 'info', message: `Child run of ${this.runId} (step ${parent.step_id}${label ? `, ${label}` : ''}).` }],
     });
     const finished = new Promise((resolve) => child.on('event', (ev) => {
-      if (ev.type === 'workflow.finished') resolve({ status: ev.status, outputs: ev.outputs || {}, error: ev.error });
+      if (ev.type === 'workflow.finished') resolve({ status: ev.status, outputs: ev.outputs || {}, error: ev.error, cost_usd: childRunCost(ev.summary) });
     }));
     this.children.set(child.runId, child);
     this.emit('child', child);
@@ -3192,7 +3229,7 @@ ${stderr || stdout}`.slice(0, 1500)));
         ...(this.from ? { from: this.from } : {}),
         // `type: workflow` steps (#174): the run that started this one, the runs this one started
         ...(this.parent ? { parent_run: this.parent } : {}),
-        ...(this.childRuns.length ? { child_runs: this.childRuns } : {}),
+        ...(this.childRuns.length ? { child_runs: this.childRuns, children_cost_usd: +this.childrenCostUsd().toFixed(6) } : {}),
         sessions,
       },
     });
@@ -3201,6 +3238,7 @@ ${stderr || stdout}`.slice(0, 1500)));
 
 module.exports = {
   attemptSummary,
+  childRunCost,
   evalExpr,
   extractJson,
   loadWorkflow,

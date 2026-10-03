@@ -497,7 +497,10 @@ async function stopRun() {
   // a run past a human gate holds work the owner already approved: always ask (#112)
   const passed = ((await api.listActiveRuns().catch(() => [])) || []).find((x) => x.runId === r.id)?.passedGates || [];
   const why = passed.length ? `It has already passed the human gate${passed.length > 1 ? 's' : ''} ${passed.join(', ')}: a new run would redo that work. ` : '';
-  if ((state.settings.confirmStop || passed.length) && !(await confirmDialog('Stop workflow', `${why}Running sessions of ${runLabel(r)} will be closed. Stop this run?`, 'Stop'))) return;
+  // its `type: workflow` steps' child runs in progress stop with it: always ask (#175)
+  const kids = (r.childRuns || []).filter((c) => c.run_id && c.status === 'running');
+  const children = kids.length ? `Its ${kids.length} child run${kids.length > 1 ? 's' : ''} in progress (${kids.map((c) => c.label || c.run_id).join(', ')}) will be stopped too; resuming this run resumes them. ` : '';
+  if ((state.settings.confirmStop || passed.length || kids.length) && !(await confirmDialog('Stop workflow', `${why}${children}Running sessions of ${runLabel(r)} will be closed. Stop this run?`, 'Stop'))) return;
   api.stopRun(r.id);
 }
 
@@ -685,13 +688,14 @@ function onEvent(ev) {
     // a `type: workflow` step's child runs (#174): the Run screen links them
     case 'workflow.child_started':
       if (v.run && ev.child_run_id) {
-        v.run.childRuns = [...(v.run.childRuns || []).filter((c) => c.run_id !== ev.child_run_id), { run_id: ev.child_run_id, step_id: ev.step_id, index: ev.index, label: ev.label, workflow: ev.workflow, status: 'running' }];
+        v.run.childRuns = [...(v.run.childRuns || []).filter((c) => c.run_id !== ev.child_run_id), { run_id: ev.child_run_id, step_id: ev.step_id, index: ev.index, label: ev.label, workflow: ev.workflow, status: ev.reused ? 'success' : 'running', resumed_from: ev.resumed_from, reused: ev.reused }];
       }
-      orch(ev, `child run ${ev.child_run_id} started (${ev.workflow}${ev.label ? `: ${ev.label}` : ''})`, 'transition');
+      // a resumed parent reuses the children that succeeded and resumes the others (#175)
+      orch(ev, `child run ${ev.child_run_id} ${ev.reused ? 'reused' : ev.resumed_from ? `resumed from ${ev.resumed_from}` : 'started'} (${ev.workflow}${ev.label ? `: ${ev.label}` : ''})`, 'transition');
       break;
     case 'workflow.child_finished': {
       const c = v.run?.childRuns?.find((x) => x.run_id && x.run_id === ev.child_run_id);
-      if (c) c.status = ev.status;
+      if (c) Object.assign(c, { status: ev.status, cost_usd: ev.cost_usd || 0 });
       orch(ev, `child run ${ev.child_run_id || '(not started)'} ${ev.status}${ev.label ? ` (${ev.label})` : ''}${ev.error ? `: ${ev.error}` : ''}`, ev.status === 'success' ? 'transition' : 'error');
       break;
     }

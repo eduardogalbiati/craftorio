@@ -6,7 +6,11 @@
 
 const fs = require('fs');
 const path = require('path');
-const { WorkflowRun, loadWorkflow } = require('../../engine/workflow');
+const {
+  childRunCost,
+  loadWorkflow,
+  WorkflowRun,
+} = require('../../engine/workflow');
 const { Recorder } = require('../../engine/recorder');
 const { resolveCommand } = require('../../engine/providers');
 const simulation = require('../../engine/simulation');
@@ -26,6 +30,9 @@ const runOwner = require('../../run-owner');
 const runPr = require('../../run-pr');
 const notifier = require('../../notifications');
 const { num } = require('../common');
+
+// how often a child run waiting for a slot of Settings › Execution checks again (#175)
+const SLOT_POLL_MS = 1000;
 
 module.exports = (ctx) => {
   const { host, events } = ctx;
@@ -78,11 +85,19 @@ module.exports = (ctx) => {
     };
   }
 
-  // Why a run ({ mock, projectId }) cannot start now ('' = it can). `self` is its own reservation.
-  function slotProblem({ mock, projectId }, self = null) {
+  // Why a run ({ mock, projectId, parentRunId }) cannot start now ('' = it can). `self` is its own reservation.
+  // Child runs of `type: workflow` steps count like any run (#175), and a parent waiting for its children
+  // lends them its slot: it does not count for its own descendants, nor for anyone while one of its
+  // children holds the slot (a limit of 1 runs the children one at a time instead of never).
+  function slotProblem({ mock, projectId, parentRunId = null }, self = null) {
     const c = concurrency();
     if (mock && !c.countSimulations) return '';
-    const taken = [...active.values(), ...[...reserved].filter((x) => x !== self)].filter((r) => c.countSimulations || !r.mock);
+    const all = [...active.values(), ...[...reserved].filter((x) => x !== self)];
+    const parentOf = (r) => r?.parent?.run_id || r?.parentRunId || null;
+    const ancestors = new Set();
+    for (let id = parentRunId; id && !ancestors.has(id); id = parentOf(active.get(id))) ancestors.add(id);
+    const lends = (r) => !!r.runId && (ancestors.has(r.runId) || all.some((x) => parentOf(x) === r.runId));
+    const taken = all.filter((r) => (c.countSimulations || !r.mock) && !lends(r));
     if (taken.length >= c.max) {
       return c.enabled ? `${taken.length} of ${c.max} runs in progress: wait for one to finish, or raise the limit in Settings › Execution.` : 'A workflow is already running.';
     }
@@ -140,10 +155,12 @@ module.exports = (ctx) => {
   // notices: [{ level, message }] the starter logs in the run (e.g. an issue read from the cache, #168)
   // attachments: { <input>: [path | { path, name }] } images attached to inputs (#129, WorkflowRun)
   // then / from: the run's chain (#134, WorkflowRun): what follows it, and the run whose chain started it
-  // parent: the run whose `type: workflow` step starts this one (#174, WorkflowRun): it takes no slot of
-  // Settings › Execution (its parent holds one and waits for it, so a limit of 1 would never free one)
+  // parent: the run whose `type: workflow` step starts this one (#174, WorkflowRun): it takes a slot of
+  // Settings › Execution like any run (#175, slotProblem: its parent lends it its own) and, when none is
+  // free, waits for one instead of failing; signal: the parent's abort signal (stops that wait);
+  // onSlotWait: (why) => void, called once when it has to wait
   // onFinished: (workflow.finished event) => void, called when the run ends (the parent's step waits on it)
-  async function startWorkflowRun({ file, inputs, mock, mockSequences = null, resume = null, projectId: forcedProject = null, issues = null, allowKeptWork = false, notices: startNotices = [], attachments = null, then = null, from = null, parent = null, onFinished = null }) {
+  async function startWorkflowRun({ file, inputs, mock, mockSequences = null, resume = null, projectId: forcedProject = null, issues = null, allowKeptWork = false, notices: startNotices = [], attachments = null, then = null, from = null, parent = null, onFinished = null, signal = null, onSlotWait = null }) {
     // simulation-only (automated checks): a real run is refused, never turned into a simulation
     if (!mock) simulation.refuseReal('a real run');
     // the same issues never get a second live run, from this app or another one (#112): resume that run instead
@@ -161,7 +178,8 @@ module.exports = (ctx) => {
       throw err;
     }
     const { ws } = ctx;
-    const slot = { mock: !!mock, projectId: forcedProject };
+    const slot = { mock: !!mock, projectId: forcedProject, parentRunId: parent?.run_id || null };
+    if (parent) await waitForSlot(slot, signal, onSlotWait);
     const busy = parent ? '' : slotProblem(slot);
     if (busy) throw new Error(busy);
     reserved.add(slot);
@@ -273,17 +291,52 @@ module.exports = (ctx) => {
     return { runId: run.runId, runDir: run.runDir };
   }
 
+  // A child run waits until slotProblem lets it start (#175); the parent's stop ends the wait.
+  async function waitForSlot(slot, signal, onWait) {
+    let told = false;
+    for (let busy = slotProblem(slot); busy; busy = slotProblem(slot)) {
+      if (signal?.aborted) break;
+      if (!told) { told = true; onWait?.(busy); }
+      await new Promise((resolve) => setTimeout(resolve, SLOT_POLL_MS));
+    }
+    if (signal?.aborted) throw new Error('Cancelled: the parent run was stopped before this child run could start.');
+  }
+
   // A child run of a `type: workflow` step (#174, WorkflowRun startChild): started like any run of the
   // parent's project and mode, its gates waiting for the owner; resolves `finished` when it ends.
-  async function startChildRun(parentRun, { file, inputs, parent, label }) {
+  // previous: { run_id, status } the child a resumed parent's previous run started for this item (#175):
+  // reused when it succeeded, else resumed from where it stopped (the step Resume from step… suggests,
+  // its gate when that step lies past a decided one: a gate always asks again), else started afresh.
+  async function startChildRun(parentRun, { file, inputs, parent, label, signal = null, previous = null }) {
     let done;
     const finished = new Promise((resolve) => { done = resolve; });
-    const started = await startWorkflowRun({
-      file, inputs, mock: parentRun.mock, projectId: parentRun.projectId, parent,
-      onFinished: (ev) => done({ status: ev.status, outputs: ev.outputs || {}, error: ev.error }),
-      notices: [{ level: 'info', message: `Child run of ${parentRun.runId} (${parentRun.wf.metadata?.name || path.basename(parentRun.file)}, step ${parent.step_id}${label ? `: ${label}` : ''}).` }],
-    });
-    return { runId: started.runId, finished, stop: () => active.get(started.runId)?.stop() };
+    const step = `${parentRun.wf.metadata?.name || path.basename(parentRun.file)}, step ${parent.step_id}${label ? `: ${label}` : ''}`;
+    const child = {
+      parent, signal,
+      onFinished: (ev) => done({ status: ev.status, outputs: ev.outputs || {}, error: ev.error, cost_usd: childRunCost(ev.summary) }),
+      onSlotWait: (why) => parentRun.emitEvent('log', { level: 'info', step_id: parent.step_id, message: `${parent.step_id}: a child run${label ? ` (${label})` : ''} waits for a free slot: ${why}` }),
+      notices: [{ level: 'info', message: `Child run of ${parentRun.runId} (${step}).` }],
+    };
+    const old = previous?.run_id && ctx.ws ? runs.readRun(ctx.ws.runs, path.basename(String(previous.run_id))) : null;
+    if (old?.status === 'success') {
+      return { runId: old.runId, reused: true, stop: () => {}, finished: Promise.resolve({ status: 'success', outputs: old.outputs || {}, error: null, cost_usd: old.costUsd + (old.childrenCostUsd || 0) }) };
+    }
+    let started = null;
+    if (old && old.status !== 'running') {
+      try {
+        const o = ctx.resumeOptions({ runId: old.runId });
+        const at = o.steps.find((s) => s.id === o.suggested);
+        const fromStep = at?.blockedBy || o.suggested;
+        if (!fromStep) throw new Error('no step to resume from');
+        child.notices = [{ level: 'info', message: `Child run of ${parentRun.runId} (${step}), resuming ${old.runId} from ${fromStep}.` }];
+        started = { ...(await ctx.resumeRun({ runId: old.runId, step: fromStep, mock: parentRun.mock }, child)), resumedFrom: old.runId };
+      } catch (e) {
+        if (signal?.aborted) throw e;
+        parentRun.emitEvent('log', { level: 'warn', step_id: parent.step_id, message: `${parent.step_id}: child run ${old.runId} could not be resumed (${e.message}); starting it again.` });
+      }
+    }
+    started ||= await startWorkflowRun({ file, inputs, mock: parentRun.mock, projectId: parentRun.projectId, ...child });
+    return { runId: started.runId, finished, stop: () => active.get(started.runId)?.stop(), ...(started.resumedFrom ? { resumedFrom: started.resumedFrom } : {}) };
   }
 
   // Provider config of a run's workflow: the live one, or the workflow file named in its events.

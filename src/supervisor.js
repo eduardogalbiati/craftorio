@@ -305,8 +305,12 @@ function resumeSpec(runDir, fromStep) {
   const sessions = {};
   const handoffs = {};
   let worktree = null; // the run's git worktree (worktree.ready / .kept / .removed): the resume continues there
+  // its `type: workflow` steps' child runs (#175): a resume reuses the ones that succeeded and resumes the others
+  const childRuns = new Map(); // run id -> { run_id, step_id, index?, label, status }
   for (const ev of events) {
     if (ev.type === 'step.finished' && !ev.error) steps[ev.step_id] = { output: ev.output, visits: ev.visit };
+    if (ev.type === 'workflow.child_started' && ev.child_run_id) childRuns.set(ev.child_run_id, { run_id: ev.child_run_id, step_id: ev.step_id, ...(ev.index !== undefined ? { index: ev.index } : {}), label: ev.label ?? null, status: 'running' });
+    if (ev.type === 'workflow.child_finished' && childRuns.has(ev.child_run_id)) childRuns.get(ev.child_run_id).status = ev.status;
     if (ev.session?.agent && ev.session.provider_session_id && ev.session.provider !== 'mock') sessions[ev.session.agent] = ev.session.provider_session_id;
     if (/^worktree\./.test(ev.type) && ev.dir) worktree = { dir: ev.dir, branch: ev.branch || worktree?.branch || null };
     if (ev.type === 'handoff.saved' && ev.agent && ev.note) handoffs[ev.agent] = { text: ev.note, step: ev.step_id, visit: ev.visit, path: ev.path };
@@ -314,7 +318,8 @@ function resumeSpec(runDir, fromStep) {
   // attachments: the images attached to inputs (#129), the previous run's copies (the new run copies them again)
   return { runId: path.basename(runDir), file: started.file, inputs: started.inputs || {}, attachments: started.attachments || null, mock: !!started.mock, projectId: started.project_id || null,
     // runs recorded before groups have a single `issue`
-    issues: started.issues || (started.issue ? [started.issue] : null), personas: started.personas || null, fromStep, steps, sessions, handoffs, worktree };
+    issues: started.issues || (started.issue ? [started.issue] : null), personas: started.personas || null, fromStep, steps, sessions, handoffs, worktree,
+    childRuns: [...childRuns.values()] };
 }
 
 /**
