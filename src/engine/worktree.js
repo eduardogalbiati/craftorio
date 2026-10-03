@@ -31,7 +31,8 @@ function git(args, cwd, { timeout = GIT_TIMEOUT_MS, auth = false } = {}) {
   const env = { ...process.env, GIT_TERMINAL_PROMPT: '0', GCM_INTERACTIVE: 'never' };
   return new Promise((resolve, reject) => {
     execFile('git', [...(auth ? authArgs() : []), ...args], { cwd, env, timeout, windowsHide: true, maxBuffer: 16 * 1024 * 1024 }, (err, stdout, stderr) => {
-      if (err) reject(new Error(`git ${args[0]} failed: ${String(stderr || err.message).trim()}`));
+      // no stderr: say how it ended (exit code, signal or timeout), not only the command line
+      if (err) reject(new Error(`git ${args[0]} failed: ${String(stderr).trim() || `${err.message.trim()} (${err.killed ? 'killed after the timeout' : `exit code ${err.code ?? '?'}${err.signal ? `, signal ${err.signal}` : ''}`})`}`));
       else resolve(String(stdout).trim());
     });
   });
