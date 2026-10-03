@@ -29,7 +29,8 @@ function supervisorTools(ctx) {
       inputSchema: obj(),
       // The fields the description names, not the screen's extras (builderProblems alone is a fifth of
       // the payload): the whole list must stay under MAX_CHARS, or clip() cuts the JSON mid-string.
-      run: () => json(ctx.listWorkflows().map(({ file, origin, name, version, description, category, tags, inputs, outputs, agents: a, steps }) => (
+      // Compact JSON: the indented list of the bundled workflows alone passed MAX_CHARS.
+      run: () => JSON.stringify(ctx.listWorkflows().map(({ file, origin, name, version, description, category, tags, inputs, outputs, agents: a, steps }) => (
         { file, origin, name, version, description, category, tags, inputs, outputs, agents: a, steps }))),
     },
     {
