@@ -58,6 +58,29 @@ outputs:
   assert.deepEqual(list.find((w) => w.file === 'fixture-service.yaml').outputs, {}); // no outputs: declared
 });
 
+test('listWorkflows (#224): an agent\'s `color` from the YAML reaches the renderer; an agent without one has none', (t) => {
+  const { api, service } = makeService(t);
+  const yaml = `apiVersion: multiagent/v1
+kind: Workflow
+metadata:
+  name: colored
+agents:
+  painter: { provider: claude, model: m, session: ephemeral, color: "#123456" }
+  plain: { provider: claude, model: m, session: ephemeral }
+steps:
+  - id: work
+    agent: painter
+    prompt: "do it"
+  - id: check
+    agent: plain
+    prompt: "check it"
+`;
+  fs.writeFileSync(path.join(service.workspace().workflows, 'colored.yaml'), yaml);
+  const wf = api['workflows:list']().find((w) => w.file === 'colored.yaml');
+  assert.equal(wf.agents.painter.color, '#123456');
+  assert.ok(!wf.agents.plain.color);
+});
+
 test('workflows:pipelines (#135): a valid pipeline returns its stages, each with its target, condition, inputs and map', (t) => {
   const { api, service } = makeService(t);
   const ws = service.workspace();

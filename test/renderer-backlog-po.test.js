@@ -55,15 +55,45 @@ function loadAppliedState() {
   return { helpers: sandbox.helpers, setIssues: (list) => { issues = list; } };
 }
 
-test('groupHtml renders the workflow, size, warnings, the mode reason and the Assign/Add to roadmap buttons, never applying anything by itself', () => {
+test('groupHtml renders the size, warnings and the Assign/Add to roadmap buttons, never applying anything by itself', () => {
   const fn = /function groupHtml\(g, m, n\)[\s\S]*?\n  \}/.exec(src)[0];
-  assert.match(fn, /<span class="mono">\$\{esc\(g\.workflow\)\}<\/span>/);
-  assert.match(fn, /\$\{sizeText\(g\)\}/);
-  assert.match(fn, /\$\{\(g\.warnings \|\| \[\]\)\.map\(\(w\) => `<div class="small warn-text">⚠ \$\{esc\(w\)\}<\/div>`\)\.join\(''\)\}/);
-  assert.match(fn, /\$\{g\.modeReason \? `<div class="small"><span class="muted">mode:<\/span> \$\{esc\(g\.modeReason\)\}<\/div>` : ''\}/);
+  assert.match(fn, /sizeText\(g\)/);
+  assert.match(fn, /g\.warnings/);
   assert.match(fn, /data-po-act="assign"/);
   assert.match(fn, /data-po-act="roadmap"/);
   assert.doesNotMatch(fn, /api\.(startRun|assignIssues)/); // rendering never starts a run or assigns by itself
+});
+
+// ---- #216: the proposal card in sections, inputs as the shared pills ----------------------------
+
+test('groupHtml (#216): the workflow by its name, not its file, and its inputs as the shared WorkflowInputs.inputPills', () => {
+  const fn = /function groupHtml\(g, m, n\)[\s\S]*?\n  \}/.exec(src)[0];
+  assert.doesNotMatch(fn, /<span class="mono">\$\{esc\(g\.workflow\)\}<\/span>/);
+  assert.match(src, /inputPills\(/);
+  // no raw key=value anywhere visible on the card (groupHtml or the Cost step's badge)
+  assert.doesNotMatch(src, /`<span class="mono">\$\{esc\(k\)\}=\$\{esc\(v\)\}<\/span>`/);
+  const cost = /function costHtml\(g\) \{[\s\S]*?\n  \}/.exec(src)?.[0] || '';
+  assert.match(cost, /inputPills\(/, 'the Cost step\'s choices are pills too');
+});
+
+test('groupHtml (#216): the reason, the mode reason and the warnings are rendered as Markdown in labelled sections', () => {
+  assert.match(src, /markdownHtml\([^)]*reason/);
+  assert.match(src, /markdownHtml\([^)]*modeReason/);
+  assert.match(src, />\s*Why\s*</);
+  assert.match(src, />\s*Files\s*</);
+  assert.match(src, />\s*Estimate\s*</);
+  assert.match(src, /callout/); // the warnings
+});
+
+test('the proposal\'s estimate (#215, #216) shows the time next to the cost', () => {
+  assert.match(src, /formatMinutes\(/);
+});
+
+test('the Product Owner skill (#216) asks for short reasons, with Markdown allowed (bold for the key point)', () => {
+  const skill = fs.readFileSync(path.join(__dirname, '..', 'skills', 'backlog-product-owner', 'SKILL.md'), 'utf8');
+  assert.match(skill, /reason[^\n]*\bshort\b|\bshort\b[^\n]*reason/i);
+  assert.match(skill, /reason[^\n]*Markdown|Markdown[^\n]*reason/i);
+  assert.match(skill, /\bbold\b/i);
 });
 
 // ---- a group already applied (#140): derived from the Backlog's data, never remembered ----------
