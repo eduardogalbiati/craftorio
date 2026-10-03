@@ -109,12 +109,12 @@ p { margin: 0; }
 .frame video { display: block; width: 100%; aspect-ratio: 14 / 9; object-fit: cover; object-position: top left; }
 .note { margin-top: 14px; font: 13px var(--mono); color: var(--on-night-soft); }
 
-/* learnings */
-.lessons { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 48px; }
+/* chapters */
+.lessons { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-top: 48px; }
 .lessons article { background: #fff; border: 1px solid var(--line-light); border-radius: 8px; padding: 26px; display: grid; gap: 10px; align-content: start; transition: transform .2s, box-shadow .2s; }
 .lessons article:hover { transform: translateY(-3px); box-shadow: 0 18px 40px -24px rgba(16, 24, 40, .35); }
 .lessons .n { font: 900 30px var(--display); font-stretch: 115%; color: var(--amber); }
-.lessons h3 { font-size: 21px; }
+.lessons h3 { font-size: 19px; }
 .lessons p { color: var(--ink-soft); font-size: 15px; }
 .soon { justify-self: start; font: 500 11px var(--mono); text-transform: uppercase; letter-spacing: .1em; color: var(--teal); border: 1px solid color-mix(in srgb, var(--teal) 50%, transparent); padding: 4px 8px; border-radius: 4px; margin-top: 6px; }
 
