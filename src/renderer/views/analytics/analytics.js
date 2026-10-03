@@ -31,7 +31,8 @@
     data: null, error: null, loading: false,
     report: null, reportError: null, analyzing: false,
     sortKey: 'tokens',
-    tab: TAB_IDS().includes(saved.tab) ? saved.tab : 'usage',
+    // inline (not TAB_IDS): the Supervisor's context test evaluates this literal on its own
+    tab: ['usage', 'performance', ...Object.keys(window.AnalyticsTabs || {})].includes(saved.tab) ? saved.tab : 'usage',
     project: (() => { try { return sessionStorage.getItem(SS_PROJECT) || saved.project || null; } catch { return saved.project || null; } })(),
     marker: saved.marker || '',
     perf: null, perfError: null, perfLoading: false, perfSort: 'runs',
@@ -511,7 +512,8 @@
   };
   window.analyticsContext = () => {
     const r = range();
-    if (extraTab(ax.tab)) return extraTab(ax.tab).context();
+    const extra = (window.AnalyticsTabs || {})[ax.tab];
+    if (extra) return extra.context();
     if (ax.tab === 'performance') return `Repository performance tab, ${ax.perf?.project?.name || 'no project'}, range ${r.from} to ${r.to}${ax.marker ? `, split before/after ${ax.marker}` : ''}`;
     return `range ${r.from} to ${r.to}, ${ax.scope === 'machine' ? 'every CLI session on this machine' : 'the orchestrator\'s runs'}`;
   };
