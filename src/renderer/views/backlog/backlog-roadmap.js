@@ -19,8 +19,18 @@
 // shows on top of every view while it is on.
 // When it finishes (#134): an item's chain (its run's `then`) is a badge, and the Edit form has the
 // ChainPicker (chain-picker.js), mounted by mountChain once backlog.js drew the form.
+// An item with a run (#194) has a progress ring on the right of its card: the estimated % (RunProgress.
+// estimateProgress over the item's `run` from the service: its trail and its workflow's typical step
+// times), the current step or group with its agent, the gate / failure / done states; hovering or
+// clicking the ring shows the run's steps (the runs list's chips), a chip opens the run at that group.
+// A refused start (#196: kept work, the item that paused the roadmap, an error without a run) offers
+// Retry / Skip like a failed run; the bar's "Show the item" scrolls to the item that paused it.
+// Start, Resume and Run this stage list the items whose workflow pushes while the default development
+// workflow (#195, DefaultWorkflow) merges locally: switch them to the default, or start anyway.
 // Rendered into #bl-list by backlog.js (mode 'roadmap'), which passes `ctx`
-// ({ projectId, setData, render, setError }). Uses app.js globals (esc, state, errMsg, devMode, confirmDialog).
+// ({ projectId, setData, render, setError }). Uses app.js globals (esc, state, errMsg, devMode, confirmDialog,
+// fmtDur, agentLabel, scheduleRender), run-list.js's (progressChip, robotAvatar, PERSON_SVG, ENGINE_SVG),
+// choiceDialog (kept-work-dialog.js), RunProgress and DefaultWorkflow.
 /* global api */
 (() => {
   const STATE_LABEL = { planned: 'planned', running: 'running', paused: 'paused', done: 'done' };
@@ -57,6 +67,15 @@
       .finally(() => { loading = false; });
   }
   const inputDefs = (x) => workflows?.get(x.workflow)?.inputs || {};
+  // #195: an item whose workflow pushes (a branch, a PR/MR, CI minutes) while the default merges locally
+  function pushesAgainstDefault(x) {
+    const def = window.DefaultWorkflow?.current();
+    return def?.merge === 'local' && x.workflow !== def.file && workflows?.get(x.workflow)?.merge === 'remote';
+  }
+  // #196: Retry / Skip on a failed run and on a refused start (the item that paused the roadmap, or an
+  // error without a run, e.g. kept work of an ended run), never while its run is alive
+  const refusedStart = (x) => !x.runId && !!x.error && x.status !== 'skipped' && x.status !== 'done';
+  const retryable = (x, r) => x.status === 'failed' || (x.status !== 'running' && (r?.pausedBy === x.id || refusedStart(x)));
   let editing = null; // the item whose Edit form is open
   let adding = false; // its "add input" name + value pair is shown
   let noteEditing = null; // the stage whose note is being edited
@@ -137,10 +156,73 @@
       </div>`;
   }
 
-  function itemHtml(x, s, n, byNumber) {
+  // ---- the run's progress ring (#194) -------------------------------------------------------------------
+  const RING_ROBOT = { running: 'thinking', waiting: 'waiting', failed: 'error', stopped: 'sleeping', done: 'idle' };
+  let ringOpen = null; // the run whose steps a click pinned open (hover shows them too)
+  const dur = (ms) => (ms == null ? 'unknown' : fmtDur(ms));
+
+  // The estimate of an item's run, from the service's `run` (trail, typical step times) and the
+  // workflow's steps in order (api.listWorkflows); null without a run.
+  function estimate(x) {
+    const run = x.run;
+    if (!x.runId || !run) return null;
+    const path = (workflows?.get(x.workflow)?.steps || []).map((st) => st.id);
+    const est = RunProgress.estimateProgress({ steps: run.progress || [], path, typical: run.stepTimes || {}, status: run.status, startedAt: run.startedAt });
+    return x.waiting && est.state === 'running' ? { ...est, state: 'waiting' } : est;
+  }
+
+  function progressHtml(x) {
+    const est = estimate(x);
+    if (!est) return '';
+    const run = x.run;
+    const last = (run.progress || []).at(-1);
+    const groupOf = new Map((run.groups || []).flatMap((g) => (g.steps || []).map((id) => [id, g.name])));
+    const where = est.step ? groupOf.get(est.step) || est.step : 'starting';
+    const label = { waiting: 'Waiting for you', failed: `Failed at ${where}`, stopped: `Stopped at ${where}`, done: 'Done' }[est.state] || where;
+    // who works there: the human at a gate, else the step's first agent (the engine when none yet)
+    // (before its first message the trail has no provider yet: the workflow's agent definition gives it)
+    const first = last?.agents?.[0];
+    const wfAgent = first && workflows?.get(x.workflow)?.agents?.[first.agent];
+    const agent = first && { ...first, provider: first.provider || wfAgent?.provider || null, model: first.model || wfAgent?.model || null };
+    const human = last?.type === 'human_approval' || est.state === 'waiting';
+    const art = human ? PERSON_SVG : agent?.provider ? robotAvatar(agent.provider, agent.model, RING_ROBOT[est.state], run.workflow, agent.agent) : ENGINE_SVG;
+    const who = human ? 'You (human gate)' : agent ? agentLabel(agent.agent, run.agentNames) : 'the orchestrator';
+    const basis = est.basis === 'history'
+      ? `${est.done} of ${est.total} steps along the usual path, each weighted by its typical time in ${run.history} past run${run.history === 1 ? '' : 's'} of this workflow`
+      : `${est.done} of ${est.total} steps of the workflow, each counted the same (no finished run to time them yet)`;
+    const tip = [
+      `Estimate: ${est.state === 'done' ? 100 : est.percent}%${est.state === 'done' ? ' (finished)' : ''}`,
+      `How: ${basis}. A return to an earlier step lowers it; it stays under 100% until the run ends.`,
+      `Elapsed ${dur(est.elapsedMs)}${est.state === 'done' ? '' : ` · about ${dur(est.leftMs)} left`}`,
+      `Now: ${label}${est.state === 'running' || est.state === 'waiting' ? ` (${who})` : ''}`,
+      `Run ${x.runId}${run.mock ? ' (simulated)' : ''}. Hover or click the ring for its steps.`,
+    ].join('\n');
+    const pct = est.state === 'done' ? 100 : est.percent;
+    const chips = RunProgress.progressGroups(run.progress || [], run.groups || [], run.status === 'running' || run.status === 'pending' ? 'running' : run.status);
+    const steps = chips.length
+      ? `<div class="rp-strip">${chips.map((c) => `<button type="button" class="rm-chip" data-rm-chip="${esc(c.name)}" data-grouped="${c.grouped ? '1' : ''}" title="${esc(`Open the run at ${c.name}`)}">${progressChip(c, run.agentNames, run.workflow)}</button>`).join('<span class="rp-sep">›</span>')}</div>`
+      : '<p class="small muted">No step has started yet.</p>';
+    return `
+      <div class="rm-progress st-${est.state}${run.mock ? ' sim' : ''}${ringOpen === x.runId ? ' open' : ''}" data-rm-progress="${esc(x.runId)}" data-workflow="${esc(run.workflow || x.workflowName || '')}">
+        <button type="button" class="rm-ring" data-rm-ring aria-expanded="${ringOpen === x.runId}" aria-label="${esc(`${pct}% estimated, ${label}. Show the run's steps`)}" title="${esc(tip)}">
+          <svg viewBox="0 0 36 36" aria-hidden="true"><circle class="rm-ring-track" cx="18" cy="18" r="15.9155"/><circle class="rm-ring-bar" cx="18" cy="18" r="15.9155" stroke-dasharray="${pct} ${100 - pct}"/></svg>
+          <span class="rm-ring-pct">${pct}%</span>
+        </button>
+        <div class="rm-progress-text" title="${esc(tip)}">
+          <span class="rm-progress-step"><span class="rp-av${human ? ' human' : agent?.provider ? '' : ' engine'}" aria-hidden="true">${art}</span><span>${esc(label)}</span></span>
+          ${run.mock ? '<span class="badge p-mock">simulated</span>' : ''}
+        </div>
+        <div class="rm-steps" role="group" aria-label="The run's steps">${steps}</div>
+      </div>`;
+  }
+
+  // `r`: the roadmap (which item paused it, #196)
+  function itemHtml(x, s, n, byNumber, r) {
     const status = x.waiting ? 'waiting' : x.status;
     const [pill, stateLabel] = ITEM_STATE[status] || ['idle', status];
     const locked = !editable(x);
+    const refused = refusedStart(x);
+    const push = pushesAgainstDefault(x);
     const open = !locked && editing === x.id;
     const defs = inputDefs(x);
     const others = Object.entries(x.inputs || {}).filter(([k]) => k !== 'mode');
@@ -155,25 +237,27 @@
         <div class="rm-item-head">
           <ul class="rm-titles">${titles}</ul>
           <div class="rm-actions">
-            ${x.status === 'failed' ? '<button class="btn sm primary" type="button" data-rm-item="retry">Retry</button><button class="btn sm ghost" type="button" data-rm-item="skip">Skip</button>' : ''}
+            ${retryable(x, r) ? `<button class="btn sm primary" type="button" data-rm-item="retry" title="${refused ? 'Start it again: when an ended run kept work for its issues, you choose to resume that run or start from scratch' : 'Run it again (a new run)'}">Retry</button><button class="btn sm ghost" type="button" data-rm-item="skip" title="Count it as finished: the roadmap goes on">Skip</button>` : ''}
             ${locked ? '' : `<button class="btn sm ghost" type="button" data-rm-move="up" title="Earlier in the stage (or into the previous stage)"${n === 0 && s === 0 ? ' disabled' : ''}>↑</button>
             <button class="btn sm ghost" type="button" data-rm-move="down" title="Later in the stage (or into the next stage)">↓</button>
             <button class="link-btn small" type="button" data-rm-remove title="Take this item out of the roadmap">remove</button>`}
           </div>
+          ${progressHtml(x)}
         </div>
         <div class="rm-meta">
           <span class="pill pill-${pill} rm-state">${esc(stateLabel)}</span>
-          <span class="badge rm-wf" title="${esc(x.workflowName && x.workflowName !== x.workflow ? `${x.workflowName} (${x.workflow})` : x.workflow)}">${esc(shortWorkflow(x.workflow))}</span>
+          <span class="badge rm-wf${push ? ' rm-wf-push' : ''}" title="${esc(`${x.workflowName && x.workflowName !== x.workflow ? `${x.workflowName} (${x.workflow})` : x.workflow}${push ? `. It pushes a branch and opens a PR/MR, while the default development workflow (${DefaultWorkflow.current().file}) merges locally` : ''}`)}">${push ? '<span aria-hidden="true">⇡ </span>' : ''}${esc(shortWorkflow(x.workflow))}</span>
           ${modeHtml(x, locked)}
           ${size != null ? `<span class="badge rm-size" title="The sum of the issues' complexity:n labels">complexity ${size}</span>` : ''}
           ${x.mock ? '<span class="badge p-mock">simulated</span>' : ''}
           ${x.then ? ChainModel.chainBadgesHtml({ then: x.then }) : ''}
-          ${others.map(([k, v]) => `<span class="badge rm-input" title="${esc(defs[k]?.description || k)}">${esc(k)}: ${esc(v)}</span>`).join('')}
+          ${others.map(([k, v]) => `<span class="badge rm-input" title="${esc(`${k}: ${v}${defs[k]?.description ? `\n${defs[k].description}` : ''}`)}">${esc(k)}: ${esc(v)}</span>`).join('')}
           ${x.runId ? `<button class="bl-run link-btn small" type="button" data-run="${esc(x.runId)}" data-workflow="${esc(x.workflowName || '')}" title="Open the run (Resume from step… is there)">run ${esc(x.runId)}</button>` : ''}
           ${locked || open ? '' : '<button class="link-btn small" type="button" data-rm-edit title="Edit this item\'s inputs">Edit</button>'}
         </div>
         ${reasonHtml(x)}
-        ${x.error ? `<div class="small ${x.status === 'failed' ? 'error' : 'muted'}">${esc(x.error)}</div>` : ''}
+        ${x.error ? `<div class="small rm-error ${x.status === 'failed' || refused ? 'error' : 'muted'}">${esc(x.error)}${refused && x.status !== 'skipped'
+    ? '<div class="rm-error-hint muted">Retry starts it again: when an ended run kept work for its issues, you choose to resume that run or start from scratch. Skip counts it as finished.</div>' : ''}</div>` : ''}
         ${open ? formHtml(x) : ''}
       </div>`;
   }
@@ -209,7 +293,7 @@
           <button class="btn sm ghost" type="button" data-rm-stage="down" title="Run this stage later"${s === count - 1 ? ' disabled' : ''}>↓</button>
         </div>
         ${note}
-        <div class="rm-items">${stage.items.map((x, n) => itemHtml(x, s, n, byNumber)).join('')}</div>
+        <div class="rm-items">${stage.items.map((x, n) => itemHtml(x, s, n, byNumber, r)).join('')}</div>
       </section>`;
   }
 
@@ -290,7 +374,7 @@
     const bar = `
       <div class="bl-queue rm-bar">
         <span><b>Roadmap</b> ${stateBadge} ${r.stages.length} stage${r.stages.length === 1 ? '' : 's'}</span>
-        ${r.error ? `<span class="${r.state === 'paused' ? 'warn-text' : 'error'} small">${esc(r.error)}</span>` : ''}
+        ${r.error ? `<span class="${r.state === 'paused' ? 'warn-text' : 'error'} small">${esc(r.error)}${r.pausedBy ? ` <button class="link-btn small" type="button" data-rm-goto="${esc(r.pausedBy)}" title="Scroll to the item that paused the roadmap: Retry or Skip it there">Show the item</button>` : ''}</span>` : ''}
         <span class="spacer"></span>
         ${r.state !== 'running' && r.stages.length ? `<label class="check small dev-only"><input type="checkbox" id="rm-simulate"${state.simulationOnly || r.simulated ? ' checked' : ''} /><span>Simulated</span></label>
           <button class="btn sm primary" type="button" data-rm="start"${scoped >= 0 && r.state === 'paused' ? ` title="Resume stage ${scoped + 1} only"` : ''}>${r.state === 'paused' ? 'Resume' : 'Start'}</button>` : ''}
@@ -325,7 +409,7 @@
       const rows = [];
       r.stages.forEach((stage, s) => stage.items.forEach((x, n) => {
         const ids = new Set(refs(x).map((i) => byNumber.get(i.number)?.epic || ''));
-        if (ids.has(e.id)) rows.push(itemHtml(x, s, n, byNumber).replace('<div class="rm-meta">', `<div class="rm-meta"><span class="badge" title="Its stage in the roadmap">stage ${s + 1}</span>`));
+        if (ids.has(e.id)) rows.push(itemHtml(x, s, n, byNumber, r).replace('<div class="rm-meta">', `<div class="rm-meta"><span class="badge" title="Its stage in the roadmap">stage ${s + 1}</span>`));
       }));
       if (!rows.length) return '';
       const items = r.stages.flatMap((st) => st.items).filter((x) => refs(x).some((i) => (byNumber.get(i.number)?.epic || '') === e.id));
@@ -440,6 +524,33 @@
     ctx.render();
   }
 
+  // #195: before a start (Start, Resume, Run this stage; `scope`: a stage id), the items still to run
+  // whose workflow pushes while the default development workflow merges locally are listed: Switch
+  // them to the default (saved, then the start goes on), Start anyway, or Cancel. → the roadmap to
+  // start from (the switched one), or null when cancelled.
+  async function checkPushes(ctx, r, scope) {
+    const items = r.stages.filter((st) => !scope || st.id === scope).flatMap((st) => st.items).filter((x) => editable(x) && pushesAgainstDefault(x));
+    if (!items.length) return r;
+    const def = DefaultWorkflow.current();
+    const names = items.map((x) => `${refs(x).map((i) => `#${i.number}`).join(' + ')} (${shortWorkflow(x.workflow)})`);
+    const choice = await choiceDialog(
+      `${items.length} item${items.length === 1 ? '' : 's'} will push and open PRs`,
+      `${names.join(', ')}: ${items.length === 1 ? 'its workflow pushes' : 'their workflows push'} a branch and open${items.length === 1 ? 's' : ''} a PR/MR (CI minutes), while your default development workflow, ${def.name}, merges locally.`,
+      [
+        { id: 'switch', label: `Switch them to ${DefaultWorkflow.label(def.file)}`, line: `Switch: the items run with ${def.file} (their other inputs are kept).`, primary: true },
+        { id: 'anyway', label: 'Start anyway', line: 'Start anyway: they push and open PRs as planned.' },
+      ],
+    );
+    if (!choice) return null;
+    if (choice === 'anyway') return r;
+    const ids = new Set(items.map((x) => x.id));
+    const stages = clone(r.stages);
+    for (const x of stages.flatMap((st) => st.items)) if (ids.has(x.id)) Object.assign(x, { workflow: def.file, workflowName: def.name });
+    const out = await api.saveRoadmap(ctx.projectId, stages);
+    ctx.setData(out);
+    return out?.roadmap || r;
+  }
+
   // Run this stage (#141): only stage `s`'s items start, with Start's simulated choice and real-run
   // confirmation; earlier stages not done ask first (the Product Owner's order is a recommendation).
   async function runStage(ctx, r, s) {
@@ -447,16 +558,47 @@
     if (!stage) return;
     const earlier = r.stages.slice(0, s).map((x, n) => (x.items.some((i) => i.status !== 'done' && i.status !== 'skipped') ? n : -1)).filter((n) => n >= 0);
     if (earlier.length && !await confirmDialog(`Run stage ${s + 1} out of order`, `${stagesText(earlier)} ${earlier.length > 1 ? 'are' : 'is'} not done: ${earlier.length > 1 ? 'their' : 'its'} issues may conflict with this stage's. They stay planned.`, 'Run this stage')) return;
+    if (!await checkPushes(ctx, r, stage.id)) return;
     const simulated = !!document.querySelector('#rm-simulate')?.checked && devMode();
     const real = !simulated && stage.items.some((x) => !x.mock && editable(x));
     if (real && !await confirmDialog(`Run stage ${s + 1}`, 'Its items run as real runs: they use your CLI subscriptions and cost money. Human gates still wait for you. The roadmap pauses when this stage is done.', 'Run')) return;
     ctx.setData(await api.startRoadmap(ctx.projectId, simulated, stage.id));
   }
 
+  // #194: a step chip of an item's ring opens its run with that group open (the Run screen's steps).
+  function openRunAt(el) {
+    const box = el.closest('[data-rm-progress]');
+    const runId = box.dataset.rmProgress;
+    window.showRun(runId, { workflow: box.dataset.workflow || undefined });
+    if (el.dataset.grouped) state.runs.get(runId)?.openGroups?.set(el.dataset.rmChip, true);
+    scheduleRender();
+  }
+
+  // #196: the bar's "Show the item": the item that paused the roadmap, scrolled into view and marked.
+  function showItem(id) {
+    const el = [...document.querySelectorAll('#bl-list [data-item]')].find((x) => x.dataset.item === id);
+    if (!el) return;
+    el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    el.classList.add('flash');
+    setTimeout(() => el.classList.remove('flash'), 1600);
+  }
+
   // The owner's buttons; true when the click was the roadmap's.
   async function onClick(e, ctx, data) {
     const r = data?.roadmap;
     if (!r) return false;
+    // the ring (#194): a click pins its steps open (hover shows them too); a chip opens the run there
+    const chip = e.target.closest('[data-rm-chip]');
+    if (chip) { openRunAt(chip); return true; }
+    const ring = e.target.closest('[data-rm-ring]');
+    if (ring) {
+      const id = ring.closest('[data-rm-progress]').dataset.rmProgress;
+      ringOpen = ringOpen === id ? null : id;
+      ctx.render();
+      return true;
+    }
+    const goto = e.target.closest('[data-rm-goto]');
+    if (goto) { showItem(goto.dataset.rmGoto); return true; }
     const act = e.target.closest('[data-rm]')?.dataset.rm;
     const stages = clone(r.stages);
     try {
@@ -464,6 +606,7 @@
         const simulated = !!document.querySelector('#rm-simulate')?.checked && devMode();
         // Resume on a stage run on its own (#141) goes on with that stage only
         const scope = r.state === 'paused' && r.scope ? r.scope.stage : null;
+        if (!await checkPushes(ctx, r, scope)) return true;
         const real = !simulated && r.stages.some((s) => (!scope || s.id === scope) && s.items.some((x) => !x.mock && editable(x)));
         if (real && !await confirmDialog('Start the roadmap', 'Its items run as real runs: they use your CLI subscriptions and cost money. Human gates still wait for you.', 'Start')) return true;
         ctx.setData(await api.startRoadmap(ctx.projectId, simulated, scope));

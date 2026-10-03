@@ -78,7 +78,8 @@ function persisted(roadmap) {
     ...roadmap,
     stages: normalizeStages(roadmap.stages || []).map((s) => ({
       ...s,
-      items: (s.items || []).map(({ waiting: _w, ...x }) => (FINISHED.has(x.status) ? x : { ...x, status: 'planned', error: x.runId ? null : x.error || null })),
+      // `waiting` and `run` (#194: its progress for the card) are the screen's, never stored
+      items: (s.items || []).map(({ waiting: _w, run: _r, ...x }) => (FINISHED.has(x.status) ? x : { ...x, status: 'planned', error: x.runId ? null : x.error || null })),
     })),
   };
 }

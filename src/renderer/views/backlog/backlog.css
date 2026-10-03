@@ -100,9 +100,18 @@ span.po-applied { cursor: default; }
 .bl-title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .bl-labels { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
 .bl-labels:empty { display: none; }
-.bl-label { --lc: var(--muted); font-size: 10.5px; padding: 0 7px; border-radius: 99px; border: 1px solid var(--lc); color: var(--lc); }
-button.bl-label { font-family: inherit; background: none; cursor: pointer; }
-.bl-label.on { background: color-mix(in srgb, var(--lc) 22%, transparent); }
+/* Labels (#207): a pastel background in the label's colour, no border. The text is the colour mixed
+   with the theme's text colour (lighter on a dark panel, darker on a light one): 4.5:1 or more on
+   the pastel even for black or white labels. A label without a colour falls back to --muted. */
+.bl-label {
+  --lc: var(--muted); font-size: 10.5px; padding: 0 7px; border-radius: 99px; border: 1px solid transparent;
+  background: color-mix(in srgb, var(--lc) 18%, var(--panel)); color: color-mix(in srgb, var(--lc) 40%, var(--text));
+}
+button.bl-label { font-family: inherit; cursor: pointer; }
+/* an active filter: a stronger mix and the focus colour's ring, not a border in the label's colour */
+.bl-label.on { background: color-mix(in srgb, var(--lc) 34%, var(--panel)); box-shadow: 0 0 0 1px var(--accent); }
+/* the other badges of a card (refreshed, epic, triage, roadmap) follow the same filled style */
+.bl-labels .badge { border-color: transparent; background: color-mix(in srgb, currentColor 16%, var(--panel)); }
 .bl-labels-wrap { position: relative; }
 .bl-labels-pop {
   position: absolute; top: calc(100% + 6px); left: 0; z-index: 20; min-width: 220px; max-height: 340px; overflow: auto;
@@ -195,8 +204,8 @@ button.bl-label { font-family: inherit; background: none; cursor: pointer; }
 .bl-card-actions { display: flex; justify-content: flex-end; }
 .bl-skipped { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 /* Epics (#138): the card badge, the filter, the Epics view (backlog.js renderEpics) */
-.bl-epic { border: 1px solid #8B5CF6; color: #A78BFA; background: transparent; cursor: pointer; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: inherit; font-size: 11px; }
-.bl-epic.on { background: rgba(139, 92, 246, 0.18); }
+.bl-epic { border: 1px solid transparent; color: #A78BFA; background: color-mix(in srgb, #8B5CF6 18%, var(--panel)); cursor: pointer; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: inherit; font-size: 11px; }
+.bl-epic.on { background: color-mix(in srgb, #8B5CF6 34%, var(--panel)); box-shadow: 0 0 0 1px var(--accent); }
 #bl-epic { width: auto; flex: none; max-width: 220px; }
 #bl-epic.active { border-color: #8B5CF6; }
 .bl-epics { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 10px; }
@@ -214,23 +223,37 @@ button.bl-label { font-family: inherit; background: none; cursor: pointer; }
 .rm-by-epic { margin-right: 6px; }
 /* Backlog › Roadmap (backlog-roadmap.js) */
 .bl-roadmap { color: var(--accent); }
-.rm { display: grid; gap: 10px; }
+/* #193: the page head (title, project, platform, Sync, New issue…) wraps on a narrow window instead
+   of widening the view */
+#view-backlog .page-head { flex-wrap: wrap; gap: 8px 16px; }
+#view-backlog .page-head > * { min-width: 0; }
+#view-backlog .page-head > .row { flex-wrap: wrap; }
+#bl-project, #bl-platform { min-width: 0; max-width: 100%; }
+/* #193: no horizontal scroll. Every grid of the roadmap has one track that may shrink below its
+   content (minmax(0, 1fr), not the default auto track sized by the longest nowrap line), so a long
+   reason ends with "…" at the card's edge and the other long texts wrap inside the card. */
+.rm { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; min-width: 0; }
 .rm .bl-queue { margin-bottom: 0; }
-.rm-stage { border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px; background: var(--panel); display: grid; gap: 6px; }
+.rm-bar > span { min-width: 0; overflow-wrap: anywhere; }
+.rm-stage { border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px; background: var(--panel); display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; min-width: 0; }
 .rm-stage.current { border-color: var(--accent); }
 .rm-stage.finished { opacity: .7; }
 /* the stage run on its own (#141); a stage opened from the Product Owner's drawer (#140) */
 .rm-stage.scoped { border-color: var(--green); box-shadow: inset 3px 0 0 var(--green); }
 .rm-stage.flash { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); transition: box-shadow .3s; }
-.rm-stage-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.rm-stage-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.rm-stage-head > b { min-width: 0; overflow-wrap: anywhere; }
 /* the stage name reads as text until hovered or edited */
 input[type=text].rm-name { flex: 0 1 260px; border-color: transparent; background: transparent; padding: 3px 6px; font-weight: 600; }
 input[type=text].rm-name:hover { border-color: var(--border); }
 input[type=text].rm-name:focus { border-color: var(--accent); background: var(--panel-2); }
 input[type=text].rm-note { max-width: 520px; }
-.rm-note-text { margin: 0; }
-.rm-items { display: grid; gap: 6px; }
-.rm-item { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; display: grid; gap: 6px; }
+.rm-note-text { margin: 0; overflow-wrap: anywhere; }
+.rm-items { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; }
+.rm-item { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; min-width: 0; }
+/* an item's error (a failed run, a refused start #196): wrapped inside the card, then what to do */
+.rm-error { overflow-wrap: anywhere; }
+.rm-error-hint { margin-top: 2px; }
 .rm-item[draggable="true"] { cursor: grab; }
 .rm-item.rm-failed { border-color: var(--red); }
 .rm-item.rm-waiting { border-color: var(--yellow); }
@@ -250,17 +273,63 @@ input[type=text].rm-note { max-width: 520px; }
 .rm-title { color: var(--text); font-weight: 600; text-decoration: none; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 a.rm-title:hover { text-decoration: underline; }
 .rm-actions { display: flex; align-items: center; gap: 6px; flex: none; }
-.rm-meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.rm-meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
 .rm-meta .pill { font-size: 10px; padding: 1px 7px; }
 .rm-wf, .rm-input { color: var(--muted); }
+/* a long input value or run id is abbreviated (the full value in the tooltip), never wider than the card */
+.rm-meta > .badge, .rm-meta > .bl-run { max-width: 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rm-meta > .rm-input { max-width: min(100%, 320px); }
+.rm-item.flash { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); transition: box-shadow .3s; }
+/* #195: a workflow that pushes while the default development workflow merges locally */
+.badge.rm-wf-push { color: var(--orange); background: color-mix(in srgb, var(--orange) 14%, var(--panel)); border-color: color-mix(in srgb, var(--orange) 45%, transparent); }
+/* the workflow select next to Split + roadmap / Create + roadmap (#195) */
+select.po-wf { width: auto; max-width: 220px; padding: 3px 6px; font-size: 12px; }
+/* #194: the run's progress ring on the right of the item: the estimated %, the current step with its
+   agent; hover, focus or a click shows the run's steps (the runs list's chips) in a popover that
+   opens to the left, so it never widens the page */
+.rm-progress { position: relative; display: flex; align-items: center; gap: 8px; flex: 0 1 190px; min-width: 0; justify-content: flex-end; }
+.rm-ring { position: relative; width: 44px; height: 44px; flex: none; padding: 0; border: 0; border-radius: 50%; background: none; cursor: pointer; color: var(--accent); }
+.rm-ring:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
+.rm-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+.rm-ring circle { fill: none; stroke-width: 3.4; }
+.rm-ring-track { stroke: var(--border); }
+.rm-ring-bar { stroke: currentColor; stroke-linecap: round; transition: stroke-dasharray .4s; }
+.rm-ring-pct { position: absolute; inset: 0; display: grid; place-items: center; font: 700 11px var(--mono); color: var(--text); }
+.rm-progress.st-waiting .rm-ring { color: var(--yellow); }
+/* paused at a human gate: the gate's colour, the bar dimmed */
+.rm-progress.st-waiting .rm-ring-bar { opacity: .6; }
+.rm-progress.st-failed .rm-ring { color: var(--red); }
+.rm-progress.st-done .rm-ring { color: var(--green); }
+.rm-progress.st-stopped .rm-ring { color: var(--muted); }
+.rm-progress-text { display: grid; gap: 2px; min-width: 0; font-size: 12px; justify-items: start; }
+.rm-progress-step { display: flex; align-items: center; gap: 5px; min-width: 0; max-width: 100%; }
+.rm-progress-step > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rm-progress.st-waiting .rm-progress-step { color: var(--yellow); }
+.rm-progress.st-failed .rm-progress-step { color: var(--red); }
+.rm-progress .rm-progress-step .rp-av { width: 22px; height: 22px; flex: none; }
+.rm-progress-text .badge { font-size: 10px; padding: 0 5px; }
+.rm-steps { display: none; position: absolute; right: 0; top: calc(100% + 6px); z-index: 30; width: max-content; max-width: min(560px, 80vw); padding: 8px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 12px 32px rgba(0,0,0,.4); }
+.rm-progress:hover .rm-steps, .rm-progress:focus-within .rm-steps, .rm-progress.open .rm-steps { display: block; }
+.rm-steps .rp-strip { flex-wrap: wrap; }
+.rm-chip { padding: 0; border: 0; background: none; font: inherit; color: inherit; cursor: pointer; border-radius: 8px; text-align: inherit; }
+.rm-chip:hover .rp-chip { outline: 1px solid var(--accent); }
+.rm-chip:focus-visible { outline: var(--focus-ring); outline-offset: 1px; }
+/* narrow windows: a small ring with its % only (the step is in its tooltip) */
+@media (max-width: 1100px) {
+  .rm-progress { flex-basis: auto; }
+  .rm-progress-text { display: none; }
+  .rm-ring { width: 34px; height: 34px; }
+  .rm-ring-pct { font-size: 9.5px; }
+}
 .rm-mode svg, .rm-mode-seg svg { width: 11px; height: 11px; margin-right: 4px; vertical-align: -1px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linejoin: round; }
 .badge.rm-mode-validated, .rm-mode-seg button.rm-mode-validated.active { color: var(--accent); }
 .rm-mode-seg button { display: inline-flex; align-items: center; }
 .rm-mode-seg button:focus-visible { outline: var(--focus-ring); outline-offset: 1px; }
+.rm-reason { min-width: 0; }
 .rm-reason > summary { list-style: none; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rm-reason > summary::-webkit-details-marker { display: none; }
-.rm-reason[open] > summary { white-space: normal; }
-.rm-reason p { margin: 2px 0 0; }
+.rm-reason[open] > summary { white-space: normal; overflow-wrap: anywhere; }
+.rm-reason p { margin: 2px 0 0; overflow-wrap: anywhere; }
 /* the Edit form: .field with the label above, two columns on wide cards, explicit Save / Cancel */
 .rm-form { border: 1px solid var(--border); border-radius: 8px; background: var(--panel-2); padding: 10px 12px; display: grid; gap: 6px; cursor: default; }
 .rm-form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0 16px; }

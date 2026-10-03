@@ -11,6 +11,7 @@ const projects = require('../../projects');
 const backlog = require('../../backlog');
 const roadmaps = require('../../roadmap');
 const runs = require('../../runs');
+const RunProgress = require('../../renderer/run-progress-model');
 
 module.exports = (ctx) => {
   const { host } = ctx;
@@ -23,14 +24,41 @@ module.exports = (ctx) => {
   const allowKeptWork = (projectId, itemId) => keptWorkAllowed.add(`${projectId}:${itemId}`);
 
   // A project's roadmap for the screen: item statuses derived from their runs (#112), each running
-  // item with `waiting` (at a human gate).
+  // item with `waiting` (at a human gate), and each item with a run its progress (#194, `run`: the
+  // trail, groups, state and the typical step times of its workflow's past runs, for the card's ring).
   function roadmapView(projectId, list = []) {
     const roadmap = roadmaps.withStatus(roadmaps.readRoadmap(ctx.ws.backlog, path.basename(String(projectId))), roadmapRun);
     const byId = new Map(list.map((r) => [r.runId, r]));
+    // past runs of the same workflow file, simulated with simulated and real with real
+    const history = new Map();
+    const typical = (file, mock) => {
+      const key = `${file}|${!!mock}`;
+      if (!history.has(key)) history.set(key, RunProgress.typicalStepTimes(list.filter((r) => r.file === file && !!r.mock === !!mock)));
+      return history.get(key);
+    };
+    const runView = (x) => {
+      const r = byId.get(x.runId);
+      if (!r) return null;
+      const live = ctx.active.get(x.runId);
+      const progress = live?.trail?.steps || r.progress || [];
+      // a run read from disk that waits at a gate (its trail's last step), when no live process says so
+      const waiting = !!r.waiting || (r.status === 'running' && progress.at(-1)?.status === 'waiting');
+      const { times, runs: count } = typical(r.file, r.mock);
+      return {
+        status: r.status, mock: !!r.mock, startedAt: r.startedAt || null, finishedAt: r.finishedAt || null, waiting,
+        progress, groups: r.groups || [], agentNames: r.agentNames || null, workflow: r.workflow || null, error: r.error || null,
+        stepTimes: times, history: count,
+      };
+    };
     return {
       ...roadmap,
       stages: roadmap.stages.map((s) => ({
-        ...s, items: s.items.map((x) => (x.status === 'running' && byId.get(x.runId)?.waiting ? { ...x, waiting: true } : x)),
+        ...s,
+        items: s.items.map((x) => {
+          const run = x.runId ? runView(x) : null;
+          const waiting = x.status === 'running' && (byId.get(x.runId)?.waiting || run?.waiting);
+          return { ...x, ...(waiting ? { waiting: true } : {}), ...(run ? { run } : {}) };
+        }),
       })),
     };
   }

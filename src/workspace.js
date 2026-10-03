@@ -163,6 +163,9 @@ const DEFAULT_SETTINGS = {
   backlogMaxGroup: 5,
   // the Backlog suggests a Backlog Refresh run when the last one is older than this (#161); 0 = off
   backlogRefreshHours: 24,
+  // the workflow used wherever one is not picked by hand (#195, src/renderer/default-workflow.js):
+  // null = the local workflow when the workspace has it, else the GitHub one
+  defaultWorkflow: null,
   // Live roadmap (#164, src/live-roadmap.js): the highest complexity:n a refill picks, the most stages
   // per refill, the spend over 24 h (USD, runs and refills; 0 = no cap) past which refills stop, and
   // whether the backlog is synced before the Product Owner reads it

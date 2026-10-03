@@ -390,20 +390,123 @@ function demoRoadmap(ws, projectId, live = 'off') {
     ...issue(numbers[0]), ...(numbers.length > 1 ? { issues: numbers.map(issue) } : {}), status: 'planned', runId: null, runs: [], error: null, ...extra,
     ...(ended ? { status: 'done' } : {}),
   });
+  // without --live: a stage "Tonight" with a running, a waiting and a failed run (#194: the progress
+  // rings) and a start refused for kept work that paused the roadmap (#196: Retry / Skip)
+  const tonight = live === 'off' ? demoRoadmapRuns(ws, projectId) : null;
+  const refused = 'Could not start #14: #14 already has work from a cancelled run, 20260119-221000-demo0014 (3 commits on its branch). Choose with Retry on the roadmap item, Resume on the queue or Start on the issue.';
   fs.writeFileSync(path.join(ws.backlog, `${projectId}.roadmap.json`), JSON.stringify({
     state: 'planned', simulated: false, error: null, pausedBy: null, updatedAt: new Date().toISOString(), ...liveFields,
+    ...(tonight ? { state: 'paused', pausedBy: 'item-7', error: refused } : {}),
     stages: [
       { id: 'stage-1', name: 'Stability first', note: 'The rename crash blocks the rest.', items: [item('item-1', 'software-development-local-hero.yaml', [11], { status: 'done', runId: '20260118-120000-demo0011', runs: ['20260118-120000-demo0011'] })] },
+      ...(tonight ? [{ id: 'stage-tonight', name: 'Tonight', note: 'Three runs at once, then the refused start waits for your answer.', items: [
+        item('item-4', 'software-development-local-hero.yaml', [16], { runId: tonight.running, runs: [tonight.running] }),
+        item('item-5', 'software-development-local-hero.yaml', [15], { runId: tonight.waiting, runs: [tonight.waiting], inputs: { language: 'js', mode: 'validated' } }),
+        item('item-6', 'software-development-local-hero.yaml', [13], { runId: tonight.failed, runs: [tonight.failed] }),
+        item('item-7', 'software-development-local-hero.yaml', [14], { error: refused.replace(/^Could not start #14: /, '') }),
+      ] }] : []),
       { id: 'stage-2', name: 'Reports and health', note: 'Both touch the server: one run, no conflict.', items: [item('item-2', 'software-development-local-hero.yaml', [12, 9], {
-        reason: 'Both add a server route and share the report formatter: one run avoids a merge conflict in src/server.',
+        // #193: a reason of 500+ characters ends with "…" at the card's edge, whole when opened
+        reason: 'Both add a server route and share the report formatter: one run avoids a merge conflict in src/server. Split from #136, whose tasks were spread over two stages: the report export needs the formatter that the health endpoint introduces, and both register their routes in src/server/routes.js, which every parallel run of this area edits; running them apart would conflict there and in the formatter tests. The health endpoint is small (complexity 3) and the export reuses its formatter, so together they stay under the group size of five issues per run and take one review instead of two.',
         modeReason: 'Auto: server code with no screen to try.',
         origin: new Date(Date.UTC(2026, 0, 20, 10, 1, 50)).toISOString(), // the demo Product Owner's plan answer
+        ...(tonight ? { inputs: { language: 'js', mode: 'auto', base_branch: 'release/2026-01-reports-and-health-with-a-very-long-branch-name-for-the-roadmap-card' } } : {}),
       })] },
       { id: 'stage-3', name: '', note: '', items: [item('item-3', 'software-development.yaml', [10], {
         inputs: { language: 'js', mode: 'validated' }, reason: 'A small UI fix on its own.', modeReason: 'Validated: a screen the owner can try in the app.',
       })] },
     ],
   }, null, 2));
+}
+
+// The roadmap's runs (#194): two finished local-hero runs that give each step its typical time, then
+// tonight's runs: one in code review, one waiting at the human review gate (both live in "another app",
+// studio-pc, whose heartbeat this script keeps fresh), one that failed in its tests. → their run ids.
+function demoRoadmapRuns(ws, projectId) {
+  const file = 'software-development-local-hero.yaml';
+  const workflow = 'software-development-local-hero';
+  const groups = [
+    { name: 'Develop', steps: ['develop', 'requirements_left_out', 'issue_not_done', 'developer_screenshots', 'developer_check'] },
+    { name: 'Review', steps: ['code_review', 'human_review'] },
+    { name: 'Validate', steps: ['test', 'suite', 'test_failed', 'build', 'build_failed', 'evidence', 'verify_change', 'verify_failed'] },
+    { name: 'Merge', steps: ['resolve_merge', 'merge_blocked'] },
+  ];
+  const AGENT = {
+    develop: ['developer', 'claude-opus-5-5'], code_review: ['reviewer', 'claude-sonnet-5-5'], test: ['test_writer', 'claude-sonnet-5'],
+    build: ['builder', 'claude-sonnet-5'], evidence: ['evidence', 'claude-sonnet-5'], verify_change: ['verifier', 'claude-sonnet-5'],
+  };
+  const TYPE = { developer_screenshots: 'screenshots', suite: 'suite', human_review: 'human_approval' };
+  // [step, minutes]: the usual path of a run that merged
+  const PATH = [['develop', 38], ['developer_screenshots', 2], ['code_review', 11], ['human_review', 9], ['test', 18], ['suite', 4], ['build', 6], ['evidence', 7], ['verify_change', 5]];
+  const min = 6e4;
+  const ev = (ts, type, extra = {}) => JSON.stringify({ ts: new Date(ts).toISOString(), type, ...extra });
+  // the events of the steps run so far; the last one `last`: running, waiting (a gate) or failed
+  const events = (start, steps, last) => {
+    const out = [ev(start, 'workflow.started', { workflow, file, project_id: projectId, mock: false, groups, inputs: { task: 'Demo roadmap run' } })];
+    let t = start + 1e3;
+    steps.forEach(([step, m], n) => {
+      const [agent, model] = AGENT[step] || [];
+      const sid = `s-${step}`;
+      out.push(ev(t, 'step.started', { step_id: step, step_type: TYPE[step] || 'agent', ...(agent ? { agent } : {}) }));
+      if (agent) out.push(ev(t + 500, 'session.opened', { session_id: sid, session: { agent, provider: 'claude', model } }));
+      const end = n === steps.length - 1 && last;
+      if (end === 'waiting') { out.push(ev(t + 1e3, 'approval.requested', { step_id: step, approval_id: 'gate-1' })); return; }
+      if (end === 'running') return;
+      if (agent) out.push(ev(t + m * min - 1e3, 'session.message_received', { session_id: sid, step_id: step, cost_usd: 0.4, duration_ms: m * min - 2e3, session: { agent, provider: 'claude', model } }));
+      out.push(ev(t + m * min, 'step.finished', { step_id: step, duration_ms: m * min, ...(end === 'failed' ? { error: 'The suite failed: 3 tests in test/report.test.js' } : {}) }));
+      t += m * min;
+    });
+    return { lines: out, end: t };
+  };
+  const write = (runId, lines, summary, owner) => {
+    const dir = path.join(ws.runs, runId);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'events.jsonl'), `${lines.join('\n')}\n`);
+    if (summary) fs.writeFileSync(path.join(dir, 'summary.json'), JSON.stringify({ run_id: runId, workflow, project_id: projectId, mock: false, groups, inputs: { task: 'Demo roadmap run' }, sessions: [], ...summary }, null, 2));
+    if (owner) {
+      const data = { pid: 4242, host: 'studio-pc', role: 'run', started_at: new Date(Date.now() - 2 * 3600e3).toISOString() };
+      const beat = () => fs.writeFileSync(path.join(dir, 'owner.json'), JSON.stringify({ ...data, heartbeat_at: new Date().toISOString() }));
+      beat();
+      setInterval(beat, 5000).unref?.();
+    }
+  };
+  const trail = (start, steps) => {
+    let t = start + 1e3;
+    return steps.map(([step, m]) => {
+      const [agent, model] = AGENT[step] || [];
+      const e = { step, visit: 1, type: TYPE[step] || 'agent', status: 'done', ts: new Date(t).toISOString(), cost: agent ? 0.4 : 0, durationMs: m * min, agents: agent ? [{ agent, provider: 'claude', model, cost: 0.4, durationMs: m * min }] : [] };
+      t += m * min;
+      return e;
+    });
+  };
+  const now = Date.now();
+  // the history: two runs that merged (a little slower, a little faster than the usual path)
+  [[-3, 1.1], [-2, 0.9]].forEach(([day, k], n) => {
+    const start = now + day * 864e5;
+    const steps = PATH.map(([s, m]) => [s, Math.round(m * k)]);
+    const runId = `${new Date(start).toISOString().slice(0, 10).replace(/-/g, '')}-210000-hist000${n + 1}`;
+    const { lines, end } = events(start, steps, null);
+    write(runId, [...lines, ev(end, 'workflow.finished', { status: 'success' })], {
+      status: 'success', started_at: new Date(start).toISOString(), finished_at: new Date(end).toISOString(), duration_ms: end - start, progress: trail(start, steps),
+    });
+  });
+  const stamp = (m) => new Date(now - m * min).toISOString().slice(0, 10).replace(/-/g, '');
+  const running = `${stamp(52)}-230500-run00016`;
+  const waiting = `${stamp(95)}-221500-run00015`;
+  const failed = `${stamp(190)}-204000-run00013`;
+  // in code review for 6 minutes
+  write(running, events(now - 52 * min, [['develop', 44], ['developer_screenshots', 2], ['code_review', 6]], 'running').lines, null, true);
+  // at the human review gate
+  write(waiting, events(now - 95 * min, [['develop', 41], ['developer_screenshots', 2], ['code_review', 12], ['human_review', 0]], 'waiting').lines, null, true);
+  // failed in its tests (a review → developer loop before)
+  const failedSteps = [['develop', 35], ['developer_screenshots', 2], ['code_review', 10], ['develop', 14], ['code_review', 6], ['human_review', 7], ['test', 22]];
+  const f = events(now - 190 * min, failedSteps, 'failed');
+  const ft = trail(now - 190 * min, failedSteps).map((e, n, all) => ({ ...e, visit: all.slice(0, n).filter((x) => x.step === e.step).length + 1 }));
+  ft[ft.length - 1].status = 'failed';
+  write(failed, [...f.lines, ev(f.end, 'workflow.finished', { status: 'failed', error: 'The suite failed: 3 tests in test/report.test.js' })], {
+    status: 'failed', error: 'The suite failed: 3 tests in test/report.test.js', started_at: new Date(now - 190 * min).toISOString(), finished_at: new Date(f.end).toISOString(), duration_ms: f.end - (now - 190 * min), progress: ft,
+  });
+  return { running, waiting, failed };
 }
 
 // Settings › General › Dependency cache (#198): two complete entries of the demo project (sizes

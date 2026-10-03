@@ -5,16 +5,17 @@
 // complexity, title, the parent's tasks each takes) and what becomes of the parent. Edit… opens a
 // framed form: each task's child (a select), each child's title, stage and complexity, "merge with
 // the next child", the parent's fate (Umbrella / Close); Save keeps the edit until filed, Cancel drops
-// it. Split (or Split + roadmap: the children planned in the roadmap by stage) files it on the owner's
-// click (api.splitProductOwnerIssue); a split filed shows "Split into #a, #b" and no buttons.
+// it. Split (or Split + roadmap: the children planned in the roadmap by stage, with the workflow of
+// the select next to the buttons, the default development workflow until changed, #195) files it on
+// the owner's click (api.splitProductOwnerIssue); a split filed shows "Split into #a, #b" and no buttons.
 // The Epics section: issues to place, grouped by epic (Place in epic), new epics (title, goal,
 // members: Create epic), and epics to merge or split (advice). Each is applied on the owner's click
 // (api.applyProductOwnerEpic). A real write asks first; developer or simulated mode only previews.
 // Uses app.js globals (esc, state, errMsg, devMode, confirmDialog).
 /* global api */
 (() => {
-  const DEFAULT_WORKFLOW = 'software-development.yaml';
   const edits = new Map(); // split key → the proposal being edited
+  const workflowOf = new Map(); // split key → the children's workflow picked (#195; else the default)
   const saved = new Map(); // split key → the owner's saved edit (filed instead of the PO's)
   const notes = new Map(); // split or epic key → { text, error }
   let busy = false;
@@ -30,6 +31,17 @@
   const epicTitle = (id) => (window.BacklogActions?.data()?.epics || []).find((e) => e.id === id)?.title || id;
 
   // ---- splits (#124) ---------------------------------------------------------------------------------
+  // The children's workflow (#195): the default development workflow (Settings › General › Backlog)
+  // unless the owner picks another; the workflows that take a task, never a pipeline.
+  const splitWorkflow = (key) => workflowOf.get(key) || DefaultWorkflow.current().file;
+  function workflowSelect(key, ctx) {
+    const value = splitWorkflow(key);
+    const list = (state.workflows || []).filter((w) => !w.error && w.inputs?.task);
+    const options = list.some((w) => w.file === value) ? list : [{ file: value, name: value }, ...list];
+    return `<select class="po-wf" data-split-wf aria-label="Workflow of the children in the roadmap" title="The workflow of the children's roadmap items (the default comes from Settings › General › Backlog)"${off(ctx)}>${options.map((w) =>
+      `<option value="${esc(w.file)}"${w.file === value ? ' selected' : ''}>${esc(w.name || w.file)}${w.file === DefaultWorkflow.current().file ? ' (default)' : ''}</option>`).join('')}</select>`;
+  }
+
   function childrenHtml(s, p) {
     const text = (k) => s.tasks?.[k - 1]?.text || `Task ${k}`;
     return `<ol class="po-children">${p.children.map((c) => `<li class="po-child">
@@ -78,7 +90,8 @@
         ${edit ? editHtml(s, edit) : childrenHtml(s, current(msg, s))}
         ${done || edit ? '' : `<div class="row po-group-actions">
           <button class="btn sm primary" type="button" data-split-act="split"${off(ctx)} title="File the children, then update #${s.issue}">Split</button>
-          <button class="btn sm ghost" type="button" data-split-act="split-roadmap"${off(ctx)} title="File the children, then plan them in the roadmap in this order (${esc(DEFAULT_WORKFLOW)})">Split + roadmap</button>
+          <button class="btn sm ghost" type="button" data-split-act="split-roadmap"${off(ctx)} title="File the children, then plan them in the roadmap in this order (${esc(DefaultWorkflow.label(splitWorkflow(key)))})">Split + roadmap</button>
+          ${workflowSelect(key, ctx)}
           <button class="btn sm ghost" type="button" data-split-act="edit"${off(ctx)} title="Move a task, merge two children, rename them">Edit…</button>
           ${noteHtml(key)}</div>`}
       </div>`;
@@ -139,10 +152,12 @@
       if (out.syncError) notes.set(key, { text: `Filed, but the backlog sync failed: ${out.syncError}`, error: true });
       if (roadmap && out.preview) notes.set(key, { text: 'Preview: the children would then be planned in the roadmap, stage by stage.' });
       if (roadmap && !out.preview) {
+        const workflow = splitWorkflow(key);
+        const workflowName = (state.workflows || []).find((w) => w.file === workflow)?.name;
         const stages = [...new Set(out.children.map((c) => c.stage))].sort((a, b) => a - b).map((st) => ({
           name: `#${s.issue} split, stage ${st}`,
           note: '',
-          items: out.children.filter((c) => c.stage === st && c.number).map((c) => ({ workflow: DEFAULT_WORKFLOW, issues: [c.number], inputs: {}, mock: !!state.simulationOnly, reason: `Split from #${s.issue}.`, origin: msg.ts })),
+          items: out.children.filter((c) => c.stage === st && c.number).map((c) => ({ workflow, ...(workflowName ? { workflowName } : {}), issues: [c.number], inputs: {}, mock: !!state.simulationOnly, reason: `Split from #${s.issue}.`, origin: msg.ts })),
         })).filter((st) => st.items.length);
         if (stages.length) window.BacklogActions.showRoadmap(await api.proposeRoadmap(ctx.projectId, { stages }, false));
       }
@@ -228,6 +243,12 @@
     const box = el.closest('[data-split]');
     const msg = box && ctx.messages[Number(el.closest('[data-msg]')?.dataset.msg)];
     const s = msg?.answer?.splits?.find((x) => x.issue === Number(box.dataset.split));
+    // the children's workflow (#195): kept for this split, the Split + roadmap tooltip follows it
+    if (s && el.dataset.splitWf != null) {
+      workflowOf.set(splitKey(msg, s), el.value);
+      if (e.type === 'change') ctx.render();
+      return true;
+    }
     const edit = s && edits.get(splitKey(msg, s));
     if (!edit) return false;
     if (el.dataset.splitTitle != null) edit.children[Number(el.dataset.splitTitle)].title = el.value;

@@ -13,6 +13,7 @@ const builder = require('../../workflow-builder');
 const skills = require('../../skills');
 const { BUNDLED_WORKFLOWS_DIR } = require('../common');
 const { bundleStatus, restoreBundled } = require('../../seed');
+const { mergeOf } = require('../../renderer/default-workflow');
 
 module.exports = (ctx) => {
   const { host } = ctx;
@@ -45,6 +46,8 @@ module.exports = (ctx) => {
             inputs: wf.inputs || {},
             // the result contract a chain maps from (#134)
             outputs: wf.outputs || {},
+            // how its work lands (#195): local (no push), remote (a branch and a PR/MR) or none
+            merge: mergeOf(wf),
             agents: Object.fromEntries(Object.entries(wf.agents).map(([k, a]) => {
               const d = { ...(wf.defaults || {}), ...a };
               return [k, {

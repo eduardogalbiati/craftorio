@@ -56,8 +56,10 @@
     'Organize the open issues into epics',
   ];
   const REGISTER = 'Register an issue';
-  // the workflow a filed issue is planned or assigned with (the assign dialog lets the owner change it)
-  const DEFAULT_WORKFLOW = 'software-development.yaml';
+  // the workflow a filed issue is planned or assigned with: the default development workflow (#195,
+  // Settings › General › Backlog) unless picked in the select next to Create + roadmap (per draft)
+  const draftWorkflow = new Map(); // message index → the workflow picked
+  const workflowFor = (m) => draftWorkflow.get(m) || DefaultWorkflow.current().file;
   const MAX_CANDIDATES = 3;
   // #169: the question the drawer suggests for issues sent from the Backlog (the owner may edit it)
   const SELECTION_QUESTION = 'What is the best strategy to put these issues in the roadmap? Should any other open issue join them?';
@@ -392,13 +394,24 @@
   // The issues the draft may go into instead: the one named by the owner or the PO, then the close ones.
   const candidates = (x) => [...new Set([x.existingIssue, ...(x.duplicates || []).filter((d) => d.state !== 'closed').map((d) => d.number)].filter(Boolean))].slice(0, MAX_CANDIDATES);
 
+  // The workflow of Create + roadmap / Create + assign… (#195): the workflows that take a task.
+  function workflowSelect(m, busy) {
+    const value = workflowFor(m);
+    const def = DefaultWorkflow.current().file;
+    const list = (state.workflows || []).filter((w) => !w.error && w.inputs?.task);
+    const options = list.some((w) => w.file === value) ? list : [{ file: value, name: value }, ...list];
+    return `<select class="po-wf" data-po-wf aria-label="Workflow of the filed issue" title="The workflow Create + roadmap plans it with (the default comes from Settings › General › Backlog)"${busy}>${options.map((w) =>
+      `<option value="${esc(w.file)}"${w.file === value ? ' selected' : ''}>${esc(w.name || w.file)}${w.file === def ? ' (default)' : ''}</option>`).join('')}</select>`;
+  }
+
   function draftActions(x, m) {
     const busy = po.busy ? ' disabled' : '';
     const note = po.notes[`draft:${m}`];
     const into = candidates(x);
     return `<div class="row po-draft-actions">
         ${x.draft ? `<button class="btn sm primary" type="button" data-po-act="create"${busy} title="File this draft as a new issue">Create</button>
-        <button class="btn sm ghost" type="button" data-po-act="create-roadmap"${busy} title="File it, then plan it as a new roadmap stage (${esc(DEFAULT_WORKFLOW)})">Create + roadmap</button>
+        <button class="btn sm ghost" type="button" data-po-act="create-roadmap"${busy} title="File it, then plan it as a new roadmap stage (${esc(DefaultWorkflow.label(workflowFor(m)))})">Create + roadmap</button>
+        ${workflowSelect(m, busy)}
         <button class="btn sm ghost" type="button" data-po-act="create-assign"${busy} title="File it, then open the assign dialog with it">Create + assign…</button>` : ''}
         ${into.map((n) => `<button class="btn sm${x.draft ? ' ghost' : ' primary'}" type="button" data-po-act="append" data-n="${n}"${busy} title="Append ${x.existingIssue === n && x.addition ? 'the addition' : 'this draft'} to #${n}'s description as a dated section, keeping what is there">Add to #${n}${x.draft ? ' instead' : ''}</button>
           <button class="link-btn small" type="button" data-po-act="comment" data-n="${n}"${busy} title="Add it as a comment on #${n} instead">comment on #${n}</button>`).join('')}
@@ -610,9 +623,9 @@
       if (out.syncError) po.notes[key] = { text: `Filed, but the backlog sync failed: ${out.syncError}`, error: true };
       const filed = !out.preview && out.filed?.number;
       if (filed && act === 'create-roadmap') {
-        await actions().roadmapGroup({ issues: [filed], workflow: DEFAULT_WORKFLOW, inputs: {}, reason: 'Filed by the Product Owner.' });
+        await actions().roadmapGroup({ issues: [filed], workflow: workflowFor(m), inputs: {}, reason: 'Filed by the Product Owner.' });
       } else if (filed && act === 'create-assign') {
-        await actions().assignGroup({ issues: [filed], workflow: DEFAULT_WORKFLOW, inputs: {} });
+        await actions().assignGroup({ issues: [filed], workflow: workflowFor(m), inputs: {} });
       }
     } catch (e) {
       po.notes[key] = { text: errMsg(e), error: true };
@@ -696,7 +709,15 @@
     else apply(b.dataset.poAct, b);
   };
   $p('#po-log').addEventListener('input', (e) => window.BacklogPoProposals.onInput(e, proposalsCtx()));
-  $p('#po-log').addEventListener('change', (e) => window.BacklogPoProposals.onInput(e, proposalsCtx()));
+  $p('#po-log').addEventListener('change', (e) => {
+    // a draft's workflow select (#195): kept for that draft, the Create + roadmap tooltip follows it
+    if (e.target.matches('[data-po-wf]')) {
+      draftWorkflow.set(Number(e.target.closest('[data-msg]')?.dataset.msg), e.target.value);
+      render();
+      return;
+    }
+    window.BacklogPoProposals.onInput(e, proposalsCtx());
+  });
   $p('#btn-po-clear').onclick = async () => {
     if (!await confirmDialog('Clear the conversation', 'The Product Owner forgets this project\'s questions and answers (and the files attached to them).', 'Clear')) return;
     try { po.messages = await api.clearProductOwner(po.projectId); Object.assign(po, { notes: {}, files: [], attached: [], extras: {} }); } catch (e) { po.error = errMsg(e); }

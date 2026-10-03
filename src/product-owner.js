@@ -51,6 +51,7 @@
 const fs = require('fs');
 const path = require('path');
 const backlog = require('./backlog');
+const DefaultWorkflow = require('./renderer/default-workflow');
 const epics = require('./epics');
 const poCalibration = require('./renderer/po-calibration');
 const poSplit = require('./po-split');
@@ -162,6 +163,7 @@ const RULES = [
   'You are the Product Owner of this project\'s backlog, inside the orchestrator\'s Backlog screen. The owner asks you a question; answer it from the backlog report below and, when you need to, from the project\'s code (your working directory, read-only: docs/agents/code-map.md, grep).',
   'Propose groups of issues to implement in one run (same files, same feature, one reuses the other), pairs or sets that must not run in parallel (overlapping files, a repo-wide refactor or reformat), the order to run the groups in (`stage`: 1 first; groups of one stage may run in parallel), and the issues too vague to implement that should be enriched first.',
   'Use only issue numbers and workflow files listed in the report. Suggest the workflow inputs that matter (for example `mode`). Leave a list empty when the question is not about it.',
+  'Give every group the default workflow (marked "(default)" in the report\'s Workflows) unless an issue needs another one; then say why in the group\'s `reason`.',
   'When the workflow has a `mode` input, set it on every group and say why in `mode_reason`: `validated` for a change the owner can try in the app (a screen, a dialog, a visible behaviour), `auto` for the engine, refactors, docs and tests.',
   'Split what is too big (`splits`): for an issue the report marks with split signals, propose 2-4 child issues. Each child has a title, the numbers of the parent\'s tasks it takes (every task in exactly one child, none dropped or invented), its complexity and its `stage` (children of one stage can run together). Say whether the parent becomes an umbrella linking its children or is closed in favour of them. Never split an issue without signals.',
   'Epics (`epics`): place each issue without an epic in an existing epic of its theme (`place`, the epic\'s id from the report); propose a new epic (a title, a one-paragraph goal, its member issues) when several issues share a theme and no epic exists; name epics to merge or split. Prefer grouping issues of the same epic in one run when they touch the same code.',
@@ -267,11 +269,12 @@ function sizeGroup(numbers, issues, history) {
 // `calibration` (#189, 1..5): the step it was planned with, recorded on the answer; a stage with more
 // groups than the step's parallel runs is cut into consecutive stages (the later stages move down),
 // and a group over the step's max complexity gets a warning.
-function normalizeAnswer(answer, { issues, history, workflows, epics: epicList = [], selection = [], mock = false, calibration = null }) {
+// `defaultWorkflow` (#195): the setting; a group without a known workflow gets it (or its fallback).
+function normalizeAnswer(answer, { issues, history, workflows, epics: epicList = [], selection = [], mock = false, calibration = null, defaultWorkflow = null }) {
   const numbers = new Set((issues || []).map((i) => i.number));
   const byNumber = new Map((issues || []).map((i) => [i.number, i]));
   const files = (workflows || []).map((w) => w.file);
-  const fallback = files.includes('software-development.yaml') ? 'software-development.yaml' : files[0] || '';
+  const fallback = files.length ? DefaultWorkflow.resolve(defaultWorkflow, files).file : '';
   const keep = (list) => [...new Set((list || []).map(Number).filter((n) => numbers.has(n)))];
   const isOpen = (n) => byNumber.get(n)?.state === 'open';
   const attached = new Set(keep(selection));
@@ -378,7 +381,8 @@ const plannable = (i) => i.state === 'open' && (!i.column || i.column === 'todo'
  * workflows. Capped at MAX_REPORT characters. The issues the owner attached (`selection`, #169) come
  * first and whole, closed ones included (marked), outside the cap; the open issues then skip them.
  */
-function backlogReport({ data, activeRuns = [], history = [], workflows = [], question = '', selection = [], shared = null }) {
+function backlogReport({ data, activeRuns = [], history = [], workflows = [], question = '', selection = [], shared = null, defaultWorkflow = null }) {
+  const byDefault = DefaultWorkflow.resolve(defaultWorkflow, workflows.map((w) => w.file)).file;
   const named = new Set([...String(question).matchAll(/#(\d+)/g)].map((m) => Number(m[1])));
   const all = data?.issues || [];
   const attached = [...new Set(selection.map(Number))].map((n) => all.find((i) => i.number === n)).filter(Boolean);
@@ -403,7 +407,7 @@ function backlogReport({ data, activeRuns = [], history = [], workflows = [], qu
   const stages = data?.roadmap?.stages || [];
   const sections = [
     `# Backlog of ${data?.projectId || 'the project'} (${issues.length} open issues, ${issues.filter(plannable).length} to do)`,
-    `## Workflows\n${workflows.map((w) => `- ${w.file}: ${w.name}${w.inputs ? ` (inputs: ${Object.keys(w.inputs).join(', ')})` : ''}`).join('\n') || '(none)'}`,
+    `## Workflows\n${workflows.map((w) => `- ${w.file}${w.file === byDefault ? ' (default)' : ''}: ${w.name}${w.inputs ? ` (inputs: ${Object.keys(w.inputs).join(', ')})` : ''}`).join('\n') || '(none)'}`,
     `## Queue\n${queue.map((q) => `- ${(q.issues || [q]).map((i) => `#${i.number}`).join(' + ')} → ${q.workflowName || q.workflow}`).join('\n') || '(empty)'}`,
     `## Runs in progress\n${activeRuns.map((r) => `- ${r.runId} ${r.workflow || ''} ${r.status}${r.waiting || r.gates?.length ? ' (waiting at a gate)' : ''}${r.issues?.length ? ` issues ${r.issues.map((i) => `#${i.number ?? i}`).join(', ')}` : ''}`).join('\n') || '(none)'}`,
     `## Merged locally, not pushed\n${local && !local.error ? `${local.ahead || 0} commits ahead${local.issues?.length ? `, issues ${local.issues.map((n) => `#${n}`).join(', ')}` : ''}` : '(unknown or none)'}`,
@@ -435,7 +439,8 @@ function backlogReport({ data, activeRuns = [], history = [], workflows = [], qu
  */
 // `calibration` (#189): the step's max complexity per group and parallel runs per stage (Speed: every
 // group of a stage at once, after the refactors; Quality: two per stage).
-function mockAnswer({ data, question = '', selection = [], calibration = poCalibration.DEFAULT }) {
+// `workflow`: the default development workflow (#195) every group gets.
+function mockAnswer({ data, question = '', selection = [], calibration = poCalibration.DEFAULT, workflow = DefaultWorkflow.LOCAL }) {
   const step = poCalibration.step(calibration);
   const backlogTodo = (data?.issues || []).filter(plannable);
   const attached = new Set(selection.map(Number));
@@ -459,7 +464,7 @@ function mockAnswer({ data, question = '', selection = [], calibration = poCalib
   const group = (g, stage) => ({
     name: g.topic || `#${g.issues[0]}`,
     issues: g.issues,
-    workflow: 'software-development.yaml',
+    workflow,
     inputs: {},
     reason: g.refactor ? 'A repo-wide change: alone in its own stage, before the others.'
       : g.issues.length > 1 ? `Same area (${/^epic /.test(g.topic) ? g.topic : `label ${g.topic}`}): likely the same files.` : 'On its own: no other issue shares its area.',
@@ -796,7 +801,7 @@ const MOCK_STEPS = [
  * ISSUE_SCHEMA); 'error' throws, so the conversation records an error answer. `files`: the turn's
  * attachments (the 'attachments' scenario lists them in the draft).
  */
-function mockScenario(scenario, { data, question = '', previous = [], files = [] }) {
+function mockScenario(scenario, { data, question = '', previous = [], files = [], workflow = DefaultWorkflow.LOCAL }) {
   if (!(scenario in MOCK_SCENARIOS)) throw new Error(`Unknown simulated scenario: ${scenario}.`);
   if (scenario === 'error') throw new Error('Simulated error (scenario "error"): the Product Owner could not answer. Nothing was spent.');
   const issues = (data?.issues || []).filter((i) => i.state === 'open');
@@ -845,7 +850,7 @@ function mockScenario(scenario, { data, question = '', previous = [], files = []
   const [one, two, three, ...rest] = todo;
   const pairs = [];
   for (let n = 0; n < rest.length; n += 2) pairs.push(rest.slice(n, n + 2).map((i) => i.number));
-  const group = (name, list, stage, reason, extra = {}) => ({ name, issues: list, workflow: 'software-development.yaml', inputs: {}, reason, files: ['src/renderer/views/backlog/backlog-po.js'], stage, ...extra });
+  const group = (name, list, stage, reason, extra = {}) => ({ name, issues: list, workflow, inputs: {}, reason, files: ['src/renderer/views/backlog/backlog-po.js'], stage, ...extra });
   const groups = [
     ...(one ? [group('Already applied', [one.number], 1, 'Already in the roadmap (simulated).', { simulated: { covered: [one.number], stage: 1 } })] : []),
     ...(two ? [group('Partly applied', [two.number, ...(three ? [three.number] : [])], 1, 'One issue already in the roadmap, one not (simulated).', { simulated: { covered: [two.number], stage: 1 } })] : []),
@@ -1063,9 +1068,11 @@ function checkBudget(budget) {
  *                  and its question record the step used (`calibration`, `calibrationOverride` when not the saved one).
  * @returns { message, messages }  the answer ({ role: 'po', text, answer | issue, model, costUsd }) and the whole conversation
  */
-async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns, runs, workflows, folder, agent, skillsDirs, resolveCommand, budget, mock, mode = 'plan', attachments = [], selection = [], scenario = null, onItem = null, signal = null, calibration = null }) {
+// `defaultWorkflow` (#195): the setting (settings.defaultWorkflow); the plan's groups get it unless an issue needs another.
+async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns, runs, workflows, folder, agent, skillsDirs, resolveCommand, budget, mock, mode = 'plan', attachments = [], selection = [], scenario = null, onItem = null, signal = null, calibration = null, defaultWorkflow = null }) {
   const q = String(question || '').trim();
   if (!q) throw new Error('Ask a question.');
+  const byDefault = DefaultWorkflow.resolve(defaultWorkflow, (workflows || []).map((w) => w.file)).file;
   const issueMode = mode === 'issue';
   const saved = poCalibration.clamp(agent?.calibration);
   const level = poCalibration.clamp(calibration, null) ?? poCalibration.fromQuestion(q) ?? saved;
@@ -1100,10 +1107,10 @@ async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns,
       try {
         // a scenario of the other mode is ignored (the default simulated answer)
         if (scenario && (MOCK_SCENARIOS[scenario] ?? mode) === mode) {
-          raw = mockScenario(scenario, { data, question: q, previous, files });
+          raw = mockScenario(scenario, { data, question: q, previous, files, workflow: byDefault });
           analysis = `Simulated (scenario "${scenario}"): no model was called, no code was read.`;
         } else {
-          raw = issueMode ? mockIssueAnswer({ data, question: q, previous }) : mockAnswer({ data, question: q, selection: selected, calibration: level });
+          raw = issueMode ? mockIssueAnswer({ data, question: q, previous }) : mockAnswer({ data, question: q, selection: selected, calibration: level, workflow: byDefault });
           analysis = 'Simulated: no model was called, no code was read.';
         }
       } catch (e) { failure = e; }
@@ -1119,7 +1126,7 @@ async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns,
       checkBudget(budget);
       let tokens;
       const shared = issueMode ? null : await sharedFiles({ runs: (runs || []).filter((r) => !r.mock).slice(0, SHARED_FILE_RUNS), repo: folder, store: storeFor(runsDir), limit: SHARED_FILES });
-      const report = (issueMode ? issueReport : backlogReport)({ data, activeRuns, history, workflows, question: q, selection: selected, shared });
+      const report = (issueMode ? issueReport : backlogReport)({ data, activeRuns, history, workflows, question: q, selection: selected, shared, defaultWorkflow: byDefault });
       ({ raw, costUsd, model, invalid, tokens, text: analysis } = await callAgent({
         mode, question: q, report, previous, attachments: files, selection: selected, folder, agent: issueMode ? ISSUE_AGENT : agent, skillsDirs, resolveCommand, onItem: seen, signal, calibration: level,
       }));
@@ -1141,7 +1148,7 @@ async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns,
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, `${message.ts.replace(/[:.]/g, '-')}.md`), `${String(analysis || '').trim()}\n\n\`\`\`json\n${JSON.stringify(raw, null, 2)}\n\`\`\`\n`);
   } else {
-    const answer = normalizeAnswer(raw, { issues: data?.issues, history, workflows, epics: data?.epics, selection: selected, mock: !!mock, calibration: level });
+    const answer = normalizeAnswer(raw, { issues: data?.issues, history, workflows, epics: data?.epics, selection: selected, mock: !!mock, calibration: level, defaultWorkflow: byDefault });
     message = appendMessage(backlogDir, projectId, {
       role: 'po', text: answer.summary, answer, model, costUsd, ...calib, ...(invalid ? { invalid } : {}),
     });

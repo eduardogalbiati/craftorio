@@ -1,5 +1,6 @@
 /* global api */
-// Settings screen: General (workspace folder, backlog defaults, voice input, the workspace index and
+// Settings screen: General (workspace folder, backlog defaults with the default development workflow
+// (#195, default-workflow.js), voice input, the workspace index and
 // its Rebuild index, src/store.js), Agents & CLIs (installed CLIs and
 // their sign-in), Execution (developer mode, Keep awake (keep-awake.js), notifications, concurrent runs, the Oracle's daily budget and compaction threshold) and About. Registers
 // itself with registerView (view-registry.js); uses app.js globals ($, esc, errMsg, state,
@@ -31,6 +32,8 @@ async function renderSettings() {
   platform.innerHTML = Object.entries(window.BACKLOG_PLATFORMS || {}).map(([id, p]) => `<option value="${id}">${esc(p.label)}${p.soon ? ' (sync not available yet)' : ''}</option>`).join('');
   platform.value = state.settings.backlogPlatform || 'github';
   $('#set-backlog-group').value = state.settings.backlogMaxGroup || 5;
+  state.workflows = await api.listWorkflows();
+  renderDefaultWorkflow();
   $('#set-backlog-refresh').value = String(state.settings.backlogRefreshHours ?? 24);
   $('#set-notif-retention').value = state.settings.notificationRetentionDays ?? 30;
   renderConcurrency();
@@ -42,6 +45,20 @@ async function renderSettings() {
   renderIndexStatus();
   renderDepsCache();
   if (!document.querySelector('[data-spage="agents"]').classList.contains('hidden')) renderTools();
+}
+
+// Settings › General › Backlog › Default development workflow (#195, settings.defaultWorkflow): the
+// workflows that take a task (no pipelines), the resolved default selected (DefaultWorkflow); a saved
+// workflow that was deleted or renamed falls back, and the note says so.
+function renderDefaultWorkflow() {
+  const list = (state.workflows || []).filter((w) => !w.error && w.inputs?.task);
+  const cur = DefaultWorkflow.current();
+  const sel = $('#set-default-workflow');
+  sel.innerHTML = list.map((w) => `<option value="${esc(w.file)}">${esc(w.name || w.file)} (${esc(w.file)}${w.merge === 'local' ? ', local merge' : w.merge === 'remote' ? ', pushes and opens PRs' : ''})</option>`).join('');
+  sel.value = cur.file;
+  const note = $('#set-default-wf-note');
+  note.textContent = cur.missing ? `${cur.missing} no longer exists: ${cur.file} is used instead.` : '';
+  note.classList.toggle('hidden', !cur.missing);
 }
 
 // Settings › Execution › Concurrent runs (settings.concurrentRuns).
@@ -300,6 +317,10 @@ registerView({
                   <div class="s-ctrl"><select id="set-backlog-platform" aria-label="Default backlog platform"></select></div>
                 </div>
                 <div class="s-row">
+                  <div class="s-label"><b>Default development workflow</b><span>Used wherever a workflow is not picked by hand: the Product Owner's plans, Split + roadmap, Create + roadmap, the Assign dialog with nothing remembered. Unset: the local workflow (no push, no PR, no CI) when the workspace has it.</span><span id="set-default-wf-note" class="warn-text hidden"></span></div>
+                  <div class="s-ctrl"><select id="set-default-workflow" aria-label="Default development workflow"></select></div>
+                </div>
+                <div class="s-row">
                   <div class="s-label"><b>Issues per run</b><span>The most issues Assign workflow sends as one run (one branch, one PR/MR that closes all of them).</span></div>
                   <div class="s-ctrl"><input type="number" id="set-backlog-group" min="2" max="20" aria-label="Most issues in one run" /></div>
                 </div>
@@ -474,6 +495,7 @@ registerView({
       if (el.dataset.setting === 'developerMode') applyDeveloperMode();
     }));
     $('#set-backlog-platform').onchange = async (e) => { state.settings = await api.setSettings({ backlogPlatform: e.target.value }); };
+    $('#set-default-workflow').onchange = async (e) => { state.settings = await api.setSettings({ defaultWorkflow: e.target.value || null }); renderDefaultWorkflow(); };
     $('#set-backlog-refresh').onchange = async (e) => { state.settings = await api.setSettings({ backlogRefreshHours: Number(e.target.value) || 0 }); };
     $('#set-backlog-group').onchange = async (e) => {
       const n = Math.floor(Number(e.target.value));
