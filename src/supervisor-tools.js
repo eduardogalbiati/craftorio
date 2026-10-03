@@ -88,7 +88,10 @@ function supervisorTools(ctx) {
       name: 'list_agents',
       description: 'The agents (robots): id, name, provider, model, effort, skills and the workflows that use them.',
       inputSchema: obj(),
-      run: () => json(agents.listAgents(ws().agents, { workflowsDir: ws().workflows })),
+      // Without the prompts (half of the payload; read_workflow has them) nor the avatars, compact:
+      // the bundled workflows' agents passed MAX_CHARS and clip() cut the JSON mid-string.
+      run: () => JSON.stringify(agents.listAgents(ws().agents, { workflowsDir: ws().workflows })
+        .map(({ prompt, appearance, ...agent }) => agent)),
     },
     {
       name: 'get_usage',
