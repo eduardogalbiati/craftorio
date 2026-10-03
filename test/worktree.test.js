@@ -237,7 +237,9 @@ test('prepareWorktree: resume recreates a deleted worktree from the run branch',
   assert.equal(git(dir, 'rev-parse', 'HEAD'), head);
 });
 
-for (const spelling of SPELLINGS) test(`cleanupWorktrees (${spelling} paths): removes succeeded and stale runs, keeps failed, recent and active ones; a removed worktree's scratch goes with it, its logs and screenshots stay`, async (t) => {
+// #202: no worktree folder is kept for an ended run (the branch keeps the work): succeeded, failed
+// and interrupted runs (no summary, no live owner, no open gate) all lose theirs.
+for (const spelling of SPELLINGS) test(`cleanupWorktrees (${spelling} paths): removes the worktrees of ended and interrupted runs (succeeded, failed, no summary) and keeps active ones; a removed worktree's scratch goes with it, its logs and screenshots stay`, async (t) => {
   const f = spelled(t, spelling);
   if (!f) return;
   const runsDir = path.join(f.tmp, 'runs');
@@ -263,24 +265,170 @@ for (const spelling of SPELLINGS) test(`cleanupWorktrees (${spelling} paths): re
   const active = await mk('active', 'success');
   const running = await mk('running', null);
   const removed = await cleanupWorktrees({ worktreesDir: f.worktrees, runsDir, active: [active] });
-  assert.deepEqual(removed.map((d) => path.basename(d)), ['ok']);
-  assert.ok(!fs.existsSync(ok) && fs.existsSync(failed) && fs.existsSync(active) && fs.existsSync(running));
-  assert.ok(!fs.existsSync(scratchOf('ok')), 'the scratch workspace goes with its removed worktree');
-  for (const name of ['failed', 'active', 'running']) assert.ok(fs.existsSync(scratchOf(name)), `${name} keeps its scratch while its worktree is kept`);
+  assert.deepEqual(removed.map((d) => path.basename(d)).sort(), ['failed', 'ok', 'running']);
+  assert.ok(!fs.existsSync(ok) && !fs.existsSync(failed) && !fs.existsSync(running));
+  assert.ok(fs.existsSync(active), 'a run in progress keeps its worktree');
+  for (const name of ['ok', 'failed', 'running']) assert.ok(!fs.existsSync(scratchOf(name)), `${name}: the scratch workspace goes with its removed worktree`);
+  assert.ok(fs.existsSync(scratchOf('active')), 'a run in progress keeps its scratch');
   // the evidence is never removed, whether or not the worktree (and the scratch workspace) was
-  assert.ok(fs.existsSync(path.join(runsDir, 'ok', 'logs', 'test.log')));
-  assert.ok(fs.existsSync(path.join(runsDir, 'ok', 'screenshots', 'shot.png')));
+  for (const name of ['ok', 'failed', 'running']) {
+    assert.ok(fs.existsSync(path.join(runsDir, name, 'logs', 'test.log')));
+    assert.ok(fs.existsSync(path.join(runsDir, name, 'screenshots', 'shot.png')));
+  }
+});
 
-  // 30 days without use: removed even if it failed
-  const old = (Date.now() - 30 * 864e5) / 1000;
-  fs.utimesSync(path.join(runsDir, 'failed', 'events.jsonl'), old, old);
-  fs.utimesSync(failed, old, old);
-  const index = path.resolve(failed, git(failed, 'rev-parse', '--git-path', 'index'));
-  fs.utimesSync(index, old, old);
-  const removed2 = await cleanupWorktrees({ worktreesDir: f.worktrees, runsDir, active: [active], maxAgeDays: 14 });
-  assert.deepEqual(removed2.map((d) => path.basename(d)), ['failed']);
-  assert.ok(!fs.existsSync(scratchOf('failed')), 'the scratch workspace goes with the worktree once it is finally removed');
-  assert.ok(fs.existsSync(path.join(runsDir, 'failed', 'logs', 'test.log')), 'the evidence still stays');
+// The run folder of an ended run, as a previous app session left it. summary: null = no summary
+// (interrupted); owner: an owner.json; events: extra events after workflow.started.
+function endedRun(runsDir, name, { summary = null, owner = null, events = [] } = {}) {
+  const runDir = path.join(runsDir, name);
+  fs.mkdirSync(runDir, { recursive: true });
+  fs.writeFileSync(path.join(runDir, 'events.jsonl'), [{ ts: new Date().toISOString(), type: 'workflow.started', workflow: 'fixture' }, ...events].map((e) => JSON.stringify(e)).join('\n') + '\n');
+  if (summary) fs.writeFileSync(path.join(runDir, 'summary.json'), JSON.stringify({ run_id: name, ...summary }));
+  if (owner) fs.writeFileSync(path.join(runDir, 'owner.json'), JSON.stringify(owner));
+  return runDir;
+}
+
+const runEvents = (runDir) => fs.readFileSync(path.join(runDir, 'events.jsonl'), 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
+
+// a folder (and its worktree's git index, when it has one) last used `days` ago
+function age(dir, days, runDir) {
+  const when = (Date.now() - days * 864e5) / 1000;
+  if (runDir) fs.utimesSync(path.join(runDir, 'events.jsonl'), when, when);
+  try {
+    const index = path.resolve(dir, git(dir, 'rev-parse', '--git-path', 'index'));
+    fs.utimesSync(index, when, when);
+  } catch { /* not a worktree */ }
+  fs.utimesSync(dir, when, when);
+}
+
+test('cleanupWorktrees: an ended run\'s uncommitted work becomes a WIP commit on its branch (a detached worktree gets a branch first), recorded as worktree.removed; the branch is never deleted', async (t) => {
+  const f = fixture(t);
+  const runsDir = path.join(f.tmp, 'runs');
+  // cancelled, detached, with a new file and a changed tracked file left uncommitted
+  const cancelled = path.join(f.worktrees, '20261002-125448-cancel01');
+  await prepareWorktree({ repo: f.repo, base: 'main', dir: cancelled });
+  fs.writeFileSync(path.join(cancelled, 'wip.txt'), 'work in progress\n');
+  fs.writeFileSync(path.join(cancelled, 'a.txt'), 'changed\n');
+  const cancelledRun = endedRun(runsDir, '20261002-125448-cancel01', { summary: { status: 'cancelled' } });
+  // interrupted (no summary, no owner), on its own branch, its work already committed
+  const interrupted = path.join(f.worktrees, '20261002-130000-interr01');
+  await prepareWorktree({ repo: f.repo, base: 'main', dir: interrupted });
+  git(interrupted, 'switch', '-q', '-c', 'feat/interrupted');
+  const head = commit(interrupted, 'b.txt', 'b\n', 'own work');
+  const interruptedRun = endedRun(runsDir, '20261002-130000-interr01');
+
+  const removed = await cleanupWorktrees({ worktreesDir: f.worktrees, runsDir, active: [] });
+  assert.deepEqual(removed.map((d) => path.basename(d)).sort(), ['20261002-125448-cancel01', '20261002-130000-interr01']);
+  assert.ok(!fs.existsSync(cancelled) && !fs.existsSync(interrupted));
+
+  const wip = runEvents(cancelledRun).filter((e) => e.type === 'worktree.removed').pop();
+  assert.ok(wip, 'the run records worktree.removed');
+  assert.ok(wip.branch, 'a detached worktree got a branch');
+  assert.ok(wip.wip_commit, 'the WIP commit is recorded');
+  assert.equal(git(f.repo, 'rev-parse', `refs/heads/${wip.branch}`), wip.wip_commit, 'the branch points at the WIP commit');
+  const message = git(f.repo, 'log', '-1', '--format=%B', wip.wip_commit);
+  assert.match(message, /WIP/);
+  assert.ok(message.includes('20261002-125448-cancel01'), `the message names the run: ${message}`);
+  assert.equal(git(f.repo, 'show', `${wip.wip_commit}:wip.txt`), 'work in progress');
+  assert.equal(git(f.repo, 'show', `${wip.wip_commit}:a.txt`), 'changed');
+
+  const own = runEvents(interruptedRun).filter((e) => e.type === 'worktree.removed').pop();
+  assert.equal(own?.branch, 'feat/interrupted');
+  assert.ok(!own.wip_commit, 'nothing uncommitted: no WIP commit');
+  assert.equal(git(f.repo, 'rev-parse', 'refs/heads/feat/interrupted'), head, 'the branch keeps the run\'s commits');
+});
+
+test('cleanupWorktrees: never removes the worktree of a run live in another app process, or of a run waiting at a human gate, however old', async (t) => {
+  const f = fixture(t);
+  const runsDir = path.join(f.tmp, 'runs');
+  const live = path.join(f.worktrees, 'live-elsewhere');
+  await prepareWorktree({ repo: f.repo, base: 'main', dir: live });
+  fs.writeFileSync(path.join(live, 'wip.txt'), 'live\n');
+  // owned by another live process on this machine (the test runner that started this file)
+  const liveRun = endedRun(runsDir, 'live-elsewhere', { owner: { pid: process.ppid, host: os.hostname(), started_at: new Date().toISOString(), heartbeat_at: new Date().toISOString() } });
+  const gate = path.join(f.worktrees, 'at-gate');
+  await prepareWorktree({ repo: f.repo, base: 'main', dir: gate });
+  fs.writeFileSync(path.join(gate, 'wip.txt'), 'gate\n');
+  const gateRun = endedRun(runsDir, 'at-gate', { events: [{ ts: new Date().toISOString(), type: 'approval.requested', approval_id: 'g1', step_id: 'review', message: 'Approve?' }] });
+  age(live, 30, liveRun);
+  age(gate, 30, gateRun);
+
+  const removed = await cleanupWorktrees({ worktreesDir: f.worktrees, runsDir, active: [] });
+  assert.deepEqual(removed, []);
+  assert.ok(fs.existsSync(path.join(live, 'wip.txt')), 'a live run\'s worktree is untouched');
+  assert.ok(fs.existsSync(path.join(gate, 'wip.txt')), 'a run waiting at a human gate keeps its worktree');
+  assert.match(git(live, 'status', '--porcelain'), /wip\.txt/, 'nothing was committed in a live run\'s worktree');
+  assert.match(git(gate, 'status', '--porcelain'), /wip\.txt/);
+});
+
+test('cleanupWorktrees: a folder git does not know (e.g. shots-*) is removed once older than an hour; a newer one may be a worktree being created and stays', async (t) => {
+  const f = fixture(t);
+  const runsDir = path.join(f.tmp, 'runs');
+  const old = path.join(f.worktrees, 'shots-old');
+  const fresh = path.join(f.worktrees, 'shots-new');
+  for (const dir of [old, fresh]) {
+    fs.mkdirSync(path.join(dir, 'sub'), { recursive: true });
+    fs.writeFileSync(path.join(dir, 'sub', 'shot.png'), 'png');
+  }
+  const twoHours = (Date.now() - 2 * 3600e3) / 1000;
+  fs.utimesSync(path.join(old, 'sub', 'shot.png'), twoHours, twoHours);
+  fs.utimesSync(path.join(old, 'sub'), twoHours, twoHours);
+  fs.utimesSync(old, twoHours, twoHours);
+
+  const removed = await cleanupWorktrees({ worktreesDir: f.worktrees, runsDir, active: [] });
+  assert.deepEqual(removed.map((d) => path.basename(d)), ['shots-old']);
+  assert.ok(!fs.existsSync(old));
+  assert.ok(fs.existsSync(fresh));
+});
+
+test('cleanupWorktrees: an ended run\'s worktree that could not be removed (a process holds a file) is removed by the next cleanup once it is free', async (t) => {
+  const f = fixture(t);
+  const runsDir = path.join(f.tmp, 'runs');
+  const name = '20261002-140000-locked01';
+  const dir = path.join(f.worktrees, name);
+  await prepareWorktree({ repo: f.repo, base: 'main', dir });
+  endedRun(runsDir, name, { summary: { status: 'failed' } });
+  git(f.repo, 'worktree', 'lock', dir);
+  const origRmSync = fs.rmSync.bind(fs);
+  const busy = t.mock.method(fs, 'rmSync', (target, opts) => {
+    if (samePath(target, dir)) throw Object.assign(new Error('EBUSY: resource busy or locked'), { code: 'EBUSY' });
+    return origRmSync(target, opts);
+  });
+  assert.deepEqual(await cleanupWorktrees({ worktreesDir: f.worktrees, runsDir, active: [] }), []);
+  assert.ok(fs.existsSync(dir), 'still there: left for the next cleanup');
+
+  busy.mock.restore();
+  git(f.repo, 'worktree', 'unlock', dir);
+  const removed = await cleanupWorktrees({ worktreesDir: f.worktrees, runsDir, active: [] });
+  assert.deepEqual(removed.map((d) => path.basename(d)), [name]);
+  assert.ok(!fs.existsSync(dir));
+});
+
+// #201: the scratch workspace of an ended run goes even when it has no worktree folder left (e.g.
+// the folder was removed by hand, or the run never got one), some days after the run ended; the
+// run's logs stay, and a live run's scratch is never touched.
+test('cleanupWorktrees: removes the scratch workspace of a run that ended days ago, without a worktree folder; keeps a live run\'s scratch and every run\'s logs', async (t) => {
+  const tmp = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'wt-scratch-')));
+  t.after(() => fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 3 }));
+  const runsDir = path.join(tmp, 'runs');
+  const worktreesDir = path.join(tmp, 'worktrees');
+  fs.mkdirSync(worktreesDir, { recursive: true });
+  const ended = new Date(Date.now() - 10 * 864e5).toISOString();
+  const endedDir = endedRun(runsDir, '20260920-100000-ended001', { summary: { status: 'failed', started_at: ended, finished_at: ended } });
+  const liveDir = endedRun(runsDir, '20260920-110000-live0001', { owner: { pid: process.ppid, host: os.hostname(), started_at: ended, heartbeat_at: new Date().toISOString() } });
+  for (const runDir of [endedDir, liveDir]) {
+    fs.mkdirSync(path.join(runDir, 'scratch', 'workspace', 'skills'), { recursive: true });
+    fs.writeFileSync(path.join(runDir, 'scratch', 'workspace', 'skills', 'SKILL.md'), 'seeded');
+    fs.mkdirSync(path.join(runDir, 'logs'), { recursive: true });
+    fs.writeFileSync(path.join(runDir, 'logs', 'test.log'), 'log');
+    const when = (Date.now() - 10 * 864e5) / 1000;
+    fs.utimesSync(path.join(runDir, 'events.jsonl'), when, when);
+  }
+
+  await cleanupWorktrees({ worktreesDir, runsDir, active: [] });
+  assert.ok(!fs.existsSync(path.join(endedDir, 'scratch')), 'an ended run\'s scratch is removed');
+  assert.ok(fs.existsSync(path.join(liveDir, 'scratch', 'workspace', 'skills', 'SKILL.md')), 'a live run\'s scratch stays');
+  for (const runDir of [endedDir, liveDir]) assert.ok(fs.existsSync(path.join(runDir, 'logs', 'test.log')), 'logs stay');
 });
 
 test('cleanupWorktrees: a worktree still there after removal (locked by a process) keeps the run\'s scratch workspace and is not reported as removed', async (t) => {
@@ -316,13 +464,15 @@ test('cleanupWorktrees: a worktree still there after removal (locked by a proces
 
 // ---- engine -----------------------------------------------------------------------
 // answer: what every human gate gets (true/false, or a choice id)
-async function runFixture({ inputs, worktreesDir, runsDir, resume, file = 'worktree.yaml', answer = true, stopProcesses }) {
+// onEvent(ev, run): sees every event first; returning true leaves a gate unanswered
+async function runFixture({ inputs, worktreesDir, runsDir, resume, file = 'worktree.yaml', answer = true, stopProcesses, onEvent }) {
   const run = new WorkflowRun({ file: path.join(__dirname, 'fixtures', file), inputs, mock: true, runsDir, worktreesDir, resume, stopProcesses });
   const rec = new Recorder(run.runDir);
   const events = [];
   run.on('event', (ev) => {
     rec.write(ev);
     events.push(ev);
+    if (onEvent && onEvent(ev, run)) return;
     if (ev.type === 'approval.requested') setImmediate(() => run.resolveApproval(ev.approval_id, answer));
   });
   await run.start();
@@ -330,7 +480,7 @@ async function runFixture({ inputs, worktreesDir, runsDir, resume, file = 'workt
   return { run, events, finished: events.find((e) => e.type === 'workflow.finished') };
 }
 
-for (const spelling of SPELLINGS) test(`engine (${spelling} paths): agents work in the run worktree; removed on success, kept on failure and reused on resume`, { timeout: 60000 }, async (t) => {
+for (const spelling of SPELLINGS) test(`engine (${spelling} paths): agents work in the run worktree; removed on success; on failure the folder goes and the branch stays, and a resume recreates the folder from it`, { timeout: 60000 }, async (t) => {
   const f = spelled(t, spelling);
   if (!f) return;
   const runsDir = path.join(f.tmp, 'runs');
@@ -348,22 +498,83 @@ for (const spelling of SPELLINGS) test(`engine (${spelling} paths): agents work 
   const bad = await runFixture({ inputs: { repo_path: f.repo, skill: 'does-not-exist' }, worktreesDir: f.worktrees, runsDir });
   assert.equal(bad.finished.status, 'failed');
   const kept = path.join(f.worktrees, bad.run.runId);
-  assert.ok(fs.existsSync(kept));
-  assert.equal(bad.finished.summary.worktree.removed, false);
-  assert.ok(bad.events.some((e) => e.type === 'worktree.kept'));
+  assert.ok(!fs.existsSync(kept), 'no worktree folder is kept for an ended run');
+  assert.equal(bad.finished.summary.worktree.removed, true);
+  assert.ok(!bad.events.some((e) => e.type === 'worktree.kept'));
+  const gone = bad.events.find((e) => e.type === 'worktree.removed');
+  assert.ok(gone?.branch, 'the detached worktree got a branch');
+  assert.equal(bad.finished.summary.worktree.branch, gone.branch);
+  git(f.repo, 'rev-parse', '--verify', `refs/heads/${gone.branch}`); // the branch is kept
 
-  // resume: the new run continues in the previous run's worktree
-  fs.writeFileSync(path.join(kept, 'wip.txt'), 'work in progress\n');
+  // resume: the folder is recreated from the run's branch and the new run continues there
   const spec = supervisor.resumeSpec(path.join(runsDir, bad.run.runId), 'work');
   assert.ok(samePath(spec.worktree.dir, kept));
+  assert.equal(spec.worktree.branch, gone.branch);
   const resumed = await runFixture({
     inputs: { repo_path: f.repo }, worktreesDir: f.worktrees, runsDir,
     resume: { runId: spec.runId, fromStep: 'work', steps: spec.steps, sessions: spec.sessions, worktree: spec.worktree },
   });
   assert.equal(resumed.finished.status, 'success', resumed.finished.error);
-  assert.equal(resumed.events.find((e) => e.type === 'worktree.ready').reused, true);
+  assert.equal(resumed.events.find((e) => e.type === 'worktree.ready').recreated, true);
   assert.ok(samePath(resumed.finished.summary.sessions.find((s) => s.agent === 'a').cwd, kept));
   assert.ok(!fs.existsSync(kept), 'removed once the resumed run succeeds');
+});
+
+// #202: cancelling a run (here at its human gate) removes its worktree folder and scratch; the
+// uncommitted work is a WIP commit on the run's branch; Resume recreates the folder from that
+// branch, tells the agent about the previous attempt's work, and the run goes on.
+test('engine: a cancelled run leaves no worktree folder and no scratch, its branch has the WIP commit; Resume recreates the folder with that work and continues', { timeout: 60000 }, async (t) => {
+  const f = fixture(t);
+  const runsDir = path.join(f.tmp, 'runs');
+  let workDir = null;
+  const cancelled = await runFixture({
+    file: 'gate-end.yaml', inputs: { repo_path: f.repo }, worktreesDir: f.worktrees, runsDir,
+    onEvent: (ev, run) => {
+      if (ev.type === 'worktree.ready') workDir = ev.work_dir || ev.dir;
+      if (ev.type !== 'approval.requested') return false;
+      // what the agent left uncommitted, and the scratch its checks used
+      fs.writeFileSync(path.join(workDir, 'wip.txt'), 'work in progress\n');
+      fs.mkdirSync(path.join(run.runDir, 'scratch', 'workspace'), { recursive: true });
+      fs.writeFileSync(path.join(run.runDir, 'scratch', 'workspace', 'settings.json'), '{}');
+      setImmediate(() => run.stop());
+      return true;
+    },
+  });
+  assert.equal(cancelled.finished.status, 'cancelled');
+  const dir = path.join(f.worktrees, cancelled.run.runId);
+  assert.ok(!fs.existsSync(dir), 'no worktree folder is kept');
+  assert.ok(!fs.existsSync(path.join(cancelled.run.runDir, 'scratch')), 'the run\'s scratch is removed with it');
+  const removed = cancelled.events.find((e) => e.type === 'worktree.removed');
+  assert.ok(removed?.branch && removed.wip_commit, JSON.stringify(removed));
+  assert.equal(git(f.repo, 'rev-parse', `refs/heads/${removed.branch}`), removed.wip_commit);
+  const message = git(f.repo, 'log', '-1', '--format=%B', removed.wip_commit);
+  assert.match(message, /WIP/);
+  assert.ok(message.includes(cancelled.run.runId), `the message names the run: ${message}`);
+  assert.equal(git(f.repo, 'show', `${removed.wip_commit}:wip.txt`), 'work in progress');
+  assert.equal(cancelled.finished.summary.worktree.removed, true);
+
+  const spec = supervisor.resumeSpec(cancelled.run.runDir, 'work');
+  let atReady = null;
+  const resumed = await runFixture({
+    file: 'gate-end.yaml', inputs: { repo_path: f.repo }, worktreesDir: f.worktrees, runsDir, answer: true,
+    resume: { runId: spec.runId, fromStep: 'work', steps: spec.steps, sessions: spec.sessions, worktree: spec.worktree },
+    onEvent: (ev) => {
+      if (ev.type === 'worktree.ready') {
+        const wd = ev.work_dir || ev.dir;
+        atReady = {
+          recreated: ev.recreated, exists: fs.existsSync(wd),
+          wip: fs.existsSync(path.join(wd, 'wip.txt')) ? fs.readFileSync(path.join(wd, 'wip.txt'), 'utf8') : null,
+          branch: git(ev.dir, 'rev-parse', '--abbrev-ref', 'HEAD'),
+        };
+      }
+      return false;
+    },
+  });
+  assert.equal(resumed.finished.status, 'success', resumed.finished.error);
+  assert.deepEqual(atReady, { recreated: true, exists: true, wip: 'work in progress\n', branch: removed.branch });
+  const sent = resumed.events.find((e) => e.type === 'session.message_sent');
+  assert.match(sent.prompt, /uncommitted work from the previous attempt/i);
+  assert.ok(!fs.existsSync(dir), 'removed again once the resumed run succeeds');
 });
 
 // #120: an agent of a run with a worktree never writes a simulated run or a screenshot into the
@@ -404,7 +615,7 @@ test('engine: an agent of a run with a worktree gets MULTIAGENT_WORKSPACE in its
   assert.ok(!fs.existsSync(path.join(run.runDir, 'scratch')));
 });
 
-test('engine: `goto: end` + `status` sets the outcome; a rejected failure gate is failed and keeps the worktree', { timeout: 60000 }, async (t) => {
+test('engine: `goto: end` + `status` sets the outcome; a rejected failure gate is failed, its worktree folder goes and its branch stays', { timeout: 60000 }, async (t) => {
   const f = fixture(t);
   const runsDir = path.join(f.tmp, 'runs');
 
@@ -416,16 +627,18 @@ test('engine: `goto: end` + `status` sets the outcome; a rejected failure gate i
   assert.equal(ok.finished.summary.worktree.removed, true);
   assert.ok(!fs.existsSync(path.join(f.worktrees, ok.run.runId)));
 
-  // rejected: `goto: end` + `status: failed` → failed, worktree kept for a resume
+  // rejected: `goto: end` + `status: failed` → failed; the branch keeps the work for a resume
   const bad = await runFixture({ file: 'gate-end.yaml', inputs: { repo_path: f.repo }, worktreesDir: f.worktrees, runsDir, answer: false });
   assert.equal(bad.finished.status, 'failed');
   assert.equal(bad.finished.summary.status, 'failed');
   assert.match(bad.finished.error, /ended as failed at step "work_failed" \(rejected\)/);
   const end = bad.events.find((e) => e.type === 'step.transition' && e.from === 'work_failed');
   assert.deepEqual([end.to, end.status], ['end', 'failed']);
-  assert.equal(bad.finished.summary.worktree.removed, false);
-  assert.ok(bad.events.some((e) => e.type === 'worktree.kept'));
-  assert.ok(fs.existsSync(path.join(f.worktrees, bad.run.runId)));
+  assert.equal(bad.finished.summary.worktree.removed, true);
+  assert.ok(!bad.events.some((e) => e.type === 'worktree.kept'));
+  assert.ok(!fs.existsSync(path.join(f.worktrees, bad.run.runId)));
+  const gone = bad.events.find((e) => e.type === 'worktree.removed');
+  git(f.repo, 'rev-parse', '--verify', `refs/heads/${gone.branch}`); // the branch is kept
   // summary.json and the runs list agree (the UI reads them)
   assert.equal(JSON.parse(fs.readFileSync(path.join(bad.run.runDir, 'summary.json'), 'utf8')).status, 'failed');
   const listed = require('../src/runs').readRun(runsDir, bad.run.runId);

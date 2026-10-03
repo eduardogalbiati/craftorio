@@ -557,6 +557,42 @@ test('roadmap:item retry: when the item\'s own run kept no commits of its own, t
   assert.equal(out.kept.runId, otherRunId);
 });
 
+// #202: an ended run keeps its branch, not its worktree folder. The kept-work question counts the
+// run's own commits on that branch, so it still asks once the folder is gone.
+test('run:start: the kept-work question counts an ended run\'s own commits on its branch when its worktree folder was removed', async (t) => {
+  const { service, api } = makeService(t);
+  const ws = service.workspace();
+  fs.writeFileSync(path.join(ws.workflows, 'fixture-issue.yaml'), ISSUE_WORKFLOW);
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'service-kept-branch-'));
+  t.after(() => fs.rmSync(folder, { recursive: true, force: true }));
+  const p = await api['projects:create']({ name: 'demo', folder });
+  // the run's branch `feature` has 1 commit of its own on top of main; the repository is back on
+  // main and the run's worktree folder no longer exists
+  const repo = keptWorkRepo(t);
+  execFileSync('git', ['checkout', '-q', 'main'], { cwd: repo, stdio: 'ignore' });
+  const gone = path.join(path.dirname(repo), `${path.basename(repo)}-worktree-removed`);
+  const issue = { number: 25, url: 'https://github.com/o/r/issues/25', title: 'Issue 25' };
+  const runId = '20260930-100000-keptbranch1';
+  const dir = path.join(ws.runs, runId);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'events.jsonl'), [
+    JSON.stringify({ ts: '2026-09-30T10:00:00Z', type: 'workflow.started', workflow: 'fixture-issue', file: 'fixture-issue.yaml', inputs: {}, mock: false, issues: [issue] }),
+    JSON.stringify({ ts: '2026-09-30T10:00:01Z', type: 'worktree.ready', dir: gone, work_dir: gone, repo, base: 'main', ref: 'feature' }),
+    JSON.stringify({ ts: '2026-09-30T10:05:00Z', type: 'worktree.removed', dir: gone, removed: true, branch: 'feature', branch_deleted: false, wip_commit: null }),
+  ].join('\n') + '\n');
+  fs.writeFileSync(path.join(dir, 'summary.json'), JSON.stringify({
+    run_id: runId, workflow: 'fixture-issue', status: 'cancelled', started_at: '2026-09-30T10:00:00Z', finished_at: '2026-09-30T10:05:00Z',
+    issues: [issue], inputs: {}, sessions: [], worktree: { dir: gone, repo, base: 'main', branch: 'feature', removed: true },
+  }));
+
+  const asked = await api['run:start']({
+    file: 'fixture-issue.yaml', inputs: { task: 't', repo_path: folder }, mock: true, projectId: p.id, issues: [issue],
+  });
+  assert.equal(asked.runId, runId);
+  assert.equal(asked.kept?.commits, 1);
+  assert.match(asked.confirm, /made 1 commit of its own for #25/);
+});
+
 test('runs:resume is never refused for kept work, even for a run of its own issue', async (t) => {
   const { service, api } = makeResumeService(t);
   const repo = keptWorkRepo(t);
