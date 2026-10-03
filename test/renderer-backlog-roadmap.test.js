@@ -20,13 +20,21 @@ function tmp(t) {
 
 const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'views', 'backlog', 'backlog-roadmap.js'), 'utf8');
 const workflowInputsSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'workflow-inputs.js'), 'utf8');
+const runProgressSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'run-progress-model.js'), 'utf8');
+const defaultWorkflowSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'default-workflow.js'), 'utf8');
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
-function loadRoadmap({ listWorkflows, confirmDialog, keptWorkDialog, roadmapItem, querySelector, devMode, setRoadmapLive } = {}) {
+// `choiceDialog`: #195's push confirmation (checkPushes); `showRunCalls`/`scheduleRenderCalls`: #194's
+// ring chip click (openRunAt). RunProgress and DefaultWorkflow are the real modules (#194, #195), not
+// reimplemented; only the purely presentational run-list helpers (avatars, chips, duration text) and
+// ChainModel are stubbed, since they draw nothing this file's own behaviour depends on.
+function loadRoadmap({ listWorkflows, confirmDialog, keptWorkDialog, choiceDialog, roadmapItem, querySelector, querySelectorAll, devMode, setRoadmapLive } = {}) {
   const savedCalls = [];
   const startCalls = [];
   const roadmapItemCalls = [];
   const liveCalls = [];
+  const showRunCalls = [];
+  let scheduleRenderCalls = 0;
   const sandbox = {
     esc,
     state: {},
@@ -34,7 +42,16 @@ function loadRoadmap({ listWorkflows, confirmDialog, keptWorkDialog, roadmapItem
     devMode: devMode || (() => false),
     confirmDialog: confirmDialog || (async () => true),
     keptWorkDialog: keptWorkDialog || (async () => null),
-    document: { querySelector: querySelector || (() => null) },
+    choiceDialog: choiceDialog || (async () => null),
+    fmtDur: (ms) => (ms == null ? 'unknown' : `${Math.round(ms / 1000)}s`),
+    robotAvatar: () => '<svg class="robot"></svg>',
+    agentLabel: (agent) => agent,
+    PERSON_SVG: '<svg class="person"></svg>',
+    ENGINE_SVG: '<svg class="engine"></svg>',
+    progressChip: (c) => esc(c.name),
+    ChainModel: { chainBadgesHtml: () => '' },
+    scheduleRender: () => { scheduleRenderCalls += 1; },
+    document: { querySelector: querySelector || (() => null), querySelectorAll: querySelectorAll || (() => []) },
     api: {
       listWorkflows: listWorkflows || (async () => []),
       saveRoadmap: async (projectId, stages) => {
@@ -55,11 +72,21 @@ function loadRoadmap({ listWorkflows, confirmDialog, keptWorkDialog, roadmapItem
       },
     },
   };
+  sandbox.setTimeout = setTimeout;
+  sandbox.clearTimeout = clearTimeout;
   sandbox.window = sandbox;
+  // `opts` is built inside the vm realm: keep only primitives so assert.deepEqual (strict, cross-realm
+  // objects never compare equal) can check it without reaching into the sandbox.
+  sandbox.window.showRun = (runId, opts) => showRunCalls.push({ runId, workflow: opts?.workflow });
   vm.createContext(sandbox);
+  vm.runInContext(runProgressSrc, sandbox); // the real RunProgress module (#194), not reimplemented
+  vm.runInContext(defaultWorkflowSrc, sandbox); // the real DefaultWorkflow module (#195)
   vm.runInContext(workflowInputsSrc, sandbox); // the real WorkflowInputs module (#116), not reimplemented
   vm.runInContext(src, sandbox);
-  return { BacklogRoadmap: sandbox.window.BacklogRoadmap, savedCalls, startCalls, roadmapItemCalls, liveCalls };
+  return {
+    BacklogRoadmap: sandbox.window.BacklogRoadmap, savedCalls, startCalls, roadmapItemCalls, liveCalls, showRunCalls, sandbox,
+    scheduleRenderCalls: () => scheduleRenderCalls,
+  };
 }
 
 const settle = () => new Promise((r) => setTimeout(r, 0));
@@ -556,6 +583,301 @@ test('onClick [data-rm-item=retry]: kept work, but "resume" (or Cancel) never re
     assert.equal(handled, true, `answer: ${answer}`);
     assert.equal(roadmapItemCalls.length, 1, `answer: ${answer}: only the first, unconfirmed call`);
   }
+});
+
+// ---- #196: Retry / Skip on a refused start (the item that paused the roadmap, or an error without
+// a run), never while its run is alive -------------------------------------------------------------
+
+test('html: Retry and Skip show on the item that paused the roadmap, even while it is still "planned" (a refused start)', () => {
+  const { BacklogRoadmap } = loadRoadmap();
+  const item = {
+    id: 'it1', status: 'planned', workflow: 'w.yaml', runId: null,
+    error: 'Could not start #1: #1 already has work from a cancelled run, run-9 (1 commit on its branch).',
+    issues: [{ number: 1, title: 'A', url: 'u' }],
+  };
+  const data = { roadmap: { state: 'paused', pausedBy: 'it1', stages: [{ id: 'st1', name: '', note: '', items: [item] }] }, issues: [] };
+  const html = BacklogRoadmap.html(data, () => {});
+  assert.match(html, /data-rm-item="retry"/);
+  assert.match(html, /data-rm-item="skip"/);
+  assert.match(html, /<div class="small rm-error error">Could not start #1: #1 already has work from a cancelled run, run-9 \(1 commit on its branch\)\.<div class="rm-error-hint muted">Retry starts it again[^<]*<\/div><\/div>/);
+});
+
+test('html: Retry and Skip show on a "planned" item with an error and no run (a refused start that did not pause the roadmap itself)', () => {
+  const { BacklogRoadmap } = loadRoadmap();
+  const item = { id: 'it2', status: 'planned', workflow: 'w.yaml', runId: null, error: 'Every issue is closed.', issues: [{ number: 2, title: 'B', url: 'u' }] };
+  const data = { roadmap: { state: 'paused', pausedBy: 'it-other', stages: [{ id: 'st1', name: '', note: '', items: [item] }] }, issues: [] };
+  const html = BacklogRoadmap.html(data, () => {});
+  assert.match(html, /data-rm-item="retry"/);
+  assert.match(html, /data-rm-item="skip"/);
+});
+
+test('html: a plain "planned" item (no error, not the one that paused the roadmap) shows no Retry or Skip', () => {
+  const { BacklogRoadmap } = loadRoadmap();
+  const item = { id: 'it3', status: 'planned', workflow: 'w.yaml', runId: null, error: null, issues: [{ number: 3, title: 'C', url: 'u' }] };
+  const data = { roadmap: { state: 'planned', pausedBy: null, stages: [{ id: 'st1', name: '', note: '', items: [item] }] }, issues: [] };
+  const html = BacklogRoadmap.html(data, () => {});
+  assert.doesNotMatch(html, /data-rm-item=/);
+});
+
+test('html: never Retry/Skip while the item\'s own run is still alive, even if it happens to be the one named by pausedBy', () => {
+  const { BacklogRoadmap } = loadRoadmap();
+  const item = { id: 'it1', status: 'running', workflow: 'w.yaml', runId: 'run-1', issues: [{ number: 1, title: 'A', url: 'u' }] };
+  const data = { roadmap: { state: 'running', pausedBy: 'it1', stages: [{ id: 'st1', name: '', note: '', items: [item] }] }, issues: [] };
+  const html = BacklogRoadmap.html(data, () => {});
+  assert.doesNotMatch(html, /data-rm-item=/);
+});
+
+test('html: a skipped item with a leftover error never shows the retry hint (it is already finished)', () => {
+  const { BacklogRoadmap } = loadRoadmap();
+  const item = { id: 'it1', status: 'skipped', workflow: 'w.yaml', runId: null, error: 'Every issue is closed.', issues: [{ number: 1, title: 'A', url: 'u' }] };
+  const data = { roadmap: { state: 'planned', pausedBy: null, stages: [{ id: 'st1', name: '', note: '', items: [item] }] }, issues: [] };
+  const html = BacklogRoadmap.html(data, () => {});
+  assert.doesNotMatch(html, /data-rm-item=/);
+  assert.match(html, /<div class="small rm-error muted">Every issue is closed\.<\/div>/);
+});
+
+test('onClick [data-rm-goto]: the bar\'s "Show the item" scrolls to and flashes the item that paused the roadmap', async () => {
+  const scrolls = [];
+  const classes = [];
+  // `opts` is built inside the vm realm: keep only primitives for assert.deepEqual (see showRun above)
+  const el = { dataset: { item: 'it1' }, scrollIntoView: (opts) => scrolls.push({ block: opts?.block, behavior: opts?.behavior }), classList: { add: (c) => classes.push(c), remove: (c) => classes.push(`-${c}`) } };
+  const { BacklogRoadmap } = loadRoadmap({ querySelectorAll: (sel) => (sel === '#bl-list [data-item]' ? [el] : []) });
+  const ctx = makeCtx();
+  const target = { dataset: { rmGoto: 'it1' } };
+  target.closest = (sel) => (sel === '[data-rm-goto]' ? target : null);
+  const data = { roadmap: { state: 'paused', pausedBy: 'it1', stages: [] }, issues: [] };
+  const handled = await BacklogRoadmap.onClick({ target }, ctx, data);
+  assert.equal(handled, true);
+  assert.deepEqual(scrolls, [{ block: 'center', behavior: 'smooth' }]);
+  assert.deepEqual(classes, ['flash']);
+});
+
+// ---- #194: the run's progress ring (estimated %, current step, hover/click shows the steps) -------
+
+function progressBoxTarget(runId, workflow) {
+  return { dataset: { rmProgress: runId, workflow } };
+}
+function chipClickTarget(runId, workflow, chipName, grouped) {
+  const box = progressBoxTarget(runId, workflow);
+  const chip = { dataset: { rmChip: chipName, grouped: grouped ? '1' : '' } };
+  chip.closest = (sel) => (sel === '[data-rm-progress]' ? box : sel === '[data-rm-chip]' ? chip : null);
+  return chip;
+}
+function ringClickTarget(runId, workflow) {
+  const box = progressBoxTarget(runId, workflow);
+  const ring = {};
+  ring.closest = (sel) => (sel === '[data-rm-progress]' ? box : sel === '[data-rm-ring]' ? ring : null);
+  return ring;
+}
+
+test('html: a running item shows a progress ring with its estimated percent and current step/group', () => {
+  const { BacklogRoadmap } = loadRoadmap();
+  const item = {
+    id: 'it1', status: 'running', runId: 'run-1', workflow: 'w.yaml', issues: [{ number: 1, title: 'A', url: 'u' }],
+    run: {
+      status: 'running', mock: false, startedAt: '2026-01-01T00:00:00.000Z',
+      progress: [
+        { step: 'develop', status: 'done', ts: '2026-01-01T00:00:00.000Z', agents: [{ agent: 'developer', provider: 'claude', model: 'm' }] },
+        { step: 'code_review', status: 'running', ts: '2026-01-01T00:01:00.000Z', agents: [{ agent: 'reviewer', provider: 'claude', model: 'm' }] },
+      ],
+      groups: [{ name: 'Develop', steps: ['develop'] }, { name: 'Review', steps: ['code_review'] }],
+      stepTimes: {}, history: 0,
+    },
+  };
+  const data = { roadmap: { state: 'running', stages: [{ id: 'st1', name: '', note: '', items: [item] }] }, issues: [] };
+  const html = BacklogRoadmap.html(data, () => {});
+  assert.match(html, /class="rm-progress st-running[^"]*" data-rm-progress="run-1"/);
+  assert.match(html, /<span class="rm-ring-pct">\d+%<\/span>/);
+  assert.match(html, />Review</); // the current step's group name
+  assert.doesNotMatch(html, /badge p-mock/); // not simulated
+});
+
+test('html: a run waiting at a gate shows the ring in the waiting state, "Waiting for you"', () => {
+  const { BacklogRoadmap } = loadRoadmap();
+  const item = {
+    id: 'it1', status: 'running', waiting: true, runId: 'run-2', workflow: 'w.yaml', issues: [{ number: 1, title: 'A', url: 'u' }],
+    run: { status: 'running', mock: false, startedAt: '2026-01-01T00:00:00.000Z', progress: [{ step: 'human_review', status: 'waiting', ts: '2026-01-01T00:00:00.000Z', type: 'human_approval', agents: [] }], groups: [], stepTimes: {}, history: 0 },
+  };
+  const data = { roadmap: { state: 'running', stages: [{ id: 'st1', name: '', note: '', items: [item] }] }, issues: [] };
+  const html = BacklogRoadmap.html(data, () => {});
+  assert.match(html, /class="rm-progress st-waiting/);
+  assert.match(html, /Waiting for you/);
+});
+
+test('html: a failed run shows the ring in the failed state, naming the step it failed at, in red', () => {
+  const { BacklogRoadmap } = loadRoadmap();
+  const item = {
+    id: 'it1', status: 'failed', runId: 'run-3', workflow: 'w.yaml', issues: [{ number: 1, title: 'A', url: 'u' }],
+    run: { status: 'failed', mock: false, startedAt: '2026-01-01T00:00:00.000Z', progress: [{ step: 'test', status: 'failed', ts: '2026-01-01T00:00:00.000Z', agents: [] }], groups: [], stepTimes: {}, history: 0 },
+  };
+  const data = { roadmap: { state: 'paused', stages: [{ id: 'st1', name: '', note: '', items: [item] }] }, issues: [] };
+  const html = BacklogRoadmap.html(data, () => {});
+  assert.match(html, /class="rm-progress st-failed/);
+  assert.match(html, /Failed at test/);
+});
+
+test('html: a successful run shows the ring at 100%, "Done"', () => {
+  const { BacklogRoadmap } = loadRoadmap();
+  const item = {
+    id: 'it1', status: 'done', runId: 'run-4', workflow: 'w.yaml', issues: [{ number: 1, title: 'A', url: 'u' }],
+    run: { status: 'success', mock: false, startedAt: '2026-01-01T00:00:00.000Z', progress: [{ step: 'merge', status: 'done', ts: '2026-01-01T00:00:00.000Z', agents: [] }], groups: [], stepTimes: {}, history: 1 },
+  };
+  const data = { roadmap: { state: 'done', stages: [{ id: 'st1', name: '', note: '', items: [item] }] }, issues: [] };
+  const html = BacklogRoadmap.html(data, () => {});
+  assert.match(html, /class="rm-progress st-done/);
+  assert.match(html, /<span class="rm-ring-pct">100%<\/span>/);
+  assert.match(html, />Done</);
+});
+
+test('html: a simulated run\'s ring carries the "simulated" badge; a planned item with no run shows no ring at all', () => {
+  const { BacklogRoadmap } = loadRoadmap();
+  const simItem = {
+    id: 'it1', status: 'running', runId: 'run-5', workflow: 'w.yaml', issues: [{ number: 1, title: 'A', url: 'u' }],
+    run: { status: 'running', mock: true, startedAt: '2026-01-01T00:00:00.000Z', progress: [{ step: 'develop', status: 'running', ts: '2026-01-01T00:00:00.000Z', agents: [] }], groups: [], stepTimes: {}, history: 0 },
+  };
+  const plannedItem = { id: 'it2', status: 'planned', runId: null, workflow: 'w.yaml', issues: [{ number: 2, title: 'B', url: 'u' }] };
+  const data = { roadmap: { state: 'running', stages: [{ id: 'st1', name: '', note: '', items: [simItem, plannedItem] }] }, issues: [] };
+  const html = BacklogRoadmap.html(data, () => {});
+  assert.match(html, /class="rm-progress st-running sim"/);
+  assert.match(html, /<span class="badge p-mock">simulated<\/span>/);
+  const perItem = html.split('data-item="it2"')[1];
+  assert.doesNotMatch(perItem.split('data-item="it1"')[0] || perItem, /class="rm-progress/);
+});
+
+test('onClick [data-rm-chip]: opens the run and, for a grouped chip, marks that group open; schedules a render either way', async () => {
+  const runsMap = new Map([['run-1', { openGroups: new Map() }]]);
+  const { BacklogRoadmap, showRunCalls, scheduleRenderCalls, sandbox } = loadRoadmap();
+  sandbox.state.runs = runsMap;
+  const ctx = makeCtx();
+  const data = { roadmap: { state: 'running', stages: [] }, issues: [] };
+  const handled = await BacklogRoadmap.onClick({ target: chipClickTarget('run-1', 'w.yaml', 'Review', true) }, ctx, data);
+  assert.equal(handled, true);
+  assert.deepEqual(showRunCalls, [{ runId: 'run-1', workflow: 'w.yaml' }]);
+  assert.equal(runsMap.get('run-1').openGroups.get('Review'), true);
+  assert.equal(scheduleRenderCalls(), 1);
+});
+
+test('onClick [data-rm-chip]: an ungrouped chip opens the run but marks no group open', async () => {
+  const runsMap = new Map([['run-1', { openGroups: new Map() }]]);
+  const { BacklogRoadmap, showRunCalls, sandbox } = loadRoadmap();
+  sandbox.state.runs = runsMap;
+  const ctx = makeCtx();
+  const data = { roadmap: { state: 'running', stages: [] }, issues: [] };
+  await BacklogRoadmap.onClick({ target: chipClickTarget('run-1', 'w.yaml', 'merge', false) }, ctx, data);
+  assert.equal(showRunCalls.length, 1);
+  assert.equal(runsMap.get('run-1').openGroups.size, 0);
+});
+
+test('onClick [data-rm-ring]: toggles that run\'s steps open and re-renders, without opening the run', async () => {
+  const { BacklogRoadmap, showRunCalls } = loadRoadmap();
+  const ctx = makeCtx();
+  const data = { roadmap: { state: 'running', stages: [] }, issues: [] };
+  const handled = await BacklogRoadmap.onClick({ target: ringClickTarget('run-1', 'w.yaml') }, ctx, data);
+  assert.equal(handled, true);
+  assert.equal(ctx._calls.render, 1);
+  assert.equal(showRunCalls.length, 0);
+});
+
+// ---- #193: no horizontal scroll (the roadmap's grids never widen past the window) ------------------
+
+test('backlog.css (#193): the roadmap\'s grids use a minmax(0, 1fr) track (not the default auto track sized by the longest line), so a long reason cannot widen the page', () => {
+  const css = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'views', 'backlog', 'backlog.css'), 'utf8');
+  assert.match(css, /\.rm \{[^}]*grid-template-columns: minmax\(0, 1fr\);[^}]*min-width: 0;/);
+  assert.match(css, /\.rm-stage \{[^}]*grid-template-columns: minmax\(0, 1fr\);[^}]*min-width: 0;/);
+  assert.match(css, /\.rm-items \{[^}]*grid-template-columns: minmax\(0, 1fr\);/);
+  assert.match(css, /\.rm-item \{[^}]*grid-template-columns: minmax\(0, 1fr\);[^}]*min-width: 0;/);
+});
+
+test('backlog.css (#193): a long reason, note, error and input badge wrap or are abbreviated instead of stretching the card', () => {
+  const css = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'views', 'backlog', 'backlog.css'), 'utf8');
+  assert.match(css, /\.rm-error \{ overflow-wrap: anywhere; \}/);
+  assert.match(css, /\.rm-note-text \{ margin: 0; overflow-wrap: anywhere; \}/);
+  assert.match(css, /\.rm-reason\[open\] > summary \{ white-space: normal; overflow-wrap: anywhere; \}/);
+  assert.match(css, /\.rm-meta > \.badge, \.rm-meta > \.bl-run \{[^}]*overflow: hidden; text-overflow: ellipsis; white-space: nowrap;/);
+});
+
+// ---- #195: a workflow that pushes while the default development workflow merges locally -----------
+
+test('html: an item whose workflow pushes (remote) while the default is local gets the push badge, naming the default in its tooltip', () => {
+  const { BacklogRoadmap, sandbox } = loadRoadmap({ listWorkflows: async () => [{ file: 'software-development.yaml', name: 'Software development', merge: 'remote' }, { file: 'software-development-local-hero.yaml', name: 'Software development (local)', merge: 'local' }] });
+  sandbox.state.settings = { defaultWorkflow: null };
+  sandbox.state.workflows = [{ file: 'software-development.yaml', name: 'Software development', merge: 'remote' }, { file: 'software-development-local-hero.yaml', name: 'Software development (local)', merge: 'local' }];
+  const item = { id: 'it1', status: 'planned', workflow: 'software-development.yaml', workflowName: 'Software development', issues: [{ number: 1, title: 'A', url: 'u' }] };
+  const data = { roadmap: { state: 'planned', stages: [{ id: 'st1', name: '', note: '', items: [item] }] }, issues: [] };
+  BacklogRoadmap.html(data, () => {}); // kicks off loadWorkflows (the module's own cache)
+  return settle().then(() => {
+    const html = BacklogRoadmap.html(data, () => {});
+    assert.match(html, /class="badge rm-wf rm-wf-push"/);
+    assert.match(html, /merges locally/);
+  });
+});
+
+test('html: an item already on the default (local) workflow gets no push badge', () => {
+  const list = [{ file: 'software-development.yaml', name: 'Software development', merge: 'remote' }, { file: 'software-development-local-hero.yaml', name: 'Software development (local)', merge: 'local' }];
+  const { BacklogRoadmap, sandbox } = loadRoadmap({ listWorkflows: async () => list });
+  sandbox.state.settings = { defaultWorkflow: null };
+  sandbox.state.workflows = list;
+  const item = { id: 'it1', status: 'planned', workflow: 'software-development-local-hero.yaml', workflowName: 'Software development (local)', issues: [{ number: 1, title: 'A', url: 'u' }] };
+  const data = { roadmap: { state: 'planned', stages: [{ id: 'st1', name: '', note: '', items: [item] }] }, issues: [] };
+  BacklogRoadmap.html(data, () => {});
+  return settle().then(() => {
+    const html = BacklogRoadmap.html(data, () => {});
+    assert.doesNotMatch(html, /rm-wf-push/);
+  });
+});
+
+test('onClick [data-rm=start]: a roadmap with items that would push while the default is local asks first; "Switch them to …" saves the default workflow on them, then starts', async () => {
+  const list = [{ file: 'software-development.yaml', name: 'Software development', merge: 'remote' }, { file: 'software-development-local-hero.yaml', name: 'Software development (local)', merge: 'local' }];
+  const choiceCalls = [];
+  const { BacklogRoadmap, savedCalls, startCalls, sandbox } = loadRoadmap({
+    listWorkflows: async () => list,
+    // `options` is a vm-realm array: Array.from (the outer realm's) copies it so deepEqual can compare it
+    choiceDialog: async (title, message, options) => { choiceCalls.push({ title, options: Array.from(options, (o) => o.id) }); return 'switch'; },
+  });
+  sandbox.state.settings = { defaultWorkflow: null };
+  sandbox.state.workflows = list;
+  const item = { id: 'it1', status: 'planned', workflow: 'software-development.yaml', workflowName: 'Software development', issues: [{ number: 1, title: 'A', url: 'u' }] };
+  const data = { roadmap: { state: 'planned', stages: [{ id: 'st1', name: '', note: '', items: [item] }] }, issues: [] };
+  BacklogRoadmap.html(data, () => {});
+  await settle();
+  const ctx = makeCtx();
+  const handled = await BacklogRoadmap.onClick({ target: startButtonTarget() }, ctx, data);
+  assert.equal(handled, true);
+  assert.equal(choiceCalls.length, 1);
+  assert.deepEqual(choiceCalls[0].options, ['switch', 'anyway']);
+  assert.equal(savedCalls.length, 1);
+  assert.equal(savedCalls[0].stages[0].items[0].workflow, 'software-development-local-hero.yaml');
+  assert.equal(startCalls.length, 1); // the start goes on after switching
+});
+
+test('onClick [data-rm=start]: "Start anyway" keeps the pushing workflow and starts without saving', async () => {
+  const list = [{ file: 'software-development.yaml', name: 'Software development', merge: 'remote' }, { file: 'software-development-local-hero.yaml', name: 'Software development (local)', merge: 'local' }];
+  const { BacklogRoadmap, savedCalls, startCalls, sandbox } = loadRoadmap({ listWorkflows: async () => list, choiceDialog: async () => 'anyway' });
+  sandbox.state.settings = { defaultWorkflow: null };
+  sandbox.state.workflows = list;
+  const item = { id: 'it1', status: 'planned', workflow: 'software-development.yaml', workflowName: 'Software development', issues: [{ number: 1, title: 'A', url: 'u' }] };
+  const data = { roadmap: { state: 'planned', stages: [{ id: 'st1', name: '', note: '', items: [item] }] }, issues: [] };
+  BacklogRoadmap.html(data, () => {});
+  await settle();
+  const ctx = makeCtx();
+  await BacklogRoadmap.onClick({ target: startButtonTarget() }, ctx, data);
+  assert.equal(savedCalls.length, 0);
+  assert.equal(startCalls.length, 1);
+});
+
+test('onClick [data-rm=start]: cancelling the push confirmation starts nothing', async () => {
+  const list = [{ file: 'software-development.yaml', name: 'Software development', merge: 'remote' }, { file: 'software-development-local-hero.yaml', name: 'Software development (local)', merge: 'local' }];
+  const { BacklogRoadmap, startCalls, sandbox } = loadRoadmap({ listWorkflows: async () => list, choiceDialog: async () => null });
+  sandbox.state.settings = { defaultWorkflow: null };
+  sandbox.state.workflows = list;
+  const item = { id: 'it1', status: 'planned', workflow: 'software-development.yaml', workflowName: 'Software development', issues: [{ number: 1, title: 'A', url: 'u' }] };
+  const data = { roadmap: { state: 'planned', stages: [{ id: 'st1', name: '', note: '', items: [item] }] }, issues: [] };
+  BacklogRoadmap.html(data, () => {});
+  await settle();
+  const ctx = makeCtx();
+  const handled = await BacklogRoadmap.onClick({ target: startButtonTarget() }, ctx, data);
+  assert.equal(handled, true);
+  assert.equal(startCalls.length, 0);
 });
 
 test('addStage (Product Owner, #140): a new stage\'s item carries the origin it was added with', async () => {

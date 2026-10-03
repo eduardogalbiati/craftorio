@@ -651,6 +651,28 @@ test('refreshCopies does nothing to a project with no roadmap file', (t) => {
   assert.equal(roadmaps.refreshCopies(dir, 'no-such-project', [issue(1, 'T', 'u')]), false);
 });
 
+// ---- persisted (#194: `waiting` and `run` are the screen's view, never written to disk) --------
+
+test('persisted strips `waiting` and `run` (the card\'s live progress) off every item, keeping the rest', () => {
+  const roadmap = mkRoadmap([{ id: 's1', name: '', note: '', items: [
+    mkItem('i1', 1, { runId: 'run-1', waiting: true, run: { status: 'running', progress: [{ step: 'a' }], groups: [] } }),
+  ] }]);
+  const out = roadmaps.persisted(roadmap);
+  const item = out.stages[0].items[0];
+  assert.equal('waiting' in item, false);
+  assert.equal('run' in item, false);
+  assert.equal(item.runId, 'run-1'); // everything else about the item is kept
+});
+
+test('persisted keeps a finished item\'s status as stored (done/skipped are not reset to planned), `run` stripped there too', () => {
+  const roadmap = mkRoadmap([{ id: 's1', name: '', note: '', items: [
+    mkItem('i1', 1, { status: 'done', runId: 'run-1', run: { status: 'success' } }),
+  ] }]);
+  const item = roadmaps.persisted(roadmap).stages[0].items[0];
+  assert.equal(item.status, 'done');
+  assert.equal('run' in item, false);
+});
+
 // ---- mergedPullRequest ------------------------------------------------------------------------
 
 test('mergedPullRequest is true only for a successful, unskipped gh/glab merge action', (t) => {

@@ -147,6 +147,22 @@ test('normalizeAnswer keeps only known issue numbers and workflow files, and fil
   assert.equal(out.enrich[0].link, 'https://github.com/eduardogalbiati/multiagent-orchestrator/issues/103');
 });
 
+// ---- #195: a group's unknown workflow falls back to the default development workflow -------------
+
+test('normalizeAnswer: a group with an unknown workflow falls back to the local development workflow when the workspace has one and no default is set', () => {
+  const raw = { summary: 'ok', groups: [{ issues: [1], workflow: 'nope.yaml', reason: 'r' }] };
+  const workflows = [{ file: 'software-development.yaml' }, { file: 'software-development-local-hero.yaml' }];
+  const out = productOwner.normalizeAnswer(raw, { issues: ISSUES, history: [], workflows });
+  assert.equal(out.groups[0].workflow, 'software-development-local-hero.yaml');
+});
+
+test('normalizeAnswer: a group with an unknown workflow falls back to the workflow set as the default (Settings), not the local one', () => {
+  const raw = { summary: 'ok', groups: [{ issues: [1], workflow: 'nope.yaml', reason: 'r' }] };
+  const workflows = [{ file: 'software-development.yaml' }, { file: 'software-development-local-hero.yaml' }];
+  const out = productOwner.normalizeAnswer(raw, { issues: ISSUES, history: [], workflows, defaultWorkflow: 'software-development.yaml' });
+  assert.equal(out.groups[0].workflow, 'software-development.yaml');
+});
+
 test('normalizeAnswer maps a group\'s mode_reason to modeReason, absent when the group has none', () => {
   const raw = {
     summary: 'ok',
@@ -368,6 +384,18 @@ test('backlogReport with a selection gives the attached issues first and whole (
   assert.doesNotMatch(otherSection, /#1 Attached A/);
   assert.doesNotMatch(otherSection, /#2 Attached closed/);
   assert.match(otherSection, /#3 Other open issue/);
+});
+
+test('backlogReport (#195): marks the resolved default development workflow with "(default)" in the Workflows section, no other one', () => {
+  const data = { projectId: 'demo', issues: [] };
+  const workflows = [{ file: 'software-development.yaml', name: 'Software development' }, { file: 'software-development-local-hero.yaml', name: 'Software development (local)' }];
+  const noSetting = productOwner.backlogReport({ data, workflows });
+  assert.match(noSetting, /- software-development-local-hero\.yaml \(default\): Software development \(local\)/);
+  assert.doesNotMatch(noSetting, /software-development\.yaml \(default\)/);
+
+  const withSetting = productOwner.backlogReport({ data, workflows, defaultWorkflow: 'software-development.yaml' });
+  assert.match(withSetting, /- software-development\.yaml \(default\): Software development/);
+  assert.doesNotMatch(withSetting, /software-development-local-hero\.yaml \(default\)/);
 });
 
 test('backlogReport: the attached issues\' size does not count toward the context cap, so other open issues still fit', () => {

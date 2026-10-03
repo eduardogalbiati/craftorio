@@ -50,6 +50,27 @@ test('styles: .gate-choices lays the gate\'s choice buttons out in a wrapping ro
   assert.match(style, /\.gate-choices \.btn\s*\{[^}]*white-space:\s*nowrap/, 'a button\'s label never wraps onto a second line by itself');
 });
 
+// #207: Backlog labels (Kanban cards, List rows, the filter menu and the active-filter chips) are a
+// pastel background in the label's own colour, no border; the other card badges (epic, refreshed,
+// triage, roadmap) follow the same filled style so a card never mixes outlined and filled chips.
+test('styles (#207): .bl-label has no border and a pastel (color-mix) background, with a neutral fallback (--muted) for an uncoloured label', () => {
+  const backlog = sheets.find((s) => s.file.replace(/\\/g, '/') === 'views/backlog/backlog.css').css;
+  assert.match(backlog, /\.bl-label\s*\{[^}]*--lc:\s*var\(--muted\);[^}]*border:\s*1px solid transparent;[^}]*background:\s*color-mix\(in srgb, var\(--lc\) 18%, var\(--panel\)\);/);
+  assert.doesNotMatch(backlog, /\.bl-label\s*\{[^}]*border:\s*1px solid var\(--lc\)/);
+});
+
+test('styles (#207): an active filter label (.bl-label.on) is a stronger mix with a focus-colour ring, not a border in the label\'s colour', () => {
+  const backlog = sheets.find((s) => s.file.replace(/\\/g, '/') === 'views/backlog/backlog.css').css;
+  assert.match(backlog, /\.bl-label\.on\s*\{[^}]*background:\s*color-mix\(in srgb, var\(--lc\) 34%, var\(--panel\)\);[^}]*box-shadow:\s*0 0 0 1px var\(--accent\);/);
+});
+
+test('styles (#207): the epic badge and the other card badges (refreshed, triage, roadmap) are filled too, not outlined, so a card never mixes the two styles', () => {
+  const backlog = sheets.find((s) => s.file.replace(/\\/g, '/') === 'views/backlog/backlog.css').css;
+  assert.match(backlog, /\.bl-epic\s*\{[^}]*border:\s*1px solid transparent;[^}]*background:\s*color-mix\(in srgb, #8B5CF6 18%, var\(--panel\)\);/);
+  assert.match(backlog, /\.bl-epic\.on\s*\{[^}]*background:\s*color-mix\(in srgb, #8B5CF6 34%, var\(--panel\)\);[^}]*box-shadow:\s*0 0 0 1px var\(--accent\);/);
+  assert.match(backlog, /\.bl-labels \.badge\s*\{[^}]*border-color:\s*transparent;[^}]*background:\s*color-mix\(in srgb, currentColor 16%, var\(--panel\)\);/);
+});
+
 test('styles: the scrollbar style is global, with no one-off scrollbar rules', () => {
   assert.match(style, /(^|\n)::-webkit-scrollbar-thumb\s*\{/);
   const oneOff = [];

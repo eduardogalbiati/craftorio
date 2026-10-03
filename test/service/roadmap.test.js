@@ -260,6 +260,47 @@ test('roadmap: assigning a planned issue elsewhere removes it from the roadmap',
   assert.deepEqual(roadmap.stages[0].items.map((i) => i.number), [2]);
 });
 
+// ---- #194: roadmapView attaches each running item's progress (the card's ring); never stored -----
+
+test('roadmap: backlog:get attaches a running item\'s run (its trail, groups and typical step times), but the roadmap file on disk never keeps it', async (t) => {
+  const { service, api } = makeService(t);
+  const ws = service.workspace();
+  fs.writeFileSync(path.join(ws.workflows, 'fixture-issue.yaml'), ISSUE_WORKFLOW);
+  const p = await roadmapProject(api, ws, t, [1], 'roadmap-ring');
+  await api['roadmap:save']({ projectId: p.id, stages: [{ items: [{ workflow: 'fixture-issue.yaml', number: 1, mock: true }] }] });
+  await api['roadmap:start']({ projectId: p.id, simulated: true });
+  await until(() => api['runs:active']().length === 1);
+  const runId = api['runs:active']()[0].runId;
+  await until(() => !!api['backlog:get']({ projectId: p.id }).roadmap.stages[0].items[0].run);
+
+  const item = api['backlog:get']({ projectId: p.id }).roadmap.stages[0].items[0];
+  assert.equal(item.runId, runId);
+  assert.ok(item.run, 'a running item carries its run\'s progress for the card\'s ring');
+  assert.equal(item.run.status, 'running');
+  assert.ok(Array.isArray(item.run.progress));
+  assert.ok(Array.isArray(item.run.groups));
+  assert.equal(typeof item.run.stepTimes, 'object');
+  assert.equal(item.run.history, 0); // no past successful run of this workflow yet
+
+  // the view attaches `run`; the file on disk (what saveStages/markStarted write) never keeps it
+  const onDisk = roadmapModel.readRoadmap(ws.backlog, p.id);
+  assert.equal('run' in onDisk.stages[0].items[0], false);
+
+  api['run:stop']({ runId });
+});
+
+test('roadmap: backlog:get attaches no run for a planned item with no runId yet', async (t) => {
+  const { service, api } = makeService(t);
+  const ws = service.workspace();
+  fs.writeFileSync(path.join(ws.workflows, 'fixture-issue.yaml'), ISSUE_WORKFLOW);
+  const p = await roadmapProject(api, ws, t, [1], 'roadmap-no-run');
+  await api['roadmap:save']({ projectId: p.id, stages: [{ items: [{ workflow: 'fixture-issue.yaml', number: 1, mock: true }] }] });
+
+  const item = api['backlog:get']({ projectId: p.id }).roadmap.stages[0].items[0];
+  assert.equal(item.runId, null);
+  assert.equal('run' in item, false);
+});
+
 test('roadmap: backlog:get issues carry their roadmap stage and status', async (t) => {
   const { service, api } = makeService(t);
   const ws = service.workspace();

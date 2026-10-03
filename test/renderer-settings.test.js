@@ -10,6 +10,7 @@ const path = require('path');
 const vm = require('vm');
 
 const settingsSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'views', 'settings', 'settings.js'), 'utf8');
+const defaultWorkflowSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'default-workflow.js'), 'utf8');
 
 function makeEl() {
   const classes = new Set();
@@ -44,6 +45,59 @@ function loadSettingsMarkup({ envDetails, speechStatus } = {}) {
   vm.runInContext(`${renderTools}\n${renderVoice}\nthis.renderTools = renderTools; this.renderVoice = renderVoice;`, sandbox);
   return { renderTools: sandbox.renderTools, renderVoice: sandbox.renderVoice, $ };
 }
+
+// renderDefaultWorkflow (#195) is pure enough (it only reads state.workflows/state.settings and the
+// real DefaultWorkflow module) to pull out of the source and run for real, the same way renderTools
+// and renderVoice are above.
+function loadDefaultWorkflow({ workflows, defaultWorkflow } = {}) {
+  const els = new Map();
+  const $ = (sel) => { if (!els.has(sel)) els.set(sel, makeEl()); return els.get(sel); };
+  const sandbox = { $, esc: (s) => String(s ?? ''), state: { workflows: workflows || [], settings: { defaultWorkflow: defaultWorkflow ?? null } } };
+  sandbox.window = sandbox;
+  vm.createContext(sandbox);
+  vm.runInContext(defaultWorkflowSrc, sandbox); // the real DefaultWorkflow module (#195), not reimplemented
+  const renderDefaultWorkflow = /function renderDefaultWorkflow\(\) \{[\s\S]*?\n\}/.exec(settingsSrc)[0];
+  assert.ok(renderDefaultWorkflow, 'renderDefaultWorkflow not found in settings.js: the source moved');
+  vm.runInContext(`${renderDefaultWorkflow}\nthis.renderDefaultWorkflow = renderDefaultWorkflow;`, sandbox);
+  return { renderDefaultWorkflow: sandbox.renderDefaultWorkflow, $ };
+}
+
+const TASK_WORKFLOWS = [
+  { file: 'software-development.yaml', name: 'Software development', inputs: { task: {} }, merge: 'remote' },
+  { file: 'software-development-local-hero.yaml', name: 'Software development (local)', inputs: { task: {} }, merge: 'local' },
+];
+
+test('renderDefaultWorkflow: unset selects the local workflow when the workspace has one, naming how each option merges', () => {
+  const { renderDefaultWorkflow, $ } = loadDefaultWorkflow({ workflows: TASK_WORKFLOWS });
+  renderDefaultWorkflow();
+  const sel = $('#set-default-workflow');
+  assert.match(sel.innerHTML, /<option value="software-development\.yaml">Software development \(software-development\.yaml, pushes and opens PRs\)<\/option>/);
+  assert.match(sel.innerHTML, /<option value="software-development-local-hero\.yaml">Software development \(local\) \(software-development-local-hero\.yaml, local merge\)<\/option>/);
+  assert.equal(sel.value, 'software-development-local-hero.yaml');
+  assert.equal($('#set-default-wf-note').textContent, '');
+  assert.equal($('#set-default-wf-note').classList.contains('hidden'), true);
+});
+
+test('renderDefaultWorkflow: the saved setting is selected when it still exists', () => {
+  const { renderDefaultWorkflow, $ } = loadDefaultWorkflow({ workflows: TASK_WORKFLOWS, defaultWorkflow: 'software-development.yaml' });
+  renderDefaultWorkflow();
+  assert.equal($('#set-default-workflow').value, 'software-development.yaml');
+  assert.equal($('#set-default-wf-note').classList.contains('hidden'), true);
+});
+
+test('renderDefaultWorkflow: a saved workflow that no longer exists falls back and the note says so, naming the missing file', () => {
+  const { renderDefaultWorkflow, $ } = loadDefaultWorkflow({ workflows: TASK_WORKFLOWS, defaultWorkflow: 'deleted-workflow.yaml' });
+  renderDefaultWorkflow();
+  assert.equal($('#set-default-workflow').value, 'software-development-local-hero.yaml');
+  assert.equal($('#set-default-wf-note').textContent, 'deleted-workflow.yaml no longer exists: software-development-local-hero.yaml is used instead.');
+  assert.equal($('#set-default-wf-note').classList.contains('hidden'), false);
+});
+
+test('renderDefaultWorkflow: a workflow with no `task` input (it cannot take one) is never listed', () => {
+  const { renderDefaultWorkflow, $ } = loadDefaultWorkflow({ workflows: [...TASK_WORKFLOWS, { file: 'backlog-refresh.yaml', name: 'Backlog refresh', inputs: {} }] });
+  renderDefaultWorkflow();
+  assert.doesNotMatch($('#set-default-workflow').innerHTML, /backlog-refresh/);
+});
 
 test('renderTools: a tool not in PATH with an install command shows the play button, not just "Not found in PATH."', async () => {
   const { renderTools, $ } = loadSettingsMarkup({

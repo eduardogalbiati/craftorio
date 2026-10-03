@@ -102,8 +102,9 @@ test('queue resume (data-pause="off"): an ended run\'s kept work opens the kept-
 
 test('openAssign: a prefill from the Product Owner picks its workflow, groups its issues into one run, and fills its inputs', () => {
   const fn = /async function openAssign\(prefill = null\)[\s\S]*?\n  \}/.exec(src)[0];
-  // the proposed workflow wins over the last-used one when it exists among the project's workflows
-  assert.match(fn, /sel\.value = \[prefill\?\.workflow, load\(WORKFLOW_KEY\), 'software-development\.yaml', files\[0\]\]\.find\(\(f\) => f && files\.includes\(f\)\);/);
+  // the proposed workflow wins over the last-used one when it exists among the project's workflows;
+  // nothing remembered falls back to the default development workflow (#195)
+  assert.match(fn, /sel\.value = \[prefill\?\.workflow, load\(WORKFLOW_KEY\), DefaultWorkflow\.current\(\)\.file, files\[0\]\]\.find\(\(f\) => f && files\.includes\(f\)\);/);
   // a multi-issue group is assigned as one run, not as separate runs
   assert.match(fn, /document\.querySelector\(`input\[name="assign-group"\]\[value="\$\{prefill\?\.group \? 'group' : 'separate'\}"\]`\)\.checked = true;/);
   // each proposed input value is written into its field, through the shared WorkflowInputs renderer

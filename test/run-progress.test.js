@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { StepTrail, trailOf, progressGroups, hydrationEvents } = require('../src/renderer/run-progress-model');
+const { StepTrail, trailOf, progressGroups, hydrationEvents, estimateProgress, typicalStepTimes } = require('../src/renderer/run-progress-model');
 const runs = require('../src/runs');
 const { WorkflowRun } = require('../src/engine/workflow');
 const { Recorder } = require('../src/engine/recorder');
@@ -245,4 +245,107 @@ test('the engine records the groups and the step trail in summary.json', { timeo
   assert.equal(summary.progress[0].agents[0].model, 'claude-opus-5-5');
   const chips = progressGroups(summary.progress, summary.groups, summary.status);
   assert.deepEqual(chips.map((c) => [c.name, c.grouped, c.status]), [['Build', true, 'done'], ['gate', false, 'done']]);
+});
+
+// ---- #194: typicalStepTimes (the median of each step's finished visits, successful runs only) ----
+
+test('typicalStepTimes: the median duration of a step, counted only from runs that succeeded', () => {
+  const run = (status, progress) => ({ status, progress });
+  const { times, runs: count } = typicalStepTimes([
+    run('success', [{ step: 'develop', status: 'done', durationMs: 1000 }, { step: 'review', status: 'done', durationMs: 500 }]),
+    run('success', [{ step: 'develop', status: 'done', durationMs: 3000 }]),
+    run('running', [{ step: 'develop', status: 'done', durationMs: 9999 }]), // not finished: excluded
+    run('success', []), // nothing recorded yet: excluded
+  ]);
+  assert.equal(count, 2);
+  assert.equal(times.develop, 2000); // median of [1000, 3000]
+  assert.equal(times.review, 500);
+});
+
+test('typicalStepTimes: an odd number of visits takes the middle one once sorted; unfinished visits and a zero duration are ignored', () => {
+  const run = (durations) => ({ status: 'success', progress: durations.map((durationMs) => ({ step: 'develop', status: 'done', durationMs })) });
+  const { times } = typicalStepTimes([
+    run([1000]), run([5000]), run([2000]),
+    { status: 'success', progress: [{ step: 'develop', status: 'running', durationMs: 999999 }] }, // not done: excluded
+    { status: 'success', progress: [{ step: 'develop', status: 'done', durationMs: 0 }] }, // not a real duration: excluded
+  ]);
+  assert.equal(times.develop, 2000); // sorted [1000, 2000, 5000]: the middle one
+});
+
+test('typicalStepTimes: no runs (or none that qualify) gives no times and a 0 run count', () => {
+  assert.deepEqual(typicalStepTimes([]), { times: {}, runs: 0 });
+  assert.deepEqual(typicalStepTimes([{ status: 'failed', progress: [{ step: 'develop', status: 'done', durationMs: 1000 }] }]), { times: {}, runs: 0 });
+});
+
+// ---- #194: estimateProgress (the roadmap card's ring) ----------------------------------------------
+
+const BASE = Date.parse('2026-01-01T00:00:00.000Z');
+const at = (ms) => new Date(BASE + ms).toISOString();
+const PATH = ['a', 'b', 'c'];
+const TYPICAL = { a: 1000, b: 2000, c: 3000 }; // total 6000
+
+test('estimateProgress: a linear path weighs the done steps by their typical time, and the current step counts for the time spent in it (90% of its own weight at most)', () => {
+  const steps = [{ step: 'a', status: 'done', ts: at(0) }, { step: 'b', status: 'running', ts: at(500) }];
+  const out = estimateProgress({ steps, path: PATH, typical: TYPICAL, status: 'running', startedAt: at(0), now: BASE + 1500 });
+  // done: a (1000) + 1000ms into b (under its 1800ms cap) = 2000 of 6000 = 33%
+  assert.deepEqual(out, { state: 'running', step: 'b', elapsedMs: 1500, basis: 'history', total: 3, percent: 33, leftMs: 4000, done: 1 });
+});
+
+test('estimateProgress: a return to an earlier step (a review -> developer loop) drops the credit already given to the step it skips back past', () => {
+  const steps = [{ step: 'a', status: 'done', ts: at(0) }, { step: 'b', status: 'done', ts: at(1000) }, { step: 'a', status: 'running', ts: at(2000) }];
+  const out = estimateProgress({ steps, path: PATH, typical: TYPICAL, status: 'running', startedAt: at(0), now: BASE + 2500 });
+  // back on "a": nothing before it on the route counts any more, even though "b" was already done
+  assert.equal(out.step, 'a');
+  assert.equal(out.percent, 8); // 500ms into "a" (weight 1000) of a 6000 total
+  assert.ok(out.percent < 21, 'well under what it would show had it stayed on "b" instead of looping back');
+});
+
+test('estimateProgress: waiting at a gate freezes the percent (no credit for time spent waiting) and reports the waiting state', () => {
+  const steps = [{ step: 'a', status: 'done', ts: at(0) }, { step: 'b', status: 'waiting', ts: at(1000) }];
+  const out = estimateProgress({ steps, path: PATH, typical: TYPICAL, status: 'running', startedAt: at(0), now: BASE + 50000 });
+  assert.equal(out.state, 'waiting');
+  assert.equal(out.percent, 16); // only "a" (1000) of 6000: no bonus added while waiting, however long
+  assert.equal(out.leftMs, 5000);
+});
+
+test('estimateProgress: a failed run reports the failed state and the step it failed at', () => {
+  const steps = [{ step: 'a', status: 'done', ts: at(0) }, { step: 'b', status: 'failed', ts: at(1000) }];
+  const out = estimateProgress({ steps, path: PATH, typical: TYPICAL, status: 'failed', startedAt: at(0), now: BASE + 2000 });
+  assert.equal(out.state, 'failed');
+  assert.equal(out.step, 'b');
+  assert.equal(out.percent, 16);
+});
+
+test('estimateProgress: a cancelled or interrupted run reports the stopped state', () => {
+  const steps = [{ step: 'a', status: 'done', ts: at(0) }, { step: 'b', status: 'running', ts: at(1000) }];
+  assert.equal(estimateProgress({ steps, path: PATH, typical: TYPICAL, status: 'cancelled', now: BASE + 2000 }).state, 'stopped');
+  assert.equal(estimateProgress({ steps, path: PATH, typical: TYPICAL, status: 'interrupted', now: BASE + 2000 }).state, 'stopped');
+});
+
+test("estimateProgress: a step off the workflow's path still counts what was visited before it, but gives it no partial credit", () => {
+  const steps = [{ step: 'a', status: 'done', ts: at(0) }, { step: 'x', status: 'running', ts: at(1000) }]; // "x" is not in path
+  const out = estimateProgress({ steps, path: PATH, typical: TYPICAL, status: 'running', startedAt: at(0), now: BASE + 5000 });
+  assert.equal(out.step, 'x');
+  assert.equal(out.percent, 16); // only "a" (1000 of 6000); "x" earns nothing, off-route
+});
+
+test('estimateProgress: a successful run is 100%, whatever step it last reports', () => {
+  const steps = [{ step: 'a', status: 'done', ts: at(0) }];
+  const out = estimateProgress({ steps, path: PATH, typical: TYPICAL, status: 'success', startedAt: at(0), now: BASE + 1000 });
+  assert.deepEqual({ percent: out.percent, leftMs: out.leftMs, done: out.done }, { percent: 100, leftMs: 0, done: 3 });
+});
+
+test('estimateProgress: with no run history (no typical time known for any step), every step counts the same and the current one earns half credit', () => {
+  const steps = [{ step: 'a', status: 'done', ts: at(0) }, { step: 'b', status: 'running', ts: at(500) }];
+  const out = estimateProgress({ steps, path: PATH, typical: {}, status: 'running', startedAt: at(0), now: BASE + 1000 });
+  assert.equal(out.basis, 'steps');
+  assert.equal(out.percent, 50); // (1 whole step + half of the current one) of 3 equally-weighed steps
+  assert.equal(out.leftMs, 1000); // estimated from elapsed time and the percent so far, not from typical times
+});
+
+test('estimateProgress: never reports 100% before the run actually ends, even when every weighed step is already done', () => {
+  const steps = [{ step: 'a', status: 'done', ts: at(0) }, { step: 'b', status: 'done', ts: at(1000) }, { step: 'extra', status: 'running', ts: at(2000) }];
+  const out = estimateProgress({ steps, path: ['a', 'b'], typical: { a: 1000, b: 2000 }, status: 'running', startedAt: at(0), now: BASE + 3000 });
+  assert.equal(out.percent, 99); // every known step's weight is already spent, but the run has not finished
+  assert.equal(out.leftMs, 0);
 });

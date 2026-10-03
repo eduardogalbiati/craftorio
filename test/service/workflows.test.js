@@ -124,6 +124,77 @@ test('listPipelines: a pipeline without stages, or a stage missing its workflow,
   assert.deepEqual(bad.stages, []);
 });
 
+// ---- #195: each workflow's `merge` (local, remote or none), used to flag a roadmap item that pushes
+// while the default development workflow merges locally --------------------------------------------
+
+test('listWorkflows: merge is "local" for a workflow whose worktree never pushes (orchestrator.worktree.remote: false)', (t) => {
+  const { api, service } = makeService(t);
+  fs.writeFileSync(path.join(service.workspace().workflows, 'fixture-merge-local.yaml'), `apiVersion: multiagent/v1
+kind: Workflow
+metadata:
+  name: fixture-merge-local
+orchestrator:
+  worktree: { repo: ".", base: main, remote: false }
+agents: {}
+steps:
+  - id: review
+    type: human_approval
+    message: "Accept?"
+`);
+  const wf = api['workflows:list']().find((w) => w.file === 'fixture-merge-local.yaml');
+  assert.equal(wf.merge, 'local');
+});
+
+test('listWorkflows: merge is "remote" for an ordinary worktree workflow (a branch and a PR/MR)', (t) => {
+  const { api, service } = makeService(t);
+  fs.writeFileSync(path.join(service.workspace().workflows, 'fixture-merge-remote.yaml'), `apiVersion: multiagent/v1
+kind: Workflow
+metadata:
+  name: fixture-merge-remote
+orchestrator:
+  worktree: { repo: ".", base: main }
+agents: {}
+steps:
+  - id: review
+    type: human_approval
+    message: "Accept?"
+`);
+  const wf = api['workflows:list']().find((w) => w.file === 'fixture-merge-remote.yaml');
+  assert.equal(wf.merge, 'remote');
+});
+
+test('listWorkflows: merge is "none" for a workflow with no worktree at all, and for one whose metadata says it never merges', (t) => {
+  const { api, service } = makeService(t);
+  const ws = service.workspace();
+  fs.writeFileSync(path.join(ws.workflows, 'fixture-merge-none.yaml'), `apiVersion: multiagent/v1
+kind: Workflow
+metadata:
+  name: fixture-merge-none
+agents:
+  a: { provider: claude, model: m, session: ephemeral }
+steps:
+  - id: work
+    agent: a
+    prompt: "do it"
+`);
+  fs.writeFileSync(path.join(ws.workflows, 'fixture-merge-never.yaml'), `apiVersion: multiagent/v1
+kind: Workflow
+metadata:
+  name: fixture-merge-never
+  merges: false
+orchestrator:
+  worktree: { repo: ".", base: main }
+agents: {}
+steps:
+  - id: review
+    type: human_approval
+    message: "Accept?"
+`);
+  const list = api['workflows:list']();
+  assert.equal(list.find((w) => w.file === 'fixture-merge-none.yaml').merge, 'none');
+  assert.equal(list.find((w) => w.file === 'fixture-merge-never.yaml').merge, 'none');
+});
+
 test('workflows:pipelines (#135): a fresh workspace already lists the bundled default pipelines, seeded like the workflows', (t) => {
   const { api } = makeService(t);
   const pipelines = api['workflows:pipelines']();

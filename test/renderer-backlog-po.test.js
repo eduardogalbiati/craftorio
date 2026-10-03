@@ -9,6 +9,25 @@ const path = require('path');
 const vm = require('vm');
 
 const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'views', 'backlog', 'backlog-po.js'), 'utf8');
+const defaultWorkflowSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'default-workflow.js'), 'utf8');
+
+// workflowFor/workflowSelect (#195: the workflow select next to Create + roadmap) are pure enough to
+// pull out of the source and run for real, the same way loadAppliedState does for groupState; the
+// real DefaultWorkflow module (not reimplemented) resolves the default from `state`.
+function loadWorkflowSelect() {
+  const draftWorkflow = /const draftWorkflow = new Map\(\); \/\/ message index.*\n/.exec(src)[0];
+  const workflowForFn = /const workflowFor = \(m\) => [^\n]+;/.exec(src)[0];
+  const workflowSelectFn = /function workflowSelect\(m, busy\) \{[\s\S]*?\n  \}/.exec(src)[0];
+  for (const [name, code] of Object.entries({ draftWorkflow, workflowForFn, workflowSelectFn })) {
+    assert.ok(code, `${name} not found in backlog-po.js: the source moved`);
+  }
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+  const sandbox = { esc, state: { workflows: [], settings: { defaultWorkflow: null } } };
+  vm.createContext(sandbox);
+  vm.runInContext(defaultWorkflowSrc, sandbox);
+  vm.runInContext(`${draftWorkflow}\n${workflowForFn}\n${workflowSelectFn}\nthis.helpers = { workflowSelect, workflowFor, draftWorkflow };`, sandbox);
+  return { helpers: sandbox.helpers, sandbox };
+}
 
 // A group's applied state (#140) is derived (groupState) from the Backlog's own data (each issue's
 // roadmap place, queue entry and live run): pure enough to pull out of the source and run for real,
@@ -374,6 +393,41 @@ test('draftActions never files by itself: Create, Add to #n instead and Discard 
   assert.match(fn, /data-po-act="discard"/);
   assert.match(fn, /data-po-act="revise"/);
   assert.doesNotMatch(fn, /api\.(fileProductOwnerDraft|discardProductOwnerDraft)/); // rendering never files or discards by itself
+});
+
+// ---- #195: the workflow select next to Create + roadmap --------------------------------------
+
+test('workflowFor: a draft with no workflow picked yet falls back to the default development workflow', () => {
+  const { helpers, sandbox } = loadWorkflowSelect();
+  sandbox.state.workflows = [{ file: 'software-development.yaml' }, { file: 'software-development-local-hero.yaml' }];
+  assert.equal(helpers.workflowFor(0), 'software-development-local-hero.yaml'); // unset: the local one wins
+});
+
+test('workflowFor: once a workflow is picked for a draft (draftWorkflow.set, as the #po-log change handler does), it wins over the default', () => {
+  const { helpers, sandbox } = loadWorkflowSelect();
+  sandbox.state.workflows = [{ file: 'software-development.yaml' }, { file: 'software-development-local-hero.yaml' }];
+  helpers.draftWorkflow.set(2, 'software-development.yaml');
+  assert.equal(helpers.workflowFor(2), 'software-development.yaml');
+  assert.equal(helpers.workflowFor(0), 'software-development-local-hero.yaml'); // another draft: unaffected
+});
+
+test('workflowSelect: lists the task workflows, the picked one selected, the default (the setting\'s, or the fallback) marked "(default)"', () => {
+  const { helpers, sandbox } = loadWorkflowSelect();
+  sandbox.state.workflows = [
+    { file: 'software-development.yaml', name: 'Software development', inputs: { task: {} } },
+    { file: 'software-development-local-hero.yaml', name: 'Software development (local)', inputs: { task: {} } },
+    { file: 'no-task.yaml', name: 'No task input', inputs: {} }, // never offered: it cannot take a task
+  ];
+  const html = helpers.workflowSelect(1, '');
+  assert.match(html, /<select class="po-wf" data-po-wf/);
+  assert.match(html, /<option value="software-development-local-hero\.yaml" selected>Software development \(local\) \(default\)<\/option>/);
+  assert.match(html, /<option value="software-development\.yaml">Software development<\/option>/);
+  assert.doesNotMatch(html, /no-task\.yaml/);
+
+  sandbox.state.settings = { defaultWorkflow: 'software-development.yaml' };
+  const withSetting = helpers.workflowSelect(1, '');
+  assert.match(withSetting, /<option value="software-development\.yaml" selected>Software development \(default\)<\/option>/);
+  assert.match(withSetting, /<option value="software-development-local-hero\.yaml">Software development \(local\)<\/option>/);
 });
 
 test('fileDraft (the owner\'s click): every "create" variant files action "create", not a new issue when appending or commenting; a real filing asks to confirm first', () => {
