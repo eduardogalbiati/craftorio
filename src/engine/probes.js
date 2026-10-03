@@ -13,8 +13,8 @@
 //                 the check right before a merge (`check:` on a gate, `precheck:` on a transition)
 // The engine decides what each state means (poll again, finish the step, or call the agent).
 
-const { execFile } = require('child_process');
 const { resolveCommand } = require('./providers');
+const { execShim } = require('../shell');
 
 const PROBES = ['pr_checks', 'pr_changes', 'workflow_run', 'pr_mergeable'];
 
@@ -132,9 +132,9 @@ function glPipelineState(p) {
 
 // ---- running the CLIs ----------------------------------------------------------------------------
 function run(cmd, args, { cwd, signal, timeout = 60000 }) {
-  const { file, shell } = resolveCommand(cmd);
+  const { file } = resolveCommand(cmd);
   return new Promise((resolve, reject) => {
-    execFile(file, args, { cwd, signal, timeout, shell, windowsHide: true, env: process.env, maxBuffer: 16 * 1024 * 1024 }, (err, stdout, stderr) => {
+    execShim(file, args, { cwd, signal, timeout, windowsHide: true, env: process.env, maxBuffer: 16 * 1024 * 1024 }, (err, stdout, stderr) => {
       if (err) return reject(new Error(`${cmd} ${args.slice(0, 3).join(' ')}: ${String(stderr || err.message).trim().slice(0, 300)}`));
       try { resolve(JSON.parse(String(stdout).replace(/^﻿/, ''))); } catch { reject(new Error(`${cmd} ${args.slice(0, 3).join(' ')}: the output is not JSON`)); }
     });

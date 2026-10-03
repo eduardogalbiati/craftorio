@@ -16,6 +16,7 @@ const path = require('path');
 const readline = require('readline');
 const { refuseReal } = require('./simulation');
 const { AGENT_ENV } = require('./capabilities');
+const { runShim } = require('../shell');
 
 const emptyUsage = () => ({ input: 0, output: 0, cache_read: 0, cache_write: 0, reasoning: 0 });
 
@@ -83,8 +84,6 @@ function resolveCommand(cmd) {
   }
   return null;
 }
-
-const quoteCmd = (a) => `"${String(a).replace(/"/g, '""')}"`;
 
 function killTree(child) {
   if (!child.pid) return;
@@ -424,9 +423,7 @@ function runCli(opts, parser) {
   if (promptFile) fs.writeFileSync(promptFile, prompt);
 
   return new Promise((resolve, reject) => {
-    const child = resolved.shell
-      ? spawn(quoteCmd(resolved.file), args.map(quoteCmd), { cwd, env, shell: true, windowsHide: true })
-      : spawn(resolved.file, args, { cwd, env, windowsHide: true });
+    const child = runShim(resolved.file, args, { cwd, env, windowsHide: true });
 
     const acc = { text: '', lastText: '', usage: null, costUsd: null, providerSessionId, error: null };
     let stderr = '';
@@ -735,7 +732,6 @@ module.exports = {
   isToolTimeout,
   killTree,
   parseGrok,
-  quoteCmd,
   refreshWindowsPath,
   resolveCommand,
   runTurn,

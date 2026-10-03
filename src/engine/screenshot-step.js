@@ -12,9 +12,9 @@
 
 const fs = require('fs');
 const path = require('path');
-const { spawn } = require('child_process');
 const evidence = require('../evidence');
-const { killTree, quoteCmd, resolveCommand } = require('./providers');
+const { killTree, resolveCommand } = require('./providers');
+const { runShim } = require('../shell');
 const {
   acquireSlot,
   SCREENSHOT_SLOT,
@@ -70,9 +70,7 @@ function runShot({ cwd, args, env, timeoutMs, signal }) {
   return new Promise((resolve) => {
     let child;
     try {
-      child = npm.shell
-        ? spawn(quoteCmd(npm.file), argv.map(quoteCmd), { cwd, env: childEnv, shell: true, windowsHide: true })
-        : spawn(npm.file, argv, { cwd, env: childEnv, windowsHide: true });
+      child = runShim(npm.file, argv, { cwd, env: childEnv, windowsHide: true });
     } catch (e) {
       resolve({ code: null, output: e.message, timedOut: false });
       return;

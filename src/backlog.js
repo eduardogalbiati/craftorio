@@ -25,8 +25,8 @@
 
 const fs = require('fs');
 const path = require('path');
-const { execFile } = require('child_process');
 const { resolveCommand } = require('./engine/providers');
+const { execShim } = require('./shell');
 const { writeJsonSafe } = require('./state-file');
 const { storeFor } = require('./store');
 
@@ -104,7 +104,7 @@ function execCli(cli, args) {
   const r = resolveCommand(cli);
   if (!r) return Promise.reject(new Error(`The ${cli} CLI is not installed (see Settings › Agents & CLIs).`));
   return new Promise((resolve, reject) => {
-    execFile(r.shell ? `"${r.file}"` : r.file, args, { windowsHide: true, timeout: 60000, shell: r.shell, maxBuffer: 32 * 1024 * 1024 }, (err, stdout, stderr) => {
+    execShim(r.file, args, { windowsHide: true, timeout: 60000, maxBuffer: 32 * 1024 * 1024 }, (err, stdout, stderr) => {
       if (err) reject(new Error(`${cli} ${args.slice(0, 2).join(' ')} failed: ${String(stderr || err.message).trim()}`));
       else resolve(stdout);
     });
