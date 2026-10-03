@@ -1,4 +1,5 @@
-// The 24x7 page: the day clock, reveal on scroll, videos that play while on screen, the newsletter.
+// The 24x7 site's script (the homes and the chapter pages, Portuguese and English: the messages
+// follow <html lang>): the day clock, reveal on scroll, videos that play while on screen, the newsletter.
 // The form calls public.join_newsletter (supabase/migrations/20261003000000_newsletter.sql) with the
 // publishable key, the same public settings as src/auth-config.js: row level security keeps the
 // list unreadable from here.
@@ -7,6 +8,17 @@ const SUPABASE_URL = 'https://grguuqxwdqxighfzurgh.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_AyKeR5ap4awlLc2d7OBCQw_sQp_lwV7';
 
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const LANG = document.documentElement.lang.startsWith('en') ? 'en' : 'pt';
+const T = {
+  pt: {
+    shortName: 'Nome muito curto.', badEmail: 'Esse e-mail não parece válido.', consent: 'Marque para eu poder te mandar os capítulos.',
+    check: 'Confira este campo.', failed: 'Não consegui registrar agora. Tente de novo em instantes.', sending: 'Enviando…', subscribe: 'Assinar',
+  },
+  en: {
+    shortName: 'Name too short.', badEmail: 'That email does not look right.', consent: 'Tick this so I can send you the chapters.',
+    check: 'Check this field.', failed: 'Could not sign you up right now. Try again in a moment.', sending: 'Sending…', subscribe: 'Subscribe',
+  },
+}[LANG];
 
 // ---------------------------------------------------------------- the day clock
 // 24 blocks: the agents' hours, and the owner's two (08:00 and 09:00); the current hour is outlined
@@ -47,7 +59,7 @@ const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
 // where the sign-up came from: utm_* parameters and the referrer's host (no personal data)
 function sourceTag() {
-  const parts = ['page=24x7'];
+  const parts = ['page=24x7', `lang=${LANG}`, `path=${location.pathname}`];
   for (const [k, v] of new URLSearchParams(location.search)) if (k.startsWith('utm_')) parts.push(`${k}=${v}`);
   try { if (document.referrer) parts.push(`ref=${new URL(document.referrer).host}`); } catch { /* ignore */ }
   return parts.join('&').slice(0, 500);
@@ -57,9 +69,9 @@ function validate(form) {
   const errors = {};
   const name = form.name.value.trim();
   const email = form.email.value.trim().toLowerCase();
-  if (name && name.length < 2) errors.name = 'Nome muito curto.';
-  if (!EMAIL_RE.test(email)) errors.email = 'Esse e-mail não parece válido.';
-  if (!form.consent.checked) errors.consent = 'Marque para eu poder te mandar os capítulos.';
+  if (name && name.length < 2) errors.name = T.shortName;
+  if (!EMAIL_RE.test(email)) errors.email = T.badEmail;
+  if (!form.consent.checked) errors.consent = T.consent;
   return { errors, data: { name, email } };
 }
 
@@ -109,7 +121,7 @@ function startForm() {
     if (form.company.value) { form.hidden = true; done.hidden = false; return; }
 
     button.disabled = true;
-    label.textContent = 'Enviando…';
+    label.textContent = T.sending;
     button.insertAdjacentHTML('afterbegin', '<span class="spinner" aria-hidden="true"></span>');
     try {
       await subscribe(data);
@@ -117,14 +129,14 @@ function startForm() {
       done.hidden = false;
     } catch (err) {
       if (err.field) {
-        showErrors(form, { [err.field]: 'Confira este campo.' });
+        showErrors(form, { [err.field]: T.check });
         form.elements[err.field].focus();
       } else {
-        msg.textContent = 'Não consegui registrar agora. Tente de novo em instantes.';
+        msg.textContent = T.failed;
       }
     } finally {
       button.disabled = false;
-      label.textContent = 'Assinar';
+      label.textContent = T.subscribe;
       button.querySelector('.spinner')?.remove();
     }
   });

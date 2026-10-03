@@ -1,10 +1,9 @@
 <!doctype html>
 <!--
-  Build-in-public page: the 24x7 software factory, told as a hobby project's diary, with a newsletter.
-  Static: index.html + style.css + main.js, no build. Copy in Brazilian Portuguese; numbers rounded on
-  purpose (the owner's choice: no prices, no availability, nothing for sale). Media come from the
-  full page's folder (../img/). Sign-ups go to Supabase (public.join_newsletter,
-  supabase/migrations/20261003000000_newsletter.sql).
+  The 24x7 page's home in Portuguese: a template of site/24x7/build.js ({{base}}, {{media}}, {{full}},
+  {{alt}}: the English home, {{chapters}}: the chapter cards from chapters.json). Copy in Brazilian
+  Portuguese; numbers rounded on purpose (no prices, no availability, nothing for sale). The English
+  twin is home.en.html: a change here usually goes there too.
 -->
 <html lang="pt-BR">
 <head>
@@ -20,7 +19,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@100..125,500..900&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="{{base}}/style.css">
+  <link rel="alternate" hreflang="pt-BR" href="{{self}}">
+  <link rel="alternate" hreflang="en" href="{{alt}}">
 </head>
 <body>
   <header class="top">
@@ -31,7 +32,7 @@
         <a href="#dia">Um dia na fábrica</a>
         <a href="#capitulos">Capítulos</a>
       </nav>
-      <a class="btn btn-sm" href="#newsletter">Acompanhar</a>
+      <div class="top-actions"><a class="lang" href="{{alt}}" hreflang="en" lang="en" title="Read in English">EN</a><a class="btn btn-sm" href="#newsletter">Acompanhar</a></div>
     </div>
   </header>
 
@@ -99,11 +100,11 @@
         <div class="media-pair">
           <figure class="frame">
             <div class="frame-bar"><i></i><i></i><i></i><span>Product Owner montando o roadmap</span></div>
-            <video muted playsinline loop preload="metadata" poster="../img/product-owner.png" data-autoplay aria-label="O Product Owner de IA monta um roadmap em etapas a partir do backlog"><source src="../img/product-owner.webm" type="video/webm"></video>
+            <video muted playsinline loop preload="metadata" poster="{{media}}/product-owner.png" data-autoplay aria-label="O Product Owner de IA monta um roadmap em etapas a partir do backlog"><source src="{{media}}/product-owner.webm" type="video/webm"></video>
           </figure>
           <figure class="frame">
             <div class="frame-bar"><i></i><i></i><i></i><span>O vigia noturno</span></div>
-            <video muted playsinline loop preload="metadata" poster="../img/night-watch.png" data-autoplay aria-label="O vigia noturno: o que a IA pode fazer sem perguntar e como foi cada noite"><source src="../img/night-watch.webm" type="video/webm"></video>
+            <video muted playsinline loop preload="metadata" poster="{{media}}/night-watch.png" data-autoplay aria-label="O vigia noturno: o que a IA pode fazer sem perguntar e como foi cada noite"><source src="{{media}}/night-watch.webm" type="video/webm"></video>
           </figure>
         </div>
         <p class="note">Gravações do app em modo simulação.</p>
@@ -115,16 +116,9 @@
       <div class="wrap">
         <p class="kicker">Os capítulos</p>
         <h2>O que essa fábrica está me ensinando.</h2>
-        <p class="body center">Oito capítulos, com os dados e os erros de cada um. Assine a newsletter para receber cada um quando sair.</p>
-        <div class="lessons">
-          <article><span class="n">01</span><h3>Escala 6x1? Aqui é 24x7</h3><p>A apresentação: o que é essa fábrica, como a ideia nasceu e o que ela fez na primeira semana.</p><span class="soon">capítulo em breve</span></article>
-          <article><span class="n">02</span><h3>O dia em que a IA saiu do meu volante</h3><p>No quarto dia, a ferramenta passou a gerar mais trabalho de agente do que eu. Poucos dias depois, mais de 90% já saía dela.</p><span class="soon">capítulo em breve</span></article>
-          <article><span class="n">03</span><h3>Dormi e acordei com o trabalho pronto</h3><p>A primeira noite inteira: um roadmap em etapas, nenhum prompt meu e 10 tarefas entregues, testadas e integradas de manhã.</p><span class="soon">capítulo em breve</span></article>
-          <article><span class="n">04</span><h3>O gargalo não é o código, é o teste</h3><p>Somando o tempo das etapas, testar levou mais do que desenvolver. A próxima grande economia está no teste.</p><span class="soon">capítulo em breve</span></article>
-          <article><span class="n">05</span><h3>O token mais caro é o de uma IA esperando</h3><p>A execução mais cara não entregou nada: uma IA consultando um status que não mudava. Esperar é trabalho de código.</p><span class="soon">capítulo em breve</span></article>
-          <article><span class="n">06</span><h3>O git foi feito para humanos</h3><p>Dois agentes conflitam só por acrescentar uma linha no fim da mesma lista. Com IAs em paralelo, o formato dos arquivos vira arquitetura.</p><span class="soon">capítulo em breve</span></article>
-          <article><span class="n">07</span><h3>Refinar antes ou reagir depois?</h3><p>Quando gerar fica barato, o incremento funcionando vira a especificação mais barata que existe.</p><span class="soon">capítulo em breve</span></article>
-          <article><span class="n">08</span><h3>O barco de Teseu: quando o software reescreve a si mesmo</h3><p>Peça por peça, a ferramenta passou a reescrever o próprio código. Ainda é o mesmo software? E o que sobra para mim?</p><span class="soon">capítulo em breve</span></article>
+        <p class="body center">Oito capítulos, com os dados e os erros de cada um. Leia os que já saíram e assine para receber os próximos.</p>
+        <div class="lessons" id="chapters-list">
+{{chapters}}
         </div>
       </div>
     </section>
@@ -165,7 +159,7 @@
       <div class="wrap narrow center">
         <h2>Quer ver tudo o que a fábrica já faz?</h2>
         <p class="body">Arena de IA, Write &amp; Review, workflows, Product Owner, vigia noturno, analytics: cada módulo com vídeo.</p>
-        <a class="btn btn-ghost" href="../index.html" data-full-page>Ver todas as funcionalidades →</a>
+        <a class="btn btn-ghost" href="{{full}}" data-full-page>Ver todas as funcionalidades →</a>
       </div>
     </section>
   </main>
@@ -177,6 +171,6 @@
     </div>
   </footer>
 
-  <script src="main.js"></script>
+  <script src="{{base}}/main.js"></script>
 </body>
 </html>

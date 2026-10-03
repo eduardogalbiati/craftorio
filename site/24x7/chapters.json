@@ -1,0 +1,53 @@
+{
+  "chapters": [
+    {
+      "n": 1,
+      "status": "published",
+      "date": "2026-10-03",
+      "pt": { "slug": "escala-24x7", "title": "Escala 6x1? Aqui é 24x7", "teaser": "A apresentação: o que é essa fábrica, como a ideia nasceu e o que ela fez na primeira semana." },
+      "en": { "slug": "forget-9-to-5", "title": "Forget 9 to 5. This one runs 24/7", "teaser": "The introduction: what this factory is, how the idea started and what it did in its first week." }
+    },
+    {
+      "n": 2,
+      "status": "soon",
+      "pt": { "slug": "a-ia-saiu-do-meu-volante", "title": "O dia em que a IA saiu do meu volante", "teaser": "No quarto dia, a ferramenta passou a gerar mais trabalho de agente do que eu. Poucos dias depois, mais de 90% já saía dela." },
+      "en": { "slug": "ai-took-the-wheel", "title": "The day AI took the wheel from me", "teaser": "On day four, the tool started generating more agent work than I did. A few days later, over 90% came from it." }
+    },
+    {
+      "n": 3,
+      "status": "soon",
+      "pt": { "slug": "dormi-e-acordei-com-o-trabalho-pronto", "title": "Dormi e acordei com o trabalho pronto", "teaser": "A primeira noite inteira: um roadmap em etapas, nenhum prompt meu e 10 tarefas entregues, testadas e integradas de manhã." },
+      "en": { "slug": "woke-up-to-finished-work", "title": "I went to sleep and woke up to finished work", "teaser": "The first full night: a roadmap in stages, not a single prompt from me, and 10 tasks delivered, tested and merged by morning." }
+    },
+    {
+      "n": 4,
+      "status": "soon",
+      "pt": { "slug": "o-gargalo-e-o-teste", "title": "O gargalo não é o código, é o teste", "teaser": "Somando o tempo das etapas, testar levou mais do que desenvolver. A próxima grande economia está no teste." },
+      "en": { "slug": "the-bottleneck-is-testing", "title": "The bottleneck isn't the code, it's the tests", "teaser": "Adding up the time of each step, testing took longer than development. The next big saving is in testing." }
+    },
+    {
+      "n": 5,
+      "status": "soon",
+      "pt": { "slug": "o-token-mais-caro", "title": "O token mais caro é o de uma IA esperando", "teaser": "A execução mais cara não entregou nada: uma IA consultando um status que não mudava. Esperar é trabalho de código." },
+      "en": { "slug": "the-most-expensive-token", "title": "The most expensive token is an AI waiting", "teaser": "The most expensive run delivered nothing: an AI polling a status that never changed. Waiting is a job for code." }
+    },
+    {
+      "n": 6,
+      "status": "soon",
+      "pt": { "slug": "o-git-foi-feito-para-humanos", "title": "O git foi feito para humanos", "teaser": "Dois agentes conflitam só por acrescentar uma linha no fim da mesma lista. Com IAs em paralelo, o formato dos arquivos vira arquitetura." },
+      "en": { "slug": "git-was-made-for-humans", "title": "Git was made for humans", "teaser": "Two agents conflict just by adding a line at the end of the same list. With AIs in parallel, file layout becomes architecture." }
+    },
+    {
+      "n": 7,
+      "status": "soon",
+      "pt": { "slug": "refinar-antes-ou-reagir-depois", "title": "Refinar antes ou reagir depois?", "teaser": "Quando gerar fica barato, o incremento funcionando vira a especificação mais barata que existe." },
+      "en": { "slug": "refine-first-or-react-later", "title": "Refine first or react later?", "teaser": "When generating gets cheap, a working increment becomes the cheapest specification there is." }
+    },
+    {
+      "n": 8,
+      "status": "soon",
+      "pt": { "slug": "o-barco-de-teseu", "title": "O barco de Teseu: quando o software reescreve a si mesmo", "teaser": "Peça por peça, a ferramenta passou a reescrever o próprio código. Ainda é o mesmo software? E o que sobra para mim?" },
+      "en": { "slug": "ship-of-theseus", "title": "The ship of Theseus: when software rewrites itself", "teaser": "Piece by piece, the tool started rewriting its own code. Is it still the same software? And what is left for me?" }
+    }
+  ]
+}

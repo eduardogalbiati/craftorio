@@ -1,0 +1,176 @@
+<!doctype html>
+<!--
+  The 24x7 page's home in English: a template of site/24x7/build.js ({{base}}, {{media}}, {{full}},
+  {{alt}}: the Portuguese home, {{chapters}}: the chapter cards from chapters.json). The twin of
+  home.pt.html: a change there usually comes here too. Numbers rounded on purpose (no prices, no
+  availability, nothing for sale). The full feature page ({{full}}) is in Portuguese only.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Running 24/7 · Factory diary</title>
+  <meta name="description" content="A personal project: a team of AIs that builds software around the clock, while I sleep. The diary of what I am learning building this factory.">
+  <meta property="og:title" content="Forget 9 to 5. This one runs 24/7.">
+  <meta property="og:description" content="A team of AIs that builds software while I sleep. The diary of a hobby project and what it is teaching me.">
+  <meta property="og:type" content="article">
+  <meta name="theme-color" content="#0b1220">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230b1220'/%3E%3Cpath d='M21 19.5A8 8 0 1 1 12.5 9a6.2 6.2 0 0 0 8.5 10.5z' fill='%23f5b041'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@100..125,500..900&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{base}}/style.css">
+  <link rel="alternate" hreflang="en" href="{{self}}">
+  <link rel="alternate" hreflang="pt-BR" href="{{alt}}">
+</head>
+<body>
+  <header class="top">
+    <div class="wrap top-in">
+      <a class="mark" href="#start"><span class="moon" aria-hidden="true"></span>Factory diary</a>
+      <nav aria-label="Sections">
+        <a href="#story">The story</a>
+        <a href="#day">A day in the factory</a>
+        <a href="#chapters">Chapters</a>
+      </nav>
+      <div class="top-actions"><a class="lang" href="{{alt}}" hreflang="pt-BR" lang="pt-BR" title="Ler em português">PT</a><a class="btn btn-sm" href="#newsletter">Follow along</a></div>
+    </div>
+  </header>
+
+  <main id="start">
+    <!-- HERO -->
+    <section class="hero">
+      <div class="wrap">
+        <p class="kicker">Personal project · built in public</p>
+        <h1>Forget 9 to 5.<br><span>This one runs 24/7.</span></h1>
+        <p class="lead">Relax, I'm not the one working around the clock. It's a team of AIs I put together as a hobby: one writes the code, another tests it, another reviews it, and nothing reaches main without a rule of mine or my approval. While I sleep, it keeps going.</p>
+        <div class="cta">
+          <a class="btn" href="#newsletter">Get the next chapters</a>
+          <a class="btn btn-ghost" href="#story">Read the story</a>
+        </div>
+
+        <figure class="clock" aria-label="A 24-hour day: 22 hours of agents working and 2 of human decisions">
+          <div class="clock-bar" id="clock"></div>
+          <figcaption>
+            <span><i class="sw-agents"></i>22 h · the agents build, review and test</span>
+            <span><i class="sw-me"></i>2 h · I approve and pick what comes next</span>
+          </figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <!-- NUMBERS -->
+    <section class="numbers" aria-label="The first week in numbers">
+      <div class="wrap nums">
+        <div><b>200+</b><span>commits in the first week</span></div>
+        <div><b>90%+</b><span>of the agents' work now comes from the tool itself, not from me</span></div>
+        <div><b>10</b><span>tasks delivered on the first night, without me typing a thing</span></div>
+        <div><b>1–2 h</b><span>of human decisions a day</span></div>
+      </div>
+    </section>
+
+    <!-- STORY -->
+    <section class="section" id="story">
+      <div class="wrap narrow">
+        <p class="kicker">The story</p>
+        <h2>It started with a small question.</h2>
+        <p class="body">"What if I could open several AI sessions at the same time?" Within a few days, the question became a small software factory. And then the most curious part happened: the tool started developing itself.</p>
+
+        <ol class="timeline">
+          <li><span class="when">Day 1</span><div><h3>A weekend idea</h3><p>An app that orchestrates Claude Code, Codex and Grok in a real development flow, with cross-review, tests and a gate where only I decide.</p></div></li>
+          <li><span class="when">Day 2</span><div><h3>The first real runs</h3><p>One AI implements, another from a different family reviews, a third writes the tests. And a supervisor that only steps in when something fails.</p></div></li>
+          <li><span class="when">Day 4</span><div><h3>The tool takes the wheel</h3><p>I wrote down the backlog, and the issues started being implemented by the tool itself. From then on, I followed along instead of writing code.</p></div></li>
+          <li class="night"><span class="when">Day 5</span><div><h3>The first full night</h3><p>An AI Product Owner laid out the plan in stages, and the roadmap ran until morning. I went to sleep and woke up to 10 tasks delivered, tested and merged.</p></div></li>
+          <li><span class="when">Today</span><div><h3>A factory that never sleeps</h3><p>By day I say the ideas, by night they become code. A night watch unblocks what it can, within what I allowed, and leaves the decisions to me.</p></div></li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- A DAY -->
+    <section class="section section-dark" id="day">
+      <div class="wrap">
+        <p class="kicker">A day in the factory</p>
+        <h2>One or two hours of decisions. The factory does the rest.</h2>
+        <div class="day">
+          <div class="d-night"><span class="t">night</span><h3>The agents' shift</h3><p>The roadmap runs stage by stage: implement, review, test, merge. What breaks, the watch tries to unblock; what needs me, waits.</p></div>
+          <div class="d-me"><span class="t">morning</span><h3>Approval</h3><p>I review what got done by its result: screenshots, evidence, cost. I approve, ask for changes or discard.</p></div>
+          <div class="d-me"><span class="t">morning</span><h3>Planning</h3><p>I talk to the Product Owner, who reads the code before giving an opinion, and accept the plan for the next 24 hours.</p></div>
+          <div class="d-night"><span class="t">day</span><h3>The factory keeps going</h3><p>New ideas come in by text or voice, get triaged and join the queue without waiting for the next sprint.</p></div>
+        </div>
+
+        <div class="media-pair">
+          <figure class="frame">
+            <div class="frame-bar"><i></i><i></i><i></i><span>The Product Owner building the roadmap</span></div>
+            <video muted playsinline loop preload="metadata" poster="{{media}}/product-owner.png" data-autoplay aria-label="The AI Product Owner builds a roadmap in stages from the backlog"><source src="{{media}}/product-owner.webm" type="video/webm"></video>
+          </figure>
+          <figure class="frame">
+            <div class="frame-bar"><i></i><i></i><i></i><span>The night watch</span></div>
+            <video muted playsinline loop preload="metadata" poster="{{media}}/night-watch.png" data-autoplay aria-label="The night watch: what the AI may do without asking and how each night went"><source src="{{media}}/night-watch.webm" type="video/webm"></video>
+          </figure>
+        </div>
+        <p class="note">Recordings of the app in simulation mode.</p>
+      </div>
+    </section>
+
+    <!-- CHAPTERS -->
+    <section class="section" id="chapters">
+      <div class="wrap">
+        <p class="kicker">The chapters</p>
+        <h2>What this factory is teaching me.</h2>
+        <p class="body center">Eight chapters, each with its data and its mistakes. Read the ones already out and subscribe to get the next ones.</p>
+        <div class="lessons" id="chapters-list">
+{{chapters}}
+        </div>
+      </div>
+    </section>
+
+    <!-- NEWSLETTER -->
+    <section class="section section-dark" id="newsletter">
+      <div class="wrap news">
+        <div class="news-copy">
+          <p class="kicker">Newsletter</p>
+          <h2>Get the next chapters.</h2>
+          <p class="body">One email when a new chapter is out: what worked, what broke and what the factory learned. No spam, unsubscribe anytime.</p>
+        </div>
+        <form class="form" id="news-form" novalidate>
+          <label class="field"><span>Name <em>(optional)</em></span>
+            <input name="name" type="text" autocomplete="name" placeholder="What should I call you?" maxlength="120">
+            <small class="err" data-for="name"></small>
+          </label>
+          <label class="field"><span>Email</span>
+            <input name="email" type="email" autocomplete="email" inputmode="email" placeholder="you@example.com" required maxlength="254">
+            <small class="err" data-for="email"></small>
+          </label>
+          <!-- honeypot: people never see it, bots fill it -->
+          <div class="hp" aria-hidden="true"><label>Company <input name="company" type="text" tabindex="-1" autocomplete="off"></label></div>
+          <label class="consent"><input type="checkbox" name="consent" required><span>Send me the chapters by email.</span></label>
+          <small class="err" data-for="consent"></small>
+          <button class="btn btn-block" type="submit" id="news-submit"><span class="btn-label">Subscribe</span></button>
+          <p class="form-msg" id="news-msg" role="status" aria-live="polite"></p>
+        </form>
+        <div class="done" id="news-done" hidden>
+          <div class="done-icon" aria-hidden="true">✓</div>
+          <h3>Done, you are on the list.</h3>
+          <p>The next chapter will reach your inbox.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section more">
+      <div class="wrap narrow center">
+        <h2>Want to see everything the factory does?</h2>
+        <p class="body">AI Arena, Write &amp; Review, workflows, Product Owner, night watch, analytics: every module with a video (page in Portuguese).</p>
+        <a class="btn btn-ghost" href="{{full}}" data-full-page>See every feature →</a>
+      </div>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <div class="wrap foot-in">
+      <span>Factory diary · a hobby project, built in public</span>
+      <span>© 2026 · Galbs Labs</span>
+    </div>
+  </footer>
+
+  <script src="{{base}}/main.js"></script>
+</body>
+</html>
