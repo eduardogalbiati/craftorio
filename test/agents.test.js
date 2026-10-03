@@ -221,6 +221,7 @@ test('listAgents(dir, { workflowsDir }) lists every agent of every workflow afte
     'workflow:ai-development-local-hero.yaml:builder',
     'workflow:ai-development-local-hero.yaml:verifier',
     'workflow:ai-development-local-hero.yaml:evidence',
+    'workflow:ai-development-local-hero.yaml:healer',
     'workflow:backlog-refresh.yaml:refresher',
     'workflow:e2e-release.yaml:e2e_runner',
     'workflow:e2e-release.yaml:developer',

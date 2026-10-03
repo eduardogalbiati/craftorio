@@ -15,6 +15,7 @@ agents:
       web: false             # WebSearch / WebFetch (default false)
       mcp: []                # names from mcp_servers (default none)
       subagents: false       # the CLI's own sub-agents, e.g. Claude's Agent/Task (default false)
+      screenshots: true      # false: the command guide names no screenshot folder (#223's E2E healer)
     isolation: true          # default; false = the user's own CLI setup is loaded too
 steps:
   - id: publish
@@ -22,7 +23,7 @@ steps:
     capabilities: { web: true }   # merged key by key over the agent's, for this step only
 ```
 
-`loadWorkflow` rejects unknown keys, tools, non-boolean `web`/`subagents` and MCP names missing from
+`loadWorkflow` rejects unknown keys, tools, non-boolean `web`/`subagents`/`screenshots` and MCP names missing from
 `mcp_servers`. `cli_args` still apply on top (for anything the vocabulary doesn't cover); a bare
 flag is never passed twice (`dedupeFlags`, clap-based CLIs refuse repeats). `permissions:` is gone
 from the bundled workflows: it was documentation only. The run log gets one

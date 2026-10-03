@@ -166,6 +166,15 @@ tpl.addFilter('e2e_scenarios', (output) => scenarios.scenariosMessage(output));
 //   {{ steps.suite.output | suite_failures }}
 tpl.addFilter('suite_failures', (output) => suiteStep.suiteMessage(output));
 
+// The numbers of the run's issues (#223: their BDD tags @issue-<n>), from `issue` and `issues` (URLs
+// ending in the number), without duplicates; [] without an issue.
+//   {% for n in inputs | issue_numbers %}@issue-{{ n }}|{% endfor %}@smoke
+tpl.addFilter('issue_numbers', (inputs) => {
+  const issues = inputs?.issues;
+  const urls = [inputs?.issue, ...(Array.isArray(issues) ? issues : String(issues || '').split(/\s+/))];
+  return [...new Set(urls.map((u) => /(\d+)\D*$/.exec(String(u || ''))?.[1]).filter(Boolean))];
+});
+
 // A gate's `summary:` (#213): one ✔ / ✖ line per issue of a developer's or a verifier's output
 // (`'not_done'` keeps the failed ones), one ✖ line per failing test of a suite's output, and a long
 // text (a report, an error) on one line cut with an ellipsis.
@@ -3400,6 +3409,8 @@ class WorkflowRun extends EventEmitter {
           base: () => this.suiteBase(),
           baseCacheDir: path.join(root, 'cache', 'base-tests'),
           log: (level, message) => this.emitEvent('log', { level, message }),
+          // a suite step other than `suite` (an e2e step, #223) logs under its own name
+          ...(step.id === 'suite' ? {} : { logName: `${step.id}-${st.visits}` }),
           ...extra,
         });
       } catch (e) {
