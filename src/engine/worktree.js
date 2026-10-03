@@ -379,6 +379,30 @@ function runState(runDir) {
   return { exists: true, live: ownerAlive(readOwner(runDir)) || openGate(runDir), endedAt, status: null };
 }
 
+// The worktree folders live runs work in (their worktree.ready events), whatever the folder's name:
+// a resumed run reuses the folder named after the run it resumes, whose own run folder has ended
+// (claimed from its workflow.started already, before its worktree.ready).
+function liveWorktrees(runsDir, worktreesDir) {
+  let names = [];
+  try { names = fs.readdirSync(runsDir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name); } catch { names = []; }
+  const dirs = [];
+  for (const name of names) {
+    const runDir = path.join(runsDir, name);
+    if (fs.existsSync(path.join(runDir, 'summary.json')) || !runState(runDir).live) continue;
+    let text = '';
+    try { text = fs.readFileSync(path.join(runDir, 'events.jsonl'), 'utf8'); } catch { continue; }
+    for (const line of text.split('\n')) {
+      if (!line.includes('"worktree.ready"') && !line.includes('"resumed_from"')) continue;
+      try {
+        const ev = JSON.parse(line);
+        if (ev.type === 'worktree.ready') dirs.push(ev.dir, ev.work_dir);
+        else if (ev.type === 'workflow.started' && ev.resumed_from?.run_id) dirs.push(path.join(worktreesDir, ev.resumed_from.run_id));
+      } catch { /* a line being written */ }
+    }
+  }
+  return dirs.filter(Boolean);
+}
+
 // Records a worktree the cleanup removed in its run (events.jsonl, and summary.json when there).
 function recordRemoved(runDir, { dir, branch, wipCommit }) {
   try {
@@ -391,8 +415,10 @@ function recordRemoved(runDir, { dir, branch, wipCommit }) {
 
 /**
  * Cleanup of <workspace>/worktrees and of the runs' scratch workspaces, at app start and then
- * periodically (#202, #201). Never touches `active` folders (runs of this process), nor a run live
- * in another app process or waiting at a human gate. The worktree of any other run (succeeded,
+ * periodically (#202, #201). Never touches `active` folders (runs of this process: a list, or a
+ * function re-read before each folder since a run may start during the pass), nor the folder of a
+ * run live in another app process or waiting at a human gate (by name, or named in its
+ * worktree.ready: a resumed run works in the folder of the run it resumes). The worktree of any other run (succeeded,
  * failed, cancelled, interrupted) goes, its work kept on its branch (retireWorktree); the branch is
  * never deleted here. Folders git does not know (e.g. shots-*) go once older than an hour. A folder
  * a process still holds (EBUSY) stays for the next cleanup. The scratch of an ended run without a
@@ -405,7 +431,8 @@ async function cleanupWorktrees({ worktreesDir, runsDir, active = [], scratchDay
   const removed = [];
   for (const name of names) {
     const dir = path.join(worktreesDir, name);
-    if (active.some((a) => a && samePath(a, dir))) continue;
+    const inUse = [...(typeof active === 'function' ? active() : active), ...liveWorktrees(runsDir, worktreesDir)];
+    if (inUse.some((a) => a && samePath(a, dir))) continue;
     // <run_id>-base: the run's checkout of the base (#198), gone once its run is not live
     const baseOf = name.endsWith('-base') ? name.slice(0, -5) : null;
     const runDir = path.join(runsDir, baseOf || name);

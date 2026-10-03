@@ -1154,13 +1154,12 @@ class WorkflowRun extends EventEmitter {
     }
     this.worktree = info;
     this.ctx.worktree_dir = info.workDir;
-    // #202: recreated from the previous run's branch, whose WIP commit (saveWork) holds what that
-    // attempt left uncommitted: back as uncommitted (staged) changes, and the agent is told
-    if (info.recreated && prev?.branch && info.ref === prev.branch && await restoreWork(info.dir)) {
+    // #202: on the previous run's branch, whose WIP commit (saveWork) holds what that attempt left
+    // uncommitted: back as uncommitted (staged) changes, whether the folder was recreated or reused
+    // (its removal failed, EBUSY). The first agent prompt of the run tells it (a resume may start at a gate).
+    if (prev?.branch && (await currentBranch(info.dir)) === prev.branch && await restoreWork(info.dir)) {
       info.commit = await git(['rev-parse', 'HEAD'], info.dir);
-      const st = this.ctx.steps[this.resume.fromStep];
-      const note = 'The worktree holds uncommitted work from the previous attempt of this run (saved as a WIP commit when it ended, restored as staged changes): check it with `git status` and `git diff --cached`, keep what is right and commit it with your own work.';
-      st.supervisorNote = st.supervisorNote ? `${st.supervisorNote}\n\n${note}` : note;
+      this.restoredWorkNote = 'The worktree holds uncommitted work from the previous attempt of this run (saved as a WIP commit when it ended, restored as staged changes): check it with `git status` and `git diff --cached`, keep what is right and commit it with your own work.';
       log('info', `worktree: restored the previous attempt's uncommitted work on ${prev.branch}`);
     }
     const how = info.reused ? 'reusing' : info.recreated ? 'recreated' : 'created';
@@ -2169,6 +2168,7 @@ class WorkflowRun extends EventEmitter {
     const settled = await Promise.allSettled(step.agents.map((name) => this.runAgentStep(step, st, name)));
     st.delegate_result = null; // consumed by all agents
     st.supervisorNote = null;
+    this.restoredWorkNote = null;
     this.gateImages = [];
     if (this.abort.signal.aborted) throw new Error('Cancelled');
     const results = {};
@@ -2199,6 +2199,10 @@ class WorkflowRun extends EventEmitter {
     if (st.supervisorNote) {
       prompt += `\n\n---\nNote from the run supervisor (a previous attempt of this step failed):\n${st.supervisorNote}`;
       if (!step.agents) st.supervisorNote = null;
+    }
+    if (this.restoredWorkNote) {
+      prompt += `\n\n---\n${this.restoredWorkNote}`;
+      if (!step.agents) this.restoredWorkNote = null;
     }
     if (!step.agents) st.delegate_result = null; // consumed (in a fan-out, after all of them)
     // step skills go in the prompt itself; the name can be a template ("{{ inputs.document_skill }}")
