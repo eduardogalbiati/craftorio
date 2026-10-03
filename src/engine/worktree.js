@@ -6,14 +6,18 @@
 // repository can go at the same time. The main checkout under <workspace>/repos is only the
 // object store: nothing is ever checked out there by a run.
 //
-// Lifecycle: created at run start; removed when the run succeeds (its local branch too, when it
-// is merged into the base); kept when the run fails, is cancelled or dies, so "resume from step"
-// can continue in the same folder (recreated from the run's branch if it was deleted).
+// Lifecycle (#202): the branch is the record, the folder is temporary. Created at run start;
+// removed when the run succeeds (its local branch too, when it is merged into the base). A run that
+// fails, is cancelled or dies keeps its branch, not its folder (retireWorktree): a detached worktree
+// gets a branch (run/<run id>), uncommitted changes become a WIP commit naming the run, then the
+// folder goes. "Resume from step" recreates the folder from the branch. cleanupWorktrees (at start
+// and periodically) does the same for runs that ended in an earlier app session.
 
 const fs = require('fs');
 const path = require('path');
 const { execFile } = require('child_process');
 const { unlinkDeps } = require('./deps-cache');
+const { ownerAlive, readOwner } = require('../run-owner');
 
 const FETCH_TIMEOUT_MS = 60e3;
 const GIT_TIMEOUT_MS = 120e3;
@@ -213,6 +217,52 @@ async function removeWorktree({ repo, dir, base, log = () => {}, remote = true }
   return { removed: !fs.existsSync(dir), branch, branchDeleted };
 }
 
+// The subject of the commit that keeps an ended run's uncommitted work (a resume restores it).
+const WIP_SUBJECT = 'WIP: uncommitted work of run';
+const wipMessage = (runId) => `${WIP_SUBJECT} ${runId}\n\nSaved by the orchestrator when the run ended without success, before its worktree folder was removed. Resume from step restores it as uncommitted work.`;
+
+/**
+ * Keeps an ended run's work on its branch (#202): a detached worktree gets a branch first
+ * (run/<run id>), then any uncommitted change becomes one WIP commit naming the run.
+ * @returns {Promise<{ branch: string, wipCommit: string|null }>}
+ */
+async function saveWork({ dir, runId }) {
+  let branch = await currentBranch(dir);
+  if (!branch) {
+    branch = `run/${runId}`;
+    if (await refExists(dir, `refs/heads/${branch}`)) branch = `${branch}-${Date.now().toString(36)}`;
+    await git(['switch', '-q', '-c', branch], dir);
+  }
+  unlinkDeps(dir); // the shared dependency cache's links are never committed
+  if (!(await git(['status', '--porcelain'], dir))) return { branch, wipCommit: null };
+  await git(['add', '-A'], dir);
+  await git([...(await identityArgs(dir)), '-c', 'commit.gpgsign=false', 'commit', '-q', '--no-verify', '-m', wipMessage(runId)], dir);
+  return { branch, wipCommit: await git(['rev-parse', 'HEAD'], dir) };
+}
+
+/**
+ * An ended run without success (#202): its work goes to its branch (saveWork), then its folder is
+ * removed; the branch is never deleted. A folder that cannot be committed is kept (nothing is lost).
+ * @returns {Promise<{ removed: boolean, branch: string, wipCommit: string|null }>}
+ */
+async function retireWorktree({ repo, dir, runId, log = () => {} }) {
+  dir = canonicalPath(dir);
+  const { branch, wipCommit } = await saveWork({ dir, runId });
+  if (wipCommit) log('info', `worktree: uncommitted work saved as ${wipCommit.slice(0, 8)} on ${branch}`);
+  const r = await removeWorktree({ repo, dir, log });
+  return { removed: r.removed, branch, wipCommit };
+}
+
+/**
+ * Resume (#202): a worktree recreated from a branch whose tip is a WIP commit gets that work back
+ * as uncommitted (staged) changes. true when it did.
+ */
+async function restoreWork(dir) {
+  const subject = await tryGit(['log', '-1', '--format=%s'], dir);
+  if (!subject || !subject.startsWith(`${WIP_SUBJECT} `)) return false;
+  return (await tryGit(['reset', '-q', '--soft', 'HEAD~1'], dir)) !== null;
+}
+
 /**
  * The run's checkout of the base (#198), for the test writer's pre-existing-failure check:
  * <worktreesDir>/<run_id>-base, detached at the current base (refreshed when reused, since the
@@ -295,42 +345,105 @@ function removeScratch(runDir) {
   try { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 3 }); return true; } catch { return false; }
 }
 
+// A folder younger than this that git does not know may be a worktree being created right now.
+const ORPHAN_AGE_MS = 3600e3;
+// How long the scratch workspace of an ended run without a worktree folder stays (#201).
+const SCRATCH_DAYS = 3;
+
+const readJson = (file) => { try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return null; } };
+const mtime = (f) => { try { return fs.statSync(f).mtimeMs; } catch { return 0; } };
+
+// A human gate asked and never answered (approval.requested without approval.resolved).
+function openGate(runDir) {
+  let text = '';
+  try { text = fs.readFileSync(path.join(runDir, 'events.jsonl'), 'utf8'); } catch { return false; }
+  const open = new Set();
+  for (const line of text.split('\n')) {
+    if (!line.includes('"approval.')) continue;
+    try {
+      const ev = JSON.parse(line);
+      if (ev.type === 'approval.requested') open.add(ev.approval_id);
+      else if (ev.type === 'approval.resolved') open.delete(ev.approval_id);
+    } catch { /* a line being written */ }
+  }
+  return open.size > 0;
+}
+
+// What the cleanup may do with a run folder: { exists, live, endedAt, status }. live: no summary.json and
+// either an owner process alive (this one or another app process, #112) or a human gate waiting.
+function runState(runDir) {
+  if (!fs.existsSync(runDir)) return { exists: false, live: false, endedAt: 0 };
+  const summary = readJson(path.join(runDir, 'summary.json'));
+  const endedAt = Date.parse(summary?.finished_at || '') || mtime(path.join(runDir, 'events.jsonl'));
+  if (summary) return { exists: true, live: false, endedAt, status: summary.status || null };
+  return { exists: true, live: ownerAlive(readOwner(runDir)) || openGate(runDir), endedAt, status: null };
+}
+
+// Records a worktree the cleanup removed in its run (events.jsonl, and summary.json when there).
+function recordRemoved(runDir, { dir, branch, wipCommit }) {
+  try {
+    fs.appendFileSync(path.join(runDir, 'events.jsonl'), JSON.stringify({ ts: new Date().toISOString(), type: 'worktree.removed', dir, removed: true, branch, branch_deleted: false, wip_commit: wipCommit, by: 'cleanup' }) + '\n');
+    const file = path.join(runDir, 'summary.json');
+    const summary = readJson(file);
+    if (summary?.worktree) fs.writeFileSync(file, JSON.stringify({ ...summary, worktree: { ...summary.worktree, branch, removed: true } }, null, 2));
+  } catch { /* the run folder went away */ }
+}
+
 /**
- * Orphan cleanup for <workspace>/worktrees (at app start). Never touches `active` folders
- * (runs in progress). Removes a worktree when its run succeeded (a removal that failed) or when
- * neither the run nor the worktree changed for `maxAgeDays`; failed runs are kept until then
- * so they can be resumed. Folders that are no longer worktrees are deleted.
+ * Cleanup of <workspace>/worktrees and of the runs' scratch workspaces, at app start and then
+ * periodically (#202, #201). Never touches `active` folders (runs of this process), nor a run live
+ * in another app process or waiting at a human gate. The worktree of any other run (succeeded,
+ * failed, cancelled, interrupted) goes, its work kept on its branch (retireWorktree); the branch is
+ * never deleted here. Folders git does not know (e.g. shots-*) go once older than an hour. A folder
+ * a process still holds (EBUSY) stays for the next cleanup. The scratch of an ended run without a
+ * worktree folder goes `scratchDays` after the run ended.
  * @returns {Promise<string[]>} removed folders
  */
-async function cleanupWorktrees({ worktreesDir, runsDir, active = [], maxAgeDays = 14, log = () => {} }) {
+async function cleanupWorktrees({ worktreesDir, runsDir, active = [], scratchDays = SCRATCH_DAYS, log = () => {} }) {
   let names = [];
-  try { names = fs.readdirSync(worktreesDir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name); } catch { return []; }
+  try { names = fs.readdirSync(worktreesDir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name); } catch { names = []; }
   const removed = [];
-  const mtime = (f) => { try { return fs.statSync(f).mtimeMs; } catch { return 0; } };
   for (const name of names) {
     const dir = path.join(worktreesDir, name);
     if (active.some((a) => a && samePath(a, dir))) continue;
+    // <run_id>-base: the run's checkout of the base (#198), gone once its run is not live
+    const baseOf = name.endsWith('-base') ? name.slice(0, -5) : null;
+    const runDir = path.join(runsDir, baseOf || name);
+    const run = runState(runDir);
+    if (run.live) continue;
     const common = await tryGit(['rev-parse', '--git-common-dir'], dir);
     const repo = common && canonicalPath(path.dirname(path.resolve(dir, common)));
-    // <run_id>-base: the run's checkout of the base (#198), gone once its run ended, whatever the status
-    const baseOf = name.endsWith('-base') ? name.slice(0, -5) : null;
-    const runName = baseOf || name;
-    let status = null;
-    try { status = JSON.parse(fs.readFileSync(path.join(runsDir, runName, 'summary.json'), 'utf8')).status; } catch { /* running, interrupted or gone */ }
-    const index = repo && await tryGit(['rev-parse', '--git-path', 'index'], dir);
-    const lastUsed = Math.max(mtime(path.join(runsDir, runName, 'events.jsonl')), index ? mtime(path.resolve(dir, index)) : 0, mtime(dir));
-    const stale = Date.now() - lastUsed > maxAgeDays * 864e5;
-    if (!repo || !(await isWorktree(repo, dir))) {
-      if (!stale) continue; // may be a worktree being created right now
-      unlinkDeps(dir);
-      fs.rmSync(dir, { recursive: true, force: true, maxRetries: 3 });
-    } else if (status === 'success' || stale || (baseOf && status)) {
-      await removeWorktree({ repo, dir, log });
-    } else continue;
+    const young = Date.now() - Math.max(mtime(path.join(runDir, 'events.jsonl')), mtime(dir)) < ORPHAN_AGE_MS;
+    try {
+      if (!repo || !(await isWorktree(repo, dir))) {
+        if (young) continue; // may be a worktree being created right now
+        unlinkDeps(dir);
+        fs.rmSync(dir, { recursive: true, force: true, maxRetries: 3 });
+      } else if (baseOf || run.status === 'success') {
+        // a base checkout, or a succeeded run whose removal failed: nothing of its own to keep
+        await removeWorktree({ repo, dir, log });
+      } else {
+        if (!run.exists && young) continue; // no run folder yet: may be a run starting
+        const r = await retireWorktree({ repo, dir, runId: name, log });
+        if (r.removed && run.exists) recordRemoved(runDir, { dir: canonicalPath(dir), branch: r.branch, wipCommit: r.wipCommit });
+      }
+    } catch (e) {
+      log('warn', `worktree: could not clean up ${dir}: ${e.message.split('\n')[0]}`);
+    }
     if (fs.existsSync(dir)) continue; // locked by a process: the worktree and its scratch stay for the next cleanup
-    removeScratch(path.join(runsDir, name));
+    if (!baseOf) removeScratch(runDir);
     removed.push(dir);
-    log('info', `worktree: removed orphan ${dir}`);
+    log('info', `worktree: removed ${dir}`);
+  }
+  // #201: the scratch workspace of an ended run whose worktree folder is already gone
+  let runNames = [];
+  try { runNames = fs.readdirSync(runsDir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name); } catch { runNames = []; }
+  for (const name of runNames) {
+    const runDir = path.join(runsDir, name);
+    if (!fs.existsSync(path.join(runDir, 'scratch')) || fs.existsSync(path.join(worktreesDir, name))) continue;
+    const run = runState(runDir);
+    if (run.live || Date.now() - run.endedAt < scratchDays * 864e5) continue;
+    if (removeScratch(runDir)) log('info', `worktree: removed the scratch workspace of ended run ${name}`);
   }
   return removed;
 }
@@ -340,4 +453,6 @@ module.exports = {
   git, identityArgs, FETCH_TIMEOUT_MS,
   prepareBaseWorktree,
   removeScratch,
+  restoreWork,
+  retireWorktree,
 };

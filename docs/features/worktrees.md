@@ -26,9 +26,13 @@ defaults:
 - **Success**: the worktree is removed (`git worktree remove --force` + `prune`) and the run's
   local branch is deleted if it is merged into `origin/<base>` (squash merges included); otherwise
   the branch is kept.
-- **Failed, cancelled or interrupted**: the worktree is kept. **Resume** from a step continues in
-  the same folder (so resumed CLI sessions keep their working directory); if it was deleted, it is
-  recreated from the run's branch.
+- **Failed, cancelled or interrupted**: the branch keeps the work, not the folder. A detached
+  worktree gets a branch (run/<run id>), anything uncommitted becomes a WIP commit naming the run,
+  then the folder and the run's scratch are removed (the branch never is). **Resume** from a step
+  recreates the folder, at the same path, from the run's branch (so resumed CLI sessions keep their
+  working directory) and gives the WIP back as uncommitted work. The app cleans up the folders of
+  ended runs at start and every 30 minutes; a run in progress, live in another app window or waiting
+  at a human gate keeps its folder.
 - The path, branch and outcome are in `summary.json` (`worktree`) and in the `worktree.ready`,
   `worktree.kept` and `worktree.removed` events. Sessions record their `cwd`; a session terminal of
   a removed worktree opens in the repository folder instead.

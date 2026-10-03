@@ -59,8 +59,8 @@
 #
 # Failure gates (human): they only offer what can change the outcome. Retrying
 # something that cannot change (the same commit, the same failed run) is not offered as
-# the way out of a code failure; stopping ends the run as `failed` (worktree kept, so it
-# can be resumed), rejecting the merge or the review loop ends it as `cancelled`.
+# the way out of a code failure; stopping ends the run as `failed` (its branch keeps the work, so
+# it can be resumed), rejecting the merge or the review loop ends it as `cancelled`.
 #
 # Rules:
 #   - Agents never talk to each other: everything goes through the orchestrator
@@ -701,7 +701,7 @@ steps:
     choices:
       - { id: approve, label: "Approve: go on to the code review" }
       - { id: changes, label: "Ask for changes: back to the developer", feedback_required: true }
-      - { id: stop,    label: "Stop the run (worktree kept to resume)" }
+      - { id: stop,    label: "Stop the run (branch kept to resume)" }
     transitions:
       - when: "choice == 'approve'"
         goto: code_review
@@ -724,7 +724,7 @@ steps:
       The rest is on branch `{{ steps.develop.output.branch }}`; the code review has not run yet.
     choices:
       - { id: continue, label: "Continue without them" }
-      - { id: stop,     label: "Stop the run as failed (worktree kept to resume)" }
+      - { id: stop,     label: "Stop the run as failed (branch kept to resume)" }
     transitions:
       # nothing committed yet: the developer commits the rest first
       - when: "choice == 'continue' and not (steps.develop.output.committed or steps.develop.output.no_change)"
@@ -757,7 +757,7 @@ steps:
       The other issues are done on branch `{{ steps.develop.output.branch }}`.
     choices:
       - { id: continue, label: "Continue without them (the PR/MR will not close them)" }
-      - { id: stop,     label: "Stop the run as failed (worktree kept to resume)" }
+      - { id: stop,     label: "Stop the run as failed (branch kept to resume)" }
     transitions:
       - when: "(choice == 'continue' and inputs.mode == 'validated' and vars.owner_validated != 'yes') and inputs.screenshots == 'off'"
         goto: developer_check
@@ -1095,7 +1095,7 @@ steps:
       {{ steps.test.output.failure_report }}
       {% endif %}
       {{ tests_plan }}
-      Approve: continue to the build anyway (the change is reported as not tested green). Reject: stop the run as failed (the worktree is kept to resume it).
+      Approve: continue to the build anyway (the change is reported as not tested green). Reject: stop the run as failed (its branch keeps the work to resume it).
     transitions:
       - when: "approved"
         goto: build
@@ -1170,7 +1170,7 @@ steps:
     choices:
       - { id: continue, label: "Continue to verification anyway" }
       - { id: retry,    label: "Build again (I fixed the environment)" }
-      - { id: stop,     label: "Stop the run as failed (worktree kept to resume)" }
+      - { id: stop,     label: "Stop the run as failed (branch kept to resume)" }
     transitions:
       - when: "choice == 'continue'"
         goto: evidence
@@ -1341,7 +1341,7 @@ steps:
       The change still does not do what the task asked after 2 rounds of fixes.
       Claim: {{ steps.verify_change.output.claim }}
       Observed: {{ steps.verify_change.output.evidence }}
-      Approve: continue to CI anyway. Reject: stop the run as failed (the worktree is kept to resume it).
+      Approve: continue to CI anyway. Reject: stop the run as failed (its branch keeps the work to resume it).
     transitions:
       - when: "approved"
         goto: ci
@@ -1464,7 +1464,7 @@ steps:
     choices:
       - { id: fix,     label: "Send the failure to the developer (one more fix round, then CI again)" }
       - { id: recheck, label: "Check CI again without code changes (stuck or flaky pipeline, re-run by you)" }
-      - { id: stop,    label: "Stop the run as failed (worktree kept to resume)" }
+      - { id: stop,    label: "Stop the run as failed (branch kept to resume)" }
     transitions:
       - when: "choice == 'fix'"
         delegate:
@@ -1667,7 +1667,7 @@ steps:
     choices:
       - { id: retry, label: "Publish the same commit again (infrastructure failure)" }
       - { id: fix,   label: "Send the failure to the developer (fix, then CI, PR check and preview again)" }
-      - { id: stop,  label: "Stop the run as failed (worktree kept to resume)" }
+      - { id: stop,  label: "Stop the run as failed (branch kept to resume)" }
     transitions:
       - when: "choice == 'retry'"
         goto: deploy_test
@@ -1795,7 +1795,7 @@ steps:
     choices:
       - { id: retry,   label: "Merge now (checked right before; you approve the PR/MR's current head)" }
       - { id: resolve, label: "Send it to the developer to resolve (then review, tests, CI, preview and your approval again)" }
-      - { id: stop,    label: "Stop the run as failed (worktree kept to resume)" }
+      - { id: stop,    label: "Stop the run as failed (branch kept to resume)" }
     transitions:
       - when: "choice == 'retry'"
         precheck:

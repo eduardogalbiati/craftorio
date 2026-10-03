@@ -18,6 +18,9 @@ const path = require('path');
 const { storeFor } = require('./store');
 
 const INTERNAL = new Set(['events.jsonl', 'meta.json', 'summary.json']);
+// top-level folders that are not the run's output: its sessions, and the scratch workspace of its
+// agents' checks (#120, #201; a file an agent saved there on purpose is listed from its file.saved)
+const SKIPPED_DIRS = new Set(['scratch', 'sessions']);
 const KINDS = { '.md': 'markdown', '.markdown': 'markdown', '.json': 'json', '.jsonl': 'json', '.tsv': 'table', '.csv': 'table', '.txt': 'text', '.log': 'text', '.yaml': 'text', '.yml': 'text', '.html': 'text', '.patch': 'text', '.diff': 'text', '.png': 'image', '.jpg': 'image', '.jpeg': 'image', '.gif': 'image', '.webp': 'image' };
 const kindOf = (file) => KINDS[path.extname(file).toLowerCase()] || 'other';
 const normPath = (p) => {
@@ -28,13 +31,13 @@ const SAVED_TYPES = new Set(['file.saved', 'handoff.saved']);
 const READ_CHUNK = 1024 * 1024;
 const STAT_BATCH = 64;
 
-/** The files of a run folder (relative paths), without sessions/ and the run's own logs (sync). */
+/** The files of a run folder (relative paths), without sessions/, scratch/ and the run's own logs (sync). */
 function walkFiles(dir, rel = '') {
   let entries = [];
   try { entries = fs.readdirSync(path.join(dir, rel), { withFileTypes: true }); } catch { return []; }
   return entries.flatMap((e) => {
     const r = rel ? path.join(rel, e.name) : e.name;
-    if (e.isDirectory()) return rel === '' && e.name === 'sessions' ? [] : walkFiles(dir, r);
+    if (e.isDirectory()) return rel === '' && SKIPPED_DIRS.has(e.name) ? [] : walkFiles(dir, r);
     return rel === '' && INTERNAL.has(e.name) ? [] : [r];
   });
 }
@@ -45,7 +48,7 @@ async function walkFilesAsync(dir, rel = '') {
   const out = [];
   for (const e of entries) {
     const r = rel ? path.join(rel, e.name) : e.name;
-    if (e.isDirectory()) { if (!(rel === '' && e.name === 'sessions')) out.push(...await walkFilesAsync(dir, r)); }
+    if (e.isDirectory()) { if (!(rel === '' && SKIPPED_DIRS.has(e.name))) out.push(...await walkFilesAsync(dir, r)); }
     else if (!(rel === '' && INTERNAL.has(e.name))) out.push(r);
   }
   return out;

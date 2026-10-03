@@ -334,7 +334,7 @@ steps:
       {% else %}Tests still fail after 3 rounds of production fixes:
       {{ steps.test.output.failure_report }}
       {% endif %}
-      Approve: one more round of the test writer. Reject: stop the run as failed (the worktree is kept to resume it).
+      Approve: one more round of the test writer. Reject: stop the run as failed (its branch keeps the work to resume it).
     transitions:
       - when: "approved"
         goto: test

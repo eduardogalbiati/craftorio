@@ -1352,6 +1352,15 @@ function main() {
             await demoEvidence(win, live);
             await js(`ArtifactsPanel.refreshRun(${JSON.stringify(path.basename(live))}); window.mountGateScenarios?.(document)`);
           }
+          // a live run with a worktree has a scratch workspace (#201; a simulated run has none): a few
+          // demo files, for the Run screen's "Scratch workspace" line
+          if (live) {
+            for (const [rel, text] of [['workspace/skills/code-review/SKILL.md', '# Code review\n'], ['workspace/workflows/software-development.yaml', 'name: demo\n'], ['user-data/Local State', '{}']]) {
+              fs.mkdirSync(path.dirname(path.join(live, 'scratch', rel)), { recursive: true });
+              fs.writeFileSync(path.join(live, 'scratch', rel), text.repeat(400));
+            }
+            await js('scratchOfRun.clear(); renderRunSummary()');
+          }
           await pause(2500); // the gate's Artifacts panel and changed files load
         } else await pause(args.wait);
       } finally {

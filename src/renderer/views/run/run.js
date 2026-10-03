@@ -130,10 +130,31 @@ function testsPlanHtml(plan) {
   return `<div class="small run-tests-plan">${plan.map((p) => `<span class="badge${p.value === 'off' ? ' warn' : ''}" title="${esc(`${p.label}: ${p.value_label} (${p.source})${p.value === 'off' ? ': nothing of it is tested in this run' : ''}`)}">${esc(p.label)}: ${esc(p.value_label)}</span>`).join(' ')}</div>`;
 }
 
+// The run's scratch workspace (#201: its agents' checks, not artifacts), read at most every 15 s
+// per run: runId → { info: { dir, files, bytes } | null, at }. Shown only while it exists.
+const scratchOfRun = new Map();
+function askScratch(runId) {
+  const cur = scratchOfRun.get(runId);
+  if (cur && (cur.pending || Date.now() - cur.at < 15000)) return;
+  scratchOfRun.set(runId, { ...(cur || { info: null }), pending: true, at: Date.now() });
+  api.runScratch(runId).then((info) => info, () => null).then((info) => {
+    scratchOfRun.set(runId, { info, at: Date.now() });
+    if (state.run?.id === runId && state.view === 'run') renderRunSummary();
+  });
+}
+
+function scratchHtml(runId) {
+  const s = scratchOfRun.get(runId)?.info;
+  if (!s) return '';
+  return `<div class="small run-scratch" title="A scratch copy of the workspace for the checks of this run's agents (simulated runs, screenshots): not artifacts, removed once the run ends. ${esc(s.dir)}">`
+    + `Scratch workspace (${esc(s.files)} file${s.files === 1 ? '' : 's'}, ${esc(fmtSize(s.bytes))}) <button class="btn sm ghost" id="btn-run-scratch">Open folder</button></div>`;
+}
+
 function renderRunSummary() {
   const r = state.run;
   if (!r) return;
   askPrStates([r]);
+  askScratch(r.id);
   const all = Object.entries(r.inputs || {}).filter(([, v]) => v !== undefined && v !== null && v !== '' && !(Array.isArray(v) && !v.length));
   // #216: the choices (enum and yes/no inputs) as the shared pills, with their labels; the rest
   // (task, paths, numbers) as key / value
@@ -151,6 +172,7 @@ function renderRunSummary() {
     ${(r.issueSaves || []).map((s) => `<div class="small" title="The accepted document was saved to the issue (Save to issue, Write & Review)">Saved to issue: <a href="${esc(s.commentUrl || s.url)}" target="_blank" rel="noopener">#${esc(s.number)}</a> · ${s.mode === 'comment' ? 'as a comment' : 'description replaced'} · ${esc(new Date(s.at).toLocaleString('en-US'))}</div>`).join('')}
     ${r.gateWaitMs ? `<div class="small" title="Time the run waited for your answers at its human gates: no agent works (or costs) meanwhile">Waiting for you at gates: <b>${esc(fmtDur(r.gateWaitMs))}</b></div>` : ''}
     ${testsPlanHtml(r.testsPlan)}
+    ${scratchHtml(r.id)}
     ${pills ? `<div class="run-input-pills">${pills}</div>` : ''}
     <dl class="kv run-inputs">${inputs.map(([k, v]) => `<dt title="${esc(k)}">${esc(k)}</dt>${inputValueCell(v)}`).join('')}</dl>
     ${inputImagesHtml()}
@@ -173,6 +195,7 @@ function renderRunSummary() {
   $('#btn-run-sup').onclick = () => openSupervisorForCurrent();
   if ($('#btn-run-watch')) $('#btn-run-watch').onclick = () => openSupervisorForCurrent({ watch: true });
   if ($('#btn-run-resume')) $('#btn-run-resume').onclick = () => openResumeDialog(r.id);
+  if ($('#btn-run-scratch')) $('#btn-run-scratch').onclick = () => api.openPath(scratchOfRun.get(r.id)?.info?.dir).catch((e) => showToast('Could not open the folder', errMsg(e)));
   if ($('#btn-run-diff')) $('#btn-run-diff').onclick = () => DiffViewer.open({ runId: r.id, title: r.title || r.workflow || '' });
   if ($('#btn-run-save-issue')) {
     $('#btn-run-save-issue').onclick = () => window.openDuoSaveToIssue({ runId: r.id, issue: saveIssue, mock: !!r.mock, docSkill: r.inputs?.document_skill || '' });

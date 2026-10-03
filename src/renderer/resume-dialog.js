@@ -49,7 +49,10 @@ function resumeEffects(o, stepId) {
   const kept = [
     before.length ? `the outputs of ${before.map((s) => `<b>${esc(s)}</b>`).join(', ')}` : 'no earlier outputs (it starts at the beginning)',
     o.sessions.length || o.handoffs.length ? `the agents' sessions and handoff notes (${esc([...new Set([...o.sessions, ...o.handoffs])].join(', '))})` : '',
-    wt ? (wt.exists ? `the worktree and branch <span class="mono">${esc(wt.branch || '')}</span> <span class="muted mono">${esc(wt.dir)}</span>` : 'not the worktree: it was removed, so the run starts a new one from the base') : '',
+    wt ? (wt.exists ? `the worktree and branch <span class="mono">${esc(wt.branch || '')}</span> <span class="muted mono">${esc(wt.dir)}</span>`
+      // #202: an ended run keeps its branch, not its folder
+      : wt.branch ? `the branch <span class="mono">${esc(wt.branch)}</span>: its worktree folder is recreated from it, with the previous attempt's uncommitted work <span class="muted mono">${esc(wt.dir)}</span>`
+        : 'not the worktree: it was removed, so the run starts a new one from the base') : '',
   ].filter(Boolean);
   return `<div><b>Kept:</b> ${kept.join('; ')}.</div>
     <div><b>Runs again:</b> <b>${esc(stepId)}</b> and the steps its transitions lead to${again.length > 1 ? ` (reached before: ${again.slice(1).map(esc).join(', ')})` : ''}.</div>

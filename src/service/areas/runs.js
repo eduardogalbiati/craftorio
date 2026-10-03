@@ -406,10 +406,17 @@ module.exports = (ctx) => {
     return { interrupted: list };
   }
 
-  // run worktrees left behind: succeeded runs whose removal failed, or unused for 14 days
-  // (call at startup; the worktrees of runs in progress are never touched); then the dependency
+  // run worktrees left behind (#202): every run not in progress here, live in another app process
+  // or waiting at a human gate loses its folder (its branch keeps the work), and the scratch of
+  // runs that ended days ago goes (#201). At startup and every 30 minutes; one pass at a time. Then the dependency
   // cache's entries no worktree links any more (#198: unused for 14 days, or over the size cap)
-  const cleanupRunWorktrees = async () => {
+  let cleaning = null;
+  const cleanupRunWorktrees = () => {
+    cleaning ??= cleanupPass().finally(() => { cleaning = null; });
+    return cleaning;
+  };
+  const cleanupPass = async () => {
+    if (!ctx.ws) return [];
     const removed = await cleanupWorktrees({
       worktreesDir: ctx.ws.worktrees, runsDir: ctx.ws.runs,
       active: [...active.values()].flatMap((r) => [r.worktree?.dir, r.resume?.worktree?.dir, path.join(ctx.ws.worktrees, r.runId), path.join(ctx.ws.worktrees, `${r.runId}-base`)]).filter(Boolean),

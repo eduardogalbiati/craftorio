@@ -79,6 +79,8 @@ const service = createService({
 });
 service.setWorkspace(ws);
 service.cleanupWorktrees().catch((e) => console.error('worktree cleanup:', e.message));
+// then every 30 minutes, as in the app (#202)
+setInterval(() => service.cleanupWorktrees().catch((e) => console.error('worktree cleanup:', e.message)), 30 * 60 * 1000).unref();
 service.clearPastedImages();
 
 const token = process.env.MULTIAGENT_SERVER_TOKEN || crypto.randomBytes(24).toString('base64url');

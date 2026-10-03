@@ -337,7 +337,7 @@ steps:
       E2E scenarios still fail after {{ inputs.max_rounds }} fix round(s):
       {{ steps.e2e.output.failure_report }}
       {{ steps.e2e.output | e2e_scenarios }}
-      Approve: one more fix round. Reject: stop the run as failed (the worktree is kept to resume it).
+      Approve: one more fix round. Reject: stop the run as failed (its branch keeps the work to resume it).
     transitions:
       - when: "approved"
         goto: fix

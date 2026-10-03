@@ -47,6 +47,9 @@ module.exports = (ctx) => [
     params: ['runId', '...opts'],
     fn: ({ runId, activity }) => runs.runEvents(ctx.runFolder(runId), { activity: !!activity }),
   },
+  // the run's scratch workspace (#201: not artifacts, shown on the Run screen while it exists):
+  // { dir, files, bytes } or null
+  { channel: 'runs:scratch', method: 'runScratch', params: ['runId'], fn: ({ runId }) => runs.runScratch(ctx.runFolder(runId)) },
   // answer: true/false or the id of a choice; feedback: the optional text typed at the gate;
   // intent: 'save_to_issue' for "Accept and save to issue #n" (#125).
   // Gate ids are per run (a1, a2…): runId says which run (without it, the only run waiting on that id).

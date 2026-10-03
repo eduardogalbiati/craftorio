@@ -19,7 +19,7 @@ the worktree**, **Terminal there**), then:
 - **Ask for changes** (needs a text): the developer gets it as your change request, fixes it on the
   same branch with a new commit, answers each point, and the run comes back to `developer_check`.
   No automatic limit: you decide when to stop;
-- **Stop**: ends the run (`cancelled`), worktree kept to resume.
+- **Stop**: ends the run (`cancelled`); its branch keeps the work to resume it.
 
 Only the first implementation and your own change requests stop there; the reviewer's, the tests',
 the build's and the verifier's fix rounds go on without it, unless **Validate every round** is on (`validate_every_round: true`, a switch shown under Validated).

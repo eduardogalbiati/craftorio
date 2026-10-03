@@ -393,7 +393,7 @@ function projectOf(run, projectList) {
 // ---------------------------------------------------------------------------
 // Artifacts: files a run produced. Those written by the engine (`save_as`, `file.saved`
 // events, possibly outside the run folder, e.g. docs/arena in the project) plus any other file
-// in the run folder, except the run's own logs. The lists and the Artifacts screen read them from
+// in the run folder, except the run's own logs and its scratch workspace (#201). The lists and the Artifacts screen read them from
 // the cached, asynchronous index of src/run-artifacts.js (#200); runArtifacts reads one run at once.
 // ---------------------------------------------------------------------------
 
@@ -427,6 +427,28 @@ function runArtifacts(runDir) {
     if (!byPath.has(normPath(file))) add(file, { step: null, agent: null });
   }
   return [...byPath.values()].sort((a, b) => a.rel.localeCompare(b.rel));
+}
+
+/** The run's scratch workspace (#201), for the Run screen: { dir, files, bytes }, or null when there is none. */
+function runScratch(runDir) {
+  const dir = path.join(runDir, 'scratch');
+  if (!fs.existsSync(dir)) return null;
+  let files = 0;
+  let bytes = 0;
+  const walk = (d) => {
+    let entries = [];
+    try { entries = fs.readdirSync(d, { withFileTypes: true }); } catch { return; }
+    for (const e of entries) {
+      const p = path.join(d, e.name);
+      if (e.isDirectory()) walk(p);
+      else if (e.isFile()) {
+        files++;
+        try { bytes += fs.statSync(p).size; } catch { /* deleted since */ }
+      }
+    }
+  };
+  walk(dir);
+  return { dir, files, bytes };
 }
 
 // A run's events without the streamed CLI output (session.stream), which is most of the file:
@@ -478,6 +500,7 @@ module.exports = {
   runArtifacts,
   runEvents,
   runPr,
+  runScratch,
   runsForProject,
   runSummaries,
   runTitle,

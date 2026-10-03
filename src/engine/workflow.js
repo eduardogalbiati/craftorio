@@ -54,6 +54,8 @@ const {
   prepareWorktree,
   removeScratch,
   removeWorktree,
+  restoreWork,
+  retireWorktree,
 } = require('./worktree');
 const capabilities = require('./capabilities');
 const depsCache = require('./deps-cache');
@@ -1152,6 +1154,15 @@ class WorkflowRun extends EventEmitter {
     }
     this.worktree = info;
     this.ctx.worktree_dir = info.workDir;
+    // #202: recreated from the previous run's branch, whose WIP commit (saveWork) holds what that
+    // attempt left uncommitted: back as uncommitted (staged) changes, and the agent is told
+    if (info.recreated && prev?.branch && info.ref === prev.branch && await restoreWork(info.dir)) {
+      info.commit = await git(['rev-parse', 'HEAD'], info.dir);
+      const st = this.ctx.steps[this.resume.fromStep];
+      const note = 'The worktree holds uncommitted work from the previous attempt of this run (saved as a WIP commit when it ended, restored as staged changes): check it with `git status` and `git diff --cached`, keep what is right and commit it with your own work.';
+      st.supervisorNote = st.supervisorNote ? `${st.supervisorNote}\n\n${note}` : note;
+      log('info', `worktree: restored the previous attempt's uncommitted work on ${prev.branch}`);
+    }
     const how = info.reused ? 'reusing' : info.recreated ? 'recreated' : 'created';
     this.emitEvent('worktree.ready', {
       dir: info.dir, work_dir: info.workDir, repo: info.repo, base: info.base, ref: info.ref, commit: info.commit, reused: info.reused, recreated: info.recreated,
@@ -1277,7 +1288,8 @@ class WorkflowRun extends EventEmitter {
   }
 
   // Success: remove the worktree and its local branch when merged, and the run's scratch workspace.
-  // Otherwise keep both for a resume.
+  // Otherwise (#202) the branch keeps the work (uncommitted changes as a WIP commit, a detached
+  // worktree gets a branch) and the folder and the scratch go; a resume recreates the folder.
   async finishWorktree(status) {
     const wt = this.worktree;
     if (!wt) return;
@@ -1296,12 +1308,19 @@ class WorkflowRun extends EventEmitter {
         log('info', `worktree: removed ${wt.dir}${r.branch ? `; branch ${r.branch} ${r.branchDeleted ? 'deleted (merged)' : 'kept'}` : ''}`);
         if (r.removed && removeScratch(this.runDir)) log('info', `worktree: removed the run's scratch workspace ${path.join(this.runDir, 'scratch')}`);
       } else {
-        Object.assign(wt, { removed: false, branch: await currentBranch(wt.dir) });
-        this.emitEvent('worktree.kept', { dir: wt.dir, branch: wt.branch });
-        log('info', `worktree: kept ${wt.dir}${wt.branch ? ` (branch ${wt.branch})` : ''} to resume the run`);
+        const r = await retireWorktree({ repo: wt.repo, dir: wt.dir, runId: this.runId, log });
+        Object.assign(wt, { removed: r.removed, branch: r.branch, branchDeleted: false });
+        this.emitEvent('worktree.removed', { dir: wt.dir, removed: r.removed, branch: r.branch, branch_deleted: false, wip_commit: r.wipCommit });
+        log('info', `worktree: ${r.removed ? 'removed' : 'could not remove (the cleanup retries)'} ${wt.dir}; branch ${r.branch} keeps the work to resume the run`);
+        if (r.removed && removeScratch(this.runDir)) log('info', `worktree: removed the run's scratch workspace ${path.join(this.runDir, 'scratch')}`);
       }
     } catch (e) {
       log('warn', `worktree: cleanup failed: ${e.message}`);
+      if (status !== 'success' && !wt.removed) {
+        // the work could not be saved on the branch: the folder stays, as it is
+        Object.assign(wt, { removed: false, branch: await currentBranch(wt.dir) });
+        this.emitEvent('worktree.kept', { dir: wt.dir, branch: wt.branch });
+      }
     }
   }
 
@@ -2498,7 +2517,7 @@ class WorkflowRun extends EventEmitter {
   // orchestrator.limits.max_total_context (e.g. 20M): the context the run's agents have read
   // (input + cache read/write, summed over every turn). Past it, the run pauses before the next
   // agent turn until the user answers: Continue grants one more block of the same size, Stop
-  // ends the run as cancelled (its worktree is kept, so it can be resumed). Never cuts a turn.
+  // ends the run as cancelled (its branch keeps the work, so it can be resumed). Never cuts a turn.
   async contextGate(stepId) {
     const raw = this.wf.orchestrator?.limits?.max_total_context;
     const lim = raw == null ? null : parseTokens(render(String(raw), this.ctx));
@@ -2510,7 +2529,7 @@ class WorkflowRun extends EventEmitter {
     this.emitEvent('limit.exceeded', { limit: 'max_total_context', value: this.contextAllowance, current: used, paused: true });
     const { answer } = await this.requestApproval({
       id: `${stepId}:context_limit`, raw: true,
-      message: `Paused: this run's agents have read ${m(used)} tokens of context, past its limit of ${m(this.contextAllowance)} (orchestrator.limits.max_total_context).\n\nContinue to allow another ${m(lim)}, or stop the run (its worktree is kept, so it can be resumed).`,
+      message: `Paused: this run's agents have read ${m(used)} tokens of context, past its limit of ${m(this.contextAllowance)} (orchestrator.limits.max_total_context).\n\nContinue to allow another ${m(lim)}, or stop the run (its branch keeps the work, so it can be resumed).`,
       choices: [{ id: 'continue', label: `Continue (another ${m(lim)})` }, { id: 'stop', label: 'Stop the run' }],
     });
     if (answer !== 'continue') {
@@ -3561,7 +3580,7 @@ class WorkflowRun extends EventEmitter {
   // The `merge: local` transition (local workflows): fast-forwards the local base to the run's
   // branch, rebasing it first when the base moved; see mergeLocally in src/engine/worktree.js.
   // A failure (conflict, uncommitted changes where the base is checked out) fails the run with
-  // the reason; the worktree is kept, so the run can be resumed after fixing it.
+  // the reason; its branch keeps the work, so the run can be resumed after fixing it.
   async mergeWorktreeLocally() {
     if (this.mock) {
       this.emitEvent('action.executed', { command: 'merge: local', skipped: true, output: '[mock] local merge not executed' });

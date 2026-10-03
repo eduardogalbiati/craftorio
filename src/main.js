@@ -401,7 +401,10 @@ app.whenReady().then(async () => {
   setInterval(() => keepAwake.update(), 15 * 1000).unref();
   restrictPermissions(session.defaultSession);
   createWindow();
+  // ended runs' worktrees and scratch (#202, #201): at start, then every 30 minutes (a folder a
+  // process held is retried)
   service.cleanupWorktrees().catch((e) => console.error('worktree cleanup:', e));
+  setInterval(() => service.cleanupWorktrees().catch((e) => console.error('worktree cleanup:', e)), 30 * 60 * 1000).unref();
   service.clearPastedImages();
   // the trial can end while the app is open
   const checkAccount = () => auth.refresh().catch((e) => console.error('account:', e.message));

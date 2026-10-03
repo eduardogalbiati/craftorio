@@ -33,7 +33,7 @@
 #     uncommitted changes in the checkout where <base> is checked out: the user's) or running out
 #     of rounds stops at merge_blocked.
 #   - orchestrator.limits.max_total_context: past 40M tokens of context the run pauses before its
-#     next agent turn; Continue allows another 40M, Stop ends it (worktree kept).
+#     next agent turn; Continue allows another 40M, Stop ends it (branch kept).
 #   - Commits end with "Closes #<n>" for the run's issues: GitHub closes them when you push <base>.
 # Push whenever you want: `git push origin <base>` from the repository.
 #
@@ -626,7 +626,7 @@ steps:
     choices:
       - { id: approve, label: "Approve: go on to the code review", help: "The code review, the tests and the verification run next; you are asked again only on a failure." }
       - { id: changes, label: "Ask for changes: back to the developer", feedback_required: true, help: "Sends your text to the developer; the run comes back to this gate after the fix." }
-      - { id: stop,    label: "Stop the run (worktree kept to resume)", help: "Ends the run as cancelled; nothing is merged and the worktree is kept to resume it." }
+      - { id: stop,    label: "Stop the run (branch kept to resume)", help: "Ends the run as cancelled; nothing is merged and its branch keeps the work to resume it." }
     transitions:
       - when: "choice == 'approve'"
         goto: code_review
@@ -653,7 +653,7 @@ steps:
       The rest is on branch `{{ steps.develop.output.branch }}`; the code review has not run yet.
     choices:
       - { id: continue, label: "Continue without them", help: "Accepts the gaps: the run goes on to the review and the tests with what was done." }
-      - { id: stop,     label: "Stop the run as failed (worktree kept to resume)", help: "Ends the run as failed; nothing is merged and the worktree is kept to resume it." }
+      - { id: stop,     label: "Stop the run as failed (branch kept to resume)", help: "Ends the run as failed; nothing is merged and its branch keeps the work to resume it." }
     transitions:
       # nothing committed yet: the developer commits the rest first
       - when: "choice == 'continue' and not (steps.develop.output.committed or steps.develop.output.no_change)"
@@ -689,7 +689,7 @@ steps:
       The other issues are done on branch `{{ steps.develop.output.branch }}`.
     choices:
       - { id: continue, label: "Continue without them", help: "The run goes on with the issues that are done; the others stay open." }
-      - { id: stop,     label: "Stop the run as failed (worktree kept to resume)", help: "Ends the run as failed; nothing is merged and the worktree is kept to resume it." }
+      - { id: stop,     label: "Stop the run as failed (branch kept to resume)", help: "Ends the run as failed; nothing is merged and its branch keeps the work to resume it." }
     transitions:
       - when: "(choice == 'continue' and inputs.mode == 'validated' and vars.owner_validated != 'yes') and inputs.screenshots == 'off'"
         goto: developer_check
@@ -779,7 +779,7 @@ steps:
     approve_label: "Go on to testing anyway"
     approve_help: "The tests, the build and the verification run with the review's findings left open."
     reject_label: "Stop the run"
-    reject_help: "Ends the run as cancelled; nothing is merged and the worktree is kept to resume it."
+    reject_help: "Ends the run as cancelled; nothing is merged and its branch keeps the work to resume it."
     message: |
       The review loop did not converge in 3 iterations.
       Go on to testing anyway: move on to testing. Stop the run: the run ends as cancelled.
@@ -1038,7 +1038,7 @@ steps:
     approve_label: "Continue to the build anyway"
     approve_help: "The build and the verification run; the change is reported as not tested green."
     reject_label: "Stop the run"
-    reject_help: "Ends the run as failed; nothing is merged and the worktree is kept to resume it."
+    reject_help: "Ends the run as failed; nothing is merged and its branch keeps the work to resume it."
     message: |
       {% if previous_step == 'suite' and steps.suite.output.status == 'blocked' %}The project's test suite could not run:
       {{ steps.suite.output.reason }}
@@ -1049,7 +1049,7 @@ steps:
       {{ steps.test.output.failure_report }}
       {% endif %}
       {{ tests_plan }}
-      Continue to the build anyway: the change is reported as not tested green. Stop the run: the run ends as failed (the worktree is kept to resume it).
+      Continue to the build anyway: the change is reported as not tested green. Stop the run: the run ends as failed (its branch keeps the work to resume it).
     transitions:
       - when: "approved"
         goto: build
@@ -1129,7 +1129,7 @@ steps:
     choices:
       - { id: continue, label: "Continue to verification anyway", help: "The verification runs with the build still failing; the change may be merged without a green build." }
       - { id: retry,    label: "Build again (I fixed the environment)", help: "Runs the build again; useful only after you fixed what blocked it." }
-      - { id: stop,     label: "Stop the run as failed (worktree kept to resume)", help: "Ends the run as failed; nothing is merged and the worktree is kept to resume it." }
+      - { id: stop,     label: "Stop the run as failed (branch kept to resume)", help: "Ends the run as failed; nothing is merged and its branch keeps the work to resume it." }
     transitions:
       - when: "choice == 'continue'"
         goto: evidence
@@ -1315,7 +1315,7 @@ steps:
     approve_label: "Merge anyway"
     approve_help: "Merges the branch into the local {{ inputs.base_branch }} as it is, unverified (nothing is pushed)."
     reject_label: "Stop the run"
-    reject_help: "Ends the run as failed; nothing is merged and the worktree is kept to resume it."
+    reject_help: "Ends the run as failed; nothing is merged and its branch keeps the work to resume it."
     message: |
       The change still does not do what the task asked after 2 rounds of fixes.
       Claim: {{ steps.verify_change.output.claim }}
@@ -1323,7 +1323,7 @@ steps:
       {{ tests_plan }}{% if steps.suite.output %} {{ steps.suite.output.message }}{% elif inputs.unit_tests == 'off' %} The test suite did not run in this run: nothing was tested here.{% endif %}
       Dev/QA: read the E2E scenarios and the screenshots; run the app and test by hand only what they do not cover.
       {% set e2e = steps.test.output | e2e_scenarios %}{% if e2e %}{{ e2e }}{% elif inputs.e2e_tests == 'off' %}E2E scenarios: off in this run (none written).{% else %}E2E scenarios: none reported by the test writer.{% endif %}
-      Merge anyway: merge it into the local {{ inputs.base_branch }} as it is. Stop the run: the run ends as failed (the worktree is kept to resume it).
+      Merge anyway: merge it into the local {{ inputs.base_branch }} as it is. Stop the run: the run ends as failed (its branch keeps the work to resume it).
     transitions:
       - when: "approved"
         merge: local
@@ -1402,7 +1402,7 @@ steps:
       Fix what is in the way (e.g. commit or stash the changes where {{ inputs.base_branch }} is checked out), then retry.
     choices:
       - { id: retry, label: "Retry the merge", help: "Tries the merge into the local {{ inputs.base_branch }} again; a conflict goes back to the developer." }
-      - { id: stop,  label: "Stop the run as failed (worktree kept to resume)", help: "Ends the run as failed; nothing is merged and the worktree is kept to resume it." }
+      - { id: stop,  label: "Stop the run as failed (branch kept to resume)", help: "Ends the run as failed; nothing is merged and its branch keeps the work to resume it." }
     transitions:
       - when: "choice == 'retry'"
         merge: local

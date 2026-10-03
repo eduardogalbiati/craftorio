@@ -144,7 +144,7 @@ the worktree**, **Terminal there**), then:
 - **Ask for changes** (needs a text): the developer gets it as your change request, fixes it on the
   same branch with a new commit, answers each point, and the run comes back to `developer_check`.
   No automatic limit: you decide when to stop;
-- **Stop**: ends the run (`cancelled`), worktree kept to resume.
+- **Stop**: ends the run (`cancelled`); its branch keeps the work to resume it.
 
 Only the first implementation and your own change requests stop there; the reviewer's, the tests',
 the build's and the verifier's fix rounds go on without it, unless **Validate every round** is on (`validate_every_round: true`, a switch shown under Validated).
@@ -1082,9 +1082,13 @@ defaults:
 - **Success**: the worktree is removed (`git worktree remove --force` + `prune`) and the run's
   local branch is deleted if it is merged into `origin/<base>` (squash merges included); otherwise
   the branch is kept.
-- **Failed, cancelled or interrupted**: the worktree is kept. **Resume** from a step continues in
-  the same folder (so resumed CLI sessions keep their working directory); if it was deleted, it is
-  recreated from the run's branch.
+- **Failed, cancelled or interrupted**: the branch keeps the work, not the folder. A detached
+  worktree gets a branch (run/<run id>), anything uncommitted becomes a WIP commit naming the run,
+  then the folder and the run's scratch are removed (the branch never is). **Resume** from a step
+  recreates the folder, at the same path, from the run's branch (so resumed CLI sessions keep their
+  working directory) and gives the WIP back as uncommitted work. The app cleans up the folders of
+  ended runs at start and every 30 minutes; a run in progress, live in another app window or waiting
+  at a human gate keeps its folder.
 - The path, branch and outcome are in `summary.json` (`worktree`) and in the `worktree.ready`,
   `worktree.kept` and `worktree.removed` events. Sessions record their `cwd`; a session terminal of
   a removed worktree opens in the repository folder instead.
