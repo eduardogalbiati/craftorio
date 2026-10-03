@@ -266,3 +266,59 @@ test('runWorkflowStep: foreach accepts JSON text or one item per line, besides a
   await runWorkflowStep({ step: { ...base, foreach: 'a\nb' }, scope: {}, render, startChild, emit: () => {}, parent: parent0 });
   assert.deepEqual(seen, ['a', 'b', 'a', 'b']);
 });
+
+// ---- #175: previous (resume), cost_usd, resumed/reused annotations ---------------------------
+
+test('runWorkflowStep: an item whose previous child has the same label is handed to startChild as `previous`', async () => {
+  const seen = [];
+  const startChild = async ({ parent, previous }) => {
+    seen.push({ index: parent.index, previous: previous || null });
+    return { runId: `r${parent.index}`, finished: Promise.resolve({ status: 'success', outputs: {} }), stop: () => {} };
+  };
+  const items = [{ title: 'a' }, { title: 'b' }];
+  const previous = { 0: { run_id: 'old-0', status: 'success', label: 'a' }, 1: { run_id: 'old-1', status: 'failed', label: 'different label' } };
+  await runWorkflowStep({
+    step: { id: 's', workflow: 'c.yaml', foreach: items, max_parallel: 2 },
+    scope: {}, render, startChild, emit: () => {}, parent: parent0, previous,
+  });
+  assert.deepEqual(seen.find((s) => s.index === 0).previous, { run_id: 'old-0', status: 'success' });
+  // item 1's label changed since the previous run (a relabeled item): it starts afresh, no `previous`
+  assert.equal(seen.find((s) => s.index === 1).previous, null);
+});
+
+test('runWorkflowStep: workflow.child_started carries resumed_from / reused from startChild\'s result', async () => {
+  const events = [];
+  const emit = (type, data) => events.push({ type, data });
+  const startChild = async () => ({ runId: 'r1', resumedFrom: 'old-run', finished: Promise.resolve({ status: 'success', outputs: {} }), stop: () => {} });
+  await runWorkflowStep({ step: { id: 's', workflow: 'c.yaml' }, scope: {}, render, startChild, emit, parent: parent0 });
+  const started = events.find((e) => e.type === 'workflow.child_started');
+  assert.equal(started.data.resumed_from, 'old-run');
+  assert.equal(started.data.reused, undefined);
+
+  events.length = 0;
+  const startChildReused = async () => ({ runId: 'r2', reused: true, finished: Promise.resolve({ status: 'success', outputs: {} }), stop: () => {} });
+  await runWorkflowStep({ step: { id: 's', workflow: 'c.yaml' }, scope: {}, render, startChild: startChildReused, emit, parent: parent0 });
+  const started2 = events.find((e) => e.type === 'workflow.child_started');
+  assert.equal(started2.data.reused, true);
+  assert.equal(started2.data.resumed_from, undefined);
+});
+
+test('runWorkflowStep: workflow.child_finished carries the child\'s cost_usd', async () => {
+  const events = [];
+  const emit = (type, data) => events.push({ type, data });
+  const startChild = async () => ({ runId: 'r1', finished: Promise.resolve({ status: 'success', outputs: {}, cost_usd: 1.234567 }), stop: () => {} });
+  await runWorkflowStep({ step: { id: 's', workflow: 'c.yaml' }, scope: {}, render, startChild, emit, parent: parent0 });
+  const finishedEv = events.find((e) => e.type === 'workflow.child_finished');
+  assert.equal(finishedEv.data.cost_usd, 1.234567);
+});
+
+test('runWorkflowStep: a child that fails to start because the signal is already aborted is reported cancelled, not failed', async () => {
+  const controller = new AbortController();
+  controller.abort();
+  const startChild = async () => { throw new Error('Cancelled: the parent run was stopped before this child run could start.'); };
+  const out = await runWorkflowStep({
+    step: { id: 's', workflow: 'c.yaml' }, scope: {}, render, startChild, emit: () => {}, signal: controller.signal, parent: parent0,
+  });
+  assert.equal(out.status, 'cancelled');
+  assert.match(out.error, /Cancelled: the parent run was stopped/);
+});

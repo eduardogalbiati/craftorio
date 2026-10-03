@@ -157,6 +157,33 @@ test('readRun derives parentRun and childRuns from events.jsonl when there is no
   assert.deepEqual(runs.readRun(root, 'c1').parentRun, parentRun);
 });
 
+test('readRun exposes childrenCostUsd (#175): from summary.children_cost_usd when there is one, else summed from each child\'s cost_usd', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-children-cost-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const childRuns = [
+    { run_id: 'c1', step_id: 'child', index: 0, workflow: 'child.yaml', status: 'success', cost_usd: 0.5 },
+    { run_id: 'c2', step_id: 'child', index: 1, workflow: 'child.yaml', status: 'success', cost_usd: 0.25 },
+  ];
+  fs.mkdirSync(path.join(root, 'with-summary'));
+  fs.writeFileSync(path.join(root, 'with-summary', 'events.jsonl'), jl({ ts: '2026-09-27T10:00:00Z', type: 'workflow.started', workflow: 'parent.yaml' }));
+  fs.writeFileSync(path.join(root, 'with-summary', 'summary.json'), JSON.stringify({ run_id: 'with-summary', workflow: 'parent.yaml', status: 'success', started_at: '2026-09-27T10:00:00Z', sessions: [], child_runs: childRuns, children_cost_usd: 0.75 }));
+  assert.equal(runs.readRun(root, 'with-summary').childrenCostUsd, 0.75);
+
+  fs.mkdirSync(path.join(root, 'no-summary'));
+  fs.writeFileSync(path.join(root, 'no-summary', 'events.jsonl'), jl(
+    { ts: '2026-09-27T10:00:00Z', type: 'workflow.started', workflow: 'parent.yaml' },
+    { ts: '2026-09-27T10:00:01Z', type: 'workflow.child_started', child_run_id: 'c1', step_id: 'child', index: 0, workflow: 'child.yaml' },
+    { ts: '2026-09-27T10:00:01Z', type: 'workflow.child_started', child_run_id: 'c2', step_id: 'child', index: 1, workflow: 'child.yaml' },
+    { ts: '2026-09-27T10:00:05Z', type: 'workflow.child_finished', child_run_id: 'c1', status: 'success', cost_usd: 0.5 },
+    { ts: '2026-09-27T10:00:06Z', type: 'workflow.child_finished', child_run_id: 'c2', status: 'success', cost_usd: 0.25 },
+  ));
+  assert.equal(runs.readRun(root, 'no-summary').childrenCostUsd, 0.75);
+
+  fs.mkdirSync(path.join(root, 'no-children'));
+  fs.writeFileSync(path.join(root, 'no-children', 'events.jsonl'), jl({ ts: '2026-09-27T10:00:00Z', type: 'workflow.started', workflow: 'solo.yaml' }));
+  assert.equal(runs.readRun(root, 'no-children').childrenCostUsd, 0);
+});
+
 test('readRun exposes the saves of its document to its issue (issue-saves.json), [] when there are none', (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-issue-saves-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));

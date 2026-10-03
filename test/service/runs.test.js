@@ -6,7 +6,9 @@ const path = require('path');
 const { setupWorkspace } = require('../../src/workspace');
 const { createService } = require('../../src/service');
 const backlog = require('../../src/backlog');
-const { WORKFLOW, makeService, until, untilTrue, watchRuns } = require('./helpers');
+const {
+  ISSUE_WORKFLOW, WORKFLOW, makeService, until, untilTrue, watchRuns,
+} = require('./helpers');
 
 test('runs a mock workflow, pushes its events and resolves the human gate', async (t) => {
   const { service, api } = makeService(t);
@@ -137,10 +139,9 @@ test('concurrent runs: simulations do not count unless the setting says so', asy
   await until(() => !service.isRunning());
 });
 
-// #174: a `type: workflow` step's child run ignores Settings > Execution entirely, even the
-// default of one run at a time (its parent holds that slot and waits for the child, so counting
-// the child too would deadlock every such workflow forever).
-test('concurrent runs: a `type: workflow` step\'s child run takes no execution slot, even with the default limit of one', async (t) => {
+// #175: a `type: workflow` step's child run takes a slot of Settings > Execution like any run, but
+// its idle parent (which only waits for it) lends it its own, so a limit of one never deadlocks.
+test('concurrent runs: a `type: workflow` step\'s child run takes a slot its idle parent lends it, even with the default limit of one', async (t) => {
   const { service, api } = makeService(t);
   const { gates, finished } = watchRuns(service);
   fs.writeFileSync(path.join(service.workspace().workflows, 'fixture-parent.yaml'), `apiVersion: multiagent/v1
@@ -167,6 +168,172 @@ steps:
   await until(() => finished.has(parentId));
   assert.equal(finished.get(parentId), 'success');
   assert.equal(finished.get(childInfo.runId), 'success');
+});
+
+// #175: children started together (a foreach step) wait for a slot instead of failing; the slot is
+// reserved in the same tick as the check that lets a child through, so two children that call
+// run:start at nearly the same time never both pass the check before either one reserves.
+test('concurrent runs: a limit of 1 runs a foreach step\'s children one at a time, even started in the same tick', async (t) => {
+  const { service, api } = makeService(t);
+  const { gates, finished } = watchRuns(service);
+  api['settings:set']({ concurrentRuns: { enabled: true, max: 1, perProject: null, countSimulations: true } });
+  fs.writeFileSync(path.join(service.workspace().workflows, 'fixture-parent-foreach.yaml'), `apiVersion: multiagent/v1
+kind: Workflow
+metadata:
+  name: fixture-parent-foreach
+agents:
+  a: { provider: claude, model: m, session: ephemeral }
+steps:
+  - id: children
+    type: workflow
+    workflow: fixture-service.yaml
+    foreach: [1, 2, 3]
+    max_parallel: 3
+`);
+  const { runId: parentId } = await api['run:start']({ file: 'fixture-parent-foreach.yaml', inputs: {}, mock: true });
+
+  let peakChildren = 0;
+  const resolved = new Set();
+  while (!finished.has(parentId)) {
+    const kids = api['runs:active']().filter((r) => r.runId !== parentId);
+    peakChildren = Math.max(peakChildren, kids.length);
+    for (const k of kids) {
+      if (gates.has(k.runId) && !resolved.has(k.runId)) {
+        resolved.add(k.runId);
+        api['approval:resolve']({ runId: k.runId, id: gates.get(k.runId), answer: true });
+      }
+    }
+    await new Promise((r) => setTimeout(r, 20));
+  }
+  assert.equal(peakChildren, 1, 'at most one child was active at a time');
+  assert.equal(resolved.size, 3, 'all three children ran, one at a time, before the parent finished');
+  assert.equal(finished.get(parentId), 'success');
+});
+
+// #175: stopping the parent while a child waits for a free slot cancels that wait (never starts the
+// child) and leaves no stale reservation behind.
+test('concurrent runs: stopping the parent while a child waits for a slot cancels it, without leaving a stale reservation', async (t) => {
+  const { service, api } = makeService(t);
+  const { gates, finished } = watchRuns(service);
+  api['settings:set']({ concurrentRuns: { enabled: true, max: 1, perProject: null, countSimulations: true } });
+  fs.writeFileSync(path.join(service.workspace().workflows, 'fixture-parent-foreach2.yaml'), `apiVersion: multiagent/v1
+kind: Workflow
+metadata:
+  name: fixture-parent-foreach2
+agents:
+  a: { provider: claude, model: m, session: ephemeral }
+steps:
+  - id: children
+    type: workflow
+    workflow: fixture-service.yaml
+    foreach: [1, 2]
+    max_parallel: 2
+`);
+  const childFinished = [];
+  service.events.on('run:event', (ev) => { if (ev.type === 'workflow.child_finished') childFinished.push(ev); });
+  const { runId: parentId } = await api['run:start']({ file: 'fixture-parent-foreach2.yaml', inputs: {}, mock: true });
+
+  // the first child takes the parent's lent slot and reaches its gate; the second has none free and waits
+  await until(() => gates.size === 1);
+  await until(() => api['runs:active']().length === 2); // parent + the one child that got the slot
+
+  api['run:stop']({ runId: parentId });
+  await until(() => finished.has(parentId));
+  await until(() => childFinished.length === 2);
+  const cancelledChild = childFinished.find((e) => e.child_run_id == null); // never got a run: it was still waiting
+  assert.ok(cancelledChild, 'the waiting child is reported cancelled, never started');
+  assert.match(cancelledChild.error, /Cancelled: the parent run was stopped before this child run could start\./);
+  assert.equal(service.isRunning(), false, 'no stale reservation or active run is left behind');
+});
+
+// #175: a per-project limit serializes a parent's children (the parent lends its own slot like the
+// global limit does), and a plain run of the same project (not a child) is still refused at once,
+// never made to wait.
+test('concurrent runs: a project\'s limit serializes its parent\'s children; an unrelated run of the same project is refused at once', async (t) => {
+  const { service, api } = makeService(t);
+  const { gates, finished } = watchRuns(service);
+  api['settings:set']({ concurrentRuns: { enabled: true, max: 5, perProject: 1, countSimulations: true } });
+  fs.writeFileSync(path.join(service.workspace().workflows, 'fixture-parent-proj.yaml'), `apiVersion: multiagent/v1
+kind: Workflow
+metadata:
+  name: fixture-parent-proj
+agents:
+  a: { provider: claude, model: m, session: ephemeral }
+steps:
+  - id: children
+    type: workflow
+    workflow: fixture-service.yaml
+    foreach: [1, 2]
+    max_parallel: 2
+`);
+  const { runId: parentId } = await api['run:start']({ file: 'fixture-parent-proj.yaml', inputs: {}, mock: true, projectId: 'proj-1' });
+
+  // only one child of the project-bound parent runs at a time, even though the global limit (5) is not reached
+  await until(() => gates.size === 1);
+  await until(() => api['runs:active']().filter((r) => r.runId !== parentId).length === 1);
+
+  // a plain run of the same project, not a child: refused at once (never made to wait)
+  await assert.rejects(
+    api['run:start']({ file: 'fixture-service.yaml', inputs: {}, mock: true, projectId: 'proj-1' }),
+    /1 of 1 runs of this project in progress/,
+  );
+
+  // resolving the first child frees the project's slot for the second
+  const [firstChild] = api['runs:active']().filter((r) => r.runId !== parentId);
+  api['approval:resolve']({ runId: firstChild.runId, id: gates.get(firstChild.runId), answer: true });
+  await until(() => gates.size === 2);
+  const [secondChild] = api['runs:active']().filter((r) => r.runId !== parentId && r.runId !== firstChild.runId);
+  assert.ok(secondChild, 'the second child started only once the first one freed the project slot');
+  api['approval:resolve']({ runId: secondChild.runId, id: gates.get(secondChild.runId), answer: true });
+  await until(() => finished.has(parentId));
+  assert.equal(finished.get(parentId), 'success');
+});
+
+// #175: a child inherits its parent's project when the parent has one; when the parent has none, the
+// child's own project (from its inputs) is only known once it starts, so it waits again for a slot
+// of that project if the first (project-less) reservation turns out to be the wrong one.
+test('concurrent runs: a child whose project is only known after it starts waits again for a slot of that project', async (t) => {
+  const { service, api } = makeService(t);
+  const { gates, finished } = watchRuns(service);
+  fs.writeFileSync(path.join(service.workspace().workflows, 'fixture-issue.yaml'), ISSUE_WORKFLOW);
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'svc-proj-'));
+  t.after(() => fs.rmSync(folder, { recursive: true, force: true }));
+  const project = await api['projects:create']({ name: 'demo', folder });
+  api['settings:set']({ concurrentRuns: { enabled: true, max: 5, perProject: 1, countSimulations: true } });
+
+  // this run alone fills the project's slot
+  const busy = await api['run:start']({ file: 'fixture-service.yaml', inputs: {}, mock: true, projectId: project.id });
+  await until(() => gates.has(busy.runId));
+
+  // the parent itself has no project; its child's repo_path points at the project's folder, so the
+  // project is only discovered once the child's own inputs are read
+  fs.writeFileSync(path.join(service.workspace().workflows, 'fixture-parent-late-project.yaml'), `apiVersion: multiagent/v1
+kind: Workflow
+metadata:
+  name: fixture-parent-late-project
+agents:
+  a: { provider: claude, model: m, session: ephemeral }
+steps:
+  - id: child
+    type: workflow
+    workflow: fixture-issue.yaml
+    inputs: { task: "do it", repo_path: ${JSON.stringify(folder)} }
+`);
+  const waiting = [];
+  service.events.on('run:event', (ev) => { if (ev.type === 'log' && /waits for a free slot/.test(ev.message || '')) waiting.push(ev); });
+  const { runId: parentId } = await api['run:start']({ file: 'fixture-parent-late-project.yaml', inputs: {}, mock: true });
+
+  await until(() => waiting.length > 0); // the child discovered the project and is waiting for its slot
+  assert.equal(api['runs:active']().filter((r) => r.runId !== parentId && r.runId !== busy.runId).length, 0, 'the child has not started yet');
+
+  // freeing the busy run's project slot lets the child proceed
+  api['run:stop']({ runId: busy.runId });
+  await until(() => api['runs:active']().some((r) => r.runId !== parentId && r.runId !== busy.runId));
+  const [child] = api['runs:active']().filter((r) => r.runId !== parentId && r.runId !== busy.runId);
+  await until(() => gates.has(child.runId));
+  api['approval:resolve']({ runId: child.runId, id: gates.get(child.runId), answer: true });
+  await until(() => finished.has(parentId));
+  assert.equal(finished.get(parentId), 'success');
 });
 
 // Resolves the fixture workflow's human gate and waits for the run to leave runs:active, so no

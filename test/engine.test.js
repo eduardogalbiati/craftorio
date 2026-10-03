@@ -2020,6 +2020,63 @@ steps:
   assert.deepEqual(finished.summary.child_runs.map((c) => c.step_id), ['children', 'children', 'children']);
 });
 
+test('type: workflow step (#175): each child\'s cost is recorded on workflow.child_finished, summed in run.childRuns and the run\'s summary.children_cost_usd', async (t) => {
+  const { dir, file } = tempWorkflow(t, `apiVersion: multiagent/v1
+kind: Workflow
+metadata: { name: parent-cost }
+agents:
+  a: { provider: claude, model: m, session: ephemeral }
+steps:
+  - id: children
+    type: workflow
+    workflow: child-echo.yaml
+    inputs: { n: "{{ item }}" }
+    foreach: [1, 2]
+`);
+  fs.writeFileSync(path.join(dir, 'child-echo.yaml'), CHILD_ECHO_YAML);
+  const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'));
+  t.after(() => fs.rmSync(runsDir, { recursive: true, force: true }));
+  const run = new WorkflowRun({ file, inputs: {}, mock: true, runsDir });
+  const events = [];
+  run.on('event', (ev) => events.push(ev));
+  await run.start();
+  const finished = events.find((e) => e.type === 'workflow.finished');
+  assert.equal(finished.status, 'success', finished.error);
+
+  const finishedEvents = events.filter((e) => e.type === 'workflow.child_finished');
+  assert.equal(finishedEvents.length, 2);
+  assert.ok(finishedEvents.every((e) => e.cost_usd > 0), 'each child\'s mock turn has a cost');
+  assert.ok(run.childRuns.every((c) => c.cost_usd > 0));
+  const total = run.childRuns.reduce((a, c) => a + c.cost_usd, 0);
+  assert.equal(run.childrenCostUsd(), total);
+  assert.equal(finished.summary.children_cost_usd, +total.toFixed(6));
+});
+
+test('checkLimits (#175): max_total_cost_usd counts child runs\' cost too, and the message says how much they added', (t) => {
+  const { file } = tempWorkflow(t, `apiVersion: multiagent/v1
+kind: Workflow
+metadata: { name: cost-limit }
+orchestrator:
+  limits: { max_total_cost_usd: 1 }
+agents:
+  a: { provider: claude, model: m, session: ephemeral }
+steps:
+  - id: one
+    agent: a
+    prompt: first
+`);
+  const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-'));
+  t.after(() => fs.rmSync(runsDir, { recursive: true, force: true }));
+  const run = new WorkflowRun({ file, inputs: {}, mock: true, runsDir });
+  assert.doesNotThrow(() => run.checkLimits()); // no sessions, no children: well under the limit
+
+  run.childRuns.push({ cost_usd: 0.4 }, { cost_usd: 0.4 });
+  assert.doesNotThrow(() => run.checkLimits()); // 0.8 of 1: still under
+
+  run.childRuns.push({ cost_usd: 0.3 });
+  assert.throws(() => run.checkLimits(), /Maximum cost exceeded \(US\$ 1, of which US\$ 1\.10 by its child runs\)\./);
+});
+
 test('on_error: a failing child workflow routes the step to its on_error step, with output.status failed', async (t) => {
   const { dir, file } = tempWorkflow(t, `apiVersion: multiagent/v1
 kind: Workflow

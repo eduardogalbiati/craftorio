@@ -6,7 +6,9 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 const backlogModule = require('../../src/backlog');
 const roadmapModule = require('../../src/roadmap');
-const { ISSUE_WORKFLOW, makeService, makeResumeService, roadmapProject, until } = require('./helpers');
+const {
+  ISSUE_WORKFLOW, makeService, makeResumeService, roadmapProject, until, watchRuns,
+} = require('./helpers');
 
 // Starts a run through the given channel, auto-approves every gate it meets, and resolves with
 // its start info ({ runId, runDir }) plus every event and the workflow.finished event.
@@ -575,4 +577,68 @@ test('runs:resume is never refused for kept work, even for a run of its own issu
 
   const resumed = await runToEnd(service, api, 'runs:resume', { runId, step: 'plan' });
   assert.equal(resumed.end.status, 'success');
+});
+
+// #175: resuming a parent whose `type: workflow` step had two children, one that already succeeded
+// and one that was still waiting at its own gate when the parent was stopped, reuses the first
+// (never restarted) and resumes the second from where it stopped (its own gate, asked again).
+test('a resumed parent reuses the child that succeeded and resumes the one that was cancelled, from where it stopped', async (t) => {
+  const { service, api } = makeService(t);
+  fs.writeFileSync(path.join(service.workspace().workflows, 'fixture-issue.yaml'), ISSUE_WORKFLOW);
+  fs.writeFileSync(path.join(service.workspace().workflows, 'fixture-parent-resume.yaml'), `apiVersion: multiagent/v1
+kind: Workflow
+metadata:
+  name: fixture-parent-resume
+agents:
+  a: { provider: claude, model: m, session: ephemeral }
+steps:
+  - id: children
+    type: workflow
+    workflow: fixture-issue.yaml
+    inputs: { task: "do {{ item }}", repo_path: "/tmp/r" }
+    foreach: [1, 2]
+    max_parallel: 2
+`);
+  const allEvents = [];
+  const gates = new Map(); // run_id -> approval_id, only while not auto-approving
+  let autoApprove = false;
+  service.events.on('run:event', (ev) => {
+    allEvents.push(ev);
+    if (ev.type === 'approval.requested') {
+      if (autoApprove) setImmediate(() => api['approval:resolve']({ runId: ev.run_id, id: ev.approval_id, answer: true }));
+      else gates.set(ev.run_id, ev.approval_id);
+    }
+  });
+
+  const { runId: parentId } = await api['run:start']({ file: 'fixture-parent-resume.yaml', inputs: {}, mock: true });
+  // the default concurrency (one run at a time) holds the second child back until the first is done
+  await until(() => gates.size === 1);
+  const [finishNow] = [...gates.keys()];
+  api['approval:resolve']({ runId: finishNow, id: gates.get(finishNow), answer: true });
+  await until(() => allEvents.some((e) => e.type === 'workflow.child_finished' && e.child_run_id === finishNow && e.status === 'success'));
+
+  // its slot freed, the second child now reaches its own gate
+  await until(() => gates.size === 2);
+  const keepRunning = [...gates.keys()].find((id) => id !== finishNow);
+
+  // it is still waiting there: stopping the parent stops it too
+  api['run:stop']({ runId: parentId });
+  await until(() => allEvents.some((e) => e.type === 'workflow.finished' && e.run_id === parentId));
+  await until(() => allEvents.some((e) => e.type === 'workflow.child_finished' && e.child_run_id === keepRunning));
+  assert.equal(allEvents.find((e) => e.type === 'workflow.child_finished' && e.child_run_id === keepRunning).status, 'cancelled');
+
+  autoApprove = true; // the resumed child reaches a fresh gate: approve it, and anything else from here
+  const resumed = await api['runs:resume']({ runId: parentId, step: 'children' });
+  await until(() => allEvents.some((e) => e.type === 'workflow.finished' && e.run_id === resumed.runId));
+  const resumedFinished = allEvents.find((e) => e.type === 'workflow.finished' && e.run_id === resumed.runId);
+  assert.equal(resumedFinished.status, 'success', resumedFinished.error);
+
+  const starts = allEvents.filter((e) => e.type === 'workflow.child_started' && e.run_id === resumed.runId);
+  assert.equal(starts.length, 2);
+  const reused = starts.find((e) => e.reused);
+  const resumedOne = starts.find((e) => e.resumed_from);
+  assert.ok(reused, 'the succeeded child is reused, not restarted');
+  assert.equal(reused.child_run_id, finishNow);
+  assert.ok(resumedOne, 'the cancelled child resumes from where it stopped');
+  assert.equal(resumedOne.resumed_from, keepRunning);
 });

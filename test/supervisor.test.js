@@ -160,6 +160,25 @@ test('resumeSpec and runReport read a run folder', (t) => {
   assert.match(report, /▶ check \(visit 1\)/);
 });
 
+test('resumeSpec (#175) collects a `type: workflow` step\'s child runs, by run id, the latest status for each', (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'run-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const ev = (o) => JSON.stringify({ ts: '2026-09-27T10:00:00Z', ...o });
+  fs.writeFileSync(path.join(dir, 'events.jsonl'), [
+    ev({ type: 'workflow.started', workflow: 'wf', file: 'wf.yaml', inputs: {} }),
+    ev({ type: 'workflow.child_started', step_id: 'children', child_run_id: 'c0', index: 0, label: 'a', workflow: 'child.yaml' }),
+    ev({ type: 'workflow.child_started', step_id: 'children', child_run_id: 'c1', index: 1, label: 'b', workflow: 'child.yaml' }),
+    ev({ type: 'workflow.child_finished', step_id: 'children', child_run_id: 'c0', status: 'success' }),
+    ev({ type: 'workflow.child_finished', step_id: 'children', child_run_id: 'c1', status: 'cancelled' }),
+    ev({ type: 'workflow.finished', status: 'cancelled' }),
+  ].join('\n') + '\n');
+  const spec = supervisor.resumeSpec(dir, 'children');
+  assert.deepEqual(spec.childRuns, [
+    { run_id: 'c0', step_id: 'children', index: 0, label: 'a', status: 'success' },
+    { run_id: 'c1', step_id: 'children', index: 1, label: 'b', status: 'cancelled' },
+  ]);
+});
+
 test('resumeSpec carries the issues over; a run recorded with one `issue` resumes with a list of one', (t) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'run-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
