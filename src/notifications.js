@@ -34,7 +34,8 @@ function runNotice(ev, run = {}) {
     case 'workflow.started':
       return notice('started', `Run started: ${name()}`, ev.resumed_from ? `Resumed from ${ev.resumed_from.run_id} at ${ev.resumed_from.step}` : '');
     case 'approval.requested':
-      return notice('waiting', `Waiting for you: ${name()}`, ev.message || `Approval needed at ${ev.step_id}`);
+      // the gate's "What happened" line (#213), else its message
+      return notice('waiting', `Waiting for you: ${name()}`, ev.brief?.headline || ev.message || `Approval needed at ${ev.step_id}`);
     case 'workflow.finished': {
       const label = STATUS_LABEL[ev.status] || ev.status;
       const ok = ev.status === 'success' ? (ev.summary?.local_merge ? `Merged locally into ${ev.summary.local_merge.base}, not pushed yet.` : '') : ev.error;

@@ -788,7 +788,8 @@ function onEvent(ev) {
       const shown = state.view === 'run' && state.runId === ev.run_id;
       if (replaying || shown) break;
       if (!window.duoShowsRun?.(ev.run_id) && !window.arenaShowsRun?.(ev.run_id) && !window.runChatShowsRun?.(ev.run_id)) {
-        showToast(`Approval waiting: ${runLabel(v.run)}`, `Step ${ev.step_id}. Click to open its run.`, ev.run_id, ev);
+        // the gate's "What happened" line (#213)
+        showToast(`Approval waiting: ${runLabel(v.run)}`, `${ev.brief?.headline || `Step ${ev.step_id}.`} Click to open its run.`, ev.run_id, ev);
       }
       break;
     }

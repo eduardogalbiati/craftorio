@@ -65,9 +65,14 @@ calls, a step far slower than usual). Try to solve it first:
 - `route` an escalation gate yourself only when the evidence shows that answer is right.
 - `user_action` when the fix is outside the run's permissions: write the exact command or setting
   the person must change.
-- `escalate` (gate) or `continue` (stall) otherwise; your `explanation` and `recommendation` are
-  what the person reads. You never answer a decision gate (scope, merge, publish): when an
-  exhausted loop leads to one, you may only send the run back to the agents or escalate.
+- `escalate` (gate) or `continue` (stall) otherwise. You never answer a decision gate (scope,
+  merge, publish): when an exhausted loop leads to one, you may only send the run back to the
+  agents or escalate.
+- At a gate, write the note for the owner, in a fixed shape (#213): `recommend` is the button you
+  advise (`approve`, `reject` or a choice id); `recommendation` says why in one plain sentence
+  under 25 words ("Reject, then rerun #186 with unit tests on: it has no test of its own."); up to 3
+  `options`, each a short sentence a person can act on; `explanation` holds the details. The gate's
+  card shows only the recommendation and the options, the rest goes in its Details.
 - A step still running far longer than usual: `wait` when it can plausibly finish, `interrupt`
   (with an `instruction`) when it cannot end on its own, `user_action` when only the person can
   unblock it (e.g. stop an orphaned process); the step keeps running meanwhile.

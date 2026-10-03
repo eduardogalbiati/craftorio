@@ -58,6 +58,7 @@ const {
 const capabilities = require('./capabilities');
 const depsCache = require('./deps-cache');
 const evidence = require('../evidence');
+const gateSummary = require('./gate-summary');
 const { scratchWorkspace } = require('../local-preview');
 const { stopProcessesIn } = require('./processes');
 const { PROBES, runProbe, parseTarget } = require('./probes');
@@ -155,6 +156,15 @@ tpl.addFilter('e2e_scenarios', (output) => scenarios.scenariosMessage(output));
 // per failing test; '' when the output is not a suite's (src/engine/suite-step.js).
 //   {{ steps.suite.output | suite_failures }}
 tpl.addFilter('suite_failures', (output) => suiteStep.suiteMessage(output));
+
+// A gate's `summary:` (#213): one ✔ / ✖ line per issue of a developer's or a verifier's output
+// (`'not_done'` keeps the failed ones), one ✖ line per failing test of a suite's output, and a long
+// text (a report, an error) on one line cut with an ellipsis.
+//   {{ steps.verify_change.output.issues | issue_lines }}   {{ steps.suite.output | suite_lines }}
+//   {{ steps.build.output.report | one_line(110) }}
+tpl.addFilter('issue_lines', (issues, only = null) => gateSummary.issueLines(issues, { only }));
+tpl.addFilter('one_line', (s, n = 110) => gateSummary.oneLine(s, n));
+tpl.addFilter('suite_lines', (output) => gateSummary.suiteLines(output));
 
 // The test inputs of the development workflows (#203): what the run summary and the gates say
 // ("Unit tests: Off (workflow default)"), and their evidence screenshots (#205: "Screenshots: Off").
@@ -266,6 +276,16 @@ function loadWorkflow(file) {
     if (s.diff_base !== undefined && (s.type !== 'human_approval' || typeof s.diff_base !== 'string' || !s.diff_base.trim())) throw new Error(`Step "${s.id}": diff_base must be a ref (e.g. "origin/{{ inputs.base_branch }}"), on a human_approval step.`);
     if (s.save_to_issue !== undefined && (s.type !== 'human_approval' || !(s.choices || []).some((c) => c.id === s.save_to_issue))) throw new Error(`Step "${s.id}": save_to_issue must be the id of one of the step's choices (e.g. accept), on a human_approval step.`);
     if ((s.choices || []).some((c) => c.feedback_required) && !s.feedback) throw new Error(`Step "${s.id}": a choice with feedback_required needs the step's feedback field.`);
+    // a gate's summary for a person (#213): `summary:` / `recommend:` templates, what the buttons
+    // say and do (`approve_label` / `reject_label` / `approve_help` / `reject_help`, a choice's `help`)
+    for (const key of ['summary', 'recommend', 'approve_label', 'reject_label', 'approve_help', 'reject_help']) {
+      if (s[key] === undefined) continue;
+      if (s.type !== 'human_approval' || typeof s[key] !== 'string') throw new Error(`Step "${s.id}": ${key} must be a text (a template), on a human_approval step.`);
+      if (key.startsWith('approve_') || key.startsWith('reject_')) {
+        if (s.choices) throw new Error(`Step "${s.id}": ${key} is for an Approve / Reject gate; a gate with choices sets each choice's label and help.`);
+      }
+    }
+    if ((s.choices || []).some((c) => c.help !== undefined && typeof c.help !== 'string')) throw new Error(`Step "${s.id}": a choice's help must be a text.`);
     // a choice's `then` (#134): picking it sets what happens with the run's result when it finishes
     for (const c of s.choices || []) {
       if (c.then === undefined) continue;
@@ -1533,7 +1553,7 @@ class WorkflowRun extends EventEmitter {
     const limits = `Interventions left after this one: ${cfg.perStep - st.onCall.length - 1} on this step, ${cfg.total - this.supervisorUsed} in this run.`
       + (cfg.maxCost != null ? ` Your cost in this run so far: US$ ${this.supervisorCost().toFixed(2)} of US$ ${cfg.maxCost}.` : '');
     const prompt = supervisor.onCallPrompt({ wf: this.wf, step, gate, signals, retryStep, steps, history, previous: st.onCall, events: this.recent, handoffs, limits, running });
-    const d = await this.askSupervisor(step, prompt, supervisor.onCallSchema({ actions, steps, routes: gate?.routes }), st.onCall.length + 1);
+    const d = await this.askSupervisor(step, prompt, supervisor.onCallSchema({ actions, steps, routes: gate?.routes, answers: gate?.answers }), st.onCall.length + 1);
     if (d) st.onCall.push({ action: d.action, explanation: d.explanation });
     return d;
   }
@@ -1576,11 +1596,19 @@ class WorkflowRun extends EventEmitter {
     const steps = this.resumableSteps();
     const prev = this.ctx.previous_step;
     const retryStep = steps.includes(prev) ? prev : null;
-    const gate = { message: render(step.message, this.ctx).trim(), routes, transitions, decision };
+    // answers: what the supervisor may recommend to the person (#213), the gate's buttons
+    const answers = step.choices ? step.choices.map((c) => c.id) : ['approve', 'reject'];
+    const gate = { message: render(step.message, this.ctx).trim(), routes, answers, transitions, decision };
     const actions = decision ? supervisor.ESCALATION_ACTIONS.filter((a) => a !== 'route') : supervisor.ESCALATION_ACTIONS;
     const d = await this.askOnCall(step, st, { kind: 'escalation', gate, signals: this.stalls.slice(-10), retryStep, steps, actions });
     if (!d) return null;
-    st.lastDiagnosis = { explanation: d.explanation, recommendation: d.recommendation || null, user_action: d.user_action || null };
+    st.lastDiagnosis = {
+      explanation: d.explanation,
+      recommend: answers.includes(d.recommend) ? d.recommend : null,
+      recommendation: d.recommendation || null,
+      options: Array.isArray(d.options) ? d.options.filter((o) => typeof o === 'string' && o.trim()).slice(0, 3) : null,
+      user_action: d.user_action || null,
+    };
     const evidence = gate.message.slice(0, 300);
     if (d.action === 'retry' || d.action === 'resume') {
       const target = d.action === 'retry' ? retryStep : d.step;
@@ -2955,10 +2983,28 @@ class WorkflowRun extends EventEmitter {
     let message = step.raw ? String(step.message).trim() : render(step.message, this.ctx).trim();
     if (diagnosis) {
       message += `\n\n---\nSupervisor on call${diagnosis.note ? ` (${diagnosis.note})` : ''}: ${diagnosis.explanation}`
-        + `${diagnosis.recommendation ? `\nRecommendation: ${diagnosis.recommendation}` : ''}`
+        + `${diagnosis.recommendation ? `\nRecommendation${diagnosis.recommend ? ` (${diagnosis.recommend})` : ''}: ${diagnosis.recommendation}` : ''}`
+        + `${diagnosis.options?.length ? `\nOptions:\n${diagnosis.options.map((o, i) => `${i + 1}. ${o}`).join('\n')}` : ''}`
         + `${diagnosis.user_action ? `\nAction only you can take: ${diagnosis.user_action}` : ''}`;
     }
-    const choices = step.choices ? step.choices.map((c) => ({ id: c.id, label: render(c.label, this.ctx), ...(c.feedback_required ? { feedback_required: true } : {}) })) : null;
+    const choices = step.choices ? step.choices.map((c) => ({
+      id: c.id,
+      label: render(c.label, this.ctx),
+      ...(c.feedback_required ? { feedback_required: true } : {}),
+      ...(c.help ? { help: this.gateText(step, c.help) } : {}),
+    })) : null;
+    // an Approve / Reject gate: what its buttons say and do (#213)
+    const yesNo = step.choices ? {} : {
+      approve: { label: this.gateText(step, step.approve_label) || 'Approve', help: this.gateText(step, step.approve_help) },
+      reject: { label: this.gateText(step, step.reject_label) || 'Reject', help: this.gateText(step, step.reject_help) },
+    };
+    const brief = gateSummary.gateBrief({
+      message,
+      summary: this.gateText(step, step.summary),
+      recommend: this.gateText(step, step.recommend),
+      diagnosis,
+      answers: choices || [{ id: 'approve', label: yesNo.approve.label }, { id: 'reject', label: yesNo.reject.label }],
+    });
     const fb = step.feedback === true ? {} : step.feedback || null;
     const feedback = fb && { label: render(fb.label || 'Anything to add? (optional)', this.ctx), placeholder: render(fb.placeholder || '', this.ctx) };
     const requestedAt = new Date().toISOString();
@@ -2966,6 +3012,8 @@ class WorkflowRun extends EventEmitter {
     // the folder the run's work is in (its worktree; a simulation works in the repository folder)
     const workDir = this.ctx.worktree_dir || this.inputs.repo_path || null;
     const extra = {
+      brief,
+      ...yesNo,
       ...(workDir ? { work_dir: workDir } : {}),
       // run_app: the gate offers Run App even without a config (its setup saves the project's, #108)
       ...(step.local_preview && workDir ? { run_app: true } : {}),
@@ -2992,6 +3040,16 @@ class WorkflowRun extends EventEmitter {
     this.emitEvent('approval.requested', { approval_id: id, step_id: step.id, message, choices, feedback, ...extra });
     if (this.approvals.has(id)) this.setStatus(this.orchestrator, 'waiting'); // not answered by a listener already
     return answered;
+  }
+
+  // A gate's summary template (#213), rendered and trimmed: '' when the step has none, is engine-made
+  // (raw) or the template fails (logged): the gate opens with its message whatever the summary does.
+  gateText(step, text) {
+    if (!text || step.raw) return '';
+    try { return render(text, this.ctx).trim(); } catch (e) {
+      this.emitEvent('log', { level: 'warn', message: `Gate ${step.id}: its summary could not be rendered (${e.message}); the gate shows its message.` });
+      return '';
+    }
   }
 
   // The gates this run waits at, as the approval.requested events described them (plus requested_at).

@@ -189,6 +189,24 @@ same features for users; this is the implementer's summary.
   offers Run locally (see worktrees.md); `diff_base: <ref>` (a template) offers Show the diff
   (`git diff <ref>...HEAD` in the worktree, read-only terminal). `approval.resolved` carries `wait_ms`; the summary's
   `timing.gates` / `timing.gate_wait_ms` hold the owner's time at gates, apart from agent time.
+- Gate summaries (#213): every gate's card shows a short summary first, the message collapsed in
+  its Details. A workflow declares it per gate, all templates rendered with the run's context:
+  `summary:` (Markdown; its first line is "What happened", the next lines the status per issue,
+  at most 6), `recommend:` (`"<answer>: <reason>"`, answer `approve` / `reject` or a choice id; any
+  other text is a reason without an answer), `approve_label` / `reject_label` / `approve_help` /
+  `reject_help` (an Approve / Reject gate's buttons: what they say and what they do) and `help` on
+  each choice. Filters for summaries: `issue_lines` (one ✔ / ✖ line per issue of a developer's
+  `done` or a verifier's `verdict` output; `issue_lines('not_done')` keeps the failed ones),
+  `suite_lines` (a suite output's failing tests, its pre-existing failures as a count, #211) and
+  `one_line(n)`. The engine stores `brief: { headline, body, recommendation: { answer, label,
+  reason, source }, options, user_action? }` on the gate record and its `approval.requested` event,
+  plus `approve` / `reject: { label, help }` on an Approve / Reject gate and `help` on choices
+  (src/engine/gate-summary.js). Without `summary:` (and on engine-made gates) the headline is the
+  first two sentences of the message; a summary that fails to render is logged and left out. The
+  supervisor on call's `recommend` (one of the gate's answers), `recommendation` (one line) and
+  `options` (up to 3) win over the workflow's `recommend:`; its full note stays under the message.
+  In the UI, an answer opposite to the recommendation asks once to confirm. The notification, the
+  toast, the roadmap's waiting badge and the Oracle's wake line use the headline.
 - `save_to_issue: <choice id>` on a gate (#125, writer-reviewer's `decide` / `out_of_rounds`): when the
   run has an issue, the gate's event carries `save_to_issue: { choice, issue }` and the UI adds
   "Accept and save to issue #n". It answers that choice (transitions unchanged) with `intent:

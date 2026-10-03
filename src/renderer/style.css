@@ -764,6 +764,17 @@ body.resizing-dock .term-body { pointer-events: none; }
 .gate-issue-state { font-size: 12px; font-weight: 600; margin-right: 4px; }
 .gate-issues li.ok .gate-issue-state { color: var(--green); }
 .gate-issues li.not .gate-issue-state { color: var(--red); }
+/* every gate's summary card (#213, gateCardHtml): what happened, the status per issue, the
+   recommendation highlighted, the options; what each button does under the buttons */
+.gate-card { display: flex; flex-direction: column; gap: 4px; max-width: 760px; }
+.gate-card p { margin: 0; }
+.gate-card-what { font-weight: 600; }
+.gate-card-status ul, .gate-card-options { margin: 0; padding-left: 18px; }
+.gate-card-status li { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gate-card-status p { margin: 0; }
+.gate-card-rec { border-left: 3px solid var(--accent); padding: 2px 8px; background: color-mix(in srgb, var(--accent) 10%, transparent); border-radius: 4px; }
+.gate-card-action { border-left: 3px solid var(--yellow); padding: 2px 8px; }
+.gate-card-buttons { margin: 2px 0 0; padding-left: 18px; }
 .run-gate-full summary { cursor: pointer; color: var(--muted); }
 .run-gate-full .run-gate-message, .run-gate-full .rc-body { margin-top: 4px; }
 /* E2E scenarios for the Dev/QA at a gate (#143, gateScenariosHtml) */

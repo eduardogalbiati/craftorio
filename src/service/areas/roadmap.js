@@ -49,8 +49,10 @@ module.exports = (ctx) => {
       // a run read from disk that waits at a gate (its trail's last step), when no live process says so
       const waiting = !!r.waiting || (r.status === 'running' && progress.at(-1)?.status === 'waiting');
       const { times, runs: count } = typical(r.file, r.mock);
+      // gate: the "What happened" line of the gate a live run waits at (#213), for the waiting badge
+      const gate = live?.pendingGates?.()[0]?.brief?.headline || null;
       return {
-        status: r.status, mock: !!r.mock, startedAt: r.startedAt || null, finishedAt: r.finishedAt || null, waiting,
+        status: r.status, mock: !!r.mock, startedAt: r.startedAt || null, finishedAt: r.finishedAt || null, waiting, gate,
         progress, groups: r.groups || [], agentNames: r.agentNames || null, workflow: r.workflow || null, error: r.error || null,
         stepTimes: times, history: count,
       };

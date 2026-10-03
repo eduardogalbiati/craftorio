@@ -571,6 +571,10 @@ steps:
     type: human_approval
     local_preview: true
     diff_base: "{{ inputs.base_branch }}"
+    # the gate's card (#213): what happened, then one line per issue; the message below is its Details
+    summary: |
+      The developer finished {% if previous_step == 'developer_screenshots' and steps.developer_check.output and steps.developer_check.output.choice == 'changes' %}your change request{% else %}the implementation{% endif %}: {{ steps.develop.output.summary | one_line(160) }}
+      {{ steps.develop.output.issues | issue_lines }}
     message: |
       The developer finished {% if previous_step == 'developer_screenshots' and steps.developer_check.output and steps.developer_check.output.choice == 'changes' %}your change request {{ steps.developer_check.visits - 1 }}{% else %}the implementation{% endif %}. Try it before the review and the tests run.
       Dev/QA: read the E2E scenarios and the screenshots; run the app and test by hand only what they do not cover.
@@ -594,9 +598,9 @@ steps:
       {% set e2e = steps.test.output | e2e_scenarios %}{% if e2e %}{{ e2e }}{% elif inputs.e2e_tests == 'off' %}E2E scenarios: off in this run.{% else %}E2E scenarios: none yet. The test writer writes them after the code review; they show in the run's summary.{% endif %}
     feedback: { label: "Your change request for the developer (required with \"Ask for changes\")", placeholder: "What to change, point by point" }
     choices:
-      - { id: approve, label: "Approve: go on to the code review" }
-      - { id: changes, label: "Ask for changes: back to the developer", feedback_required: true }
-      - { id: stop,    label: "Stop the run (worktree kept to resume)" }
+      - { id: approve, label: "Approve: go on to the code review", help: "The code review, the tests and the verification run next; you are asked again only on a failure." }
+      - { id: changes, label: "Ask for changes: back to the developer", feedback_required: true, help: "Sends your text to the developer; the run comes back to this gate after the fix." }
+      - { id: stop,    label: "Stop the run (worktree kept to resume)", help: "Ends the run as cancelled; nothing is merged and the worktree is kept to resume it." }
     transitions:
       - when: "choice == 'approve'"
         goto: code_review
@@ -612,14 +616,18 @@ steps:
   # them (#98): never dropped silently. A human gate: neither the supervisor nor a retry answers it.
   - id: requirements_left_out
     type: human_approval
+    summary: |
+      {% set gaps = steps.develop.output.left_out | developer_gaps %}The developer left {{ gaps | length }} requirement{{ '' if gaps | length == 1 else 's' }} of the task out, even after being sent back once to finish them.
+      {% for g in gaps %}{% if loop.index <= 4 %}- ✖ {{ g.requirement | one_line(80) }}: {{ g.reason | one_line(60) }}
+      {% endif %}{% endfor %}
     message: |
       The developer left these requirements of the task out, even after being sent back once to finish them:
       {% for g in steps.develop.output.left_out | developer_gaps %}
       - {{ g.requirement }}: {{ g.reason }}{% endfor %}
       The rest is on branch `{{ steps.develop.output.branch }}`; the code review has not run yet.
     choices:
-      - { id: continue, label: "Continue without them" }
-      - { id: stop,     label: "Stop the run as failed (worktree kept to resume)" }
+      - { id: continue, label: "Continue without them", help: "Accepts the gaps: the run goes on to the review and the tests with what was done." }
+      - { id: stop,     label: "Stop the run as failed (worktree kept to resume)", help: "Ends the run as failed; nothing is merged and the worktree is kept to resume it." }
     transitions:
       # nothing committed yet: the developer commits the rest first
       - when: "choice == 'continue' and not (steps.develop.output.committed or steps.develop.output.no_change)"
@@ -645,14 +653,17 @@ steps:
   # A run for several issues where the developer could not do one of them: never dropped silently.
   - id: issue_not_done
     type: human_approval
+    summary: |
+      The developer could not do every issue of this run; the others are done on branch `{{ steps.develop.output.branch }}`.
+      {{ steps.develop.output.issues | issue_lines }}
     message: |
       The developer could not do every issue of this run:
       {% for i in steps.develop.output.issues %}{% if not i.done %}
       - {{ i.issue }}: {{ i.summary }}{% endif %}{% endfor %}
       The other issues are done on branch `{{ steps.develop.output.branch }}`.
     choices:
-      - { id: continue, label: "Continue without them" }
-      - { id: stop,     label: "Stop the run as failed (worktree kept to resume)" }
+      - { id: continue, label: "Continue without them", help: "The run goes on with the issues that are done; the others stay open." }
+      - { id: stop,     label: "Stop the run as failed (worktree kept to resume)", help: "Ends the run as failed; nothing is merged and the worktree is kept to resume it." }
     transitions:
       - when: "(choice == 'continue' and inputs.mode == 'validated' and vars.owner_validated != 'yes') and inputs.screenshots == 'off'"
         goto: developer_check
@@ -737,9 +748,15 @@ steps:
   - id: human_review
     type: human_approval
     local_preview: true
+    summary: |
+      The code review did not converge in 3 rounds: the reviewer still asks for changes.
+    approve_label: "Go on to testing anyway"
+    approve_help: "The tests, the build and the verification run with the review's findings left open."
+    reject_label: "Stop the run"
+    reject_help: "Ends the run as cancelled; nothing is merged and the worktree is kept to resume it."
     message: |
       The review loop did not converge in 3 iterations.
-      Approve: move on to testing anyway. Reject: stop the run (cancelled).
+      Go on to testing anyway: move on to testing. Stop the run: the run ends as cancelled.
       {% if tests_plan %}{{ tests_plan }}{% endif %}
     transitions:
       # #203: the same test routing as code_review's
@@ -974,6 +991,19 @@ steps:
   - id: test_failed
     type: human_approval
     kind: escalation   # the supervisor on call tries first
+    # the run's failures, the pre-existing ones as a count (#211)
+    summary: |
+      {% if previous_step == 'suite' and steps.suite.output.status == 'blocked' %}The project's test suite could not run: {{ steps.suite.output.reason | one_line(160) }}
+      {% elif previous_step == 'suite' %}The test suite still fails after {{ steps.suite.visits }} round(s): {{ steps.suite.output.failures | length }} failing test(s) of this run.
+      {{ steps.suite.output | suite_lines }}
+      {% else %}Tests still fail after 3 rounds of fixes.
+      - ✖ {{ steps.test.output.failure_report | one_line(120) }}
+      {% endif %}
+    recommend: "{% if previous_step == 'suite' and steps.suite.output.status == 'blocked' %}reject: set the workflow's test_command input, then resume the run.{% else %}reject: the change is not tested green; look at the failures, then resume the run.{% endif %}"
+    approve_label: "Continue to the build anyway"
+    approve_help: "The build and the verification run; the change is reported as not tested green."
+    reject_label: "Stop the run"
+    reject_help: "Ends the run as failed; nothing is merged and the worktree is kept to resume it."
     message: |
       {% if previous_step == 'suite' and steps.suite.output.status == 'blocked' %}The project's test suite could not run:
       {{ steps.suite.output.reason }}
@@ -984,7 +1014,7 @@ steps:
       {{ steps.test.output.failure_report }}
       {% endif %}
       {{ tests_plan }}
-      Approve: continue to the build anyway (the change is reported as not tested green). Reject: stop the run as failed (the worktree is kept to resume it).
+      Continue to the build anyway: the change is reported as not tested green. Stop the run: the run ends as failed (the worktree is kept to resume it).
     transitions:
       - when: "approved"
         goto: build
@@ -1051,15 +1081,20 @@ steps:
   - id: build_failed
     type: human_approval
     kind: escalation   # the supervisor on call tries first
+    # from the build's failure_class: infra (the environment) or still blocked after the fix rounds
+    summary: |
+      {% if steps.build.output.build_status == 'failed' and steps.build.output.failure_class == 'infra' %}The build failed because of the environment, not the code (no fix round was spent).{% else %}The build is still blocked after 3 rounds of fixes.{% endif %}
+      - ✖ Build {{ steps.build.output.build_status }}{% if steps.build.output.failure_class %} ({{ steps.build.output.failure_class }}){% endif %}: {{ steps.build.output.report | one_line(120) }}
+    recommend: "{% if steps.build.output.build_status == 'failed' and steps.build.output.failure_class == 'infra' %}retry: fix the environment first (stop what holds the worktree's files), then build again.{% else %}stop: the fix rounds ran out; read the build report before resuming the run.{% endif %}"
     message: |
       {% if steps.build.output.build_status == 'failed' and steps.build.output.failure_class == 'infra' %}The build failed because of the environment, not the code (no fix round was spent):{% else %}The build is still blocked after 3 rounds of fixes:{% endif %}
       {{ steps.build.output.report }}
       Building again only helps once the environment is fixed (e.g. the process holding a file
       of the worktree is stopped: the orchestrator stops the ones started from the worktree).
     choices:
-      - { id: continue, label: "Continue to verification anyway" }
-      - { id: retry,    label: "Build again (I fixed the environment)" }
-      - { id: stop,     label: "Stop the run as failed (worktree kept to resume)" }
+      - { id: continue, label: "Continue to verification anyway", help: "The verification runs with the build still failing; the change may be merged without a green build." }
+      - { id: retry,    label: "Build again (I fixed the environment)", help: "Runs the build again; useful only after you fixed what blocked it." }
+      - { id: stop,     label: "Stop the run as failed (worktree kept to resume)", help: "Ends the run as failed; nothing is merged and the worktree is kept to resume it." }
     transitions:
       - when: "choice == 'continue'"
         goto: evidence
@@ -1236,6 +1271,16 @@ steps:
   - id: verify_failed
     type: human_approval
     kind: escalation   # the supervisor on call tries first
+    # the verifier's verdict per issue (verify_change.output.issues), else its claim and evidence
+    summary: |
+      Verification failed after 2 rounds of fixes: the change does not do everything the task asked.
+      {% if steps.verify_change.output.issues %}{{ steps.verify_change.output.issues | issue_lines }}{% else %}- ✖ Claim: {{ steps.verify_change.output.claim | one_line(100) }}
+      - Observed: {{ steps.verify_change.output.evidence | one_line(100) }}{% endif %}
+    recommend: "reject: merging would put unverified code on the local {{ inputs.base_branch }}; look at the evidence, then resume the run."
+    approve_label: "Merge anyway"
+    approve_help: "Merges the branch into the local {{ inputs.base_branch }} as it is, unverified (nothing is pushed)."
+    reject_label: "Stop the run"
+    reject_help: "Ends the run as failed; nothing is merged and the worktree is kept to resume it."
     message: |
       The change still does not do what the task asked after 2 rounds of fixes.
       Claim: {{ steps.verify_change.output.claim }}
@@ -1243,7 +1288,7 @@ steps:
       {{ tests_plan }}{% if steps.suite.output %} {{ steps.suite.output.message }}{% elif inputs.unit_tests == 'off' %} The test suite did not run in this run: nothing was tested here.{% endif %}
       Dev/QA: read the E2E scenarios and the screenshots; run the app and test by hand only what they do not cover.
       {% set e2e = steps.test.output | e2e_scenarios %}{% if e2e %}{{ e2e }}{% elif inputs.e2e_tests == 'off' %}E2E scenarios: off in this run (none written).{% else %}E2E scenarios: none reported by the test writer.{% endif %}
-      Approve: merge it into the local {{ inputs.base_branch }} anyway. Reject: stop the run as failed (the worktree is kept to resume it).
+      Merge anyway: merge it into the local {{ inputs.base_branch }} as it is. Stop the run: the run ends as failed (the worktree is kept to resume it).
     transitions:
       - when: "approved"
         merge: local
@@ -1310,14 +1355,19 @@ steps:
   - id: merge_blocked
     type: human_approval
     kind: escalation   # the supervisor on call tries first
+    summary: |
+      Branch `{{ steps.develop.output.branch }}` could not be merged into the local `{{ inputs.base_branch }}`{% if steps.resolve_merge.output %} and the developer could not resolve it{% endif %}.
+      {% if action_error %}- ✖ {{ action_error.message | one_line(120) }}
+      {% endif %}{% if steps.resolve_merge.output %}- Developer: {{ steps.resolve_merge.output.summary | one_line(120) }}{% endif %}
+    recommend: "retry: fix what is in the way (e.g. commit or stash the changes where {{ inputs.base_branch }} is checked out), then retry the merge."
     message: |
       Branch `{{ steps.develop.output.branch }}` could not be merged into the local `{{ inputs.base_branch }}`:
       {{ action_error.message if action_error else '' }}
       {% if steps.resolve_merge.output %}Developer: {{ steps.resolve_merge.output.summary }}{% endif %}
       Fix what is in the way (e.g. commit or stash the changes where {{ inputs.base_branch }} is checked out), then retry.
     choices:
-      - { id: retry, label: "Retry the merge" }
-      - { id: stop,  label: "Stop the run as failed (worktree kept to resume)" }
+      - { id: retry, label: "Retry the merge", help: "Tries the merge into the local {{ inputs.base_branch }} again; a conflict goes back to the developer." }
+      - { id: stop,  label: "Stop the run as failed (worktree kept to resume)", help: "Ends the run as failed; nothing is merged and the worktree is kept to resume it." }
     transitions:
       - when: "choice == 'retry'"
         merge: local

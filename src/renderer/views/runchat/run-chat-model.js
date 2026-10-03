@@ -251,7 +251,10 @@
     'approval.requested'(ev) {
       const gate = this.add({
         kind: 'gate', ts: ev.ts, approvalId: ev.approval_id, stepId: ev.step_id, message: String(ev.message || ''),
-        choices: ev.choices || [{ id: true, label: 'Approve' }, { id: false, label: 'Reject' }], feedback: ev.feedback || null,
+        choices: ev.choices || [{ id: true, label: ev.approve?.label || 'Approve' }, { id: false, label: ev.reject?.label || 'Reject' }], feedback: ev.feedback || null,
+        // the summary card (#213): { headline, body, recommendation, options, user_action } and an
+        // Approve / Reject gate's labels and help
+        brief: ev.brief || null, approve: ev.approve || null, reject: ev.reject || null,
         // Run locally ({ install, command, url }), the folder to open and the diff's base ref, when the gate offers them
         localPreview: ev.local_preview || null, workDir: ev.work_dir || null, diffBase: ev.diff_base || null,
         // Run App without a config (#108): the step has local_preview: true

@@ -77,7 +77,13 @@ function wakeLine(ev, kind) {
   const at = String(ev.ts || new Date().toISOString()).slice(11, 19);
   const run = ev.run_id || '?';
   switch (ev.type) {
-    case 'approval.requested': return `${at} ${run}: gate ${ev.step_id || ev.id || '?'} waits for the owner${ev.message ? ` (${clip(ev.message, 160)})` : ''}`;
+    // the gate's "What happened" line (#213) and its recommendation, else the start of its message
+    case 'approval.requested': {
+      const what = ev.brief?.headline || ev.message;
+      const rec = ev.brief?.recommendation;
+      const advice = rec?.label || rec?.reason ? `; recommended: ${clip([rec.label, rec.reason].filter(Boolean).join(', '), 120)}` : '';
+      return `${at} ${run}: gate ${ev.step_id || ev.id || '?'} waits for the owner${what ? ` (${clip(what, 200)}${advice})` : ''}`;
+    }
     case 'workflow.finished': {
       const cost = ev.summary?.cost_usd ?? ev.summary?.costUsd ?? ev.cost_usd;
       return `${at} ${run}: ${kind === 'merge' ? 'failed on a merge' : `finished ${ev.status || '?'}`}${cost != null ? `, cost ${money(cost)}` : ''}${ev.error ? ` (${clip(ev.error, 200)})` : ''}`;

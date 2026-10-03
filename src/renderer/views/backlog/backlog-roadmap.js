@@ -215,8 +215,10 @@
       `How: ${basis}. A return to an earlier step lowers it; it stays under 100% until the run ends.`,
       `Elapsed ${dur(est.elapsedMs)}${est.state === 'done' ? '' : ` · about ${dur(est.leftMs)} left`}`,
       `Now: ${label}${est.state === 'running' || est.state === 'waiting' ? ` (${who})` : ''}`,
+      // the gate's "What happened" line (#213)
+      est.state === 'waiting' && run.gate ? `Gate: ${run.gate}` : '',
       `Run ${x.runId}${run.mock ? ' (simulated)' : ''}. Hover or click the ring for its steps.`,
-    ].join('\n');
+    ].filter(Boolean).join('\n');
     const pct = est.state === 'done' ? 100 : est.percent;
     const chips = RunProgress.progressGroups(run.progress || [], run.groups || [], run.status === 'running' || run.status === 'pending' ? 'running' : run.status);
     const steps = chips.length
@@ -265,7 +267,7 @@
           ${progressHtml(x)}
         </div>
         <div class="rm-meta">
-          <span class="pill pill-${pill} rm-state">${esc(stateLabel)}</span>
+          <span class="pill pill-${pill} rm-state"${x.waiting && x.run?.gate ? ` title="${esc(x.run.gate)}"` : ''}>${esc(stateLabel)}</span>
           <span class="badge rm-wf${push ? ' rm-wf-push' : ''}" title="${esc(`${x.workflowName && x.workflowName !== x.workflow ? `${x.workflowName} (${x.workflow})` : x.workflow}${push ? `. It pushes a branch and opens a PR/MR, while the default development workflow (${DefaultWorkflow.current().file}) merges locally` : ''}`)}">${push ? '<span aria-hidden="true">⇡ </span>' : ''}${esc(shortWorkflow(x.workflow))}</span>
           ${modeHtml(x, locked)}
           ${size != null ? `<span class="badge rm-size" title="The sum of the issues' complexity:n labels">complexity ${size}</span>` : ''}

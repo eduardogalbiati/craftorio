@@ -70,8 +70,9 @@ const actionSchema = (recover) => ({
 // escalation gate (`kind: escalation`) or on a stall the engine detected. The first action is the
 // mock's default and the safe one: `escalate` shows the gate with the diagnosis, `continue` lets the
 // run go on as planned. `step` is limited to the agent steps the run already went through, `route`
-// to the gate's own answers.
-const onCallSchema = ({ actions, steps = [], routes = [] }) => ({
+// to the gate's own answers. At a gate, `recommend` (one of `answers`: approve / reject or a choice
+// id), `recommendation` (why, one line) and `options` (up to 3) are what the person's card shows (#213).
+const onCallSchema = ({ actions, steps = [], routes = [], answers = [] }) => ({
   type: 'object',
   required: ['explanation', 'action'],
   properties: {
@@ -82,7 +83,9 @@ const onCallSchema = ({ actions, steps = [], routes = [] }) => ({
     step: steps.length ? { type: 'string', enum: steps } : { type: 'string' },
     ...(routes.length ? { route: { type: 'string', enum: routes } } : {}),
     user_action: { type: 'string' },
+    ...(answers.length ? { recommend: { type: 'string', enum: answers } } : {}),
     recommendation: { type: 'string' },
+    ...(answers.length ? { options: { type: 'array', maxItems: 3, items: { type: 'string' } } } : {}),
   },
 });
 const ESCALATION_ACTIONS = ['escalate', 'retry', 'resume', 'route', 'user_action'];
@@ -211,7 +214,10 @@ function onCallPrompt({ wf, step, gate, signals, retryStep, steps, history, prev
   else if (gate) intro = `The workflow "${wf.metadata?.name}" reached the escalation gate "${step.id}": it would stop and ask the person about a problem. You are the supervisor on call: try to solve it first, following the run-supervisor skill. The person is only asked when you cannot, and then with your diagnosis.`;
   else if (running) intro = `The step "${step.id}" of the workflow "${wf.metadata?.name}" is still running, far longer than its usual duration. You are the supervisor on call: decide whether it keeps running or its turn is stopped, following the run-supervisor skill.`;
   let first = '- continue: nothing is stuck (e.g. the same answer is expected); the run goes on as planned.';
-  if (gate) first = '- escalate: you cannot solve it; the gate opens for the person with your `explanation` as the diagnosis and your `recommendation`.';
+  if (gate) {
+    first = '- escalate: you cannot solve it; the gate opens for the person with your diagnosis.'
+      + `\n\nWrite the diagnosis for the owner, not for an agent (whatever your action, in case the gate opens): \`recommend\` is the button you advise (one of ${(gate.answers || []).join(', ') || 'the gate\'s answers'}); \`recommendation\` says why in plain words, one sentence under 25 words; \`options\` lists up to 3 alternatives, each one short sentence a person can act on; \`explanation\` holds the details (evidence, causes). The gate's card shows only the recommendation and the options; the explanation goes in its Details.`;
+  }
   else if (running) first = '- wait: the step can plausibly still finish (a long build, a large change); it keeps running and you may be asked again later.';
   return [
     intro,

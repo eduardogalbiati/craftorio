@@ -25,14 +25,15 @@ function renderRunGates() {
   box.innerHTML = gates.map((g) => {
     const buttons = g.choices
       ? gateChoices(g).map((c, i) => `<button type="button" class="btn sm ${i === 0 ? 'primary' : 'ghost'}" data-choice="${esc(c.id)}"${c.intent ? ` data-intent="${esc(c.intent)}" title="${esc(c.title)}"` : ''}${c.feedback_required ? ' data-needs-text="1"' : ''}>${esc(c.label)}</button>`).join('')
-      : '<button type="button" class="btn sm ghost" data-answer="false">Reject</button><button type="button" class="btn sm primary" data-answer="true">Approve</button>';
+      : `<button type="button" class="btn sm ghost" data-answer="false">${esc(g.reject?.label || 'Reject')}</button><button type="button" class="btn sm primary" data-answer="true">${esc(g.approve?.label || 'Approve')}</button>`;
     const field = g.feedback ? `<label class="duo-ask-label">${esc(g.feedback.label || 'Instructions (optional)')}</label>
       <textarea class="duo-ask-text run-gate-feedback" rows="3" placeholder="${esc(g.feedback.placeholder || '')}"></textarea>` : '';
     const message = `<pre class="run-gate-message">${esc(g.message || '')}</pre>`;
     const main = `<div class="run-gate-head"><b>Approval required</b><span class="muted small mono">${esc(`${v.run ? `${runLabel(v.run)} · ` : ''}step: ${g.step_id}`)}</span></div>
-      ${gateBriefHtml(g.run_id, g, message) || message}${gateToolsHtml(g)}${field}<div class="row gate-choices run-gate-actions">${buttons}</div>`;
+      ${gateCardHtml(g.run_id, g, message) || message}${gateToolsHtml(g)}${field}<div class="row gate-choices run-gate-actions">${buttons}</div>${gateButtonsHelpHtml(g)}`;
     const side = gateSideHtml(g);
-    return `<div class="run-gate${side ? ' run-gate-wide' : ''}" data-approval="${esc(g.approval_id)}" data-run="${esc(g.run_id)}">${side ? `<div class="run-gate-main">${main}</div>${side}` : main}</div>`;
+    const rec = g.brief?.recommendation?.answer;
+    return `<div class="run-gate${side ? ' run-gate-wide' : ''}" data-approval="${esc(g.approval_id)}" data-run="${esc(g.run_id)}"${rec ? ` data-recommend="${esc(rec)}"` : ''}>${side ? `<div class="run-gate-main">${main}</div>${side}` : main}</div>`;
   }).join('');
   mountGateSides(box);
   paintGateApps();
@@ -52,15 +53,20 @@ function onRunGateClick(e) {
   if (b.dataset.needsText && !text?.value.trim()) { showToast('Write your request first', `"${b.textContent}" sends the text to the agent.`); text?.focus(); return; }
   const buttons = card.querySelectorAll('button');
   buttons.forEach((x) => (x.disabled = true));
-  // intent: "Accept and save to issue #n" (#125); images pasted into the feedback (#130)
-  PasteImage.settle(text)
+  const send = () => PasteImage.settle(text)
     .then(() => {
+      // intent: "Accept and save to issue #n" (#125); images pasted into the feedback (#130)
       const images = PasteImage.attachments(text);
       const extra = images.length ? [b.dataset.intent || null, images] : b.dataset.intent ? [b.dataset.intent] : [];
       return api.resolveApproval(card.dataset.approval, answer, text?.value || '', card.dataset.run, ...extra);
     })
     .then((ok) => { if (ok === false) { buttons.forEach((x) => (x.disabled = false)); showToast('The gate did not accept the answer', 'It needs a text, or it was already answered.'); } })
     .catch((err) => { buttons.forEach((x) => (x.disabled = false)); showToast('Could not answer the gate', errMsg(err)); });
+  // the answer opposite to the gate's recommendation asks once (#213); any other is sent at once
+  // (data-recommend on the card: the recommended answer, approve / reject or a choice id)
+  const key = typeof answer === 'boolean' ? (answer ? 'approve' : 'reject') : String(answer);
+  if (!card.dataset.recommend || key === card.dataset.recommend) { send(); return; }
+  confirmGateAnswer(selectedView().approvals.get(card.dataset.approval), answer).then((ok) => (ok ? send() : buttons.forEach((x) => (x.disabled = false))));
 }
 
 // Brings the Run screen's gate card into view and focuses its first answer.

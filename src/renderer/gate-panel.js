@@ -1,7 +1,8 @@
 /* global api */
 // The gate panel every run screen shares (#108, #115, #119): the Run screen's gate cards
 // (views/run/), the run chat (views/runchat/) and Write & Review (views/duo/). A gate's choices
-// (gateChoices), the developer's brief instead of the long message (gateBriefHtml) with the test
+// (gateChoices), every gate's summary card (gateCardHtml, gateButtonsHelpHtml, confirmGateAnswer:
+// #213), the developer's brief instead of the long message (gateBriefHtml) with the test
 // writer's E2E scenarios for the Dev/QA (gateScenariosHtml, mountGateScenarios, #143), the Artifacts
 // side panel of a gate that tries the change (gateSideHtml, mountGateSides) and the gate's tools
 // (gateToolsHtml, onGateTool): Run App with its one-click confirmation and its fields, the
@@ -89,6 +90,67 @@ function gateBriefHtml(runId, g, fullHtml) {
 }
 window.gateBriefHtml = gateBriefHtml;
 
+// A gate's answers as buttons say them (#213): an Approve / Reject gate's labels and help
+// (`approve` / `reject` on the gate), else its choices; `key` is what a recommendation names
+// (approve, reject or the choice id).
+function gateAnswers(g) {
+  if (g.approve || g.reject || !g.choices) {
+    return [
+      { id: true, key: 'approve', label: g.approve?.label || 'Approve', help: g.approve?.help || '' },
+      { id: false, key: 'reject', label: g.reject?.label || 'Reject', help: g.reject?.help || '' },
+    ];
+  }
+  return g.choices.map((c) => ({ ...c, key: String(c.id), help: c.help || '' }));
+}
+
+// The summary every human gate shows first (#213), in the run chat and on the Run screen: what
+// happened, the status per issue (Markdown), the recommendation (the supervisor's or the
+// workflow's), the supervisor's options and an action only the person can take; a gate that tries
+// the change keeps its E2E scenarios; the long message (with the supervisor's full note) is
+// collapsed in Details. A gate of a run from before #213 (no `brief`) gets gateBriefHtml or ''.
+// g: the gate record, its event or a run chat gate (brief); fullHtml: the message as the screen shows it.
+function gateCardHtml(runId, g, fullHtml) {
+  const b = g.brief;
+  if (!b?.headline) return gateBriefHtml(runId, g, fullHtml);
+  const md = (t) => (typeof markdownHtml === 'function' ? markdownHtml(t) : `<pre>${esc(t)}</pre>`);
+  const rec = b.recommendation;
+  const recHtml = rec && (rec.label || rec.reason) ? `<p class="gate-card-rec"><b>Recommended${rec.source === 'supervisor' ? ' by the supervisor' : ''}:</b>
+    ${rec.label ? `<b>${esc(rec.label)}</b>${rec.reason ? '. ' : ''}` : ''}${esc(rec.reason || '')}</p>` : '';
+  const options = b.options?.length ? `<ol class="gate-card-options small">${b.options.map((o) => `<li>${esc(o)}</li>`).join('')}</ol>` : '';
+  const action = b.user_action ? `<p class="gate-card-action small"><b>Only you can do this:</b> ${esc(b.user_action)}</p>` : '';
+  const scenarios = gateTriesChange(g) ? gateScenariosHtml(runId, g) : '';
+  return `<div class="gate-card"><p class="gate-card-what">${esc(b.headline)}</p>${b.body ? `<div class="gate-card-status md">${md(b.body)}</div>` : ''}${recHtml}${options}${action}${scenarios}
+    <details class="run-gate-full"><summary class="small">Details</summary>${fullHtml}</details></div>`;
+}
+window.gateCardHtml = gateCardHtml;
+
+// What each button does (#213), under the buttons: one line per answer that has a help text.
+function gateButtonsHelpHtml(g) {
+  const rows = gateAnswers(g).filter((a) => a.help);
+  return rows.length ? `<ul class="gate-card-buttons muted small">${rows.map((a) => `<li><b>${esc(a.label)}</b>: ${esc(a.help)}</li>`).join('')}</ul>` : '';
+}
+window.gateButtonsHelpHtml = gateButtonsHelpHtml;
+
+// The answer clicked against the gate's recommendation (#213): the opposite one asks once
+// ("The supervisor recommends Stop the run. Merge anyway?"); resolves true to send it.
+// answer: true / false (Approve / Reject) or a choice id. gateAgainstRecommendation says, without
+// waiting, whether it asks: the screens send any other answer at once, as before.
+const answerKey = (answer) => (answer === true || answer === 'true' ? 'approve' : answer === false || answer === 'false' ? 'reject' : String(answer));
+function gateAgainstRecommendation(g, answer) {
+  const rec = g?.brief?.recommendation;
+  return !!rec?.answer && answerKey(answer) !== rec.answer;
+}
+window.gateAgainstRecommendation = gateAgainstRecommendation;
+async function confirmGateAnswer(g, answer) {
+  if (!gateAgainstRecommendation(g, answer)) return true;
+  const rec = g.brief.recommendation;
+  const key = answerKey(answer);
+  const clicked = gateAnswers(g).find((a) => a.key === key)?.label || key;
+  const who = rec.source === 'supervisor' ? 'The supervisor' : 'The workflow';
+  return confirmDialog(`${clicked}?`, `${who} recommends ${rec.label || rec.answer}${rec.reason ? `: ${rec.reason}` : '.'} ${clicked} anyway?`, clicked);
+}
+window.confirmGateAnswer = confirmGateAnswer;
+
 // The test writer's E2E scenarios (#143), for the Dev/QA at a gate that tries the change: the
 // counts, then one row per scenario (status pill, name, the reason of a failed or skipped one),
 // each expanding to its Given/When/Then and its screenshots (read by mountGateScenarios). Before
@@ -167,7 +229,7 @@ window.mountGateScenarios = mountGateScenarios;
 // about an issue (#125) also offers "Accept and save to issue #n", right after the choice it
 // answers: the same choice with intent save_to_issue (the Save to issue preview opens when the run ends).
 function gateChoices(gate) {
-  const choices = gate.choices || [{ id: true, label: 'Approve' }, { id: false, label: 'Reject' }];
+  const choices = gate.choices || [{ id: true, label: gate.approve?.label || 'Approve' }, { id: false, label: gate.reject?.label || 'Reject' }];
   const save = gate.save_to_issue;
   const at = save?.issue ? choices.findIndex((c) => String(c.id) === String(save.choice)) : -1;
   if (at < 0) return choices;

@@ -297,15 +297,18 @@ function openStore(ws) {
     },
     /**
      * Marks `interrupted` the open gates of every run not in `liveRunIds` (at startup: their runs did
-     * not survive, so nobody can answer them). Returns them ({ runId, approvalId, stepId, message, requestedAt }).
+     * not survive, so nobody can answer them). Returns them ({ runId, approvalId, stepId, message,
+     * headline, requestedAt }); headline: the gate's "What happened" line (#213), null before it.
      */
     interruptGates(liveRunIds = []) {
       const live = new Set([...liveRunIds].map(String));
       return transaction(() => {
-        const rows = db.prepare("SELECT run_id, approval_id, step_id, message, requested_at FROM gates WHERE state = 'open'").all().filter((r) => !live.has(r.run_id));
+        const rows = db.prepare("SELECT run_id, approval_id, step_id, message, gate, requested_at FROM gates WHERE state = 'open'").all().filter((r) => !live.has(r.run_id));
         const upd = db.prepare("UPDATE gates SET state = 'interrupted', closed_at = ? WHERE run_id = ? AND approval_id = ?");
         for (const r of rows) upd.run(now(), r.run_id, r.approval_id);
-        return rows.map((r) => ({ runId: r.run_id, approvalId: r.approval_id, stepId: r.step_id, message: r.message, requestedAt: r.requested_at }));
+        return rows.map((r) => ({
+          runId: r.run_id, approvalId: r.approval_id, stepId: r.step_id, message: r.message, headline: parse(r.gate)?.brief?.headline || null, requestedAt: r.requested_at,
+        }));
       });
     },
     /** Gates by state ('open' | 'resolved' | 'closed' | 'interrupted'), newest first. */

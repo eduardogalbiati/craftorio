@@ -101,12 +101,15 @@
     const field = it.feedback && !it.resolved && !it.closed ? `<label class="duo-ask-label">${esc(it.feedback.label || 'Instructions (optional)')}</label>
       <textarea class="duo-ask-text" rows="2" placeholder="${esc(it.feedback.placeholder || '')}"${off}></textarea>` : '';
     const state = it.resolved ? '' : it.closed ? '<p class="muted small">The run ended before an answer.</p>' : chat.live ? '' : '<p class="muted small">Waiting for an answer.</p>';
-    // a gate that tries the change (#108): a short summary and the run's Artifacts panel on the right
+    // every gate's summary card (#213), the long message in its Details; a gate that tries the change
+    // (#108) also gets the run's Artifacts panel on the right while it waits
     const full = `<div class="rc-body md">${md(it.message)}</div>`;
-    const brief = open ? window.gateBriefHtml?.(chat.runId, it, full) : '';
+    const card = it.brief?.headline ? window.gateCardHtml?.(chat.runId, open ? it : { ...it, runApp: false, localPreview: null }, full)
+      : open ? window.gateBriefHtml?.(chat.runId, it, full) : '';
+    const help = !it.resolved && !it.closed ? window.gateButtonsHelpHtml?.(it) || '' : '';
     const side = open && typeof gateSideHtml === 'function' ? gateSideHtml(it, chat.runId) : '';
     const main = `<div class="duo-meta"><b>Human gate</b>${stepTag(it.stepId)}<span class="time">${clock(it.ts)}</span></div>
-      ${brief || full}${tools}${field}<div class="row gate-choices">${buttons}</div>${state}`;
+      ${card || full}${tools}${field}<div class="row gate-choices">${buttons}</div>${help}${state}`;
     return `<div class="rc-gate" data-item="${it.id}"><div class="duo-ask${side ? ' run-gate-wide' : ''}" data-gate="${esc(it.approvalId)}">
       ${side ? `<div class="run-gate-main">${main}</div>${side}` : main}</div></div>`;
   }
@@ -302,9 +305,14 @@
       const v = b.dataset.choice;
       const text = b.closest('.duo-ask')?.querySelector('textarea')?.value || '';
       if (b.dataset.needsText && !text.trim()) { showToast('Write your request first', `"${b.textContent}" sends the text to the agent.`); b.closest('.duo-ask')?.querySelector('textarea')?.focus(); return; }
-      b.closest('.duo-ask').querySelectorAll('button').forEach((x) => { x.disabled = true; });
-      // images pasted into the feedback (#130) go with it
-      PasteImage.collect(b.closest('.duo-ask').querySelector('textarea')).then((images) => api.resolveApproval(b.dataset.approval, v === 'true' ? true : v === 'false' ? false : v, text, chat.runId, b.dataset.intent || null, ...(images.length ? [images] : [])));
+      const buttons = b.closest('.duo-ask').querySelectorAll('button');
+      buttons.forEach((x) => { x.disabled = true; });
+      // the answer opposite to the gate's recommendation asks once (#213); images pasted into the feedback (#130) go with it
+      const answer = v === 'true' ? true : v === 'false' ? false : v;
+      const send = () => PasteImage.collect(b.closest('.duo-ask').querySelector('textarea')).then((images) => api.resolveApproval(b.dataset.approval, answer, text, chat.runId, b.dataset.intent || null, ...(images.length ? [images] : [])));
+      const gate = chat.model.gates.get(b.dataset.approval);
+      if (!window.gateAgainstRecommendation?.(gate, answer)) { send(); return; }
+      window.confirmGateAnswer(gate, answer).then((ok) => (ok ? send() : buttons.forEach((x) => { x.disabled = false; })));
     });
     $c('#rc-stop').onclick = () => api.stopRun(chat.runId);
     $c('#rc-logs').onclick = () => chat.model.run.runDir && api.openPath(chat.model.run.runDir);

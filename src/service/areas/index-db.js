@@ -19,7 +19,7 @@ module.exports = (ctx) => {
       for (const g of store.interruptGates([...ctx.active.keys()])) {
         ctx.notify({
           kind: 'run', event: 'gate_interrupted', title: `Gate interrupted: ${g.stepId || g.approvalId}`,
-          body: `${g.message ? `${String(g.message).slice(0, 180)}\n` : ''}The app closed while run ${g.runId} waited here. Resume it from the run screen.`,
+          body: `${g.headline || g.message ? `${String(g.headline || g.message).slice(0, 180)}\n` : ''}The app closed while run ${g.runId} waited here. Resume it from the run screen.`,
           target: { runId: g.runId },
         });
       }
