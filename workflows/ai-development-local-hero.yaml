@@ -518,6 +518,11 @@ steps:
       A task with no observable behaviour (docs, refactor, infrastructure): write no test, still
       create the branch, leave `tests_added` empty and say why in `summary`.
       {% if inputs.e2e_tests != 'off' %}{% set tags %}{% for n in inputs | issue_numbers %}{{ ', ' if not loop.first }}`@issue-{{ n }}`{% endfor %}{% endset %}
+      {% if not tags %}
+      End-to-end scenarios: none in this run. It has no issue number, so the scenarios could not be
+      tagged `@issue-<n>` and the orchestrator would never run them: write no scenario, set
+      `e2e_scope: none` and say so in `e2e_note`.
+      {% else %}
       End-to-end scenarios (E2E tests are on in this run), written first like the unit tests:
       - Only for an issue with user-visible behaviour (a screen, a dialog, a CLI output a person
         reads). An engine, docs or refactor issue gets no scenario: `e2e_scope: none`, and say why
@@ -535,6 +540,7 @@ steps:
         orchestrator runs them after the review ({% if inputs.e2e_tests == 'write_and_run' %}{{ tags or '`@issue-<n>`' }} plus the @smoke journeys{% else %}not in this run: the E2E release workflow runs them{% endif %}).
       - List the .feature files and step definition files you wrote or changed in `e2e_files` (the
         developer may not change them) and the scenarios in `scenarios` (status `pending`).
+      {% endif %}
       {% endif %}
     output_schema:
       type: object
@@ -1274,8 +1280,10 @@ steps:
         goto: e2e
       - when: "output.heal_status == 'blocked'"
         goto: test_failed
-      - when: "output.heal_status == 'app'"
-        delegate:
+      # a product fix changes production code: the unit suite runs again first (it goes on to e2e
+      # when green), so a regression is never merged on the earlier green suite
+      - when: "output.heal_status == 'app' and inputs.unit_tests != 'off'"
+        delegate: &app_fix
           agent: developer
           prompt: |
             The issue's E2E scenarios fail because of the application on branch `{{ steps.develop.output.branch }}`.
@@ -1286,6 +1294,9 @@ steps:
             one is wrong, say why in your answer). Add the `data-testid`s the steps use; when the
             change intentionally changes a screen with a `toHaveScreenshot` baseline, update that
             baseline on the branch. Check with that scenario only, commit and report the commit hash.
+        goto: suite
+      - when: "output.heal_status == 'app'"
+        delegate: *app_fix
         goto: e2e
 
   - id: test_failed

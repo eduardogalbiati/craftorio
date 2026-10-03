@@ -189,11 +189,12 @@ function parseFailures(text, { cwd } = {}) {
   // Playwright (playwright-bdd, #223): "  1) <spec>:7:7 › Feature › Scenario @tag", the error, then the
   // attachments; the trace kept for the failure is the "trace.zip" line. The generated spec
   // (.features-gen/features/x.feature.spec.js) is reported as its feature file (features/x.feature).
+  // A config with projects prefixes the file with the project: "1) [chromium] › <spec>:7:7 › ...".
   for (let i = 0; i < lines.length; i++) {
-    const m = /^\s*\d+\) (\S+?):\d+:\d+ › (.+)$/.exec(lines[i]);
+    const m = /^\s*\d+\) (?:\[[^\]]+\] › )?(\S+?):\d+:\d+ › (.+)$/.exec(lines[i]);
     if (!m) continue;
     const block = [];
-    for (let j = i + 1; j < lines.length && !/^\s*\d+\) \S+?:\d+:\d+ › /.test(lines[j]) && !/^\s*\d+ (failed|passed|flaky|skipped|interrupted)\b/.test(lines[j]); j++) block.push(lines[j]);
+    for (let j = i + 1; j < lines.length && !/^\s*\d+\) (?:\[[^\]]+\] › )?\S+?:\d+:\d+ › /.test(lines[j]) && !/^\s*\d+ (failed|passed|flaky|skipped|interrupted)\b/.test(lines[j]); j++) block.push(lines[j]);
     const end = block.findIndex((l) => /^\s*attachment #\d+:/.test(l));
     const trace = block.map((l) => l.trim()).find((l) => /trace\.zip$/.test(l) && !/^npx /.test(l));
     const file = fileOf(m[1].split('\\').join('/'), cwd).replace(/^\.features-gen\//, '').replace(/\.spec\.[cm]?[jt]s$/, '');
