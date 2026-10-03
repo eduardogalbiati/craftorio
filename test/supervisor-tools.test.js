@@ -98,6 +98,21 @@ test('list_workflows on the bundled workflows stays under MAX_CHARS and parses (
   assert.equal(list.length, ctx.listWorkflows().length);
 });
 
+test('list_agents on the bundled workflows stays under MAX_CHARS and parses, without prompts or avatars', async (t) => {
+  const { ctx } = makeCtx(t);
+  const tools = supervisorTools(ctx);
+
+  const out = await callTool(tools, 'list_agents', {});
+  assert.equal(out.isError, false);
+  assert.ok(out.text.length <= MAX_CHARS, `list_agents is ${out.text.length} chars, over MAX_CHARS (${MAX_CHARS}): clip() would cut it mid-string`);
+  const list = JSON.parse(out.text);
+  assert.ok(list.some((a) => a.id === 'supervisor'));
+  for (const agent of list) {
+    assert.ok(!('prompt' in agent), `${agent.id} carries its prompt`);
+    assert.ok(!('appearance' in agent), `${agent.id} carries its avatar`);
+  }
+});
+
 test('list_workflows items carry only the fields the tool describes, not the Workflows screen\'s builderProblems or update/bundle flags', async (t) => {
   const { ctx } = makeCtx(t);
   const tools = supervisorTools(ctx);
