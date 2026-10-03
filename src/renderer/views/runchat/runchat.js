@@ -20,23 +20,25 @@
 
   // ---------------------------------------------------------------- avatars
   const isSupervisor = (agent) => /^_?supervisor$/.test(agent || '');
-  // Each agent keeps one colour through the chat (the supervisor has its own).
-  function hueOf(agent) {
-    let h = 0;
-    for (const ch of String(agent)) h = (h * 31 + ch.codePointAt(0)) >>> 0;
-    return Math.round((h % 1000) * 137.508) % 360; // golden angle: close names get distant hues
-  }
-  const colorStyle = (agent) => (isSupervisor(agent) ? '' : ` style="--rc-agent:hsl(${hueOf(agent)} 70% 64%)"`);
+  // Each agent keeps one colour through the chat (the supervisor has its own): its role's fixed
+  // colour, or the workflow's `color` (#224, agent-colors.js); the name hash only for other agents.
+  const agentDef = (agent) => AgentColors.defIn(state.workflows, chat.model.run?.workflow, agent);
+  const agentColor = (agent) => AgentColors.colorFor(agent, agentDef(agent));
+  const colorStyle = (agent) => (isSupervisor(agent) ? '' : ` style="--rc-agent:${agentColor(agent)}"`);
+  // its robot's glow (eyes, antennas): a fixed or YAML colour only, the name hash keeps the provider's
+  const glowOf = (agent) => { const c = agentColor(agent); return AgentColors.isHex(c) ? c : undefined; };
   const nameOf = (agent) => (isSupervisor(agent) ? 'Supervisor' : chat.model.nameOf(agent));
   // Robots face the centre of the screen (as in Write & Review and AI Arena): one on the left
   // looks right (mirrored), one on the right looks left. The supervisor sits on the left.
   function robot(who, st = 'idle', opts = {}) {
     const mirror = isSupervisor(who.agent) || who.side !== 'right';
     if (isSupervisor(who.agent)) return Robots.svg('supervisor', st, { mirror, ...opts });
-    // a look saved for this workflow's agent in Agents, else the provider's robot
-    const variant = window.AgentLooks?.forWorkflow(chat.model.run?.workflow, who.agent)
-      || Robots.variantFor(providerType(who.provider, who.model), who.model || '');
-    return Robots.svg(variant, st, { plaque: who.model ? Robots.plaqueFor(who.model) : undefined, mirror, ...opts });
+    // a look saved for this workflow's agent in Agents, else the provider's robot glowing in the
+    // agent's colour (#224)
+    const saved = window.AgentLooks?.forWorkflow(chat.model.run?.workflow, who.agent);
+    const variant = saved || Robots.variantFor(providerType(who.provider, who.model), who.model || '');
+    const accent = !saved && window.AgentColors ? glowOf(who.agent) : undefined;
+    return Robots.svg(variant, st, { plaque: who.model ? Robots.plaqueFor(who.model) : undefined, mirror, ...(accent ? { accent } : {}), ...opts });
   }
   const avatar = (who) => `<span class="duo-robot still" aria-hidden="true">${robot(who, 'idle', { bubble: false })}</span>`;
 

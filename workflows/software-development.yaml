@@ -113,24 +113,29 @@ metadata:
 # -----------------------------------------------------------------------------
 inputs:
   task:
+    label: "Task"
     type: string
     required: true
     description: Feature or bug to implement.
   issue:
+    label: "Issue"
     type: string
     default: ""
     description: "URL of the issue this run implements (set by the Backlog screen). The PR/MR closes it."
   issues:
+    label: "Issues"
     type: array
     default: []
     description: "URLs of the issues this run implements together, one branch and one PR/MR (set by the Backlog screen; one per line). The PR/MR closes each one."
   repo_path:
+    label: "Repository"
     type: string
     required: true
     description: Local repository path or git URL (cloned into <workspace>/repos). Needs a GitHub or GitLab remote.
   # Picks the unit-test-writer-<language>, e2e-test-writer-<language> and build-audit-<language> skills. The app prefills it
   # from the project's files (package.json, pyproject.toml, go.mod, pom.xml, *.csproj).
   language:
+    label: "Language"
     type: string
     enum: [js, python, go, java, csharp]
     default: js
@@ -145,6 +150,7 @@ inputs:
     options: { gh: GitHub, gl: GitLab }
     description: Where the pull request (GitHub) or merge request (GitLab) is opened.
   base_branch:
+    label: "Base branch"
     type: string
     default: main
     description: The branch the work starts from and is merged into.
@@ -162,6 +168,7 @@ inputs:
     description: "GitHub only: the Actions workflow that runs after the merge."
   # validated: the run stops at developer_check after the developer.
   mode:
+    label: "Mode"
     type: string
     enum: [auto, validated]
     default: auto
@@ -169,6 +176,7 @@ inputs:
     description: "Automatic: the change goes straight from the developer to review and tests. Validated: the run stops after the developer so you can try the change before review and tests are paid for."
   # A boolean; saved inputs "true"/"false" (before #116) are accepted by the engine.
   validate_every_round:
+    label: "Validate every round"
     type: boolean
     default: false
     show_if: "mode == 'validated'"
@@ -276,6 +284,7 @@ orchestrator:
 # -----------------------------------------------------------------------------
 agents:
   developer:
+    color: "#4C7DFF" # #224: its role's colour in the run chat and the runs list
     provider: claude
     model: claude-opus-5-5
     session: handoff
@@ -320,6 +329,7 @@ agents:
       requested fix, report the commit hash.
 
   reviewer:
+    color: "#A06BFF" # #224: its role's colour in the run chat and the runs list
     provider: claude
     model: claude-sonnet-5-5
     effort: high
@@ -333,6 +343,7 @@ agents:
       detect the languages in the diff and read the rules for each one before the verdict.
 
   test_writer:
+    color: "#FF8A3D" # #224: its role's colour in the run chat and the runs list
     provider: claude
     model: claude-sonnet-5
     session: persistent
@@ -371,6 +382,7 @@ agents:
       is left, so the next session continues without mapping the change again.
 
   builder:
+    color: "#E6C229" # #224: its role's colour in the run chat and the runs list
     provider: claude
     model: claude-sonnet-5
     session: persistent
@@ -385,6 +397,7 @@ agents:
       - report only: moderate/low, and anything in development-only dependencies
 
   verifier:
+    color: "#2FBF71" # #224: its role's colour in the run chat and the runs list
     provider: claude
     model: claude-sonnet-5
     session: persistent
@@ -396,6 +409,7 @@ agents:
       you do not run the full test suite (the test writer ran it).
 
   evidence:
+    color: "#1FC2D6" # #224: its role's colour in the run chat and the runs list
     provider: claude
     model: claude-sonnet-5
     session: ephemeral

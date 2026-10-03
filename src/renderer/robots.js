@@ -345,6 +345,7 @@ ${flip(v.overlay || '')}
     const v = { ...(typeof variant === 'object' && variant ? variant : VARIANTS[variant] || VARIANTS.vanilla), ...st };
     v.mirror = !!opts.mirror;
     if (opts.plaque !== undefined) v.plaque = opts.plaque;
+    if (opts.accent) v.accent = opts.accent; // the glow in the agent's colour (#224, agent-colors.js)
     if (opts.bubble === false) delete v.overlay;
     else if (v.overlay) v.overlay = v.overlay.replace('__UNFLIP__', v.mirror ? ' scale(-1,1)' : '');
     return render(v, `rb${++uid}`);

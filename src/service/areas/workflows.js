@@ -53,6 +53,8 @@ module.exports = (ctx) => {
               return [k, {
                 provider: a.provider, model: a.model, session: d.session || 'persistent', max_context: d.max_context || null, skills: a.skills || [],
                 capabilities: capabilities.describe(a.capabilities), isolated: d.isolation !== false,
+                // #224: the agent's colour in the run chat and the runs list (wins over its role's)
+                ...(a.color ? { color: String(a.color) } : {}),
               }];
             })),
             steps: wf.steps.map((s) => ({

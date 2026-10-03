@@ -16,6 +16,8 @@
 // `*branch` inputs get the local branches and the default branch) without overriding what the
 // owner set. A container with data-wi-scope (or the form) is where show_if reads the other values;
 // its data-wi-context (JSON) adds values that are not in it (the Roadmap item's mode).
+// inputPills(workflow, inputs) shows a run's inputs as read-only pills ("Unit tests: Run existing",
+// #216) on the cards that list them.
 // Browser: window.WorkflowInputs (pills and show_if wired once on the document); Node: module.exports.
 (function (root) {
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -34,7 +36,29 @@
     const v = String(value ?? '');
     const named = def.options && typeof def.options === 'object' ? def.options[v] : undefined;
     if (named != null && named !== '') return String(named);
-    return /^[a-z]{2,3}$/.test(v) ? v.toUpperCase() : humanize(v);
+    return /^[a-z]{2,3}$/.test(v) && !WORDS.has(v) ? v.toUpperCase() : humanize(v);
+  }
+  // short values that are words, not slugs (off → "Off", not "OFF")
+  const WORDS = new Set(['all', 'any', 'no', 'off', 'on', 'yes']);
+
+  /**
+   * A run's inputs as friendly pills (#216), the same on every card (the roadmap item, the Product
+   * Owner's proposal and its Cost step, the Assign dialog's summary, the run header): one pill
+   * "<label>: <option label>" per input, the raw key and value and the description in the tooltip.
+   * `workflow`: its definition (inputs from api.listWorkflows), or null (labels from the keys).
+   * An input at its workflow default is left out, unless `defaults: true` (then dimmed, wi-pill-default);
+   * `skip`: keys never shown (e.g. the mode, which has its own toggle).
+   */
+  function inputPills(workflow, inputs, { skip = [], defaults = false } = {}) {
+    const defs = workflow?.inputs || {};
+    return Object.entries(inputs || {}).filter(([k, v]) => v != null && v !== '' && !skip.includes(k)).map(([k, v]) => {
+      const def = defs[k] || {};
+      const atDefault = def.default != null && String(def.default) === String(v);
+      if (atDefault && !defaults) return '';
+      const value = isBoolean(def) || typeof v === 'boolean' ? (truthy(v) ? 'On' : 'Off') : optionLabel(def, v);
+      const tip = `${k}: ${v}${atDefault ? ' (the workflow default)' : ''}${def.description ? `\n${def.description}` : ''}`;
+      return `<span class="badge wi-pill${atDefault ? ' wi-pill-default' : ''}" data-wi-pill="${esc(k)}" title="${esc(tip)}">${esc(label(k, def))}: ${esc(value)}</span>`;
+    }).join('');
   }
   const isBoolean = (def = {}) => def.type === 'boolean' || (Array.isArray(def.enum) && def.enum.length === 2 && def.enum.map(String).sort().join() === 'false,true');
   const truthy = (v) => !['', 'false', '0', 'no', 'off', 'undefined', 'null'].includes(String(v ?? '').trim().toLowerCase());
@@ -278,6 +302,7 @@
     fieldHtml,
     formHtml,
     humanize,
+    inputPills,
     isBoolean,
     kind,
     label,

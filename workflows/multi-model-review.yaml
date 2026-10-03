@@ -29,18 +29,22 @@ metadata:
 # -----------------------------------------------------------------------------
 inputs:
   task:
+    label: "Task"
     type: string
     required: false
     description: What the change is supposed to do (the spec for the review's spec axis). Optional.
   repo_path:
+    label: "Repository"
     type: string
     required: true
     description: Local repository path or git URL (cloned into <workspace>/repos).
   branch:
+    label: "Branch"
     type: string
     default: HEAD
     description: Branch or ref under review.
   base_branch:
+    label: "Base branch"
     type: string
     default: main
 

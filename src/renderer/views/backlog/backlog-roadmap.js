@@ -23,6 +23,15 @@
 // estimate yet" without history), its real cost once it has a run, and the Product Owner's Cost step
 // (a badge: the tests, screenshots and grouping it chose); each stage its estimate. A roadmap the
 // budget cap paused offers "Raise for today" and "Resume anyway" (api.roadmapBudget).
+// Time (#215): the estimated time next to the cost ("≈ 1 h 45 min"; a stage: its longest item); once
+// the run ends, "$22.21 / ≈ $15.18" and "3 h 41 min / ≈ 1 h 45 min" coloured by Estimates.verdict
+// (estimates.js: green at or under, amber up to +25%, red above, with an arrow), the difference and
+// the longest step in the tooltip; while it runs, "58 min of ≈ 1 h 45", amber or red once past it.
+// A finished stage shows its real total against its estimate the same way.
+// Inputs (#216): the item's inputs as WorkflowInputs.inputPills ("Unit tests: Run existing").
+// Open work (#217): html()'s `view` ({ epic, showAll }, the Backlog's filter shared with the Board
+// tab) hides finished stages ("N finished stages hidden") and folds a stage's done items ("+N done")
+// unless Show all; the epic keeps only its items. Stage numbers and edits use the real indexes.
 // An item with a run (#194) has a progress ring on the right of its card: the estimated % (RunProgress.
 // estimateProgress over the item's `run` from the service: its trail and its workflow's typical step
 // times), the current step or group with its agent, the gate / failure / done states; hovering or
@@ -122,19 +131,74 @@
   }
 
   const money = (n) => `$${Number(n || 0).toFixed(2)}`;
+  const mins = (n) => Estimates.formatMinutes(n);
 
-  // #206: the item's estimate and, once it has a run, what it cost (so far, while it runs)
+  // #215: a real value against its estimate, coloured by the verdict (Estimates.verdict) with an
+  // arrow, so colour is never the only signal; the difference in the tooltip. `fmt` formats a value,
+  // `more`: the tooltip's difference ("$7.03 more"), `extra`: more tooltip lines.
+  function vsBadge(kind, actual, estimate, fmt, more, extra = []) {
+    const v = Estimates.verdict(actual, estimate);
+    if (!v) return `<span class="badge rm-actual rm-${kind}">${fmt(actual)}</span>`;
+    const pct = `${v.percent > 0 ? '+' : v.percent < 0 ? '−' : '±'}${Math.abs(v.percent)}%`;
+    const tip = [`${pct}, ${more(v.diff)} than the estimate (${fmt(estimate)})`, ...extra].filter(Boolean).join('\n');
+    return `<span class="badge rm-actual rm-${kind} rm-verdict rm-verdict-${v.level}" title="${esc(tip)}"><span class="rm-sign" aria-hidden="true">${v.sign}</span> <b>${esc(fmt(actual))}</b> / ≈ ${esc(fmt(estimate))}</span>`;
+  }
+  const moneyMore = (d) => `${money(Math.abs(d))} ${d < 0 ? 'less' : 'more'}`;
+  const timeMore = (d) => `${mins(Math.abs(d))} ${d < 0 ? 'less' : 'more'}`;
+  // "1 h 45" in "58 min of ≈ 1 h 45" (the running badge's short form)
+  const minsShort = (n) => mins(n).replace(/^(\d+ h \d+) min$/, '$1');
+  const topStep = (x) => (x.actualTopStep ? `Longest step: ${x.actualTopStep.step} ${mins(x.actualTopStep.minutes)}` : '');
+
+  // #206, #215: the item's estimate (cost and time) and, once it has a run, what it cost and took
+  // against it (so far, while it runs: elapsed vs estimate, coloured only once past it)
   function costHtml(x) {
     const e = x.estimate;
-    const est = e
-      ? `<span class="badge rm-estimate" title="${esc(e.basis)}">≈ ${money(e.usd)}${e.estimated ? ' (est.)' : ''}</span>`
-      : '<span class="badge rm-estimate rm-no-estimate" title="No successful real run of this workflow yet: nothing to estimate from">no estimate yet</span>';
-    const actual = x.actualUsd != null ? `<span class="badge rm-actual" title="${esc(`What its run${(x.runs || []).length > 1 ? 's' : ''} cost${x.status === 'running' ? ' so far' : ''}, next to the estimate`)}">${money(x.actualUsd)}${x.status === 'running' ? ' so far' : ''}</span>` : '';
+    const running = x.status === 'running' || x.waiting;
+    const ran = x.actualUsd != null || x.actualMinutes != null;
+    const runsWord = `run${(x.runs || []).length > 1 ? 's' : ''}`;
+    let spend = '';
+    let time = '';
+    if (!e) {
+      spend = '<span class="badge rm-estimate rm-no-estimate" title="No successful real run of this workflow yet: nothing to estimate from">no estimate yet</span>';
+      if (x.actualUsd != null) spend += `<span class="badge rm-actual" title="${esc(`What its ${runsWord} cost${running ? ' so far' : ''}`)}">${money(x.actualUsd)}${running ? ' so far' : ''}</span>`;
+      if (x.actualMinutes != null) time = `<span class="badge rm-actual rm-time" title="${esc([`How long its ${runsWord} took${running ? ' so far' : ''} (gate waits left out)`, topStep(x)].filter(Boolean).join('\n'))}">${mins(x.actualMinutes)}${running ? ' so far' : ''}</span>`;
+    } else if (running && ran) {
+      const cost = Estimates.verdict(x.actualUsd, e.usd);
+      spend = `<span class="badge rm-estimate" title="${esc(e.basis)}">≈ ${money(e.usd)}${e.estimated ? ' (est.)' : ''}</span>`
+        + (x.actualUsd != null ? `<span class="badge rm-actual${cost && cost.level !== 'good' ? ` rm-verdict rm-verdict-${cost.level}` : ''}" title="${esc(`What its ${runsWord} cost so far, next to the estimate`)}">${cost && cost.level !== 'good' ? `<span class="rm-sign" aria-hidden="true">${cost.sign}</span> ` : ''}${money(x.actualUsd)} so far</span>` : '');
+      if (x.actualMinutes != null && e.minutes) {
+        const v = Estimates.verdict(x.actualMinutes, e.minutes);
+        const over = v && v.level !== 'good';
+        time = `<span class="badge rm-actual rm-time${over ? ` rm-verdict rm-verdict-${v.level}` : ''}" title="${esc([`Elapsed (gate waits left out) against the estimate${over ? `: ${timeMore(v.diff)}` : ''}`, e.timeBasis].filter(Boolean).join('\n'))}">${over ? `<span class="rm-sign" aria-hidden="true">${v.sign}</span> ` : ''}${mins(x.actualMinutes)} of ≈ ${minsShort(e.minutes)}</span>`;
+      }
+    } else if (ran) {
+      if (x.actualUsd != null) spend = vsBadge('cost', x.actualUsd, e.usd, money, moneyMore, [e.basis]);
+      if (x.actualMinutes != null) time = e.minutes ? vsBadge('time', x.actualMinutes, e.minutes, mins, timeMore, [topStep(x), e.timeBasis]) : `<span class="badge rm-actual rm-time">${mins(x.actualMinutes)}</span>`;
+    } else {
+      spend = `<span class="badge rm-estimate" title="${esc(e.basis)}">≈ ${money(e.usd)}${e.estimated ? ' (est.)' : ''}</span>`;
+      if (e.minutes) time = `<span class="badge rm-estimate rm-time" title="${esc(e.timeBasis || `From ${e.runs} past runs`)}">≈ ${mins(e.minutes)}</span>`;
+    }
     // #205: the Product Owner's Cost step and what it chose for this item
     const c = x.cost;
     const tip = c ? [`Cost: ${c.name}`, Object.entries(c.inputs || {}).map(([k, v]) => `${k}: ${v}`).join(', '), c.grouping, ...(c.notAdjustable || [])].filter(Boolean).join('\n') : '';
     const step = c ? `<span class="badge rm-cost rm-cost-${Number(c.level) || 3}" title="${esc(tip)}">${esc(c.name)}${c.grouping ? ' · grouped' : ''}</span>` : '';
-    return `${step}${est}${actual}`;
+    return `${step}${spend}${time}`;
+  }
+
+  // #215: the stage's estimate (its items' costs summed, its longest item's time) and, once every
+  // item has ended, its real total against it
+  function stageCostHtml(stage, finished) {
+    const e = stage.estimate;
+    if (!e) return '';
+    const plus = e.missing ? ' +' : '';
+    const runs = `each from up to ${e.runs} past runs of its workflow`;
+    const missing = e.missing ? `; ${e.missing} item(s) have no estimate yet` : '';
+    if (finished && stage.actualUsd != null) {
+      return vsBadge('cost', stage.actualUsd, e.usd, money, moneyMore, [`The real cost of its items' runs against the sum of their estimates${missing}`])
+        + (stage.actualMinutes && e.minutes ? vsBadge('time', stage.actualMinutes, e.minutes, mins, timeMore, ['Its longest item\'s real duration against its longest estimate (items run in parallel)']) : '');
+    }
+    return `<span class="badge rm-estimate" title="${esc(`The sum of its items' estimates (${runs})${missing}`)}">≈ ${money(e.usd)}${plus}</span>`
+      + (e.minutes ? `<span class="badge rm-estimate rm-time" title="${esc(`Its longest item's estimate: its items run in parallel (${runs})${missing}`)}">≈ ${mins(e.minutes)}${plus}</span>` : '');
   }
 
   // The Product Owner's reason for the group and for the mode (#105): one line, expandable.
@@ -246,8 +310,6 @@
     const refused = refusedStart(x);
     const push = pushesAgainstDefault(x);
     const open = !locked && editing === x.id;
-    const defs = inputDefs(x);
-    const others = Object.entries(x.inputs || {}).filter(([k]) => k !== 'mode');
     const size = complexity(x, byNumber);
     const titles = refs(x).map((i) => {
       const title = i.title && i.title !== `#${i.number}` ? i.title : '';
@@ -274,7 +336,7 @@
           ${costHtml(x)}
           ${x.mock ? '<span class="badge p-mock">simulated</span>' : ''}
           ${x.then ? ChainModel.chainBadgesHtml({ then: x.then }) : ''}
-          ${others.map(([k, v]) => `<span class="badge rm-input" title="${esc(`${k}: ${v}${defs[k]?.description ? `\n${defs[k].description}` : ''}`)}">${esc(k)}: ${esc(v)}</span>`).join('')}
+          ${WorkflowInputs.inputPills(workflows?.get(x.workflow) || null, x.inputs, { skip: ['mode'] })}
           ${x.runId ? `<button class="bl-run link-btn small" type="button" data-run="${esc(x.runId)}" data-workflow="${esc(x.workflowName || '')}" title="Open the run (Resume from step… is there)">run ${esc(x.runId)}</button>` : ''}
           ${locked || open ? '' : '<button class="link-btn small" type="button" data-rm-edit title="Edit this item\'s inputs">Edit</button>'}
         </div>
@@ -292,9 +354,10 @@
     return `Stages ${n.every((x, k) => !k || x === n[k - 1] + 1) ? `${n[0]}–${n[n.length - 1]}` : n.join(', ')}`;
   }
 
-  // `scoped`: the index of the stage run on its own (#141), -1 when none; `r`: the roadmap.
-  function stageHtml(stage, s, count, current, byNumber, scoped, r) {
-    const done = stage.items.every((x) => x.status === 'done' || x.status === 'skipped');
+  // `scoped`: the index of the stage run on its own (#141), -1 when none; `r`: the roadmap; `show`:
+  // which items the view shows (#217, every item by default); `folded`: its finished items hidden.
+  function stageHtml(stage, s, count, current, byNumber, scoped, r, show = () => true, folded = 0) {
+    const done = stage.items.every(finished);
     const noteOpen = noteEditing != null && noteEditing === stage.id;
     const note = noteOpen
       ? `<input type="text" class="rm-note small" data-rm-note value="${esc(stage.note || '')}" placeholder="Why this order" aria-label="Stage note" autofocus />`
@@ -309,7 +372,7 @@
           <span class="muted small">Stage ${s + 1}</span>
           <input type="text" class="rm-name" data-rm-name value="${esc(stage.name)}" placeholder="Name (optional)" aria-label="Stage name" />
           ${stateBadge}
-          ${stage.estimate ? `<span class="badge rm-estimate" title="${esc(`The sum of its items' estimates (each from up to ${stage.estimate.runs} past runs of its workflow)${stage.estimate.missing ? `; ${stage.estimate.missing} item(s) have no estimate yet` : ''}`)}">≈ ${money(stage.estimate.usd)}${stage.estimate.missing ? ' +' : ''}</span>` : ''}
+          ${stageCostHtml(stage, done && stage.items.length > 0)}
           ${stage.note || noteOpen ? '' : '<button class="link-btn small" type="button" data-rm-addnote>add note</button>'}
           <span class="spacer"></span>
           <button class="btn sm ghost rm-run-stage" type="button" data-rm-run-stage title="${esc(runTitle)}"${runnable ? '' : ' disabled'}><span aria-hidden="true">▶</span> Run this stage</button>
@@ -317,8 +380,39 @@
           <button class="btn sm ghost" type="button" data-rm-stage="down" title="Run this stage later"${s === count - 1 ? ' disabled' : ''}>↓</button>
         </div>
         ${note}
-        <div class="rm-items">${stage.items.map((x, n) => itemHtml(x, s, n, byNumber, r)).join('')}</div>
+        <div class="rm-items">${stage.items.map((x, n) => (show(x) ? itemHtml(x, s, n, byNumber, r) : '')).join('')}${folded
+    ? `<button class="link-btn small rm-folded" type="button" data-rm-show-all title="Done or skipped items of this stage, hidden: Show all brings them back">+${folded} done</button>` : ''}</div>
       </section>`;
+  }
+
+  // ---- what the Roadmap tab shows (#217): the open work by default, Show all, the epic filter ------
+  const finished = (x) => x.status === 'done' || x.status === 'skipped';
+  const NO_EPIC = 'none'; // BacklogEpics.NONE
+  // the item belongs to the epic filter ('' every item, NO_EPIC an issue in no epic, else an epic's id)
+  function inEpic(x, epic, byNumber) {
+    if (!epic) return true;
+    return refs(x).some((i) => {
+      const e = byNumber.get(i.number)?.epic || '';
+      return epic === NO_EPIC ? !e : e === epic;
+    });
+  }
+  /**
+   * The stages the view shows: [{ stage, s (its real index), show (item → bool), folded }] and how
+   * many finished stages it hides. `view`: { epic, showAll } (the Backlog's filter, both tabs).
+   */
+  function visibleStages(r, view, byNumber) {
+    const out = [];
+    let hidden = 0;
+    r.stages.forEach((stage, s) => {
+      const mine = stage.items.filter((x) => inEpic(x, view.epic, byNumber));
+      if (!stage.items.length && !view.epic) { out.push({ stage, s, show: () => true, folded: 0 }); return; }
+      if (!mine.length) return;
+      const open = mine.filter((x) => !finished(x));
+      if (view.showAll) { out.push({ stage, s, show: (x) => mine.includes(x), folded: 0 }); return; }
+      if (!open.length) { hidden++; return; }
+      out.push({ stage, s, show: (x) => open.includes(x), folded: mine.length - open.length });
+    });
+    return { stages: out, hidden };
   }
 
   // ---- Live roadmap (#164, src/live-roadmap.js) ----------------------------------------------------
@@ -385,9 +479,15 @@
     }
   }
 
-  /** The Roadmap view (into #bl-list): its bar, the plain queue's items, the stages in order. `rerender` redraws once the workflows are loaded. */
-  function html(data, rerender) {
+  /**
+   * The Roadmap view (into #bl-list): its bar, the plain queue's items, the stages in order. `rerender`
+   * redraws once the workflows are loaded. `view` (#217): the Backlog's filter shared with the Board
+   * tab, { epic, showAll }: without Show all, only the open work (finished stages hidden, a stage's
+   * finished items folded); the epic keeps only its items and hides the stages left empty.
+   */
+  function html(data, rerender, view = {}) {
     loadWorkflows(rerender);
+    const v = { epic: view.epic || '', showAll: !!view.showAll };
     const r = data?.roadmap || { state: 'planned', stages: [] };
     const q = data?.queue?.items || [];
     const byNumber = new Map((data?.issues || []).map((i) => [i.number, i]));
@@ -418,22 +518,32 @@
     const epics = data?.epics || [];
     const grouped = byEpic && epics.length > 0 && r.stages.length > 0;
     const toggle = epics.length && r.stages.length ? `<label class="check small rm-by-epic" title="Show the roadmap's items under their issues' epics (the stages keep their order)"><input type="checkbox" data-rm-by-epic${grouped ? ' checked' : ''} /><span>Group by epic</span></label>` : '';
+    const showAllToggle = r.stages.length ? `<label class="check small rm-show-all" title="Show the done and skipped stages and items too (by default only the open work: running, waiting, failed and planned)"><input type="checkbox" data-rm-show-all-toggle${v.showAll ? ' checked' : ''} /><span>Show all</span></label>` : '';
+    const vis = visibleStages(r, v, byNumber);
+    const allItems = r.stages.flatMap((s) => s.items);
+    const shownItems = vis.stages.reduce((a, x) => a + x.stage.items.filter(x.show).length, 0);
+    const epicName = v.epic === NO_EPIC ? 'with no epic' : `in epic ${epics.find((e) => e.id === v.epic)?.title || v.epic}`;
+    const count = r.stages.length && (v.epic || !v.showAll) ? `<span class="small muted rm-count">${shownItems} of ${allItems.length} item${allItems.length === 1 ? '' : 's'} shown</span>` : '';
+    const hiddenLine = vis.hidden ? `<p class="small muted rm-hidden-line">${vis.hidden} finished stage${vis.hidden === 1 ? '' : 's'} hidden${v.epic ? ` (${esc(epicName)})` : ''} · <button class="link-btn small" type="button" data-rm-show-all>Show all</button></p>` : '';
+    const nothing = `<div class="empty-state"><b>No ${v.showAll ? '' : 'open '}roadmap items${v.epic ? ` ${esc(epicName)}` : ''}.</b>
+      <p class="muted">${v.showAll ? 'Pick another epic, or All epics.' : 'Finished work is hidden.'}</p>${v.showAll ? '' : '<button class="btn sm ghost" type="button" data-rm-show-all>Show all</button>'}</div>`;
     const stages = !r.stages.length
       ? '<div class="empty-state"><b>No roadmap yet</b><p class="muted">Select issues, Assign workflow…, then Add to roadmap: each addition is a stage that starts when the previous one has finished and merged.</p></div>'
-      : grouped ? byEpicHtml(r, epics, byNumber)
-        : r.stages.map((s, n) => stageHtml(s, n, r.stages.length, current, byNumber, scoped, r)).join('');
+      : grouped ? byEpicHtml(r, epics, byNumber, v)
+        : vis.stages.length ? vis.stages.map((x) => stageHtml(x.stage, x.s, r.stages.length, current, byNumber, scoped, r, x.show, x.folded)).join('') : nothing;
     const liveHtml = r.stages.length ? liveBox(r) : '';
-    return `<div class="rm">${bar.replace('<span class="spacer"></span>', `<span class="spacer"></span>${toggle}`)}${queued}${stages}${liveHtml}${importBox}</div>`;
+    return `<div class="rm">${bar.replace('<span class="spacer"></span>', `${count}<span class="spacer"></span>${showAllToggle}${toggle}`)}${queued}${grouped ? '' : hiddenLine}${stages}${liveHtml}${importBox}</div>`;
   }
 
   // #138: the items under their issues' epics (an item of issues in two epics shows under both; "No
-  // epic" last), each with its stage; editing stays in the stage view.
-  function byEpicHtml(r, epics, byNumber) {
+  // epic" last), each with its stage; editing stays in the stage view. `v`: the view's filter (#217).
+  function byEpicHtml(r, epics, byNumber, v = {}) {
     const sections = [...epics.map((e) => ({ id: e.id, title: e.title })), { id: '', title: 'No epic' }].map((e) => {
+      if (v.epic && v.epic !== (e.id || NO_EPIC)) return '';
       const rows = [];
       r.stages.forEach((stage, s) => stage.items.forEach((x, n) => {
         const ids = new Set(refs(x).map((i) => byNumber.get(i.number)?.epic || ''));
-        if (ids.has(e.id)) rows.push(itemHtml(x, s, n, byNumber, r).replace('<div class="rm-meta">', `<div class="rm-meta"><span class="badge" title="Its stage in the roadmap">stage ${s + 1}</span>`));
+        if (ids.has(e.id) && (v.showAll || !finished(x))) rows.push(itemHtml(x, s, n, byNumber, r).replace('<div class="rm-meta">', `<div class="rm-meta"><span class="badge" title="Its stage in the roadmap">stage ${s + 1}</span>`));
       }));
       if (!rows.length) return '';
       const items = r.stages.flatMap((st) => st.items).filter((x) => refs(x).some((i) => (byNumber.get(i.number)?.epic || '') === e.id));
@@ -611,6 +721,8 @@
   async function onClick(e, ctx, data) {
     const r = data?.roadmap;
     if (!r) return false;
+    // #217: "Show all" (the hidden-stages line, a stage's "+N done", the empty state)
+    if (e.target.closest('[data-rm-show-all]')) { ctx.setShowAll?.(true); return true; }
     // the ring (#194): a click pins its steps open (hover shows them too); a chip opens the run there
     const chip = e.target.closest('[data-rm-chip]');
     if (chip) { openRunAt(chip); return true; }
@@ -728,6 +840,10 @@
     const el = e.target;
     if (r && el.matches('[data-rm-live]')) {
       await setLive(ctx, r, el.checked);
+      return true;
+    }
+    if (el.matches('[data-rm-show-all-toggle]')) {
+      ctx.setShowAll?.(el.checked);
       return true;
     }
     if (el.matches('[data-rm-by-epic]')) {

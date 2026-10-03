@@ -58,6 +58,8 @@ module.exports = (ctx) => {
       };
     };
     const prices = workspace.readSettings(ctx.ws).prices || {};
+    // the backlog's issues: their complexity:n labels scale each item's estimate (#215)
+    const issues = backlog.readBacklog(ctx.ws.backlog, path.basename(String(projectId)))?.issues || [];
     return costEstimate.withEstimates({
       ...roadmap,
       stages: roadmap.stages.map((s) => ({
@@ -68,7 +70,7 @@ module.exports = (ctx) => {
           return { ...x, ...(waiting ? { waiting: true } : {}), ...(run ? { run } : {}) };
         }),
       })),
-    }, list, { prices });
+    }, list, { issues, prices });
   }
 
   // #206: whether the budget cap stops this start: the roadmap pauses with the stage's estimate
@@ -78,7 +80,8 @@ module.exports = (ctx) => {
     const caps = budget.budgetSettings(settings);
     if (!caps.dailyUsd && !caps.nightlyUsd) return false;
     const list = runs.listRuns(ctx.ws.runs);
-    const estimate = (x) => costEstimate.estimateItem(x, list, { prices: settings.prices || {} });
+    const issues = backlog.readBacklog(ctx.ws.backlog, path.basename(String(projectId)))?.issues || [];
+    const estimate = (x) => costEstimate.estimateItem(x, list, { issues, prices: settings.prices || {} });
     const next = estimate(item);
     const block = ctx.budgetBlock(roadmap, next?.usd || 0);
     if (!block) return false;

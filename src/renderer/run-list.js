@@ -380,7 +380,9 @@ function progressAvatar(a, chip, names, workflow) {
   // the last chip's working agents show the run's state; the others rest
   const st = chip.status === 'done' ? 'idle' : CHIP_ROBOT_STATE[chip.status];
   const art = a.human ? PERSON_SVG : a.provider ? robotAvatar(a.provider, a.model, st, workflow, a.agent) : ENGINE_SVG;
-  return `<span class="rp-av${a.human ? ' human' : a.provider ? '' : ' engine'}" title="${esc(tip)}">${art}</span>`;
+  // the agent's fixed colour (#224) as a ring around its avatar
+  const color = !a.human && window.AgentColors ? AgentColors.colorFor(a.agent, AgentColors.defIn(state.workflows, workflow, a.agent)) : '';
+  return `<span class="rp-av${a.human ? ' human' : a.provider ? '' : ' engine'}"${color ? ` style="--agent-color:${esc(color)}"` : ''} title="${esc(tip)}">${art}</span>`;
 }
 
 function progressChip(c, names, workflow) {

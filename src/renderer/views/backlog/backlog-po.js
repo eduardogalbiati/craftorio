@@ -35,6 +35,9 @@
 // question is in flight its attachments can't be removed: they were sent with it.
 // An answer the owner has not seen (the drawer closed, or another screen) puts a yellow dot on the
 // robot button until the drawer opens (#149, po.unread); the service also notifies it (`po` notice).
+// A proposed group's card (#216): the workflow by its name with its inputs as pills
+// (WorkflowInputs.inputPills, the Cost step's choices too), then labelled sections (Why, Mode as
+// Markdown; Files; Estimate with the time, Estimates.formatMinutes) and the warnings as a callout.
 // Uses app.js globals ($, esc, state, errMsg, devMode, fmtCost, fmtSize, markdownHtml, confirmDialog)
 // and window.Robots (robots.js).
 // Live progress (#180, window.LiveTurn, live-turn.js): while a question is in flight the drawer shows
@@ -252,11 +255,14 @@
     const i = issueOf(n);
     return i?.url ? `<a class="badge po-issue" href="${esc(i.url)}" target="_blank" rel="noopener" title="${esc(i.title)}">#${n}</a>` : `<span class="badge po-issue">#${n}</span>`;
   };
+  // #215: the time as the roadmap shows it ("1 h 45 min"); the roadmap's history estimate first
+  const minutesOf = (g) => g.costEstimate?.minutes ?? g.estimate?.minutes;
   const sizeText = (g) => {
+    const time = minutesOf(g) != null ? `≈ ${Estimates.formatMinutes(minutesOf(g))} · ` : '';
     const est = g.costEstimate
-      ? `${g.estimate ? `≈ ${g.estimate.minutes} min · ` : ''}≈ $${Number(g.costEstimate.usd).toFixed(2)} <span class="muted" title="${esc(g.costEstimate.basis)}">(estimate from ${g.costEstimate.runs} past run${g.costEstimate.runs > 1 ? 's' : ''}${g.costEstimate.estimated ? ', partly from token prices' : ''})</span>`
+      ? `${time}≈ $${Number(g.costEstimate.usd).toFixed(2)} <span class="muted" title="${esc(g.costEstimate.basis)}">(estimate from ${g.costEstimate.runs} past run${g.costEstimate.runs > 1 ? 's' : ''}${g.costEstimate.estimated ? ', partly from token prices' : ''})</span>`
       : g.estimate
-      ? `≈ ${g.estimate.minutes} min · ≈ $${Number(g.estimate.costUsd).toFixed(2)} <span class="muted">(estimate from ${esc(g.estimate.basis)})</span>`
+      ? `${time}≈ $${Number(g.estimate.costUsd).toFixed(2)} <span class="muted">(estimate from ${esc(g.estimate.basis)})</span>`
       : '<span class="muted">no past run to estimate from</span>';
     return `complexity ${g.complexity}${g.guessed ? ' <span class="muted" title="Some issues have no complexity:n label: counted as 3">(some guessed)</span>' : ''} · ${est}`;
   };
@@ -317,8 +323,26 @@
       }).join('')}</div>`;
   }
 
+  // #216: the files a group touches, as code paths (the first FILES_SHOWN, the rest folded)
+  const FILES_SHOWN = 3;
+  const filesHtml = (files) => {
+    const li = (f) => `<li><code>${esc(f)}</code></li>`;
+    const rest = files.slice(FILES_SHOWN);
+    return `<ul class="po-files">${files.slice(0, FILES_SHOWN).map(li).join('')}</ul>${rest.length
+      ? `<details class="po-files-more"><summary class="small muted">+${rest.length} more</summary><ul class="po-files">${rest.map(li).join('')}</ul></details>` : ''}`;
+  };
+  const workflowOf = (file) => (state.workflows || []).find((w) => w.file === file) || null;
+  // A workflow as people read it: software-development-local-hero → "Software development, local
+  // hero" (the variant of another workflow after a comma), ai-development → "AI development".
+  const words = (slug) => WorkflowInputs.humanize(slug).replace(/\b(ai|ci|e2e|pr|ui)\b/gi, (m) => m.toUpperCase());
+  function workflowTitle(wf, file) {
+    const slug = String(wf?.name || file || '').replace(/\.ya?ml$/i, '');
+    const base = (state.workflows || []).map((w) => w.name).filter((s) => s && slug.startsWith(`${s}-`)).sort((a, b) => b.length - a.length)[0];
+    return base ? `${words(base)}, ${words(slug.slice(base.length + 1)).replace(/^\w/, (c) => c.toLowerCase())}` : words(slug);
+  }
+
   function groupHtml(g, m, n) {
-    const inputs = Object.entries(g.inputs || {});
+    const wf = workflowOf(g.workflow);
     const key = `${m}:${n}`;
     const st = groupState(g);
     const done = applied(st);
@@ -335,13 +359,15 @@
           <span class="po-issues">${g.issues.map(issueRef).join('')}</span>
           ${appliedBadge(st, already)}
         </div>
-        <div class="small"><span class="muted">workflow</span> <span class="mono">${esc(g.workflow)}</span>${inputs.length ? ` · <span class="muted">inputs</span> ${inputs.map(([k, v]) => `<span class="mono">${esc(k)}=${esc(v)}</span>`).join(', ')}` : ''}</div>
-        ${g.reason ? `<div class="small">${esc(g.reason)}</div>` : ''}
-        ${g.modeReason ? `<div class="small"><span class="muted">mode:</span> ${esc(g.modeReason)}</div>` : ''}
-        ${g.files?.length ? `<div class="small muted">files: <span class="mono">${g.files.map(esc).join(', ')}</span></div>` : ''}
-        <div class="small po-size">${sizeText(g)}</div>
-        ${costHtml(g)}
-        ${(g.warnings || []).map((w) => `<div class="small warn-text">⚠ ${esc(w)}</div>`).join('')}
+        <div class="po-wf"><span class="badge po-wf-name" title="${esc(g.workflow)}">${esc(workflowTitle(wf, g.workflow))}</span>${WorkflowInputs.inputPills(wf, g.inputs, { defaults: true })}</div>
+        <dl class="po-secs small">
+          ${g.reason ? `<dt>Why</dt><dd class="md md-compact">${markdownHtml(g.reason)}</dd>` : ''}
+          ${g.modeReason ? `<dt>Mode</dt><dd class="md md-compact">${markdownHtml(g.modeReason)}</dd>` : ''}
+          ${g.files?.length ? `<dt>Files</dt><dd>${filesHtml(g.files)}</dd>` : ''}
+          <dt>Estimate</dt><dd class="po-size">${sizeText(g)}</dd>
+          ${g.cost ? `<dt>Cost</dt><dd>${costHtml(g)}</dd>` : ''}
+        </dl>
+        ${g.warnings?.length ? `<div class="po-callout warn small" role="note">${g.warnings.map((w) => `<div>⚠ ${esc(w)}</div>`).join('')}</div>` : ''}
         ${suggestedHtml(g, key, done)}
         <div class="row po-group-actions">
           <button class="btn sm primary" type="button" data-po-act="assign"${off || ' title="Open the assign dialog with these issues as one run"'}>Assign…</button>
@@ -354,11 +380,12 @@
   }
 
   // #205: what the Cost step set on a group (its inputs, the grouping, what the workflow cannot adjust)
+  // (#216: its choices as the same pills as the workflow's inputs)
   function costHtml(g) {
     if (!g.cost) return '';
-    const set = Object.entries(g.cost.inputs || {}).map(([k, v]) => `${k}=${v}`).join(', ');
+    const set = Object.entries(g.cost.inputs || {}).map(([k, v]) => `${k}: ${v}`).join(', ');
     const tip = [set && `Set by the Cost step: ${set}`, g.cost.grouping, ...(g.cost.notAdjustable || [])].filter(Boolean).join('\n');
-    return `<div class="small"><span class="badge" title="${esc(tip)}">${esc(g.cost.name)}</span>${g.cost.grouping ? ` <span class="muted">${esc(g.cost.grouping)}</span>` : ''}${(g.cost.notAdjustable || []).some((x) => /^Agents/.test(x)) ? ' <span class="muted">· agents: not adjustable</span>' : ''}</div>`;
+    return `<div class="po-cost"><span class="badge po-cost-name" title="${esc(tip)}">${esc(g.cost.name)}</span>${WorkflowInputs.inputPills(workflowOf(g.workflow), g.cost.inputs, { defaults: true })}${g.cost.grouping ? ` <span class="muted">${esc(g.cost.grouping)}</span>` : ''}${(g.cost.notAdjustable || []).some((x) => /^Agents/.test(x)) ? ' <span class="muted">· agents: not adjustable</span>' : ''}</div>`;
   }
 
   function answerHtml(a, m) {

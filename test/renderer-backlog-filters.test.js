@@ -29,9 +29,9 @@ test('filtering() and the "No issues match" message both account for the epic fi
   assert.match(noMatch, /bl\.epic \? `Epic: /);
 });
 
-test('the epic select is hidden with no epics, and in the Roadmap and Epics views (they have their own epic grouping)', () => {
+test('the epic select is hidden with no epics, and in the Epics view (it shows on the Board and the Roadmap, #217)', () => {
   const fn = /function renderEpicFilter\(issues\)[\s\S]*?\n  \}/.exec(src)[0];
-  assert.match(fn, /sel\.classList\.toggle\('hidden', !epics\.length \|\| bl\.mode === 'roadmap' \|\| bl\.mode === 'epics'\);/);
+  assert.match(fn, /sel\.classList\.toggle\('hidden', !epics\.length \|\| bl\.mode === 'epics'\);/);
 });
 
 test('a card\'s epic badge filters the list by that epic on click, toggling off when clicked again outside the Epics view', () => {

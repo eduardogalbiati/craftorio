@@ -199,4 +199,7 @@ group is risky for another reason (an unknown area, a migration, a flaky test su
 - Use only issue numbers and workflow files from the report; suggest the inputs that matter
   (`mode` with its `mode_reason`, see above).
 - The summary is short Markdown in English: the recommendation first, then the reasons.
+- Keep each group's `reason` and `mode_reason` short: one or two sentences each, shown on the
+  proposal card. Markdown is allowed in a reason: **bold** for the key point (e.g. "**Same
+  screen**: both change the roadmap card"), `code` for a file; no headings, no lists.
 - End with the JSON block the prompt asks for.

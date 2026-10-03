@@ -419,6 +419,9 @@ function demoRoadmap(ws, projectId, live = 'off', budget = null) {
         item('item-5', 'software-development-local-hero.yaml', [15], { runId: tonight.waiting, runs: [tonight.waiting], inputs: { language: 'js', mode: 'validated' } }),
         item('item-6', 'software-development-local-hero.yaml', [13], { runId: tonight.failed, runs: [tonight.failed] }),
         item('item-7', 'software-development-local-hero.yaml', [14], { error: refused.replace(/^Could not start #14: /, '') }),
+        // #215: done, real cost and time against the estimate (folded as "+2 done" until Show all)
+        item('item-9', 'software-development-local-hero.yaml', [9], { status: 'done', runId: tonight.better, runs: [tonight.better] }),
+        item('item-10', 'software-development-local-hero.yaml', [12], { status: 'done', runId: tonight.worse, runs: [tonight.worse] }),
       ] }] : []),
       { id: 'stage-2', name: 'Reports and health', note: 'Both touch the server: one run, no conflict.', items: [item('item-2', 'software-development-local-hero.yaml', [12, 9], {
         // #193: a reason of 500+ characters ends with "…" at the card's edge, whole when opened
@@ -511,17 +514,25 @@ function demoRoadmapRuns(ws, projectId) {
     id: `s-${step}`, step_id: step, agent: AGENT[step][0], provider: 'claude', model: AGENT[step][1], cost_usd: Math.round(STEP_COST[step] * k * 100) / 100, tokens: { input: 1000, output: 2000, cache_read: 0, cache_write: 0 }, turns: 1,
   }));
   const now = Date.now();
-  // the history: two runs that merged (a little slower, a little faster than the usual path)
-  [[-3, 1.1], [-2, 0.9]].forEach(([day, k], n) => {
-    const start = now + day * 864e5;
+  // a run that merged, `k` times the usual path's time and cost
+  const merged = (start, k, runId) => {
     const steps = PATH.map(([s, m]) => [s, Math.round(m * k)]);
-    const runId = `${new Date(start).toISOString().slice(0, 10).replace(/-/g, '')}-210000-hist000${n + 1}`;
     const { lines, end } = events(start, steps, null);
     write(runId, [...lines, ev(end, 'workflow.finished', { status: 'success' })], {
       status: 'success', started_at: new Date(start).toISOString(), finished_at: new Date(end).toISOString(), duration_ms: end - start, progress: trail(start, steps), sessions: sessionsOf(steps, k),
     });
+    return runId;
+  };
+  // the history: two runs that merged (a little slower, a little faster than the usual path)
+  [[-3, 1.1], [-2, 0.9]].forEach(([day, k], n) => {
+    const start = now + day * 864e5;
+    merged(start, k, `${new Date(start).toISOString().slice(0, 10).replace(/-/g, '')}-210000-hist000${n + 1}`);
   });
   const stamp = (m) => new Date(now - m * min).toISOString().slice(0, 10).replace(/-/g, '');
+  // #215: tonight's two runs that already merged: one cheaper and faster than estimated (green),
+  // one far over (red)
+  const better = merged(now - 300 * min, 0.6, `${stamp(300)}-190000-run00009`);
+  const worse = merged(now - 420 * min, 1.8, `${stamp(420)}-170000-run00012`);
   const running = `${stamp(52)}-230500-run00016`;
   const waiting = `${stamp(95)}-221500-run00015`;
   const failed = `${stamp(190)}-204000-run00013`;
@@ -537,7 +548,7 @@ function demoRoadmapRuns(ws, projectId) {
   write(failed, [...f.lines, ev(f.end, 'workflow.finished', { status: 'failed', error: 'The suite failed: 3 tests in test/report.test.js' })], {
     status: 'failed', error: 'The suite failed: 3 tests in test/report.test.js', started_at: new Date(now - 190 * min).toISOString(), finished_at: new Date(f.end).toISOString(), duration_ms: f.end - (now - 190 * min), progress: ft,
   });
-  return { running, waiting, failed };
+  return { running, waiting, failed, better, worse };
 }
 
 // Settings › General › Dependency cache (#198): two complete entries of the demo project (sizes

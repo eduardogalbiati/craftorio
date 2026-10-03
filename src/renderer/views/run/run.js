@@ -134,7 +134,13 @@ function renderRunSummary() {
   const r = state.run;
   if (!r) return;
   askPrStates([r]);
-  const inputs = Object.entries(r.inputs || {}).filter(([, v]) => v !== undefined && v !== null && v !== '' && !(Array.isArray(v) && !v.length));
+  const all = Object.entries(r.inputs || {}).filter(([, v]) => v !== undefined && v !== null && v !== '' && !(Array.isArray(v) && !v.length));
+  // #216: the choices (enum and yes/no inputs) as the shared pills, with their labels; the rest
+  // (task, paths, numbers) as key / value
+  const wf = (state.workflows || []).find((w) => w.file === r.file || w.name === r.workflow) || null;
+  const isChoice = (k) => Array.isArray(wf?.inputs?.[k]?.enum) || wf?.inputs?.[k]?.type === 'boolean';
+  const pills = WorkflowInputs.inputPills(wf, Object.fromEntries(all.filter(([k]) => isChoice(k))), { defaults: true });
+  const inputs = all.filter(([k]) => !isChoice(k));
   // an accepted Write & Review run started from an issue: Save to issue, now or later (#103)
   const saveIssue = r.workflow === 'writer-reviewer' && r.status === 'success' && window.openDuoSaveToIssue ? (issuesOfRun(r)[0] || null) : null;
   // its title (editable) and PR first, the workflow under it (#84); a past run opened from disk is read-only
@@ -145,6 +151,7 @@ function renderRunSummary() {
     ${(r.issueSaves || []).map((s) => `<div class="small" title="The accepted document was saved to the issue (Save to issue, Write & Review)">Saved to issue: <a href="${esc(s.commentUrl || s.url)}" target="_blank" rel="noopener">#${esc(s.number)}</a> · ${s.mode === 'comment' ? 'as a comment' : 'description replaced'} · ${esc(new Date(s.at).toLocaleString('en-US'))}</div>`).join('')}
     ${r.gateWaitMs ? `<div class="small" title="Time the run waited for your answers at its human gates: no agent works (or costs) meanwhile">Waiting for you at gates: <b>${esc(fmtDur(r.gateWaitMs))}</b></div>` : ''}
     ${testsPlanHtml(r.testsPlan)}
+    ${pills ? `<div class="run-input-pills">${pills}</div>` : ''}
     <dl class="kv run-inputs">${inputs.map(([k, v]) => `<dt title="${esc(k)}">${esc(k)}</dt>${inputValueCell(v)}`).join('')}</dl>
     ${inputImagesHtml()}
     ${window.gateScenariosHtml ? window.gateScenariosHtml(r.id) : ''}

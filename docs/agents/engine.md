@@ -139,6 +139,8 @@ same features for users; this is the implementer's summary.
   (missing ones left out with a warn). Recorded as `personas` in `workflow.started`; `resumeSpec` keeps the pick.
   Written by the visual builder's "random agent" desk.
 - `capabilities` (agent, overridable per step) and `isolation: false`: see [capabilities.md](capabilities.md).
+- `color: "#RRGGBB"` (agent, #224): the agent's colour in the run chat and the runs list, over its role's
+  fixed colour (`src/renderer/agent-colors.js`); the engine ignores it, `workflows:list` passes it on.
 - `edits_tests: false` (agent or `defaults`, overridable per step, e.g. `resolve_merge: true`) + workflow-level
   `tests_paths` (globs; default `TESTS_PATHS` in `src/engine/test-paths.js`): `sendToAgent` snapshots the
   working dir before every turn of that agent (steps and delegations) and, after it, lists the test files the

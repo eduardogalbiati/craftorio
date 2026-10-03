@@ -55,14 +55,17 @@ metadata:
 # -----------------------------------------------------------------------------
 inputs:
   request:
+    label: "Request"
     type: string
     required: true
     description: The problem or the idea, in a few words, in any language (e.g. "the run chat hides the gate when the window is small").
   project_path:
+    label: "Project folder"
     type: string
     required: true
     description: Local repository the issue is about (read-only for the analyzer and the writer). Needs a GitHub or GitLab remote.
   mode:
+    label: "Mode"
     type: string
     enum: [auto, validated]
     default: validated
@@ -77,19 +80,23 @@ inputs:
     # gh = GitHub (gh CLI), gl = GitLab (glab CLI): picks the issue-creator skill.
     description: Where the issue is filed.
   related:
+    label: "Related issues"
     type: string
     required: false
     default: ""
     description: Optional related issues, e.g. "#41, #79". The analyzer reads them first.
   attachments:
+    label: "Attachments"
     type: array
     default: []
     description: Optional files that show the problem (screenshots, logs, a run folder), one path per line. The analyzer reads them.
   max_revisions:
+    label: "Max revisions"
     type: integer
     default: 3
     description: How many times you can send the draft back to the writer from the review.
   assign_workflow:
+    label: "Workflow to assign"
     type: string
     default: software-development.yaml
     description: "Workflow the new issues are queued for when you pick \"Create and queue\" at the review (grouped in one run when the analysis advises it)."

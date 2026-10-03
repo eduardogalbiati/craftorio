@@ -42,12 +42,14 @@ metadata:
 # -----------------------------------------------------------------------------
 inputs:
   project_path:
+    label: "Project folder"
     type: string
     required: true
     description: Local clone of the repository whose open issues are refreshed (read-only). Needs a GitHub or GitLab remote (origin).
   # the Start panel's free-text field (the first text input); the other inputs come prefilled from
   # the Backlog's banner (Refresh now)
   focus:
+    label: "Focus"
     type: string
     default: ""
     description: Optional, what to look at first, e.g. "the screens epic #158 moved to src/renderer/views/". Empty = a plain refresh.
@@ -60,14 +62,17 @@ inputs:
     # gh = GitHub (gh CLI), gl = GitLab (glab CLI): picks the backlog-refresh-<platform> skill.
     description: Where the issues live.
   base_branch:
+    label: "Base branch"
     type: string
     default: main
     description: "The branch that holds today's code, read from this clone (local merges count)."
   since:
+    label: "Since"
     type: string
     default: "24 hours ago"
     description: What counts as recent changes - a date ("2026-10-01"), "24 hours ago", or a git ref/commit.
   issues:
+    label: "Issues"
     type: array
     default: []
     # a roadmap stage fills it with its item's issue URLs (src/backlog.js runInputs)

@@ -23,6 +23,18 @@
 .po-sec .sup-h { color: #2DD4BF; }
 .po-group { border: 1px solid var(--border); border-left: 3px solid #0F9F8F; background: var(--panel); border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; display: grid; gap: 5px; }
 .po-group-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+/* #216: the proposal card in sections: the workflow and its pills, Why / Mode / Files / Estimate / Cost, the warnings */
+.po-wf, .po-cost { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.po-wf-name { color: var(--text); font-weight: 600; }
+.po-secs { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 3px 10px; margin: 0; }
+.po-secs dt { color: var(--muted); font-weight: 600; }
+.po-secs dd { margin: 0; min-width: 0; }
+.po-secs .md > :first-child { margin-top: 0; }
+.po-secs .md > :last-child { margin-bottom: 0; }
+.po-files { list-style: none; margin: 0; padding: 0; display: grid; gap: 1px; }
+.po-files code { font-size: 11px; overflow-wrap: anywhere; }
+.po-files-more summary { cursor: pointer; }
+.po-callout.warn { color: var(--yellow); background: color-mix(in srgb, var(--yellow) 10%, var(--panel)); border: 1px solid color-mix(in srgb, var(--yellow) 40%, transparent); border-radius: 6px; padding: 5px 8px; display: grid; gap: 2px; }
 .po-issues { display: inline-flex; gap: 4px; flex-wrap: wrap; }
 .po-issue { text-decoration: none; color: var(--text); }
 .po-issue:hover { border-color: #2DD4BF; }
@@ -286,6 +298,15 @@ a.rm-title:hover { text-decoration: underline; }
 .rm-estimate { font-variant-numeric: tabular-nums; }
 .rm-no-estimate { color: var(--muted); }
 .rm-actual { font-variant-numeric: tabular-nums; color: var(--text); }
+/* #215: a real value against its estimate, by verdict (the arrow says it too: colour is never alone) */
+.badge.rm-verdict-good { color: var(--green); background: color-mix(in srgb, var(--green) 12%, var(--panel)); border-color: color-mix(in srgb, var(--green) 45%, transparent); }
+.badge.rm-verdict-warn { color: var(--yellow); background: color-mix(in srgb, var(--yellow) 12%, var(--panel)); border-color: color-mix(in srgb, var(--yellow) 45%, transparent); }
+.badge.rm-verdict-bad { color: var(--red); background: color-mix(in srgb, var(--red) 12%, var(--panel)); border-color: color-mix(in srgb, var(--red) 45%, transparent); }
+.rm-verdict .rm-sign { font-size: .85em; }
+/* #217: what the Roadmap tab hides by default, and how to bring it back */
+.rm-show-all { margin-right: 6px; }
+.rm-hidden-line { margin: 0 0 8px; }
+.rm-folded { align-self: flex-start; }
 .rm-item.flash { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); transition: box-shadow .3s; }
 /* #195: a workflow that pushes while the default development workflow merges locally */
 .badge.rm-wf-push { color: var(--orange); background: color-mix(in srgb, var(--orange) 14%, var(--panel)); border-color: color-mix(in srgb, var(--orange) 45%, transparent); }

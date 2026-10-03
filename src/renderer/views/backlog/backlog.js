@@ -28,6 +28,9 @@
 // and the search); the fourth mode, Epics, lists the epics with their progress (closed, done in the
 // roadmap) and members, the "Auto-place new issues" option (project.autoEpic) and "Organize into
 // epics…", which asks the Product Owner (window.BacklogPO).
+// Page tabs (#217): Board (the list or the kanban, a List / Kanban switch, with the state, search,
+// label and sort filters), Roadmap (open work by default, Show all remembered) and Epics; the tab and
+// the Board's view are remembered. The epic select is one choice for the Board and the Roadmap.
 // Registers itself with registerView (view-registry.js), with the Product Owner drawer and the
 // assign / push / unqueue dialogs; mount() wires them and adds the sidebar's unpushed badge.
 // Uses app.js globals ($, esc, state, errMsg, dateOf, markdownHtml, showView, openModal,
@@ -39,6 +42,9 @@
   window.BACKLOG_PLATFORMS = PLATFORMS;
   const PROJECT_KEY = 'multiagent.backlogProject';
   const MODE_KEY = 'multiagent.backlogMode';
+  // #217: the Board tab's last view (list or kanban) and the Roadmap tab's Show all
+  const BOARD_KEY = 'multiagent.backlogBoard';
+  const SHOW_ALL_KEY = 'multiagent.roadmapShowAll';
   const WORKFLOW_KEY = 'multiagent.backlogWorkflow';
   const LABELS_KEY = 'multiagent.backlogLabels.'; // + project id
   const SORT_KEY = 'multiagent.backlogSort';
@@ -59,7 +65,17 @@
     mode: ['kanban', 'roadmap', 'epics'].includes(load(MODE_KEY)) ? load(MODE_KEY) : 'list', filter: 'open', q: '', expanded: new Set(), seq: 0,
     selected: new Set(), workflows: [], labels: [], labelsOpen: false, epic: '',
     sort: SORTS.includes(load(SORT_KEY)) ? load(SORT_KEY) : 'updated',
+    board: load(BOARD_KEY) === 'kanban' || (load(BOARD_KEY) == null && load(MODE_KEY) === 'kanban') ? 'kanban' : 'list',
+    showAll: load(SHOW_ALL_KEY) === '1',
   };
+  // #217: the page tab of a mode (Board: list / kanban)
+  const tabOf = (mode) => (mode === 'roadmap' || mode === 'epics' ? mode : 'board');
+  const onRoadmapTab = () => bl.mode === 'roadmap';
+  function setMode(mode) {
+    bl.mode = mode;
+    save(MODE_KEY, mode);
+    if (tabOf(mode) === 'board') { bl.board = mode; save(BOARD_KEY, mode); }
+  }
   const {
     hasLabel,
     labelOptions,
@@ -425,6 +441,10 @@
     assignChain().set(null);
     renderAssignInputs();
     for (const [k, v] of Object.entries(prefill?.inputs || {})) WorkflowInputs.set($b('#assign-inputs'), k, v);
+    // #216: what the Product Owner chose, as the same pills as its card (the Settings below edit them)
+    const proposed = prefill?.inputs ? WorkflowInputs.inputPills(bl.workflows.find((w) => w.file === prefill.workflow) || null, prefill.inputs, { defaults: true }) : '';
+    $b('#assign-proposed').innerHTML = proposed ? `<span class="muted">Product Owner's choices:</span> ${proposed}` : '';
+    $b('#assign-proposed').classList.toggle('hidden', !proposed);
     openModal('#assign-modal');
   }
 
@@ -437,7 +457,7 @@
     const numbers = issues.filter((n) => todo.some((i) => i.number === n));
     const skipped = issues.filter((n) => !numbers.includes(n));
     if (!numbers.length) return skipped;
-    if (bl.mode === 'roadmap') { bl.mode = 'list'; save(MODE_KEY, bl.mode); }
+    if (bl.mode === 'roadmap') setMode(bl.board);
     if (numbers.some((n) => !isShown(todo.find((i) => i.number === n)))) {
       bl.q = '';
       $b('#bl-search').value = '';
@@ -547,7 +567,11 @@
       btn.disabled = false;
     }
   }
-  const roadmapCtx = () => ({ projectId: bl.projectId, setData, render, setError: (msg) => { bl.error = msg; } });
+  const roadmapCtx = () => ({
+    projectId: bl.projectId, setData, render, setError: (msg) => { bl.error = msg; },
+    // #217: the Roadmap tab's Show all (remembered)
+    setShowAll: (on) => { bl.showAll = !!on; save(SHOW_ALL_KEY, bl.showAll ? '1' : ''); render(); },
+  });
 
   // An issue of a queued group: remove it from the group (the others still go as one run) or
   // cancel the whole group. Resolves 'one', 'all' or null (keep it).
@@ -616,13 +640,14 @@
   };
 
   // The epic filter (#138): every epic with how many issues the other filters show, then "No epic".
-  // Hidden when the backlog has no epic, and in the Roadmap and Epics views.
+  // Hidden when the backlog has no epic, and in the Epics view. One choice for the Board and the
+  // Roadmap tabs (#217); on the Roadmap it counts the issues the roadmap plans.
   function renderEpicFilter(issues) {
     const sel = $b('#bl-epic');
     const epics = bl.data?.epics || [];
-    sel.classList.toggle('hidden', !epics.length || bl.mode === 'roadmap' || bl.mode === 'epics');
+    sel.classList.toggle('hidden', !epics.length || bl.mode === 'epics');
     if (!epics.length) return;
-    const shown = issues.filter((i) => inState(i) && matchesLabels(i, bl.labels));
+    const shown = onRoadmapTab() ? issues.filter((i) => i.roadmap) : issues.filter((i) => inState(i) && matchesLabels(i, bl.labels));
     sel.innerHTML = `<option value="">All epics</option>${epicOptions(epics, shown).map((o) => `<option value="${esc(o.id)}">${esc(o.title)} (${o.count})</option>`).join('')}`;
     sel.value = bl.epic;
     sel.classList.toggle('active', !!bl.epic);
@@ -963,10 +988,20 @@
     $b('#bl-sort').value = bl.sort;
     $b('#bl-sort').classList.toggle('hidden', bl.mode === 'roadmap' || bl.mode === 'epics');
 
+    // #217: the page tabs (Board / Roadmap / Epics) and the Board's List / Kanban switch; the
+    // search and the labels belong to the Board (and the Epics view), the epic filter to both tabs
+    const tab = tabOf(bl.mode);
+    document.querySelectorAll('#bl-tabs [data-bl-tab]').forEach((b) => {
+      b.classList.toggle('active', b.dataset.blTab === tab);
+      b.setAttribute('aria-selected', String(b.dataset.blTab === tab));
+    });
+    $b('#bl-mode').classList.toggle('hidden', tab !== 'board');
     document.querySelectorAll('#bl-mode [data-mode]').forEach((b) => {
       b.classList.toggle('active', b.dataset.mode === bl.mode);
-      b.setAttribute('aria-selected', String(b.dataset.mode === bl.mode));
+      b.setAttribute('aria-pressed', String(b.dataset.mode === bl.mode));
     });
+    const shownCount = (bl.data?.issues || []).filter(isShown).length;
+    $b('#bl-count').textContent = tab === 'board' && bl.data ? `${shownCount} issue${shownCount === 1 ? '' : 's'}` : '';
     const n = shownSelected().length;
     $b('#btn-bl-assign').classList.toggle('hidden', !n);
     $b('#btn-bl-assign').textContent = `Assign workflow… (${n})`;
@@ -985,6 +1020,9 @@
       `<button class="chip${bl.filter === f ? ' active' : ''}" data-f="${f}">${label} <span class="muted">${count(f)}</span></button>`).join('');
     renderLabelFilter(issues);
     renderEpicFilter(issues);
+    // (after renderLabelFilter, which shows the labels button whenever there are labels)
+    for (const id of ['#bl-search', '#bl-label-active']) $b(id).classList.toggle('hidden', tab === 'roadmap');
+    if (tab === 'roadmap') $b('#bl-labels-wrap').classList.add('hidden');
     $b('#bl-synced').textContent = bl.syncing ? 'Syncing…' : bl.data ? `Synced ${dateOf(bl.data.syncedAt)} from ${PLATFORMS[bl.data.platform]?.label || bl.data.platform}` : '';
     const prError = bl.data?.pullRequestsError ? `Open ${bl.data.platform === 'gitlab' ? 'MRs' : 'PRs'} could not be read: ${bl.data.pullRequestsError}` : '';
     $b('#bl-error').textContent = bl.error || prError;
@@ -1003,7 +1041,7 @@
     } else if (!bl.data) {
       list.innerHTML = bl.syncing ? '<p class="muted">Loading issues…</p>' : '<p class="muted">Not synced yet.</p>';
     } else {
-      list.innerHTML = bl.mode === 'roadmap' ? window.BacklogRoadmap.html(bl.data, render) : bl.mode === 'epics' ? renderEpics(issues) : bl.mode === 'kanban' ? renderKanban(issues) : renderList(issues);
+      list.innerHTML = bl.mode === 'roadmap' ? window.BacklogRoadmap.html(bl.data, render, { epic: bl.epic, showAll: bl.showAll }) :bl.mode === 'epics' ? renderEpics(issues) : bl.mode === 'kanban' ? renderKanban(issues) : renderList(issues);
       // the open item's "When it finishes" (#134)
       if (bl.mode === 'roadmap') window.BacklogRoadmap.mountChain(bl.data);
     }
@@ -1020,7 +1058,7 @@
   // an epic's badge or "Show its issues": that epic in the list (the Epics view switches to the list)
   function filterEpic(id) {
     bl.epic = bl.epic === id && bl.mode !== 'epics' ? '' : id;
-    if (bl.mode === 'epics') { bl.mode = 'list'; save(MODE_KEY, 'list'); }
+    if (bl.mode === 'epics') setMode(bl.board);
     render();
   }
   const flipLabel = (name) => { setLabels(toggleLabel(bl.labels, name)); render(); };
@@ -1131,7 +1169,12 @@
     $b('#bl-search').oninput = (e) => { bl.q = e.target.value.trim(); render(); };
     $b('#bl-mode').onclick = (e) => {
       const mode = e.target.closest('[data-mode]')?.dataset.mode;
-      if (mode) { bl.mode = mode; save(MODE_KEY, mode); render(); }
+      if (mode) { setMode(mode); render(); }
+    };
+    // #217: the Board tab opens its last view (list or kanban)
+    $b('#bl-tabs').onclick = (e) => {
+      const tab = e.target.closest('[data-bl-tab]')?.dataset.blTab;
+      if (tab) { setMode(tab === 'board' ? bl.board : tab); render(); }
     };
     $b('#bl-epic').onchange = (e) => { bl.epic = e.target.value; render(); };
     $b('#btn-bl-labels').onclick = () => { bl.labelsOpen = !bl.labelsOpen; render(); };
@@ -1282,13 +1325,17 @@
             <button id="btn-bl-new-issue" class="btn ghost nowrap" type="button" title="Describe a problem or an idea in a few words: the issue-tracker workflow analyses the code, rates impact and complexity, drafts the issue and files it once you approve">New issue…</button>
           </div>
         </div>
+        <div id="bl-tabs" class="tabs page-tabs" role="tablist" aria-label="Backlog">
+          <button type="button" class="tab" role="tab" data-bl-tab="board" title="The issues as a list or a kanban">Board</button>
+          <button type="button" class="tab" role="tab" data-bl-tab="roadmap" data-mode="roadmap" title="Ordered stages of runs: each stage starts when the previous one has finished and merged">Roadmap</button>
+          <button type="button" class="tab" role="tab" data-bl-tab="epics" data-mode="epics" title="The epics: themes of issues, with their progress and members">Epics</button>
+        </div>
         <div class="pr-toolbar">
-          <div id="bl-mode" class="chips" role="tablist" aria-label="View">
-            <button class="chip" data-mode="list" role="tab">List</button>
-            <button class="chip" data-mode="kanban" role="tab">Kanban</button>
-            <button class="chip" data-mode="roadmap" role="tab" title="Ordered stages of runs: each stage starts when the previous one has finished and merged">Roadmap</button>
-            <button class="chip" data-mode="epics" role="tab" title="The epics: themes of issues, with their progress and members">Epics</button>
-          </div>
+          <span id="bl-mode" class="seg sm" role="group" aria-label="Board view">
+            <button type="button" data-mode="list">List</button>
+            <button type="button" data-mode="kanban">Kanban</button>
+          </span>
+          <span id="bl-count" class="small muted"></span>
           <div id="bl-filters" class="chips"></div>
           <input type="text" id="bl-search" placeholder="Search issues, labels…" aria-label="Search" />
           <div id="bl-labels-wrap" class="bl-labels-wrap">
@@ -1359,6 +1406,7 @@
           <select id="assign-workflow"></select>
           <div id="assign-wf-desc" class="hint"></div>
           <details id="assign-wf-about" class="assign-about"><summary>About this workflow</summary><p id="assign-wf-about-text"></p></details>
+          <div id="assign-proposed" class="small hidden"></div>
         </div>
         <fieldset id="assign-settings" class="assign-settings">
           <legend>Settings</legend>
@@ -1394,7 +1442,7 @@
     focusIssue: (number) => {
       if (!number) return;
       bl.q = `#${number} `;
-      if (bl.mode === 'roadmap') bl.mode = 'list';
+      if (bl.mode === 'roadmap') bl.mode = bl.board;
       const input = $b('#bl-search');
       if (input) input.value = bl.q;
     },
