@@ -9,8 +9,11 @@
 // - chip(agent, def, theme): { background, text } (#RRGGBB) for a coloured chip in the 'light' or
 //   'dark' theme: a tint of the colour, the text a shade of the same colour with a contrast of at
 //   least 4.5:1 on it (the darkest needed in light, the lightest in dark).
+// - hexFor(agent, def): colorFor as #RRGGBB, the colour a robot is painted in (Robots.svg `color`, #227).
+// - roleChip(agent, def, theme): the HTML of the role chip by an agent's name ("test writer"), in chip()'s colours.
 // - defIn(workflows, workflow, agent): an agent's definition from a workflows list, by file or name.
-// Used by the run chat (--rc-agent, its robots' glow) and the runs list's progress avatars.
+// Used by the run chat (--rc-agent, its robots, the role chip), the runs list's progress avatars and
+// Write & Review's robots.
 // Browser: window.AgentColors; Node: module.exports.
 (function (root) {
   const ROLES = {
@@ -73,6 +76,16 @@
     return { background, text };
   }
 
+  /** The agent's colour as #RRGGBB (the name hash's hsl converted), for robots.js' `color`. */
+  const hexFor = (agent, def) => hexOf(toRgb(colorFor(agent, def)));
+
+  const escHtml = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+  /** The small chip by an agent's name (#227): its role in words ("test writer") in chip()'s colours. */
+  function roleChip(agent, def, theme = 'dark') {
+    const c = chip(agent, def, theme);
+    return `<span class="agent-chip" style="background:${c.background};color:${c.text}">${escHtml(String(agent).replace(/_/g, ' '))}</span>`;
+  }
+
   /** An agent's definition in a workflows list (api.listWorkflows), by the workflow's file or name. */
   function defIn(workflows, workflow, agent) {
     const wf = (workflows || []).find((w) => w && (w.file === workflow || w.name === workflow));
@@ -83,8 +96,10 @@
     chip,
     colorFor,
     defIn,
+    hexFor,
     hueOf,
     isHex,
+    roleChip,
     ROLES,
   };
   if (typeof module === 'object' && module.exports) module.exports = api;

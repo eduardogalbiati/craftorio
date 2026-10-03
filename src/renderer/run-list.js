@@ -355,16 +355,19 @@ function renderRunListsSoon() {
   });
 }
 
-// Robot SVGs are large: one per provider/model/state, reused. A workflow agent with a look saved
-// in Agents (`workflow` + `agent`) gets its own entry, dropped when a look changes.
+// Robot SVGs are large: one per provider/model/colour/state, reused. A workflow agent with a look
+// saved in Agents (`workflow` + `agent`) gets its own entry, dropped when a look changes. Without a
+// saved look the provider's robot is painted in the agent's colour (#227, agent-colors.js): the
+// progress strip, the roadmap and the workflows list draw the same robot.
 const avatarCache = new Map();
 document.addEventListener('robots:changed', (e) => { if (e.detail?.name === 'workflow-agents') avatarCache.clear(); });
 function robotAvatar(provider, model, st, workflow, agent) {
   const look = window.AgentLooks?.forWorkflow(workflow, agent);
-  const key = look ? `look|${workflow}/${agent}|${st}` : `${provider}|${model}|${st}`;
+  const color = !look && agent && window.AgentColors ? AgentColors.hexFor(agent, AgentColors.defIn(state.workflows, workflow, agent)) : '';
+  const key = look ? `look|${workflow}/${agent}|${st}` : `${provider}|${model}|${color}|${st}`;
   if (!avatarCache.has(key)) {
     const variant = look || (window.Robots ? Robots.variantFor(window.RunChatModel?.providerType(provider, model) || provider, model || '') : null);
-    avatarCache.set(key, variant ? Robots.svg(variant, st, { bubble: false, plaque: '' }) : '');
+    avatarCache.set(key, variant ? Robots.svg(variant, st, { bubble: false, plaque: '', ...(color ? { color } : {}) }) : '');
   }
   return avatarCache.get(key);
 }
@@ -379,10 +382,13 @@ function progressAvatar(a, chip, names, workflow) {
     : `${a.steps.join(', ')} · ${agentLabel(a.agent, names)} (${a.agent})${a.provider ? ` · ${a.provider}${a.model ? `/${a.model}` : ''}` : ''}${a.durationMs ? ` · ${fmtDur(a.durationMs)}` : ''} · ${fmtUsd(a.cost)}`;
   // the last chip's working agents show the run's state; the others rest
   const st = chip.status === 'done' ? 'idle' : CHIP_ROBOT_STATE[chip.status];
+  // the agent's fixed colour (#224): its robot is painted in it (#227), the engine's gear is drawn in it
+  const def = !a.human && window.AgentColors ? AgentColors.defIn(state.workflows, workflow, a.agent) : null;
+  const color = !a.human && window.AgentColors ? AgentColors.colorFor(a.agent, def) : '';
   const art = a.human ? PERSON_SVG : a.provider ? robotAvatar(a.provider, a.model, st, workflow, a.agent) : ENGINE_SVG;
-  // the agent's fixed colour (#224) as a ring around its avatar
-  const color = !a.human && window.AgentColors ? AgentColors.colorFor(a.agent, AgentColors.defIn(state.workflows, workflow, a.agent)) : '';
-  return `<span class="rp-av${a.human ? ' human' : a.provider ? '' : ' engine'}"${color ? ` style="--agent-color:${esc(color)}"` : ''} title="${esc(tip)}">${art}</span>`;
+  // the hover card: the agent's name with its role chip (#227), then the steps, provider, time and cost
+  const card = a.human ? '' : `<span class="rp-card" role="tooltip"><span><b>${esc(agentLabel(a.agent, names))}</b>${window.AgentColors ? AgentColors.roleChip(a.agent, def) : ''}</span><span class="muted">${esc(tip)}</span></span>`;
+  return `<span class="rp-av${a.human ? ' human' : a.provider ? '' : ' engine'}"${color ? ` style="--agent-color:${esc(color)}"` : ''}${a.human ? ` title="${esc(tip)}"` : ` tabindex="0" aria-label="${esc(tip)}"`}>${art}${card}</span>`;
 }
 
 function progressChip(c, names, workflow) {

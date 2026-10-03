@@ -144,7 +144,8 @@
     s += box(20, 76, 48, 20, 24, 40, v.limb, o).svg;
     const body = box(40, 40, 44, 70, 70, 60, v.body, { ...o, gloss: true, glossOp: v.glossOp });
     s += body.svg;
-    if (v.logo) s += at(body.L, 35, 30, `<g transform="${unflip}">${LOGOS[v.logo](19, v.chestLogo || '#fff')}</g>`);
+    // emblems drawn at the picker's size (emblem()) and scaled: the same artwork everywhere
+    if (v.logo) s += at(body.L, 35, 30, `<g transform="${unflip} scale(1.9)">${LOGOS[v.logo](10, v.chestLogo || '#fff')}</g>`);
     else s += at(body.L, 35, 30, `<rect x="-16" y="-10" width="32" height="20" rx="6" fill="${darken(v.body, .12)}" stroke="${ol}" stroke-width="2.5"/><circle cx="-6" r="3.5" fill="${v.accent}"/><circle cx="6" r="3.5" fill="${lighten(v.body, .5)}"/>`);
     s += box(110, 76, 48, 20, 24, 40, v.limb, o).svg;
     const head = box(15, 15, 104, 120, 120, 110, v.head, { ...o, gloss: true, glossOp: v.glossOp });
@@ -154,7 +155,7 @@
       `<g filter="url(#glow-${id})">${v.face ? v.face(v, id) : EYES[v.eyes](v.accent) + `<path d="M48 72 Q60 80 72 72" fill="none" stroke="${v.accent}" stroke-width="4" stroke-linecap="round"/>`}</g>` +
       `<rect x="18" y="26" width="30" height="5" rx="2.5" fill="#fff" opacity=".18"/>`);
     const plate = v.logo
-      ? `<circle r="32" fill="${v.plate}" stroke="${ol}" stroke-width="4"/><g transform="${unflip}">${LOGOS[v.logo](20, v.plateLogo || '#fff')}</g>`
+      ? `<circle r="32" fill="${v.plate}" stroke="${ol}" stroke-width="4"/><g transform="${unflip} scale(2)">${LOGOS[v.logo](10, v.plateLogo || '#fff')}</g>`
       : `<circle r="32" fill="${v.plate}" stroke="${ol}" stroke-width="4"/><circle r="22" fill="none" stroke="${darken(v.plate, .25)}" stroke-width="3"/>` +
         `<g fill="${darken(v.plate, .3)}">${[-8, 0, 8].flatMap((x) => [-8, 0, 8].map((y) => `<circle cx="${x}" cy="${y}" r="2.6"/>`)).join('')}</g>`;
     s += at(head.R, 60, 55, plate + (v.plateExtra || ''));
@@ -332,19 +333,30 @@ ${flip(v.overlay || '')}
     VARIANTS[name] = fromAppearance(appearance, label ?? VARIANTS[name]?.label ?? name);
     document.dispatchEvent(new CustomEvent('robots:changed', { detail: { name } }));
   }
-  // An emblem alone, for pickers: an <svg> with a 20x20 viewBox in `color`.
+  // An emblem alone, for pickers: an <svg> with a 20x20 viewBox in `color` (a brand's logo too).
   const emblem = (name, color = 'currentColor') =>
-    `<svg viewBox="-11 -11 22 22" aria-hidden="true" focusable="false">${ICONS[name] ? LOGOS[name](10, color) : ''}</svg>`;
+    `<svg viewBox="-11 -11 22 22" aria-hidden="true" focusable="false">${Object.hasOwn(LOGOS, name) ? LOGOS[name](10, color) : ''}</svg>`;
 
   let uid = 0;
   // `variant` is a name from VARIANTS or a variant object (see fromAppearance).
   // `bubble: false` drops the balloon overlay (small avatars, where it would be unreadable);
   // `plaque` is the name plate text (the model), `mirror` faces the robot right.
+  // `color` (#RRGGBB, the agent's role colour, #227) paints the body and the shoulder plate, the shell
+  // (head, limbs) in a light tint of it, with the base and outline derived from it and a lighter tint
+  // for the visor glow (unless the state has its own, e.g. error red); the emblem and the plaque stay
+  // the provider's.
   function svg(variant, state = 'idle', opts = {}) {
     const st = STATES[state] || STATES.idle;
     const v = { ...(typeof variant === 'object' && variant ? variant : VARIANTS[variant] || VARIANTS.vanilla), ...st };
     v.mirror = !!opts.mirror;
     if (opts.plaque !== undefined) v.plaque = opts.plaque;
+    if (hex(opts.color)) {
+      const c = opts.color;
+      // an emblem on a light body would vanish in white (as in fromAppearance)
+      const mark = luma(c) > 0.7 ? darken(c, .6) : '#FFFFFF';
+      Object.assign(v, { body: c, plate: c, head: lighten(c, .7), limb: lighten(c, .7), base: darken(c, .55), outline: darken(c, .65), chestLogo: mark, plateLogo: mark });
+      if (!st.accent) v.accent = lighten(c, .45);
+    }
     if (opts.accent) v.accent = opts.accent; // the glow in the agent's colour (#224, agent-colors.js)
     if (opts.bubble === false) delete v.overlay;
     else if (v.overlay) v.overlay = v.overlay.replace('__UNFLIP__', v.mirror ? ' scale(-1,1)' : '');

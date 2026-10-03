@@ -47,9 +47,12 @@
   // the writer and the reviewer wear the look saved for writer-reviewer's agents in Agents, if any
   const variantOf = (role) => (roles[role].internal ? 'supervisor'
     : window.AgentLooks?.forWorkflow('writer-reviewer', role) || Robots.variantFor(roles[role].provider, roles[role].model));
+  // without a saved look, the provider's robot is painted in the role's colour (#227, agent-colors.js)
+  const colorOf = (role) => (roles[role].internal || !window.AgentColors || window.AgentLooks?.forWorkflow('writer-reviewer', role) ? undefined
+    : AgentColors.hexFor(role, AgentColors.defIn(state.workflows, 'writer-reviewer', role)));
   // The name plate shows the chosen model; the internal supervisor keeps its own generic plate.
   const plaqueOf = (role) => (roles[role].internal ? undefined : Robots.plaqueFor(roles[role].model));
-  const robotSvg = (role, st = 'idle', opts = {}) => Robots.svg(variantOf(role), st, { mirror: MIRRORED[role], plaque: plaqueOf(role), ...opts });
+  const robotSvg = (role, st = 'idle', opts = {}) => Robots.svg(variantOf(role), st, { mirror: MIRRORED[role], plaque: plaqueOf(role), color: colorOf(role), ...opts });
   // Chat messages keep a still, balloon-less robot; only the live ones animate.
   const avatar = (role) => `<span class="duo-robot still ${role}" aria-hidden="true">${robotSvg(role, 'idle', { bubble: false })}</span>`;
   const DOING = {

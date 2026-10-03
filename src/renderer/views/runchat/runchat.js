@@ -25,20 +25,20 @@
   const agentDef = (agent) => AgentColors.defIn(state.workflows, chat.model.run?.workflow, agent);
   const agentColor = (agent) => AgentColors.colorFor(agent, agentDef(agent));
   const colorStyle = (agent) => (isSupervisor(agent) ? '' : ` style="--rc-agent:${agentColor(agent)}"`);
-  // its robot's glow (eyes, antennas): a fixed or YAML colour only, the name hash keeps the provider's
-  const glowOf = (agent) => { const c = agentColor(agent); return AgentColors.isHex(c) ? c : undefined; };
+  // the colour its robot is painted in (#227), as #RRGGBB
+  const paintOf = (agent) => AgentColors.hexFor(agent, agentDef(agent));
   const nameOf = (agent) => (isSupervisor(agent) ? 'Supervisor' : chat.model.nameOf(agent));
   // Robots face the centre of the screen (as in Write & Review and AI Arena): one on the left
   // looks right (mirrored), one on the right looks left. The supervisor sits on the left.
   function robot(who, st = 'idle', opts = {}) {
     const mirror = isSupervisor(who.agent) || who.side !== 'right';
     if (isSupervisor(who.agent)) return Robots.svg('supervisor', st, { mirror, ...opts });
-    // a look saved for this workflow's agent in Agents, else the provider's robot glowing in the
-    // agent's colour (#224)
+    // a look saved for this workflow's agent in Agents, else the provider's robot painted in the
+    // agent's colour (#227): the emblem and the plaque keep the provider
     const saved = window.AgentLooks?.forWorkflow(chat.model.run?.workflow, who.agent);
     const variant = saved || Robots.variantFor(providerType(who.provider, who.model), who.model || '');
-    const accent = !saved && window.AgentColors ? glowOf(who.agent) : undefined;
-    return Robots.svg(variant, st, { plaque: who.model ? Robots.plaqueFor(who.model) : undefined, mirror, ...(accent ? { accent } : {}), ...opts });
+    const color = !saved && window.AgentColors ? paintOf(who.agent) : undefined;
+    return Robots.svg(variant, st, { plaque: who.model ? Robots.plaqueFor(who.model) : undefined, mirror, ...(color ? { color } : {}), ...opts });
   }
   const avatar = (who) => `<span class="duo-robot still" aria-hidden="true">${robot(who, 'idle', { bubble: false })}</span>`;
 
@@ -85,7 +85,7 @@
     const ctx = it.context?.peak ? ` · context ${it.fresh ? 'fresh ' : ''}${fmtK(it.context.start)} → ${fmtK(it.context.peak)}` : '';
     const foot = it.durationMs ? `${fmtK(it.tokensIn)} in / ${fmtK(it.tokensOut)} out${ctx} · $${it.cost.toFixed(2)} · ${fmtSecs(it.durationMs)}` : '';
     return `<div class="rc-msg rc-${it.side === 'right' ? 'right' : 'left'}" data-item="${it.id}"${colorStyle(it.agent)}>${agentAvatar(it)}<div class="duo-bubble">
-      <div class="duo-meta"><b class="rc-name" title="${esc(it.agent)}">${esc(nameOf(it.agent))}</b>${it.model ? `<span class="tag">${esc(it.model)}</span>` : ''}${stepTag(it.stepId, it.visit, it.sub)}<span class="time">${clock(it.ts)}</span></div>
+      <div class="duo-meta"><b class="rc-name" title="${esc(it.agent)}">${esc(nameOf(it.agent))}</b>${isSupervisor(it.agent) ? '' : AgentColors.roleChip(it.agent, agentDef(it.agent))}${it.model ? `<span class="tag">${esc(it.model)}</span>` : ''}${stepTag(it.stepId, it.visit, it.sub)}<span class="time">${clock(it.ts)}</span></div>
       <div class="rc-body md">${body}</div>${extras.join('')}${foot ? `<div class="duo-foot">${esc(foot)}</div>` : ''}</div></div>`;
   }
 
