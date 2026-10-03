@@ -9,3 +9,7 @@ docs/agents/code-map.md
 docs/agents/test-map.md
 # npm test in agent mode: the human-readable report and the JSON (scripts/test.js, #219)
 .test-output/
+# the E2E suite (#222): the tests bddgen generates from features/, Playwright's default output folders
+.features-gen/
+test-results/
+playwright-report/

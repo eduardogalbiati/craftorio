@@ -41,7 +41,7 @@
     <div class="brand">Multiagent <span>Orchestrator</span></div>
     <span id="sim-only-badge" class="sim-only-badge hidden" title="MULTIAGENT_SIMULATION_ONLY is set: real runs and CLI terminals are refused, only simulations run.">Simulation only</span>
     <button id="run-meta" class="run-meta" type="button" title="View the current run">
-      <span id="run-status" class="pill pill-idle">idle</span>
+      <span id="run-status" class="pill pill-idle" data-testid="run-status">idle</span>
       <span id="run-id" class="muted mono"></span>
     </button>
     <div class="kpis">
@@ -75,7 +75,7 @@
         </svg>
       </button>
       <button id="btn-stop" class="btn danger" disabled>Stop</button>
-      <button id="btn-quick-start" class="btn primary btn-icon" title="Start a workflow (opens the side panel)">
+      <button id="btn-quick-start" class="btn primary btn-icon" data-testid="quick-start"title="Start a workflow (opens the side panel)">
         <svg class="icon" width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M7 4.5v15a1 1 0 0 0 1.5.86l12-7.5a1 1 0 0 0 0-1.72l-12-7.5A1 1 0 0 0 7 4.5z" /></svg>
         Start
       </button>
@@ -171,7 +171,7 @@
       <div class="drawer-foot">
         <p id="start-info" class="muted small"></p>
         <p id="start-error" class="error small"></p>
-        <button id="btn-start" class="btn primary block">Start workflow</button>
+        <button id="btn-start" class="btn primary block" data-testid="start-workflow">Start workflow</button>
         <button id="btn-start-another" class="btn block" title="Start the run and keep this panel open, with the task cleared">Start and create another</button>
       </div>
     </aside>
@@ -262,7 +262,7 @@
 
   <!-- ================= Modals ================= -->
 
-  <div id="confirm-modal" class="modal hidden">
+  <div id="confirm-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="confirm-title" data-testid="confirm-modal">
     <div class="modal-card">
       <h3 id="confirm-title">Confirm</h3>
       <p id="confirm-message" class="muted"></p>

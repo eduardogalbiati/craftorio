@@ -815,7 +815,7 @@
     const shown = sortIssues(issues.filter(isShown), bl.sort);
     const withLocal = bl.data?.local?.ahead > 0 || issues.some((i) => i.column === 'local');
     const columns = COLUMNS.filter(([col]) => col !== 'local' || withLocal);
-    return `${!shown.length && issues.length && filtering() ? noMatch() : ''}<div class="bl-board${withLocal ? ' with-local' : ''}">${columns.map(([col, title]) => {
+    return `${!shown.length && issues.length && filtering() ? noMatch() : ''}<div class="bl-board${withLocal ? ' with-local' : ''}" data-testid="backlog-board">${columns.map(([col, title]) => {
       const items = shown.filter((i) => (i.column || (i.state === 'closed' ? 'done' : 'todo')) === col);
       return `<section class="bl-col bl-col-${col}">
         <h3>${title} <span class="muted">${items.length}</span></h3>
@@ -1360,7 +1360,7 @@
         <div id="bl-local" class="bl-queue bl-local hidden"></div>
         <div id="bl-queue" class="bl-queue hidden"></div>
         <p id="bl-error" class="error small"></p>
-        <div id="bl-list" class="pr-list"></div>
+        <div id="bl-list" class="pr-list" data-testid="backlog-list"></div>
         <button id="btn-bl-po" class="po-fab" type="button" title="Ask the Product Owner: which issues to run together, which not, in what order" aria-label="Product Owner"></button>
       </section>`,
     modals: `

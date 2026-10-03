@@ -40,3 +40,7 @@ Apply together with the core checklist in SKILL.md.
 ## Tests
 - `node:test`/Jest/Vitest: async test without `await`/`return` passes without checking anything.
 - Global mocks not restored (`afterEach`).
+- Playwright/E2E: a step that locates by CSS class, DOM position or text fragments instead of
+  `getByRole`/`getByTestId`; a step with no `expect` (it only clicks or takes a screenshot).
+- UI: a new control without a `data-testid` or without an ARIA role/accessible name (an icon-only
+  `<div>` with a click handler instead of a `<button>` or `role="button"` with `aria-label`).

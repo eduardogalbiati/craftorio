@@ -498,8 +498,6 @@ function mockString(key) {
 const MOCK_SEQUENCES = {
   verdict: ['changes_requested', 'approved'],
   tests_status: ['fail', 'pass'],
-  // e2e-release (#199): the whole suite fails once, the developer fixes it, then it passes
-  e2e_status: ['fail', 'pass'],
   build_status: ['success'],
   ci_status: ['pending', 'failed', 'pending', 'success'],
   state: ['waiting', 'needs_human', 'needs_fix', 'ready_to_merge'],

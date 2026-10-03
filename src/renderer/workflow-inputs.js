@@ -57,7 +57,7 @@
       if (atDefault && !defaults) return '';
       const value = isBoolean(def) || typeof v === 'boolean' ? (truthy(v) ? 'On' : 'Off') : optionLabel(def, v);
       const tip = `${k}: ${v}${atDefault ? ' (the workflow default)' : ''}${def.description ? `\n${def.description}` : ''}`;
-      return `<span class="badge wi-pill${atDefault ? ' wi-pill-default' : ''}" data-wi-pill="${esc(k)}" title="${esc(tip)}">${esc(label(k, def))}: ${esc(value)}</span>`;
+      return `<span class="badge wi-pill${atDefault ? ' wi-pill-default' : ''}" data-testid="input-pill" data-wi-pill="${esc(k)}" title="${esc(tip)}">${esc(label(k, def))}: ${esc(value)}</span>`;
     }).join('');
   }
   const isBoolean = (def = {}) => def.type === 'boolean' || (Array.isArray(def.enum) && def.enum.length === 2 && def.enum.map(String).sort().join() === 'false,true');

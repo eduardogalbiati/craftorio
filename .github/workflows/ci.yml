@@ -85,6 +85,18 @@ jobs:
         env:
           MULTIAGENT_UI_TESTS: "1"
         run: node node_modules/electron/install.js && node --test test/screenshot.test.js
+      # The Playwright + playwright-bdd E2E suite's critical journeys (#222): the real app with
+      # _electron on a simulated demo workspace, real assertions; a failure keeps its trace and screenshot.
+      - name: E2E smoke (Playwright, @smoke)
+        if: runner.os == 'Windows'
+        run: npm run test:e2e -- --grep "@smoke"
+      - name: E2E results and failure traces
+        if: failure() && runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-results
+          path: .test-output/e2e/
+          if-no-files-found: ignore
       - name: Production vulnerabilities
         if: runner.os == 'Linux'   # same lockfile everywhere: once is enough
         run: npm audit --omit=dev --audit-level=high

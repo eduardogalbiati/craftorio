@@ -83,6 +83,8 @@
 // (src/engine/machine-slot.js) and prints `screenshot: waiting for the screenshot slot` while
 // another run's capture holds it; a slot held by a dead process is freed.
 // Prints `screenshot: <path>` and exits 0, or exits 1 with the error.
+// The Playwright E2E suite (features/support/app.js, #222) seeds its scratch workspaces with the same
+// demo data: the helpers exported at the end (plain Node, no Electron needed).
 
 const fs = require('fs');
 const os = require('os');
@@ -494,9 +496,14 @@ function demoRoadmapRuns(ws, projectId) {
     if (summary) fs.writeFileSync(path.join(dir, 'summary.json'), JSON.stringify({ run_id: runId, workflow, project_id: projectId, mock: false, groups, inputs: { task: 'Demo roadmap run' }, sessions: [], ...summary }, null, 2));
     if (owner) {
       const data = { pid: 4242, host: 'studio-pc', role: 'run', started_at: new Date(Date.now() - 2 * 3600e3).toISOString() };
-      const beat = () => fs.writeFileSync(path.join(dir, 'owner.json'), JSON.stringify({ ...data, heartbeat_at: new Date().toISOString() }));
+      // stops once the scratch workspace is removed (the E2E suite seeds it from its own process)
+      let timer = null;
+      const beat = () => {
+        try { fs.writeFileSync(path.join(dir, 'owner.json'), JSON.stringify({ ...data, heartbeat_at: new Date().toISOString() })); } catch (e) { if (!timer) throw e; clearInterval(timer); }
+      };
       beat();
-      setInterval(beat, 5000).unref?.();
+      timer = setInterval(beat, 5000);
+      timer.unref?.();
     }
   };
   const trail = (start, steps) => {
@@ -1445,13 +1452,20 @@ function main() {
   require(path.join(appDir, 'src', 'main'));
 }
 
-// Electron's main process runs the capture; plain Node (the tests) only imports the helpers.
-if (process.type === 'browser') main();
+// Electron's main process runs the capture; plain Node (the tests) and the E2E suite's Electron main
+// (features/support/electron-main.js, which sets global.multiagentScreenshotHelpers) only import the helpers.
+if (process.type === 'browser' && !global.multiagentScreenshotHelpers) main();
 
 module.exports = {
+  DEMO_REPO,
+  demoBacklog,
+  demoDepsCache,
+  demoLocalMerge,
+  demoRoadmap,
   fileName,
   parseArgs,
   recordShot,
+  simulateChannels,
   usage,
   VIEWS,
 };

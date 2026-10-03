@@ -29,6 +29,11 @@ screen; they are skipped for changes without UI. You run unattended: record a de
   a muted help line from the field's description. A multi-field edit has explicit **Save** /
   **Cancel**; a single obvious choice (a toggle) may save at once. Nothing saves on every keystroke.
 - **Focus on the control**, not on a whole row or card; keyboard reachable, visible focus.
+- **Stable locators**: every new control an end-to-end scenario could use gets a semantic element
+  or an ARIA `role` with an accessible name (a `<button>` with its text, `aria-label` on an icon
+  button), and a `data-testid` (kebab-case, named after what it is, e.g. `gate-approve`) on the
+  controls and containers a step asserts on. E2E steps locate by role and test id, never by CSS
+  classes or layout.
 - **Quiet by default**: optional fields appear when set or when asked ("add note"), not as empty
   inputs everywhere. Edit areas look like edit areas (a framed panel), not like raw controls.
 - **States**: every screen you add or change has its empty state, its edit state, its error state

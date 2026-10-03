@@ -317,7 +317,7 @@
       return `<li class="rm-issue"${locked || open ? '' : ` draggable="true" data-drag-issue="${i.number}" data-from="${esc(x.id)}"`} title="${esc(`#${i.number} ${title}`.trim())}"><span class="rm-num mono">#${i.number}</span>${text}</li>`;
     }).join('');
     return `
-      <div class="rm-item rm-${esc(status)}" data-item="${esc(x.id)}" data-stage="${s}"${locked || open ? '' : ' draggable="true" data-drag-item'}>
+      <div class="rm-item rm-${esc(status)}" data-testid="roadmap-item" data-item="${esc(x.id)}" data-stage="${s}"${locked || open ? '' : ' draggable="true" data-drag-item'}>
         <div class="rm-item-head">
           <ul class="rm-titles">${titles}</ul>
           <div class="rm-actions">
@@ -367,7 +367,7 @@
     const stateBadge = s === scoped ? `<span class="badge ${r.state === 'running' ? 'live' : 'warn'}">${r.state === 'running' ? 'Running this stage only' : 'This stage only · paused'}</span>`
       : s === current ? '<span class="badge live">current</span>' : done ? '<span class="badge">done</span>' : '';
     return `
-      <section class="rm-stage${s === current ? ' current' : ''}${s === scoped ? ' scoped' : ''}${done ? ' finished' : ''}" data-stage="${s}" data-drop-stage="${s}">
+      <section class="rm-stage${s === current ? ' current' : ''}${s === scoped ? ' scoped' : ''}${done ? ' finished' : ''}" data-stage="${s}" data-drop-stage="${s}" data-testid="roadmap-stage">
         <div class="rm-stage-head">
           <span class="muted small">Stage ${s + 1}</span>
           <input type="text" class="rm-name" data-rm-name value="${esc(stage.name)}" placeholder="Name (optional)" aria-label="Stage name" />

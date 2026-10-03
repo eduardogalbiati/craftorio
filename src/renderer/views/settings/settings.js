@@ -337,7 +337,7 @@ registerView({
                 </div>
                 <div class="s-row">
                   <div class="s-label"><b>Default development workflow</b><span>Used wherever a workflow is not picked by hand: the Product Owner's plans, Split + roadmap, Create + roadmap, the Assign dialog with nothing remembered. Unset: the local workflow (no push, no PR, no CI) when the workspace has it.</span><span id="set-default-wf-note" class="warn-text hidden"></span></div>
-                  <div class="s-ctrl"><select id="set-default-workflow" aria-label="Default development workflow"></select></div>
+                  <div class="s-ctrl"><select id="set-default-workflow" aria-label="Default development workflow" data-testid="settings-default-workflow"></select></div>
                 </div>
                 <div class="s-row">
                   <div class="s-label"><b>Issues per run</b><span>The most issues Assign workflow sends as one run (one branch, one PR/MR that closes all of them).</span></div>

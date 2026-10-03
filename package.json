@@ -18,6 +18,8 @@
     "pretest": "node scripts/docs.js --derived",
     "test": "node scripts/test.js",
     "screenshot": "electron scripts/screenshot.js",
+    "test:e2e": "bddgen && playwright test",
+    "test:e2e:update": "bddgen && playwright test --update-snapshots",
     "test:engine": "node scripts/run.js --mock --auto-approve --task \"Engine test\"",
     "prebuild": "node scripts/docs.js --derived",
     "build": "node scripts/package.js build",
@@ -37,7 +39,9 @@
   "devDependencies": {
     "@electron/fuses": "^2.1.3",
     "@electron/packager": "^20.3.0",
-    "electron": "^44.4.5"
+    "@playwright/test": "^1.63.0",
+    "electron": "^44.4.5",
+    "playwright-bdd": "^9.2.1"
   },
   "allowScripts": {
     "node-pty@1.1.0": true

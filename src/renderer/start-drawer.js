@@ -150,7 +150,7 @@ function selectWorkflow(file) {
   // the other inputs: human labels and the control that fits each (workflow-inputs.js, #116)
   const field = ([key, def]) => WorkflowInputs.fieldHtml(key, def, { value: values[key], id: `in-${key}`, attrs: `name="${esc(key)}"`, context: values });
   const mainHtml = ([key, def]) => `<div class="field"><label for="in-${key}">Input ${def.required ? '<span class="req">*</span>' : ''}</label>`
-    + `<textarea id="in-${key}" name="${key}" data-wi-input="${esc(key)}" rows="7" placeholder="Describe what needs to be done…">${esc(values[key])}</textarea>`
+    + `<textarea id="in-${key}" name="${key}" data-testid="start-main-input" data-wi-input="${esc(key)}" rows="7" placeholder="Describe what needs to be done…">${esc(values[key])}</textarea>`
     + `${def.description ? `<div class="hint">${esc(def.description)}</div>` : ''}</div>`;
   // a workflow's `mode` (e.g. auto | validated) and its tests (#203: unit_tests, e2e_tests, about
   // half of a run's cost) and its screenshots (#205) change how the run goes: shown next to the task, not in Advanced
