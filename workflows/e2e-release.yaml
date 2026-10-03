@@ -234,7 +234,7 @@ steps:
       {{ inputs.task }}
       The orchestrator ran the project's whole E2E suite (`{{ steps.e2e.output.command }}`) on the
       local `{{ inputs.base_branch }}` (round {{ steps.e2e.visits }}): {{ steps.e2e.output.message }}
-      Its whole output: {{ steps.e2e.output.log }} (read the failures from it, not the whole file).
+      Its whole output: {{ run_dir }}/{{ steps.e2e.output.log }} (read the failures from it, not the whole file).
       The runner's JSON results and the failed scenarios' traces and screenshots are in the
       worktree, where the project's E2E config writes them (this app: .test-output/e2e/results.json
       and .test-output/e2e/artifacts/<scenario>/trace.zip, failure.png).
@@ -294,7 +294,7 @@ steps:
     agent: developer
     prompt: |
       The release's E2E suite found failures on the local `{{ inputs.base_branch }}` (its log:
-      {{ steps.e2e.output.log }}); the E2E runner traced them to the application:
+      {{ run_dir }}/{{ steps.e2e.output.log }}); the E2E runner traced them to the application:
       {{ steps.heal.output.failure_report }}
       {{ steps.heal.output | e2e_scenarios }}
       Each failed scenario's screenshots are listed with it (paths relative to {{ run_dir }}).
@@ -366,7 +366,7 @@ steps:
     kind: escalation   # the supervisor on call tries first
     message: |
       E2E scenarios still fail after {{ inputs.max_rounds }} round(s): {{ steps.e2e.output.message }}
-      Log: {{ steps.e2e.output.log }}
+      Log: {{ run_dir }}/{{ steps.e2e.output.log }}
       {{ steps.heal.output.failure_report }}
       {{ steps.heal.output | e2e_scenarios }}
       Approve: one more fix round. Reject: stop the run as failed (its branch keeps the work to resume it).
@@ -382,7 +382,7 @@ steps:
     kind: escalation   # the supervisor on call tries first
     message: |
       The E2E suite could not run: {{ steps.e2e.output.reason or steps.heal.output.e2e_note or steps.heal.output.summary or steps.e2e.output.message }}
-      Log: {{ steps.e2e.output.log }}
+      Log: {{ run_dir }}/{{ steps.e2e.output.log }}
       Approve: run it again (after you fixed the environment). Reject: stop the run as failed.
     transitions:
       - when: "approved"

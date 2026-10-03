@@ -6,7 +6,8 @@
 // sign-in off, HOME/USERPROFILE/APPDATA inside the scratch folder (no CLI session or account of this
 // machine shows). Electron is never started as plain Node: ELECTRON_RUN_AS_NODE is removed.
 // One Electron at a time on the machine (#199): each launch takes the machine-wide screenshot slot
-// (src/engine/machine-slot.js) and frees it on close. close() removes the scratch folder.
+// (src/engine/machine-slot.js, in machineSlotDir: not the suite step's own MULTIAGENT_LOCKS_DIR,
+// so a release run waits for other runs' captures) and frees it on close. close() removes the scratch folder.
 
 const fs = require('fs');
 const os = require('os');
@@ -70,7 +71,7 @@ function removeScratch(dir) {
  */
 async function launchApp({ theme = 'light', size = '1400x900' } = {}) {
   const slot = await machineSlot.acquireSlot('screenshot', {
-    holder: 'e2e', onWait: (h) => console.log(`e2e: waiting for the screenshot slot (pid ${h?.pid ?? '?'})`),
+    dir: machineSlot.machineSlotDir(), holder: 'e2e', onWait: (h) => console.log(`e2e: waiting for the screenshot slot (pid ${h?.pid ?? '?'})`),
   });
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'multiagent-e2e-'));
   let app = null;
