@@ -153,10 +153,14 @@ const isWorkflowAgent = (id) => WORKFLOW_ID.test(String(id));
 const lookFile = (dir, file, key) => path.join(dir, 'workflows', path.basename(file), `${path.basename(key)}.json`);
 const isTemplate = (v) => typeof v === 'string' && v.includes('{{');
 
-/** `unit-test-writer-{{ inputs.language }}` → `unit-test-writer` (the family). */
+/**
+ * `unit-test-writer-{{ inputs.language }}` → `unit-test-writer` (the family). Liquid tags are
+ * dropped first, so a conditional skill (`{% if … %}name-{{ … }}{% endif %}`) shows its family
+ * whatever the inputs pick.
+ */
 function skillFamily(s) {
   const name = String(typeof s === 'object' && s ? s.name || s.id || '' : s || '');
-  return name.replace(/[-_]?\{\{.*$/, '').trim();
+  return name.replace(/\{%.*?%\}/g, '').replace(/[-_]?\{\{.*$/, '').trim();
 }
 
 /** The defaults of a workflow's inputs, to resolve `{{ inputs.x }}` for display. */
