@@ -47,7 +47,7 @@ async function runAiDevE2e(t, { inputs = {}, mockSequences = {}, onTurn } = {}) 
   t.after(() => fs.rmSync(runsDir, { recursive: true, force: true }));
   const run = new WorkflowRun({
     file: WORKFLOW,
-    inputs: { task: 'Show the backlog as a kanban board', issue: ISSUE, repo_path: repo, e2e_tests: 'write_and_run', ...inputs },
+    inputs: { task: 'Show the backlog as a kanban board', issue: ISSUE, repo_path: repo, e2e_tests: 'write_and_run', unit_tests: 'run_existing', ...inputs },
     mock: true,
     runsDir,
     mockSequences: { verdict: ['approved'], e2e_scope: ['scenarios'], ...mockSequences },

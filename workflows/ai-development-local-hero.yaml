@@ -176,15 +176,17 @@ inputs:
     type: string
     enum: [write_and_run, run_existing, "off"]
     # tests first: the acceptance tests are always written before the code; this is the EXTRA
-    # test step after the review (write_and_run) or only the suite (run_existing, the default)
-    default: run_existing
+    # test step after the review (write_and_run, the default: owner 2026-10-03, quality first) or
+    # only the suite (run_existing)
+    default: write_and_run
     label: Unit tests
     options: { write_and_run: Write and run, run_existing: Run existing, "off": "Off" }
     description: "Write and run: the test writer writes the change's tests, then the orchestrator runs the whole suite (about half of a run's cost). Run existing: no new tests, the suite runs once without an agent and failures go to the developer (cheap, the change stays untested). Off: no suite at all (cheapest; test later with the test-batch workflow)."
   e2e_tests:
     type: string
     enum: ["off", write, write_and_run]
-    default: "off"
+    # owner 2026-10-03: quality first, the scenarios are written and run here by default
+    default: write_and_run
     label: E2E tests
     options: { "off": "Off", write: Write, write_and_run: Write and run }
     description: "Write: the test writer writes the issue's end-to-end scenarios first, with the acceptance tests, and checks that they parse; the E2E release workflow runs them. Write and run: the orchestrator also runs them here, with the @smoke journeys, after the suite (no agent while they pass; starts the app). Off: none."

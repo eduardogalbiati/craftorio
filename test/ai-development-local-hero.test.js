@@ -36,7 +36,8 @@ async function runAiDev(t, { mockSequences = {}, onTurn } = {}) {
   t.after(() => fs.rmSync(runsDir, { recursive: true, force: true }));
   const run = new WorkflowRun({
     file: WORKFLOW,
-    inputs: { task: 'Add the feature', repo_path: repo },
+    // the paths below are the lean ones (no extra test step, no E2E); the defaults are pinned by their own test
+    inputs: { task: 'Add the feature', repo_path: repo, unit_tests: 'run_existing', e2e_tests: 'off' },
     mock: true,
     runsDir,
     // the reviewer approves the change on its first look, unless a test says otherwise
@@ -153,3 +154,9 @@ test('ai-development-local-hero: the transition from acceptance_tests goes to de
 // The mock provider returns one placeholder for a list of strings (providers.js, the array case), so
 // a run cannot write "nothing testable" yet: the route to develop is checked above, the run is left out here.
 test('ai-development-local-hero: a task with nothing testable goes straight from acceptance_tests to develop, through a mock run', { skip: 'the mock cannot return an empty tests_added (src/engine/providers.js, array case): needs a sequence for it' }, () => {});
+
+test('ai-development-local-hero: quality first by default, the change\'s unit tests and its E2E scenarios are written and run', () => {
+  const wf = loadWorkflow(WORKFLOW);
+  assert.equal(wf.inputs.unit_tests.default, 'write_and_run');
+  assert.equal(wf.inputs.e2e_tests.default, 'write_and_run');
+});
