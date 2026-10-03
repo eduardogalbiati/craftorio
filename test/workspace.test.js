@@ -54,6 +54,30 @@ test('MULTIAGENT_WORKSPACE overrides without querying the registry', (t) => {
   assert.deepEqual([r.source, r.dir], ['env', path.join(home, 'env')]);
 });
 
+// #120: an agent's own check (MULTIAGENT_SIMULATION_ONLY=1) that was not given its run's scratch
+// workspace must never fall back to the owner's registered or default workspace.
+test('simulation only (MULTIAGENT_SIMULATION_ONLY=1) without MULTIAGENT_WORKSPACE never returns the registered or the default workspace', (t) => {
+  const home = tmpHome(t);
+  const registered = path.join(home, 'registered');
+  fs.mkdirSync(registered);
+  fs.mkdirSync(path.join(home, DEFAULT_NAME));
+  const store = { get() { throw new Error('should not read the registry in simulation only'); }, set() { throw new Error('should not write it either'); } };
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ws-sim-'));
+  t.after(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
+  const r = resolveWorkspace({ store, env: { MULTIAGENT_SIMULATION_ONLY: '1' }, home, tmp: tmpDir });
+  assert.equal(r.source, 'simulation');
+  assert.equal(r.dir, path.join(tmpDir, 'multiagent-simulation', 'workspace'));
+  assert.notEqual(r.dir, registered);
+  assert.notEqual(r.dir, path.join(home, DEFAULT_NAME));
+  assert.equal(r.registered, null);
+});
+
+test('MULTIAGENT_WORKSPACE (an agent\'s own run scratch workspace, set by the engine) still wins over simulation only', (t) => {
+  const home = tmpHome(t);
+  const r = resolveWorkspace({ store: memStore(), env: { MULTIAGENT_WORKSPACE: path.join(home, 'scratch'), MULTIAGENT_SIMULATION_ONLY: '1' }, home });
+  assert.deepEqual([r.source, r.dir], ['env', path.join(home, 'scratch')]);
+});
+
 test('setupWorkspace creates runs/ and repos/ and saves the path', (t) => {
   const home = tmpHome(t);
   const store = memStore();
@@ -61,6 +85,9 @@ test('setupWorkspace creates runs/ and repos/ and saves the path', (t) => {
   assert.ok(fs.statSync(ws.runs).isDirectory());
   assert.ok(fs.statSync(ws.repos).isDirectory());
   assert.equal(store.value, ws.root);
+  // the app-wide Supervisor chat (#28, src/supervisor-chat.js): created on demand, not up front
+  assert.equal(ws.supervisor, path.join(ws.root, 'supervisor'));
+  assert.equal(fs.existsSync(ws.supervisor), false);
 });
 
 test('fileStore persists the path as JSON', (t) => {

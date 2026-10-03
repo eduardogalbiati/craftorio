@@ -1,0 +1,63 @@
+/* ---------- analytics view (views/analytics/analytics.js) ---------- */
+#view-analytics .s-subtitle { margin-top: 24px; }
+.an-controls { flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.an-date { display: inline-flex; align-items: center; gap: 6px; }
+.an-date input { padding: 4px 6px; font-family: var(--mono); font-size: 12px; }
+.an-totals { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin-bottom: 12px; }
+.an-note { margin: -4px 0 10px; }
+.an-card { gap: 10px; margin-bottom: 12px; min-width: 0; }
+.an-card h3 { margin: 0; font-size: 13px; }
+.an-card h4 { margin: 6px 0 0; font-weight: 600; }
+.an-card-head { justify-content: space-between; align-items: center; }
+.an-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+.an-grid > .an-card { margin-bottom: 0; }
+.an-grid + .an-grid, .an-grid + #an-report { margin-top: 12px; }
+
+/* tokens per day */
+.an-chart { position: relative; padding: 14px 0 18px; }
+.an-chart svg { display: block; width: 100%; height: 180px; border-bottom: 1px solid var(--border); }
+.an-chart .an-hit { fill: transparent; }
+.an-chart .an-hit:hover { fill: rgba(255,255,255,.04); }
+.an-ymax { position: absolute; top: 0; left: 0; font-family: var(--mono); font-size: 10px; }
+.an-xlabels { position: relative; height: 14px; font-family: var(--mono); font-size: 10px; color: var(--muted); }
+.an-xlabels span { position: absolute; top: 3px; transform: translateX(-50%); white-space: nowrap; }
+
+/* horizontal bars */
+.an-bars { display: grid; gap: 6px; }
+.an-bar { display: grid; grid-template-columns: minmax(80px, 34%) 1fr auto; align-items: center; gap: 8px; font-size: 12px; }
+.an-bar-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.an-bar-track { height: 8px; border-radius: 4px; background: var(--panel-2); overflow: hidden; }
+.an-bar-track span { display: block; height: 100%; border-radius: 4px; }
+.an-bar-val { font-family: var(--mono); font-size: 11px; color: var(--muted); white-space: nowrap; }
+
+/* stacked mix + legend */
+.an-stack { display: flex; height: 10px; border-radius: 5px; overflow: hidden; background: var(--panel-2); gap: 1px; }
+.an-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 11px; }
+.an-legend i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 5px; vertical-align: middle; }
+.an-facts { gap: 4px 14px; }
+
+/* sessions table */
+.an-sessions .an-title { max-width: 420px; }
+.an-sessions .an-title > span:last-of-type { display: inline-block; max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
+.an-sessions th.an-sort { cursor: pointer; user-select: none; }
+.an-sessions th.an-sort:hover, .an-sessions th.an-sort.active { color: var(--text); }
+.an-sessions th.an-sort.active::after { content: " ▾"; }
+.an-cx { font-family: var(--mono); font-weight: 600; }
+.an-cx.cx-low { color: var(--green); }
+.an-cx.cx-medium { color: var(--yellow); }
+.an-cx.cx-high { color: var(--red); }
+.an-empty { padding: 12px 14px; margin: 0; }
+
+/* Repository performance tab */
+#view-analytics .page-tabs { margin: -4px 0 14px; }
+.an-marker { width: 130px; }
+.an-files .an-file { display: inline-block; max-width: 520px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; font-family: var(--mono); font-size: 12px; }
+.an-compare { margin-bottom: 12px; }
+.an-compare .an-better { color: var(--green); font-weight: 600; }
+.an-compare .an-worse { color: var(--red); font-weight: 600; }
+.an-hours { display: grid; grid-template-columns: repeat(24, 1fr); gap: 3px; height: 110px; padding-bottom: 16px; }
+.an-hours span { position: relative; display: flex; align-items: flex-end; background: var(--panel-2); border-radius: 3px; }
+.an-hours i { display: block; width: 100%; border-radius: 3px; background: var(--accent); }
+.an-hours em { position: absolute; bottom: -15px; left: 0; font-style: normal; font-family: var(--mono); font-size: 10px; color: var(--muted); }
+#view-analytics .an-card + .table-wrap { margin-top: 0; }
+.an-report .md { max-width: none; }

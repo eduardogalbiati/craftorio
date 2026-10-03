@@ -1,0 +1,11 @@
+# Test fixture for scripts/run.js: a single mock step, no worktree, no required inputs.
+apiVersion: multiagent/v1
+kind: Workflow
+metadata:
+  name: fixture-run-script
+agents:
+  a: { provider: claude, model: m, session: ephemeral }
+steps:
+  - id: work
+    agent: a
+    prompt: "do work"

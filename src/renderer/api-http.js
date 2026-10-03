@@ -3,6 +3,7 @@
 // called over its HTTP + WebSocket API (src/server). In the desktop app the preload has already
 // defined window.api and this file does nothing. Nothing here lists channels: only the few methods
 // the browser does its own way (below) are named.
+// load: early (app.js calls window.api as it loads)
 (() => {
   if (window.api) return;
 
@@ -82,6 +83,20 @@
     pickFolder: async () => window.prompt('Folder path on the server:')?.trim() || null,
     clipboardRead: () => navigator.clipboard.readText(),
     clipboardWrite: async (text) => { await navigator.clipboard.writeText(String(text ?? '')); return true; },
+    // an artifact's image (#114): the browser's clipboard takes PNG only, so others go through a canvas.
+    // Copying the file itself has no web equivalent (clipboardWriteFile throws; the UI hides it).
+    clipboardWriteImage: async (path) => {
+      const art = await call('artifacts:read', { path });
+      if (!art.image) throw new Error('The image is too large to copy here.');
+      const img = new Image();
+      img.src = art.image;
+      await img.decode();
+      const canvas = Object.assign(document.createElement('canvas'), { width: img.naturalWidth, height: img.naturalHeight });
+      canvas.getContext('2d').drawImage(img, 0, 0);
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+      return true;
+    },
   };
 
   function method(entry) {

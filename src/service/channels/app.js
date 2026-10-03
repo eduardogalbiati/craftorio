@@ -24,8 +24,12 @@ module.exports = (ctx) => [
       node: process.versions.node,
       workflowsDir: ctx.ws.workflows,
       simulationOnly: simulation.simulationOnly(),
+      // the screen a Run App copy opens on (#119, set by src/local-preview.js); simulation-only copies only
+      startView: simulation.simulationOnly() ? process.env.MULTIAGENT_START_VIEW || null : null,
     }),
   },
+  // the code this process started with and the code on disk now (changed: a restart is needed, #83)
+  { channel: 'app:codeVersion', method: 'codeVersion', fn: () => ctx.code.check() },
   { channel: 'settings:get', method: 'getSettings', fn: () => workspace.readSettings(ctx.ws) },
   {
     channel: 'settings:set',
@@ -35,6 +39,8 @@ module.exports = (ctx) => [
       const next = workspace.writeSettings(ctx.ws, patch);
       // a higher limit of concurrent runs frees slots for the Backlog queues
       if (patch && 'concurrentRuns' in patch) ctx.dispatchQueue().catch((e) => console.error('backlog dispatch:', e));
+      // the desktop app re-checks Keep awake (#162, src/main.js)
+      ctx.events.emit('settings:changed', next);
       return next;
     },
   },

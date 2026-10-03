@@ -1,18 +1,23 @@
 ---
 name: pr-screenshots
-description: Shared part of pr-screenshots-gh and pr-screenshots-gl. Publishes the UI screenshots a run captured on its PR/MR as one comment (before/after side by side), stored on a dedicated pr-screenshots branch, with publish.js from this skill's folder.
-summary: "`publish.js`: commits the PNGs to the `pr-screenshots` branch (one folder per PR/MR, closed ones pruned) without touching the checkout, then posts one before/after comment"
+description: Shared part of pr-screenshots-gh and pr-screenshots-gl. Publishes the UI screenshots a run captured on its PR/MR as one comment (original/modified side by side), stored on a dedicated pr-screenshots branch, with publish.js from this skill's folder.
+summary: "`publish.js`: commits the PNGs to the `pr-screenshots` branch (one folder per PR/MR, closed ones pruned) without touching the checkout, then posts one original/modified comment"
 used_by: "via `uses`"
 ---
 
 # PR/MR screenshots
 
-The evidence step captures screenshots of the screens a change touches into a folder of the run
-(`<run_dir>/screenshots/`) with a `screenshots.json` manifest:
+The steps of a run capture screenshots of the screens a change touches into round folders of the
+run (`<run_dir>/evidence/<step>/round-<n>/`, `<issue>-<screen>-<state>.original.png` / `.modified.png`),
+indexed in `<run_dir>/evidence/manifest.json`. Only its **final set** is published (the images
+marked `final`: the last round that captured), each `modified` image next to its `original` pair:
 
 ```json
-[{ "path": "settings-after.png", "caption": "Settings > General", "before": "settings-before.png" }]
+{ "final": { "step": "evidence", "round": 2 }, "images": [{ "path": "evidence/evidence/round-2/12-settings-general.modified.png",
+  "side": "modified", "pair": "evidence/evidence/round-2/12-settings-general.original.png", "caption": "Settings > General", "final": true }] }
 ```
+
+A run recorded before the evidence folders: `--dir <run_dir>/screenshots` (its `screenshots.json`).
 
 PR/MR comments can't take attachments from the command line, so the images go to a branch of their
 own, **`pr-screenshots`**, one folder per PR/MR (`<number>/<name>-<hash>.png`), and the comment points
@@ -23,7 +28,7 @@ to them. They render inline for anyone who can see the repository, private ones 
 Run the script in this skill's folder, from the repository (one command, no pipes):
 
 ```
-node <this skill's folder>/publish.js --platform <gh|gl> --pr-url <PR/MR URL> --dir <run_dir>/screenshots
+node <this skill's folder>/publish.js --platform <gh|gl> --pr-url <PR/MR URL> --dir <run_dir>/evidence
 ```
 
 It:
@@ -44,7 +49,7 @@ always exits 0, so it never blocks the merge. You don't run it.
 
 - Publish at most once per set of screenshots: if this PR/MR already got the comment for them in this
   run, don't post it again.
-- No `screenshots.json` or an empty list: nothing to publish, say so and move on. Never capture
+- No `manifest.json` or no final screenshots: nothing to publish, say so and move on. Never capture
   screenshots yourself; that is the test step's job.
 - Publishing is best effort: if the script fails (no push permission, protected branch pattern,
   network), report the error line in your answer and carry on with your main task. A missing comment

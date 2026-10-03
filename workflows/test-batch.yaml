@@ -1,0 +1,375 @@
+# =============================================================================
+# Workflow: Test batch (#203): write features first, test them later, all together
+# -----------------------------------------------------------------------------
+#   test ──► suite ──(green, tests only)──merge: local──► end  (records the commit as the last green batch)
+#    ▲  │      │
+#    │  │      ├──(green after production fixes)──► approve_fixes (you) ──merge: local──► end
+#    │  │      ├──(failing tests)──► test (at most max_rounds, then tests_failed: you)
+#    │  │      └──(could not run: no test command)──► tests_failed (you)
+#    │  └──(a test fails because of the code)──► developer (delegation) ──► test
+#    └──────────────────────────────────────────────────────────────────┘
+#
+# For runs made with `unit_tests: off` / `run_existing` or `e2e_tests: off` (software-development,
+# software-development-local-hero): this workflow writes the tests they skipped, for a range of
+# local commits, in ONE test writer session, then the orchestrator runs the project's whole suite
+# ONCE per round (step suite, no agent, #177).
+# 1. test:   in its own worktree of the LOCAL base, the test writer lists what to cover: the
+#            commits since `since` (default: the last green test batch, the local ref
+#            `refs/multiagent/test-batch-last-green`; none yet: the last 20 commits) or, when the
+#            run has issues (Backlog, roadmap item), the commits that close them. It writes the
+#            missing unit tests (and the E2E scenarios when `e2e_tests` is on) on the branch
+#            `test-batch-<run_id>`, running only focused tests.
+# 2. suite:  the project's whole suite once (`test_command`, else found from the project's files),
+#            log in logs/suite-<round>.log; failing tests go back to the test writer (max_rounds),
+#            then tests_failed. A test that fails because of the production code goes to the
+#            developer (a delegation), then back to the test writer.
+# 3. Green: the branch merges into the local base (merge: local, never pushed) and the tested
+#    commit becomes the last green batch. When the developer changed production code, you approve
+#    first (approve_fixes, with the diff): nothing reviewed it.
+# Start it by hand from Workflows, from the Backlog (the issues to test) or as a roadmap item
+# (e.g. the last item of a stage). Never pushes, tags or publishes, never crosses a human gate.
+# =============================================================================
+
+apiVersion: multiagent/v1
+kind: Workflow
+
+metadata:
+  name: test-batch
+  version: 0.1.0
+  description: Writes the missing tests for the work merged locally since the last green batch (or for the given issues) in one test writer session, runs the whole suite once per round without an agent, and merges the tests into the local base. Never pushes.
+  tags: [test, batch, local, worktree]
+  # Dashboard category: plan (Plan & Design), build (Code & Build) or monitor (Monitor & Improve).
+  category: build
+
+# -----------------------------------------------------------------------------
+inputs:
+  task:
+    type: string
+    required: true
+    default: "Write the missing tests for the work merged since the last green test batch."
+    description: What this batch covers. The Backlog fills it with the issues.
+  issue:
+    type: string
+    default: ""
+    description: "URL of an issue this run tests (set by the Backlog screen)."
+  issues:
+    type: array
+    default: []
+    description: "URLs of the issues this run tests (set by the Backlog screen; one per line). Their commits are the range."
+  repo_path:
+    type: string
+    required: true
+    description: Local repository path (a git repository; no remote needed).
+  # Picks the unit-test-writer-<language> and e2e-test-writer-<language> skills.
+  language:
+    type: string
+    enum: [js, python, go, java, csharp]
+    default: js
+    options: { js: JavaScript, python: Python, go: Go, java: Java, csharp: "C#" }
+    description: The project's main language, for its tests.
+  base_branch:
+    type: string
+    default: main
+    description: The local branch whose commits are tested, and where the tests are merged.
+  since:
+    type: string
+    default: ""
+    label: Since
+    description: "The first commit to cover: a commit, a tag or a ref (the range is since..HEAD). Empty: since the last green test batch (none yet: the last 20 commits). Ignored when the run has issues."
+  e2e_tests:
+    type: string
+    enum: ["off", write, write_and_run]
+    default: write
+    label: E2E tests
+    options: { "off": "Off", write: Write, write_and_run: Write and run }
+    description: "Write: also the missing end-to-end scenarios, checked to parse (the E2E release workflow runs them). Write and run: also run them here (slow). Off: unit tests only."
+  test_command:
+    type: string
+    default: ""
+    label: Test command
+    description: "The project's whole-suite command the orchestrator runs once per round (e.g. npm test). Empty: found from the project's files."
+  max_rounds:
+    type: integer
+    default: 2
+    description: Suite rounds that go back to the test writer before you are asked.
+
+# -----------------------------------------------------------------------------
+providers:
+  claude:
+    type: claude-code
+    command: claude
+    args: ["-p", "--output-format", "stream-json", "--verbose", "--model", "{{ model }}"]
+    resume_args: ["--resume", "{{ session_id }}"]
+    skill_args: ["--add-dir", "{{ skill_dir }}"]
+
+x-tools:
+  # every supported language toolchain: the language skill says which one to use
+  toolchains: &toolchains [bash:git, bash:npm, bash:npx, bash:node, bash:pnpm, bash:yarn, bash:python, bash:python3, bash:py, bash:pip, bash:pytest, bash:uv, bash:poetry, bash:behave, bash:robot, bash:go, bash:mvn, bash:./mvnw, bash:mvnw.cmd, bash:gradle, bash:./gradlew, bash:gradlew.bat, bash:dotnet]
+
+defaults:
+  # the run's own git worktree of the local base
+  working_dir: "{{ worktree_dir }}"
+  timeout: 45m
+  max_context: 150k
+  retry:
+    max_attempts: 2
+    backoff: exponential
+    initial_delay: 10s
+
+orchestrator:
+  provider: claude
+  model: claude-sonnet-5
+  # <workspace>/worktrees/<run_id>, detached at the LOCAL <base> (remote: false: no fetch);
+  # dependencies linked from the shared cache (#198)
+  worktree:
+    repo: "{{ inputs.repo_path }}"
+    base: "{{ inputs.base_branch }}"
+    remote: false
+  supervisor:
+    enabled: true
+    on_call: true
+    max_interventions: 2
+    max_cost_usd: 5
+  limits:
+    max_total_duration: 8h
+    max_total_cost_usd: 40
+    max_total_context: 40M
+
+# -----------------------------------------------------------------------------
+agents:
+  test_writer:
+    provider: claude
+    model: claude-sonnet-5
+    session: persistent
+    capabilities: { tools: [read, edit, write, *toolchains], web: false, subagents: true }
+    skills:
+      - "unit-test-writer-{{ inputs.language }}"
+      - "{% if inputs.e2e_tests != 'off' %}e2e-test-writer-{{ inputs.language }}{% endif %}"
+      - context-economy
+    system_prompt: |
+      You are the test writer of a test batch: the features were merged without their tests, and
+      you write the missing ones for all of them in this session, following the test skill for
+      this language. You run only focused tests: the orchestrator runs the whole suite once after
+      your step and gives you its failing tests (never start the whole suite yourself). You do
+      NOT fix production code: when a test fails because of a bug in the code, describe it
+      precisely (test, file, error, probable cause) so the orchestrator can hand it to the
+      developer. Commit test files only, on the run's branch. Never push, tag or publish.
+      Keep your context small (context-economy): one exploration sub-agent maps the commits'
+      behaviours and the tests that already cover them before you write; a long output or the
+      suite's log goes to a sub-agent that returns the failures.
+
+  developer:
+    provider: claude
+    model: claude-opus-5-5
+    session: handoff
+    capabilities: { tools: [read, edit, write, *toolchains], web: false, subagents: true }
+    # the tests belong to the test writer
+    edits_tests: false
+    skills: [long-commands, bug-diagnosis, context-economy, decision-log]
+    system_prompt: |
+      You are a senior software engineer fixing what a test batch found in code that is already
+      merged locally. Make the smallest production-code fix that addresses the root cause,
+      following the existing architecture. Never create, edit or delete tests (the orchestrator
+      refuses a turn that changes one): when a test is wrong, say why in your answer. Run only the
+      failing tests, not the whole suite (the orchestrator runs it). Commit on the run's branch
+      (the one checked out in this worktree). Never fetch, pull, push or tag. The dependencies
+      are linked from a shared cache: never run `npm ci` and never delete `node_modules`.
+
+groups:
+  - name: Tests
+    steps: [test, suite, tests_failed]
+  - name: Merge
+    steps: [approve_fixes, merge_blocked]
+
+# -----------------------------------------------------------------------------
+steps:
+
+  - id: test
+    agent: test_writer
+    # the orchestrator runs the whole suite: a whole-suite command of the test writer is noted (#177)
+    full_suite: warn
+    # test files left uncommitted are committed by the orchestrator before the suite (#209)
+    commit_tests: true
+    prompt: |
+      {{ inputs.task }}
+      Never start the project's whole test suite yourself: the orchestrator runs it once after
+      your step and gives you its failing tests. Run only focused tests (the files you touch,
+      filtered to the tests you write), each slow one at most once per round.
+      {% if previous_step == 'suite' and steps.suite.output and steps.suite.output.status == 'fail' %}
+      The orchestrator ran the whole suite after your last step and it failed. Only these tests
+      fail (the full output is in `{{ run_dir }}/{{ steps.suite.output.log }}`):
+      {{ steps.suite.output | suite_failures }}
+      For each one: a wrong or obsolete test → fix it and commit; a failure caused by the
+      production code → do NOT fix it, describe it in `failure_report` and set `tests_status:
+      fail` (the developer fixes it). Run only these failing tests to confirm.
+      {% elif delegate_result %}
+      The developer fixed the production code you reported (it does not touch the tests):
+      {{ delegate_result.text }}
+      Run the failing tests again and confirm.
+      {% else %}
+      1. Create the run's branch once: `git switch -c test-batch-{{ run_id }}` (the worktree
+         starts detached at the local `{{ inputs.base_branch }}`). Commit only test files there.
+      2. What to cover (at most 30 commits, one line each in `covered`):
+         {% if inputs.issues | length %}the commits of the local `{{ inputs.base_branch }}` whose messages close these
+         issues (`Closes #n`): {{ inputs.issues | join(', ') }};
+         {% elif inputs.since %}`git log --oneline {{ inputs.since }}..HEAD`;
+         {% else %}`git log --oneline refs/multiagent/test-batch-last-green..HEAD` (when that ref does
+         not exist: the last 20 commits);
+         {% endif %}
+         skip commits that only touch docs or tests, and the behaviours the existing tests already
+         cover. Also the runs that merged them: the `summary.json` files under {{ runs_dir }} whose
+         local merge commit is in that range (their `tests_plan` says which tests they skipped).
+      3. Write the missing unit tests, one behaviour at a time, following the test skill (the
+         framework and folder the project already uses).
+      {% if inputs.e2e_tests != 'off' %}
+      4. The missing end-to-end scenarios of user-visible behaviour, following the E2E test skill:
+         at most 3 per issue, tagged `@issue-<n>`, reusing the existing step definitions;
+         {% if inputs.e2e_tests == 'write_and_run' %}run only these scenarios (by their tags), one feature file at a time.{% else %}check that they parse, do not run them (the E2E release workflow does).{% endif %}
+      {% endif %}
+      {% endif %}
+      If a test fails because of production code, do NOT fix it: fill `failure_report` with
+      test, file, error and probable cause, and set `tests_status: fail`.
+      Last step, always: `git add` every test file you wrote or changed (feature files and step
+      definitions included) and commit them on the branch, then set `committed: true`. Any other file
+      left changed sends the step back to you. `committed: false` only when you changed no file.
+    output_schema:
+      type: object
+      required: [tests_status, tests_added, committed, branch]
+      properties:
+        tests_status:   { type: string, enum: [pass, fail] }
+        tests_added:    { type: array, items: { type: string } }
+        committed:      { type: boolean }
+        branch:         { type: string }
+        # the commits (and issues) the batch covers, one line each
+        covered:        { type: array, items: { type: string } }
+        failure_report: { type: string }
+        summary:        { type: string }
+        scenarios:
+          type: array
+          items:
+            type: object
+            required: [name, steps, status]
+            properties:
+              feature:     { type: string }
+              name:        { type: string }
+              steps:       { type: array, items: { type: string } }
+              status:      { type: string, enum: [pending, skipped, passed, failed] }
+              reason:      { type: string }
+              screenshots: { type: array, items: { type: string } }
+        e2e_note: { type: string }
+    transitions:
+      - when: "output.tests_status == 'pass'"
+        goto: suite
+      - when: "output.tests_status == 'fail'"
+        # production code changed: you approve before the merge (nothing reviewed it)
+        set: { production_fixed: "yes" }
+        delegate:
+          agent: developer
+          prompt: |
+            The test batch found failures caused by the production code, on branch `{{ output.branch }}`:
+            {{ output.failure_report }}
+            Fix the production code only: never change the tests (if you think a test is wrong,
+            say why in your answer; the test writer owns it). Run only the failing tests, commit
+            on that branch and report the commit hash.
+        goto: test
+        max_visits: 3
+        on_exhausted: tests_failed
+
+  # The project's whole test suite, once per round, without an agent (#177); its timeout comes from
+  # the project's recent suite durations (#210), its failures are checked on the base (#211).
+  - id: suite
+    type: suite
+    command: "{{ inputs.test_command }}"
+    transitions:
+      - when: "output.status == 'pass' and vars.production_fixed == 'yes'"
+        goto: approve_fixes
+      - when: "output.status == 'pass'"
+        # the tested commit becomes the last green batch (a local ref, skipped in simulation)
+        action: "git update-ref refs/multiagent/test-batch-last-green HEAD"
+        merge: local
+        goto: end
+        on_error: merge_blocked
+      - when: "output.status == 'blocked'"
+        goto: tests_failed
+      - when: "output.status == 'fail'"
+        goto: test
+        max_visits: "{{ inputs.max_rounds }}"
+        on_exhausted: tests_failed
+
+  - id: approve_fixes
+    type: human_approval
+    message: |
+      The whole suite passes with the batch's tests, after the developer changed production code
+      (nothing reviewed it) on branch `{{ steps.test.output.branch }}`:
+      {{ steps.test.output.summary }}
+      {{ steps.suite.output.message }}
+      Approve: merge the branch (tests and fixes) into the local {{ inputs.base_branch }} (nothing is pushed). Reject: stop; the worktree and the branch are kept.
+    diff_base: "{{ inputs.base_branch }}"
+    transitions:
+      - when: "approved"
+        action: "git update-ref refs/multiagent/test-batch-last-green HEAD"
+        merge: local
+        goto: end
+        on_error: merge_blocked
+      - when: "rejected"
+        goto: end
+        status: cancelled
+
+  - id: tests_failed
+    type: human_approval
+    kind: escalation   # the supervisor on call tries first
+    message: |
+      {% if steps.suite.output and steps.suite.output.status == 'blocked' %}The project's test suite could not run:
+      {{ steps.suite.output.reason }}
+      Set the workflow's `test_command` input (e.g. npm test) when the project's files do not give it.
+      {% elif previous_step == 'suite' %}The suite still fails after {{ steps.suite.visits }} round(s):
+      {{ steps.suite.output | suite_failures }}
+      {% else %}Tests still fail after 3 rounds of production fixes:
+      {{ steps.test.output.failure_report }}
+      {% endif %}
+      Approve: one more round of the test writer. Reject: stop the run as failed (the worktree is kept to resume it).
+    transitions:
+      - when: "approved"
+        goto: test
+      - when: "rejected"
+        goto: end
+        status: failed
+
+  - id: merge_blocked
+    type: human_approval
+    kind: escalation   # the supervisor on call tries first
+    message: |
+      The local merge into {{ inputs.base_branch }} failed: {{ action_error.message if action_error else 'unknown error' }}
+      Approve: try the merge again (after you resolved it, e.g. committed the changes in your checkout of {{ inputs.base_branch }}). Reject: stop the run as failed (the worktree and the branch are kept).
+    transitions:
+      - when: "approved"
+        merge: local
+        goto: end
+        on_error: merge_blocked
+      - when: "rejected"
+        goto: end
+        status: failed
+
+# -----------------------------------------------------------------------------
+outputs:
+  suite_status:
+    type: string
+    description: "pass, fail or blocked: the last pass of the suite."
+    value: "{{ steps.suite.output.status }}"
+  tests_added:
+    type: array
+    description: The test files the batch added or changed.
+    value: "{{ steps.test.output.tests_added | to_json }}"
+
+# -----------------------------------------------------------------------------
+observability:
+  storage:
+    type: jsonl
+    path: "./runs/{{ run_id }}/"
+  capture:
+    prompts: true
+    outputs: true
+    thinking: true
+    tool_calls: true
+    redact:
+      - pattern: "(?i)(api[_-]?key|token|secret|password)\\s*[:=]\\s*\\S+"

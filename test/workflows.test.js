@@ -101,6 +101,67 @@ test('an edited copy that matches the new default becomes untouched again', (t) 
   assert.ok(JSON.parse(read(dest, MANIFEST))['a.yaml']);
 });
 
+// ---- #203: a workflow copy changed only in an input's `default:` is not "frozen" -----------------
+
+const yamlWithInput = (name, version, def, { label = '' } = {}) => `apiVersion: multiagent/v1
+kind: Workflow
+metadata:
+  name: ${name}
+  version: ${version}
+inputs:
+  unit_tests:
+    type: string
+    enum: [write_and_run, "off"]
+${label}
+    default: ${def}
+agents:
+  a: { provider: claude, model: m, session: ephemeral }
+steps:
+  - id: work
+    agent: a
+    prompt: "do it"
+`;
+
+test('#203: a bump that only ships a new default reaches a copy whose only edit was its own default; the owner\'s value is kept, and later bumps keep reaching it too', (t) => {
+  const src = tmp(t);
+  const dest = path.join(tmp(t), 'workflows');
+  write(src, 'a.yaml', yamlWithInput('a', '1.0.0', 'write_and_run'));
+  wfs.seedWorkflows(src, dest);
+  // the owner turns it off in their copy (nothing else touched): baseHash ignores the default line,
+  // so it is still the kind of edit carryOver understands, even though its bytes differ (shown as
+  // "modified", like any edited copy, until the next bump carries it forward)
+  write(dest, 'a.yaml', yamlWithInput('a', '1.0.0', 'off'));
+  assert.deepEqual(wfs.workflowStatus(src, dest)['a.yaml'], { origin: 'modified', updateAvailable: false, restorable: true });
+
+  // a later app version ships a change elsewhere (not the input): the owner's default survives it
+  write(src, 'a.yaml', yamlWithInput('a', '2.0.0', 'write_and_run', { label: '    label: Unit tests' }));
+  assert.deepEqual(wfs.seedWorkflows(src, dest), ['a.yaml']);
+  assert.match(read(dest, 'a.yaml'), /version: 2\.0\.0/);
+  assert.match(read(dest, 'a.yaml'), /label: Unit tests/); // the rest of the new version came through
+  assert.match(read(dest, 'a.yaml'), /default: off/); // the owner's value survived the update
+  assert.deepEqual(wfs.seedWorkflows(src, dest), [], 'idempotent: nothing left to carry over');
+
+  // unlike a genuinely modified copy (which freezes forever, see the next test), this one keeps
+  // receiving later bumps too: it never "freezes" just because its default differs
+  write(src, 'a.yaml', yamlWithInput('a', '3.0.0', 'write_and_run', { label: '    label: Unit tests' }));
+  assert.deepEqual(wfs.seedWorkflows(src, dest), ['a.yaml']);
+  assert.match(read(dest, 'a.yaml'), /version: 3\.0\.0/);
+  assert.match(read(dest, 'a.yaml'), /default: off/); // the owner's value survives every later bump
+});
+
+test('#203: an edit outside the input defaults (a step, a prompt) is still kept frozen, like before', (t) => {
+  const src = tmp(t);
+  const dest = path.join(tmp(t), 'workflows');
+  write(src, 'a.yaml', yamlOf('a', '1.0.0'));
+  wfs.seedWorkflows(src, dest);
+  write(dest, 'a.yaml', yamlOf('a', '1.0.0', 'edited_step')); // a real edit, not an input default
+  assert.deepEqual(wfs.workflowStatus(src, dest)['a.yaml'], { origin: 'modified', updateAvailable: false, restorable: true });
+  write(src, 'a.yaml', yamlOf('a', '2.0.0'));
+  assert.deepEqual(wfs.seedWorkflows(src, dest), [], 'an edit outside the input defaults is kept, not silently updated');
+  assert.match(read(dest, 'a.yaml'), /version: 1\.0\.0/);
+  assert.deepEqual(wfs.workflowStatus(src, dest)['a.yaml'], { origin: 'modified', updateAvailable: true, restorable: true });
+});
+
 test('resolveWorkflow looks in the workspace first, then in the bundled folder', (t) => {
   const wsDir = tmp(t);
   const bundled = tmp(t);

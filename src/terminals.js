@@ -69,8 +69,8 @@ class Terminals {
     return { write, flush };
   }
 
-  /** Pseudoterminal running `file args` in `cwd`. */
-  open({ title, file, args = [], cwd, env, cols = 100, rows = 24 }) {
+  /** Pseudoterminal running `file args` in `cwd`; onExit(exitCode) once the program ends or is killed. */
+  open({ title, file, args = [], cwd, env, cols = 100, rows = 24, onExit }) {
     pty ??= loadPty();
     const id = `t${++this.seq}`;
     const proc = pty.spawn(file, args, {
@@ -82,6 +82,7 @@ class Terminals {
       out.flush();
       this.procs.delete(id);
       this.send('term:exit', { id, exitCode });
+      try { onExit?.(exitCode); } catch (e) { console.error('terminal exit:', e); }
     });
     this.procs.set(id, { title, pid: proc.pid, write: (d) => proc.write(d), resize: (c, r) => proc.resize(c, r), kill: () => { killTree(proc.pid); proc.kill(); } });
     return { id, title, pid: proc.pid };

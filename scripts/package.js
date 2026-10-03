@@ -33,7 +33,8 @@ async function hardenExe(exe) {
     // node-pty is a native module (embedded terminals): it has to live outside app.asar.
     // session-tail.js runs under the system node in the external live terminal (see
     // terminalSpec in src/main.js), and node can't read app.asar.
-    asar: { unpack: '{**/node_modules/node-pty/**,**/src/session-tail.js}' },
+    // supervisor-mcp.js (the supervisor's MCP server, a child of claude) likewise.
+    asar: { unpack: '{**/node_modules/node-pty/**,**/src/session-tail.js,**/src/supervisor-mcp.js}' },
     // .claude/ may contain worktrees from other sessions (with their own node_modules)
     ignore: [/^\/(runs|dist|build|scripts|test|supabase|site|\.github|\.claude)(\/|$)/],
     // Hardening: turn the packaged exe into "just this app", not a general Node/Electron runtime

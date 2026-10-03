@@ -1,0 +1,21 @@
+/* Notification center (notification-center.js): the panel opened by the sidebar's bell. */
+.notification-center {
+  /* next to the sidebar (200px wide), level with its bell */
+  position: fixed; left: 208px; bottom: 12px; z-index: 60; width: 380px; max-height: min(70vh, 560px);
+  display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: 0 12px 32px rgba(0, 0, 0, .45);
+}
+.nc-head { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+.nc-head b { margin-right: auto; }
+.nc-list { overflow-y: auto; padding: 4px; }
+.nc-empty { padding: 16px 12px; margin: 0; }
+.nc-item {
+  display: flex; gap: 8px; width: 100%; padding: 8px; border: 0; border-radius: 8px; background: transparent;
+  color: var(--text); text-align: left; cursor: pointer; font: inherit;
+}
+.nc-item:hover, .nc-item:focus-visible { background: var(--panel-2); }
+.nc-dot { flex: none; width: 8px; height: 8px; margin-top: 5px; border-radius: 50%; background: transparent; }
+.nc-item.unread .nc-dot { background: var(--accent); }
+.nc-item:not(.unread) b { font-weight: 500; color: var(--muted); }
+.nc-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.nc-body { color: var(--muted); font-size: 12px; white-space: pre-line; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; }

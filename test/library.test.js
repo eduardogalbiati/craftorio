@@ -29,6 +29,32 @@ test('settings: defaults, merge and dropping unknown keys', (t) => {
   assert.equal('junk' in readSettings(ws), false);
 });
 
+// #82: voice input (src/speech.js) defaults to whisper-cli, the "small" model and Portuguese (the
+// owner dictates in Portuguese); an unrelated settings patch keeps them.
+test('settings: voice input defaults (whisper-cli, small, pt), kept by an unrelated patch', (t) => {
+  const ws = setupWorkspace(path.join(tmp(t), 'w'), { store: memStore() });
+  assert.deepEqual(
+    { voiceCommand: DEFAULT_SETTINGS.voiceCommand, voiceModel: DEFAULT_SETTINGS.voiceModel, voiceLanguage: DEFAULT_SETTINGS.voiceLanguage },
+    { voiceCommand: 'whisper-cli', voiceModel: 'small', voiceLanguage: 'pt' },
+  );
+  const s = writeSettings(ws, { developerMode: true });
+  assert.equal(s.voiceCommand, 'whisper-cli');
+  assert.equal(s.voiceModel, 'small');
+  assert.equal(s.voiceLanguage, 'pt');
+});
+
+// #162: Keep awake (src/keep-awake.js) is off by default, and an unrelated patch keeps it as is.
+test('settings: keep awake is off by default, kept by an unrelated patch', (t) => {
+  const ws = setupWorkspace(path.join(tmp(t), 'w'), { store: memStore() });
+  assert.equal(DEFAULT_SETTINGS.keepAwake, false);
+  assert.equal(readSettings(ws).keepAwake, false);
+  const s = writeSettings(ws, { developerMode: true });
+  assert.equal(s.keepAwake, false);
+  const s2 = writeSettings(ws, { keepAwake: true });
+  assert.equal(s2.keepAwake, true);
+  assert.equal(writeSettings(ws, { developerMode: false }).keepAwake, true);
+});
+
 test('slugify strips accents and special characters', () => {
   assert.equal(projects.slugify('Café Déjà Vu!'), 'cafe-deja-vu');
   assert.equal(projects.slugify('***'), 'project');
@@ -180,6 +206,7 @@ test('every templated skill in the workflows resolves for every enum input value
     for (const inputs of combos) {
       for (const n of names) {
         const id = nunjucks.renderString(n, { inputs });
+        if (!id) continue; // optional skill left empty (e.g. document_skill): the engine skips it, as loadSkills does
         assert.doesNotThrow(() => skills.resolveSkill([dir], id), `${file}: ${n} → ${id}`);
       }
     }
@@ -190,12 +217,14 @@ test('language and platform skill families are complete', () => {
   const ids = skills.listSkills(path.join(__dirname, '..', 'skills')).map((s) => s.id);
   const families = {
     'unit-test-writer': ['js', 'python', 'go', 'java', 'csharp'],
+    'e2e-test-writer': ['js', 'python', 'go', 'java', 'csharp'],
     'build-audit': ['js', 'python', 'go', 'java', 'csharp'],
     'ci-pipeline': ['gh', 'gl'],
     'pr-babysitter': ['gh', 'gl'],
     'pr-screenshots': ['gh', 'gl'],
     deploy: ['gh', 'gl'],
     'issue-creator': ['gh', 'gl'],
+    'backlog-refresh': ['gh', 'gl'],
   };
   for (const [cap, suffixes] of Object.entries(families)) {
     for (const s of suffixes) assert.ok(ids.includes(`${cap}-${s}`), `missing ${cap}-${s}`);

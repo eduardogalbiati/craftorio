@@ -5,6 +5,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const usage = require('../src/usage');
+const { installCommand } = require('../src/install-commands');
 const { parseGrok } = require('../src/engine/providers');
 const { WorkflowRun } = require('../src/engine/workflow');
 
@@ -96,6 +97,19 @@ test('concurrent runs share the budgets: the engine counts the other runs, prefl
   assert.equal(merged.claude.usedUsd, 1.1);
   assert.equal(merged.claude.usedTokens, 15);
   assert.equal(budget.claude.usedUsd, 0.5); // the baseline is not changed
+});
+
+test('computeUsage providers (#147): claude/codex carry the play button\'s install command and note; Grok keeps its prose hint', (t) => {
+  const dir = runsDir(t, []);
+  const u = usage.computeUsage({ runsDir: dir, now: NOW });
+  const by = Object.fromEntries(u.providers.map((p) => [p.id, p]));
+  assert.equal(by.claude.installCommand, installCommand('claude'));
+  assert.equal(by.claude.installNote, 'then run `claude` once to log in');
+  assert.equal(by.claude.installHint, `${installCommand('claude')}   (then run \`claude\` once to log in)`);
+  assert.equal(by.codex.installCommand, installCommand('codex'));
+  assert.equal(by.codex.installHint, `${installCommand('codex')}   (then \`codex login\`)`);
+  assert.equal(by.grok.installCommand, null);
+  assert.equal(by.grok.installHint, 'install Grok Build from x.ai (then `grok login`)');
 });
 
 test('preflight reports missing CLIs and exhausted budgets', () => {

@@ -5,28 +5,78 @@
 const path = require('path');
 const os = require('os');
 const fs = require('fs');
-const { spawn } = require('child_process');
+const {
+  execFile,
+  spawn,
+} = require('child_process');
 const {
   app,
   BrowserWindow,
   clipboard,
+  ClipboardItem,
   dialog,
   ipcMain,
+  nativeImage,
   Notification,
+  powerSaveBlocker,
   safeStorage,
+  session,
   shell,
 } = require('electron');
 const workspace = require('./workspace');
+const localPreview = require('./local-preview');
+const runOwner = require('./run-owner');
+const { allowPermission } = require('./permissions');
 const { createService } = require('./service');
 const { authChannels } = require('./service/manifest');
 const { createAuth, fileStorage } = require('./auth');
 const authConfig = require('./auth-config');
+const { createKeepAwake } = require('./keep-awake');
 
 // The packaged app doesn't accept Chromium's remote debugging switches (the Node inspector is
 // already disabled by a fuse, see scripts/package.js)
 if (app.isPackaged && ['remote-debugging-port', 'remote-debugging-pipe'].some((s) => app.commandLine.hasSwitch(s))) {
   app.exit(1);
 }
+
+// A copy started by Run locally at a gate (src/local-preview.js) keeps its own user data folder,
+// so it never shares the owner's sign-in or window state
+if (!app.isPackaged && process.env.MULTIAGENT_USER_DATA) app.setPath('userData', path.resolve(process.env.MULTIAGENT_USER_DATA));
+
+// ---- one app per workspace (#112) ------------------------------------------------------------
+// Two copies on one workspace judge each other's runs as interrupted and start them twice.
+// - An app started by hand from a run's worktree (<workspace>/worktrees/<id>) opens a scratch
+//   workspace with its own user data folder, simulations only, as Run locally does.
+// - The owner's app (no MULTIAGENT_WORKSPACE) holds Electron's single-instance lock for its user
+//   data folder; a second copy gets a user data folder of its own and offers a scratch copy or quit.
+// - Whatever the user data folder, the app locks the workspace it opens (<workspace>/.lock with a
+//   heartbeat, src/run-owner.js); a locked workspace is never opened read-write by a second copy.
+// Scratch copies (screenshots, Run locally, smoke checks, tests) have their own workspaces: unaffected.
+const APP_DIR = path.join(__dirname, '..');
+if (!app.isPackaged && !process.env.MULTIAGENT_WORKSPACE) {
+  const scratch = localPreview.worktreeAppScratch(APP_DIR);
+  if (scratch) {
+    process.env.MULTIAGENT_WORKSPACE = scratch.workspace;
+    process.env.MULTIAGENT_SIMULATION_ONLY = '1';
+    if (!process.env.MULTIAGENT_USER_DATA) app.setPath('userData', scratch.userData);
+    console.log(`Started from a worktree of ${scratch.owner}: using the scratch workspace ${scratch.workspace} (simulations only).`);
+  }
+}
+// An agent's check started without its run's scratch workspace (#120): simulations only never open
+// the owner's workspace (workspace.resolveWorkspace) nor the owner's user data (sign-in, #112).
+// Agents of a run with a worktree get MULTIAGENT_WORKSPACE and MULTIAGENT_USER_DATA from the engine.
+if (!app.isPackaged && !process.env.MULTIAGENT_WORKSPACE && process.env.MULTIAGENT_SIMULATION_ONLY === '1') {
+  const scratch = workspace.simulationWorkspace();
+  process.env.MULTIAGENT_WORKSPACE = scratch.workspace;
+  if (!process.env.MULTIAGENT_USER_DATA) app.setPath('userData', scratch.userData);
+  console.log(`Simulation only: using the scratch workspace ${scratch.workspace}.`);
+}
+const secondCopy = !process.env.MULTIAGENT_WORKSPACE && !app.requestSingleInstanceLock();
+if (secondCopy) {
+  const dir = workspace.resolveWorkspace().dir || os.tmpdir();
+  app.setPath('userData', path.join(dir, 'local-previews', `app-${process.pid}`, 'user-data'));
+}
+let workspaceLock = null;
 
 let win = null;
 
@@ -61,6 +111,7 @@ const service = createService({
     appVersion: app.getVersion(),
     isPackaged: app.isPackaged,
     assertCanRun: (opts) => auth.assertCanRun(opts),
+    userDataDir: app.getPath('userData'),
   },
 });
 
@@ -83,11 +134,33 @@ for (const { channel, fn } of authChannels(account)) if (channel) ipcMain.handle
 for (const [channel, fn] of Object.entries(service.api)) ipcMain.handle(channel, (_e, arg) => fn(arg));
 for (const [channel, fn] of Object.entries(service.notifications)) ipcMain.on(channel, (_e, arg) => fn(arg));
 // what the preload builds window.api from, asked once when the window loads (sync: the page's
-// scripts use window.api right away)
-ipcMain.on('api:manifest', (e) => { e.returnValue = service.manifest; });
-for (const channel of ['run:event', 'term:data', 'term:exit']) {
+// scripts use window.api right away); also when the window's code is recorded (#83)
+ipcMain.on('api:manifest', (e) => {
+  service.code.markLoaded();
+  e.returnValue = service.manifest;
+});
+for (const channel of ['backlog:changed', 'chat:progress', 'notifications:changed','oracle:changed', 'run:event', 'run:meta', 'supervisor:watch', 'term:data', 'term:exit']) {
   service.events.on(channel, (payload) => { if (win && !win.isDestroyed()) win.webContents.send(channel, payload); });
 }
+
+// ---- keep awake (#162) -----------------------------------------------------------------
+// The app that runs the work (#112) holds the blocker, only while the setting is on and there is
+// work (src/keep-awake.js). Re-checked after run events, when the settings change and every 15 s
+// (a roadmap or a queue changed from the Backlog); released when idle, switched off and on quit.
+const keepAwake = createKeepAwake({
+  blocker: powerSaveBlocker,
+  enabled: () => { const ws = service.workspace(); return !!ws && !!workspace.readSettings(ws).keepAwake; },
+  readWork: () => service.pendingWork(),
+  onChange: (s) => { if (win && !win.isDestroyed()) win.webContents.send('keepAwake:changed', s); },
+});
+let keepAwakeTimer = null;
+function checkKeepAwake() {
+  if (keepAwakeTimer) return;
+  keepAwakeTimer = setTimeout(() => { keepAwakeTimer = null; keepAwake.update(); }, 1000);
+}
+service.events.on('run:event', checkKeepAwake);
+service.events.on('settings:changed', () => keepAwake.update());
+ipcMain.handle('keepAwake:state', () => keepAwake.update());
 
 // ---- desktop notifications -------------------------------------------------------------
 // The service decides what deserves one (settings, what the window shows); clicking it brings the
@@ -115,7 +188,7 @@ service.events.on('notify', (n) => {
 // ~/multiagent-workspace) does not exist, asks whether to create the default or pick another.
 async function ensureWorkspace() {
   const r = workspace.resolveWorkspace();
-  if (r.dir) return workspace.setupWorkspace(r.dir, { persist: r.source !== 'env' });
+  if (r.dir) return workspace.setupWorkspace(r.dir, { persist: r.source !== 'env' && r.source !== 'simulation' });
 
   const reason = r.registered
     ? `The registered workspace folder no longer exists:\n${r.registered}`
@@ -138,10 +211,46 @@ async function ensureWorkspace() {
   }
 }
 
+// Locks the workspace for this process (#112). Held by another live copy: says so and offers a
+// scratch copy of it (simulations only) or quit; returns the workspace to open, or null to quit.
+async function claimWorkspace(ws) {
+  const lock = secondCopy ? { ok: false, holder: null } : runOwner.lockWorkspace(ws.root, { app: APP_DIR });
+  if (lock.ok) { workspaceLock = lock; return ws; }
+  const h = lock.holder;
+  const who = h ? `process ${h.pid} on ${h.host}, open since ${h.started_at}${h.app ? ` (from ${h.app})` : ''}` : 'another copy of the app';
+  const { response } = await dialog.showMessageBox({
+    type: 'warning',
+    title: 'Workspace in use',
+    message: 'This workspace is already open in another copy of the app',
+    detail: `${ws.root}\n\nIt is open in ${who}. Two copies on one workspace would take each other's runs for interrupted and start them twice.\n\nOpen a scratch copy (your agents, skills, workflows and settings copied to a new workspace; simulations only), or quit.`,
+    buttons: ['Open a scratch copy', 'Quit'],
+    defaultId: 0,
+    cancelId: 1,
+    noLink: true,
+  });
+  if (response !== 0) return null;
+  const scratch = localPreview.scratchWorkspace(ws, path.join(ws.root, 'local-previews', `app-${process.pid}`));
+  process.env.MULTIAGENT_SIMULATION_ONLY = '1';
+  const next = workspace.setupWorkspace(scratch.workspace, { persist: false });
+  workspaceLock = runOwner.lockWorkspace(next.root, { app: APP_DIR });
+  return next;
+}
+
 async function pickWorkspaceDir(parent) {
   const opts = { title: 'Workspace folder', properties: ['openDirectory', 'createDirectory'], defaultPath: service.workspace()?.root || os.homedir() };
   const r = parent ? await dialog.showOpenDialog(parent, opts) : await dialog.showOpenDialog(opts);
   return r.canceled ? null : r.filePaths[0];
+}
+
+const APP_PAGE = path.join(__dirname, 'renderer', 'index.html');
+
+// The microphone (voice input, #82) for the app's own page only, audio only; every other
+// permission and page is denied (see src/permissions.js). A check names the page through its
+// webContents (its origin is just "file://").
+function restrictPermissions(ses) {
+  ses.setPermissionRequestHandler((_wc, permission, callback, details) => callback(allowPermission(permission, details, APP_PAGE)));
+  ses.setPermissionCheckHandler((wc, permission, _origin, details) =>
+    allowPermission(permission, { ...details, requestingUrl: details?.requestingUrl || wc?.getURL() }, APP_PAGE));
 }
 
 function createWindow() {
@@ -170,7 +279,7 @@ function createWindow() {
       if (/^https?:\/\//i.test(url)) shell.openExternal(url);
     }
   });
-  win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
+  win.loadFile(APP_PAGE);
   // a run that died with the app last time, once the window can open it
   win.webContents.once('did-finish-load', () => service.notifyInterruptedRun());
 }
@@ -203,16 +312,47 @@ ipcMain.handle('run:openDir', (_e, arg) => {
 });
 
 // Opens an artifact with the default app, or shows it in the file explorer.
-ipcMain.handle('artifacts:open', (_e, { path: file, reveal }) => {
-  const found = service.findArtifact(file);
+ipcMain.handle('artifacts:open', async (_e, { path: file, reveal }) => {
+  const found = await service.findArtifact(file);
   if (!found?.exists) throw new Error('Artifact not found.');
   if (reveal) { shell.showItemInFolder(found.path); return ''; }
   return shell.openPath(found.path);
 });
 
-// Clipboard for the terminals (the sandboxed renderer has no clipboard module)
-ipcMain.handle('clipboard:read', () => clipboard.readText());
-ipcMain.handle('clipboard:write', (_e, { text }) => { clipboard.writeText(String(text ?? '')); return true; });
+// Clipboard for the terminals (the sandboxed renderer has no clipboard module). Electron 44's
+// clipboard is async and ClipboardItem-based (#139): readText/writeText return promises.
+ipcMain.handle('clipboard:read', async () => clipboard.readText());
+ipcMain.handle('clipboard:write', async (_e, { text }) => { await clipboard.writeText(String(text ?? '')); return true; });
+
+// An artifact's image, or the file itself, on the clipboard (#114). Only a run's artifact (a file of
+// its folder or its recorded project copy) is accepted: service.existingArtifact refuses the rest.
+// The image goes as PNG data (writeImage was removed in Electron 44, #139).
+ipcMain.handle('clipboard:writeImage', async (_e, { path: file }) => {
+  const found = await service.existingArtifact(file);
+  const img = nativeImage.createFromPath(found.path);
+  if (img.isEmpty()) throw new Error(`Not an image the clipboard can hold: ${path.basename(found.path)}`);
+  await clipboard.write([new ClipboardItem({ 'image/png': new Blob([img.toPNG()], { type: 'image/png' }) })]);
+  return true;
+});
+
+// The file itself, to paste in the file explorer or attach in a chat. Windows: the file-drop list
+// (CF_HDROP) through Windows PowerShell's Set-Clipboard -LiteralPath (Electron cannot write it).
+// macOS / Linux: the file URL as a ClipboardItem (public.file-url as a raw macOS format, text/uri-list
+// on Linux), checked with clipboard.has afterwards: a platform that drops the type gets a clear error.
+ipcMain.handle('clipboard:writeFile', async (_e, { path: file }) => {
+  const found = await service.existingArtifact(file);
+  if (process.platform === 'win32') {
+    const literal = `'${found.path.replace(/'/g, "''")}'`;
+    await new Promise((resolve, reject) => execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `Set-Clipboard -LiteralPath ${literal}`],
+      { windowsHide: true, timeout: 15000 }, (err, _out, stderr) => (err ? reject(new Error(`Could not copy the file: ${String(stderr || err.message).trim()}`)) : resolve())));
+    return true;
+  }
+  const type = process.platform === 'darwin' ? 'electron application/osclipboard;format="public.file-url"' : 'text/uri-list';
+  const url = require('url').pathToFileURL(found.path).href;
+  await clipboard.write([new ClipboardItem({ [type]: new Blob([url], { type: 'text/plain' }) })]);
+  if (!(await clipboard.has(type))) throw new Error('Copy file is not available on this platform: use Copy path instead');
+  return true;
+});
 
 // External console window (Windows) for a session: its live log or its CLI conversation.
 const q = (a) => `"${String(a).replace(/"/g, '""')}"`;
@@ -231,16 +371,38 @@ ipcMain.handle('session:terminal', (_e, { sessionId, mode, runId }) => {
   return true;
 });
 
+// Restart after the code changed on disk (#83): the service refuses while runs are in progress
+// unless the user confirmed interrupting them, and pauses the Backlog queues first.
+ipcMain.handle('app:relaunch', (_e, arg) => {
+  const r = service.prepareRestart({ interruptRuns: !!arg?.interruptRuns });
+  setImmediate(() => {
+    // the renderer saved the interrupted runs to list after the restart
+    if (win && !win.isDestroyed()) win.webContents.session.flushStorageData();
+    service.shutdown();
+    // app.exit skips will-quit: the new process takes the workspace lock (and holds its own blocker)
+    keepAwake.stop();
+    workspaceLock?.release();
+    app.relaunch();
+    app.exit(0);
+  });
+  return r;
+});
+
 // Windows shows notifications under the app's AppUserModelID (the exe itself in development).
 if (process.platform === 'win32') app.setAppUserModelId(app.isPackaged ? 'MultiagentOrchestrator' : process.execPath);
 
 app.whenReady().then(async () => {
   createAccount();
-  const ws = await ensureWorkspace();
+  const found = await ensureWorkspace();
+  const ws = found && await claimWorkspace(found);
   if (!ws) return app.quit();
   service.setWorkspace(ws);
+  keepAwake.update();
+  setInterval(() => keepAwake.update(), 15 * 1000).unref();
+  restrictPermissions(session.defaultSession);
   createWindow();
   service.cleanupWorktrees().catch((e) => console.error('worktree cleanup:', e));
+  service.clearPastedImages();
   // the trial can end while the app is open
   const checkAccount = () => auth.refresh().catch((e) => console.error('account:', e.message));
   checkAccount();
@@ -248,5 +410,17 @@ app.whenReady().then(async () => {
 });
 app.on('window-all-closed', () => {
   service.shutdown();
+  keepAwake.stop();
   app.quit();
+});
+app.on('will-quit', () => {
+  keepAwake.stop();
+  workspaceLock?.release();
+});
+// a second copy started on the same user data folder: this window comes forward (#112)
+app.on('second-instance', () => {
+  if (!win || win.isDestroyed()) return;
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.focus();
 });

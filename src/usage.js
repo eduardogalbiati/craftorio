@@ -1,7 +1,8 @@
 // Token and cost usage per provider, and monthly budgets.
 //
 // Two scopes:
-// - orchestrator: the runs' summary.json files (<workspace>/runs/*/summary.json; mock runs
+// - orchestrator: the runs' summary.json files (<workspace>/runs/*/summary.json, through the run
+//   index when it is open: src/store.js; mock runs
 //   are ignored) plus the sessions of the run in progress;
 // - machine: everything the CLIs recorded on this machine (src/local-usage.js), including use
 //   outside the orchestrator. The orchestrator's part is found by provider session id. Cost is what the CLI reported
@@ -11,12 +12,16 @@
 
 const fs = require('fs');
 const path = require('path');
+const { installCommand } = require('./install-commands');
+const { runSummaries } = require('./runs');
 
+// installCommand: what the Usage screen's play button runs (#147); installNote: what to do after it
 const PROVIDERS = [
-  { id: 'claude', type: 'claude-code', command: 'claude', name: 'Claude Code', costReported: true, installHint: 'irm https://claude.ai/install.ps1 | iex   (then run `claude` once to log in)' },
-  { id: 'codex', type: 'codex-cli', command: 'codex', name: 'Codex CLI', costReported: false, installHint: 'npm install -g @openai/codex   (then `codex login`)' },
-  { id: 'grok', type: 'grok-cli', command: 'grok', name: 'Grok Build', costReported: true, installHint: 'install Grok Build from x.ai (then `grok login`)' },
+  { id: 'claude', type: 'claude-code', command: 'claude', name: 'Claude Code', costReported: true, installCommand: installCommand('claude'), installNote: 'then run `claude` once to log in' },
+  { id: 'codex', type: 'codex-cli', command: 'codex', name: 'Codex CLI', costReported: false, installCommand: installCommand('codex'), installNote: 'then `codex login`' },
+  { id: 'grok', type: 'grok-cli', command: 'grok', name: 'Grok Build', costReported: true, installCommand: null, installNote: 'then `grok login`', installHint: 'install Grok Build from x.ai (then `grok login`)' },
 ];
+for (const p of PROVIDERS) p.installHint = p.installHint || `${p.installCommand}   (${p.installNote})`;
 const WARN_AT = 0.8;
 
 const TOKEN_KEYS = ['input', 'output', 'cache_read', 'cache_write', 'reasoning'];
@@ -51,7 +56,10 @@ function addSession(tot, session, prices) {
   else tot.costUsd += cost;
 }
 
+// From the run index when the service has it open (src/store.js), else the summary.json files.
 function readRuns(runsDir) {
+  const indexed = runSummaries(runsDir, { mock: false });
+  if (indexed) return indexed;
   let dirs = [];
   try { dirs = fs.readdirSync(runsDir); } catch { return []; }
   const runs = [];
@@ -78,8 +86,9 @@ const recordAsSession = (r) => ({ provider: r.provider, model: r.model, tokens: 
  *                    or a list of them (concurrent runs)
  * @param installed   { claude: bool, codex: bool, grok: bool }
  * @param now         Date (tests)
+ * @param extraRuns   summary-like spend that is in no run folder, e.g. the Oracle's days (src/oracle.js usageRuns)
  */
-function computeUsage({ runsDir, settings = {}, live = null, installed = {}, now = new Date(), scope = 'orchestrator', local = null }) {
+function computeUsage({ runsDir, settings = {}, live = null, installed = {}, now = new Date(), scope = 'orchestrator', local = null, extraRuns = [] }) {
   const prices = settings.prices || {};
   const budgets = settings.budgets || {};
   const month = monthKey(now);
@@ -88,6 +97,7 @@ function computeUsage({ runsDir, settings = {}, live = null, installed = {}, now
   const liveIds = new Set(lives.map((l) => l.run_id));
   const runs = readRuns(runsDir).filter((r) => !liveIds.has(r.run_id));
   for (const l of lives) runs.push({ ...l, status: 'running' });
+  runs.push(...(extraRuns || []));
 
   const byProvider = Object.fromEntries(PROVIDERS.map((p) => [p.id, { month: emptyTotals(), today: emptyTotals(), models: {} }]));
   const totals = { month: emptyTotals(), today: emptyTotals() };
@@ -166,7 +176,7 @@ function computeUsage({ runsDir, settings = {}, live = null, installed = {}, now
     const usedPctTokens = budget.monthlyTokens ? u.month.tokens.total / budget.monthlyTokens : null;
     const worst = Math.max(usedPctUsd ?? 0, usedPctTokens ?? 0);
     return {
-      id: p.id, name: p.name, installed: installed[p.id] ?? null, installHint: p.installHint, costReported: p.costReported,
+      id: p.id, name: p.name, installed: installed[p.id] ?? null, installHint: p.installHint, installCommand: p.installCommand, installNote: p.installNote, costReported: p.costReported,
       month: u.month, today: u.today, budget, usedPctUsd, usedPctTokens,
       status: worst >= 1 ? 'over' : worst >= WARN_AT ? 'warn' : 'ok',
       models: Object.entries(u.models).map(([model, month]) => ({ model, month })).sort((a, b) => b.month.tokens.total - a.month.tokens.total),
@@ -199,9 +209,9 @@ function computeUsage({ runsDir, settings = {}, live = null, installed = {}, now
  * Budget state the engine checks before each turn: what each provider already used this
  * month in finished runs (the run itself adds its own sessions on top).
  */
-function budgetBaseline({ runsDir, settings = {}, now = new Date(), local = null }) {
-  const orch = computeUsage({ runsDir, settings, now });
-  const all = local ? computeUsage({ runsDir, settings, now, scope: 'machine', local }) : null;
+function budgetBaseline({ runsDir, settings = {}, now = new Date(), local = null, extraRuns = [] }) {
+  const orch = computeUsage({ runsDir, settings, now, extraRuns });
+  const all = local ? computeUsage({ runsDir, settings, now, scope: 'machine', local, extraRuns }) : null;
   return Object.fromEntries(orch.providers.map((o, i) => {
     const p = o.budget.countOutside && all ? all.providers[i] : o;
     return [p.id, {

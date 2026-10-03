@@ -2,7 +2,7 @@
 name: prd-writing
 description: Writes and scores PRDs (Product Requirements Documents) - required structure with user stories, traceable requirements, testing decisions and open questions with recommended defaults, plus the rubric used to score proposals. Use to write, critique or merge a PRD.
 summary: "PRD structure (user stories, traceable requirements, testing decisions, questions with defaults) and scoring rubric"
-used_by: "arena"
+used_by: "arena, Write & Review (`document_skill`)"
 ---
 
 # PRD (Product Requirements Document)

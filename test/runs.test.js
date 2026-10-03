@@ -6,6 +6,7 @@ const os = require('os');
 const path = require('path');
 const runs = require('../src/runs');
 const projects = require('../src/projects');
+const { writeTitle } = require('../src/run-pr');
 
 const jl = (...objs) => objs.map((o) => JSON.stringify(o)).join('\n') + '\n';
 const snap = (id, agent, extra = {}) => ({ id, agent, provider: 'claude', model: 'm', status: 'idle', turns: 1, tokens: { input: 10, output: 5 }, cost_usd: 0.5, provider_session_id: `p-${id}`, ...extra });
@@ -54,6 +55,49 @@ test('listRuns reads finished runs from summary.json and rebuilds interrupted on
   assert.equal(r2.sessions[0].provider_session_id, 'p-s1');
 });
 
+// ---- owner.json: "running (elsewhere)" vs "interrupted" (#112) ----------------------------------
+
+function unfinishedRun(t, extra = {}) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-owner-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const dir = path.join(root, 'live1');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'events.jsonl'), jl({ ts: '2026-09-27T10:00:00Z', type: 'workflow.started', workflow: 'w', file: 'w.yaml', inputs: {}, mock: true }));
+  if (extra.owner) fs.writeFileSync(path.join(dir, 'owner.json'), JSON.stringify(extra.owner));
+  return { root, dir };
+}
+
+test('readRun/listRuns: a run with no owner.json (died with the app, before #112, or the owner never wrote one in time) is interrupted', (t) => {
+  const { root } = unfinishedRun(t);
+  assert.equal(runs.readRun(root, 'live1').status, 'interrupted');
+  assert.equal(runs.readRun(root, 'live1').runningElsewhere, null);
+  assert.equal(runs.listRuns(root).find((r) => r.runId === 'live1').status, 'interrupted');
+});
+
+test('readRun/listRuns: a fresh heartbeat from another live process reads as "running", never "interrupted"', (t) => {
+  const { root } = unfinishedRun(t, { owner: { pid: process.ppid, host: os.hostname(), heartbeat_at: new Date().toISOString() } });
+  const read = runs.readRun(root, 'live1');
+  assert.equal(read.status, 'running');
+  assert.deepEqual(read.runningElsewhere, { pid: process.ppid, host: os.hostname() });
+  const listed = runs.listRuns(root).find((r) => r.runId === 'live1');
+  assert.equal(listed.status, 'running');
+  assert.deepEqual(listed.runningElsewhere, { pid: process.ppid, host: os.hostname() });
+});
+
+test('readRun/listRuns: this process\'s own ownership reads as "running" with no runningElsewhere (the service already knows its own runs)', (t) => {
+  const { root } = unfinishedRun(t, { owner: { pid: process.pid, host: os.hostname(), heartbeat_at: new Date().toISOString() } });
+  const read = runs.readRun(root, 'live1');
+  assert.equal(read.status, 'running');
+  assert.equal(read.runningElsewhere, null);
+});
+
+test('readRun/listRuns: a dead owner (stale heartbeat) makes the run interrupted, even if it once had a live one', (t) => {
+  const stale = new Date(Date.now() - 60000).toISOString(); // past STALE_MS (30s)
+  const { root } = unfinishedRun(t, { owner: { pid: process.ppid, host: os.hostname(), heartbeat_at: stale } });
+  assert.equal(runs.readRun(root, 'live1').status, 'interrupted');
+  assert.equal(runs.listRuns(root).find((r) => r.runId === 'live1').status, 'interrupted');
+});
+
 test('readRun gives the issues a run implements; a run recorded with one `issue` still loads as a list of one', (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-issues-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
@@ -71,6 +115,156 @@ test('readRun gives the issues a run implements; a run recorded with one `issue`
   assert.deepEqual(runs.readRun(root, 'old-finished').issues, [ref(7)]);
   assert.deepEqual(runs.readRun(root, 'old-interrupted').issues, [ref(8)]);
   assert.equal(runs.readRun(root, 'none').issues, null);
+});
+
+test('readRun exposes parentRun and childRuns (#174): from summary.json when there is one', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-children-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const parentRun = { run_id: 'parent', workflow: 'parent.yaml', step_id: 'child', index: 1, depth: 1 };
+  const childRuns = [
+    { run_id: 'c1', step_id: 'child', index: 0, workflow: 'child.yaml', status: 'success' },
+    { run_id: 'c2', step_id: 'child', index: 1, workflow: 'child.yaml', status: 'running' },
+  ];
+  fs.mkdirSync(path.join(root, 'parent'));
+  fs.writeFileSync(path.join(root, 'parent', 'events.jsonl'), jl({ ts: '2026-09-27T10:00:00Z', type: 'workflow.started', workflow: 'parent.yaml' }));
+  fs.writeFileSync(path.join(root, 'parent', 'summary.json'), JSON.stringify({ run_id: 'parent', workflow: 'parent.yaml', status: 'running', started_at: '2026-09-27T10:00:00Z', sessions: [], child_runs: childRuns }));
+  fs.mkdirSync(path.join(root, 'c1'));
+  fs.writeFileSync(path.join(root, 'c1', 'events.jsonl'), jl({ ts: '2026-09-27T10:00:01Z', type: 'workflow.started', workflow: 'child.yaml', parent_run: parentRun }));
+  fs.writeFileSync(path.join(root, 'c1', 'summary.json'), JSON.stringify({ run_id: 'c1', workflow: 'child.yaml', status: 'success', started_at: '2026-09-27T10:00:01Z', sessions: [], parent_run: parentRun }));
+  assert.deepEqual(runs.readRun(root, 'parent').childRuns, childRuns);
+  assert.equal(runs.readRun(root, 'parent').parentRun, null);
+  assert.deepEqual(runs.readRun(root, 'c1').parentRun, parentRun);
+  assert.equal(runs.readRun(root, 'c1').childRuns, null); // no child_runs: null, not []
+});
+
+test('readRun derives parentRun and childRuns from events.jsonl when there is no summary yet (#174)', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-children-live-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const parentRun = { run_id: 'parent', workflow: 'parent.yaml', step_id: 'child', index: 0, depth: 1 };
+  fs.mkdirSync(path.join(root, 'parent'));
+  fs.writeFileSync(path.join(root, 'parent', 'events.jsonl'), jl(
+    { ts: '2026-09-27T10:00:00Z', type: 'workflow.started', workflow: 'parent.yaml' },
+    { ts: '2026-09-27T10:00:01Z', type: 'workflow.child_started', child_run_id: 'c1', step_id: 'child', index: 0, workflow: 'child.yaml' },
+    { ts: '2026-09-27T10:00:01Z', type: 'workflow.child_started', child_run_id: 'c2', step_id: 'child', index: 1, workflow: 'child.yaml' },
+    { ts: '2026-09-27T10:00:05Z', type: 'workflow.child_finished', child_run_id: 'c1', status: 'success' },
+  ));
+  fs.mkdirSync(path.join(root, 'c1'));
+  fs.writeFileSync(path.join(root, 'c1', 'events.jsonl'), jl({ ts: '2026-09-27T10:00:01Z', type: 'workflow.started', workflow: 'child.yaml', parent_run: parentRun }));
+  assert.deepEqual(runs.readRun(root, 'parent').childRuns, [
+    { run_id: 'c1', step_id: 'child', index: 0, workflow: 'child.yaml', status: 'success' },
+    { run_id: 'c2', step_id: 'child', index: 1, workflow: 'child.yaml', status: 'running' },
+  ]);
+  assert.deepEqual(runs.readRun(root, 'c1').parentRun, parentRun);
+});
+
+test('readRun exposes childrenCostUsd (#175): from summary.children_cost_usd when there is one, else summed from each child\'s cost_usd', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-children-cost-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const childRuns = [
+    { run_id: 'c1', step_id: 'child', index: 0, workflow: 'child.yaml', status: 'success', cost_usd: 0.5 },
+    { run_id: 'c2', step_id: 'child', index: 1, workflow: 'child.yaml', status: 'success', cost_usd: 0.25 },
+  ];
+  fs.mkdirSync(path.join(root, 'with-summary'));
+  fs.writeFileSync(path.join(root, 'with-summary', 'events.jsonl'), jl({ ts: '2026-09-27T10:00:00Z', type: 'workflow.started', workflow: 'parent.yaml' }));
+  fs.writeFileSync(path.join(root, 'with-summary', 'summary.json'), JSON.stringify({ run_id: 'with-summary', workflow: 'parent.yaml', status: 'success', started_at: '2026-09-27T10:00:00Z', sessions: [], child_runs: childRuns, children_cost_usd: 0.75 }));
+  assert.equal(runs.readRun(root, 'with-summary').childrenCostUsd, 0.75);
+
+  fs.mkdirSync(path.join(root, 'no-summary'));
+  fs.writeFileSync(path.join(root, 'no-summary', 'events.jsonl'), jl(
+    { ts: '2026-09-27T10:00:00Z', type: 'workflow.started', workflow: 'parent.yaml' },
+    { ts: '2026-09-27T10:00:01Z', type: 'workflow.child_started', child_run_id: 'c1', step_id: 'child', index: 0, workflow: 'child.yaml' },
+    { ts: '2026-09-27T10:00:01Z', type: 'workflow.child_started', child_run_id: 'c2', step_id: 'child', index: 1, workflow: 'child.yaml' },
+    { ts: '2026-09-27T10:00:05Z', type: 'workflow.child_finished', child_run_id: 'c1', status: 'success', cost_usd: 0.5 },
+    { ts: '2026-09-27T10:00:06Z', type: 'workflow.child_finished', child_run_id: 'c2', status: 'success', cost_usd: 0.25 },
+  ));
+  assert.equal(runs.readRun(root, 'no-summary').childrenCostUsd, 0.75);
+
+  fs.mkdirSync(path.join(root, 'no-children'));
+  fs.writeFileSync(path.join(root, 'no-children', 'events.jsonl'), jl({ ts: '2026-09-27T10:00:00Z', type: 'workflow.started', workflow: 'solo.yaml' }));
+  assert.equal(runs.readRun(root, 'no-children').childrenCostUsd, 0);
+});
+
+test('readRun exposes the saves of its document to its issue (issue-saves.json), [] when there are none', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-issue-saves-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  fs.mkdirSync(path.join(root, 'a'));
+  fs.writeFileSync(path.join(root, 'a', 'events.jsonl'), jl({ ts: '2026-09-27T10:00:00Z', type: 'workflow.started', workflow: 'writer-reviewer', issues: [{ number: 29, url: 'https://github.com/o/r/issues/29', title: 'T' }] }));
+  const saved = [{ number: 29, url: 'https://github.com/o/r/issues/29', mode: 'replace', platform: 'github', at: '2026-09-27T11:00:00Z' }];
+  fs.writeFileSync(path.join(root, 'a', 'issue-saves.json'), JSON.stringify(saved));
+  fs.mkdirSync(path.join(root, 'b'));
+  fs.writeFileSync(path.join(root, 'b', 'events.jsonl'), jl({ ts: '2026-09-27T10:00:00Z', type: 'workflow.started', workflow: 'writer-reviewer' }));
+  assert.deepEqual(runs.readRun(root, 'a').issueSaves, saved);
+  assert.deepEqual(runs.readRun(root, 'b').issueSaves, []);
+});
+
+test('readRun exposes the PR from the latest step output with pr_url/pr_number, and the default title from the task', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-pr-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  fs.mkdirSync(path.join(root, 'a'));
+  fs.writeFileSync(path.join(root, 'a', 'events.jsonl'), jl(
+    { ts: '2026-09-27T10:00:00Z', type: 'workflow.started', workflow: 'w', inputs: { task: 'Fix the bug' } },
+    { ts: '2026-09-27T10:01:00Z', type: 'step.finished', step_id: 'ci', output: { pr_url: 'https://github.com/o/r/pull/42', pr_number: 42 } },
+  ));
+  const r = runs.readRun(root, 'a');
+  assert.deepEqual(r.pr, { number: 42, url: 'https://github.com/o/r/pull/42' });
+  assert.equal(r.title, 'Fix the bug');
+  assert.equal(r.customTitle, null);
+  assert.equal(r.resumedFrom, null);
+});
+
+test('readRun: the owner\'s title (meta.json) wins over the default', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-title-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  fs.mkdirSync(path.join(root, 'a'));
+  fs.writeFileSync(path.join(root, 'a', 'events.jsonl'), jl({ ts: '2026-09-27T10:00:00Z', type: 'workflow.started', workflow: 'w', inputs: { task: 'Fix the bug' } }));
+  writeTitle(path.join(root, 'a'), 'Second try after conflict');
+  const r = runs.readRun(root, 'a');
+  assert.equal(r.title, 'Second try after conflict');
+  assert.equal(r.customTitle, 'Second try after conflict');
+});
+
+test('readRun: a resumed run without its own PR or title inherits them from the run it resumes', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-resume-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  fs.mkdirSync(path.join(root, 'a'));
+  fs.writeFileSync(path.join(root, 'a', 'events.jsonl'), jl(
+    { ts: '2026-09-27T10:00:00Z', type: 'workflow.started', workflow: 'w', inputs: { task: 'Fix the bug' } },
+    { ts: '2026-09-27T10:01:00Z', type: 'step.finished', step_id: 'ci', output: { pr_url: 'https://github.com/o/r/pull/42', pr_number: 42 } },
+  ));
+  writeTitle(path.join(root, 'a'), 'Notifications');
+  fs.mkdirSync(path.join(root, 'b'));
+  fs.writeFileSync(path.join(root, 'b', 'events.jsonl'), jl(
+    { ts: '2026-09-28T10:00:00Z', type: 'workflow.started', workflow: 'w', inputs: { task: 'Fix the bug, again' }, resumed_from: { run_id: 'a', step: 'develop' } },
+  ));
+  const r = runs.readRun(root, 'b');
+  assert.equal(r.resumedFrom, 'a');
+  assert.deepEqual(r.pr, { number: 42, url: 'https://github.com/o/r/pull/42' });
+  assert.equal(r.title, 'Notifications');
+  assert.equal(r.customTitle, 'Notifications');
+});
+
+test('writeTitle never touches events.jsonl', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-events-untouched-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const dir = path.join(root, 'a');
+  fs.mkdirSync(dir);
+  const eventsPath = path.join(dir, 'events.jsonl');
+  fs.writeFileSync(eventsPath, jl({ ts: '2026-09-27T10:00:00Z', type: 'workflow.started', workflow: 'w' }));
+  const before = fs.readFileSync(eventsPath, 'utf8');
+  writeTitle(dir, 'A title');
+  assert.equal(fs.readFileSync(eventsPath, 'utf8'), before);
+  assert.ok(fs.existsSync(path.join(dir, 'meta.json')));
+});
+
+test('runArtifacts never lists meta.json', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'runs-meta-artifact-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const dir = path.join(root, 'a');
+  fs.mkdirSync(dir);
+  fs.writeFileSync(path.join(dir, 'events.jsonl'), '');
+  writeTitle(dir, 'A title');
+  const names = runs.runArtifacts(dir).map((a) => a.name);
+  assert.ok(!names.includes('meta.json'));
 });
 
 test('runsForProject matches the project id, then the current or previous folders', (t) => {
@@ -172,5 +366,26 @@ test('runEvents with activity keeps tool calls and thinking, compacted, and drop
   assert.equal(events[4].item.text.length, 4001);
   // without the option nothing streamed comes back
   assert.deepEqual(runs.runEvents(dir).map((e) => e.seq), [1, 11]);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('runEvents with activity keeps a sub-agent call\'s type and description, not its long prompt (#160)', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'run-events-'));
+  const s = (seq, item) => ({ seq, type: 'session.stream', session_id: 's1', turn: 1, item });
+  fs.writeFileSync(path.join(dir, 'events.jsonl'), jl(
+    { seq: 1, type: 'workflow.started', workflow: 'software-development' },
+    s(2, { kind: 'tool_call', name: 'Task', input: { subagent_type: 'Explore', description: `Map the login flow ${'x'.repeat(1000)}`, prompt: 'z'.repeat(5000) } }),
+    s(3, { kind: 'tool_call', name: 'Agent', input: {} }),
+    s(4, { kind: 'tool_call', name: 'Bash', input: { command: 'npm test' } }),
+  ));
+  const events = runs.runEvents(dir, { activity: true });
+  assert.deepEqual(events.map((e) => e.seq), [1, 2, 3, 4]);
+  assert.deepEqual(Object.keys(events[1].item.input), ['subagent_type', 'description']); // no raw prompt
+  assert.equal(events[1].item.input.subagent_type, 'Explore');
+  assert.equal(events[1].item.input.description.length, 601); // 600 characters + "…"
+  // no subagent_type or description at all: still the compact { subagent_type, description } shape
+  assert.deepEqual(events[2].item.input, { subagent_type: undefined, description: '' });
+  // an ordinary tool call keeps its usual (JSON string) input
+  assert.equal(events[3].item.input, '{"command":"npm test"}');
   fs.rmSync(dir, { recursive: true, force: true });
 });

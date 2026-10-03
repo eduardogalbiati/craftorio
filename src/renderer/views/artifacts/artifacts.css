@@ -1,0 +1,51 @@
+/* Artifacts screen (views/artifacts/artifacts.js): its layout, run groups, file rows, viewer and the
+   markdown table of contents. The kind badges, the shared artifact content (.art-empty, .art-code,
+   .art-table, .md…) and the Artifacts panel (.ap-*) are in style.css. */
+.art-layout { display: grid; grid-template-columns: 340px minmax(0, 1fr); height: 100%; }
+.art-side { background: var(--panel); border-right: 1px solid var(--border); display: flex; flex-direction: column; min-height: 0; }
+.art-side-head { padding: 20px 14px 12px; display: grid; gap: 8px; border-bottom: 1px solid var(--border); }
+.art-side-head h1 { font-size: 20px; margin: 0; }
+.art-toggle-all { justify-self: start; }
+#art-error:empty { display: none; }
+#art-error { padding: 0 14px; }
+.art-list { flex: 1; overflow: auto; padding: 6px 8px 16px; }
+.art-run { margin-top: 10px; }
+.art-run-head {
+  display: block; width: 100%; text-align: left; padding: 4px 8px 6px; border: none; border-radius: 7px;
+  background: none; color: var(--text); font: inherit; cursor: pointer;
+}
+.art-run-head:hover { background: var(--panel-2); }
+.art-chev { color: var(--muted); width: 12px; display: inline-block; font-size: 14px; line-height: 1; }
+.art-run-sub { padding-left: 16px; }
+.art-run-head .row { gap: 6px; flex-wrap: wrap; }
+.art-run-name { font-size: 13px; }
+.art-run-head .pill { font-size: 10px; padding: 1px 7px; }
+.art-file {
+  display: flex; align-items: center; gap: 9px; width: 100%; text-align: left; padding: 6px 8px; border-radius: 7px;
+  border: 1px solid transparent; background: none; color: var(--text); font: inherit; cursor: pointer;
+}
+.art-file:hover { background: var(--panel-2); }
+.art-file.active { background: rgba(124,156,255,.12); border-color: rgba(124,156,255,.35); }
+.art-file.missing { opacity: .55; }
+.art-file-main { min-width: 0; flex: 1; display: flex; flex-direction: column; }
+.art-file-name { font-size: 12.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.art-file-name .badge { font-size: 9.5px; padding: 0 5px; font-weight: 400; }
+.art-file-sub { font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.art-file-size { font-size: 11px; font-family: var(--mono); flex: none; }
+.art-step { padding: 6px 8px 2px 24px; font-size: 11px; }
+.art-run > .art-pad { padding: 4px 8px 4px 24px; }
+.art-more { margin: 4px 0 0 24px; }
+.art-viewer { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.art-toolbar { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--panel); flex-wrap: wrap; }
+.art-title { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1; }
+.art-title-text { display: flex; flex-direction: column; min-width: 0; }
+.art-path { font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; }
+.art-msg:empty { display: none; }
+.art-body { flex: 1; overflow: auto; position: relative; padding: 24px 32px 48px; }
+.md-wrap { display: flex; gap: 28px; justify-content: center; align-items: flex-start; }
+.md-toc { position: sticky; top: 0; order: 2; width: 220px; flex: none; max-height: calc(100vh - 200px); overflow: auto; font-size: 12px; border-left: 1px solid var(--border); padding: 4px 0 4px 12px; }
+.md-toc-title { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; margin-bottom: 6px; }
+.md-toc a { display: block; color: var(--muted); text-decoration: none; padding: 3px 0; line-height: 1.35; }
+.md-toc a.sub { padding-left: 12px; font-size: 11.5px; }
+.md-toc a:hover { color: var(--text); }
+@media (max-width: 1250px) { .md-toc { display: none; } }

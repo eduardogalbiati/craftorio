@@ -2,7 +2,7 @@
 name: issue-writing
 description: Writes a GitHub/GitLab issue that someone else (a person or an agent) can pick up and finish without asking - a concrete context with evidence, the decisions already taken, and a checklist of verifiable acceptance criteria. Use when filing a bug, an enhancement or a follow-up.
 summary: "Issue structure: concrete context with evidence, decisions taken, a checklist of verifiable acceptance criteria, related issues"
-used_by: "via `uses`"
+used_by: "via `uses`; Write & Review (`document_skill`); issue-tracker (issue_writer); the Product Owner (Register an issue)"
 ---
 
 # Issue writing
@@ -70,6 +70,26 @@ Related: #<n> (<why>), #<n>.
   one real case.
 - Order tasks by dependency; the last ones are tests, docs and measurement.
 
+## UI acceptance criteria (any issue that touches a screen)
+
+What a screen does is not enough: a view can reorder, move and edit everything it should and still
+be hard to use. For each screen, dialog or component the issue adds or changes, add tasks that say
+**how** it looks and is used:
+
+- **What leads**: the primary information of each element (an issue's title, not a file name),
+  what is secondary, and how long text is cut (ellipsis, full text on hover).
+- **Which controls**: a select or segmented toggle for a fixed list, a checkbox or switch for a
+  flag, a badge for a state, text only for free values; where each edit happens (inline, an Edit
+  form with Save/Cancel, a toggle saved at once).
+- **The states**: empty, edit, error, running/loading, and read-only (what can't be edited, when).
+- **The shared components to reuse** (the project's badges, form fields, rows, switches, buttons),
+  named, instead of new markup.
+- **The screenshots that prove it**: the default view and each state opened by a click, with demo
+  data that has the new fields.
+
+Example: #110 (Roadmap items: issue titles first, badges, the mode editable in one click, an Edit
+form with proper controls and Save/Cancel).
+
 ## Rules
 
 - Write in the repository's language for issues (English here).
@@ -81,5 +101,5 @@ Related: #<n> (<why>), #<n>.
 ## Done when
 
 The issue has a specific title, a context someone new can understand, the decisions already
-taken, a task list where every item is verifiable (including tests), and links to related
-issues — and no duplicate of it exists.
+taken, a task list where every item is verifiable (including tests), UI acceptance criteria when
+it touches a screen, and links to related issues — and no duplicate of it exists.

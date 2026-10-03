@@ -41,6 +41,29 @@ function setup(t, shots = [{ path: 'settings-after.png', caption: 'Settings > Ge
   return { origin, repo, dir };
 }
 
+/** A clone with one commit on main, its bare origin, and <run>/evidence/manifest.json with `images`. */
+function setupEvidence(t, images) {
+  const root = tmp(t, 'prshots-ev-');
+  const origin = path.join(root, 'origin.git');
+  const repo = path.join(root, 'repo');
+  git(root, 'init', '-q', '--bare', origin);
+  git(root, 'clone', '-q', origin, repo);
+  fs.writeFileSync(path.join(repo, 'app.js'), 'console.log(1)\n');
+  git(repo, 'add', 'app.js');
+  git(repo, 'commit', '-q', '-m', 'app');
+  git(repo, 'push', '-q', 'origin', 'HEAD:main');
+  const run = path.join(root, 'run');
+  const dir = path.join(run, 'evidence');
+  for (const img of images) {
+    const file = path.join(run, ...img.path.split('/'));
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, `PNG ${img.path}`);
+  }
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify({ version: 1, images }));
+  return { origin, repo, dir };
+}
+
 /** gh/glab stand-in: answers the open PR list, records the rest. */
 function fakeCli(open) {
   const calls = [];
@@ -54,7 +77,7 @@ function fakeCli(open) {
 
 const branchFiles = (origin) => git(origin, 'ls-tree', '-r', '--name-only', 'pr-screenshots').split('\n').filter(Boolean);
 
-test('publishes the screenshots to the PR folder of the pr-screenshots branch and comments them before/after', (t) => {
+test('publishes the screenshots to the PR folder of the pr-screenshots branch and comments them original/modified', (t) => {
   const { origin, repo, dir } = setup(t);
   const head = git(repo, 'rev-parse', 'HEAD');
   const { cli, calls } = fakeCli([12]);
@@ -66,7 +89,7 @@ test('publishes the screenshots to the PR folder of the pr-screenshots branch an
   assert.ok(files.every((f) => /^12\/settings-(after|before)-[0-9a-f]{8}\.png$/.test(f)), files.join(', '));
   const after = files.find((f) => f.includes('after'));
   assert.equal(git(origin, 'show', `pr-screenshots:${after}`), 'PNG settings-after.png');
-  assert.match(r.body, /\| Before \| After \|/);
+  assert.match(r.body, /\| Original \| Modified \|/);
   assert.ok(r.body.includes(`https://github.com/acme/app/blob/pr-screenshots/${after}?raw=true`));
   const comment = calls.find((c) => c.args[1] === 'comment');
   assert.deepEqual(comment.args, ['pr', 'comment', 'https://github.com/acme/app/pull/12', '--body-file', '-']);
@@ -158,6 +181,46 @@ test('refuses a manifest pointing to a missing file or a non-image, before pushi
   fs.writeFileSync(path.join(dir, 'screenshots.json'), JSON.stringify([{ path: '../../repo/app.js', caption: 'x' }]));
   assert.throws(() => publish({ platform: 'gh', prUrl: 'https://github.com/acme/app/pull/1', dir, cwd: repo, cli: fakeCli([1]).cli }), /not an image/);
   assert.throws(() => git(origin, 'rev-parse', '--verify', 'pr-screenshots'));
+});
+
+// ---- manifest.json (#146): the final set, pairs carried across rounds --------------------------
+
+test('manifest.json: a final original whose pair is an earlier round\'s modified publishes as one Original | Modified pair, not as removed', (t) => {
+  const fx = setupEvidence(t, [
+    { path: 'evidence/evidence/round-1/146-x-default.modified.png', key: '146-x-default', side: 'modified', step: 'evidence', round: 1, final: false, pair: 'evidence/evidence/round-1/146-x-default.original.png', caption: 'X thing' },
+    { path: 'evidence/evidence/round-1/146-x-default.original.png', key: '146-x-default', side: 'original', step: 'evidence', round: 1, final: false, pair: 'evidence/evidence/round-1/146-x-default.modified.png', caption: 'X thing' },
+    { path: 'evidence/evidence/round-2/146-x-default.original.png', key: '146-x-default', side: 'original', step: 'evidence', round: 2, final: true, pair: 'evidence/evidence/round-1/146-x-default.modified.png', caption: 'X thing' },
+  ]);
+  const r = publish({ platform: 'gh', prUrl: 'https://github.com/acme/app/pull/1', dir: fx.dir, cwd: fx.repo, cli: fakeCli([1]).cli });
+  assert.match(r.body, /\*\*X thing\*\*\n\n\| Original \| Modified \|/);
+  assert.doesNotMatch(r.body, /removes this screen/);
+  assert.equal((r.body.match(/\*\*X thing\*\*/g) || []).length, 1, 'one section, not a duplicate');
+});
+
+test('manifest.json: a final original with no pair is published alone, noted as a removed screen', (t) => {
+  const fx = setupEvidence(t, [
+    { path: 'evidence/evidence/round-1/146-y-default.original.png', key: '146-y-default', side: 'original', step: 'evidence', round: 1, final: true, pair: null, caption: 'Y removed' },
+  ]);
+  const r = publish({ platform: 'gh', prUrl: 'https://github.com/acme/app/pull/1', dir: fx.dir, cwd: fx.repo, cli: fakeCli([1]).cli });
+  assert.match(r.body, /\*\*Y removed\*\* \(original only: the change removes this screen\)/);
+  assert.doesNotMatch(r.body, /\| Original \| Modified \|/);
+});
+
+test('manifest.json: a final modified and a final original of the same key yield one pair, no duplicate section', (t) => {
+  const fx = setupEvidence(t, [
+    { path: 'evidence/evidence/round-1/146-z-default.modified.png', key: '146-z-default', side: 'modified', step: 'evidence', round: 1, final: true, pair: 'evidence/evidence/round-1/146-z-default.original.png', caption: 'Z' },
+    { path: 'evidence/evidence/round-1/146-z-default.original.png', key: '146-z-default', side: 'original', step: 'evidence', round: 1, final: true, pair: 'evidence/evidence/round-1/146-z-default.modified.png', caption: 'Z' },
+  ]);
+  const r = publish({ platform: 'gh', prUrl: 'https://github.com/acme/app/pull/1', dir: fx.dir, cwd: fx.repo, cli: fakeCli([1]).cli });
+  assert.equal((r.body.match(/\*\*Z\*\*/g) || []).length, 1);
+  assert.match(r.body, /\| Original \| Modified \|/);
+});
+
+test('manifest.json with no final images refuses before pushing anything', (t) => {
+  const fx = setupEvidence(t, [
+    { path: 'evidence/evidence/round-1/146-x-default.modified.png', key: '146-x-default', side: 'modified', step: 'evidence', round: 1, final: false, pair: null, caption: 'X' },
+  ]);
+  assert.throws(() => publish({ platform: 'gh', prUrl: 'https://github.com/acme/app/pull/1', dir: fx.dir, cwd: fx.repo, cli: fakeCli([1]).cli }), /manifest\.json has no final screenshots/);
 });
 
 test('parsePrUrl accepts PR/MR URLs of its platform only', () => {

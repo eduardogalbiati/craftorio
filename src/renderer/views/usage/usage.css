@@ -1,0 +1,29 @@
+/* Usage screen (views/usage/usage.js); meters, the top-bar widget and shared tables are in style.css */
+#view-usage .s-subtitle { margin-top: 28px; }
+.usage-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
+.usage-card { gap: 10px; }
+.card-icon.p-claude { color: var(--orange); }
+.card-icon.p-codex { color: var(--green); }
+.card-icon.p-grok { color: var(--purple); }
+.u-status { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; }
+.u-status.st-ok { color: var(--green); }
+.u-status.st-warn { color: var(--yellow); }
+.u-status.st-over { color: var(--red); }
+.u-install { display: flex; flex-direction: column; gap: 3px; background: var(--panel-2); border-radius: 8px; padding: 8px 10px; }
+.u-install code { font-family: var(--mono); font-size: 11px; word-break: break-all; user-select: all; }
+.u-note { margin: 0; }
+.u-meters { display: grid; gap: 10px; }
+.u-table.prices input { width: 96px; font-family: var(--mono); text-align: right; padding: 5px 7px; }
+.u-table.prices input.price-model { width: 100%; min-width: 160px; text-align: left; }
+.u-table.prices td:last-child { white-space: nowrap; }
+.price-msg { margin-right: 8px; color: var(--green); }
+.price-msg.error { color: var(--red); min-height: 0; }
+.u-split { display: flex; flex-wrap: wrap; gap: 4px; }
+.usage-note { margin-top: 20px; }
+.u-plan { display: grid; gap: 8px; border: 1px solid var(--border); border-radius: 8px; padding: 9px 10px; }
+.u-plan-head { display: flex; align-items: center; gap: 8px; }
+.u-orch { display: grid; gap: 4px; }
+.split-bar { height: 6px; border-radius: 99px; background: rgba(138,145,163,.3); overflow: hidden; }
+.split-bar span { display: block; height: 100%; background: var(--accent); }
+.bd-outside { margin-top: 8px; align-items: flex-start; }
+.bd-outside input { margin-top: 3px; }

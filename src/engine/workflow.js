@@ -2,7 +2,8 @@
 // Emits events ('event') that feed the UI and the observability recorder.
 // `loadWorkflow`, `WorkflowRun` (graph walk, transitions, `/goal` + `/loop`, delegation, fan-out
 // `agents: [...]`, `save_as`, `on_error`, schema validation + retries, skills injection with `uses:`,
-// budgets check per turn, decision log `decisions.tsv`, AI supervisor `superviseFailure`, resume from
+// budgets check per turn, decision log `decisions.tsv`, AI supervisor `superviseFailure` and on call
+// (gates `kind: escalation` → `superviseEscalation`, stall signals `checkStalls` → `superviseStall`), resume from
 // step, per-run worktree lifecycle `setupWorktree`/`finishWorktree`, run outcome from the ending
 // transition's `status`, `mockSequences` to steer the mock per field in tests, gates with their
 // details kept for runs:active (`pendingGates`), `preexisting_failures` reported by a step).
@@ -11,22 +12,31 @@
 // `contextSummary` → `summary.context`). `sendToAgent` builds one turn; `invokeTurn` runs it against
 // the provider (templated `timeout` via `turnTimeout`; a failed attempt's tool calls go to the next
 // one, `attemptSummary`). Exports `render` (nunjucks, autoescape off, filters `to_yaml`, `to_json`,
-// `shuffle(seed)`, `clamp(lo, hi)`), `takeHandoff`, `parseTokens`.
+// `shuffle(seed)`, `clamp(lo, hi)`, `e2e_scenarios`), `takeHandoff`, `parseTokens`. Steps without an agent: gates
+// (`type: human_approval`), `type: screenshots` (`runScreenshots`, #144) and `type: workflow`
+// (`runChildWorkflows`, #174: child runs, once or `foreach` item, src/engine/workflow-step.js).
+// Chaining (#134): the declared `outputs:` (`computeOutputs`, in workflow.finished and summary.json),
+// the run's `then` (option, a gate choice's `then`, `setThen`) and `from`; the service starts what
+// comes next. Child runs (#174): `parent_run` in workflow.started and summary, `child_runs` in the summary.
 
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { EventEmitter } = require('events');
-const { exec } = require('child_process');
+const { exec, execFileSync } = require('child_process');
 const yaml = require('js-yaml');
 const nunjucks = require('nunjucks');
 const {
+  checkAttachments,
   emptyUsage,
+  imageInput,
   isPermissionDenial,
   isRetryable,
+  isToolTimeout,
   refreshWindowsPath,
   runTurn,
   sleep,
+  storeAttachments,
 } = require('./providers');
 const { resolveSkill, skillPrompt } = require('../skills');
 const {
@@ -40,16 +50,37 @@ const {
   currentBranch,
   git,
   mergeLocally,
+  prepareBaseWorktree,
   prepareWorktree,
+  removeScratch,
   removeWorktree,
 } = require('./worktree');
 const capabilities = require('./capabilities');
+const depsCache = require('./deps-cache');
+const evidence = require('../evidence');
+const gateSummary = require('./gate-summary');
+const { scratchWorkspace } = require('../local-preview');
 const { stopProcessesIn } = require('./processes');
 const { PROBES, runProbe, parseTarget } = require('./probes');
+const scenarios = require('./scenarios');
+const { captureScreenshots } = require('./screenshot-step');
+const suiteStep = require('./suite-step');
+const {
+  affectedTests,
+  relatedTests,
+  selectionLines,
+  testMap,
+  testMapMarkdown,
+} = require('./affected-tests');
+const {
+  runWorkflowStep,
+  validateWorkflowStep,
+} = require('./workflow-step');
 const mergeQueue = require('./merge-queue');
 const { IdleWatch } = require('./idle');
 const testPaths = require('./test-paths');
 const { StepTrail } = require('../renderer/run-progress-model');
+const chain = require('../renderer/chain-model');
 
 // Skills bundled with the app (skills/ folder at the root). Workspace skills take precedence.
 const BUNDLED_SKILLS = path.join(__dirname, '..', '..', 'skills');
@@ -95,8 +126,87 @@ tpl.addFilter('pr_url', (url) => {
 //   timeout: "{{ (30 + 10 * ((inputs.issues | length) - 1)) | clamp(30, 60) }}m"
 tpl.addFilter('clamp', (v, lo = -Infinity, hi = Infinity) => Math.min(Math.max(Number(v) || 0, lo), hi));
 
+// The commits of a folder's checkout since a base ref, one `<sha> <subject>` per line, for a gate's
+// message: `{{ worktree_dir | git_commits('origin/' ~ inputs.base_branch) }}`. Empty without a
+// folder (simulations have no worktree) or when git fails: a message never fails on it.
+tpl.addFilter('git_commits', (dir, base) => {
+  if (!dir || !base || !fs.existsSync(String(dir))) return '';
+  try {
+    return execFileSync('git', ['log', '--oneline', '--no-decorate', '-n', '30', `${base}..HEAD`], { cwd: String(dir), encoding: 'utf8', windowsHide: true, timeout: 10000, stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+  } catch { return ''; }
+});
+
+// The issues an issue-tracker run created, as its `issues` output (#134): the `file` step's created
+// issues with the analysis' complexity and grouping advice (`group_with`: the open issues it advised
+// to run with them), what a `queue` chain groups by (chain-model queueBatches).
+tpl.addFilter('filed_issues', (filed, analysis) => {
+  const a = analysis || {};
+  const groupWith = a.grouping === 'group' ? (a.nearby || []).filter((n) => n?.advice === 'group_with' && Number.isInteger(n.number)).map((n) => n.number) : [];
+  return (filed || []).filter((f) => f?.action === 'created' && Number.isInteger(f.number) && f.number > 0).map((f) => ({
+    number: f.number, url: f.url || '', title: f.title || '', complexity: a.complexity?.score ?? null, grouping: a.grouping || 'alone', group_with: groupWith,
+  }));
+});
+
+// The developer's declared gaps (`left_out`, #98) that are really theirs (#173): an issue's Tests
+// task belongs to the test writer and its Measure task to the owner's real runs, so an entry led by
+// "Tests"/"Measure" (bold or not, then `:`, `-`, `(` or nothing) never sends the run back to develop
+// nor to the requirements_left_out gate; it stays in the develop output of the run's summary.
+const NOT_DEVELOPER_TASK = /^[\s>*_#[\]x-]*(?:tests?|measures?|measurements?)\b[*_\s]*(?::|-|–|—|\(|$)/i;
+tpl.addFilter('developer_gaps', (gaps) => (Array.isArray(gaps) ? gaps : []).filter((g) => !NOT_DEVELOPER_TASK.test(String(g?.requirement ?? ''))));
+
+// The E2E scenarios of a step output for a gate's message (#143): counts, one line per scenario
+// with its status and reason, the note; '' when the output has no `scenarios` (src/engine/scenarios.js).
+//   {{ steps.test.output | e2e_scenarios }}
+tpl.addFilter('e2e_scenarios', (output) => scenarios.scenariosMessage(output));
+
+// A `type: suite` step's output for a prompt or a gate (#177): the result, the log path and one line
+// per failing test; '' when the output is not a suite's (src/engine/suite-step.js).
+//   {{ steps.suite.output | suite_failures }}
+tpl.addFilter('suite_failures', (output) => suiteStep.suiteMessage(output));
+
+// A gate's `summary:` (#213): one ✔ / ✖ line per issue of a developer's or a verifier's output
+// (`'not_done'` keeps the failed ones), one ✖ line per failing test of a suite's output, and a long
+// text (a report, an error) on one line cut with an ellipsis.
+//   {{ steps.verify_change.output.issues | issue_lines }}   {{ steps.suite.output | suite_lines }}
+//   {{ steps.build.output.report | one_line(110) }}
+tpl.addFilter('issue_lines', (issues, only = null) => gateSummary.issueLines(issues, { only }));
+tpl.addFilter('one_line', (s, n = 110) => gateSummary.oneLine(s, n));
+tpl.addFilter('suite_lines', (output) => gateSummary.suiteLines(output));
+
+// The test inputs of the development workflows (#203): what the run summary and the gates say
+// ("Unit tests: Off (workflow default)"), and their evidence screenshots (#205: "Screenshots: Off").
+const TEST_INPUTS = { unit_tests: 'Unit tests', e2e_tests: 'E2E tests', screenshots: 'Screenshots' };
+function testsPlan(defs, given, resolved) {
+  return Object.entries(TEST_INPUTS).filter(([k]) => defs?.[k]).map(([k, label]) => {
+    const def = defs[k];
+    const value = resolved[k];
+    const chosen = given?.[k] !== undefined && given[k] !== '' && given[k] !== def.default;
+    return { input: k, label: def.label || label, value, value_label: def.options?.[value] || String(value), source: chosen ? 'chosen for this run' : 'workflow default' };
+  });
+}
+
 const render = (s, scope) => (s == null ? '' : tpl.renderString(String(s), scope));
 const evalExpr = (expr, scope) => render(`{% if ${expr} %}1{% else %}0{% endif %}`, scope).trim() === '1';
+
+// A list of files in the YAML (`protect_files`, a suite step's `files`, #220): a template or a list of
+// them. Rendered, each item may hold several files (a rendered list reads "a,b"; one per line works too).
+function validateFileList(v, what) {
+  if (v === undefined) return;
+  if (!(typeof v === 'string' || (Array.isArray(v) && v.every((x) => typeof x === 'string')))) throw new Error(`${what} must be a file list: a template or a list of paths.`);
+}
+const renderFileList = (v, scope) => [...new Set([v ?? []].flat()
+  .flatMap((x) => render(String(x), scope).split(/[\n,]/))
+  .map((f) => f.trim().replace(/\\/g, '/').replace(/^\.\//, ''))
+  .filter(Boolean))];
+
+// A `type: boolean` input's value: true/false, or their text ("true", "yes", "1" / "false", "no", "0", "").
+function toBoolean(key, v) {
+  if (typeof v === 'boolean') return v;
+  const s = String(v).trim().toLowerCase();
+  if (['true', 'yes', 'on', '1'].includes(s)) return true;
+  if (['false', 'no', 'off', '0', ''].includes(s)) return false;
+  throw new Error(`Input "${key}" must be true or false`);
+}
 
 function parseDuration(v, def) {
   if (v == null) return def;
@@ -135,6 +245,7 @@ function loadWorkflow(file) {
     if (a.max_context !== undefined && !String(a.max_context).includes('{{') && !parseTokens(a.max_context)) throw new Error(`${name}: max_context must be a token count such as 150k.`);
     if (a.persona !== undefined && a.persona !== 'random') throw new Error(`${name}: persona must be "random".`);
     if (a.edits_tests !== undefined && typeof a.edits_tests !== 'boolean') throw new Error(`${name}: edits_tests must be true or false.`);
+    validateFileList(a.protect_files, `${name}: protect_files`);
     capabilities.validate(a.capabilities, name, mcpServers);
   }
   testPaths.validateTestsPaths(wf.tests_paths);
@@ -142,7 +253,33 @@ function loadWorkflow(file) {
   for (const s of wf.steps) {
     capabilities.validate(s.capabilities, `Step "${s.id}"`, mcpServers);
     if (s.edits_tests !== undefined && typeof s.edits_tests !== 'boolean') throw new Error(`Step "${s.id}": edits_tests must be true or false.`);
-    if (s.type !== 'human_approval') {
+    // #220: files its agent may not change (a template, e.g. another step's tests_added), and the
+    // code → tests map given to its prompt as {{ test_map }} (#219)
+    validateFileList(s.protect_files, `Step "${s.id}": protect_files`);
+    if (s.protect_files !== undefined && ['human_approval', 'screenshots', 'suite', 'workflow'].includes(s.type)) throw new Error(`Step "${s.id}": protect_files is only valid on an agent step.`);
+    if (s.test_map !== undefined && (typeof s.test_map !== 'boolean' || ['human_approval', 'screenshots', 'suite', 'workflow'].includes(s.type))) throw new Error(`Step "${s.id}": test_map must be true or false, on an agent step.`);
+    if (s.type === 'screenshots') {
+      // `type: screenshots` (#144): no agent; the screens listed in `from`'s `screenshots` output
+      if (s.agent || s.agents) throw new Error(`Step "${s.id}": a screenshots step has no agent.`);
+      if (!ids.has(s.from)) throw new Error(`Step "${s.id}": from must be the step whose output lists the screenshots.`);
+      if (s.folder !== undefined && !/^[\w-]+$/.test(String(s.folder))) throw new Error(`Step "${s.id}": folder must be a plain folder name (e.g. developer).`);
+      if (s.timeout !== undefined && parseDuration(s.timeout, null) == null) throw new Error(`Step "${s.id}": timeout must be a duration such as 3m.`);
+    } else if (s.type === 'suite') {
+      // `type: suite` (#177): no agent; the project's whole test suite, once per visit
+      if (s.agent || s.agents) throw new Error(`Step "${s.id}": a suite step has no agent.`);
+      if (s.command !== undefined && typeof s.command !== 'string') throw new Error(`Step "${s.id}": command must be a string (a template; empty = found from the project's files).`);
+      if (s.timeout !== undefined && !String(s.timeout).includes('{{') && parseDuration(s.timeout, null) == null) throw new Error(`Step "${s.id}": timeout must be a duration such as 30m.`);
+      // #212: affected = the affected test files each visit, the whole suite once when they pass
+      if (s.scope !== undefined && !String(s.scope).includes('{{') && !['affected', 'full'].includes(s.scope)) throw new Error(`Step "${s.id}": scope must be affected or full.`);
+      // #220: given test files only (a template, e.g. "{{ steps.acceptance_tests.output.tests_added }}"),
+      // and `expect: red` for tests written before the code (the red check)
+      validateFileList(s.files, `Step "${s.id}": files`);
+      if (s.files !== undefined && s.scope !== undefined) throw new Error(`Step "${s.id}": files and scope cannot be combined.`);
+      if (s.expect !== undefined && (s.expect !== 'red' || s.files === undefined)) throw new Error(`Step "${s.id}": expect must be "red", with files (the red check of tests written before the code).`);
+    } else if (s.type === 'workflow') {
+      // `type: workflow` (#174): a child run of another workflow, once or per `foreach` item
+      validateWorkflowStep(s, file);
+    } else if (s.type !== 'human_approval') {
       // `agents: [...]` = fan-out: the same prompt goes to several agents in parallel
       if (s.agents && (!Array.isArray(s.agents) || !s.agents.length)) throw new Error(`Step "${s.id}": agents must be a non-empty list.`);
       if (s.agents && s.goal) throw new Error(`Step "${s.id}": goal is not supported on a fan-out step (agents).`);
@@ -163,6 +300,34 @@ function loadWorkflow(file) {
       if (w.grace !== undefined && parseDuration(w.grace, null) == null) throw new Error(`Step "${s.id}": wait.grace must be a duration such as 10m.`);
     }
     if (s.choices && s.type !== 'human_approval') throw new Error(`Step "${s.id}": choices is only valid for human_approval.`);
+    if (s.full_suite !== undefined && (s.full_suite !== 'warn' || ['human_approval', 'screenshots', 'suite', 'workflow'].includes(s.type))) throw new Error(`Step "${s.id}": full_suite must be "warn", on an agent step (a whole-suite command its agent starts is noted, #177).`);
+    if (s.commit_tests !== undefined && (s.commit_tests !== true || ['human_approval', 'screenshots', 'suite', 'workflow'].includes(s.type) || s.agents)) throw new Error(`Step "${s.id}": commit_tests must be true, on a single-agent step (the orchestrator commits the test files its agent left uncommitted, #209).`);
+    if (s.base_worktree !== undefined && (typeof s.base_worktree !== 'boolean' || ['human_approval', 'screenshots', 'suite', 'workflow'].includes(s.type) || !wf.orchestrator?.worktree)) throw new Error(`Step "${s.id}": base_worktree must be true or false, on an agent step of a workflow with orchestrator.worktree.`);
+    if (s.local_preview !== undefined && (s.type !== 'human_approval' || typeof s.local_preview !== 'boolean')) throw new Error(`Step "${s.id}": local_preview must be true or false, on a human_approval step.`);
+    if (s.diff_base !== undefined && (s.type !== 'human_approval' || typeof s.diff_base !== 'string' || !s.diff_base.trim())) throw new Error(`Step "${s.id}": diff_base must be a ref (e.g. "origin/{{ inputs.base_branch }}"), on a human_approval step.`);
+    if (s.save_to_issue !== undefined && (s.type !== 'human_approval' || !(s.choices || []).some((c) => c.id === s.save_to_issue))) throw new Error(`Step "${s.id}": save_to_issue must be the id of one of the step's choices (e.g. accept), on a human_approval step.`);
+    if ((s.choices || []).some((c) => c.feedback_required) && !s.feedback) throw new Error(`Step "${s.id}": a choice with feedback_required needs the step's feedback field.`);
+    // a gate's summary for a person (#213): `summary:` / `recommend:` templates, what the buttons
+    // say and do (`approve_label` / `reject_label` / `approve_help` / `reject_help`, a choice's `help`)
+    for (const key of ['summary', 'recommend', 'approve_label', 'reject_label', 'approve_help', 'reject_help']) {
+      if (s[key] === undefined) continue;
+      if (s.type !== 'human_approval' || typeof s[key] !== 'string') throw new Error(`Step "${s.id}": ${key} must be a text (a template), on a human_approval step.`);
+      if (key.startsWith('approve_') || key.startsWith('reject_')) {
+        if (s.choices) throw new Error(`Step "${s.id}": ${key} is for an Approve / Reject gate; a gate with choices sets each choice's label and help.`);
+      }
+    }
+    if ((s.choices || []).some((c) => c.help !== undefined && typeof c.help !== 'string')) throw new Error(`Step "${s.id}": a choice's help must be a text.`);
+    // a choice's `then` (#134): picking it sets what happens with the run's result when it finishes
+    for (const c of s.choices || []) {
+      if (c.then === undefined) continue;
+      try { chain.normalizeThen(c.then); } catch (e) { throw new Error(`Step "${s.id}": choice "${c.id}": ${e.message}`); }
+    }
+    // `kind: escalation`: a gate about a problem (a failure, an exhausted loop), where the supervisor on
+    // call tries first; `decision` (default): a choice only the person makes, never answered by it
+    if (s.kind !== undefined) {
+      if (s.type !== 'human_approval' || !GATE_KINDS.includes(s.kind)) throw new Error(`Step "${s.id}": kind must be one of ${GATE_KINDS.join(', ')}, on a human_approval step.`);
+      if (s.kind === 'escalation' && s.check) throw new Error(`Step "${s.id}": a gate with check (a merge) is a decision, not an escalation.`);
+    }
     // a deterministic PR/MR check: `check:` before a gate opens, `precheck:` before a transition's action
     const validateCheck = (c, what) => {
       if (!c || typeof c !== 'object' || !PROBES.includes(c.probe) || !c.target) throw new Error(`Step "${s.id}": ${what} needs a probe (${PROBES.join(', ')}) and a target.`);
@@ -182,6 +347,15 @@ function loadWorkflow(file) {
       validateCheck(s.check, 'check');
       if (s.check.on_fail && !ids.has(s.check.on_fail)) throw new Error(`Step "${s.id}" points to unknown step "${s.check.on_fail}".`);
       validateRecover(s.check.recover, s.check.on_fail, 'check');
+    }
+    if (s.stall !== undefined) {
+      const fields = s.stall?.same_output_fields;
+      if (!s.stall || typeof s.stall !== 'object' || !Array.isArray(fields) || !fields.length || fields.some((f) => typeof f !== 'string' || !f)) {
+        throw new Error(`Step "${s.id}": stall.same_output_fields must be a non-empty list of output field names.`);
+      }
+      const props = s.output_schema?.properties;
+      const unknown = props && fields.find((f) => !(f in props));
+      if (unknown) throw new Error(`Step "${s.id}": stall.same_output_fields names "${unknown}", which is not in its output_schema.`);
     }
     for (const t of s.transitions || []) {
       if (t.precheck !== undefined) {
@@ -204,8 +378,33 @@ function loadWorkflow(file) {
   }
   const maxCtx = wf.orchestrator?.limits?.max_total_context;
   if (maxCtx != null && !String(maxCtx).includes('{{') && !parseTokens(maxCtx)) throw new Error('orchestrator.limits.max_total_context must be a token count such as 20M.');
+  const lp = wf.orchestrator?.local_preview;
+  if (lp != null && (typeof lp !== 'object' || !String(lp.command || '').trim())) throw new Error('orchestrator.local_preview needs a command (e.g. "npm start").');
+  const sup = wf.orchestrator?.supervisor || {};
+  if (sup.on_call !== undefined && typeof sup.on_call !== 'boolean') throw new Error('orchestrator.supervisor.on_call must be true or false.');
+  const isAmount = (v) => typeof v === 'number' && v >= 0;
+  if (sup.max_cost_usd !== undefined && !isAmount(sup.max_cost_usd)) throw new Error('orchestrator.supervisor.max_cost_usd must be a number of US$ (0 or more).');
+  for (const k of ['same_output', 'slow_factor']) {
+    if (sup.stall?.[k] !== undefined && !isAmount(sup.stall[k])) throw new Error(`orchestrator.supervisor.stall.${k} must be a number (0 = off).`);
+  }
   validateGroups(wf.groups, ids);
+  validateOutputs(wf.outputs);
   return wf;
+}
+
+// `outputs:` (#134): the run's result contract, { <name>: { type, description, value } }. `value` is a
+// template over the run's context plus `run` ({ issues, local_merge }); a type other than string is
+// rendered as JSON (`| to_json`). Filled when the run finishes (WorkflowRun.computeOutputs).
+const OUTPUT_TYPES = ['string', 'number', 'integer', 'boolean', 'array', 'object'];
+function validateOutputs(outputs) {
+  if (outputs === undefined) return;
+  if (!outputs || typeof outputs !== 'object' || Array.isArray(outputs)) throw new Error('outputs must be a map of output names to { type, description, value }.');
+  for (const [name, o] of Object.entries(outputs)) {
+    if (!/^[a-z][a-z0-9_]*$/.test(name)) throw new Error(`outputs.${name}: the name must be lower case letters, digits and _.`);
+    if (!o || typeof o !== 'object') throw new Error(`outputs.${name} must be { type, description, value }.`);
+    if (!OUTPUT_TYPES.includes(o.type || 'string')) throw new Error(`outputs.${name}.type must be one of ${OUTPUT_TYPES.join(', ')}.`);
+    if (typeof o.value !== 'string' || !o.value.trim()) throw new Error(`outputs.${name}.value must be a template (e.g. "{{ steps.write.output.document }}").`);
+  }
 }
 
 // `groups:` names sets of steps for progress views (runs list, Run screen); the graph ignores it.
@@ -240,6 +439,19 @@ function extractJson(text) {
     try { return JSON.parse(b); } catch { /* try the next one */ }
   }
   throw new Error('No valid JSON block found in the response.');
+}
+
+// A test request at the end of an agent's answer (#212): a ```run-tests block with one test file per
+// line (project-relative) or `affected`. → { affected, files } or null. A path with `..`, an absolute
+// path or a character a shell would read is dropped (the files go on a command line).
+const MAX_TEST_REQUESTS = 3;
+function parseTestRequest(text) {
+  const m = [...String(text || '').matchAll(/```run-tests[^\n]*\n([\s\S]*?)```/g)].pop();
+  if (!m) return null;
+  const items = m[1].split('\n').map((l) => l.trim().replace(/^[-*]\s+/, '').replace(/^`|`$/g, '').replace(/\\/g, '/')).filter(Boolean);
+  const affected = items.some((l) => /^affected$/i.test(l));
+  const files = [...new Set(items.filter((l) => !/^affected$/i.test(l) && /^[\w@][\w./@+-]*$/.test(l) && !l.split('/').includes('..')))];
+  return affected || files.length ? { affected, files } : null;
 }
 
 const TYPE_CHECK = {
@@ -321,6 +533,22 @@ const DEFAULT_MAX_BLOCKED = 3;
 const maxBlocked = (step) => loopConfig(step).max_blocked ?? DEFAULT_MAX_BLOCKED;
 // Consecutive refused tool calls in one turn that are worth a warning (agent fighting its allowlist).
 const DENIAL_WARN = 5;
+// Human gates (#41): `decision` (default) is a choice only the person makes (scope, merge, publish);
+// `escalation` is a problem the supervisor on call tries to solve before the person is asked.
+const GATE_KINDS = ['decision', 'escalation'];
+// Stall signals of an agent step (orchestrator.supervisor.stall, 0 = off): the same decision this many
+// visits in a row, and a visit this many times longer than the step's usual one (its earlier visits in
+// the run), past STALL_SLOW_MIN_MS. With the supervisor on call, a stall wakes it.
+const STALL_SAME_OUTPUT = 3;
+const STALL_SLOW_FACTOR = 3;
+const STALL_SLOW_MIN_MS = 10 * 60e3;
+// What the supervisor may spend per run (orchestrator.supervisor.max_cost_usd) before the person is asked.
+const SUPERVISOR_MAX_COST_USD = 5;
+const median = (xs) => {
+  if (!xs?.length) return 0;
+  const s = [...xs].sort((a, b) => a - b);
+  return s[Math.floor(s.length / 2)];
+};
 // Silence with a command waiting that is worth a warning (an agent polling for text that never shows up).
 const IDLE_WARN_MS = 5 * 60e3;
 
@@ -331,6 +559,42 @@ function decisionKey(output, schema) {
   if (!props || !output || typeof output !== 'object') return JSON.stringify(output ?? null);
   const keys = Object.keys(props).filter((k) => props[k].enum || ['boolean', 'integer', 'number'].includes(props[k].type));
   return JSON.stringify(keys.length ? keys.map((k) => output[k] ?? null) : output);
+}
+
+// Output fields that show an author's progress (#121): a new commit, summary or set of changed files is
+// never "the same answer", even when the decision fields (committed: true) are.
+const PROGRESS_FIELDS = ['commit_sha', 'files_changed', 'notes', 'summary'];
+
+// A list of findings by what identifies each one (its enum, boolean and number fields, and its file),
+// not by its description, which an LLM rewords on every call.
+function findingsKey(findings, itemSchema) {
+  if (!Array.isArray(findings)) return findings ?? null;
+  const props = itemSchema?.properties;
+  if (!props) return findings;
+  const keys = Object.keys(props).filter((k) => k === 'file' || props[k].enum || ['boolean', 'integer', 'number'].includes(props[k].type));
+  return keys.length ? findings.map((f) => (f && typeof f === 'object' ? keys.map((k) => f[k] ?? null) : f)) : findings;
+}
+
+// What `same_output` compares between visits of a step: the fields of `stall.same_output_fields` when
+// the step declares them; otherwise its decision fields plus its findings and, for an author step, its
+// progress fields (with the worktree's head when it reports no commit_sha). `answered`: the findings of
+// the step it came from (a review), so a fix round answering new findings never repeats the last one.
+function repeatKey(step, output, { head, answered } = {}) {
+  const props = step.output_schema?.properties || {};
+  const value = (k) => {
+    if (k === 'commit_sha') return output?.commit_sha || head?.() || null;
+    if (k === 'findings') return findingsKey(output?.findings, props.findings?.items);
+    return output?.[k] ?? null;
+  };
+  let fields = step.stall?.same_output_fields;
+  if (!fields) {
+    const progress = PROGRESS_FIELDS.filter((k) => props[k]);
+    if (progress.length && !progress.includes('commit_sha')) progress.unshift('commit_sha');
+    fields = [...progress, ...(props.findings ? ['findings'] : [])];
+  }
+  const own = step.stall?.same_output_fields ? [] : [decisionKey(output, step.output_schema)];
+  if (!fields.length && answered == null) return own[0];
+  return JSON.stringify([...own, ...fields.map(value), ...(answered == null ? [] : [{ answered }])]);
 }
 
 const stepAgentLabel = (s) => (s.agents ? s.agents.join(' · ') : s.agent || null);
@@ -409,6 +673,9 @@ function addUsage(total, u) {
   for (const k of Object.keys(total)) total[k] += (u && u[k]) || 0;
 }
 
+// What a child run cost from its summary (#175): its own sessions and its own child runs.
+const childRunCost = (summary) => +((+summary?.cost_usd || 0) + (+summary?.children_cost_usd || 0)).toFixed(6);
+
 class WorkflowRun extends EventEmitter {
   // budget: { [provider id]: { name, limitUsd, limitTokens, blockOnLimit, usedUsd, usedTokens } }
   // (this month's usage before this run, see src/usage.js); prices: USD per 1M tokens by model.
@@ -434,7 +701,19 @@ class WorkflowRun extends EventEmitter {
   // idleWarnMs: an agent silent this long while a tool call is open gets an `agent_idle` warning (src/engine/idle.js).
   //   Default 5 minutes; 0 disables it.
   // personas: [{ id, name, prompt, skills }] the user's agents (Agents menu), for `persona: random`.
-  constructor({ file, inputs, mock, runsDir, skillsDirs, budget, prices, projectId, issues, issue, resume, worktreesDir, mockSequences, notices, stopProcesses, probe, actionsQuota, peerSessions, idleWarnMs, personas }) {
+  // attachments: { <input>: [path | { path, name }] } images attached to inputs (#129), checked here (refused
+  //   before anything runs), copied into <run_dir>/attachments/<input>/ at start and given to every turn of a
+  //   step whose prompt uses that input (stepAttachments). A resume passes the previous run's copies.
+  // then: what happens with the run's result when it finishes (#134, src/renderer/chain-model.js), recorded in
+  //   workflow.started and summary.json; a gate choice with `then` or the owner (setThen) can change it while it runs.
+  // from: { run_id, workflow, pipeline? } the run whose chain started this one (workflow.started.from,
+  //   summary.from); `pipeline` when a saved pipeline's stage (#135, chain-model normalizePipeline).
+  // parent: { run_id, workflow, step_id, index?, depth } the run whose `type: workflow` step started this one
+  //   (#174), recorded as `parent_run` in workflow.started and summary.json.
+  // startChild: ({ file, inputs, parent, label }) => Promise<{ runId, finished: Promise<{ status, outputs, error }>, stop }>,
+  //   starts a child run for a `type: workflow` step (the service: a normal run, src/service/areas/runs.js).
+  //   Default: startChildRun, a WorkflowRun of its own, emitted as 'child' (its events are the listener's to record).
+  constructor({ file, inputs, mock, runsDir, skillsDirs, budget, prices, projectId, issues, issue, resume, worktreesDir, mockSequences, notices, stopProcesses, probe, actionsQuota, peerSessions, idleWarnMs, personas, localPreview, attachments, then, from, parent, startChild }) {
     super();
     refreshWindowsPath(); // actions (e.g. gh pr merge) need the refreshed PATH
     this.file = file;
@@ -447,6 +726,16 @@ class WorkflowRun extends EventEmitter {
     this.skillsDirs = [...(skillsDirs || []), BUNDLED_SKILLS];
     this.projectId = projectId || null;
     this.issues = issues?.length ? issues : issue ? [issue] : null;
+    this.then = chain.normalizeThen(then);
+    const pipeline = chain.normalizePipeline(from?.pipeline);
+    this.from = from?.run_id ? { run_id: String(from.run_id), workflow: from.workflow ? String(from.workflow) : undefined, ...(pipeline ? { pipeline } : {}) } : null;
+    this.parent = parent?.run_id ? {
+      run_id: String(parent.run_id), workflow: parent.workflow ? String(parent.workflow) : undefined, step_id: parent.step_id ? String(parent.step_id) : undefined,
+      ...(Number.isInteger(parent.index) ? { index: parent.index } : {}), depth: Math.max(1, Number(parent.depth) || 1),
+    } : null;
+    this.startChild = startChild || ((spec) => this.startChildRun(spec));
+    this.children = new Map(); // run id -> WorkflowRun started by the default startChild
+    this.childRuns = []; // [{ run_id, step_id, index?, workflow, status }] (summary.child_runs)
     this.worktreesDir = worktreesDir || null;
     this.worktree = null; // see setupWorktree
     this.stopProcesses = stopProcesses === undefined ? (this.mock ? null : stopProcessesIn) : stopProcesses;
@@ -462,6 +751,18 @@ class WorkflowRun extends EventEmitter {
     this.idleWarnMs = idleWarnMs ?? IDLE_WARN_MS;
     this.stepTiming = {};           // step id -> { turns, duration_ms, active_ms, waiting_ms, stalled_ms } (summary.timing)
     this.inputs = this.resolveInputs(inputs || {});
+    this.testsPlan = testsPlan(this.wf.inputs, inputs, this.inputs); // summary.tests_plan, ctx.tests_plan (#203)
+    this.suiteRuns = { engine: 0, agents: 0 }; // whole-suite runs: suite steps vs agents' own commands (#177, summary.suite_runs)
+    // #212: the whole suite passed once in this run (scope: affected stops running it), and the
+    // test files that failed in a suite round (they join the next rounds' affected set)
+    this.fullSuitePassed = false;
+    this.suiteFailedFiles = [];
+    this.testsAutocommitted = []; // [{ step_id, files, commit }] (#209, summary.tests_autocommitted)
+    this.toolTimeouts = 0; // tool results cut by the tool's timeout (#178, summary.tool_timeouts)
+    this.inputImages = this.checkInputAttachments(attachments || {});
+    this.attachments = {}; // input -> [{ name, path }] the copies in the run folder (storeInputAttachments)
+    this.gateImages = []; // images attached to the last gate's feedback, for the next agent step
+    this.imagesWarned = new Set();
     // An agent's provider, model and effort can be templates over the inputs
     // (provider: "{{ inputs.writer_provider }}"), so a workflow can let the user pick them.
     // Resolved once per run, before anything reads them (preflight, budgets, sessions).
@@ -481,8 +782,12 @@ class WorkflowRun extends EventEmitter {
       previous_step: null,
       // run variables set by transitions (`set: { name: value }`), e.g. what the next checks cover
       vars: {},
+      // how to run the worktree locally ({ install, command, url }) or null; gates' messages show it
+      local_preview: null,
       // folder of a skill (workspace first, then bundled), e.g. to run its script in an action
       skill_dir: (name) => resolveSkill(this.skillsDirs, name).path,
+      // the unit / E2E test inputs (#203), one sentence for the gates and the verifier ('' without them)
+      tests_plan: this.testsPlan.map((p) => `${p.label}: ${p.value_label} (${p.source}).`).join(' '),
     };
     for (const s of this.wf.steps) this.ctx.steps[s.id] = { output: null, visits: 0 };
     this.resume = resume || null;
@@ -492,6 +797,8 @@ class WorkflowRun extends EventEmitter {
         if (this.ctx.steps[id] && id !== resume.fromStep) Object.assign(this.ctx.steps[id], { output: v.output ?? null, visits: v.visits || 1 });
       }
       if (resume.instruction) this.ctx.steps[resume.fromStep].supervisorNote = resume.instruction;
+      // images pasted into the instruction (#130): checked here, copied at start, given to the first agent step
+      this.resumeImages = checkAttachments(resume.images || []);
     }
     this.recent = []; // last events, for the supervisor's timeline
     this.trail = new StepTrail(); // step visits with their agents, for the progress views (summary.progress)
@@ -507,7 +814,15 @@ class WorkflowRun extends EventEmitter {
     this.counters = {};
     this.loops = {};
     this.approvals = new Map();
+    // how to run the worktree from a gate with `local_preview: true` (the project's override, else
+    // the workflow's orchestrator.local_preview); null hides Run locally
+    this.localPreview = localPreview || this.wf.orchestrator?.local_preview || null;
+    this.ctx.local_preview = this.localPreview;
+    this.gateWaits = {}; // gate step id -> { waits, wait_ms } (summary.timing.gates): owner time, not agent time
     this.preexisting = []; // [{ step, test, file, reason }] (notePreexistingFailures)
+    this.stalls = []; // last stall signals [{ step, kind, detail, ts }] (recordStall), for the supervisor on call
+    this.liveTurns = new Map(); // step id -> Set of stop(decision) of its running turns (a slow step's interrupt)
+    this.exhausted = null; // { from, target, detail, refund } of the last transition to an on_exhausted target (noteExhausted)
     this.abort = new AbortController();
     this.seq = 0;
     this.nSession = 0;
@@ -521,6 +836,8 @@ class WorkflowRun extends EventEmitter {
       let v = given[k];
       if (v === undefined || v === '') v = def.default;
       if (def.required && (v === undefined || v === '')) throw new Error(`Required input not provided: ${k}`);
+      // a yes/no: a boolean, or its text from a form, the CLI or inputs saved before it was one ("true"/"false")
+      if (def.type === 'boolean' && v !== undefined) v = toBoolean(k, v);
       if (def.enum && v !== undefined && !def.enum.includes(v)) throw new Error(`Input "${k}" must be one of ${def.enum.join(', ')}`);
       if (def.type === 'run') v = this.resolveRunInput(k, v);
       // a list typed in a form arrives as text: one item per line or comma
@@ -528,6 +845,35 @@ class WorkflowRun extends EventEmitter {
       out[k] = v;
     }
     return out;
+  }
+
+  // The images attached to inputs (constructor's `attachments`): only the workflow's inputs, each
+  // image within the limits (checkAttachments), and no more images in all than one turn may carry.
+  checkInputAttachments(given) {
+    const out = {};
+    for (const [k, list] of Object.entries(given)) {
+      if (!Array.isArray(list) || !list.length) continue;
+      if (!this.wf.inputs?.[k]) throw new Error(`Images are attached to "${k}", which is not an input of this workflow.`);
+      out[k] = checkAttachments(list);
+    }
+    checkAttachments(Object.values(out).flat());
+    return out;
+  }
+
+  // Copies images into <run_dir>/attachments/<folder>/ (storeAttachments): the run keeps them whatever
+  // happens to the originals. Returns [{ name, path }] of the copies.
+  copyAttachments(files, folder) {
+    return storeAttachments(files, path.join(this.runDir, 'attachments', String(folder).replace(/[^A-Za-z0-9_.-]+/g, '-')));
+  }
+
+  storeInputAttachments() {
+    for (const [k, files] of Object.entries(this.inputImages)) this.attachments[k] = this.copyAttachments(files, k);
+  }
+
+  // The input images a prompt template gets: those of every input it uses ({{ inputs.<name> }}).
+  stepAttachments(template) {
+    const used = new Set([...String(template || '').matchAll(/\binputs\.([A-Za-z0-9_]+)/g)].map((m) => m[1]));
+    return Object.entries(this.attachments).filter(([k]) => used.has(k)).flatMap(([, files]) => files);
   }
 
   // `agents.<name>.enabled` (a boolean or a template over the inputs) leaves an agent out of
@@ -541,7 +887,7 @@ class WorkflowRun extends EventEmitter {
       if (!enabled) delete this.wf.agents[name];
     }
     for (const s of this.wf.steps) {
-      if (s.type === 'human_approval') continue;
+      if (s.type === 'human_approval' || s.type === 'screenshots' || s.type === 'suite' || s.type === 'workflow') continue;
       if (!s.agents) {
         if (!this.wf.agents[s.agent]) throw new Error(`Step "${s.id}" uses agent "${s.agent}", which is disabled for this run.`);
         continue;
@@ -636,6 +982,52 @@ class WorkflowRun extends EventEmitter {
     this.emitEvent('session.closed', { session_id: s.id, status, session: this.snapshot(s) });
   }
 
+  // What happens with the result when the run finishes (#134): the owner edits or cancels it while the
+  // run goes (null = nothing). Recorded as `run.then`; summary.json has the last one.
+  setThen(then, by = 'owner') {
+    this.then = chain.normalizeThen(then);
+    this.emitEvent('run.then', { then: this.then, by });
+    return this.then;
+  }
+
+  // A gate choice with `then` (e.g. the issue tracker's "Create and queue"): the owner's pick sets the
+  // chain; its workflow can be a template over the run (`{{ inputs.assign_workflow }}`).
+  thenFromChoice(step, choice) {
+    const t = choice.then && typeof choice.then === 'object' ? { ...choice.then } : choice.then;
+    try {
+      if (t?.workflow) t.workflow = render(t.workflow, this.ctx).trim();
+      this.setThen(t, `gate:${step.id}`);
+    } catch (e) {
+      this.emitEvent('log', { level: 'warn', message: `Gate ${step.id}: the choice's "then" was not set: ${e.message}` });
+    }
+  }
+
+  // The declared `outputs:` filled from the run (#134): each value template rendered over the context
+  // plus `run`, parsed as JSON for a type other than string; empty or unparsable → null (logged).
+  computeOutputs() {
+    const defs = this.wf.outputs;
+    if (!defs) return undefined;
+    const scope = { ...this.ctx, run: { issues: this.issues || [], local_merge: this.ctx.local_merge || null } };
+    const out = {};
+    for (const [name, def] of Object.entries(defs)) {
+      let value = null;
+      try {
+        const text = render(def.value, scope).trim();
+        const type = def.type || 'string';
+        if (text && text !== 'null') {
+          value = type === 'string' ? text : JSON.parse(text);
+          if (type === 'array' && !Array.isArray(value)) value = [value];
+          if ((type === 'number' || type === 'integer') && typeof value !== 'number') value = Number(value);
+        }
+      } catch (e) {
+        this.emitEvent('log', { level: 'warn', message: `Output ${name} could not be filled: ${e.message}` });
+        value = null;
+      }
+      out[name] = value;
+    }
+    return out;
+  }
+
   // The name of an agent imported from the Agents menu (or picked by `persona: random`), for
   // the UI; an agent written in the YAML has none and shows its key.
   agentNames() {
@@ -671,11 +1063,19 @@ class WorkflowRun extends EventEmitter {
   async start() {
     this.startedAt = Date.now();
     this.status = 'running';
+    this.storeInputAttachments();
+    if (this.resumeImages?.length) this.gateImages = this.copyAttachments(this.resumeImages, `${this.resume.fromStep}-instruction`);
     this.emitEvent('workflow.started', {
       workflow: this.wf.metadata?.name, version: this.wf.metadata?.version, project_id: this.projectId,
       issues: this.issues || undefined,
       file: path.basename(this.file), inputs: this.inputs, mock: this.mock, run_dir: this.runDir,
+      // the unit / E2E test inputs and where each value came from (#203)
+      tests_plan: this.testsPlan.length ? this.testsPlan : undefined,
+      attachments: Object.keys(this.attachments).length ? this.attachments : undefined,
       resumed_from: this.resume ? { run_id: this.resume.runId, step: this.resume.fromStep } : undefined,
+      then: this.then || undefined,
+      from: this.from || undefined,
+      parent_run: this.parent || undefined,
       personas: Object.keys(this.personas).length ? this.personas : undefined,
       agent_names: this.agentNames(),
       steps: this.wf.steps.map((s) => ({ id: s.id, type: s.type || 'agent', agent: stepAgentLabel(s) })),
@@ -693,6 +1093,17 @@ class WorkflowRun extends EventEmitter {
     let error = null;
     try {
       await this.setupWorktree();
+      // the owner confirmed, in the Resume from step dialog, a gate the previous run decided (#112):
+      // recorded as the owner's decision; automation never sets `confirmedGate`
+      const confirmed = this.resume?.confirmedGate;
+      if (confirmed) {
+        const out = this.ctx.steps[confirmed.step]?.output || {};
+        const data = out.choice !== undefined ? { choice: out.choice } : { approved: out.approved !== false };
+        this.emitEvent('approval.resolved', {
+          approval_id: `resume-${confirmed.step}`, step_id: confirmed.step, ...data, by: 'owner', confirmed_at_resume: true,
+          note: 'confirmed at resume', wait_ms: 0, ...(confirmed.commit ? { commit: confirmed.commit } : {}),
+        });
+      }
       while (current !== 'end') {
         if (current === 'fail') throw new Error('Workflow routed to "fail" (retry limit reached).');
         if (++guard > 500) throw new Error('Limit of 500 transitions reached.');
@@ -746,19 +1157,144 @@ class WorkflowRun extends EventEmitter {
       dir: info.dir, work_dir: info.workDir, repo: info.repo, base: info.base, ref: info.ref, commit: info.commit, reused: info.reused, recreated: info.recreated,
     });
     log('info', `worktree: ${how} ${info.dir} at ${info.ref || 'its branch'} (${String(info.commit || '').slice(0, 8)})`);
+    await this.prepareDeps('worktree', info.workDir, 'worktree ready');
   }
 
-  // Success: remove the worktree and its local branch when merged. Otherwise keep it for a resume.
+  // ---- dependencies from the shared cache (#198, src/engine/deps-cache.js) ---------------------
+  // Installed once per lockfile content in <workspace>/cache/deps and linked into the worktree when
+  // it is ready, again after each agent step (a lockfile the step changed: the new key is installed
+  // once), and into the base worktree. Records `deps.ready`; agents are told in their command guide.
+  // which: 'worktree' | 'base'. A simulated run has no worktree, so nothing is installed.
+  async prepareDeps(which, dir, after) {
+    if (this.mock || !dir) return null;
+    this.deps ??= {};
+    const previous = this.deps[which] || null;
+    let r;
+    try {
+      r = await depsCache.ensureDeps({
+        workDir: dir,
+        cacheDir: path.join(path.dirname(path.dirname(this.runDir)), 'cache', 'deps'),
+        project: this.projectId || path.basename(this.worktree?.repo || dir),
+        env: capabilities.AGENT_ENV,
+        signal: this.abort.signal,
+        previous,
+        log: (level, message) => this.emitEvent('log', { level, message }),
+      });
+    } catch (e) {
+      if (this.abort.signal.aborted) throw e;
+      r = { status: 'failed', reason: e.message };
+    }
+    this.deps[which] = r.status === 'none' ? null : r;
+    // nothing to say: no lockfile, or the folder already links its key
+    if (r === previous || r.status === 'none' || (r.status === 'linked' && previous?.key === r.key) || (r.status === previous?.status && r.status === 'not_cached')) return r;
+    const hit = r.status === 'hit' || r.status === 'linked';
+    this.emitEvent('deps.ready', {
+      for: which, dir, after, status: r.status, hit, lockfile: r.lockfile || null, manager: r.manager || null, key: r.key || null,
+      entry: r.entry || null, seconds: r.seconds != null ? Math.round(r.seconds * 10) / 10 : null, waited: !!r.waited, reason: r.reason || null,
+    });
+    const what = {
+      hit: `linked from the cache (key ${r.key})`, linked: `linked from the cache (key ${r.key})`, miss: `installed once into the cache (key ${r.key})`,
+      local: `installed in the worktree only: ${r.reason}`, failed: `not ready: ${r.reason}`, not_cached: `not cached: ${r.reason}`,
+    }[r.status];
+    this.emitEvent('log', { level: r.status === 'failed' || r.status === 'local' ? 'warn' : 'info', message: `dependencies (${which}, ${r.lockfile}): ${what}${r.seconds != null ? ` in ${r.seconds.toFixed(1)} s` : ''}` });
+    return r;
+  }
+
+  // The lines of an agent's command guide about dependencies: what is ready and what never to run
+  depsGuide() {
+    const w = this.deps?.worktree;
+    const b = this.deps?.base;
+    const lines = [];
+    if (w?.entry && ['hit', 'linked', 'miss'].includes(w.status)) {
+      lines.push(`- Dependencies are ready: \`node_modules\` links to the shared dependency cache (installed once per ${w.lockfile} content). Never run ${w.manager === 'npm' ? '`npm ci`' : `a clean ${w.manager} install`} and never delete \`node_modules\`: it would empty the cache for every run. Adding a package with the package manager (\`${w.manager} ${w.manager === 'npm' ? 'install' : 'add'} <pkg>\`) is fine: the engine installs the new lockfile into the cache after your turn. To check that the dependencies match package.json, use \`npm ls --all\`.`);
+    } else if (w && w.status !== 'none') {
+      lines.push(`- Dependencies are not linked from the shared cache (${w.reason || w.status}): install them yourself when they are missing.`);
+    }
+    if (b && this.ctx.base_worktree_dir) {
+      lines.push(`- The base worktree \`${this.ctx.base_worktree_dir}\` (for a pre-existing-failure check) is ready${b.entry ? ' with its dependencies' : ''}: use it, never create another one${b.entry ? ' and never install in it' : ''}.`);
+    }
+    return lines.join('\n');
+  }
+
+  // `base_worktree: true` on a step: the run's checkout of the base, <worktreesDir>/<run_id>-base,
+  // refreshed to the current base on each visit, with its dependencies from the same cache;
+  // `base_worktree_dir` in the templates (empty without a worktree). Removed with the run's worktree.
+  async setupBaseWorktree() {
+    const wt = this.worktree;
+    if (!wt || !this.worktreesDir) { this.ctx.base_worktree_dir = ''; return; }
+    const log = (level, message) => this.emitEvent('log', { level, message });
+    try {
+      const info = await prepareBaseWorktree({ repo: wt.repo, base: wt.base, dir: path.join(this.worktreesDir, `${this.runId}-base`), log, remote: wt.remote !== false });
+      if (!info) return;
+      this.baseWorktree = info;
+      this.ctx.base_worktree_dir = info.workDir;
+      this.emitEvent('log', { level: 'info', message: `worktree: base checkout ${info.dir} at ${info.ref} (${String(info.commit || '').slice(0, 8)})` });
+      await this.prepareDeps('base', info.workDir, 'base worktree ready');
+    } catch (e) {
+      if (this.abort.signal.aborted) throw e;
+      this.ctx.base_worktree_dir = '';
+      log('warn', `worktree: could not prepare the base checkout: ${e.message}`);
+    }
+  }
+
+  // The base checkout the suite step checks its failures on (#211): the test writer's when it made
+  // one, else prepared now (runs with unit_tests run_existing/off have no test writer). → { dir,
+  // commit } or null (no worktree, or it could not be prepared).
+  async suiteBase() {
+    if (!this.baseWorktree) await this.setupBaseWorktree();
+    return this.baseWorktree && this.ctx.base_worktree_dir ? { dir: this.ctx.base_worktree_dir, commit: this.baseWorktree.commit || null } : null;
+  }
+
+  // The test files the run's change can break (#212, src/engine/affected-tests.js), plus the files
+  // that failed in an earlier round (`this.suiteFailedFiles`): { mode, files, reasons, why, ... }.
+  // Simulation: two simulated files. A run without a worktree or a base: the whole suite.
+  affectedSelection() {
+    if (this.mock) {
+      const files = ['test/simulated.test.js', 'test/simulated-other.test.js'];
+      return { mode: 'affected', files, reasons: { [files[0]]: 'imports src/simulated.js', [files[1]]: 'imports src/simulated.js (through src/simulated-user.js)' }, changed: ['src/simulated.js'], slow: [], why: `${files.length} test file(s) reach the 1 changed file(s) (simulated)` };
+    }
+    const base = this.worktree?.base || render(this.wf.orchestrator?.worktree?.base || '', this.ctx).trim();
+    if (!this.ctx.worktree_dir || !base) return { mode: 'all', files: [], reasons: {}, changed: [], slow: [], why: 'the run has no worktree or base branch: the whole suite' };
+    const sel = affectedTests({ root: this.ctx.worktree_dir, base });
+    for (const f of this.suiteFailedFiles) {
+      if (sel.mode !== 'affected' || sel.files.includes(f) || !fs.existsSync(path.join(this.ctx.worktree_dir, f))) continue;
+      sel.files.push(f);
+      sel.reasons[f] = 'failed in an earlier round';
+    }
+    sel.files.sort();
+    return sel;
+  }
+
+  // The run's scratch workspace (#120), { workspace, userData } under <run>/scratch: a copy of the
+  // owner's agents, skills, workflows and settings with project entries pointing to empty folders
+  // (local-preview.scratchWorkspace). Agents get it in their environment, so the app's tools they
+  // run from the worktree (npm run run, npm run screenshot, the app itself) never write to the
+  // owner's workspace. Only runs with a worktree; created on the first agent turn, removed with it.
+  scratchWorkspace() {
+    if (!this.worktree) return null;
+    this.scratch ??= scratchWorkspace({ root: path.dirname(path.dirname(this.runDir)) }, path.join(this.runDir, 'scratch'));
+    return this.scratch;
+  }
+
+  // Success: remove the worktree and its local branch when merged, and the run's scratch workspace.
+  // Otherwise keep both for a resume.
   async finishWorktree(status) {
     const wt = this.worktree;
     if (!wt) return;
     const log = (level, message) => this.emitEvent('log', { level, message });
+    // the base checkout (base_worktree) is recreated when needed: it goes whatever the status
+    if (this.baseWorktree) {
+      const b = this.baseWorktree;
+      await removeWorktree({ repo: b.repo, dir: b.dir, base: null, log, remote: false }).catch((e) => log('warn', `worktree: could not remove the base checkout: ${e.message}`));
+      this.baseWorktree = null;
+    }
     try {
       if (status === 'success') {
         const r = await removeWorktree({ repo: wt.repo, dir: wt.dir, base: wt.base, log, remote: wt.remote !== false });
         Object.assign(wt, { removed: r.removed, branch: r.branch, branchDeleted: r.branchDeleted });
         this.emitEvent('worktree.removed', { dir: wt.dir, removed: r.removed, branch: r.branch, branch_deleted: r.branchDeleted });
         log('info', `worktree: removed ${wt.dir}${r.branch ? `; branch ${r.branch} ${r.branchDeleted ? 'deleted (merged)' : 'kept'}` : ''}`);
+        if (r.removed && removeScratch(this.runDir)) log('info', `worktree: removed the run's scratch workspace ${path.join(this.runDir, 'scratch')}`);
       } else {
         Object.assign(wt, { removed: false, branch: await currentBranch(wt.dir) });
         this.emitEvent('worktree.kept', { dir: wt.dir, branch: wt.branch });
@@ -773,7 +1309,11 @@ class WorkflowRun extends EventEmitter {
   // dev server) hold its files: every later `npm ci` fails with EBUSY and no agent may stop them.
   // Stopped after each agent turn and at the end of the run; see src/engine/processes.js.
   async stopWorktreeProcesses(after) {
-    const dir = this.worktree?.dir;
+    if (this.baseWorktree?.dir) await this.stopProcessesIn(this.baseWorktree.dir, after);
+    await this.stopProcessesIn(this.worktree?.dir, after);
+  }
+
+  async stopProcessesIn(dir, after) {
     if (!dir || !this.stopProcesses) return;
     let found;
     try {
@@ -810,10 +1350,12 @@ class WorkflowRun extends EventEmitter {
       this.emitEvent('limit.exceeded', { limit: 'max_total_duration', value: lim.max_total_duration });
       throw new Error(`Maximum duration exceeded (${lim.max_total_duration}).`);
     }
-    const cost = [...this.sessions.values()].reduce((a, s) => a + s.costUsd, 0);
+    // its child runs' cost counts too (#175)
+    const children = this.childrenCostUsd();
+    const cost = [...this.sessions.values()].reduce((a, s) => a + s.costUsd, 0) + children;
     if (lim.max_total_cost_usd && cost > lim.max_total_cost_usd) {
-      this.emitEvent('limit.exceeded', { limit: 'max_total_cost_usd', value: lim.max_total_cost_usd, current: cost });
-      throw new Error(`Maximum cost exceeded (US$ ${lim.max_total_cost_usd}).`);
+      this.emitEvent('limit.exceeded', { limit: 'max_total_cost_usd', value: lim.max_total_cost_usd, current: cost, ...(children ? { children } : {}) });
+      throw new Error(`Maximum cost exceeded (US$ ${lim.max_total_cost_usd}${children ? `, of which US$ ${children.toFixed(2)} by its child runs` : ''}).`);
     }
   }
 
@@ -837,20 +1379,72 @@ class WorkflowRun extends EventEmitter {
     st.turnRecs = []; // this visit's turn records (turnLog), marked as waste when the visit was blocked
     this.emitEvent('step.started', { step_id: step.id, visit: st.visits, iteration: st.iteration, step_type: step.type || 'agent', agent: stepAgentLabel(step) });
 
+    // a loop that ran out and sent the run here (finishStep handles the targets that are not gates)
+    const exhausted = this.exhausted?.target === step.id ? this.exhausted : null;
+    this.exhausted = null;
     let output, scope;
     if (step.type === 'human_approval') {
-      const gate = await this.openGate(step, t0);
+      // `kind: escalation`, or any gate an exhausted loop leads to: the supervisor on call tries to
+      // solve the problem before the person is asked; when it cannot, the gate opens with its
+      // diagnosis. A decision gate stays the person's: the supervisor may only send the run back.
+      const oc = step.kind === 'escalation' || exhausted ? await this.superviseEscalation(step, st, t0, { decision: step.kind !== 'escalation' }) : null;
+      if (oc?.goto) { exhausted?.refund(); return oc.goto; }
+      const routed = oc?.route !== undefined;
+      const gate = routed ? { answer: oc.route, feedback: '' } : await this.openGate(step, t0, oc?.diagnosis);
       if (gate.recover) return gate.recover;
       const { answer, feedback } = gate;
+      const by = routed ? { by: 'supervisor' } : {};
       if (step.choices) {
-        output = { choice: answer, feedback };
+        output = { choice: answer, feedback, ...by };
         scope = { ...this.ctx, output, choice: answer, feedback };
+        const picked = step.choices.find((c) => c.id === answer);
+        if (picked?.then !== undefined) this.thenFromChoice(step, picked);
       } else {
-        output = { approved: answer, feedback };
+        output = { approved: answer, feedback, ...by };
         scope = { ...this.ctx, output, approved: answer, rejected: !answer, feedback };
       }
       st.output = output;
+    } else if (step.type === 'screenshots') {
+      // no agent, no supervisor: whatever fails is in the output, for the gate that follows (#144)
+      try {
+        output = await this.runScreenshots(step, st);
+      } finally {
+        await this.stopWorktreeProcesses(`step ${step.id}`);
+      }
+      st.output = output;
+      scope = { ...this.ctx, output, iteration: st.iteration };
+    } else if (step.type === 'suite') {
+      // no agent, no supervisor (#177): the result (pass, fail with the failing tests, blocked) is
+      // the output, and the transitions route it
+      try {
+        output = await this.runSuiteStep(step, st);
+      } finally {
+        await this.stopWorktreeProcesses(`step ${step.id}`);
+      }
+      if (this.abort.signal.aborted) throw new Error('Cancelled');
+      st.output = output;
+      scope = { ...this.ctx, output, iteration: st.iteration };
+    } else if (step.type === 'workflow') {
+      // child runs (#174): their gates wait for the owner, and so does this run; no supervisor here
+      output = await this.runChildWorkflows(step, st);
+      if (this.abort.signal.aborted) throw new Error('Cancelled');
+      st.output = output;
+      if (output.status !== 'success') {
+        const reason = `the child workflow ${output.workflow} ${output.runs ? `failed for ${output.failed} of ${output.runs.length} items` : `ended ${output.status}${output.error ? `: ${output.error}` : ''}`}`;
+        // `on_error: <step>` (a route or a gate) takes a child that failed or stopped; without it the
+        // transitions decide (they see output.status), and a step with none fails the run
+        if (step.on_error) {
+          this.emitEvent('log', { level: 'error', message: `${step.id}: ${reason} → ${step.on_error}` });
+          this.emitEvent('step.finished', { step_id: step.id, visit: st.visits, iteration: st.iteration, output, duration_ms: Date.now() - t0, error: true });
+          this.emitEvent('step.transition', { from: step.id, to: step.on_error, when: 'on_error' });
+          return step.on_error;
+        }
+        if (!step.transitions?.length) throw new Error(`Step "${step.id}": ${reason}.`);
+      }
+      scope = { ...this.ctx, output, status: output.status, iteration: st.iteration };
     } else {
+      if (step.base_worktree) await this.setupBaseWorktree();
+      const slow = this.watchSlowStep(step, st);
       try {
         output = step.agents ? await this.runFanOut(step, st) : await this.runAgentStep(step, st, step.agent);
       } catch (e) {
@@ -867,7 +1461,11 @@ class WorkflowRun extends EventEmitter {
           return r.goto;
         }
       } finally {
+        slow?.stop();
         await this.stopWorktreeProcesses(`step ${step.id}`);
+        // a lockfile the step changed (a package added): its key is installed once and linked; an
+        // entry the agent changed or emptied through the link is no longer given to new worktrees
+        if (this.worktree && !this.abort.signal.aborted) await this.prepareDeps('worktree', this.ctx.worktree_dir, `step ${step.id}`).catch(() => {});
       }
       if (output === undefined) {
         const e = new Error(this.lastStepError || `Step "${step.id}" failed.`);
@@ -880,17 +1478,275 @@ class WorkflowRun extends EventEmitter {
         this.emitEvent('step.transition', { from: step.id, to: step.on_error, when: 'on_error' });
         return step.on_error;
       }
+      if (step.commit_tests) output = await this.commitLeftoverTests(step, st, output);
       st.output = output;
       scope = { ...this.ctx, output, iteration: st.iteration };
       if (step.wait) await this.afterAgentTurn(step, st);
     }
-    return this.finishStep(step, st, output, scope, t0);
+    const next = await this.finishStep(step, st, output, scope, t0);
+    return ['human_approval', 'screenshots', 'suite', 'workflow'].includes(step.type) ? next : this.checkStalls(step, st, output, t0, next, again);
+  }
+
+  // ---- stall detection and the supervisor on call (#41) ---------------------------------------
+  // Stall signals of an agent step's visit (deterministic, no tokens): the same decision N visits in a
+  // row, refused tool calls in a row, a visit far longer than the step's usual one (watchSlowStep). Each
+  // is a `log` warning of kind `stall`; with the supervisor on call, it decides whether the run goes on
+  // to `next` (superviseStall). Not when the run ends there or reaches an escalation gate, where the
+  // supervisor is called anyway (with these signals).
+  async checkStalls(step, st, output, t0, next, again) {
+    const cfg = this.wf.orchestrator?.supervisor?.stall || {};
+    const signals = [];
+    // a /loop iteration repeats its answer by design (polling); a fix round (goto itself) counts
+    const same = Number(cfg.same_output ?? STALL_SAME_OUTPUT);
+    if (!(again && isLooping(step)) && same) {
+      // the findings a fix round answers: those of the step it came from (e.g. code_review)
+      const from = this.ctx.previous_step !== step.id && this.wf.steps.find((s) => s.id === this.ctx.previous_step);
+      const findings = from ? this.ctx.steps[from.id]?.output?.findings : null;
+      const answered = findings == null ? null : findingsKey(findings, from.output_schema?.properties?.findings?.items);
+      const key = repeatKey(step, output, { head: () => this.worktreeHead(), answered });
+      st.repeat = st.repeat?.key === key ? { key, count: st.repeat.count + 1 } : { key, count: 1 };
+      if (st.repeat.count % same === 0) signals.push({ kind: 'same_output', detail: `the same answer ${st.repeat.count} visits in a row: ${key.slice(0, 200)}` });
+    }
+    const tools = st.tools || {};
+    if ((tools.maxStreak || 0) >= DENIAL_WARN) {
+      signals.push({ kind: 'permission_denials', detail: `${tools.denials} tool calls refused in this visit (${tools.maxStreak} in a row), e.g. ${(tools.denied || []).slice(-2).join(' · ')}` });
+    }
+    for (const s of signals) this.recordStall(step.id, s);
+    // already reported while the step ran; not again when the supervisor decided on it then
+    if (st.slow && !st.slow.handled) signals.push(st.slow);
+    st.slow = null;
+    (st.durations ??= []).push(Date.now() - t0);
+    if (!signals.length || next === 'end' || next === 'fail' || !this.supervisorCfg?.onCall) return next;
+    if (this.wf.steps.find((s) => s.id === next)?.kind === 'escalation') return next;
+    // an exhausted loop: the supervisor was called on it (finishStep) or is called at the gate (runStep)
+    if (st.exhaustedVisit === st.visits || this.exhausted?.target === next) return next;
+    return (await this.superviseStall(step, st, signals, next)) || next;
+  }
+
+  // A visit running `slow_factor` times longer than the step's usual one (the median of its earlier
+  // visits in this run) is reported while it runs and wakes the supervisor on call right away
+  // (superviseSlow): the step keeps running, or its turn is stopped and the step runs again. After a
+  // `wait`, it is checked again when the visit has run twice as long. stop(): the visit ended.
+  watchSlowStep(step, st) {
+    const factor = Number(this.wf.orchestrator?.supervisor?.stall?.slow_factor ?? STALL_SLOW_FACTOR);
+    const usual = median(st.durations);
+    if (!factor || !usual) return null;
+    const t0 = Date.now();
+    let timer = null;
+    let stopped = false;
+    const arm = (after) => {
+      timer = setTimeout(async () => {
+        const ran = Date.now() - t0;
+        st.slow = { kind: 'slow_step', detail: `running for ${Math.round(ran / 6e4)} min, ${factor}× its usual ${Math.round(usual / 6e3) / 10} min or more` };
+        this.recordStall(step.id, st.slow);
+        const again = await this.superviseSlow(step, st).catch((e) => {
+          this.emitEvent('log', { level: 'error', message: `Supervisor could not decide on the slow step ${step.id}: ${e.message}` });
+          return false;
+        });
+        if (again && !stopped) arm(ran);
+      }, after);
+      timer.unref?.();
+    };
+    arm(Math.max(usual * factor, STALL_SLOW_MIN_MS));
+    return { stop: () => { stopped = true; clearTimeout(timer); } };
+  }
+
+  // The supervisor on call on a step still running far longer than usual: `wait` (true: check again
+  // later), `interrupt` its running turns (the step runs again with the instruction, idleRetry), or
+  // `user_action` (the person is told what to do while the step keeps running). Parallel steps are
+  // not interrupted (their turns' errors do not come back as one), only diagnosed.
+  async superviseSlow(step, st) {
+    if (!this.supervisorCfg?.onCall) return false;
+    const blocked = this.onCallBlocked(st);
+    if (blocked) {
+      this.emitEvent('log', { level: 'warn', message: `Supervisor on call: not called on the slow step ${step.id} (${blocked}); it keeps running.` });
+      return false;
+    }
+    const signal = st.slow;
+    const d = await this.askOnCall(step, st, { kind: 'slow', signals: [{ step: step.id, ...signal }], steps: [], actions: supervisor.SLOW_ACTIONS, running: true });
+    if (!d || st.slow !== signal) return false; // no decision, or the visit ended meanwhile
+    signal.handled = true;
+    const evidence = `${signal.kind}: ${signal.detail}`;
+    if (d.action === 'interrupt') {
+      const turns = step.agents ? [] : [...(this.liveTurns.get(step.id) || [])];
+      const stopped = turns.filter((stop) => stop(d)).length > 0;
+      this.onCallDecided(step, 'stall', d, stopped ? 'interrupt' : 'wait', {
+        goto: stopped ? step.id : null, evidence,
+        ...(stopped ? {} : { note: step.agents ? 'not interrupted: a parallel step is not interrupted' : 'not interrupted: no turn of the step was running' }),
+      });
+      return !stopped;
+    }
+    this.onCallDecided(step, 'stall', d, d.action === 'user_action' ? 'user_action' : 'wait', { evidence });
+    if (d.action === 'user_action') {
+      this.emitEvent('log', { level: 'warn', kind: 'user_action', step_id: step.id, message: `The supervisor on call needs you while ${step.id} keeps running: ${d.user_action || d.recommendation || d.explanation}` });
+    }
+    return true;
+  }
+
+  // quiet: already reported by its own warning (a blocked /loop)
+  recordStall(stepId, s, { quiet = false } = {}) {
+    this.stalls.push({ step: stepId, ...s, ts: new Date().toISOString() });
+    if (this.stalls.length > 20) this.stalls.shift();
+    if (!quiet) this.emitEvent('log', { level: 'warn', kind: 'stall', stall: s.kind, step_id: stepId, message: `${stepId} may be stuck (${s.kind}): ${s.detail}` });
+  }
+
+  // Why the supervisor on call is not called on this step (null: it is): off, or a limit reached.
+  onCallBlocked(st) {
+    const cfg = this.supervisorCfg;
+    if (!cfg?.onCall) return 'off';
+    if ((st.onCall?.length || 0) >= cfg.perStep) return `its ${cfg.perStep} interventions on this step are used`;
+    if (this.supervisorUsed >= cfg.total) return `its ${cfg.total} interventions in this run are used`;
+    if (cfg.maxCost != null && this.supervisorCost() >= cfg.maxCost) return `its cost cap for this run (US$ ${cfg.maxCost}) is reached`;
+    return null;
+  }
+
+  supervisorCost() {
+    return [...this.sessions.values()].filter((s) => s.agent === this.supervisorCfg?.agent).reduce((a, s) => a + (s.costUsd || 0), 0);
+  }
+
+  // The agent steps the run went through: where the supervisor may resume it.
+  resumableSteps() {
+    return this.wf.steps.filter((s) => s.type !== 'human_approval' && this.ctx.steps[s.id]?.visits > 0).map((s) => s.id);
+  }
+
+  async askOnCall(step, st, { kind, gate, signals, retryStep, steps, actions, running = false }) {
+    const cfg = this.supervisorCfg;
+    this.supervisorUsed++;
+    st.onCall ??= [];
+    this.emitEvent('supervisor.started', {
+      step_id: step.id, kind, error: gate ? 'escalation gate: the run would ask you about a problem' : `stall: ${signals.map((s) => `${s.kind} (${s.detail})`).join('; ')}`,
+    });
+    const handoffs = [...this.handoffNotes.entries()].map(([agent, n]) => ({ agent, ...n }));
+    const history = this.wf.steps.filter((s) => this.ctx.steps[s.id]?.visits > 0).map((s) => ({ step: s.id, visits: this.ctx.steps[s.id].visits, output: this.ctx.steps[s.id].output }));
+    const limits = `Interventions left after this one: ${cfg.perStep - st.onCall.length - 1} on this step, ${cfg.total - this.supervisorUsed} in this run.`
+      + (cfg.maxCost != null ? ` Your cost in this run so far: US$ ${this.supervisorCost().toFixed(2)} of US$ ${cfg.maxCost}.` : '');
+    const prompt = supervisor.onCallPrompt({ wf: this.wf, step, gate, signals, retryStep, steps, history, previous: st.onCall, events: this.recent, handoffs, limits, running });
+    const d = await this.askSupervisor(step, prompt, supervisor.onCallSchema({ actions, steps, routes: gate?.routes, answers: gate?.answers }), st.onCall.length + 1);
+    if (d) st.onCall.push({ action: d.action, explanation: d.explanation });
+    return d;
+  }
+
+  // Every on-call intervention: an event (run chat, watch mode, timeline) and a decision-log row.
+  onCallDecided(step, kind, d, action, { goto = null, route = null, note = null, evidence = '' } = {}) {
+    this.emitEvent('supervisor.decision', {
+      step_id: step.id, kind, action, goto, cause_class: d.cause_class || null, explanation: d.explanation, instruction: d.instruction || null,
+      ...(route != null ? { route } : {}), ...(d.recommendation ? { recommendation: d.recommendation } : {}),
+      ...(d.user_action ? { user_action: d.user_action } : {}), ...(note ? { note } : {}),
+    });
+    const asked = action === 'escalate' || action === 'user_action';
+    this.logDecisions('supervisor', step.id, [[
+      kind === 'escalation' ? 'on-call' : 'stall', `${action}${goto ? ` → ${goto}` : ''}${route != null ? ` → ${route}` : ''}`, d.explanation,
+      evidence, note || (asked ? 'asked the person' : 'applied'),
+    ]]);
+  }
+
+  // Back to an agent step with the supervisor's instruction; false when the step is not allowed.
+  onCallGoto(from, d, target, allowed) {
+    if (!target || !allowed.includes(target)) return false;
+    this.ctx.steps[target].supervisorNote = d.instruction || `The supervisor on call sent the run back here: ${d.explanation}`;
+    this.emitEvent('step.transition', { from: from.id, to: target, when: `supervisor on call: ${d.action}` });
+    return true;
+  }
+
+  // An escalation gate: the supervisor retries or resumes an agent step, routes the gate itself, or
+  // returns its diagnosis for the gate (escalate, an action only the person can take, an invalid
+  // choice, or no decision). Over its limits, the gate opens with its last diagnosis on this gate.
+  // decision: a decision gate an exhausted loop led to: the supervisor never answers it (no `route`).
+  async superviseEscalation(step, st, t0, { decision = false } = {}) {
+    const blocked = this.onCallBlocked(st);
+    if (blocked) {
+      if (blocked === 'off') return null;
+      this.emitEvent('log', { level: 'warn', message: `Supervisor on call: not called at ${step.id} (${blocked}); asking you.` });
+      return st.lastDiagnosis ? { diagnosis: { ...st.lastDiagnosis, note: `not called again: ${blocked}` } } : null;
+    }
+    const routes = decision ? [] : step.choices ? step.choices.filter((c) => !c.feedback_required).map((c) => c.id) : ['approved', 'rejected'];
+    const transitions = (step.transitions || []).map((t) => `- ${t.when} → ${t.goto}${t.status ? ` (the run ends as ${t.status})` : ''}${t.delegate ? ` (${t.delegate.agent} acts first)` : ''}`).join('\n');
+    const steps = this.resumableSteps();
+    const prev = this.ctx.previous_step;
+    const retryStep = steps.includes(prev) ? prev : null;
+    // answers: what the supervisor may recommend to the person (#213), the gate's buttons
+    const answers = step.choices ? step.choices.map((c) => c.id) : ['approve', 'reject'];
+    const gate = { message: render(step.message, this.ctx).trim(), routes, answers, transitions, decision };
+    const actions = decision ? supervisor.ESCALATION_ACTIONS.filter((a) => a !== 'route') : supervisor.ESCALATION_ACTIONS;
+    const d = await this.askOnCall(step, st, { kind: 'escalation', gate, signals: this.stalls.slice(-10), retryStep, steps, actions });
+    if (!d) return null;
+    st.lastDiagnosis = {
+      explanation: d.explanation,
+      recommend: answers.includes(d.recommend) ? d.recommend : null,
+      recommendation: d.recommendation || null,
+      options: Array.isArray(d.options) ? d.options.filter((o) => typeof o === 'string' && o.trim()).slice(0, 3) : null,
+      user_action: d.user_action || null,
+    };
+    const evidence = gate.message.slice(0, 300);
+    if (d.action === 'retry' || d.action === 'resume') {
+      const target = d.action === 'retry' ? retryStep : d.step;
+      if (target && steps.includes(target)) {
+        st.output = { supervisor: { action: d.action, goto: target, explanation: d.explanation } };
+        this.onCallDecided(step, 'escalation', d, d.action, { goto: target, evidence });
+        this.emitEvent('step.finished', { step_id: step.id, visit: st.visits, iteration: st.iteration, output: st.output, duration_ms: Date.now() - t0 });
+        this.onCallGoto(step, d, target, steps);
+        return { goto: target };
+      }
+      this.onCallDecided(step, 'escalation', d, 'escalate', { evidence, note: `"${target}" is not a step the run can go back to` });
+      return { diagnosis: st.lastDiagnosis };
+    }
+    if (d.action === 'route') {
+      if (routes.includes(d.route)) {
+        this.onCallDecided(step, 'escalation', d, 'route', { route: d.route, evidence });
+        return { route: step.choices ? d.route : d.route === 'approved' };
+      }
+      this.onCallDecided(step, 'escalation', d, 'escalate', { evidence, note: `"${d.route}" is not an answer of this gate` });
+      return { diagnosis: st.lastDiagnosis };
+    }
+    this.onCallDecided(step, 'escalation', d, d.action === 'user_action' ? 'user_action' : 'escalate', { evidence });
+    return { diagnosis: st.lastDiagnosis };
+  }
+
+  // A stall on an agent step: the run goes on to `next` (continue), the step runs again or the run
+  // resumes from an earlier agent step with an instruction, or the person is asked for an action only
+  // they can take. Returns the step to go to instead of `next`, or null.
+  async superviseStall(step, st, signals, next) {
+    const blocked = this.onCallBlocked(st);
+    if (blocked) {
+      this.emitEvent('log', { level: 'warn', message: `Supervisor on call: not called on the stall of ${step.id} (${blocked}); the run goes on to ${next}.` });
+      return null;
+    }
+    const steps = this.resumableSteps();
+    const d = await this.askOnCall(step, st, { kind: 'stall', signals, retryStep: step.id, steps, actions: supervisor.STALL_ACTIONS });
+    if (!d) return null;
+    const evidence = signals.map((s) => `${s.kind}: ${s.detail}`).join('; ').slice(0, 300);
+    if (d.action === 'retry' || d.action === 'resume') {
+      const target = d.action === 'retry' ? step.id : d.step;
+      if (this.onCallGoto(step, d, target, steps)) {
+        this.onCallDecided(step, 'stall', d, d.action, { goto: target, evidence });
+        return target;
+      }
+      this.onCallDecided(step, 'stall', d, 'continue', { evidence, note: `"${target}" is not a step the run can go back to` });
+      return null;
+    }
+    if (d.action !== 'user_action') {
+      this.onCallDecided(step, 'stall', d, 'continue', { goto: next, evidence });
+      return null;
+    }
+    this.onCallDecided(step, 'stall', d, 'user_action', { evidence });
+    const { answer, feedback } = await this.requestApproval({
+      id: step.id, raw: true,
+      message: `The step "${step.id}" seems stuck and the supervisor on call needs an action only you can take.\n\n${d.explanation}\n\nWhat to do:\n${d.user_action || d.recommendation || '(no action given)'}`,
+      choices: [{ id: 'retry', label: 'Done: run the step again' }, { id: 'continue', label: `Continue to ${next}` }, { id: 'stop', label: 'Stop the run' }],
+      feedback: { label: 'Your instruction for the new attempt (optional)' },
+    });
+    if (answer === 'stop') throw new Error(`Stopped at ${step.id} by the user, at the supervisor's request.`);
+    if (answer !== 'retry') return null;
+    this.onCallGoto(step, { ...d, instruction: feedback || d.instruction }, step.id, [step.id]);
+    return step.id;
   }
 
   // step.finished, the /goal check and the transitions of a step that has its output.
   async finishStep(step, st, output, scope, t0, extra = {}) {
     this.emitEvent('step.finished', { step_id: step.id, visit: st.visits, iteration: st.iteration, output, duration_ms: Date.now() - t0, ...extra });
     this.notePreexistingFailures(step.id, output);
+    this.recordEvidence(step, st, output);
+    this.saveScenarios(step, output);
 
     if (step.goal) {
       const met = evalExpr(step.goal.until, scope);
@@ -945,12 +1801,16 @@ class WorkflowRun extends EventEmitter {
       let delegated = null;
       if (t.delegate && target === t.goto) {
         this.emitEvent('log', { level: 'info', message: `${step.id} delegated to ${t.delegate.agent}` });
-        const res = await this.sendToAgent(t.delegate.agent, render(t.delegate.prompt, scope), { stepId: `${step.id}:delegate` })
+        const res = await this.sendToAgent(t.delegate.agent, render(t.delegate.prompt, scope), { stepId: `${step.id}:delegate`, attachments: this.stepAttachments(t.delegate.prompt) })
           .finally(() => this.stopWorktreeProcesses(`${step.id} delegation to ${t.delegate.agent}`));
         delegated = { agent: t.delegate.agent, text: res.text };
       }
       if (delegated) st.blocked = null; // another agent acted: the next check is a fresh start
       if (target === step.id && isLooping(step)) target = await this.loopWait(step, output, { probed: !!extra.probe });
+      // a loop ran out: the supervisor on call first (a gate target: when the gate runs, runStep)
+      if (this.exhausted?.target === target && this.wf.steps.find((s) => s.id === target)?.type !== 'human_approval') {
+        target = await this.superviseExhausted(step, st, target);
+      }
       // the delegation result goes to the next step (e.g. babysitter replies on the PR with the hash)
       if (delegated && this.ctx.steps[target]) this.ctx.steps[target].delegate_result = delegated;
       const ends = target === 'end' && t.status && t.status !== 'success';
@@ -1011,7 +1871,8 @@ class WorkflowRun extends EventEmitter {
 
     if (action === 'poll') {
       stats.polls++;
-      const next = await this.loopWait(step, st.output, { probed: true });
+      let next = await this.loopWait(step, st.output, { probed: true });
+      if (this.exhausted?.target === next && this.wf.steps.find((s) => s.id === next)?.type !== 'human_approval') next = await this.superviseExhausted(step, st, next);
       if (next !== step.id) this.emitEvent('step.transition', { from: step.id, to: next, when: `/loop limit (${loopConfig(step).max_duration})` });
       return next;
     }
@@ -1084,13 +1945,13 @@ class WorkflowRun extends EventEmitter {
   // gate is not opened (or is withdrawn) and the run takes the recovery route (recoverFromActionError).
   // A check that could not run (`error`) opens the gate anyway; the approved merge checks again.
   // Resolves to the approval ({ answer, feedback }) or { recover: <next step> }.
-  async openGate(step, t0) {
+  async openGate(step, t0, diagnosis = null) {
     const c = step.check;
-    if (!c) return this.requestApproval(step);
+    if (!c) return this.requestApproval(step, diagnosis);
     const failed = (r) => !!c.on_fail && !['passed', 'error'].includes(r.state);
     const first = await this.runCheck(c, step, 'check', this.ctx);
     if (failed(first)) return { recover: await this.gateCheckFailed(step, first, t0) };
-    const pending = this.requestApproval(step);
+    const pending = this.requestApproval(step, diagnosis);
     const id = `a${this.nApproval}`;
     const key = this.mergeKey(c, this.ctx);
     const off = mergeQueue.onMerged(async (m) => {
@@ -1192,6 +2053,7 @@ class WorkflowRun extends EventEmitter {
       if (this.counters[key] > limit(t.max_visits)) {
         target = t.on_exhausted || 'fail';
         this.emitEvent('log', { level: 'warn', message: `max_visits (${t.max_visits}) reached at ${key} → ${target}` });
+        this.noteExhausted(step, target, `max_visits (${t.max_visits}) reached at ${key}`, () => { this.counters[key]--; });
       }
     }
     if (t.loop) {
@@ -1200,6 +2062,7 @@ class WorkflowRun extends EventEmitter {
       if (this.loops[name] > limit(t.loop.max_iterations)) {
         target = t.loop.on_exhausted || 'fail';
         this.emitEvent('log', { level: 'warn', message: `loop "${name}" reached ${t.loop.max_iterations} iterations → ${target}` });
+        this.noteExhausted(step, target, `loop "${name}" reached ${t.loop.max_iterations} iterations`, () => { this.loops[name]--; });
       } else {
         this.ctx.loop = { name, iteration: this.loops[name] };
       }
@@ -1207,19 +2070,45 @@ class WorkflowRun extends EventEmitter {
     return target;
   }
 
+  // A transition goes to an on_exhausted target: the supervisor on call is asked before the run goes
+  // there (superviseExhausted, or superviseEscalation at a gate). refund(): one more round, when it
+  // sends the run back to the agents.
+  noteExhausted(step, target, detail, refund) {
+    this.exhausted = { from: step.id, target, detail, refund };
+    this.recordStall(step.id, { kind: 'loop_exhausted', detail: `${detail} → ${target}` }, { quiet: true });
+  }
+
+  // A loop ran out towards a step, `end` or `fail`: the supervisor on call decides whether the run
+  // goes there (continue) or back to the agents with an instruction (retry/resume, one more round).
+  async superviseExhausted(step, st, target) {
+    const ex = this.exhausted;
+    this.exhausted = null;
+    if (!this.supervisorCfg?.onCall) return target;
+    st.exhaustedVisit = st.visits; // checkStalls does not call it again on this visit
+    const next = await this.superviseStall(step, st, [{ step: step.id, kind: 'loop_exhausted', detail: `${ex.detail} → ${target}` }], target);
+    if (!next) return target;
+    ex.refund();
+    return next;
+  }
+
   // probed: the iteration was the engine's own check (`wait:`), not an agent turn, so it cannot be "blocked"
   async loopWait(step, output, { probed = false } = {}) {
     const st = this.ctx.steps[step.id];
     const cfg = loopConfig(step);
     const exhausted = step.goal?.on_exhausted || cfg.on_exhausted || 'fail';
+    // the supervisor sent the run back to the /loop: a fresh start (duration, blocked check)
+    const refund = () => { st.loopStartedAt = Date.now(); st.blocked = null; };
     const maxDur = parseDuration(cfg.max_duration, null);
     if (maxDur && Date.now() - st.loopStartedAt > maxDur) {
       this.emitEvent('log', { level: 'warn', message: `/loop of ${step.id} exceeded ${cfg.max_duration} without meeting the /goal → ${exhausted}` });
+      this.noteExhausted(step, exhausted, `/loop exceeded ${cfg.max_duration} without meeting the /goal`, refund);
       return exhausted;
     }
     const stop = probed ? null : this.checkBlocked(step, st, output);
     if (stop) {
       this.emitEvent('log', { level: 'warn', kind: 'loop_blocked', step_id: step.id, message: `/loop of ${step.id} stopped: ${stop} → ${exhausted}` });
+      this.recordStall(step.id, { kind: 'loop_blocked', detail: stop }, { quiet: true });
+      this.noteExhausted(step, exhausted, `/loop stopped: ${stop}`, refund);
       this.logDecisions('orchestrator', step.id, [[
         'loop', `stopped the /loop of ${step.id} → ${exhausted}`,
         `${stop}; polling again (every ${cfg.interval || '1m'}, up to ${cfg.max_duration || 'no limit'}) could not change anything`,
@@ -1261,6 +2150,7 @@ class WorkflowRun extends EventEmitter {
     const settled = await Promise.allSettled(step.agents.map((name) => this.runAgentStep(step, st, name)));
     st.delegate_result = null; // consumed by all agents
     st.supervisorNote = null;
+    this.gateImages = [];
     if (this.abort.signal.aborted) throw new Error('Cancelled');
     const results = {};
     const failed = [];
@@ -1282,7 +2172,10 @@ class WorkflowRun extends EventEmitter {
   async runAgentStep(step, st, agentName) {
     const visit = st.visits;
     const schema = step.output_schema;
-    const scope = { ...this.ctx, iteration: st.iteration, delegate_result: st.delegate_result, agent: agentName };
+    // evidence_dir: where this visit's screenshots go (#146), <run_dir>/evidence/<step>/round-<visit>
+    const scope = { ...this.ctx, iteration: st.iteration, delegate_result: st.delegate_result, agent: agentName, evidence_dir: evidence.roundDir(this.runDir, step.id, visit) };
+    // `test_map: true` (#219): the code → tests map of the agent's checkout, as {{ test_map }}
+    if (step.test_map) scope.test_map = this.writeTestMap(agentName);
     let prompt = render(step.prompt, scope).trim();
     if (st.supervisorNote) {
       prompt += `\n\n---\nNote from the run supervisor (a previous attempt of this step failed):\n${st.supervisorNote}`;
@@ -1301,12 +2194,16 @@ class WorkflowRun extends EventEmitter {
         + OUTPUT_LANGUAGE;
     }
     const hint = { stepId: step.id, visit, schema, agent: agentName, sequences: this.mockSequences };
-    const opts = { stepId: step.id, hint, skills, capabilities: step.capabilities, editsTests: step.edits_tests };
+    // images (#129): those of the inputs its prompt uses, and those of the last gate's feedback
+    const attachments = [...this.stepAttachments(step.prompt), ...this.gateImages];
+    if (!step.agents) this.gateImages = []; // consumed (in a fan-out, after all of them)
+    const opts = { stepId: step.id, hint, skills, capabilities: step.capabilities, editsTests: step.edits_tests, protectFiles: step.protect_files, attachments };
     const countTools = (r) => {
       if (r.turnRec) st.turnRecs?.push(r.turnRec);
       if (!r.tools || !st.tools) return;
       st.tools.ran += r.tools.ran;
       st.tools.denials += r.tools.denials;
+      st.tools.maxStreak = Math.max(st.tools.maxStreak || 0, r.tools.maxStreak || 0);
       st.tools.denied.push(...r.tools.denied);
     };
     let res = await this.sendToAgent(agentName, prompt, opts);
@@ -1329,12 +2226,73 @@ class WorkflowRun extends EventEmitter {
       } catch (e) {
         errs = [e.message];
       }
-      this.emitEvent('log', { level: 'warn', message: `Invalid output in ${step.id}${step.agents ? ` (${agentName})` : ''}: ${errs.join('; ')}` });
+      this.emitEvent('log', { level: 'warn', kind: 'invalid_output', step_id: step.id, message: `Invalid output in ${step.id}${step.agents ? ` (${agentName})` : ''}: ${errs.join('; ')}` });
       if (attempt >= 2) throw new Error(`Output of step "${step.id}" failed validation: ${errs.join('; ')}`);
       res = await this.sendToAgent(agentName, this.retryPrompt(agentName, prompt, res.text, schema, errs), { ...opts, retry: true });
       countTools(res);
       st.lastAnswer = res.text;
     }
+  }
+
+  // `commit_tests: true` on the test writer's step (#209): the run never goes on (build, evidence,
+  // verify, the local merge) with its files uncommitted. Only the run's own worktree is touched.
+  // Leftovers that are all test files (tests_paths) are committed by the engine, without a model
+  // call; other changed files (production code, generated files) are never committed: the step goes
+  // back to its agent once with the list, then a gate asks the owner.
+  async commitLeftoverTests(step, st, output) {
+    const dir = this.worktree?.workDir;
+    if (!dir) return output;
+    const agentName = step.agent;
+    if (output?.committed === false) {
+      this.emitEvent('log', { level: 'warn', kind: 'tests_uncommitted', step_id: step.id, agent: agentName, message: `[${agentName}] answered committed: false in ${step.id}; the orchestrator checks the worktree for files left uncommitted.` });
+    }
+    const isTest = testPaths.testMatcher(this.wf.tests_paths);
+    const leftovers = async () => {
+      const root = await git(['rev-parse', '--show-toplevel'], dir);
+      const files = (await testPaths.localChanges(root)).sort();
+      return { root, tests: files.filter(isTest), others: files.filter((f) => !isTest(f)) };
+    };
+    const commit = async ({ root, tests }) => {
+      const nums = (this.issues || []).map((i) => i?.number ?? (/(\d+)\/?$/.exec(String(i?.url ?? i)) || [])[1]).filter(Boolean);
+      await git(['add', '-A', '--', ...tests], root);
+      await git(['commit', '-m', `Tests${nums.length ? ` for ${nums.map((n) => `#${n}`).join(', ')}` : ''} (committed by the orchestrator)`], root);
+      const hash = await git(['rev-parse', 'HEAD'], root);
+      this.testsAutocommitted.push({ step_id: step.id, files: tests, commit: hash });
+      this.emitEvent('tests.autocommitted', { step_id: step.id, agent: agentName, files: tests, commit: hash });
+      this.emitEvent('log', { level: 'warn', kind: 'tests_autocommitted', step_id: step.id, agent: agentName, files: tests, commit: hash, message: `Tests committed by the orchestrator (${tests.length} file${tests.length === 1 ? '' : 's'}, ${hash.slice(0, 8)}): ${agentName} left them uncommitted in ${step.id}.` });
+      return { ...output, committed: true, autocommitted: { files: tests, commit: hash } };
+    };
+    let left = await leftovers();
+    if (!left.others.length) return left.tests.length ? commit(left) : output;
+
+    const list = (files) => files.map((f) => `- ${f}`).join('\n');
+    this.emitEvent('log', { level: 'warn', kind: 'tests_uncommitted', step_id: step.id, agent: agentName, files: left.others, message: `[${agentName}] left files that are not tests uncommitted in ${step.id}: ${left.others.join(', ')}; the step goes back to it once.` });
+    const fix = `The orchestrator found uncommitted changes in the worktree after your turn. Files that are not tests (tests_paths), which you may not leave changed:\n${list(left.others)}\n`
+      + `${left.tests.length ? `Test files, still to commit:\n${list(left.tests)}\n` : ''}`
+      + 'Commit your test files; revert the others (`git checkout -- <file>`, or delete a new generated file) or, when a change of production code is needed, revert it and report it in your answer. '
+      + 'Then answer again in full, in the format you were asked for, with `committed: true`.';
+    const hint = { stepId: step.id, visit: st.visits, schema: step.output_schema, agent: agentName, sequences: this.mockSequences };
+    const res = await this.sendToAgent(agentName, fix, { stepId: step.id, hint, retry: true });
+    st.lastAnswer = res.text;
+    try {
+      const out = extractJson(res.text);
+      if (!step.output_schema || !validateSchema(out, step.output_schema).length) output = out;
+    } catch { /* the first answer stays the step's output */ }
+
+    left = await leftovers();
+    if (left.others.length) {
+      const gate = {
+        id: step.id,
+        raw: true,
+        message: `${agentName} left files that are not tests uncommitted in ${step.id}, after being asked once to commit its tests and revert the others:\n${list(left.others)}\n\n`
+          + `Worktree: ${left.root}. Commit or revert them there, then continue (test files still uncommitted are committed by the orchestrator); or stop the run.`,
+        choices: [{ id: 'continue', label: 'Continue' }, { id: 'stop', label: 'Stop the run' }],
+      };
+      const { answer } = await this.requestApproval(gate);
+      if (answer !== 'continue') throw new Error(`Stopped at ${step.id}: files that are not tests were left uncommitted (${left.others.join(', ')}).`);
+      left = await leftovers();
+    }
+    return left.tests.length ? commit(left) : output;
   }
 
   // ---- AI supervisor (orchestrator.supervisor in the YAML; skill run-supervisor) ------------
@@ -1347,14 +2305,21 @@ class WorkflowRun extends EventEmitter {
     if (!cfg || cfg.enabled === false) { this.supervisorCfg = null; return; }
     const providerName = cfg.provider || orch.provider || 'claude';
     const name = this.wf.agents.supervisor ? '_supervisor' : 'supervisor';
+    // Opus 5.5 by default on Claude, unless the workflow names a model
+    const model = cfg.model || orch.model || (providerName === 'claude' ? 'claude-opus-5-5' : undefined);
     // read-only on the run folder: it works on the workflow, never on the user's code
     this.wf.agents[name] = {
-      provider: providerName, model: cfg.model || orch.model, session: 'ephemeral', working_dir: '{{ run_dir }}',
+      provider: providerName, model, ...(cfg.effort ? { effort: cfg.effort } : {}), session: 'ephemeral', working_dir: '{{ run_dir }}',
       skills: ['run-supervisor'], capabilities: { tools: ['read'], web: false }, timeout: cfg.timeout || '10m',
       system_prompt: 'You are the run supervisor of this workflow engine.',
     };
-    this.ctx.agents[name] = { provider: providerName, model: cfg.model || orch.model };
-    this.supervisorCfg = { agent: name, perStep: cfg.max_interventions ?? 2, total: cfg.max_total ?? 6 };
+    this.ctx.agents[name] = { provider: providerName, model };
+    // onCall (#41, `on_call: false` turns it off): escalation gates and stalls call it before the person;
+    // maxCost: what it may spend per run (max_cost_usd), with max_interventions / max_total
+    this.supervisorCfg = {
+      agent: name, perStep: cfg.max_interventions ?? 2, total: cfg.max_total ?? 6,
+      onCall: cfg.on_call !== false, maxCost: cfg.max_cost_usd ?? SUPERVISOR_MAX_COST_USD,
+    };
     this.supervisorUsed = 0;
   }
 
@@ -1376,10 +2341,13 @@ class WorkflowRun extends EventEmitter {
     const decision = await this.askSupervisor(step, prompt, supervisor.DECISION_SCHEMA, st.interventions.length + 1);
     if (!decision) return null;
     st.interventions.push({ action: decision.action, explanation: decision.explanation });
-    const emit = (action, extra = {}) => this.emitEvent('supervisor.decision', {
-      step_id: step.id, action, cause_class: decision.cause_class || null, explanation: decision.explanation,
-      instruction: decision.instruction || null, goto: decision.goto || null, ...extra,
-    });
+    const emit = (action, extra = {}) => {
+      this.emitEvent('supervisor.decision', {
+        step_id: step.id, action, cause_class: decision.cause_class || null, explanation: decision.explanation,
+        instruction: decision.instruction || null, goto: decision.goto || null, ...extra,
+      });
+      this.logDecisions('supervisor', step.id, [['failure', `${action}${action === 'goto' ? ` → ${decision.goto}` : ''}`, decision.explanation, err.message.slice(0, 300), extra.note || 'applied']]);
+    };
     const retry = (instruction) => { st.supervisorNote = instruction || decision.instruction || 'Your previous attempt failed; read the error and try again.'; return { goto: step.id, decision }; };
 
     switch (decision.action) {
@@ -1454,7 +2422,9 @@ class WorkflowRun extends EventEmitter {
   // A turn the supervisor interrupted: the step runs again with its instruction (no second supervisor call).
   idleRetry(step, st, e) {
     st.supervisorNote = e.idleInterrupt.instruction
-      || `Your previous attempt was stopped after waiting with no output on: ${e.idleInterrupt.command}. Run long commands in the foreground with a timeout and read their exit code.`;
+      || (e.idleInterrupt.command
+        ? `Your previous attempt was stopped after waiting with no output on: ${e.idleInterrupt.command}. Run long commands in the foreground with a timeout and read their exit code.`
+        : 'Your previous attempt was stopped because it ran far longer than this step usually takes. Check what you were waiting on, and run long commands in the foreground with a timeout.');
     return { goto: step.id, decision: { action: 'retry', explanation: e.message } };
   }
 
@@ -1614,13 +2584,20 @@ class WorkflowRun extends EventEmitter {
   // The engine checks the checkout after the turn and sends it back with the list of files, at most
   // twice; after that the turn fails (the supervisor or the step's on_error take over). A snapshot or
   // a check that cannot run (git error) fails the turn too; only a folder outside git is unchecked.
+  // `protect_files` (#220; opts.protectFiles: the step's over the agent's, rendered now): the same
+  // guard on exactly these files (e.g. the acceptance tests written before the code), whatever
+  // edits_tests says, so the agent may still add and edit its own tests.
   async sendToAgent(agentName, prompt, opts = {}) {
     const agent = { ...(this.wf.defaults || {}), ...this.wf.agents[agentName] };
     const guarded = !!this.wf.agents[agentName] && (opts.editsTests ?? agent.edits_tests) === false;
     const dir = guarded ? this.workingDir(agent) : null;
     const snap = guarded ? await testPaths.snapshot(dir, this.wf.tests_paths)
       .catch((e) => { throw new Error(`Could not snapshot the test files before ${agentName}'s turn in ${opts.stepId || 'a delegated turn'} (edits_tests: false): ${e.message}`); }) : null;
-    let res = await this.agentTurn(agentName, prompt, { ...opts, guarded });
+    const protect = this.wf.agents[agentName] ? renderFileList(opts.protectFiles ?? agent.protect_files, this.ctx) : [];
+    const psnap = protect.length ? await testPaths.snapshot(this.workingDir(agent), protect)
+      .catch((e) => { throw new Error(`Could not snapshot the protected files before ${agentName}'s turn in ${opts.stepId || 'a delegated turn'} (protect_files): ${e.message}`); }) : null;
+    let res = await this.agentTurn(agentName, prompt, { ...opts, guarded, protect });
+    res = await this.serveTestRequests(agentName, prompt, res, { ...opts, guarded, protect });
     for (let attempt = 1; snap; attempt++) {
       // an unchecked turn fails the step: passing it would let test changes through the guard
       const files = await testPaths.changedTestFiles(snap, { bases: this.baseRefs() })
@@ -1630,9 +2607,100 @@ class WorkflowRun extends EventEmitter {
       this.emitEvent('tests.refused', { agent: agentName, step_id: opts.stepId || null, files, attempt });
       this.emitEvent('log', { level: 'warn', kind: 'tests_refused', agent: agentName, message: `[${agentName}] changed test files in ${stepId}, which it may not edit (edits_tests: false): ${files.join(', ')}` });
       if (attempt > 2) throw new Error(`${agentName} changed test files in ${stepId} and did not put them back: ${files.join(', ')}. Only the test writer edits tests.`);
-      res = await this.agentTurn(agentName, this.testsRefusedPrompt(agentName, prompt, res.text, files, snap.head), { ...opts, guarded, retry: true });
+      res = await this.agentTurn(agentName, this.testsRefusedPrompt(agentName, prompt, res.text, files, snap.head), { ...opts, guarded, protect, retry: true });
+    }
+    for (let attempt = 1; psnap; attempt++) {
+      const files = await testPaths.changedTestFiles(psnap, { bases: this.baseRefs() })
+        .catch((e) => { throw new Error(`Could not check the protected files changed by ${agentName} in ${opts.stepId || 'a delegated turn'} (protect_files): ${e.message}`); });
+      if (!files.length) break;
+      const stepId = opts.stepId || 'a delegated turn';
+      this.emitEvent('tests.refused', { agent: agentName, step_id: opts.stepId || null, files, attempt, protected: true });
+      this.emitEvent('log', { level: 'warn', kind: 'protected_refused', agent: agentName, message: `[${agentName}] changed protected files in ${stepId} (protect_files): ${files.join(', ')}` });
+      if (attempt > 2) throw new Error(`${agentName} changed protected files in ${stepId} and did not put them back: ${files.join(', ')}.`);
+      res = await this.agentTurn(agentName, this.protectedRefusedPrompt(agentName, prompt, res.text, files, psnap.head), { ...opts, guarded, protect, retry: true });
     }
     return res;
+  }
+
+  // The code → tests map of an agent's checkout (#219, a step's `test_map: true`), written to
+  // <run_dir>/test-map.md for each turn (the graph of src/engine/affected-tests.js) → its path.
+  writeTestMap(agentName) {
+    const agent = { ...(this.wf.defaults || {}), ...this.wf.agents[agentName] };
+    const file = path.join(this.runDir, 'test-map.md');
+    let map;
+    try { map = testMap({ root: this.workingDir(agent) }); } catch (e) { map = { mode: 'none', why: e.message.split('\n')[0], sources: {} }; }
+    fs.mkdirSync(this.runDir, { recursive: true });
+    fs.writeFileSync(file, testMapMarkdown(map));
+    return file;
+  }
+
+  // Agents ask, the orchestrator runs (#212): a turn that ends with a ```run-tests block (one test
+  // file per line, or `affected` for the affected tests of the run's change) has them run by the
+  // engine in the agent's working folder (suite-step.js runSuite with files, log
+  // logs/tests-<step>-<n>.log), and the agent resumes in the same step with a summary only: the
+  // passed / failed counts, each failure's test, file and first lines, and the log's path. At most
+  // MAX_TEST_REQUESTS per turn; after that the last answer stands.
+  async serveTestRequests(agentName, prompt, res, opts) {
+    for (let n = 1; ; n++) {
+      const request = parseTestRequest(res?.text);
+      if (!request) return res;
+      if (n > MAX_TEST_REQUESTS) {
+        this.emitEvent('log', { level: 'warn', kind: 'test_request', agent: agentName, message: `[${agentName}] asked to run tests more than ${MAX_TEST_REQUESTS} times in ${opts.stepId || 'a delegated turn'}: its last answer stands` });
+        return res;
+      }
+      const summary = await this.runTestRequest(agentName, opts.stepId, request);
+      res = await this.agentTurn(agentName, this.testResultsPrompt(agentName, prompt, res.text, summary), { ...opts, retry: true });
+    }
+  }
+
+  // Runs one request → the summary for the agent's prompt (never the output itself).
+  async runTestRequest(agentName, stepId, request) {
+    const agent = { ...(this.wf.defaults || {}), ...this.wf.agents[agentName] };
+    const cwd = render(agent.working_dir || '', this.ctx).trim() || this.ctx.worktree_dir;
+    this.testRequests = (this.testRequests || 0) + 1;
+    const root = path.dirname(path.dirname(this.runDir));
+    let files = request.files.filter((f) => this.mock || (cwd && fs.existsSync(path.join(cwd, f))));
+    const missing = request.files.filter((f) => !files.includes(f));
+    const reasons = Object.fromEntries(files.map((f) => [f, `asked by ${agentName}`]));
+    let why = `asked by ${agentName}`;
+    if (request.affected) {
+      const sel = this.affectedSelection();
+      if (sel.mode !== 'affected') {
+        return `The orchestrator did not run the affected tests: ${sel.why}. The whole suite runs in the workflow's suite step, not in your turn; ask for given test files instead (one per line in the run-tests block).`;
+      }
+      for (const f of sel.files) if (!files.includes(f)) { files.push(f); reasons[f] = sel.reasons[f]; }
+      why = sel.why;
+    }
+    if (!files.length) return `The orchestrator ran no test: ${missing.length ? `these files do not exist in ${cwd}: ${missing.join(', ')}` : 'no test file reaches your change'}.`;
+    const name = `tests-${String(stepId || agentName).replace(/[^\w-]/g, '_')}-${this.testRequests}`;
+    this.emitEvent('log', { level: 'info', kind: 'test_request', agent: agentName, step_id: stepId || null, message: `[${agentName}] asked to run ${files.length} test file(s): the orchestrator runs them (log logs/${name}.log)` });
+    const output = await suiteStep.runSuite({
+      command: this.suiteCommand(), cwd, runDir: this.runDir, round: this.testRequests, logName: name,
+      env: { ...process.env, ...capabilities.agentEnv() }, mock: this.mock, preexisting: this.preexisting, signal: this.abort.signal,
+      base: () => this.suiteBase(), baseCacheDir: path.join(root, 'cache', 'base-tests'),
+      files, selection: { mode: 'affected', files, reasons, why },
+      log: (level, message) => this.emitEvent('log', { level, message }),
+    }).catch((e) => ({ status: 'blocked', reason: e.message, failures: [], preexisting: [] }));
+    if (output.log) this.emitEvent('file.saved', { step_id: stepId || null, path: path.join(this.runDir, output.log) });
+    this.suiteRuns.requests = (this.suiteRuns.requests || 0) + 1;
+    if (output.status === 'blocked') return `The orchestrator could not run the tests: ${output.reason}`;
+    const lines = [
+      `The orchestrator ran ${files.length} test file(s) for you (\`${output.command}\`): ${output.status === 'pass' ? 'they passed' : 'they failed'}.`,
+      `Passed: ${output.passed ?? '?'}, failed: ${output.failed ?? '?'}${output.timed_out ? ' (timed out)' : ''}. Log: ${path.join(this.runDir, output.log)} (read only the lines you need).`,
+    ];
+    if (missing.length) lines.push(`Not found, not run: ${missing.join(', ')}.`);
+    if (output.failures.length) lines.push('Failures:', ...output.failures.map((f) => `- ${f.test}${f.file ? ` (${f.file})` : ''}${f.error ? `\n  ${String(f.error).split('\n').slice(0, 3).join('\n  ')}` : ''}`));
+    if (output.preexisting?.length) lines.push('Also failing on the base (not yours, leave them):', ...output.preexisting.map((f) => `- ${f.test}${f.file ? ` (${f.file})` : ''}`));
+    return lines.join('\n');
+  }
+
+  // The follow-up turn with a test request's summary. As in retryPrompt, a handoff or ephemeral
+  // agent answers in a fresh session, so the task and its previous answer go along.
+  testResultsPrompt(agentName, prompt, previous, summary) {
+    const next = `${summary}\n\nGo on with your task from here. Answer in full, in the format you were asked for (another run-tests block only if you need another run).`;
+    const def = { ...(this.wf.defaults || {}), ...this.wf.agents[agentName] };
+    if ((def.session || 'persistent') === 'persistent') return next;
+    return `${prompt}\n\n---\nYou already answered this task:\n<previous_answer>\n${String(previous).slice(-20000)}\n</previous_answer>\n\n${next}`;
   }
 
   // The run's base branch, local and remote: commits reachable from it are not the agent's.
@@ -1654,7 +2722,22 @@ class WorkflowRun extends EventEmitter {
     return `${prompt}\n\n---\nYou already answered this task:\n<previous_answer>\n${String(previous).slice(-20000)}\n</previous_answer>\n\n${fix}`;
   }
 
-  async agentTurn(agentName, prompt, { stepId, hint, skills: stepSkills = [], capabilities: stepCaps, retry = false, guarded = false } = {}) {
+  // A turn refused because it changed protected files (#220, protect_files: e.g. the acceptance
+  // tests written before the code). Same shape as testsRefusedPrompt.
+  protectedRefusedPrompt(agentName, prompt, previous, files, head) {
+    const fix = 'The orchestrator refused your last turn: it changed files you may not change (written before your'
+      + ' turn, e.g. the acceptance tests your code must pass):\n' + files.map((f) => `- ${f}`).join('\n') + '\n'
+      + `Put them back as they were before your turn (\`git checkout ${head} -- <file>\` for a changed or deleted file)`
+      + ' and commit, keeping your other changes; make the code pass them instead. If one contradicts the task,'
+      + ' say why in your answer (the reviewer decides). Then answer again in full, in the format you were asked for.';
+    const def = { ...(this.wf.defaults || {}), ...this.wf.agents[agentName] };
+    if ((def.session || 'persistent') === 'persistent') return fix;
+    return `${prompt}\n\n---\nYou already answered this task:\n<previous_answer>\n${String(previous).slice(-20000)}\n</previous_answer>\n\n${fix}`;
+  }
+
+  // opts.attachments: images for this turn ([{ name, path }] in the run folder, #129); a provider that
+  // cannot open images still gets their paths, with one warning per step and agent.
+  async agentTurn(agentName, prompt, { stepId, hint, skills: stepSkills = [], capabilities: stepCaps, retry = false, guarded = false, attachments = [] } = {}) {
     const def = this.wf.agents[agentName];
     if (!def) throw new Error(`Unknown agent: ${agentName}`);
     const agent = { ...(this.wf.defaults || {}), ...def };
@@ -1690,8 +2773,18 @@ class WorkflowRun extends EventEmitter {
     // a fresh session of an agent that already worked in this run (or the run it resumes) starts from its note
     const note = turn === 1 ? this.handoffNotes.get(agentName) : null;
     const parts = [];
-    if (turn === 1 && (agent.system_prompt || agentSkills.length)) {
-      const system = [render(agent.system_prompt, this.ctx).trim(), ...agentSkills.map(skillPrompt)].filter(Boolean).join('\n\n');
+    const caps = capabilities.merge(agent.capabilities, stepCaps);
+    // agents with commands: the folders they may write to, and how to run commands unattended
+    const runDirs = capabilities.runDirs(caps, this.runDir);
+    for (const dir of runDirs) fs.mkdirSync(dir, { recursive: true });
+    const agentEnv = capabilities.agentEnv(this.scratchWorkspace());
+    const shotsDir = hint?.visit ? evidence.roundDir(this.runDir, stepId, hint.visit) : null;
+    const commands = capabilities.commandGuide(caps, this.runDir, agentEnv, shotsDir);
+    const guide = commands && [commands, this.depsGuide()].filter(Boolean).join('\n');
+    // node_modules linked from the shared cache (#198): Claude refuses `npm ci` and deleting it
+    const depsLinked = !!this.deps?.worktree?.entry;
+    if (turn === 1 && (agent.system_prompt || agentSkills.length || guide)) {
+      const system = [render(agent.system_prompt, this.ctx).trim(), guide, ...agentSkills.map(skillPrompt)].filter(Boolean).join('\n\n');
       parts.push(`<system>\n${system}\n</system>`);
     }
     if (note) {
@@ -1704,10 +2797,10 @@ class WorkflowRun extends EventEmitter {
     const provider = this.mock ? { type: 'mock' } : this.wf.providers?.[agent.provider];
     // capabilities + isolation → this CLI's flags (see capabilities.js); cli_args still apply on top
     const providerType = this.wf.providers?.[agent.provider]?.type;
-    const caps = capabilities.merge(agent.capabilities, stepCaps);
     const isolated = agent.isolation !== false;
     const denyEdits = guarded ? this.wf.tests_paths || testPaths.TESTS_PATHS : [];
-    const { args: capArgs, notes } = capabilities.providerArgs(providerType, { caps, isolated, mcpServers: this.wf.mcp_servers || {}, denyEdits });
+    const denyCommands = depsLinked ? capabilities.DEPS_DENIED_COMMANDS : [];
+    const { args: capArgs, notes } = capabilities.providerArgs(providerType, { caps, isolated, mcpServers: this.wf.mcp_servers || {}, denyEdits, denyCommands, runDir: runDirs.length ? this.runDir : null, env: agentEnv });
     const capsKey = `${agentName}|${capabilities.describe(caps)}|${guarded}`;
     if (!this.capsLogged.has(capsKey)) {
       this.capsLogged.add(capsKey);
@@ -1729,7 +2822,16 @@ class WorkflowRun extends EventEmitter {
     // simulation: which answer of this step this is (mockSequences.invalid_answers: { step: n } makes the first n invalid)
     if (this.mock) { this.mockCalls ??= {}; hint.call = this.mockCalls[hint.stepId] = (this.mockCalls[hint.stepId] || 0) + 1; }
 
-    const call = { session, agentName, agent, provider, extraArgs, stepId, hint };
+    const imagesKey = `${stepId}|${agentName}`;
+    // the configured provider's type, so a simulation warns like the real run would
+    if (attachments.length && !imageInput(providerType || provider?.type) && !this.imagesWarned.has(imagesKey)) {
+      this.imagesWarned.add(imagesKey);
+      this.emitEvent('log', {
+        level: 'warn', kind: 'attachments_unsupported', step_id: stepId, agent: agentName, provider: providerType || agent.provider,
+        message: `[${agentName}] ${stepId}: ${providerType || agent.provider} cannot open attached images; it only gets their paths (${attachments.map((f) => f.name).join(', ')})`,
+      });
+    }
+    const call = { session, agentName, agent, provider, extraArgs, agentEnv, stepId, hint, attachments };
     let res;
     try {
       res = await this.invokeTurn(call, turn, fullPrompt);
@@ -1743,7 +2845,7 @@ class WorkflowRun extends EventEmitter {
     const rec = {
       agent: agentName, step: stepId, visit, session: session.id, mode, fresh: turn === 1,
       context_start: res.context.start, context_peak: res.context.peak,
-      tokens: totalTokens(res.usage), cost_usd: res.costUsd || 0,
+      tokens: totalTokens(res.usage), cost_usd: res.costUsd || 0, subagent_calls: res.tools.subagents || 0,
       waste: res.tools.ran === 0 && res.tools.denials > 0 ? 'refused' : null,
     };
     this.turnLog.push(rec);
@@ -1777,7 +2879,7 @@ class WorkflowRun extends EventEmitter {
     const { session } = call;
     if (!session.providerSessionId) return null;
     try {
-      const res = await this.invokeTurn({ ...call, hint: { ...call.hint, handoffOnly: true }, attempts: 1 }, ++session.turns, HANDOFF_ONLY);
+      const res = await this.invokeTurn({ ...call, hint: { ...call.hint, handoffOnly: true }, attempts: 1, attachments: [] }, ++session.turns, HANDOFF_ONLY);
       rec.tokens += totalTokens(res.usage);
       rec.cost_usd += res.costUsd || 0;
       const plain = String(res.text || '').trim();
@@ -1828,9 +2930,9 @@ class WorkflowRun extends EventEmitter {
     return parseDuration(v, 30 * 60e3);
   }
 
-  async invokeTurn({ session, agentName, agent, provider, extraArgs, stepId, hint, attempts }, turn, fullPrompt) {
+  async invokeTurn({ session, agentName, agent, provider, extraArgs, agentEnv, stepId, hint, attempts, attachments = [] }, turn, fullPrompt) {
     const timeoutMs = this.turnTimeout(agent);
-    this.emitEvent('session.message_sent', { session_id: session.id, turn, step_id: stepId, prompt: fullPrompt, timeout_ms: timeoutMs });
+    this.emitEvent('session.message_sent', { session_id: session.id, turn, step_id: stepId, prompt: fullPrompt, timeout_ms: timeoutMs, ...(attachments.length ? { attachments } : {}) });
     // a retry after a failed attempt that did work (a timeout, a crash) starts with what it did
     let prompt = fullPrompt;
     if (!provider) throw new Error(`Provider "${agent.provider}" is not defined.`);
@@ -1846,15 +2948,31 @@ class WorkflowRun extends EventEmitter {
       const t0 = Date.now();
       this.setStatus(session, 'active');
       // tool calls of this turn: refused ones (allowlist) vs the ones that ran
-      const tools = { ran: 0, denials: 0, streak: 0, maxStreak: 0, denied: [] };
+      // subagents: the sub-agent calls of this turn (capabilities.subagents, Claude's Agent/Task tool)
+      const tools = { ran: 0, denials: 0, streak: 0, maxStreak: 0, denied: [], subagents: 0 };
       // context window of each model request: the first one and the largest
       const context = { start: null, peak: null };
       const calls = new Map();
+      // `full_suite: warn` (#177): the engine's suite step runs the whole suite; the agent's own run is noted
+      const suiteWarn = this.wf.steps.find((s) => s.id === stepId)?.full_suite === 'warn' ? this.suiteCommand() : null;
       const track = (item) => {
         if (item.kind === 'context') { context.start ??= item.tokens; context.peak = Math.max(context.peak || 0, item.tokens); return; }
         if (item.kind === 'tool_call') calls.set(item.id, { ...item });
+        if (suiteWarn !== null && item.kind === 'tool_call' && suiteStep.isFullSuiteCommand(item.input?.command, suiteWarn)) {
+          this.suiteRuns.agents++;
+          this.emitEvent('log', { level: 'warn', kind: 'full_suite_by_agent', step_id: stepId, agent: agentName, command: String(item.input.command).slice(0, 200), message: `[${agentName}] started the whole test suite in ${stepId} (\`${String(item.input.command).slice(0, 120)}\`): the orchestrator runs it once per round after the step; agents run only the focused tests of the change.` });
+        }
+        if (item.kind === 'tool_call' && capabilities.CLAUDE_SUBAGENT_TOOLS.includes(item.name)) tools.subagents++;
         if (item.kind !== 'tool_result') return;
         if (calls.has(item.id)) calls.get(item.id).result = item;
+        if (isToolTimeout(item)) {
+          // #178: a command cut by the tool's timeout returned nothing; without an explicit `timeout` it hit the default
+          const call = calls.get(item.id);
+          const command = String(call?.input?.command ?? '').slice(0, 200);
+          const explicit = call?.input?.timeout != null;
+          this.toolTimeouts++;
+          this.emitEvent('log', { level: 'warn', kind: 'tool_timeout', step_id: stepId, agent: agentName, command, timeout_ms: explicit ? +call.input.timeout : null, message: `[${agentName}] a command was cut by the tool's ${explicit ? `timeout (${call.input.timeout} ms)` : 'default timeout (no `timeout` given)'} in ${stepId || 'a delegated turn'}: \`${command.slice(0, 120)}\`. Give every test or build command an explicit timeout sized for it, or run a narrower filter.` });
+        }
         if (!isPermissionDenial(item)) { tools.ran++; tools.streak = 0; return; }
         tools.denials++;
         tools.maxStreak = Math.max(tools.maxStreak, ++tools.streak);
@@ -1874,6 +2992,15 @@ class WorkflowRun extends EventEmitter {
         turnAbort.abort();
         return true;
       };
+      // the supervisor on call stopping a step that runs far longer than usual (superviseSlow)
+      const live = stepId && this.ctx.steps[stepId] ? this.liveTurns.get(stepId) || this.liveTurns.set(stepId, new Set()).get(stepId) : null;
+      const stopSlow = (decision) => {
+        if (timed) return false;
+        interrupted = { ...decision, slow: true };
+        turnAbort.abort();
+        return true;
+      };
+      live?.add(stopSlow);
       const idle = new IdleWatch({ idleMs: this.idleWarnMs });
       const idleTimer = this.idleWarnMs > 0 && setInterval(() => this.warnIdle(idle, { session, agentName, stepId, turn, interrupt }), Math.min(30e3, Math.max(50, this.idleWarnMs / 4)));
       idleTimer?.unref?.();
@@ -1881,6 +3008,7 @@ class WorkflowRun extends EventEmitter {
       const timing = () => {
         if (timed) return timed;
         this.abort.signal.removeEventListener('abort', cancel);
+        live?.delete(stopSlow);
         clearInterval(idleTimer);
         this.addStepTiming(stepId, (timed = idle.finish()));
         return timed;
@@ -1888,7 +3016,7 @@ class WorkflowRun extends EventEmitter {
       try {
         const res = await runTurn({
           provider, model: agent.model, effort: agent.effort, providerSessionId: session.providerSessionId,
-          prompt, cwd: (session.cwd = this.workingDir(agent)), extraArgs,
+          prompt, cwd: (session.cwd = this.workingDir(agent)), extraArgs, agentEnv, attachments,
           timeoutMs, attempt: a,
           signal: turnAbort.signal, hint, render,
           onItem: (item) => { track(item); idle.item(item); this.emitEvent('session.stream', { session_id: session.id, turn, item }); },
@@ -1913,7 +3041,7 @@ class WorkflowRun extends EventEmitter {
         this.emitEvent('session.message_received', {
           session_id: session.id, turn, step_id: stepId, text: res.text, usage: res.usage,
           cost_usd: res.costUsd, duration_ms: dur, active_ms, waiting_ms, stalled_ms, session: this.snapshot(session),
-          context, ...(res.handoff ? { handoff: res.handoff } : {}),
+          context, ...(res.handoff ? { handoff: res.handoff } : {}), ...(tools.subagents ? { subagent_calls: tools.subagents } : {}),
         });
         this.recordDecisions(agentName, stepId, res.text);
         return res;
@@ -1922,6 +3050,12 @@ class WorkflowRun extends EventEmitter {
         session.activeMs += Date.now() - t0;
         lastErr = e;
         if (this.abort.signal.aborted) break;
+        if (interrupted?.slow) {
+          lastErr = Object.assign(new Error(`[${agentName}] turn interrupted by the supervisor on call: ${stepId} ran far longer than usual`),
+            { idleInterrupt: { instruction: interrupted.instruction || null, command: null } });
+          this.emitEvent('log', { level: 'warn', kind: 'agent_interrupted', step_id: stepId, agent: agentName, message: lastErr.message });
+          break;
+        }
         if (interrupted) {
           const stall = idle.lastStall;
           lastErr = Object.assign(new Error(`[${agentName}] turn interrupted by the supervisor: no output while waiting on ${stall?.tool || 'a tool'}: ${stall?.command || '?'}`),
@@ -1977,25 +3111,32 @@ class WorkflowRun extends EventEmitter {
 
   // Agent time per step: active (the model working) vs waiting (a tool call running), and the part
   // of the waits with no output past idleWarnMs (stalled). Explains why a slow step was slow.
+  // gate_wait_ms: the time the run waited for the owner at its human gates, apart from agent time.
   timingSummary() {
     const total = { duration_ms: 0, active_ms: 0, waiting_ms: 0, stalled_ms: 0 };
     for (const s of Object.values(this.stepTiming)) for (const k of Object.keys(total)) total[k] += s[k];
-    return { steps: this.stepTiming, ...total };
+    const gateWaitMs = Object.values(this.gateWaits).reduce((a, g) => a + g.wait_ms, 0);
+    return { steps: this.stepTiming, ...total, gates: this.gateWaits, gate_wait_ms: gateWaitMs };
   }
 
   // Per run and per agent: context at the start of each turn, its peak, tokens, and the tokens spent
   // on turns that could not progress ("waste": every tool call refused, or a blocked /loop iteration).
+  // subagent_calls: sub-agent calls per agent, in total and per step, to compare runs (#160).
   contextSummary() {
     const agents = {};
     let waste = 0;
     for (const r of this.turnLog) {
-      const a = (agents[r.agent] ??= { mode: r.mode, turns: 0, fresh_sessions: 0, tokens: 0, peak: null, waste_tokens: 0, per_turn: [] });
+      const a = (agents[r.agent] ??= { mode: r.mode, turns: 0, fresh_sessions: 0, tokens: 0, peak: null, waste_tokens: 0, subagent_calls: 0, subagent_calls_by_step: {}, per_turn: [] });
       a.turns++;
       if (r.fresh) a.fresh_sessions++;
       a.tokens += r.tokens;
       if (r.context_peak != null) a.peak = Math.max(a.peak || 0, r.context_peak);
       if (r.waste) { a.waste_tokens += r.tokens; waste += r.tokens; }
-      a.per_turn.push({ step: r.step, visit: r.visit, start: r.context_start, peak: r.context_peak, tokens: r.tokens, ...(r.waste ? { waste: r.waste } : {}) });
+      if (r.subagent_calls) {
+        a.subagent_calls += r.subagent_calls;
+        a.subagent_calls_by_step[r.step] = (a.subagent_calls_by_step[r.step] || 0) + r.subagent_calls;
+      }
+      a.per_turn.push({ step: r.step, visit: r.visit, start: r.context_start, peak: r.context_peak, tokens: r.tokens, ...(r.subagent_calls ? { subagent_calls: r.subagent_calls } : {}), ...(r.waste ? { waste: r.waste } : {}) });
       if (a.per_turn.length > 200) a.per_turn.shift();
     }
     return { agents, waste_tokens: waste };
@@ -2012,14 +3153,58 @@ class WorkflowRun extends EventEmitter {
   // Resolves to { answer, feedback }. `feedback: true | { label, placeholder }` on the step asks the
   // UI for an optional free text next to the choices; it is the gate's `output.feedback`, and every
   // non-empty one is appended to the run-wide `feedback` list the next prompts can include.
-  requestApproval(step) {
+  // A choice with `feedback_required: true` is refused without a text (resolveApproval returns false).
+  // `local_preview: true` on the step offers Run locally (the service runs the worktree, see
+  // src/local-preview.js); it never answers the gate. `diff_base: <ref>` offers Show the diff (the
+  // worktree's changes since that ref, in an embedded terminal).
+  // diagnosis: the supervisor on call could not solve the problem of an escalation gate
+  // ({ explanation, recommendation, user_action, note }): it goes under the message and in `supervisor`.
+  requestApproval(step, diagnosis = null) {
     const id = `a${++this.nApproval}`;
-    const message = step.raw ? String(step.message).trim() : render(step.message, this.ctx).trim();
-    const choices = step.choices ? step.choices.map((c) => ({ id: c.id, label: render(c.label, this.ctx) })) : null;
+    let message = step.raw ? String(step.message).trim() : render(step.message, this.ctx).trim();
+    if (diagnosis) {
+      message += `\n\n---\nSupervisor on call${diagnosis.note ? ` (${diagnosis.note})` : ''}: ${diagnosis.explanation}`
+        + `${diagnosis.recommendation ? `\nRecommendation${diagnosis.recommend ? ` (${diagnosis.recommend})` : ''}: ${diagnosis.recommendation}` : ''}`
+        + `${diagnosis.options?.length ? `\nOptions:\n${diagnosis.options.map((o, i) => `${i + 1}. ${o}`).join('\n')}` : ''}`
+        + `${diagnosis.user_action ? `\nAction only you can take: ${diagnosis.user_action}` : ''}`;
+    }
+    const choices = step.choices ? step.choices.map((c) => ({
+      id: c.id,
+      label: render(c.label, this.ctx),
+      ...(c.feedback_required ? { feedback_required: true } : {}),
+      ...(c.help ? { help: this.gateText(step, c.help) } : {}),
+    })) : null;
+    // an Approve / Reject gate: what its buttons say and do (#213)
+    const yesNo = step.choices ? {} : {
+      approve: { label: this.gateText(step, step.approve_label) || 'Approve', help: this.gateText(step, step.approve_help) },
+      reject: { label: this.gateText(step, step.reject_label) || 'Reject', help: this.gateText(step, step.reject_help) },
+    };
+    const brief = gateSummary.gateBrief({
+      message,
+      summary: this.gateText(step, step.summary),
+      recommend: this.gateText(step, step.recommend),
+      diagnosis,
+      answers: choices || [{ id: 'approve', label: yesNo.approve.label }, { id: 'reject', label: yesNo.reject.label }],
+    });
     const fb = step.feedback === true ? {} : step.feedback || null;
     const feedback = fb && { label: render(fb.label || 'Anything to add? (optional)', this.ctx), placeholder: render(fb.placeholder || '', this.ctx) };
     const requestedAt = new Date().toISOString();
     const timeout = parseDuration(step.timeout, null);
+    // the folder the run's work is in (its worktree; a simulation works in the repository folder)
+    const workDir = this.ctx.worktree_dir || this.inputs.repo_path || null;
+    const extra = {
+      brief,
+      ...yesNo,
+      ...(workDir ? { work_dir: workDir } : {}),
+      // run_app: the gate offers Run App even without a config (its setup saves the project's, #108)
+      ...(step.local_preview && workDir ? { run_app: true } : {}),
+      ...(step.local_preview && this.localPreview && workDir ? { local_preview: this.localPreview } : {}),
+      ...(step.diff_base && workDir ? { diff_base: render(step.diff_base, this.ctx).trim() } : {}),
+      ...(diagnosis ? { supervisor: diagnosis } : {}),
+      // save_to_issue: <choice> (#125): a run about an issue also offers "<choice> and save to issue #n";
+      // the answer is that choice (transitions unchanged) with intent save_to_issue
+      ...(step.save_to_issue && this.issues?.[0] ? { save_to_issue: { choice: step.save_to_issue, issue: this.issues[0] } } : {}),
+    };
 
     // registered before its event, so runs:active lists it as soon as anyone hears of it
     const answered = new Promise((resolve, reject) => {
@@ -2028,14 +3213,24 @@ class WorkflowRun extends EventEmitter {
       this.approvals.set(id, {
         stepId: step.id,
         // what pendingGates() hands the UI, so a reloaded window rebuilds the gate without its event
-        gate: { approval_id: id, step_id: step.id, message, choices, feedback, requested_at: requestedAt },
+        gate: { approval_id: id, step_id: step.id, message, choices, feedback, ...extra, requested_at: requestedAt },
         resolve: (v) => { clearTimeout(timer); resolve(v); },
         reject: (e) => { clearTimeout(timer); reject(e); },
       });
     });
-    this.emitEvent('approval.requested', { approval_id: id, step_id: step.id, message, choices, feedback });
+    this.emitEvent('approval.requested', { approval_id: id, step_id: step.id, message, choices, feedback, ...extra });
     if (this.approvals.has(id)) this.setStatus(this.orchestrator, 'waiting'); // not answered by a listener already
     return answered;
+  }
+
+  // A gate's summary template (#213), rendered and trimmed: '' when the step has none, is engine-made
+  // (raw) or the template fails (logged): the gate opens with its message whatever the summary does.
+  gateText(step, text) {
+    if (!text || step.raw) return '';
+    try { return render(text, this.ctx).trim(); } catch (e) {
+      this.emitEvent('log', { level: 'warn', message: `Gate ${step.id}: its summary could not be rendered (${e.message}); the gate shows its message.` });
+      return '';
+    }
   }
 
   // The gates this run waits at, as the approval.requested events described them (plus requested_at).
@@ -2044,15 +3239,320 @@ class WorkflowRun extends EventEmitter {
     return [...this.approvals.values()].map((a) => a.gate).filter(Boolean);
   }
 
-  // answer: boolean (approve/reject) or the id of one of the step's choices; feedback: optional text
-  resolveApproval(id, answer, by = 'user', feedback = '') {
+  // The commit checked out in the run's worktree, or null (no worktree: a simulation, not a git repo).
+  worktreeHead() {
+    if (!this.worktree) return null;
+    try {
+      return execFileSync('git', ['rev-parse', 'HEAD'], { cwd: this.worktree.workDir || this.worktree.dir, encoding: 'utf8', windowsHide: true, timeout: 10000 }).trim() || null;
+    } catch { return null; }
+  }
+
+  // The branch checked out in the run's worktree, or null (none, or a detached HEAD).
+  worktreeBranch() {
+    if (!this.worktree) return null;
+    try {
+      const b = execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: this.worktree.workDir || this.worktree.dir, encoding: 'utf8', windowsHide: true, timeout: 10000 }).trim();
+      return b && b !== 'HEAD' ? b : null;
+    } catch { return null; }
+  }
+
+  // Rebuilds <run_dir>/evidence/manifest.json after a step (#146, src/evidence.js): a new image
+  // gets the worktree's commit (modified) or the base's (original); a step output's `screenshots:
+  // [{ path, caption }]` (a file of the step's round folder, or a path under the run folder) gives
+  // the captions. Nothing to do while the run has no evidence folder.
+  recordEvidence(step, st, output) {
+    if (!this.runDir || !fs.existsSync(evidence.evidenceRoot(this.runDir))) return;
+    try {
+      const captions = {};
+      for (const s of Array.isArray(output?.screenshots) ? output.screenshots : []) {
+        if (!s || typeof s.path !== 'string' || !s.caption) continue;
+        const rel = path.isAbsolute(s.path) ? path.relative(this.runDir, s.path) : s.path;
+        const p = rel.split(/[\\/]/).join('/');
+        captions[p.includes('/') ? p : `evidence/${step.id}/round-${st.visits}/${p}`] = { caption: String(s.caption) };
+      }
+      // an E2E scenario's screenshots (#143): captioned with the scenario's name
+      for (const s of scenarios.normalizeScenarios(output?.scenarios, this.runDir)) {
+        for (const p of s.screenshots) {
+          const key = p.includes('/') ? p : `evidence/${step.id}/round-${st.visits}/${p}`;
+          if (!captions[key]) captions[key] = { caption: `Scenario: ${s.name}` };
+        }
+      }
+      evidence.writeManifest(this.runDir, {
+        captions, commit: this.worktreeHead(), baseCommit: this.worktree?.commit || null, base: this.worktree?.base || null, branch: this.worktreeBranch(),
+      });
+    } catch (e) {
+      this.emitEvent('log', { level: 'warn', message: `evidence manifest: ${e.message}` });
+    }
+  }
+
+  // A step output's E2E `scenarios` (#143): <run_dir>/e2e/scenarios.feature + scenarios.json
+  // (src/engine/scenarios.js), the copy the gates' Dev/QA reads; never blocks the step.
+  saveScenarios(step, output) {
+    try {
+      const saved = scenarios.recordScenarios(this.runDir, step.id, output);
+      if (saved) this.emitEvent('file.saved', { step_id: step.id, path: saved.feature });
+    } catch (e) {
+      this.emitEvent('log', { level: 'warn', message: `e2e scenarios: ${e.message}` });
+    }
+  }
+
+  // `type: screenshots` (#144): the project's screenshot command once per entry of `from`'s
+  // `screenshots` output, modified from the worktree and original at `base` (default: the
+  // worktree's base ref), into evidence/<folder>/round-<visit>/ (src/engine/screenshot-step.js).
+  // A simulated run captures nothing. Never throws: an error becomes the output's reason.
+  async runScreenshots(step, st) {
+    const folder = step.folder || step.id;
+    try {
+      const base = step.base ? render(String(step.base), this.ctx).trim() : this.worktree?.ref || null;
+      return await captureScreenshots({
+        entries: this.ctx.steps[step.from]?.output?.screenshots,
+        cwd: this.ctx.worktree_dir,
+        runDir: this.runDir,
+        folder,
+        round: st.visits,
+        base: base || null,
+        env: { ...process.env, ...capabilities.agentEnv(this.scratchWorkspace()) },
+        mock: this.mock,
+        signal: this.abort.signal,
+        timeoutMs: parseDuration(step.timeout, undefined),
+        log: (level, message) => this.emitEvent('log', { level, message }),
+        // another run (or agent) is capturing: one Electron screenshot at a time on the machine (#199)
+        onSlotWait: (holder) => {
+          this.emitEvent('screenshots.waiting', { step_id: step.id, holder_pid: holder?.pid ?? null, holder: holder?.holder || null });
+          this.emitEvent('log', { level: 'info', kind: 'screenshot_slot', message: `${step.id}: waiting for the screenshot slot (held by pid ${holder?.pid ?? '?'}${holder?.holder ? `, ${holder.holder}` : ''})` });
+        },
+      });
+    } catch (e) {
+      const reason = `the capture failed: ${e.message}`;
+      return { kind: 'screenshots', folder, round: st.visits, dir: null, taken: 0, screens: 0, screenshots: [], errors: [], reason, message: `No screenshots: ${reason}` };
+    }
+  }
+
+  // The whole-suite command of the run (its first suite step's, else the one the worktree's files
+  // give), '' when none: what `full_suite: warn` compares an agent's commands with.
+  suiteCommand() {
+    const s = this.wf.steps.find((x) => x.type === 'suite');
+    const cmd = s?.command ? render(String(s.command), this.ctx).trim() : '';
+    return cmd || suiteStep.detectTestCommand(this.ctx.worktree_dir) || '';
+  }
+
+  // `type: suite` (#177): the project's whole test suite once (src/engine/suite-step.js), with the
+  // environment a shell would give it (simulation only, no scratch workspace shared by every test
+  // process, its own lock folder, #210), its log in logs/suite-<visit>.log; the run's known
+  // pre-existing failures do not count, and the other failures are checked on the base checkout
+  // (#211: those failing there too become the run's pre-existing failures and go to the workspace's
+  // failing-on-main.json). Without a step `timeout`, the timeout comes from the project's recent suite
+  // durations (cache/suite-durations.json). Simulation: mockSequences.suite: { <step>: [...] }.
+  // `scope: affected` (#212): each visit runs only the affected test files (affectedSelection: the
+  // import graph since the base, plus the files that failed in an earlier round); when they pass and
+  // the whole suite has not passed yet in this run, the whole suite runs right after (log
+  // suite-<visit>-full.log), so it runs once before the merge. A shared root changed or a project
+  // without a JS graph: the whole suite. The output's `selection` says which files and why.
+  // `files` (#220): only these test files (a rendered list; those missing from the worktree are left
+  // out), never the whole suite after them. With `expect: red` (tests written before the code) the
+  // run is a red check: `red_check` sorts the files into red / green (already passing: they guard
+  // existing behaviour or are wrong) / broken (cannot run), the status is `broken` when one cannot
+  // run (else pass: failing is expected), and `affected_tests` lists the existing tests that reach
+  // the sources the new tests import (relatedTests, the code → tests graph). Simulation: default red.
+  async runSuiteStep(step, st) {
+    const seq = this.mockSequences?.suite?.[step.id];
+    const mockResult = Array.isArray(seq) && seq.length ? seq[Math.min(st.visits, seq.length) - 1] : step.expect === 'red' ? 'fail' : 'pass';
+    const root = path.dirname(path.dirname(this.runDir));
+    const project = this.worktree?.repo || this.ctx.worktree_dir || '';
+    const scope = step.scope ? render(String(step.scope), this.ctx).trim() : 'full';
+    const once = async (extra = {}) => {
+      try {
+        return await suiteStep.runSuite({
+          command: step.command ? render(String(step.command), this.ctx).trim() : '',
+          cwd: this.ctx.worktree_dir,
+          runDir: this.runDir,
+          round: st.visits,
+          env: { ...process.env, ...capabilities.agentEnv() },
+          mock: this.mock,
+          mockResult,
+          preexisting: this.preexisting,
+          signal: this.abort.signal,
+          timeoutMs: step.timeout ? parseDuration(render(String(step.timeout), this.ctx).trim(), suiteStep.SUITE_TIMEOUT_MS) : null,
+          history: project ? { file: path.join(root, 'cache', 'suite-durations.json'), project } : null,
+          base: () => this.suiteBase(),
+          baseCacheDir: path.join(root, 'cache', 'base-tests'),
+          log: (level, message) => this.emitEvent('log', { level, message }),
+          ...extra,
+        });
+      } catch (e) {
+        return { kind: 'suite', status: 'blocked', round: st.visits, scope: 'full', command: null, log: null, exit_code: null, duration_ms: 0, timed_out: false, failures: [], preexisting: [], reason: e.message, message: `The suite could not run: ${e.message}` };
+      }
+    };
+    let output;
+    if (step.files !== undefined) {
+      const cwd = this.ctx.worktree_dir;
+      const given = renderFileList(step.files, this.ctx);
+      const files = given.filter((f) => this.mock || (cwd && fs.existsSync(path.join(cwd, f))));
+      const missing = given.filter((f) => !files.includes(f));
+      const selection = { mode: 'affected', files, reasons: Object.fromEntries(files.map((f) => [f, `listed by ${step.id}`])), why: `the ${files.length} test file(s) the step lists${missing.length ? ` (not found: ${missing.join(', ')})` : ''}` };
+      // new tests are not on the base: no base check for a red check
+      output = await once({ files, selection, logName: `${step.id}-${st.visits}`, mockResult: step.expect === 'red' && mockResult === 'broken' ? 'fail' : mockResult, ...(step.expect === 'red' ? { base: null } : {}) });
+      output.missing = missing;
+      if (step.expect === 'red') output = this.redCheckOutput(output, files, mockResult);
+    } else if (scope === 'affected') {
+      let selection;
+      try { selection = this.affectedSelection(); } catch (e) { selection = { mode: 'all', files: [], reasons: {}, changed: [], slow: [], why: `the affected tests could not be listed (${e.message}): the whole suite` }; }
+      this.emitEvent('log', { level: 'info', kind: 'suite', step_id: step.id, message: `${step.id}: ${selectionLines(selection).slice(0, 6).join('\n')}` });
+      output = await once(selection.mode === 'affected' ? { files: selection.files, selection } : { selection });
+      if (output.scope === 'files') this.suiteRuns.affected = (this.suiteRuns.affected || 0) + 1;
+      if (output.scope === 'files' && output.status === 'pass' && !this.fullSuitePassed) {
+        const affected = { command: output.command, log: output.log, passed: output.passed, failed: output.failed, duration_ms: output.duration_ms, files: selection.files };
+        if (output.log) this.emitEvent('file.saved', { step_id: step.id, path: path.join(this.runDir, output.log) });
+        output = await once({ selection: { ...selection, why: `the ${selection.files.length} affected test file(s) passed; the whole suite runs once before the merge` }, logName: `suite-${st.visits}-full` });
+        output.affected = affected;
+      }
+    } else {
+      output = await once();
+    }
+    if (output.status !== 'blocked' && output.scope !== 'files') this.suiteRuns.engine++;
+    if (output.status === 'pass' && output.scope !== 'files' && step.files === undefined) this.fullSuitePassed = true;
+    // the files that failed come back in the next round's affected set
+    for (const f of output.failures || []) if (f.file && !this.suiteFailedFiles.includes(f.file)) this.suiteFailedFiles.push(f.file);
+    if (output.preexisting_failures?.length && !this.mock) {
+      suiteStep.noteFailingOnMain(path.join(root, 'failing-on-main.json'), { project, base: this.worktree?.base, commit: output.base_check?.commit, runId: this.runId, failures: output.preexisting_failures });
+    }
+    if (output.log) this.emitEvent('file.saved', { step_id: step.id, path: path.join(this.runDir, output.log) });
+    if (output.base_check?.log) this.emitEvent('file.saved', { step_id: step.id, path: path.join(this.runDir, output.base_check.log) });
+    this.emitEvent('log', { level: output.status === 'pass' ? 'info' : 'warn', kind: 'suite', step_id: step.id, status: output.status, failures: output.failures.length, message: `${step.id}: ${output.message}` });
+    return output;
+  }
+
+  // A suite output turned into the red check of tests written before the code (#220): red_check,
+  // affected_tests (+ affected_reasons), status broken | pass (| blocked), and a message for the
+  // next prompt that names the already-green files.
+  redCheckOutput(output, files, mockResult) {
+    if (output.status === 'blocked') return output;
+    const check = suiteStep.redCheck(output, files, { mock: this.mock, mockResult });
+    let related = { files: [], reasons: {}, why: '' };
+    if (!this.mock && files.length) {
+      try { related = relatedTests({ root: this.ctx.worktree_dir, tests: files }); } catch (e) { related.why = `the related tests could not be listed (${e.message.split('\n')[0]})`; }
+    }
+    const lines = [`Red check of ${files.length} test file(s) written before the code (\`${output.command}\`):`];
+    if (check.red.length) lines.push(`- red, as expected: ${check.red.join(', ')}`);
+    for (const p of check.partly_green) lines.push(`- ${p.file}: ${p.passed} test(s) already pass, ${p.failed} fail`);
+    if (check.green.length) lines.push(`- already green (they pass before any code: they guard existing behaviour or are wrong): ${check.green.join(', ')}`);
+    for (const b of check.broken) lines.push(`- cannot run: ${b.file}: ${b.error}`);
+    if (output.missing?.length) lines.push(`- not found in the worktree: ${output.missing.join(', ')}`);
+    if (!files.length) lines.push('- no test file to check');
+    if (related.why) lines.push(`Existing tests related to them: ${related.why}${related.files.length ? `: ${related.files.join(', ')}` : ''}`);
+    if (output.human_log || output.log) lines.push(`Log: ${path.join(this.runDir, output.human_log || output.log)}`);
+    return {
+      ...output,
+      status: check.broken.length ? 'broken' : 'pass',
+      red_check: check,
+      affected_tests: related.files,
+      affected_reasons: related.reasons,
+      message: lines.join('\n'),
+    };
+  }
+
+  // `type: workflow` (#174): the child runs of the step (src/engine/workflow-step.js), started through
+  // startChild; the run shows as waiting while they go. Each one lands in `child_runs` (summary).
+  async runChildWorkflows(step, st) {
+    this.setStatus(this.orchestrator, 'waiting');
+    const emit = (type, data) => {
+      if (type === 'workflow.child_started') {
+        this.childRuns.push({
+          run_id: data.child_run_id, step_id: step.id, visit: st.visits, ...(data.index !== undefined ? { index: data.index, label: data.label } : {}), workflow: data.workflow, status: 'running',
+          ...(data.resumed_from ? { resumed_from: data.resumed_from } : {}), ...(data.reused ? { reused: true } : {}),
+        });
+      }
+      if (type === 'workflow.child_finished') {
+        const c = this.childRuns.find((x) => x.run_id && x.run_id === data.child_run_id);
+        if (c) Object.assign(c, { status: data.status, cost_usd: data.cost_usd || 0 });
+      }
+      this.emitEvent(type, data);
+    };
+    try {
+      return await runWorkflowStep({
+        step, render, emit, startChild: this.startChild, signal: this.abort.signal, previous: this.previousChildren(step),
+        scope: { ...this.ctx, iteration: st.iteration },
+        parent: { run_id: this.runId, workflow: this.wf.metadata?.name || path.basename(this.file), depth: this.parent?.depth || 0 },
+      });
+    } finally {
+      this.setStatus(this.orchestrator, 'active');
+    }
+  }
+
+  // A resumed run (#175): the children the previous run started for the step it resumes from, by item
+  // index ({ <index>: { run_id, status, label } }, the latest per index), the first time it runs that step
+  // only (a later visit starts its children afresh); null when there are none.
+  previousChildren(step) {
+    const r = this.resume;
+    if (!r?.childRuns?.length || r.fromStep !== step.id || this.previousChildrenUsed) return null;
+    this.previousChildrenUsed = true;
+    const out = {};
+    for (const c of r.childRuns) if (c.step_id === step.id && c.run_id) out[c.index ?? 0] = { run_id: c.run_id, status: c.status, label: c.label ?? null };
+    return Object.keys(out).length ? out : null;
+  }
+
+  // What this run's child runs cost (#175), their own children included: it counts toward this run's
+  // max_total_cost_usd and shows next to its cost; their context never counts toward its context limit.
+  childrenCostUsd() {
+    return this.childRuns.reduce((a, c) => a + (+c.cost_usd || 0), 0);
+  }
+
+  // The default startChild (the CLI, engine tests): a WorkflowRun of its own in the same runs folder,
+  // with this run's settings, emitted as 'child' before it starts (record its events, answer its gates).
+  // The child's workflow file: next to this run's, else the bundled one. A resumed run reuses a child
+  // of its previous run that succeeded (`previous`, #175); any other child starts afresh (resuming a
+  // child from where it stopped is the service's, src/service/areas/runs.js).
+  async startChildRun({ file, inputs, parent, label, previous }) {
+    if (previous?.run_id) {
+      let summary = null;
+      try { summary = JSON.parse(fs.readFileSync(path.join(this.ctx.runs_dir, path.basename(previous.run_id), 'summary.json'), 'utf8')); } catch { /* not finished */ }
+      if (summary?.status === 'success') {
+        return { runId: summary.run_id || path.basename(previous.run_id), reused: true, stop: () => {}, finished: Promise.resolve({ status: 'success', outputs: summary.outputs || {}, error: null, cost_usd: childRunCost(summary) }) };
+      }
+    }
+    const bundled = path.join(__dirname, '..', '..', 'workflows');
+    const dirs = [path.dirname(path.resolve(this.file)), bundled];
+    const found = path.isAbsolute(file) ? file : dirs.map((d) => path.join(d, file)).find((f) => fs.existsSync(f));
+    if (!found) throw new Error(`Workflow not found: "${file}" (searched in ${dirs.join(', ')})`);
+    const child = new WorkflowRun({
+      file: found, inputs, mock: this.mock, runsDir: this.ctx.runs_dir, skillsDirs: this.skillsDirs.filter((d) => d !== BUNDLED_SKILLS),
+      budget: this.budget, prices: this.prices, projectId: this.projectId, worktreesDir: this.worktreesDir, parent,
+      ...(this.stopProcesses === null ? { stopProcesses: null } : {}), idleWarnMs: this.idleWarnMs,
+      notices: [{ level: 'info', message: `Child run of ${this.runId} (step ${parent.step_id}${label ? `, ${label}` : ''}).` }],
+    });
+    const finished = new Promise((resolve) => child.on('event', (ev) => {
+      if (ev.type === 'workflow.finished') resolve({ status: ev.status, outputs: ev.outputs || {}, error: ev.error, cost_usd: childRunCost(ev.summary) });
+    }));
+    this.children.set(child.runId, child);
+    this.emit('child', child);
+    child.start();
+    return { runId: child.runId, finished, stop: () => child.stop() };
+  }
+
+  // answer: boolean (approve/reject) or the id of one of the step's choices; feedback: optional text;
+  // intent: 'save_to_issue' with the gate's save_to_issue choice (#125), recorded on the answer
+  // images: pictures attached to the feedback (#129), checked (an error names the file and the limit),
+  // copied into <run_dir>/attachments/<gate>-feedback/ and given to the next agent step. They never
+  // decide anything: the answer is the owner's choice.
+  resolveApproval(id, answer, by = 'user', feedback = '', intent = null, images = []) {
     const a = this.approvals.get(id);
     if (!a) return false;
-    this.approvals.delete(id);
     const text = String(feedback ?? '').trim();
+    if (!text && a.gate?.choices?.find((c) => c.id === answer)?.feedback_required) return false;
+    // copied before the approval is taken: a failed copy throws and leaves the gate open to answer again
+    const stored = this.copyAttachments(checkAttachments(images), `${a.stepId}-feedback`);
+    this.approvals.delete(id);
+    if (stored.length) this.gateImages = stored;
+    const waitMs = Math.max(0, Date.now() - Date.parse(a.gate?.requested_at || Date.now()));
+    const w = (this.gateWaits[a.stepId] ??= { waits: 0, wait_ms: 0 });
+    w.waits++;
+    w.wait_ms += waitMs;
     const data = typeof answer === 'boolean' ? { approved: answer } : { choice: answer };
-    this.emitEvent('approval.resolved', { approval_id: id, ...data, by, ...(text ? { feedback: text } : {}) });
-    if (text) this.ctx.feedback.push({ step: a.stepId, choice: typeof answer === 'boolean' ? String(answer) : answer, text, ts: new Date().toISOString() });
+    if (intent === 'save_to_issue' && a.gate?.save_to_issue?.choice === answer) data.intent = intent;
+    // the commit the owner decided on (#112): a resume may only pass this gate again while the branch is still there
+    const commit = this.worktreeHead();
+    this.emitEvent('approval.resolved', { approval_id: id, step_id: a.stepId, ...data, by, wait_ms: waitMs, ...(commit ? { commit } : {}), ...(text ? { feedback: text } : {}), ...(stored.length ? { attachments: stored } : {}) });
+    if (text) this.ctx.feedback.push({ step: a.stepId, choice: typeof answer === 'boolean' ? String(answer) : answer, text, ts: new Date().toISOString(), ...(stored.length ? { images: stored } : {}) });
     this.setStatus(this.orchestrator, 'active');
     a.resolve({ answer, feedback: text });
     return true;
@@ -2104,8 +3604,12 @@ ${stderr || stdout}`.slice(0, 1500)));
     const sessions = [...this.sessions.values()].map((s) => this.snapshot(s));
     const tokens = emptyUsage();
     sessions.forEach((s) => addUsage(tokens, s.tokens));
+    const outputs = this.computeOutputs();
     this.emitEvent('workflow.finished', {
       status, error: err?.message || null,
+      // the declared outputs (#134) and the chain, for what starts next
+      ...(outputs ? { outputs } : {}),
+      ...(this.then ? { then: this.then } : {}),
       summary: {
         run_id: this.runId, workflow: this.wf.metadata?.name, project_id: this.projectId, issues: this.issues || undefined, status,
         started_at: new Date(this.startedAt).toISOString(), finished_at: new Date().toISOString(),
@@ -2120,8 +3624,21 @@ ${stderr || stdout}`.slice(0, 1500)));
         steps: Object.fromEntries(Object.entries(this.ctx.steps).map(([k, v]) => [k, { visits: v.visits, output: v.output }])),
         // failures that also fail on the base, reported by a step and not chased in this run: follow-up issues for the owner
         ...(this.preexisting.length ? { preexisting_failures: this.preexisting } : {}),
+        // #203: the unit / E2E test inputs and where each value came from; #177: whole-suite runs
+        // by the engine's suite steps and by the agents' own commands (the measure of the change)
+        ...(this.testsPlan.length ? { tests_plan: this.testsPlan } : {}),
+        ...(Object.values(this.suiteRuns).some(Boolean) ? { suite_runs: this.suiteRuns } : {}),
+        // #209: test files the engine committed for the test writer; #178: commands cut by the tool's timeout
+        ...(this.testsAutocommitted.length ? { tests_autocommitted: this.testsAutocommitted } : {}),
+        ...(this.toolTimeouts ? { tool_timeouts: this.toolTimeouts } : {}),
         // step visits in order with their agents (runs list); this event's own update lands in it
         groups: this.wf.groups, progress: this.trail.steps,
+        ...(outputs ? { outputs } : {}),
+        ...(this.then ? { then: this.then } : {}),
+        ...(this.from ? { from: this.from } : {}),
+        // `type: workflow` steps (#174): the run that started this one, the runs this one started
+        ...(this.parent ? { parent_run: this.parent } : {}),
+        ...(this.childRuns.length ? { child_runs: this.childRuns, children_cost_usd: +this.childrenCostUsd().toFixed(6) } : {}),
         sessions,
       },
     });
@@ -2130,11 +3647,14 @@ ${stderr || stdout}`.slice(0, 1500)));
 
 module.exports = {
   attemptSummary,
+  childRunCost,
   evalExpr,
   extractJson,
   loadWorkflow,
+  parseTestRequest,
   parseTokens,
   render,
+  repeatKey,
   takeHandoff,
   validateSchema,
   WorkflowRun,

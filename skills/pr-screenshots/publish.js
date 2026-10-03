@@ -1,14 +1,16 @@
 #!/usr/bin/env node
 // Publishes a run's UI screenshots on its PR/MR: commits the PNGs to a dedicated branch (one folder
-// per PR/MR) and posts one comment with them, before/after side by side. The working tree, the index
-// and the current branch are never touched (git plumbing with an index of its own).
+// per PR/MR) and posts one comment with them, original/modified side by side. The working tree, the
+// index and the current branch are never touched (git plumbing with an index of its own).
 //
-//   node publish.js --platform gh|gl --pr-url <PR/MR URL> --dir <folder with screenshots.json>
+//   node publish.js --platform gh|gl --pr-url <PR/MR URL> --dir <run_dir>/evidence
 //                   [--remote origin] [--branch pr-screenshots] [--no-comment]
 //   node publish.js --cleanup --platform gh|gl --pr-url <PR/MR URL> [--remote origin] [--branch pr-screenshots]
 //
-// screenshots.json: [{ "path": "settings-after.png", "caption": "Settings", "before": "settings-before.png" }]
-// (paths relative to --dir, or absolute). Folders of PRs/MRs that are no longer open are removed
+// --dir <run_dir>/evidence: its manifest.json (#146), whose final set is published (images marked
+// `final`, a `modified` image with its `pair`, paths relative to the run folder). A run recorded
+// before #146: --dir <run_dir>/screenshots with screenshots.json ([{ "path", "caption", "before" }],
+// paths relative to --dir, or absolute). Folders of PRs/MRs that are no longer open are removed
 // from the branch in the same commit. Prints the comment body, then `comment: posted` when posted.
 // --cleanup (run by the workflow when the PR/MR merges or closes) only removes that PR/MR's folder
 // and those of other PRs/MRs no longer open; it always exits 0.
@@ -36,25 +38,47 @@ function fileUrl(platform, target, branch, file) {
   return platform === 'gl' ? `${base}/-/raw/${branch}/${file}` : `${base}/blob/${branch}/${file}?raw=true`;
 }
 
+const resolver = (dir) => (p) => {
+  const file = path.resolve(dir, String(p));
+  if (!/\.(png|jpe?g|gif|webp)$/i.test(file)) throw new Error(`not an image: ${p}`);
+  if (!fs.existsSync(file)) throw new Error(`missing screenshot: ${p}`);
+  return file;
+};
+
+// The shots to publish: [{ caption, path, original }] (path: the modified image, or the original
+// alone for a screen the change removes). --dir is <run_dir>/evidence with manifest.json (its final
+// set; paths relative to the run folder), or a legacy folder with screenshots.json.
 function readManifest(dir) {
+  const evidence = path.join(dir, 'manifest.json');
+  if (fs.existsSync(evidence)) {
+    const m = JSON.parse(fs.readFileSync(evidence, 'utf8'));
+    const resolve = resolver(path.dirname(path.resolve(dir)));
+    const final = (m.images || []).filter((x) => x.final);
+    const pairedOriginals = new Set(final.filter((x) => x.side === 'modified' && x.pair).map((x) => x.pair));
+    // a final original paired with an earlier round's modified (the last round recaptured only the
+    // original) is published with that modified; an original without a pair is a removed screen
+    const shots = final.filter((x) => x.side === 'modified' || !pairedOriginals.has(x.path)).map((x) => {
+      const caption = String(x.caption || x.key || path.basename(x.path));
+      if (x.side === 'modified') return { caption, path: resolve(x.path), original: x.pair ? resolve(x.pair) : null, removed: false };
+      if (x.pair) return { caption, path: resolve(x.pair), original: resolve(x.path), removed: false };
+      return { caption, path: resolve(x.path), original: null, removed: true };
+    });
+    if (!shots.length) throw new Error('manifest.json has no final screenshots');
+    return shots;
+  }
   const list = JSON.parse(fs.readFileSync(path.join(dir, 'screenshots.json'), 'utf8'));
   if (!Array.isArray(list) || !list.length) throw new Error('screenshots.json has no screenshots');
-  const resolve = (p) => {
-    const file = path.resolve(dir, String(p));
-    if (!/\.(png|jpe?g|gif|webp)$/i.test(file)) throw new Error(`not an image: ${p}`);
-    if (!fs.existsSync(file)) throw new Error(`missing screenshot: ${p}`);
-    return file;
-  };
-  return list.map((s) => ({ caption: String(s.caption || path.basename(s.path)), path: resolve(s.path), before: s.before ? resolve(s.before) : null }));
+  const resolve = resolver(dir);
+  return list.map((s) => ({ caption: String(s.caption || path.basename(s.path)), path: resolve(s.path), original: s.before ? resolve(s.before) : null }));
 }
 
-/** The comment body: one section per screenshot, a Before | After table when there is a before. */
+/** The comment body: one section per screenshot, an Original | Modified table for a pair. */
 function commentBody(shots, urlOf) {
   const img = (file, alt) => `<img src="${urlOf(file)}" alt="${alt.replace(/"/g, '&quot;')}" width="480">`;
   const parts = [MARKER, '### UI screenshots', ''];
   for (const s of shots) {
-    parts.push(`**${s.caption}**`, '');
-    if (s.before) parts.push('| Before | After |', '|---|---|', `| ${img(s.before, `${s.caption} (before)`)} | ${img(s.path, `${s.caption} (after)`)} |`);
+    parts.push(`**${s.caption}**${s.removed ? ' (original only: the change removes this screen)' : ''}`, '');
+    if (s.original) parts.push('| Original | Modified |', '|---|---|', `| ${img(s.original, `${s.caption} (original)`)} | ${img(s.path, `${s.caption} (modified)`)} |`);
     else parts.push(img(s.path, s.caption));
     parts.push('');
   }
@@ -143,7 +167,7 @@ function publish({ platform, prUrl, dir, cwd = process.cwd(), remote = 'origin',
     // this PR's folder is replaced; folders of PRs that are no longer open go away
     pruneFolders(git, platform, target, cli);
     const stored = new Map();
-    for (const file of shots.flatMap((s) => [s.path, s.before]).filter(Boolean)) {
+    for (const file of shots.flatMap((s) => [s.path, s.original]).filter(Boolean)) {
       if (stored.has(file)) continue;
       const rel = `${target.number}/${storedName(file)}`;
       const blob = git(['hash-object', '-w', '--no-filters', '--', file]);

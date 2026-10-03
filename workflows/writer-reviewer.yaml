@@ -22,7 +22,11 @@
 # The user picks the CLI, model and effort of the writer and the reviewer (inputs); the
 # supervisor is internal. Agents work in the run folder, or read-only in the project folder
 # when one is picked (project_path); drafts are always saved in the run folder.
-# The Write & Review screen shows this run as a chat.
+# The document type is optional: the skill in `document_skill` (e.g. issue-writing, rfc-writing)
+# is loaded by the writer and the reviewer; empty, the document is free-form.
+# The Write & Review screen shows this run as a chat. Started from a Backlog issue, the run records
+# the issue (`issues` in workflow.started) and, once accepted, the owner can save the document
+# back to it (Save to issue: the app does it on the owner's confirmation, never an agent).
 # =============================================================================
 
 apiVersion: multiagent/v1
@@ -30,7 +34,7 @@ kind: Workflow
 
 metadata:
   name: writer-reviewer
-  version: 0.4.0
+  version: 0.6.0
   description: A writer drafts a document from your prompt, a reviewer scores it against your goal and sends notes back until it passes, and the supervisor checks it and asks you what to do.
   tags: [writing, review, documents]
   category: plan
@@ -50,6 +54,11 @@ inputs:
     required: false
     default: ""
     description: Optional project folder. The writer and the reviewer work in it and read its files (read-only) to ground the document.
+  document_skill:
+    type: string
+    required: false
+    default: ""
+    description: "Optional skill that defines the document's structure and rubric (issue-writing, rfc-writing, prd-writing, design-doc-writing, or your own). The writer and the reviewer load it. Empty: free-form, as asked in the prompt."
   threshold:
     type: number
     default: 8
@@ -70,6 +79,7 @@ inputs:
     type: string
     enum: [low, medium, high, xhigh]
     default: high
+    options: { xhigh: Extra high }
   reviewer_provider:
     type: string
     enum: [claude, codex, grok]
@@ -82,6 +92,7 @@ inputs:
     type: string
     enum: [low, medium, high, xhigh]
     default: high
+    options: { xhigh: Extra high }
 
 # -----------------------------------------------------------------------------
 providers:
@@ -144,6 +155,7 @@ agents:
     model: "{{ inputs.writer_model }}"
     effort: "{{ inputs.writer_effort }}"
     session: persistent   # remembers its drafts across rounds
+    skills: ["{{ inputs.document_skill }}"]   # the document type (empty: none)
     capabilities: *read_only   # it can read the project's files, never change them
     working_dir: "{{ inputs.project_path }}"   # empty: the run folder
     system_prompt: |
@@ -161,6 +173,7 @@ agents:
     model: "{{ inputs.reviewer_model }}"
     effort: "{{ inputs.reviewer_effort }}"
     session: persistent   # checks whether its previous notes were addressed
+    skills: ["{{ inputs.document_skill }}"]   # scores against the skill's rubric too
     capabilities: *read_only
     working_dir: "{{ inputs.project_path }}"
     system_prompt: |
@@ -336,6 +349,8 @@ steps:
       - { id: accept, label: "Accept the document{% if not steps.signoff.output.ready %} as it is{% endif %}" }
       - { id: revise, label: "Send it back to the writer" }
       - { id: stop,   label: "Stop without accepting" }
+    # a run about an issue also offers "Accept and save to issue #n" (the preview opens when the run ends)
+    save_to_issue: accept
     transitions:
       - when: "choice == 'accept'"
         goto: end
@@ -358,6 +373,7 @@ steps:
       - { id: accept, label: "Accept the last draft as it is" }
       - { id: more,   label: "One more round (write and review again)" }
       - { id: stop,   label: "Stop without a document" }
+    save_to_issue: accept
     transitions:
       - when: "choice == 'accept'"
         goto: end
@@ -366,6 +382,18 @@ steps:
       - when: "choice == 'stop'"
         goto: end
         status: cancelled
+
+# -----------------------------------------------------------------------------
+# What the run hands to the next one when it finishes (#134): `then` at start, or a gate choice's.
+outputs:
+  document:
+    type: string
+    description: The accepted document (also document.md in the run folder).
+    value: "{{ steps.write.output.document }}"
+  issue:
+    type: object
+    description: "The issue the document was written for (number, url, title), when started from one."
+    value: "{{ (run.issues[0] if run.issues | length else none) | to_json }}"
 
 # -----------------------------------------------------------------------------
 observability:

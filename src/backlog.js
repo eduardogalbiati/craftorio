@@ -5,19 +5,30 @@
 // `linkRuns` ties runs to issues (`run.issues` recorded by the engine, `run.issue` for older runs,
 // else task/inputs mentioning the URL or `#n`, mock runs excluded; `groupedWith` = the other issues
 // of the same run or queued group) and picks the kanban column (todo / in_progress / waiting / local
-// / done; done = closed on the platform). Each sync also reads the open PRs/MRs
+// / done; done = closed on the platform). Simulated (mock) runs and queue items are listed but never
+// move the column: it comes from the newest real run and the real queue items. Each sync also reads the open PRs/MRs
 // (`fetchOpenPullRequests`, `referencedIssues`) into `issue.pullRequests`. Assigning a workflow
-// queues issues in `<id>.queue.json` (`enqueue`, `group: true` = one item with `issues` for one run,
+// queues issues (the index's queue tables, src/store.js, snapshotted to `<id>.queue.json`) (`enqueue`, `group: true` = one item with `issues` for one run,
 // `itemIssues`, `unqueue`, `runInputs` builds one task listing every issue of a group; before a real
 // start `newPullRequests` and `skipQueued`); the service's `dispatchQueue` starts queued issues while
-// there are free run slots (`nextQueued`). Column `local`: an open issue whose latest run merged
+// there are free run slots (`claimQueued`: atomic with the index). Column `local`: an open issue whose latest run merged
 // locally while its commit is not on origin (`readLocal`/`writeLocal`: `<id>.local.json`).
-// Screen: src/renderer/backlog.js; channels: src/service/channels/backlog.js.
+// Write & Review runs started from an issue (`enrich` on the linked run) never move its column; their
+// accepted document can be saved back to the issue (`saveRunToIssue`: replace the description or comment).
+// An issue-tracker run whose owner chose "create and queue" is chained to a queue (#134): the service
+// (src/service/areas/chain.js) syncs the backlog and assigns its `issues` output when the run ends.
+// Each sync also reads the epics (#138, src/epics.js readEpics): `issue.epic` and the cache's `epics`.
+// The platform is the source of truth (#168): queue and roadmap items keep a read-only copy of their
+// issues, refreshed by each sync (`refreshQueuedCopies`) and read again right before a run starts
+// (`freshIssues`, with the cache as a recorded fallback when the platform cannot be read).
+// Screen: src/renderer/views/backlog/backlog.js; channels: src/service/channels/backlog.js.
 
 const fs = require('fs');
 const path = require('path');
 const { execFile } = require('child_process');
 const { resolveCommand } = require('./engine/providers');
+const { writeJsonSafe } = require('./state-file');
+const { storeFor } = require('./store');
 
 const PLATFORMS = {
   github: { label: 'GitHub', cli: 'gh', host: 'github.com' },
@@ -26,6 +37,11 @@ const PLATFORMS = {
 };
 const DEFAULT_PLATFORM = 'github';
 const MAX_ISSUES = 300;
+// the workflow of Write & Review: its runs enrich an issue's text, they do not implement it
+const ENRICH_WORKFLOW = 'writer-reviewer';
+// the issue tracker (#81) files issues, it does not implement them: its runs never link to an issue
+// they mention (e.g. "related to #41"); its "create and queue" choice queues the issues it filed
+const ISSUE_TRACKER_WORKFLOW = 'issue-tracker';
 
 /**
  * https://host/owner/repo(.git), ssh://git@host/owner/repo.git, git@host:owner/repo.git
@@ -78,6 +94,8 @@ function normalizeGitlab(raw) {
     tasks: taskProgress(i.description),
     createdAt: i.created_at,
     updatedAt: i.updated_at,
+    // a group epic (GitLab paid tiers): read by src/epics.js, not kept in the cache
+    ...(i.epic?.iid ? { groupEpic: { iid: i.epic.iid, title: i.epic.title || null, groupId: i.epic.group_id ?? null, url: i.epic.web_url || i.epic.url || null } } : {}),
   }));
 }
 
@@ -202,11 +220,18 @@ async function syncBacklog({ dir, project, platform, exec }) {
     fetchIssues({ platform, repo: project.repo, exec }),
     fetchOpenPullRequests({ platform, repo: project.repo, exec }).catch((e) => { pullRequestsError = e.message; return []; }),
   ]);
-  const issues = attachPullRequests(fetched, prs);
+  // epics, like the PRs, never fail the sync: an error leaves a note (epicsError)
+  const { issues, epics, epicsError } = await require('./epics').readEpics({ platform, repo: project.repo, issues: attachPullRequests(fetched, prs), exec });
   issues.sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
-  const data = { projectId: project.id, platform, repo: project.repo, syncedAt: new Date().toISOString(), pullRequestsError, issues };
+  const data = { projectId: project.id, platform, repo: project.repo, syncedAt: new Date().toISOString(), pullRequestsError, issues, epics, epicsError };
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(cacheFile(dir, project.id), JSON.stringify(data, null, 2));
+  // the planned items not started yet show (and the Product Owner reads) the current text (#168);
+  // a plan that cannot be written leaves the sync done
+  try {
+    refreshQueuedCopies(dir, project.id, issues);
+    require('./roadmap').refreshCopies(dir, project.id, issues);
+  } catch (e) { console.error('planned issue copies:', e.message); }
   return data;
 }
 
@@ -233,7 +258,7 @@ function notPushed(issue, run, local) {
   return (local.issues || []).includes(issue.number) || (local.commits || []).some((c) => c.sha === run.localMerge.commit);
 }
 
-// Kanban column from the issue state, its place in the queue, its latest run and the project's
+// Kanban column from the issue state, a real queue item for it, its latest real run and the project's
 // local commits not pushed yet (localStatus in src/local-push.js). Done = closed on the platform,
 // only: an open issue whose run succeeded (a PR not merged yet, a push the platform hasn't seen)
 // stays in progress until a sync reports it closed.
@@ -260,7 +285,7 @@ function linkRuns(issues, runs, queue = null, local = null) {
   const sorted = [...runs].sort((a, b) => String(b.startedAt).localeCompare(String(a.startedAt)));
   const items = queue?.items || [];
   return issues.map((issue) => {
-    const linked = sorted.filter((r) => startedFor(r, issue) || (!r.mock && !runIssues(r).length && mentions(r, issue)))
+    const linked = sorted.filter((r) => startedFor(r, issue) || (!r.mock && r.workflow !== ISSUE_TRACKER_WORKFLOW && !runIssues(r).length && mentions(r, issue)))
       .map((r) => {
         // a run started for a group: the other issues it implements ("grouped with #a, #b")
         const others = runIssues(r).filter((a) => !sameIssue(a, issue)).map((a) => a.number);
@@ -269,6 +294,11 @@ function linkRuns(issues, runs, queue = null, local = null) {
           ...(r.localMerge ? { localMerge: r.localMerge } : {}), ...(others.length ? { groupedWith: others } : {}),
           // the supervisor sent the run back after a failed merge (runs.js fromEvents)
           ...(r.recovery ? { recovery: r.recovery } : {}),
+          // its display title and the PR it opened (#84)
+          ...(r.title ? { title: r.title, customTitle: r.customTitle || null } : {}),
+          ...(r.pr ? { pr: r.pr } : {}),
+          // a Write & Review run enriching the issue's text (#103): shown on the card, never moves the column
+          ...(r.workflow === ENRICH_WORKFLOW ? { enrich: true } : {}),
         };
       });
     const at = items.findIndex((q) => itemIssues(q).some((x) => x.number === issue.number));
@@ -276,7 +306,9 @@ function linkRuns(issues, runs, queue = null, local = null) {
     const queued = at < 0 ? null : {
       position: at + 1, workflow: items[at].workflowName || items[at].workflow, mock: !!items[at].mock, ...(others.length ? { groupedWith: others } : {}),
     };
-    return { ...issue, runs: linked, queued, column: columnOf(issue, linked[0], queued, local) };
+    // simulations stay in the issue's history (and keep their queued badge) but never decide its column
+    const realQueued = items.some((q) => !q.mock && itemIssues(q).some((x) => x.number === issue.number));
+    return { ...issue, runs: linked, queued, column: columnOf(issue, linked.find((r) => !r.mock && !r.enrich), realQueued, local) };
   });
 }
 
@@ -303,23 +335,56 @@ function writeLocal(dir, projectId, status) {
 // sent as a single run (one branch, one PR/MR), which also has `issues`: the same fields per issue,
 // in the order selected; its number/url/title are the first issue's.
 // `skipped` lists the issues taken out right before their start, with the reason (an open PR/MR).
+// With the service's index open (src/store.js, #76) the queue lives in its tables: each change is
+// one transaction and the file is only a readable snapshot written under that lock; without it
+// (scripts, unit tests) the file is the queue.
 const queueFile = (dir, projectId) => path.join(dir, `${path.basename(String(projectId))}.queue.json`);
 const emptyQueue = () => ({ paused: false, error: null, inputs: {}, items: [], skipped: [] });
 const MAX_SKIPPED = 20;
 
 function readQueue(dir, projectId) {
+  const store = storeFor(dir);
+  if (store) return { ...emptyQueue(), ...(store.readQueue(path.basename(String(projectId))) || {}) };
   try { return { ...emptyQueue(), ...JSON.parse(fs.readFileSync(queueFile(dir, projectId), 'utf8')) }; } catch { return emptyQueue(); }
 }
 
-function writeQueue(dir, projectId, queue) {
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(queueFile(dir, projectId), JSON.stringify(queue, null, 2));
-  return queue;
+// What a queue must look like (#112: a write that breaks it is refused, src/state-file.js).
+function queueProblem(q) {
+  if (!q || typeof q !== 'object') return 'not an object';
+  if (!Array.isArray(q.items)) return 'items is not a list';
+  if (q.skipped && !Array.isArray(q.skipped)) return 'skipped is not a list';
+  const bad = q.items.find((x) => !x || !x.workflow || !Number.isInteger(Number(x.number)));
+  return bad ? `an item has no workflow or issue number: ${JSON.stringify(bad).slice(0, 120)}` : null;
 }
 
-const updateQueue = (dir, projectId, fn) => writeQueue(dir, projectId, fn(readQueue(dir, projectId)) || readQueue(dir, projectId));
+// atomic, with the previous version kept as .bak (src/state-file.js)
+function writeQueueFile(dir, projectId, queue) {
+  return writeJsonSafe(queueFile(dir, projectId), queue, { validate: queueProblem });
+}
 
-const issueFields = (i) => ({ number: i.number, url: i.url, title: i.title, body: i.body || '', knownPullRequests: i.knownPullRequests || [] });
+function writeQueue(dir, projectId, queue) {
+  const problem = queueProblem(queue);
+  if (problem) writeQueueFile(dir, projectId, queue); // refused, logged and thrown before the index changes
+  const store = storeFor(dir);
+  if (!store) return writeQueueFile(dir, projectId, queue);
+  return store.transaction(() => {
+    store.writeQueue(path.basename(String(projectId)), queue);
+    return writeQueueFile(dir, projectId, queue);
+  });
+}
+
+// read, change and write in one transaction (with the index): a concurrent change waits for it
+function updateQueue(dir, projectId, fn) {
+  const apply = () => writeQueue(dir, projectId, fn(readQueue(dir, projectId)) || readQueue(dir, projectId));
+  const store = storeFor(dir);
+  return store ? store.transaction(apply) : apply();
+}
+
+// An item's copy of an issue (#168: read-only, refreshed by each sync and right before its run starts)
+const issueFields = (i) => ({
+  number: i.number, url: i.url, title: i.title, body: i.body || '', labels: i.labels || [], updatedAt: i.updatedAt || null,
+  knownPullRequests: i.knownPullRequests || [],
+});
 /** The issues of a queue item: its `issues` (a group), or the item itself. */
 const itemIssues = (item) => (Array.isArray(item.issues) && item.issues.length ? item.issues : [issueFields(item)]);
 // An item with these issues: a group while it has two or more, a single issue otherwise.
@@ -343,13 +408,14 @@ function queueStamp() {
  * `group`: the issues go as one item (one run, one branch, one PR/MR), in the order given.
  * @param {{ issues: { number, url, title, body, pullRequests? }[], workflow: string, workflowName?: string, inputs?: object, mock?: boolean, group?: boolean }} a
  */
-function enqueue(dir, projectId, { issues, workflow, workflowName = null, inputs = {}, mock = false, group = false }) {
+// then: what happens with each run's result when it finishes (#134, chain-model), given to its start
+function enqueue(dir, projectId, { issues, workflow, workflowName = null, inputs = {}, mock = false, group = false, then = null }) {
   return updateQueue(dir, projectId, (q) => {
     const have = new Set(q.items.flatMap((x) => itemIssues(x).map((i) => i.number)));
     const now = queueStamp();
     const fresh = issues.filter((i) => !have.has(i.number))
       .map((i) => issueFields({ ...i, knownPullRequests: (i.pullRequests || []).map((p) => p.url) }));
-    const base = { workflow, workflowName, inputs, mock: !!mock, addedAt: now };
+    const base = { workflow, workflowName, inputs, mock: !!mock, addedAt: now, ...(then ? { then } : {}) };
     const added = !fresh.length ? [] : group ? [withIssues(base, fresh)] : fresh.map((i) => withIssues(base, [i]));
     const numbers = new Set(fresh.map((x) => x.number));
     return {
@@ -408,31 +474,299 @@ function setPaused(dir, projectId, paused, error = null) {
   return updateQueue(dir, projectId, (q) => ({ ...q, paused: !!paused, error: paused ? error : null }));
 }
 
-// Project ids with a queue file.
+// Project ids with a queue (rows of the index, else queue files).
 function queuedProjects(dir) {
+  const store = storeFor(dir);
+  if (store) return store.queuedProjects();
   try { return fs.readdirSync(dir).filter((f) => f.endsWith('.queue.json')).map((f) => f.slice(0, -'.queue.json'.length)); } catch { return []; }
 }
 
 /**
  * The next item to start: the oldest one across the projects whose queue is not paused, among
  * those `canStart(projectId, item)` accepts (a project at its limit of concurrent runs waits).
+ * Items another dispatcher claimed (claimQueued, being started) are passed over.
  */
 function nextQueued(dir, canStart = () => true) {
+  const store = storeFor(dir);
   const heads = queuedProjects(dir)
     .map((projectId) => ({ projectId, q: readQueue(dir, projectId) }))
     .filter(({ q }) => !q.paused && q.items.length)
-    .map(({ projectId, q }) => ({ projectId, item: q.items[0] }))
-    .filter(({ projectId, item }) => canStart(projectId, item));
+    .map(({ projectId, q }) => {
+      const claimed = store ? store.claimedNumbers(projectId) : new Set();
+      return { projectId, item: q.items.find((x) => !claimed.has(x.number)) };
+    })
+    .filter(({ projectId, item }) => item && canStart(projectId, item));
   heads.sort((a, b) => String(a.item.addedAt).localeCompare(String(b.item.addedAt)));
   return heads[0] || null;
+}
+
+/**
+ * nextQueued, taken atomically: with the index, the item is claimed in the same transaction, so two
+ * dispatchers (two windows' services, or a server and the app on one workspace) never take the same
+ * issue. The claim ends when the item leaves the queue (unqueue after its start) or releaseQueued.
+ */
+function claimQueued(dir, canStart = () => true) {
+  const store = storeFor(dir);
+  if (!store) return nextQueued(dir, canStart);
+  return store.transaction(() => {
+    const next = nextQueued(dir, canStart);
+    if (next) store.claim(next.projectId, next.item.number);
+    return next;
+  });
+}
+
+/** Ends a dispatcher's claim on an item that did not start (it stays queued). */
+function releaseQueued(dir, projectId, number) {
+  storeFor(dir)?.release(path.basename(String(projectId)), number);
 }
 
 /** Pauses every queue with items waiting (the app restarted: nothing starts without the user). */
 function pauseAll(dir, reason) {
   for (const projectId of queuedProjects(dir)) {
-    const q = readQueue(dir, projectId);
-    if (q.items.length && !q.paused) writeQueue(dir, projectId, { ...q, paused: true, error: reason });
+    updateQueue(dir, projectId, (q) => (q.items.length && !q.paused ? { ...q, paused: true, error: reason } : q));
   }
+}
+
+// ---- save a document to its issue ------------------------------------------------------------
+// A Write & Review run started from an issue ("Enrich in Write & Review", run.issues) can save its
+// accepted document (document.md) back to that issue, on the owner's confirmation only: `replace`
+// makes the document the new description and keeps the original at the end in a collapsed
+// <details> block; `comment` adds it as a comment and leaves the description as it is. A preview
+// never calls the CLI. Each save is recorded in the run folder: issue-save.md (the text sent) and
+// issue-saves.json ([{ number, url, mode, at, platform, commentUrl? }]), shown in Details and Artifacts.
+const SAVE_MODES = ['replace', 'comment'];
+const ORIGINAL_SUMMARY = '<details><summary>Original description</summary>';
+const ORIGINAL_BLOCK = /\n*<details><summary>Original description<\/summary>\n\n([\s\S]*)\n\n<\/details>\s*$/;
+
+// The --repo value of gh/glab for a repository URL (same rules as fetchIssues).
+function cliTarget(platform, repo) {
+  const p = PLATFORMS[platform];
+  if (!p?.cli) throw new Error(`Saving to an issue needs GitHub or GitLab (the backlog's platform is ${p?.label || platform || 'not set'}).`);
+  const parsed = parseRepoUrl(repo);
+  if (!parsed) throw new Error(`The project's repository is not a recognizable git URL: ${repo || '(none)'}`);
+  if (platform === 'github') return parsed.host === 'github.com' ? parsed.path : `${parsed.host}/${parsed.path}`;
+  return parsed.host === 'gitlab.com' ? parsed.path : `https://${parsed.host}/${parsed.path}`;
+}
+
+/**
+ * The text sent to the issue. `replace`: the document, then the original description in a collapsed
+ * block (a description saved before keeps its first original, so saving again never nests blocks);
+ * `comment`: the document only.
+ */
+function issueSaveBody({ mode, document, original = '' }) {
+  const doc = String(document || '').replace(/\r\n/g, '\n').trim();
+  if (mode === 'comment') return `${doc}\n`;
+  const current = String(original || '').replace(/\r\n/g, '\n').trim();
+  const kept = (current.match(ORIGINAL_BLOCK)?.[1] ?? current).trim();
+  return kept ? `${doc}\n\n${ORIGINAL_SUMMARY}\n\n${kept}\n\n</details>\n` : `${doc}\n`;
+}
+
+/**
+ * The CLI call that saves `text` to issue `number`: gh reads it from `file` (--body-file), glab
+ * takes it as an argument. { cli, args, display } (display: the command as shown in the preview).
+ */
+function issueSaveCommand({ platform, repo, number, mode, file, text }) {
+  if (!SAVE_MODES.includes(mode)) throw new Error(`Unknown save mode: ${mode} (replace or comment).`);
+  const target = cliTarget(platform, repo);
+  const n = String(Number(number));
+  let cli;
+  let args;
+  if (platform === 'github') {
+    cli = 'gh';
+    args = ['issue', mode === 'replace' ? 'edit' : 'comment', n, '--repo', target, '--body-file', file];
+  } else {
+    cli = 'glab';
+    args = mode === 'replace' ? ['issue', 'update', n, '--repo', target, '--description', text] : ['issue', 'note', n, '--repo', target, '--message', text];
+  }
+  const shown = args.map((a) => (a === text ? '<document>' : /\s/.test(a) ? `"${a}"` : a));
+  return { cli, args, display: `${cli} ${shown.join(' ')}` };
+}
+
+/**
+ * The CLI call that files a new issue (the Product Owner's Create, #117): gh reads the body from
+ * `file` (--body-file), glab takes it as an argument. { cli, args, display }.
+ */
+function issueCreateCommand({ platform, repo, title, labels = [], file, text }) {
+  const target = cliTarget(platform, repo);
+  const t = String(title || '').trim();
+  if (!t) throw new Error('The issue has no title.');
+  let cli;
+  let args;
+  if (platform === 'github') {
+    cli = 'gh';
+    args = ['issue', 'create', '--repo', target, '--title', t, '--body-file', file, ...labels.flatMap((l) => ['--label', l])];
+  } else {
+    cli = 'glab';
+    args = ['issue', 'create', '--repo', target, '--title', t, '--description', text, ...(labels.length ? ['--label', labels.join(',')] : []), '--yes'];
+  }
+  const shown = args.map((a) => (a === text ? '<document>' : /\s/.test(a) ? `"${a}"` : a));
+  return { cli, args, display: `${cli} ${shown.join(' ')}` };
+}
+
+/** The CLI call that closes issue `number` (a parent split into child issues, #124): { cli, args, display }. */
+function issueCloseCommand({ platform, repo, number }) {
+  const target = cliTarget(platform, repo);
+  const n = String(Number(number));
+  const cli = platform === 'github' ? 'gh' : 'glab';
+  const args = platform === 'github' ? ['issue', 'close', n, '--repo', target, '--reason', 'not planned'] : ['issue', 'close', n, '--repo', target];
+  return { cli, args, display: `${cli} ${args.map((a) => (/\s/.test(a) ? `"${a}"` : a)).join(' ')}` };
+}
+
+/**
+ * A description with `addition` appended as a dated section ("## Update (YYYY-MM-DD)"), keeping
+ * everything already there (the hand-made updates of #77, #96, #110, #112).
+ */
+function issueAppendBody({ original = '', addition, date = new Date() }) {
+  const current = String(original || '').replace(/\r\n/g, '\n').trimEnd();
+  const add = String(addition || '').replace(/\r\n/g, '\n').trim();
+  if (!add) throw new Error('Nothing to add to the issue.');
+  const section = `## Update (${date.toISOString().slice(0, 10)})\n\n${add}\n`;
+  return current ? `${current}\n\n${section}` : section;
+}
+
+/** The repository's label names (GitHub), or null when unknown (GitLab creates missing labels itself). */
+async function repoLabels({ platform, repo, exec = execCli }) {
+  if (platform !== 'github') return null;
+  const out = await exec('gh', ['label', 'list', '--repo', cliTarget(platform, repo), '--limit', '500', '--json', 'name']);
+  return JSON.parse(out || '[]').map((l) => l.name);
+}
+
+/** One issue, read again from the platform (same shape as fetchIssues). */
+async function fetchIssue({ platform, repo, number, exec = execCli }) {
+  const target = cliTarget(platform, repo);
+  const n = String(Number(number));
+  if (platform === 'github') {
+    const out = await exec('gh', ['issue', 'view', n, '--repo', target, '--json', 'number,title,state,labels,url,author,assignees,body,createdAt,updatedAt']);
+    return normalizeGithub([JSON.parse(out)])[0];
+  }
+  const out = await exec('glab', ['issue', 'view', n, '--repo', target, '--output', 'json']);
+  return normalizeGitlab([JSON.parse(out)])[0];
+}
+
+/** Replaces one issue in a project's cache (its pull requests are kept); returns the cache, or null without one. */
+function updateCachedIssue(dir, projectId, issue) {
+  const data = readBacklog(dir, projectId);
+  if (!data) return null;
+  data.issues = (data.issues || []).map((i) => (i.number === issue.number ? { ...i, ...issue, pullRequests: i.pullRequests || [] } : i));
+  fs.writeFileSync(cacheFile(dir, projectId), JSON.stringify(data, null, 2));
+  return data;
+}
+
+// ---- the platform is the source of truth (#168) ------------------------------------------------
+// Queue and roadmap items keep a read-only copy of their issues (issueFields) for the screen and the
+// Product Owner: every sync brings the copies of the items not started yet up to date
+// (refreshQueuedCopies, roadmap.refreshCopies), and right before a run starts its issues are read
+// again from the platform (freshIssues). Nothing here writes to the platform.
+
+/** A copy of an issue with the text of `synced` (title, body, labels, updatedAt), or the copy when there is none. */
+function withSyncedText(copy, synced) {
+  if (!synced) return copy;
+  return { ...copy, url: synced.url || copy.url, title: synced.title, body: synced.body || '', labels: synced.labels || [], updatedAt: synced.updatedAt || null };
+}
+const copyChanged = (copy, synced) => JSON.stringify(withSyncedText(copy, synced)) !== JSON.stringify(copy);
+
+/**
+ * Brings the copies of a project's queued issues up to `issues` (a sync, or a fresh read). Items a
+ * dispatcher is starting (claimed) are left as they are, unless `includeClaimed`. Writes only on a change.
+ */
+function refreshQueuedCopies(dir, projectId, issues, { includeClaimed = false } = {}) {
+  const known = new Map((issues || []).map((i) => [i.number, i]));
+  const claimed = includeClaimed ? new Set() : storeFor(dir)?.claimedNumbers(projectId) || new Set();
+  const open = (x) => !claimed.has(x.number);
+  if (!readQueue(dir, projectId).items.some((x) => open(x) && itemIssues(x).some((i) => copyChanged(i, known.get(i.number))))) return false;
+  updateQueue(dir, projectId, (q) => ({ ...q, items: q.items.map((x) => (open(x) ? withIssues(x, itemIssues(x).map((i) => withSyncedText(i, known.get(i.number)))) : x)) }));
+  return true;
+}
+
+const clockOf = (iso) => {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? 'an unknown time' : d.toTimeString().slice(0, 5);
+};
+
+/**
+ * The issues of an item read again from the platform right before its run starts (title, body,
+ * state, labels, updatedAt), each `{ ...issueFields, state }`. A read that fails falls back to the
+ * synced cache (`cache`, readBacklog) when its version is at least as new as the item's copy, else to
+ * the copy, and says so: the issue gets `fallback: 'cache' | 'copy'` (and `cachedAt`), and a warning
+ * for the run's log. `fromPlatform: false` (a simulation, a project without repository) never calls
+ * the CLI: the newest of the cache and the copy, without warning.
+ * @returns {Promise<{ issues: object[], warnings: string[] }>}
+ */
+async function freshIssues({ item, platform, repo, cache = null, fromPlatform = true, exec = execCli }) {
+  const synced = new Map((cache?.issues || []).map((i) => [i.number, i]));
+  const issues = [];
+  const warnings = [];
+  for (const copy of itemIssues(item)) {
+    const kept = { knownPullRequests: copy.knownPullRequests || [] };
+    let error = null;
+    if (fromPlatform) {
+      try {
+        const read = await fetchIssue({ platform, repo, number: copy.number, exec });
+        issues.push({ ...issueFields({ ...read, ...kept }), state: read.state });
+        continue;
+      } catch (e) { error = e.message; }
+    }
+    const cached = synced.get(copy.number);
+    // a copy without updatedAt was saved before #168: the cache is at least as new
+    const useCache = !!cached && !(copy.updatedAt && String(cached.updatedAt || '') < String(copy.updatedAt));
+    issues.push({
+      ...issueFields({ ...(useCache ? cached : copy), ...kept }), state: cached?.state || 'open',
+      ...(error ? { fallback: useCache ? 'cache' : 'copy', ...(useCache ? { cachedAt: cache.syncedAt || null } : {}) } : {}),
+    });
+    if (error) {
+      warnings.push(useCache ? `Issue #${copy.number} read from the cache of ${clockOf(cache.syncedAt)}: ${error}`
+        : `Issue #${copy.number} read from the copy saved with the planned item (the cache has no newer version): ${error}`);
+    }
+  }
+  return { issues, warnings };
+}
+
+/** What a run records of each issue it starts from (workflow.started `issues`): the version read (`updatedAt`) and any fallback. */
+const recordedIssues = (issues) => issues.map(({ number, url, title, updatedAt = null, fallback = null, cachedAt = null }) => ({
+  number, url, title, updatedAt, ...(fallback ? { fallback, cachedAt } : {}),
+}));
+
+const savesFile = (runDir) => path.join(runDir, 'issue-saves.json');
+/** The saves of a run to its issue (issue-saves.json), oldest first. */
+function readIssueSaves(runDir) {
+  try { return JSON.parse(fs.readFileSync(savesFile(runDir), 'utf8')); } catch { return []; }
+}
+
+/**
+ * Preview or save the accepted document of a run to its issue.
+ * run: { runDir, status, mock, issues }; platform/repo: the project's backlog; cached: the issue as
+ * last synced (its body is the original shown by a preview). `preview` (or a simulated run) never
+ * calls the CLI; a save reads the issue again first, so the description kept is the current one,
+ * then reads it once more into the cache (`dir`, `projectId`).
+ * Returns { preview, mode, issue: { number, url, title }, command, body, saved?, refreshError? }.
+ */
+async function saveRunToIssue({ run, mode = 'replace', preview = false, platform, repo, cached = null, dir = null, projectId = null, exec = execCli }) {
+  const issue = runIssues(run)[0];
+  if (!issue) throw new Error('This run was not started from an issue.');
+  if (run.status !== 'success') throw new Error('Only an accepted document can be saved to its issue.');
+  let document;
+  try { document = fs.readFileSync(path.join(run.runDir, 'document.md'), 'utf8'); } catch { throw new Error('The run has no document.md to save.'); }
+  if (!document.trim()) throw new Error('The run\'s document.md is empty.');
+  const file = path.join(run.runDir, 'issue-save.md');
+  const dryRun = preview || !!run.mock;
+  let original = cached?.body || '';
+  if (!dryRun && mode === 'replace') original = (await fetchIssue({ platform, repo, number: issue.number, exec })).body;
+  const body = issueSaveBody({ mode, document, original });
+  const command = issueSaveCommand({ platform, repo, number: issue.number, mode, file, text: body });
+  const out = { preview: dryRun, mode, issue: { number: issue.number, url: issue.url, title: issue.title || cached?.title || '' }, command: command.display, body };
+  if (dryRun) return out;
+
+  fs.writeFileSync(file, body);
+  const stdout = String(await exec(command.cli, command.args) || '');
+  const commentUrl = mode === 'comment' ? stdout.match(/https?:\/\/\S+/)?.[0] || null : null;
+  const saved = { number: issue.number, url: issue.url, mode, platform, at: new Date().toISOString(), ...(commentUrl ? { commentUrl } : {}) };
+  fs.writeFileSync(savesFile(run.runDir), JSON.stringify([...readIssueSaves(run.runDir), saved], null, 2));
+  out.saved = saved;
+  // the Backlog shows the new body, task progress and labels without a full sync
+  if (dir && projectId) {
+    try { updateCachedIssue(dir, projectId, await fetchIssue({ platform, repo, number: issue.number, exec })); } catch (e) { out.refreshError = e.message; }
+  }
+  return out;
 }
 
 // The task of a group: every issue (title, URL and body) in the order selected, shipped together.
@@ -470,4 +804,22 @@ module.exports = {
   referencedIssues, fetchOpenPullRequests, attachPullRequests,
   readQueue, enqueue, unqueue, skipQueued, newPullRequests, setPaused, nextQueued, pauseAll, runInputs,
   itemIssues, runIssues, execCli, readLocal, writeLocal,
+  claimQueued,
+  cliTarget,
+  fetchIssue,
+  freshIssues,
+  issueAppendBody,
+  issueCloseCommand,
+  issueCreateCommand,
+  issueSaveBody,
+  issueSaveCommand,
+  queuedProjects,
+  readIssueSaves,
+  recordedIssues,
+  refreshQueuedCopies,
+  releaseQueued,
+  repoLabels,
+  saveRunToIssue,
+  updateCachedIssue,
+  withSyncedText,
 };

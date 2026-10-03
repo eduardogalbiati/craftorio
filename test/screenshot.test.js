@@ -8,7 +8,8 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
-const { parseArgs, recordShot, VIEWS } = require('../scripts/screenshot');
+const { fileName, parseArgs, recordShot, usage, VIEWS } = require('../scripts/screenshot');
+const evidence = require('../src/evidence');
 
 const root = path.join(__dirname, '..');
 
@@ -17,6 +18,19 @@ function tmp(t) {
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   return dir;
 }
+
+test('--help prints the header comment: every option, without comment markers', () => {
+  const text = usage();
+  for (const opt of ['--view', '--tab', '--click', '--ref', '--out', '--name', '--side', '--caption', '--input', '--stop-at']) assert.match(text, new RegExp(opt));
+  assert.doesNotMatch(text, /--before/);
+  assert.doesNotMatch(text, /^\/\//m);
+});
+
+test('the backlog view offers roadmap and epics modes, alongside list and kanban', () => {
+  assert.deepEqual(VIEWS.backlog.modes, ['list', 'kanban', 'roadmap', 'epics']);
+  assert.equal(parseArgs(['--view', 'backlog', '--mode', 'roadmap']).name, 'backlog-roadmap');
+  assert.equal(parseArgs(['--view', 'backlog', '--mode', 'epics']).name, 'backlog-epics');
+});
 
 test('parseArgs names the file after the scenario and checks options against the view', () => {
   assert.equal(parseArgs(['--view', 'backlog', '--mode', 'kanban', '--theme', 'light']).name, 'backlog-kanban-light');
@@ -28,7 +42,7 @@ test('parseArgs names the file after the scenario and checks options against the
   assert.throws(() => parseArgs(['--view', 'dashboard', '--mode', 'kanban']), /does not apply to dashboard$/);
   assert.throws(() => parseArgs(['--size', 'big']), /WIDTHxHEIGHT/);
   assert.throws(() => parseArgs(['--name', '../x']), /plain file name/);
-  assert.throws(() => parseArgs(['--before', 'a.png']), /--before needs --caption/);
+  assert.throws(() => parseArgs(['--before', 'a.png']), /Unknown argument: --before/);
   assert.throws(() => parseArgs(['--real']), /Unknown argument: --real/);
 });
 
@@ -63,15 +77,77 @@ test('the site recordings are valid --steps files', () => {
   for (const f of fs.readdirSync(dir)) assert.ok(parseArgs(['--steps', path.join(dir, f)]).steps.length, f);
 });
 
-test('recordShot adds a shot to screenshots.json and replaces the one with the same file', (t) => {
+// #162: --keep-awake off | idle | active | error, a demo state of the Keep awake switch.
+test('--keep-awake takes off, idle, active or error; anything else is refused', () => {
+  assert.equal(parseArgs(['--view', 'workflows']).keepAwake, null);
+  for (const v of ['off', 'idle', 'active', 'error']) assert.equal(parseArgs(['--view', 'workflows', '--keep-awake', v]).keepAwake, v);
+  assert.throws(() => parseArgs(['--view', 'workflows', '--keep-awake', 'nope']), /--keep-awake takes off \| idle \| active \| error/);
+});
+
+// #180: --po working | writing | stopped | failed, the Product Owner's drawer with its live turn.
+test('--po takes working, writing, stopped or failed, and only applies to --view backlog', () => {
+  assert.equal(parseArgs(['--view', 'backlog']).po, undefined);
+  for (const v of ['working', 'writing', 'stopped', 'failed']) {
+    const a = parseArgs(['--view', 'backlog', '--po', v]);
+    assert.equal(a.po, v);
+    assert.equal(a.name, `backlog-po-${v}`);
+  }
+  assert.throws(() => parseArgs(['--view', 'backlog', '--po', 'nope']), /--po takes working \| writing \| stopped \| failed/);
+  assert.throws(() => parseArgs(['--view', 'dashboard', '--po', 'working']), /--po applies to --view backlog/);
+});
+
+test('--side takes original or modified, and is inferred from --ref (original) or --caption (modified) when not given', () => {
+  assert.equal(parseArgs(['--view', 'dashboard']).side, null);
+  assert.equal(parseArgs(['--view', 'dashboard', '--side', 'original']).side, 'original');
+  assert.throws(() => parseArgs(['--view', 'dashboard', '--side', 'before']), /--side takes original \| modified/);
+  assert.equal(parseArgs(['--view', 'dashboard', '--ref', 'HEAD']).side, 'original');
+});
+
+test('fileName: --side appends .original.png / .modified.png; without it, just <name>.png', () => {
+  assert.equal(fileName(parseArgs(['--view', 'dashboard'])), 'dashboard.png');
+  assert.equal(fileName(parseArgs(['--view', 'dashboard', '--side', 'original'])), 'dashboard.original.png');
+  assert.equal(fileName(parseArgs(['--view', 'dashboard', '--side', 'modified'])), 'dashboard.modified.png');
+});
+
+test('--caption needs --out to be a run\'s evidence round folder (<run_dir>/evidence/<step>/round-<n>)', (t) => {
+  const run = tmp(t);
+  assert.throws(() => parseArgs(['--view', 'dashboard', '--caption', 'x']), /--caption needs --out/);
+  assert.throws(() => parseArgs(['--view', 'dashboard', '--caption', 'x', '--out', run]), /--caption needs --out/, 'not a round folder');
+  const roundDir = evidence.roundDir(run, 'evidence', 1);
+  fs.mkdirSync(roundDir, { recursive: true });
+  const a = parseArgs(['--view', 'dashboard', '--caption', 'It works', '--out', roundDir]);
+  assert.equal(a.caption, 'It works');
+  assert.equal(a.side, 'modified');
+});
+
+test('--input and --stop-at only apply to --view run; --input takes key=value and is repeatable', () => {
+  const a = parseArgs(['--view', 'run', '--input', 'mode=validated', '--input', 'base_branch=main']);
+  assert.deepEqual(a.inputs, { mode: 'validated', base_branch: 'main' });
+  assert.equal(parseArgs(['--view', 'run', '--stop-at', 'developer_check']).stopAt, 'developer_check');
+  assert.throws(() => parseArgs(['--input', 'mode=validated']), /--stop-at and --input apply to --view run/);
+  assert.throws(() => parseArgs(['--view', 'dashboard', '--stop-at', 'developer_check']), /--stop-at and --input apply to --view run/);
+  assert.throws(() => parseArgs(['--view', 'run', '--input', 'mode']), /--input takes key=value/);
+});
+
+test('recordShot records a round folder\'s file (caption, commit) into the run\'s evidence manifest', (t) => {
+  const run = tmp(t);
+  const roundDir = evidence.roundDir(run, 'evidence', 1);
+  fs.mkdirSync(roundDir, { recursive: true });
+  const file = path.join(roundDir, 'settings-general.modified.png');
+  fs.writeFileSync(file, 'PNG');
+
+  const m = recordShot(roundDir, { file, caption: 'Settings > General', commit: 'abc1234' });
+
+  assert.equal(m.images.length, 1);
+  assert.equal(m.images[0].path, 'evidence/evidence/round-1/settings-general.modified.png');
+  assert.equal(m.images[0].caption, 'Settings > General');
+  assert.equal(m.images[0].commit, 'abc1234');
+  assert.deepEqual(JSON.parse(fs.readFileSync(evidence.manifestPath(run), 'utf8')).images[0].caption, 'Settings > General');
+});
+
+test('recordShot refuses a folder that is not a run\'s evidence round folder', (t) => {
   const dir = tmp(t);
-  recordShot(dir, { path: 'settings-after.png', caption: 'Settings', before: 'settings-before.png' });
-  recordShot(dir, { path: 'backlog.png', caption: 'Backlog' });
-  recordShot(dir, { path: 'settings-after.png', caption: 'Settings > General', before: 'settings-before.png' });
-  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(dir, 'screenshots.json'), 'utf8')), [
-    { path: 'settings-after.png', caption: 'Settings > General', before: 'settings-before.png' },
-    { path: 'backlog.png', caption: 'Backlog' },
-  ]);
+  assert.throws(() => recordShot(dir, { file: path.join(dir, 'x.png'), caption: 'x' }), /Not a round folder of a run's evidence/);
 });
 
 // ---- in Electron ------------------------------------------------------------------------------
@@ -154,4 +230,34 @@ test('refuses an unknown view without opening the app', { skip, timeout: 60000 }
   const r = await shoot(['--view', 'nope'], 30000);
   assert.equal(r.code, 2);
   assert.match(r.out, /Unknown view: nope/);
+});
+
+// #187 (E2E, @issue-187): the Oracle drawer's --oracle actions demo data (scripts/screenshot.js
+// demoOracleActions) has a proposed card 'c1' and a done+undoable card 'c3'; clicking their real
+// buttons drives the real preload.js + the real service, the way the owner does. The screenshot is
+// evidence for the gate reviewer; the assertion here is that the real app does not crash or hang on
+// the click (a regression that threw "not in the conversation" synchronously, before any await,
+// would still leave the renderer running, but a thrown promise rejection the renderer never awaits
+// can surface as an uncaught exception at the Electron process level, which the pass/fail here would
+// still have caught via `r.code`). The service-level test in test/oracle.test.js is what proves the
+// id reaches the service as a string, not an object.
+test('Oracle drawer: clicking "Do it" on a proposed card does not crash the app (#187, @issue-187)', { skip, timeout: 60000 }, async (t) => {
+  const out = tmp(t);
+  const r = await shoot(['--view', 'oracle', '--oracle', 'actions', '--click', '[data-oracle-act="c1"]', '--wait', '1500', '--out', out, '--name', '187-do-it'], 50000);
+  assert.equal(r.code, 0, r.out);
+  assert.ok(isPng(path.join(out, '187-do-it.png')));
+});
+
+test('Oracle drawer: clicking "Dismiss" on a proposed card does not crash the app (#187, @issue-187)', { skip, timeout: 60000 }, async (t) => {
+  const out = tmp(t);
+  const r = await shoot(['--view', 'oracle', '--oracle', 'actions', '--click', '[data-oracle-dismiss="c2"]', '--wait', '1500', '--out', out, '--name', '187-dismiss'], 50000);
+  assert.equal(r.code, 0, r.out);
+  assert.ok(isPng(path.join(out, '187-dismiss.png')));
+});
+
+test('Oracle drawer: clicking "Undo" on a done, undoable card (after confirming) does not crash the app (#187, @issue-187)', { skip, timeout: 60000 }, async (t) => {
+  const out = tmp(t);
+  const r = await shoot(['--view', 'oracle', '--oracle', 'actions', '--click', '[data-oracle-undo="c3"]', '--click', '#btn-confirm-yes', '--wait', '1500', '--out', out, '--name', '187-undo'], 50000);
+  assert.equal(r.code, 0, r.out);
+  assert.ok(isPng(path.join(out, '187-undo.png')));
 });

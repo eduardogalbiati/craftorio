@@ -1,0 +1,35 @@
+# Test fixture: outputs: (#134) filled from the finished run's steps, each value a template
+# rendered over the context, parsed as JSON for a type other than string.
+apiVersion: multiagent/v1
+kind: Workflow
+metadata:
+  name: fixture-outputs
+agents:
+  a: { provider: claude, model: m, session: ephemeral }
+steps:
+  - id: work
+    agent: a
+    prompt: "do it"
+    output_schema:
+      type: object
+      required: [items, count]
+      properties:
+        items: { type: array, items: { type: string } }
+        count: { type: integer }
+outputs:
+  doc:
+    type: string
+    description: "joined items (never JSON-parsed: type string)"
+    value: "{{ steps.work.output.items | join(', ') }}"
+  total:
+    type: number
+    description: "the count, parsed as a number"
+    value: "{{ steps.work.output.count }}"
+  empty:
+    type: string
+    description: "a field the step never set renders empty, so the output stays null"
+    value: "{{ steps.work.output.missing_field }}"
+  broken:
+    type: array
+    description: "a literal that is not valid JSON for its declared type stays null, with a warning"
+    value: "not json"

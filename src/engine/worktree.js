@@ -13,6 +13,7 @@
 const fs = require('fs');
 const path = require('path');
 const { execFile } = require('child_process');
+const { unlinkDeps } = require('./deps-cache');
 
 const FETCH_TIMEOUT_MS = 60e3;
 const GIT_TIMEOUT_MS = 120e3;
@@ -190,6 +191,8 @@ async function isMerged(repo, branch, base) {
 async function removeWorktree({ repo, dir, base, log = () => {}, remote = true }) {
   dir = canonicalPath(dir); // the spelling git registered the worktree with
   const branch = fs.existsSync(dir) ? await currentBranch(dir) : null;
+  // the shared dependency cache (#198): its links go first, so no delete below ever follows one
+  unlinkDeps(dir);
   await git(['worktree', 'remove', '--force', dir], repo).catch((e) => {
     // not registered any more (or locked by a process): delete the folder itself
     try { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 3 }); } catch { /* in use: kept */ }
@@ -208,6 +211,22 @@ async function removeWorktree({ repo, dir, base, log = () => {}, remote = true }
     }
   }
   return { removed: !fs.existsSync(dir), branch, branchDeleted };
+}
+
+/**
+ * The run's checkout of the base (#198), for the test writer's pre-existing-failure check:
+ * <worktreesDir>/<run_id>-base, detached at the current base (refreshed when reused, since the
+ * local base moves with local merges). Never a branch; removed with the run's worktree.
+ * @returns {Promise<object|null>} as prepareWorktree; null when `repo` is not a git repository
+ */
+async function prepareBaseWorktree({ repo, base, dir, log = () => {}, remote = true }) {
+  const info = await prepareWorktree({ repo, base, dir, log, remote });
+  if (info?.reused) {
+    info.ref = await baseRef(info.repo, base, log, { remote });
+    await git(['checkout', '--detach', '--force', info.ref], info.dir);
+    info.commit = await tryGit(['rev-parse', 'HEAD'], info.dir);
+  }
+  return info;
 }
 
 // Committer identity for the rebase below: the user's own when git has one, otherwise a fixed
@@ -267,6 +286,15 @@ async function mergeLocally({ repo, dir, base, log = () => {} }) {
   return { branch, base, commit, checkout: checkout?.dir || null, rebased };
 }
 
+// The run's scratch workspace (<run>/scratch, #120) goes with its worktree; the run's logs/ and
+// evidence/ (its screenshots, #146) stay. A folder still locked (a program left running) is left for the
+// next cleanup. true when it was removed.
+function removeScratch(runDir) {
+  const dir = path.join(runDir, 'scratch');
+  if (!fs.existsSync(dir)) return false;
+  try { fs.rmSync(dir, { recursive: true, force: true, maxRetries: 3 }); return true; } catch { return false; }
+}
+
 /**
  * Orphan cleanup for <workspace>/worktrees (at app start). Never touches `active` folders
  * (runs in progress). Removes a worktree when its run succeeded (a removal that failed) or when
@@ -284,17 +312,23 @@ async function cleanupWorktrees({ worktreesDir, runsDir, active = [], maxAgeDays
     if (active.some((a) => a && samePath(a, dir))) continue;
     const common = await tryGit(['rev-parse', '--git-common-dir'], dir);
     const repo = common && canonicalPath(path.dirname(path.resolve(dir, common)));
+    // <run_id>-base: the run's checkout of the base (#198), gone once its run ended, whatever the status
+    const baseOf = name.endsWith('-base') ? name.slice(0, -5) : null;
+    const runName = baseOf || name;
     let status = null;
-    try { status = JSON.parse(fs.readFileSync(path.join(runsDir, name, 'summary.json'), 'utf8')).status; } catch { /* running, interrupted or gone */ }
+    try { status = JSON.parse(fs.readFileSync(path.join(runsDir, runName, 'summary.json'), 'utf8')).status; } catch { /* running, interrupted or gone */ }
     const index = repo && await tryGit(['rev-parse', '--git-path', 'index'], dir);
-    const lastUsed = Math.max(mtime(path.join(runsDir, name, 'events.jsonl')), index ? mtime(path.resolve(dir, index)) : 0, mtime(dir));
+    const lastUsed = Math.max(mtime(path.join(runsDir, runName, 'events.jsonl')), index ? mtime(path.resolve(dir, index)) : 0, mtime(dir));
     const stale = Date.now() - lastUsed > maxAgeDays * 864e5;
     if (!repo || !(await isWorktree(repo, dir))) {
       if (!stale) continue; // may be a worktree being created right now
+      unlinkDeps(dir);
       fs.rmSync(dir, { recursive: true, force: true, maxRetries: 3 });
-    } else if (status === 'success' || stale) {
+    } else if (status === 'success' || stale || (baseOf && status)) {
       await removeWorktree({ repo, dir, log });
     } else continue;
+    if (fs.existsSync(dir)) continue; // locked by a process: the worktree and its scratch stay for the next cleanup
+    removeScratch(path.join(runsDir, name));
     removed.push(dir);
     log('info', `worktree: removed orphan ${dir}`);
   }
@@ -304,4 +338,6 @@ async function cleanupWorktrees({ worktreesDir, runsDir, active = [], maxAgeDays
 module.exports = {
   prepareWorktree, removeWorktree, mergeLocally, cleanupWorktrees, listWorktrees, isMerged, repoRoot, currentBranch, samePath, canonicalPath,
   git, identityArgs, FETCH_TIMEOUT_MS,
+  prepareBaseWorktree,
+  removeScratch,
 };

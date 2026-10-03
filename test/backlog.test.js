@@ -173,6 +173,31 @@ test('sync shows each issue its open PRs; PRs that cannot be read leave a note, 
   assert.match(data.pullRequestsError, /HTTP 502/);
 });
 
+// ---- epics (#138): read alongside the issues and PRs, cached with the rest -----------------------
+
+test('sync reads an epic and its sub-issues into the cache (src/epics.js readEpics)', async (t) => {
+  const dir = tmp(t);
+  const project = { id: 'p', repo: 'https://github.com/o/r' };
+  const epicIssue = { ...GH_ISSUE, number: 40, title: 'Theme epic', labels: [{ name: 'epic', color: '5319e7' }] };
+  const memberA = { ...GH_ISSUE, number: 41, title: 'Member A' };
+  const memberB = { ...GH_ISSUE, number: 42, title: 'Member B', state: 'CLOSED' };
+  const exec = routedExec({
+    issue: [epicIssue, memberA, memberB],
+    pr: [],
+    api: (args) => (args.join(' ').includes('sub_issues') ? [{ number: 41 }, { number: 42 }] : []),
+  });
+  const data = await backlog.syncBacklog({ dir, project, platform: 'github', exec: exec.exec });
+  assert.equal(data.epicsError, null);
+  assert.equal(data.epics.length, 1);
+  assert.deepEqual(data.epics[0].members, [41, 42]);
+  assert.deepEqual(data.epics[0].progress, { open: 1, closed: 1, total: 2 });
+  const epicOf = Object.fromEntries(data.issues.map((i) => [i.number, i.epic]));
+  assert.equal(epicOf[41], '#40');
+  assert.equal(epicOf[42], '#40');
+  assert.equal(data.issues.find((i) => i.number === 40).isEpic, true);
+  assert.deepEqual(backlog.readBacklog(dir, 'p').epics, data.epics); // cached like the rest
+});
+
 test('right before a queued issue starts: only PRs opened since it was assigned skip it, and the queue says why', async (t) => {
   const dir = tmp(t);
   const pr = (number, issue) => ({ number, title: `PR ${number} (#${issue})`, url: `https://github.com/o/r/pull/${number}`, body: '' });
@@ -262,7 +287,7 @@ test('the push status of a project is cached next to its backlog', (t) => {
   assert.equal(backlog.readBacklog(dir, 'p'), null); // its own file, not the synced issues
 });
 
-test('a run started for an issue links to it even when simulated; its state picks the column', () => {
+test('a run started for an issue links to it even when simulated; only a real one picks the column', () => {
   const issue = (number) => ({ number, state: 'open', url: `https://github.com/o/r/issues/${number}` });
   const run = (runId, number, extra) => ({ runId, workflow: 'w', startedAt: `2026-09-0${runId.length}`, issue: { number, url: `https://github.com/o/r/issues/${number}` }, ...extra });
   const out = backlog.linkRuns([issue(1), issue(2), issue(3), issue(4), issue(5)], [
@@ -273,14 +298,77 @@ test('a run started for an issue links to it even when simulated; its state pick
     run('d', 5, { status: 'running', task: 'Also see #4' }),
   ], { items: [{ number: 4, workflow: 'software-development.yaml', workflowName: 'software-development', mock: true }] });
   const by = Object.fromEntries(out.map((i) => [i.number, i]));
-  assert.equal(by[1].column, 'waiting');
-  assert.equal(by[1].runs[0].mock, true);
+  assert.equal(by[1].column, 'todo'); // its only run is a simulation
+  assert.equal(by[1].runs[0].mock, true); // but it still shows in the issue's history
   assert.equal(by[2].column, 'in_progress'); // succeeded, still open on the platform
   assert.equal(by[3].column, 'in_progress');
   assert.deepEqual(by[4].runs, []);
-  assert.deepEqual(by[4].queued, { position: 1, workflow: 'software-development', mock: true });
-  assert.equal(by[4].column, 'in_progress');
+  assert.deepEqual(by[4].queued, { position: 1, workflow: 'software-development', mock: true }); // still shows the queued badge
+  assert.equal(by[4].column, 'todo'); // a simulated queue item doesn't move it either
   assert.equal(by[5].column, 'in_progress');
+});
+
+test('a simulated run never decides an issue\'s column, whatever its status', () => {
+  const issue = (number, state = 'open') => ({ number, state, url: `https://github.com/o/r/issues/${number}` });
+  const run = (runId, number, extra) => ({ runId, workflow: 'w', startedAt: `2026-09-0${runId.length}`, mock: true, issue: { number, url: `https://github.com/o/r/issues/${number}` }, ...extra });
+  const runs = [
+    run('a', 1, { status: 'success' }),
+    run('bb', 2, { status: 'failed' }),
+    run('ccc', 3, { status: 'interrupted' }),
+    run('dddd', 4, { status: 'running', waiting: true }), // stopped at a human gate
+    run('eeeee', 5, { status: 'success' }),
+  ];
+  const out = backlog.linkRuns([issue(1), issue(2), issue(3), issue(4), issue(5, 'closed')], runs);
+  const by = Object.fromEntries(out.map((i) => [i.number, i]));
+  assert.equal(by[1].column, 'todo');
+  assert.equal(by[2].column, 'todo');
+  assert.equal(by[3].column, 'todo');
+  assert.equal(by[4].column, 'todo');
+  assert.equal(by[5].column, 'done'); // closed on the platform, simulation or not
+  for (const n of [1, 2, 3, 4, 5]) assert.equal(by[n].runs[0].mock, true); // kept in the history
+});
+
+test('a real run decides the column even when a newer simulated run is linked', () => {
+  const issue = { number: 1, state: 'open', url: 'https://github.com/o/r/issues/1' };
+  const runs = [
+    { runId: 'a', workflow: 'w', status: 'running', waiting: true, startedAt: '2026-09-01', issue: { number: 1, url: issue.url } }, // real, older, waiting at a gate
+    { runId: 'bb', workflow: 'w', status: 'success', startedAt: '2026-09-02', mock: true, issue: { number: 1, url: issue.url } }, // simulated, newer, success
+  ];
+  const [out] = backlog.linkRuns([issue], runs);
+  assert.equal(out.column, 'waiting'); // the real (older) run decides, not the newer simulation
+  assert.deepEqual(out.runs.map((r) => r.runId), ['bb', 'a']); // the history still lists both, newest first
+});
+
+test('a queued simulation leaves the column as it would be without it; a real queue item moves it', () => {
+  const issue = (number) => ({ number, state: 'open', url: `https://github.com/o/r/issues/${number}` });
+  const queue = { items: [
+    { number: 1, workflow: 'w.yaml', workflowName: 'w', mock: true },
+    { number: 2, workflow: 'w.yaml', workflowName: 'w', mock: false },
+  ] };
+  const out = backlog.linkRuns([issue(1), issue(2)], [], queue);
+  const by = Object.fromEntries(out.map((i) => [i.number, i]));
+  assert.equal(by[1].column, 'todo');
+  assert.deepEqual(by[1].queued, { position: 1, workflow: 'w', mock: true }); // still shows the queued badge
+  assert.equal(by[2].column, 'in_progress');
+  assert.deepEqual(by[2].queued, { position: 2, workflow: 'w', mock: false });
+});
+
+test('linkRuns passes a run\'s title and PR through to its history (#84)', () => {
+  const issue = { number: 1, state: 'open', url: 'https://github.com/o/r/issues/1' };
+  const pr = { number: 42, url: 'https://github.com/o/r/pull/42', state: 'ready' };
+  const run = { runId: 'a', workflow: 'w', status: 'success', startedAt: '2026-09-01', issue: { number: 1, url: issue.url }, title: 'Fix the bug', customTitle: null, pr };
+  const [out] = backlog.linkRuns([issue], [run]);
+  assert.equal(out.runs[0].title, 'Fix the bug');
+  assert.equal(out.runs[0].customTitle, null);
+  assert.deepEqual(out.runs[0].pr, pr);
+});
+
+test('linkRuns: a run with no title or PR carries neither (no undefined fields leaking in)', () => {
+  const issue = { number: 1, state: 'open', url: 'https://github.com/o/r/issues/1' };
+  const run = { runId: 'a', workflow: 'w', status: 'success', startedAt: '2026-09-01', issue: { number: 1, url: issue.url } };
+  const [out] = backlog.linkRuns([issue], [run]);
+  assert.ok(!('title' in out.runs[0]));
+  assert.ok(!('pr' in out.runs[0]));
 });
 
 test('the queue: enqueue skips duplicates and remembers inputs, next item across projects, pause', (t) => {
@@ -298,6 +386,7 @@ test('the queue: enqueue skips duplicates and remembers inputs, next item across
   assert.deepEqual(q.inputs, { 'sd.yaml': { language: 'js' } });
 
   backlog.enqueue(dir, 'other', { issues: [issue(9)], workflow: 'sd.yaml' });
+  assert.deepEqual(backlog.queuedProjects(dir).sort(), ['other', 'p']); // #162: Keep awake sums work across these
   assert.deepEqual(backlog.nextQueued(dir), { projectId: 'p', item: q.items[0] }); // the oldest first
   assert.equal(backlog.nextQueued(dir, (projectId) => projectId !== 'p').projectId, 'other'); // p at its limit of runs
   assert.equal(backlog.nextQueued(dir, () => false), null);
@@ -377,6 +466,218 @@ test('a queued group becomes one task listing every issue, with `issues` next to
   assert.deepEqual(backlog.runInputs(ref(7, 'x'), wf, 'C:/repo').issues, ['https://github.com/o/r/issues/7']);
 });
 
+test('a Write & Review run enriching an issue is shown on its card and never decides the column', () => {
+  const issue = (number) => ({ number, state: 'open', url: `https://github.com/o/r/issues/${number}` });
+  const runs = [
+    { runId: 'enrich', workflow: 'writer-reviewer', status: 'success', startedAt: '2026-09-02', issues: [{ number: 1, url: 'https://github.com/o/r/issues/1' }] },
+  ];
+  const [out] = backlog.linkRuns([issue(1)], runs);
+  assert.equal(out.runs[0].enrich, true);
+  assert.equal(out.column, 'todo'); // only a Write & Review run: the issue is still untouched
+});
+
+test('a real implementation run still decides the column alongside an enrich run', () => {
+  const issue = { number: 1, state: 'open', url: 'https://github.com/o/r/issues/1' };
+  const runs = [
+    { runId: 'enrich', workflow: 'writer-reviewer', status: 'success', startedAt: '2026-09-03', issues: [{ number: 1, url: issue.url }] },
+    { runId: 'impl', workflow: 'software-development', status: 'success', startedAt: '2026-09-01', issues: [{ number: 1, url: issue.url }] },
+  ];
+  const [out] = backlog.linkRuns([issue], runs);
+  assert.equal(out.column, 'in_progress');
+  assert.deepEqual(out.runs.map((r) => [r.runId, !!r.enrich]), [['enrich', true], ['impl', false]]);
+});
+
+// Issue tracker: what a "create and queue" run asks to queue (#81) is now the chain mechanism's
+// `queue` action (src/renderer/chain-model.js queueBatches, test/chain-model.test.js): filedToQueue
+// and the service's queueFiledIssues are gone (#134).
+
+// ---- save a document to its issue (#103) --------------------------------------------------------
+test('issueSaveBody: replace keeps the original at the end in a collapsed <details> block', () => {
+  const body = backlog.issueSaveBody({ mode: 'replace', document: '# Enriched\n\nBody.', original: 'Original text.' });
+  assert.equal(body, '# Enriched\n\nBody.\n\n<details><summary>Original description</summary>\n\nOriginal text.\n\n</details>\n');
+});
+
+test('issueSaveBody: replace without an original gives the document only', () => {
+  assert.equal(backlog.issueSaveBody({ mode: 'replace', document: 'Doc.', original: '' }), 'Doc.\n');
+  assert.equal(backlog.issueSaveBody({ mode: 'replace', document: 'Doc.' }), 'Doc.\n');
+});
+
+test('issueSaveBody: saving again never nests the original block', () => {
+  const already = 'New doc 1.\n\n<details><summary>Original description</summary>\n\nOriginal text.\n\n</details>\n';
+  const body = backlog.issueSaveBody({ mode: 'replace', document: 'New doc 2.', original: already });
+  assert.equal(body, 'New doc 2.\n\n<details><summary>Original description</summary>\n\nOriginal text.\n\n</details>\n');
+});
+
+test('issueSaveBody: a comment is the document only, whatever the original', () => {
+  assert.equal(backlog.issueSaveBody({ mode: 'comment', document: 'An RFC.', original: 'Kept as is.' }), 'An RFC.\n');
+});
+
+test('issueSaveBody: CRLF is normalized', () => {
+  const body = backlog.issueSaveBody({ mode: 'replace', document: 'Doc.\r\nLine 2.', original: 'Old.\r\nLine 2.' });
+  assert.equal(body, 'Doc.\nLine 2.\n\n<details><summary>Original description</summary>\n\nOld.\nLine 2.\n\n</details>\n');
+});
+
+test('issueSaveCommand: GitHub replace/comment call gh with --body-file; Enterprise prepends the host', () => {
+  const file = 'C:/run/issue-save.md';
+  const replace = backlog.issueSaveCommand({ platform: 'github', repo: 'https://github.com/o/r', number: 29, mode: 'replace', file, text: 'x' });
+  assert.deepEqual(replace, { cli: 'gh', args: ['issue', 'edit', '29', '--repo', 'o/r', '--body-file', file], display: `gh issue edit 29 --repo o/r --body-file ${file}` });
+  const comment = backlog.issueSaveCommand({ platform: 'github', repo: 'https://github.com/o/r', number: 29, mode: 'comment', file, text: 'x' });
+  assert.deepEqual(comment.args, ['issue', 'comment', '29', '--repo', 'o/r', '--body-file', file]);
+  const ghe = backlog.issueSaveCommand({ platform: 'github', repo: 'https://ghe.corp/o/r', number: 1, mode: 'replace', file, text: 'x' });
+  assert.ok(ghe.args.includes('ghe.corp/o/r'));
+});
+
+test('issueSaveCommand: GitLab replace/comment pass the text as an argument; a self-hosted GitLab gives an https:// target', () => {
+  const replace = backlog.issueSaveCommand({ platform: 'gitlab', repo: 'https://gitlab.com/g/r', number: 7, mode: 'replace', text: 'the body' });
+  assert.deepEqual(replace.args, ['issue', 'update', '7', '--repo', 'g/r', '--description', 'the body']);
+  const comment = backlog.issueSaveCommand({ platform: 'gitlab', repo: 'https://gitlab.com/g/r', number: 7, mode: 'comment', text: 'the body' });
+  assert.deepEqual(comment.args, ['issue', 'note', '7', '--repo', 'g/r', '--message', 'the body']);
+  const selfHosted = backlog.issueSaveCommand({ platform: 'gitlab', repo: 'git@gitlab.corp:g/sub/r.git', number: 7, mode: 'replace', text: 'x' });
+  assert.ok(selfHosted.args.includes('https://gitlab.corp/g/sub/r'));
+});
+
+test('issueSaveCommand: an unknown mode throws; Bitbucket has no CLI to save with; the text never appears in the display', () => {
+  assert.throws(() => backlog.issueSaveCommand({ platform: 'github', repo: 'https://github.com/o/r', number: 1, mode: 'delete', file: 'f', text: 'x' }), /Unknown save mode: delete/);
+  assert.throws(() => backlog.issueSaveCommand({ platform: 'bitbucket', repo: 'https://bitbucket.org/o/r', number: 1, mode: 'replace', text: 'x' }), /needs GitHub or GitLab/);
+  const secret = 'the full document text';
+  const cmd = backlog.issueSaveCommand({ platform: 'gitlab', repo: 'https://gitlab.com/g/r', number: 7, mode: 'comment', text: secret });
+  assert.ok(!cmd.display.includes(secret));
+  assert.match(cmd.display, /<document>/);
+});
+
+function savesTmp(t) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'issue-save-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  return dir;
+}
+
+function writeDoc(runDir, text = '# Enriched issue\n\nBody.') {
+  fs.mkdirSync(runDir, { recursive: true });
+  fs.writeFileSync(path.join(runDir, 'document.md'), text);
+}
+
+test('saveRunToIssue: preview never calls the CLI and returns the body and the command', async (t) => {
+  const runDir = savesTmp(t);
+  writeDoc(runDir);
+  const { exec, calls } = fakeExec('irrelevant');
+  const run = { runDir, status: 'success', issues: [{ number: 29, url: 'https://github.com/o/r/issues/29', title: 'Backlog screen' }] };
+  const out = await backlog.saveRunToIssue({ run, mode: 'replace', preview: true, platform: 'github', repo: 'https://github.com/o/r', cached: { body: 'Original.' }, exec });
+  assert.equal(out.preview, true);
+  assert.equal(calls.length, 0);
+  assert.match(out.body, /^# Enriched issue/);
+  assert.match(out.body, /<details><summary>Original description<\/summary>\n\nOriginal\./);
+  assert.match(out.command, /^gh issue edit 29 --repo o\/r --body-file/);
+  assert.equal(fs.existsSync(path.join(runDir, 'issue-saves.json')), false);
+});
+
+test('saveRunToIssue: a simulated run only previews, even without preview:true', async (t) => {
+  const runDir = savesTmp(t);
+  writeDoc(runDir);
+  const { exec, calls } = fakeExec('irrelevant');
+  const run = { runDir, status: 'success', mock: true, issues: [{ number: 29, url: 'https://github.com/o/r/issues/29' }] };
+  const out = await backlog.saveRunToIssue({ run, mode: 'comment', preview: false, platform: 'github', repo: 'https://github.com/o/r', exec });
+  assert.equal(out.preview, true);
+  assert.equal(calls.length, 0);
+  assert.equal(fs.existsSync(path.join(runDir, 'issue-saves.json')), false);
+});
+
+test('saveRunToIssue: replace reads the issue again first (the kept original is the current body) and records the save', async (t) => {
+  const runDir = savesTmp(t);
+  writeDoc(runDir, '# Enriched\n\nFresh content.');
+  const calls = [];
+  const exec = async (cli, args) => {
+    calls.push([cli, ...args]);
+    if (args[0] === 'issue' && args[1] === 'view') {
+      return JSON.stringify({ number: 29, title: 'Backlog screen', state: 'OPEN', url: 'https://github.com/o/r/issues/29', labels: [], body: 'The current description.', assignees: [] });
+    }
+    return '';
+  };
+  const run = { runDir, status: 'success', issues: [{ number: 29, url: 'https://github.com/o/r/issues/29', title: 'Backlog screen' }] };
+  const out = await backlog.saveRunToIssue({ run, mode: 'replace', preview: false, platform: 'github', repo: 'https://github.com/o/r', cached: { body: 'A stale cached body.' }, exec });
+  assert.ok(calls.some((c) => c[0] === 'gh' && c[1] === 'issue' && c[2] === 'view'));
+  assert.ok(calls.some((c) => c[0] === 'gh' && c[1] === 'issue' && c[2] === 'edit'));
+  assert.match(out.body, /The current description\./); // the fresh body, not the stale cache
+  assert.equal(out.saved.number, 29);
+  assert.equal(out.saved.mode, 'replace');
+  assert.equal(out.saved.platform, 'github');
+  assert.equal(fs.readFileSync(path.join(runDir, 'issue-save.md'), 'utf8'), out.body);
+  assert.deepEqual(backlog.readIssueSaves(runDir), [out.saved]);
+});
+
+test('saveRunToIssue: comment mode does not read the issue first and records the comment URL from stdout', async (t) => {
+  const runDir = savesTmp(t);
+  writeDoc(runDir);
+  const calls = [];
+  const exec = async (cli, args) => { calls.push([cli, ...args]); return 'created https://github.com/o/r/issues/29#issuecomment-1\n'; };
+  const run = { runDir, status: 'success', issues: [{ number: 29, url: 'https://github.com/o/r/issues/29' }] };
+  const out = await backlog.saveRunToIssue({ run, mode: 'comment', preview: false, platform: 'github', repo: 'https://github.com/o/r', exec });
+  assert.ok(!calls.some((c) => c[1] === 'view'));
+  assert.equal(out.saved.commentUrl, 'https://github.com/o/r/issues/29#issuecomment-1');
+});
+
+test('saveRunToIssue: a successful save refreshes the project\'s cached issue (its pull requests are kept)', async (t) => {
+  const runDir = savesTmp(t);
+  writeDoc(runDir);
+  const dir = savesTmp(t);
+  fs.writeFileSync(path.join(dir, 'p.json'), JSON.stringify({
+    projectId: 'p', platform: 'github', repo: 'https://github.com/o/r',
+    issues: [{ number: 29, title: 'Old title', state: 'open', url: 'https://github.com/o/r/issues/29', body: 'old', pullRequests: [{ number: 5, title: 'A PR', url: 'u', draft: false }] }],
+  }));
+  const exec = async (cli, args) => {
+    if (args[0] === 'issue' && (args[1] === 'edit' || args[1] === 'view')) {
+      if (args[1] === 'view') return JSON.stringify({ number: 29, title: 'New title', state: 'OPEN', url: 'https://github.com/o/r/issues/29', labels: [], body: 'New body', assignees: [] });
+      return '';
+    }
+    return '';
+  };
+  const run = { runDir, status: 'success', issues: [{ number: 29, url: 'https://github.com/o/r/issues/29' }] };
+  await backlog.saveRunToIssue({ run, mode: 'replace', preview: false, platform: 'github', repo: 'https://github.com/o/r', exec, dir, projectId: 'p' });
+  const cache = backlog.readBacklog(dir, 'p');
+  assert.equal(cache.issues[0].title, 'New title');
+  assert.equal(cache.issues[0].body, 'New body');
+  assert.deepEqual(cache.issues[0].pullRequests, [{ number: 5, title: 'A PR', url: 'u', draft: false }]);
+});
+
+test('saveRunToIssue: a failing refresh still records the save, with refreshError set', async (t) => {
+  const runDir = savesTmp(t);
+  writeDoc(runDir);
+  const dir = savesTmp(t); // no project cache file: fetchIssue after the save will fail to update it
+  let calls = 0;
+  const exec = async (cli, args) => {
+    calls += 1;
+    if (args[1] === 'view') throw new Error('gh issue view failed: not found');
+    return '';
+  };
+  const run = { runDir, status: 'success', issues: [{ number: 29, url: 'https://github.com/o/r/issues/29' }] };
+  const out = await backlog.saveRunToIssue({ run, mode: 'comment', preview: false, platform: 'github', repo: 'https://github.com/o/r', exec, dir, projectId: 'missing' });
+  assert.ok(out.saved);
+  assert.match(out.refreshError, /not found/);
+});
+
+test('saveRunToIssue: refuses a run with no issue, a run that did not succeed, or a missing/empty document', async (t) => {
+  const runDir = savesTmp(t);
+  const { exec } = fakeExec('x');
+  await assert.rejects(backlog.saveRunToIssue({ run: { runDir, status: 'success', issues: [] }, preview: true, platform: 'github', repo: 'r', exec }), /not started from an issue/);
+  await assert.rejects(backlog.saveRunToIssue({ run: { runDir, status: 'running', issues: [{ number: 1, url: 'u' }] }, preview: true, platform: 'github', repo: 'r', exec }), /Only an accepted document/);
+  await assert.rejects(backlog.saveRunToIssue({ run: { runDir, status: 'success', issues: [{ number: 1, url: 'u' }] }, preview: true, platform: 'github', repo: 'r', exec }), /has no document\.md/);
+  writeDoc(runDir, '   \n  ');
+  await assert.rejects(backlog.saveRunToIssue({ run: { runDir, status: 'success', issues: [{ number: 1, url: 'u' }] }, preview: true, platform: 'github', repo: 'r', exec }), /document\.md is empty/);
+});
+
+test('saveRunToIssue: an exec error (e.g. no auth) propagates and nothing is recorded', async (t) => {
+  const runDir = savesTmp(t);
+  writeDoc(runDir);
+  const exec = async () => { throw new Error('gh issue edit failed: not authenticated'); };
+  const run = { runDir, status: 'success', issues: [{ number: 29, url: 'https://github.com/o/r/issues/29' }] };
+  await assert.rejects(backlog.saveRunToIssue({ run, mode: 'comment', preview: false, platform: 'github', repo: 'https://github.com/o/r', exec }), /not authenticated/);
+  assert.equal(fs.existsSync(path.join(runDir, 'issue-saves.json')), false);
+});
+
+test('readIssueSaves: [] when the run has never saved to an issue', (t) => {
+  const runDir = savesTmp(t);
+  assert.deepEqual(backlog.readIssueSaves(runDir), []);
+});
+
 test('a queued issue becomes the run inputs: task, project folder and issue', () => {
   const item = { number: 7, url: 'https://github.com/o/r/issues/7', title: 'Add X', body: 'Details', inputs: { language: 'go', repo_path: '' } };
   const wf = { inputs: { task: {}, repo_path: { type: 'string' }, language: {}, issue: {}, run_id: { type: 'run' } } };
@@ -385,4 +686,144 @@ test('a queued issue becomes the run inputs: task, project folder and issue', ()
   });
   // no `issue` input: the URL is only in the task
   assert.equal(backlog.runInputs(item, { inputs: { task: {} } }, 'C:/repo').issue, undefined);
+});
+
+// ---- the platform is the source of truth (#168): a fresh read right before a start ---------------
+
+// A fake `gh issue view <n>` runner: `byNumber[n]` answers the call, or it throws when `byNumber[n]`
+// is an Error; unlisted numbers throw "no such issue".
+function issueViewExec(byNumber) {
+  const calls = [];
+  const exec = async (cli, args) => {
+    calls.push([cli, ...args]);
+    const n = Number(args[2]);
+    const a = byNumber[n];
+    if (a === undefined) throw new Error(`no such issue: ${n}`);
+    if (a instanceof Error) throw a;
+    return JSON.stringify({ number: n, state: 'OPEN', labels: [], ...a });
+  };
+  return { exec, calls };
+}
+
+test('freshIssues: the platform read wins over a stale, closed cache (the platform is the source of truth)', async () => {
+  const item = { number: 1, url: 'https://github.com/o/r/issues/1', title: 'Old title', body: 'Old body', updatedAt: '2026-09-01T00:00:00Z', knownPullRequests: ['https://github.com/o/r/pull/9'] };
+  const cache = { syncedAt: '2026-09-20T08:00:00Z', issues: [{ number: 1, state: 'closed', title: 'Cached title', body: 'Cached body', url: 'https://github.com/o/r/issues/1', updatedAt: '2026-09-15T00:00:00Z' }] };
+  const { exec } = issueViewExec({ 1: { title: 'Fresh title', body: 'Fresh body', state: 'OPEN', url: 'https://github.com/o/r/issues/1', updatedAt: '2026-10-01T12:00:00Z' } });
+  const { issues, warnings } = await backlog.freshIssues({ item, platform: 'github', repo: 'https://github.com/o/r', cache, fromPlatform: true, exec });
+  assert.deepEqual(warnings, []);
+  assert.deepEqual(issues, [{
+    number: 1, url: 'https://github.com/o/r/issues/1', title: 'Fresh title', body: 'Fresh body', labels: [],
+    updatedAt: '2026-10-01T12:00:00Z', knownPullRequests: ['https://github.com/o/r/pull/9'], state: 'open',
+  }]);
+});
+
+test('freshIssues: a platform read that fails falls back to the synced cache when it is newer than the item\'s copy, and warns', async () => {
+  const item = { number: 1, url: 'u', title: 'Copy title', body: 'Copy body', updatedAt: '2026-09-10T00:00:00Z', knownPullRequests: [] };
+  const cache = { syncedAt: '2026-09-20T08:30:00Z', issues: [{ number: 1, state: 'open', title: 'Synced title', body: 'Synced body', url: 'https://github.com/o/r/issues/1', updatedAt: '2026-09-25T00:00:00Z' }] };
+  const { exec } = issueViewExec({ 1: new Error('gh: not authenticated') });
+  const { issues, warnings } = await backlog.freshIssues({ item, platform: 'github', repo: 'https://github.com/o/r', cache, fromPlatform: true, exec });
+  assert.deepEqual(issues, [{
+    number: 1, url: 'https://github.com/o/r/issues/1', title: 'Synced title', body: 'Synced body', labels: [],
+    updatedAt: '2026-09-25T00:00:00Z', knownPullRequests: [], state: 'open', fallback: 'cache', cachedAt: '2026-09-20T08:30:00Z',
+  }]);
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0], /^Issue #1 read from the cache of \d{2}:\d{2}: gh: not authenticated$/);
+});
+
+test('freshIssues: a platform read that fails falls back to the item\'s own copy when the cache has no newer version', async () => {
+  const item = { number: 1, url: 'u', title: 'Copy title', body: 'Copy body', updatedAt: '2026-09-25T00:00:00Z', knownPullRequests: [] };
+  const cache = { syncedAt: '2026-09-20T08:00:00Z', issues: [{ number: 1, state: 'open', title: 'Stale cached', body: 'Stale body', url: 'https://github.com/o/r/issues/1', updatedAt: '2026-09-10T00:00:00Z' }] };
+  const { exec } = issueViewExec({ 1: new Error('offline') });
+  const { issues, warnings } = await backlog.freshIssues({ item, platform: 'github', repo: 'https://github.com/o/r', cache, fromPlatform: true, exec });
+  assert.deepEqual(issues, [{
+    number: 1, url: 'u', title: 'Copy title', body: 'Copy body', labels: [],
+    updatedAt: '2026-09-25T00:00:00Z', knownPullRequests: [], state: 'open', fallback: 'copy',
+  }]);
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0], /^Issue #1 read from the copy saved with the planned item \(the cache has no newer version\): offline$/);
+});
+
+test('freshIssues: fromPlatform false (a simulation, or a project with no repository) never calls the CLI; no warning, no fallback marker', async () => {
+  const item = { number: 1, url: 'u', title: 'Copy', body: 'copy body', updatedAt: '2026-09-10T00:00:00Z', knownPullRequests: [] };
+  const cache = { syncedAt: 'x', issues: [{ number: 1, state: 'closed', title: 'Cached', body: 'cached body', url: 'ucached', updatedAt: '2026-09-20T00:00:00Z' }] };
+  let called = false;
+  const exec = async () => { called = true; throw new Error('should not be called'); };
+  const { issues, warnings } = await backlog.freshIssues({ item, platform: 'github', repo: 'r', cache, fromPlatform: false, exec });
+  assert.equal(called, false);
+  assert.deepEqual(warnings, []);
+  assert.deepEqual(issues, [{ number: 1, url: 'ucached', title: 'Cached', body: 'cached body', labels: [], updatedAt: '2026-09-20T00:00:00Z', knownPullRequests: [], state: 'closed' }]);
+});
+
+test('freshIssues: a group\'s issues are read independently, each with its own fallback', async () => {
+  const item = {
+    number: 1, url: 'u1', title: 't1', body: 'b1', updatedAt: null,
+    issues: [
+      { number: 1, url: 'u1', title: 'Old1', body: 'Old body1', knownPullRequests: [] },
+      { number: 2, url: 'u2', title: 'Old2', body: 'Old body2', updatedAt: '2026-09-01T00:00:00Z', knownPullRequests: [] },
+    ],
+  };
+  const cache = { syncedAt: '2026-09-20T00:00:00Z', issues: [{ number: 2, state: 'open', title: 'Cached2', body: 'Cached body2', url: 'u2', updatedAt: '2026-09-15T00:00:00Z' }] };
+  const { exec } = issueViewExec({ 1: { title: 'Fresh1', body: 'Fresh body1', state: 'OPEN', url: 'u1', updatedAt: '2026-10-01T00:00:00Z' }, 2: new Error('offline') });
+  const { issues, warnings } = await backlog.freshIssues({ item, platform: 'github', repo: 'https://github.com/o/r', cache, fromPlatform: true, exec });
+  assert.deepEqual(issues.map((i) => i.title), ['Fresh1', 'Cached2']);
+  assert.equal(issues[0].fallback, undefined);
+  assert.equal(issues[1].fallback, 'cache');
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0], /^Issue #2 read from the cache/);
+});
+
+test('recordedIssues: number/url/title/updatedAt only, plus fallback and cachedAt when there was a fallback', () => {
+  const issues = [
+    { number: 1, url: 'u1', title: 't1', body: 'b', labels: [], state: 'open', updatedAt: '2026-10-01T00:00:00Z' },
+    { number: 2, url: 'u2', title: 't2', body: 'b', labels: [], state: 'open', updatedAt: '2026-09-01T00:00:00Z', fallback: 'cache', cachedAt: '2026-09-20T00:00:00Z' },
+  ];
+  assert.deepEqual(backlog.recordedIssues(issues), [
+    { number: 1, url: 'u1', title: 't1', updatedAt: '2026-10-01T00:00:00Z' },
+    { number: 2, url: 'u2', title: 't2', updatedAt: '2026-09-01T00:00:00Z', fallback: 'cache', cachedAt: '2026-09-20T00:00:00Z' },
+  ]);
+});
+
+test('withSyncedText: a copy takes the synced title/body/labels/updatedAt (its own url when the sync has none); without a sync it is unchanged', () => {
+  const copy = { number: 1, url: 'old-url', title: 'Old', body: 'old body', labels: [{ name: 'a' }], updatedAt: '2026-09-01T00:00:00Z', knownPullRequests: ['p'] };
+  const synced = { title: 'New', body: 'new body', labels: [{ name: 'b' }], updatedAt: '2026-10-01T00:00:00Z' }; // no url
+  assert.deepEqual(backlog.withSyncedText(copy, synced), { ...copy, title: 'New', body: 'new body', labels: [{ name: 'b' }], updatedAt: '2026-10-01T00:00:00Z' });
+  assert.deepEqual(backlog.withSyncedText(copy, null), copy);
+});
+
+test('refreshQueuedCopies: brings the queued copies up to a sync; a no-op (no write) once they already match', (t) => {
+  const dir = tmp(t);
+  backlog.enqueue(dir, 'p', {
+    workflow: 'w.yaml',
+    issues: [{ number: 1, url: 'u1', title: 'Old', body: 'old' }, { number: 2, url: 'u2', title: 'Old2', body: 'old2' }],
+  });
+  const synced = [
+    { number: 1, title: 'New title', body: 'new body', url: 'u1', labels: [], updatedAt: '2026-10-01T00:00:00Z' },
+    { number: 2, title: 'New2', body: 'new2', url: 'u2', labels: [], updatedAt: '2026-10-01T00:00:00Z' },
+  ];
+  assert.equal(backlog.refreshQueuedCopies(dir, 'p', synced), true);
+  const q = backlog.readQueue(dir, 'p');
+  assert.deepEqual(q.items.map((i) => i.title), ['New title', 'New2']);
+  assert.equal(backlog.refreshQueuedCopies(dir, 'p', synced), false); // already up to date: nothing written
+});
+
+test('the platform is the source of truth: a sync and a fresh pre-start read never write back to it (no edit/create/close/comment call)', async (t) => {
+  const dir = tmp(t);
+  const calls = [];
+  const exec = async (cli, args) => {
+    calls.push([cli, ...args]);
+    if (args[0] === 'issue' && args[1] === 'list') return JSON.stringify([GH_ISSUE]);
+    if (args[0] === 'pr' && args[1] === 'list') return JSON.stringify([]);
+    if (args[0] === 'issue' && args[1] === 'view') return JSON.stringify(GH_ISSUE);
+    return '[]'; // epics / sub-issues reads (gh api ...)
+  };
+  const project = { id: 'p', repo: 'https://github.com/o/r' };
+  await backlog.syncBacklog({ dir, project, platform: 'github', exec });
+  const cache = backlog.readBacklog(dir, 'p');
+  await backlog.freshIssues({
+    item: { number: GH_ISSUE.number, url: GH_ISSUE.url, title: GH_ISSUE.title, body: GH_ISSUE.body },
+    platform: 'github', repo: project.repo, cache, fromPlatform: true, exec,
+  });
+  assert.ok(calls.length > 0);
+  const writeVerbs = ['edit', 'create', 'close', 'comment', 'update', 'note'];
+  assert.ok(!calls.some(([, , verb]) => writeVerbs.includes(verb)), JSON.stringify(calls));
 });

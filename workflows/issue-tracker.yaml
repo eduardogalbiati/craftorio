@@ -1,0 +1,505 @@
+# =============================================================================
+# Workflow: Issue Tracker
+# -----------------------------------------------------------------------------
+#   analyze ──► write ──► review (you) ──► file ──► end
+#                 ▲   │      │               ▲
+#                 └───┼──────┘ revise        │
+#                     └──────────────────────┘ mode: auto (no duplicate found)
+#
+# Mode (`mode`, #133): `validated` (default) stops at the review gate, as above. `auto` files the
+# first draft as soon as it is written, without the gate: the owner chose so at start, nobody
+# answers the gate for them. In auto, a draft that found a duplicate (`existing_issue` not 0) still
+# stops at the review (nothing is added to an existing issue without the owner), no missing label is
+# created (the filer files with the existing labels and lists the skipped ones in its summary), and
+# nothing is queued for `assign_workflow` (queueing stays a choice at the gate).
+#
+# Intake: the inputs. `request` is free text in any language (the owner's few words); the
+# project, the platform, optional files (screenshots, logs) and an optional "related to #n".
+#
+# 1. analyze: the code analyzer (read-only, cheaper model) finds the code involved and today's
+#             behaviour (file:line), estimates the files to change, rates impact 1-5 and
+#             complexity 1-5 (issue-triage rubric), searches issues and open PRs/MRs for
+#             duplicates and work in flight, and advises whether to run it alone or grouped.
+# 2. write:   the issue writer drafts the issue(s) in English (issue-writing): title, body with
+#             evidence, the owner's decisions verbatim, tasks as acceptance criteria, labels.
+#             Independent parts become several cross-linked issues.
+# 3. review:  you see the scores, the grouping advice and the draft(s), and pick: create, create
+#             and queue a workflow now, revise (your note goes back to the writer), add to an
+#             existing issue instead, or discard.
+# 4. file:    the issue filer (gh/glab only) creates the issue(s) or comments on/edits the
+#             existing one, with the labels, and reports the URLs. Missing impact/complexity/kind/
+#             area labels are created only here, after your choice at the gate: no agent before
+#             the gate can create anything (in auto, none is created).
+#
+# "Create and queue" (`create_assign`): the choice's `then` (#134) chains the run to a queue: when it
+# ends with success, the app syncs the project's Backlog and queues the created issues (the `issues`
+# output) for `assign_workflow` (src/service/areas/chain.js, chain-model queueBatches), as one run
+# when there are several and the analysis said `group`. Simulated runs
+# queue nothing. The Backlog's New issue button starts this workflow for the selected project.
+# Epics (#138): the analyzer names the existing epic the issue belongs to (`epic`). When the match is
+# `clear` and the project's "Auto-place new issues" option (project.autoEpic) is on, the app places
+# the created issues in it when the run ends (src/epics.js filedToEpic, the service's
+# placeFiledInEpic). It never creates an epic: new epics are the Product Owner's proposals.
+# =============================================================================
+
+apiVersion: multiagent/v1
+kind: Workflow
+
+metadata:
+  name: issue-tracker
+  version: 0.2.0
+  description: Turns a request in a few words into a triaged GitHub/GitLab issue - the code involved, the files to change, impact and complexity 1-5 as labels, duplicates and grouping advice - and files it after you approve the draft (Validated) or as soon as it is written (Automatic).
+  tags: [issues, triage, backlog, github, gitlab]
+  category: plan
+
+# -----------------------------------------------------------------------------
+inputs:
+  request:
+    type: string
+    required: true
+    description: The problem or the idea, in a few words, in any language (e.g. "the run chat hides the gate when the window is small").
+  project_path:
+    type: string
+    required: true
+    description: Local repository the issue is about (read-only for the analyzer and the writer). Needs a GitHub or GitLab remote.
+  mode:
+    type: string
+    enum: [auto, validated]
+    default: validated
+    options: { auto: Automatic, validated: Validated }
+    description: "Validated: the run stops at the review so you approve, revise or discard the draft before anything is filed. Automatic: the drafts are filed as soon as they are written, with no review (a possible duplicate still stops for review, and no new label is created)."
+  git_platform:
+    type: string
+    enum: [gh, gl]
+    default: gh
+    label: Platform
+    options: { gh: GitHub, gl: GitLab }
+    # gh = GitHub (gh CLI), gl = GitLab (glab CLI): picks the issue-creator skill.
+    description: Where the issue is filed.
+  related:
+    type: string
+    required: false
+    default: ""
+    description: Optional related issues, e.g. "#41, #79". The analyzer reads them first.
+  attachments:
+    type: array
+    default: []
+    description: Optional files that show the problem (screenshots, logs, a run folder), one path per line. The analyzer reads them.
+  max_revisions:
+    type: integer
+    default: 3
+    description: How many times you can send the draft back to the writer from the review.
+  assign_workflow:
+    type: string
+    default: software-development.yaml
+    description: "Workflow the new issues are queued for when you pick \"Create and queue\" at the review (grouped in one run when the analysis advises it)."
+
+# -----------------------------------------------------------------------------
+providers:
+  claude:
+    type: claude-code
+    command: claude
+    args: ["-p", "--output-format", "stream-json", "--verbose", "--model", "{{ model }}"]
+    effort_args: ["--effort", "{{ effort }}"]
+    resume_args: ["--resume", "{{ session_id }}"]
+    skill_args: ["--add-dir", "{{ skill_dir }}"]
+
+x-tools:
+  # Read-only is a convention (capabilities.md): git and gh/glab are allowed to search the history,
+  # the issues and the PRs/MRs; the prompts forbid any command that changes something.
+  read_vcs: &read_vcs { tools: [read, bash:git, bash:gh, bash:glab], web: false }
+  read_only: &read_only { tools: [read], web: false }
+  # gh / glab: called bare, in the Bash tool, one command per call (see issue-creator-<platform>).
+  vcs_only: &vcs_only { tools: [bash:gh, bash:glab], web: false }
+
+defaults:
+  working_dir: "{{ inputs.project_path }}"
+  timeout: 20m
+  max_context: 150k
+  retry:
+    max_attempts: 2
+    backoff: exponential
+    initial_delay: 10s
+
+orchestrator:
+  provider: claude
+  model: claude-sonnet-5
+  # Called when a step fails (e.g. an answer that does not match its schema); it never answers
+  # the review gate.
+  supervisor:
+    enabled: true
+    max_interventions: 2   # per step
+    max_cost_usd: 2
+  limits:
+    max_total_duration: 2h
+    max_total_cost_usd: 15
+
+# -----------------------------------------------------------------------------
+agents:
+  code_analyzer:
+    provider: claude
+    model: claude-sonnet-5
+    effort: medium
+    session: ephemeral
+    capabilities: *read_vcs
+    skills: [issue-triage, "issue-creator-{{ inputs.git_platform }}"]
+    system_prompt: |
+      You are the code analyzer of an issue tracker. Before an issue is written, you find the
+      code a request touches, describe today's behaviour with file:line evidence, estimate the
+      files to change and rate impact and complexity with the issue-triage rubric. The current
+      folder is the project ({{ inputs.project_path }}): it is read-only for you. Use git and
+      {% if inputs.git_platform == 'gl' %}glab{% else %}gh{% endif %} only to read (log, grep, show; issue/PR/MR list and view, label list):
+      never create, edit, comment, label, push or change anything. Nobody can answer questions:
+      record assumptions. Write everything in English, whatever the language of the request.
+
+  issue_writer:
+    provider: claude
+    model: claude-opus-5-5
+    effort: high
+    session: persistent   # revises its own draft with the owner's notes
+    capabilities: *read_only
+    skills: [issue-writing, issue-triage]
+    system_prompt: |
+      You are the issue writer. You turn the owner's request and the analyzer's findings into
+      issues someone else can implement without asking (issue-writing). The repository is in
+      English: translate the request, keep the owner's intent and record their decisions
+      verbatim as "Decision (owner): ...". You only write drafts; you never file anything.
+      The current folder is the project, read-only for you.
+
+  issue_filer:
+    provider: claude
+    model: claude-sonnet-5
+    effort: low
+    session: ephemeral
+    capabilities: *vcs_only
+    skills: ["issue-creator-{{ inputs.git_platform }}"]
+    system_prompt: |
+      You are the issue filer. The owner approved the drafts at the review gate; you file them
+      exactly as approved with {% if inputs.git_platform == 'gl' %}glab{% else %}gh{% endif %} (create, comment or edit), with their labels, and
+      report the URLs. You do not rewrite the drafts.
+
+# Progress shown in the runs list and the Run screen (does not change the graph).
+groups:
+  - name: Analysis
+    steps: [analyze]
+  - name: Draft
+    steps: [write, review]
+  - name: File
+    steps: [file]
+
+# -----------------------------------------------------------------------------
+steps:
+
+  - id: analyze
+    agent: code_analyzer
+    save_as:
+      - { path: "analysis.json", content: "{{ output | dump }}" }
+    prompt: |
+      Request from the owner (any language; it may be only a few words):
+      <request>
+      {{ inputs.request }}
+      </request>
+      {% if inputs.related %}Related, according to the owner: {{ inputs.related }}. Read them first.
+      {% endif %}{% if inputs.attachments | length %}Files the owner attached (read them):
+      {% for a in inputs.attachments %}- {{ a }}
+      {% endfor %}{% endif %}
+      Follow the issue-triage skill:
+      1. Find the code involved and today's behaviour: `evidence` (where = file:line or function,
+         what = what happens there today). When the project keeps runs or logs, quote run ids,
+         error text and numbers.
+      2. `files`: the files likely to change, each with what changes; `files_count`; `blast_radius`
+         (what else could break).
+      3. `impact` and `complexity`: a score 1-5 and a one-line reason each, from the rubric.
+      4. `duplicates`: open and closed issues that cover it (two keyword searches), and
+         `in_flight`: open PRs/MRs that already cover part of it.
+      5. `grouping`: `alone` or `group`, with `grouping_reason`, and `nearby`: open issues touching
+         the same files (group with, avoid running together, do first or after).
+      6. `labels_missing`: which of the labels the issue needs (impact:<n>, complexity:<n>, its kind,
+         area:<...>) do not exist yet in the repository (label list). Do not create them.
+      7. `follow_ups`: related smells you noticed, as separate suggestions.
+      8. `epic`: the existing epic the issue belongs to. Epics are the open issues labelled `epic`
+         (GitLab: also the group epics of the project's issues). `id` is `#<number>` (`&<iid>` for
+         a GitLab group epic), `title` its title, `match` `clear` when the issue plainly belongs to
+         its theme, `unsure` when it might, `none` (with `id` and `title` "") when no epic fits or
+         the project has none; `reason` in one line. Never create an epic.
+      `repo` is owner/name of the remote. Everything in English.
+    output_schema:
+      type: object
+      required: [repo, summary, kind, evidence, files, files_count, blast_radius, impact, complexity, duplicates, in_flight, grouping, grouping_reason, nearby, areas, labels_missing, follow_ups, epic, assumptions]
+      properties:
+        repo:    { type: string }
+        summary: { type: string }
+        kind:    { type: string, enum: [enhancement, bug, documentation] }
+        evidence:
+          type: array
+          items:
+            type: object
+            required: [where, what]
+            properties:
+              where: { type: string }
+              what:  { type: string }
+        files:
+          type: array
+          items:
+            type: object
+            required: [path, change]
+            properties:
+              path:   { type: string }
+              change: { type: string }
+        files_count:  { type: integer }
+        blast_radius: { type: string }
+        impact:
+          type: object
+          required: [score, reason]
+          properties:
+            score:  { type: integer, enum: [1, 2, 3, 4, 5] }
+            reason: { type: string }
+        complexity:
+          type: object
+          required: [score, reason]
+          properties:
+            score:  { type: integer, enum: [1, 2, 3, 4, 5] }
+            reason: { type: string }
+        duplicates:
+          type: array
+          items:
+            type: object
+            required: [number, title, state, relation]
+            properties:
+              number:   { type: integer }
+              title:    { type: string }
+              state:    { type: string, enum: [open, closed] }
+              relation: { type: string, enum: [duplicate, overlaps, related] }
+        in_flight:
+          type: array
+          items:
+            type: object
+            required: [number, title, covers]
+            properties:
+              number: { type: integer }
+              title:  { type: string }
+              covers: { type: string }
+        grouping:        { type: string, enum: [alone, group] }
+        grouping_reason: { type: string }
+        nearby:
+          type: array
+          items:
+            type: object
+            required: [number, advice, reason]
+            properties:
+              number: { type: integer }
+              advice: { type: string, enum: [group_with, avoid_together, do_first, do_after] }
+              reason: { type: string }
+        areas:
+          type: array
+          items: { type: string, enum: [engine, renderer, workflows, docs] }
+        labels_missing:
+          type: array
+          items: { type: string }
+        follow_ups:
+          type: array
+          items: { type: string }
+        epic:
+          type: object
+          required: [id, title, match, reason]
+          properties:
+            id:     { type: string }
+            title:  { type: string }
+            match:  { type: string, enum: [clear, unsure, none] }
+            reason: { type: string }
+        assumptions:
+          type: array
+          items: { type: string }
+
+  - id: write
+    agent: issue_writer
+    save_as:
+      - { path: "drafts/v{{ steps.write.visits }}.md", content: "{% for i in output.issues %}# {{ i.title }}\n\nLabels: {{ i.labels | join(', ') }}\n\n{{ i.body }}\n\n{% endfor %}" }
+    prompt: |
+      {% if steps.write.visits == 1 %}
+      Owner's request (translate it; keep the intent):
+      <request>
+      {{ inputs.request }}
+      </request>
+      {% if inputs.related %}Related, according to the owner: {{ inputs.related }}.
+      {% endif %}
+      The code analyzer's findings (estimates are marked):
+      {{ steps.analyze.output | dump }}
+
+      Draft the issue(s) following issue-writing: a specific title, a context grounded in the
+      evidence (file:line, today's numbers, run ids), "Decision (owner): ..." for every decision
+      the request states, tasks as verifiable acceptance criteria ending with tests, docs (and a
+      measure task when it claims a gain), the invariants it must keep, and "Related: #n".
+      Add a short "Triage" section: impact and complexity with their reasons, the estimated files
+      (marked as an estimate) and the grouping advice. Split into several issues only when the
+      parts can ship independently; cross-link them and say the order in `message`.
+      Labels per issue: `impact:<n>`, `complexity:<n>`, the kind, and `area:<...>` from the areas.
+      When the analyzer found a duplicate (`relation: duplicate`), set `existing_issue` to its
+      number and write in `addition` the comment that adds what is new; otherwise 0 and "".
+      The analyzer's follow-ups stay out of the issue: list them in `follow_ups`.
+      {% else %}
+      The owner sent draft v{{ steps.write.visits - 1 }} back:
+      {{ steps.review.output.feedback }}
+      Revise the draft(s) to address it. Always return every issue complete.
+      {% endif %}
+      {% if feedback | length %}
+      The owner's decisions so far (record them verbatim as "Decision (owner): ..."):
+      {% for f in feedback %}- {{ f.text }}
+      {% endfor %}{% endif %}
+      Answer with `message` (two or three sentences to the owner: what you drafted, the split and
+      order if any), `issues`, `existing_issue`, `addition` and `follow_ups`. Everything in English.
+    output_schema:
+      type: object
+      required: [message, issues, existing_issue, addition, follow_ups]
+      properties:
+        message: { type: string }
+        issues:
+          type: array
+          items:
+            type: object
+            required: [title, body, labels]
+            properties:
+              title:  { type: string }
+              body:   { type: string }
+              labels:
+                type: array
+                items: { type: string }
+        existing_issue: { type: integer }
+        addition:       { type: string }
+        follow_ups:
+          type: array
+          items: { type: string }
+    # auto: the first draft goes straight to the filer, unless it found a duplicate (the owner
+    # decides what is added to an existing issue); once the owner has seen a draft, it is reviewed.
+    transitions:
+      - when: "inputs.mode == 'auto' and steps.review.visits == 0 and not (output.existing_issue | int)"
+        goto: file
+      - when: "true"
+        goto: review
+
+  # The owner decides; the supervisor never answers this gate (a decision gate).
+  - id: review
+    type: human_approval
+    feedback:
+      label: Your note (needed to revise; optional otherwise)
+      placeholder: "e.g. Split the badges from the button; the owner decided: no new step type."
+    message: |
+      {% if inputs.mode == 'auto' and steps.review.visits == 1 %}Automatic mode stopped here: the writer found an existing issue (#{{ steps.write.output.existing_issue }}) this may duplicate, and nothing is added to an existing issue without you.
+      {% endif %}Impact {{ steps.analyze.output.impact.score }}/5: {{ steps.analyze.output.impact.reason }}
+      Complexity {{ steps.analyze.output.complexity.score }}/5: {{ steps.analyze.output.complexity.reason }}
+      Files to change (estimate): {{ steps.analyze.output.files_count }}. Grouping: {{ steps.analyze.output.grouping }} ({{ steps.analyze.output.grouping_reason }}).
+      {% for d in steps.analyze.output.duplicates %}Possible {{ d.relation }}: #{{ d.number }} {{ d.title }} ({{ d.state }}).
+      {% endfor %}{% for p in steps.analyze.output.in_flight %}Open PR/MR #{{ p.number }} already covers: {{ p.covers }}.
+      {% endfor %}{% for n in steps.analyze.output.nearby %}Nearby #{{ n.number }} ({{ n.advice }}): {{ n.reason }}{% if steps.analyze.output.grouping == 'group' and n.advice == 'group_with' %} - "Create and queue" runs it grouped with the new issue(s), up to the Backlog's group size (Settings › General › Backlog).{% endif %}
+      {% endfor %}{% if steps.analyze.output.epic.id %}Epic: {{ steps.analyze.output.epic.id }} {{ steps.analyze.output.epic.title }} ({{ steps.analyze.output.epic.match }} match: {{ steps.analyze.output.epic.reason }}).{% if steps.analyze.output.epic.match == 'clear' %} Created issues join it when the project's "Auto-place new issues" option is on (Backlog › Epics).{% endif %}
+      {% endif %}
+      {{ steps.write.output.message }}
+      {% for i in steps.write.output.issues %}
+      ### {{ i.title }}
+      Labels: {{ i.labels | join(', ') }}
+
+      {{ i.body }}
+      {% endfor %}
+      {% if steps.analyze.output.labels_missing | length %}Creating or adding also creates these missing labels, once: {{ steps.analyze.output.labels_missing | join(', ') }}.
+      {% endif %}{% if steps.write.visits > (inputs.max_revisions | int) %}No revision rounds left.
+      {% endif %}What do you want to do?
+    choices:
+      - { id: create,        label: "Create {% if steps.write.output.issues | length > 1 %}the {{ steps.write.output.issues | length }} issues{% else %}the issue{% endif %}" }
+      - { id: create_assign, label: "Create and queue {{ inputs.assign_workflow }} now (Backlog)", then: { action: queue, workflow: "{{ inputs.assign_workflow }}" } }
+      - { id: revise,        label: "Revise: send my note to the writer", feedback_required: true }
+      - { id: add_to,        label: "Add to {% if steps.write.output.existing_issue %}#{{ steps.write.output.existing_issue }}{% else %}an existing issue (#n in your note){% endif %} instead" }
+      - { id: discard,       label: "Discard" }
+    transitions:
+      - when: "choice == 'revise'"
+        goto: write
+        loop: { name: revisions, max_iterations: "{{ inputs.max_revisions | int }}", on_exhausted: review }
+      - when: "choice == 'discard'"
+        goto: end
+        status: cancelled
+      - when: "true"
+        goto: file
+
+  - id: file
+    agent: issue_filer
+    # without the review (mode: auto) the choice is `create` and no person confirmed new labels
+    prompt: |
+      {% set reviewed = steps.review.output and steps.review.output.choice %}
+      {% set choice = steps.review.output.choice if reviewed else 'create' %}
+      Repository: {{ steps.analyze.output.repo }} (pass it with --repo on every command).
+      {% if reviewed %}The owner chose: {{ choice }}.
+      {% else %}Automatic mode: the owner chose at start to file the drafts without a review. Do: create.
+      {% endif %}
+      {% if reviewed and steps.review.output.feedback %}The owner's note: {{ steps.review.output.feedback }}
+      {% endif %}
+      {% if not reviewed and steps.analyze.output.labels_missing | length %}
+      Create no label: nobody confirmed creating new ones. File with the existing labels only (drop
+      these missing ones from the issues) and list them as skipped in your `summary`: {{ steps.analyze.output.labels_missing | join(', ') }}.
+      {% elif steps.analyze.output.labels_missing | length %}
+      The owner confirmed creating these missing labels, once each, before filing (skip any that
+      exists by now): {{ steps.analyze.output.labels_missing | join(', ') }}. Create no other label.
+      Colors: impact:* d93f0b, complexity:* 5319e7, area:* 0e8a16.
+      {% else %}
+      Use the existing labels only; create none.
+      {% endif %}
+      {% if choice == 'add_to' %}
+      Do not create a new issue. Add this to the existing issue
+      {% if steps.write.output.existing_issue %}#{{ steps.write.output.existing_issue }}{% else %}named in the owner's note{% endif %}
+      (the owner's note wins when it names another number): post a comment with
+      {% if steps.write.output.addition %}this text:
+      {{ steps.write.output.addition }}
+      {% else %}the body of the draft below (without its title).{% endif %}
+      Edit its body instead only when the owner's note asks for it (keep the existing content).
+      Add the draft's labels to it.
+      {% else %}
+      Create each issue below, in order, with its title, body and labels. When there are
+      several, edit the later ones' "Related" lines to link the earlier ones' numbers.
+      {% endif %}
+      {% for i in steps.write.output.issues %}
+      <issue title="{{ i.title }}" labels="{{ i.labels | join(',') }}">
+      {{ i.body }}
+      </issue>
+      {% endfor %}
+      Answer with `filed` (each issue created, commented or edited: action, number, url, title),
+      `labels_created` (the labels you created) and `summary` (one sentence for the owner).
+    output_schema:
+      type: object
+      required: [filed, labels_created, summary]
+      properties:
+        filed:
+          type: array
+          items:
+            type: object
+            required: [action, number, url, title]
+            properties:
+              action: { type: string, enum: [created, commented, edited] }
+              number: { type: integer }
+              url:    { type: string }
+              title:  { type: string }
+        labels_created:
+          type: array
+          items: { type: string }
+        summary: { type: string }
+    transitions:
+      - when: "true"
+        goto: end
+
+# -----------------------------------------------------------------------------
+# What the run hands to the next one when it finishes (#134): `then` at start, or a gate choice's.
+outputs:
+  issues:
+    type: array
+    description: "The issues created: number, url, title, complexity and the grouping advice (grouping, group_with)."
+    value: "{{ steps.file.output.filed | filed_issues(steps.analyze.output) | to_json }}"
+
+# -----------------------------------------------------------------------------
+observability:
+  storage:
+    type: jsonl
+    path: "./runs/{{ run_id }}/"
+  capture:
+    prompts: true
+    outputs: true
+    thinking: true
+    tool_calls: true
+    redact:
+      - pattern: "(?i)(api[_-]?key|token|secret|password)\\s*[:=]\\s*\\S+"

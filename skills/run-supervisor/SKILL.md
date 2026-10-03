@@ -54,9 +54,62 @@ interactive prompt. The engine then stops the turn and runs the step again with 
 `instruction`: name the command and say how to run it instead (foreground, a timeout sized for
 the project, read the exit code). Never prescribe a code fix.
 
+## On call (an escalation gate or a stall)
+
+The engine calls you before a run stops to ask the person about a problem: a failure gate, an
+exhausted loop, or a stall it detected (the same answer several visits in a row, refused tool
+calls, a step far slower than usual). Try to solve it first:
+- `retry` / `resume` with an `instruction` when the workflow's agents can fix it: give them the
+  evidence and your hypotheses (e.g. "call bare `gh` in the Bash tool", "a process holds the
+  build folder: stop it before building"), never a code fix.
+- `route` an escalation gate yourself only when the evidence shows that answer is right.
+- `user_action` when the fix is outside the run's permissions: write the exact command or setting
+  the person must change.
+- `escalate` (gate) or `continue` (stall) otherwise. You never answer a decision gate (scope,
+  merge, publish): when an exhausted loop leads to one, you may only send the run back to the
+  agents or escalate.
+- At a gate, write the note for the owner, in a fixed shape (#213): `recommend` is the button you
+  advise (`approve`, `reject` or a choice id); `recommendation` says why in one plain sentence
+  under 25 words ("Reject, then rerun #186 with unit tests on: it has no test of its own."); up to 3
+  `options`, each a short sentence a person can act on; `explanation` holds the details. The gate's
+  card shows only the recommendation and the options, the rest goes in its Details.
+- A step still running far longer than usual: `wait` when it can plausibly finish, `interrupt`
+  (with an `instruction`) when it cannot end on its own, `user_action` when only the person can
+  unblock it (e.g. stop an orphaned process); the step keeps running meanwhile.
+
+## Roadmap and workspace problems (on demand)
+
+When a person asks why the Backlog or the roadmap stopped, check these first (each one happened):
+
+- **Kept work** (#112, #170): a roadmap or queue paused with "… already have work from a cancelled
+  run": an ended run of the same issues left commits of its own. *Start from scratch* (Retry on the
+  roadmap item) starts a new run from today's base (the old commits stay in their worktree,
+  untouched); *Resume the old run* continues it from those commits. The text says how far behind
+  the base it is and whether its files changed since: recommend *Start from scratch* when it is
+  stale (it would mostly conflict) or covers fewer issues than the item, *Resume* when it is recent.
+- **Nothing starts by itself**: the app starts queued and roadmap items only when a run finishes or
+  when it opens. A roadmap paused with no run active waits for the person's Start or Retry.
+- **A frozen copy**: a workflow or skill the user edited in the workspace is "modified" and stops
+  receiving the app's updates without any warning (src/seed.js). When a run behaves like an older
+  version, compare the workspace copy with the bundled default; the fix is to change the default
+  and restore the copy.
+- **Two apps on one workspace** (#112): the second copy sees the other's runs as interrupted and may
+  start them twice. To switch the app to a new version: check that no run is active, close the old
+  app completely, then open the new one.
+- **Old issue text**: a run builds its task from the copy of the issue saved in the roadmap or queue
+  item, not from the platform; an issue edited after it was planned runs with the old text until
+  the item is saved again (#168).
+- **The repository clone itself**: runs install dependencies in their own worktrees, so a
+  "Cannot find module" that only happens when something runs directly in the project's clone points
+  to that clone's stale install, not to the code.
+- **Merged locally, not pushed**: those issues stay open on the platform until the person pushes;
+  say how many commits the local base is ahead of the remote.
+
 ## Explain for a person
 
-The explanation is read by the person who runs the workflow, in the language of the task.
+The explanation is read by the person who runs the workflow. Write it, your record and every
+`instruction` in English (the app's language), whatever language the task, the workflow or the
+person's messages use.
 Short and concrete: what the workflow was doing, what went wrong (with the decisive evidence
 quoted), why, what was already produced, and what you did or recommend. No stack traces unless
 they are the evidence; no blame.

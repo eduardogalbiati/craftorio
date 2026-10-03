@@ -15,6 +15,7 @@ const crypto = require('crypto');
 const path = require('path');
 const readline = require('readline');
 const { refuseReal } = require('./simulation');
+const { AGENT_ENV } = require('./capabilities');
 
 const emptyUsage = () => ({ input: 0, output: 0, cache_read: 0, cache_write: 0, reasoning: 0 });
 
@@ -276,20 +277,135 @@ function gitConfigEnv(env, settings) {
   return out;
 }
 
-function runCli(opts, parser) {
-  const { provider, model, effort, providerSessionId, prompt, cwd, extraArgs, timeoutMs, signal, onItem, render } = opts;
+// ---------------------------------------------------------------------------
+// Image attachments (#129): image files a turn hands to the CLI next to its prompt. Callers store
+// them in the workspace first (a run's attachments/ folder, a conversation's folder); runTurn checks
+// them before anything is spawned. How each CLI opens them (IMAGE_INPUT):
+//   read: Claude Code reads them with its Read tool: their folders go with --add-dir, Read is offered
+//   flag: attached to the message with --image=<file> (the `=` form: --image takes several values,
+//         a separate one would swallow `resume` or the `-` stdin argument). Meant for Codex CLI, off
+//         until a real `codex exec --image` call confirms it: then add 'codex-cli': 'flag' below
+//   none: no confirmed way (Codex CLI for now, Grok Build): the prompt still lists the paths; the
+//         caller warns (imageInput)
+// Every provider gets the "Attached images" block with the absolute paths.
+// ---------------------------------------------------------------------------
+const IMAGE_TYPES = {
+  '.gif': 'gif',
+  '.jpeg': 'jpeg',
+  '.jpg': 'jpeg',
+  '.png': 'png',
+  '.webp': 'webp',
+};
+const ATTACHMENT_LIMITS = { count: 10, bytes: 10 * 1024 * 1024 };
+const IMAGE_INPUT = { 'claude-code': 'read', mock: 'record' };
+
+// How a provider type opens attached images: 'read', 'flag', 'record' (mock) or null (it cannot).
+const imageInput = (type) => IMAGE_INPUT[type] || null;
+
+// The image format of a file's first bytes, or null.
+function sniffImage(buf) {
+  if (buf.length >= 8 && buf.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return 'png';
+  if (buf.length >= 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return 'jpeg';
+  if (buf.length >= 6 && /^GIF8[79]a$/.test(buf.subarray(0, 6).toString('latin1'))) return 'gif';
+  if (buf.length >= 12 && buf.subarray(0, 4).toString('latin1') === 'RIFF' && buf.subarray(8, 12).toString('latin1') === 'WEBP') return 'webp';
+  return null;
+}
+
+/**
+ * Checks a turn's attachments (paths or { path, name }) against the limits: PNG, JPEG, GIF or WebP
+ * (by extension and content), at most ATTACHMENT_LIMITS.count images of ATTACHMENT_LIMITS.bytes each.
+ * Returns [{ path (absolute), name }]; throws an error naming the file and the limit.
+ */
+function checkAttachments(list) {
+  const files = (list || []).map((a) => (typeof a === 'string' ? { path: a } : a || {}))
+    .map((a) => ({ path: path.resolve(String(a.path || '')), name: String(a.name || path.basename(String(a.path || ''))) }));
+  if (files.length > ATTACHMENT_LIMITS.count) throw new Error(`Too many attached images: ${files.length} (at most ${ATTACHMENT_LIMITS.count} per turn).`);
+  const mb = (n) => `${(n / 1024 / 1024).toFixed(1)} MB`;
+  for (const f of files) {
+    const type = IMAGE_TYPES[path.extname(f.path).toLowerCase()];
+    if (!type) throw new Error(`Attached file "${f.name}" is not a supported image: only PNG, JPEG, GIF and WebP files can be attached.`);
+    let stat;
+    try { stat = fs.statSync(f.path); } catch { throw new Error(`Attached image "${f.name}" was not found: ${f.path}`); }
+    if (!stat.isFile()) throw new Error(`Attached image "${f.name}" is not a file: ${f.path}`);
+    if (stat.size > ATTACHMENT_LIMITS.bytes) throw new Error(`Attached image "${f.name}" is ${mb(stat.size)}: the limit is ${mb(ATTACHMENT_LIMITS.bytes)} per image.`);
+    const head = Buffer.alloc(12);
+    const fd = fs.openSync(f.path, 'r');
+    let read;
+    try { read = fs.readSync(fd, head, 0, 12, 0); } finally { fs.closeSync(fd); }
+    if (sniffImage(head.subarray(0, read)) !== type) throw new Error(`Attached file "${f.name}" is not a valid ${type.toUpperCase()} image: only PNG, JPEG, GIF and WebP files can be attached.`);
+  }
+  return files;
+}
+
+// Whether a file name is one of the image types a turn may carry (by extension only).
+const isImagePath = (file) => !!IMAGE_TYPES[path.extname(String(file || '')).toLowerCase()];
+
+/**
+ * Checks images (checkAttachments) and copies them into `dir` (a workspace folder: a run's
+ * attachments/, a conversation's folder), each under a safe file name (-2, -3... when taken), so
+ * they outlive the originals and survive a resume. Returns [{ name, path }] of the copies.
+ */
+function storeAttachments(list, dir) {
+  const files = checkAttachments(list);
+  if (!files.length) return [];
+  fs.mkdirSync(dir, { recursive: true });
+  return files.map((f) => {
+    const ext = path.extname(f.path).toLowerCase();
+    const base = path.basename(f.name, path.extname(f.name)).replace(/[^A-Za-z0-9_.-]+/g, '-').replace(/^[-.]+|-+$/g, '').slice(-80) || 'image';
+    let file = path.join(dir, `${base}${ext}`);
+    for (let n = 2; fs.existsSync(file); n++) file = path.join(dir, `${base}-${n}${ext}`);
+    fs.copyFileSync(f.path, file);
+    return { name: f.name, path: file };
+  });
+}
+
+// The prompt block listing a turn's images, worded for how the CLI opens them.
+function attachmentsBlock(files, type) {
+  const how = {
+    read: 'Open each one with your Read tool before you start.',
+    flag: 'They are attached to this message; the files are:',
+  }[imageInput(type)] || 'Open each file if you can read images.';
+  return `## Attached images\n${how}\n${files.map((f) => `- ${f.name}: ${f.path}`).join('\n')}`;
+}
+
+// Claude Code: Read among the offered tools (a --tools list without it, e.g. a tool-less chat).
+function withReadTool(args) {
+  const i = args.indexOf('--tools');
+  if (i < 0 || i + 1 >= args.length) return args;
+  const tools = String(args[i + 1]).split(',').map((t) => t.trim()).filter(Boolean);
+  if (tools.includes('Read')) return args;
+  return [...args.slice(0, i + 1), [...tools, 'Read'].join(','), ...args.slice(i + 2)];
+}
+
+/**
+ * The command line and prompt of one CLI turn: { args, prompt, promptFile }. Without attachments
+ * both are exactly what the provider's definition and extraArgs give; `attachments` (checked by
+ * checkAttachments) add the per-CLI arguments (IMAGE_INPUT) and the "Attached images" block.
+ */
+function cliInvocation({ provider, model, effort, providerSessionId, prompt, extraArgs, render, attachments = [] }) {
   // `prompt_file_arg`: CLIs that take the prompt from a file (e.g. grok --prompt-file) instead of stdin
   const promptFile = provider.prompt_file_arg ? path.join(os.tmpdir(), `multiagent-prompt-${crypto.randomUUID()}.md`) : null;
   const vars = { model, effort, session_id: providerSessionId, prompt_file: promptFile };
-  const args = [
+  const input = attachments.length ? imageInput(provider.type) : null;
+  const imageArgs = input === 'read' ? [...new Set(attachments.map((f) => path.dirname(f.path)))].flatMap((d) => ['--add-dir', d])
+    : input === 'flag' ? attachments.map((f) => `--image=${f.path}`) : [];
+  let args = [
     ...(provider.args || []),
     // `effort_args` (e.g. claude --effort {{ effort }}): only when the agent sets an effort
     ...(effort ? provider.effort_args || [] : []),
     ...(extraArgs || []),
+    ...imageArgs,
     ...(providerSessionId ? provider.resume_args || [] : []),
     ...(provider.stdin_arg ? [provider.stdin_arg] : []),
     ...(provider.prompt_file_arg || []),
   ].map((a) => render(String(a), vars));
+  if (input === 'read') args = withReadTool(args);
+  return { args, prompt: attachments.length ? `${prompt}\n\n${attachmentsBlock(attachments, provider.type)}` : prompt, promptFile };
+}
+
+function runCli(opts, parser) {
+  const { provider, providerSessionId, cwd, timeoutMs, signal, onItem, agentEnv } = opts;
+  const { args, prompt, promptFile } = cliInvocation(opts);
 
   const resolved = resolveCommand(provider.command);
   if (!resolved) return Promise.reject(new Error(`Command "${provider.command}" not found in PATH.`));
@@ -301,6 +417,9 @@ function runCli(opts, parser) {
   const env = { ...process.env };
   delete env.CLAUDECODE; // avoids the "nested session" block if the app is launched from inside Claude Code
   Object.assign(env, gitConfigEnv(env, { 'rerere.enabled': 'true' }));
+  // agents' own checks never start real runs, and need no `VAR=value` prefix (refused by allowlists);
+  // agentEnv (capabilities.agentEnv): with the run's scratch workspace when it has one (#120)
+  Object.assign(env, agentEnv || AGENT_ENV);
 
   if (promptFile) fs.writeFileSync(promptFile, prompt);
 
@@ -366,6 +485,7 @@ function mockString(key) {
     question: 'A reviewer suggested switching the YAML library. Does that make sense in this PR?',
     failure_log: 'test/engine.test.js:12 AssertionError: expected "approved"',
     failure_report: 'npm test: 1 failure in test/engine.test.js (validateSchema accepts an invalid enum).',
+    e2e_note: 'Simulated: the run\'s scenarios written and checked with a dry run; they run at release (E2E release workflow).',
     file: 'src/auth/login.ts',
     summary: 'Simulated implementation of the feature with tests.',
     message: 'Simulated draft: I covered the request and applied the latest notes.',
@@ -381,6 +501,8 @@ function mockString(key) {
 const MOCK_SEQUENCES = {
   verdict: ['changes_requested', 'approved'],
   tests_status: ['fail', 'pass'],
+  // e2e-release (#199): the whole suite fails once, the developer fixes it, then it passes
+  e2e_status: ['fail', 'pass'],
   build_status: ['success'],
   ci_status: ['pending', 'failed', 'pending', 'success'],
   state: ['waiting', 'needs_human', 'needs_fix', 'ready_to_merge'],
@@ -391,6 +513,44 @@ const MOCK_SEQUENCES = {
   // writer-reviewer: the draft is approved on the 3rd review (threshold 8)
   score: [5.5, 7, 8.6],
 };
+
+// The test writer's E2E scenarios (#143), mixed statuses for the gates: a visit whose tests_status
+// fails (the 1st by default) has a failed scenario, the next ones pass it; one is always skipped
+// (environment). The UI scenario's screenshot is under the visit's evidence folder (the screenshot
+// demo writes it; a plain mock run has no image).
+// A schema whose status allows `pending` (a development run's test step, #199; it also allows
+// passed / failed for `e2e_tests: write_and_run`, #203, and test-batch): the scenarios are written,
+// not run: pending (run at release by e2e-release), one skipped (not writable here).
+function mockScenarios(h, statuses = []) {
+  const seq = h.sequences?.tests_status || MOCK_SEQUENCES.tests_status;
+  const failing = seq[Math.min(h.visit - 1, seq.length - 1)] === 'fail';
+  const feature = 'features/143-dashboard-filter.feature';
+  if (statuses.includes('pending') || (statuses.length && !statuses.includes('passed'))) {
+    return [
+      { feature, name: 'Filter the runs by status', status: 'pending', steps: ['Given the dashboard lists 3 runs, one of them failed', 'When I pick "Failed" in the status filter', 'Then only the failed run is listed'], screenshots: [] },
+      { feature, name: 'An empty filter result explains itself', status: 'pending', steps: ['Given the dashboard lists 2 runs, none of them failed', 'When I pick "Failed" in the status filter', 'Then I see "No run matches this filter"'], screenshots: [] },
+    ];
+  }
+  return [
+    {
+      feature, name: 'Filter the runs by status', status: 'passed',
+      steps: ['Given the dashboard lists 3 runs, one of them failed', 'When I pick "Failed" in the status filter', 'Then only the failed run is listed'],
+      screenshots: [`evidence/test/round-${h.visit}/143-e2e-filter-by-status-1.modified.png`],
+    },
+    {
+      feature, name: 'An empty filter result explains itself', status: failing ? 'failed' : 'passed',
+      ...(failing ? { reason: 'Then "No run matches this filter" is shown: the list was empty without a message (simulated)' } : {}),
+      steps: ['Given the dashboard lists 2 runs, none of them failed', 'When I pick "Failed" in the status filter', 'Then I see "No run matches this filter"'],
+      screenshots: [],
+    },
+    {
+      feature, name: 'The filter is kept after a restart', status: 'skipped',
+      reason: 'Environment: the app could not be restarted headless in this run (simulated)',
+      steps: ['Given I filtered the dashboard by "Failed"', 'When I restart the app', 'Then the dashboard is still filtered by "Failed"'],
+      screenshots: [],
+    },
+  ];
+}
 
 // h.sequences (WorkflowRun's mockSequences) overrides the defaults per field
 function mockValue(s, key, h) {
@@ -419,9 +579,26 @@ function mockValue(s, key, h) {
       return o;
     }
     // sequences.preexisting_failures: true: the test writer reports a test that also fails on the base
-    case 'array':
+    // sequences.left_out: [1, 0]: the developer declares one gap on its 1st visit, none after (default none)
+    // sequences.left_out_not_mine: true: the developer also declares the issue's Tests and Measure tasks (#173)
+    // sequences.ui_findings: true: the evidence step's visual review returns a (blocking) UI finding
+    case 'array': {
       if (key === 'preexisting_failures' && !h.sequences?.preexisting_failures) return [];
+      if (key === 'ui_findings' && !h.sequences?.ui_findings) return [];
+      // the developer's screens to capture (#144): one valid entry of the screenshot command
+      if (key === 'screenshots' && s.items?.properties?.args) return [{ name: '144-dashboard-default', caption: 'The dashboard (simulated)', args: ['--view', 'dashboard'] }];
+      if (key === 'scenarios' && s.items?.properties?.status) return mockScenarios(h, s.items.properties.status.enum || []);
+      if (key === 'left_out') {
+        const seq = h.sequences?.left_out;
+        const count = Array.isArray(seq) && seq.length ? +seq[Math.min(h.visit - 1, seq.length - 1)] || 0 : 0;
+        const gaps = Array.from({ length: count }, () => mockValue(s.items || { type: 'string' }, key, h));
+        if (!h.sequences?.left_out_not_mine) return gaps;
+        return [...gaps,
+          { requirement: '**Tests**: unit tests of the change (simulated)', reason: 'Only the test writer writes tests' },
+          { requirement: 'Measure: real before/after runs (simulated)', reason: 'Real runs are refused in this run' }];
+      }
       return [mockValue(s.items || { type: 'string' }, key, h)];
+    }
     case 'boolean': {
       const seq = h.sequences?.[key];
       return seq && seq.every((v) => typeof v === 'boolean') ? seq[Math.min(h.visit - 1, seq.length - 1)] : true;
@@ -436,7 +613,7 @@ function mockValue(s, key, h) {
 const mockTurns = new Map();
 const MOCK_HANDOFF = '```handoff\n- Goal: simulated goal of this agent\n- State: branch feat/mock-feature, commit abc1234\n- Done: simulated work of this turn\n- Left: nothing blocking\n- Decisions: none\n- Key files: src/auth/login.ts\n- Known problems: none\n```';
 
-async function runMock({ providerSessionId, model, hint, signal, onItem, attempt = 1, timeoutMs }) {
+async function runMock({ providerSessionId, model, hint, signal, onItem, attempt = 1, timeoutMs, attachments = [] }) {
   const sid = providerSessionId || `mock-${Math.random().toString(36).slice(2, 10)}`;
   const scale = +(process.env.MULTIAGENT_MOCK_DELAY_SCALE ?? 1);
   const d = (ms) => sleep(ms * scale * (0.6 + Math.random() * 0.8), signal);
@@ -456,6 +633,8 @@ async function runMock({ providerSessionId, model, hint, signal, onItem, attempt
   }
   await d(600);
   onItem({ kind: 'thinking', text: `Analyzing step "${hint?.stepId ?? 'delegated'}" (visit ${hint?.visit ?? '-'}).\nI will inspect the repository and plan the next steps.` });
+  // attached images (#129): recorded, never opened
+  if (attachments.length) onItem({ kind: 'thinking', text: `Attached images (simulated: not opened): ${attachments.map((f) => `${f.name} (${f.path})`).join(', ')}` });
   await d(900);
   // sequences.permission_denials: { stepId: n }: in the first n answers of that step every tool
   // call is refused by the allowlist (an agent fighting its cli_args)
@@ -473,6 +652,12 @@ async function runMock({ providerSessionId, model, hint, signal, onItem, attempt
     onItem({ kind: 'tool_call', id: 't1', name: 'Bash', input: { command: slow ? 'until grep -q "duration_ms" out.log; do sleep 5; done' : 'git status' } });
     await (slow ? sleep(slow, signal) : d(500));
     onItem({ kind: 'tool_result', id: 't1', output: 'On branch feat/mock-feature\nnothing to commit, working tree clean' });
+    // sequences.tool_timeouts: { stepId: n }: in the first n answers of that step a test command
+    // without a `timeout` is cut at the Bash tool's default (#178)
+    if (hint?.call <= (hint?.sequences?.tool_timeouts?.[hint.stepId] || 0)) {
+      onItem({ kind: 'tool_call', id: 't2', name: 'Bash', input: { command: 'node --test test/slow.test.js' } });
+      onItem({ kind: 'tool_result', id: 't2', output: '▶ slow suite\nCommand timed out after 2m 0.0s', is_error: true });
+    }
   }
   // sequences.timeouts: { stepId: n }: the first n attempts of each of that step's turns are killed
   // at their timeout after their tool call (the engine retries with the attempt's summary)
@@ -499,12 +684,15 @@ async function runMock({ providerSessionId, model, hint, signal, onItem, attempt
   const usage = { input: rand(2000, 12000), output: rand(300, 2500), cache_read: rand(0, 8000), cache_write: rand(0, 2000), reasoning: rand(100, 1500) };
   const costUsd = +(usage.input * 3e-6 + usage.output * 15e-6).toFixed(4);
   onItem({ kind: 'usage', usage, costUsd });
-  return { text, usage, costUsd, providerSessionId: sid, exitCode: 0 };
+  return { text, usage, costUsd, providerSessionId: sid, exitCode: 0, ...(attachments.length ? { attachments } : {}) };
 }
 
 // ---------------------------------------------------------------------------
+// opts.attachments: optional image files for this turn (paths or { path, name }), checked against
+// the limits before anything runs (checkAttachments); see "Image attachments" above.
 async function runTurn(opts) {
   if (opts.provider.type !== 'mock') refuseReal(`the ${opts.provider.type} provider`);
+  opts = { ...opts, attachments: checkAttachments(opts.attachments) };
   switch (opts.provider.type) {
     case 'mock': return runMock(opts);
     case 'claude-code': return runCli(opts, parseClaude);
@@ -522,19 +710,36 @@ function isPermissionDenial(item) {
   return /requires approval|haven't granted|permission[^.\n]{0,80}denied|denied by (?:the )?(?:policy|sandbox|user)|rejected by (?:the )?(?:policy|sandbox|user)|not allowed by/i.test(String(item.output || ''));
 }
 
+// A command cut by the tool's own timeout (Claude Code's Bash tool: "Command timed out after 2m 0.0s";
+// its default is 120 s when the call passes no `timeout`): the command returned no result (#178).
+function isToolTimeout(item) {
+  if (item?.kind !== 'tool_result') return false;
+  return /\bcommand timed out after\b/i.test(String(item.output || '').slice(-400));
+}
+
 // Request errors (invalid model, 4xx) are not worth retrying.
 function isRetryable(err) {
   return !/"status":\s*4\d\d|invalid_request|not supported|not found|does not exist/i.test(String(err?.message || err));
 }
 
 module.exports = {
+  ATTACHMENT_LIMITS,
+  checkAttachments,
+  cliInvocation,
   emptyUsage,
   gitConfigEnv,
+  imageInput,
+  isImagePath,
   isPermissionDenial,
   isRetryable,
+  isToolTimeout,
+  killTree,
   parseGrok,
+  quoteCmd,
   refreshWindowsPath,
   resolveCommand,
   runTurn,
   sleep,
+  sniffImage,
+  storeAttachments,
 };

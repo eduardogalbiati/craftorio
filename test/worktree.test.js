@@ -208,6 +208,21 @@ test('removeWorktree: deletes a squash-merged branch, keeps an unmerged one', as
   assert.match(lines.join('\n'), /not merged .* kept/);
 });
 
+test('removeWorktree: a node_modules linking the shared dependency cache (#198) is unlinked first; removal never follows it into the cache', async (t) => {
+  const f = fixture(t);
+  const dir = path.join(f.worktrees, 'run1');
+  await prepareWorktree({ repo: f.repo, base: 'main', dir });
+  const cacheEntry = path.join(f.tmp, 'cache-entry');
+  fs.mkdirSync(path.join(cacheEntry, 'node_modules'), { recursive: true });
+  fs.writeFileSync(path.join(cacheEntry, 'node_modules', 'kept.txt'), 'kept');
+  fs.symlinkSync(path.join(cacheEntry, 'node_modules'), path.join(dir, 'node_modules'), process.platform === 'win32' ? 'junction' : 'dir');
+
+  const r = await removeWorktree({ repo: f.repo, dir, base: 'main' });
+  assert.equal(r.removed, true);
+  assert.ok(!fs.existsSync(dir));
+  assert.ok(fs.existsSync(path.join(cacheEntry, 'node_modules', 'kept.txt')), 'the shared cache entry is untouched');
+});
+
 test('prepareWorktree: resume recreates a deleted worktree from the run branch', async (t) => {
   const f = fixture(t);
   const dir = path.join(f.worktrees, 'run1');
@@ -222,18 +237,27 @@ test('prepareWorktree: resume recreates a deleted worktree from the run branch',
   assert.equal(git(dir, 'rev-parse', 'HEAD'), head);
 });
 
-for (const spelling of SPELLINGS) test(`cleanupWorktrees (${spelling} paths): removes succeeded and stale runs, keeps failed, recent and active ones`, async (t) => {
+for (const spelling of SPELLINGS) test(`cleanupWorktrees (${spelling} paths): removes succeeded and stale runs, keeps failed, recent and active ones; a removed worktree's scratch goes with it, its logs and screenshots stay`, async (t) => {
   const f = spelled(t, spelling);
   if (!f) return;
   const runsDir = path.join(f.tmp, 'runs');
+  // scratch (#120): goes with a removed worktree; logs/screenshots (the evidence) are never touched
   const mk = async (name, status) => {
     const dir = path.join(f.worktrees, name);
     await prepareWorktree({ repo: f.repo, base: 'main', dir });
-    fs.mkdirSync(path.join(runsDir, name), { recursive: true });
-    fs.writeFileSync(path.join(runsDir, name, 'events.jsonl'), '{}\n');
-    if (status) fs.writeFileSync(path.join(runsDir, name, 'summary.json'), JSON.stringify({ status }));
+    const runDir = path.join(runsDir, name);
+    fs.mkdirSync(runDir, { recursive: true });
+    fs.writeFileSync(path.join(runDir, 'events.jsonl'), '{}\n');
+    if (status) fs.writeFileSync(path.join(runDir, 'summary.json'), JSON.stringify({ status }));
+    fs.mkdirSync(path.join(runDir, 'scratch', 'workspace'), { recursive: true });
+    fs.writeFileSync(path.join(runDir, 'scratch', 'workspace', 'settings.json'), '{}');
+    fs.mkdirSync(path.join(runDir, 'logs'), { recursive: true });
+    fs.writeFileSync(path.join(runDir, 'logs', 'test.log'), 'log');
+    fs.mkdirSync(path.join(runDir, 'screenshots'), { recursive: true });
+    fs.writeFileSync(path.join(runDir, 'screenshots', 'shot.png'), 'png');
     return dir;
   };
+  const scratchOf = (name) => path.join(runsDir, name, 'scratch');
   const ok = await mk('ok', 'success');
   const failed = await mk('failed', 'failed');
   const active = await mk('active', 'success');
@@ -241,6 +265,11 @@ for (const spelling of SPELLINGS) test(`cleanupWorktrees (${spelling} paths): re
   const removed = await cleanupWorktrees({ worktreesDir: f.worktrees, runsDir, active: [active] });
   assert.deepEqual(removed.map((d) => path.basename(d)), ['ok']);
   assert.ok(!fs.existsSync(ok) && fs.existsSync(failed) && fs.existsSync(active) && fs.existsSync(running));
+  assert.ok(!fs.existsSync(scratchOf('ok')), 'the scratch workspace goes with its removed worktree');
+  for (const name of ['failed', 'active', 'running']) assert.ok(fs.existsSync(scratchOf(name)), `${name} keeps its scratch while its worktree is kept`);
+  // the evidence is never removed, whether or not the worktree (and the scratch workspace) was
+  assert.ok(fs.existsSync(path.join(runsDir, 'ok', 'logs', 'test.log')));
+  assert.ok(fs.existsSync(path.join(runsDir, 'ok', 'screenshots', 'shot.png')));
 
   // 30 days without use: removed even if it failed
   const old = (Date.now() - 30 * 864e5) / 1000;
@@ -250,6 +279,39 @@ for (const spelling of SPELLINGS) test(`cleanupWorktrees (${spelling} paths): re
   fs.utimesSync(index, old, old);
   const removed2 = await cleanupWorktrees({ worktreesDir: f.worktrees, runsDir, active: [active], maxAgeDays: 14 });
   assert.deepEqual(removed2.map((d) => path.basename(d)), ['failed']);
+  assert.ok(!fs.existsSync(scratchOf('failed')), 'the scratch workspace goes with the worktree once it is finally removed');
+  assert.ok(fs.existsSync(path.join(runsDir, 'failed', 'logs', 'test.log')), 'the evidence still stays');
+});
+
+test('cleanupWorktrees: a worktree still there after removal (locked by a process) keeps the run\'s scratch workspace and is not reported as removed', async (t) => {
+  const f = fixture(t);
+  const runsDir = path.join(f.tmp, 'runs');
+  const name = 'locked';
+  const dir = path.join(f.worktrees, name);
+  await prepareWorktree({ repo: f.repo, base: 'main', dir });
+  const runDir = path.join(runsDir, name);
+  fs.mkdirSync(runDir, { recursive: true });
+  fs.writeFileSync(path.join(runDir, 'events.jsonl'), '{}\n');
+  fs.writeFileSync(path.join(runDir, 'summary.json'), JSON.stringify({ status: 'success' }));
+  fs.mkdirSync(path.join(runDir, 'scratch', 'workspace'), { recursive: true });
+  fs.writeFileSync(path.join(runDir, 'scratch', 'workspace', 'settings.json'), '{}');
+
+  // a locked worktree: `git worktree remove --force` (one --force) refuses it, as it would a
+  // folder a process still has open; the fallback (fs.rmSync) is mocked to fail too, as it would
+  // for a file still in use
+  git(f.repo, 'worktree', 'lock', dir);
+  const origRmSync = fs.rmSync.bind(fs);
+  t.mock.method(fs, 'rmSync', (target, opts) => {
+    if (samePath(target, dir)) throw new Error('EBUSY: resource busy or locked');
+    return origRmSync(target, opts);
+  });
+
+  const { lines, log } = logger();
+  const removed = await cleanupWorktrees({ worktreesDir: f.worktrees, runsDir, active: [], log });
+  assert.deepEqual(removed, []);
+  assert.ok(fs.existsSync(dir), 'the worktree folder is still there: kept for the next cleanup');
+  assert.ok(fs.existsSync(path.join(runDir, 'scratch')), 'the scratch workspace stays with it');
+  assert.match(lines.join('\n'), /cannot remove a locked working tree/);
 });
 
 // ---- engine -----------------------------------------------------------------------
@@ -302,6 +364,44 @@ for (const spelling of SPELLINGS) test(`engine (${spelling} paths): agents work 
   assert.equal(resumed.events.find((e) => e.type === 'worktree.ready').reused, true);
   assert.ok(samePath(resumed.finished.summary.sessions.find((s) => s.agent === 'a').cwd, kept));
   assert.ok(!fs.existsSync(kept), 'removed once the resumed run succeeds');
+});
+
+// #120: an agent of a run with a worktree never writes a simulated run or a screenshot into the
+// owner's own workspace: it gets MULTIAGENT_WORKSPACE pointing at a scratch workspace of its own,
+// under the run's folder, created on the first agent turn and removed with the worktree.
+test('engine: an agent of a run with a worktree gets MULTIAGENT_WORKSPACE in its environment, pointing at the run\'s own scratch workspace; removed once the worktree is removed', { timeout: 30000 }, async (t) => {
+  const f = fixture(t);
+  const runsDir = path.join(f.tmp, 'runs');
+  // the "CLI" is node + a fake that calls no model: lift the simulation-only guard for this test
+  const guard = process.env.MULTIAGENT_SIMULATION_ONLY;
+  delete process.env.MULTIAGENT_SIMULATION_ONLY;
+  t.after(() => { if (guard !== undefined) process.env.MULTIAGENT_SIMULATION_ONLY = guard; });
+  const fake = path.join(__dirname, 'fixtures', 'fake-claude.js').replace(/\\/g, '/');
+  const file = path.join(f.tmp, 'wf.yaml');
+  fs.writeFileSync(file, [
+    'providers:',
+    `  claude: { type: claude-code, command: node, args: ["${fake}", "-p"] }`,
+    'inputs:',
+    '  repo_path: { type: string, required: true }',
+    'orchestrator:',
+    '  worktree: { repo: "{{ inputs.repo_path }}", base: main }',
+    'agents:',
+    '  dev: { provider: claude, model: fake, session: handoff, capabilities: { tools: [read, bash:git] } }',
+    'steps:',
+    '  - { id: work, agent: dev, prompt: "Do it." }',
+  ].join('\n'));
+  const run = new WorkflowRun({ file, inputs: { repo_path: f.repo }, runsDir, worktreesDir: f.worktrees });
+  const events = [];
+  run.on('event', (ev) => events.push(ev));
+  await run.start();
+  const finished = events.find((e) => e.type === 'workflow.finished');
+  assert.equal(finished.status, 'success', finished.error);
+
+  const scratchWorkspaceDir = path.join(run.runDir, 'scratch', 'workspace');
+  const received = events.find((e) => e.type === 'session.message_received');
+  assert.ok(received.text.includes(`MULTIAGENT_WORKSPACE: ${scratchWorkspaceDir}`), received.text);
+  // the scratch workspace goes with the worktree once the run succeeds (never left for the owner to find)
+  assert.ok(!fs.existsSync(path.join(run.runDir, 'scratch')));
 });
 
 test('engine: `goto: end` + `status` sets the outcome; a rejected failure gate is failed and keeps the worktree', { timeout: 60000 }, async (t) => {

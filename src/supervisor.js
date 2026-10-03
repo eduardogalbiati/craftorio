@@ -6,14 +6,24 @@
 //   while a command waits (superviseIdle): keep waiting, or interrupt the turn and retry the step;
 //   and when a transition's action or pre-merge check fails (superviseActionError): go back to a
 //   recovery step with an instruction, or escalate to the failure gate with a diagnosis;
+//   and on call (superviseEscalation / superviseStall, onCallPrompt): before an escalation gate
+//   (`kind: escalation`) asks the person about a problem, and on a stall the engine detected (the same
+//   output N times, refused tool calls, a slow step): retry or resume a step with an instruction, route
+//   the gate, ask the person for an action only they can take, or escalate with a diagnosis;
 // - by a person, from the UI, for any run (analyzeRun): it explains what happened and recommends
 //   actions such as resuming the run from a step (resumeSpec) with an instruction;
 // - by a person, from Analytics, on the sessions of a date range (analyzeSessions): a report on what
-//   they were used for, their complexity, patterns and suggestions.
+//   they were used for, their complexity, patterns and suggestions;
+// - by a person who watches a running run (src/supervisor-watch.js): updates in a chat on each batch
+//   of meaningful events (timelineLine), and answers in the same conversation.
 
 const fs = require('fs');
 const path = require('path');
 const yaml = require('js-yaml');
+
+// The app is English-only (#94, #121): the supervisor's words reach the person and decisions.tsv, and
+// its instructions reach the agents, so the language is pinned instead of following the task's.
+const WRITE_ENGLISH = 'Write your explanation, record, recommendation and instructions in English (the app\'s language), whatever language the task, the workflow or the person\'s messages use.';
 
 // Decision taken during a run. `retry` first: it is the mock provider's default.
 const DECISION_SCHEMA = {
@@ -55,6 +65,33 @@ const actionSchema = (recover) => ({
     instruction: { type: 'string' },
   },
 });
+
+// Decision of the supervisor on call (#41), before a person is asked about a problem: at an
+// escalation gate (`kind: escalation`) or on a stall the engine detected. The first action is the
+// mock's default and the safe one: `escalate` shows the gate with the diagnosis, `continue` lets the
+// run go on as planned. `step` is limited to the agent steps the run already went through, `route`
+// to the gate's own answers. At a gate, `recommend` (one of `answers`: approve / reject or a choice
+// id), `recommendation` (why, one line) and `options` (up to 3) are what the person's card shows (#213).
+const onCallSchema = ({ actions, steps = [], routes = [], answers = [] }) => ({
+  type: 'object',
+  required: ['explanation', 'action'],
+  properties: {
+    explanation: { type: 'string' },
+    cause_class: { type: 'string', enum: ['environment', 'permissions', 'instruction', 'capability', 'code', 'workflow', 'unknown'] },
+    action: { type: 'string', enum: actions },
+    instruction: { type: 'string' },
+    step: steps.length ? { type: 'string', enum: steps } : { type: 'string' },
+    ...(routes.length ? { route: { type: 'string', enum: routes } } : {}),
+    user_action: { type: 'string' },
+    ...(answers.length ? { recommend: { type: 'string', enum: answers } } : {}),
+    recommendation: { type: 'string' },
+    ...(answers.length ? { options: { type: 'array', maxItems: 3, items: { type: 'string' } } } : {}),
+  },
+});
+const ESCALATION_ACTIONS = ['escalate', 'retry', 'resume', 'route', 'user_action'];
+const STALL_ACTIONS = ['continue', 'retry', 'resume', 'user_action'];
+// A step still running far longer than usual: it keeps running, or its turn is stopped and run again.
+const SLOW_ACTIONS = ['wait', 'interrupt', 'user_action'];
 
 // Analysis asked for by a person.
 const ANALYSIS_SCHEMA = {
@@ -127,7 +164,7 @@ function decisionPrompt({ wf, step, error, answer, allowed, events, previous, ha
     `- goto: continue at one of these steps: ${allowed.length ? allowed.join(', ') : '(none)'}.`,
     '- ask_human: stop and ask the person (explain what they need to decide or change).',
     '- fail: end the run.',
-    'Explain in the language of the workflow\'s task, for the person running it.',
+    WRITE_ENGLISH,
   ].filter(Boolean).join('\n');
 }
 
@@ -143,7 +180,7 @@ function actionErrorPrompt({ wf, step, error, check, recover, gate, events, hand
     `\n## Your options (the engine validates them)`,
     `- goto: a case you recognize that the workflow's agents can fix (e.g. the PR/MR conflicts with its base because another change was merged meanwhile): go back to one of ${recover.join(', ')}; \`instruction\` is added to that step's prompt. Give the evidence (the error text, the PR/MR state), never a code fix. The change goes through its checks and the human approval again.`,
     `- escalate: an unknown case, or one no agent can fix (permissions, the platform down): the run stops at the gate "${gate}", where the person sees your \`explanation\` as the diagnosis.`,
-    'Explain in the language of the workflow\'s task, for the person running it.',
+    WRITE_ENGLISH,
   ].filter(Boolean).join('\n');
 }
 
@@ -159,7 +196,50 @@ function idlePrompt({ wf, step, agent, idle, events, handoffs }) {
     `\n## Your options`,
     '- wait: the command can plausibly still finish (a long build or test suite in the foreground prints nothing until it ends).',
     '- interrupt: the wait cannot end on its own (polling for a text that may never appear, a background job with no exit check, an interactive prompt); the engine stops this turn and runs the step again with `instruction` added to the agent\'s prompt. Describe the evidence and what to do instead (e.g. run the command in the foreground with a timeout and read its exit code); never prescribe a code fix.',
-    'Explain in the language of the workflow\'s task, for the person running it.',
+    WRITE_ENGLISH,
+  ].filter(Boolean).join('\n');
+}
+
+/**
+ * Prompt for the supervisor on call (engine-side): the run would stop to ask the person about a
+ * problem (an escalation gate) or the engine detected a stall (`signals`). It tries to solve it first.
+ * history: [{ step, visits, output }] of the steps the run went through.
+ * gate.decision: a decision gate reached because a loop ran out (no `route`: only the person answers it).
+ * running: the step is still running (a slow step): wait, interrupt its turn, or ask the person.
+ */
+function onCallPrompt({ wf, step, gate, signals, retryStep, steps, history, previous, events, handoffs, limits, running }) {
+  const routes = gate?.routes || [];
+  let intro = `The engine detected that the step "${step.id}" of the workflow "${wf.metadata?.name}" may be stuck. You are the supervisor on call: decide whether the run goes on as planned or how to unblock it, following the run-supervisor skill.`;
+  if (gate?.decision) intro = `The workflow "${wf.metadata?.name}" reached the human gate "${step.id}" because a loop ran out of iterations. It is a decision gate: only the person answers it, but you are the supervisor on call: if the evidence shows the agents can still solve the problem, send the run back to them first, following the run-supervisor skill. Otherwise the gate opens for the person with your diagnosis.`;
+  else if (gate) intro = `The workflow "${wf.metadata?.name}" reached the escalation gate "${step.id}": it would stop and ask the person about a problem. You are the supervisor on call: try to solve it first, following the run-supervisor skill. The person is only asked when you cannot, and then with your diagnosis.`;
+  else if (running) intro = `The step "${step.id}" of the workflow "${wf.metadata?.name}" is still running, far longer than its usual duration. You are the supervisor on call: decide whether it keeps running or its turn is stopped, following the run-supervisor skill.`;
+  let first = '- continue: nothing is stuck (e.g. the same answer is expected); the run goes on as planned.';
+  if (gate) {
+    first = '- escalate: you cannot solve it; the gate opens for the person with your diagnosis.'
+      + `\n\nWrite the diagnosis for the owner, not for an agent (whatever your action, in case the gate opens): \`recommend\` is the button you advise (one of ${(gate.answers || []).join(', ') || 'the gate\'s answers'}); \`recommendation\` says why in plain words, one sentence under 25 words; \`options\` lists up to 3 alternatives, each one short sentence a person can act on; \`explanation\` holds the details (evidence, causes). The gate's card shows only the recommendation and the options; the explanation goes in its Details.`;
+  }
+  else if (running) first = '- wait: the step can plausibly still finish (a long build, a large change); it keeps running and you may be asked again later.';
+  return [
+    intro,
+    wf.metadata?.description ? `Workflow: ${wf.metadata.description}` : '',
+    gate ? `\n## What the gate would ask the person\n${clip(gate.message, 4000)}\n\nThe gate's answers and where they lead:\n${gate.transitions || '(none)'}` : '',
+    signals?.length ? `\n## Stall signals (deterministic, from the engine)\n${signals.map((s) => `- ${s.step || step.id}: ${s.kind}: ${s.detail}`).join('\n')}` : '',
+    history?.length ? `\n## Step history (visits and latest output)\n${history.map((h) => `- ${h.step} (${h.visits} visit${h.visits === 1 ? '' : 's'}): ${clip(JSON.stringify(h.output), 500)}`).join('\n')}` : '',
+    previous?.length ? `\n## Your previous interventions here\n${previous.map((p, i) => `${i + 1}. ${p.action}: ${p.explanation}`).join('\n')}` : '',
+    handoffs?.length ? `\n## The agents' handoff notes (their own summary of where they are, latest turn)\n${handoffs.map((h) => `### ${h.agent} (step ${h.step}, visit ${h.visit})\n${clip(h.text, 3000)}`).join('\n\n')}` : '',
+    `\n## Recent timeline\n${timeline(events, 60) || '(empty)'}`,
+    limits ? `\n## Your limits\n${limits}` : '',
+    '\n## Your options (the engine validates them)',
+    first,
+    running ? '- interrupt: the step cannot end on its own (a hung process, a wait that never ends, an agent going in circles); the engine stops its running turn and runs the step again with `instruction` added to its agent\'s prompt.' : '',
+    retryStep && !running ? `- retry: run "${retryStep}" again; \`instruction\` is added to its agent's prompt.` : '',
+    running ? '' : `- resume: continue at one of these steps: ${steps.length ? steps.join(', ') : '(none)'}; \`step\` names it and \`instruction\` is added to its agent's prompt.`,
+    gate && routes.length ? `- route: answer the gate yourself with \`route\` (one of ${routes.join(', ')}), only when the evidence shows that answer is what the problem calls for (e.g. the failure is not caused by the run's change).` : '',
+    running
+      ? '- user_action: only the person can unblock it (a process to stop, a permission to grant, a login): put the exact command or step in `user_action`; the person is told while the step keeps running.'
+      : '- user_action: the fix is outside the run\'s permissions (a process to stop, a permission to grant, a login): put the exact command or step the person must take in `user_action`; the person is asked with it.',
+    'Rules: never prescribe a code fix and never edit code; a problem in the code goes back to the workflow\'s agents (retry/resume) with the evidence and your hypotheses in `instruction`. A problem in how an agent works (refused commands, a wrong tool, a wait that never ends) gets a concrete instruction (e.g. call `gh` directly in the Bash tool).',
+    WRITE_ENGLISH,
   ].filter(Boolean).join('\n');
 }
 
@@ -231,15 +311,21 @@ function resumeSpec(runDir, fromStep) {
   const sessions = {};
   const handoffs = {};
   let worktree = null; // the run's git worktree (worktree.ready / .kept / .removed): the resume continues there
+  // its `type: workflow` steps' child runs (#175): a resume reuses the ones that succeeded and resumes the others
+  const childRuns = new Map(); // run id -> { run_id, step_id, index?, label, status }
   for (const ev of events) {
     if (ev.type === 'step.finished' && !ev.error) steps[ev.step_id] = { output: ev.output, visits: ev.visit };
+    if (ev.type === 'workflow.child_started' && ev.child_run_id) childRuns.set(ev.child_run_id, { run_id: ev.child_run_id, step_id: ev.step_id, ...(ev.index !== undefined ? { index: ev.index } : {}), label: ev.label ?? null, status: 'running' });
+    if (ev.type === 'workflow.child_finished' && childRuns.has(ev.child_run_id)) childRuns.get(ev.child_run_id).status = ev.status;
     if (ev.session?.agent && ev.session.provider_session_id && ev.session.provider !== 'mock') sessions[ev.session.agent] = ev.session.provider_session_id;
     if (/^worktree\./.test(ev.type) && ev.dir) worktree = { dir: ev.dir, branch: ev.branch || worktree?.branch || null };
     if (ev.type === 'handoff.saved' && ev.agent && ev.note) handoffs[ev.agent] = { text: ev.note, step: ev.step_id, visit: ev.visit, path: ev.path };
   }
-  return { runId: path.basename(runDir), file: started.file, inputs: started.inputs || {}, mock: !!started.mock, projectId: started.project_id || null,
+  // attachments: the images attached to inputs (#129), the previous run's copies (the new run copies them again)
+  return { runId: path.basename(runDir), file: started.file, inputs: started.inputs || {}, attachments: started.attachments || null, mock: !!started.mock, projectId: started.project_id || null,
     // runs recorded before groups have a single `issue`
-    issues: started.issues || (started.issue ? [started.issue] : null), personas: started.personas || null, fromStep, steps, sessions, handoffs, worktree };
+    issues: started.issues || (started.issue ? [started.issue] : null), personas: started.personas || null, fromStep, steps, sessions, handoffs, worktree,
+    childRuns: [...childRuns.values()] };
 }
 
 /**
@@ -277,11 +363,14 @@ const DEFAULT_MODEL = 'claude-sonnet-5';
 /**
  * Asks the supervisor about a run (a person's question from the UI). Simulated runs use the mock
  * provider. The analysis is saved as supervisor/analysis-<time>.md in the run folder.
+ * attachments: images for this question (#129, paths or { path, name }), copied into the run's
+ * supervisor/attachments/ and given to this question's turn only.
  * @returns { analysis, artifactPath, model, costUsd, steps }
  */
-async function analyzeRun({ runDir, question, workflowsDir, skillsDirs, resolveCommand }) {
+async function analyzeRun({ runDir, question, workflowsDir, skillsDirs, resolveCommand, attachments = [] }) {
   const { extractJson, validateSchema, render } = require('./engine/workflow');
-  const { runTurn } = require('./engine/providers');
+  const { runTurn, storeAttachments } = require('./engine/providers');
+  const images = storeAttachments(attachments, path.join(runDir, 'supervisor', 'attachments'));
   const { resolveSkill, skillPrompt } = require('./skills');
   const cfg = supervisorConfig(runDir, workflowsDir);
   const skill = resolveSkill(skillsDirs, 'run-supervisor');
@@ -291,7 +380,7 @@ async function analyzeRun({ runDir, question, workflowsDir, skillsDirs, resolveC
     'A person asks you, the run supervisor, about this workflow run. Explain what happened and recommend what to do next.',
     question ? `Their question: ${question}` : 'They want to know what happened and, if something went wrong, how to fix it.',
     'Recommendations can be: resume (continue the run from a step, reusing the previous outputs and agent conversations, with an instruction for that step), rerun (start again from the first step with the same inputs), or none (something the person must do, e.g. change an input or the workflow).',
-    'Write the summary and root cause in Markdown, in the language of the task.',
+    `Write the summary and root cause in Markdown. ${WRITE_ENGLISH}`,
     runReport(runDir, { workflowsDir }),
     `\n---\nAt the end of your response you MUST include a \`\`\`json block with an object that validates against this JSON Schema:\n\`\`\`json\n${JSON.stringify(schema, null, 2)}\n\`\`\``,
   ].join('\n\n');
@@ -303,7 +392,7 @@ async function analyzeRun({ runDir, question, workflowsDir, skillsDirs, resolveC
   const readOnly = providerArgs(provider.type, { caps: normalize({ tools: ['read'] }) }).args;
   const extraArgs = dedupeFlags([...readOnly, ...(provider.skill_args || []).map((x) => render(x, { skill_dir: skill.path }))], provider.args || []);
   const turn = (text) => runTurn({
-    provider, model: cfg.model, prompt: text, cwd: runDir, extraArgs, timeoutMs: 15 * 60e3, render,
+    provider, model: cfg.model, prompt: text, cwd: runDir, extraArgs, timeoutMs: 15 * 60e3, render, attachments: images,
     hint: { stepId: 'supervisor', visit: 1, schema }, onItem: () => {},
   });
   let res = await turn(prompt);
@@ -355,11 +444,13 @@ function sessionsReportMarkdown(r, { from, to, scope, model } = {}) {
  * what they were used for, complexity, patterns, suggestions. Read-only; no run folder, so it uses the
  * default supervisor (Claude Code) unless `mock`. The report is saved as <reportsDir>/sessions-<time>.md.
  * @param report  the text digest of the range (analytics.analyticsReport)
+ * @param attachments images for this question (#129), copied into <reportsDir>/attachments/
  * @returns { report, reportPath, markdown, model, costUsd }
  */
-async function analyzeSessions({ report, from, to, scope, question, reportsDir, skillsDirs, resolveCommand, mock = false, provider: forced, model: forcedModel }) {
+async function analyzeSessions({ report, from, to, scope, question, reportsDir, skillsDirs, resolveCommand, mock = false, provider: forced, model: forcedModel, attachments = [] }) {
   const { extractJson, validateSchema, render } = require('./engine/workflow');
-  const { runTurn } = require('./engine/providers');
+  const { runTurn, storeAttachments } = require('./engine/providers');
+  const images = storeAttachments(attachments, path.join(reportsDir, 'attachments'));
   const { resolveSkill, skillPrompt } = require('./skills');
   const skill = resolveSkill(skillsDirs, 'run-supervisor');
   const schema = SESSIONS_REPORT_SCHEMA;
@@ -380,7 +471,7 @@ async function analyzeSessions({ report, from, to, scope, question, reportsDir, 
   const readOnly = providerArgs(provider.type, { caps: normalize({ tools: ['read'] }) }).args;
   const extraArgs = dedupeFlags([...readOnly, ...(provider.skill_args || []).map((x) => render(x, { skill_dir: skill.path }))], provider.args || []);
   const turn = (text) => runTurn({
-    provider, model, prompt: text, cwd: reportsDir, extraArgs, timeoutMs: 15 * 60e3, render,
+    provider, model, prompt: text, cwd: reportsDir, extraArgs, timeoutMs: 15 * 60e3, render, attachments: images,
     hint: { stepId: 'supervisor', visit: 1, schema }, onItem: () => {},
   });
   let res = await turn(prompt);
@@ -409,15 +500,21 @@ module.exports = {
   analyzeSessions,
   DECISION_SCHEMA,
   decisionPrompt,
+  ESCALATION_ACTIONS,
   IDLE_SCHEMA,
   idlePrompt,
+  onCallPrompt,
+  onCallSchema,
   readEvents,
   resumeSpec,
   runReport,
   SESSIONS_REPORT_SCHEMA,
   sessionsReportMarkdown,
   skippedGate,
+  SLOW_ACTIONS,
+  STALL_ACTIONS,
   supervisorConfig,
   timeline,
+  timelineLine,
   withoutGateDecisions,
 };

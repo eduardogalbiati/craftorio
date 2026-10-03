@@ -73,6 +73,9 @@ jobs:
       - run: npm ci
       - name: Syntax check
         run: for f in $(git ls-files '*.js'); do node --check "$f" || exit 1; done
+      # README tables and index.html's generated script/style lists match their sources (#152)
+      - name: Generated files up to date
+        run: node scripts/docs.js --check
       - name: Tests (unit + mock flow)
         run: npm test
       # scripts/screenshot.js (the test step's UI screenshots): every view opens in simulation and the

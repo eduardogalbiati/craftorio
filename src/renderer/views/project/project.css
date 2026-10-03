@@ -1,0 +1,5 @@
+/* Project screen (views/project/project.js); the run list's rules (.pr-*) are shared, in style.css */
+.back-link { display: inline-block; margin-bottom: 12px; font-size: 12px; }
+.pr-head-info { min-width: 0; }
+.pr-head-info p { margin: 0 0 4px; }
+.pr-head-info .kv { margin-top: 6px; }

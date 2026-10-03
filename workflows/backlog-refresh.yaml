@@ -1,0 +1,251 @@
+# =============================================================================
+# Workflow: Backlog Refresh
+# -----------------------------------------------------------------------------
+#   review ──► apply safe fixes ──► scope decisions (you) ──► apply closes ──► end
+#                                     (only when there are proposals)
+#
+# Issues are written against the code of the day they were filed; after a few merges their paths,
+# lines and task lists drift. This workflow reviews every open issue (or the ones you list)
+# against the base branch as it is now. The Backlog suggests running it when the last refresh is
+# older than the interval of Settings › General › Backlog and the base branch got merges since.
+#
+# 1. review:  the refresher (read-only: git and gh/glab to read, exploration sub-agents in
+#             batches, backlog-refresh-<platform> skill) compares each issue with the code and the
+#             changes since `since`, and answers per issue: current / update / partly_done / done /
+#             obsolete / duplicate, the exact text replacements for the safe fixes (paths, line
+#             numbers, renamed symbols, tasks done with evidence), a new complexity when the size
+#             changed, and scope proposals (close as done/obsolete/duplicate, rewrite).
+# 2. safe fixes are applied right away, with no model, by the backlog-refresh skill's apply.js
+#    (gh or glab): each replacement must match the current body exactly once, an issue edited
+#    after the review is skipped, a "Backlog refresh" note is appended, the platform keeps the
+#    previous versions.
+# 3. scope:   you approve or skip the proposed closes (a decision gate: nothing closes an issue
+#             without you, and the supervisor never answers it). Rewrites are only reported.
+#
+# The run never merges anything: as a roadmap stage it is done when the run succeeds.
+# Files in the run folder: refresh.json (the answer), report.md, applied-safe.json /
+# applied-scope.json (what was done), bodies/<n>.md (the bodies sent).
+# =============================================================================
+
+apiVersion: multiagent/v1
+kind: Workflow
+
+metadata:
+  name: backlog-refresh
+  version: 1.0.0
+  description: Reviews every open issue against the code as it is now - renamed files, drifted lines, tasks already done, obsolete or duplicated issues - applies the safe fixes and asks you before closing anything.
+  tags: [issues, backlog, maintenance]
+  category: plan
+  # never merges: as a roadmap stage it is done when its run succeeds (src/service/areas/roadmap.js)
+  merges: false
+
+# -----------------------------------------------------------------------------
+inputs:
+  project_path:
+    type: string
+    required: true
+    description: Local clone of the repository whose open issues are refreshed (read-only). Needs a GitHub or GitLab remote (origin).
+  # the Start panel's free-text field (the first text input); the other inputs come prefilled from
+  # the Backlog's banner (Refresh now)
+  focus:
+    type: string
+    default: ""
+    description: Optional, what to look at first, e.g. "the screens epic #158 moved to src/renderer/views/". Empty = a plain refresh.
+  git_platform:
+    type: string
+    enum: [gh, gl]
+    default: gh
+    label: Platform
+    options: { gh: GitHub, gl: GitLab }
+    # gh = GitHub (gh CLI), gl = GitLab (glab CLI): picks the backlog-refresh-<platform> skill.
+    description: Where the issues live.
+  base_branch:
+    type: string
+    default: main
+    description: "The branch that holds today's code, read from this clone (local merges count)."
+  since:
+    type: string
+    default: "24 hours ago"
+    description: What counts as recent changes - a date ("2026-10-01"), "24 hours ago", or a git ref/commit.
+  issues:
+    type: array
+    default: []
+    # a roadmap stage fills it with its item's issue URLs (src/backlog.js runInputs)
+    description: Optional, only these issues (numbers such as 129, 130, or their URLs). Empty = every open issue.
+
+# -----------------------------------------------------------------------------
+providers:
+  claude:
+    type: claude-code
+    command: claude
+    args: ["-p", "--output-format", "stream-json", "--verbose", "--model", "{{ model }}"]
+    effort_args: ["--effort", "{{ effort }}"]
+    resume_args: ["--resume", "{{ session_id }}"]
+    skill_args: ["--add-dir", "{{ skill_dir }}"]
+
+defaults:
+  working_dir: "{{ inputs.project_path }}"
+  timeout: 60m
+  max_context: 200k
+  retry:
+    max_attempts: 2
+    backoff: exponential
+    initial_delay: 10s
+
+orchestrator:
+  provider: claude
+  model: claude-sonnet-5
+  # Called when a step fails (e.g. an answer that does not match its schema); never at the gates.
+  supervisor:
+    enabled: true
+    max_interventions: 2
+    max_cost_usd: 2
+  limits:
+    max_total_duration: 2h
+    max_total_cost_usd: 15
+
+# -----------------------------------------------------------------------------
+agents:
+  refresher:
+    provider: claude
+    model: claude-sonnet-5
+    effort: high
+    session: ephemeral
+    # read-only is a convention (capabilities.md): git and gh/glab only to read
+    capabilities: { tools: [read, bash:git, bash:gh, bash:glab], web: false, subagents: true }
+    skills: ["backlog-refresh-{{ inputs.git_platform }}", context-economy]
+    system_prompt: |
+      You are the backlog refresher. You compare a repository's open issues with its code as it
+      is now and describe, exactly, what drifted (backlog-refresh skill). The current folder is
+      the project ({{ inputs.project_path }}): read-only for you; read the code from the
+      `{{ inputs.base_branch }}` branch with git, not from the working tree. Use git and
+      {% if inputs.git_platform == 'gl' %}glab{% else %}gh{% endif %} only to read (log, show, grep, ls-tree; issue list/view, PR/MR list/view): never
+      create, edit, comment, label, close, push or change anything; a script applies your answer.
+      Nobody can answer questions: when unsure, leave an issue as it is and say why. Write
+      everything in English.
+
+groups:
+  - name: Review
+    steps: [review]
+  - name: Apply
+    steps: [scope, apply_failed]
+
+# -----------------------------------------------------------------------------
+steps:
+
+  - id: review
+    agent: refresher
+    save_as:
+      - { path: "refresh.json", content: "{{ output | dump }}" }
+      - { path: "report.md", content: "{{ output.report }}" }
+    prompt: |
+      Refresh the open issues of this repository against `{{ inputs.base_branch }}`.
+      {% if inputs.issues | length %}Only these issues: {{ inputs.issues | join(', ') }}.
+      {% else %}Every open issue.{% endif %}
+      Recent changes: since `{{ inputs.since }}` (a date or a git ref).
+      {% if inputs.focus %}The owner asks you to look at this first: {{ inputs.focus }}
+      {% endif %}      Follow the backlog-refresh skill: what changed (renames and deletions, closed issues, merged
+      PRs/MRs), then a verdict per issue with evidence, exact `edits` for the safe fixes,
+      `complexity` (0 = unchanged), a one-sentence `note` for each issue you edit, and the `scope`
+      proposals. Copy each issue's update time exactly as the platform gives it into `updated_at`:
+      the script skips an issue edited after your review.
+      Answer with `repo`, `base`, `since`, `reviewed`, `issues`, `scope` and `report`.
+    output_schema:
+      type: object
+      required: [repo, base, since, reviewed, issues, scope, report]
+      properties:
+        repo:     { type: string }
+        base:     { type: string }
+        since:    { type: string }
+        reviewed: { type: integer }
+        issues:
+          type: array
+          items:
+            type: object
+            required: [number, title, updated_at, verdict, evidence, edits, complexity, note]
+            properties:
+              number:     { type: integer }
+              title:      { type: string }
+              updated_at: { type: string }
+              verdict:    { type: string, enum: [current, update, partly_done, done, obsolete, duplicate] }
+              evidence:   { type: string }
+              edits:
+                type: array
+                items:
+                  type: object
+                  required: [find, replace]
+                  properties:
+                    find:    { type: string }
+                    replace: { type: string }
+              complexity: { type: integer, enum: [0, 1, 2, 3, 4, 5] }
+              note:       { type: string }
+        scope:
+          type: array
+          items:
+            type: object
+            required: [number, action, reason, duplicate_of]
+            properties:
+              number:       { type: integer }
+              action:       { type: string, enum: [close_done, close_obsolete, close_duplicate, rewrite] }
+              reason:       { type: string }
+              duplicate_of: { type: integer }
+        report: { type: string }
+    transitions:
+      # the safe fixes are applied by the skill's script (no model), then the scope proposals
+      # wait for the owner; with none, the run ends
+      - when: "(output.scope or []) | length"
+        action: &apply_safe "node \"{{ skill_dir('backlog-refresh') }}/apply.js\" --platform {{ inputs.git_platform }} --mode safe --file \"{{ run_dir }}/refresh.json\" --project \"{{ inputs.project_path }}\" --run-id {{ run_id }}"
+        on_error: apply_failed
+        goto: scope
+      - when: "true"
+        action: *apply_safe
+        on_error: apply_failed
+        goto: end
+
+  # The owner decides; the supervisor never answers this gate (a decision gate).
+  - id: scope
+    type: human_approval
+    message: |
+      Reviewed {{ steps.review.output.reviewed }} open issues of {{ steps.review.output.repo }} against `{{ steps.review.output.base }}` (changes since {{ steps.review.output.since }}). The safe fixes are applied (applied-safe.json in the run folder).
+
+      Scope changes proposed:
+      {% for p in steps.review.output.scope %}- #{{ p.number }} {{ p.action | replace('_', ' ') }}{% if p.action == 'close_duplicate' %} of #{{ p.duplicate_of }}{% endif %}: {{ p.reason }}
+      {% endfor %}
+      "Apply" closes the issues marked close (with a comment saying why); rewrites are only reported, for you or the Product Owner to do.
+
+      {{ steps.review.output.report }}
+    choices:
+      - { id: apply, label: "Apply: close the issues proposed for closing" }
+      - { id: skip,  label: "Skip: close nothing" }
+    transitions:
+      - when: "choice == 'apply'"
+        action: "node \"{{ skill_dir('backlog-refresh') }}/apply.js\" --platform {{ inputs.git_platform }} --mode scope --file \"{{ run_dir }}/refresh.json\" --project \"{{ inputs.project_path }}\" --run-id {{ run_id }}"
+        on_error: apply_failed
+        goto: end
+      - when: "true"
+        goto: end
+
+  - id: apply_failed
+    type: human_approval
+    message: |
+      Applying the refresh failed for some issues (the others were applied; applied-*.json in the run folder says which):
+      {{ action_error.message if action_error else 'unknown error' }}
+    choices:
+      - { id: done, label: "End the run" }
+    transitions:
+      - when: "true"
+        goto: end
+        status: failed
+
+# -----------------------------------------------------------------------------
+observability:
+  storage:
+    type: jsonl
+    path: "./runs/{{ run_id }}/"
+  capture:
+    prompts: true
+    outputs: true
+    thinking: true
+    tool_calls: true
+    redact:
+      - pattern: "(?i)(api[_-]?key|token|secret|password)\\s*[:=]\\s*\\S+"

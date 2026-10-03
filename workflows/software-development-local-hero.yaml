@@ -1,13 +1,19 @@
 # =============================================================================
 # Workflow: Software Development, local hero
 # -----------------------------------------------------------------------------
-#   develop ─► code_review ─► test ─► build ─► evidence ─► verify_change ──merge: local──► end
-#     ▲            │            │        │                        │              │ conflict
-#     └────────────┴────────────┴────────┴────────────────────────┘              ▼
+#   develop ─► code_review ─► test ─► suite ─► build ─► evidence ─► verify_change ──merge: local──► end
+#     ▲            │            │        │        │                        │              │ conflict
+#     └────────────┴────────────┴────────┴────────┴────────────────────────┘              ▼
 #                  ▲                                                       resolve_merge (developer)
 #                  └──────────── code_review ◄──────────────────────────────────┘
 #   evidence: screenshots / HTTP request+response / CLI output / log lines that show the change
 #   working (local, simulated), in the run folder; it never blocks and the verifier uses it.
+#   UI changes (#111): it also captures the states the developer's evidence_plan lists and reviews
+#   the screenshots (ui-conventions skill); blocking `ui_findings` go back to develop once.
+#   Declared gaps (`left_out`: requirements of the task the developer did not implement): never
+#   reviewed. The first time, develop ─► develop with the list (no reviewer call); still there
+#   after that ─► requirements_left_out (human gate: continue without them / stop). An entry led
+#   by "Tests" or "Measure" (the test writer's and the owner's tasks, #173) triggers neither.
 #
 # The software-development pipeline without GitHub/GitLab and without a merge approval: no
 # push, no PR/MR, no CI, no preview, no deploy. Each run works in its own git worktree, started
@@ -26,16 +32,54 @@
 #     concurrent runs go one at a time. At most 3 rounds; only what the developer can't fix (e.g.
 #     uncommitted changes in the checkout where <base> is checked out: the user's) or running out
 #     of rounds stops at merge_blocked.
-#   - orchestrator.limits.max_total_context: past 20M tokens of context the run pauses before its
-#     next agent turn; Continue allows another 20M, Stop ends it (worktree kept).
+#   - orchestrator.limits.max_total_context: past 40M tokens of context the run pauses before its
+#     next agent turn; Continue allows another 40M, Stop ends it (worktree kept).
 #   - Commits end with "Closes #<n>" for the run's issues: GitHub closes them when you push <base>.
 # Push whenever you want: `git push origin <base>` from the repository.
 #
+# MODES (input `mode`)
+#   auto (default): develop ─► code_review, as above; nothing waits for the owner.
+#   validated: develop ─► developer_check (human gate) ─► code_review. The owner tries the worktree
+#   (Run locally when a local_preview is set, see below), then approves, asks for changes (back to
+#   develop with the text, then back to the gate) or stops. Only the first implementation and the
+#   owner's own change requests stop there; review fix rounds too with validate_every_round: true.
+#   Before the gate, developer_screenshots (no agent, #144) captures the UI states develop listed in
+#   `screenshots`, original and modified, into evidence/developer/round-<n>/; the gate shows them.
+# RUN LOCALLY (gates with `local_preview: true`: developer_check, human_review)
+#   Offered when the project (Projects › Local preview) or `orchestrator.local_preview`
+#   ({ install, command, url }) says how to run the worktree. It never answers the gate.
+#
+# TESTS (inputs `unit_tests` and `e2e_tests`, #203; the workflow's default, changeable per run)
+#   unit_tests: write_and_run (default) = test (the test writer writes and runs focused tests) ─►
+#     suite; run_existing = no unit tests written, suite only (failures go to the developer);
+#     off = no suite at all. e2e_tests: write (default) = the test writer writes the issue's
+#     scenarios and checks that they parse; write_and_run = it also runs them; off = none.
+#   Both off: code_review ─► build (no test step). Only run_existing: code_review ─► suite.
+#   build, evidence, verify_change and the local merge always run. Nothing is reported as tested
+#   when it was off: verify_failed and the verifier get `tests_plan` ("Unit tests: Off (workflow
+#   default)"), and the run summary records it. Test later, all together: test-batch.yaml.
+#   suite (no agent, #177): the orchestrator runs the project's whole test suite once per round
+#   (`test_command`, else found from the project's files), log in logs/suite-<round>.log; failing
+#   tests go back to the test writer with the failures and the log (2 rounds, then test_failed).
+#   Tests that also fail on the base (the test writer's preexisting_failures) never count.
+#
 # Rules (as in software-development):
 #   - Agents never talk to each other: the engine delegates fixes to the developer.
-#   - Tests belong to the test writer (the only full suite run); the developer changes production
+#   - Tests belong to the test writer (focused runs; the suite step runs the whole suite, and a
+#     whole-suite command of the test writer is noted, `full_suite: warn`); the developer changes production
 #     code only (`edits_tests: false`, enforced by the engine) and says what to test (`test_notes`).
-#   - `language` picks unit-test-writer-<language> (test writer) and build-audit-<language> (builder).
+#   - `language` picks unit-test-writer-<language> and e2e-test-writer-<language> (test writer)
+#     and build-audit-<language> (builder).
+#   - End-to-end BDD scenarios (#143), kept cheap: only for user-visible behaviour, at most 3 per
+#     issue, tagged `@issue-<n>`, written and checked (they parse) but never run here (#199): the
+#     E2E release workflow (e2e-release.yaml) runs the whole suite at release time, and the local
+#     merge does not wait for it. The test step reports them as `pending` (`scenarios`,
+#     `e2e_note`); the engine saves them in
+#     <run_dir>/e2e/scenarios.feature. developer_check and verify_failed (the gate before the local
+#     merge on its failure path) list them for the Dev/QA; the run's summary shows them otherwise
+#     (no merge approval here).
+#   - Dependencies (#198): the engine links the worktree's node_modules from the shared cache
+#     (installed once per lockfile) and prepares the test step's base checkout (base_worktree).
 # =============================================================================
 
 apiVersion: multiagent/v1
@@ -43,7 +87,7 @@ kind: Workflow
 
 metadata:
   name: software-development-local-hero
-  version: 0.4.0
+  version: 0.9.0
   description: Implements, reviews, tests, builds and verifies a change in its own worktree, then merges it into the local base branch automatically, resolving conflicts on the way. No push, no PR, no CI; push when you want.
   tags: [dev, review, test, build, local, worktree]
   # Dashboard category: plan (Plan & Design), build (Code & Build) or monitor (Monitor & Improve).
@@ -67,14 +111,60 @@ inputs:
     type: string
     required: true
     description: Local repository path (a git repository; no remote needed).
+  # Picks the unit-test-writer-<language>, e2e-test-writer-<language> and build-audit-<language> skills. The app prefills it
+  # from the project's files (package.json, pyproject.toml, go.mod, pom.xml, *.csproj).
   language:
     type: string
     enum: [js, python, go, java, csharp]
     default: js
-    description: Main language of the repository. Picks the unit-test-writer-<language> and build-audit-<language> skills.
+    options: { js: JavaScript, python: Python, go: Go, java: Java, csharp: "C#" }
+    description: The project's main language, for its tests and build checks.
   base_branch:
     type: string
     default: main
+    description: The local branch the work starts from and is merged into.
+  # validated: the run stops at developer_check after the developer.
+  mode:
+    type: string
+    enum: [auto, validated]
+    default: auto
+    options: { auto: Automatic, validated: Validated }
+    description: "Automatic: the change goes straight from the developer to review and tests. Validated: the run stops after the developer so you can try the change before review and tests are paid for."
+  # A boolean; saved inputs "true"/"false" (before #116) are accepted by the engine.
+  validate_every_round:
+    type: boolean
+    default: false
+    show_if: "mode == 'validated'"
+    description: "Also stop for you after each round of review fixes, not only after the first change and your own change requests."
+  # #203: the test step is the largest cost of a run (about half of it): turn its parts on or off.
+  unit_tests:
+    type: string
+    enum: [write_and_run, run_existing, "off"]
+    default: write_and_run
+    label: Unit tests
+    options: { write_and_run: Write and run, run_existing: Run existing, "off": "Off" }
+    description: "Write and run: the test writer writes the change's tests, then the orchestrator runs the whole suite (about half of a run's cost). Run existing: no new tests, the suite runs once without an agent and failures go to the developer (cheap, the change stays untested). Off: no suite at all (cheapest; test later with the test-batch workflow)."
+  e2e_tests:
+    type: string
+    enum: ["off", write, write_and_run]
+    default: write
+    label: E2E tests
+    options: { "off": "Off", write: Write, write_and_run: Write and run }
+    description: "Write: the test writer writes the issue's end-to-end scenarios and checks that they parse; the E2E release workflow runs them. Write and run: it also runs them here (slow: starts the app, about 25 more minutes). Off: none."
+  # #205: the evidence screenshots (the Product Owner's Cost step sets it on a roadmap item:
+  # Economy off, Balanced changed, Generous all)
+  screenshots:
+    type: string
+    enum: ["off", changed, all]
+    default: all
+    label: Screenshots
+    options: { "off": "Off", changed: Changed screens, all: All }
+    description: "All: the developer's UI states before your check and the evidence's captures. Changed: only the screens the issue changes, original and modified. Off: no screenshot step and no npm run screenshot by any agent; the evidence is the diff, the logs and the test results (cheapest: the evidence step costs about $0.3-1.5 and 5-10 min of a run)."
+  test_command:
+    type: string
+    default: ""
+    label: Test command
+    description: "The project's whole-suite command the orchestrator runs once per test round (e.g. npm test). Empty: found from the project's files (package.json, go.mod, pom.xml, build.gradle, *.csproj, pyproject.toml)."
 
 # -----------------------------------------------------------------------------
 # Final command line = args + capability and isolation flags + agent.cli_args + (resume_args if
@@ -128,17 +218,21 @@ orchestrator:
     repo: "{{ inputs.repo_path }}"
     base: "{{ inputs.base_branch }}"
     remote: false
-  # AI supervisor: called only when a step fails; explains it and picks a recovery the engine
+  # AI supervisor: called when a step fails; explains it and picks a recovery the engine
   # validates (fix the output, retry with an instruction, an allowed goto, or ask a human).
+  # On call: gates with kind: escalation and stalls (the same answer 3 visits in a row, refused
+  # tool calls, a slow step) call it before you are asked; decision gates never do.
   supervisor:
     enabled: true
+    on_call: true
     max_interventions: 2   # per step
+    max_cost_usd: 5        # what the supervisor may spend in one run
   limits:
     max_total_duration: 8h
     max_total_cost_usd: 60
     # context the agents read (input + cache), summed over every turn: past it the run pauses
-    # before the next agent turn until you choose Continue (another 20M) or Stop
-    max_total_context: 20M
+    # before the next agent turn until you choose Continue (another 40M) or Stop
+    max_total_context: 40M
 
 # -----------------------------------------------------------------------------
 # Agents. `capabilities` is what each agent may use; the engine turns it into each CLI's flags
@@ -157,8 +251,9 @@ agents:
     # tests belong to the test writer: a turn that changes a test file (tests_paths) is sent back
     edits_tests: false
     # bug-diagnosis: fixes delegated after failures; merge-conflict-resolver: resolve_merge;
-    # long-commands: installs, builds and focused checks in the foreground
-    skills: [long-commands, bug-diagnosis, merge-conflict-resolver, context-economy, decision-log]
+    # long-commands: installs, builds and focused checks in the foreground; ui-conventions: changes
+    # that touch a screen (shared components, controls, the states to capture)
+    skills: [long-commands, bug-diagnosis, merge-conflict-resolver, context-economy, decision-log, ui-conventions]
     system_prompt: |
       You are a senior software engineer. Make small, cohesive changes to the production code
       that follow the architecture and conventions of the existing code.
@@ -173,23 +268,28 @@ agents:
       files, start one exploration sub-agent before your first edit and have it report the
       files, functions and line numbers to change; then read only the files you will edit, and
       group several changes to a file in one edit. On a fix turn, read only what the findings name.
+      Sub-agents are the default for code research: a search across files you will not edit,
+      a long output (a failing check, a log, a long diff) or a finding in code you have not
+      mapped goes to a sub-agent that returns a summary; edits and the checks that decide your
+      step stay in your own turn.
       Work on your own branch and commit your changes there. This run has its own git
       worktree (the current folder), which starts detached at the LOCAL {{ inputs.base_branch }}:
       this workflow works locally, and the local {{ inputs.base_branch }} holds earlier local
       merges that were never pushed. Start your branch right where the worktree is:
       `git switch -c <branch>`. Never fetch, pull or branch from origin, and never push: the
       orchestrator merges your branch into the local {{ inputs.base_branch }} after approval.
-      A fresh worktree has no installed dependencies: install them
-      when they are missing or the lockfile changed (e.g. `npm ci` when node_modules is missing
-      or package-lock.json differs from the previous HEAD).
+      The engine gives the worktree its dependencies (linked from a shared cache, installed
+      once per lockfile): never run `npm ci` and never delete `node_modules`. Adding a package
+      with the package manager is fine: the engine installs the new lockfile after your turn.
       {% if inputs.issue or (inputs.issues | length) %}End every commit message with one line per issue this run implements,
       `Closes #<number>` (the numbers from: {{ inputs.issue }}{% for u in inputs.issues %} {{ u }}{% endfor %}):
       GitHub closes them when the local {{ inputs.base_branch }} is pushed.
       {% endif %}When you finish a requested fix, report the commit hash.
 
   reviewer:
-    provider: codex
-    model: gpt-6-luna
+    provider: claude
+    model: claude-sonnet-5-5
+    effort: high
     session: persistent
     capabilities: { tools: [read, bash:git], web: false }
     # Criteria, severities and per-language rules live in the skill
@@ -203,16 +303,39 @@ agents:
     provider: claude
     model: claude-sonnet-5
     session: persistent
+    # #176: its re-read context is the largest controllable cost; past this, the next turn starts a
+    # fresh session from its handoff note (never mid-turn)
+    max_context: 120k
     # edits test files only (a convention of its role: the tools can't tell tests from code)
-    capabilities: { tools: [read, edit, write, *toolchains], web: false }
-    skills: ["unit-test-writer-{{ inputs.language }}"]
+    # subagents: exploration sub-agents map the behaviours and tests, so the main context stays small
+    capabilities: { tools: [read, edit, write, *toolchains], web: false, subagents: true }
+    # only the parts the run's unit_tests / e2e_tests turn on (#203)
+    skills:
+      - "{% if inputs.unit_tests == 'write_and_run' %}unit-test-writer-{{ inputs.language }}{% endif %}"
+      - "{% if inputs.e2e_tests != 'off' %}e2e-test-writer-{{ inputs.language }}{% endif %}"
+      - context-economy
     system_prompt: |
       You are the test writer, the only agent of this workflow that writes tests. You write
       and update them (including tests an intended behaviour change makes obsolete) and run
-      the full suite, following the test skill for this language. You do NOT fix production
+      the focused tests of the change, following the test skill for this language; the
+      orchestrator runs the whole suite once after your step and gives you its failures
+      (never start the whole suite yourself). You also write the
+      end-to-end acceptance scenarios (Given/When/Then feature files and their step
+      definitions) and check that they parse, following the E2E test skill, when the run's
+      E2E tests are on. Your step's prompt says which parts are on. You do NOT fix production
       code: when a test fails because of a bug in the code, describe the failure precisely
       (test, file, error, probable cause) so the orchestrator can hand it to the developer.
       Commit test files only.
+      Keep your context small (context-economy): before writing tests, start one exploration
+      sub-agent that maps, from the developer's test_notes and the branch diff, the changed
+      behaviours, the existing tests that cover them and the test helpers and conventions,
+      with file and line numbers; then read only the test files you edit and the production
+      lines under test. A long test output or the suite's log goes to a sub-agent that returns
+      the failures; the focused runs that decide your step stay in your own turn.
+      Your session may continue in a fresh one from your handoff note: in it, keep the
+      behaviours to test (from test_notes) and which are covered, the test files you wrote or
+      edited, the last test command with its result (pass/fail counts, failing tests), and what
+      is left, so the next session continues without mapping the change again.
 
   builder:
     provider: claude
@@ -243,7 +366,8 @@ agents:
     model: claude-sonnet-5
     session: ephemeral
     capabilities: { tools: [read, *toolchains], web: false }
-    skills: [implementation-evidence]
+    # ui-conventions: the visual review of the UI screenshots (ui_findings)
+    skills: [implementation-evidence, ui-conventions]
     system_prompt: |
       You collect evidence that the change works: UI screenshots, HTTP requests and their
       responses, CLI output or log lines, local and simulated only. You do not change code, do not
@@ -251,11 +375,11 @@ agents:
 
 groups:
   - name: Develop
-    steps: [develop, issue_not_done]
+    steps: [develop, requirements_left_out, issue_not_done, developer_screenshots, developer_check]
   - name: Review
     steps: [code_review, human_review]
   - name: Validate
-    steps: [test, test_failed, build, build_failed, evidence, verify_change, verify_failed]
+    steps: [test, suite, test_failed, build, build_failed, evidence, verify_change, verify_failed]
   - name: Merge
     steps: [resolve_merge, merge_blocked]
 
@@ -288,23 +412,99 @@ steps:
       test writer owns, or you disagree with it): answer it in `summary` with the reason, make no
       empty commit, and set `no_change: true` when no finding of this round needed a code change.
       {% endif %}
+      {% if previous_step == 'developer_check' %}
+      The owner tried your change and asks for these changes (change request {{ steps.developer_check.visits }}):
+      {{ steps.developer_check.output.feedback }}
+      Fix them on the same branch with a new commit, and answer each point in `summary`.
+      {% endif %}
+      {% if previous_step == 'evidence' %}
+      The visual review of the screenshots found these UI problems (ui-conventions skill; one round):
+      {{ steps.evidence.output.ui_findings | selectattr('blocking') | list | to_yaml }}
+      Fix them on the same branch with a new commit and answer each one in `summary` (one you
+      disagree with: say why). Keep `evidence_plan` listing the states to capture.
+      {% endif %}
       {% if not steps.develop.output %}
       Before changing code: create your branch where the worktree starts (the local
-      {{ inputs.base_branch }}): `git switch -c <branch>`, then make sure dependencies are
-      installed for that base.
+      {{ inputs.base_branch }}): `git switch -c <branch>`; the engine already
+      linked the dependencies of that base.
       {% endif %}
+      {% if inputs.unit_tests == 'write_and_run' %}
       Change production code only: the test writer writes and runs the tests after the review.
-      In `test_notes`, tell it what should be tested: the behaviours you changed, the edge cases
+      {% else %}
+      Change production code only. No test writer runs in this run (unit_tests is {{ inputs.unit_tests }}):
+      nobody writes new tests, {% if inputs.unit_tests == 'run_existing' %}and the suite step runs the existing tests your change affects after you{% else %}and no suite step runs: the tests you ask for below are the only ones of this run{% endif %}.
+      {% endif %}
+      To check your change, ask the orchestrator instead of running tests yourself: end your turn
+      with a ```run-tests block, one test file per line (the existing tests of the files you changed)
+      or the word `affected` (the test files that import what you changed). The orchestrator runs them
+      in the background and resumes you with a summary: passed / failed, each failure's first lines and
+      the log's path. Never run the whole suite, nor slow test files that simulate whole runs unless
+      you changed what they cover. One focused test file in your turn stays allowed: with a timeout of
+      about 2 minutes, its output to a log, reading only the summary.
+      In `test_notes`, tell {{ 'the test writer' if inputs.unit_tests == 'write_and_run' else 'the owner' }} what should be tested: the behaviours you changed, the edge cases
       and the files (and the existing tests your change makes obsolete, if any).
+      In `evidence_plan`, say per issue how to show the change working, for the evidence step (it
+      does not read the code): the screen and the screenshot options (view, tab, clicks), or the
+      request, command or mock run whose output shows it; `none` and why when nothing is observable.
+      For a UI change, list the interaction states to capture (the default view, then each edit
+      form, empty state and error state the change adds, with the clicks that open them) and make
+      the screenshot demo data cover the fields the change introduces (ui-conventions skill).
+      {% if inputs.screenshots == 'off' %}
+      Screenshots are off in this run (input `screenshots`): `screenshots` is an empty list, and
+      the evidence plan shows the change with the diff, commands, logs or test results, never with
+      `npm run screenshot`.
+      {% else %}
+      {% if inputs.screenshots == 'changed' %}Screenshots: only the screens this issue changes (input `screenshots`), at most the
+      default view and one state per changed screen.
+      {% endif %}
+      In `screenshots`, list the same UI states as exact options of the project's screenshot command
+      (`npm run screenshot -- …`), one entry each: `name` a plain file name
+      `<issue>-<screen>-<state>`, `caption` one sentence, `args` the options as a list (e.g.
+      ["--view", "backlog", "--mode", "roadmap", "--click", "[data-rm-edit]"]), never --out, --name,
+      --side, --ref or --caption (the capture sets them). The engine captures each one, original and
+      modified, before the owner tries the change. An empty list when the change has no UI.
+      {% endif %}
+      In `left_out`, list each requirement of the task (its acceptance criteria, each task of the
+      issue) that you did not implement, with the reason: never leave one only in prose; an empty
+      list when everything was done. A list that is not empty sends you back here, not to the review.
+      Tasks that are not yours never go in `left_out`: tests (the test writer writes and runs them
+      after the review; describe them in `test_notes`) and measurements that need real runs or the
+      owner (say in `summary` what to measure and how).{% if inputs.issues | length > 1 %}
+      A whole issue you could not do goes in `issues` (`done: false`), not in `left_out`.{% endif %}
+      {% if vars.accepted_gaps %}
+      The owner chose to continue without these requirements; do not list them again: {{ vars.accepted_gaps }}
+      {% elif previous_step == 'develop' and vars.gaps_returned == 'yes' and steps.develop.output.left_out | developer_gaps | length %}
+      Your previous answer left these requirements out, so the review was not called:
+      {{ steps.develop.output.left_out | developer_gaps | to_yaml }}
+      Finish them on the same branch with a new commit. Keep in `left_out` only those that are
+      impossible in this run, each with the reason: the owner then decides whether the run goes on
+      without them.
+      {% endif %}
+    # a fix round with a new commit, summary or set of files is progress, not "the same answer" (#121)
+    stall:
+      same_output_fields: [commit_sha, summary, files_changed]
     output_schema:
       type: object
-      required: [branch, summary, files_changed, test_notes, committed]
+      required: [branch, summary, files_changed, test_notes, committed, left_out]
       properties:
         branch:        { type: string }
         summary:       { type: string }
         files_changed: { type: array, items: { type: string } }
         # for the test writer: behaviours, edge cases and files to test
         test_notes:    { type: string }
+        # for the evidence step: per issue, the screen/command/request that shows the change
+        evidence_plan: { type: string }
+        # for developer_screenshots (#144): each UI state as the screenshot command's options;
+        # an empty list for a change without UI
+        screenshots:
+          type: array
+          items:
+            type: object
+            required: [name, caption, args]
+            properties:
+              name:    { type: string }
+              caption: { type: string }
+              args:    { type: array, items: { type: string } }
         committed:     { type: boolean }
         # a review round answered without a production change: back to the reviewer with the answer
         no_change:     { type: boolean }
@@ -320,10 +520,36 @@ steps:
               issue:   { type: string }
               done:    { type: boolean }
               summary: { type: string }
+        # requirements of the task the developer did not implement (#98), single issue or group;
+        # required, so an answer cannot skip it (an empty list when nothing is missing)
+        left_out:
+          type: array
+          items:
+            type: object
+            required: [requirement, reason]
+            properties:
+              requirement: { type: string }
+              reason:      { type: string }
     transitions:
+      # declared gaps (#98): no review is spent on work the developer says is missing. The first
+      # time, back to the developer with the list (no reviewer call); any gap after that (also a new
+      # one after the owner continued, or on a review round) goes to the owner at requirements_left_out.
+      # Tests and Measure tasks are never the developer's (#173): developer_gaps drops them
+      - when: "output.left_out | developer_gaps | length and vars.gaps_returned != 'yes'"
+        goto: develop
+        set: { gaps_returned: "yes" }
+      - when: "output.left_out | developer_gaps | length"
+        goto: requirements_left_out
       # an issue of the group could not be done: the owner decides (once) whether the run goes on without it
       - when: "output.committed and inputs.issues | length > 1 and not steps.issue_not_done.output and (output.issues or []) | rejectattr('done') | list | length"
         goto: issue_not_done
+      # validated mode: the owner tries the first implementation and every round they asked for
+      # (vars.owner_validated is "yes" once they approved; a review fix round goes on without them,
+      # unless validate_every_round)
+      - when: "(inputs.mode == 'validated' and output.committed and (vars.owner_validated != 'yes' or inputs.validate_every_round)) and inputs.screenshots == 'off'"
+        goto: developer_check
+      - when: "inputs.mode == 'validated' and output.committed and (vars.owner_validated != 'yes' or inputs.validate_every_round)"
+        goto: developer_screenshots
       # the review findings needed no production change (e.g. they ask for tests, which the test
       # writer owns): the reviewer gets the answer; a disagreement ends at human_review, never in a loop
       - when: "output.no_change and steps.code_review.output"
@@ -335,18 +561,126 @@ steps:
         max_visits: 3
         on_exhausted: fail
 
+  # Screenshots of the developer's UI states before the owner's check (#144): no agent, no model
+  # cost. The project's screenshot command runs once per entry of develop's `screenshots`, modified
+  # (the worktree) and original (--ref the base), into evidence/developer/round-<n>/ (one round per
+  # visit). Never blocks: an empty list, a simulated run or a failed capture is in its output's
+  # message, which developer_check shows.
+  - id: developer_screenshots
+    type: screenshots
+    from: develop
+    folder: developer
+    base: "{{ inputs.base_branch }}"
+    transitions:
+      - when: "true"
+        goto: developer_check
+
+  # Validated mode (inputs.mode): the owner tries the developer's work before any review or test
+  # token is spent. Ask for changes goes back to the developer with the text, and the run comes
+  # back here; no automatic limit, the owner decides when to stop. A human gate: no timeout, and
+  # neither the supervisor nor a retry ever answers it.
+  - id: developer_check
+    type: human_approval
+    local_preview: true
+    diff_base: "{{ inputs.base_branch }}"
+    # the gate's card (#213): what happened, then one line per issue; the message below is its Details
+    summary: |
+      The developer finished {% if previous_step == 'developer_screenshots' and steps.developer_check.output and steps.developer_check.output.choice == 'changes' %}your change request{% else %}the implementation{% endif %}: {{ steps.develop.output.summary | one_line(160) }}
+      {{ steps.develop.output.issues | issue_lines }}
+    message: |
+      The developer finished {% if previous_step == 'developer_screenshots' and steps.developer_check.output and steps.developer_check.output.choice == 'changes' %}your change request {{ steps.developer_check.visits - 1 }}{% else %}the implementation{% endif %}. Try it before the review and the tests run.
+      Dev/QA: read the E2E scenarios and the screenshots; run the app and test by hand only what they do not cover.
+      Branch `{{ steps.develop.output.branch }}`{% if worktree_dir %} in the worktree {{ worktree_dir }}{% endif %}.
+      {% if local_preview %}Run App starts `{{ local_preview.command }}` there.{% else %}To try it: Run App proposes a command from the worktree (package.json, the README) and saves it as the project's Local preview.{% endif %} Try it with Run App, not by starting it by hand in the worktree.
+
+      Summary: {{ steps.develop.output.summary }}
+      {% if steps.develop.output.issues %}
+      Issues:
+      {% for i in steps.develop.output.issues %}- {{ i.issue }}: {% if i.done %}done{% else %}NOT done{% endif %}, {{ i.summary }}
+      {% endfor %}{% endif %}
+      Files changed: {{ steps.develop.output.files_changed | join(', ') }}
+      {% set commits = worktree_dir | git_commits(inputs.base_branch) %}{% if commits %}Commits on the branch:
+      {{ commits }}
+      {% endif %}
+      {% if worktree_dir %}Diff: Show the diff opens the branch's changes since `{{ inputs.base_branch }}` here.{% endif %}
+      Test notes: {{ steps.develop.output.test_notes }}
+      {% if tests_plan %}{{ tests_plan }}{% endif %}
+      {% if inputs.screenshots == 'off' %}Screenshots: off in this run (the evidence is the diff, the logs and the test results).{% elif steps.developer_screenshots.output %}Screenshots: {{ steps.developer_screenshots.output.message }}{% endif %}
+      {% if steps.develop.output.evidence_plan %}Evidence plan: {{ steps.develop.output.evidence_plan }}{% endif %}
+      {% set e2e = steps.test.output | e2e_scenarios %}{% if e2e %}{{ e2e }}{% elif inputs.e2e_tests == 'off' %}E2E scenarios: off in this run.{% else %}E2E scenarios: none yet. The test writer writes them after the code review; they show in the run's summary.{% endif %}
+    feedback: { label: "Your change request for the developer (required with \"Ask for changes\")", placeholder: "What to change, point by point" }
+    choices:
+      - { id: approve, label: "Approve: go on to the code review", help: "The code review, the tests and the verification run next; you are asked again only on a failure." }
+      - { id: changes, label: "Ask for changes: back to the developer", feedback_required: true, help: "Sends your text to the developer; the run comes back to this gate after the fix." }
+      - { id: stop,    label: "Stop the run (worktree kept to resume)", help: "Ends the run as cancelled; nothing is merged and the worktree is kept to resume it." }
+    transitions:
+      - when: "choice == 'approve'"
+        goto: code_review
+        set: { owner_validated: "yes" }
+      - when: "choice == 'changes'"
+        goto: develop
+        set: { owner_validated: "no" }
+      - when: "choice == 'stop'"
+        goto: end
+        status: cancelled
+
+  # Requirements of the task the developer still leaves out after being sent back once to finish
+  # them (#98): never dropped silently. A human gate: neither the supervisor nor a retry answers it.
+  - id: requirements_left_out
+    type: human_approval
+    summary: |
+      {% set gaps = steps.develop.output.left_out | developer_gaps %}The developer left {{ gaps | length }} requirement{{ '' if gaps | length == 1 else 's' }} of the task out, even after being sent back once to finish them.
+      {% for g in gaps %}{% if loop.index <= 4 %}- ✖ {{ g.requirement | one_line(80) }}: {{ g.reason | one_line(60) }}
+      {% endif %}{% endfor %}
+    message: |
+      The developer left these requirements of the task out, even after being sent back once to finish them:
+      {% for g in steps.develop.output.left_out | developer_gaps %}
+      - {{ g.requirement }}: {{ g.reason }}{% endfor %}
+      The rest is on branch `{{ steps.develop.output.branch }}`; the code review has not run yet.
+    choices:
+      - { id: continue, label: "Continue without them", help: "Accepts the gaps: the run goes on to the review and the tests with what was done." }
+      - { id: stop,     label: "Stop the run as failed (worktree kept to resume)", help: "Ends the run as failed; nothing is merged and the worktree is kept to resume it." }
+    transitions:
+      # nothing committed yet: the developer commits the rest first
+      - when: "choice == 'continue' and not (steps.develop.output.committed or steps.develop.output.no_change)"
+        goto: develop
+        # the separator goes before each entry: the engine trims a set: value, so a trailing one is lost
+        set: &accepted_gaps { accepted_gaps: "{{ vars.accepted_gaps }}{% for g in steps.develop.output.left_out | developer_gaps %}{% if vars.accepted_gaps or not loop.first %} {% endif %}{{ g.requirement }};{% endfor %}" }
+      - when: "choice == 'continue' and inputs.issues | length > 1 and not steps.issue_not_done.output and (steps.develop.output.issues or []) | rejectattr('done') | list | length"
+        goto: issue_not_done
+        set: *accepted_gaps
+      - when: "(choice == 'continue' and inputs.mode == 'validated' and vars.owner_validated != 'yes') and inputs.screenshots == 'off'"
+        goto: developer_check
+        set: *accepted_gaps
+      - when: "choice == 'continue' and inputs.mode == 'validated' and vars.owner_validated != 'yes'"
+        goto: developer_screenshots
+        set: *accepted_gaps
+      - when: "choice == 'continue'"
+        goto: code_review
+        set: *accepted_gaps
+      - when: "choice == 'stop'"
+        goto: end
+        status: failed
+
   # A run for several issues where the developer could not do one of them: never dropped silently.
   - id: issue_not_done
     type: human_approval
+    summary: |
+      The developer could not do every issue of this run; the others are done on branch `{{ steps.develop.output.branch }}`.
+      {{ steps.develop.output.issues | issue_lines }}
     message: |
       The developer could not do every issue of this run:
       {% for i in steps.develop.output.issues %}{% if not i.done %}
       - {{ i.issue }}: {{ i.summary }}{% endif %}{% endfor %}
       The other issues are done on branch `{{ steps.develop.output.branch }}`.
     choices:
-      - { id: continue, label: "Continue without them" }
-      - { id: stop,     label: "Stop the run as failed (worktree kept to resume)" }
+      - { id: continue, label: "Continue without them", help: "The run goes on with the issues that are done; the others stay open." }
+      - { id: stop,     label: "Stop the run as failed (worktree kept to resume)", help: "Ends the run as failed; nothing is merged and the worktree is kept to resume it." }
     transitions:
+      - when: "(choice == 'continue' and inputs.mode == 'validated' and vars.owner_validated != 'yes') and inputs.screenshots == 'off'"
+        goto: developer_check
+      - when: "choice == 'continue' and inputs.mode == 'validated' and vars.owner_validated != 'yes'"
+        goto: developer_screenshots
       - when: "choice == 'continue'"
         goto: code_review
       - when: "choice == 'stop'"
@@ -376,6 +710,7 @@ steps:
       `{{ inputs.base_branch }}` (`git diff {{ inputs.base_branch }}...{{ steps.develop.output.branch }}`).
       Task (the spec for the spec axis): {{ inputs.task }}
       Developer summary: {{ steps.develop.output.summary }}
+      {% if vars.accepted_gaps %}The owner accepted that the run goes on without these requirements (not blocking): {{ vars.accepted_gaps }}{% endif %}
       {% endif %}
       {% if inputs.issues | length > 1 and vars.recheck != 'resolution' %}
       This run implements several issues: check the spec axis per issue, and set `issue` (its URL)
@@ -386,7 +721,8 @@ steps:
       Tests are not part of this review: the test writer writes and runs them in the next step,
       after your approval, and the developer never edits test files. A missing test, coverage or
       screenshot, even when the task asks for it, is never a finding here: list it in
-      `for_test_writer` instead; it does not change the verdict.
+      `for_test_writer` instead; it does not change the verdict. A measurement that needs real runs
+      or the owner (an issue's Measure task) is the owner's, never a finding either.
     output_schema:
       type: object
       required: [verdict, findings]
@@ -407,6 +743,11 @@ steps:
               description: { type: string }
               issue:       { type: string }
     transitions:
+      # #203: unit and E2E tests both off → no test step; only the existing suite → no test writer
+      - when: "output.verdict == 'approved' and inputs.unit_tests == 'off' and inputs.e2e_tests == 'off'"
+        goto: build
+      - when: "output.verdict == 'approved' and inputs.unit_tests == 'run_existing' and inputs.e2e_tests == 'off'"
+        goto: suite
       - when: "output.verdict == 'approved'"
         goto: test
       - when: "output.verdict == 'changes_requested'"
@@ -418,21 +759,41 @@ steps:
 
   - id: human_review
     type: human_approval
+    local_preview: true
+    summary: |
+      The code review did not converge in 3 rounds: the reviewer still asks for changes.
+    approve_label: "Go on to testing anyway"
+    approve_help: "The tests, the build and the verification run with the review's findings left open."
+    reject_label: "Stop the run"
+    reject_help: "Ends the run as cancelled; nothing is merged and the worktree is kept to resume it."
     message: |
       The review loop did not converge in 3 iterations.
-      Approve: move on to testing anyway. Reject: stop the run (cancelled).
+      Go on to testing anyway: move on to testing. Stop the run: the run ends as cancelled.
+      {% if tests_plan %}{{ tests_plan }}{% endif %}
     transitions:
+      # #203: the same test routing as code_review's
+      - when: "approved and inputs.unit_tests == 'off' and inputs.e2e_tests == 'off'"
+        goto: build
+      - when: "approved and inputs.unit_tests == 'run_existing' and inputs.e2e_tests == 'off'"
+        goto: suite
       - when: "approved"
         goto: test
       - when: "rejected"
         goto: end
         status: cancelled
 
-  # Test writer: owns the tests (writes/updates them) and runs the full suite, the only full run
-  # of this workflow. On a production-code failure the orchestrator hands it to the developer and
-  # tells the test writer when it is fixed.
+  # Test writer: owns the tests (writes/updates them) and runs the focused ones; the suite step
+  # after it runs the whole suite (#177). On a production-code failure the orchestrator hands it
+  # to the developer and tells the test writer when it is fixed. Its parts follow unit_tests /
+  # e2e_tests (#203): it only runs when one of them makes it write something.
   - id: test
     agent: test_writer
+    # the run's checkout of the base with its dependencies, for the pre-existing-failure check (#198)
+    base_worktree: true
+    # the orchestrator runs the whole suite: a whole-suite command of the test writer is noted (#177)
+    full_suite: warn
+    # test files left uncommitted are committed by the orchestrator before the build (#209)
+    commit_tests: true
     prompt: |
       Branch `{{ steps.develop.output.branch }}` (already reviewed).
       Original task: {{ inputs.task }}
@@ -447,10 +808,27 @@ steps:
       {{ steps.code_review.output.for_test_writer }}
       {% endif %}
 
-      {% if delegate_result %}
+      This run's tests (#203): {{ tests_plan }}
+      Never start the project's whole test suite yourself: the orchestrator runs it once after
+      your step (round by round) and gives you its failing tests. Run only focused tests: the
+      files you touch, filtered to the tests you are writing (e.g. `--test-name-pattern`), each
+      slow one (over a minute) at most once per round. Never start a full mock run of a workflow
+      (`scripts/run.js`).
+
+      {% if previous_step == 'suite' and steps.suite.output and steps.suite.output.status == 'fail' %}
+      The orchestrator ran the whole suite after your last step and it failed. Only these tests
+      fail (the full output is in `{{ run_dir }}/{{ steps.suite.output.log }}`: read only what
+      you need, or have a sub-agent summarise it):
+      {{ steps.suite.output | suite_failures }}
+      For each one: a test that is wrong or obsolete (yours or one the change made obsolete by an
+      intended behaviour change) → fix the test and commit it; a failure caused by the production
+      code → do NOT fix it, describe it in `failure_report` and set `tests_status: fail` (the
+      developer fixes it); a test that also fails on the base → `preexisting_failures` (below).
+      Run only these failing tests to confirm.
+      {% elif delegate_result %}
       The developer fixed the production code you reported (it does not touch the tests):
       {{ delegate_result.text }}
-      Run the full suite again and confirm.
+      Run the failing tests again{% if inputs.e2e_tests == 'write_and_run' %} and this run's E2E scenarios (by their issue tag){% endif %} and confirm.
       {% elif vars.recheck == 'resolution' and (steps.resolve_merge.output.files_changed or []) | length <= 5 %}
       Your tests already passed on this change. Since then the developer rebased the branch onto
       the local `{{ inputs.base_branch }}` and resolved a conflict, touching only:
@@ -465,30 +843,72 @@ steps:
       Your tests already passed on this change. Since then the developer rebased the branch onto
       the local `{{ inputs.base_branch }}` and resolved a conflict that touched many files:
       {{ steps.resolve_merge.output.summary }}
-      Run the full suite once. Update a test only when the base's change made it obsolete (not a
-      bug); no new tests.
+      Run the tests of the files the resolution touched (the orchestrator runs the whole suite
+      next). Update a test only when the base's change made it obsolete (not a bug); no new tests.
       {% else %}
+      {% if inputs.unit_tests == 'write_and_run' %}
       1. Check out the branch. You own the tests: the developer did not write or run any.
          Write the tests the change needs, starting from the developer's notes (they are a
          starting point, not a limit), following the test skill (the framework and folder the
          project already uses). Update the tests the change makes obsolete because of an
          intended behaviour change (not a bug). Commit only test files. Purely visual changes
          may not need a new test — justify it.
-      2. While writing, run only the test files you touch, each slow one (over a minute) at most
-         once per round, filtered to the tests you are writing (e.g. `--test-name-pattern`). Then
-         run the full suite once, at the end, with the project's test command. Never start a full
-         mock run of a workflow (`scripts/run.js`): the suite already includes one.
+      2. While writing, run only the test files you touch (see above); the whole suite is the
+         orchestrator's. To run several files, or the tests the change affects, end your turn with
+         a ```run-tests block (one test file per line, or `affected`): the orchestrator runs them in
+         the background and resumes you with a summary (counts, failures, the log's path).
+      {% else %}
+      1. Check out the branch. Unit tests are {{ 'run without new tests' if inputs.unit_tests == 'run_existing' else 'off' }} in this run: write no unit
+         tests and leave `tests_added` empty; `tests_status` is pass unless your scenarios'
+         parse check fails because of the production code.
       {% endif %}
-      Screenshots and other evidence of the change are collected after the build (evidence
-      step): capture none.
-      If the suite fails, first check whether the same tests fail on the local
+      {% if inputs.e2e_tests != 'off' %}
+      3. End-to-end acceptance scenarios, following the E2E test skill, kept cheap:
+         - only when the issue has user-visible behaviour (a screen, a dialog, a CLI output a
+           person reads); an engine, refactor or docs issue gets none: say why in `e2e_note`;
+         - at most 3 scenarios per issue (the main path and the failure cases the issue names),
+           Given/When/Then from the original task and the issue's acceptance criteria, tagged
+           `@issue-<n>`, in the project's usual feature folder, reusing the existing step
+           definitions before writing new ones;
+         {% if inputs.e2e_tests == 'write_and_run' %}
+         - write them, check that they parse, then run only this issue's scenarios
+           (`--tags "@issue-<n>"`), one feature file at a time, with the E2E skill's release-run
+           commands; screenshots of UI scenarios go to {{ evidence_dir }}. A scenario that fails
+           because of the production code makes `tests_status` fail (failure_report).
+         {% else %}
+         - write them, do not run them: check that they parse (e.g. `npx cucumber-js --dry-run
+           --tags "@issue-<n>"`) and never start Electron, the app or a browser for them. The
+           E2E release workflow (e2e-release.yaml) runs the whole suite at release time.
+         {% endif %}
+      {% else %}
+      3. E2E tests are off in this run: write no scenarios and leave `scenarios` empty
+         (`e2e_note`: "E2E tests off").
+      {% endif %}
+      {% endif %}
+      {% if inputs.e2e_tests != 'off' %}
+      Report every scenario in `scenarios` (feature file, name, its Given/When/Then lines, status
+      {% if inputs.e2e_tests == 'write_and_run' %}`passed` / `failed` = run here, with their screenshots{% else %}`pending` = written and parsed, run at release{% endif %}; `skipped` with the reason when it could not
+      be written, e.g. no E2E framework).{% if inputs.e2e_tests != 'write_and_run' %} Scenarios never make `tests_status` fail.{% endif %} Say in
+      `e2e_note` how you checked that they parse. The Dev/QA reads these
+      scenarios in the run's summary and at the gates.
+      {% endif %}
+      {% if inputs.e2e_tests != 'write_and_run' %}
+      No screenshots here: the evidence of the change is collected after the build (evidence step).
+      {% elif inputs.screenshots == 'off' %}
+      Screenshots are off in this run: never run `npm run screenshot`; report the scenarios without screenshots.
+      {% endif %}
+      When a test fails (yours or one of the suite's), first check whether the same test fails on the local
       `{{ inputs.base_branch }}`, following the test skill (pre-existing failures): run only the
-      failing files on a temporary worktree of the base. A test that also fails there is not this
+      failing files in the base checkout the engine prepared ({{ base_worktree_dir or "a
+      temporary worktree of the base" }}, dependencies already there). A test that also fails there is not this
       run's: list it in `preexisting_failures` (test, file, reason), do not investigate or fix it
       (unless it is trivial and in files this change touches), and it does not make
-      `tests_status` fail. The owner gets the list as a follow-up.
+      `tests_status` fail; the orchestrator's suite does not count it either. The owner gets the list as a follow-up.
       If a test fails because of production code, do NOT fix it:
       fill failure_report with test, file, error and probable cause.
+      Last step, always: `git add` every test file you wrote or changed (feature files and step
+      definitions included) and commit them on the branch, then set `committed: true`. Any other file
+      left changed sends the step back to you. `committed: false` only when you changed no file.
     output_schema:
       type: object
       required: [tests_status, tests_added, committed]
@@ -508,9 +928,32 @@ steps:
               test:   { type: string }
               file:   { type: string }
               reason: { type: string }
+        # E2E BDD scenarios (#143): saved by the engine in <run_dir>/e2e/, shown in the run's summary and at the gates
+        scenarios:
+          type: array
+          items:
+            type: object
+            required: [name, steps, status]
+            properties:
+              feature:     { type: string }
+              name:        { type: string }
+              steps:       { type: array, items: { type: string } }
+              # pending: written and parsed (e2e_tests: write); passed / failed: run here (write_and_run)
+              status:      { type: string, enum: [pending, skipped, passed, failed] }
+              reason:      { type: string }
+              screenshots: { type: array, items: { type: string } }
+        # why there are no scenarios, the issue tag run, the framework assumed, an environment problem
+        e2e_note: { type: string }
     transitions:
-      - when: "output.tests_status == 'pass'"
+      # unit tests off (#203): the test writer only wrote scenarios; no suite
+      - when: "output.tests_status == 'pass' and inputs.unit_tests == 'off'"
         goto: build
+      # a small conflict resolution: the related tests and a smoke check were enough, no whole suite
+      - when: "output.tests_status == 'pass' and vars.recheck == 'resolution' and (steps.resolve_merge.output.files_changed or []) | length <= 5"
+        goto: build
+      # the orchestrator runs the whole suite (#177)
+      - when: "output.tests_status == 'pass'"
+        goto: suite
       - when: "output.tests_status == 'fail'"
         delegate:
           agent: developer
@@ -518,18 +961,81 @@ steps:
             The test writer found failures caused by the production code on branch `{{ steps.develop.output.branch }}`:
             {{ output.failure_report }}
             Fix the production code only: never change the tests (if you think a test is wrong,
-            say why in your answer; the test writer owns it). Run only the failing tests, not the
-            full suite (the test writer runs it next), commit and report the commit hash.
+            say why in your answer; the test writer owns it). To check the fix, end your turn with a
+            ```run-tests block listing the failing test files (the orchestrator runs them and answers
+            with a summary), never the full suite (it runs after the test writer); then commit and
+            report the commit hash.
         goto: test
         max_visits: 3
         on_exhausted: test_failed
 
+  # The project's whole test suite, once per round, without an agent (#177): the command of
+  # `test_command` (empty: found from the project's files), its output in logs/suite-<round>.log.
+  # Failing tests go back to the test writer (write_and_run) or to the developer (run_existing),
+  # 2 rounds, then test_failed. Tests that also fail on the base (the test writer's
+  # preexisting_failures, or the step's own rerun of the failing files on the base, #211) never
+  # count. A suite that cannot run (no command) goes to test_failed. No timeout: it comes from the
+  # project's recent suite durations (#210).
+  # scope affected (#212): each round runs the test files the change reaches (import graph since the
+  # base, plus the files that failed before); when they pass, the whole suite runs once in the run.
+  - id: suite
+    type: suite
+    command: "{{ inputs.test_command }}"
+    scope: affected
+    transitions:
+      # build: after a merge-conflict resolution it goes on to verify_change (evidence kept)
+      - when: "output.status == 'pass'"
+        goto: build
+      - when: "output.status == 'blocked'"
+        goto: test_failed
+      - when: "output.status == 'fail' and inputs.unit_tests == 'write_and_run'"
+        goto: test
+        max_visits: 2
+        on_exhausted: test_failed
+      - when: "output.status == 'fail'"
+        delegate:
+          agent: developer
+          prompt: |
+            The project's test suite fails on branch `{{ steps.develop.output.branch }}` (no new
+            tests were written in this run: unit_tests is run_existing):
+            {{ output | suite_failures }}
+            The whole log: {{ run_dir }}/{{ output.log }} (read only the failing tests' part).
+            Fix the production code only: never change the tests (if you think a test is wrong or
+            made obsolete by the intended change, say why in your answer). To check the fix, end
+            your turn with a ```run-tests block listing the failing test files (the orchestrator runs
+            them and answers with a summary), never the full suite (the suite step runs it next);
+            then commit and report the commit hash.
+        goto: suite
+        max_visits: 2
+        on_exhausted: test_failed
+
   - id: test_failed
     type: human_approval
+    kind: escalation   # the supervisor on call tries first
+    # the run's failures, the pre-existing ones as a count (#211)
+    summary: |
+      {% if previous_step == 'suite' and steps.suite.output.status == 'blocked' %}The project's test suite could not run: {{ steps.suite.output.reason | one_line(160) }}
+      {% elif previous_step == 'suite' %}The test suite still fails after {{ steps.suite.visits }} round(s): {{ steps.suite.output.failures | length }} failing test(s) of this run.
+      {{ steps.suite.output | suite_lines }}
+      {% else %}Tests still fail after 3 rounds of fixes.
+      - ✖ {{ steps.test.output.failure_report | one_line(120) }}
+      {% endif %}
+    recommend: "{% if previous_step == 'suite' and steps.suite.output.status == 'blocked' %}reject: set the workflow's test_command input, then resume the run.{% else %}reject: the change is not tested green; look at the failures, then resume the run.{% endif %}"
+    approve_label: "Continue to the build anyway"
+    approve_help: "The build and the verification run; the change is reported as not tested green."
+    reject_label: "Stop the run"
+    reject_help: "Ends the run as failed; nothing is merged and the worktree is kept to resume it."
     message: |
-      Tests are still failing after 3 rounds of fixes:
+      {% if previous_step == 'suite' and steps.suite.output.status == 'blocked' %}The project's test suite could not run:
+      {{ steps.suite.output.reason }}
+      Set the workflow's `test_command` input (e.g. npm test) when the project's files do not give it.
+      {% elif previous_step == 'suite' %}The project's test suite still fails after {{ steps.suite.visits }} round(s):
+      {{ steps.suite.output | suite_failures }}
+      {% else %}Tests are still failing after 3 rounds of fixes:
       {{ steps.test.output.failure_report }}
-      Approve: continue to the build anyway. Reject: stop the run as failed (the worktree is kept to resume it).
+      {% endif %}
+      {{ tests_plan }}
+      Continue to the build anyway: the change is reported as not tested green. Stop the run: the run ends as failed (the worktree is kept to resume it).
     transitions:
       - when: "approved"
         goto: build
@@ -553,7 +1059,7 @@ steps:
         code = a commit on the branch can fix it (code, tests, lockfile, build scripts);
         infra = no commit can (a file locked by a running process, e.g. EBUSY/EPERM under
         node_modules, missing permissions, network, disk): say what holds it in the report
-        and do not retry the install in a loop;
+        and never reinstall (`npm ci`): node_modules links the shared dependency cache;
         unknown = you could not tell.
     output_schema:
       type: object
@@ -595,15 +1101,21 @@ steps:
   # Reached by an infra failure (at once) or a build still blocked after 3 fix rounds.
   - id: build_failed
     type: human_approval
+    kind: escalation   # the supervisor on call tries first
+    # from the build's failure_class: infra (the environment) or still blocked after the fix rounds
+    summary: |
+      {% if steps.build.output.build_status == 'failed' and steps.build.output.failure_class == 'infra' %}The build failed because of the environment, not the code (no fix round was spent).{% else %}The build is still blocked after 3 rounds of fixes.{% endif %}
+      - ✖ Build {{ steps.build.output.build_status }}{% if steps.build.output.failure_class %} ({{ steps.build.output.failure_class }}){% endif %}: {{ steps.build.output.report | one_line(120) }}
+    recommend: "{% if steps.build.output.build_status == 'failed' and steps.build.output.failure_class == 'infra' %}retry: fix the environment first (stop what holds the worktree's files), then build again.{% else %}stop: the fix rounds ran out; read the build report before resuming the run.{% endif %}"
     message: |
       {% if steps.build.output.build_status == 'failed' and steps.build.output.failure_class == 'infra' %}The build failed because of the environment, not the code (no fix round was spent):{% else %}The build is still blocked after 3 rounds of fixes:{% endif %}
       {{ steps.build.output.report }}
       Building again only helps once the environment is fixed (e.g. the process holding a file
       of the worktree is stopped: the orchestrator stops the ones started from the worktree).
     choices:
-      - { id: continue, label: "Continue to verification anyway" }
-      - { id: retry,    label: "Build again (I fixed the environment)" }
-      - { id: stop,     label: "Stop the run as failed (worktree kept to resume)" }
+      - { id: continue, label: "Continue to verification anyway", help: "The verification runs with the build still failing; the change may be merged without a green build." }
+      - { id: retry,    label: "Build again (I fixed the environment)", help: "Runs the build again; useful only after you fixed what blocked it." }
+      - { id: stop,     label: "Stop the run as failed (worktree kept to resume)", help: "Ends the run as failed; nothing is merged and the worktree is kept to resume it." }
     transitions:
       - when: "choice == 'continue'"
         goto: evidence
@@ -626,11 +1138,30 @@ steps:
       This run implements several issues ({{ inputs.issues | join(', ') }}): collect evidence per
       issue and set `issue` (its URL) on each entry.
       {% endif %}
+      {% if steps.develop.output.evidence_plan %}
+      The developer's evidence plan (follow it; don't explore the code to find another):
+      {{ steps.develop.output.evidence_plan }}
+      {% endif %}
+      Stay within the skill's budget: no reading code beyond `git diff --stat` and the plan, no
+      tests, no checking docs (the verifier does that), at most 2 captures per issue (plus the
+      interaction states the plan lists for a UI change, at most 4 more).
+      {% if inputs.screenshots == 'off' %}
+      Screenshots are off in this run (input `screenshots`): never run `npm run screenshot` or start the
+      app. The evidence is the diff (`git diff --stat`), the logs and the test results, and
+      `ui_findings` is an empty list. Say "Screenshots: off" in `note`.
+      {% elif inputs.screenshots == 'changed' %}
+      Screenshots: only the screens this issue changes (input `screenshots`), original and modified;
+      no other screen.
+      {% endif %}
       Collect the evidence that the change does what the task asked, following the
-      implementation-evidence skill: pick the kind per issue (UI screenshots before/after into
-      `{{ run_dir }}/screenshots`, HTTP request and response, CLI output, log lines of a simulated
-      run), local and simulated only, and stay read-only on the working tree. Nothing observable,
-      or no way to capture it: say why in `note`.
+      implementation-evidence skill: pick the kind per issue (UI screenshots original/modified into
+      `{{ evidence_dir }}` as `<issue>-<screen>-<state>.original.png` / `.modified.png`, HTTP
+      request and response, CLI output, log lines of a simulated run), local and simulated only,
+      and stay read-only on the working tree. Nothing observable, or no way to capture it: say why in `note`.
+      UI screenshots: review them against the ui-conventions skill and list each problem in
+      `ui_findings` (`blocking` when it makes the screen hard to read or use); an empty list when
+      there is none or the change has no UI.{% if vars.ui_review_returned == 'yes' %} This is the
+      check after the developer's UI fix round: report what is still wrong, it is recorded for the owner.{% endif %}
     output_schema:
       type: object
       required: [evidence]
@@ -645,9 +1176,11 @@ steps:
               kind:    { type: string, enum: [screenshot, http, cli, log] }
               title:   { type: string }
               command: { type: string }
-              before:  { type: string }
-              after:   { type: string }
-        # UI changes: files in <run_dir>/screenshots (Artifacts; a PR/MR workflow publishes them)
+              original: { type: string }
+              modified: { type: string }
+        # UI changes: the captions of the images of this round (<run_dir>/evidence/<step>/round-<n>/);
+        # the engine indexes them in <run_dir>/evidence/manifest.json, whose final set the gate, the
+        # verifier and a PR/MR workflow use
         screenshots:
           type: array
           items:
@@ -656,9 +1189,26 @@ steps:
             properties:
               path:    { type: string }
               caption: { type: string }
-              before:  { type: string }
         note: { type: string }
+        # the visual review of the UI screenshots (ui-conventions skill; #111)
+        ui_findings:
+          type: array
+          items:
+            type: object
+            required: [element, problem, convention, blocking]
+            properties:
+              issue:      { type: string }
+              element:    { type: string }
+              problem:    { type: string }
+              convention: { type: string }
+              screenshot: { type: string }
+              blocking:   { type: boolean }
     transitions:
+      # blocking UI findings go back to the developer once, like review findings (one UI fix round:
+      # develop ─► code_review ─► test ─► build ─► evidence again); after it they are only recorded
+      - when: "(output.ui_findings or []) | selectattr('blocking') | list | length and vars.ui_review_returned != 'yes'"
+        goto: develop
+        set: { ui_review_returned: "yes" }
       - when: "true"
         goto: verify_change
 
@@ -685,10 +1235,18 @@ steps:
       {% endif %}
       {% if steps.evidence.output and steps.evidence.output.evidence %}
       Evidence already collected (use it; run your own command only for a claim it does not
-      cover or to compare before and after): {{ steps.evidence.output.evidence | to_json }}
+      cover or to compare original and modified): {{ steps.evidence.output.evidence | to_json }}
       {% endif %}
-      Verify the change following the claim-verification skill. Stay read-only: the
+      The run's screenshots are indexed in `{{ run_dir }}/evidence/manifest.json`: use its final set
+      (images with `final: true`; a `modified` image's `pair` is its original), not older rounds.
+      Verify the change following the claim-verification skill. The issue's Tests task is checked
+      at the test step and a measurement that needs real runs or the owner (its Measure task) is the
+      owner's: neither is a claim to verify nor a reason for not_verified. Stay read-only: the
       working tree must not change (no files, stash, worktree or checkout).
+      {% if tests_plan %}
+      This run's tests (#203): {{ tests_plan }} Never claim or imply test coverage for a part that
+      was off: say "not tested in this run" for it in your summary.
+      {% endif %}
       {% if inputs.issues | length > 1 %}
       This run implements several issues: verify each one the developer did (their report:
       {{ steps.develop.output.issues | to_json }}). In `issues`, one entry per issue with its own
@@ -733,11 +1291,25 @@ steps:
 
   - id: verify_failed
     type: human_approval
+    kind: escalation   # the supervisor on call tries first
+    # the verifier's verdict per issue (verify_change.output.issues), else its claim and evidence
+    summary: |
+      Verification failed after 2 rounds of fixes: the change does not do everything the task asked.
+      {% if steps.verify_change.output.issues %}{{ steps.verify_change.output.issues | issue_lines }}{% else %}- ✖ Claim: {{ steps.verify_change.output.claim | one_line(100) }}
+      - Observed: {{ steps.verify_change.output.evidence | one_line(100) }}{% endif %}
+    recommend: "reject: merging would put unverified code on the local {{ inputs.base_branch }}; look at the evidence, then resume the run."
+    approve_label: "Merge anyway"
+    approve_help: "Merges the branch into the local {{ inputs.base_branch }} as it is, unverified (nothing is pushed)."
+    reject_label: "Stop the run"
+    reject_help: "Ends the run as failed; nothing is merged and the worktree is kept to resume it."
     message: |
       The change still does not do what the task asked after 2 rounds of fixes.
       Claim: {{ steps.verify_change.output.claim }}
       Observed: {{ steps.verify_change.output.evidence }}
-      Approve: merge it into the local {{ inputs.base_branch }} anyway. Reject: stop the run as failed (the worktree is kept to resume it).
+      {{ tests_plan }}{% if steps.suite.output %} {{ steps.suite.output.message }}{% elif inputs.unit_tests == 'off' %} The test suite did not run in this run: nothing was tested here.{% endif %}
+      Dev/QA: read the E2E scenarios and the screenshots; run the app and test by hand only what they do not cover.
+      {% set e2e = steps.test.output | e2e_scenarios %}{% if e2e %}{{ e2e }}{% elif inputs.e2e_tests == 'off' %}E2E scenarios: off in this run (none written).{% else %}E2E scenarios: none reported by the test writer.{% endif %}
+      Merge anyway: merge it into the local {{ inputs.base_branch }} as it is. Stop the run: the run ends as failed (the worktree is kept to resume it).
     transitions:
       - when: "approved"
         merge: local
@@ -803,14 +1375,20 @@ steps:
   # Only when the automation can't go on: the developer is blocked, or 3 resolution rounds ran out.
   - id: merge_blocked
     type: human_approval
+    kind: escalation   # the supervisor on call tries first
+    summary: |
+      Branch `{{ steps.develop.output.branch }}` could not be merged into the local `{{ inputs.base_branch }}`{% if steps.resolve_merge.output %} and the developer could not resolve it{% endif %}.
+      {% if action_error %}- ✖ {{ action_error.message | one_line(120) }}
+      {% endif %}{% if steps.resolve_merge.output %}- Developer: {{ steps.resolve_merge.output.summary | one_line(120) }}{% endif %}
+    recommend: "retry: fix what is in the way (e.g. commit or stash the changes where {{ inputs.base_branch }} is checked out), then retry the merge."
     message: |
       Branch `{{ steps.develop.output.branch }}` could not be merged into the local `{{ inputs.base_branch }}`:
       {{ action_error.message if action_error else '' }}
       {% if steps.resolve_merge.output %}Developer: {{ steps.resolve_merge.output.summary }}{% endif %}
       Fix what is in the way (e.g. commit or stash the changes where {{ inputs.base_branch }} is checked out), then retry.
     choices:
-      - { id: retry, label: "Retry the merge" }
-      - { id: stop,  label: "Stop the run as failed (worktree kept to resume)" }
+      - { id: retry, label: "Retry the merge", help: "Tries the merge into the local {{ inputs.base_branch }} again; a conflict goes back to the developer." }
+      - { id: stop,  label: "Stop the run as failed (worktree kept to resume)", help: "Ends the run as failed; nothing is merged and the worktree is kept to resume it." }
     transitions:
       - when: "choice == 'retry'"
         merge: local
@@ -819,6 +1397,26 @@ steps:
       - when: "choice == 'stop'"
         goto: end
         status: failed
+
+# -----------------------------------------------------------------------------
+# What the run hands to the next one when it finishes (#134): `then` at start, or a gate choice's.
+outputs:
+  branch:
+    type: string
+    description: The branch the developer worked on.
+    value: "{{ steps.develop.output.branch }}"
+  merged_commit:
+    type: string
+    description: The commit the run merged into the local base branch (merge local). Empty when nothing was merged.
+    value: "{{ run.local_merge.commit if run.local_merge else '' }}"
+  issues:
+    type: array
+    description: "The issues the run implemented (number, url, title)."
+    value: "{{ run.issues | to_json }}"
+  pr_url:
+    type: string
+    description: Always empty here (the work is merged locally, no PR/MR); declared like software-development's.
+    value: "{{ '' }}"
 
 observability:
   storage:

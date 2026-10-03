@@ -2,8 +2,8 @@
 name: issue-creator-gl
 description: Files, updates or comments on GitLab issues with the glab CLI, after searching for duplicates, using the issue-writing structure (context, evidence, decisions, verifiable acceptance criteria). Use when an agent must record a bug, an enhancement or a follow-up on GitLab.
 uses: [issue-writing]
-summary: "Search for duplicates, create/comment/edit issues with gh or glab, existing labels only"
-used_by: "backlog planner (#30), any agent that files issues"
+summary: "Search for duplicates, create/comment/edit issues with gh or glab, existing labels only (new ones only when a person confirmed them)"
+used_by: "issue-tracker (code_analyzer, issue_filer), backlog planner (#30), any agent that files issues"
 ---
 
 # Issue creator: GitLab (glab CLI)
@@ -31,7 +31,9 @@ paths, no `;`/`&&`/pipes, no files: long descriptions go inline with `--descript
      `glab issue update <iid> --repo <r> --description "<full new description>"` (keep the
      existing content).
 3. **Check the label exists**: `glab label list --repo <r> --output json`. Use only existing
-   labels; don't create labels.
+   labels; don't create labels. Only exception: your task lists labels a person confirmed
+   creating (the issue-tracker's review gate): create exactly those that are still missing, once,
+   `glab label create --repo <r> --name <name> --color "#<hex>"`.
 4. **Create**: `glab issue create --repo <r> --title "<title>" --label <label> --description "<body>" --yes`.
    It prints the issue URL.
 5. **Link**: reference related issues in the description (`#<iid>`); when a new issue splits or

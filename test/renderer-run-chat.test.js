@@ -1,14 +1,14 @@
-// src/renderer/run-chat.js: it runs only inside the Electron renderer (document, window.Robots),
-// so the pure `robot()` and `cardLines()` helpers are pulled out of the source and evaluated in a
-// sandbox, the way test/renderer-run-summary.test.js checks app.js as a seam.
+// src/renderer/views/runchat/runchat.js: it runs only inside the Electron renderer (document,
+// window.Robots), so the pure `robot()` and `cardLines()` helpers are pulled out of the source and
+// evaluated in a sandbox, the way test/renderer-run-summary.test.js checks app.js as a seam.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const { providerType } = require('../src/renderer/run-chat-model.js');
+const { providerType } = require('../src/renderer/views/runchat/run-chat-model.js');
 
-const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'run-chat.js'), 'utf8');
+const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'views', 'runchat', 'runchat.js'), 'utf8');
 
 function loadHelpers() {
   const isSupervisor = /const isSupervisor = [^\n]+/.exec(src)[0];
@@ -17,10 +17,12 @@ function loadHelpers() {
   const modesMap = /const MODES = \{[^\n]+\};/.exec(src)[0];
   const cardLines = /function cardLines\(who\) \{[\s\S]*?\n  \}/.exec(src)[0];
   for (const [name, code] of Object.entries({ isSupervisor, robot, providersMap, modesMap, cardLines })) {
-    assert.ok(code, `${name} not found in run-chat.js: the source moved`);
+    assert.ok(code, `${name} not found in runchat.js: the source moved`);
   }
   const sandbox = {
     providerType,
+    chat: { model: { run: null } },
+    window: { AgentLooks: null }, // the agent's saved look (Agents menu), when one exists (#68)
     Robots: {
       svg: (variant, st, opts) => ({ variant, st, ...opts }),
       variantFor: (type) => type,
@@ -33,10 +35,10 @@ function loadHelpers() {
     + 'this.helpers = { robot, cardLines };',
     sandbox,
   );
-  return sandbox.helpers;
+  return { ...sandbox.helpers, sandbox };
 }
 
-const { robot, cardLines } = loadHelpers();
+const { robot, cardLines, sandbox } = loadHelpers();
 
 test('robot(): an agent on the left is mirrored to face right, toward the centre of the screen', () => {
   assert.equal(robot({ agent: 'developer', side: 'left', provider: 'claude', model: 'claude-opus-5-5' }).mirror, true);
@@ -51,6 +53,19 @@ test('robot(): an agent on the right is not mirrored, so it faces left, toward t
 test('robot(): the supervisor is always mirrored, whatever side it is given', () => {
   assert.equal(robot({ agent: 'supervisor', side: 'right' }).mirror, true);
   assert.equal(robot({ agent: '_supervisor' }).mirror, true);
+});
+
+test('robot(): uses the workflow agent\'s saved look (Agents menu) over the provider\'s robot, when one exists', (t) => {
+  t.after(() => { sandbox.chat.model.run = null; sandbox.window.AgentLooks = null; });
+  sandbox.chat.model.run = { workflow: 'writer-reviewer.yaml' };
+  sandbox.window.AgentLooks = { forWorkflow: (workflow, agent) => (workflow === 'writer-reviewer.yaml' && agent === 'writer' ? 'studio' : null) };
+  assert.equal(robot({ agent: 'writer', provider: 'claude', model: 'claude-opus-5-5' }).variant, 'studio');
+  // a different agent of the same workflow has no saved look: falls back to the provider's robot
+  assert.equal(robot({ agent: 'reviewer', provider: 'codex', model: 'gpt-6-luna' }).variant, 'codex-cli');
+});
+
+test('robot(): without a saved look, draws the provider\'s robot as before', () => {
+  assert.equal(robot({ agent: 'developer', provider: 'claude', model: 'claude-opus-5-5' }).variant, 'claude-code');
 });
 
 test('cardLines(): the hover card shows provider, model and effort, then the session mode and turn', () => {
@@ -71,4 +86,70 @@ test('cardLines(): a simulated session says so next to its provider', () => {
 
 test('turnHtml: a message on the right gets the rc-right class', () => {
   assert.match(src, /rc-\$\{it\.side === 'right' \? 'right' : 'left'\}/);
+});
+
+// turnHtml's activity block (#160): a sub-agent entry gets its own class, a tag for its type and
+// its description (not the raw tool input); an ordinary tool keeps the plain rendering.
+function activityExtras(activity) {
+  const block = /const tools = it\.activity\.filter[\s\S]*?\n    \}\n/.exec(src)[0];
+  assert.ok(block, 'activity block not found in runchat.js: the source moved');
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+  const sandbox = { esc, it: { activity } };
+  vm.createContext(sandbox);
+  vm.runInContext(`const extras = [];\n${block}\nthis.extras = extras;`, sandbox);
+  return sandbox.extras;
+}
+
+test('turnHtml activity: a sub-agent call renders its type and description, tagged rc-subagent', () => {
+  const [html] = activityExtras([{ kind: 'tool', name: 'Task', input: '{}', subagent: { type: 'Explore', description: 'Map the login flow' } }]);
+  assert.match(html, /<li class="rc-subagent">/);
+  assert.match(html, /<span class="tag">Explore<\/span> Map the login flow/);
+  assert.match(html, /1 sub-agent</);
+});
+
+test('turnHtml activity: an ordinary tool call (no subagent) keeps the plain rendering, with its input', () => {
+  const [html] = activityExtras([{ kind: 'tool', name: 'Bash', input: '{"command":"npm test"}' }]);
+  assert.doesNotMatch(html, /rc-subagent/);
+  assert.match(html, /<b class="mono">Bash<\/b> <span class="mono muted">\{&quot;command&quot;:&quot;npm test&quot;\}<\/span>/);
+  assert.doesNotMatch(html, /sub-agent/);
+});
+
+test('turnHtml activity: a failed sub-agent call still gets the err class alongside rc-subagent', () => {
+  const [html] = activityExtras([{ kind: 'tool', name: 'Task', input: '{}', error: true, subagent: { type: 'Explore', description: 'Read the build log' } }]);
+  assert.match(html, /<li class="rc-subagent err">/);
+});
+
+// #80: a run's chat always opens scrolled to its latest message, live or past (it used to open a
+// past run at the start: "scroller.scrollTop = chat.live ? scroller.scrollHeight : 0").
+test('openRun(): every run opens scrolled to its latest message, not only a live one', () => {
+  const openRun = /async function openRun\(runId, \{[\s\S]*?\n  \}/.exec(src)[0];
+  assert.match(openRun, /toLatest\(\);/);
+  assert.doesNotMatch(openRun, /scroller\.scrollTop = chat\.live \? scroller\.scrollHeight : 0/);
+});
+
+// #80: the Chat / Details toggle becomes the remembered run view for every later way of opening a run.
+test('Details and "Chat" switch explicitly and become the remembered run view', () => {
+  assert.match(src, /\$c\('#rc-details'\)\.onclick = \(\) => \{\s*setRunView\('details'\);/);
+  assert.match(src, /setRunView\('chat'\);\s*openChatFor\(/);
+});
+
+// #80: "Jump to latest" appears once the reader has scrolled far enough up from the last message.
+test('scrolledUp(): true once more than 240px of messages are below the visible area', () => {
+  const scrolledUp = /const scrolledUp = \(s\) => [^\n]+;/.exec(src)[0];
+  const sandbox = {};
+  vm.createContext(sandbox);
+  vm.runInContext(`${scrolledUp}\nthis.scrolledUp = scrolledUp;`, sandbox);
+  assert.equal(sandbox.scrolledUp({ scrollHeight: 1000, scrollTop: 760, clientHeight: 200 }), false); // 40px below
+  assert.equal(sandbox.scrolledUp({ scrollHeight: 1000, scrollTop: 500, clientHeight: 200 }), true); // 300px below
+  assert.equal(sandbox.scrolledUp({ scrollHeight: 1000, scrollTop: 800, clientHeight: 200 }), false); // at the bottom
+});
+
+// #181: the gate card spans the conversation's full width (runchat.css's .rc-gate), and its choice
+// buttons sit side by side in one row, the first (primary) one first, not stacked.
+test('gateHtml: the choice buttons sit in one .row.gate-choices row, the first one primary while open', () => {
+  const gateHtml = /function gateHtml\(it\) \{[\s\S]*?\n  \}/.exec(src)[0];
+  assert.match(gateHtml, /<div class="row gate-choices">\$\{buttons\}<\/div>/, 'the buttons share one row, not one per line');
+  assert.match(gateHtml, /class="btn sm \$\{!it\.resolved && i === 0 \? 'primary' : ''\}/, 'the first, unresolved choice is the primary one');
+  assert.match(gateHtml, /c\.feedback_required \? ' data-needs-text="1"' : ''/, 'feedback_required still marks the choice as needing text');
+  assert.match(gateHtml, /<div class="rc-gate" data-item="\$\{it\.id\}">/, 'the gate card keeps its rc-gate class (full width is runchat.css, not markup)');
 });

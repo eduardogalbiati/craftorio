@@ -6,7 +6,7 @@ const path = require('path');
 const { WorkflowRun } = require('../src/engine/workflow');
 const { Recorder } = require('../src/engine/recorder');
 const { runEvents } = require('../src/runs');
-const { RunChatModel, splitAnswer, providerType } = require('../src/renderer/run-chat-model.js');
+const { RunChatModel, splitAnswer, providerType } = require('../src/renderer/views/runchat/run-chat-model.js');
 
 process.env.MULTIAGENT_MOCK_DELAY_SCALE = '0.05';
 const root = path.join(__dirname, '..');
@@ -201,7 +201,7 @@ test('run chat: loops back show as loop lines, gates keep the chosen answer and 
   assert.equal(gate.stepId, 'out_of_rounds');
   assert.ok(gate.choices.some((c) => c.id === 'stop'));
   const stop = gate.choices.find((c) => c.id === 'stop');
-  assert.deepEqual(gate.resolved, { choice: 'stop', label: stop.label });
+  assert.deepEqual(gate.resolved, { choice: 'stop', label: stop.label, intent: null });
   const [reply] = kinds(model, 'reply');
   assert.deepEqual([reply.label, reply.feedback, reply.by], [stop.label, 'Too vague, stop here.', 'user']);
   assert.deepEqual(model.pendingGates(), []);
@@ -231,6 +231,63 @@ test('run chat: a gate still open when the run ends is closed, not answered', ()
   const [gate] = kinds(model, 'gate');
   assert.deepEqual([gate.resolved, gate.closed], [null, true]);
   assert.equal(kinds(model, 'reply').length, 0);
+});
+
+test('run chat: a gate\'s Run locally / diff tools (local_preview, work_dir, diff_base) are kept on the gate item, none of them when the event has none', () => {
+  const withTools = chatOf([
+    { seq: 1, type: 'workflow.started', run_id: 'r1', workflow: 'wf', inputs: {} },
+    {
+      seq: 2, type: 'approval.requested', run_id: 'r1', approval_id: 'g1', step_id: 'developer_check', message: 'Try it',
+      local_preview: { command: 'npm start' }, work_dir: 'C:\\work\\wt', diff_base: 'origin/main', run_app: true,
+    },
+  ]);
+  const [gate] = kinds(withTools, 'gate');
+  assert.deepEqual(gate.localPreview, { command: 'npm start' });
+  assert.equal(gate.workDir, 'C:\\work\\wt');
+  assert.equal(gate.diffBase, 'origin/main');
+  assert.equal(gate.runApp, true);
+
+  const withoutTools = chatOf([
+    { seq: 1, type: 'workflow.started', run_id: 'r1', workflow: 'wf', inputs: {} },
+    { seq: 2, type: 'approval.requested', run_id: 'r1', approval_id: 'g2', step_id: 'human_review', message: 'Merge?' },
+  ]);
+  const [gate2] = kinds(withoutTools, 'gate');
+  assert.deepEqual([gate2.localPreview, gate2.workDir, gate2.diffBase, gate2.runApp], [null, null, null, false]);
+});
+
+test('run chat: "Accept and save to issue #n" (#125) is kept on the gate, and the reply label names it, not the plain "Accept" choice', () => {
+  const events = [
+    { seq: 1, type: 'workflow.started', run_id: 'r1', workflow: 'writer-reviewer', inputs: {}, issue: { number: 42, url: 'https://github.com/o/r/issues/42', title: 'T' } },
+    {
+      seq: 2, type: 'approval.requested', run_id: 'r1', approval_id: 'g1', step_id: 'decide', message: 'Accept?',
+      choices: [{ id: 'accept', label: 'Accept the document' }, { id: 'stop', label: 'Stop without accepting' }],
+      save_to_issue: { choice: 'accept', issue: { number: 42 } },
+    },
+  ];
+  const model = chatOf(events);
+  const [gate] = kinds(model, 'gate');
+  assert.deepEqual(gate.saveToIssue, { choice: 'accept', issue: { number: 42 } });
+
+  model.apply({ seq: 3, type: 'approval.resolved', run_id: 'r1', approval_id: 'g1', step_id: 'decide', choice: 'accept', intent: 'save_to_issue', by: 'user' });
+  const [resolvedGate] = kinds(model, 'gate');
+  assert.deepEqual(resolvedGate.resolved, { choice: 'accept', label: 'Accept and save to issue #42', intent: 'save_to_issue' });
+  const [reply] = kinds(model, 'reply');
+  assert.equal(reply.label, 'Accept and save to issue #42', 'not the plain "Accept the document" label');
+});
+
+test('run chat: a plain "accept" on the same gate (no intent) keeps the ordinary choice label', () => {
+  const events = [
+    { seq: 1, type: 'workflow.started', run_id: 'r1', workflow: 'writer-reviewer', inputs: {}, issue: { number: 42, url: 'https://github.com/o/r/issues/42', title: 'T' } },
+    {
+      seq: 2, type: 'approval.requested', run_id: 'r1', approval_id: 'g1', step_id: 'decide', message: 'Accept?',
+      choices: [{ id: 'accept', label: 'Accept the document' }, { id: 'stop', label: 'Stop without accepting' }],
+      save_to_issue: { choice: 'accept', issue: { number: 42 } },
+    },
+  ];
+  const model = chatOf(events);
+  model.apply({ seq: 3, type: 'approval.resolved', run_id: 'r1', approval_id: 'g1', step_id: 'decide', choice: 'accept', by: 'user' });
+  const [gate] = kinds(model, 'gate');
+  assert.deepEqual(gate.resolved, { choice: 'accept', label: 'Accept the document', intent: null });
 });
 
 test('run chat: the run and its start message carry every issue; a run recorded with one `issue` shows a list of one', () => {
@@ -280,7 +337,7 @@ test('run chat: an approval withdrawn by the engine\'s check shows why, not as a
     { seq: 3, type: 'approval.resolved', approval_id: 'a1', withdrawn: true, by: 'check', reason: 'conflict: the PR now conflicts with main' },
   ]);
   const [gate] = kinds(model, 'gate');
-  assert.deepEqual(gate.resolved, { choice: 'withdrawn', label: 'Withdrawn before anyone answered: conflict: the PR now conflicts with main' });
+  assert.deepEqual(gate.resolved, { choice: 'withdrawn', label: 'Withdrawn before anyone answered: conflict: the PR now conflicts with main', intent: null });
 });
 
 test('run chat: a supervisor recovery from a failed merge shows its record ("went back to..."), not the raw explanation', () => {
@@ -328,6 +385,24 @@ test('run chat: tool calls and thinking are kept with the turn and say what the 
   assert.deepEqual([turn.tokensIn, turn.tokensOut, turn.cost], [1500, 80, 0.25]);
   assert.equal(model.active.size, 0);
   assert.equal(model.run.cost, 0.25);
+});
+
+test('run chat: an Agent/Task tool call is kept as a sub-agent, with its type and description; other tools are not', () => {
+  const model = chatOf([
+    { seq: 1, type: 'workflow.started', run_id: 'r1', workflow: 'wf', inputs: {} },
+    { seq: 2, type: 'session.opened', session_id: 's1', session: { agent: 'developer', provider: 'claude', model: 'claude-opus-5-5' } },
+    { seq: 3, type: 'session.message_sent', session_id: 's1', turn: 1, step_id: 'develop' },
+    { seq: 4, type: 'session.stream', session_id: 's1', turn: 1, item: { kind: 'tool_call', name: 'Task', input: { subagent_type: 'Explore', description: 'Map the login flow' } } },
+    { seq: 5, type: 'session.stream', session_id: 's1', turn: 1, item: { kind: 'tool_call', name: 'Agent', input: { description: 'Summarize the failing suite' } } },
+    { seq: 6, type: 'session.stream', session_id: 's1', turn: 1, item: { kind: 'tool_call', name: 'Bash', input: { command: 'npm test' } } },
+    { seq: 7, type: 'session.message_received', session_id: 's1', turn: 1, step_id: 'develop', text: 'Done.' },
+  ]);
+  const [turn] = kinds(model, 'turn');
+  assert.deepEqual(turn.activity.map((a) => a.subagent || null), [
+    { type: 'Explore', description: 'Map the login flow' },
+    { type: 'general-purpose', description: 'Summarize the failing suite' }, // no subagent_type: the generic default
+    null, // Bash: not a sub-agent
+  ]);
 });
 
 test('run chat: the supervisor shows its decision, not its raw turn', () => {

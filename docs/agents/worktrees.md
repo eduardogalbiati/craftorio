@@ -11,7 +11,79 @@ actions, or any code that deletes or checks out branches.
   `worktree_dir`. Falls back to the repo path when it isn't a git repo; mock runs never create
   worktrees. `software-development` and `software-development-local-hero` use it (`multi-model-review` reviews the checked-out branch).
 - **Local workflows**: `orchestrator.worktree.remote: false` starts the worktree from the **local** `<base>` without fetching (it may hold local merges never pushed), and `removeWorktree` checks "merged" against the local base. A transition with `merge: local` (validated by `loadWorkflow`; needs `orchestrator.worktree`) calls `mergeLocally`: the run's worktree must be on a branch with everything committed; the branch is rebased onto the local base when it moved (a conflict aborts the rebase, leaves the branch untouched and fails with the files); then the base is fast-forwarded with `merge --ff-only` where it is checked out (refused when that checkout has uncommitted changes to tracked files) or by `update-ref` (compare-and-swap) when it is checked out nowhere. No push, no fetch; simulated runs skip it (`action.executed` skipped). Emits `worktree.merged`. Used by `software-development-local-hero`.
-- Starts without `node_modules`: the language skills install dependencies when missing.
+- **Dependencies from a shared cache (#198, `src/engine/deps-cache.js`)**: after `worktree.ready`
+  the engine (`prepareDeps`) links the worktree's `node_modules` to
+  `<workspace>/cache/deps/<project>/<key>/node_modules` (a junction on Windows, a symlink elsewhere)
+  and records `deps.ready` (`for`, `status` hit | linked | miss | local | failed | not_cached, `key`,
+  `seconds`, `waited`). key = sha256 of the lockfile + package manager and version + Node version
+  + platform/arch (a project's Electron is in its lockfile). Miss: `npm ci` / `pnpm install
+  --frozen-lockfile` / `yarn install --frozen-lockfile` runs in the worktree (its lifecycle scripts
+  see the project), then `node_modules` is renamed into the cache and linked back; `entry.json` is
+  written last (an entry without it, a crash or a cancel, is never used and is replaced). One
+  installer per key: `<key>.lock` (pid, host; a dead holder's is taken over); the second run waits
+  and gets a hit. After each agent step the same call runs again: a changed lockfile installs its
+  new key once (the old entry stays for the runs that link it); an entry changed through the link
+  (its hidden lockfile changed) or emptied is marked `unusable` in entry.json and never given to a
+  new worktree. A move or link that fails (EBUSY, another volume) keeps the install in the worktree
+  (`local`) and the cache untouched. Not cached (agents install as before, told by the command
+  guide): npm/yarn/pnpm workspaces, `file:`/`link:` dependencies, and the other languages
+  (`NOT_CACHED`: poetry/uv/requirements, go.sum, Gemfile.lock). Agents are told in their command
+  guide (`depsGuide`); Claude refuses `npm ci` and `rm -rf node_modules` (`DEPS_DENIED_COMMANDS`
+  in capabilities.js; Codex/Grok: the after-step check). `removeWorktree` and `cleanupWorktrees`
+  unlink the links first (`unlinkDeps`), so no delete follows one into the cache. At app start
+  (`cleanupRunWorktrees`) `pruneDepsCache` removes the entries no worktree links: unusable or
+  incomplete ones, unused for 14 days, then the least recently used above 20 GB. Settings ›
+  General › Dependency cache shows the size and clears the unlinked entries (`depsCache:info`,
+  `depsCache:clear`). Simulated runs have no worktree: nothing is installed.
+- **The base checkout (#198)**: a step with `base_worktree: true` (the test step of both
+  development workflows) gets `<worktreesDir>/<run_id>-base`, detached at the current base
+  (refreshed on each visit) with its dependencies from the same cache, as `base_worktree_dir` in
+  its prompt, for the pre-existing-failure check (`setupBaseWorktree`, `prepareBaseWorktree`).
+  Removed in `finishWorktree` whatever the status; `cleanupWorktrees` removes an orphan once its run
+  has a `summary.json`.
+- **Run locally at a gate (#70)**: a gate with `local_preview: true` (developer_check, human_review,
+  approve_merge) whose run has a config (the project's `localPreview`, else
+  `orchestrator.local_preview: { install, command, url }`) carries `local_preview` and `work_dir`
+  in `approval.requested` / `pendingGates()`. `localPreview:start` (service `startLocalPreview`,
+  helpers in `src/local-preview.js`) runs `install && command` (install only when node_modules is
+  missing or the lockfile hash changed since the run's last preview) in the worktree, in a pty of
+  `src/terminals.js`; one per run; a busy `url` port is refused with a message. Env: always
+  `MULTIAGENT_SIMULATION_ONLY=1`, `MULTIAGENT_WORKSPACE` = a scratch copy under
+  `<workspace>/local-previews/<run>/workspace` (projects, agents, skills, workflows, settings; never
+  runs) and `MULTIAGENT_USER_DATA` (read by `src/main.js`, dev only) unless the owner chose the
+  real workspace. Stopped on `approval.resolved` and `workflow.finished` (and by `terminals.killAll`
+  at quit); it never answers the gate. `local_preview.started` / `local_preview.stopped` events land
+  in the run's history and chat. Mock runs have no worktree: `work_dir` is `repo_path`.
+- **Run App's config (#115)**: `gateRunConfig` (service) resolves project `localPreview` >
+  `.multiagent/local-preview.yaml` read from the gate's `work_dir` (the run's branch, so a run that
+  edits it sees its own version) > `orchestrator.local_preview` > the gate's; `suggestConfig`
+  detects from `work_dir` only when none applies. A non-project config runs only after the owner's
+  one click (`localPreview:start` with `confirm`), which stores its fingerprint as the project's
+  `localPreviewConfirmed`; a different fingerprint (the file edited) asks again. `cwd` must stay
+  inside `work_dir`; the lockfile check (install) stays at the root. `localPreview:save` writes the
+  file to the project's folder (the owner's checkout, never the run's worktree).
+- **The app started by hand in a worktree (#112)**: `npm start` in `<workspace>/worktrees/<id>`
+  (dev only, no `MULTIAGENT_WORKSPACE`) gets a scratch workspace and user data folder under
+  `<workspace>/local-previews/app-<id>/` and simulations only (`worktreeAppScratch` in
+  `src/local-preview.js`, used by `src/main.js`): it never opens the owner's workspace. Prefer **Run App**.
+- **The run's scratch workspace (#120)**: a run with a worktree gets `runs/<id>/scratch/{workspace,
+  user-data}` (`WorkflowRun.scratchWorkspace`, same content rules as `scratchWorkspace` in
+  `src/local-preview.js`: agents, skills, workflows, settings, project entries pointing to empty
+  folders; never runs, repos or worktrees), created on the first agent turn. Every agent of the run
+  gets it as `MULTIAGENT_WORKSPACE` / `MULTIAGENT_USER_DATA` (`capabilities.agentEnv`), so
+  `npm run run -- --mock`, `npm run screenshot`, `npm start` and `node -e` engine scripts from the
+  worktree write there, never to the owner's runs, roadmap, queue or backlog. Removed with the
+  worktree (`finishWorktree` on success, `cleanupWorktrees` for orphans, `removeScratch` in
+  `src/engine/worktree.js`); a failed or cancelled run keeps it while its worktree is kept. The
+  evidence agents keep lives in `runs/<id>/logs` and `runs/<id>/evidence`, which stay. Without
+  the variable, `resolveWorkspace` under `MULTIAGENT_SIMULATION_ONLY=1` falls back to
+  `<os tmp>/multiagent-simulation/workspace`, never the registered workspace.
+- **One app per workspace (#112)**: `src/main.js` takes Electron's single-instance lock (the owner's
+  user data folder) and `<workspace>/.lock` (pid, host, heartbeat; `lockWorkspace` in
+  `src/run-owner.js`). A second copy offers a scratch copy or quit; a stale lock (dead pid, old
+  heartbeat) is taken over. Each run in progress has `runs/<id>/owner.json` with a heartbeat
+  (`claimRun`): another process lists it as `running` (`runningElsewhere`), never `interrupted`,
+  and the roadmap, Retry, Resume and a new run for the same issues leave it alone.
 
 ## Gotchas
 
@@ -28,7 +100,8 @@ actions, or any code that deletes or checks out branches.
 
 - Shared tables are generated from per-feature files (`npm run docs`, see the code map's header):
   the code map is gitignored, the README tables are committed with an out-of-date check. The
-  channels of `window.api` are one file per area (`src/service/channels/`).
+  channels of `window.api` are one file per area (`src/service/channels/`), and so are the
+  service's helpers and state (`src/service/areas/`) and its tests (`test/service/`).
 - Shared name lists (`module.exports`, destructured requires) are one item per line, sorted
   (`npm run lint:lists`, `-- --fix`); new functions go next to related code, not before the same
   section comment every run uses.

@@ -1,0 +1,12 @@
+/* Settings screen (views/settings/settings.js); shared rows (.s-group, .s-row, .switch) are in style.css */
+.settings { display: flex; height: 100%; }
+.settings-nav { width: 220px; flex: none; padding: 28px 12px 28px 20px; border-right: 1px solid var(--border); display: flex; flex-direction: column; gap: 2px; }
+.settings-nav h1 { margin-bottom: 14px; padding-left: 10px; }
+.settings-tab { text-align: left; padding: 7px 10px; border-radius: 7px; border: none; background: none; color: var(--muted); font: inherit; cursor: pointer; }
+.settings-tab:hover { color: var(--text); background: var(--panel-2); }
+.settings-tab.active { color: var(--text); background: var(--panel-2); font-weight: 600; }
+.settings-body { flex: 1; overflow: auto; padding: 28px 40px; }
+.settings-page { max-width: 760px; }
+.settings-title { font-size: 18px; text-transform: none; letter-spacing: 0; color: var(--text); margin: 0 0 14px; }
+/* Settings › Execution › Oracle: the wake-up kinds, two columns of checkboxes (#123) */
+.oracle-wake-kinds { display: grid; grid-template-columns: repeat(2, max-content); gap: 4px 14px; }

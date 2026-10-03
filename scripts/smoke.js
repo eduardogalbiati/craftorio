@@ -56,7 +56,7 @@ app.on('browser-window-created', (_e, win) => {
       if (!document.body.classList.contains('dev-mode')) throw new Error('developer mode is off: refusing to start a real run');
       document.querySelector('#btn-start').click();
     })()`);
-    const timer = setInterval(() => js(`(document.querySelector('#approval-modal:not(.hidden) #approval-choices:not(.hidden) button') || document.querySelector('#approval-modal:not(.hidden) #btn-approve'))?.click()`), 1000);
+    const timer = setInterval(() => js(`document.querySelector('#run-gates:not(.hidden) .run-gate-actions button[data-choice]:not(:disabled), #run-gates:not(.hidden) button[data-answer=\"true\"]:not(:disabled)')?.click()`), 1000);
     setTimeout(() => finish().catch((e) => { console.error('smoke:', e); app.exit(1); }), 45000);
     async function finish() {
       clearInterval(timer);

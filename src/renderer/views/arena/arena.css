@@ -1,0 +1,136 @@
+/* AI Arena: the ai-arena workflow as a chat. Builds on chat.css (the look it shares with Write &
+   Review, loaded before every view); every role has its own color in --role (contenders by slot,
+   the synthesizer, the verifier). */
+:root {
+  --ar-c1: #f05252;
+  --ar-c2: #fb923c;
+  --ar-c3: #4f8cff;
+  --ar-c4: #34d399;
+  --ar-c5: #f472b6;
+  --ar-synth: #facc15;
+  --ar-verify: #2dd4bf;
+}
+#view-arena { padding: 0; overflow: hidden; }
+.c-synth { color: var(--ar-synth); }
+.c-verify { color: var(--ar-verify); }
+
+/* ---------- setup ---------- */
+.ar-rules input[list] {
+  width: 180px; margin: 0 4px; background: var(--panel-2); color: var(--text);
+  border: 1px solid var(--border); border-radius: 8px; padding: 4px 8px; font: inherit; font-family: var(--mono);
+}
+.ar-section-head { display: flex; align-items: baseline; gap: 12px; margin: 22px 0 10px; }
+.ar-section-head h2 { margin: 0; }
+.ar-contenders { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; }
+.ar-card {
+  position: relative; background: var(--panel); border: 1px solid var(--border); border-top: 3px solid var(--role);
+  border-radius: 14px; padding: 12px 12px 14px; display: flex; flex-direction: column; gap: 8px;
+}
+.ar-card-head { display: flex; align-items: center; justify-content: center; }
+.ar-card-head .duo-robot { width: 104px; height: 104px; margin: -6px 0 -4px; }
+.ar-card-title { font-weight: 700; color: var(--role); text-align: center; font-size: 13px; }
+.ar-card select { width: 100%; }
+.ar-card .field { margin: 0; }
+.ar-card .field label { font-size: 10px; }
+.ar-card .duo-effort button { font-size: 10px; padding: 3px 0; }
+.ar-card .duo-effort button.active { color: var(--role); }
+.ar-remove {
+  position: absolute; top: 6px; right: 6px; width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--border);
+  background: var(--panel-2); color: var(--muted); cursor: pointer; font: 700 12px/1 inherit; display: grid; place-items: center;
+}
+.ar-remove:hover { color: var(--red); border-color: var(--red); }
+.ar-add {
+  border: 1px dashed var(--border); border-radius: 14px; background: none; color: var(--muted); cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-height: 240px; font: inherit; font-weight: 600;
+}
+.ar-add:hover { color: var(--text); border-color: var(--accent); }
+.ar-add b { font-size: 28px; line-height: 1; }
+.ar-internal { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 14px; }
+.ar-internal-card { padding: 12px 14px; border-top-color: var(--role); }
+.ar-internal-card .duo-agent-head { margin: 0; gap: 10px; }
+.ar-internal-card .duo-agent-head b { color: var(--role); font-size: 14px; }
+
+/* ---------- conversation ---------- */
+.ar-cast { flex-wrap: nowrap; }
+.ar-cast .duo-cast { min-width: 46px; }
+.ar-cast .duo-robot.head { width: 38px; height: 38px; }
+.ar-phases { display: flex; align-items: center; gap: 4px; font-size: 11px; }
+.ar-phases span { padding: 2px 8px; border-radius: 99px; border: 1px solid var(--border); color: var(--muted); white-space: nowrap; }
+.ar-phases span.done { color: var(--text); }
+.ar-phases span.now { color: var(--accent); border-color: var(--accent); font-weight: 700; }
+.ar-phases span.skip { opacity: .4; text-decoration: line-through; }
+.ar-phases i { color: var(--muted); font-style: normal; }
+
+.duo-msg.ar-msg .duo-bubble { border-left: 3px solid var(--role); border-bottom-left-radius: 4px; }
+.duo-msg.ar-msg .duo-meta b { color: var(--role); }
+.duo-msg.ar-left { align-self: flex-start; }
+.duo-msg.ar-right { align-self: flex-end; flex-direction: row-reverse; }
+.duo-msg.ar-right .duo-bubble { border-left: 1px solid var(--border); border-right: 3px solid var(--role); border-bottom-left-radius: 14px; border-bottom-right-radius: 4px; background: #16191f; }
+.ar-doc-card { background: color-mix(in srgb, var(--role) 12%, transparent); border-color: color-mix(in srgb, var(--role) 40%, transparent); }
+.ar-doc-card:hover { border-color: var(--role); }
+.ar-doc-card svg { stroke: var(--role); }
+.ar-author { font-weight: 700; color: var(--role); }
+
+/* the models at work (a fan-out has several at once) */
+.ar-working { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 4px 14px; animation: duo-in .2s ease-out; }
+.ar-working figure { margin: 0; display: flex; flex-direction: column; align-items: center; font-size: 11px; color: var(--muted); }
+.ar-working .duo-robot { width: 96px; height: 96px; }
+.ar-working.solo .duo-robot { width: 132px; height: 132px; }
+.ar-working figcaption b { color: var(--role); }
+.ar-working.right { align-self: flex-end; }
+
+/* critiques */
+.ar-evals { list-style: none; margin: 4px 0 6px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.ar-eval { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 8px; }
+.ar-eval .duo-score-bar { min-width: 60px; }
+.ar-eval .duo-score-bar i { background: var(--role); }
+.ar-eval-num { font-family: var(--mono); font-weight: 700; }
+.ar-eval details { grid-column: 1 / -1; font-size: 12px; }
+.ar-eval summary { cursor: pointer; color: var(--muted); font-size: 11px; }
+.ar-eval ul { margin: 2px 0; }
+.ar-plus { color: var(--green); }
+.ar-minus { color: var(--yellow); }
+.ar-err { color: var(--red); }
+.ar-issues li { margin: 2px 0; }
+
+/* side panel */
+.ar-doc-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+.ar-doc-tabs button {
+  font: inherit; font-size: 11px; padding: 3px 8px; border-radius: 99px; cursor: pointer;
+  border: 1px solid var(--border); background: var(--panel-2); color: var(--muted);
+}
+.ar-doc-tabs button.active { color: var(--role); border-color: var(--role); font-weight: 700; }
+.ar-board-panel { border-bottom: 1px solid var(--border); }
+.ar-board { display: flex; flex-direction: column; gap: 6px; }
+.ar-board-row { display: grid; grid-template-columns: 110px 1fr 44px; align-items: center; gap: 8px; font-size: 12px; }
+.ar-board-row .name { color: var(--role); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ar-board-row .bar { height: 6px; border-radius: 99px; background: var(--panel-2); overflow: hidden; }
+.ar-board-row .bar i { display: block; height: 100%; background: var(--role); border-radius: 99px; }
+.ar-board-row .val { font-family: var(--mono); text-align: right; }
+.ar-board-row.best .val { color: var(--green); font-weight: 700; }
+
+/* document type and reference documents (attachments) */
+.ar-rules select {
+  margin: 0 4px; background: var(--panel-2); color: var(--text);
+  border: 1px solid var(--border); border-radius: 8px; padding: 4px 8px; font: inherit;
+}
+.ar-attach .row { gap: 10px; flex-wrap: wrap; align-items: center; }
+.ar-attach.drag { outline: 2px dashed var(--accent); outline-offset: 6px; border-radius: 8px; }
+.ar-chips { display: contents; }
+.ar-chip {
+  display: inline-flex; align-items: center; gap: 6px; padding: 3px 4px 3px 10px; border-radius: 99px; font-size: 12px;
+  background: var(--panel-2); border: 1px solid var(--border); max-width: 320px;
+}
+.ar-chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ar-chip small { color: var(--muted); flex: none; }
+.ar-chip button { border: none; background: none; color: var(--muted); cursor: pointer; font: 700 13px/1 inherit; padding: 2px 6px; border-radius: 50%; }
+.ar-chip button:hover { color: var(--red); }
+.duo-msg.user .ar-chip { cursor: pointer; padding-right: 10px; margin: 2px 4px 0 0; font: inherit; font-size: 12px; color: var(--text); }
+.duo-msg.user .ar-chip:hover { border-color: var(--accent); }
+
+/* the header holds up to eight robots and the phases: keep it on one line when it fits, wrap otherwise */
+#arena-chat .duo-chat-head { flex-wrap: wrap; row-gap: 6px; }
+#arena-chat .duo-chat-title { white-space: nowrap; }
+#arena-chat .ar-cast { gap: 2px; }
+#arena-chat .ar-cast .duo-cast { min-width: 40px; }
+#arena-chat .ar-cast .duo-robot.head { width: 34px; height: 34px; }

@@ -33,7 +33,7 @@ kind: Workflow
 
 metadata:
   name: ai-arena
-  version: 0.9.0
+  version: 0.10.0
   description: "Up to five models you pick write the same document (e.g. a PRD) in parallel, blindly critique each other, and an orchestrator merges the final document."
   tags: [arena, prd, plan, multi-model]
   category: plan
@@ -75,19 +75,19 @@ inputs:
   # The contenders: `none` leaves a slot out. At least two are needed for the critique.
   contender_1_provider: { type: string, enum: [none, claude, codex, grok], default: claude, description: CLI of contender 1. }
   contender_1_model:    { type: string, default: claude-opus-5-5 }
-  contender_1_effort:   { type: string, enum: [low, medium, high, xhigh], default: high }
+  contender_1_effort:   { type: string, enum: [low, medium, high, xhigh], default: high, options: { xhigh: Extra high } }
   contender_2_provider: { type: string, enum: [none, claude, codex, grok], default: claude, description: CLI of contender 2. }
   contender_2_model:    { type: string, default: claude-sonnet-5-5 }
-  contender_2_effort:   { type: string, enum: [low, medium, high, xhigh], default: high }
+  contender_2_effort:   { type: string, enum: [low, medium, high, xhigh], default: high, options: { xhigh: Extra high } }
   contender_3_provider: { type: string, enum: [none, claude, codex, grok], default: codex, description: CLI of contender 3. }
   contender_3_model:    { type: string, default: gpt-6-luna }
-  contender_3_effort:   { type: string, enum: [low, medium, high, xhigh], default: high }
+  contender_3_effort:   { type: string, enum: [low, medium, high, xhigh], default: high, options: { xhigh: Extra high } }
   contender_4_provider: { type: string, enum: [none, claude, codex, grok], default: grok, description: CLI of contender 4. }
   contender_4_model:    { type: string, default: grok-4.7 }
-  contender_4_effort:   { type: string, enum: [low, medium, high, xhigh], default: high }
+  contender_4_effort:   { type: string, enum: [low, medium, high, xhigh], default: high, options: { xhigh: Extra high } }
   contender_5_provider: { type: string, enum: [none, claude, codex, grok], default: none, description: "CLI of contender 5 (none = not used)." }
   contender_5_model:    { type: string, default: claude-haiku-4-5 }
-  contender_5_effort:   { type: string, enum: [low, medium, high, xhigh], default: high }
+  contender_5_effort:   { type: string, enum: [low, medium, high, xhigh], default: high, options: { xhigh: Extra high } }
 
 # -----------------------------------------------------------------------------
 providers:
@@ -461,6 +461,14 @@ steps:
       - when: "choice == 'discard'"
         goto: end
         status: cancelled
+
+# -----------------------------------------------------------------------------
+# What the run hands to the next one when it finishes (#134): `then` at start, or a gate choice's.
+outputs:
+  document:
+    type: string
+    description: The synthesized answer the owner accepted (also arena/final.md in the run folder).
+    value: "{{ steps.synthesize.output.text }}"
 
 # -----------------------------------------------------------------------------
 observability:

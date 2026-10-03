@@ -7,6 +7,7 @@
 const fs = require('fs');
 const path = require('path');
 const { execGit, repoNameFromUrl } = require('./workspace');
+const { cleanConfig } = require('./local-preview');
 
 const isDir = (p) => { try { return fs.statSync(p).isDirectory(); } catch { return false; } };
 
@@ -61,7 +62,8 @@ async function createProject(dir, data, { git = execGit, reposDir = null } = {})
     if (!repo && isDir(path.join(folder, '.git'))) repo = await git(['remote', 'get-url', 'origin'], folder).then((s) => s.trim() || null, () => null);
   }
 
-  const project = { name, description: data.description?.trim() || '', folder, repo, createdAt: new Date().toISOString() };
+  const localPreview = cleanLocalPreview(data.localPreview);
+  const project = { name, description: data.description?.trim() || '', folder, repo, ...(localPreview ? { localPreview } : {}), createdAt: new Date().toISOString() };
   fs.writeFileSync(metaFile(dir, id), JSON.stringify(project, null, 2));
   return readProject(dir, id);
 }
@@ -74,6 +76,12 @@ function updateProject(dir, id, patch) {
   if (patch.repo !== undefined) next.repo = String(patch.repo).trim() || null;
   // push the local base after every successful local merge (software-development-local-hero)
   if (patch.autoPush !== undefined) next.autoPush = !!patch.autoPush;
+  // #138: a new issue the Product Owner registers joins the existing epic it matches clearly, with no extra click
+  if (patch.autoEpic !== undefined) next.autoEpic = !!patch.autoEpic;
+  // how to run a run's worktree from a gate (Run locally); overrides the workflow's orchestrator.local_preview
+  if (patch.localPreview !== undefined) next.localPreview = cleanLocalPreview(patch.localPreview);
+  // the fingerprint of the declared run command the owner confirmed (#115): a changed one asks again
+  if (patch.localPreviewConfirmed !== undefined) next.localPreviewConfirmed = patch.localPreviewConfirmed ? String(patch.localPreviewConfirmed) : null;
   if (patch.folder !== undefined) {
     const folder = path.resolve(String(patch.folder).trim());
     if (!isDir(folder)) throw new Error(`Folder does not exist: ${folder}`);
@@ -83,6 +91,9 @@ function updateProject(dir, id, patch) {
   fs.writeFileSync(metaFile(dir, id), JSON.stringify(next, null, 2));
   return readProject(dir, id);
 }
+
+// { install, command, url, cwd?, env? } with empty fields dropped; null without a command (the action is hidden)
+const cleanLocalPreview = (v) => cleanConfig(v);
 
 /** Removes only the project entry; the project folder is not deleted. */
 function removeProject(dir, id) {

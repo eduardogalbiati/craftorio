@@ -1,0 +1,23 @@
+/* Pasted images (#130, paste-image.js): the chip row under an AI prompt field. The chips are Arena's
+   attachment chips (.ar-chip, views/arena/arena.css) with a 48 px thumbnail in front, a spinner
+   while the image is saved, and a red chip with the reason when it is refused. */
+.ar-chips.paste-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+/* a field in a row with its Send button (the Supervisor chat): the chips go on a line of their own */
+.svc-form:has(.paste-chips:not(.hidden)) { flex-wrap: wrap; }
+.svc-form .paste-chips { order: 3; flex-basis: 100%; margin-top: 0; }
+.ar-chip.paste-chip { padding-left: 4px; border-radius: 10px; }
+.paste-chip .paste-thumb { width: 48px; height: 48px; object-fit: cover; border-radius: 6px; flex: none; cursor: zoom-in; }
+.paste-chip .paste-thumb:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.paste-chip .paste-spin {
+  width: 48px; height: 48px; flex: none; border-radius: 6px; background: var(--panel, #151820);
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.paste-chip .paste-spin::after {
+  content: ''; width: 16px; height: 16px; border-radius: 50%;
+  border: 2px solid var(--border, #262b37); border-top-color: var(--accent); animation: spin .8s linear infinite;
+}
+.ar-chip.paste-chip.error { padding-left: 10px; border-color: var(--red); color: var(--red); background: rgba(248, 113, 113, .1); }
+.ar-chip.paste-chip.error span { white-space: normal; }
+@media (prefers-reduced-motion: reduce) {
+  .paste-chip .paste-spin::after { animation: none; }
+}

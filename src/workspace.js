@@ -3,7 +3,10 @@
 // the skills (skills/), the agents (agents/), the workflows (workflows/) and the app preferences (settings.json).
 //
 // Resolution order:
-//   1. MULTIAGENT_WORKSPACE environment variable (tests/CI; not persisted)
+//   1. MULTIAGENT_WORKSPACE environment variable (tests/CI, an agent's run scratch workspace; not persisted)
+//   *. simulation only (MULTIAGENT_SIMULATION_ONLY=1) without it: a scratch workspace in the OS temp
+//      folder (simulationWorkspace), never the registered one, so an agent's check that missed its
+//      run's scratch workspace can't write to the owner's (#120); not persisted
 //   2. registered path (Windows: HKCU\Software\MultiagentOrchestrator\WorkspacePath;
 //      other OSes: ~/.multiagent-orchestrator.json)
 //   3. default folder ~/multiagent-workspace, if it already exists
@@ -14,6 +17,7 @@ const os = require('os');
 const path = require('path');
 const { execFile, execFileSync } = require('child_process');
 const { resolveCommand } = require('./engine/providers');
+const { simulationOnly } = require('./engine/simulation');
 
 const DEFAULT_NAME = 'multiagent-workspace';
 const REG_KEY = 'HKCU\\Software\\MultiagentOrchestrator';
@@ -21,6 +25,11 @@ const REG_VALUE = 'WorkspacePath';
 const ENV_VAR = 'MULTIAGENT_WORKSPACE';
 
 const defaultWorkspace = (home = os.homedir()) => path.join(home, DEFAULT_NAME);
+// Where a simulation-only process given no workspace works: { workspace, userData } (#120)
+const simulationWorkspace = (tmp = os.tmpdir()) => ({
+  workspace: path.join(tmp, 'multiagent-simulation', 'workspace'),
+  userData: path.join(tmp, 'multiagent-simulation', 'user-data'),
+});
 
 // ---------------------------------------------------------------------------
 // Where the path is registered
@@ -64,13 +73,14 @@ const isDir = (p) => { try { return fs.statSync(p).isDirectory(); } catch { retu
 
 /**
  * Finds the workspace without user interaction.
- * @returns {{ dir: string|null, source: 'env'|'registry'|'default'|null, registered: string|null, fallback: string }}
+ * @returns {{ dir: string|null, source: 'env'|'simulation'|'registry'|'default'|null, registered: string|null, fallback: string }}
  *   dir null => the UI needs to ask. `registered` holds the saved path even
- *   when it no longer exists (to warn the user).
+ *   when it no longer exists (to warn the user). Only 'registry' and 'default' may be persisted.
  */
-function resolveWorkspace({ store = defaultStore(), env = process.env, home = os.homedir() } = {}) {
+function resolveWorkspace({ store = defaultStore(), env = process.env, home = os.homedir(), tmp = os.tmpdir() } = {}) {
   const fallback = defaultWorkspace(home);
   if (env[ENV_VAR]) return { dir: path.resolve(env[ENV_VAR]), source: 'env', registered: null, fallback };
+  if (simulationOnly(env)) return { dir: simulationWorkspace(tmp).workspace, source: 'simulation', registered: null, fallback };
 
   const registered = store.get();
   if (registered && isDir(registered)) return { dir: path.resolve(registered), source: 'registry', registered, fallback };
@@ -101,17 +111,31 @@ function layout(root) {
     agents: path.join(root, 'agents'),
     // editable workflow YAML files (bundled defaults are seeded here, see src/workflows.js)
     workflows: path.join(root, 'workflows'),
+    // saved pipelines, one YAML file each (bundled defaults are seeded here, see src/pipelines.js, #135)
+    pipelines: path.join(root, 'pipelines'),
     // one git worktree per run (orchestrator.worktree), created on demand
     worktrees: path.join(root, 'worktrees'),
+    // dependencies installed once per lockfile hash, linked into run worktrees (#198, src/engine/deps-cache.js)
+    cache: path.join(root, 'cache'),
+    // Run locally at a gate: per run, the scratch workspace and user data of the copy (src/local-preview.js)
+    localPreviews: path.join(root, 'local-previews'),
     // last issue sync of each project (see src/backlog.js)
     backlog: path.join(root, 'backlog'),
     // the supervisor's reports on the sessions of a date range (Analytics), created on demand
     reports: path.join(root, 'reports'),
+    // the app-wide Supervisor chat (src/supervisor-chat.js), created on demand
+    supervisor: path.join(root, 'supervisor'),
+    // the Oracle (src/oracle.js): its conversation, memory, handoff notes and usage, created on demand
+    oracle: path.join(root, 'oracle'),
+    // images pasted into the AI prompt fields (#130, src/pasted-images.js): pending/ until submitted
+    attachments: path.join(root, 'attachments'),
     settings: path.join(root, 'settings.json'),
     // titles the user gave to CLI sessions on the Sessions screen ({ "<provider>:<id>": title })
     sessionTitles: path.join(root, 'session-titles.json'),
     // the run the app has in progress, removed when it ends: found at the next start, the run died with the app
     activeRun: path.join(root, 'active-run.json'),
+    // SQLite index next to the files: runs cache, Backlog queues, pending gates, notifications (src/store.js)
+    index: path.join(root, 'index.db'),
   };
 }
 
@@ -123,26 +147,54 @@ const DEFAULT_SETTINGS = {
   developerMode: false,
   openRunOnStart: true,   // when a workflow starts, switch to the run screen
   confirmStop: true,      // ask for confirmation before stopping a workflow
-  // desktop notifications (see src/notifications.js): run status changes, CLI sessions waiting for you
+  // desktop notifications (see src/notifications.js): run status changes, CLI sessions waiting for you,
+  // the Product Owner's answers (#149), the Oracle's actions under Night watch (#123)
+  notifyOracle: true,
+  notifyPO: true,
   notifyRuns: true,
   notifySessions: true,
+  // days the notification center keeps notifications (src/store.js); older ones are deleted
+  notificationRetentionDays: 30,
   lastProject: null,
   lastWorkflow: null,
   // where the Backlog screen syncs issues from by default: github | gitlab | bitbucket
   backlogPlatform: 'github',
   // the most issues the Backlog sends as one run (one branch, one PR/MR)
   backlogMaxGroup: 5,
+  // the Backlog suggests a Backlog Refresh run when the last one is older than this (#161); 0 = off
+  backlogRefreshHours: 24,
+  // the workflow used wherever one is not picked by hand (#195, src/renderer/default-workflow.js):
+  // null = the local workflow when the workspace has it, else the GitHub one
+  defaultWorkflow: null,
+  // Live roadmap (#164, src/live-roadmap.js): the highest complexity:n a refill picks, the most stages
+  // per refill, the spend over 24 h (USD, runs and refills; 0 = no cap) past which refills stop, and
+  // whether the backlog is synced before the Product Owner reads it
+  liveRoadmap: { complexityCap: 2, maxStages: 3, dailyBudgetUsd: 50, refreshFirst: true },
   // several workflows at the same time (Settings › Execution); disabled = one run at a time.
   // perProject: null = no limit per project; simulations count toward the limits only if countSimulations.
   concurrentRuns: { enabled: false, max: 2, perProject: null, countSimulations: false },
+  // Keep awake (#162, src/keep-awake.js): no sleep while runs, a roadmap or a queue have work to do
+  keepAwake: false,
   // warn when an agent shows no output for this long while a command it started is waiting; 0 = off
   idleWarningMinutes: 5,
   // monthly limits per provider (see src/usage.js); null = no limit
   budgets: {},
+  // the spending budget (#206, src/budget.js): US$ per local day and per Night watch night (null = no
+  // cap) past which the roadmaps pause before their next start; `raised`: "Raise for today" (one day/night)
+  budget: { dailyUsd: null, nightlyUsd: null, raised: null },
+  // the Oracle (src/oracle.js): its daily spend limit in USD (0 = no cap) and the context size
+  // (tokens) past which its next turn starts a new session from a handoff note; what wakes it (#123,
+  // src/oracle-wake.js): wakeScope all | watched | off, wakeOn the event kinds
+  oracle: { dailyBudgetUsd: 20, compactAtTokens: 150000, wakeScope: 'all', wakeOn: ['finished', 'gate', 'interrupted', 'invalid', 'limit', 'merge', 'stall'] },
   // USD per 1M tokens, for CLIs that do not report cost: { model: { input, output, cache_read } }
   prices: {},
   // GitHub Actions quota minutes included per month (GitHub Free: 2,000), see src/actions-usage.js
   actionsIncludedMinutes: 2000,
+  // voice input (src/speech.js): the whisper.cpp CLI (a name in PATH or a path), the model (an id
+  // from speech.MODELS or a path to a ggml .bin) and the spoken language ('auto' = detect)
+  voiceCommand: 'whisper-cli',
+  voiceModel: 'small',
+  voiceLanguage: 'pt',
 };
 
 function readSettings(ws) {
@@ -225,5 +277,6 @@ module.exports = {
   repoNameFromUrl,
   resolveWorkspace,
   setupWorkspace,
+  simulationWorkspace,
   writeSettings,
 };

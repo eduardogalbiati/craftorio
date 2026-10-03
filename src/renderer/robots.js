@@ -1,6 +1,6 @@
 // Robot avatars ("Visor" model): isometric robots drawn as SVG, one brand variant per provider and
 // one animated state per phase of a turn (thinking, writing, done...). Ported from the owner's
-// avatar generators. Animations are CSS classes prefixed with `rb-` (see duo.css), so the SVGs can
+// avatar generators. Animations are CSS classes prefixed with `rb-` (see chat.css), so the SVGs can
 // be inlined in the page without clashing with the app's own class names.
 // Exposes window.Robots = { svg(variant, state, opts), variantFor(provider, model), plaqueFor(model),
 // fromAppearance(appearance, label), define(name, appearance), emblem(name), VARIANTS, STATES, ... }.
@@ -83,6 +83,8 @@
   const line = (d, w = 2.4) => `<path d="${d}" fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round"/>`;
   const ICONS = {
     bolt: '<path d="M2 -10 L-6 2 H-1 L-2 10 L6 -2 H1 Z"/>',
+    // the Product Owner's badge (#105): a clipboard with a checklist
+    clipboard: '<path fill-rule="evenodd" d="M-7 -7 H-3.5 V-9.5 H3.5 V-7 H7 Q8 -7 8 -6 V9 Q8 10 7 10 H-7 Q-8 10 -8 9 V-6 Q-8 -7 -7 -7Z M-4.5 -2 H4.5 V0 H-4.5Z M-4.5 3 H4.5 V5 H-4.5Z"/>',
     heart: '<path d="M0 8 C-9 2 -10 -4 -6 -7 C-3 -9 0 -7 0 -4 C0 -7 3 -9 6 -7 C10 -4 9 2 0 8Z"/>',
     shield: '<path d="M0 -9 L8 -6 V0 C8 5 4 8 0 10 C-4 8 -8 5 -8 0 V-6Z"/>',
     leaf: '<path d="M-7 8 C-10 -3 -3 -9 9 -9 C9 3 3 9 -7 8Z"/>',
@@ -222,6 +224,22 @@ ${flip(v.overlay || '')}
       head: '#F4F4F6', body: '#7C5CFF', limb: '#F4F4F6', plate: '#7C5CFF', base: darken('#7C5CFF', .55),
       screen: '#15161A', accent: '#C9B8FF', eyes: 'dots', outline: darken('#7C5CFF', .65),
       bg1: lighten('#7C5CFF', .88), bg2: lighten('#7C5CFF', .6),
+    },
+    // The Backlog's Product Owner (#105): teal, a clipboard on the chest.
+    'product-owner': {
+      label: 'Product Owner', logo: 'clipboard',
+      head: '#F4F4F6', body: '#0F9F8F', limb: '#F4F4F6', plate: '#0F9F8F', base: darken('#0F9F8F', .55),
+      screen: '#15161A', accent: '#9FF5E6', eyes: 'arcs', outline: darken('#0F9F8F', .65),
+      chestLogo: '#FFFFFF', plateLogo: '#FFFFFF',
+      bg1: lighten('#0F9F8F', .88), bg2: lighten('#0F9F8F', .6),
+    },
+    // The app-wide Oracle (#122): deep blue and gold, an eye on the chest, slit eyes.
+    oracle: {
+      label: 'Oracle', logo: 'eye',
+      head: '#F4F4F6', body: '#1E3A8A', limb: '#F4F4F6', plate: '#1E3A8A', base: darken('#1E3A8A', .55),
+      screen: '#15161A', accent: '#FCD34D', eyes: 'slits', outline: darken('#1E3A8A', .65),
+      chestLogo: '#FCD34D', plateLogo: '#FCD34D',
+      bg1: lighten('#1E3A8A', .88), bg2: lighten('#1E3A8A', .6),
     },
   };
 

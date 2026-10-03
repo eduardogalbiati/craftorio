@@ -1,7 +1,9 @@
 // Runs a workflow from the terminal (without Electron).
 //
 //   node scripts/run.js --task "..." [--repo <path>] [--file <yaml>] [--mock] [--auto-approve] [--input key=value]
+//                       [--attach key=<image file>]
 //
+// --attach: an image attached to an input (#129; repeat it for several), e.g. --attach task=C:/shots/bug.png.
 // --file: an absolute path is used as is; a name or relative path is looked up in <workspace>/workflows
 // first, then in the workflows bundled with the app (workflows/ in this repository).
 // --auto-approve approves every human gate (use with care outside mock mode).
@@ -19,7 +21,7 @@ const { seedSkills } = require('../src/skills');
 const root = path.join(__dirname, '..');
 
 function parseArgs(argv) {
-  const a = { inputs: {}, mock: false, autoApprove: false, file: 'software-development.yaml' };
+  const a = { inputs: {}, attachments: {}, mock: false, autoApprove: false, file: 'software-development.yaml' };
   for (let i = 0; i < argv.length; i++) {
     const k = argv[i];
     const next = () => argv[++i];
@@ -29,6 +31,7 @@ function parseArgs(argv) {
     else if (k === '--task') a.inputs.task = next();
     else if (k === '--repo') a.inputs.repo_path = next();
     else if (k === '--input') { const [key, ...v] = next().split('='); a.inputs[key] = v.join('='); }
+    else if (k === '--attach') { const [key, ...v] = next().split('='); (a.attachments[key] ??= []).push(v.join('=')); }
     else throw new Error(`Unknown argument: ${k}`);
   }
   a.inputs.repo_path ??= root;
@@ -37,9 +40,10 @@ function parseArgs(argv) {
 
 const args = parseArgs(process.argv.slice(2));
 // Same workspace as the app (MULTIAGENT_WORKSPACE > registered path > ~/multiagent-workspace).
-// With no interactive terminal, creates the default folder if none exists.
+// With no interactive terminal, creates the default folder if none exists. An agent's check
+// (MULTIAGENT_SIMULATION_ONLY=1) gets its run's scratch workspace or a temporary one, never the owner's (#120).
 const found = resolveWorkspace();
-const ws = setupWorkspace(found.dir || found.fallback, { persist: found.source !== 'env' });
+const ws = setupWorkspace(found.dir || found.fallback, { persist: found.source !== 'env' && found.source !== 'simulation' });
 // Same defaults as the app: bundled skills and workflows are seeded into the workspace.
 seedSkills(path.join(root, 'skills'), ws.skills);
 seedWorkflows(BUNDLED_WORKFLOWS_DIR, ws.workflows);
@@ -51,6 +55,7 @@ const budget = usage.budgetBaseline({ runsDir: ws.runs, settings, local: needsLo
 const run = new WorkflowRun({
   file: wfFile.file,
   inputs: args.inputs,
+  attachments: args.attachments,
   mock: args.mock,
   runsDir: ws.runs,
   skillsDirs: [ws.skills],
@@ -108,6 +113,24 @@ run.on('event', (ev) => {
       process.exitCode = ev.status === 'success' ? 0 : 1;
       break;
   }
+});
+
+// child runs of a `type: workflow` step (#174): recorded in their own folder, their gates answered
+// like the parent's (--auto-approve) or left waiting
+run.on('child', function followChild(child) {
+  const childRec = new Recorder(child.runDir, child.wf.observability?.capture?.redact);
+  const tag = `[child ${child.runId}]`;
+  child.on('child', followChild);
+  child.on('event', (ev) => {
+    childRec.write(ev);
+    if (ev.type === 'step.started') console.log(`${t()}   ${tag} ▶ ${ev.step_id}`);
+    if (ev.type === 'approval.requested') {
+      console.log(`${t()}   ${tag} ? ${short(ev.message, 200)}`);
+      if (args.autoApprove) setTimeout(() => child.resolveApproval(ev.approval_id, ev.choices ? ev.choices[0].id : true), 200);
+      else console.log('     waiting for approval: use the UI or run with --auto-approve');
+    }
+    if (ev.type === 'workflow.finished') console.log(`${t()}   ${tag} ■ ${ev.status}${ev.error ? ': ' + ev.error : ''} (${child.runDir})`);
+  });
 });
 
 process.on('SIGINT', () => run.stop());

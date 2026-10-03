@@ -6,7 +6,10 @@
 // - progressGroups folds a trail into the chips the runs list shows: only the groups visited, in
 //   order, a return to a group counted (×N), the last one with the run's state.
 // hydrationEvents merges a run's recorded and live events for a window that opened mid-run.
+// estimateProgress (#194): a run's estimated % along its workflow's steps, weighted by the typical
+// time of each step in past runs (typicalStepTimes), for the roadmap card's ring.
 // Browser: window.RunProgress; Node: module.exports.
+// load: early (app.js draws its run lists with it)
 (function (root) {
   const baseStep = (id) => String(id || '').split(':')[0];
   const subStep = (id) => String(id || '').split(':')[1] || null;
@@ -159,21 +162,97 @@
     return chips;
   }
 
+  // ---- the estimate of a run's progress (#194: the roadmap card's ring) ------------------------------
+  /**
+   * The typical time of each step in past runs: the median of the finished visits' durations, from
+   * runs that succeeded (their `progress` trail). → { times: { stepId: ms }, runs: how many runs }
+   */
+  function typicalStepTimes(runs = []) {
+    const visits = new Map();
+    let count = 0;
+    for (const r of runs || []) {
+      if (r?.status !== 'success' || !r.progress?.length) continue;
+      count++;
+      for (const e of r.progress) {
+        if (e.status !== 'done' || !(e.durationMs > 0)) continue;
+        (visits.get(e.step) || visits.set(e.step, []).get(e.step)).push(e.durationMs);
+      }
+    }
+    const times = {};
+    for (const [step, list] of visits) {
+      list.sort((a, b) => a - b);
+      const mid = Math.floor(list.length / 2);
+      times[step] = list.length % 2 ? list[mid] : Math.round((list[mid - 1] + list[mid]) / 2);
+    }
+    return { times, runs: count };
+  }
+
+  const STOPPED = new Set(['cancelled', 'interrupted']);
+  const toMs = (ts) => { const t = Date.parse(ts || ''); return Number.isFinite(t) ? t : null; };
+
+  /**
+   * A run's estimated progress: the steps done along the expected path, weighted by each step's
+   * typical time when past runs have it (`typical`, typicalStepTimes), else each step counts the same.
+   * `path`: the workflow's step ids in order; with history, only the steps past runs went through (or
+   * this run did). A return to an earlier step (a review → developer loop) lowers the estimate; it
+   * never says more than 99% before the run ends.
+   * → { percent, state: running | waiting | failed | stopped | done, step, elapsedMs, leftMs (null:
+   *   unknown), basis: 'history' | 'steps', done, total }
+   */
+  function estimateProgress({ steps = [], path = [], typical = {}, status = 'running', startedAt = null, now = Date.now() } = {}) {
+    const last = steps.at(-1) || null;
+    const state = status === 'success' ? 'done' : status === 'failed' ? 'failed' : STOPPED.has(status) ? 'stopped'
+      : last?.status === 'waiting' ? 'waiting' : last?.status === 'failed' ? 'failed' : 'running';
+    const start = toMs(startedAt) ?? toMs(steps[0]?.ts) ?? now;
+    const elapsedMs = Math.max(0, now - start);
+    const visited = new Set(steps.map((e) => e.step));
+    const known = Object.values(typical || {}).filter((ms) => ms > 0);
+    const basis = known.length ? 'history' : 'steps';
+    let route = (path || []).filter((id) => basis === 'steps' || typical[id] > 0 || visited.has(id));
+    if (!route.length) route = [...visited];
+    const avg = known.length ? known.reduce((a, b) => a + b, 0) / known.length : 1;
+    const weight = (id) => (typical?.[id] > 0 ? typical[id] : avg);
+    const total = route.reduce((a, id) => a + weight(id), 0) || 1;
+    const out = { state, step: last?.step || null, elapsedMs, basis, total: route.length };
+    if (state === 'done') return { ...out, percent: 100, leftMs: 0, done: route.length };
+    const at = last ? route.indexOf(last.step) : -1;
+    // the steps before the current one on the route; a step off the route: the route steps visited
+    const before = at >= 0 ? route.slice(0, at) : route.filter((id) => visited.has(id) && id !== last?.step);
+    let doneW = before.reduce((a, id) => a + weight(id), 0);
+    if (last && at >= 0 && state === 'running') {
+      // the current step: its time so far against its typical time (90% at most), half a step without history
+      const inStep = toMs(last.ts) != null ? Math.max(0, now - toMs(last.ts)) : 0;
+      doneW += basis === 'history' ? Math.min(inStep, 0.9 * weight(last.step)) : 0.5 * weight(last.step);
+    }
+    const percent = Math.max(0, Math.min(99, Math.floor((100 * doneW) / total)));
+    const leftMs = basis === 'history' ? Math.max(0, Math.round(total - doneW)) : percent > 0 ? Math.round((elapsedMs * (100 - percent)) / percent) : null;
+    return { ...out, percent, leftMs, done: before.length };
+  }
+
   // The events that rebuild the view of a run picked up mid-way: the ones recorded on disk (from
   // workflow.started on), then the live ones that came in while the file was read and are not on
-  // disk yet. The recorder may redact an event's text, so an event is matched by what identifies
-  // it (type, time, step, session, turn, gate), not by its content. Nothing recorded from
-  // workflow.started: only the live events.
+  // disk yet: those after the last recorded `seq` (the engine numbers a run's events). Events
+  // without a seq (older recordings) are matched by what identifies them (type, time, step,
+  // session, turn, gate), not by their content, which the recorder may redact. Nothing recorded
+  // from workflow.started: only the live events.
   const eventKey = (e) => [e.type, e.ts, e.step_id, e.session_id, e.turn, e.approval_id].map((x) => x ?? '').join('|');
   function hydrationEvents(recorded = [], live = []) {
     const start = recorded.findIndex((e) => e.type === 'workflow.started');
     if (start < 0) return live.slice();
     const past = recorded.slice(start);
+    const lastSeq = past.reduce((m, e) => Math.max(m, e.seq || 0), 0);
     const seen = new Set(past.map(eventKey));
-    return past.concat(live.filter((e) => !seen.has(eventKey(e))));
+    return past.concat(live.filter((e) => (e.seq && lastSeq ? e.seq > lastSeq : !seen.has(eventKey(e)))));
   }
 
-  const api = { StepTrail, trailOf, progressGroups, hydrationEvents };
+  const api = {
+    StepTrail,
+    estimateProgress,
+    hydrationEvents,
+    progressGroups,
+    trailOf,
+    typicalStepTimes,
+  };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.RunProgress = api;
 })(typeof window !== 'undefined' ? window : globalThis);

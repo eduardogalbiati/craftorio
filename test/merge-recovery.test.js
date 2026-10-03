@@ -365,7 +365,7 @@ test('local-hero: a resolution touching many files runs the full suite, not a ta
   assert.equal(finished.status, 'success', finished.error);
   const scopedTest = prompt('test').at(-1);
   assert.match(scopedTest, /touched many files/);
-  assert.match(scopedTest, /Run the full suite once/);
+  assert.match(scopedTest, /the orchestrator runs the whole suite\s+next/);
   assert.doesNotMatch(scopedTest, /Run only the tests related to those files/);
 });
 
@@ -376,7 +376,7 @@ test('local-hero: a resolution that changes behaviour goes through the full revi
   });
   assert.equal(finished.status, 'success', finished.error);
   assert.deepEqual(sinceMerge(transitions), [
-    'verify_change>resolve_merge', 'resolve_merge>code_review', 'code_review>test', 'test>build', 'build>evidence', 'evidence>verify_change', 'verify_change>end',
+    'verify_change>resolve_merge', 'resolve_merge>code_review', 'code_review>test', 'test>suite', 'suite>build', 'build>evidence', 'evidence>verify_change', 'verify_change>end',
   ]);
   const fullReview = prompt('code_review').at(-1);
   assert.doesNotMatch(fullReview, /Review the RESOLUTION of a merge conflict/);
@@ -454,7 +454,7 @@ test('software-development: a conflict found right before approve_merge opens re
   assert.equal(finished.status, 'success', finished.error);
   assert.deepEqual(sinceApprove(transitions), [
     'deploy_test>approve_merge', 'approve_merge>resolve_conflict', 'resolve_conflict>code_review',
-    'code_review>test', 'test>ci', 'ci>pr_babysitter', 'pr_babysitter>deploy_test', 'deploy_test>approve_merge', 'approve_merge>deploy_prod',
+    'code_review>test', 'test>suite', 'suite>ci', 'ci>pr_babysitter', 'pr_babysitter>deploy_test', 'deploy_test>approve_merge', 'approve_merge>deploy_prod',
     'deploy_prod>deploy_prod', 'deploy_prod>end',
   ]);
   // never asked for approval on a PR/MR the check already found not mergeable
@@ -476,7 +476,7 @@ test('software-development: a conflict found right before approve_merge opens re
 
   const scopedTest = prompt('test').at(-1);
   assert.match(scopedTest, /Your tests already passed on this change/);
-  assert.match(scopedTest, /Check out the branch \(pull it: the developer pushed\) and run the full suite once/);
+  assert.match(scopedTest, /Check out the branch \(pull it: the developer pushed\) and run the tests of the files the\s+resolution touched \(the orchestrator runs the whole suite\s+next\)/);
   assert.doesNotMatch(scopedTest, /Write the tests the change needs/);
 
   // the second approval shows the branch changed since the last one
@@ -495,7 +495,7 @@ test('software-development: the merge action itself failing (not the check) stil
   assert.equal(finished.status, 'success', finished.error);
   assert.deepEqual(sinceApprove(transitions), [
     'deploy_test>approve_merge', 'approve_merge>resolve_conflict', 'resolve_conflict>code_review',
-    'code_review>test', 'test>ci', 'ci>pr_babysitter', 'pr_babysitter>deploy_test', 'deploy_test>approve_merge', 'approve_merge>deploy_prod',
+    'code_review>test', 'test>suite', 'suite>ci', 'ci>pr_babysitter', 'pr_babysitter>deploy_test', 'deploy_test>approve_merge', 'approve_merge>deploy_prod',
     'deploy_prod>deploy_prod', 'deploy_prod>end',
   ]);
   assert.equal(events.filter((e) => e.type === 'approval.requested' && e.step_id === 'approve_merge').length, 2, 'approved once, the merge failed, approved again after the resolution');

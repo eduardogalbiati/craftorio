@@ -19,15 +19,19 @@ Keep **Simulation mode** checked to try a flow without calling the CLIs.
 | Menu | What it has |
 |---|---|
 | Sessions | Every Claude Code, Codex and Grok conversation recorded on this machine (read from `~/.claude/projects`, `~/.codex/sessions`, `~/.grok/sessions`), newest first, with its project, model and folder; filter by provider or search. Clicking one reopens it in its CLI (`claude --resume`, `codex resume`, `grok --resume`) in an embedded terminal, in the session's folder. **New session** starts a CLI with a provider, model, effort and project (or folder). Terminals keep running while you use other screens; sessions created by workflow agents are hidden unless you ask for them |
-| Dashboard | "What are we building today?": Plan & Design, Code & Build and Monitor & Improve open the start panel filtered by the workflow's `metadata.category` (`plan`, `build`, `monitor`) |
+| Dashboard | "What are we building today?": Plan & Design, Code & Build and Monitor & Improve open the start panel filtered by the workflow's `metadata.category` (`plan`, `build`, `monitor`). The panel remembers the workflow, project, `mode` and Advanced parameters between runs; the main task field starts empty for each run. **Start workflow** starts the run and shows it; **Start and create another** starts it and keeps the panel open with the task cleared, to queue several runs in a row (with concurrent runs off, only one can start) |
 | Projects | Projects in `<workspace>/projects/<id>.json`. Every project has a folder and optionally a git repository. With a repository and no folder, it is cloned into `<workspace>/repos/<owner>-<repo>`; without either, the folder is `<workspace>/projects/<id>/`. Clicking a project shows every workflow run in it (status, cost, task), and for each run its sessions, with **Live terminal** / **Open in CLI** to watch or resume any of them. Runs are linked by the project id they were started with (older ones by the project's current or previous folders) |
-| Backlog | A project's issues, synced from its git platform: **GitHub** (gh CLI) or **GitLab** (glab CLI); Bitbucket is listed but has no sync yet. The default platform is in Settings › General › Backlog and can be switched on the screen. The last sync is kept in `<workspace>/backlog/<project id>.json` (shown instantly, a new sync runs each time the screen opens). **List** view (open/closed filters, labels, task-list progress, the issue rendered as Markdown) or **Kanban**: **To do**, **In progress** (queued, running, failed, or its run succeeded but the issue is still open, e.g. its PR/MR isn't merged yet), **Waiting for approval** (its run is at a human gate; **Review approval** opens it), **Merged locally** (not pushed yet) and **Done** (closed on the platform). Select To do issues and **Assign workflow…** (workflows with a `task` input; their other inputs are asked once and remembered per project; simulation in developer mode): they wait in the project's queue (`<workspace>/backlog/<id>.queue.json`) and start in the order selected: **one at a time**, or as many as the free slots allow with Settings › Execution › **Concurrent runs** (the oldest first across projects, within the limit per project). With two or more issues selected, the dialog asks how to send them: **Separate runs** (the default: one run, branch and PR/MR per issue) or **One run for all**: one queued item, one run, one branch and one PR/MR that closes every issue (the note says what will happen: "3 issues → 1 run, 1 PR closing #53, #65, #77"); at most Settings › General › Backlog › **Issues per run** (5 by default). Every card of a group shows the same run (queued position, status, waiting, Done) with a "grouped with #a, #b" badge; removing one card from a queued group asks whether to take only that issue out of the group or cancel the group. Each run records its issues; `software-development` gets them as the `issue` (the first) and `issues` (every URL) inputs: for a group, the task lists every issue, the developer and the PR/MR account for each one, the review and the verifier check each one, and an issue the developer could not do stops at a gate (continue without it / stop), never dropped silently. The queue can be paused; it is paused when the app starts, when a start fails (budget, missing CLI) and when a queued issue's run fails. Each sync also reads the open PRs/MRs that refer to an issue (a closing keyword or a link to it in the description, `#<number>` in the title, GitHub's closing references) and shows them as badges linking to them; **Assign workflow…** warns about selected issues that already have one (or a run in progress or waiting) and skips them unless you assign them anyway; right before a queued issue starts, the queue checks again and skips it (saying why) if a PR/MR was opened for it since it was queued. Runs started by hand are linked when their task or a text input mentions the issue URL or `#<number>` |
-| Artifacts | Every file a run produced (documents, proposals, reviews, reports), grouped by run and filterable by project. The viewer renders Markdown (tables, table of contents; sanitized with DOMPurify), pretty-prints JSON and shows TSV/CSV as tables. Also listed per run in the project view |
-| Workflows | Three sub-items in the menu (clicking Workflows opens **Runs**). **Runs**: every run, live or finished (**Open chat** replays one). **Definitions**: the YAMLs in `<workspace>/workflows/` with their steps, agents/models, skills, `/goal`, `/loop`, parallel steps and branches. **Builder**: draw a workflow instead of writing YAML (see [Visual builder](#visual-builder)). Each definition is marked **default** (untouched copy of a workflow bundled with the app), **modified** (a default you edited; **Restore default** moves your copy to the trash and restores the bundled one, and **newer default** means the app ships a newer version than the one you edited) or **custom** (created by you) |
-| Agents | Reusable agents in `<workspace>/agents/<id>.json`: a robot look (main color, shell, visor, glow, eyes, emblem; live preview of the animated states), a prompt with what the agent is for and the skills it always gets. The built-in **Supervisor** is always listed: its prompt and skills are fixed, only its look can be changed (it shows wherever the supervisor appears, e.g. Write & Review). The visual builder imports them into desks, or picks one at random when a run starts |
+| Backlog | A project's issues, synced from its git platform: **GitHub** (gh CLI) or **GitLab** (glab CLI); Bitbucket is listed but has no sync yet. The default platform is in Settings › General › Backlog and can be switched on the screen. The last sync is kept in `<workspace>/backlog/<project id>.json` (shown instantly, a new sync runs each time the screen opens). **List** view (open/closed filters, labels, task-list progress, the issue rendered as Markdown) or **Kanban**: **To do**, **In progress** (queued, running, failed, or its run succeeded but the issue is still open, e.g. its PR/MR isn't merged yet), **Waiting for approval** (its run is at a human gate; **Review approval** opens it), **Merged locally** (not pushed yet) and **Done** (closed on the platform). Select To do issues and **Assign workflow…** (workflows with a `task` input; their other inputs are asked once and remembered per project; simulation in developer mode): they wait in the project's queue (`<workspace>/backlog/<id>.queue.json`) and start in the order selected: **one at a time**, or as many as the free slots allow with Settings › Execution › **Concurrent runs** (the oldest first across projects, within the limit per project). With two or more issues selected, the dialog asks how to send them: **Separate runs** (the default: one run, branch and PR/MR per issue) or **One run for all**: one queued item, one run, one branch and one PR/MR that closes every issue (the note says what will happen: "3 issues → 1 run, 1 PR closing #53, #65, #77"); at most Settings › General › Backlog › **Issues per run** (5 by default). Every card of a group shows the same run (queued position, status, waiting, Done) with a "grouped with #a, #b" badge; removing one card from a queued group asks whether to take only that issue out of the group or cancel the group. Each run records its issues; `software-development` gets them as the `issue` (the first) and `issues` (every URL) inputs: for a group, the task lists every issue, the developer and the PR/MR account for each one, the review and the verifier check each one, and an issue the developer could not do stops at a gate (continue without it / stop), never dropped silently. The queue can be paused; it is paused when the app starts, when a start fails (budget, missing CLI) and when a queued issue's run fails. Each sync also reads the open PRs/MRs that refer to an issue (a closing keyword or a link to it in the description, `#<number>` in the title, GitHub's closing references) and shows them as badges linking to them; **Assign workflow…** warns about selected issues that already have one (or a run in progress or waiting) and skips them unless you assign them anyway; right before a queued issue starts, the queue checks again and skips it (saying why) if a PR/MR was opened for it since it was queued. The git platform is the **source of truth** for issues (#168): queued and roadmap items keep a read-only copy of each issue that every sync refreshes until the item starts, and right before a queued or roadmap item starts, its issues are read again from the platform: the run's task uses the current title and body, an issue closed meanwhile is skipped, and the run records the version it used (`updatedAt`). If the platform cannot be read, the run starts from the last sync (or the planned copy, when it is newer), logs a warning ("Issue #n read from the cache of HH:MM: …") and its card shows an **issue from cache** badge. Nothing writes local issue text back to the platform; only the explicit, previewed actions below do (Save to issue, create, close, epics). Runs started by hand are linked when their task or a text input mentions the issue URL or `#<number>`; **Enrich in Write & Review** on an open issue (list row, kanban card, expanded details) opens Write & Review prefilled with it (an enriched issue by default; title, number, URL, labels and body in the prompt; nothing starts by itself), and once its document is accepted, **Save to issue** replaces the description (the original kept in a collapsed block) or adds it as a comment, after a preview and your click; the issue is read again after the save. Such a run shows as "being enriched" / "enriched" and never moves the card's column . **Roadmap** (the third view): the queue is a pool (items start whenever a slot is free); a roadmap is a plan. It lists **stages** in order, each with one or more items (a workflow with one issue or a group, its inputs, simulated or real), a name and a note on why this order, in `<workspace>/backlog/<id>.roadmap.json`. **Add to roadmap** in the Assign dialog plans the selection as a new stage; the plain queue's items can be moved in; a Product Owner proposal (JSON) is added or replaces the roadmap, always as **planned**. Stages and items move up/down or by drag, an issue can be dragged from one item to another, items are removed and their inputs edited. **Start** (optionally **Simulated**) runs the first stage's items in parallel within the concurrency limit; the next stage starts only when **every item of the current one finished successfully and merged** (a local merge, the PR/MR merge action, a simulation that succeeded, or a successful run of a workflow that never merges, `metadata.merges: false`, such as **Backlog Refresh**); a run waiting at a human gate keeps its stage open. A failed, cancelled or interrupted run **pauses** the roadmap with a notice: resume the run (Resume from step…: the new run takes the item's place), **Retry** or **Skip** the item, or **Stop** the roadmap; it never skips a failure nor answers a gate by itself. A start the roadmap could not make (kept work of an ended run, #170) pauses it the same way: the item shows its error, wrapped, with **Retry** (it asks: resume the old run or start from scratch) and **Skip**, and the bar's **Show the item** scrolls to it; several such items ask in turn. An item with a run has a **progress ring** on the right of its card: the estimated % (the steps done along the workflow's usual path, weighted by each step's typical time in past runs; never 100% before the end), the current step or group with its agent, Waiting for you at a gate, the failed step in red; hover or click it for the run's steps, a step opens the run there. Start, Resume and Run this stage list the items whose workflow pushes and opens PRs while the default development workflow merges locally (their workflow badge is highlighted): **Switch them** to the default, or **Start anyway**. Long reasons, notes, errors and inputs wrap or end with … inside the card: the roadmap never scrolls sideways. A started roadmap continues after an app restart. Issue cards show their place ("Roadmap: stage 2"); an issue belongs to at most one planned item, assigning it to the queue asks first and takes it out of the roadmap, and items whose issues are all closed are skipped. **Group by epic** shows the roadmap's items under their issues' epics. **Live roadmap** (#164, a switch in a box below the last stage; on only while the roadmap runs, so turning it on asks to start it): when the last stage ends, the roadmap does not end: the Product Owner picks the next open issues (not in the roadmap or the queue, no open PR/MR or run in progress, not an epic, not flagged to enrich first, `complexity:n` up to a cap, lowest first) and adds them as new planned stages (a stage note says when, and what its answer cost), and the roadmap goes on, again and again. While it is on, the box turns a muted red with **LIVE** and a banner with a blinking dot sits on top of every Backlog view (last refill, **Turn off**). It stops by itself when nothing is left to pick or the daily budget (runs and refills over 24 h) is reached: the roadmap ends done with the reason and live stays on (Start tries again); a failure pauses it as usual, and turning it off lets the current stages finish. Refills only add planned stages: they never answer a gate. Settings › General › Live roadmap: the complexity cap (2), the stages per refill (3), the daily budget (US$ 50) and a sync before each refill. **Epics** (the fourth view, #138): on GitHub an epic is an issue labelled `epic` (or of the organization issue type "Epic") whose **sub-issues** are its members; on GitLab a group epic, or an issue labelled `epic` whose members carry the scoped label `epic::<name>`. Each sync reads them into the cache; every card shows its epic as a badge (a click filters by it) and the **epic filter** (a select with counts, "No epic" included) narrows the list and the kanban, together with the labels and the search. The view lists each epic with its progress (open, closed, done in the roadmap) and members, the issues in no epic, **Auto-place new issues** (per project: a new issue the Product Owner registers, or the Issue Tracker files, joins the existing epic it clearly matches; a new epic always asks) and **Organize into epics…**, which asks the Product Owner to propose epics for the open issues. **Product Owner** (the robot button at the bottom right, every view): a built-in agent that opens a drawer on the right, with suggested questions ("Analyze the backlog and propose runs", "What should not run together?", "Build a roadmap", "Which issues are too big or unclear?", "Which issues are too big to run as one?", "Organize the open issues into epics") and a free text box. **Send to Product Owner (n)** (#169), next to **Assign workflow… (n)** when issues are selected (list or kanban), opens the drawer with them attached as removable chips (`#129`, `#130`) and an editable suggested question ("What is the best strategy to put these issues in the roadmap? Should any other open issue join them?"): nothing is sent until you press **Ask**, and the selection is kept. Attached issues are read in full and stay attached for follow-up questions until removed (or the conversation is cleared); the answer plans only them and lists, per group, similar open issues that could join as **suggested, not selected** checkboxes (unchecked: a checked one joins on **Assign…**, **Add to roadmap** and **Add all to the roadmap**). An attached issue closed meanwhile is struck through and left out of the proposal; the button is disabled while the Product Owner is answering. It reads the synced issues (bodies clipped unless the question names or attaches them), the queue, the runs in progress, local merges not pushed, the roadmap and the project's finished runs (agent time, cost, tokens, merge conflicts and the files they hit), plus the project's code, read-only. Each answer shows its cost and proposes **groups** (issues, workflow and inputs, why they belong together, files, stage), the issues that **must not run in parallel** and why, the issues to **enrich first** (#103), and each group's **size**: the sum of its `complexity:n` labels (3 when missing), a time and cost **estimate** from past runs of similar size, and a warning at complexity 7 (context limit) or 5 in a group (test time budget). Nothing is applied until you click: **Assign…** opens the Assign dialog prefilled (the issues selected as one run, the workflow and inputs), **Add to roadmap** plans the group as a new stage, **Add all to the roadmap** adds every group as planned stages. One agent call per question (Claude Code, the model and effort set in Agents, 15 min at most), refused when Claude Code reached a blocking monthly budget; developer and simulated mode answer from a simulated Product Owner (no model call). It never edits issues, starts runs or answers a gate. **Live progress** (#180): while it answers, the drawer shows under your question what it is doing, like a Claude Code conversation: an activity line with a spinner and a timer ("Starting the Product Owner…", "Reading src/roadmap.js", "Searching the code for dispatchRoadmaps", "Listing open issues (gh)", "Thinking…"), its last steps as a collapsible list ("6 steps"), then the answer as it is written, rendered as Markdown (the JSON block at its end never shows; the groups and their buttons appear when the turn ends). **Stop** ends the turn and keeps what was written, marked **Stopped**; a failure keeps it too, after the error; with no news for a minute the line says "Still working: last step 1 min ago". Simulated mode streams a few fake steps and the simulated answer. **Split what is too big** (#124): an issue of complexity 4–5, with more than 8 tasks, tasks in unrelated areas of the code, parts that could ship on their own, or the size of past runs that hit the context limit or the test time budget is flagged with its reasons, and the answer proposes 2–4 child issues (title, the parent's tasks each takes — every task in exactly one child —, complexity, stage: children of one stage can run together) and whether the parent becomes an umbrella or is closed; **Edit…** moves a task to another child, renames or merges children, and **Split** (or **Split + roadmap**, the children planned by stage with the workflow of the select next to the buttons, the default development workflow of Settings › General › Backlog until changed; the same select is next to **Create + roadmap** in the chat) files them, each with the parent's context, then adds a `- [ ] #n` task list to the parent or comments and closes it. **Epics** (#138): the answer places issues in existing epics (**Place in epic**) and proposes new ones (title, goal, members: **Create epic**), and names epics to merge or split; a drafted issue may name its epic, and **Create** places it there when "Place in epic" is checked. Everything that writes to GitHub/GitLab waits for your click (previews only in developer mode). The conversation is kept per project in `<workspace>/backlog/<id>.po.jsonl` until **Clear**. **Backlog Refresh banner** (#161): when the project's last successful Backlog Refresh run is older than Settings › General › Backlog › **Suggest a backlog refresh every** (24 h by default; Off) and its base branch got merges since (or no refresh ever ran), a one-line banner above every view says "Backlog refreshed 26 h ago · 14 merges since" with **Refresh now** (the Start panel on `backlog-refresh.yaml`, prefilled with the project, its platform, the base and `since` = the last refresh's start; nothing starts until you press Start, simulated in developer mode) and **Dismiss for today** (kept in `<workspace>/backlog/<id>.refresh.json`). While a refresh run is live the banner says "Refreshing the backlog…" with a link to the run. When the run ends the Backlog syncs the project; the issues it updated show a **refreshed** badge for a day, and the issues it closed leave the roadmap as usual (an item whose issues are all closed is skipped) |
+| Artifacts | Every file a run produced (documents, proposals, reviews, reports), grouped by run and filterable by project. The viewer renders Markdown (tables, table of contents; sanitized with DOMPurify), pretty-prints JSON and shows TSV/CSV as tables. Also listed per run in the project view, in the Run screen's **Artifacts** tab (next to Session and Events, updated live, previewed in place) and on the approval gates that try the change. Right-click a file (or Shift+F10) for **Copy to clipboard** (an image as an image, a text file as its text), **Copy file** (paste it in Explorer or a chat; desktop app only) and **Copy path**; right-click an open image for **Copy image** |
+| Workflows | Three sub-items in the menu (clicking Workflows opens **Runs**). **Runs**: every run, live or finished (**Open chat** replays one). **Definitions**: the YAMLs in `<workspace>/workflows/` with their steps, agents/models, skills, `/goal`, `/loop`, parallel steps and branches. **Builder**: draw a workflow instead of writing YAML (see [Visual builder](#visual-builder)). Each definition is marked **default** (untouched copy of a workflow bundled with the app), **modified** (a default you edited; **Restore default** moves your copy to the trash and restores the bundled one, and **newer default** means the app ships a newer version than the one you edited) or **custom** (created by you). **Keep awake** (the switch in the header of Runs and Definitions, the same setting as Settings › Execution, per workspace, off by default): while a run is in progress, a roadmap is running or a Backlog queue has items to start, the app keeps the computer from sleeping (a run waiting at a gate counts only when a roadmap or a queue continues after it). The switch shows **Active: 2 runs, roadmap stage 3/6**, **On: waiting for work** or **Off**, and the sidebar shows **Keeping awake** while it holds; the display may still turn off, and choosing Sleep, closing the lid or the Windows power plan still apply |
+| Agents | Reusable agents in `<workspace>/agents/<id>.json`: a robot look (main color, shell, visor, glow, eyes, emblem; live preview of the animated states), a prompt with what the agent is for and the skills it always gets. The built-in **Supervisor** is always listed: its prompt and skills are fixed, only its look can be changed (it shows wherever the supervisor appears, e.g. Write & Review). The built-in **Product Owner** (the Backlog's planner, skill `backlog-product-owner`, a teal robot with a clipboard) is listed second: its prompt and skills are fixed; its look, its model (default `claude-opus-5-5`), its effort (default high) and its **Planning** calibration (a Speed ↔ Quality slider, default Speed-leaning; see "Calibrating the Product Owner") can be changed, each with a "What this changes" line. Neither can be removed. The visual builder imports them into desks, or picks one at random when a run starts. The **workflows' own agents** (the `agents:` of each workflow in `<workspace>/workflows/`, edited and custom ones included) follow, one section per workflow with a `workflow` badge: readable name, provider, model and effort (a value the user picks when starting a run shows the workflow's default, marked "picked at start"), session, skills (a templated skill shows its family) and capabilities; a workflow that fails to load shows its error once. They are read-only: **View** shows their prompt, skills, capabilities and the steps that use them, and only their look can be changed (saved in `agents/workflows/<file>/<agent>.json`, shown in that workflow's run chat, progress chips and Write & Review); **Open in workflow** jumps to Workflows › Definitions; **Duplicate as my agent** makes an editable copy |
 | Skills | One folder per skill in `<workspace>/skills/<id>/SKILL.md` (Claude Code format) |
 | Usage | Tokens and cost per provider this month and today, monthly budgets (USD and/or tokens), per-model prices for CLIs that do not report cost, recent runs, and the GitHub Actions minutes of the month against the included quota (warning at 80%, see CI/CD). The topbar widget shows this month's total; click it for a per-provider popover |
-| Settings | Workspace, CLI status (Claude Code, Codex, Grok Build, GitHub CLI, GitLab CLI, Git) and run preferences (`<workspace>/settings.json`). **Execution › Concurrent runs**: off by default (one run at a time); on, several workflows run at the same time up to a **maximum** (default 2), with an optional **maximum per project**; simulations count toward the limits only if you say so. Each run has its own git worktree, and the monthly budgets count every run in progress. The **Run** menu item then lists the runs in progress (status, workflow, project/issue): click one to show it on the Run screen and in the top bar (whose **All runs** counter adds them up); a badge counts the human gates waiting across runs, and a gate never pops up over another screen: a toast names its run |
+| Analytics | Two tabs over a date range (the selected tab, scope and range are remembered). **Usage**: tokens, cost and session metrics per day, provider, model and project, for the orchestrator's runs or every CLI session on this machine; "Ask the supervisor" writes a report on the range (a real model call). **Repository performance**: per project, how well its repository takes parallel runs: the files most runs edit (runs that edited each file, % of runs, its line count today; generated files marked), the share of runs that hit a merge conflict (the `resolve_merge` / `resolve_conflict` step or a failed `gh pr merge` / `glab mr merge`) and their share of the cost, with the list of those runs and the files their conflict named, the runs and roadmap stages active at once per day and the hours runs were active. A marker (a date or a commit) splits every number into before and after, to check the targets of a change such as epic #158. Computed offline from the run folders, the index and the local clone's `git log`: no model call, no network |
+| Settings | Workspace, voice input (**General › Voice input**: OS dictation, the whisper.cpp CLI, model download and language, see Voice input below), CLI status (Claude Code, Codex, Grok Build, GitHub CLI, GitLab CLI, Git) and run preferences (`<workspace>/settings.json`). **General › Backlog › Default development workflow**: the workflow used wherever one is not picked by hand (the Product Owner's plans and its simulated plan, Split + roadmap, Create + roadmap, the Assign dialog with nothing remembered); unset, it is `software-development-local-hero.yaml` (local merge: no push, no PR, no CI minutes) when the workspace has it, else `software-development.yaml`; a saved workflow that was deleted or renamed falls back the same way, and Settings says so. **Execution › Keep awake**: the switch of the Workflows screen (see Workflows), off by default: no sleep while runs, a roadmap or a queue have work to do. **Execution › Concurrent runs**: off by default (one run at a time); on, several workflows run at the same time up to a **maximum** (default 2), with an optional **maximum per project**; simulations count toward the limits only if you say so. Each run has its own git worktree, and the monthly budgets count every run in progress. The **Run** menu item then lists the runs in progress (status, workflow, project/issue): click one to show it on the Run screen and in the top bar (whose **All runs** counter adds them up); a badge counts the human gates waiting across runs, and a gate never pops up over another screen: a toast names its run |
+| Night watch | The Oracle's night shift (#172). It leads with the switch: **Off**, or **On until 07:30** with who turned it on and when (an end time is required, at most 24 hours; a preset sets 8 h from now). The owner's checklist says what the Oracle may do **without asking** while it is on (retry a failed roadmap item, skip an item, regroup or reorder planned items, start from scratch over kept work, refresh issue text, restore a workflow or skill default, append low-complexity issues, restart the dispatch, commit a workflow or skill fix to the local main, file an issue), each with what it does and its undo; defaults: retry and refresh. Answering a human gate, pushing, closing issues, deleting data and paid calls outside the plan are shown locked, never allowed. Each night is measured from the Oracle's own log (`oracle/night-log.jsonl`) and the runs' events: incidents by kind, autonomy, escalation, resolution, TTD and TTR (median, p90), idle hours by cause, hours saved (an estimate), work unblocked, gate wait, precision (undone actions), loops, false alarms, the watch's cost, the night's yield and the safety counters (a red alarm when a gate was crossed or a never-allowed action ran), a timeline, the actions with their permission, backup and Undo, and a table to compare nights against the baseline night. While the watch is on, the sidebar entry shows a moon and the runs it watches; when it ends, a notification and a Dashboard card give the morning summary. Simulated mode can replay a sample night |
+| Supervisor | The Supervisor as a companion on every screen: the top bar's **Supervisor** button opens a chat drawer that knows the screen you are on (e.g. "Workflows, builder tab, editing workflow X", "Analytics, range 2026-09-01 to 2026-09-30"), and the Supervisor menu item shows the whole conversation full page. It reads the app's data through read-only tools (workflows, projects, runs, skills, agents, usage, analytics) served by its own MCP server, never the repositories' code; it never answers a human gate and routes code problems to the workflow's agents. Each message is one model call (developer mode: the simulated supervisor, no cost). While it answers, the chat shows what it is doing (an activity line with a timer, its last steps), then the answer as it is written; **Stop** ends the turn and keeps what was written, marked Stopped (#180) |
+| Oracle | The Oracle's one conversation for the whole app (see The Oracle below): docked on the Dashboard, and a drawer on every other screen from the **Oracle** button at the bottom left of the sidebar, whose badge counts the answers that arrived while it was closed. Answers render Markdown and tables, with their time, model, cost and tokens; run ids, issues and run files open in the app; pasted screenshots are sent with the question; **Memory** edits its standing decisions and **New session** starts over from a handoff note. The footer shows today's spend against the daily budget (Settings › Execution); paused by budget or answering in another app process, the input is replaced by a notice. While it answers, the chat shows what it is doing (an activity line with a timer, its last steps), then the answer as it is written; **Stop** ends the turn and keeps what was written, marked Stopped (#180) |
 <!-- /generated:screens -->
 
 The **Start** button at the top (next to Stop) opens the right side panel: pick the workflow,
@@ -88,9 +92,12 @@ HttpOnly cookie after the first visit; API clients send `Authorization: Bearer <
   server machine). `MULTIAGENT_AUTH=off` disables it in development.
 - Desktop-only actions (native folder picker, opening files in their app, external console
   windows, changing the workspace) are not available in the browser; folder paths are typed.
+  **Keep awake** is disabled there ("Not available in the browser client"): only the desktop app
+  keeps the computer from sleeping.
 
 Local build: `npm run build` (writes `build/`) or `npm run package` (writes `dist/`, used by the deploy).
 
+<!-- generated:workflows -->
 ## Software development flow (`workflows/software-development.yaml`)
 
 | Stage | Agent | Model | What it does | Skills |
@@ -120,6 +127,133 @@ files, twice at most before the step fails. Claude also gets them as `Edit(...)`
 Human gates: a doubtful PR/MR comment (fix / justify / ignore) and the merge, which produces
 the production release. Agents never talk to each other: the orchestrator (engine) hands
 failures to the developer and returns the result to the agent that asked.
+
+**Modes: automatic or validated** (input `mode`, in the Start drawer next to the task, the
+Backlog's **Assign to a workflow** dialog and the Workflows screen; remembered per workflow and
+shown in the run's Details). `auto` (default) goes from the developer straight to the review, as
+above. `validated` stops right after the developer at the `developer_check` gate, before any review
+or test token is spent: its message has the developer's summary, the issues (done / not done), the
+files changed, the commits on the branch, the diff command, the `test_notes` and `evidence_plan`,
+and the worktree path and branch. On a wide window the gate has two columns: on the left a short
+list (the summary and one line per issue: done / not done, the full message expandable), the
+tools and the choices; on the right the run's **Artifacts** so far, newest first (handoff notes,
+`decisions.tsv`, documents, screenshots), the **changed files** (each opens its diff) and the
+developer's test notes and evidence plan, each previewed in place. Try it (**Run App**, **Open
+the worktree**, **Terminal there**), then:
+- **Approve**: on to `code_review`;
+- **Ask for changes** (needs a text): the developer gets it as your change request, fixes it on the
+  same branch with a new commit, answers each point, and the run comes back to `developer_check`.
+  No automatic limit: you decide when to stop;
+- **Stop**: ends the run (`cancelled`), worktree kept to resume.
+
+Only the first implementation and your own change requests stop there; the reviewer's, the tests',
+the build's and the verifier's fix rounds go on without it, unless **Validate every round** is on (`validate_every_round: true`, a switch shown under Validated).
+It is a human gate: no timeout, no supervisor, no retry ever answers it. The time a run waits for
+you at its gates is recorded apart from agent time (`summary.timing.gate_wait_ms`, the Details
+panel and the Time tooltip).
+
+**Tests: on or off, per workflow and per run** (#203; inputs `unit_tests` and `e2e_tests`, shown
+like `mode` in the Start drawer, the roadmap item's Edit form and the Backlog's Assign dialog, with
+the workflow's default). The test step is the largest cost of a run (about half of it), so:
+- `unit_tests`: **Write and run** (default) = the test writer writes the change's tests and runs the
+  focused ones, then the orchestrator runs the whole suite; **Run existing** = no test writer for
+  unit tests, the suite runs once without an agent and its failures go to the developer; **Off** =
+  no suite at all.
+- `e2e_tests`: **Write** (default) = the issue's BDD scenarios are written and checked to parse (run
+  at release by `e2e-release`); **Write and run** = also run here (slow: it starts the app);
+  **Off** = none.
+- Both off: the run goes from the code review straight to the build (no test step); the build,
+  the evidence, the verification and the merge always run. Nothing off is reported as tested: the
+  run's Details show a badge per input ("Unit tests: Off", the source on hover: workflow default or
+  chosen for this run), and the gates and the verifier get the same sentence. To test later, all
+  together: the `test-batch` workflow.
+- Your own defaults: change `default:` of these inputs in the workspace copy of the workflow. A
+  copy changed only in its inputs' defaults still gets the app's new versions (your values kept).
+
+**The orchestrator runs the suite, not an agent** (#177): after the test writer's turn, the `suite`
+step (no agent) runs the project's whole test suite once (`test_command`, else found from the
+project's files: `npm test`, `go test ./...`, `mvn test`, `dotnet test`, `pytest`…), saves the output
+in the run's `logs/suite-<round>.log` and gives the test writer only the failing tests (name, file,
+first lines of the error) and the log's path: at most 2 rounds, then the `test_failed` gate. Tests
+that also fail on the base (the test writer's pre-existing failures) are reported, never chased.
+The test writer runs only focused tests; a whole-suite command it starts anyway is noted in the
+run as a warning. The summary counts the suite runs (`suite_runs: { engine, agents }`).
+
+**Run App at a gate.** `developer_check`, `human_review` and `approve_merge` (any gate with
+`local_preview: true`) always offer **Run App** (its label says what it runs, e.g. "Run App: npm
+start"). It uses the project's Local preview (Projects › Edit › Local preview), else the
+workflow's:
+
+```yaml
+orchestrator:
+  local_preview:
+    install: "npm ci"      # only when dependencies are missing or the lockfile changed
+    command: "npm start"   # or "npm run dev"
+    url: null              # or "http://localhost:5173" (a link at the gate; a busy port is reported)
+```
+
+It runs in the run's worktree in an embedded terminal (the dock, labelled with the run's issues),
+with **■ Stop**, and stops by itself when the gate is answered or the run ends. It never answers the
+gate. The copy runs in simulation only (`MULTIAGENT_SIMULATION_ONLY=1`) on a scratch workspace
+(`<workspace>/local-previews/<run>/`: a copy of your projects, agents, skills, workflows and
+settings, never your runs) with its own user-data folder, so trying this app can't spend on real
+models or touch your workspace; **real workspace** (with a warning) points it at yours instead.
+"Local preview started/stopped" is recorded in the run's history and chat. The gate shows the
+app's state (running / stopped / failed, with the busy-port message), **Terminal** to show or hide
+its terminal and **Open URL** when a URL is set.
+
+Which command runs, first match wins: the project's Local preview (Projects › Edit) > the
+repository's `.multiagent/local-preview.yaml` > the workflow's `orchestrator.local_preview` >
+detection. A repository declares how it runs once, committed, and everyone gets one-click Run App:
+
+```yaml
+# .multiagent/local-preview.yaml
+install: npm ci          # optional
+command: npm run dev
+url: http://localhost:5173   # optional
+cwd: apps/web            # optional: a monorepo's app
+env:                     # optional
+  API_URL: http://localhost:8080
+```
+
+Running a repository's command is code execution on your machine, so Run App asks once per
+project, in one click: a small popover over the gate, "Run with `npm ci` + `npm start` (from
+package.json)? **Run** · **Edit**". A declared command that changes (the file edited) asks again;
+your own Local preview never asks. With nothing declared, it detects: package.json's `start`/`dev`
+script (`npm ci` / `yarn` / `pnpm` per lockfile, a framework URL), a monorepo's apps (workspaces or
+several package.json: pick one, stored as `cwd`), Docker Compose (`docker compose up`, the first
+published port), a dev container's `postStartCommand` (forwarded port), a Procfile's `web:`, a
+Makefile `run`/`dev`/`start` target, the README's run command, Django, Go, Rust or .NET; each
+suggestion says where it came from. **Run** saves a detected command as the project's Local preview;
+**Edit** opens the fields, and **Save and run** can also write them to
+`.multiagent/local-preview.yaml` in the project folder (a change you commit). Projects › Add / Edit
+shows what the folder declares or is detected to run with (**Use it**), before any gate. For this
+app itself it proposes `npm ci` and `npm start`. In a simulation (no git worktree) the gate's
+**Changed files** are the ones the simulated developer reported, labelled "simulated".
+`developer_check` also offers **Show the diff**: the branch's changes since the base branch, in the
+diff viewer (see Reviewing a run's changes).
+
+### Reviewing a run's changes
+
+The diff viewer shows a run's changed files the way GitHub's "Files changed" does. It opens from a
+gate's **Show the diff**, from a **Changed files** entry of the gate's Artifacts panel (on that
+file), and from **Review changes** on the Run screen of any run with a worktree or reported files.
+The changes are `git diff --find-renames <base>...HEAD` in the run's worktree: everything since
+the merge base with the run's base branch. They are read-only: nothing is checked out or written.
+
+- **Files** on the left are grouped by folder. Each has an added / modified / deleted / renamed
+  icon and `+n −m` counts, and a filter box narrows the list. Mark a file **Viewed** to track your
+  progress ("n of m viewed", remembered per run). ↑ / ↓ or j / k move between files.
+- **The diff** is **Split** (before | after, aligned, line numbers on both sides) or **Unified**,
+  switchable at any time and remembered. Both modes have syntax highlighting, word-level
+  highlights and **Wrap lines**. Unchanged regions are collapsed; ↑ 20 / ↓ 20 / **Expand all**
+  shows them.
+- **Binary files** say "Binary file changed", and images show before and after previews (click to
+  enlarge). Huge files such as lockfiles are collapsed with **Load diff**.
+- **Commits** shows all the branch's changes or only one of its commits, e.g. the developer's new
+  commit after *Ask for changes*.
+- **Esc** or ✕ closes it, and the gate is still there. A simulated run (no worktree) lists the files
+  the developer reported, with a "Simulated: no diff" note.
 
 Failure gates (a step that ran out of fix rounds, or a failure no commit can fix) only offer what
 can change the outcome:
@@ -195,17 +329,56 @@ use what its `capabilities` declare (e.g. the CI pusher: read, `git`, `gh`, `gla
 
 The same develop → code review → test → build → verify pipeline as `software-development`, for working fast on your machine without GitHub or GitLab: no push, no PR/MR, no CI, no preview, no deploy.
 
+<!-- generated:local-hero -->
+- **Tests on or off** (#203): the same `unit_tests` / `e2e_tests` inputs and the same `suite` step (the orchestrator runs the whole suite once per round, #177) as `software-development`. With unit tests off nothing is reported as tested: `verify_failed` and the verifier say so, and the run's Details show it.
 - Each run still gets its own git worktree, started from your **local** `base_branch` (nothing is fetched, so a run sees the local merges of earlier runs you haven't pushed).
 - **No merge approval**: once `verify_change` passes, the engine merges the run's branch into the local `base_branch` automatically: rebased onto it first if it moved (another run merged meanwhile), fast-forward only (linear history), never pushed. The run's worktree and branch are then removed.
 - **Conflicts are resolved automatically**: a failed merge goes to `resolve_merge`, where the developer rebases onto the local base and resolves the conflicts (skill `merge-conflict-resolver`). Then only what the resolution changed is checked again: the review covers the rebase against the last approved commit (`git range-diff`; findings on untouched code are not blocking), the tests are the ones related to the files the resolution touched plus a smoke check (the full suite when it touched more than 5 files), the build runs, the verifier re-checks only the claims whose files were touched, and the merge is attempted right after. A resolution that changes behaviour (the developer answers `behaviour_changed: true`) goes through the full review, suite and verification. Merges of concurrent runs go one at a time. At most 3 rounds; what the developer can't fix, such as uncommitted changes in the checkout where the base is checked out (your work), stops at the `merge_blocked` gate (retry / stop).
+- **E2E scenarios for the Dev/QA** (#143): the test writer writes end-to-end BDD scenarios (Given/When/Then, skill `e2e-test-writer-<language>`) only when the issue has user-visible behaviour, at most 3 per issue, and runs only the run's ones by their issue tag (`@issue-<n>`); the full E2E suite belongs to the release workflow. With no merge approval, the run's summary lists them with their status, steps and screenshots; `developer_check` and `verify_failed` (the gate before the merge when the verification keeps failing) list them too.
+- **Modes**: the same `mode: auto | validated` as `software-development`. In `auto` nothing waits for you (the run merges locally by itself); in `validated` the run stops at `developer_check` after the developer so you try the change (Run locally, Open the worktree) and approve it or ask for changes before the review and the tests. `human_review` offers Run locally too.
 - **Context limit**: `orchestrator.limits.max_total_context: 20M`. Past 20M tokens of context the run pauses before its next agent turn; choose **Continue** (another 20M) or **Stop**.
 - **Issues close when you push**: commits end with `Closes #<n>` for the run's issues, so GitHub closes them when you push the base branch. Until then the Backlog shows them in **Merged locally** (a "not pushed" badge), not in Done: Done means closed on GitHub/GitLab.
 - **Push from the Backlog**: when the project's local base has commits that `origin/<base>` hasn't (checked with a fetch on every Backlog sync and after every local merge), a bar above the issues says how many and which issues they close. **Push…** lists the commits, then runs `git push origin <base>` in the project's repository (the clone under `<workspace>/repos/`, not your own checkout): never forced, never another branch. The Backlog syncs afterwards, so the closed issues move to Done. The sidebar's Backlog item and the project's page show the count of commits not pushed; the run's chat and its notification say "merged locally, not pushed yet".
 - **When `origin` moved** (a PR merged meanwhile), the push is rejected: **Update and push** runs `git pull --rebase origin <base>` where the base is checked out (a temporary worktree when it is checked out nowhere), then pushes. A conflict undoes the update (the local base keeps every local commit), lists the files, and offers **Resolve in a run**: a run of the local workflow whose developer merges `origin/<base>` into the local commits and resolves the conflict; after review, tests and the local merge, **Push** goes through as a fast-forward. The run calls the agents' CLIs (real cost) unless simulated.
 - **Auto-push** (per project, off by default): the checkbox on the Backlog's bar pushes the base after every successful local merge; a rejected push only notifies you.
 - Or push yourself: `git push origin main` from the repository.
+<!-- /generated:local-hero -->
 
 Engine options behind it: `orchestrator.worktree.remote: false`, a transition with `merge: local` and `on_error`, and `orchestrator.limits.max_total_context` (see `docs/agents/worktrees.md` and `docs/agents/engine.md`).
+
+## AI Development, local hero (`workflows/ai-development-local-hero.yaml`)
+
+The local-hero pipeline with the tests written **first** (#220): acceptance tests → red check → develop → code review → suite → build → verify → local merge. No push, no PR/MR, no CI.
+
+- **Acceptance tests before the code**: the test writer (Opus 5.5) writes the tests of the issue from its criteria, not from the implementation, on the run's branch. It gets the project's code → tests map (`test_map: true`) to put them where they belong. A task with nothing testable goes straight to develop.
+- **Red first, really**: the orchestrator runs exactly those files once (a suite step with `files` and `expect: red`, no agent). A test already green before any code is reported to the developer (it guards existing behaviour or is wrong); a file that cannot run goes back to the test writer once. The existing tests related to them come from the code → tests graph and are given to the developer, not guessed.
+- **Locked for the developer**: the engine refuses a developer turn that changes an acceptance test (`protect_files`), while the developer may add its own internal tests; the reviewer checks the files are unchanged too.
+- `unit_tests` defaults to `run_existing` (the suite after the review, no second test-writer step) and `e2e_tests` to `off`. Reviewer and test writer run on Claude Opus 5.5.
+
+## E2E release (`workflows/e2e-release.yaml`)
+
+Code & Build. Runs the project's whole end-to-end BDD suite once, before a release, in its own
+worktree of the local base: one feature file at a time within `time_budget_minutes`, each
+scenario's result and screenshots recorded in the run. A failed scenario goes to the developer
+with its screenshots and what changed since the last green E2E run (commits, issues, runs), then
+to review and the failed scenarios again, at most `max_rounds`, then a human gate. Green with
+nothing fixed: the tested commit is recorded as the last green E2E (`refs/multiagent/e2e-last-green`,
+a local ref). Green after fixes: you approve, then the fix merges into the local base. Development
+runs only write their issue's scenarios and check that they parse ("written, run at release"); they
+never wait for this workflow. It never pushes, tags or publishes.
+
+## Test batch (`workflows/test-batch.yaml`)
+
+Code & Build (#203). Write features first and test them later, all together: for runs made with
+unit or E2E tests off, it covers a range of local commits (since `since`, else since the last green
+batch, `refs/multiagent/test-batch-last-green`, a local ref; or the commits that close the run's
+issues) in its own worktree of the local base. One test writer session writes the missing unit tests
+(and E2E scenarios when `e2e_tests` is on) on the branch `test-batch-<run_id>`; the orchestrator runs
+the whole suite once per round (`suite` step, no agent) and sends the failing tests back to the test
+writer, at most `max_rounds`, then a human gate. A failure caused by the production code goes to the
+developer; then you approve the merge (nothing reviewed the fix). Green: the branch merges into the
+local base and the commit becomes the last green batch. Start it by hand, from the Backlog or as a
+roadmap item (e.g. the last item of a stage). It never pushes, tags or publishes.
 
 ## AI Arena (`workflows/ai-arena.yaml`)
 
@@ -269,11 +442,84 @@ and the supervisor, and takes precedence over the goal where they conflict.
 
 Past runs open as a chat again from Workflows › Runs › **Open chat**.
 
+**Document type** (optional, the `document_skill` input): the skill the writer and the reviewer load,
+with its structure and rubric: `issue-writing` (an enriched issue), `rfc-writing`, `prd-writing`,
+`design-doc-writing`, or your own. Empty, the document is free-form, as before.
+
+**Enrich a Backlog issue**: **Enrich in Write & Review** on an open issue (list row, kanban card,
+expanded details) opens this screen prefilled: an enriched issue by default, a prompt with the
+issue's title, number, URL, labels and full body, a default goal for the document type (it follows
+the type until you edit it), and the Backlog's project (read-only). Nothing starts by itself. The run
+records its issue (`issues` in `workflow.started`): the chat shows it, and the Backlog card shows
+"being enriched" / "enriched" with a link to the run (it never moves the card's column). Once you
+accept the document, **Save to issue #n…** (in the chat and in Run Details, so you can save later or
+again) shows a preview of the text and the command, and saves only when you click it:
+- **Replace the description** (default for an enriched issue): the document becomes the body and the
+  original description is kept at the end in a collapsed `<details><summary>Original description</summary>`
+  block (saving again keeps the first original, never nested);
+- **Add as a comment** (default for an RFC, PRD or design doc): the description stays as it is.
+
+It uses the Backlog's CLI: `gh issue edit <n> --body-file` / `gh issue comment <n> --body-file`, or
+`glab issue update <iid> --description` / `glab issue note <iid> --message`. Then the Backlog reads the
+issue again (new body, task progress, labels), and the run records the save (`issue-saves.json`, the
+text sent in `issue-save.md`), shown in Details and Artifacts. A failure (no auth, issue closed or
+deleted, network) shows the CLI's message; the document stays in `document.md`. Agents and the
+supervisor never save to an issue. A simulated run only shows the preview, and
+`MULTIAGENT_SIMULATION_ONLY=1` refuses every real save, so automated checks never call `gh`/`glab`.
+
 **Simulation** (Settings › Execution › **Developer mode**): shows the "Simulation" checkboxes, checked
 by default, and a **Scenario** picker on Write & Review: approved on the 3rd review (5.5 → 7 → 8.6),
 approved on the 1st review, never reaches the score (rounds run out), the supervisor finds gaps in the
 approved draft, and the reviewer answers in the wrong format (asked again twice, then the supervisor
 steps in). Without developer mode every run is real.
+
+## Issue tracker (`workflows/issue-tracker.yaml`)
+
+Plan & Design. Turns a request in a few words (any language) into a triaged GitHub/GitLab issue.
+Start it from the Backlog's **New issue…** button (the selected project and platform are filled in)
+or from the Start panel. Inputs: `request`, `project_path`, `mode` (**Validated**, the default, or
+**Automatic**, shown next to the request), `git_platform` (`gh`/`gl`), and the optional `related`
+("#41, #79"), `attachments` (screenshots, logs), `max_revisions` and `assign_workflow`.
+
+| Step | Agent | What it does |
+|---|---|---|
+| `analyze` | `code_analyzer` (Sonnet, read-only: git and gh/glab to read) | Finds the code involved and today's behaviour (file:line), estimates the files to change, rates **impact** and **complexity** 1–5 (`issue-triage` rubric), searches issues and open PRs/MRs for duplicates and work in flight, advises running it alone or grouped with #n, lists the labels the repository lacks. |
+| `write` | `issue_writer` (Opus, read-only) | Drafts the issue(s) in English with `issue-writing`: evidence, "Decision (owner): …", tasks as acceptance criteria, a Triage section, labels. Independent parts become cross-linked issues. |
+| `review` | you (Validated; Automatic skips it) | The scores, the grouping advice and the draft(s), in the run chat. **Create**, **Create and queue** (a chain to the queue, see *Chaining workflows*: once the run succeeds, the new issues go to the Backlog queue for `assign_workflow`, as one run when grouping was advised), **Revise** (your note goes back to the writer, `max_revisions` rounds), **Add to #n instead** (comment on the existing issue), **Discard**. |
+| `file` | `issue_filer` (Sonnet, gh/glab only) | Creates the issue(s) or comments on the existing one, with the labels, and reports the URLs. |
+
+**Automatic mode** (`mode: auto`): `write` goes straight to `file`, which creates the drafts as
+they are: no review, no revise rounds, nothing queued for `assign_workflow` (the issues show on the
+Backlog after its next sync). You chose it at start, so no gate is skipped on your behalf. Two
+cases still need you: a draft that found an existing issue (a possible duplicate) stops at the
+review, with a line saying why; and missing labels are not created (the filer uses the existing
+ones and lists the skipped ones in its summary), since only a person confirms new labels.
+
+**Labels**: `impact:1`…`impact:5`, `complexity:1`…`complexity:5`, the kind (`bug`, `enhancement`,
+`documentation`) and optional `area:engine`, `area:renderer`, `area:workflows`, `area:docs`. The ones
+the repository does not have are listed at the review and created once, by the filer, only after
+your choice there; the generic `issue-creator-*` skills keep using existing labels only. On the
+Backlog, the triage labels show as `I3`/`C2` badges on each issue, the **Sort** menu orders by impact
+or complexity, and the Labels filter narrows by them (e.g. `complexity:1 OR complexity:2`).
+
+## Backlog Refresh (`workflows/backlog-refresh.yaml`)
+
+Plan & Design, read-only on the code. Issues are written against the code of the day they were
+filed; after a few merges their paths, line numbers and task lists drift. The `refresher` (Claude
+Sonnet, git and gh/glab only to read, exploration sub-agents in batches, skill
+`backlog-refresh-<git_platform>` on top of the shared `backlog-refresh`) reviews every open issue
+(or the `issues` listed) against `base_branch` and the changes since `since`, and answers per issue
+`current`, `update`, `partly_done`, `done`, `obsolete` or `duplicate` with evidence, exact
+`{ find, replace }` edits for the safe fixes (paths, lines, renamed symbols, tasks done with
+evidence), a new `complexity` when the size changed, and `scope` proposals. A transition action runs
+the skill's `apply.js --platform gh|gl --mode safe` (no model): each `find` must match the current
+body exactly once, an issue edited after the review (`updatedAt`) or closed is skipped, the refresh
+note goes after a `<!-- backlog-refresh -->` marker (replacing an older one), and the platform keeps
+the earlier bodies. The `scope` decision gate lists the proposed closes; only your **Apply** runs
+`--mode scope` (closes with a comment); rewrites are only reported, and the supervisor never answers
+the gate. The run never merges (`metadata.merges: false`): as a roadmap stage it is done when it
+succeeds. The Backlog suggests it every 24 hours (see the Backlog screen). Run folder:
+`refresh.json`, `report.md`, `applied-safe.json` / `applied-scope.json`, `bodies/<n>.md`.
 
 ## Run retrospective (`workflows/run-retrospective.yaml`)
 
@@ -316,6 +562,7 @@ and an optional `project_path` (the folder the agents work in; empty = the run f
   in the file is kept;
 - workflows made with the builder are fully editable. Hand edits to `providers`, `defaults`,
   `orchestrator` and `observability` are kept when the builder saves again.
+<!-- /generated:workflows -->
 
 ## Skills
 
@@ -363,6 +610,9 @@ What is shared by a family lives in a suffix-less skill referenced with `uses:`.
 |---|---|---|
 | `adr-writing` | arena (`document_skill`) | ADR (after MADR 4.0): one decision, drivers, real options with pros/cons, consequences, confirmation, rubric |
 | `arena-synthesis` | arena synthesizer | Merge method and the arena appendix |
+| `backlog-product-owner` | the Product Owner (Backlog screen, on demand) | Groups of issues per run, pairs that must not run in parallel, the order (stages), sizes from past runs, issues to enrich first, splits of issues too big for one run, and epics; read-only |
+| `backlog-refresh` | backlog-refresh (refresher), through backlog-refresh-gh / backlog-refresh-gl | Open issues vs today's code: exact find/replace fixes (paths, lines, done tasks, complexity), scope proposals (close, duplicate, rewrite) for the owner |
+| `backlog-refresh-{gh,gl}` | backlog-refresh (refresher) | Backlog refresh on GitHub: read issues and PRs with `gh`, apply.js --platform gh |
 | `blast-radius` | multi-model review | Boundary changes, their consumers, and the safety fact proven on an evidence ladder |
 | `bug-diagnosis` | developer | Red feedback loop first, ranked hypotheses, regression test, cleanup |
 | `build-audit-{js,python,go,java,csharp}` | builder | Build and audit commands, production vs development scope per ecosystem |
@@ -370,29 +620,34 @@ What is shared by a family lives in a suffix-less skill referenced with `uses:`.
 | `ci-pipeline-{gh,gl}` | CI pusher | Push, PR/MR, mergeability (conflicts fail fast), CI status, missing checks, fetching failed logs, retrying flaky jobs |
 | `claim-verification` | verifier | Falsifiable claim, baseline vs treatment with the same command, verified / not_verified / inconclusive |
 | `code-review` | reviewer | Correctness, spec and standards axes, severities, `rules/` per language (JS/TS, Python, Go, Java/Kotlin, C#, SQL, Shell/CI) and `rules/smells.md` |
-| `context-economy` | developer | Maps the code with exploration sub-agents, reads excerpts instead of whole files, writes handoff notes the next fresh session can act on |
+| `context-economy` | developer, test_writer | Does code research through exploration sub-agents, reads excerpts instead of whole files, writes handoff notes the next fresh session can act on |
 | `decision-log` | developer, PR babysitter | Agents end answers with a ```` ```decisions ```` block; the engine appends it to `<run>/decisions.tsv` |
 | `dependency-audit-policy` | via `uses` | Severity from CVSS, how to report blockers with a fix, redaction |
 | `deploy-{gh,gl}` | deployer | Preview and production deploy tracking and cleanup |
-| `design-doc-writing` | arena (`document_skill`) | Design doc (after Google's practice): context, goals/non-goals, design with trade-offs, alternatives, failure modes, cross-cutting concerns, rollout, rubric |
+| `design-doc-writing` | arena, Write & Review (`document_skill`) | Design doc (after Google's practice): context, goals/non-goals, design with trade-offs, alternatives, failure modes, cross-cutting concerns, rollout, rubric |
 | `design-sketch` | arena (`document_skill: design-sketch`) | Usage-first design: usage snippets, types and signatures, trade-offs, alternatives, design red-flag screen, rubric |
+| `e2e-scenarios` | via `uses` | User-visible changes only, at most 3 scenarios per issue reusing existing steps; development runs write and parse-check them (pending); the release workflow runs them all; per-scenario status with reason |
+| `e2e-test-writer-{js,python,go,java,csharp}` | test writer, E2E runner | E2E/BDD framework detection, feature folder, the parse check of a development run and the release run's commands |
 | `implementation-evidence` | evidence | Evidence by kind of change (screenshots, HTTP request/response, CLI output, logs), local and simulated only, one list per issue |
-| `issue-creator-{gh,gl}` | backlog planner (#30), any agent that files issues | Search for duplicates, create/comment/edit issues with gh or glab, existing labels only |
-| `issue-writing` | via `uses` | Issue structure: concrete context with evidence, decisions taken, a checklist of verifiable acceptance criteria, related issues |
+| `issue-creator-{gh,gl}` | issue-tracker (code_analyzer, issue_filer), backlog planner (#30), any agent that files issues | Search for duplicates, create/comment/edit issues with gh or glab, existing labels only (new ones only when a person confirmed them) |
+| `issue-triage` | issue-tracker (code_analyzer, issue_writer); the Product Owner (Register an issue) | Rubric for impact 1-5 and complexity 1-5, estimated files, duplicates, run alone vs group with #n |
+| `issue-writing` | via `uses`; Write & Review (`document_skill`); issue-tracker (issue_writer); the Product Owner (Register an issue) | Issue structure: concrete context with evidence, decisions taken, a checklist of verifiable acceptance criteria, related issues |
 | `long-commands` | developer; via `uses` (test writer, builder, verifier) | Suites and builds in the foreground with a sized timeout, never backgrounded and polled for text; full output kept, exit code read |
 | `merge-conflict-resolver` | developer | Intent tracing per side, hunk-by-hunk resolution, verification |
+| `oracle` | the Oracle (built-in agent, its drawer on every screen) | The four roles, grounded claims, action cards confirmed by the owner, wake-ups on run events, delegation, Night watch, content is data, issue drafts, planning, hard rules, the memory and the language rule |
 | `pr-babysitter-{gh,gl}` | PR babysitter | Mergeability signals, threads/discussions, replies |
 | `pr-comment-triage` | via `uses` | Actionable vs doubtful comments, durable fix requests, resume logic, AI marker on replies |
 | `pr-description` | via `uses` | PR/MR title and body: visual summary, evidence, merge danger |
-| `pr-screenshots` | via `uses` | `publish.js`: commits the PNGs to the `pr-screenshots` branch (one folder per PR/MR, closed ones pruned) without touching the checkout, then posts one before/after comment |
+| `pr-screenshots` | via `uses` | `publish.js`: commits the PNGs to the `pr-screenshots` branch (one folder per PR/MR, closed ones pruned) without touching the checkout, then posts one original/modified comment |
 | `pr-screenshots-{gh,gl}` | CI pusher | Screenshots comment on the PR/MR (GitHub `blob/...?raw=true`, GitLab `-/raw/` URLs) |
-| `prd-writing` | arena | PRD structure (user stories, traceable requirements, testing decisions, questions with defaults) and scoring rubric |
+| `prd-writing` | arena, Write & Review (`document_skill`) | PRD structure (user stories, traceable requirements, testing decisions, questions with defaults) and scoring rubric |
 | `review-synthesis` | multi-model review judge | Lead judgment: merge, verify, weigh agreement and nitpicks, act on / consider / noted / dismissed |
-| `rfc-writing` | arena (`document_skill`) | RFC (after the Rust RFC template): motivation, guide- and reference-level explanation, drawbacks, alternatives, prior art, rollout, rubric |
+| `rfc-writing` | arena, Write & Review (`document_skill`) | RFC (after the Rust RFC template): motivation, guide- and reference-level explanation, drawbacks, alternatives, prior art, rollout, rubric |
 | `run-retrospective` | run retrospective | Friction, waste, skill gaps and no-ops in a run's logs, turned into proposals with evidence |
 | `run-supervisor` | the AI supervisor (a failed step, or on demand) | Plain-words account of a run, root cause from its logs, a safe recovery (fix the output, retry with an instruction, go to an allowed step, resume, or hand over to a human) |
 | `test-plan-writing` | arena (`document_skill`) | Test plan (after ISO/IEC/IEEE 29119-3): risk-based approach, traceability to requirements, entry/exit criteria, environment and data, rubric |
 | `testing-principles` | via `uses` | Seams first, no tautological or implementation-coupled tests, mocks only at boundaries, red before green for bug fixes, each suite run once, pre-existing failures reported instead of chased |
+| `ui-conventions` | developer (software-development workflows, when the change touches the UI); evidence (the visual review) | UI changes: shared components, controls that follow the data, states to capture, and the visual review of the screenshots (ui_findings) |
 | `unit-test-writer-{js,python,go,java,csharp}` | test writer | Framework detection, commands, idioms per language |
 <!-- /generated:skills -->
 
@@ -403,6 +658,7 @@ What is shared by a family lives in a suffix-less skill referenced with `uses:`.
 All of them are rewritten for agents that run unattended: where the originals ask the user, ours
 record an assumption or a recommended default instead.
 
+<!-- generated:engine -->
 ### AI supervisor
 
 The engine is deterministic (same graph, same gates, auditable); an AI **supervisor** (skill
@@ -440,6 +696,208 @@ orchestrator:
   run folder (an artifact). **Chat in terminal** opens the supervisor's CLI in the run folder,
   read-only, to ask follow-up questions.
 
+### The Oracle
+
+The Oracle is a built-in agent (Agents lists it; model and effort editable, default
+`claude-opus-5-5`, high) with **one persistent conversation for the whole app**: it plays Product
+Owner, supervisor, reliability engineer and operator's assistant in the same context. Its panel is
+docked on the **Dashboard**; on every other screen the **Oracle** button at the bottom left of the
+sidebar opens the same conversation as a drawer that knows the screen you are on (Esc closes it).
+The button's badge counts the answers that arrived while the conversation was out of view.
+
+- **What it reads**, read-only: the runs (events, summaries, sessions, decisions, handoff notes,
+  costs), the roadmaps, the Backlog caches and queues, local merges not pushed, the workflows and
+  skills (and whether a newer default exists), your projects' repositories (git log/diff/show,
+  files) and the app's own code when its repository is a project. Run ids, `#<number>` issues and
+  run files in an answer open in the app; other paths copy on click. Paste a screenshot into the
+  input (PNG, JPEG, GIF or WebP, up to 5 MB each and 4 per message): it is saved in
+  `<workspace>/oracle/attachments/` and the Oracle looks at it.
+- **Memory**: your standing decisions ("reply in Portuguese", "validated mode for UI changes"),
+  edited only by you from the drawer's **Memory** button and read at every session start.
+  **New session** starts over from a handoff note; the conversation and the memory are kept. Past
+  the context threshold it compacts on its own the same way.
+- **Cost**: each answer shows its time, model, cost and tokens; the footer shows today's spend
+  against the **daily budget** (Settings › Execution, default 20 USD, 0 = no cap). Once reached,
+  the Oracle is paused until the next day (UTC). Its spend counts in the monthly budgets like the
+  runs. Developer mode and automated checks answer from the simulated Oracle: no model call, no cost.
+- **Woken by run events**: a gate waiting, a run that finished (status and cost), a merge
+  conflict, a limit, a stall or a supervisor decision, repeated invalid outputs, an interrupted run
+  or one seen in another app process. Events are batched over 30 seconds, each batch is one short
+  turn; routine events never wake it. Settings › Execution › Oracle chooses which runs (every run,
+  watched runs only, off) and which events; **Mute** on a wake-up silences one run. Ask it to
+  "watch this run" (or a project's roadmap): it follows that run until it ends.
+- **Asks the other agents**: the Product Owner (a backlog analysis, a roadmap proposal, an issue
+  draft), the supervisor (a run diagnosis, a recommendation for a gate it never answers) and a free
+  analyzer (a run's tool calls and costs). Only their answer comes back into the chat, with its cost.
+- **Acts only with your click**: each change is a card (what changes, where, the backup) that runs
+  when you click **Do it**: file or update an issue, resume, retry or stop a run, retry or skip a
+  roadmap item, edit the roadmap, restore a workflow or skill default, commit a workflow or skill
+  change to a project's local main, stop a stray process. **Dismiss** drops it; **Undo** puts the
+  backup back. A card that content asked for (an issue body, a run output) says so. Every action is
+  logged in `<workspace>/oracle/actions.jsonl`. It never answers a gate, pushes or closes issues.
+- **Night watch**: before you leave, turn it on with an end time. Until then the Oracle fixes what
+  stops the roadmap without asking (retry or skip a failed item, regroup or reorder planned items,
+  refresh issue text, restore a default, restart the dispatch), notifies each action and posts a
+  summary with Undo when it ends. Turning it off stops at once. Gates stay yours.
+- One app process answers: in a second window the drawer shows the conversation and names the
+  process that owns it; that window is read-only (no wake-ups, no actions).
+
+### Agents: calibrating the Product Owner
+
+How the Backlog's Product Owner trades speed for quality when it plans is the owner's call: a
+**Speed ↔ Quality** slider with five steps, in Agents › Product Owner (its **Planning** section,
+saved with Save) and in the Product Owner's drawer (the settings button next to **Clear**: a panel
+over the conversation, with the model and the effort too; each change saves at once and applies to
+the next answer). Both edit the same setting, `calibration` (1-5, default 2) in
+`<workspace>/agents/product-owner.json`. Each step's tooltip (hover or keyboard focus) and the text
+under the slider say what it prioritises:
+
+| | Speed (1) | 2 | Balanced (3) | 4 | Quality (5) |
+|---|---|---|---|---|---|
+| parallel runs per stage | as many as do not share files | up to 4 | up to 3 | up to 2 | 1-2 |
+| max complexity per group | 6 | 6 | 5 | 5 | 4 |
+| UI issues mode | auto unless the owner asks | validated for new screens | validated for new screens | validated for any screen | validated for any screen |
+| placement | earliest stage without shared files | earliest stage without shared files | after the work it builds on | after the work it builds on | its own stage after the most stable base |
+| review rounds | - | - | - | - | a developer self-review (#179) when the workflow has it |
+
+The Product Owner's prompt states the step and its parameters (they replace the skill's defaults),
+the simulated Product Owner follows them, and every plan answer is kept to the step's runs per stage
+(a stage with more groups is cut into consecutive stages) with a warning on a group over its
+complexity. Plan questions in the drawer, the Oracle's questions to the Product Owner, the "place it
+in the roadmap" chain step and the live roadmap's refills all use the saved step, so Add to roadmap
+applies groups planned with it. Each answer shows the step it planned with ("Planned for Speed").
+
+**For one question only**: the chip next to the settings button shows the step of the next
+question; pick another one there, or write it in the question ("plan this one for quality"), and
+only that question uses it: the saved setting does not change.
+
+**The second axis, Cost: Economy ↔ Generous** (#205). Most of a run's cost is decided when the work
+is planned: how many runs (each pays a fixed overhead), which tests run (#203) and which models the
+agents use. A second five-step slider sits under Speed ↔ Quality in both places (same tooltips and
+"what this step does" line), saved as `cost` (1-5, default 3) in the same file:
+
+| | Economy (1) | 2 | Balanced (3) | 4 | Generous (5) |
+|---|---|---|---|---|---|
+| max complexity per group | 8 | 7 | the Speed ↔ Quality step's | 5 | 4 |
+| grouping | issues of one area or files packed into one run ("grouped to pay the run overhead once") | the same | as Speed ↔ Quality plans | as Speed ↔ Quality plans | as Speed ↔ Quality plans |
+| `unit_tests` | run existing, then a `test-batch` item after the stage | write and run | write and run | write and run | write and run |
+| `e2e_tests` | write | write | write | write | write and run |
+| `screenshots` | off | changed screens | changed screens | all | all |
+| agents | cheaper models and a medium effort where the workflow has an input for them | the same | the workflow's | the workflow's | the workflow's |
+
+When the two sliders disagree, cost wins: the group cap is the Cost step's (Speed + Economy gives
+fewer, larger runs); the runs per stage stay the calibration's. The orchestrator applies the step to
+every planned group, whatever the model wrote: it packs a stage's groups that share an area (name,
+files, epic or topic label) within the cap, sets `unit_tests`, `e2e_tests` and `screenshots` when the
+group's workflow declares them, and at Economy adds a stage with one `test-batch` item for the issues
+that ran with their existing tests only (a test-batch item may name issues another item holds, and
+runs even when they are closed). An input a workflow does not declare is not adjustable: the group
+says so (the bundled development workflows have no model or effort input, so "agents: not
+adjustable"), and no workflow is edited. Each group, and the roadmap item added from it, carries a
+cost badge with these choices; you can still change the item's inputs. Each plan answer shows both
+steps ("Planned for Speed · Economy") and the plan's estimated total. For one question: the Cost chip
+next to the calibration chip, or "plan this one cheap" in the question.
+
+**Screenshots on or off** (`screenshots` input of both development workflows, #205): `all` (the
+default: as before), `changed` (only the screens the issue changes, original and modified) or `off`
+(no `developer_screenshots` step, no `npm run screenshot` by the test or evidence agents: the evidence
+is the diff, the logs and the test results, and the gates say "Screenshots: off"). The evidence step
+costs about $0.3-1.5 and 5-10 minutes of Electron time per run.
+
+To measure: compare $/run and $/issue over a week at Economy with the baseline of 2026-10-01/02
+(~$11.7-11.9 per run, the test step about half of it), from the runs' `summary.json` or Usage.
+
+### Roadmap cost estimates and the spending budget
+
+**Estimates before running** (#206, `src/cost-estimate.js`). Each roadmap item shows "≈ $X" and each
+stage "≈ $Y" (the sum of its items). The tooltip says how it was computed and from how many runs.
+An item's estimate comes from the last 30 successful real runs of its workflow in the project. Each
+past run's cost is split by step (its sessions' `step_id`) and divided by its complexity (the
+`complexity:n` labels of its issues, 3 for an issue without one). The estimate is the median per
+step × the item's complexity. A step the item's inputs change is read from past runs with the same
+inputs when there are at least 3, else scaled:
+- the test step by `unit_tests` / `e2e_tests` (#203): run existing ×0.35, off ×0.25, E2E write and
+  run ×1.3;
+- the evidence step by `screenshots` (#205): changed ×0.75, off ×0.5. With screenshots off, the
+  `developer_screenshots` step costs nothing.
+
+So the Cost step shows up in the estimate through the inputs it sets and the size of its groups. An
+item without history says "no estimate yet". Once an item has a run, its real cost shows next to the
+estimate ("so far" while it runs). The Product Owner's plan answers show the plan's estimated total.
+Codex reports no cost, so its sessions are priced from tokens × the model prices of Usage, and the
+estimate is marked estimated.
+
+**A budget that pauses before overspending** (Settings › General › Budget: `budget.dailyUsd` per
+local day, `budget.nightlyUsd` per Night watch night, from its start; empty = no cap). Spending is
+what real runs recorded (their sessions' `cost_usd`, live runs included). The cap stops starts,
+never runs mid-way or gates. Before a roadmap starts a real item, if what is spent plus the item's
+estimate would pass a cap, the roadmap pauses before it. You get a notification: "Budget reached:
+$X of $Y today; next stage ≈ $Z". The roadmap bar then offers two buttons:
+- **Raise for today** (or tonight): the cap becomes what is spent plus the next stage, for that day
+  or that night only (`budget.raised`).
+- **Resume anyway**: this roadmap ignores the cap until the day or the night ends (the roadmap's
+  `budgetWaived`).
+
+A run already started finishes, and no human gate is answered. The live roadmap's refills (#164)
+and the Night watch's roadmaps respect the same cap. The top bar shows today's spending next to the
+month's usage, "$38 / $60 today", or tonight's while the Night watch is on.
+
+### Chaining workflows: When it finishes
+
+A run can hand its result to what comes next. The Start panel, the Backlog's Assign dialog and a
+roadmap item's Edit form have an optional **When it finishes** choice:
+
+- **Nothing** (the default).
+- **Start a workflow with it**: pick the workflow; each of its inputs can take one of this run's
+  declared outputs (e.g. `issues ← issues`, `task ← document`), proposed for the pair and editable,
+  and its own short inputs (`mode`…) are set there too. Its folder, branch and language come from
+  this run. The next run shows "← from <run>".
+- **Ask the Product Owner to place it in the roadmap**: the Product Owner gets the produced issues
+  and proposes where they go, as planned roadmap stages. Nothing starts until you press Start.
+- **Queue the issues (Backlog)**: what the issue tracker's **Create and queue** does (it is the same
+  chain, set by that gate choice).
+
+Under the choice, the workflows that will run and a rough cost from your past runs, marked as an
+estimate. The next step starts only when the run finished with **success** (a development workflow
+must also have merged). A run that failed, was cancelled or stopped at a gate **pauses** its chain
+with a notification: the Run screen's chain banner then offers **Resume chain**, **Edit** and **Drop
+chain**. While the run goes, the banner edits or cancels the chain. Chaining never answers a gate:
+each workflow's gates still wait for you. Simulated runs only chain simulated runs.
+
+Each workflow declares what it hands over (`outputs:`, recorded in `summary.json`): issue-tracker
+`issues`; writer-reviewer `document`, `issue`; ai-arena `document`; software-development and the
+local hero `branch`, `merged_commit`, `issues`, `pr_url`; run-retrospective `findings`. The run
+lists and the run chat show "→ then: <workflow>" on a chained run. Engine details:
+[docs/agents/engine.md](docs/agents/engine.md#chaining-declared-outputs-and-then-134).
+
+### A workflow as a step (child runs)
+
+A step can run another workflow, once or once per item of a list, and use its outputs:
+
+```yaml
+- id: develop
+  type: workflow
+  workflow: software-development.yaml
+  inputs: { task: "{{ item.title }}", repo_path: "{{ inputs.repo_path }}" }
+  foreach: "{{ steps.plan.output.issues }}"   # optional: one child run per item
+  max_parallel: 2                             # optional, with foreach (default 1)
+```
+
+Each child is a normal run (its own folder, worktree, sessions and gates), listed under its parent;
+the Run screen links both ways. Its gates wait for you, and so does the parent.
+
+- **Limits and cost**: a child takes a slot of Settings › Execution › Concurrent runs like any run;
+  its parent, which only waits, lends it its own slot. When no slot is free the child waits for one
+  instead of failing (with a limit of 1 the children run one at a time). Children count in the
+  monthly budgets. Each child has its own context limit (`max_total_context`); the parent's
+  `max_total_cost_usd` includes what its children cost. The run lists and the Run screen show the
+  children's total cost next to the parent's own.
+- **Stop and resume**: stopping the parent stops its running children, and the Stop button asks
+  first. Resuming the parent from that step reuses the children that succeeded and resumes the
+  others from where they stopped (gates still ask again), instead of starting them from scratch.
+
+Engine details: [docs/agents/engine.md](docs/agents/engine.md#a-workflow-as-a-step-type-workflow-174).
+
 ### Resuming a run from a step
 
 A finished, failed, cancelled or interrupted run (e.g. by an app restart) can go on from any step
@@ -453,9 +911,32 @@ the chosen step. It says what is kept (the previous steps' outputs, the agents' 
 notes, the worktree and branch, or a new worktree from the base when it was removed) and what runs
 again (the chosen step and the steps its transitions lead to). The resume is a new run.
 
-Human gates are never crossed: every gate reached again asks again, and a step after a gate the run
-already decided is refused (resume from the gate instead). In Developer mode the dialog has the
-Simulation toggle; a simulated run always resumes as one.
+Human gates are never crossed by automation: every gate reached again asks again, and a step after
+a gate the run already decided is refused (resume from the gate instead), unless you tick **Approve
+<gate> again** in the dialog. That box shows the commit approved at the gate and the branch's
+current commit, and is only offered while they are the same; your confirmation is recorded in the
+new run as your approval ("confirmed at resume"). The supervisor and the roadmap never confirm a
+gate. The dialog pre-selects the step where the run stopped (or the nearest allowed step before
+it). In Developer mode the dialog has the Simulation toggle; a simulated run always resumes as one.
+
+### Roadmap: kept work from an ended run
+
+A failed or cancelled run keeps its worktree. When a start would do the same issues again (roadmap
+**Retry**, Resume on a paused queue, Start/Assign on an issue, Write & Review from an issue), the
+app asks first, with the same question everywhere, e.g. **#113 + #142 already have work from a
+cancelled run**:
+
+- what the old work is: the commits the old run made **itself** (not the base's commits merged or
+  not pushed since), when it ran and how far its base is behind today's main, with a warning when
+  the files it touched changed on main since ("resuming will likely conflict");
+- when the item groups more issues than the old run had: "the old run only covers #113";
+- **Start from scratch**: a new run from today's main; the old commits stay in their worktree,
+  untouched;
+- **Resume the old run**: continues from those commits (opens Resume from step… for that run).
+
+The recommended button is the primary one: Start from scratch when the old work is stale (behind
+main and its files changed), Resume otherwise. Automation never answers: the roadmap and the queue
+pause with the same text until you choose.
 
 ### Parallel steps
 
@@ -556,6 +1037,28 @@ groups:                        # optional; the graph ignores it (transitions sti
   visits in order with their agents, status, duration and cost. Runs without it (in progress,
   interrupted, older) get it from `events.jsonl`.
 
+### Run titles and PRs
+
+- Every run has a **display title**: its issue ("#12 Notifications"), else the first line of its
+  task. Hover it and click the pencil to give it your own ("Notifications, 2nd try after
+  conflict"); an empty title goes back to the default. It is saved in `runs/<id>/meta.json`
+  (`events.jsonl` is never changed), a resumed run inherits it, and it is shown everywhere a run is
+  listed: Workflows › Runs, Projects › Project, the left sidebar's run list, the Run screen, the run
+  chat, Backlog cards, toasts and desktop notifications. The workflow name stays next to it.
+- A run that opened a pull/merge request (the latest step output with `pr_url` / `pr_number`, e.g.
+  the `ci` step; a resumed run shows the PR of the run it resumes) shows it in the same places: the
+  pull-request icon coloured by the PR state and its number, a link that opens the PR in the
+  browser. Blue: open, checks running; green: ready to merge; red: checks failing; orange with "!":
+  conflict; grey: draft (or state unknown); purple: merged; grey struck: closed without merge. The
+  tooltip says the state in words and when it was checked. The app reads it with
+  `gh pr view` / `glab mr view` (no model call): every minute and on run events for the runs in
+  progress, when a list shows them for finished runs (cached 5 minutes; merged and closed PRs are
+  final). Simulated runs' PRs are not real and are not read.
+- **View run** opens any run in the Run screen, also one this window never saw: a finished run is
+  rebuilt from its `events.jsonl`, read-only (no Stop, no gates). After a reload (Ctrl+R) or
+  reopening the app, the runs in progress are rebuilt the same way, so their steps, sessions,
+  orchestrator log and pending gates are all there.
+
 ### A git worktree per run
 
 A workflow whose agents change a repository can give every run its own checkout, so runs never
@@ -605,6 +1108,7 @@ defaults:
 
 Enabled in `software-development`. The other bundled workflows only read a folder
 (`multi-model-review` reviews whatever branch the given checkout has) and do not use it.
+<!-- /generated:engine -->
 
 ## CI/CD
 
@@ -612,7 +1116,8 @@ Enabled in `software-development`. The other bundled workflows only read a folde
   (checks `test (<os>)`), plus a production `npm audit`. macOS runs too when the PR touches a
   platform-sensitive path (worktrees, processes, terminals, packaging, dependencies, CI) or has the
   `ci:macos` label (from the next push), every Monday on `main`, and on manual runs. A docs-only PR
-  (`.md` files other than `CLAUDE.md`, `docs/agents/` and `skills/`, which the tests read) runs no
+  (`.md` files other than `CLAUDE.md`, `docs/agents/`, `skills/`, `docs/screens/` and `docs/features/`,
+  which the tests read) runs no
   tests. A new push to a PR cancels the previous run. The `test` check is green only when every
   planned OS is: use that name in branch protection. Each run records a `ci/tested` commit status
   on the PR head (a PR's checks belong to GitHub's merge commit, not the head): pending when it
@@ -789,10 +1294,51 @@ Grok Build: install it from x.ai (it lands in `%USERPROFILE%\.grok\bin`, which m
 Then log in once to each, interactively (`claude`, `codex login` and `grok login`).
 The app shows in Settings whether it found each command on the PATH.
 
+## Voice input
+
+- **OS dictation, no setup**: `Win+H` on Windows, Dictation on macOS. It types into any focused
+  field of the app.
+- **Mic button** on the long text fields (supervisor questions, gate feedback, the Start drawer's
+  task and issue intake, Write & Review and Arena prompts, the resume instruction): click to
+  record and click again to stop, or hold it and release to stop (push-to-talk). `Ctrl+Shift+M`
+  toggles it in the focused field and `Escape` discards a recording. It records up to 2 minutes.
+  While the recording is transcribed, the field shows "Transcribing..." and stays editable until
+  the text is inserted. The transcript is inserted at the cursor for you to review; it is never
+  sent by itself.
+- **Local and private**: the page records the audio, converts it to a 16 kHz mono WAV and sends it
+  to the engine (`audio:transcribe`), which runs [whisper.cpp](https://github.com/ggml-org/whisper.cpp)
+  (`whisper-cli`). The audio goes to a temp folder for the CLI and is deleted right after; nothing
+  leaves the machine and nothing is kept.
+- **Setup** (Settings › General › Voice input): install `whisper-cli` (see
+  [environment.md](docs/agents/environment.md)), pick a model (Tiny 75 MB to Medium 1.5 GB: bigger
+  is better and slower; Small is the default) and click **Download** (stored in the app's user data
+  folder, `speech-models/`, not the workspace), and choose the language (Portuguese by default, or
+  auto-detect). A missing CLI or model is reported with what to install.
+- The microphone is allowed only for the app's own page (audio only); every other web permission
+  is denied. In the browser UI (`npm run serve`) the browser asks, and only on `localhost` or HTTPS.
+
+### Paste images
+
+- **Ctrl+V with an image** (a `Win+Shift+S` screenshot, an image copied in a browser) in the same
+  fields as the mic button, above all the Start drawer's input, adds it under the field as a chip:
+  a thumbnail (click it to enlarge), `image-1.png · 240 KB` and × to remove it. A clipboard that
+  holds text pastes the text as before, even when it also holds an image (a copy from Office).
+- PNG, JPEG, GIF or WebP, at most 10 MB each and 10 per field; a refused image shows a red chip
+  with the reason and the field keeps its text.
+- Pasting sends nothing. The images go with the field when you send it: starting a workflow (the
+  steps whose prompt uses that input see them), answering a gate (the next agent step), asking the
+  Supervisor, resuming a run (the first resumed step). The run keeps a copy in
+  `runs/<id>/attachments/`, shown as thumbnails under the run's inputs.
+- Until then they wait in `<workspace>/attachments/pending/`; a removed chip deletes its file and
+  what was never sent is cleared at the next start. Nothing is uploaded except through the provider
+  CLI of the step (see `docs/agents/capabilities.md` for which CLIs open images). The browser UI
+  pastes the same way.
+
 ## Workspace
 
 Everything the app produces lives in a local workspace folder:
 
+<!-- generated:workspace-tree -->
 ```
 <workspace>/
   runs/      logs of each run (see Observability)
@@ -800,11 +1346,39 @@ Everything the app produces lives in a local workspace folder:
   worktrees/ one git worktree per run (<run_id>), see "A git worktree per run"
   projects/  projects (one .json per project)
   skills/    skills (one folder with SKILL.md per skill)
-  backlog/   last issue sync of each project (one .json per project)
-  agents/    user-defined agents (one .json per agent; supervisor.json = the supervisor's look)
+  backlog/   last issue sync of each project (one .json per project; <id>.po.jsonl = the Product Owner's conversation)
+  agents/    user-defined agents (one .json per agent; supervisor.json = the supervisor's look, product-owner.json = the Product Owner's look, model, effort, Speed ↔ Quality calibration and Economy ↔ Generous cost)
   workflows/ workflow definitions (one .yaml per workflow)
   settings.json  app preferences, budgets and prices
+  index.db   SQLite index next to the files: runs cache, Backlog queues, pending gates, notifications
+  attachments/pending/  images pasted into prompt fields, until sent (cleared at the next start)
+  .lock      the app that has the workspace open (pid, host, heartbeat)
 ```
+<!-- /generated:workspace-tree -->
+
+<!-- generated:workspace -->
+- **One app per workspace.** The app locks the workspace it opens. A second copy on the same
+  workspace (or on the same user data folder) says so and offers a **scratch copy** (your agents,
+  skills, workflows and settings copied to a new workspace, simulations only) or to quit; it never
+  opens your workspace read-write. A lock left by an app that died is taken over. Each run in
+  progress records its owner (`runs/<id>/owner.json`, refreshed every few seconds): another copy
+  shows it as **running (another window)**, never as interrupted, and its roadmap, Retry and Resume
+  leave it alone. A run is only interrupted once its owner is gone.
+- **Trying a run's worktree**: use **Run App** at the gate. Started by hand from
+  `<workspace>/worktrees/<id>` (`npm start`), the app uses a scratch workspace and user data folder
+  of its own (`<workspace>/local-previews/app-<id>/`), simulations only, as Run App does.
+- **Safe state files**: the roadmap and queue files are checked before each write (an invalid one
+  is refused and logged), written atomically, and the previous version is kept as `<file>.bak`.
+
+- **The files are the source of truth; `index.db` is an index next to them** (built into Node, no
+  extra dependency). It caches the run list (Workflows › Runs, Projects, Usage and Analytics read it
+  instead of every run folder), keeps the Backlog queues in transactions (two dispatchers never start
+  the same issue; `backlog/<id>.queue.json` stays as a readable snapshot), records the gates waiting
+  for you (after a restart, gates of runs that did not survive show as interrupted) and every
+  notification (the bell in the sidebar: history, unread count, mark as read; kept for
+  **Settings › Execution › Keep notifications** days). Deleting it loses no run and no queued issue (only the notification history): the app rebuilds it
+  at the next start, and **Settings › General › Index › Rebuild index** reads every run again.
+  Details: `docs/agents/storage.md`.
 
 - **Bundled defaults.** The app folder (read-only `app.asar` in the packaged app) only holds the
   default skills and workflows; the app and `scripts/run.js` copy them into `skills/` and
@@ -832,6 +1406,7 @@ Everything the app produces lives in a local workspace folder:
   `repos/<owner>-<repo>` (or runs `git fetch` if already cloned) and runs the workflow on that copy.
 - `MULTIAGENT_WORKSPACE=<folder>` overrides the workspace without writing to the registry (used by `npm test`).
 - `scripts/run.js` uses the same workspace; with nothing stored, it creates the default folder.
+<!-- /generated:workspace -->
 
 ## Structuring your repository's CLAUDE.md for unattended agents
 
@@ -871,16 +1446,18 @@ Notes:
 
 ## Structure
 
+<!-- generated:structure -->
 ```
 src/main.js              Electron main process + IPC
 src/preload.js           safe API exposed to the renderer
 src/workspace.js         workspace folder (Windows registry, runs/, repos/, workflows/, clone)
 src/projects.js          projects: CRUD and folder/repository setup
 src/backlog.js           backlog: project issues via gh/glab, sync cache, issue ↔ run links, workflow queue
+src/roadmap.js           backlog roadmap: ordered stages of runs, each after the previous one merged
 src/local-push.js        local merges not pushed: status (commits, issues they close), push, update and push
 src/seed.js              seeding of bundled defaults into the workspace (.seeded.json, origin status, restore)
 src/skills.js            skills: CRUD, lookup, seeding and prompt block
-src/agents.js            agents: CRUD, appearance validation, the built-in supervisor
+src/agents.js            agents: CRUD, appearance validation, the built-in supervisor, the workflows' agents (read-only)
 src/workflows.js         workflows: seeding, origin status, lookup (workspace, then bundled)
 src/workflow-builder.js  visual builder: spec <-> workflow YAML, what the builder can't draw
 src/usage.js             token/cost usage per provider and scope, budgets and the pre-run CLI check
@@ -899,3 +1476,4 @@ scripts/                 terminal runner, tests, build, UI smoke test and UI scr
 test/                    unit tests (node:test) and fixtures
 CLAUDE.md, docs/agents/  context for coding agents working on this repository (short index + topic docs)
 ```
+<!-- /generated:structure -->

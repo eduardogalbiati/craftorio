@@ -16,6 +16,100 @@ same features for users; this is the implementer's summary.
   - `set: { name: value }` (values rendered against the step's scope) → run variables `vars.<name>` (not restored on resume). software-development and local-hero use `vars.recheck == 'resolution'` to scope code_review/test/verify after a conflict.
   - Simulation: `mockSequences.action_errors: { step: n }` fails the first n actions/merges of that step; probe states per check with `mockSequences.probes: { '<step>:check': [...], '<step>:precheck': [...] }` (default `pr_mergeable: ['passed']`).
 - A **human gate** can take `check: { probe, target, on_fail?, recover? }` (`openGate`): the probe runs right before it opens (`check` in the message's template context: `{ state, detail, target, checked_at }`), and again on every `merged` notification of another run for the same key while it is open. Not `passed`/`error` with `on_fail` → the gate is not opened / is withdrawn (`approval.resolved` with `withdrawn: true, by: 'check', reason`) and the run takes `recoverFromActionError` with `{ on_error: on_fail, recover }`. Nothing ever approves a gate for the person.
+- A **screenshots step** (`type: screenshots`, no agent, #144; `runScreenshots` → `src/engine/screenshot-step.js`): `from: <step>` (whose output lists `screenshots: [{ name, caption, args }]`, `args` = the options of the project's screenshot command), `folder` (default the step id), `base` (template, the ref of the "original" side; default the worktree's base ref), `timeout` per shot (default 3m). It runs `npm run screenshot -- <args> --out <run_dir>/evidence/<folder>/round-<visit> --name <name> --side modified`, then the same with `--side original --ref <base>`, with the agents' environment (simulation only, scratch workspace); at most 8 entries, `--out/--name/--side/--ref/--caption` in `args` are refused. It never fails and never calls the supervisor: an empty list, a simulated run (`mock`: nothing is launched), no worktree, no `screenshot` script in the worktree's package.json, an invalid entry, a timeout or a crash end up in its output `{ kind: 'screenshots', folder, round, dir, taken, screens, screenshots: [{ path, caption, side }], errors: [{ name, side?, error }], reason, message }` (`message`: "N screenshots of M screens taken in round n" or "No screenshots: <reason>"). software-development and local-hero run `developer_screenshots` (from `develop`, folder `developer`) on every way into `developer_check`, whose message shows `message`; the gate's Artifacts panel shows that round only (`lastCapture` in gate-panel.js).
+  - **The screenshot slot (#199)**: at most one Electron screenshot process at a time on the machine, across all runs and apps. Each capture of the step takes the machine-wide slot (`src/engine/machine-slot.js`, `acquireSlot('screenshot')`: a file `<os tmp>/multiagent-orchestrator/locks/screenshot.slot` with pid, host and token, or under `MULTIAGENT_LOCKS_DIR`) and passes its token to `npm run screenshot` (`MULTIAGENT_SCREENSHOT_SLOT`), which then does not wait for it. While another run holds it the step emits `screenshots.waiting` (`holder_pid`) and a log line "waiting for the screenshot slot". `scripts/screenshot.js` takes the same slot itself (`acquireSlotSync`), so an agent's `npm run screenshot` (evidence, test writer, E2E runner) waits too and prints the same line. A slot whose process is gone, or held over 15 minutes, is freed; a wait over 20 minutes fails that capture.
+- A **suite step** (`type: suite`, no agent, #177; `runSuiteStep` → `src/engine/suite-step.js`): the
+  project's whole test suite, once per visit, run by the orchestrator instead of an agent (an agent
+  running it kept its turn and its 100k+ context open for minutes, several times per run).
+  `command` (template; empty → `detectTestCommand` from the worktree's files: package.json's test
+  script → `npm test`, go.mod, pom.xml/mvnw, build.gradle/gradlew, *.sln/*.csproj, pyproject.toml…),
+  `timeout` (default 30m). It runs in the worktree with the agents' environment, its whole output in
+  `<run_dir>/logs/suite-<visit>.log` (`file.saved`), and reads the failing tests from it
+  (`parseFailures`: node:test spec/TAP, Jest, pytest, go test, dotnet test, Maven). Output `{ kind:
+  'suite', status: pass | fail | blocked, round, command, log, exit_code, duration_ms, timed_out,
+  failures: [{ test, file, error }], preexisting, reason, message }`; the run's known pre-existing
+  failures (`notePreexistingFailures`) are moved to `preexisting` and never fail it; `blocked` = it
+  could not run (no worktree, no command). It never throws and never calls the supervisor: the
+  transitions route it. The other failures are checked on the base by the step itself (#211): their
+  test files run in the base checkout (`suiteBase`, prepared on demand, so `run_existing`/`off` runs
+  get it too), cached per base commit + file in `cache/base-tests/`; those failing there too become
+  `preexisting_failures` (the run's list, the summary, the workspace's `failing-on-main.json`). The
+  suite gets a shell-like env (`suiteEnv`: no Electron/npm/inspector variables, no scratch
+  workspace, its own `MULTIAGENT_LOCKS_DIR`, #210); without a step `timeout`, the timeout is 3× the
+  median of the project's recent durations (`cache/suite-durations.json`, min 10 min, 30 min with no
+  history), and a timeout names the test files still running. Filter `suite_failures`
+  (`{{ steps.suite.output | suite_failures }}`): the message plus one line per failing test, for a
+  prompt or a gate. Simulation: `mockSequences.suite: { <step>: ['fail', 'pass'] }` per visit
+  (default pass; `preexisting` = only the run's pre-existing failures fail, so it passes; `base` =
+  the failures fail on the simulated base too, a pass; `mixed` = 2 failures, one on the base, a
+  fail; `blocked`), a simulated log is written.
+  - **`scope: affected`** (#212, default `full`): each visit runs only the affected test files
+    (`affectedSelection` → `src/engine/affected-tests.js`, plus the files that failed in an earlier
+    round, `suiteFailedFiles`), the command filtered to them (`filteredCommand`); when they pass and
+    the whole suite has not passed yet in the run (`fullSuitePassed`), the whole suite runs right after
+    (log `suite-<visit>-full.log`, the affected run in `output.affected`). Output adds `scope` (full |
+    files), `selection` ({ mode, files, reasons, why }: "imports src/roadmap.js"), `passed`, `failed`;
+    `summary.suite_runs.affected` counts the affected runs. Simulation: two simulated files.
+  - **Test requests** (#212, `serveTestRequests`): an agent turn that ends with a ```` ```run-tests ````
+    block (`parseTestRequest`: test files, or `affected`) has them run by the engine in the agent's
+    working folder (log `logs/tests-<step>-<n>.log`), then the agent resumes in the same step with a
+    summary only (`testResultsPrompt`: counts, failures with their first 3 lines, the log's path), at
+    most 3 per turn; `summary.suite_runs.requests` counts them.
+  - **`full_suite: warn`** on an agent step: a tool call of its agent that starts the whole suite
+    (`isFullSuiteCommand`: `npm test`, `pytest`, `go test ./...`, `dotnet test`, `mvn test`, the
+    suite step's own command…) is noted, not refused: a `log` warn `kind: full_suite_by_agent`.
+  - `summary.suite_runs: { engine, agents }`: whole-suite runs by suite steps and by agents (the
+    measure of #177).
+  - **`files` / `expect: red`** on a suite step (#220): only the listed test files (a template such
+    as `"{{ steps.acceptance_tests.output.tests_added }}"`; missing files are left out, log
+    `logs/<step>-<visit>.log`), never the whole suite after them. `expect: red` makes it a red check
+    (`redCheckOutput`, `suiteStep.redCheck`): `red_check { red, green, partly_green, broken }`,
+    status `broken` when a file cannot run (else `pass`), no base check, `affected_tests` /
+    `affected_reasons` from `relatedTests` (the existing tests reaching the sources the new tests
+    import) and a `message` for the next prompt. Simulation: default red; `mockSequences.suite`
+    `pass` = all green, `broken` = all broken.
+  - **`protect_files`** on an agent or an agent step (#220, the step's wins): a file list template
+    rendered before each turn; `sendToAgent` snapshots exactly those files (`testPaths.snapshot`
+    with the paths as patterns) and refuses a turn that changes one, like `edits_tests: false`
+    (`protectedRefusedPrompt`, event `tests.refused` with `protected: true`, log `kind:
+    protected_refused`, the turn fails after 2 retries), whatever `edits_tests` says.
+  - **`test_map: true`** on an agent step (#219): `writeTestMap` writes the code → tests map of the
+    agent's checkout to `<run_dir>/test-map.md` before each turn and passes its path as
+    `{{ test_map }}`.
+  - Agent mode (#219): `suiteEnv` sets `MULTIAGENT_AGENT_MODE=1`, and each run gets
+    `MULTIAGENT_TEST_HUMAN_LOG=<log>.human.log`; a runner that knows them (this project's
+    `scripts/test.js`) prints one failures-only JSON line, read first by `parseFailures` /
+    `parseCounts` (output `human_log`, `file_counts`, failures with `line` and `kind`).
+  - software-development and local-hero: `test` (test writer, focused tests) → `suite` → build; a
+    failing suite goes back to the test writer (its prompt gets the failures and the log path when
+    `previous_step == 'suite'`), 2 rounds, then `test_failed`.
+  - **`commit_tests: true`** on a single-agent step (the test writer's `test` step in both
+    development workflows and test-batch, #209): after the turn (before the suite, the build and the
+    local merge) `commitLeftoverTests` lists the run worktree's local changes (`localChanges` in
+    test-paths.js; no worktree = nothing to do). `committed: false` in the answer → a `log` warn
+    `kind: tests_uncommitted`. All of them test files (`tests_paths`) → the engine stages and
+    commits them (`Tests for #<issues> (committed by the orchestrator)`), event
+    `tests.autocommitted { files, commit }`, a `log` warn `kind: tests_autocommitted`, the output
+    gets `committed: true, autocommitted`, `summary.tests_autocommitted`. Other files changed too →
+    never committed: the step goes back to its agent once with both lists (`retry`, no new note),
+    then, if non-test files are still changed, a gate (Continue / Stop the run); test files left
+    after it are committed as above.
+- **`tool_timeout` (#178)**: a tool result cut by the tool's own timeout (`isToolTimeout` in
+  providers.js: "Command timed out after …", Claude Code's Bash default is 120 s without a
+  `timeout`) is a `log` warn `kind: tool_timeout` with the command and `timeout_ms` (null = the
+  default), counted in `summary.tool_timeouts`. Simulation: `mockSequences.tool_timeouts: { <step>: n }`
+  (the first n answers of that step have one test command cut at the default).
+- **Test inputs (#203)**: the development workflows' `unit_tests` (write_and_run | run_existing |
+  off) and `e2e_tests` (off | write | write_and_run) route the transitions (code_review/human_review
+  → test, suite or build; test → suite or build; suite failures → test writer or developer) and
+  the test writer's skills and prompt. `testsPlan` (workflow.js) turns them into `ctx.tests_plan`
+  ("Unit tests: Off (workflow default). E2E tests: Write (chosen for this run).": a value differs
+  from the workflow's `default` = chosen for this run), and `tests_plan: [{ input, label, value,
+  value_label, source }]` in `workflow.started` and the summary (runs.js `testsPlan`, the Run
+  screen's badges). The gates and the verifier's prompt show it; nothing off is reported as tested.
+  `test-batch.yaml` writes the skipped tests later, for a range of local commits, in one session.
+- **`base_worktree: true`** on an agent step (#198; needs `orchestrator.worktree`): before each visit the engine prepares the run's checkout of the base (`<worktreesDir>/<run_id>-base`, detached at the current base, dependencies linked from the shared cache) and gives it as `base_worktree_dir` (empty without a worktree), for the test writer's pre-existing-failure check. See [worktrees.md](worktrees.md).
+- **`deps.ready`** (#198): the run's dependencies from the shared cache, after `worktree.ready`, for the base checkout and after an agent step that changed the lockfile (`{ for: worktree|base, after, status, hit, lockfile, manager, key, entry, seconds, waited, reason }`; nothing when the folder already links its key). Agents with commands get a line about it in their command guide (`depsGuide`). See [worktrees.md](worktrees.md).
 - `orchestrator.limits.max_total_context` (e.g. `20M`): the context the run's agents read (input + cache, summed over every turn). Past it, `contextGate` pauses the run before the next agent turn with a `<step>:context_limit` gate (choices `continue` = allow another block of the same size, `stop` = cancel; the worktree is kept). A turn is never cut; `limit.exceeded` is emitted with `paused: true`.
 - `groups: [{ name, steps }]` (optional, top level): progress views only, the graph ignores it;
   `validateGroups` in `loadWorkflow`. Recorded in `workflow.started` and `summary.groups`, with
@@ -23,6 +117,18 @@ same features for users; this is the implementer's summary.
 - Inputs with `type: run` take another run's id: empty/`latest` → the most recent run of another
   workflow; an id with no `runs/<id>/events.jsonl` is refused when the run is created (the UI shows
   it before anything starts). Used by `run-retrospective`.
+- Inputs with `type: boolean` take true/false; `resolveInputs` also accepts their text ("true",
+  "false", "yes", "no", "1", "0", "": saved inputs, the CLI's `--input`), so a condition reads
+  `inputs.x`, not `inputs.x == 'true'`. UI-only keys the engine ignores (#116, rendered by
+  `src/renderer/workflow-inputs.js`): `label` (else derived from the key), `options` (`{ value:
+  label }` for an enum), `show_if` (`"mode == 'validated'"`: hidden while false, value kept).
+- Images attached to inputs (#129): `attachments: { <input>: [path | { path, name }] }` on
+  `run:start` / `WorkflowRun` (`--attach task=<file>` in `scripts/run.js`). Checked in the
+  constructor (limits in capabilities.md, "Images"), copied into `<run_dir>/attachments/<input>/`
+  at start, recorded in `workflow.started.attachments` (a resume copies them again). Every turn of a
+  step whose prompt template uses `inputs.<input>` gets them (`stepAttachments`, delegations
+  included); `session.message_sent` lists them. Simulations: the mock provider lists them in a
+  thinking item and never opens them.
 - Agent `provider`/`model`/`effort` can be templates over the inputs (resolved once in the constructor);
   `cli_args` can be a map keyed by provider; providers' `effort_args` get `{{ effort }}`.
   `max_visits` / `loop.max_iterations` accept templates. `agents.<name>.enabled` (bool or template)
@@ -103,8 +209,75 @@ same features for users; this is the implementer's summary.
 
 - Human gates can ask for free text (`feedback: true | { label, placeholder }`): `output.feedback` and the
   run-wide `feedback` list in templates (`approval:resolve` takes `feedback`). `previous_step` = the step that
-  ran before. The Write & Review chat answers its run's gates inline (the approval dialog stays hidden there).
+  ran before. Gates are answered inside their run: the run chats inline, or the gate card on the Run screen (no dialog).
+  `approval:resolve` also takes `images` (#129): copied into `<run_dir>/attachments/<gate>-feedback/`,
+  recorded in `approval.resolved.attachments`, and given to the next agent step only (all agents of
+  a fan-out). They never decide anything: the answer stays the owner's choice.
+  `runs:resume` takes `images` too (#130, pasted into the instruction): `resume.images`, checked in
+  the constructor, copied into `<run_dir>/attachments/<step>-instruction/` at start and given to
+  the first agent step like gate feedback images.
+- A gate choice with `feedback_required: true` (needs the step's `feedback`) is refused without a
+  text: `resolveApproval` returns false and the gate stays open. `local_preview: true` on a gate
+  offers Run locally (see worktrees.md); `diff_base: <ref>` (a template) offers Show the diff
+  (`git diff <ref>...HEAD` in the worktree, read-only terminal). `approval.resolved` carries `wait_ms`; the summary's
+  `timing.gates` / `timing.gate_wait_ms` hold the owner's time at gates, apart from agent time.
+- Gate summaries (#213): every gate's card shows a short summary first, the message collapsed in
+  its Details. A workflow declares it per gate, all templates rendered with the run's context:
+  `summary:` (Markdown; its first line is "What happened", the next lines the status per issue,
+  at most 6), `recommend:` (`"<answer>: <reason>"`, answer `approve` / `reject` or a choice id; any
+  other text is a reason without an answer), `approve_label` / `reject_label` / `approve_help` /
+  `reject_help` (an Approve / Reject gate's buttons: what they say and what they do) and `help` on
+  each choice. Filters for summaries: `issue_lines` (one ✔ / ✖ line per issue of a developer's
+  `done` or a verifier's `verdict` output; `issue_lines('not_done')` keeps the failed ones),
+  `suite_lines` (a suite output's failing tests, its pre-existing failures as a count, #211) and
+  `one_line(n)`. The engine stores `brief: { headline, body, recommendation: { answer, label,
+  reason, source }, options, user_action? }` on the gate record and its `approval.requested` event,
+  plus `approve` / `reject: { label, help }` on an Approve / Reject gate and `help` on choices
+  (src/engine/gate-summary.js). Without `summary:` (and on engine-made gates) the headline is the
+  first two sentences of the message; a summary that fails to render is logged and left out. The
+  supervisor on call's `recommend` (one of the gate's answers), `recommendation` (one line) and
+  `options` (up to 3) win over the workflow's `recommend:`; its full note stays under the message.
+  In the UI, an answer opposite to the recommendation asks once to confirm. The notification, the
+  toast, the roadmap's waiting badge and the Oracle's wake line use the headline.
+- `save_to_issue: <choice id>` on a gate (#125, writer-reviewer's `decide` / `out_of_rounds`): when the
+  run has an issue, the gate's event carries `save_to_issue: { choice, issue }` and the UI adds
+  "Accept and save to issue #n". It answers that choice (transitions unchanged) with `intent:
+  'save_to_issue'` (`approval:resolve` takes `intent`; `approval.resolved` records it). When the run
+  ends with success the UI opens the Save to issue preview: nothing is written before it is confirmed.
+- Validated mode (`inputs.mode == 'validated'` in both software-development workflows):
+  `develop` → `developer_check` while `vars.owner_validated != 'yes'` (set by the gate's
+  approve/changes transitions) or `inputs.validate_every_round` (a boolean); the developer's
+  prompt shows the change request when `previous_step == 'developer_check'`. Template filter
+  `git_commits(base)` lists a folder's commits for a gate message (empty without a folder).
 - `orchestrator.supervisor: { enabled, max_interventions }` — per step 2, per run 6.
+- Supervisor on call (#41): `orchestrator.supervisor.on_call` (default true), `max_cost_usd`
+  (default 5, the supervisor sessions' cost per run), `effort`, `model` (default Opus 5.5 on
+  Claude), `stall: { same_output: 3, slow_factor: 3 }` (0 = off). A gate's `kind` is `decision`
+  (default: the person's choice, never answered by the supervisor) or `escalation` (failure gates,
+  `on_exhausted` targets; not with `check:`). Before an escalation gate opens, `superviseEscalation`
+  asks it (`onCallPrompt`, `onCallSchema`): `retry` the step before the gate / `resume` an agent
+  step already visited (instruction → `supervisorNote`), `route` one of the gate's answers
+  (output `by: 'supervisor'`), `user_action` / `escalate` → the gate opens with its diagnosis
+  under the message and in `approval.requested.supervisor`. Over its limits the gate opens with
+  its last diagnosis. Stalls (`checkStalls` after an agent step, `watchSlowStep` while it runs):
+  same `repeatKey` N visits in a row (not /loop iterations; #121: the decision fields plus the
+  findings and, for an author step, `commit_sha` (else the worktree head), `summary`, `notes`,
+  `files_changed`; a step's `stall: { same_output_fields: [...] }` replaces that list, as `develop`
+  does; the findings of the step it came from are part of the key, so a fix round answering new
+  review findings never repeats), 5+ refused calls in a row, a visit
+  `slow_factor`× the median of its earlier visits (min 10 min), a blocked /loop. Each is a `log`
+  warn `kind: stall` (blocked loops keep their `loop_blocked` warn); `superviseStall` decides
+  `continue` / `retry` / `resume` / `user_action` (a raw gate: retry, continue, stop), except when
+  the next step is `end`/`fail` or an escalation gate. A slow visit wakes it at the threshold
+  (`superviseSlow`, `SLOW_ACTIONS`): `wait` (checked again at twice the run time), `interrupt`
+  (stops the step's running turns via `liveTurns`, the step runs again with the instruction;
+  not on parallel steps) or `user_action` (a warn `kind: user_action`, the step keeps running).
+  Exhausted loops (`noteExhausted` in `applyCounters`/`loopWait`): before an `on_exhausted`
+  target that is a step, `end` or `fail`, `superviseExhausted` (stall signal `loop_exhausted`);
+  at any gate target, `superviseEscalation`, where a decision gate gets no `route` (only
+  retry/resume/user_action/escalate). Sending the run back grants one more round (`refund`).
+  Every intervention: `supervisor.decision` (`kind: escalation | stall`) and a `supervisor` row
+  in `decisions.tsv`.
 - Refused tool calls: `isPermissionDenial` (providers.js) spots allowlist refusals in the stream
   ("requires approval"); 5+ in a row in one turn → `log` warn with `kind: permission_denials`
   (supervisor timeline, run chat). A `/loop` stops after `loop.max_blocked` (default 3, 0 = off)
@@ -143,11 +316,30 @@ same features for users; this is the implementer's summary.
   like `projectId` and carried over on resume (`resumeSpec`). The old option `issue` is still accepted;
   runs recorded with `issue` load as `issues: [issue]` (`runs.readRun`, `resumeSpec`, the run chat).
   The Backlog fills the `issue` (first URL) and `issues` (every URL) inputs when a workflow declares them.
+- Backlog dispatch (service, not the engine): `dispatchQueue` starts the plain queue's items whenever a
+  slot is free; `dispatchRoadmaps` (src/roadmap.js `advance`) runs a started roadmap stage by stage,
+  first after every `workflow.finished` (before the queue) and when a workspace opens. An item is done when
+  its run succeeded and merged: `summary.local_merge`, an `action.executed` with `gh pr merge`/`glab mr merge`
+  and exit 0 (`mergedPullRequest`), or `mock`. A workflow that never merges declares `metadata.merges: false`
+  (backlog-refresh, #161): its item is done when its run succeeds (service `roadmapRun` reads the run's
+  workflow file). Any other end pauses the roadmap (`pausedBy`); a resumed run
+  (`resume.runId` = the item's run) takes the item's place (`adoptResumed`).
 - Inputs with `type: array` take a list; text from a form becomes one item per line or comma.
 - software-development (0.15.0) for several issues: the developer answers `issues: [{ issue, done, summary }]`;
   one with `done: false` goes to the `issue_not_done` gate (continue without it / stop), asked once per
   run; the review sets `issue` on its findings, the verifier answers a verdict per issue, and the CI
   Pusher's PR/MR body closes each issue that was done.
+- software-development (0.19.0) and local-hero (0.6.0), declared gaps (#98): `develop` answers
+  `left_out: [{ requirement, reason }]` (required, `[]` when nothing is missing; single issue or
+  group). Not empty → back to `develop` with the list, once (`set: { gaps_returned: yes }`), without
+  calling the reviewer; not empty on any later visit (also after the owner continued) → the
+  `requirements_left_out` gate (continue without them / stop as failed), so a gap never reaches the
+  review. Continue appends to `vars.accepted_gaps` (shown to the developer and the reviewer, not
+  blocking) and goes on as `issue_not_done` would. Mock: `mockSequences.left_out: [1, 0]` = gaps declared per develop visit
+  (default none). Only the developer's own gaps count (#173): the `developer_gaps` filter drops
+  entries led by "Tests" or "Measure" (the test writer's and the owner's tasks), so they trigger
+  neither the return nor the gate and stay in the develop output of `summary.json`. Mock:
+  `mockSequences.left_out_not_mine: true` adds one Tests and one Measure entry on every visit.
 - software-development (0.17.0), merge conflicts (#69): `approve_merge` has `check` (pr_mergeable,
   `on_fail: merge_failed`, `recover: [resolve_conflict]`) and its approved transition `precheck: true`
   with the same routes. `resolve_conflict` (developer, `edits_tests: true`, merges `origin/<base>`,
@@ -164,15 +356,129 @@ same features for users; this is the implementer's summary.
   files); `build` unchanged; `evidence` is skipped (its earlier evidence is kept); `verify_change`
   re-checks only the claims whose files were touched.
 
+## Chaining: declared outputs and `then` (#134)
+
+- `outputs:` (top level, `validateOutputs`): `{ <name>: { type, description, value } }`, type one of
+  string, number, integer, boolean, array, object. `value` is a template over the run's context plus
+  `run` (`run.issues`, `run.local_merge`); a type other than string is rendered as JSON (`| to_json`) and
+  parsed. `computeOutputs` fills them in `finish()`: `workflow.finished.outputs` and `summary.outputs`.
+  Empty or unparsable → `null` (a `log` warn, never a failed run). Filter `filed_issues(analysis)`: the
+  issue tracker's created issues with complexity and grouping advice (`grouping`, `group_with`).
+  The visual builder flags `outputs` (it would drop it on save): such a workflow is edited as YAML.
+- Bundled contracts: issue-tracker `issues`; writer-reviewer `document`, `issue`; ai-arena `document`;
+  software-development(-local-hero) `branch`, `merged_commit`, `issues`, `pr_url`; run-retrospective `findings`.
+- `WorkflowRun` options `then` (what follows, `src/renderer/chain-model.js normalizeThen`: `{ action:
+  'workflow', workflow, map: { <next input>: <output name> | '@run' }, inputs }`, `{ action:
+  'product_owner' }`, `{ action: 'queue', workflow, inputs }`) and `from: { run_id, workflow }`, both in
+  `workflow.started` and `summary.json`. A gate choice with `then:` (issue-tracker's `create_assign`:
+  `{ action: queue, workflow: "{{ inputs.assign_workflow }}" }`) sets it when picked (`thenFromChoice`);
+  the owner edits it with `setThen` (Run screen). Each change is a `run.then` event.
+- The service acts on it (`src/service/areas/chain.js`), never the engine: on `workflow.finished`
+  with `success` (and, when the workflow declares `merged_commit`, a non-empty one; simulated runs are
+  exempt) it starts the next run (`nextInputs`: the then's values, the mapped outputs, the previous
+  run's path/branch/language/platform inputs; the produced issues linked), queues the produced issues
+  (`queueBatches`, like the old "Create and queue"; a simulated run queues nothing), or asks the
+  Product Owner and adds its plan as planned roadmap stages (`roadmaps.propose`, never started by
+  itself). Anything else pauses the chain (`runs/<id>/chain.json`: `then`, `state` waiting | started |
+  paused | dropped | done, `reason`, `nextRunId`) with a notification; channels `chain:get`,
+  `chain:set`, `chain:resume`, `chain:drop`, `chain:estimate`. Chaining never answers a gate: the
+  next run's gates wait for the owner. A simulated run only chains simulated runs.
+
+## Saved pipelines (#135)
+
+- `src/pipelines.js`: `<workspace>/pipelines/*.yaml` (bundled `pipelines/`, seeded and restorable like
+  the workflows). `parsePipeline` checks the shape (≥ 2 stages, the first a workflow, a `product_owner` /
+  `queue` target only last, `on: success` only); `validatePipeline` checks each stage against its
+  workflows: fixed `inputs` and `map` keys are inputs of the stage's workflow, `map` values are outputs
+  the previous workflow declares (or `'@run'`), a target follows a workflow with an `issues`/`issue`
+  output. No `map` → chain-model `defaultMap`. The error names the pipeline, the stage, the workflow and
+  the missing name; `listPipelines` returns it per file.
+- It runs as a phase-1 chain (no engine change but `from.pipeline`): `pipelineThen(p)` is the first run's
+  `then`, stage 2 with the rest nested in `then.then`, each with `pipeline: { id, file, name, stage,
+  stages }`. `startNext` (areas/chain.js) hands the nested `then` to the run it starts and records
+  `from.pipeline` there, stamping the pipeline run's id (the first run's id) on the rest
+  (`withPipelineId`). `chain-model pipelineOf(chain, runId)` says which pipeline and stage a run is.
+  Pauses, Resume / Edit / Drop are the chain's; an Edit that keeps the next workflow keeps the stages
+  after it.
+- Service `src/service/areas/pipelines.js`, channels `workflows:pipelines` (list), `pipelines:run`,
+  `pipelines:estimate`, `pipelines:get-run` (a pipeline run's stages and runs), `pipelines:save` (a run's
+  chain → `fromChain` → a new file, never over an existing one), `pipelines:restore`; `backlog:assign`
+  takes `pipeline` (its first workflow, fixed inputs and chain for each queued issue).
+
+## A workflow as a step: `type: workflow` (#174)
+
+- `{ type: workflow, workflow: <file>, inputs: {...}, foreach?, max_parallel?, on_error?, transitions? }`
+  (src/engine/workflow-step.js, `runChildWorkflows` in workflow.js). `inputs` are templates over the
+  run, plus `item` / `index` with `foreach`; a whole `{{ expr }}` keeps its type (a list stays a list).
+  `foreach` (a list or a template giving one) starts one child per item, at most `max_parallel`
+  (default 1) at a time, and never two items whose `files` overlap.
+- Output: once `{ kind: 'workflow', workflow, status, run_id, outputs, error }`; foreach `{ ..., status,
+  runs: [{ index, item, run_id, status, error, outputs }], outputs: [per item], succeeded, failed }`.
+  `status` is success when every child succeeded. Not a success: `on_error` (a route or a gate) when
+  set, else the transitions (they see `output.status`), else the run fails. Children run to the end
+  even when one fails.
+- Children are normal runs, started through the `startChild` option: the service starts them with
+  `startWorkflowRun({ parent, onFinished, signal })`; without it (CLI, engine tests) `startChildRun`
+  builds a `WorkflowRun` and emits it as `'child'` (record its events, answer its gates). Their gates
+  wait for the owner, the parent waits too (orchestrator session `waiting`) and never answers them.
+- Limits (#175): a child takes a Settings › Execution slot like any run (`slotProblem`), and its
+  parent lends it its own: a waiting parent counts neither for its descendants nor, while one of its
+  children holds the slot, for anyone. With no slot free a child waits (`waitForSlot`, a log line on
+  the parent) instead of failing; a limit of 1 runs the children one at a time. Children count in the
+  monthly budgets like any run (peers, then their summary). Each child has its own
+  `max_total_context` (the parent's counts only its own sessions); the parent's `max_total_cost_usd`
+  includes its children's cost (checked between steps). `workflow.child_finished` carries the child's
+  `cost_usd` (its own children included, `childRunCost`); the parent records it in `child_runs` and
+  `summary.children_cost_usd` (readRun `childrenCostUsd`, not in `costUsd`), shown in the run lists
+  and the Run screen.
+- Stop and resume (#175): stopping the parent stops its children (the Run screen's Stop asks first
+  when children are running); a child still waiting for a slot ends `cancelled`. Resuming the parent
+  from the `type: workflow` step (`resume.childRuns`, from `supervisor.resumeSpec`) hands each item
+  its previous child (`previous`, matched by index and label, first visit only): the service reuses
+  one that succeeded (its outputs, event `reused: true`) and resumes any other one from the step
+  Resume from step… suggests (its gate instead when that step lies past a decided gate: the gate asks
+  again), event `resumed_from`; a child that cannot be resumed starts afresh. The default
+  `startChildRun` only reuses successes.
+- Links: `parent_run: { run_id, workflow, step_id, index?, depth }` in the child's workflow.started and
+  summary; the parent's `workflow.child_started` / `workflow.child_finished` events and
+  `summary.child_runs: [{ run_id, step_id, visit, index?, label?, workflow, status, cost_usd,
+  resumed_from?, reused? }]` (readRun `parentRun` / `childRuns`). Run lists nest children under their
+  parent; the Run screen's chain banner links both ways. Children nest at most 3 deep; a workflow
+  cannot name itself.
+
 ## Worktrees and template context
 
 - `orchestrator.worktree: { repo, base }` + `defaults.working_dir: "{{ worktree_dir }}"`: see [worktrees.md](worktrees.md).
 - Template context: `inputs`, `steps.<id>.output/visits`, `run_id`, `run_dir`, `runs_dir`,
   `workflows_dir`, `worktree_dir`, `agents.<name>.model`, `agent` (in fan-out), `delegate_result`,
-  `skill_dir('<name>')` (a skill's folder, to run its script in an action).
+  `skill_dir('<name>')` (a skill's folder, to run its script in an action), and in an agent step's
+  prompt `evidence_dir` (`<run_dir>/evidence/<step>/round-<visit>`, where its screenshots go).
 - Transition `action:` is a shell command run in the worktree (skipped in simulation); one that
   renders empty runs nothing. Agent output reaching it goes through a validating filter
   (`github_repo`, `pr_url`). The PR screenshots cleanup on merge/close uses this.
+
+## Evidence: screenshots per step and round (#146)
+
+- Every screenshot of a run goes to `<run_dir>/evidence/<step>/round-<n>/` (the step that captured
+  it, its visit: one folder per "Ask for changes" round, per UI fix round), never flat in the run
+  folder. Names: `<issue>-<screen>-<state>.original.png` (the app on the base branch) and
+  `.modified.png` (the app with the run's change); a new screen has only `modified`, a removed one
+  only `original`. The engine gives the folder as `evidence_dir` and in the command guide, and
+  `evidence` is one of the `RUN_DIRS` (`--add-dir`).
+- `src/evidence.js` keeps one index, `<run_dir>/evidence/manifest.json`: every image with `step`,
+  `round`, `commit` (captured), `issue`, `screen`, `state`, `side`, `caption` and `pair` (the other
+  side, the same round first, else the newest earlier one), the run's `base` and `branch`, and the
+  **final set** (`final`, images marked `final: true`): the round that captured last, i.e. the last
+  round of the last step that captured. The folders are the source of truth: the engine rebuilds
+  the manifest after every step (`recordEvidence`: commits from the worktree, captions from a
+  step output's `screenshots: [{ path, caption }]`), and `scripts/screenshot.js --caption` records a
+  shot as it saves it. `orphanImages` lists images the manifest misses.
+- Readers use the final set: the Artifacts panel (gate and Run tab) and screen through
+  `artifacts:evidence`, the verifier's prompt, `pr-screenshots`'s `publish.js --dir <run_dir>/evidence`.
+  Exception: the gate right after a screenshots step (developer_check) shows that step's round
+  (`evidence/developer/round-<n>`, #144) and puts every other round in History.
+- Runs recorded before: a flat `screenshots/` with `screenshots.json` (`{ path, caption, before }`)
+  reads as one legacy set (`legacyManifest`); old folders are not migrated.
 
 ## Providers
 

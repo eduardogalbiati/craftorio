@@ -1,0 +1,86 @@
+/* The Oracle (views/oracle/oracle.js): its dock on the Dashboard, its drawer on the other screens and
+   the sidebar button. Messages reuse .sup-wmsg, .sup-loading (style.css) and the .svc-* layout
+   (views/supervisor/supervisor.css); card states use the shared .pill status styles. */
+#view-dashboard.oracle-docked { display: grid; grid-template-columns: minmax(0, 1fr) 400px; grid-template-rows: minmax(0, 1fr); gap: 20px; overflow: hidden; }
+#view-dashboard.oracle-docked > .dash { overflow: auto; min-height: 0; width: 100%; padding-top: 4vh; }
+@media (max-width: 1150px) { #view-dashboard.oracle-docked { grid-template-columns: minmax(0, 1fr) 340px; } }
+.oracle-dock { padding: 0; display: flex; flex-direction: column; min-height: 0; min-width: 0; overflow: hidden; }
+.oracle-dock .drawer-body { min-height: 0; }
+.oracle-drawer .drawer-head .row, .oracle-dock .drawer-head .row { gap: 6px; flex: none; }
+.oracle-head { gap: 10px; }
+.oracle-who { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.oracle-who .sup-head { min-width: 0; }
+
+/* the avatar: a robot drawing, not a line icon (.nav-item svg strokes its icons) */
+.oracle-avatar { display: inline-grid; place-items: center; width: 36px; height: 36px; flex: none; }
+.oracle-avatar svg { width: 100%; height: 100%; }
+.oracle-avatar.xs { width: 16px; height: 16px; vertical-align: -3px; }
+.nav-item .oracle-avatar.nav { width: 20px; height: 20px; margin: -2px 0; }
+.nav-item .oracle-avatar svg { width: 100%; height: 100%; fill: initial; stroke: none; }
+.nav-oracle { margin-top: 6px; border-top: 1px solid var(--border); border-radius: 0 0 6px 6px; }
+.nav-badge.oracle-unread { text-transform: none; letter-spacing: 0; font-size: 10px; min-width: 16px; text-align: center; background: var(--accent); color: #0b1020; font-weight: 700; }
+
+/* long values: one line, the full text on hover */
+.oracle-cut { display: block; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.oracle-meta { display: flex; align-items: center; gap: 4px; min-width: 0; white-space: nowrap; overflow: hidden; }
+.oracle-meta .oracle-cut { display: inline-block; min-width: 0; flex: 0 1 auto; }
+.oracle-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.oracle-msg { min-width: 0; }
+/* wide tables and code scroll inside the message: the drawer never widens */
+.oracle-md { min-width: 0; overflow-wrap: anywhere; }
+.oracle-md table { display: block; max-width: 100%; overflow-x: auto; }
+.oracle-md th, .oracle-md td { white-space: nowrap; overflow-wrap: normal; }
+.oracle-md pre { max-width: 100%; overflow-x: auto; }
+.oracle-md h1, .oracle-md h2, .oracle-md h3 { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.oracle-link { cursor: pointer; color: var(--accent); text-decoration: underline dotted; }
+.oracle-path { cursor: copy; }
+
+/* pasted images: a removable thumbnail before sending, small ones in the log */
+.oracle-thumbs { display: flex; flex-wrap: wrap; gap: 6px; }
+.oracle-thumbs:empty { display: none; }
+.oracle-thumb { position: relative; display: inline-grid; place-items: center; width: 72px; height: 52px; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; background: var(--panel-2); }
+.sup-wmsg .oracle-thumbs { margin-top: 6px; }
+.oracle-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.oracle-thumb .icon-btn { position: absolute; top: 2px; right: 2px; padding: 1px; background: var(--panel); }
+.oracle-thumb .icon-btn svg { width: 12px; height: 12px; }
+.oracle-paste-error { margin: -4px 0 0; }
+
+/* the paused and unavailable notices; the memory panel */
+.oracle-notice:empty { display: none; }
+.oracle-notice-box { display: flex; align-items: baseline; gap: 8px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel-2); font-size: 13px; }
+.oracle-notice-box .badge { flex: none; }
+.oracle-notice-box a { color: var(--accent); }
+.oracle-memory { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; background: var(--panel-2); flex: none; }
+.oracle-memory .field { margin-bottom: 8px; }
+.oracle-memory textarea { width: 100%; resize: vertical; }
+.oracle-memory .row { gap: 6px; align-items: center; }
+.oracle-memory-head .spacer { flex: 1; }
+.oracle-memory-text { white-space: pre-wrap; max-height: 180px; overflow: auto; margin-top: 6px; }
+.oracle-mem-error { margin: 4px 0 0; }
+
+/* #123: action cards (the title leads, then what changes, where, the backup, why), wake-ups and
+   delegations folded, the Night watch form and strip, the runs watched or muted */
+.oracle-card { border: 1px solid var(--border); border-left: 3px solid var(--accent); }
+.oracle-card.from-content { border-left-color: var(--yellow); }
+.oracle-card-head { display: flex; align-items: center; gap: 8px; margin: 4px 0; min-width: 0; }
+.oracle-card-head .pill { flex: none; }
+.oracle-card-title { flex: 1 1 auto; min-width: 0; font-weight: 600; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.oracle-card-fields { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 2px 10px; margin: 4px 0; }
+.oracle-card-fields dt { color: var(--muted); }
+.oracle-card-fields dd { margin: 0; overflow-wrap: anywhere; }
+.oracle-card-from.warn { color: var(--yellow); }
+.oracle-card-result { margin-top: 6px; padding: 6px 8px; border-radius: 6px; background: var(--panel-2); overflow-wrap: anywhere; }
+.oracle-card-result.error { color: var(--red); }
+.oracle-card-actions { gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.oracle-fold summary { cursor: pointer; }
+.oracle-fold[open] summary { margin-bottom: 4px; }
+.oracle-events { margin: 4px 0 0; padding-left: 18px; overflow-wrap: anywhere; }
+.oracle-ops { display: flex; flex-direction: column; gap: 4px; border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; background: var(--panel-2); flex: none; }
+.oracle-ops-row { gap: 4px; align-items: center; flex-wrap: wrap; }
+.oracle-ops-row .spacer { flex: 1; }
+.oracle-ops-row .btn.sm { padding: 1px 7px; font-size: 11px; }
+.oracle-ops-row .btn.oracle-cut { display: inline-block; max-width: 150px; }
+.oracle-card-from .badge { margin-right: 4px; }
+.oracle-night-form .field { margin-bottom: 8px; }
+.oracle-night-form input[type="datetime-local"] { width: 220px; }
+.oracle-night-form .row { gap: 6px; }

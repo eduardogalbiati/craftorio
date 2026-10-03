@@ -9,12 +9,17 @@
 // - seeded, user deleted it           -> leave it deleted (defaults do not come back)
 // - seeded, untouched, app has update -> replace it with the new version
 // - seeded, edited by the user        -> keep the user's version ("a newer default exists" in status)
+// - seeded, edited only where the kind allows (a workflow's input defaults, #203: `kind.baseHash`
+//   ignores them, `kind.carryOver` writes the new version with the user's values) -> updated, the
+//   user's values kept. The base hash of each seeded version is kept under DEFAULTS_KEY.
 // Entries the user created are never touched.
 
 const fs = require('fs');
 const path = require('path');
 
 const MANIFEST = '.seeded.json';
+// manifest key of { id: base hash of the seeded version } (kinds with baseHash); never an entry id
+const DEFAULTS_KEY = '#base';
 const isDir = (p) => { try { return fs.statSync(p).isDirectory(); } catch { return false; } };
 
 function readManifest(destDir) {
@@ -49,14 +54,24 @@ function seedBundle(srcDir, destDir, kind) {
   if (!isDir(srcDir)) return [];
   fs.mkdirSync(destDir, { recursive: true });
   const seeded = readManifest(destDir);
+  const bases = kind.baseHash ? { ...(seeded[DEFAULTS_KEY] || {}) } : null;
   const changed = [];
+  const current = (id) => { if (bases) bases[id] = kind.baseHash(srcDir, id); };
   for (const id of kind.list(srcDir)) {
     const srcHash = kind.hash(srcDir, id);
     const exists = kind.exists(destDir, id);
     const destHash = exists ? kind.hash(destDir, id) : null;
-    if (destHash === srcHash) { seeded[id] = srcHash; continue; } // already the current default
+    if (destHash === srcHash) { seeded[id] = srcHash; current(id); continue; } // already the current default
     if (!(id in seeded)) {
       if (exists) continue; // the user already has one with this name
+    } else if (exists && seeded[id] !== null && seeded[id] !== srcHash && destHash !== seeded[id]
+      && bases?.[id] && kind.baseHash(destDir, id) === bases[id] && kind.carryOver) {
+      // edited only where the kind allows (a workflow's input defaults): the new version with the user's values
+      if (!kind.carryOver(srcDir, destDir, id)) continue;
+      seeded[id] = srcHash;
+      current(id);
+      changed.push(id);
+      continue;
     } else if (!exists || seeded[id] === null || seeded[id] === srcHash || destHash !== seeded[id]) {
       continue; // deleted, legacy, already current, or edited by the user
     } else {
@@ -64,8 +79,10 @@ function seedBundle(srcDir, destDir, kind) {
     }
     kind.copy(srcDir, destDir, id);
     seeded[id] = srcHash;
+    current(id);
     changed.push(id);
   }
+  if (bases) seeded[DEFAULTS_KEY] = bases;
   writeManifest(destDir, seeded);
   return changed;
 }
@@ -82,7 +99,7 @@ function bundleStatus(srcDir, destDir, kind) {
   const bundled = new Set(isDir(srcDir) ? kind.list(srcDir) : []);
   const out = {};
   for (const id of isDir(destDir) ? kind.list(destDir) : []) {
-    if (!(id in seeded)) { out[id] = { origin: 'custom', updateAvailable: false, restorable: false }; continue; }
+    if (!(id in seeded) || id === DEFAULTS_KEY) { out[id] = { origin: 'custom', updateAvailable: false, restorable: false }; continue; }
     const hash = kind.hash(destDir, id);
     const srcHash = bundled.has(id) ? kind.hash(srcDir, id) : null;
     const untouched = seeded[id] === null ? hash === srcHash : hash === seeded[id];
@@ -103,12 +120,14 @@ function restoreBundled(srcDir, destDir, kind, id) {
   kind.copy(srcDir, destDir, id);
   const seeded = readManifest(destDir);
   seeded[id] = kind.hash(srcDir, id);
+  if (kind.baseHash) seeded[DEFAULTS_KEY] = { ...(seeded[DEFAULTS_KEY] || {}), [id]: kind.baseHash(srcDir, id) };
   writeManifest(destDir, seeded);
 }
 
 module.exports = {
   bundleStatus,
   copyDir,
+  DEFAULTS_KEY,
   MANIFEST,
   readManifest,
   restoreBundled,

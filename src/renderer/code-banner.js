@@ -1,0 +1,97 @@
+/* global api */
+// The code banner (#83): the code on disk changed while the app runs, with a safe restart (it
+// lists the runs in progress first); after a restart, the runs it interrupted, each with Resume.
+// initCodeBanner() runs from app.js's init(), once the runs in progress are known.
+
+// The code changed on disk while the app runs (#83): a pull or a merge updated src/ and a reload
+// (Ctrl+R) runs the new UI against the old main process (or server), where new channels are
+// missing. Checked when the window loads and gets the focus; a banner offers a safe restart.
+const RESTART_KEY = 'multiagent.restartInterrupted';
+const codeState = { running: null, changed: false, reload: false };
+
+async function checkCodeVersion() {
+  let v = null;
+  try {
+    // a main process older than this check has no such channel: it is older than the page
+    v = typeof api.codeVersion === 'function' ? await api.codeVersion() : { changed: true };
+  } catch (e) {
+    v = missingChannel(String(e?.message || e)) ? { changed: true } : null;
+  }
+  if (!v) return;
+  // the browser UI: the server restarted with other code than the page loaded
+  if (codeState.running && v.running && v.running !== codeState.running) codeState.reload = true;
+  codeState.running = codeState.running || v.running || null;
+  if (v.changed || codeState.reload) showCodeBanner();
+}
+
+const runningStepsOf = (runId) => [...(state.runs.get(runId)?.steps.values() || [])].filter((s) => s.status === 'running').map((s) => s.id).join(', ');
+
+async function showCodeBanner() {
+  codeState.changed = true;
+  let runs = [];
+  try { runs = await api.listActiveRuns(); } catch { /* the count is left out */ }
+  const n = runs.length;
+  const inProgress = n ? ` (${n} run${n > 1 ? 's' : ''} in progress will be interrupted and can be resumed)` : '';
+  const desktop = api.platform !== 'browser' && typeof api.relaunchApp === 'function';
+  const text = codeState.reload ? 'The server restarted with other code. Reload the page to use it.'
+    : desktop ? `The app's code changed on disk. Restart to use it${inProgress}.`
+      : api.platform === 'browser' ? `The app's code changed on disk. Restart the server (npm run serve) and reload the page to use it${inProgress}.`
+        : `The app's code changed on disk. Close and open the app to use it${inProgress}.`;
+  const el = $('#code-banner');
+  el.innerHTML = `<span>${esc(text)}</span>
+    ${codeState.reload ? '<button class="btn sm primary" type="button" data-code="reload">Reload</button>' : desktop ? '<button class="btn sm primary" type="button" data-code="restart">Restart</button>' : ''}
+    <button class="btn sm ghost" type="button" data-code="dismiss" title="Hide until the next check">Later</button>`;
+  el.classList.remove('hidden');
+}
+window.showCodeBanner = showCodeBanner;
+
+// Warns with the runs in progress (and the step each is on), then restarts: main refuses again if
+// a run started meanwhile and the user did not confirm it.
+async function restartApp() {
+  let runs = [];
+  try { runs = await api.listActiveRuns(); } catch { /* main still refuses with runs in progress */ }
+  if (runs.length) {
+    const lines = runs.map((r) => `• ${r.workflow} (${r.runId}): ${r.waiting ? 'waiting for approval' : runningStepsOf(r.runId) || 'in progress'}`);
+    const ok = await confirmDialog('Restart and interrupt runs?',
+      `${runs.length} run${runs.length > 1 ? 's' : ''} in progress will be interrupted:\n${lines.join('\n')}\n\nThe Backlog queues are paused. After the restart the interrupted runs are listed with Resume.`, 'Restart');
+    if (!ok) return;
+  }
+  try { localStorage.setItem(RESTART_KEY, JSON.stringify(runs.map((r) => ({ runId: r.runId, workflow: r.workflow })))); } catch { /* storage unavailable */ }
+  try {
+    await api.relaunchApp(runs.length > 0);
+  } catch (e) {
+    try { localStorage.removeItem(RESTART_KEY); } catch { /* storage unavailable */ }
+    showToast('Restart refused', errMsg(e));
+  }
+}
+
+// After a restart: the runs it interrupted, each with Resume (a new run from a step, #74-#76).
+function showRestartInterrupted() {
+  let list = [];
+  try {
+    list = JSON.parse(localStorage.getItem(RESTART_KEY) || '[]');
+    localStorage.removeItem(RESTART_KEY);
+  } catch { return; }
+  if (!Array.isArray(list) || !list.length) return;
+  const el = $('#code-banner');
+  el.innerHTML = `<span>The restart interrupted ${list.length} run${list.length > 1 ? 's' : ''}:</span>
+    ${list.map((r) => `<span class="code-banner-run"><span class="mono small">${esc(r.workflow || 'workflow')} ${esc(r.runId)}</span>
+      <button class="btn sm primary" type="button" data-code="resume" data-run="${esc(r.runId)}">Resume…</button></span>`).join('')}
+    <button class="btn sm ghost" type="button" data-code="dismiss">Dismiss</button>`;
+  el.classList.remove('hidden');
+}
+
+function initCodeBanner() {
+  $('#code-banner').onclick = (e) => {
+    const b = e.target.closest('[data-code]');
+    if (!b) return;
+    if (b.dataset.code === 'restart') restartApp();
+    if (b.dataset.code === 'reload') location.reload();
+    if (b.dataset.code === 'resume') openResumeDialog(b.dataset.run);
+    if (b.dataset.code === 'dismiss') $('#code-banner').classList.add('hidden');
+  };
+  showRestartInterrupted();
+  checkCodeVersion();
+  window.addEventListener('focus', checkCodeVersion);
+  api.onReconnect?.(checkCodeVersion);
+}

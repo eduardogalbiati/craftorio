@@ -15,7 +15,7 @@ kind: Workflow
 
 metadata:
   name: run-retrospective
-  version: 0.3.0
+  version: 0.4.0
   description: Analyzes a finished run's logs and proposes evidence-backed improvements to skills and workflows.
   tags: [retro, observability, skills]
   category: monitor
@@ -96,6 +96,14 @@ steps:
       <path>" messages; the workflow file name is in the workflow.started event, and the
       workflow files live in {{ workflows_dir }}.
       Follow the run-retrospective skill and answer only with its Markdown report.
+
+# -----------------------------------------------------------------------------
+# What the run hands to the next one when it finishes (#134): `then` at start, or a gate choice's.
+outputs:
+  findings:
+    type: string
+    description: The retrospective report (also retrospective.md in the run folder).
+    value: "{{ steps.analyze.output.text }}"
 
 # -----------------------------------------------------------------------------
 observability:
