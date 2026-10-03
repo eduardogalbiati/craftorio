@@ -5,7 +5,7 @@
       "status": "published",
       "date": "2026-10-03",
       "pt": { "slug": "escala-24x7", "title": "Escala 6x1? Aqui é 24x7", "teaser": "A história completa: do sábado à noite em que a ideia surgiu até as primeiras noites em que a fábrica trabalhou sozinha." },
-      "en": { "slug": "forget-9-to-5", "title": "Forget 9 to 5. This one runs 24/7", "teaser": "The whole story: from the Saturday night the idea came up to the first nights the factory worked on its own." }
+      "en": { "slug": "here-its-24-7", "title": "6x1? Here it's 24/7", "teaser": "The whole story: from the Saturday night the idea came up to the first nights the factory worked on its own." }
     },
     {
       "n": 2,
@@ -17,7 +17,7 @@
       "n": 3,
       "status": "soon",
       "pt": { "slug": "dormi-e-acordei-com-o-trabalho-pronto", "title": "Dormi e acordei com o trabalho pronto", "teaser": "A primeira noite inteira: um roadmap em etapas, nenhum prompt meu e 10 tarefas entregues, testadas e integradas de manhã." },
-      "en": { "slug": "woke-up-to-finished-work", "title": "I went to sleep and woke up to finished work", "teaser": "The first full night: a roadmap in stages, not a single prompt from me, and 10 tasks delivered, tested and merged by morning." }
+      "en": { "slug": "woke-up-to-finished-work", "title": "I went to sleep and woke up to the work done", "teaser": "The first full night: a roadmap in stages, not a single prompt from me, and 10 tasks delivered, tested and merged by morning." }
     },
     {
       "n": 4,
@@ -29,7 +29,7 @@
       "n": 5,
       "status": "soon",
       "pt": { "slug": "o-token-mais-caro", "title": "O token mais caro é o de uma IA esperando", "teaser": "A execução mais cara não entregou nada: uma IA consultando um status que não mudava. Esperar é trabalho de código." },
-      "en": { "slug": "the-most-expensive-token", "title": "The most expensive token is an AI waiting", "teaser": "The most expensive run delivered nothing: an AI polling a status that never changed. Waiting is a job for code." }
+      "en": { "slug": "the-most-expensive-token", "title": "The most expensive token is the one of an AI waiting", "teaser": "The most expensive run delivered nothing: an AI polling a status that never changed. Waiting is a job for code." }
     },
     {
       "n": 6,
@@ -45,6 +45,12 @@
     },
     {
       "n": 8,
+      "status": "soon",
+      "pt": { "slug": "um-sistema-que-a-ia-le", "title": "Um sistema que a IA lê, a IA conserta", "teaser": "Todo o estado em arquivos legíveis: quando duas cópias do app bagunçaram o roteiro, a IA leu, entendeu e consertou em dois minutos." },
+      "en": { "slug": "a-system-ai-can-read", "title": "A system AI can read is a system AI can fix", "teaser": "All the state in readable files: when two copies of the app scrambled the plan, the AI read it, understood it and fixed it in two minutes." }
+    },
+    {
+      "n": 9,
       "status": "soon",
       "pt": { "slug": "o-barco-de-teseu", "title": "O barco de Teseu: quando o software reescreve a si mesmo", "teaser": "Peça por peça, a ferramenta passou a reescrever o próprio código. Ainda é o mesmo software? E o que sobra para mim?" },
       "en": { "slug": "ship-of-theseus", "title": "The ship of Theseus: when software rewrites itself", "teaser": "Piece by piece, the tool started rewriting its own code. Is it still the same software? And what is left for me?" }
