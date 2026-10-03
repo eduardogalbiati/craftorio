@@ -3,7 +3,10 @@
 // workflow. Seams: runFigures({ summary, events }), compareWithWorkflow(figures, history).
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { runFigures, compareWithWorkflow } = require('../src/run-analysis');
+// Loaded inside each test: before the module exists, each test fails on its own instead of the file.
+const load = () => require('../src/run-analysis');
+const runFigures = (...args) => load().runFigures(...args);
+const compareWithWorkflow = (...args) => load().compareWithWorkflow(...args);
 
 const T0 = Date.parse('2026-10-03T14:00:00.000Z');
 const MIN = 60e3;

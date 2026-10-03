@@ -5,8 +5,13 @@
 // Seams: occupancyOf, idleHint, costFigures.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { occupancyOf, idleHint, costFigures } = require('../src/occupancy');
 const { nightMetrics } = require('../src/night-watch');
+
+// Loaded inside each test: before the module exists, each test fails on its own instead of the file.
+const load = () => require('../src/occupancy');
+const occupancyOf = (...args) => load().occupancyOf(...args);
+const idleHint = (...args) => load().idleHint(...args);
+const costFigures = (...args) => load().costFigures(...args);
 
 const W0 = Date.parse('2026-10-01T00:00:00.000Z');
 const minute = (m) => W0 + m * 60e3;
