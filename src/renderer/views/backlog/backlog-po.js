@@ -154,6 +154,8 @@
     const issues = mode === 'plan' ? [...po.attached] : [];
     // #189: the chip's step for this question only; the next question uses the saved one again
     const calibration = mode === 'plan' ? window.BacklogPoSettings?.override() ?? null : null;
+    // #205: the Cost chip's step, the same way
+    const cost = mode === 'plan' ? window.BacklogPoSettings?.costOverride?.() ?? null : null;
     if (mode === 'plan') window.BacklogPoSettings?.clearOverride();
     Object.assign(po, { busy: true, pending: q, error: null, live: window.LiveTurn.create({ agent: 'Product Owner' }) });
     $p('#po-question').value = '';
@@ -162,7 +164,7 @@
     const tick = setInterval(renderLive, 1000);
     try {
       // #148: the simulation-only scenario picker forces the simulated answer
-      const out = await api.askProductOwner(projectId, q, devMode(), mode, files, issues, devMode() ? po.scenario || null : null, calibration);
+      const out = await api.askProductOwner(projectId, q, devMode(), mode, files, issues, devMode() ? po.scenario || null : null, calibration, cost);
       if (po.projectId === projectId) {
         po.messages = out.messages;
         if (mode === 'issue') po.files = [];
@@ -251,7 +253,9 @@
     return i?.url ? `<a class="badge po-issue" href="${esc(i.url)}" target="_blank" rel="noopener" title="${esc(i.title)}">#${n}</a>` : `<span class="badge po-issue">#${n}</span>`;
   };
   const sizeText = (g) => {
-    const est = g.estimate
+    const est = g.costEstimate
+      ? `${g.estimate ? `≈ ${g.estimate.minutes} min · ` : ''}≈ $${Number(g.costEstimate.usd).toFixed(2)} <span class="muted" title="${esc(g.costEstimate.basis)}">(estimate from ${g.costEstimate.runs} past run${g.costEstimate.runs > 1 ? 's' : ''}${g.costEstimate.estimated ? ', partly from token prices' : ''})</span>`
+      : g.estimate
       ? `≈ ${g.estimate.minutes} min · ≈ $${Number(g.estimate.costUsd).toFixed(2)} <span class="muted">(estimate from ${esc(g.estimate.basis)})</span>`
       : '<span class="muted">no past run to estimate from</span>';
     return `complexity ${g.complexity}${g.guessed ? ' <span class="muted" title="Some issues have no complexity:n label: counted as 3">(some guessed)</span>' : ''} · ${est}`;
@@ -336,6 +340,7 @@
         ${g.modeReason ? `<div class="small"><span class="muted">mode:</span> ${esc(g.modeReason)}</div>` : ''}
         ${g.files?.length ? `<div class="small muted">files: <span class="mono">${g.files.map(esc).join(', ')}</span></div>` : ''}
         <div class="small po-size">${sizeText(g)}</div>
+        ${costHtml(g)}
         ${(g.warnings || []).map((w) => `<div class="small warn-text">⚠ ${esc(w)}</div>`).join('')}
         ${suggestedHtml(g, key, done)}
         <div class="row po-group-actions">
@@ -348,9 +353,19 @@
       </div>`;
   }
 
+  // #205: what the Cost step set on a group (its inputs, the grouping, what the workflow cannot adjust)
+  function costHtml(g) {
+    if (!g.cost) return '';
+    const set = Object.entries(g.cost.inputs || {}).map(([k, v]) => `${k}=${v}`).join(', ');
+    const tip = [set && `Set by the Cost step: ${set}`, g.cost.grouping, ...(g.cost.notAdjustable || [])].filter(Boolean).join('\n');
+    return `<div class="small"><span class="badge" title="${esc(tip)}">${esc(g.cost.name)}</span>${g.cost.grouping ? ` <span class="muted">${esc(g.cost.grouping)}</span>` : ''}${(g.cost.notAdjustable || []).some((x) => /^Agents/.test(x)) ? ' <span class="muted">· agents: not adjustable</span>' : ''}</div>`;
+  }
+
   function answerHtml(a, m) {
     if (!a) return '';
     const parts = [];
+    // #206: the plan's estimated total
+    if (a.estimateUsd != null && a.groups?.length) parts.push(`<div class="small"><span class="badge" title="The sum of the groups' estimates from past runs${a.estimateMissing ? `; ${a.estimateMissing} group(s) have no estimate yet` : ''}">Plan ≈ $${Number(a.estimateUsd).toFixed(2)}</span>${a.estimateMissing ? ` <span class="muted">${a.estimateMissing} without an estimate</span>` : ''}</div>`);
     if (a.groups?.length) {
       const allDone = a.groups.every((g) => applied(groupState(g)));
       const allTitle = allDone ? 'Every group is already in the roadmap or assigned' : 'Every group as a planned stage (by its stage number) at the end of the roadmap';
@@ -454,11 +469,14 @@
     const time = msg.ts ? new Date(msg.ts).toLocaleTimeString() : '';
     if (msg.role === 'user') {
       const files = [...(msg.issues || []).map(issueRef), ...(msg.attachments || []).map((f) => `<span class="badge" title="${esc(f)}">${esc(f.split(/[\\/]/).pop())}</span>`)].join(' ');
-      const once = msg.calibrationOverride ? ` · <span class="badge" title="For this question only: the saved calibration is unchanged">for ${esc(window.PoCalibration.step(msg.calibration).name)}</span>` : '';
+      const once = [msg.calibrationOverride ? window.PoCalibration.step(msg.calibration).name : '', msg.costOverride ? window.PoCalibration.cost.step(msg.cost).name : ''].filter(Boolean)
+        .map((name) => ` · <span class="badge" title="For this question only: the saved setting is unchanged">for ${esc(name)}</span>`).join('');
       return `<div class="sup-wmsg user"><div class="sup-wmsg-meta">You · ${esc(time)}${once}</div><div>${esc(msg.text)}</div>${files ? `<div class="po-files">${files}</div>` : ''}</div>`;
     }
     // #189: the calibration it planned with (marked when it was for this question only)
-    const calib = msg.calibration ? ` <span class="badge" title="${esc(`${msg.calibrationOverride ? 'For this question only. ' : ''}${window.PoCalibration.tooltip(msg.calibration)}`)}">Planned for ${esc(window.PoCalibration.step(msg.calibration).name)}${msg.calibrationOverride ? ' · this question' : ''}</span>` : '';
+    // #205: and the Cost step ("Planned for Speed · Economy")
+    const once = msg.calibrationOverride || msg.costOverride;
+    const calib = msg.calibration ? ` <span class="badge" title="${esc(`${once ? 'For this question only. ' : ''}${window.PoCalibration.tooltip(msg.calibration)}${msg.cost ? `\n\n${window.PoCalibration.cost.tooltip(msg.cost)}` : ''}`)}">Planned for ${esc(window.PoCalibration.plannedFor(msg.calibration, msg.cost ?? null))}${once ? ' · this question' : ''}</span>` : '';
     const meta = `Product Owner · ${esc(time)}${msg.model ? ` · ${esc(msg.model)}` : ''} · ${esc(fmtCost(msg.costUsd || 0))}${calib}${msg.stopped ? ' <span class="badge warn" title="You stopped this turn: the answer is what was written until then">Stopped</span>' : ''}`;
     return `<div class="sup-wmsg po-msg${msg.error ? ' error' : ''}" data-msg="${m}"><div class="sup-wmsg-meta">${meta}</div>
       <div class="md md-compact">${msg.error ? esc(msg.text) : markdownHtml(msg.text || '')}</div>
@@ -554,7 +572,7 @@
       const stages = [...new Set(answer.groups.map((g) => g.stage))].sort((a, b) => a - b).map((s) => ({
         name: `Stage ${s} (Product Owner)`,
         note: '',
-        items: answer.groups.map((g, n) => ({ g, n })).filter(({ g }) => g.stage === s).map(({ g, n }) => ({ workflow: g.workflow, issues: withExtras(g.issues, `${m}:${n}`), inputs: g.inputs, mock: !!state.simulationOnly, reason: g.reason, modeReason: g.modeReason, origin })),
+        items: answer.groups.map((g, n) => ({ g, n })).filter(({ g }) => g.stage === s).map(({ g, n }) => ({ workflow: g.workflow, issues: withExtras(g.issues, `${m}:${n}`), inputs: g.inputs, mock: !!state.simulationOnly, reason: g.reason, modeReason: g.modeReason, origin, ...(g.cost ? { cost: g.cost } : {}) })),
       }));
       try {
         const out = await api.proposeRoadmap(po.projectId, { stages }, false);

@@ -39,6 +39,7 @@ async function renderSettings() {
   renderConcurrency();
   renderOracleSettings();
   renderLiveSettings();
+  renderBudgetSettings();
   renderOracleWake();
   refreshKeepAwake();
   renderVoice();
@@ -108,6 +109,24 @@ async function saveLiveSettings() {
   };
   state.settings = await api.setSettings({ liveRoadmap });
   renderLiveSettings();
+}
+
+// Settings › General › Budget (settings.budget, src/budget.js, #206): the daily and nightly caps in
+// USD (empty or 0: no cap), saved together; a "Raise for today" (`raised`) is kept.
+function renderBudgetSettings() {
+  const b = state.settings.budget || {};
+  $('#set-budget-day').value = b.dailyUsd || '';
+  $('#set-budget-night').value = b.nightlyUsd || '';
+}
+
+async function saveBudgetSettings() {
+  const cap = (sel) => {
+    const n = Number($(sel).value);
+    return $(sel).value !== '' && Number.isFinite(n) && n > 0 ? Math.min(n, 100000) : null;
+  };
+  const budget = { ...(state.settings.budget || {}), dailyUsd: cap('#set-budget-day'), nightlyUsd: cap('#set-budget-night') };
+  state.settings = await api.setSettings({ budget });
+  renderBudgetSettings();
 }
 
 // Settings › Execution › Oracle (settings.oracle, read by src/oracle.js): both fields are saved
@@ -354,6 +373,18 @@ registerView({
                   <div class="s-ctrl"><label class="switch"><input type="checkbox" role="switch" id="set-live-refresh" aria-label="Sync the backlog before a refill" /><span></span></label></div>
                 </div>
               </div>
+              <h3 class="s-subtitle">Budget</h3>
+              <p class="muted small">What real runs spend (live runs included; Codex runs priced from tokens × the model prices of Usage). When the next roadmap item's estimate would pass a budget, the roadmap pauses before starting it and tells you: raise it for today, or resume anyway. A run already started finishes; no gate is answered. The top bar shows today's spending against it.</p>
+              <div id="set-budget" class="s-group">
+                <div class="s-row">
+                  <div class="s-label"><b>Daily budget (USD)</b><span>Per calendar day, every roadmap, the live roadmap's refills and the Night watch included. Empty: no cap.</span></div>
+                  <div class="s-ctrl"><input type="number" id="set-budget-day" min="0" max="100000" step="1" class="s-num" placeholder="no cap" aria-label="Daily budget in USD" /></div>
+                </div>
+                <div class="s-row">
+                  <div class="s-label"><b>Nightly budget (USD)</b><span>While the Night watch is on, from its start. Empty: no cap (the daily one still applies).</span></div>
+                  <div class="s-ctrl"><input type="number" id="set-budget-night" min="0" max="100000" step="1" class="s-num" placeholder="no cap" aria-label="Nightly budget in USD" /></div>
+                </div>
+              </div>
               <h3 class="s-subtitle">Voice input</h3>
               <p class="muted small">Dictate into any field with the OS: <b>Win+H</b> on Windows, <b>Dictation</b> on macOS (press Fn twice). Or use the mic button on the long text fields (or Ctrl+Shift+M): the recording is transcribed on this machine by whisper.cpp, inserted at the cursor for review, and deleted right after. Nothing leaves the machine.</p>
               <div id="set-voice" class="s-group">
@@ -519,6 +550,7 @@ registerView({
     for (const sel of ['#set-cr-enabled', '#set-cr-max', '#set-cr-project', '#set-cr-sims']) $(sel).onchange = saveConcurrency;
     for (const sel of ['#set-oracle-budget', '#set-oracle-compact']) $(sel).onchange = saveOracleSettings;
     for (const sel of ['#set-live-cap', '#set-live-stages', '#set-live-budget', '#set-live-refresh']) $(sel).onchange = saveLiveSettings;
+    for (const sel of ['#set-budget-day', '#set-budget-night']) $(sel).onchange = saveBudgetSettings;
     $('#set-oracle-wake').onchange = saveOracleWake;
   },
   show: renderSettings,

@@ -513,6 +513,10 @@ details[open] > summary .label::after { content: " ▾"; }
 .seg button.active { background: var(--panel); color: var(--text); box-shadow: 0 0 0 1px var(--border); }
 .seg.sm button { font-size: 11px; padding: 3px 8px; }
 .usage-pop-head { align-items: center; gap: 10px; }
+/* #206: today's spending against the budget, "$38 / $60 today" */
+.u-today { font-size: 11px; color: var(--muted); border-left: 1px solid var(--border); padding-left: 6px; }
+.u-today.st-warn { color: var(--yellow); }
+.u-today.st-over { color: var(--red); }
 .u-scope { font-size: 10px; font-family: inherit; text-transform: uppercase; letter-spacing: .05em; color: var(--accent); border: 1px solid rgba(124,156,255,.4); border-radius: 4px; padding: 0 4px; }
 .stale { opacity: .5; transition: opacity .15s; }
 .u-plan-pct { font-size: 11px; font-family: var(--mono); }

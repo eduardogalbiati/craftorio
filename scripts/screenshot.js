@@ -41,6 +41,9 @@
 //                      on (running, simulated, last refill 03:12 +3 stages) | refilling (the Product
 //                      Owner picking) | empty (done: nothing left under complexity 2) | budget (done:
 //                      the daily budget reached); the banner shows on every --mode, the box on roadmap
+//   --budget <state>   backlog: the spending budget (#206): paused (a daily budget of $60 reached: the
+//                      roadmap paused before its next stage, with Raise for today / Resume anyway) |
+//                      set (the same budget, not reached: the top bar's "$X / $60 today")
 //   --po <state>       backlog: the Product Owner's drawer open with its live turn (#180): working (the
 //                      activity line, timer, Stop and the last steps) | writing (the answer as it is
 //                      written, its JSON block hidden) | stopped (an answer stopped by the owner) |
@@ -147,6 +150,7 @@ function parseArgs(argv) {
     else if (k === '--no-demo-shots') a.demoShots = false;
     else if (k === '--oracle') a.oracle = next();
     else if (k === '--live') a.live = next();
+    else if (k === '--budget') a.budget = next();
     else if (k === '--po') a.po = next();
     else throw new Error(`Unknown argument: ${k}`);
   }
@@ -297,11 +301,17 @@ function demoPoConversation(ws, projectId, po = null) {
     // (In roadmap · Stage 2), #11 its done stage 1, planned before (Already in the roadmap), #10 + #8
     // only partly planned (Add the rest)
     { ts: at(90), role: 'user', mode: 'plan', text: 'Analyze the backlog and propose runs' },
-    { ts: at(110), role: 'po', mode: 'plan', model: 'claude-opus-5-5', costUsd: 0.21, calibration: 2, text: 'Three runs: the rename crash first, then the server work together, then the small UI and docs fixes.', answer: {
+    { ts: at(110), role: 'po', mode: 'plan', model: 'claude-opus-5-5', costUsd: 0.21, calibration: 2, cost: 1, text: 'Three runs: the rename crash first, then the server work together, then the small UI and docs fixes.', answer: {
       summary: 'Three runs.',
+      cost: 1,
+      estimateUsd: 27.4,
+      estimateMissing: 1,
       groups: [
         { name: 'Rename crash', issues: [11], workflow: 'software-development-local-hero.yaml', inputs: { mode: 'auto' }, reason: 'It blocks the rest.', files: ['src/workspace.js'], stage: 1, complexity: 4, guessed: false, estimate: null, warnings: [] },
-        { name: 'Reports and health', issues: [12, 9], workflow: 'software-development-local-hero.yaml', inputs: { mode: 'auto' }, reason: 'Both add a server route: one run avoids a merge conflict in src/server.', files: ['src/server.js'], stage: 2, complexity: 5, guessed: false, estimate: { minutes: 35, costUsd: 1.8, basis: '3 past runs' }, warnings: [] },
+        { name: 'Reports and health', issues: [12, 9], workflow: 'software-development-local-hero.yaml', inputs: { mode: 'auto' }, reason: 'Both add a server route: one run avoids a merge conflict in src/server.', files: ['src/server.js'], stage: 2, complexity: 5, guessed: false, estimate: { minutes: 35, costUsd: 1.8, basis: '3 past runs' }, warnings: [],
+          inputs: { mode: 'auto', unit_tests: 'run_existing', e2e_tests: 'write', screenshots: 'off' },
+          costEstimate: { usd: 15.8, perPoint: 3.16, complexity: 5, runs: 12, estimated: false, basis: 'Median cost per step and complexity point of the last 12 successful runs of software-development-local-hero.yaml, × complexity 5 (test ×0.35, evidence ×0.5, developer_screenshots off).' },
+          cost: { level: 1, name: 'Economy', inputs: { unit_tests: 'run_existing', e2e_tests: 'write', screenshots: 'off' }, grouping: 'Grouped to pay the run overhead once (same area or files).', notAdjustable: ['Agents: not adjustable (the workflow has no model or effort input)'] } },
         { name: 'Scrollbars and docs', issues: [10, 8], workflow: 'software-development.yaml', inputs: { mode: 'validated' }, reason: 'Two small fixes the owner can check in the app.', files: ['src/renderer/style.css'], stage: 3, complexity: 1, guessed: true, estimate: null, warnings: [] },
       ],
       conflicts: [], enrich: [],
@@ -369,7 +379,11 @@ function demoPoTurn(sender, which, projectId) {
 // planned item's Edit form (the workflow's inputs: select, checkbox, text).
 // `live` (#164, --live): on / refilling run it simulated with the live switch on and a last refill;
 // empty / budget end it done (every item done) with live still on and why refills stopped.
-function demoRoadmap(ws, projectId, live = 'off') {
+// `budget` (#206, --budget): set writes a daily budget of $60 (the top bar's "$X / $60 today"); paused
+// also pauses the roadmap before its next stage, as the budget cap does.
+// Cost (#205): the group of stage 2 was planned at Economy (grouped, existing tests only, no
+// screenshots), so a test-batch item follows it; the UI issue of stage 3 at Generous.
+function demoRoadmap(ws, projectId, live = 'off', budget = null) {
   const at = (h, m) => { const d = new Date(); d.setHours(h, m, 0, 0); return d.toISOString(); };
   const ended = live === 'empty' || live === 'budget';
   const refill = {
@@ -397,6 +411,7 @@ function demoRoadmap(ws, projectId, live = 'off') {
   fs.writeFileSync(path.join(ws.backlog, `${projectId}.roadmap.json`), JSON.stringify({
     state: 'planned', simulated: false, error: null, pausedBy: null, updatedAt: new Date().toISOString(), ...liveFields,
     ...(tonight ? { state: 'paused', pausedBy: 'item-7', error: refused } : {}),
+    ...(budget === 'paused' ? { state: 'paused', pausedBy: null, error: 'Budget reached: $58.40 of $60 today; next stage ≈ $24.60. Raise for today, or resume anyway.', budget: { period: 'day', spentUsd: 58.4, limitUsd: 60, nextUsd: 12.3, stageUsd: 24.6, at: new Date().toISOString() } } : {}),
     stages: [
       { id: 'stage-1', name: 'Stability first', note: 'The rename crash blocks the rest.', items: [item('item-1', 'software-development-local-hero.yaml', [11], { status: 'done', runId: '20260118-120000-demo0011', runs: ['20260118-120000-demo0011'] })] },
       ...(tonight ? [{ id: 'stage-tonight', name: 'Tonight', note: 'Three runs at once, then the refused start waits for your answer.', items: [
@@ -410,13 +425,24 @@ function demoRoadmap(ws, projectId, live = 'off') {
         reason: 'Both add a server route and share the report formatter: one run avoids a merge conflict in src/server. Split from #136, whose tasks were spread over two stages: the report export needs the formatter that the health endpoint introduces, and both register their routes in src/server/routes.js, which every parallel run of this area edits; running them apart would conflict there and in the formatter tests. The health endpoint is small (complexity 3) and the export reuses its formatter, so together they stay under the group size of five issues per run and take one review instead of two.',
         modeReason: 'Auto: server code with no screen to try.',
         origin: new Date(Date.UTC(2026, 0, 20, 10, 1, 50)).toISOString(), // the demo Product Owner's plan answer
-        ...(tonight ? { inputs: { language: 'js', mode: 'auto', base_branch: 'release/2026-01-reports-and-health-with-a-very-long-branch-name-for-the-roadmap-card' } } : {}),
+        inputs: { language: 'js', mode: 'auto', unit_tests: 'run_existing', e2e_tests: 'write', screenshots: 'off', ...(tonight ? { base_branch: 'release/2026-01-reports-and-health-with-a-very-long-branch-name-for-the-roadmap-card' } : {}) },
+        cost: { level: 1, name: 'Economy', inputs: { unit_tests: 'run_existing', e2e_tests: 'write', screenshots: 'off' }, grouping: 'Grouped to pay the run overhead once (same area or files).', notAdjustable: ['Agents: not adjustable (the workflow has no model or effort input)'] },
+      })] },
+      { id: 'stage-2-tests', name: 'Test batch', note: '', items: [item('item-8', 'test-batch.yaml', [12, 9], {
+        inputs: {}, reason: 'Economy: these issues ran with their existing tests only; one test writer session writes their unit tests together, after their stage.',
       })] },
       { id: 'stage-3', name: '', note: '', items: [item('item-3', 'software-development.yaml', [10], {
-        inputs: { language: 'js', mode: 'validated' }, reason: 'A small UI fix on its own.', modeReason: 'Validated: a screen the owner can try in the app.',
+        inputs: { language: 'js', mode: 'validated', unit_tests: 'write_and_run', e2e_tests: 'write_and_run', screenshots: 'all' }, reason: 'A small UI fix on its own.', modeReason: 'Validated: a screen the owner can try in the app.',
+        cost: { level: 5, name: 'Generous', inputs: { unit_tests: 'write_and_run', e2e_tests: 'write_and_run', screenshots: 'all' }, notAdjustable: [] },
       })] },
     ],
   }, null, 2));
+  // (the settings file directly: this runs before the app's code is loaded, maybe from another --ref)
+  if (budget) {
+    let settings = {};
+    try { settings = JSON.parse(fs.readFileSync(ws.settings, 'utf8')); } catch { /* the defaults */ }
+    fs.writeFileSync(ws.settings, JSON.stringify({ ...settings, budget: { dailyUsd: 60, nightlyUsd: null, raised: null } }, null, 2));
+  }
 }
 
 // The roadmap's runs (#194): two finished local-hero runs that give each step its typical time, then
@@ -479,6 +505,11 @@ function demoRoadmapRuns(ws, projectId) {
       return e;
     });
   };
+  // what each agent step cost in the finished runs (#206: the estimates' median per step)
+  const STEP_COST = { develop: 3.1, code_review: 0.7, test: 5.7, build: 0.2, evidence: 0.8, verify_change: 0.3 };
+  const sessionsOf = (steps, k) => steps.filter(([step]) => AGENT[step]).map(([step]) => ({
+    id: `s-${step}`, step_id: step, agent: AGENT[step][0], provider: 'claude', model: AGENT[step][1], cost_usd: Math.round(STEP_COST[step] * k * 100) / 100, tokens: { input: 1000, output: 2000, cache_read: 0, cache_write: 0 }, turns: 1,
+  }));
   const now = Date.now();
   // the history: two runs that merged (a little slower, a little faster than the usual path)
   [[-3, 1.1], [-2, 0.9]].forEach(([day, k], n) => {
@@ -487,7 +518,7 @@ function demoRoadmapRuns(ws, projectId) {
     const runId = `${new Date(start).toISOString().slice(0, 10).replace(/-/g, '')}-210000-hist000${n + 1}`;
     const { lines, end } = events(start, steps, null);
     write(runId, [...lines, ev(end, 'workflow.finished', { status: 'success' })], {
-      status: 'success', started_at: new Date(start).toISOString(), finished_at: new Date(end).toISOString(), duration_ms: end - start, progress: trail(start, steps),
+      status: 'success', started_at: new Date(start).toISOString(), finished_at: new Date(end).toISOString(), duration_ms: end - start, progress: trail(start, steps), sessions: sessionsOf(steps, k),
     });
   });
   const stamp = (m) => new Date(now - m * min).toISOString().slice(0, 10).replace(/-/g, '');
@@ -1127,7 +1158,7 @@ function main() {
     fs.writeFileSync(path.join(ws.backlog, `${project.id}.json`), JSON.stringify(demoBacklog(project.id, src('backlog').taskProgress), null, 2));
     // also on Project: its run list shows the run's "issue from cache" badge (#168)
     if (['backlog', 'project'].includes(args.view)) demoLocalMerge(ws, project.id);
-    if (args.view === 'backlog') demoRoadmap(ws, project.id, args.live);
+    if (args.view === 'backlog') demoRoadmap(ws, project.id, args.live, args.budget);
     if (args.view === 'backlog') demoPoConversation(ws, project.id, args.po);
     if (args.view === 'backlog' && project.folder) demoBacklogRefresh(ws, project.folder, project.id);
     // also on Artifacts: a second run group (its document.md) for Collapse all / Expand all (#126)

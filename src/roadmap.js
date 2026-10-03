@@ -20,6 +20,11 @@
 // Live roadmap (#164, `live`, src/live-roadmap.js): when the last stage of a live roadmap ends,
 // `advance` asks for a refill (`refill: true`) instead of ending it; the service adds the Product
 // Owner's next stages (`propose` with `keepRunning`) and the roadmap goes on.
+// Cost (#205, #206): an item keeps the Product Owner's Cost choices (`cost`: the step, the inputs it
+// set, the grouping); a test-batch item (`testsLater`) tests the issues of the stage before it, so it
+// may name issues another item holds and runs even when they are closed. The budget cap (src/budget.js)
+// pauses a roadmap before a start (`budget`: the period, spent, cap and next stage); "Resume anyway"
+// records `budgetWaived` (the day or night it covers) and Start clears the pause.
 // Screen: src/renderer/views/backlog/backlog-roadmap.js; channels: src/service/channels/roadmap.js.
 
 const fs = require('fs');
@@ -33,6 +38,9 @@ const { writeJsonSafe } = require('./state-file');
 const STATES = ['done', 'paused', 'planned', 'running'];
 const ITEM_STATES = ['done', 'failed', 'planned', 'running', 'skipped'];
 const FINISHED = new Set(['done', 'skipped']);
+
+// #205: a test-batch item tests the issues the items before it implemented
+const testsLater = (item) => path.basename(String(item?.workflow || '')) === 'test-batch.yaml';
 
 const roadmapFile = (dir, projectId) => path.join(dir, `${path.basename(String(projectId))}.roadmap.json`);
 const emptyRoadmap = () => ({ state: 'planned', simulated: false, error: null, pausedBy: null, scope: null, stages: [], updatedAt: null });
@@ -183,10 +191,12 @@ function cleanItem(raw, known, previous) {
   const origin = String(raw.origin ?? old?.origin ?? '').trim();
   // what happens with the item's run result when it finishes (#134), given to its start
   const then = normalizeThen(raw.then);
+  // the Product Owner's Cost choices (#205), shown on the card
+  const cost = raw.cost && typeof raw.cost === 'object' ? raw.cost : old?.cost || null;
   return {
     id: old ? old.id : newId('item'), workflow, workflowName: raw.workflowName || old?.workflowName || workflow,
     inputs: raw.inputs && typeof raw.inputs === 'object' ? raw.inputs : {}, mock: !!raw.mock,
-    ...(reason ? { reason } : {}), ...(modeReason ? { modeReason } : {}), ...(origin ? { origin } : {}), ...(then ? { then } : {}),
+    ...(reason ? { reason } : {}), ...(modeReason ? { modeReason } : {}), ...(origin ? { origin } : {}), ...(then ? { then } : {}), ...(cost ? { cost } : {}),
     ...issues[0], issues,
     status: ITEM_STATES.includes(state.status) ? state.status : 'planned', runId: state.runId || null, runs: state.runs || [], error: state.error || null,
   };
@@ -197,7 +207,7 @@ function assertUnique(stages) {
   const seen = new Map();
   for (const [n, stage] of stages.entries()) {
     for (const item of stage.items) {
-      if (FINISHED.has(item.status)) continue;
+      if (FINISHED.has(item.status) || testsLater(item)) continue;
       for (const i of itemIssues(item)) {
         if (seen.has(i.number)) throw new Error(`Issue #${i.number} is in two roadmap items (stages ${seen.get(i.number)} and ${n + 1}): keep it in one.`);
         seen.set(i.number, n + 1);
@@ -233,7 +243,7 @@ function saveStages(dir, projectId, stages, { issues } = {}) {
 
 // The issue numbers of the items not finished yet.
 function plannedNumbers(roadmap) {
-  return new Set(allItems(roadmap).filter((x) => !FINISHED.has(x.status)).flatMap((x) => itemIssues(x).map((i) => i.number)));
+  return new Set(allItems(roadmap).filter((x) => !FINISHED.has(x.status) && !testsLater(x)).flatMap((x) => itemIssues(x).map((i) => i.number)));
 }
 
 /**
@@ -314,7 +324,7 @@ function setState(dir, projectId, state, { simulated, stage = null } = {}) {
       scope = { stage: s.id };
     }
     return {
-      ...r, state, scope, error: null, pausedBy: null, ...(simulated !== undefined ? { simulated: !!simulated } : {}), ...(state === 'planned' && r.live ? { live: false } : {}),
+      ...r, state, scope, error: null, pausedBy: null, budget: null, ...(simulated !== undefined ? { simulated: !!simulated } : {}), ...(state === 'planned' && r.live ? { live: false } : {}),
     };
   });
 }
@@ -385,7 +395,7 @@ const stageName = (r, at) => r.stages[at].name || `Stage ${at + 1}`;
 function stageStep(r, at, { closed, canStart }) {
   const stage = r.stages[at];
   for (const item of stage.items) {
-    if (item.status === 'planned' && itemIssues(item).every((i) => closed(i.number, item))) {
+    if (item.status === 'planned' && !testsLater(item) && itemIssues(item).every((i) => closed(i.number, item))) {
       Object.assign(item, { status: 'skipped', error: 'Every issue is closed.' });
     }
   }
@@ -449,6 +459,20 @@ function markStarted(dir, projectId, itemId, { runId = null, error = null }) {
   }));
 }
 
+// #206: the budget cap pauses a running roadmap before its next start (`budget`: { period, spentUsd,
+// limitUsd, nextUsd, stageUsd }, the message in `error`); the runs in progress go on.
+function budgetPause(dir, projectId, budget, message) {
+  return updateRoadmap(dir, projectId, (r) => (r.state !== 'running' ? null : { ...r, state: 'paused', pausedBy: null, error: message, budget }));
+}
+
+// "Resume anyway" (#206): the roadmap runs again and ignores the cap for the period `key` (src/budget.js waiverKey).
+function waiveBudget(dir, projectId, key) {
+  return updateRoadmap(dir, projectId, (r) => {
+    if (!r.stages.length) throw new Error('The roadmap has no stage: add items first.');
+    return { ...r, state: 'running', error: null, pausedBy: null, budget: null, budgetWaived: String(key) };
+  });
+}
+
 // An item whose issues were all found closed right before its start (#168: read again from the platform).
 function skipClosed(dir, projectId, itemId) {
   return updateRoadmap(dir, projectId, (r) => ({
@@ -456,11 +480,11 @@ function skipClosed(dir, projectId, itemId) {
   }));
 }
 
-/** Each planned issue's place in the roadmap (the Backlog's cards): number → { stage, status, itemId }. */
+/** Each planned issue's place in the roadmap (the Backlog's cards): number → { stage, status, itemId }; a test-batch item never hides the item that implements the issue. */
 function issueStages(roadmap) {
   const out = new Map();
   (roadmap.stages || []).forEach((s, n) => {
-    for (const x of s.items) for (const i of itemIssues(x)) out.set(i.number, { stage: n + 1, name: s.name || `Stage ${n + 1}`, status: x.status, itemId: x.id, origin: x.origin || null });
+    for (const x of s.items) for (const i of itemIssues(x)) if (!testsLater(x) || !out.has(i.number)) out.set(i.number, { stage: n + 1, name: s.name || `Stage ${n + 1}`, status: x.status, itemId: x.id, origin: x.origin || null });
   });
   return out;
 }
@@ -468,6 +492,7 @@ function issueStages(roadmap) {
 module.exports = {
   adoptResumed,
   advance,
+  budgetPause,
   cleanStages,
   clearRoadmap,
   currentStage,
@@ -488,7 +513,9 @@ module.exports = {
   setLive,
   setState,
   skipClosed,
+  testsLater,
   updateRoadmap,
+  waiveBudget,
   withStatus,
   writeRoadmap,
 };

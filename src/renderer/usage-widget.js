@@ -106,6 +106,21 @@ function renderUsageWidget() {
   $('#usage-widget-dot').className = `u-dot st-${worst}`;
   $('#usage-widget-scope').classList.toggle('hidden', !machine);
   btn.title = `${machine ? 'All CLI usage on this machine' : 'Orchestrator usage'} in ${monthLabel(u.month)}: ${fmtNum(m.tokens?.total)} tokens, ${fmtUsd(m.costUsd)} — ${STATUS_TEXT[worst]}`;
+  renderSpending(u.spending);
+}
+
+// #206: today's (or tonight's, under the Night watch) spending against the budget, "$38 / $60 today":
+// shown when a budget is set or something was spent today; warn at 80 %, over at 100 %.
+function renderSpending(sp) {
+  const el = $('#usage-widget-today');
+  const p = sp?.night?.limitUsd ? sp.night : sp?.day;
+  const show = !!p && (!!p.limitUsd || p.spentUsd > 0);
+  el.classList.toggle('hidden', !show);
+  if (!show) return;
+  const pct = p.limitUsd ? p.spentUsd / p.limitUsd : 0;
+  el.textContent = sp.text;
+  el.className = `u-today mono${pct >= 1 ? ' st-over' : pct >= 0.8 ? ' st-warn' : ''}`;
+  el.title = `${p === sp.night ? 'Spent since the Night watch started' : 'Spent today'} by real runs (live runs included)${p.limitUsd ? `, against the ${p === sp.night ? 'night' : 'daily'} budget${p.raised ? ' (raised for this period)' : ''}: the roadmaps pause before a start that would pass it` : ': no budget set (Settings › Budget)'}${p.estimated ? '. Some costs are estimated from tokens × the model prices' : ''}.`;
 }
 
 function toggleUsagePopover() {

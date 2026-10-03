@@ -19,6 +19,10 @@
 // shows on top of every view while it is on.
 // When it finishes (#134): an item's chain (its run's `then`) is a badge, and the Edit form has the
 // ChainPicker (chain-picker.js), mounted by mountChain once backlog.js drew the form.
+// Cost (#205, #206): each item shows its estimate ("≈ $X", tooltip: how and from how many runs; "no
+// estimate yet" without history), its real cost once it has a run, and the Product Owner's Cost step
+// (a badge: the tests, screenshots and grouping it chose); each stage its estimate. A roadmap the
+// budget cap paused offers "Raise for today" and "Resume anyway" (api.roadmapBudget).
 // An item with a run (#194) has a progress ring on the right of its card: the estimated % (RunProgress.
 // estimateProgress over the item's `run` from the service: its trail and its workflow's typical step
 // times), the current step or group with its agent, the gate / failure / done states; hovering or
@@ -115,6 +119,22 @@
     if (locked || values.length < 2) return `<span class="badge rm-mode rm-mode-${esc(value)}" title="${esc(`Mode: ${WorkflowInputs.optionLabel(def || {}, value)}${help}`)}">${label(value)}</span>`;
     return `<span class="seg sm rm-mode-seg" role="group" aria-label="Mode" title="${esc(`Mode (saved at once)${help}`)}">${values.map((v) =>
       `<button type="button" class="rm-mode-${esc(v)}${v === value ? ' active' : ''}" data-rm-mode="${esc(v)}" aria-pressed="${v === value}">${label(v)}</button>`).join('')}</span>`;
+  }
+
+  const money = (n) => `$${Number(n || 0).toFixed(2)}`;
+
+  // #206: the item's estimate and, once it has a run, what it cost (so far, while it runs)
+  function costHtml(x) {
+    const e = x.estimate;
+    const est = e
+      ? `<span class="badge rm-estimate" title="${esc(e.basis)}">≈ ${money(e.usd)}${e.estimated ? ' (est.)' : ''}</span>`
+      : '<span class="badge rm-estimate rm-no-estimate" title="No successful real run of this workflow yet: nothing to estimate from">no estimate yet</span>';
+    const actual = x.actualUsd != null ? `<span class="badge rm-actual" title="${esc(`What its run${(x.runs || []).length > 1 ? 's' : ''} cost${x.status === 'running' ? ' so far' : ''}, next to the estimate`)}">${money(x.actualUsd)}${x.status === 'running' ? ' so far' : ''}</span>` : '';
+    // #205: the Product Owner's Cost step and what it chose for this item
+    const c = x.cost;
+    const tip = c ? [`Cost: ${c.name}`, Object.entries(c.inputs || {}).map(([k, v]) => `${k}: ${v}`).join(', '), c.grouping, ...(c.notAdjustable || [])].filter(Boolean).join('\n') : '';
+    const step = c ? `<span class="badge rm-cost rm-cost-${Number(c.level) || 3}" title="${esc(tip)}">${esc(c.name)}${c.grouping ? ' · grouped' : ''}</span>` : '';
+    return `${step}${est}${actual}`;
   }
 
   // The Product Owner's reason for the group and for the mode (#105): one line, expandable.
@@ -249,6 +269,7 @@
           <span class="badge rm-wf${push ? ' rm-wf-push' : ''}" title="${esc(`${x.workflowName && x.workflowName !== x.workflow ? `${x.workflowName} (${x.workflow})` : x.workflow}${push ? `. It pushes a branch and opens a PR/MR, while the default development workflow (${DefaultWorkflow.current().file}) merges locally` : ''}`)}">${push ? '<span aria-hidden="true">⇡ </span>' : ''}${esc(shortWorkflow(x.workflow))}</span>
           ${modeHtml(x, locked)}
           ${size != null ? `<span class="badge rm-size" title="The sum of the issues' complexity:n labels">complexity ${size}</span>` : ''}
+          ${costHtml(x)}
           ${x.mock ? '<span class="badge p-mock">simulated</span>' : ''}
           ${x.then ? ChainModel.chainBadgesHtml({ then: x.then }) : ''}
           ${others.map(([k, v]) => `<span class="badge rm-input" title="${esc(`${k}: ${v}${defs[k]?.description ? `\n${defs[k].description}` : ''}`)}">${esc(k)}: ${esc(v)}</span>`).join('')}
@@ -286,6 +307,7 @@
           <span class="muted small">Stage ${s + 1}</span>
           <input type="text" class="rm-name" data-rm-name value="${esc(stage.name)}" placeholder="Name (optional)" aria-label="Stage name" />
           ${stateBadge}
+          ${stage.estimate ? `<span class="badge rm-estimate" title="${esc(`The sum of its items' estimates (each from up to ${stage.estimate.runs} past runs of its workflow)${stage.estimate.missing ? `; ${stage.estimate.missing} item(s) have no estimate yet` : ''}`)}">≈ ${money(stage.estimate.usd)}${stage.estimate.missing ? ' +' : ''}</span>` : ''}
           ${stage.note || noteOpen ? '' : '<button class="link-btn small" type="button" data-rm-addnote>add note</button>'}
           <span class="spacer"></span>
           <button class="btn sm ghost rm-run-stage" type="button" data-rm-run-stage title="${esc(runTitle)}"${runnable ? '' : ' disabled'}><span aria-hidden="true">▶</span> Run this stage</button>
@@ -374,7 +396,7 @@
     const bar = `
       <div class="bl-queue rm-bar">
         <span><b>Roadmap</b> ${stateBadge} ${r.stages.length} stage${r.stages.length === 1 ? '' : 's'}</span>
-        ${r.error ? `<span class="${r.state === 'paused' ? 'warn-text' : 'error'} small">${esc(r.error)}${r.pausedBy ? ` <button class="link-btn small" type="button" data-rm-goto="${esc(r.pausedBy)}" title="Scroll to the item that paused the roadmap: Retry or Skip it there">Show the item</button>` : ''}</span>` : ''}
+        ${r.error ? `<span class="${r.state === 'paused' ? 'warn-text' : 'error'} small">${esc(r.error)}${r.pausedBy ? ` <button class="link-btn small" type="button" data-rm-goto="${esc(r.pausedBy)}" title="Scroll to the item that paused the roadmap: Retry or Skip it there">Show the item</button>` : ''}${r.state === 'paused' && r.budget ? ` <button class="btn sm primary" type="button" data-rm="budget-raise" title="${esc(`The ${r.budget.period === 'night' ? 'night' : 'daily'} budget becomes what is spent plus the next stage, for ${r.budget.period === 'night' ? 'tonight' : 'today'} only; the roadmap goes on`)}">Raise for ${r.budget.period === 'night' ? 'tonight' : 'today'}</button> <button class="btn sm ghost" type="button" data-rm="budget-resume" title="${esc(`This roadmap ignores the budget until ${r.budget.period === 'night' ? 'the night' : 'the day'} ends; the budget stays as it is`)}">Resume anyway</button>` : ''}</span>` : ''}
         <span class="spacer"></span>
         ${r.state !== 'running' && r.stages.length ? `<label class="check small dev-only"><input type="checkbox" id="rm-simulate"${state.simulationOnly || r.simulated ? ' checked' : ''} /><span>Simulated</span></label>
           <button class="btn sm primary" type="button" data-rm="start"${scoped >= 0 && r.state === 'paused' ? ` title="Resume stage ${scoped + 1} only"` : ''}>${r.state === 'paused' ? 'Resume' : 'Start'}</button>` : ''}
@@ -612,6 +634,10 @@
         ctx.setData(await api.startRoadmap(ctx.projectId, simulated, scope));
       } else if (e.target.closest('[data-rm-run-stage]')) {
         await runStage(ctx, r, locate(stages, e.target).s);
+      } else if (act === 'budget-raise' || act === 'budget-resume') {
+        // #206: the budget cap paused it; real runs start again (they cost money)
+        if (act === 'budget-resume' && !await confirmDialog('Resume anyway', 'The roadmap goes on past the budget until the day (or the night) ends. Its items run as real runs and cost money.', 'Resume')) return true;
+        ctx.setData(await api.roadmapBudget(ctx.projectId, act === 'budget-raise' ? 'raise' : 'resume'));
       } else if (act === 'pause' || act === 'stop') {
         ctx.setData(await api.pauseRoadmap(ctx.projectId, act === 'stop'));
       } else if (act === 'clear') {
@@ -813,9 +839,9 @@
 
   /** A new stage at the end with the assign dialog's issues: one item (group) or one per issue; `reason`/`modeReason`/`origin`: the Product Owner's. */
   // then: the items' chain (#134), from the Assign dialog's "When it finishes"
-  async function addStage(ctx, data, { issues, workflow, workflowName, inputs, mock, group, reason, modeReason, origin, then }) {
+  async function addStage(ctx, data, { issues, workflow, workflowName, inputs, mock, group, reason, modeReason, origin, then, cost }) {
     const stages = clone(data?.roadmap?.stages);
-    const why = { ...(reason ? { reason } : {}), ...(modeReason ? { modeReason } : {}), ...(origin ? { origin } : {}), ...(then ? { then } : {}) };
+    const why = { ...(reason ? { reason } : {}), ...(modeReason ? { modeReason } : {}), ...(origin ? { origin } : {}), ...(then ? { then } : {}), ...(cost ? { cost } : {}) };
     const items = group ? [{ workflow, workflowName, inputs, mock, issues, ...why }] : issues.map((n) => ({ workflow, workflowName, inputs, mock, issues: [n], ...why }));
     stages.push({ name: '', note: '', items });
     ctx.setData(await api.saveRoadmap(ctx.projectId, stages));

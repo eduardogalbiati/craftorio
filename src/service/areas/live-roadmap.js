@@ -1,5 +1,5 @@
 // Service area: the live roadmap's refill (#164, src/live-roadmap.js). When `advance` asks for one
-// (a live roadmap's last stage ended), refillRoadmap checks the daily budget, syncs the backlog first
+// (a live roadmap's last stage ended), refillRoadmap checks the daily budget (and the spending budget, #206), syncs the backlog first
 // (setting refreshFirst; never in a simulation), asks the Product Owner the fixed refill question
 // about the issues it may pick (the simulated Product Owner in a simulated roadmap or
 // MULTIAGENT_SIMULATION_ONLY: no model call), adds its first stages as planned stages and dispatches
@@ -48,6 +48,13 @@ module.exports = (ctx) => {
     try { p = projects.readProject(ws.projects, projectId); } catch { /* reported below */ }
     const blocked = live.budgetProblem(live.spentToday({ roadmap: before, runCost }), opts);
     if (blocked) { record(projectId, { status: 'budget', message: blocked }, p); return false; }
+    // #206: the workspace's spending budget (Settings › Budget) stops refills too (the Product Owner's answer costs)
+    const capped = before.simulated ? null : ctx.budgetBlock(before, 0);
+    if (capped) {
+      const when = capped.period === 'night' ? 'tonight' : 'today';
+      record(projectId, { status: 'budget', message: `Live roadmap: the budget is reached (US$ ${capped.spentUsd.toFixed(2)} of US$ ${capped.limitUsd.toFixed(2)} ${when}): no refill until it is raised.` }, p);
+      return false;
+    }
     if (!p) { record(projectId, { status: 'failed', message: `Live roadmap: the project ${projectId} no longer exists.` }, p); return false; }
     const simulated = !!before.simulated || simulation.simulationOnly();
     record(projectId, { status: 'refilling', message: 'The Product Owner is picking the next issues.' }, p);

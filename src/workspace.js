@@ -179,6 +179,9 @@ const DEFAULT_SETTINGS = {
   idleWarningMinutes: 5,
   // monthly limits per provider (see src/usage.js); null = no limit
   budgets: {},
+  // the spending budget (#206, src/budget.js): US$ per local day and per Night watch night (null = no
+  // cap) past which the roadmaps pause before their next start; `raised`: "Raise for today" (one day/night)
+  budget: { dailyUsd: null, nightlyUsd: null, raised: null },
   // the Oracle (src/oracle.js): its daily spend limit in USD (0 = no cap) and the context size
   // (tokens) past which its next turn starts a new session from a handoff note; what wakes it (#123,
   // src/oracle-wake.js): wakeScope all | watched | off, wakeOn the event kinds

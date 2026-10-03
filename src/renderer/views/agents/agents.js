@@ -1,7 +1,8 @@
 // Agents screen: the list of agents (the built-in supervisor and Product Owner first) and the editor:
 // the robot's look (colors, eyes, emblem) with a live preview, the prompt (what the agent is for) and
 // its skills; for the Product Owner, its model and effort instead, and its Planning section (#189): the
-// Speed ↔ Quality slider (window.PoCalibration, po-calibration.js), each control with a "What this changes" line.
+// Speed ↔ Quality slider (window.PoCalibration, po-calibration.js) and the Economy ↔ Generous Cost slider
+// (#205, PoCalibration.cost), each control with a "What this changes" line.
 // The workflows' own agents follow, one section per workflow (#68): read-only (View shows their
 // prompt, skills, model, capabilities and steps; only the look is saved), "Open in workflow" and
 // "Duplicate as my agent". Their saved looks are shared through window.AgentLooks.
@@ -127,7 +128,7 @@
           <button class="btn sm ghost" data-act="duplicate">Duplicate</button>
         </div>` : actions ? `<div class="card-actions">
           <span class="muted small">${a.system ? (a.calibration ? `Look, model and planning · ${esc(a.model)}` : a.model ? `Look and model · ${esc(a.model)}` : 'Look only') : a.updatedAt ? `updated ${esc(dateOf(a.updatedAt))}` : ''}</span>
-          ${a.calibration ? `<span class="badge" title="${esc(PoCalibration.tooltip(a.calibration))}">${esc(PoCalibration.step(a.calibration).name)}</span>` : ''}
+          ${a.calibration ? `<span class="badge" title="${esc(PoCalibration.tooltip(a.calibration))}">${esc(PoCalibration.step(a.calibration).name)}</span> <span class="badge" title="${esc(PoCalibration.cost.tooltip(a.cost))}">${esc(PoCalibration.cost.step(a.cost).name)}</span>` : ''}
           <span class="spacer"></span>
           <button class="btn sm ghost" data-act="edit">${a.system ? 'Customize' : 'Edit'}</button>
           ${a.system ? '' : '<button class="btn sm ghost danger" data-act="remove">Remove</button>'}
@@ -216,6 +217,7 @@
     ed.filter = '';
     ed.effort = a?.effort || 'high';
     ed.calibration = a?.calibration || null;
+    ed.cost = a?.calibration ? a.cost || PoCalibration.cost.DEFAULT : null;
     const system = isReadOnly();
     const workflow = isWorkflow();
     $a('#agent-modal-title').textContent = a ? (workflow ? `${a.name} · ${a.workflow.name}` : isSystem() ? `Customize the ${a.id === SUPERVISOR ? 'supervisor' : a.name}` : `Edit ${a.name}`) : 'New agent';
@@ -227,6 +229,7 @@
     // #189: the Product Owner's Planning section
     $a('#ag-planning').classList.toggle('hidden', !ed.calibration);
     $a('#ag-calibration-box').innerHTML = ed.calibration ? PoCalibration.sliderHtml({ id: 'ag-calibration', value: ed.calibration }) : '';
+    $a('#ag-cost-box').innerHTML = ed.cost ? PoCalibration.cost.sliderHtml({ id: 'ag-cost', value: ed.cost }) : '';
     $a('#ag-workflow-note').classList.toggle('hidden', !workflow);
     $a('#ag-workflow-name').textContent = workflow ? a.workflow.name : '';
     $a('#ag-workflow-facts').classList.toggle('hidden', !workflow);
@@ -336,7 +339,7 @@
   async function saveAgent(e) {
     e.preventDefault();
     const data = isTunable()
-      ? { appearance: ed.look, model: $a('#ag-model').value.trim(), effort: ed.effort, ...(ed.calibration ? { calibration: ed.calibration } : {}) }
+      ? { appearance: ed.look, model: $a('#ag-model').value.trim(), effort: ed.effort, ...(ed.calibration ? { calibration: ed.calibration, cost: ed.cost } : {}) }
       : isWorkflow()
       // only the look; null = back to the provider's robot
       ? { appearance: ed.custom ? ed.look : null }
@@ -381,6 +384,7 @@
     $a('#ag-effort').onclick = (e) => { const b = e.target.closest('[data-effort]'); if (b) { ed.effort = b.dataset.effort; renderEffort(); } };
     // saved with the form's Save, like the model and the effort
     PoCalibration.bindSlider($a('#ag-calibration-box'), (v) => { ed.calibration = v; });
+    PoCalibration.cost.bindSlider($a('#ag-cost-box'), (v) => { ed.cost = v; });
     $a('#ag-name').addEventListener('input', renderPreview);
     $a('#ag-states').onclick = (e) => {
       const b = e.target.closest('[data-state]');
@@ -462,6 +466,11 @@
             <label for="ag-calibration">Speed ↔ Quality</label>
             <div id="ag-calibration-box"></div>
             <p class="hint">What this changes: how many runs share a stage, how big a run gets, which issues stop for your look (validated mode) and where an issue goes in the roadmap, in every plan answer, Add to roadmap proposal and live roadmap refill. The same setting is in the Product Owner's drawer (the settings button next to Clear).</p>
+          </div>
+          <div class="field">
+            <label for="ag-cost">Cost: Economy ↔ Generous</label>
+            <div id="ag-cost-box"></div>
+            <p class="hint">What this changes: how many issues share a run (one run overhead for a whole area at Economy), which tests the planned items run, whether they take screenshots and, where a workflow allows it, cheaper agents. When it disagrees with Speed ↔ Quality, cost wins. You can still change each item's inputs on the roadmap.</p>
           </div>
         </div>
 

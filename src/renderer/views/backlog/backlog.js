@@ -423,13 +423,13 @@
     return skipped;
   }
 
-  async function roadmapGroup({ issues, workflow, inputs, reason, modeReason, origin }) {
+  async function roadmapGroup({ issues, workflow, inputs, reason, modeReason, origin, cost }) {
     const list = issues.map((n) => (bl.data?.issues || []).find((i) => i.number === n)).filter(Boolean);
     const skipped = issues.filter((n) => !list.some((i) => i.number === n));
     if (!list.length) return skipped;
     const wf = (await api.listWorkflows()).find((w) => w.file === workflow);
     await window.BacklogRoadmap.addStage(roadmapCtx(), bl.data, {
-      issues: list, workflow, workflowName: wf?.name || workflow, inputs: inputs || {}, mock: !!state.simulationOnly, group: list.length > 1, reason, modeReason, origin,
+      issues: list, workflow, workflowName: wf?.name || workflow, inputs: inputs || {}, mock: !!state.simulationOnly, group: list.length > 1, reason, modeReason, origin, cost,
     });
     showRoadmap();
     return skipped;
@@ -1011,6 +1011,7 @@
         </div>
         <div class="row">
           <select id="po-calib-chip" class="po-calib-chip" aria-label="Calibration of the next answer"></select>
+          <select id="po-cost-chip" class="po-calib-chip" aria-label="Cost of the next answer"></select>
           <button id="btn-po-settings" class="icon-btn" type="button" title="Calibrate the Product Owner" aria-label="Calibrate the Product Owner">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h3M11 7h9M4 17h9M17 17h3" /><circle cx="9" cy="7" r="2" /><circle cx="15" cy="17" r="2" /></svg>
           </button>
@@ -1055,6 +1056,11 @@
             <label for="po-set-calibration">Speed ↔ Quality</label>
             <div id="po-set-calibration-box"></div>
             <p class="hint">What this changes: how many runs share a stage, how big a run gets, which issues stop for your look and where an issue goes, in every plan answer and live roadmap refill.</p>
+          </div>
+          <div class="field">
+            <label for="po-set-cost">Cost: Economy ↔ Generous</label>
+            <div id="po-set-cost-box"></div>
+            <p class="hint">What this changes: how many issues share a run, which tests and screenshots the planned items take and, where a workflow allows it, cheaper agents. When it disagrees with Speed ↔ Quality, cost wins.</p>
           </div>
           <div class="row">
             <div class="field">

@@ -29,7 +29,11 @@ module.exports = (ctx) => {
     const installed = Object.fromEntries(usage.PROVIDERS.map((p) => [p.id, !!resolveCommand(p.command)]));
     const local = scope === 'machine' ? readLocalUsage() : null;
     // the Oracle's spend is in no run folder: its days are added as runs (src/oracle.js)
-    return usage.computeUsage({ runsDir: ctx.ws.runs, settings: workspace.readSettings(ctx.ws), live, installed, scope, local, extraRuns: oracle.usageRuns(ctx.ws.oracle) });
+    const out = usage.computeUsage({ runsDir: ctx.ws.runs, settings: workspace.readSettings(ctx.ws), live, installed, scope, local, extraRuns: oracle.usageRuns(ctx.ws.oracle) });
+    // #206: today's (or tonight's) spending against the budget, for the top bar ("$38 / $60 today")
+    let spending = null;
+    try { spending = ctx.budgetNow(); } catch (e) { console.error('budget:', e); }
+    return { ...out, spending };
   }
 
   // The CLIs' transcripts are read in both scopes: they add tool calls, prompts, files... to run sessions.

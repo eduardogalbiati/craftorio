@@ -77,6 +77,12 @@ placed. Plan within them, and start the summary with the calibration you planned
 Speed end, use the parallelism above to the full; at the Quality end, keep each stage to one or two
 runs, place an issue after the most stable work it builds on, and use validated mode for any screen.
 
+The owner also sets the **Cost**, between **Economy** and **Generous** (the prompt's "Cost"
+section). When it disagrees with the calibration, cost wins: it gives the largest group. At Economy,
+group issues of the same area or files into one run rather than separate runs (each run pays a fixed
+overhead) and say "grouped to pay the run overhead once" in the group's reason. The orchestrator sets
+each group's test, screenshot and agent inputs from the Cost step: leave them out of `inputs`.
+
 ### Dependencies are per task, not only per file
 
 Two issues that touch different files can still depend on each other through one task. Before

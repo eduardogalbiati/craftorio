@@ -14,6 +14,12 @@
 // Calibration (#189, src/renderer/po-calibration.js): a plan question is planned with the agent's saved
 // Speed ↔ Quality step, or a step for that question only; the prompt states its parameters, the simulated
 // answer follows them, normalizeAnswer caps the runs per stage, and the answer records the step.
+// Cost (#205, PoCalibration.cost): the saved Economy ↔ Generous step (`cost`), or one for the question
+// ("plan this one cheap"). It sets the largest group (groupCap: cost wins over the calibration), packs
+// groups of one area or files into one run at Economy (packGroups), sets the test, screenshot and
+// agent inputs the group's workflow declares (costInputs; "not adjustable" when it has none) and adds
+// a test-batch stage after each stage with untested issues (testBatchStages). The answer records both
+// steps and the plan's estimated total (#206, src/cost-estimate.js when the runs are given).
 // Live progress (#180, src/chat-progress.js): ask's `onItem` gets the turn's items as they arrive
 // (a simulated turn streams fake steps first); its `signal` stops the turn, keeping what was written.
 // The conversation is kept per project in <workspace>/backlog/<projectId>.po.jsonl until cleared.
@@ -51,6 +57,7 @@
 const fs = require('fs');
 const path = require('path');
 const backlog = require('./backlog');
+const costEstimate = require('./cost-estimate');
 const DefaultWorkflow = require('./renderer/default-workflow');
 const epics = require('./epics');
 const poCalibration = require('./renderer/po-calibration');
@@ -270,7 +277,9 @@ function sizeGroup(numbers, issues, history) {
 // groups than the step's parallel runs is cut into consecutive stages (the later stages move down),
 // and a group over the step's max complexity gets a warning.
 // `defaultWorkflow` (#195): the setting; a group without a known workflow gets it (or its fallback).
-function normalizeAnswer(answer, { issues, history, workflows, epics: epicList = [], selection = [], mock = false, calibration = null, defaultWorkflow = null }) {
+// `cost` (#205, 1..5): the Cost step it was planned with, recorded on the answer, applied to the groups
+// (see the header); `runs` (#206): the past runs, for each group's `costEstimate` and the plan's `estimateUsd`.
+function normalizeAnswer(answer, { issues, history, workflows, epics: epicList = [], selection = [], mock = false, calibration = null, defaultWorkflow = null, cost = null, runs = null, prices = {} }) {
   const numbers = new Set((issues || []).map((i) => i.number));
   const byNumber = new Map((issues || []).map((i) => [i.number, i]));
   const files = (workflows || []).map((w) => w.file);
@@ -307,10 +316,15 @@ function normalizeAnswer(answer, { issues, history, workflows, epics: epicList =
     };
   }).filter((g) => g.issues.length);
   const level = calibration == null ? null : poCalibration.clamp(calibration);
+  const costLevel = cost == null ? null : poCalibration.cost.clamp(cost);
+  const planned = costedGroups(groups, { level, costLevel, issues, history, workflows, runs, prices });
+  const known = planned.map((g) => g.costEstimate?.usd ?? g.estimate?.costUsd).filter((x) => x != null);
   return {
     summary: String(answer.summary || ''),
     ...(level ? { calibration: level } : {}),
-    groups: level ? calibrateGroups(groups, poCalibration.step(level)) : groups,
+    ...(costLevel ? { cost: costLevel } : {}),
+    ...(known.length ? { estimateUsd: Math.round(known.reduce((a, x) => a + x, 0) * 100) / 100, estimateMissing: planned.length - known.length } : {}),
+    groups: planned,
     ...(closed.length ? { closed } : {}),
     conflicts: (answer.conflicts || []).map((c) => ({ issues: keep(c.issues), reason: String(c.reason || ''), files: (c.files || []).map(String).slice(0, 20) })).filter((c) => c.issues.length > 1),
     enrich: (answer.enrich || []).filter((e) => numbers.has(Number(e.issue))).map((e) => ({ issue: Number(e.issue), reason: String(e.reason || ''), link: ENRICH_ISSUE })),
@@ -334,6 +348,134 @@ function calibrateGroups(groups, step) {
       out.push({ ...g, stage: next + Math.floor(n / per), warnings: [...new Set([...g.warnings, ...over])] });
     });
     next += Math.ceil(of.length / per);
+  }
+  return out;
+}
+
+// #205: the groups planned with both steps: packed at Economy, given the Cost step's inputs, kept to
+// the calibration's runs per stage and to the combined group cap (cost wins), then a test-batch stage
+// after each stage with untested issues; each with its estimate from the past runs (#206).
+function costedGroups(groups, { level, costLevel, issues, history, workflows, runs, prices }) {
+  let out = groups;
+  const costStep = costLevel ? poCalibration.cost.step(costLevel) : null;
+  if (costStep) {
+    const cap = poCalibration.groupCap(level ?? poCalibration.DEFAULT, costLevel);
+    if (costStep.pack) out = packGroups(out, cap, { issues, history });
+    out = out.map((g) => ({ ...g, ...costInputs(g, costStep, workflows) }));
+    const base = level ? poCalibration.step(level) : { maxRuns: null };
+    out = calibrateGroups(out, { ...base, maxComplexity: cap, name: poCalibration.plannedFor(level ?? poCalibration.DEFAULT, costLevel) });
+    if (costStep.testBatch) out = testBatchStages(out, { issues, history, workflows });
+  } else if (level) {
+    out = calibrateGroups(out, poCalibration.step(level));
+  }
+  if (!runs) return out;
+  return out.map((g) => {
+    const e = costEstimate.estimateItem(g, runs, { issues, prices, complexity: g.complexity });
+    return e ? { ...g, costEstimate: e } : g;
+  });
+}
+
+// A group's areas: its name, its files, its issues' epic and topic labels (two groups that share one
+// are in the same area: likely the same files).
+const GENERIC_LABEL = /^(complexity|bug$|enhancement$|feature$|good first issue$|help wanted$)/i;
+function areasOf(g, byNumber) {
+  const out = new Set([`name:${g.name.toLowerCase()}`, ...(g.files || []).map((f) => `file:${f.toLowerCase()}`)]);
+  for (const n of g.issues) {
+    const i = byNumber.get(n);
+    if (i?.epic) out.add(`epic:${i.epic}`);
+    for (const l of i?.labels || []) { const name = String(l?.name ?? l); if (!GENERIC_LABEL.test(name)) out.add(`label:${name.toLowerCase()}`); }
+  }
+  return out;
+}
+
+const PACKED = 'Grouped to pay the run overhead once (same area or files).';
+
+/**
+ * #205 (Economy): a stage's groups of the same workflow and area (areasOf) packed into one run while
+ * the sum of their complexity stays within `cap`; the packed group's reason says so (PACKED).
+ */
+function packGroups(groups, cap, { issues, history }) {
+  const byNumber = new Map((issues || []).map((i) => [i.number, i]));
+  const out = [];
+  for (const g of groups) {
+    const areas = areasOf(g, byNumber);
+    const into = out.find((h) => h.stage === g.stage && h.workflow === g.workflow && !h.simulated && !g.simulated
+      && h.complexity + g.complexity <= cap && [...areasOf(h, byNumber)].some((a) => areas.has(a)));
+    if (!into) { out.push(g); continue; }
+    const nums = [...into.issues, ...g.issues];
+    const size = sizeGroup(nums, issues, history);
+    const own = (x) => (x.warnings || []).filter((w) => !/^Complexity \d+/.test(w));
+    Object.assign(into, {
+      issues: nums,
+      inputs: { ...g.inputs, ...into.inputs },
+      reason: [into.reason, `With ${g.name}: ${g.reason}`.trim(), into.packed ? '' : PACKED].filter(Boolean).join(' '),
+      files: [...new Set([...into.files, ...g.files])].slice(0, 20),
+      ...size,
+      warnings: [...new Set([...size.warnings, ...own(into), ...own(g)])],
+      packed: true,
+      ...(into.suggested || g.suggested ? { suggested: [...(into.suggested || []), ...(g.suggested || [])].filter((s) => !nums.includes(s.issue)) } : {}),
+    });
+  }
+  return out;
+}
+
+// The Cost step's values of the #203/#205 inputs; a cheaper agent (`cheapAgents`) for each model or
+// effort input a workflow declares (none in the bundled development workflows: "not adjustable").
+const CHEAP_MODEL = 'claude-sonnet-5-5';
+const CHEAP_EFFORT = 'medium';
+function costInputs(g, step, workflows) {
+  const declared = (workflows || []).find((w) => w.file === g.workflow)?.inputs || {};
+  const allowed = (k, v) => !!declared[k] && (!Array.isArray(declared[k].enum) || declared[k].enum.map(String).includes(v));
+  const want = { unit_tests: step.unitTests, e2e_tests: step.e2eTests, screenshots: step.screenshots };
+  const set = {};
+  for (const [k, v] of Object.entries(want)) if (allowed(k, v)) set[k] = v;
+  const notAdjustable = [];
+  if (step.cheapAgents) {
+    // the developer keeps its model (a medium effort only); the test writer, evidence and verifier get the cheaper model
+    const agentInputs = Object.keys(declared).filter((k) => /_effort$/.test(k) || (/_model$/.test(k) && !/^develop/.test(k)));
+    for (const k of agentInputs) {
+      const v = /_effort$/.test(k) ? CHEAP_EFFORT : CHEAP_MODEL;
+      if (allowed(k, v)) set[k] = v;
+    }
+    if (!agentInputs.length) notAdjustable.push('Agents: not adjustable (the workflow has no model or effort input)');
+  }
+  for (const k of Object.keys(want)) if (!declared[k]) notAdjustable.push(`${k}: not adjustable (the workflow has no such input)`);
+  return {
+    inputs: { ...g.inputs, ...set },
+    cost: {
+      level: step.level, name: step.name, inputs: set,
+      ...(g.packed ? { grouping: PACKED } : {}),
+      ...(notAdjustable.length ? { notAdjustable } : {}),
+    },
+  };
+}
+
+// Issues whose unit tests a group leaves for later (#203): run existing or off.
+const untested = (g) => ['run_existing', 'off'].includes(g.inputs?.unit_tests);
+const TEST_BATCH = 'test-batch.yaml';
+
+/**
+ * #205 (Economy): after each stage with untested issues, a stage with one test-batch item for them
+ * (the stages after move down). Without the test-batch workflow the groups stay as they are.
+ */
+function testBatchStages(groups, { issues, history, workflows }) {
+  if (!(workflows || []).some((w) => w.file === TEST_BATCH)) return groups;
+  const stages = [...new Set(groups.map((g) => g.stage))].sort((a, b) => a - b);
+  const out = [];
+  let next = 1;
+  for (const s of stages) {
+    const of = groups.filter((g) => g.stage === s);
+    out.push(...of.map((g) => ({ ...g, stage: next })));
+    const nums = [...new Set(of.filter(untested).flatMap((g) => g.issues))];
+    next += 1;
+    if (!nums.length) continue;
+    const size = sizeGroup(nums, issues, history);
+    out.push({
+      name: `Test batch (stage ${next - 1})`, issues: nums, workflow: TEST_BATCH, inputs: {},
+      reason: 'Economy: these issues ran with their existing tests only; one test writer session writes their unit tests together, after their stage.',
+      files: [], stage: next, ...size, estimate: null, warnings: [], testBatch: true,
+    });
+    next += 1;
   }
   return out;
 }
@@ -440,8 +582,11 @@ function backlogReport({ data, activeRuns = [], history = [], workflows = [], qu
 // `calibration` (#189): the step's max complexity per group and parallel runs per stage (Speed: every
 // group of a stage at once, after the refactors; Quality: two per stage).
 // `workflow`: the default development workflow (#195) every group gets.
-function mockAnswer({ data, question = '', selection = [], calibration = poCalibration.DEFAULT, workflow = DefaultWorkflow.LOCAL }) {
-  const step = poCalibration.step(calibration);
+// `cost` (#205): the group cap is groupCap (cost wins); at a packing step (Economy) the issues without
+// a shared area are packed together too, "to pay the run overhead once".
+function mockAnswer({ data, question = '', selection = [], calibration = poCalibration.DEFAULT, workflow = DefaultWorkflow.LOCAL, cost = null }) {
+  const costStep = cost == null ? null : poCalibration.cost.step(cost);
+  const step = { ...poCalibration.step(calibration), ...(costStep ? { maxComplexity: poCalibration.groupCap(calibration, cost) } : {}) };
   const backlogTodo = (data?.issues || []).filter(plannable);
   const attached = new Set(selection.map(Number));
   const todo = attached.size ? backlogTodo.filter((i) => attached.has(i.number)) : backlogTodo;
@@ -458,15 +603,17 @@ function mockAnswer({ data, question = '', selection = [], calibration = poCalib
   const groups = [];
   for (const i of others) {
     const c = complexityOf(i) ?? DEFAULT_COMPLEXITY;
-    const g = topic(i) && groups.find((x) => x.topic === topic(i) && x.size + c <= step.maxComplexity);
-    if (g) { g.issues.push(i.number); g.size += c; } else groups.push({ topic: topic(i), issues: [i.number], size: c });
+    const g = topic(i) ? groups.find((x) => x.topic === topic(i) && x.size + c <= step.maxComplexity)
+      : costStep?.pack && groups.find((x) => x.packed && x.size + c <= step.maxComplexity);
+    if (g) { g.issues.push(i.number); g.size += c; } else groups.push({ topic: topic(i), issues: [i.number], size: c, packed: !topic(i) && !!costStep?.pack });
   }
   const group = (g, stage) => ({
-    name: g.topic || `#${g.issues[0]}`,
+    name: g.topic || (g.packed && g.issues.length > 1 ? 'Small issues' : `#${g.issues[0]}`),
     issues: g.issues,
     workflow,
     inputs: {},
     reason: g.refactor ? 'A repo-wide change: alone in its own stage, before the others.'
+      : g.packed && g.issues.length > 1 ? 'Grouped to pay the run overhead once: small issues of no shared area (simulated).'
       : g.issues.length > 1 ? `Same area (${/^epic /.test(g.topic) ? g.topic : `label ${g.topic}`}): likely the same files.` : 'On its own: no other issue shares its area.',
     files: [],
     stage,
@@ -477,7 +624,7 @@ function mockAnswer({ data, question = '', selection = [], calibration = poCalib
   const perStage = step.maxRuns || Math.max(1, groups.length);
   return {
     summary: [
-      `**Simulated answer** (developer or simulated mode: no model was called)${question ? ` to: “${clip(question, 120)}”` : ''}. Planned for ${poCalibration.label(calibration)}.`,
+      `**Simulated answer** (developer or simulated mode: no model was called)${question ? ` to: “${clip(question, 120)}”` : ''}. Planned for ${cost == null ? poCalibration.label(calibration) : poCalibration.plannedFor(calibration, cost)}.`,
       `${todo.length} ${attached.size ? 'attached ' : ''}issues to do:${groups.length + refactor.length} proposed run${groups.length + refactor.length === 1 ? '' : 's'}, grouped by epic, else by shared label (complexity ${step.maxComplexity} at most per run); repo-wide changes first and alone, then ${step.maxRuns ? `stages of at most ${step.maxRuns} runs` : 'one stage with every other run'}.`,
       `${splits.length ? `${splits.length} issue${splits.length > 1 ? 's are' : ' is'} too big for one run: see the proposed splits.` : 'No issue is too big for one run.'} ${epicPlan.place.length + epicPlan.create.length ? `Epics: ${epicPlan.place.length} issue${epicPlan.place.length === 1 ? '' : 's'} to place, ${epicPlan.create.length} epic${epicPlan.create.length === 1 ? '' : 's'} to create.` : ''}`.trim(),
     ].join('\n\n'),
@@ -1066,17 +1213,24 @@ function checkBudget(budget) {
  * @param calibration #189: a step (1..5) for this question only; else one the question asks for
  *                  ("plan this one for quality"), else the agent's saved `calibration`. A plan answer
  *                  and its question record the step used (`calibration`, `calibrationOverride` when not the saved one).
+ * @param cost      #205: a Cost step (1..5) for this question only; else one the question asks for
+ *                  ("plan this one cheap"), else the agent's saved `cost` (recorded as `cost`, `costOverride`).
  * @returns { message, messages }  the answer ({ role: 'po', text, answer | issue, model, costUsd }) and the whole conversation
  */
 // `defaultWorkflow` (#195): the setting (settings.defaultWorkflow); the plan's groups get it unless an issue needs another.
-async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns, runs, workflows, folder, agent, skillsDirs, resolveCommand, budget, mock, mode = 'plan', attachments = [], selection = [], scenario = null, onItem = null, signal = null, calibration = null, defaultWorkflow = null }) {
+async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns, runs, workflows, folder, agent, skillsDirs, resolveCommand, budget, mock, mode = 'plan', attachments = [], selection = [], scenario = null, onItem = null, signal = null, calibration = null, defaultWorkflow = null, cost = null, prices = {} }) {
   const q = String(question || '').trim();
   if (!q) throw new Error('Ask a question.');
   const byDefault = DefaultWorkflow.resolve(defaultWorkflow, (workflows || []).map((w) => w.file)).file;
   const issueMode = mode === 'issue';
   const saved = poCalibration.clamp(agent?.calibration);
   const level = poCalibration.clamp(calibration, null) ?? poCalibration.fromQuestion(q) ?? saved;
-  const calib = issueMode ? {} : { calibration: level, ...(level !== saved ? { calibrationOverride: true } : {}) };
+  const savedCost = poCalibration.cost.clamp(agent?.cost);
+  const costLevel = poCalibration.cost.clamp(cost, null) ?? poCalibration.costFromQuestion(q) ?? savedCost;
+  const calib = issueMode ? {} : {
+    calibration: level, ...(level !== saved ? { calibrationOverride: true } : {}),
+    cost: costLevel, ...(costLevel !== savedCost ? { costOverride: true } : {}),
+  };
   // #169: the attached issues the backlog knows (plan mode only)
   const known = new Set((data?.issues || []).map((i) => i.number));
   const selected = issueMode ? [] : [...new Set((selection || []).map(Number))].filter((n) => known.has(n));
@@ -1110,7 +1264,7 @@ async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns,
           raw = mockScenario(scenario, { data, question: q, previous, files, workflow: byDefault });
           analysis = `Simulated (scenario "${scenario}"): no model was called, no code was read.`;
         } else {
-          raw = issueMode ? mockIssueAnswer({ data, question: q, previous }) : mockAnswer({ data, question: q, selection: selected, calibration: level, workflow: byDefault });
+          raw = issueMode ? mockIssueAnswer({ data, question: q, previous }) : mockAnswer({ data, question: q, selection: selected, calibration: level, workflow: byDefault, cost: costLevel });
           analysis = 'Simulated: no model was called, no code was read.';
         }
       } catch (e) { failure = e; }
@@ -1128,7 +1282,7 @@ async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns,
       const shared = issueMode ? null : await sharedFiles({ runs: (runs || []).filter((r) => !r.mock).slice(0, SHARED_FILE_RUNS), repo: folder, store: storeFor(runsDir), limit: SHARED_FILES });
       const report = (issueMode ? issueReport : backlogReport)({ data, activeRuns, history, workflows, question: q, selection: selected, shared, defaultWorkflow: byDefault });
       ({ raw, costUsd, model, invalid, tokens, text: analysis } = await callAgent({
-        mode, question: q, report, previous, attachments: files, selection: selected, folder, agent: issueMode ? ISSUE_AGENT : agent, skillsDirs, resolveCommand, onItem: seen, signal, calibration: level,
+        mode, question: q, report, previous, attachments: files, selection: selected, folder, agent: issueMode ? ISSUE_AGENT : agent, skillsDirs, resolveCommand, onItem: seen, signal, calibration: level, cost: costLevel,
       }));
       recordUsage(backlogDir, { projectId, model, tokens, costUsd });
     }
@@ -1148,7 +1302,7 @@ async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns,
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, `${message.ts.replace(/[:.]/g, '-')}.md`), `${String(analysis || '').trim()}\n\n\`\`\`json\n${JSON.stringify(raw, null, 2)}\n\`\`\`\n`);
   } else {
-    const answer = normalizeAnswer(raw, { issues: data?.issues, history, workflows, epics: data?.epics, selection: selected, mock: !!mock, calibration: level, defaultWorkflow: byDefault });
+    const answer = normalizeAnswer(raw, { issues: data?.issues, history, workflows, epics: data?.epics, selection: selected, mock: !!mock, calibration: level, defaultWorkflow: byDefault, cost: costLevel, runs: (runs || []).filter((r) => !r.mock), prices });
     message = appendMessage(backlogDir, projectId, {
       role: 'po', text: answer.summary, answer, model, costUsd, ...calib, ...(invalid ? { invalid } : {}),
     });
@@ -1158,8 +1312,9 @@ async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns,
 
 // One read-only Claude Code turn in the project folder. An answer that does not validate is kept as
 // prose (no second call: one call per question). Mode 'issue': the issue skills, ISSUE_SCHEMA, and
-// read access to the attachments' folder. A plan turn states its calibration (#189) after the rules.
-async function callAgent({ mode = 'plan', question, report, previous, attachments = [], selection = [], folder, agent, skillsDirs, resolveCommand, onItem = () => {}, signal = null, calibration = null }) {
+// read access to the attachments' folder. A plan turn states its calibration (#189) and its Cost step
+// (#205) after the rules.
+async function callAgent({ mode = 'plan', question, report, previous, attachments = [], selection = [], folder, agent, skillsDirs, resolveCommand, onItem = () => {}, signal = null, calibration = null, cost = null }) {
   const { extractJson, validateSchema, render } = require('./engine/workflow');
   const { runTurn, isImagePath } = require('./engine/providers');
   const { resolveSkill, skillPrompt } = require('./skills');
@@ -1182,6 +1337,7 @@ async function callAgent({ mode = 'plan', question, report, previous, attachment
     ...skills.map(skillPrompt),
     issueMode ? ISSUE_RULES : RULES,
     issueMode ? '' : poCalibration.promptSection(calibration ?? agent?.calibration),
+    issueMode ? '' : poCalibration.costPromptSection(cost ?? agent?.cost, poCalibration.clamp(calibration ?? agent?.calibration)),
     selection.length ? SELECTION_RULES : '',
     report,
     issueMode ? issueContext(previous) : previousExchanges(previous),
@@ -1212,8 +1368,11 @@ module.exports = {
   applySplit,
   ask,
   backlogReport,
+  calibrateGroups,
   clearConversation,
   complexityOf,
+  costedGroups,
+  costInputs,
   currentDraft,
   discardDraft,
   estimate,
@@ -1227,9 +1386,11 @@ module.exports = {
   monthUsage,
   normalizeAnswer,
   normalizeIssueAnswer,
+  packGroups,
   readConversation,
   runHistory,
   saveAttachment,
   SELECTION_RULES,
   sizeGroup,
+  testBatchStages,
 };

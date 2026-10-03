@@ -156,8 +156,8 @@ tpl.addFilter('e2e_scenarios', (output) => scenarios.scenariosMessage(output));
 tpl.addFilter('suite_failures', (output) => suiteStep.suiteMessage(output));
 
 // The test inputs of the development workflows (#203): what the run summary and the gates say
-// ("Unit tests: Off (workflow default)").
-const TEST_INPUTS = { unit_tests: 'Unit tests', e2e_tests: 'E2E tests' };
+// ("Unit tests: Off (workflow default)"), and their evidence screenshots (#205: "Screenshots: Off").
+const TEST_INPUTS = { unit_tests: 'Unit tests', e2e_tests: 'E2E tests', screenshots: 'Screenshots' };
 function testsPlan(defs, given, resolved) {
   return Object.entries(TEST_INPUTS).filter(([k]) => defs?.[k]).map(([k, label]) => {
     const def = defs[k];

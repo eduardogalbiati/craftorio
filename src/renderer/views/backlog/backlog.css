@@ -279,6 +279,13 @@ a.rm-title:hover { text-decoration: underline; }
 /* a long input value or run id is abbreviated (the full value in the tooltip), never wider than the card */
 .rm-meta > .badge, .rm-meta > .bl-run { max-width: 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rm-meta > .rm-input { max-width: min(100%, 320px); }
+/* #205/#206: the Product Owner's Cost step, the estimate and the real cost of an item */
+.rm-cost { border-color: rgba(45,212,191,.45); }
+.rm-cost-1, .rm-cost-2 { background: rgba(15,159,143,.14); }
+.rm-cost-4, .rm-cost-5 { background: rgba(168,85,247,.12); border-color: rgba(168,85,247,.4); }
+.rm-estimate { font-variant-numeric: tabular-nums; }
+.rm-no-estimate { color: var(--muted); }
+.rm-actual { font-variant-numeric: tabular-nums; color: var(--text); }
 .rm-item.flash { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); transition: box-shadow .3s; }
 /* #195: a workflow that pushes while the default development workflow merges locally */
 .badge.rm-wf-push { color: var(--orange); background: color-mix(in srgb, var(--orange) 14%, var(--panel)); border-color: color-mix(in srgb, var(--orange) 45%, transparent); }

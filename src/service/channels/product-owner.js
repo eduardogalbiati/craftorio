@@ -52,8 +52,8 @@ module.exports = (ctx) => {
     {
       channel: 'po:ask',
       method: 'askProductOwner',
-      params: ['projectId', 'question', 'mock', 'mode', 'attachments', 'issues', 'scenario', 'calibration'],
-      fn: async ({ projectId, question, mock, mode, attachments, issues, scenario, calibration }) => {
+      params: ['projectId', 'question', 'mock', 'mode', 'attachments', 'issues', 'scenario', 'calibration', 'cost'],
+      fn: async ({ projectId, question, mock, mode, attachments, issues, scenario, calibration, cost }) => {
         const id = project(projectId);
         const p = projects.readProject(ctx.ws.projects, id);
         const data = ctx.withIssueRuns(backlog.readBacklog(ctx.ws.backlog, id));
@@ -89,6 +89,9 @@ module.exports = (ctx) => {
             scenario: simulated && typeof scenario === 'string' && scenario ? scenario : null,
             // #189: the drawer's calibration chip, for this question only (null: the saved one)
             calibration: calibration ?? null,
+            // #205: the drawer's Cost chip, for this question only (null: the saved one); #206: the prices of the estimates
+            cost: cost ?? null,
+            prices: settings.prices || {},
             onItem: turn.onItem,
             signal: turn.signal,
           });

@@ -188,6 +188,15 @@ inputs:
     label: E2E tests
     options: { "off": "Off", write: Write, write_and_run: Write and run }
     description: "Write: the test writer writes the issue's end-to-end scenarios and checks that they parse; the E2E release workflow runs them. Write and run: it also runs them here (slow: starts the app, about 25 more minutes). Off: none."
+  # #205: the evidence screenshots (the Product Owner's Cost step sets it on a roadmap item:
+  # Economy off, Balanced changed, Generous all)
+  screenshots:
+    type: string
+    enum: ["off", changed, all]
+    default: all
+    label: Screenshots
+    options: { "off": "Off", changed: Changed screens, all: All }
+    description: "All: the developer's UI states before your check and the evidence's captures. Changed: only the screens the issue changes, original and modified. Off: no screenshot step and no npm run screenshot by any agent; the evidence is the diff, the logs and the test results (cheapest: the evidence step costs about $0.3-1.5 and 5-10 min of a run)."
   test_command:
     type: string
     default: ""
@@ -497,12 +506,21 @@ steps:
       For a UI change, list the interaction states to capture (the default view, then each edit
       form, empty state and error state the change adds, with the clicks that open them) and make
       the screenshot demo data cover the fields the change introduces (ui-conventions skill).
+      {% if inputs.screenshots == 'off' %}
+      Screenshots are off in this run (input `screenshots`): `screenshots` is an empty list, and
+      the evidence plan shows the change with the diff, commands, logs or test results, never with
+      `npm run screenshot`.
+      {% else %}
+      {% if inputs.screenshots == 'changed' %}Screenshots: only the screens this issue changes (input `screenshots`), at most the
+      default view and one state per changed screen.
+      {% endif %}
       In `screenshots`, list the same UI states as exact options of the project's screenshot command
       (`npm run screenshot -- …`), one entry each: `name` a plain file name
       `<issue>-<screen>-<state>`, `caption` one sentence, `args` the options as a list (e.g.
       ["--view", "backlog", "--mode", "roadmap", "--click", "[data-rm-edit]"]), never --out, --name,
       --side, --ref or --caption (the capture sets them). The engine captures each one, original and
       modified, before the owner tries the change. An empty list when the change has no UI.
+      {% endif %}
       In `left_out`, list each requirement of the task (its acceptance criteria, each task of the
       issue) that you did not implement, with the reason: never leave one only in prose; an empty
       list when everything was done. A list that is not empty sends you back here, not to the review.
@@ -585,6 +603,8 @@ steps:
       # validated mode: the owner tries the first implementation and every round they asked for
       # (vars.owner_validated is "yes" once they approved; a review fix round goes on without them,
       # unless validate_every_round)
+      - when: "(inputs.mode == 'validated' and output.committed and (vars.owner_validated != 'yes' or inputs.validate_every_round)) and inputs.screenshots == 'off'"
+        goto: developer_check
       - when: "inputs.mode == 'validated' and output.committed and (vars.owner_validated != 'yes' or inputs.validate_every_round)"
         goto: developer_screenshots
       # the review findings needed no production change (e.g. they ask for tests, which the test
@@ -638,7 +658,7 @@ steps:
       {% if worktree_dir %}Diff: Show the diff opens the branch's changes since `origin/{{ inputs.base_branch }}` here.{% endif %}
       Test notes: {{ steps.develop.output.test_notes }}
       {% if tests_plan %}{{ tests_plan }}{% endif %}
-      {% if steps.developer_screenshots.output %}Screenshots: {{ steps.developer_screenshots.output.message }}{% endif %}
+      {% if inputs.screenshots == 'off' %}Screenshots: off in this run (the evidence is the diff, the logs and the test results).{% elif steps.developer_screenshots.output %}Screenshots: {{ steps.developer_screenshots.output.message }}{% endif %}
       {% if steps.develop.output.evidence_plan %}Evidence plan: {{ steps.develop.output.evidence_plan }}{% endif %}
       {% set e2e = steps.test.output | e2e_scenarios %}{% if e2e %}{{ e2e }}{% elif inputs.e2e_tests == 'off' %}E2E scenarios: off in this run.{% else %}E2E scenarios: none yet. The test writer writes them after the code review; they show at the merge approval.{% endif %}
     feedback: { label: "Your change request for the developer (required with \"Ask for changes\")", placeholder: "What to change, point by point" }
@@ -678,6 +698,9 @@ steps:
       - when: "choice == 'continue' and inputs.issues | length > 1 and not steps.issue_not_done.output and (steps.develop.output.issues or []) | rejectattr('done') | list | length"
         goto: issue_not_done
         set: *accepted_gaps
+      - when: "(choice == 'continue' and inputs.mode == 'validated' and vars.owner_validated != 'yes') and inputs.screenshots == 'off'"
+        goto: developer_check
+        set: *accepted_gaps
       - when: "choice == 'continue' and inputs.mode == 'validated' and vars.owner_validated != 'yes'"
         goto: developer_screenshots
         set: *accepted_gaps
@@ -700,6 +723,8 @@ steps:
       - { id: continue, label: "Continue without them (the PR/MR will not close them)" }
       - { id: stop,     label: "Stop the run as failed (worktree kept to resume)" }
     transitions:
+      - when: "(choice == 'continue' and inputs.mode == 'validated' and vars.owner_validated != 'yes') and inputs.screenshots == 'off'"
+        goto: developer_check
       - when: "choice == 'continue' and inputs.mode == 'validated' and vars.owner_validated != 'yes'"
         goto: developer_screenshots
       - when: "choice == 'continue'"
@@ -900,6 +925,8 @@ steps:
       {% endif %}
       {% if inputs.e2e_tests != 'write_and_run' %}
       No screenshots here: the evidence of the change is collected after the build (evidence step).
+      {% elif inputs.screenshots == 'off' %}
+      Screenshots are off in this run: never run `npm run screenshot`; report the scenarios without screenshots.
       {% endif %}
       When a test fails (yours or one of the suite's), first check whether the same test fails on
       `origin/{{ inputs.base_branch }}`, following the test skill (pre-existing failures): run
@@ -1125,6 +1152,14 @@ steps:
       Stay within the skill's budget: no reading code beyond `git diff --stat` and the plan, no
       tests, no checking docs (the verifier does that), at most 2 captures per issue (plus the
       interaction states the plan lists for a UI change, at most 4 more).
+      {% if inputs.screenshots == 'off' %}
+      Screenshots are off in this run (input `screenshots`): never run `npm run screenshot` or start the
+      app. The evidence is the diff (`git diff --stat`), the logs and the test results, and
+      `ui_findings` is an empty list. Say "Screenshots: off" in `note`.
+      {% elif inputs.screenshots == 'changed' %}
+      Screenshots: only the screens this issue changes (input `screenshots`), original and modified;
+      no other screen.
+      {% endif %}
       Collect the evidence that the change does what the task asked, following the
       implementation-evidence skill: pick the kind per issue (UI screenshots original/modified into
       `{{ evidence_dir }}` as `<issue>-<screen>-<state>.original.png` / `.modified.png`, HTTP

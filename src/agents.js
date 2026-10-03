@@ -7,7 +7,8 @@
 // (agents/supervisor.json).
 // The Backlog's Product Owner (#105, src/product-owner.js) is built in the same way, listed second:
 // its instructions are the backlog-product-owner skill; its look, model, effort and its Speed ↔ Quality
-// calibration (#189, `calibration` 1..5, src/renderer/po-calibration.js) are saved (agents/product-owner.json).
+// calibration (#189, `calibration` 1..5, src/renderer/po-calibration.js) and its Economy ↔ Generous
+// Cost step (#205, `cost` 1..5, the same file) are saved (agents/product-owner.json).
 // The Oracle (#122, src/oracle.js), the app-wide master agent, is built in the same way, listed third:
 // its instructions are the oracle skill; its look, model and effort are saved (agents/oracle.json).
 // The workflows' own agents (the `agents:` of each YAML in <workspace>/workflows/, #68) are listed
@@ -119,7 +120,7 @@ function tunableAgent(dir, id) {
     model: MODEL.test(saved.model || '') ? saved.model : def.model,
     effort: EFFORTS.includes(saved.effort) ? saved.effort : def.effort,
     appearance: normalizeAppearance(saved.appearance, look),
-    ...(id === PRODUCT_OWNER_ID ? { calibration: calibration.clamp(saved.calibration) } : {}),
+    ...(id === PRODUCT_OWNER_ID ? { calibration: calibration.clamp(saved.calibration), cost: calibration.cost.clamp(saved.cost) } : {}),
     updatedAt: saved.updatedAt || null,
   };
 }
@@ -297,7 +298,7 @@ function createAgent(dir, data) {
 
 /**
  * The supervisor only takes `appearance`, the Product Owner and the Oracle `appearance`, `model` and `effort`
- * (the Product Owner also its `calibration`, 1..5: a missing one keeps the saved value); everything else
+ * (the Product Owner also its `calibration` and its `cost`, 1..5: a missing one keeps the saved value); everything else
  * about them is fixed.
  */
 function saveAgent(dir, id, data, { workflowsDir } = {}) {
@@ -312,11 +313,12 @@ function saveAgent(dir, id, data, { workflowsDir } = {}) {
     if (data?.effort && !EFFORTS.includes(data.effort)) throw new Error(`Pick the effort (${EFFORTS.join(', ')}).`);
     const level = data?.calibration;
     if (id === PRODUCT_OWNER_ID && level != null && !calibration.clamp(level, 0)) throw new Error(`Pick a calibration from ${calibration.MIN} (Speed) to ${calibration.MAX} (Quality).`);
+    if (id === PRODUCT_OWNER_ID && data?.cost != null && !calibration.cost.clamp(data.cost, 0)) throw new Error(`Pick a cost from ${calibration.MIN} (Economy) to ${calibration.MAX} (Generous).`);
     return write(dir, id, {
       appearance: normalizeAppearance(data?.appearance, look),
       model: model || def.model,
       effort: data?.effort || def.effort,
-      ...(id === PRODUCT_OWNER_ID ? { calibration: calibration.clamp(level, tunableAgent(dir, id).calibration) } : {}),
+      ...(id === PRODUCT_OWNER_ID ? { calibration: calibration.clamp(level, tunableAgent(dir, id).calibration), cost: calibration.cost.clamp(data?.cost, tunableAgent(dir, id).cost) } : {}),
       updatedAt: new Date().toISOString(),
     });
   }

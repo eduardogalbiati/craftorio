@@ -762,6 +762,77 @@ applies groups planned with it. Each answer shows the step it planned with ("Pla
 question; pick another one there, or write it in the question ("plan this one for quality"), and
 only that question uses it: the saved setting does not change.
 
+**The second axis, Cost: Economy ↔ Generous** (#205). Most of a run's cost is decided when the work
+is planned: how many runs (each pays a fixed overhead), which tests run (#203) and which models the
+agents use. A second five-step slider sits under Speed ↔ Quality in both places (same tooltips and
+"what this step does" line), saved as `cost` (1-5, default 3) in the same file:
+
+| | Economy (1) | 2 | Balanced (3) | 4 | Generous (5) |
+|---|---|---|---|---|---|
+| max complexity per group | 8 | 7 | the Speed ↔ Quality step's | 5 | 4 |
+| grouping | issues of one area or files packed into one run ("grouped to pay the run overhead once") | the same | as Speed ↔ Quality plans | as Speed ↔ Quality plans | as Speed ↔ Quality plans |
+| `unit_tests` | run existing, then a `test-batch` item after the stage | write and run | write and run | write and run | write and run |
+| `e2e_tests` | write | write | write | write | write and run |
+| `screenshots` | off | changed screens | changed screens | all | all |
+| agents | cheaper models and a medium effort where the workflow has an input for them | the same | the workflow's | the workflow's | the workflow's |
+
+When the two sliders disagree, cost wins: the group cap is the Cost step's (Speed + Economy gives
+fewer, larger runs); the runs per stage stay the calibration's. The orchestrator applies the step to
+every planned group, whatever the model wrote: it packs a stage's groups that share an area (name,
+files, epic or topic label) within the cap, sets `unit_tests`, `e2e_tests` and `screenshots` when the
+group's workflow declares them, and at Economy adds a stage with one `test-batch` item for the issues
+that ran with their existing tests only (a test-batch item may name issues another item holds, and
+runs even when they are closed). An input a workflow does not declare is not adjustable: the group
+says so (the bundled development workflows have no model or effort input, so "agents: not
+adjustable"), and no workflow is edited. Each group, and the roadmap item added from it, carries a
+cost badge with these choices; you can still change the item's inputs. Each plan answer shows both
+steps ("Planned for Speed · Economy") and the plan's estimated total. For one question: the Cost chip
+next to the calibration chip, or "plan this one cheap" in the question.
+
+**Screenshots on or off** (`screenshots` input of both development workflows, #205): `all` (the
+default: as before), `changed` (only the screens the issue changes, original and modified) or `off`
+(no `developer_screenshots` step, no `npm run screenshot` by the test or evidence agents: the evidence
+is the diff, the logs and the test results, and the gates say "Screenshots: off"). The evidence step
+costs about $0.3-1.5 and 5-10 minutes of Electron time per run.
+
+To measure: compare $/run and $/issue over a week at Economy with the baseline of 2026-10-01/02
+(~$11.7-11.9 per run, the test step about half of it), from the runs' `summary.json` or Usage.
+
+### Roadmap cost estimates and the spending budget
+
+**Estimates before running** (#206, `src/cost-estimate.js`). Each roadmap item shows "≈ $X" and each
+stage "≈ $Y" (the sum of its items). The tooltip says how it was computed and from how many runs.
+An item's estimate comes from the last 30 successful real runs of its workflow in the project. Each
+past run's cost is split by step (its sessions' `step_id`) and divided by its complexity (the
+`complexity:n` labels of its issues, 3 for an issue without one). The estimate is the median per
+step × the item's complexity. A step the item's inputs change is read from past runs with the same
+inputs when there are at least 3, else scaled:
+- the test step by `unit_tests` / `e2e_tests` (#203): run existing ×0.35, off ×0.25, E2E write and
+  run ×1.3;
+- the evidence step by `screenshots` (#205): changed ×0.75, off ×0.5. With screenshots off, the
+  `developer_screenshots` step costs nothing.
+
+So the Cost step shows up in the estimate through the inputs it sets and the size of its groups. An
+item without history says "no estimate yet". Once an item has a run, its real cost shows next to the
+estimate ("so far" while it runs). The Product Owner's plan answers show the plan's estimated total.
+Codex reports no cost, so its sessions are priced from tokens × the model prices of Usage, and the
+estimate is marked estimated.
+
+**A budget that pauses before overspending** (Settings › General › Budget: `budget.dailyUsd` per
+local day, `budget.nightlyUsd` per Night watch night, from its start; empty = no cap). Spending is
+what real runs recorded (their sessions' `cost_usd`, live runs included). The cap stops starts,
+never runs mid-way or gates. Before a roadmap starts a real item, if what is spent plus the item's
+estimate would pass a cap, the roadmap pauses before it. You get a notification: "Budget reached:
+$X of $Y today; next stage ≈ $Z". The roadmap bar then offers two buttons:
+- **Raise for today** (or tonight): the cap becomes what is spent plus the next stage, for that day
+  or that night only (`budget.raised`).
+- **Resume anyway**: this roadmap ignores the cap until the day or the night ends (the roadmap's
+  `budgetWaived`).
+
+A run already started finishes, and no human gate is answered. The live roadmap's refills (#164)
+and the Night watch's roadmaps respect the same cap. The top bar shows today's spending next to the
+month's usage, "$38 / $60 today", or tonight's while the Night watch is on.
+
 ### Chaining workflows: When it finishes
 
 A run can hand its result to what comes next. The Start panel, the Backlog's Assign dialog and a
@@ -789,34 +860,6 @@ Each workflow declares what it hands over (`outputs:`, recorded in `summary.json
 local hero `branch`, `merged_commit`, `issues`, `pr_url`; run-retrospective `findings`. The run
 lists and the run chat show "→ then: <workflow>" on a chained run. Engine details:
 [docs/agents/engine.md](docs/agents/engine.md#chaining-declared-outputs-and-then-134).
-
-### A workflow as a step (child runs)
-
-A step can run another workflow, once or once per item of a list, and use its outputs:
-
-```yaml
-- id: develop
-  type: workflow
-  workflow: software-development.yaml
-  inputs: { task: "{{ item.title }}", repo_path: "{{ inputs.repo_path }}" }
-  foreach: "{{ steps.plan.output.issues }}"   # optional: one child run per item
-  max_parallel: 2                             # optional, with foreach (default 1)
-```
-
-Each child is a normal run (its own folder, worktree, sessions and gates), listed under its parent;
-the Run screen links both ways. Its gates wait for you, and so does the parent.
-
-- **Limits and cost**: a child takes a slot of Settings › Execution › Concurrent runs like any run;
-  its parent, which only waits, lends it its own slot. When no slot is free the child waits for one
-  instead of failing (with a limit of 1 the children run one at a time). Children count in the
-  monthly budgets. Each child has its own context limit (`max_total_context`); the parent's
-  `max_total_cost_usd` includes what its children cost. The run lists and the Run screen show the
-  children's total cost next to the parent's own.
-- **Stop and resume**: stopping the parent stops its running children, and the Stop button asks
-  first. Resuming the parent from that step reuses the children that succeeded and resumes the
-  others from where they stopped (gates still ask again), instead of starting them from scratch.
-
-Engine details: [docs/agents/engine.md](docs/agents/engine.md#a-workflow-as-a-step-type-workflow-174).
 
 ### Resuming a run from a step
 
@@ -1267,7 +1310,7 @@ Everything the app produces lives in a local workspace folder:
   projects/  projects (one .json per project)
   skills/    skills (one folder with SKILL.md per skill)
   backlog/   last issue sync of each project (one .json per project; <id>.po.jsonl = the Product Owner's conversation)
-  agents/    user-defined agents (one .json per agent; supervisor.json = the supervisor's look, product-owner.json = the Product Owner's look, model, effort and Speed ↔ Quality calibration)
+  agents/    user-defined agents (one .json per agent; supervisor.json = the supervisor's look, product-owner.json = the Product Owner's look, model, effort, Speed ↔ Quality calibration and Economy ↔ Generous cost)
   workflows/ workflow definitions (one .yaml per workflow)
   settings.json  app preferences, budgets and prices
   index.db   SQLite index next to the files: runs cache, Backlog queues, pending gates, notifications

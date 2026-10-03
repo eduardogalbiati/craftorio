@@ -2,6 +2,9 @@
 // the current stage's items while there are free run slots; called after every run and when a
 // workspace opens. Also the roadmap as the Backlog shows it (item statuses from their runs, #112)
 // and Start (the whole roadmap, or one stage, #141). A live roadmap's refill (#164): areas/live-roadmap.js.
+// Cost (#206): the view gives each item and stage its estimate (src/cost-estimate.js, from the
+// project's past runs) and each item with a run its real cost; a real start that would pass the
+// budget cap (areas/budget.js) pauses the roadmap instead (budgetStop) and notifies the owner.
 
 const path = require('path');
 const { loadWorkflow } = require('../../engine/workflow');
@@ -9,6 +12,8 @@ const simulation = require('../../engine/simulation');
 const workspace = require('../../workspace');
 const projects = require('../../projects');
 const backlog = require('../../backlog');
+const budget = require('../../budget');
+const costEstimate = require('../../cost-estimate');
 const roadmaps = require('../../roadmap');
 const runs = require('../../runs');
 const RunProgress = require('../../renderer/run-progress-model');
@@ -50,7 +55,8 @@ module.exports = (ctx) => {
         stepTimes: times, history: count,
       };
     };
-    return {
+    const prices = workspace.readSettings(ctx.ws).prices || {};
+    return costEstimate.withEstimates({
       ...roadmap,
       stages: roadmap.stages.map((s) => ({
         ...s,
@@ -60,7 +66,27 @@ module.exports = (ctx) => {
           return { ...x, ...(waiting ? { waiting: true } : {}), ...(run ? { run } : {}) };
         }),
       })),
-    };
+    }, list, { prices });
+  }
+
+  // #206: whether the budget cap stops this start: the roadmap pauses with the stage's estimate
+  // (its items not started yet) and the owner is notified (Raise for today / Resume anyway on the roadmap).
+  function budgetStop(projectId, item, roadmap) {
+    const settings = workspace.readSettings(ctx.ws);
+    const caps = budget.budgetSettings(settings);
+    if (!caps.dailyUsd && !caps.nightlyUsd) return false;
+    const list = runs.listRuns(ctx.ws.runs);
+    const estimate = (x) => costEstimate.estimateItem(x, list, { prices: settings.prices || {} });
+    const next = estimate(item);
+    const block = ctx.budgetBlock(roadmap, next?.usd || 0);
+    if (!block) return false;
+    const stage = roadmap.stages.find((s) => s.items.some((x) => x.id === item.id));
+    const known = (stage?.items || []).filter((x) => x.status === 'planned' && !x.runId).map((x) => estimate(x)?.usd).filter((v) => v != null);
+    const stageUsd = known.length ? Math.round(known.reduce((a, v) => a + v, 0) * 100) / 100 : null;
+    const message = budget.pauseMessage(block, stageUsd);
+    roadmaps.budgetPause(ctx.ws.backlog, projectId, { period: block.period, spentUsd: block.spentUsd, limitUsd: block.limitUsd, nextUsd: block.nextUsd, stageUsd, at: new Date().toISOString() }, message);
+    ctx.notify({ kind: 'run', event: 'failed', title: 'Budget reached', body: message.slice(0, 180), target: { view: 'backlog', projectId } }, { projectId });
+    return true;
   }
 
   async function dispatchRoadmaps() {
@@ -129,6 +155,9 @@ module.exports = (ctx) => {
     for (const item of start) {
       // a slot may have been taken by the previous start
       if (ctx.slotProblem({ mock: mockOf(item), projectId })) break;
+      // #206: the budget cap stops a real start whose estimate would pass it (never a run in progress
+      // nor a gate): the roadmap pauses with the next stage's estimate, the owner raises or resumes
+      if (!mockOf(item) && budgetStop(projectId, item, roadmap)) break;
       try {
         const project = projects.readProject(ws.projects, projectId);
         const wf = loadWorkflow(ctx.workflowPath(item.workflow).file);

@@ -65,6 +65,18 @@ module.exports = (ctx) => {
         return current(projectId);
       },
     },
+    // A roadmap paused by the budget cap (#206, areas/budget.js): raise (the cap for today or tonight
+    // becomes what is spent plus the next stage) or resume (this roadmap ignores the cap until the
+    // day or the night ends); both run it again
+    {
+      channel: 'roadmap:budget',
+      method: 'roadmapBudget',
+      params: ['projectId', 'action'],
+      fn: async ({ projectId, action }) => {
+        await ctx.budgetAction({ projectId: project(projectId), action: String(action) });
+        return current(projectId);
+      },
+    },
     // Live roadmap (#164): on (only while running) the Product Owner refills it from the backlog when
     // its last stage ends; off lets the current stages finish and adds nothing more
     {
