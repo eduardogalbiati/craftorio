@@ -11,11 +11,12 @@ const path = require('path');
 const vm = require('vm');
 const RunBadges = require('../src/renderer/run-badges');
 
-const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'app.js'), 'utf8');
+// run titles, issues and PRs moved into run-meta.js: both files are searched
+const src = ['app.js', 'run-meta.js'].map((f) => fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', f), 'utf8')).join('\n');
 
 function extract(name, re) {
   const m = re.exec(src);
-  assert.ok(m, `${name} not found in app.js: the source moved`);
+  assert.ok(m, `${name} not found in app.js or run-meta.js: the source moved`);
   return m[0];
 }
 

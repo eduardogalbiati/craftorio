@@ -12,7 +12,8 @@ const RunProgress = require('../src/renderer/run-progress-model');
 const RunBadges = require('../src/renderer/run-badges');
 const ChainModel = require('../src/renderer/chain-model'); // #134: runInfo reads a run's chain through it
 
-const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'app.js'), 'utf8');
+// run titles, issues and PRs moved into run-meta.js: both files are searched
+const src = ['app.js', 'run-meta.js'].map((f) => fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', f), 'utf8')).join('\n');
 const supSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'supervisor-drawer.js'), 'utf8');
 
 const PATTERNS = {
@@ -45,7 +46,7 @@ function loadHelpers({ api = {}, view = 'dashboard' } = {}) {
   const code = {};
   for (const [name, re] of Object.entries(PATTERNS)) {
     const m = re.exec(name === 'SUP_ACTIONS' ? supSrc : src);
-    assert.ok(m, `${name} not found in ${name === 'SUP_ACTIONS' ? 'supervisor-drawer.js' : 'app.js'}: the source moved`);
+    assert.ok(m, `${name} not found in ${name === 'SUP_ACTIONS' ? 'supervisor-drawer.js' : 'app.js or run-meta.js'}: the source moved`);
     code[name] = m[0];
   }
   const calls = { showToast: [], loadUsage: 0, loadUsageThrottled: 0, loadActiveRuns: 0, showView: [], showRunInList: [] };
