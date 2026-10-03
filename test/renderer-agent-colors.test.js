@@ -88,6 +88,30 @@ test('chip: in both themes, the text on a role\'s chip has a contrast of at leas
   }
 });
 
+// #227: roleChip(agent, def, theme) is the HTML of the small chip by an agent's name: its role in
+// words ("test writer"), with chip()'s background and text colours.
+test('roleChip: the chip names the role in words, in the role\'s chip colours, in both themes', () => {
+  const { roleChip, chip } = load();
+  for (const theme of ['light', 'dark']) {
+    for (const [agent, label] of [['test_writer', 'test writer'], ['developer', 'developer'], ['reviewer', 'reviewer']]) {
+      const html = roleChip(agent, undefined, theme);
+      const c = chip(agent, undefined, theme);
+      assert.match(html, /class="[^"]*agent-chip[^"]*"/, `${agent} ${theme}: an agent-chip element`);
+      assert.match(html, new RegExp(`>${label}<`), `${agent} ${theme}: says "${label}"`);
+      assert.match(html, new RegExp(`background(-color)?:\\s*${c.background}`, 'i'), `${agent} ${theme}: chip background`);
+      assert.match(html, new RegExp(`(^|[;"\\s])color:\\s*${c.text}`, 'i'), `${agent} ${theme}: chip text colour`);
+    }
+  }
+});
+
+test('roleChip: a workflow\'s `color` wins, and a custom agent\'s name is escaped', () => {
+  const { roleChip, chip } = load();
+  assert.match(roleChip('developer', { color: '#123456' }, 'dark'), new RegExp(chip('developer', { color: '#123456' }, 'dark').background, 'i'));
+  const html = roleChip('<b>bot</b>', undefined, 'dark');
+  assert.doesNotMatch(html, /<b>bot<\/b>/);
+  assert.match(html, /&lt;b&gt;bot&lt;\/b&gt;/);
+});
+
 test('the run chat colours its agents through AgentColors, not only the name hash', () => {
   const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'views', 'runchat', 'runchat.js'), 'utf8');
   assert.match(src, /AgentColors\.(colorFor|chip)\(/);
