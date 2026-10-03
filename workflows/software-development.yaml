@@ -910,6 +910,9 @@ steps:
       `tests_status` fail; the orchestrator's suite does not count it either. The owner gets the list as a follow-up.
       If a test fails because of production code, do NOT fix it:
       fill failure_report with test, file, error and probable cause.
+      Last step, always: `git add` every test file you wrote or changed (feature files and step
+      definitions included) and commit them on the branch, then set `committed: true`. Test files left
+      uncommitted block the local merge. `committed: false` only when you changed no file.
     output_schema:
       type: object
       required: [tests_status, tests_added, committed]
