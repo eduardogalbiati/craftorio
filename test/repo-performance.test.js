@@ -8,7 +8,7 @@ const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
 const {
-  CONFLICT_STEPS, conflictsOf, fileCounts, filesEditedByRuns, repositoryPerformance, runFacts, SHARED_LIMIT, sharedFiles,
+  CONFLICT_STEPS, conflictsOf, fileCounts, filesEditedByRuns, recommendationOf, repositoryPerformance, runFacts, SHARED_LIMIT, sharedFiles,
 } = require('../src/repo-performance');
 
 // Isolated identity on every call: nothing depends on the machine's git config (as in worktree.test.js).
@@ -243,6 +243,50 @@ test('sharedFiles: the Product Owner\'s conflict map is fileCounts of filesEdite
   assert.deepEqual(out.files, [{ file: 'a.txt', runs: 1, share: 0.5, runIds: ['r1'] }]); // "a.txt" sorts before "z.txt", limit 1
 });
 
+// ---- recommendationOf (#197): what to do with a file over the shared limit -------------------------
+
+const over = (file, extra = {}) => ({ file, runs: 8, share: 0.4, lines: 120, generated: false, conflicts: 2, ...extra });
+
+test('recommendationOf: a generated file → edit the generator or its source list (even a generated doc)', () => {
+  assert.equal(recommendationOf(over('README.md', { generated: true })).kind, 'generated');
+});
+
+test('recommendationOf: a shared registry or list → one file per entry the registry discovers', () => {
+  assert.equal(recommendationOf(over('src/registry.js')).kind, 'registry');
+});
+
+test('recommendationOf: a large file touched by many runs → split it by area', () => {
+  assert.equal(recommendationOf(over('src/engine/workflow.js', { lines: 3700 })).kind, 'large');
+});
+
+test('recommendationOf: a stylesheet → per-screen CSS', () => {
+  assert.equal(recommendationOf(over('src/renderer/style.css')).kind, 'stylesheet');
+});
+
+test('recommendationOf: a doc → per-topic doc or generated table', () => {
+  assert.equal(recommendationOf(over('docs/agents/engine.md')).kind, 'doc');
+});
+
+test('recommendationOf: a test file every run edits → one test file per feature', () => {
+  assert.equal(recommendationOf(over('test/service/runs.test.js')).kind, 'test');
+});
+
+test('recommendationOf: says what to do and names the evidence (share, runs, lines now, conflicts)', () => {
+  const rec = recommendationOf(over('src/renderer/style.css', { share: 0.4, runs: 8, lines: 120, conflicts: 2 }));
+  assert.equal(typeof rec.text, 'string');
+  assert.ok(rec.text.length > 0);
+  assert.deepEqual(
+    { share: rec.evidence.share, runs: rec.evidence.runs, lines: rec.evidence.lines, conflicts: rec.evidence.conflicts },
+    { share: 0.4, runs: 8, lines: 120, conflicts: 2 },
+  );
+});
+
+test('recommendationOf: none at or below the limit, nor for a file only one run edited', () => {
+  assert.equal(recommendationOf(over('src/renderer/style.css', { share: SHARED_LIMIT })), null);
+  assert.equal(recommendationOf(over('src/renderer/style.css', { share: 0.1 })), null);
+  assert.equal(recommendationOf(over('src/renderer/style.css', { share: 1, runs: 1 })), null);
+});
+
 // ---- repositoryPerformance (end to end) ------------------------------------------------------------
 
 test('repositoryPerformance: a conflict run\'s cost share, the file the two runs share (over the shared limit), and the peak of overlapping runs', async (t) => {
@@ -294,7 +338,16 @@ test('repositoryPerformance: a conflict run\'s cost share, the file the two runs
   assert.equal(Math.round(result.conflictCostShare * 1000) / 1000, Math.round((2 / 3) * 1000) / 1000);
   assert.equal(result.peak, 2); // pa and pb overlap; rc/ro are on a different day and never overlap
 
-  assert.deepEqual(result.files, [{ file: 'shared.js', runs: 2, share: 1, lines: 2, generated: false }]);
+  assert.equal(result.files.length, 1);
+  const { recommendation, ...counts } = result.files[0];
+  assert.deepEqual(
+    { file: counts.file, runs: counts.runs, share: counts.share, lines: counts.lines, generated: counts.generated },
+    { file: 'shared.js', runs: 2, share: 1, lines: 2, generated: false },
+  );
+  // #197: a file over the shared limit carries a recommendation with its evidence (one conflict named it)
+  assert.ok(recommendation, 'shared.js is over the limit: it gets a recommendation');
+  assert.equal(recommendation.evidence.conflicts, 1);
+  assert.equal(recommendation.evidence.runs, 2);
 
   assert.equal(result.conflicts.length, 1);
   assert.equal(result.conflicts[0].runId, 'rc');

@@ -32,6 +32,12 @@ test('the backlog view offers roadmap and epics modes, alongside list and kanban
   assert.equal(parseArgs(['--view', 'backlog', '--mode', 'epics']).name, 'backlog-epics');
 });
 
+test('the analytics view offers the Run (#228) and 24/7 (#188) tabs, alongside usage and performance', () => {
+  for (const tab of ['usage', 'performance', 'run', 'occupancy']) assert.ok(VIEWS.analytics.tabs.includes(tab), `analytics tab ${tab}`);
+  assert.equal(parseArgs(['--view', 'analytics', '--tab', 'run']).name, 'analytics-run');
+  assert.equal(parseArgs(['--view', 'analytics', '--tab', 'occupancy', '--theme', 'light']).name, 'analytics-occupancy-light');
+});
+
 test('parseArgs names the file after the scenario and checks options against the view', () => {
   assert.equal(parseArgs(['--view', 'backlog', '--mode', 'kanban', '--theme', 'light']).name, 'backlog-kanban-light');
   assert.deepEqual(parseArgs(['--view', 'settings', '--tab', 'about', '--size', '1200x800']).size, [1200, 800]);
