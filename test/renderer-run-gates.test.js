@@ -27,8 +27,8 @@ test('renderRunGates: the gate card names the run (workflow/project/issue via ru
   const renderRunGates = /function renderRunGates\(\) \{[\s\S]*?\n\}/.exec(runSrc)[0];
   assert.match(renderRunGates, /runLabel\(v\.run\)/);
   assert.match(renderRunGates, /step: \$\{g\.step_id\}/);
-  assert.match(renderRunGates, /data-answer="false">Reject/);
-  assert.match(renderRunGates, /data-answer="true">Approve/);
+  assert.match(renderRunGates, /data-answer="false">\$\{esc\(g\.reject\?\.label \|\| 'Reject'\)\}/, 'the Reject button takes its label from the gate (#213), "Reject" by default');
+  assert.match(renderRunGates, /data-answer="true">\$\{esc\(g\.approve\?\.label \|\| 'Approve'\)\}/, 'the Approve button takes its label from the gate (#213), "Approve" by default');
   assert.match(renderRunGates, /gateChoices\(g\)\.map/, 'a gate with choices offers them (plus save_to_issue, #125) instead of Approve/Reject');
   assert.match(renderRunGates, /run-gate-feedback/, 'the optional feedback field');
 });
@@ -49,8 +49,11 @@ test('showToast: dismissable (a close button) and never blocks: a gate still wai
   assert.match(showToast, /openGateOf\(gate\.run_id\)/);
 });
 
+// run.js answers after PasteImage.settle resolves: one turn of the event loop later
+const tick = () => new Promise((r) => setTimeout(r, 0));
+
 function loadHelpers() {
-  const esc = /const esc = \(s\) => [^\n]+/.exec(src)[0];
+  const esc =/const esc = \(s\) => [^\n]+/.exec(src)[0];
   const pendingGates = /const pendingGates = [^\n]+/.exec(src)[0];
   const onRunGateClick = /function onRunGateClick\(e\) \{[\s\S]*?\n\}/.exec(runSrc)[0];
   for (const [name, code] of Object.entries({ esc, pendingGates })) {
@@ -64,6 +67,8 @@ function loadHelpers() {
     api: { resolveApproval: async (...args) => { calls.push(args); return {}; } },
     errMsg: (e) => String(e?.message || e),
     showToast: (...args) => toasts.push(args),
+    // run.js settles the pasted images of the answer (src/renderer/paste-image.js)
+    PasteImage: { settle: async () => {}, attachments: () => [] },
   };
   vm.createContext(sandbox);
   vm.runInContext(`${esc}\n${pendingGates}\n${onRunGateClick}\nthis.helpers = { pendingGates, onRunGateClick };`, sandbox);
@@ -98,36 +103,40 @@ test('pendingGates: every gate waiting across every run, flattened', () => {
   assert.deepEqual(Array.from(helpers.pendingGates(), (g) => g.approval_id), ['a1', 'a2', 'a3']);
 });
 
-test('onRunGateClick: a binary answer resolves the gate with the run id and the feedback text, and disables its buttons', () => {
+test('onRunGateClick: a binary answer resolves the gate with the run id and the feedback text, and disables its buttons', async () => {
   const { helpers, calls } = loadHelpers();
   const { card, addButton } = fakeGate({ approval: 'a1', run: 'r1', feedback: 'looks good' });
   const reject = addButton({ answer: 'false' });
   const approve = addButton({ answer: 'true' });
   helpers.onRunGateClick({ target: approve });
+  await tick();
   assert.deepEqual(calls, [['a1', true, 'looks good', 'r1']]);
   assert.equal(approve.disabled, true);
   assert.equal(reject.disabled, true);
 });
 
-test('onRunGateClick: a choice gate resolves with the choice id, even an empty-string one, never a boolean', () => {
+test('onRunGateClick: a choice gate resolves with the choice id, even an empty-string one, never a boolean', async () => {
   const { helpers, calls } = loadHelpers();
   const { addButton } = fakeGate({ approval: 'a2', run: 'r2', feedback: null });
   const choice = addButton({ choice: '' });
   helpers.onRunGateClick({ target: choice });
+  await tick();
   assert.deepEqual(calls, [['a2', '', '', 'r2']]);
 });
 
-test('onRunGateClick: "Accept and save to issue #n" (#125) passes its save_to_issue intent as a 5th argument; a plain choice passes none', () => {
+test('onRunGateClick: "Accept and save to issue #n" (#125) passes its save_to_issue intent as a 5th argument; a plain choice passes none', async () => {
   const { helpers, calls } = loadHelpers();
   const { addButton } = fakeGate({ approval: 'a1', run: 'r1', feedback: null });
   const saveChoice = addButton({ choice: 'accept', intent: 'save_to_issue' });
   helpers.onRunGateClick({ target: saveChoice });
+  await tick();
   assert.deepEqual(calls, [['a1', 'accept', '', 'r1', 'save_to_issue']]);
 
   const { helpers: helpers2, calls: calls2 } = loadHelpers();
   const { addButton: addButton2 } = fakeGate({ approval: 'a2', run: 'r2', feedback: null });
   const plain = addButton2({ choice: 'accept' });
   helpers2.onRunGateClick({ target: plain });
+  await tick();
   assert.deepEqual(calls2, [['a2', 'accept', '', 'r2']], 'no intent: no 5th argument at all');
 });
 

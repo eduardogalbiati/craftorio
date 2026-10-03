@@ -44,10 +44,13 @@ function load({ view = 'backlog', hidden = false, mode = 'roadmap', projectId = 
      function staleNotice() { staleCalls += 1; }
      let reloadCalls = 0;
      let staleCalls = 0;
+     // the data differs from what is shown (#214): stubbed here, its own tests are in renderer-backlog-refresh.test.js
+     let changedResult = true;
+     async function backlogChanged() { return changedResult; }
      ${ownerBusyFn}
      ${liveReloadFn}
      ${onChangedCall}
-     this.helpers = { ownerBusy, liveReload, setBl: (v) => { bl = v; }, getWatching: () => watching, getReloadCalls: () => reloadCalls, getStaleCalls: () => staleCalls };`,
+     this.helpers = { ownerBusy, liveReload, setBl: (v) => { bl = v; }, setChanged: (v) => { changedResult = v; }, getWatching: () => watching, getReloadCalls: () => reloadCalls, getStaleCalls: () => staleCalls };`,
     sandbox,
   );
   return { helpers: sandbox.helpers, sandbox, calls, fireInterval: () => intervalFn?.(), changed: (ev) => sandbox.changedHandler(ev) };

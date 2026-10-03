@@ -7,7 +7,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { detectTestCommand, isFullSuiteCommand, parseFailures, runSuite, suiteMessage } = require('../src/engine/suite-step');
+const { detectTestCommand, filteredCommand, isFullSuiteCommand, parseCounts, parseFailures, runSuite, suiteMessage } = require('../src/engine/suite-step');
 
 function tmp(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'suite-step-'));
@@ -384,4 +384,74 @@ test('suiteMessage: lists the failures and the pre-existing ones apart; empty fo
   assert.match(msg, /- legacy \(old\.test\.js\)/);
   assert.equal(suiteMessage({ kind: 'screenshots' }), '');
   assert.equal(suiteMessage(null), '');
+});
+
+test('suiteMessage: a files run lists what was chosen and why, one line per file', () => {
+  const out = {
+    kind: 'suite', scope: 'files', message: 'The selected tests passed in round 2.', passed: 3, failed: 0, failures: [],
+    selection: { why: '1 test file(s) reach the 1 changed file(s)', files: ['test/a.test.js'], reasons: { 'test/a.test.js': 'imports src/a.js' } },
+  };
+  assert.equal(suiteMessage(out), [
+    'The selected tests passed in round 2.',
+    'Passed: 3, failed: 0.',
+    'Chosen: 1 test file(s) reach the 1 changed file(s)',
+    '- test/a.test.js: imports src/a.js',
+  ].join('\n'));
+});
+
+test('filteredCommand: npm test, pytest and node --test take the files; other commands cannot', () => {
+  assert.equal(filteredCommand('npm test', ['test/a.test.js', 'test/b.test.js']), 'npm test -- test/a.test.js test/b.test.js');
+  assert.equal(filteredCommand('pytest -q', ['tests/test_a.py']), 'pytest -q tests/test_a.py');
+  assert.equal(filteredCommand('node --test test/', ['test/a.test.js']), 'node --test test/ test/a.test.js');
+  assert.equal(filteredCommand('make test', ['test/a.test.js']), null);
+  assert.equal(filteredCommand('npm test', []), null);
+});
+
+test('parseCounts: node:test spec and TAP, Jest "Tests:", pytest summary; no summary gives nulls', () => {
+  assert.deepEqual(parseCounts('ℹ pass 41\nℹ fail 1\n'), { passed: 41, failed: 1 });
+  assert.deepEqual(parseCounts('# tests 4\n# pass 3\n# fail 0\n'), { passed: 3, failed: 0 });
+  assert.deepEqual(parseCounts('Tests:       1 failed, 4 passed, 5 total\n'), { passed: 4, failed: 1 });
+  assert.deepEqual(parseCounts('==== 2 failed, 3 passed in 1.23s ====\n'), { passed: 3, failed: 2 });
+  assert.deepEqual(parseCounts('no summary here\n'), { passed: null, failed: null });
+});
+
+test('runSuite with files: runs the filtered command, reports scope files, records no duration', async (t) => {
+  const runDir = tmp(t);
+  const cwd = tmp(t);
+  const history = { file: path.join(tmp(t), 'history.json'), project: 'p' };
+  const seen = [];
+  const run = async ({ command, logFile }) => {
+    seen.push(command);
+    fs.appendFileSync(logFile, 'ℹ pass 2\nℹ fail 0\n');
+    return { code: 0, timedOut: false, error: null };
+  };
+  const selection = { why: '2 test file(s) reach the 1 changed file(s)', files: ['test/a.test.js', 'test/b.test.js'], reasons: {} };
+  const out = await runSuite({ command: 'npm test', cwd, runDir, round: 2, run, files: ['test/a.test.js', 'test/b.test.js'], selection, history });
+  assert.deepEqual(seen, ['npm test -- test/a.test.js test/b.test.js']);
+  assert.equal(out.scope, 'files');
+  assert.equal(out.status, 'pass');
+  assert.equal(out.passed, 2);
+  assert.equal(fs.existsSync(history.file), false);
+});
+
+test('runSuite with files: an empty list passes without running anything', async (t) => {
+  const runDir = tmp(t);
+  const cwd = tmp(t);
+  const run = async () => { throw new Error('the command must not run'); };
+  const out = await runSuite({ command: 'npm test', cwd, runDir, round: 1, run, files: [], selection: { why: 'no test reaches the 1 changed file(s)', files: [] } });
+  assert.equal(out.status, 'pass');
+  assert.equal(out.scope, 'files');
+  assert.match(out.message, /No test file to run in round 1: no test reaches the 1 changed file\(s\)\./);
+});
+
+test('runSuite with files: a command that cannot take files runs whole and says so in selection.why', async (t) => {
+  const runDir = tmp(t);
+  const cwd = tmp(t);
+  const seen = [];
+  const run = async ({ command }) => { seen.push(command); return { code: 0, timedOut: false, error: null }; };
+  const selection = { why: '1 test file(s) reach the 1 changed file(s)', files: ['x.test.js'], reasons: {} };
+  const out = await runSuite({ command: 'make test', cwd, runDir, round: 1, run, files: ['x.test.js'], selection });
+  assert.deepEqual(seen, ['make test']);
+  assert.equal(out.scope, 'full');
+  assert.match(out.selection.why, /`make test` cannot run single test files: the whole suite ran$/);
 });

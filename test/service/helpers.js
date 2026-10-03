@@ -119,13 +119,14 @@ steps:
 function makeService(t, hostExtra = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'service-ws-'));
   process.env.MULTIAGENT_SIMULATION_ONLY = '1'; // tests never call real models
+  process.env.MULTIAGENT_MOCK_DELAY_SCALE ??= '0.05';
   const trashed = [];
   const service = createService({ host: { trashItem: async (p) => { trashed.push(p); }, appVersion: '9.9.9', isPackaged: false, ...hostExtra } });
   t.after(async () => {
     for (const run of service.api['runs:active']()) {
       try { service.api['run:stop']({ runId: run.runId }); } catch { /* already ended */ }
     }
-    await untilTrue(() => service.api['runs:active']().length === 0);
+    await untilIdle(service);
     service.shutdown();
   });
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
@@ -142,6 +143,24 @@ function makeResumeService(t) {
 
 async function until(fn) { for (let i = 0; i < 200 && !fn(); i++) await new Promise((r) => setTimeout(r, 50)); assert.ok(fn()); }
 async function untilTrue(fn) { for (let i = 0; i < 200 && !fn(); i++) await new Promise((r) => setTimeout(r, 20)); assert.ok(fn()); }
+
+// Waits for the service's active runs to end, woken by its run events (a run that ends pushes one),
+// not by a fixed poll: a run that is still going when the workspace is removed fails the file (#186).
+// A deadline makes a run that never ends fail here, with its name, instead of hanging the file.
+function untilIdle(service, timeoutMs = 60000) {
+  const idle = () => service.api['runs:active']().length === 0;
+  if (idle()) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const check = () => { if (idle()) done(); };
+    const onEv = () => setImmediate(check); // the run leaves runs:active right after its last event
+    const timer = setTimeout(() => {
+      service.events.off('run:event', onEv);
+      reject(new Error(`runs still active after ${timeoutMs} ms: ${service.api['runs:active']().map((r) => r.runId).join(', ')}`));
+    }, timeoutMs);
+    function done() { clearTimeout(timer); service.events.off('run:event', onEv); resolve(); }
+    service.events.on('run:event', onEv);
+  });
+}
 
 // Gates and finished runs by run id, from the pushed events.
 function watchRuns(service) {
