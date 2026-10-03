@@ -652,6 +652,12 @@ async function runMock({ providerSessionId, model, hint, signal, onItem, attempt
     onItem({ kind: 'tool_call', id: 't1', name: 'Bash', input: { command: slow ? 'until grep -q "duration_ms" out.log; do sleep 5; done' : 'git status' } });
     await (slow ? sleep(slow, signal) : d(500));
     onItem({ kind: 'tool_result', id: 't1', output: 'On branch feat/mock-feature\nnothing to commit, working tree clean' });
+    // sequences.tool_timeouts: { stepId: n }: in the first n answers of that step a test command
+    // without a `timeout` is cut at the Bash tool's default (#178)
+    if (hint?.call <= (hint?.sequences?.tool_timeouts?.[hint.stepId] || 0)) {
+      onItem({ kind: 'tool_call', id: 't2', name: 'Bash', input: { command: 'node --test test/slow.test.js' } });
+      onItem({ kind: 'tool_result', id: 't2', output: '▶ slow suite\nCommand timed out after 2m 0.0s', is_error: true });
+    }
   }
   // sequences.timeouts: { stepId: n }: the first n attempts of each of that step's turns are killed
   // at their timeout after their tool call (the engine retries with the attempt's summary)
@@ -704,6 +710,13 @@ function isPermissionDenial(item) {
   return /requires approval|haven't granted|permission[^.\n]{0,80}denied|denied by (?:the )?(?:policy|sandbox|user)|rejected by (?:the )?(?:policy|sandbox|user)|not allowed by/i.test(String(item.output || ''));
 }
 
+// A command cut by the tool's own timeout (Claude Code's Bash tool: "Command timed out after 2m 0.0s";
+// its default is 120 s when the call passes no `timeout`): the command returned no result (#178).
+function isToolTimeout(item) {
+  if (item?.kind !== 'tool_result') return false;
+  return /\bcommand timed out after\b/i.test(String(item.output || '').slice(-400));
+}
+
 // Request errors (invalid model, 4xx) are not worth retrying.
 function isRetryable(err) {
   return !/"status":\s*4\d\d|invalid_request|not supported|not found|does not exist/i.test(String(err?.message || err));
@@ -719,6 +732,7 @@ module.exports = {
   isImagePath,
   isPermissionDenial,
   isRetryable,
+  isToolTimeout,
   killTree,
   parseGrok,
   quoteCmd,

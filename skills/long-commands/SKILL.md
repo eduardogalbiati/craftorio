@@ -17,13 +17,22 @@ tool's own timeout, although the suite had passed in 3.
 
 - Run the suite, the build, `npm ci`/`pip install`/`mvn`/`dotnet` **in the foreground**: one call
   that returns when the process exits.
-- Set the tool's timeout above the expected duration, not at its default. Size it from what you
-  know: a previous run of the same command, the CI job's duration, the size of the project. When
-  unknown, use the tool's maximum (Claude Code's Bash tool: `timeout: 600000`).
+- **Every test or build command gets an explicit timeout**: pass the tool's `timeout` parameter
+  on each call (Claude Code's Bash tool), never rely on its default. The default is 120 s: a
+  command cut there returns **no result**, the turn is lost and the same command is often run
+  again (8 focused test commands cut at exactly 120 s in one night). The orchestrator logs each
+  cut command as a `tool_timeout` warning.
+- Size the timeout above the expected duration. Size it from what you know: a previous run of the
+  same command, the CI job's duration, the size of the project (this orchestrator: `timeout: 300000`
+  for one focused test file, the suite's budget for the whole suite). When unknown, use the tool's
+  maximum (Claude Code's Bash tool: `timeout: 600000`).
 - Longer than the tool's maximum: split it (test files, packages or modules in groups) and run
-  each group in the foreground.
-- **Never** start a suite or a build in the background and then poll for a string
-  (`until grep -q "passed" out.log; do sleep 5; done`, `while ! grep ...`, repeated `tail` calls).
+  each group in the foreground, or narrow the filter. The whole suite is the orchestrator's suite
+  step when the workflow has one: never run it yourself to fit it into a timeout.
+- **Never** start a suite or a build in the background and then poll for a string or a file
+  (`until grep -q "passed" out.log; do sleep 5; done`, `while ! grep ...`, repeated `tail` calls,
+  `node -e "function check() { … fs.existsSync … }"`): each such loop ends at the tool's 10-minute
+  cap (three of them, 8 to 10 minutes each, in one 95-minute test step).
 
 ## 2. If a background job is unavoidable
 

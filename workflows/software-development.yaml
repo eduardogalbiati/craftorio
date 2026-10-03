@@ -333,6 +333,9 @@ agents:
     provider: claude
     model: claude-sonnet-5
     session: persistent
+    # #176: its re-read context is the largest controllable cost; past this, the next turn starts a
+    # fresh session from its handoff note (never mid-turn)
+    max_context: 120k
     # edits test files only (a convention of its role: the tools can't tell tests from code)
     # subagents: exploration sub-agents map the behaviours and tests, so the main context stays small
     capabilities: { tools: [read, edit, write, *toolchains], web: false, subagents: true }
@@ -359,6 +362,10 @@ agents:
       with file and line numbers; then read only the test files you edit and the production
       lines under test. A long test output or the suite's log goes to a sub-agent that returns
       the failures; the focused runs that decide your step stay in your own turn.
+      Your session may continue in a fresh one from your handoff note: in it, keep the
+      behaviours to test (from test_notes) and which are covered, the test files you wrote or
+      edited, the last test command with its result (pass/fail counts, failing tests), and what
+      is left, so the next session continues without mapping the change again.
 
   builder:
     provider: claude
@@ -836,6 +843,8 @@ steps:
     base_worktree: true
     # the orchestrator runs the whole suite: a whole-suite command of the test writer is noted (#177)
     full_suite: warn
+    # test files left uncommitted are committed by the orchestrator before the build (#209)
+    commit_tests: true
     prompt: |
       Branch `{{ steps.develop.output.branch }}` (already reviewed).
       Original task: {{ inputs.task }}
@@ -938,8 +947,8 @@ steps:
       If a test fails because of production code, do NOT fix it:
       fill failure_report with test, file, error and probable cause.
       Last step, always: `git add` every test file you wrote or changed (feature files and step
-      definitions included) and commit them on the branch, then set `committed: true`. Test files left
-      uncommitted block the local merge. `committed: false` only when you changed no file.
+      definitions included) and commit them on the branch, then set `committed: true`. Any other file
+      left changed sends the step back to you. `committed: false` only when you changed no file.
     output_schema:
       type: object
       required: [tests_status, tests_added, committed]

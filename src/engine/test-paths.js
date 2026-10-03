@@ -144,6 +144,7 @@ async function changedTestFiles(snap, { bases = [] } = {}) {
 module.exports = {
   changedTestFiles,
   globToRegExp,
+  localChanges,
   snapshot,
   testMatcher,
   TESTS_PATHS,

@@ -188,6 +188,8 @@ steps:
     agent: test_writer
     # the orchestrator runs the whole suite: a whole-suite command of the test writer is noted (#177)
     full_suite: warn
+    # test files left uncommitted are committed by the orchestrator before the suite (#209)
+    commit_tests: true
     prompt: |
       {{ inputs.task }}
       Never start the project's whole test suite yourself: the orchestrator runs it once after
@@ -227,6 +229,9 @@ steps:
       {% endif %}
       If a test fails because of production code, do NOT fix it: fill `failure_report` with
       test, file, error and probable cause, and set `tests_status: fail`.
+      Last step, always: `git add` every test file you wrote or changed (feature files and step
+      definitions included) and commit them on the branch, then set `committed: true`. Any other file
+      left changed sends the step back to you. `committed: false` only when you changed no file.
     output_schema:
       type: object
       required: [tests_status, tests_added, committed, branch]

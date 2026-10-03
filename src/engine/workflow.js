@@ -32,6 +32,7 @@ const {
   imageInput,
   isPermissionDenial,
   isRetryable,
+  isToolTimeout,
   refreshWindowsPath,
   runTurn,
   sleep,
@@ -259,6 +260,7 @@ function loadWorkflow(file) {
     }
     if (s.choices && s.type !== 'human_approval') throw new Error(`Step "${s.id}": choices is only valid for human_approval.`);
     if (s.full_suite !== undefined && (s.full_suite !== 'warn' || ['human_approval', 'screenshots', 'suite', 'workflow'].includes(s.type))) throw new Error(`Step "${s.id}": full_suite must be "warn", on an agent step (a whole-suite command its agent starts is noted, #177).`);
+    if (s.commit_tests !== undefined && (s.commit_tests !== true || ['human_approval', 'screenshots', 'suite', 'workflow'].includes(s.type) || s.agents)) throw new Error(`Step "${s.id}": commit_tests must be true, on a single-agent step (the orchestrator commits the test files its agent left uncommitted, #209).`);
     if (s.base_worktree !== undefined && (typeof s.base_worktree !== 'boolean' || ['human_approval', 'screenshots', 'suite', 'workflow'].includes(s.type) || !wf.orchestrator?.worktree)) throw new Error(`Step "${s.id}": base_worktree must be true or false, on an agent step of a workflow with orchestrator.worktree.`);
     if (s.local_preview !== undefined && (s.type !== 'human_approval' || typeof s.local_preview !== 'boolean')) throw new Error(`Step "${s.id}": local_preview must be true or false, on a human_approval step.`);
     if (s.diff_base !== undefined && (s.type !== 'human_approval' || typeof s.diff_base !== 'string' || !s.diff_base.trim())) throw new Error(`Step "${s.id}": diff_base must be a ref (e.g. "origin/{{ inputs.base_branch }}"), on a human_approval step.`);
@@ -687,6 +689,8 @@ class WorkflowRun extends EventEmitter {
     this.inputs = this.resolveInputs(inputs || {});
     this.testsPlan = testsPlan(this.wf.inputs, inputs, this.inputs); // summary.tests_plan, ctx.tests_plan (#203)
     this.suiteRuns = { engine: 0, agents: 0 }; // whole-suite runs: suite steps vs agents' own commands (#177, summary.suite_runs)
+    this.testsAutocommitted = []; // [{ step_id, files, commit }] (#209, summary.tests_autocommitted)
+    this.toolTimeouts = 0; // tool results cut by the tool's timeout (#178, summary.tool_timeouts)
     this.inputImages = this.checkInputAttachments(attachments || {});
     this.attachments = {}; // input -> [{ name, path }] the copies in the run folder (storeInputAttachments)
     this.gateImages = []; // images attached to the last gate's feedback, for the next agent step
@@ -1378,6 +1382,7 @@ class WorkflowRun extends EventEmitter {
         this.emitEvent('step.transition', { from: step.id, to: step.on_error, when: 'on_error' });
         return step.on_error;
       }
+      if (step.commit_tests) output = await this.commitLeftoverTests(step, st, output);
       st.output = output;
       scope = { ...this.ctx, output, iteration: st.iteration };
       if (step.wait) await this.afterAgentTurn(step, st);
@@ -2123,6 +2128,67 @@ class WorkflowRun extends EventEmitter {
     }
   }
 
+  // `commit_tests: true` on the test writer's step (#209): the run never goes on (build, evidence,
+  // verify, the local merge) with its files uncommitted. Only the run's own worktree is touched.
+  // Leftovers that are all test files (tests_paths) are committed by the engine, without a model
+  // call; other changed files (production code, generated files) are never committed: the step goes
+  // back to its agent once with the list, then a gate asks the owner.
+  async commitLeftoverTests(step, st, output) {
+    const dir = this.worktree?.workDir;
+    if (!dir) return output;
+    const agentName = step.agent;
+    if (output?.committed === false) {
+      this.emitEvent('log', { level: 'warn', kind: 'tests_uncommitted', step_id: step.id, agent: agentName, message: `[${agentName}] answered committed: false in ${step.id}; the orchestrator checks the worktree for files left uncommitted.` });
+    }
+    const isTest = testPaths.testMatcher(this.wf.tests_paths);
+    const leftovers = async () => {
+      const root = await git(['rev-parse', '--show-toplevel'], dir);
+      const files = (await testPaths.localChanges(root)).sort();
+      return { root, tests: files.filter(isTest), others: files.filter((f) => !isTest(f)) };
+    };
+    const commit = async ({ root, tests }) => {
+      const nums = (this.issues || []).map((i) => i?.number ?? (/(\d+)\/?$/.exec(String(i?.url ?? i)) || [])[1]).filter(Boolean);
+      await git(['add', '-A', '--', ...tests], root);
+      await git(['commit', '-m', `Tests${nums.length ? ` for ${nums.map((n) => `#${n}`).join(', ')}` : ''} (committed by the orchestrator)`], root);
+      const hash = await git(['rev-parse', 'HEAD'], root);
+      this.testsAutocommitted.push({ step_id: step.id, files: tests, commit: hash });
+      this.emitEvent('tests.autocommitted', { step_id: step.id, agent: agentName, files: tests, commit: hash });
+      this.emitEvent('log', { level: 'warn', kind: 'tests_autocommitted', step_id: step.id, agent: agentName, files: tests, commit: hash, message: `Tests committed by the orchestrator (${tests.length} file${tests.length === 1 ? '' : 's'}, ${hash.slice(0, 8)}): ${agentName} left them uncommitted in ${step.id}.` });
+      return { ...output, committed: true, autocommitted: { files: tests, commit: hash } };
+    };
+    let left = await leftovers();
+    if (!left.others.length) return left.tests.length ? commit(left) : output;
+
+    const list = (files) => files.map((f) => `- ${f}`).join('\n');
+    this.emitEvent('log', { level: 'warn', kind: 'tests_uncommitted', step_id: step.id, agent: agentName, files: left.others, message: `[${agentName}] left files that are not tests uncommitted in ${step.id}: ${left.others.join(', ')}; the step goes back to it once.` });
+    const fix = `The orchestrator found uncommitted changes in the worktree after your turn. Files that are not tests (tests_paths), which you may not leave changed:\n${list(left.others)}\n`
+      + `${left.tests.length ? `Test files, still to commit:\n${list(left.tests)}\n` : ''}`
+      + 'Commit your test files; revert the others (`git checkout -- <file>`, or delete a new generated file) or, when a change of production code is needed, revert it and report it in your answer. '
+      + 'Then answer again in full, in the format you were asked for, with `committed: true`.';
+    const hint = { stepId: step.id, visit: st.visits, schema: step.output_schema, agent: agentName, sequences: this.mockSequences };
+    const res = await this.sendToAgent(agentName, fix, { stepId: step.id, hint, retry: true });
+    st.lastAnswer = res.text;
+    try {
+      const out = extractJson(res.text);
+      if (!step.output_schema || !validateSchema(out, step.output_schema).length) output = out;
+    } catch { /* the first answer stays the step's output */ }
+
+    left = await leftovers();
+    if (left.others.length) {
+      const gate = {
+        id: step.id,
+        raw: true,
+        message: `${agentName} left files that are not tests uncommitted in ${step.id}, after being asked once to commit its tests and revert the others:\n${list(left.others)}\n\n`
+          + `Worktree: ${left.root}. Commit or revert them there, then continue (test files still uncommitted are committed by the orchestrator); or stop the run.`,
+        choices: [{ id: 'continue', label: 'Continue' }, { id: 'stop', label: 'Stop the run' }],
+      };
+      const { answer } = await this.requestApproval(gate);
+      if (answer !== 'continue') throw new Error(`Stopped at ${step.id}: files that are not tests were left uncommitted (${left.others.join(', ')}).`);
+      left = await leftovers();
+    }
+    return left.tests.length ? commit(left) : output;
+  }
+
   // ---- AI supervisor (orchestrator.supervisor in the YAML; skill run-supervisor) ------------
   // Called only when a step fails. It explains the failure and picks a recovery; the engine
   // validates it: fixed outputs must match the step's schema, goto only to the step's own
@@ -2682,6 +2748,14 @@ class WorkflowRun extends EventEmitter {
         if (item.kind === 'tool_call' && capabilities.CLAUDE_SUBAGENT_TOOLS.includes(item.name)) tools.subagents++;
         if (item.kind !== 'tool_result') return;
         if (calls.has(item.id)) calls.get(item.id).result = item;
+        if (isToolTimeout(item)) {
+          // #178: a command cut by the tool's timeout returned nothing; without an explicit `timeout` it hit the default
+          const call = calls.get(item.id);
+          const command = String(call?.input?.command ?? '').slice(0, 200);
+          const explicit = call?.input?.timeout != null;
+          this.toolTimeouts++;
+          this.emitEvent('log', { level: 'warn', kind: 'tool_timeout', step_id: stepId, agent: agentName, command, timeout_ms: explicit ? +call.input.timeout : null, message: `[${agentName}] a command was cut by the tool's ${explicit ? `timeout (${call.input.timeout} ms)` : 'default timeout (no `timeout` given)'} in ${stepId || 'a delegated turn'}: \`${command.slice(0, 120)}\`. Give every test or build command an explicit timeout sized for it, or run a narrower filter.` });
+        }
         if (!isPermissionDenial(item)) { tools.ran++; tools.streak = 0; return; }
         tools.denials++;
         tools.maxStreak = Math.max(tools.maxStreak, ++tools.streak);
@@ -3222,6 +3296,9 @@ ${stderr || stdout}`.slice(0, 1500)));
         // by the engine's suite steps and by the agents' own commands (the measure of the change)
         ...(this.testsPlan.length ? { tests_plan: this.testsPlan } : {}),
         ...(this.suiteRuns.engine || this.suiteRuns.agents ? { suite_runs: this.suiteRuns } : {}),
+        // #209: test files the engine committed for the test writer; #178: commands cut by the tool's timeout
+        ...(this.testsAutocommitted.length ? { tests_autocommitted: this.testsAutocommitted } : {}),
+        ...(this.toolTimeouts ? { tool_timeouts: this.toolTimeouts } : {}),
         // step visits in order with their agents (runs list); this event's own update lands in it
         groups: this.wf.groups, progress: this.trail.steps,
         ...(outputs ? { outputs } : {}),

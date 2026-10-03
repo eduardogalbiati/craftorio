@@ -23,6 +23,19 @@ Dependencies: a fresh checkout (each run has its own worktree) has no build outp
 treat a slow first run as a failure.
 Libraries: read the test dependencies (JUnit 4 vs 5, AssertJ/Hamcrest, Mockito/MockK, Kotest) and use what is there.
 
+## Running the tests: timeouts and turns
+
+- Pass the Bash tool's `timeout` on **every** test or build command (e.g. `timeout: 300000` for
+  one focused file in this orchestrator, the suite's budget for the whole suite), never the default
+  120 s: a command cut there returns no result and the turn is lost (long-commands). Never start a
+  test command in the background and wait for its log in a loop: run it in the foreground.
+- Measure your first focused run (the runner's duration line). A file that takes more than a
+  minute is a slow file: from then on run it with a narrower filter (`-Dtest=<Class>#<method>` (Maven), `--tests "<Class>.<method>"` (Gradle), one class),
+  at most once per round; a command that may take longer than the tool's maximum goes to the
+  orchestrator's suite step or runs with a narrower filter.
+- Fewer, bigger turns: write all the tests of a behaviour in one edit, then run them once; never
+  one assertion per edit-and-run cycle. Each turn re-reads your whole context.
+
 ## Idioms
 
 - Same package as the code under `src/test/java` (or `src/test/kotlin`), class `NameTest`.

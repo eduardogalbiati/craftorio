@@ -42,6 +42,22 @@ same features for users; this is the implementer's summary.
   - software-development and local-hero: `test` (test writer, focused tests) → `suite` → build; a
     failing suite goes back to the test writer (its prompt gets the failures and the log path when
     `previous_step == 'suite'`), 2 rounds, then `test_failed`.
+  - **`commit_tests: true`** on a single-agent step (the test writer's `test` step in both
+    development workflows and test-batch, #209): after the turn (before the suite, the build and the
+    local merge) `commitLeftoverTests` lists the run worktree's local changes (`localChanges` in
+    test-paths.js; no worktree = nothing to do). `committed: false` in the answer → a `log` warn
+    `kind: tests_uncommitted`. All of them test files (`tests_paths`) → the engine stages and
+    commits them (`Tests for #<issues> (committed by the orchestrator)`), event
+    `tests.autocommitted { files, commit }`, a `log` warn `kind: tests_autocommitted`, the output
+    gets `committed: true, autocommitted`, `summary.tests_autocommitted`. Other files changed too →
+    never committed: the step goes back to its agent once with both lists (`retry`, no new note),
+    then, if non-test files are still changed, a gate (Continue / Stop the run); test files left
+    after it are committed as above.
+- **`tool_timeout` (#178)**: a tool result cut by the tool's own timeout (`isToolTimeout` in
+  providers.js: "Command timed out after …", Claude Code's Bash default is 120 s without a
+  `timeout`) is a `log` warn `kind: tool_timeout` with the command and `timeout_ms` (null = the
+  default), counted in `summary.tool_timeouts`. Simulation: `mockSequences.tool_timeouts: { <step>: n }`
+  (the first n answers of that step have one test command cut at the default).
 - **Test inputs (#203)**: the development workflows' `unit_tests` (write_and_run | run_existing |
   off) and `e2e_tests` (off | write | write_and_run) route the transitions (code_review/human_review
   → test, suite or build; test → suite or build; suite failures → test writer or developer) and
