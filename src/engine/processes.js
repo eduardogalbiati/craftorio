@@ -136,4 +136,38 @@ async function stopProcessesIn(dir, { self = process.pid } = {}) {
   return found;
 }
 
-module.exports = { listProcesses, selectProcesses, stopProcessesIn };
+// Command lines of every process: [{ pid, ppid, cmd }] (the suite step's timeout names the test
+// files still running from them, #210).
+const WIN_COMMANDS = "[Console]::OutputEncoding=[Text.Encoding]::UTF8; Get-CimInstance -ClassName Win32_Process -Property ProcessId,ParentProcessId,CommandLine | ForEach-Object { '{0}|{1}|{2}' -f $_.ProcessId,$_.ParentProcessId,$_.CommandLine }";
+
+async function listCommandLines() {
+  if (process.platform === 'win32') {
+    const out = await run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', WIN_COMMANDS]);
+    return String(out || '').split(/\r?\n/).map((l) => l.trim().split('|')).filter((f) => f.length >= 3 && /^\d+$/.test(f[0]))
+      .map(([pid, ppid, ...cmd]) => ({ pid: +pid, ppid: +ppid, cmd: cmd.join('|') }));
+  }
+  const out = await run('ps', ['-axo', 'pid=,ppid=,args=']);
+  return String(out || '').split('\n').map((l) => /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(l)).filter(Boolean)
+    .map((m) => ({ pid: +m[1], ppid: +m[2], cmd: m[3].trim() }));
+}
+
+/** The descendants of `pid` with their command lines: [{ pid, ppid, cmd }]; [] when they cannot be listed. */
+async function processTreeCommands(pid) {
+  let procs;
+  try { procs = await listCommandLines(); } catch { return []; }
+  const children = new Map();
+  for (const p of procs) if (p.ppid !== p.pid) children.set(p.ppid, [...(children.get(p.ppid) || []), p]);
+  const out = [];
+  const seen = new Set([pid]);
+  for (let queue = [pid]; queue.length;) {
+    for (const c of children.get(queue.shift()) || []) if (!seen.has(c.pid)) { seen.add(c.pid); out.push(c); queue.push(c.pid); }
+  }
+  return out;
+}
+
+module.exports = {
+  listProcesses,
+  processTreeCommands,
+  selectProcesses,
+  stopProcessesIn,
+};

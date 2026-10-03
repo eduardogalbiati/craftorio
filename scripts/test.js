@@ -1,7 +1,13 @@
 // Test suite: unit tests (node:test in test/*.test.js and test/<area>/*.test.js, e.g.
 // test/service/, #156) + full flow in mock mode. Lists the files explicitly so it works on any
 // Node version; test/fixtures/ holds no tests.
+// The files run in parallel, one process each: the concurrency is explicit (MULTIAGENT_TEST_CONCURRENCY,
+// else the CPUs minus one) and printed with what could lower it (an inspector in NODE_OPTIONS forces
+// node --test to one file at a time), so a slow suite inside the app can be compared with a shell (#210).
+// With test files as arguments (the suite step's check of failures on the base, #211), only those
+// run, without the full flow.
 //   npm test
+//   npm test -- test/a.test.js test/b.test.js
 
 const fs = require('fs');
 const os = require('os');
@@ -18,10 +24,17 @@ const testFiles = (dir) => fs.readdirSync(path.join(root, dir), { withFileTypes:
   if (e.isDirectory()) return e.name === 'fixtures' ? [] : testFiles(path.join(dir, e.name));
   return e.name.endsWith('.test.js') ? [path.join(dir, e.name)] : [];
 }).sort();
-const files = testFiles('test');
+const only = process.argv.slice(2).filter((a) => !a.startsWith('-'));
+const files = only.length ? only : testFiles('test');
 
-console.log(`\n== Unit tests (${files.length} file(s)) ==`);
-if (run(['--test', ...files]) !== 0) process.exit(1);
+const cpus = Math.max(os.availableParallelism(), os.cpus().length);
+const concurrency = Math.max(1, Number(process.env.MULTIAGENT_TEST_CONCURRENCY) || cpus - 1);
+const inspector = /--(inspect|debug)/.test(process.env.NODE_OPTIONS || '') || process.execArgv.some((a) => /^--(inspect|debug)/.test(a));
+console.log(`\n== Unit tests (${files.length} file(s), concurrency ${concurrency}, availableParallelism ${os.availableParallelism()}, cpus ${os.cpus().length}) ==`);
+if (inspector) console.log('warning: an inspector is enabled (NODE_OPTIONS or execArgv): node --test runs one file at a time');
+if (process.env.NODE_TEST_CONTEXT) console.log(`warning: NODE_TEST_CONTEXT=${process.env.NODE_TEST_CONTEXT} is set: node --test acts as a test file, not a runner`);
+if (run(['--test', `--test-concurrency=${concurrency}`, ...files]) !== 0) process.exit(1);
+if (only.length) process.exit(0);
 
 console.log('\n== Full flow in mock mode ==');
 // Fresh temporary workspace: the tests do not write to the user's workspace or the registry, and the

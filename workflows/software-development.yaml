@@ -1010,11 +1010,12 @@ steps:
   # `test_command` (empty: found from the project's files), its output in logs/suite-<round>.log.
   # Failing tests go back to the test writer (write_and_run) or to the developer (run_existing),
   # 2 rounds, then test_failed. Tests that also fail on the base (the test writer's
-  # preexisting_failures) never count. A suite that cannot run (no command) goes to test_failed.
+  # preexisting_failures, or the step's own rerun of the failing files on the base, #211) never
+  # count. A suite that cannot run (no command) goes to test_failed. No timeout: it comes from the
+  # project's recent suite durations (#210).
   - id: suite
     type: suite
     command: "{{ inputs.test_command }}"
-    timeout: 30m
     transitions:
       # after a merge conflict: the build and the verification already passed on the change; CI
       # builds the merged result, then the PR check, the preview and the owner's approval again

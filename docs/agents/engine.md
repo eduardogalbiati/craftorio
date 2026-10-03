@@ -30,10 +30,19 @@ same features for users; this is the implementer's summary.
   failures: [{ test, file, error }], preexisting, reason, message }`; the run's known pre-existing
   failures (`notePreexistingFailures`) are moved to `preexisting` and never fail it; `blocked` = it
   could not run (no worktree, no command). It never throws and never calls the supervisor: the
-  transitions route it. Filter `suite_failures` (`{{ steps.suite.output | suite_failures }}`): the
-  message plus one line per failing test, for a prompt or a gate. Simulation:
-  `mockSequences.suite: { <step>: ['fail', 'pass'] }` per visit (default pass; `preexisting` = only
-  the run's pre-existing failures fail, so it passes; `blocked`), a simulated log is written.
+  transitions route it. The other failures are checked on the base by the step itself (#211): their
+  test files run in the base checkout (`suiteBase`, prepared on demand, so `run_existing`/`off` runs
+  get it too), cached per base commit + file in `cache/base-tests/`; those failing there too become
+  `preexisting_failures` (the run's list, the summary, the workspace's `failing-on-main.json`). The
+  suite gets a shell-like env (`suiteEnv`: no Electron/npm/inspector variables, no scratch
+  workspace, its own `MULTIAGENT_LOCKS_DIR`, #210); without a step `timeout`, the timeout is 3× the
+  median of the project's recent durations (`cache/suite-durations.json`, min 10 min, 30 min with no
+  history), and a timeout names the test files still running. Filter `suite_failures`
+  (`{{ steps.suite.output | suite_failures }}`): the message plus one line per failing test, for a
+  prompt or a gate. Simulation: `mockSequences.suite: { <step>: ['fail', 'pass'] }` per visit
+  (default pass; `preexisting` = only the run's pre-existing failures fail, so it passes; `base` =
+  the failures fail on the simulated base too, a pass; `mixed` = 2 failures, one on the base, a
+  fail; `blocked`), a simulated log is written.
   - **`full_suite: warn`** on an agent step: a tool call of its agent that starts the whole suite
     (`isFullSuiteCommand`: `npm test`, `pytest`, `go test ./...`, `dotnet test`, `mvn test`, the
     suite step's own command…) is noted, not refused: a `log` warn `kind: full_suite_by_agent`.

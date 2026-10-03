@@ -1169,6 +1169,14 @@ class WorkflowRun extends EventEmitter {
     }
   }
 
+  // The base checkout the suite step checks its failures on (#211): the test writer's when it made
+  // one, else prepared now (runs with unit_tests run_existing/off have no test writer). → { dir,
+  // commit } or null (no worktree, or it could not be prepared).
+  async suiteBase() {
+    if (!this.baseWorktree) await this.setupBaseWorktree();
+    return this.baseWorktree && this.ctx.base_worktree_dir ? { dir: this.ctx.base_worktree_dir, commit: this.baseWorktree.commit || null } : null;
+  }
+
   // The run's scratch workspace (#120), { workspace, userData } under <run>/scratch: a copy of the
   // owner's agents, skills, workflows and settings with project entries pointing to empty folders
   // (local-preview.scratchWorkspace). Agents get it in their environment, so the app's tools they
@@ -3090,11 +3098,17 @@ class WorkflowRun extends EventEmitter {
   }
 
   // `type: suite` (#177): the project's whole test suite once (src/engine/suite-step.js), with the
-  // agents' environment (simulation only, scratch workspace), its log in logs/suite-<visit>.log; the
-  // run's known pre-existing failures do not count. Simulation: mockSequences.suite: { <step>: [...] }.
+  // environment a shell would give it (simulation only, no scratch workspace shared by every test
+  // process, its own lock folder, #210), its log in logs/suite-<visit>.log; the run's known
+  // pre-existing failures do not count, and the other failures are checked on the base checkout
+  // (#211: those failing there too become the run's pre-existing failures and go to the workspace's
+  // failing-on-main.json). Without a step `timeout`, the timeout comes from the project's recent suite
+  // durations (cache/suite-durations.json). Simulation: mockSequences.suite: { <step>: [...] }.
   async runSuiteStep(step, st) {
     const seq = this.mockSequences?.suite?.[step.id];
     const mockResult = Array.isArray(seq) && seq.length ? seq[Math.min(st.visits, seq.length) - 1] : 'pass';
+    const root = path.dirname(path.dirname(this.runDir));
+    const project = this.worktree?.repo || this.ctx.worktree_dir || '';
     let output;
     try {
       output = await suiteStep.runSuite({
@@ -3102,19 +3116,26 @@ class WorkflowRun extends EventEmitter {
         cwd: this.ctx.worktree_dir,
         runDir: this.runDir,
         round: st.visits,
-        env: { ...process.env, ...capabilities.agentEnv(this.scratchWorkspace()) },
+        env: { ...process.env, ...capabilities.agentEnv() },
         mock: this.mock,
         mockResult,
         preexisting: this.preexisting,
         signal: this.abort.signal,
-        timeoutMs: parseDuration(step.timeout ? render(String(step.timeout), this.ctx).trim() : null, suiteStep.SUITE_TIMEOUT_MS),
+        timeoutMs: step.timeout ? parseDuration(render(String(step.timeout), this.ctx).trim(), suiteStep.SUITE_TIMEOUT_MS) : null,
+        history: project ? { file: path.join(root, 'cache', 'suite-durations.json'), project } : null,
+        base: () => this.suiteBase(),
+        baseCacheDir: path.join(root, 'cache', 'base-tests'),
         log: (level, message) => this.emitEvent('log', { level, message }),
       });
     } catch (e) {
       output = { kind: 'suite', status: 'blocked', round: st.visits, command: null, log: null, exit_code: null, duration_ms: 0, timed_out: false, failures: [], preexisting: [], reason: e.message, message: `The suite could not run: ${e.message}` };
     }
     if (output.status !== 'blocked') this.suiteRuns.engine++;
+    if (output.preexisting_failures?.length && !this.mock) {
+      suiteStep.noteFailingOnMain(path.join(root, 'failing-on-main.json'), { project, base: this.worktree?.base, commit: output.base_check?.commit, runId: this.runId, failures: output.preexisting_failures });
+    }
     if (output.log) this.emitEvent('file.saved', { step_id: step.id, path: path.join(this.runDir, output.log) });
+    if (output.base_check?.log) this.emitEvent('file.saved', { step_id: step.id, path: path.join(this.runDir, output.base_check.log) });
     this.emitEvent('log', { level: output.status === 'pass' ? 'info' : 'warn', kind: 'suite', step_id: step.id, status: output.status, failures: output.failures.length, message: `${step.id}: ${output.message}` });
     return output;
   }

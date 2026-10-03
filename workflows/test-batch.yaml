@@ -275,11 +275,11 @@ steps:
         max_visits: 3
         on_exhausted: tests_failed
 
-  # The project's whole test suite, once per round, without an agent (#177).
+  # The project's whole test suite, once per round, without an agent (#177); its timeout comes from
+  # the project's recent suite durations (#210), its failures are checked on the base (#211).
   - id: suite
     type: suite
     command: "{{ inputs.test_command }}"
-    timeout: 30m
     transitions:
       - when: "output.status == 'pass' and vars.production_fixed == 'yes'"
         goto: approve_fixes
