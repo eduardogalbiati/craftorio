@@ -264,6 +264,42 @@ test('listAgents(dir, { workflowsDir }) lists every agent of every workflow afte
   assert.ok(contender1.steps.includes('compete'));
 });
 
+// #203 regression (34a48ee): a skill wrapped in a Liquid condition (`{% if inputs.unit_tests ==
+// 'write_and_run' %}unit-test-writer-{{ inputs.language }}{% endif %}`) must resolve to its family
+// on the Agents screen whatever the input's default is, since listAgents never renders a run's
+// actual inputs here; skillFamily only strips the Liquid syntax.
+function tmpWorkflowWithUnitTestsDefault(t, unitTestsDefault) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'workflow-conditional-skill-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  fs.writeFileSync(path.join(dir, 'conditional-skill.yaml'), `
+metadata:
+  name: conditional-skill
+inputs:
+  language: { type: string, default: js }
+  unit_tests: { type: string, enum: [write_and_run, off], default: ${unitTestsDefault} }
+agents:
+  test_writer:
+    provider: claude
+    model: claude-sonnet-5
+    skills:
+      - "{% if inputs.unit_tests == 'write_and_run' %}unit-test-writer-{{ inputs.language }}{% endif %}"
+steps:
+  - id: test
+    agent: test_writer
+`);
+  return dir;
+}
+
+test('listAgents: a skill wrapped in {% if %}...{% endif %} resolves to its family whatever the input\'s default is', (t) => {
+  const dir = tmp(t);
+  for (const unitTestsDefault of ['write_and_run', 'off']) {
+    const workflowsDir = tmpWorkflowWithUnitTestsDefault(t, unitTestsDefault);
+    const list = agents.listAgents(dir, { workflowsDir });
+    const testWriter = list.find((x) => x.id === 'workflow:conditional-skill.yaml:test_writer');
+    assert.deepEqual(testWriter.skills, ['unit-test-writer'], `default ${unitTestsDefault}`);
+  }
+});
+
 test('template resolution: writer-reviewer\'s user-picked models show "picked at start", its fixed signoff does not', (t) => {
   const dir = tmp(t);
   const workflowsDir = tmpWorkflows(t);
