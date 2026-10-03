@@ -64,7 +64,13 @@ In a tests-first workflow (AI Development, local hero, #220) the test writer wri
 - derive them from the task and the public interfaces it names, never from today's internals;
   a criterion that cannot be tested automatically is listed as not testable, never faked;
 - the orchestrator runs them once right after (the red check): a test already green before any
-  code guards existing behaviour or is wrong; a file that cannot run comes back to you;
+  code guards existing behaviour or is wrong; a file that cannot run comes back to you (a whole
+  extra turn, which re-reads your context);
+- **each file must load before the code exists**: a module, export or file the change creates is
+  loaded inside each test (or in a per-test helper), never at the top of the file, so a missing
+  module fails each test on its own instead of crashing the file; before answering, run only the
+  new files once to check they load and fail on the missing behaviour (the language skill names
+  the pattern);
 - **the developer never edits the acceptance tests written before it** (the engine refuses a turn
   that changes one, `protect_files`), and **may add its own internal tests**.
 In the other workflows the rule stays: the developer never writes tests (only the test writer does).

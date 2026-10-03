@@ -506,8 +506,10 @@ steps:
          existing test files the map gives for the files the change will touch, so the developer
          runs them too.
       4. New behaviour must fail now (red), and the orchestrator checks it: right after your turn it
-         runs exactly the files of `tests_added` once. Do not run them yourself unless you need to
-         check they load. A test that already passes is reported to the developer as "already
+         runs exactly the files of `tests_added` once. Each file must load before the code exists:
+         load a module the change creates inside each test, never at the top of the file (see
+         testing-principles). Before answering, run only your new files once, to check they load
+         and fail on the missing behaviour; a file that crashes costs a whole extra turn. A test that already passes is reported to the developer as "already
          green" (it guards existing behaviour, or it is wrong); a file that cannot run comes back to
          you. A criterion that cannot be tested automatically (a measurement, a visual detail, a
          real-model call) goes in `not_testable` with the reason, never a fake test.
