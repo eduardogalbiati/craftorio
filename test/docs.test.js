@@ -202,6 +202,14 @@ test('main(--check): a docs/features/ fragment edited without regenerating makes
   assert.match(read(path.join(tmp, 'README.md')), /Changed flow name/);
 });
 
+test('main(): writes docs/agents/test-map.md (the code → tests map, #219), saying why there is no map for a project with no tests', (t) => {
+  const tmp = tmpFullRoot(t);
+  assert.equal(main([], tmp), 0);
+  const map = read(path.join(tmp, 'docs', 'agents', 'test-map.md'));
+  assert.match(map, /^# Code → tests map/);
+  assert.match(map, /No map: /, 'a folder that is not a git project has no files to map');
+});
+
 // #152: src/renderer/index.html's <link>/<script> lists.
 
 test('src/renderer/index.html\'s script and style lists are up to date with the generator', () => {
