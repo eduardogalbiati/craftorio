@@ -2,7 +2,10 @@
 // Run tab (src/run-analysis.js) and through them the roadmap's real cost (src/cost-estimate.js).
 // Runs recorded since `cost_accounting: 'per_turn'` (workflow.started, summary.json) are read as
 // recorded: each turn's cost_usd is its own and an attempt stopped before its result has a
-// `session.attempt_stopped` event (estimated, or cost not recorded). Runs recorded before it:
+// `session.attempt_stopped` event (estimated, or cost not recorded), except a Claude turn with several
+// `result` events recorded before #277 (summary without `turn_cost: 'max_result'`): its cost_usd is
+// the last event's (often 0), so it costs the highest cost among its `usage` stream items. Runs
+// recorded before per-turn costs:
 // - a Claude turn recorded the CLI's `total_cost_usd`, cumulative over the CLI session on `--resume`:
 //   its own cost is the difference with the previous turn of the same CLI session, and the session
 //   costs its last total (handoff sessions, one turn each, and other providers are unchanged);
@@ -31,7 +34,14 @@ function runCosts(events = [], summary = null) {
   const provider = new Map();
   const agentOf = new Map();
   const last = new Map();
+  const streamed = new Map(); // `${session_id}:${turn}` → the highest cost among the turn's usage items
   for (const e of events) {
+    if (e.type === 'session.stream') {
+      const c = e.item?.kind === 'usage' ? Number(e.item.costUsd) : NaN;
+      const k = `${e.session_id}:${e.turn}`;
+      if (fixed && c > (streamed.get(k) || 0)) streamed.set(k, c);
+      continue;
+    }
     const snap = e.session;
     if (snap && e.session_id) {
       if (snap.provider) provider.set(e.session_id, snap.provider);
@@ -47,7 +57,17 @@ function runCosts(events = [], summary = null) {
       if (m && !NOT_STARTED.test(m[2])) stopped.push({ agent: m[1], sessionId: null, step: null, t: Date.parse(e.ts || ''), costUsd: 0, estimated: false, notRecorded: true });
       continue;
     }
-    if (e.type !== 'session.message_received' || fixed) continue;
+    if (e.type !== 'session.message_received') continue;
+    if (fixed) {
+      // #277: a turn with several `result` events was recorded with the last one's cost (often 0)
+      const recorded = Number(e.cost_usd) || 0;
+      const best = streamed.get(`${e.session_id}:${e.turn}`) || 0;
+      if (best > recorded) {
+        own.set(e, best);
+        overcount.set(e.session_id, (overcount.get(e.session_id) || 0) + recorded - best);
+      }
+      continue;
+    }
     if (provider.get(e.session_id) !== 'claude') continue;
     const recorded = Number(e.cost_usd) || 0;
     const cli = snap?.provider_session_id || null;
@@ -86,8 +106,10 @@ function correctSessions(sessions = [], costs) {
   });
 }
 
-// a run recorded before per-turn costs: its events say which turns counted twice and which attempts left no cost
-const needsEvents = (summary) => summary?.cost_accounting !== 'per_turn' && (summary?.sessions || []).length > 0;
+// a run recorded before per-turn costs: its events say which turns counted twice and which attempts
+// left no cost; one recorded before #277 (no `turn_cost: 'max_result'`): which turns recorded 0
+const needsEvents = (summary) => (summary?.cost_accounting !== 'per_turn' || summary?.turn_cost !== 'max_result')
+  && (summary?.sessions || []).length > 0;
 
 module.exports = {
   correctSessions,

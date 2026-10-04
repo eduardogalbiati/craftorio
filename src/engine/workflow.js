@@ -3888,6 +3888,8 @@ ${stderr || stdout}`.slice(0, 1500)));
       // `ship:` (#260): the release the owner shipped ({ tag, base, commit, pushed, issues }; `simulated` in a simulation)
       ...(this.ctx.release ? { release: this.ctx.release } : {}),
       tokens, cost_usd: +sessions.reduce((a, s) => a + s.cost_usd, 0).toFixed(6), cost_accounting: 'per_turn',
+      // #277: a multi-result Claude turn records its highest total (src/run-costs.js reads older runs from their events)
+      turn_cost: 'max_result',
       context: this.contextSummary(),
       timing: this.timingSummary(),
       // `wait:` steps: checks made without an agent turn, agent turns they asked for, steps they finished

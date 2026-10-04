@@ -64,7 +64,8 @@ function fromEvents(file) {
   const key = `${st.mtimeMs}:${st.size}`;
   const hit = derived.get(file);
   if (hit?.key === key) return hit;
-  const events = readEvents(file).filter((e) => e.type !== 'session.stream');
+  const all = readEvents(file);
+  const events = all.filter((e) => e.type !== 'session.stream');
   const byId = new Map();
   for (const ev of events) {
     if (SESSION_EVENTS.has(ev.type) && ev.session) byId.set(ev.session_id, { ...ev.session, status: ev.type === 'session.closed' ? ev.status : ev.session.status });
@@ -80,8 +81,9 @@ function fromEvents(file) {
     if (ev.type === 'workflow.child_started') children.set(ev.child_run_id, { run_id: ev.child_run_id, step_id: ev.step_id, ...(ev.index !== undefined ? { index: ev.index } : {}), workflow: ev.workflow, status: 'running' });
     else if (ev.type === 'workflow.child_finished' && children.has(ev.child_run_id)) Object.assign(children.get(ev.child_run_id), { status: ev.status, ...(ev.cost_usd !== undefined ? { cost_usd: ev.cost_usd } : {}) });
   }
-  // #233: a run recorded before per-turn costs counted each resumed Claude turn's whole session
-  const costs = runCosts(events);
+  // #233: a run recorded before per-turn costs counted each resumed Claude turn's whole session;
+  // #277: a multi-result turn's cost is in its `usage` stream items
+  const costs = runCosts(all.filter((e) => e.type !== 'session.stream' || e.item?.kind === 'usage'));
   // the PR the run opened (#84): the latest step output with pr_url / pr_number
   const out = { key, sessions: correctSessions([...byId.values()], costs), costs, progress: trailOf(events), localMerge, recovery, pr: prOfEvents(events), childRuns: [...children.values()] };
   derived.set(file, out);

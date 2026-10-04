@@ -154,25 +154,41 @@ function parseClaude(ev, emit, acc) {
         }
       }
       break;
+    // #277: a turn that used sub-agents ends with 2 to 4 `result` events one ms apart, all carrying
+    // the same (or a growing) session total_cost_usd. The turn costs the highest total seen in the
+    // turn minus the session's total before the turn, so a later event never lowers it. Their usages
+    // overlap (the total does not grow with the later, smaller ones: their tokens were already paid),
+    // so the turn's tokens are the largest of each field, not a sum. The raw `result` events of such
+    // a turn are kept in the run as `raw` stream items, to check this rule against a real stream.
     case 'result': {
       const u = ev.usage || {};
       acc.text = ev.result ?? acc.lastText ?? '';
-      acc.usage = {
+      const usage = {
         input: u.input_tokens || 0,
         output: u.output_tokens || 0,
         cache_read: u.cache_read_input_tokens || 0,
         cache_write: u.cache_creation_input_tokens || 0,
         reasoning: 0, // the Anthropic API counts thinking inside output_tokens
       };
+      acc.results = (acc.results || 0) + 1;
+      const first = acc.results === 1;
+      acc.usage = first || !acc.usage ? usage : Object.fromEntries(Object.keys(usage).map((k) => [k, Math.max(usage[k], acc.usage[k] || 0)]));
       if (ev.session_id) acc.providerSessionId = ev.session_id;
-      acc.costUsd = null;
+      if (first) acc.firstResult = ev;
+      else {
+        if (acc.results === 2) emit({ kind: 'raw', event: acc.firstResult });
+        emit({ kind: 'raw', event: ev });
+      }
+      if (first) acc.costUsd = null;
       if (ev.total_cost_usd != null) {
         const sid = acc.providerSessionId;
-        const before = (sid && claudeTotals.get(sid)) || 0;
+        if (acc.turnTotalBefore == null) acc.turnTotalBefore = (sid && claudeTotals.get(sid)) || 0;
+        const before = acc.turnTotalBefore;
+        const total = Math.max(ev.total_cost_usd, acc.cliTotalCostUsd ?? 0);
         // a total below the previous one is a new count (a forked session): taken whole
-        acc.costUsd = ev.total_cost_usd >= before ? +(ev.total_cost_usd - before).toFixed(6) : ev.total_cost_usd;
-        if (sid) claudeTotals.set(sid, ev.total_cost_usd);
-        acc.cliTotalCostUsd = ev.total_cost_usd;
+        acc.costUsd = total >= before ? +(total - before).toFixed(6) : total;
+        if (sid) claudeTotals.set(sid, total);
+        acc.cliTotalCostUsd = total;
       }
       if (ev.is_error) acc.error = `Claude returned an error: ${ev.subtype} ${ev.result || ''}`;
       emit({ kind: 'usage', usage: acc.usage, costUsd: acc.costUsd });
