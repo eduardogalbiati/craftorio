@@ -56,7 +56,8 @@ module.exports = (ctx) => {
   }
 
   function saveReleaseNotes({ projectId, notes }) {
-    releases.saveNextNotes(ctx.ws.releases, idOf(projectId), notes);
+    // a project that exists (readProject throws otherwise): notes are never kept for an unknown id
+    releases.saveNextNotes(ctx.ws.releases, projects.readProject(ctx.ws.projects, idOf(projectId)).id, notes);
     return listReleases({ projectId });
   }
 
@@ -106,7 +107,8 @@ module.exports = (ctx) => {
     const history = releases.readReleases(ws.releases, projectId);
     if (shipped && !summary.mock && !history.releases.some((r) => r.tag === shipped.tag)) {
       const project = projects.readProject(ws.projects, projectId);
-      const next = nextOf(project);
+      // the release run itself (it merged a fix) is added below, once, with its own cost
+      const next = nextOf(project, projectRuns(project).filter((r) => r.runId !== runId));
       const titles = new Map((backlog.readBacklog(ws.backlog, projectId)?.issues || []).map((i) => [i.number, i.title]));
       const issues = new Map(next.issues.map((i) => [i.number, i]));
       for (const n of shipped.issues || []) if (!issues.has(n)) issues.set(n, { number: n, title: titles.get(n) || '' });

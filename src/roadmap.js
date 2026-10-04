@@ -265,8 +265,8 @@ function cleanStages(stages, { issues = [], previous = null } = {}) {
 function saveStages(dir, projectId, stages, { issues } = {}) {
   return updateRoadmap(dir, projectId, (r) => {
     const next = { ...r, stages: cleanStages(stages, { issues, previous: r }) };
-    // an edit that leaves nothing to run ends a running roadmap
-    return next.stages.length && currentStage(next) < 0 && r.state === 'running' ? { ...next, state: 'done', scope: null } : next;
+    // an edit that leaves nothing to run ends a running roadmap (not one that waits at a cut line, #260)
+    return next.stages.length && currentStage(next) < 0 && r.state === 'running' && !pendingRelease(next, -1) ? { ...next, state: 'done', scope: null } : next;
   });
 }
 
