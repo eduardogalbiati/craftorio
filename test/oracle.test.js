@@ -261,7 +261,10 @@ test('a daily budget already reached refuses the question, naming the spend, the
   assert.equal(out.refused.spentUsd, 1);
   assert.equal(out.refused.limitUsd, 1);
   assert.match(out.refused.text, /Paused by budget/);
-  assert.equal((await api['oracle:history']()).length, 0); // refused before anything is posted
+  // #244: a refused question is logged; no answer is posted for it
+  const history = await api['oracle:history']();
+  assert.ok(history.some((m) => m.text === 'Hi'));
+  assert.ok(!history.some((m) => m.role === 'oracle'));
 });
 
 test('dailyBudgetUsd: 0 means no cap: the Oracle never pauses, whatever it already spent today', async (t) => {

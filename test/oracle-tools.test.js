@@ -228,6 +228,99 @@ test('repo_read: reads a file and lists a folder inside the project; ".." cannot
   assert.doesNotMatch(escape.text, /root:/);
 });
 
+// ---- #244 tool output budgets: run_events, run_file, repo_read ----------------------------------
+
+test.describe('#244 tool output budgets', () => {
+  // a run folder written by hand (runFolder only needs <workspace>/runs/<id>/events.jsonl), with
+  // `count` events numbered e1..eN in `message` so the slice the tool returns is identifiable
+  const seedRun = (service, runId, count, files = {}) => {
+    const runDir = path.join(service.workspace().runs, runId);
+    fs.mkdirSync(runDir, { recursive: true });
+    const lines = [];
+    for (let i = 1; i <= count; i++) lines.push(JSON.stringify({ type: 'log', seq: i, message: `e${i}` }));
+    fs.writeFileSync(path.join(runDir, 'events.jsonl'), `${lines.join('\n')}\n`);
+    for (const [name, content] of Object.entries(files)) fs.writeFileSync(path.join(runDir, name), content);
+    return runDir;
+  };
+  // fixed-width lines (20 bytes each: "L" + 6 digits + 12 "x" + "\n"), so byte offset N is the start
+  // of line N / 20 and every position in the file is identifiable
+  const LINE = 20;
+  const numbered = (bytes) => {
+    let s = '';
+    for (let i = 0; s.length < bytes; i++) s += `L${String(i).padStart(6, '0')}${'x'.repeat(12)}\n`;
+    return s.slice(0, bytes);
+  };
+  const BUDGET = 40 * 1024;
+  const NOTE = 1024; // room for the "cut: ... bytes, next offset ..." note after the content
+
+  test('run_events with no `last` returns only the last 200 events (e51..e250 of 250)', async (t) => {
+    const { ctx, service } = makeCtx(t);
+    seedRun(service, 'run-244-events', 250);
+    const out = await callTool(oracleTools(ctx), 'run_events', { runId: 'run-244-events' });
+    assert.equal(out.isError, false);
+    const events = JSON.parse(out.text);
+    assert.equal(events.length, 200);
+    assert.equal(events[0].message, 'e51');
+    assert.equal(events.at(-1).message, 'e250');
+  });
+
+  test('run_events with an explicit `all: true` returns every event (250)', async (t) => {
+    // assumption: the explicit "all" of #244 is a boolean argument `all: true` next to `last`
+    const { ctx, service } = makeCtx(t);
+    seedRun(service, 'run-244-all', 250);
+    const out = await callTool(oracleTools(ctx), 'run_events', { runId: 'run-244-all', all: true });
+    assert.equal(out.isError, false);
+    const events = JSON.parse(out.text);
+    assert.equal(events.length, 250);
+    assert.equal(events[0].message, 'e1');
+    assert.equal(events.at(-1).message, 'e250');
+    // and the schema accepts it (the model only sends what inputSchema declares)
+    const tool = oracleTools(ctx).find((x) => x.name === 'run_events');
+    assert.ok(tool.inputSchema.properties.all, 'run_events declares an `all` argument');
+  });
+
+  test('run_file on a 100 KB file returns at most 40 KB and says the file was cut (total size or next offset)', async (t) => {
+    const { ctx, service } = makeCtx(t);
+    const size = 100 * 1024;
+    seedRun(service, 'run-244-file', 1, { 'big.log': numbered(size) });
+    const out = await callTool(oracleTools(ctx), 'run_file', { runId: 'run-244-file', path: 'big.log' });
+    assert.equal(out.isError, false);
+    assert.ok(out.text.startsWith('L000000'), 'starts at the beginning of the file');
+    assert.ok(out.text.length <= BUDGET + NOTE, `at most 40 KB of content (got ${out.text.length} chars)`);
+    assert.match(out.text, new RegExp(`${size}|offset`, 'i'));
+  });
+
+  test('run_file with `offset` (bytes) returns the content starting at that offset', async (t) => {
+    const { ctx, service } = makeCtx(t);
+    seedRun(service, 'run-244-offset', 1, { 'big.log': numbered(100 * 1024) });
+    const offset = 2500 * LINE; // 50000: the start of line L002500
+    const out = await callTool(oracleTools(ctx), 'run_file', { runId: 'run-244-offset', path: 'big.log', offset });
+    assert.equal(out.isError, false);
+    assert.ok(out.text.startsWith('L002500'), `starts at byte ${offset} (got ${JSON.stringify(out.text.slice(0, 20))})`);
+    assert.ok(out.text.length <= BUDGET + NOTE);
+  });
+
+  test('repo_read on a 100 KB file returns at most 40 KB', async (t) => {
+    const { ctx, api } = makeCtx(t);
+    const folder = tmpRepo(t);
+    fs.writeFileSync(path.join(folder, 'big.txt'), numbered(100 * 1024));
+    const project = await api['projects:create']({ name: 'Repo budget project', folder });
+    const out = await callTool(oracleTools(ctx), 'repo_read', { projectId: project.id, path: 'big.txt' });
+    assert.equal(out.isError, false);
+    assert.ok(out.text.startsWith('L000000'));
+    assert.ok(out.text.length <= BUDGET + NOTE, `at most 40 KB of content (got ${out.text.length} chars)`);
+  });
+
+  test('the descriptions of run_events, run_file and repo_read state their limits (200 events, 40 KB)', async (t) => {
+    const { ctx } = makeCtx(t);
+    const tools = oracleTools(ctx);
+    const description = (name) => tools.find((x) => x.name === name).description;
+    assert.match(description('run_events'), /\b200\b/);
+    assert.match(description('run_file'), /40\s?KB/i);
+    assert.match(description('repo_read'), /40\s?KB/i);
+  });
+});
+
 // ---- app_source: where the app's own code can be read --------------------------------------------
 
 test('app_source: not available without the orchestrator\'s own repository registered as a project', async (t) => {
