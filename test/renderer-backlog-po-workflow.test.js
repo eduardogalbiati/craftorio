@@ -132,6 +132,8 @@ function loadDrawer({ projectId = 'proj-a1b2' } = {}) {
     },
     reportNotifyContext: () => {},
     showRun: () => {},
+    // backlog-po.js redraws on agent-request:changed (#241)
+    addEventListener: () => {},
   };
   sandbox.window = sandbox;
   vm.createContext(sandbox);
