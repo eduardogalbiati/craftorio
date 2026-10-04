@@ -768,6 +768,14 @@ function onEvent(ev) {
       orch(ev, `limit exceeded: ${ev.limit}`, 'error');
       break;
 
+    // #276: the memory guard stopped a process of this run / held a suite for low memory
+    case 'process.killed':
+      orch(ev, ev.message || `memory guard stopped ${ev.command_line}`, 'warn');
+      break;
+    case 'memory.hold':
+      orch(ev, `${ev.step_id || 'a step'} waited ${Math.round((ev.waited_ms || 0) / 1000)} s for memory${ev.recovered ? '' : ' (started anyway)'}`, 'warn');
+      break;
+
     case 'file.saved':
       orch(ev, `💾 ${ev.step_id}${ev.agent ? ` (${ev.agent})` : ''} saved to ${ev.path}`);
       break;

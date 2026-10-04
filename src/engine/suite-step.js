@@ -268,7 +268,8 @@ function runningTestFiles(procs, cwd) {
 
 // Runs `command` in a shell in cwd, its whole output into logFile → { code, timedOut, error, running };
 // running: on a timeout, the test files still running. Never rejects.
-function runCommand({ command, cwd, env, timeoutMs, signal, logFile }) {
+// onSpawn(pid): the shell's process, for the memory guard (#276).
+function runCommand({ command, cwd, env, timeoutMs, signal, logFile, onSpawn }) {
   const childEnv = { ...env };
   // the engine may run inside Electron as node: the suite's own Electron children must not
   delete childEnv.ELECTRON_RUN_AS_NODE;
@@ -283,6 +284,7 @@ function runCommand({ command, cwd, env, timeoutMs, signal, logFile }) {
       resolve({ code: null, timedOut: false, error: e.message });
       return;
     }
+    if (child.pid) onSpawn?.(child.pid);
     let timedOut = false;
     let running = [];
     child.stdout?.on('data', (d) => out.write(d));
@@ -518,7 +520,8 @@ function saveCoverage(text, runDir, changedFiles) {
 // coverage (#225): the command runs with node's coverage (coverageCommand); whenever the output
 // has node's coverage report, <run_dir>/coverage/coverage-summary.md (the totals and the changed files',
 // changedFiles(): the files the run changed) is written and `coverage` added to the output.
-async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = 'pass', preexisting = [], signal, timeoutMs, history, base, baseCacheDir, run = runCommand, log = () => {}, files = null, selection = null, logName = null, coverage = false, changedFiles = null }) {
+// onSpawn(pid): the command's process, watched by the memory guard (#276).
+async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = 'pass', preexisting = [], signal, timeoutMs, history, base, baseCacheDir, run = runCommand, log = () => {}, files = null, selection = null, logName = null, coverage = false, changedFiles = null, onSpawn = null }) {
   const logFile = runDir ? path.join(runDir, 'logs', `${logName || `suite-${round}`}.log`) : null;
   const out = {
     kind: 'suite', status: 'blocked', round, scope: 'full', command: null, log: logFile ? path.relative(runDir, logFile).split(path.sep).join('/') : null,
@@ -574,7 +577,7 @@ async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = '
     if (logFile) fs.appendFileSync(logFile, text);
   } else {
     log('info', `suite: ${out.command} (round ${round}, timeout ${Math.round(out.timeout_ms / 60e3)} min, log ${out.log})`);
-    const r = await run({ command: out.command, cwd, env: { ...childEnv.env, MULTIAGENT_TEST_HUMAN_LOG: humanLog(logFile) }, timeoutMs: out.timeout_ms, signal, logFile });
+    const r = await run({ command: out.command, cwd, env: { ...childEnv.env, MULTIAGENT_TEST_HUMAN_LOG: humanLog(logFile) }, timeoutMs: out.timeout_ms, signal, logFile, ...(onSpawn ? { onSpawn } : {}) });
     out.exit_code = r.code;
     out.timed_out = r.timedOut;
     out.running = r.running || [];

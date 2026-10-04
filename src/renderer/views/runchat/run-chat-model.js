@@ -327,6 +327,9 @@
 
     'limit.exceeded'(ev) { this.system(ev, 'error', `Limit exceeded: ${ev.limit}`); },
 
+    // #276: the memory guard stopped a process of the run
+    'process.killed'(ev) { this.system(ev, 'warn', ev.message || `The memory guard stopped ${ev.command_line}`); },
+
     'budget.exceeded'(ev) {
       this.system(ev, ev.blocked ? 'error' : 'warn', `${ev.provider} reached its monthly budget${ev.blocked ? ': turn blocked' : ' (not blocking)'}`);
     },

@@ -64,7 +64,8 @@ function screenshotCommand(dir) {
 }
 
 // Runs `npm run screenshot -- <args>` in cwd → { code, output, timedOut }; never rejects.
-function runShot({ cwd, args, env, timeoutMs, signal }) {
+// onSpawn(pid): the command's process, watched by the memory guard (#276).
+function runShot({ cwd, args, env, timeoutMs, signal, onSpawn }) {
   const npm = resolveCommand('npm');
   if (!npm) return Promise.resolve({ code: null, output: 'npm not found in PATH', timedOut: false });
   const argv = ['run', 'screenshot', '--', ...args];
@@ -80,6 +81,7 @@ function runShot({ cwd, args, env, timeoutMs, signal }) {
       resolve({ code: null, output: e.message, timedOut: false });
       return;
     }
+    if (child.pid) onSpawn?.(child.pid);
     let output = '';
     let timedOut = false;
     const keep = (d) => { output = (output + d).slice(-4000); };
@@ -117,8 +119,9 @@ async function withSlot({ signal, onSlotWait, slot }, fn) {
 
 // entries: the developer's list; cwd: the worktree; base: the ref of the "original" side (none: modified
 // only); env: the agents' environment (simulation only, scratch workspace); run: runShot (replaceable);
-// slot: acquireSlot (replaceable); onSlotWait(holder): a capture waits for another run's screenshot
-async function captureScreenshots({ entries, cwd, runDir, folder, round, base, env, mock, signal, timeoutMs = SHOT_TIMEOUT_MS, run = runShot, log = () => {}, slot = acquireSlot, onSlotWait = () => {} }) {
+// slot: acquireSlot (replaceable); onSlotWait(holder): a capture waits for another run's screenshot;
+// onSpawn(pid): each capture's process (the memory guard, #276)
+async function captureScreenshots({ entries, cwd, runDir, folder, round, base, env, mock, signal, timeoutMs = SHOT_TIMEOUT_MS, run = runShot, log = () => {}, slot = acquireSlot, onSlotWait = () => {}, onSpawn = null }) {
   const dir = runDir ? evidence.roundDir(runDir, folder, round) : null;
   const out = {
     kind: 'screenshots', folder, round, dir: dir ? path.relative(runDir, dir).split(path.sep).join('/') : null,
@@ -158,7 +161,7 @@ async function captureScreenshots({ entries, cwd, runDir, folder, round, base, e
       const args = [...e.args, '--out', dir, '--name', e.name, '--side', side, ...(side === 'original' ? ['--ref', base] : [])];
       const t0 = Date.now();
       log('info', `screenshots: ${command} -- ${args.join(' ')}`);
-      const r = await withSlot({ signal, onSlotWait, slot }, (token) => run({ cwd, args, env: { ...env, [SCREENSHOT_SLOT_ENV]: token }, timeoutMs, signal }));
+      const r = await withSlot({ signal, onSlotWait, slot }, (token) => run({ cwd, args, env: { ...env, [SCREENSHOT_SLOT_ENV]: token }, timeoutMs, signal, ...(onSpawn ? { onSpawn } : {}) }));
       const file = path.join(dir, `${e.name}.${side}.png`);
       if (r.code === 0 && fs.existsSync(file)) {
         out.taken++;

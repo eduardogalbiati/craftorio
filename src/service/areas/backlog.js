@@ -151,6 +151,11 @@ module.exports = (ctx) => {
         const next = backlog.claimQueued(ws.backlog, (projectId, item) => !ctx.slotProblem({ mock: !!item.mock, projectId }));
         if (!next) return;
         const { projectId, item } = next;
+        // #276: low memory holds a real start: the item goes back to the queue and a timer dispatches again
+        if (!item.mock && await ctx.memoryHold()) {
+          backlog.releaseQueued(ws.backlog, projectId, item.number);
+          return;
+        }
         try {
           const project = projects.readProject(ws.projects, projectId);
           const wf = loadWorkflow(ctx.workflowPath(item.workflow).file);

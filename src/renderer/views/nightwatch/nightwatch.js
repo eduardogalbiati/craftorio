@@ -22,7 +22,7 @@
   const defaultEnd = () => { const d = new Date(); d.setHours(7, 30, 0, 0); if (d <= new Date()) d.setDate(d.getDate() + 1); return localValue(d); };
   const stat = (label, value, title = '', cls = '') => `<div class="u-stat${cls ? ` ${cls}` : ''}"${title ? ` title="${esc(title)}"` : ''}><label>${esc(label)}</label><b>${value}</b></div>`;
   const KIND = {
-    'dispatch-idle': 'Dispatch idle', failed: 'Failed run', interrupted: 'Interrupted', limit: 'Limit pause',
+    'dispatch-idle': 'Dispatch idle', failed: 'Failed run', interrupted: 'Interrupted', limit: 'Limit pause', memory: 'Memory guard',
     'roadmap-empty': 'Roadmap empty', 'roadmap-paused': 'Roadmap paused', stalled: 'Stalled',
   };
 

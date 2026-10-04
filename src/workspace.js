@@ -181,6 +181,9 @@ const DEFAULT_SETTINGS = {
   // several workflows at the same time (Settings › Execution); disabled = one run at a time.
   // perProject: null = no limit per project; simulations count toward the limits only if countSimulations.
   concurrentRuns: { enabled: false, max: 2, perProject: null, countSimulations: false },
+  // Memory guard (#276, src/engine/memory-guard.js): a real run's process over limitPercent of the RAM
+  // is stopped; suites and new runs wait while less than floorPercent is free (0 = no hold)
+  memoryGuard: { enabled: true, limitPercent: 25, floorPercent: 10 },
   // Keep awake (#162, src/keep-awake.js): no sleep while runs, a roadmap or a queue have work to do
   keepAwake: false,
   // the top bar's 24/7 chip (#188, src/renderer/occupancy-chip.js): the last 24 h occupancy

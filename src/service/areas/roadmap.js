@@ -170,6 +170,8 @@ module.exports = (ctx) => {
       // #206: the budget cap stops a real start whose estimate would pass it (never a run in progress
       // nor a gate): the roadmap pauses with the next stage's estimate, the owner raises or resumes
       if (!mockOf(item) && budgetStop(projectId, item, roadmap)) break;
+      // #276: low memory holds a real start (not an error of the item): a timer dispatches again once it recovers
+      if (!mockOf(item) && await ctx.memoryHold()) break;
       try {
         const project = projects.readProject(ws.projects, projectId);
         const wf = loadWorkflow(ctx.workflowPath(item.workflow).file);

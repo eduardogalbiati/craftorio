@@ -42,6 +42,7 @@ async function renderSettings() {
   $('#set-backlog-refresh').value = String(state.settings.backlogRefreshHours ?? 24);
   $('#set-notif-retention').value = state.settings.notificationRetentionDays ?? 30;
   renderConcurrency();
+  renderMemoryGuard();
   renderOracleSettings();
   renderLiveSettings();
   renderBudgetSettings();
@@ -86,6 +87,40 @@ async function saveConcurrency() {
   state.settings = await api.setSettings({ concurrentRuns });
   renderConcurrency();
   renderHeader();
+}
+
+// Settings › Execution › Memory guard (settings.memoryGuard, #276, src/engine/memory-guard.js): the
+// hint gives the limit in GB for this machine (app:info totalMemoryBytes, binary GB like Task Manager).
+async function renderMemoryGuard() {
+  const g = { enabled: true, limitPercent: 25, floorPercent: 10, ...(state.settings.memoryGuard || {}) };
+  $('#set-mg-enabled').checked = g.enabled !== false;
+  $('#set-mg-limit').value = g.limitPercent;
+  $('#set-mg-floor').value = g.floorPercent;
+  for (const sel of ['#set-mg-limit', '#set-mg-floor']) { $(sel).classList.remove('invalid'); $(sel).removeAttribute('aria-invalid'); }
+  document.querySelectorAll('#set-memory-guard .mg-opt').forEach((el) => el.classList.toggle('hidden', g.enabled === false));
+  if (!state.totalMemoryBytes) state.totalMemoryBytes = (await api.appInfo().catch(() => null))?.totalMemoryBytes || null;
+  const total = Number(state.totalMemoryBytes);
+  const gb = total > 0 ? ((total * g.limitPercent) / 100 / 1024 ** 3).toFixed(1) : null;
+  $('#set-mg-limit-hint').textContent = `${gb ? `${gb} GB on this machine. ` : ''}Between 5 and 90. Measured as committed memory on Windows, resident memory elsewhere.`;
+}
+
+// Saves the group when a field changes; a value out of its range shows the field's error state and nothing is saved.
+async function saveMemoryGuard() {
+  const field = (sel, min, max) => {
+    const el = $(sel);
+    const raw = String(el.value ?? '').trim();
+    const n = Number(raw);
+    const ok = raw !== '' && Number.isFinite(n) && n >= min && n <= max;
+    el.classList.toggle('invalid', !ok);
+    if (ok) el.removeAttribute('aria-invalid'); else el.setAttribute('aria-invalid', 'true');
+    el.title = ok ? '' : `Between ${min} and ${max}: not saved.`;
+    return ok ? n : null;
+  };
+  const limitPercent = field('#set-mg-limit', 5, 90);
+  const floorPercent = field('#set-mg-floor', 0, 50);
+  if (limitPercent == null || floorPercent == null) return;
+  state.settings = await api.setSettings({ memoryGuard: { enabled: $('#set-mg-enabled').checked, limitPercent, floorPercent } });
+  await renderMemoryGuard();
 }
 
 // Settings › General › Live roadmap (settings.liveRoadmap, read by src/live-roadmap.js, #164): every
@@ -499,6 +534,21 @@ registerView({
                   <label class="switch"><input type="checkbox" id="set-cr-sims" /><span></span></label>
                 </div>
               </div>
+              <h3 class="s-subtitle">Memory guard</h3>
+              <div id="set-memory-guard" class="s-group">
+                <div class="s-row">
+                  <div class="s-label"><b>Stop a run's runaway process</b><span>A test, a build or a script a real run started that passes the limit below is stopped with its children, before it exhausts the machine. The agent CLI itself, the app and your other programs are never stopped.</span></div>
+                  <label class="switch"><input type="checkbox" id="set-mg-enabled" data-testid="memory-guard-enabled" aria-label="Memory guard on" /><span></span></label>
+                </div>
+                <div class="s-row mg-opt">
+                  <div class="s-label"><b>Stop a process over (% of the RAM)</b><span id="set-mg-limit-hint" data-testid="memory-guard-limit-hint"></span></div>
+                  <div class="s-ctrl"><input type="number" id="set-mg-limit" data-testid="memory-guard-limit" min="5" max="90" step="1" class="s-num" aria-label="Memory limit per process, percent of the RAM" /></div>
+                </div>
+                <div class="s-row mg-opt">
+                  <div class="s-label"><b>Hold while free memory is under (%)</b><span>Suites and new runs wait while less than this share of the memory is free (a suite at most 10 minutes). 0: never hold. Between 0 and 50.</span></div>
+                  <div class="s-ctrl"><input type="number" id="set-mg-floor" data-testid="memory-guard-floor" min="0" max="50" step="1" class="s-num" aria-label="Free memory floor, percent" /></div>
+                </div>
+              </div>
               <h3 class="s-subtitle">Oracle</h3>
               <div id="set-oracle" class="s-group">
                 <div class="s-row">
@@ -568,6 +618,7 @@ registerView({
       e.target.value = state.settings.notificationRetentionDays;
     };
     for (const sel of ['#set-cr-enabled', '#set-cr-max', '#set-cr-project', '#set-cr-sims']) $(sel).onchange = saveConcurrency;
+    for (const sel of ['#set-mg-enabled', '#set-mg-limit', '#set-mg-floor']) $(sel).onchange = saveMemoryGuard;
     for (const sel of ['#set-oracle-budget', '#set-oracle-compact']) $(sel).onchange = saveOracleSettings;
     for (const sel of ['#set-live-cap', '#set-live-stages', '#set-live-budget', '#set-live-refresh']) $(sel).onchange = saveLiveSettings;
     for (const sel of ['#set-budget-day', '#set-budget-night']) $(sel).onchange = saveBudgetSettings;

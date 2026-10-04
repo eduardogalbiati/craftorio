@@ -46,6 +46,9 @@ function runNotice(ev, run = {}, { gateLink } = {}) {
       const ok = ev.status === 'success' ? (ev.summary?.local_merge ? `Merged locally into ${ev.summary.local_merge.base}, not pushed yet.` : '') : ev.error;
       return notice(ev.status === 'success' ? 'succeeded' : label, `Run ${label}: ${name()}`, ok);
     }
+    // #276: the memory guard stopped the same command a second time in a step (the engine sets notify once)
+    case 'process.killed':
+      return ev.notify ? notice('memory', `Process stopped again for memory: ${name()}`, `${ev.step_id || 'A step'} ran \`${ev.command_line}\` again and the memory guard stopped it again (${(ev.bytes / 1024 ** 3).toFixed(1)} GB, over the ${(ev.limit_bytes / 1024 ** 3).toFixed(1)} GB limit).`) : null;
     default:
       return null;
   }

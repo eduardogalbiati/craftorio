@@ -28,6 +28,11 @@ Before writing tests, list the seams you will test at the top of your answer:
   call order of your own collaborators.
 - Covers the happy path, edges (empty, null/zero value, limits, unicode, time zones) and
   expected errors.
+- **Never hands a DOM node, a sandbox / `vm` object or another large object graph to an
+  assertion**: compare a primitive (`el === null`, a count, a string, `Array.from(list)`). A failing
+  assertion serialises both operands for its message, and a node of a fake DOM or a sandbox drags
+  the whole page or context with it: one such failure grew a test process past 70 GB and stalled
+  every other run on the machine.
 
 ## Where a test goes
 

@@ -15,6 +15,11 @@ const { Recorder } = require('../../engine/recorder');
 const { resolveCommand } = require('../../engine/providers');
 const simulation = require('../../engine/simulation');
 const { cleanupWorktrees } = require('../../engine/worktree');
+const {
+  configureMemoryGuard,
+  memoryProblem,
+  sharedMemoryGuard,
+} = require('../../engine/memory-guard');
 const { pruneDepsCache } = require('../../engine/deps-cache');
 const workspace = require('../../workspace');
 const projects = require('../../projects');
@@ -33,6 +38,8 @@ const { num } = require('../common');
 
 // how often a child run waiting for a slot of Settings › Execution checks again (#175)
 const SLOT_POLL_MS = 1000;
+// how often a start refused for low memory (#276) checks whether memory recovered
+const MEMORY_RETRY_MS = 30e3;
 
 module.exports = (ctx) => {
   const { host, events } = ctx;
@@ -48,6 +55,40 @@ module.exports = (ctx) => {
   function stopDispatchTimers() {
     for (const t of dispatchTimers) clearTimeout(t);
     dispatchTimers.clear();
+    if (memoryRetry) { clearInterval(memoryRetry); memoryRetry = null; }
+  }
+
+  // ---- memory guard (#276) --------------------------------------------------------------
+  // Settings › Execution › Memory guard configures the app's guard (src/engine/memory-guard.js) that
+  // real runs use. A new real run does not start while free memory is under its floor: the refusal
+  // names the reason like slotProblem, and a timer dispatches the roadmaps and queues again once
+  // memory recovers (they only dispatch at app start, when a run ends and on a screen action).
+  let memoryRetry = null;
+  function applyMemorySettings() {
+    configureMemoryGuard({ ...workspace.DEFAULT_SETTINGS.memoryGuard, ...(workspace.readSettings(ctx.ws).memoryGuard || {}) });
+    return sharedMemoryGuard();
+  }
+  const memoryNow = async (guard) => {
+    const m = guard ? await guard.freeMemory() : null;
+    return m ? memoryProblem({ freeBytes: m.freeBytes, floorBytes: guard.floorBytes }) : '';
+  };
+  // '' or why a new real run cannot start now for memory
+  async function memoryHold() {
+    // automated checks start no real run, so no sampler either
+    if (simulation.simulationOnly()) return '';
+    const guard = applyMemorySettings();
+    const why = await memoryNow(guard);
+    if (why && !memoryRetry) {
+      memoryRetry = setInterval(async () => {
+        if (!ctx.ws || await memoryNow(applyMemorySettings())) return;
+        clearInterval(memoryRetry);
+        memoryRetry = null;
+        Promise.resolve().then(() => ctx.dispatchRoadmaps()).catch((e) => console.error('roadmap dispatch:', e))
+          .then(() => ctx.dispatchQueue()).catch((e) => console.error('backlog dispatch:', e));
+      }, MEMORY_RETRY_MS);
+      memoryRetry.unref?.();
+    }
+    return why;
   }
 
   // The runs in progress are written down until they end: still there at the next start = they
@@ -184,6 +225,13 @@ module.exports = (ctx) => {
       throw err;
     }
     const { ws } = ctx;
+    // #276: the memory guard's settings for this real run; a new one waits while memory is low
+    // (a child run starts inside its parent's run, which already passed the check)
+    if (!mock) {
+      applyMemorySettings();
+      const low = parent ? '' : await memoryHold();
+      if (low) throw new Error(low);
+    }
     const slot = { mock: !!mock, projectId: forcedProject, parentRunId: parent?.run_id || null };
     // a child waits for its slot (waitForSlot reserves it); any other run fails when none is free
     if (parent) await waitForSlot(slot, signal, onSlotWait);
@@ -435,6 +483,7 @@ module.exports = (ctx) => {
     isRunning,
     liveRun,
     liveRunForIssues,
+    memoryHold,
     notifyInterruptedRun,
     passedGates,
     prepareRestart,

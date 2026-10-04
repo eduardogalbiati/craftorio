@@ -67,6 +67,7 @@ const gateSummary = require('./gate-summary');
 const { scratchWorkspace } = require('../local-preview');
 const { writeResultSummary } = require('../result-summary');
 const { stopProcessesIn } = require('./processes');
+const { sharedMemoryGuard } = require('./memory-guard');
 const { PROBES, runProbe, parseTarget } = require('./probes');
 const scenarios = require('./scenarios');
 const { captureScreenshots } = require('./screenshot-step');
@@ -611,6 +612,12 @@ const median = (xs) => {
 };
 // Silence with a command waiting that is worth a warning (an agent polling for text that never shows up).
 const IDLE_WARN_MS = 5 * 60e3;
+// bytes in GB (binary, like Task Manager), one decimal: the memory guard's messages (#276)
+const gib = (bytes) => (bytes / 1024 ** 3).toFixed(1);
+// #276: a suite / e2e step waits at most this long for memory before it starts, and reruns at most
+// this many times a round that failed during a memory incident
+const MEMORY_WAIT_MS = 10 * 60e3;
+const MAX_ENV_RERUNS = 2;
 
 // What the transitions decide on: enum, boolean and number fields of the schema (not the
 // free text, which an LLM rewords on every call). Without a schema, the whole answer.
@@ -792,7 +799,7 @@ class WorkflowRun extends EventEmitter {
   // startChild: ({ file, inputs, parent, label }) => Promise<{ runId, finished: Promise<{ status, outputs, error }>, stop }>,
   //   starts a child run for a `type: workflow` step (the service: a normal run, src/service/areas/runs.js).
   //   Default: startChildRun, a WorkflowRun of its own, emitted as 'child' (its events are the listener's to record).
-  constructor({ file, inputs, mock, runsDir, skillsDirs, budget, prices, projectId, issues, issue, resume, worktreesDir, mockSequences, notices, stopProcesses, probe, actionsQuota, peerSessions, idleWarnMs, personas, localPreview, attachments, then, from, parent, startChild }) {
+  constructor({ file, inputs, mock, runsDir, skillsDirs, budget, prices, projectId, issues, issue, resume, worktreesDir, mockSequences, notices, stopProcesses, probe, actionsQuota, peerSessions, idleWarnMs, personas, localPreview, attachments, then, from, parent, startChild, memoryGuard }) {
     super();
     refreshWindowsPath(); // actions (e.g. gh pr merge) need the refreshed PATH
     this.file = file;
@@ -818,6 +825,12 @@ class WorkflowRun extends EventEmitter {
     this.worktreesDir = worktreesDir || null;
     this.worktree = null; // see setupWorktree
     this.stopProcesses = stopProcesses === undefined ? (this.mock ? null : stopProcessesIn) : stopProcesses;
+    // #276 (src/engine/memory-guard.js): stops a process of this run over the memory limit and holds
+    // suites while memory is low; the app's guard for a real run (null when turned off), none for a
+    // simulation unless one is given
+    this.memoryGuard = memoryGuard !== undefined ? memoryGuard : this.mock ? null : sharedMemoryGuard();
+    this.memoryNotes = new Map(); // agent -> [what the guard stopped], told in its next prompt
+    this.memoryStops = new Map(); // `${step}\n${command}` -> stops (the second one notifies the owner)
     this.probe = probe || (this.mock ? (args) => this.mockProbe(args) : runProbe);
     this.actionsQuota = actionsQuota || null;
     this.probeStats = {}; // step -> { polls, agent_calls, completed, errors } (summary.probes)
@@ -2948,6 +2961,13 @@ class WorkflowRun extends EventEmitter {
       parts.push(`<handoff_note>\n${note.text}\n</handoff_note>\nThis is a fresh session. The note above is what you wrote at the end of your previous turn in this run`
         + ` (step ${note.step}, visit ${note.visit}). The code is in git: re-read only the files you need.`);
     }
+    // #276: what the memory guard stopped during this agent's previous turn, so it is not rerun unchanged
+    const stops = this.memoryNotes.get(agentName);
+    if (stops?.length) {
+      this.memoryNotes.delete(agentName);
+      parts.push(stops.map((s) => `The orchestrator stopped \`${s.commandLine}\` at ${gib(s.bytes)} GB for passing the memory limit`
+        + ` (${gib(s.limitBytes)} GB per process). Do not run it again unchanged: find why it grows (e.g. a failing assertion that formats a huge object) or run a smaller part of it.`).join('\n'));
+    }
     parts.push(wantNote ? `${prompt}\n\n---\n${HANDOFF_INSTRUCTIONS}` : prompt);
     const fullPrompt = parts.join('\n\n');
 
@@ -3088,6 +3108,37 @@ class WorkflowRun extends EventEmitter {
     return parseDuration(v, 30 * 60e3);
   }
 
+  // #276: watches a process this run started (an agent CLI, a suite command) with the memory guard;
+  // what it stops becomes a `process.killed` event (the second stop of the same command in a step
+  // notifies the owner) and, for an agent, a line of its next prompt. onStop(ev): the caller's own use.
+  watchMemory({ rootPid = null, protectChildren = false, stepId = null, session = null, agentName = null, onStop = null }) {
+    if (!this.memoryGuard) return { stop() {} };
+    return this.memoryGuard.watch({
+      rootPid, protectedPids: [], protectChildren, step: stepId, session,
+      onKill: (ev) => {
+        const key = `${stepId}\n${ev.commandLine}`;
+        const n = (this.memoryStops.get(key) || 0) + 1;
+        this.memoryStops.set(key, n);
+        this.emitEvent('process.killed', {
+          step_id: stepId, session, pid: ev.pid, command_line: ev.commandLine, bytes: ev.bytes, limit_bytes: ev.limitBytes, ...(n === 2 ? { notify: true } : {}),
+          message: `The memory guard stopped \`${ev.commandLine}\` (pid ${ev.pid}) at ${gib(ev.bytes)} GB: over the limit of ${gib(ev.limitBytes)} GB per process${n > 1 ? ` (stopped ${n} times in ${stepId})` : ''}.`,
+        });
+        if (agentName) this.memoryNotes.set(agentName, [...(this.memoryNotes.get(agentName) || []), ev]);
+        onStop?.(ev);
+      },
+      // the agent CLI itself over the limit: never stopped (its turn would be lost), only reported
+      onReport: (ev) => this.emitEvent('log', {
+        level: 'warn', kind: 'memory_over_limit', step_id: stepId, pid: ev.pid, bytes: ev.bytes, limit_bytes: ev.limitBytes,
+        message: `${agentName ? `[${agentName}] the agent CLI` : 'The step\'s command'} uses ${gib(ev.bytes)} GB, over the memory limit of ${gib(ev.limitBytes)} GB: not stopped (it is the turn itself).`,
+      }),
+      onLog: (l) => {
+        if (this.memoryGuardOff) return;
+        this.memoryGuardOff = true;
+        this.emitEvent('log', { level: l.level || 'warn', kind: 'memory_guard_off', step_id: stepId, message: l.message });
+      },
+    });
+  }
+
   async invokeTurn({ session, agentName, agent, provider, extraArgs, agentEnv, stepId, hint, attempts, attachments = [] }, turn, fullPrompt) {
     const timeoutMs = this.turnTimeout(agent);
     this.emitEvent('session.message_sent', { session_id: session.id, turn, step_id: stepId, prompt: fullPrompt, timeout_ms: timeoutMs, ...(attachments.length ? { attachments } : {}) });
@@ -3165,8 +3216,15 @@ class WorkflowRun extends EventEmitter {
       const idleTimer = this.idleWarnMs > 0 && setInterval(() => this.warnIdle(idle, { session, agentName, stepId, turn, interrupt }), Math.min(30e3, Math.max(50, this.idleWarnMs / 4)));
       idleTimer?.unref?.();
       let timed = null;
+      // #276: the memory guard watches the CLI's process tree while the turn runs (a mock turn has none)
+      let memWatch = this.mock ? this.watchMemory({ stepId, session: session.id, agentName }) : null;
+      const onSpawn = ({ pid, shim }) => {
+        memWatch?.stop();
+        memWatch = this.watchMemory({ rootPid: pid, protectChildren: shim, stepId, session: session.id, agentName });
+      };
       const timing = () => {
         if (timed) return timed;
+        memWatch?.stop();
         this.abort.signal.removeEventListener('abort', cancel);
         live?.delete(stopSlow);
         clearInterval(idleTimer);
@@ -3178,7 +3236,7 @@ class WorkflowRun extends EventEmitter {
           provider, model: agent.model, effort: agent.effort, providerSessionId: session.providerSessionId,
           prompt, cwd: (session.cwd = this.workingDir(agent)), extraArgs, agentEnv, attachments,
           timeoutMs, attempt: a,
-          signal: turnAbort.signal, hint, render,
+          signal: turnAbort.signal, hint, render, onSpawn,
           onItem: (item) => { track(item); idle.item(item); this.emitEvent('session.stream', { session_id: session.id, turn, item }); },
         });
         const { active_ms, waiting_ms, stalled_ms } = timing();
@@ -3499,6 +3557,7 @@ class WorkflowRun extends EventEmitter {
   // A simulated run captures nothing. Never throws: an error becomes the output's reason.
   async runScreenshots(step, st) {
     const folder = step.folder || step.id;
+    let watch = null;
     try {
       const base = step.base ? render(String(step.base), this.ctx).trim() : this.worktree?.ref || null;
       return await captureScreenshots({
@@ -3518,10 +3577,14 @@ class WorkflowRun extends EventEmitter {
           this.emitEvent('screenshots.waiting', { step_id: step.id, holder_pid: holder?.pid ?? null, holder: holder?.holder || null });
           this.emitEvent('log', { level: 'info', kind: 'screenshot_slot', message: `${step.id}: waiting for the screenshot slot (held by pid ${holder?.pid ?? '?'}${holder?.holder ? `, ${holder.holder}` : ''})` });
         },
+        // #276: each capture's process tree is watched by the memory guard
+        onSpawn: (pid) => { watch?.stop(); watch = this.watchMemory({ rootPid: pid, stepId: step.id }); },
       });
     } catch (e) {
       const reason = `the capture failed: ${e.message}`;
       return { kind: 'screenshots', folder, round: st.visits, dir: null, taken: 0, screens: 0, screenshots: [], errors: [], new_elements: [], reason, message: `No screenshots: ${reason}` };
+    } finally {
+      watch?.stop();
     }
   }
 
@@ -3551,13 +3614,64 @@ class WorkflowRun extends EventEmitter {
   // existing behaviour or are wrong) / broken (cannot run), the status is `broken` when one cannot
   // run (else pass: failing is expected), and `affected_tests` lists the existing tests that reach
   // the sources the new tests import (relatedTests, the code → tests graph). Simulation: default red.
+  //
+  // The memory guard (#276): each execution waits first while free memory is under the guard's floor
+  // (at most MEMORY_WAIT_MS), its command's process tree is watched (a stop is named in its message),
+  // and a round that fails while the guard recorded a stop or a low-memory period in its time window
+  // runs again in the same visit (log <name>-env.log, output environment_reruns), at most
+  // MAX_ENV_RERUNS times: only the last result is routed. mockSequences.suite.<step> is indexed by
+  // execution (a visit plus its environment reruns).
   async runSuiteStep(step, st) {
+    const guard = this.memoryGuard;
+    this.suiteEnvReruns ??= {}; // step -> environment reruns so far in this run
+    for (let reruns = 0; ; reruns++) {
+      if (reruns) this.suiteEnvReruns[step.id] = (this.suiteEnvReruns[step.id] || 0) + 1;
+      const execution = st.visits + (this.suiteEnvReruns[step.id] || 0);
+      if (guard) await this.waitForMemory(step.id);
+      const stopped = [];
+      const start = Date.now();
+      const output = await this.suiteRound(step, st, { execution, reruns, stopped });
+      const end = Date.now();
+      if (stopped.length) {
+        const list = [...new Set(stopped.map((ev) => `\`${ev.commandLine}\` (${gib(ev.bytes)} GB)`))].join(', ');
+        output.memory_stops = stopped.map((ev) => ({ pid: ev.pid, command_line: ev.commandLine, bytes: ev.bytes, limit_bytes: ev.limitBytes }));
+        output.message = `${output.message} The memory guard stopped ${list} for passing the memory limit of ${gib(stopped[0].limitBytes)} GB per process.`;
+      }
+      if (reruns) output.environment_reruns = reruns;
+      const incidents = guard && output.status === 'fail' && reruns < MAX_ENV_RERUNS ? guard.incidentsBetween(start, end) : [];
+      if (!incidents.length) return output;
+      const what = incidents.some((i) => i.kind === 'stop') ? 'the memory guard stopped a process' : 'the machine was low on memory';
+      this.emitEvent('log', { level: 'warn', kind: 'suite_env_rerun', step_id: step.id, message: `${step.id}: the round failed while ${what}: an environment failure, not the change's; it runs again once memory recovers (rerun ${reruns + 1} of at most ${MAX_ENV_RERUNS}).` });
+    }
+  }
+
+  // #276: a suite / e2e step waits while free memory is under the memory guard's floor (memory.hold:
+  // the Night watch counts a long one)
+  async waitForMemory(stepId) {
+    let low = null;
+    const r = await this.memoryGuard.waitForMemory({
+      maxWaitMs: MEMORY_WAIT_MS,
+      onWait: (info) => {
+        low = info;
+        this.emitEvent('log', { level: 'warn', kind: 'memory_hold', step_id: stepId, message: `${stepId} waits for memory before it starts: ${gib(info.freeBytes)} GB free, under the memory guard's floor of ${gib(info.floorBytes)} GB (at most ${MEMORY_WAIT_MS / 60e3} min).` });
+      },
+    });
+    if (low) this.emitEvent('memory.hold', { step_id: stepId, waited_ms: r.waitedMs, recovered: r.recovered, free_bytes: low.freeBytes, floor_bytes: low.floorBytes });
+  }
+
+  // One execution of a suite step (see runSuiteStep); stopped: what the memory guard stopped meanwhile.
+  async suiteRound(step, st, { execution, reruns, stopped }) {
     const seq = this.mockSequences?.suite?.[step.id];
-    const mockResult = Array.isArray(seq) && seq.length ? seq[Math.min(st.visits, seq.length) - 1] : step.expect === 'red' ? 'fail' : 'pass';
+    const mockResult = Array.isArray(seq) && seq.length ? seq[Math.min(execution, seq.length) - 1] : step.expect === 'red' ? 'fail' : 'pass';
     const root = path.dirname(path.dirname(this.runDir));
     const project = this.worktree?.repo || this.ctx.worktree_dir || '';
     const scope = step.scope ? render(String(step.scope), this.ctx).trim() : 'full';
+    // an environment rerun logs next to the round's own log
+    const env = reruns ? `-env${reruns > 1 ? `-${reruns}` : ''}` : '';
     const once = async (extra = {}) => {
+      const onStop = (ev) => stopped.push(ev);
+      let watch = this.mock ? this.watchMemory({ stepId: step.id, onStop }) : null;
+      const onSpawn = (pid) => { watch?.stop(); watch = this.watchMemory({ rootPid: pid, stepId: step.id, onStop }); };
       try {
         return await suiteStep.runSuite({
           command: step.command ? render(String(step.command), this.ctx).trim() : '',
@@ -3577,17 +3691,21 @@ class WorkflowRun extends EventEmitter {
           baseCacheDir: path.join(root, 'cache', 'base-tests'),
           log: (level, message) => this.emitEvent('log', { level, message }),
           // a suite step other than `suite` (an e2e step, #223) logs under its own name
-          ...(step.id === 'suite' ? {} : { logName: `${step.id}-${st.visits}` }),
+          ...(step.id === 'suite' && !env ? {} : { logName: `${step.id}-${st.visits}${env}` }),
           // #225: `coverage: true` adds node's coverage; the summary covers the files the run changed
           coverage: step.coverage === true,
           changedFiles: () => {
             const base = this.worktree?.base;
             return this.ctx.worktree_dir && base ? changedFiles(this.ctx.worktree_dir, base) : [];
           },
+          onSpawn,
           ...extra,
+          ...(env && extra.logName ? { logName: `${extra.logName}${env}` } : {}),
         });
       } catch (e) {
         return { kind: 'suite', status: 'blocked', round: st.visits, scope: 'full', command: null, log: null, exit_code: null, duration_ms: 0, timed_out: false, failures: [], preexisting: [], reason: e.message, message: `The suite could not run: ${e.message}` };
+      } finally {
+        watch?.stop();
       }
     };
     let output;

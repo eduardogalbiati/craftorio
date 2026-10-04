@@ -479,6 +479,9 @@ function runCli(opts, parser) {
 
   return new Promise((resolve, reject) => {
     const child = runShim(resolved.file, args, { cwd, env, windowsHide: true });
+    // the CLI's process (the memory guard watches its tree, #276); shim: a .cmd/.bat wrapper whose
+    // child is the CLI itself
+    if (child.pid) opts.onSpawn?.({ pid: child.pid, shim: !!resolved.shell });
 
     const acc = { text: '', lastText: '', usage: null, costUsd: null, providerSessionId, error: null };
     let stderr = '';

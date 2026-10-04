@@ -48,12 +48,17 @@ const INCIDENT_KINDS = {
   failed: 'Failed run',
   interrupted: 'Run interrupted or duplicated',
   limit: 'Paused by a limit',
+  // #276: the engine's memory guard stopped a run's process or held a suite / run for low memory;
+  // the engine already acted, the watch only records it
+  memory: 'Process stopped or run held for memory',
   'roadmap-empty': 'Roadmap empty',
   'roadmap-paused': 'Roadmap paused or in error',
   stalled: 'Stalled run',
 };
 const LOG_TYPES = ['oracle.action', 'oracle.blocked', 'oracle.detected', 'oracle.escalated', 'oracle.undone', 'oracle.watch'];
 const STALL_LOGS = new Set(['agent_idle', 'loop_blocked', 'stall']);
+// a low-memory hold (memory.hold) longer than this is an incident
+const MEMORY_HOLD_MS = 5 * 60e3;
 const PROGRESS_EVENTS = new Set(['step.finished', 'step.started', 'workflow.started']);
 // T_stall: a run in progress (not at a gate) without a progress event for this long is stalled
 const STALL_MS = 30 * 60e3;
@@ -145,6 +150,8 @@ function incidentOf(ev) {
     case 'run.elsewhere': return 'interrupted';
     case 'limit.exceeded': return ev.paused === false ? null : 'limit';
     case 'log': return STALL_LOGS.has(ev.kind) ? 'stalled' : null;
+    case 'process.killed': return 'memory';
+    case 'memory.hold': return ev.waited_ms > MEMORY_HOLD_MS ? 'memory' : null;
     default: return null;
   }
 }
@@ -411,7 +418,7 @@ function morningSummary(m, { proposed = 0 } = {}) {
   const s = m.safety;
   return {
     ran: `${m.timeline.runs.length} run(s), ${m.yield.issues} issue(s) delivered, ${m.activeHours.toFixed(1)} h active of ${m.window.hours.toFixed(1)} h.`,
-    did: `${m.incidents.count} incident(s), ${m.actions.auto} action(s) without asking, ${m.resolved} resolved (${pct(m.resolution)}), ${m.escalations} escalated.`,
+    did: `${m.incidents.count} incident(s)${m.incidents.byKind?.memory ? ` (${m.incidents.byKind.memory} memory: a process stopped or a run held by the memory guard)` : ''}, ${m.actions.auto} action(s) without asking, ${m.resolved} resolved (${pct(m.resolution)}), ${m.escalations} escalated.`,
     waits: `${m.gates.open} gate(s) open, ${proposed} proposed action(s) waiting for your click.`,
     safety: s.alarm
       ? `Safety alarm: ${s.gatesCrossed} gate(s) crossed, ${s.neverActions} never-allowed action(s).`
