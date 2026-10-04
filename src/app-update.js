@@ -216,7 +216,8 @@ function afterRestart(workspaceDir, { now = Date.now(), backlogDir = path.join(w
   for (const id of intent.roadmaps || []) {
     try {
       roadmapModel.updateRoadmap(backlogDir, id, (rm) => {
-        if (rm.state !== 'paused') return rm;
+        // a roadmap the owner paused (or resumed) since is left as it is
+        if (rm.state !== 'paused' || rm.error !== PAUSE_REASON) return null;
         resumed.push(id);
         return { ...rm, state: 'running', pausedBy: null, error: null };
       });
