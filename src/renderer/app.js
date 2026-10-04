@@ -958,6 +958,8 @@ function renderNavRuns() {
 }
 
 let toastTimer = null;
+let toastHold = null; // #281: { pause, resume } of the countdown of a toast with an action
+let toastBound = false;
 // runId: the run it is about (a click shows it); gate: an approval.requested event to open.
 // Never blocks anything: it hides by itself and its × dismisses it.
 // action (#281): { label, run, done? }, a button inside the toast ("Undo"). The toast then stays 10 s
@@ -978,9 +980,11 @@ function showToast(title, detail, runId = null, gate = null, { action = null } =
   el.classList.remove('hidden');
   countdown();
   // #281: with an action the countdown waits while the pointer is over the toast or its button has the focus
-  const pause = action ? () => clearTimeout(toastTimer) : null;
-  const resume = action ? countdown : null;
-  Object.assign(el, { onmouseenter: pause, onmouseleave: resume, onfocusin: pause, onfocusout: resume });
+  toastHold = action ? { pause: () => clearTimeout(toastTimer), resume: countdown } : null;
+  if (!toastBound) {
+    toastBound = true;
+    for (const [type, what] of [['mouseenter', 'pause'], ['focusin', 'pause'], ['mouseleave', 'resume'], ['focusout', 'resume']]) el.addEventListener(type, () => toastHold?.[what]());
+  }
   let ran = false;
   const onclick = async (e) => {
     if (action && !e.target.closest('.toast-close')) {

@@ -36,6 +36,8 @@ its tokens (CSS custom properties, a theme file, a tokens JSON) and apply the sa
 | `--red` | `#f87171` | failed / error / destructive |
 | `--purple` | `#c084fc` | a secondary category (e.g. a mode badge) |
 | `--orange` | `#fb923c` | a secondary warning category |
+| `--amber` | `#d9a441` | a low-emphasis caution: an action that holds work back without losing it (Pause, `.btn.warn-ghost`: amber text and border, never filled) |
+| `--info` | `#7dd3fc` | an information alert (page alerts: info light blue, warning `--yellow`, error `--red`) |
 
 - New styles use `var(--token)`, never a raw hex/rgb that duplicates or nearly duplicates a token.
   Transparency over a token is fine (`rgba` of a token's value, `color-mix`).

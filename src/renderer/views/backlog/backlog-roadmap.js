@@ -1554,7 +1554,7 @@
     const why = { ...(reason ? { reason } : {}), ...(modeReason ? { modeReason } : {}), ...(origin ? { origin } : {}), ...(then ? { then } : {}), ...(cost ? { cost } : {}) };
     const items = group ? [{ workflow, workflowName, inputs, mock, issues, ...why }] : issues.map((n) => ({ workflow, workflowName, inputs, mock, issues: [n], ...why }));
     stages.push({ name: '', note: '', items });
-    ctx.setData(await api.saveRoadmap(ctx.projectId, stages));
+    ctx.setData(await api.saveRoadmap(ctx.projectId, stages, `Added ${issues.map((i) => `#${i.number}`).join(', ')} to the roadmap`));
   }
 
   // #204: a live reload waits while the owner drags, or edits an item or a stage's note; Reload in

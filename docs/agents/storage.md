@@ -101,6 +101,20 @@ owner actions write to the platform (Save to issue, create, close, epics: `src/b
   record of what a release shipped: an issue's "Released" badge is read from it on every Backlog
   read (`releasedIssues`), never written into the synced `<project>.json`, which each sync rewrites.
   A roadmap's cut line keeps its release run in `<project>.roadmap.json` (`stage.release`).
+- **The roadmap's history** (#281, `src/roadmap-history.js`): before each owner edit of a roadmap
+  (a save from the screen, a proposal added or replacing it, the queue moved in, Clear, an Undo, a
+  Restore) the roadmap channels keep its stages as they were in
+  `backlog/<project>.roadmap.history/<time>-<n>.json` (`{ at, label, stages }`, the label being what
+  the edit did: "Removed #279 from the roadmap"), the last 20 per project. The Roadmap's ⋮ menu
+  lists them ("Restore an earlier version…"). The engine's own writes (a run started or finished, a
+  live refill) and the Oracle's actions (their own backup, `oracle/backups/`) are not kept there.
+  **Undo** (the toast after an edit) does not read the history: the service keeps the last edit of
+  each project in memory (`{ before, after, label }`, `src/roadmap-undo.js`) until the next edit or
+  a restart. Undo and Restore put back what changed, never the whole file: an item that exists now
+  keeps its run (`status`, `runId`, `runs`, `error`), one that is running or done is not changed,
+  items and stages added since stay, and both refuse (changing nothing) when an issue they bring
+  back is planned in another unfinished item. They write through `roadmap.restoreStages` (ids and
+  run states kept), never stop a run and never answer a gate.
 - `src/service/areas/backlog-watch.js` watches the folder (one `fs.watch` per workspace, started by
   `setWorkspace`, closed on a switch and on `shutdown`) and pushes `backlog:changed { projectId,
   file: roadmap | queue | issues | local | refresh, watching: true }` once per file, 300 ms after

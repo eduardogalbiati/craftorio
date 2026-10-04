@@ -7,7 +7,7 @@
 // of them (one branch, one PR/MR). Issues link to the runs working on them. The Assign dialog's
 // "When it finishes" (#134, chain-picker.js) chains each run to what follows it.
 // Work a local workflow merged into the local base but did not push shows in "Merged locally"; the
-// bar above the list pushes it (and updates from origin first when origin moved); a conflict on
+// "Not pushed" alert pushes it (and updates from origin first when origin moved); a conflict on
 // the update goes to a run of the local workflow, whose developer resolves it.
 // Archive (#238, rules in backlog-archive.js): the selection bar's Archive (n) and each open issue's
 // menu close issues as not planned with the `archived` label; the Archived chip lists them, with Restore.
@@ -22,7 +22,10 @@
 // The Product Owner's drawer (backlog-po.js) applies a proposed group through window.BacklogActions.
 // Send to Product Owner (n) (#169), next to Assign workflow…, attaches the selection to the drawer's
 // question (window.BacklogPO.attach); the selection is kept.
-// Backlog Refresh (#161): a banner above the views suggests a refresh run when the last one is stale
+// Alerts (#270, alerts.js): what the page has to say sits at its top, above the filter row, one at a
+// time (renderAlerts): a roadmap paused by an item and the queue's error (errors), a stale Backlog
+// Refresh and the retired deprioritized label (warnings), local merges not pushed (an info).
+// Backlog Refresh (#161): an alert suggests a refresh run when the last one is stale
 // and the base got merges since (Refresh now opens the Start drawer prefilled; Dismiss for today);
 // issues the last refresh updated carry a "refreshed" badge for a day.
 // Epics (#138): each card shows its epic as a badge (a click filters by it); the epic select narrows
@@ -35,7 +38,7 @@
 // one choice for the Board and the Roadmap.
 // The Roadmap is a screen of its own (#254, Code & Build › Roadmap: open work by default, Show all
 // remembered): the second view this file registers, drawn in the Backlog's section (the registry's
-// `section`) with the same data, banners and Product Owner drawer; bl.mode is 'roadmap' on it.
+// `section`) with the same data, alerts and Product Owner drawer; bl.mode is 'roadmap' on it.
 // The project is the app's, chosen in the header (#254, window.CurrentProject).
 // Epics are not work (#253): an issue with `isEpic` is left out of the Board (list, kanban, their
 // counts and filters), cannot be selected, assigned or planned, and shows only in the Epics view.

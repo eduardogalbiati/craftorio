@@ -13,6 +13,8 @@
   --red: #f87171;
   --purple: #c084fc;
   --orange: #fb923c;
+  --amber: #d9a441;
+  --info: #7dd3fc;
   --radius: 10px;
   --mono: "Cascadia Code", Consolas, "SF Mono", monospace;
   /* focus ring shared by buttons, switches, checkboxes and radios */
@@ -126,8 +128,8 @@ body:not(.dev-mode) .dev-only { display: none !important; }
 .btn.danger-solid { background: var(--red); border-color: var(--red); color: #140808; }
 .btn.ghost.danger { color: var(--red); }
 /* a low-emphasis caution (#269, the Roadmap's Pause): burnt amber text and border, never filled */
-.btn.warn-ghost { background: transparent; color: #d9a441; border-color: rgba(217,164,65,.45); }
-.btn.warn-ghost:hover:not(:disabled) { border-color: #d9a441; }
+.btn.warn-ghost { background: transparent; color: var(--amber); border-color: rgba(217,164,65,.45); }
+.btn.warn-ghost:hover:not(:disabled) { border-color: var(--amber); }
 .row { display: flex; gap: 6px; align-items: center; }
 .spacer { flex: 1; }
 .icon-btn { background: none; border: 1px solid transparent; color: var(--muted); border-radius: 6px; padding: 4px; cursor: pointer; display: grid; place-items: center; }
@@ -813,7 +815,7 @@ body.resizing-dock .term-body { pointer-events: none; }
 .alerts-nav { display: inline-flex; align-items: center; gap: 2px; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
 .alert-close { font-size: 16px; line-height: 1; }
 .alert.alert-info { background: rgba(125,211,252,.1); border-color: rgba(125,211,252,.45); }
-.alert-info .alert-icon, .alert-info .alert-title { color: #7dd3fc; }
+.alert-info .alert-icon, .alert-info .alert-title { color: var(--info); }
 .alert.alert-warning { background: rgba(250,204,21,.09); border-color: rgba(250,204,21,.45); }
 .alert-warning .alert-icon, .alert-warning .alert-title { color: var(--yellow); }
 .alert.alert-error { background: rgba(248,113,113,.1); border-color: rgba(248,113,113,.5); }

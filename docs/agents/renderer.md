@@ -262,7 +262,9 @@ which the software-development developer and evidence agents load (#111). The de
 ai-development-local-hero's `ui_reviewer` reviews the screenshots against both. A token added or
 changed in `style.css` goes into that skill too. In this app:
 
-- **Reuse what `style.css` has**: `.btn` (`.primary`, `.ghost`, `.sm`), `.link-btn` for small
+- **Reuse what `style.css` has**: `.btn` (`.primary`, `.ghost`, `.sm`; `.ghost.danger` red for a
+  destructive action, `.warn-ghost` amber for one that holds work back, `.btn-icon` with an icon before
+  the text: the Roadmap bar's Stop and Pause, #269), `.link-btn` for small
   actions ("add note", "Edit"); `.badge` (neutral; `.warn`, `.live`, `.p-mock`…) and `.pill`
   (`-idle`, `-running`, `-success`, `-failed`, `-cancelled`, `-interrupted`) for states: a run's
   or an item's status is always drawn by `StatusPill` (`status-pill.js`, #266:
@@ -285,6 +287,31 @@ changed in `style.css` goes into that skill too. In this app:
   are small badges or links with the full value in `title`. Long titles ellipsize.
 - **Edits**: several fields → an Edit form with Save / Cancel; one obvious choice (a mode) → a
   toggle that saves at once; optional text (a note) appears when set or from an "add …" link.
+- **Page alerts** (#270, `alerts.js`, `window.Alerts`): what a page has to tell its owner goes into
+  the alerts box at the top of the page (above its filter row), never into a banner of its own. The
+  page builds a list on every render and hands it over: `Alerts.mount(box).set(list)`, each alert
+  `{ id, level, title, text, actions: [{ label, onClick, primary, title?, pressed? (a switch),
+  attrs? (e.g. a `data-testid`) }], dismissible, onDismiss?, createdAt? }`. One alert shows at a
+  time with a counter ("1/3") and arrows, errors first, then warnings, then infos. Choose the level
+  by what the owner must do: **error** when something is blocked until they act (a roadmap paused by
+  a failed item, the queue's error; never dismissible: it leaves when its cause does), **warning**
+  when something is stale or will go wrong later (a Backlog Refresh that is due, a retired label),
+  **info** for a state worth knowing with an optional action (local merges not pushed). An alert
+  leaves by itself when the page stops listing it; × hides an info or a warning until its condition
+  comes back. The component has no screen code: the Backlog's list is `renderAlerts` in `backlog.js`
+  (the roadmap's own alert comes from `BacklogRoadmap.alerts`).
+- **A toast with an action** (#281, `showToast(title, detail, runId, gate, { action })` in `app.js`):
+  `action: { label, run, done? }` draws a button inside the toast ("Undo"). Such a toast stays 10 s
+  (7 without), waits while the pointer is over it or its button has the focus, runs the action once
+  and then says its outcome (`done`, "Restored" by default, or the error's message); a click
+  elsewhere on it does nothing, × dismisses it. **An action that removes or replaces something in
+  one click offers Undo in its toast** (or asks first when it cannot be undone): the Roadmap's edits
+  do (`undoToast` in `backlog-roadmap.js`, `api.undoRoadmap`), with "Restore an earlier version…" in
+  its ⋮ menu for a mistake noticed later.
+- **A menu of actions** (#269): secondary or rare actions go into a ⋮ menu built from a list
+  (`MENU` in `backlog-roadmap.js`: `.bl-menu-wrap`, a button with `aria-haspopup="menu"` and
+  `aria-expanded`, `role="menu"` / `role="menuitem"`, the first entry focused when it opens, Esc
+  closes it and gives the focus back), so a new action is a line in the list, not a new button.
 - **Check it**: extend the screen's demo data in `scripts/screenshot.js` with the fields you add,
   then capture the default view and each state with `--click` (e.g.
   `npm run screenshot -- --view backlog --mode roadmap --click "[data-rm-edit]"`). List those

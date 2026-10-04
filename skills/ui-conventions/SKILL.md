@@ -38,6 +38,11 @@ screen; they are skipped for changes without UI. You run unattended: record a de
   inputs everywhere. Edit areas look like edit areas (a framed panel), not like raw controls.
 - **States**: every screen you add or change has its empty state, its edit state, its error state
   and its running/loading state designed, not left to chance.
+- **One click, one way back**: an action that removes or replaces something in one click offers
+  **Undo** in the toast that confirms it (what was removed returns at its place, the previous order
+  or name comes back), or asks first when it cannot be undone. The toast says what changed in the
+  screen's own words ("Removed #279 from the roadmap"), and Undo says why when it can no longer be
+  done; it never undoes more than that one action.
 
 ## 2. Developer: build, log, plan the capture
 
