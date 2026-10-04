@@ -1,7 +1,7 @@
 // src/renderer/views/<view>/: one folder per screen, registering itself with registerView instead of
 // index.html listing its markup and nav entry (#78 moved Settings, Usage and Supervisor; #153 moved
 // dashboard, sessions, projects, project, backlog, artifacts, workflows, agents, skills and
-// analytics; #154 moved run, runchat, duo and arena; #171 added oracle; #256 added inbox). A generic check (any view
+// analytics; #154 moved run, runchat, duo and arena; #171 added oracle; #256 added inbox; #257 added discovery). A generic check (any view
 // folder registers under its own folder name and is loaded by index.html) plus a check that the move
 // left no duplicate markup behind in index.html, so this stays a pure move.
 const test = require('node:test');
@@ -14,9 +14,9 @@ const indexHtml = fs.readFileSync(path.join(rendererDir, 'index.html'), 'utf8');
 const viewIds = fs.readdirSync(path.join(rendererDir, 'views'), { withFileTypes: true })
   .filter((d) => d.isDirectory()).map((d) => d.name);
 
-test('views/: all 21 screens have moved into their own folders (#260 added releases)', () => {
+test('views/: all 22 screens have moved into their own folders (#260 added releases, #257 discovery)', () => {
   assert.deepEqual(viewIds.sort(), [
-    'agents', 'analytics', 'arena', 'artifacts', 'backlog', 'dashboard', 'duo', 'inbox', 'nightwatch', 'oracle',
+    'agents', 'analytics', 'arena', 'artifacts', 'backlog', 'dashboard', 'discovery', 'duo', 'inbox', 'nightwatch', 'oracle',
     'project', 'projects', 'releases', 'run', 'runchat', 'sessions', 'settings', 'skills', 'supervisor', 'usage', 'workflows',
   ]);
 });
