@@ -53,6 +53,7 @@
 
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; }
+html { overflow: clip; }
 body {
   background: var(--bg);
   color: var(--text);

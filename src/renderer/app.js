@@ -953,6 +953,10 @@ function showToast(title, detail, runId = null, gate = null) {
   };
 }
 
+// #208: the page itself never scrolls (each view scrolls inside); a clipped root still scrolls
+// programmatically (scrollIntoView, focus), which shifted the whole app sideways: undo it at once.
+window.addEventListener('scroll', () => { if (window.scrollX || window.scrollY) window.scrollTo(0, 0); });
+
 // The screens of views/ load after this script and register their markup as they load; the page may
 // yield between scripts (an IPC reply can run then), so init starts once every screen is in place.
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init, { once: true });

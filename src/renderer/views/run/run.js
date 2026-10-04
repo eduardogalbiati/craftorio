@@ -75,7 +75,13 @@ function onRunGateClick(e) {
 function focusRunGate() {
   requestAnimationFrame(() => {
     const card = $('#run-gates .run-gate');
-    card?.scrollIntoView({ block: 'nearest' });
+    // scrolls the Run view only, never the page (#208: scrollIntoView also scrolled the page sideways)
+    const view = card?.closest('.view');
+    if (card && view) {
+      const c = card.getBoundingClientRect(), v = view.getBoundingClientRect();
+      if (c.top < v.top) view.scrollTop -= v.top - c.top;
+      else if (c.bottom > v.bottom) view.scrollTop += Math.min(c.bottom - v.bottom, c.top - v.top);
+    }
     card?.querySelector('.run-gate-actions button')?.focus({ preventScroll: true });
   });
 }
