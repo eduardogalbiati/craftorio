@@ -94,8 +94,8 @@ module.exports = (ctx) => {
 
   const PERFORM = {
     'check.run': async (a) => {
-      const out = await check(a.params, oracleCheck.LONG_MS);
-      return { ok: out.ok, text: out.text };
+      // the action is done when the check ran, whatever its result (the text says pass or fail)
+      return { text: (await check(a.params, oracleCheck.LONG_MS)).text };
     },
     'dispatch.restart': async () => {
       await ctx.dispatchRoadmaps();

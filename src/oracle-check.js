@@ -30,7 +30,6 @@ const CHECK_PROGRAMS = [
   'mvn',
   'node',
   'npm',
-  'npx',
   'pnpm',
   'pytest',
   'python',
@@ -41,6 +40,18 @@ const CHECK_PROGRAMS = [
 // plain arguments only: what a shell would read as code is refused
 const SAFE_ARG = /^[A-Za-z0-9_@%+=:,./\\-]+$/;
 const INLINE_CODE = new Set(['-c', '-e', '-p', '--eval', '--print']);
+// the subcommands of the runners that could otherwise fetch and run a package (npm exec, go run
+// pkg@latest, python -m pip): only the repository's own tests and scripts
+const SUBCOMMANDS = {
+  dotnet: ['build', 'test'],
+  go: ['test', 'vet'],
+  npm: ['run', 'run-script', 't', 'test'],
+  pnpm: ['run', 'test'],
+  python: ['-m'],
+  python3: ['-m'],
+  yarn: ['run', 'test'],
+};
+const PYTHON_MODULES = ['pytest', 'unittest'];
 
 /** The command's argv, or throws why it is refused. */
 function parseCheckCommand(command) {
@@ -50,6 +61,10 @@ function parseCheckCommand(command) {
   if (bad) throw new Error(`The check runs plain arguments only (no quotes, pipes, redirections or chains): "${bad}" is refused.`);
   if (!CHECK_PROGRAMS.includes(argv[0].toLowerCase())) throw new Error(`A check starts a test runner (${CHECK_PROGRAMS.join(', ')}), not ${argv[0]}.`);
   if (argv.some((a) => INLINE_CODE.has(a))) throw new Error('A check runs the project\'s tests, not inline code.');
+  const program = argv[0].toLowerCase();
+  const sub = SUBCOMMANDS[program];
+  if (sub && !sub.includes(argv[1])) throw new Error(`A check runs ${program} ${sub.join(' / ')} only.`);
+  if (sub && argv[1] === '-m' && !PYTHON_MODULES.includes(argv[2])) throw new Error(`A check runs ${program} -m ${PYTHON_MODULES.join(' / ')} only.`);
   return argv;
 }
 

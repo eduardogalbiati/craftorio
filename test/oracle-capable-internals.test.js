@@ -28,7 +28,9 @@ test('importMemory: keeps the base, appends only new decisions, ignores case and
 test('parseCheckCommand: a test runner with plain arguments only', () => {
   assert.deepEqual(check.parseCheckCommand('node --test test/a.test.js'), ['node', '--test', 'test/a.test.js']);
   assert.deepEqual(check.parseCheckCommand('npm test -- test/a.test.js'), ['npm', 'test', '--', 'test/a.test.js']);
-  for (const bad of ['', 'rm -rf .', 'node --test a.js && del x', 'npm test | tail', 'node -e "1"', 'node -e 1', 'python -c 1', 'npm test > out.log', 'git push']) {
+  assert.deepEqual(check.parseCheckCommand('python -m pytest tests/test_a.py'), ['python', '-m', 'pytest', 'tests/test_a.py']);
+  for (const bad of ['', 'rm -rf .', 'node --test a.js && del x', 'npm test | tail', 'node -e "1"', 'node -e 1', 'python -c 1', 'npm test > out.log', 'git push',
+    'npx some-package', 'npm exec some-package', 'go run example.com/x@latest', 'python -m pip install x', 'yarn dlx x']) {
     assert.throws(() => check.parseCheckCommand(bad), undefined, bad);
   }
 });

@@ -159,8 +159,8 @@ tool timeouts, the test writer's context, whole-suite starts; `src/oracle-run-an
 model); `issues_search`, `issue_view` and `labels` (`src/oracle-platform.js`: gh / glab `issue
 list`, `issue view` and `label list` only, built by the app on the synced backlog's repository,
 never a command from the model); and the `checker` delegate (`src/oracle-check.js`): one test
-runner (node, npm, npx, pytest, go, dotnet, mvn...) with plain arguments, no shell syntax or inline
-code, on a detached scratch worktree under `<workspace>/oracle/checks/` removed afterwards, with
+runner (node, npm test/run, pytest, go test, dotnet test, mvn...; nothing that fetches a package:
+no npx, npm exec, go run, pip) with plain arguments, no shell syntax or inline code, on a detached scratch worktree under `<workspace>/oracle/checks/` removed afterwards, with
 `MULTIAGENT_SIMULATION_ONLY=1`, stopped after 2 min; a longer check is a `check.run` card (20 min)
 the owner confirms. The service, not the model, writes its
 files (storage.md). The Oracle's chat replies are in the owner's language, a deliberate exception
