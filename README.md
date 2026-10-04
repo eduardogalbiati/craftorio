@@ -467,8 +467,8 @@ Past runs open as a chat again from Workflows › Runs › **Open chat**.
 with its structure and rubric: `issue-writing` (an enriched issue), `rfc-writing`, `prd-writing`,
 `design-doc-writing`, or your own. Empty, the document is free-form, as before.
 
-**Enrich a Backlog issue**: **Enrich in Write & Review** in an open issue's **⋯** menu (list row,
-kanban card) opens this screen prefilled: an enriched issue by default, a prompt with the
+**Enrich a Backlog issue**: **Enrich in Write & Review** in an open issue's **⋯** menu (list row, kanban
+card) opens this screen prefilled: an enriched issue by default, a prompt with the
 issue's title, number, URL, labels and full body, a default goal for the document type (it follows
 the type until you edit it), and the Backlog's project (read-only). Nothing starts by itself. The run
 records its issue (`issues` in `workflow.started`): the chat shows it, and the Backlog card shows
