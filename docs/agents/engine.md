@@ -301,7 +301,8 @@ same features for users; this is the implementer's summary.
   findings and, for an author step, `commit_sha` (else the worktree head), `summary`, `notes`,
   `files_changed`; a step's `stall: { same_output_fields: [...] }` replaces that list, as `develop`
   does; the findings of the step it came from are part of the key, so a fix round answering new
-  review findings never repeats), 5+ refused calls in a row, a visit
+  review findings never repeats; a fan-out step, e.g. `code_review` (#151), is keyed per agent
+  from `output.results`, `ui_findings` included), 5+ refused calls in a row, a visit
   `slow_factor`× the median of its earlier visits (min 10 min), a blocked /loop. Each is a `log`
   warn `kind: stall` (blocked loops keep their `loop_blocked` warn); `superviseStall` decides
   `continue` / `retry` / `resume` / `user_action` (a raw gate: retry, continue, stop), except when

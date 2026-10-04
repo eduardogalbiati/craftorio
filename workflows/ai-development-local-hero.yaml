@@ -660,7 +660,7 @@ steps:
       empty commit, and set `no_change: true` when no finding of this round needed a code change.
       {% endif %}
       {% set ui_blocking = ((steps.code_review.output.results.ui_reviewer.ui_findings if steps.code_review.output and steps.code_review.output.results and steps.code_review.output.results.ui_reviewer else none) or []) | selectattr('blocking') | list %}
-      {% if previous_step == 'code_review' and ui_blocking | length %}
+      {% if previous_step == 'code_review' and vars.ui_review_sent == 'yes' and ui_blocking | length %}
       The UI Reviewer found these UI problems on the screenshots (ui-conventions and design-system
       skills; one UI fix round):
       {{ ui_blocking | to_yaml }}
@@ -827,13 +827,13 @@ steps:
         goto: developer_check
       - when: "inputs.mode == 'validated' and output.committed and (vars.owner_validated != 'yes' or inputs.validate_every_round)"
         goto: developer_screenshots
-      # the review findings needed no production change (e.g. they ask for tests, which the test
-      # writer owns): the reviewer gets the answer; a disagreement ends at human_review, never in a loop
       # #151: a committed UI change (screens to capture, or files under src/renderer/) is captured
       # right after develop in every mode too, for the ui_reviewer in code_review (a UI fix round
       # included); a change without UI skips it
       - when: "output.committed and inputs.screenshots != 'off' and ((output.screenshots or []) | length or 'src/renderer/' in ((output.files_changed or []) | join(' ') | replace('\\\\', '/')))"
         goto: developer_screenshots
+      # the review findings needed no production change (e.g. they ask for tests, which the test
+      # writer owns): the reviewer gets the answer; a disagreement ends at human_review, never in a loop
       - when: "output.no_change and steps.code_review.output"
         goto: code_review
       - when: "output.committed"
@@ -1089,10 +1089,14 @@ steps:
               blocking:   { type: boolean }
     transitions:
       # code findings, with the blocking UI findings when there are, go back to develop in one turn;
-      # the UI is sent back once (vars.ui_review_returned), like evidence did before #151
+      # the UI is sent back once (vars.ui_review_returned), like evidence did before #151;
+      # vars.ui_review_sent: this round shows develop the blocking UI findings (set first, from the
+      # flag before this round)
       - when: "output.results.reviewer.verdict == 'changes_requested'"
         goto: develop
-        set: { ui_review_returned: "{% if (output.results.ui_reviewer.ui_findings or []) | selectattr('blocking') | list | length %}yes{% else %}{{ vars.ui_review_returned }}{% endif %}" }
+        set:
+          ui_review_sent: "{% if (output.results.ui_reviewer.ui_findings or []) | selectattr('blocking') | list | length and vars.ui_review_returned != 'yes' %}yes{% else %}no{% endif %}"
+          ui_review_returned: "{% if (output.results.ui_reviewer.ui_findings or []) | selectattr('blocking') | list | length %}yes{% else %}{{ vars.ui_review_returned }}{% endif %}"
         loop:
           name: review_cycle
           max_iterations: 3
@@ -1101,7 +1105,7 @@ steps:
       # this review, never through test/suite/E2E/build
       - when: "(output.results.ui_reviewer.ui_findings or []) | selectattr('blocking') | list | length and vars.ui_review_returned != 'yes'"
         goto: develop
-        set: { ui_review_returned: "yes" }
+        set: { ui_review_sent: "yes", ui_review_returned: "yes" }
       # #203: unit tests written after the review → the test writer; only the existing suite → no
       # test writer. #223: the E2E scenarios were written first (acceptance_tests): the machine runs
       # them (e2e) after the suite, or right after the review when there is no suite.

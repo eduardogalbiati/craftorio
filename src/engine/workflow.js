@@ -589,22 +589,41 @@ function findingsKey(findings, itemSchema) {
   return keys.length ? findings.map((f) => (f && typeof f === 'object' ? keys.map((k) => f[k] ?? null) : f)) : findings;
 }
 
+// The findings a fix round answers, from the output of the step it came from (a review): its
+// `findings`, or for a fan-out each agent's `findings` and `ui_findings`. null: none to answer.
+function answeredKey(from, output) {
+  const props = from.output_schema?.properties || {};
+  if (!(from.agents && output?.results && typeof output.results === 'object')) {
+    return output?.findings == null ? null : findingsKey(output.findings, props.findings?.items);
+  }
+  const per = Object.keys(output.results).sort().map((a) => {
+    const r = output.results[a] || {};
+    return [a, findingsKey(r.findings, props.findings?.items), findingsKey(r.ui_findings, props.ui_findings?.items)];
+  });
+  return per.some(([, f, u]) => f != null || u != null) ? per : null;
+}
+
 // What `same_output` compares between visits of a step: the fields of `stall.same_output_fields` when
-// the step declares them; otherwise its decision fields plus its findings and, for an author step, its
+// the step declares them; otherwise its decision fields plus its findings (and ui_findings) and, for an author step, its
 // progress fields (with the worktree's head when it reports no commit_sha). `answered`: the findings of
 // the step it came from (a review), so a fix round answering new findings never repeats the last one.
 function repeatKey(step, output, { head, answered } = {}) {
+  // a fan-out (agents: [...]) answers { results: { agent: output } }: each agent's answer, keyed alone
+  if (step.agents && output?.results && typeof output.results === 'object') {
+    const per = Object.keys(output.results).sort().map((a) => [a, repeatKey({ ...step, agents: null }, output.results[a], { head })]);
+    return JSON.stringify([per, ...(answered == null ? [] : [{ answered }])]);
+  }
   const props = step.output_schema?.properties || {};
   const value = (k) => {
     if (k === 'commit_sha') return output?.commit_sha || head?.() || null;
-    if (k === 'findings') return findingsKey(output?.findings, props.findings?.items);
+    if (k === 'findings' || k === 'ui_findings') return findingsKey(output?.[k], props[k]?.items);
     return output?.[k] ?? null;
   };
   let fields = step.stall?.same_output_fields;
   if (!fields) {
     const progress = PROGRESS_FIELDS.filter((k) => props[k]);
     if (progress.length && !progress.includes('commit_sha')) progress.unshift('commit_sha');
-    fields = [...progress, ...(props.findings ? ['findings'] : [])];
+    fields = [...progress, ...['findings', 'ui_findings'].filter((k) => props[k])];
   }
   const own = step.stall?.same_output_fields ? [] : [decisionKey(output, step.output_schema)];
   if (!fields.length && answered == null) return own[0];
@@ -1538,8 +1557,7 @@ class WorkflowRun extends EventEmitter {
     if (!(again && isLooping(step)) && same) {
       // the findings a fix round answers: those of the step it came from (e.g. code_review)
       const from = this.ctx.previous_step !== step.id && this.wf.steps.find((s) => s.id === this.ctx.previous_step);
-      const findings = from ? this.ctx.steps[from.id]?.output?.findings : null;
-      const answered = findings == null ? null : findingsKey(findings, from.output_schema?.properties?.findings?.items);
+      const answered = from ? answeredKey(from, this.ctx.steps[from.id]?.output) : null;
       const key = repeatKey(step, output, { head: () => this.worktreeHead(), answered });
       st.repeat = st.repeat?.key === key ? { key, count: st.repeat.count + 1 } : { key, count: 1 };
       if (st.repeat.count % same === 0) signals.push({ kind: 'same_output', detail: `the same answer ${st.repeat.count} visits in a row: ${key.slice(0, 200)}` });
@@ -3755,6 +3773,7 @@ ${stderr || stdout}`.slice(0, 1500)));
 }
 
 module.exports = {
+  answeredKey,
   attemptSummary,
   childRunCost,
   evalExpr,

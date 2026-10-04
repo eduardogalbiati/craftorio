@@ -618,7 +618,7 @@ function mockValue(s, key, h) {
     // sequences.preexisting_failures: true: the test writer reports a test that also fails on the base
     // sequences.left_out: [1, 0]: the developer declares one gap on its 1st visit, none after (default none)
     // sequences.left_out_not_mine: true: the developer also declares the issue's Tests and Measure tasks (#173)
-    // sequences.ui_findings: true: the evidence step's visual review returns a (blocking) UI finding
+    // sequences.ui_findings: true: the ui_reviewer (code_review, #151) returns a (blocking) UI finding
     case 'array': {
       if (key === 'preexisting_failures' && !h.sequences?.preexisting_failures) return [];
       if (key === 'ui_findings' && !h.sequences?.ui_findings) return [];
