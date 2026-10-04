@@ -100,6 +100,34 @@ test('#281 undo keeps the run and state of an item that started between the edit
   assert.deepEqual([out.stages[0].name, it1.status, it1.runId, Array.from(it1.runs)], ['Login', 'running', 'run-9', ['run-9']]);
 });
 
+test('#281 undo of moving an item to another stage puts it back, keeping the run it started meanwhile', () => {
+  const { recordEdit, undoEdit } = undo();
+  const before = BEFORE();
+  const after = clone(before);
+  after[1].items.push(after[0].items.pop()); // it2 (#102) moved from Login to Readable statuses
+  const edit = recordEdit(clone(before), clone(after), 'Moved #102 to stage 2');
+  const current = clone(after);
+  Object.assign(current[1].items[1], { status: 'running', runId: 'run-7', runs: ['run-7'] });
+  const out = undoEdit(current, edit);
+  assert.equal(out.ok, true);
+  assert.equal(shape(out.stages), shape(before));
+  const it2 = out.stages[0].items.find((x) => x.id === 'it2');
+  assert.deepEqual([it2.status, it2.runId], ['running', 'run-7']);
+});
+
+test('#281 undo keeps an item added to the roadmap after the edit', () => {
+  const { recordEdit, undoEdit } = undo();
+  const before = BEFORE();
+  const after = [before[0], before[2]];
+  const edit = recordEdit(clone(before), clone(after), 'Removed #279');
+  const current = clone(after);
+  current[1].items.push(item('it9', 300)); // added later, to the Alerts stage
+  const out = undoEdit(current, edit);
+  assert.equal(out.ok, true);
+  assert.deepEqual(Array.from(out.stages, (s) => s.id), ['st1', 'st2', 'st3']);
+  assert.equal(out.stages.some((s) => s.items.some((x) => x.id === 'it9')), true, 'the item added since is still there');
+});
+
 // ---- the history ----------------------------------------------------------------------------------
 
 const tmpWorkspace = () => fs.mkdtempSync(path.join(os.tmpdir(), 'roadmap-history-'));

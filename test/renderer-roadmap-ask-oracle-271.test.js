@@ -109,6 +109,47 @@ test('#271 a failed start (no run) sends the item\'s error and no run id', async
   assert.equal(/"run_?id"\s*:\s*"[^"]+"/i.test(opened[0]), false, 'no run id');
 });
 
+// the card's header: Retry, Skip and Ask the Oracle are one group (.rm-fail-actions) that the CSS moves
+// under the title on a narrow page; the reorder arrows and "remove" stay in .rm-actions
+test('#271 a failed card groups Retry, Skip and Ask the Oracle in .rm-fail-actions, apart from the arrows and remove', () => {
+  const { R } = load();
+  const card = H.itemEl(R.html(dataOf(FAILED()), () => {}, view), 'a').outer;
+  const group = H.findEl(card, (e) => /\brm-fail-actions\b/.test(e.attrs.class || ''));
+  assert.ok(group, 'a .rm-fail-actions group on the failed card');
+  const has = (html, pred) => !!H.findEl(html, pred);
+  assert.deepEqual([
+    has(group.inner, (e) => e.attrs['data-rm-item'] === 'retry'),
+    has(group.inner, (e) => e.attrs['data-rm-item'] === 'skip'),
+    has(group.inner, (e) => 'data-rm-ask-oracle' in e.attrs),
+    has(group.inner, (e) => 'data-rm-move' in e.attrs || 'data-rm-remove' in e.attrs),
+  ], [true, true, true, false]);
+  const actions = H.findEl(card, (e) => /\brm-actions\b/.test(e.attrs.class || ''));
+  assert.equal(has(actions.inner, (e) => 'data-rm-remove' in e.attrs), true, 'remove stays in .rm-actions');
+  assert.equal(has(actions.inner, (e) => 'data-rm-ask-oracle' in e.attrs || e.attrs['data-rm-item'] === 'retry'), false);
+});
+
+test('#271 planned and running cards have no .rm-fail-actions group', () => {
+  const { R } = load();
+  const running = H.item('r', 'running', 2, 'Two', { runId: 'run-50', runs: ['run-50'], origin: recent, run: H.run({ status: 'running', startedAt: recent }) });
+  const html = R.html(H.roadmapOf([{ id: 'st1', name: '', note: '', items: [H.item('p', 'planned', 1, 'One', { origin: recent }), running] }], { state: 'running' }), () => {}, view);
+  const group = (id) => !!H.findEl(H.itemEl(html, id).outer, (e) => /\brm-fail-actions\b/.test(e.attrs.class || ''));
+  assert.deepEqual([group('p'), group('r')], [false, false]);
+});
+
+test('#271 backlog.css puts .rm-fail-actions on its own row at 1100px, and at 1700px with the Oracle beside the page', () => {
+  const css = fs.readFileSync(path.join(H.R, 'views', 'backlog', 'backlog.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  const media = (width) => {
+    const at = css.search(new RegExp(`@media\\s*\\(max-width:\\s*${width}px\\)\\s*\\{`));
+    return at < 0 ? '' : css.slice(at, css.indexOf('\n}', at));
+  };
+  const narrow = media(1100);
+  assert.match(narrow, /(^|[\s,}])\.rm-fail-actions\s*\{[^}]*flex:\s*1 1 100%/, 'own row in a narrow window');
+  assert.match(narrow, /\.rm-item-head\s*\{[^}]*flex-wrap:\s*wrap/);
+  const side = media(1700);
+  assert.match(side, /\.shell\.oracle-side \.rm-fail-actions\s*\{[^}]*flex:\s*1 1 100%/, 'own row with the Oracle drawer open');
+  assert.match(side, /\.shell\.oracle-side \.rm-item-head\s*\{[^}]*flex-wrap:\s*wrap/);
+});
+
 test('#271 while the Oracle answers another question the button reads "Oracle is answering…"', () => {
   const { R } = load({ pending: 'gate:other-approval' });
   const btn = askBtn(R.html(dataOf(FAILED()), () => {}, view));
