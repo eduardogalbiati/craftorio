@@ -90,3 +90,69 @@ Then('the run\'s {string} session shows {string}', async ({ e2e }, agent, text) 
   const card = e2e.window.getByTestId('run-session-card').filter({ hasText: new RegExp(agent, 'i') }).first();
   await expect(card).toContainText(text, { timeout: 30000 });
 });
+
+// #183: a human gate's "Interact with Oracle" button opens the Oracle's drawer beside the gate, with
+// a context chip (the run, the issue, the step, the branch) and starter questions about the gate
+const gateCard = (page) => page.getByTestId('run-gate').first();
+const oracleDrawer = (page) => page.getByRole('complementary', { name: 'Oracle', exact: true });
+const contextChip = (page) => oracleDrawer(page).getByTestId('oracle-context-chip');
+
+When('I click the gate\'s "Interact with Oracle" button', async ({ e2e }) => {
+  const button = gateCard(e2e.window).getByTestId('gate-oracle');
+  await expect(button).toHaveAccessibleName(/Interact with Oracle/);
+  await button.click();
+});
+
+Then('the Oracle drawer opens', async ({ e2e }) => {
+  await expect(oracleDrawer(e2e.window)).toBeVisible();
+});
+
+// the choices can still be clicked: nothing (the drawer, a backdrop) lies over them
+Then('the gate card is still in view with its choices enabled', async ({ e2e }) => {
+  const card = gateCard(e2e.window);
+  await expect(card).toBeInViewport();
+  const choices = card.getByTestId('run-gate-choice');
+  expect(await choices.count()).toBeGreaterThanOrEqual(2);
+  for (const choice of await choices.all()) {
+    await expect(choice).toBeEnabled();
+    const onTop = await choice.evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      return !!hit && el.contains(hit);
+    });
+    expect(onTop, `the choice "${await choice.textContent()}" is covered`).toBe(true);
+  }
+});
+
+Then('the Oracle\'s question box shows a context chip naming the gate\'s run and step', async ({ e2e }) => {
+  const card = gateCard(e2e.window);
+  const runId = await card.getAttribute('data-run');
+  const step = (await card.textContent()).match(/step:\s*([\w.-]+)/)?.[1];
+  expect(step, 'the gate card names its step').toBeTruthy();
+  const chip = contextChip(e2e.window);
+  await expect(chip).toBeVisible();
+  await expect(chip).toContainText(`Run ${runId}`);
+  await expect(chip).toContainText(step);
+});
+
+Then('the Oracle suggests {string}, {string}, {string} and {string}', async ({ e2e }, a, b, c, d) => {
+  const drawer = oracleDrawer(e2e.window);
+  for (const name of [a, b, c, d]) await expect(drawer.getByRole('button', { name, exact: true })).toBeEnabled();
+});
+
+When('I remove the Oracle\'s context chip', async ({ e2e }) => {
+  await contextChip(e2e.window).getByRole('button', { name: /Remove/ }).click();
+});
+
+Then('the Oracle\'s question box has no context chip', async ({ e2e }) => {
+  await expect(contextChip(e2e.window)).toHaveCount(0);
+});
+
+When('I ask the Oracle the suggested question {string}', async ({ e2e }, question) => {
+  await oracleDrawer(e2e.window).getByRole('button', { name: question, exact: true }).click();
+});
+
+// the simulated Oracle (MULTIAGENT_SIMULATION_ONLY) answers without a model: "Simulated Oracle: ..."
+Then('the Oracle shows a simulated answer', async ({ e2e }) => {
+  await expect(oracleDrawer(e2e.window)).toContainText('Simulated Oracle', { timeout: 30000 });
+});

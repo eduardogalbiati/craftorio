@@ -57,3 +57,37 @@ Feature: Runs and gates
     And I pick the run "old00233" in Analytics
     And I open the run from Analytics
     Then the run's "developer" session shows "cost not recorded"
+
+  @issue-183
+  Scenario: A human gate opens the Oracle with the gate as context
+    Given the app is open
+    When I start a simulated run with the task "Add a /health endpoint"
+    Then a gate card waits for my approval
+    When I click the gate's "Interact with Oracle" button
+    Then the Oracle drawer opens
+    And the gate card is still in view with its choices enabled
+    And the Oracle's question box shows a context chip naming the gate's run and step
+    And the Oracle suggests "What was implemented, in plain words?", "Does it cover every task of the issue?", "What could break?" and "Should I approve or ask for changes?"
+
+  @issue-183
+  Scenario: The gate's context chip can be removed from the Oracle's question box
+    Given the app is open
+    When I start a simulated run with the task "Add a /health endpoint"
+    Then a gate card waits for my approval
+    When I click the gate's "Interact with Oracle" button
+    And I remove the Oracle's context chip
+    Then the Oracle's question box has no context chip
+    And the gate card is still in view with its choices enabled
+
+  # The simulated Oracle answers with a fixed text and never proposes "Ask for changes" text, so the
+  # "Use this text" card has no deterministic E2E path: this scenario checks the gate stays pending
+  @issue-183
+  Scenario: Asking the Oracle about a gate never answers the gate
+    Given the app is open
+    When I start a simulated run with the task "Add a /health endpoint"
+    Then a gate card waits for my approval
+    When I click the gate's "Interact with Oracle" button
+    And I ask the Oracle the suggested question "What could break?"
+    Then the Oracle shows a simulated answer
+    And a gate card waits for my approval
+    And the gate card is still in view with its choices enabled
