@@ -87,3 +87,43 @@ Feature: Backlog Board and Roadmap
     When I resume the roadmap as a simulation
     Then the roadmap bar does not show "Stage 5 done"
     And the Backlog shows no error "Every item of this stage is done or skipped."
+
+  # Archive (#238): in simulation the close, label and reopen are recorded in the synced backlog
+  # (no gh call). Every demo issue is planned, running or merged locally, hence the added ones.
+  @issue-238
+  Scenario: Archiving two selected issues closes them as not planned and moves them to Archived
+    Given the app is open
+    And the backlog has the open issues "Old idea: a splash screen" and "Old idea: export the queue as CSV"
+    When I open "Backlog" in the sidebar
+    And I open the Board as a list
+    And I select the issue "Old idea: a splash screen"
+    And I select the issue "Old idea: export the queue as CSV"
+    And I click "Archive (2)" in the selection bar
+    Then the archive confirm names "#17" and "#18", closed as not planned on GitHub and labelled archived
+    When I confirm the archive
+    Then the Open view does not show "Old idea: a splash screen"
+    And the Open view does not show "Old idea: export the queue as CSV"
+    When I show the "Archived" issues
+    Then the list shows the issue "Old idea: a splash screen"
+    And the list shows the issue "Old idea: export the queue as CSV"
+
+  @issue-238
+  Scenario: Restoring an archived issue brings it back to the Open view
+    Given the app is open
+    And the backlog has the archived issue "Old idea: a splash screen"
+    When I open "Backlog" in the sidebar
+    And I open the Board as a list
+    And I show the "Archived" issues
+    And I restore the issue "Old idea: a splash screen"
+    Then the list does not show the issue "Old idea: a splash screen"
+    When I show the "Open" issues
+    Then the list shows the issue "Old idea: a splash screen"
+
+  # The demo roadmap's stage 5 (the unnamed stage) plans #10 alone
+  @issue-238
+  Scenario: An issue planned in the roadmap cannot be archived and says why
+    Given the app is open
+    When I open "Backlog" in the sidebar
+    And I open the Board as a list
+    And I open the menu of the issue "Dark scrollbars in the terminal dock"
+    Then its Archive action is disabled with the reason "Planned in stage 5: remove it from the roadmap first"
