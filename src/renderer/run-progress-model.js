@@ -201,8 +201,8 @@
    * percentage never falls (`leftMs` still counts the steps to redo), and the result says the round.
    * → { percent, state: running | waiting | failed | stopped | done, step, elapsedMs, leftMs (null:
    *   unknown), basis: 'history' | 'steps', done, total }; with `keep` also round (the visit of the
-   *   current step: 2 in its first fix round) and sentBackBy (the step the run last went back from,
-   *   while round > 1)
+   *   current step: 2 in its first fix round) and sentBackBy (the step the run last went back from
+   *   to an earlier one, while round > 1; null when the step was only retried)
    */
   function estimateProgress({ steps = [], path = [], typical = {}, status = 'running', startedAt = null, now = Date.now(), keep = false } = {}) {
     const last = steps.at(-1) || null;
@@ -218,12 +218,17 @@
     const avg = known.length ? known.reduce((a, b) => a + b, 0) / known.length : 1;
     const weight = (id) => (typical?.[id] > 0 ? typical[id] : avg);
     const total = route.reduce((a, id) => a + weight(id), 0) || 1;
-    // #272 a fix round: the visit of the current step, and the latest step the run went back from
-    // (to a step at or before it on the route)
+    // #272 a fix round: the visit of the current step; the latest visit followed by a step at or
+    // before it on the route (`again`: a step run again, a retry of the same step included) and the
+    // latest one the run went back from, to an earlier step (`back`: what sent it back)
     const places = steps.map((e) => route.indexOf(e.step));
     const round = last ? steps.filter((e) => e.step === last.step).length : 1;
-    let back = -1;
-    for (let k = steps.length - 2; k >= 0 && back < 0; k--) if (places[k] >= 0 && places[k + 1] >= 0 && places[k + 1] <= places[k]) back = k;
+    const latest = (went) => {
+      for (let k = steps.length - 2; k >= 0; k--) if (places[k] >= 0 && places[k + 1] >= 0 && went(places[k + 1], places[k])) return k;
+      return -1;
+    };
+    const again = latest((to, from) => to <= from);
+    const back = latest((to, from) => to < from);
     const out = { state, step: last?.step || null, elapsedMs, basis, total: route.length, ...(keep ? { round, sentBackBy: round > 1 && back >= 0 ? steps[back].step : null } : {}) };
     if (state === 'done') return { ...out, percent: 100, leftMs: 0, done: route.length };
     const at = last ? route.indexOf(last.step) : -1;
@@ -236,8 +241,8 @@
       const inStep = toMs(last.ts) != null ? Math.max(0, now - toMs(last.ts)) : 0;
       doneW += basis === 'history' ? Math.min(inStep, cap * weight(last.step)) : cap * weight(last.step);
     }
-    // what the run had earned before it went back
-    const far = keep && back >= 0 ? Math.max(...places.slice(0, -1)) : -1;
+    // what the run had earned before it ran a step again
+    const far = keep && again >= 0 ? Math.max(...places.slice(0, -1)) : -1;
     const earnedW = far >= 0 ? route.slice(0, far).reduce((a, id) => a + weight(id), 0) + cap * weight(route[far]) : 0;
     const percent = Math.max(0, Math.min(99, Math.floor((100 * Math.max(doneW, earnedW)) / total)));
     const leftMs = basis === 'history' ? Math.max(0, Math.round(total - doneW)) : percent > 0 ? Math.round((elapsedMs * (100 - percent)) / percent) : null;

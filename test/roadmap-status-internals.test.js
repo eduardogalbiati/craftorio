@@ -46,6 +46,14 @@ test('#272 estimateProgress: back in the step it was sent back from (round 2), t
   assert.equal(est.round, 2);
 });
 
+test('#272 estimateProgress: a step retried in place (the supervisor ran it again) is round 2 with nothing that sent it back, and keeps its progress', () => {
+  const steps = [step('develop', 'failed', START, 8 * MIN), step('develop', 'running', START + 8 * MIN)];
+  const est = RunProgress.estimateProgress({ steps, path: PATH, typical: TYPICAL, startedAt: H.iso(START), now: START + 9 * MIN, keep: true });
+  assert.equal(est.round, 2);
+  assert.equal(est.sentBackBy, null);
+  assert.equal(est.percent, 45); // 90% of develop (10 of 20 minutes), not the 5% of its second visit so far
+});
+
 test('#266 StatusPill: a run\'s "success" reads "Succeeded", a refused start "Failed to start"; the title is escaped', () => {
   const { statusLabel, statusPill } = H.loadStatusPill();
   assert.equal(statusLabel('success'), 'Succeeded');

@@ -651,16 +651,17 @@
     return { drawn, earlier: start, more };
   }
   // After backlog.js drew the view: the "Loading…" row asks for the next page when it comes near the
-  // screen (as the runs list's does), never under an open Edit form; a view just changed whose page
-  // starts below earlier stages shows its current stage.
+  // screen (as the runs list's does), never while the owner edits (`ownerBusy`: a field with the
+  // focus, an open Edit form, a drag: a redraw would lose it; the next draw asks again); a view just
+  // changed whose page starts below earlier stages shows its current stage.
   let observer = null;
-  function mounted(list, rerender) {
+  function mounted(list, rerender, ownerBusy = busy) {
     observer?.disconnect();
     observer = null;
     const row = list?.querySelector('[data-rm-load-more]');
     if (row && typeof IntersectionObserver === 'function') {
       observer = new IntersectionObserver((entries) => {
-        if (!entries.some((e) => e.isIntersecting) || busy()) return;
+        if (!entries.some((e) => e.isIntersecting) || ownerBusy()) return;
         loadMore();
         rerender();
       }, { rootMargin: '300px' });
@@ -738,7 +739,7 @@
   /**
    * The Roadmap view (into #bl-list): its bar, the plain queue's items, the stages in order. `rerender`
    * redraws once the workflows are loaded. `view` (#217, #268): what backlog.js remembers, { epic,
-   * showAll, since }: Planned (showAll off) is the open work, a stage's finished items of the date
+   * showAll, since, project (its id: another project starts at its first page) }: Planned (showAll off) is the open work, a stage's finished items of the date
    * range folded; All is every item of the range; the epic keeps only its items and hides the stages
    * left empty. A change of the view goes back to the first page.
    */
@@ -746,7 +747,7 @@
     loadWorkflows(rerender);
     const [since, , sinceText, rangeMs] = SINCE.find(([id]) => id === view.since) || SINCE[0];
     const v = { epic: view.epic || '', showAll: !!view.showAll, since, rangeMs };
-    const key = `${v.showAll ? 'all' : 'planned'}|${since}|${v.epic}`;
+    const key = `${view.project || ''}|${v.showAll ? 'all' : 'planned'}|${since}|${v.epic}`;
     if (pages.key !== key) pages = { key, more: 0, earlier: 0, fresh: true };
     const r = data?.roadmap || { state: 'planned', stages: [] };
     const q = data?.queue?.items || [];
