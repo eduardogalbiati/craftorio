@@ -209,10 +209,13 @@ function cleanItem(raw, known, previous) {
   const then = normalizeThen(raw.then);
   // the Product Owner's Cost choices (#205), shown on the card
   const cost = raw.cost && typeof raw.cost === 'object' ? raw.cost : old?.cost || null;
+  // #279: Self-healing updates the app once this item's run has merged
+  const updateAfter = !!(raw.updateAfter ?? old?.updateAfter);
   return {
     id: old ? old.id : newId('item'), workflow, workflowName: raw.workflowName || old?.workflowName || workflow,
     inputs: raw.inputs && typeof raw.inputs === 'object' ? raw.inputs : {}, mock: !!raw.mock,
     ...(reason ? { reason } : {}), ...(modeReason ? { modeReason } : {}), ...(origin ? { origin } : {}), ...(then ? { then } : {}), ...(cost ? { cost } : {}),
+    ...(updateAfter ? { updateAfter } : {}),
     ...issues[0], issues,
     status: ITEM_STATES.includes(state.status) ? state.status : 'planned', runId: state.runId || null, runs: state.runs || [], error: state.error || null,
   };
