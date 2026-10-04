@@ -14,7 +14,7 @@
 //                                  401 device, 403 link, 400 confirmation or answer, 409 gate not open
 //
 // Gate links are `<url>/gates/<run>/<id>?t=<payload>.<hmac>`, payload { r, a, exp }, signed with the
-// app's secret (HMAC-SHA256), valid `linkTtlMs` (30 min). Paired devices are kept in the workspace
+// workspace's key (`<workspace>/phone-gates/secret`, HMAC-SHA256), valid `linkTtlMs` (30 min). Paired devices are kept in the workspace
 // (`<workspace>/phone-gates/devices.json`: id, name, the SHA-256 of their token, pairedAt, lastSeen);
 // a revoked device is removed and its token stops working at once. The answer goes through the
 // service's answerPhoneGate (src/service/areas/phone-gates.js, never a channel): the gate's
@@ -132,6 +132,19 @@ function revokeDevice(ws, deviceId) {
   writeDevices(ws, list.filter((d) => d.id !== deviceId));
   return true;
 }
+/** The key gate links are signed with (<workspace>/phone-gates/secret): created once, so links sent in
+ *  notifications keep working across restarts and Settings saves until they expire */
+function linkSecret(ws) {
+  const file = path.join(ws.root, 'phone-gates', 'secret');
+  try {
+    const s = fs.readFileSync(file, 'utf8').trim();
+    if (s.length >= 32) return s;
+  } catch { /* created below */ }
+  const s = crypto.randomBytes(32).toString('hex');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, s, { mode: 0o600 });
+  return s;
+}
 
 // service: { api: { 'runs:active' }, workspace(), answerPhoneGate(runId, approvalId, answer, feedback, deviceId) }
 // publicUrl(): the private address from outside (Tailscale, Cloudflare Tunnel) the gate links use, or ''
@@ -171,7 +184,11 @@ function createMobileGatesServer({ service, secret, now = Date.now, linkTtlMs = 
     return out;
   }
   const findGate = (runId, approvalId) => openGates().find((x) => x.run.runId === runId && x.gate.approval_id === approvalId) || null;
-  const choicesOf = (g) => (Array.isArray(g.choices) && g.choices.length ? g.choices : [{ id: 'approve', label: 'Approve' }, { id: 'reject', label: 'Reject' }]);
+  // an Approve / Reject gate answers true / false (like the desktop), with its #213 labels and help
+  const choicesOf = (g) => (Array.isArray(g.choices) && g.choices.length ? g.choices : [
+    { id: 'approve', label: g.approve?.label || 'Approve', help: g.approve?.help || '', value: true },
+    { id: 'reject', label: g.reject?.label || 'Reject', help: g.reject?.help || '', value: false },
+  ]);
   const runTitle = (run) => run.title || run.workflow || run.runId;
   const gateLink = (runId, approvalId) => `${publicUrl() || base}/gates/${encodeURIComponent(runId)}/${encodeURIComponent(approvalId)}?t=${encodeURIComponent(gateToken(runId, approvalId))}`;
 
@@ -186,7 +203,7 @@ function createMobileGatesServer({ service, secret, now = Date.now, linkTtlMs = 
     if (chosen) {
       return page('Confirm your answer', `<div class="card">${head}<p>You chose <b>${esc(chosen.label || chosen.id)}</b>${chosen.help ? `:</p><p class="rec">${esc(chosen.help)}</p>` : '.</p>'}
         <form id="confirm" data-post="${esc(`${self}/answer`)}" data-t="${esc(t)}" data-answer="${esc(chosen.id)}">
-          <p><input id="fb" maxlength="2000" placeholder="Note for the run (optional)"></p>
+          <p><input id="fb" maxlength="2000" ${chosen.feedback_required ? 'required placeholder="Note for the run (required)"' : 'placeholder="Note for the run (optional)"'}></p>
           <button class="primary" type="submit">Confirm: ${esc(chosen.label || chosen.id)}</button></form>
         <p id="msg"></p><p><a href="${esc(`${self}?t=${encodeURIComponent(t)}`)}">Back</a></p></div>`, CONFIRM_SCRIPT);
     }
@@ -256,7 +273,8 @@ function createMobileGatesServer({ service, secret, now = Date.now, linkTtlMs = 
         const choice = choicesOf(found.gate).find((c) => c.id === body.answer);
         if (!choice) throw new HttpError(400, 'Unknown answer.');
         const feedback = typeof body.feedback === 'string' && body.feedback.trim() ? body.feedback.slice(0, 2000) : undefined;
-        const ok = resolveGate(runId, approvalId, choice.id, feedback, device);
+        if (choice.feedback_required && !feedback) throw new HttpError(400, 'This answer needs a note.');
+        const ok = resolveGate(runId, approvalId, 'value' in choice ? choice.value : choice.id, feedback, device);
         if (!ok) throw new HttpError(409, 'This gate is no longer waiting.');
         writeDevices(ws(), readDevices(ws()).map((d) => (d.id === device.id ? { ...d, lastSeen: new Date(now()).toISOString() } : d)));
         sendJson(res, 200, { ok: true });
@@ -309,6 +327,7 @@ function createMobileGatesServer({ service, secret, now = Date.now, linkTtlMs = 
 module.exports = {
   createMobileGatesServer,
   LINK_TTL_MS,
+  linkSecret,
   listDevices,
   revokeDevice,
 };

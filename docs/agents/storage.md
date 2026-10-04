@@ -22,8 +22,9 @@ Read this before touching run listings, the Backlog queue, pending gates, notifi
   run-owner heartbeat). Written by the service, never by the model.
 - `phone-gates/devices.json` (#226, `src/mobile-gates.js`): the phones paired with the gates page
   (`id`, `name`, `tokenHash` (SHA-256; the token itself is only on the phone), `pairedAt`,
-  `lastSeen`); Revoke removes the entry. Pairing codes and the key that signs the gate links live
-  in memory only: a restart voids the codes and every gate link.
+  `lastSeen`); Revoke removes the entry. `phone-gates/secret`: the key that signs the gate links,
+  created once, so a link keeps working across restarts until it expires. Pairing codes live in
+  memory only: a restart voids them.
 - **The gate answer record**: a gate's `approval.resolved` event in `events.jsonl` carries
   `approval_id`, `step_id`, `choice` (or `approved`), `by`, `wait_ms`, `feedback?`, `commit?`;
   answered from a paired phone it adds `answered_by: "owner"`, `via: "mobile"`, `device` (the

@@ -10,6 +10,7 @@ const qrcode = require('qrcode-generator');
 const workspace = require('../../workspace');
 const {
   createMobileGatesServer,
+  linkSecret,
   listDevices,
   revokeDevice,
 } = require('../../mobile-gates');
@@ -31,6 +32,7 @@ module.exports = (ctx) => {
     if (gates) return address;
     const server = createMobileGatesServer({
       service: { api: { 'runs:active': () => ctx.activeRuns() }, workspace: () => ctx.ws, answerPhoneGate },
+      secret: linkSecret(ctx.ws),
       publicUrl,
     });
     const port = Number(config().port) || 0;
