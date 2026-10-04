@@ -1,0 +1,43 @@
+# Test fixture (#276, test/memory-guard-suite-276.test.js): an agent step, then a suite step run by
+# the orchestrator. A failing suite goes back to the agent (at most twice), then to a gate.
+apiVersion: multiagent/v1
+kind: Workflow
+metadata:
+  name: fixture-memory-guard-suite
+agents:
+  writer: { provider: claude, model: mock-model, session: persistent }
+steps:
+  - id: work
+    agent: writer
+    prompt: "Write the code."
+    output_schema:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [done, again] }
+    transitions:
+      - when: "output.status == 'again'"
+        goto: work
+      - when: "output.status == 'done'"
+        goto: suite
+  - id: suite
+    type: suite
+    command: "npm test"
+    transitions:
+      - when: "output.status == 'pass'"
+        goto: end
+      - when: "output.status == 'fail'"
+        goto: work
+        max_visits: 2
+        on_exhausted: give_up
+      - when: "output.status == 'blocked'"
+        goto: give_up
+  - id: give_up
+    type: human_approval
+    message: "The suite keeps failing."
+    transitions:
+      - when: "approved"
+        goto: work
+      - when: "rejected"
+        goto: end
+        status: failed

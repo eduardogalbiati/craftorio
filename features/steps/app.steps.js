@@ -1,7 +1,8 @@
 // Steps of features/app.feature, features/settings.feature and features/navigation.feature (#222,
 // #254, #264): open the app, move through the sidebar's menu (grouped by the flow: Home, Plan &
 // Design, Code & Build, Workflows, AI, Night watch, Settings; a group's title collapses it), the
-// header (project selector, Oracle, notifications bell), the Workflows screen's tabs, Settings.
+// header (project selector, Oracle, notifications bell), the Workflows screen's tabs, Settings
+// (#276: Execution's Memory guard group).
 // Locators are roles and data-testid only (skills/ui-conventions).
 // #254: a menu group is a role="group" named by its title, holding its title's toggle button
 // (aria-expanded, named like the group) and its items' buttons; the header's project selector is a
@@ -68,6 +69,48 @@ When('I choose {string} as the default development workflow', async ({ e2e }, fi
 
 Then('the default development workflow is {string}', async ({ e2e }, file) => {
   await expect(e2e.window.getByRole('combobox', { name: 'Default development workflow' })).toHaveValue(file);
+});
+
+// ---- Settings › Execution › Memory guard (#276) -------------------------------------------------------
+// data-testids: memory-guard-enabled (checkbox), memory-guard-limit / memory-guard-floor (number
+// inputs), memory-guard-limit-hint ("(8.0 GB on this machine)"). A field saves on change, like the
+// rest of the Execution tab: setting a value fills it and leaves it (Tab).
+
+const memoryGuard = (page, field) => page.getByTestId(`memory-guard-${field}`);
+
+Then('the memory guard is on', async ({ e2e }) => {
+  await expect(memoryGuard(e2e.window, 'enabled')).toBeChecked();
+});
+
+// field: limit | floor
+Then("the memory guard's {word} is {int}", async ({ e2e }, field, value) => {
+  await expect(memoryGuard(e2e.window, field)).toHaveValue(String(value));
+});
+
+When("I set the memory guard's {word} to {int}", async ({ e2e }, field, value) => {
+  const input = memoryGuard(e2e.window, field);
+  await input.fill(String(value));
+  await input.press('Tab');
+});
+
+// the hint's GB figure is the limit's share of this machine's RAM (GiB or GB, one decimal)
+Then("the memory guard's hint gives its limit in GB for this machine", async ({ e2e }) => {
+  const os = require('os');
+  const page = e2e.window;
+  const limit = Number(await memoryGuard(page, 'limit').inputValue());
+  const hint = memoryGuard(page, 'limit-hint');
+  await expect(hint).toHaveText(/\d+(\.\d+)?\s*GB/);
+  const shown = Number((await hint.innerText()).match(/(\d+(?:\.\d+)?)\s*GB/)[1]);
+  const bytes = (os.totalmem() * limit) / 100;
+  expect(shown).toBeGreaterThanOrEqual(Math.floor((bytes / 1024 ** 3) * 10) / 10 - 0.1);
+  expect(shown).toBeLessThanOrEqual(Math.ceil((bytes / 1e9) * 10) / 10 + 0.1);
+});
+
+// the field's error state: aria-invalid, an error/invalid class, or the input's own :invalid
+Then("the memory guard's {word} field shows an error", async ({ e2e }, field) => {
+  const input = memoryGuard(e2e.window, field);
+  await expect.poll(() => input.evaluate((el) => el.getAttribute('aria-invalid') === 'true'
+    || /\b(error|invalid)\b/.test(el.className) || el.matches(':invalid'))).toBe(true);
 });
 
 // ---- the menu by the flow (#254) ---------------------------------------------------------------------
