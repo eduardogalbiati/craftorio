@@ -9,6 +9,8 @@
 // (#254, nav-groups.js: plan, code, workflows, ai) puts it under that group's title, which folds.
 // `section`: the screen is drawn in another screen's section (the Roadmap, in the Backlog's);
 // `menu`: the entry lit on a screen that has none (a project's page lights Settings).
+// `panel` (#255): the markup of a screen that is a tab of another one (Analytics, in Home), instead
+// of `markup`: that screen places it in its own section.
 // `mount()` runs once, right after the markup is in place; `show()` each time showView opens it.
 const viewRegistry = new Map();
 const navGroupBoxes = new Map(); // a group's id → the element that holds its entries

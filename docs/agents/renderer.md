@@ -214,7 +214,7 @@ state from `OracleChatModel` (`views/oracle/oracle-chat-model.js`, pure, tested 
   `unavailable` (another live process owns `oracle/owner.json`: the form is replaced by a notice
   naming it);
 - **unread**: the `.nav-badge.oracle-unread` counts Oracle answers newer than `oracle:state`'s
-  `readAt`; the conversation in view (dock on the Dashboard, or the open drawer) saves it with
+  `readAt`; the conversation in view (dock on Home's Overview, or the open drawer) saves it with
   `oracle:markRead`, so the count survives a reload;
 - **pasted images** (`addImages`/`removeImage`, 5 MB and 4 per message): thumbnails above the input,
   an inline error under it; sent as data URLs to `oracle:ask`, shown in the log through

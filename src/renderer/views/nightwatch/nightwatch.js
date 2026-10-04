@@ -4,7 +4,7 @@
 // metrics from the Oracle's night log (src/night-watch.js, channels nightwatch:*): the summary
 // cards, a timeline of the window, the actions with their permission, backup and Undo, and a
 // table to compare nights (and the baseline night). The sidebar entry shows a moon and the runs
-// it watches while the watch is on; the Dashboard shows the morning summary (renderMorning).
+// it watches while the watch is on; Home shows the morning summary (renderMorning).
 // Registers itself with registerView (view-registry.js); uses app.js globals ($, esc, state, api,
 // errMsg, fmtDur, dateOf, confirmDialog, showView).
 

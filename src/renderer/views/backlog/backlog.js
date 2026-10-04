@@ -92,9 +92,13 @@
   // #254: the Backlog and the Roadmap screens show one project's backlog. Opened from the menu, a
   // screen reads and syncs it again; a switch this file makes (keepData) keeps what is loaded.
   let keepData = false;
+  // Home's flow strip (#255) opens the board's columns for one visit (asked, then shown): the next
+  // opening shows the remembered mode again
+  let columns = null;
   function openScreen(roadmap) {
     if (roadmap) bl.mode = 'roadmap';
-    else if (bl.mode === 'roadmap') bl.mode = backlogMode();
+    else if (columns === 'asked') { bl.mode = 'kanban'; columns = 'shown'; }
+    else if (bl.mode === 'roadmap' || columns === 'shown') { bl.mode = backlogMode(); columns = null; }
     if (keepData && bl.data) render(); else refreshBacklog();
     keepData = false;
   }
@@ -1623,9 +1627,9 @@
     project: () => project() || null,
     projectId: () => bl.projectId,
     roadmapGroup,
-    // the board with its columns (Home's flow strip, #255: the To do and Merged locally counts open
-    // them), for this visit: the preferred board is not changed
-    showColumns: () => { bl.mode = 'kanban'; },
+    // the board with its columns, when the Backlog opens next (Home's flow strip, #255: the To do and
+    // Merged locally counts open them), for that visit: the remembered mode is not changed
+    showColumns: () => { columns = 'asked'; },
     // the backlog synced again after the Product Owner filed or updated an issue (#117)
     showData: (data) => { if (data) { setData(data); render(); } },
     showRoadmap,

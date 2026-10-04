@@ -12,8 +12,8 @@
 //                      same as backlog --mode roadmap; the Supervisor's drawer: --view workflows --click
 //                      "#btn-wf-supervisor"; a folded menu group: --click ".nav-group[data-group=workflows]
 //                      .nav-group-title"; oracle: Settings with the Oracle's drawer open from its
-//                      header button; the Dashboard shows its docked panel; nightwatch (#172): two
-//                      replayed nights, src/night-watch-demo.js, also the Dashboard's morning
+//                      header button; Home shows its docked panel; nightwatch (#172): two
+//                      replayed nights, src/night-watch-demo.js, also Home's morning
 //                      summary; its turn-on form: --click "#nw-switch", the permissions' Save /
 //                      Cancel: --click ".nw-perm-check[data-perm=skip]")
 //   --oracle <state>   the Oracle's demo state (#171), on any view: empty | conversation | answering |
@@ -1474,7 +1474,7 @@ function main() {
         if (args.tab === 'run') demo.writeDemoRunInDepth(ws, project.id); else demo.writeDemoOccupancy(ws, project.id);
       } catch (e) { if (e.code !== 'MODULE_NOT_FOUND') throw e; }
     }
-    // the Night watch's nights (#172): its screen, and the Dashboard's morning summary (an app before it: nothing)
+    // the Night watch's nights (#172): its screen, and Home's morning summary (an app before it: nothing)
     if (home || args.view === 'nightwatch') {
       try { src('night-watch-demo').writeDemoNights(ws, project.id); } catch (e) { if (e.code !== 'MODULE_NOT_FOUND') throw e; }
     }

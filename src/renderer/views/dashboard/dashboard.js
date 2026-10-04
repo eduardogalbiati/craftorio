@@ -14,8 +14,9 @@
 // - "Today": the real cost of the day and of the last night (the Night watch's window), the runs
 //   finished and failed, the 24/7 occupancy (#188) and the roadmap's next stage;
 // - a new workspace (no project, no run): how to start.
-// Registers itself with registerView (view-registry.js); uses app.js globals ($, esc, state, dateOf,
-// pendingGates, openGateOf, showRun, showView, openDrawer, issueRefs, displayName, fmtUsd, loadUsage).
+// Registers itself with registerView (view-registry.js); uses viewRegistry and the globals of app.js and
+// the shared pieces ($, esc, state, dateOf, pendingGates, openGateOf, showRun, showView, openDrawer,
+// openProjectModal, issueRefs, displayName, fmtUsd, loadUsage).
 // renderDashboard is also called by app.js (init, and renderHeader on run events): it paints from
 // what was read last (nothing is redrawn while it reads the same) and reads again at most every
 // HOME_REFRESH_MS (at once when Home opens or the header's project changes; every HOME_REFRESH_MS
@@ -30,11 +31,13 @@ const HOME_STAGES = [
   { id: 'discovery', label: 'Discovery', view: 'discovery', hint: 'Cards in Triage, Shape and Define' },
   { id: 'ready', label: 'Ready', view: 'discovery', hint: 'Cards ready to become issues' },
   { id: 'todo', label: 'Backlog To do', view: 'backlog', hint: 'Open issues nobody works on yet' },
-  { id: 'running', label: 'Running', view: 'workflows', hint: 'Runs in progress' },
+  { id: 'running', label: 'Running', view: 'workflows', hint: 'Runs of this project in progress' },
   { id: 'merged', label: 'Merged locally', view: 'backlog', hint: 'Issues merged into the local base, not pushed yet' },
   { id: 'released', label: 'Released', view: 'releases', hint: 'Releases shipped' },
 ];
 const HOME_FAILED = ['failed', 'cancelled', 'interrupted'];
+// the attributes of the overview's buttons (onHomeClick)
+const HOME_ACTIONS = ['data-home-run', 'data-home-roadmap', 'data-home-act', 'data-stage'];
 // asked: the project of the last read started (undefined: none yet); data: what the last read answered
 // html: what the overview shows now
 const homeView = { seq: 0, at: 0, asked: undefined, data: null, morning: null, html: null };
@@ -87,7 +90,9 @@ function homeRunning(d) {
 }
 
 function homeCounts(d) {
-  const column = (id) => homeList(d.backlog?.issues).filter((i) => i.column === id);
+  // the board's columns: no epic (#253), no archived issue (#238)
+  const onBoard = (i) => !i.isEpic && window.BacklogArchive?.issueState(i) !== 'archived';
+  const column = (id) => homeList(d.backlog?.issues).filter((i) => onBoard(i) && (i.column || (i.state === 'closed' ? 'done' : 'todo')) === id);
   const cards = (columns) => d.cards.filter((c) => columns.includes(c.column)).length;
   // merged locally: the board's column, and the issues of the commits not pushed yet (a simulated
   // run never moves a card, its local merge still waits for a push)
@@ -220,18 +225,22 @@ function paintHome() {
   const html = !d ? '<p class="muted small home-none">Loading…</p>' : fresh ? HOME_EMPTY_HTML : homeStripHtml(d) + homeNeedsHtml(d) + homeTodayHtml(d);
   if (html === homeView.html) return;
   homeView.html = html;
+  // the button in focus keeps it across the redraw
+  const at = document.activeElement?.closest?.('#home-body') ? document.activeElement : null;
+  const mark = at && HOME_ACTIONS.map((a) => [a, at.getAttribute(a)]).find(([, v]) => v != null);
   body.innerHTML = html;
+  if (mark) [...body.querySelectorAll(`button[${mark[0]}]`)].find((b) => b.getAttribute(mark[0]) === mark[1])?.focus({ preventScroll: true });
 }
 
 function renderDashboard() {
   paintHome();
-  if (homeView.asked !== homeProject() || Date.now() - homeView.at > HOME_REFRESH_MS) loadHome();
+  if (homeView.asked !== homeProject() || Date.now() - homeView.at > HOME_REFRESH_MS) loadHome().catch((e) => console.error('home:', e));
   // the last Night watch's morning summary (#172, views/nightwatch/); its window dates "Cost last night"
   window.NightWatchView?.renderMorning($('#dash-nightwatch'))?.then((m) => {
     if ((m || null) === homeView.morning) return;
     homeView.morning = m || null;
     paintHome();
-  });
+  }).catch((e) => console.error('home:', e));
 }
 
 // The tab of the open view: Analytics on showView('analytics'), the Overview otherwise.
@@ -253,8 +262,9 @@ function openHomeStage(id) {
   if (!stage || !viewRegistry.has(stage.view)) return;
   if (stage.view === 'backlog') window.BacklogActions?.showColumns();
   if (stage.view === 'workflows') {
+    // the runs in progress of the header's project (the search matches its name), simulated ones included
     state.workflowsTab = 'runs';
-    Object.assign(state.wr, { filter: 'running', q: '' });
+    Object.assign(state.wr, { filter: 'running', showSim: true, q: state.projects.find((p) => p.id === homeProject())?.name || '' });
   }
   showView(stage.view);
 }
@@ -294,7 +304,11 @@ registerView({
   mount() {
     $('#view-dashboard').addEventListener('click', onHomeClick);
     // an open Home stays current without run events (a gate waiting in another app, the ages)
-    setInterval(() => { if (state.view === 'dashboard' && !document.hidden) renderDashboard(); }, HOME_REFRESH_MS);
+    setInterval(() => {
+      if (state.view !== 'dashboard' || document.hidden) return;
+      homeView.at = 0;
+      renderDashboard();
+    }, HOME_REFRESH_MS);
     // the start screen's sidebar entry starts highlighted, as showView would
     $('nav.sidebar [data-view="dashboard"]').classList.toggle('active', state.view === 'dashboard');
   },

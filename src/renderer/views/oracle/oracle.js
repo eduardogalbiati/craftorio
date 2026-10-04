@@ -1,5 +1,6 @@
 // The Oracle's chat (#171; the service is #122, src/oracle.js): one conversation in two places.
-// - the dock (#oracle-dock): docked on the Dashboard, open there;
+// - the dock (#oracle-dock): docked on Home's Overview (the view `dashboard`), open there; hidden on
+//   Home's Analytics tab (#255, the view `analytics`: the drawer, as on the other screens);
 // - the drawer (#oracle-drawer): an overlay opened on any other screen from the header's Oracle
 //   button (#nav-oracle, at the top right next to the notifications bell, #254; on the Dashboard it
 //   focuses the dock). Esc and the backdrop close it. The button's .nav-badge counts the answers that arrived
@@ -637,7 +638,7 @@
   <div id="oracle-backdrop" class="drawer-backdrop sup-backdrop hidden"></div>
   <aside id="oracle-drawer" class="drawer sup-drawer oracle-drawer" aria-hidden="true" aria-label="Oracle">${surfaceHtml('drawer')}</aside>`,
     mount() {
-      // the dock on the Dashboard (its section is in place: views load in path order)
+      // the dock on Home (its section is in place: views load in path order)
       const dash = $('#view-dashboard');
       dash.classList.add('oracle-docked');
       dash.insertAdjacentHTML('beforeend', `<aside id="oracle-dock" class="card oracle-dock" aria-label="Oracle">${surfaceHtml('dock')}</aside>`);
@@ -651,7 +652,7 @@
       btn.onclick = (e) => { e.stopPropagation(); if (or.drawer) closeDrawer(); else openDrawer(); };
       const corner = $('.topbar .header-right');
       corner.insertBefore(btn, corner.querySelector('.notif-wrap'));
-      // the Dashboard shows the dock: the drawer closes there
+      // Home's Overview shows the dock: the drawer closes there
       SURFACES.forEach(mountChat);
       const dashView = viewRegistry.get('dashboard');
       const showDash = dashView.show;
