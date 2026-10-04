@@ -89,7 +89,7 @@ module.exports = (ctx) => {
         const simulated = !!mock || simulation.simulationOnly();
         const out = await chat().handleRequest(request, { perform: (kind, params) => ctx.performAction(kind, params, { mock: simulated }) });
         if (out.from === 'oracle') {
-          ctx.oracleService?.().requested({ to: 'supervisor', ref: out.ref, ownerTs: out.ownerTs, requestKind: out.kind, text: out.text, costUsd: out.costUsd, error: out.error });
+          ctx.oracleService?.()?.requested({ to: 'supervisor', ref: out.ref, ownerTs: out.ownerTs, requestKind: out.kind, text: out.text, costUsd: out.costUsd, error: out.error });
         }
         return { ok: out.ok, text: out.text, costUsd: out.costUsd, ...(out.error ? { error: out.error } : {}) };
       },

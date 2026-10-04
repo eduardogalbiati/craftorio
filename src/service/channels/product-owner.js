@@ -114,6 +114,7 @@ module.exports = (ctx) => {
       if (unknown.length) throw new Error(`${refs(unknown)} ${unknown.length > 1 ? 'are' : 'is'} not in the synced backlog.`);
       const files = ctx.listWorkflows().filter((w) => !w.error && w.inputs?.task).map((w) => w.file);
       const workflow = p.workflow ? path.basename(String(p.workflow)) : DefaultWorkflow.resolve(workspace.readSettings(ctx.ws).defaultWorkflow, files).file;
+      if (!files.includes(workflow)) throw new Error(`Workflow ${workflow} is not installed, or has no task input to receive an issue.`);
       const inputs = p.inputs && typeof p.inputs === 'object' ? p.inputs : {};
       const items = p.group ? [{ workflow, inputs, issues: numbers }] : numbers.map((n) => ({ workflow, inputs, issues: [n] }));
       const { roadmap, dropped } = roadmaps.propose(ctx.ws.backlog, id, [{ items }], { issues, alive: ctx.runAlive });
@@ -251,7 +252,11 @@ module.exports = (ctx) => {
       params: 'opts',
       fn: async ({ projectId, mock, ...request } = {}) => {
         const id = project(projectId || '');
-        if (!projectId || !projects.readProject(ctx.ws.projects, id)) throw new Error(`Unknown project: ${projectId || '(none)'}`);
+        // no project, no conversation to record it in
+        if (!projectId || !projects.readProject(ctx.ws.projects, id)) {
+          const error = `Unknown project: ${projectId || '(none)'}`;
+          return { ok: false, text: error, costUsd: 0, error };
+        }
         const simulated = !!mock || simulation.simulationOnly();
         const out = await productOwner.handleRequest({
           backlogDir: ctx.ws.backlog,
@@ -261,7 +266,7 @@ module.exports = (ctx) => {
           ask: ({ question, request: tag }) => productOwner.ask({ ...askOptions(id, simulated), question, mode: 'plan', request: tag }),
         });
         if (out.from === 'oracle') {
-          ctx.oracleService?.().requested({ to: 'product-owner', ref: out.ref, ownerTs: out.ownerTs, requestKind: out.kind, projectId: id, text: out.text, costUsd: out.costUsd, error: out.error });
+          ctx.oracleService?.()?.requested({ to: 'product-owner', ref: out.ref, ownerTs: out.ownerTs, requestKind: out.kind, projectId: id, text: out.text, costUsd: out.costUsd, error: out.error });
         }
         return { ok: out.ok, text: out.text, costUsd: out.costUsd, ...(out.error ? { error: out.error } : {}) };
       },
