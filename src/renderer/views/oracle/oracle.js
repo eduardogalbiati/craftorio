@@ -611,7 +611,7 @@
       onRender: (log) => log.querySelectorAll('.oracle-md').forEach(decorate),
       // typing only changes Send (the log is not redrawn on every key)
       onInput: setDraftText,
-      canSend: () => view().canSend,
+      canSend: () => view().ready,
       inputEnabled: () => view().inputEnabled,
       hasDraft: () => or.drafts.images.length > 0,
       onPaste,

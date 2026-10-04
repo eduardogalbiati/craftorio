@@ -46,6 +46,8 @@
       state,
       unread: open ? 0 : unreadCount(messages, service?.readAt ?? null),
       canSend: ready && (!!String(drafts.text || '').trim() || images.length > 0),
+      // #274: the shared chat's Send waits only for a turn or a block (an empty box sends nothing)
+      ready,
       chipsEnabled: ready,
       inputEnabled: !blocked,
       attachments: images,
