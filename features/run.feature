@@ -39,7 +39,8 @@ Feature: Runs and gates
   @issue-233
   Scenario: A run with a timed-out attempt marks its estimated cost
     Given the app is open
-    When I open "Analytics" in the sidebar
+    When I open "Home" in the sidebar
+    And I open the "Analytics" tab of Home
     And I open the "Run" Analytics tab
     And I pick the run "run00233" in Analytics
     Then the run's total cost in Analytics is marked as estimated
@@ -52,7 +53,8 @@ Feature: Runs and gates
   @issue-233
   Scenario: An old run's stopped attempt shows its cost as not recorded
     Given the app is open
-    When I open "Analytics" in the sidebar
+    When I open "Home" in the sidebar
+    And I open the "Analytics" tab of Home
     And I open the "Run" Analytics tab
     And I pick the run "old00233" in Analytics
     And I open the run from Analytics

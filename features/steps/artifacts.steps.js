@@ -32,11 +32,12 @@ Given('a finished demo run {string} with {}', async ({ e2e }, fragment, _data) =
   expect(summary.finished_at, `the demo run ${dir} is finished`).toBeTruthy();
 });
 
-// Analytics › Run lists every finished run (searched first: the list shows the latest 80), and its
-// Open run button goes to the Run screen
+// Home › Analytics › Run (#255: Analytics is a tab of Home) lists every finished run (searched
+// first: the list shows the latest 80), and its Open run button goes to the Run screen
 When('I open the demo run {string}', async ({ e2e }, fragment) => {
   const page = e2e.window;
-  await page.getByRole('navigation').getByRole('button', { name: /^Analytics(\s+\d+)?$/ }).click();
+  await page.getByRole('navigation').getByRole('button', { name: /^Home(\s+\d+)?$/ }).click();
+  await page.getByTestId('home-tab-analytics').click();
   await page.getByRole('tablist', { name: 'Analytics' }).getByRole('tab', { name: 'Run', exact: true }).click();
   await page.getByTestId('an-run-search').fill(fragment);
   const option = page.getByTestId('an-run-pick').locator(`option[value*="${fragment}"]`);
