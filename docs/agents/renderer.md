@@ -230,7 +230,11 @@ request unchanged) and `PasteImage.clear(field)` with the text. Chips are Arena'
 ## UI conventions
 
 The general rules (and the visual review of the screenshots) are in the `ui-conventions` skill,
-which the software-development developer and evidence agents load (#111). In this app:
+which the software-development developer and evidence agents load (#111). The design tokens
+(colours, spacing scale, typography, radius, alignment grid, from the `:root` block of
+`style.css`) are in the separate [`design-system`](../../skills/design-system/SKILL.md) skill (#151);
+ai-development-local-hero's `ui_reviewer` reviews the screenshots against both. A token added or
+changed in `style.css` goes into that skill too. In this app:
 
 - **Reuse what `style.css` has**: `.btn` (`.primary`, `.ghost`, `.sm`), `.link-btn` for small
   actions ("add note", "Edit"); `.badge` (neutral; `.warn`, `.live`, `.p-mock`…) and `.pill`

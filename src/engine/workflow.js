@@ -2183,8 +2183,16 @@ class WorkflowRun extends EventEmitter {
   // Fan-out: the same step runs in parallel for each agent in `agents`, each one
   // in its own session. output = { results: { agent: output }, succeeded, failed }.
   // `min_success` (default: all) says how many must respond for the step to count.
+  // `agent_when: { <agent>: <expr> }` (#151) leaves an agent out of this visit when its expression
+  // is false (output `skipped`; `min_success` capped at the agents that run); `required_agents`
+  // fails the step when one of them ran and did not respond, whatever `min_success` says.
   async runFanOut(step, st) {
-    const settled = await Promise.allSettled(step.agents.map((name) => this.runAgentStep(step, st, name)));
+    const when = step.agent_when || {};
+    const agents = step.agents.filter((name) => when[name] === undefined || evalExpr(when[name], this.ctx));
+    const skipped = step.agents.filter((name) => !agents.includes(name));
+    if (skipped.length) this.emitEvent('log', { level: 'info', message: `[${step.id}] skipped this visit (agent_when): ${skipped.join(', ')}` });
+    if (!agents.length) throw new Error(`Step "${step.id}": agent_when leaves no agent of the fan-out to run.`);
+    const settled = await Promise.allSettled(agents.map((name) => this.runAgentStep(step, st, name)));
     st.delegate_result = null; // consumed by all agents
     st.supervisorNote = null;
     this.restoredWorkNote = null;
@@ -2193,18 +2201,20 @@ class WorkflowRun extends EventEmitter {
     const results = {};
     const failed = [];
     settled.forEach((r, i) => {
-      const name = step.agents[i];
+      const name = agents[i];
       if (r.status === 'fulfilled') { results[name] = r.value; return; }
       failed.push({ agent: name, error: r.reason?.message || String(r.reason) });
       this.emitEvent('log', { level: 'error', message: `[${step.id}] ${name} failed: ${r.reason?.message || r.reason}` });
     });
     const succeeded = Object.keys(results);
-    const min = step.min_success ?? step.agents.length;
-    if (succeeded.length < min) {
+    const min = Math.min(step.min_success ?? agents.length, agents.length);
+    const missing = (step.required_agents || []).filter((name) => agents.includes(name) && !results[name]);
+    if (succeeded.length < min || missing.length) {
       const why = failed.map((f) => `${f.agent}: ${f.error}`).join(' | ');
-      throw new Error(`Step "${step.id}": only ${succeeded.length}/${step.agents.length} agents responded (minimum ${min}). ${why}`);
+      const need = missing.length ? `required: ${missing.join(', ')}` : `minimum ${min}`;
+      throw new Error(`Step "${step.id}": only ${succeeded.length}/${agents.length} agents responded (${need}). ${why}`);
     }
-    return { results, succeeded, failed };
+    return { results, succeeded, failed, ...(skipped.length ? { skipped } : {}) };
   }
 
   async runAgentStep(step, st, agentName) {

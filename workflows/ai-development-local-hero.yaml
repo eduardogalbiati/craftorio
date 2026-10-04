@@ -28,9 +28,12 @@
 #                  ▲                                                       resolve_merge (developer)
 #                  └──────────── code_review ◄──────────────────────────────────┘
 #   evidence: screenshots / HTTP request+response / CLI output / log lines that show the change
-#   working (local, simulated), in the run folder; it never blocks and the verifier uses it.
-#   UI changes (#111): it also captures the states the developer's evidence_plan lists and reviews
-#   the screenshots (ui-conventions skill); blocking `ui_findings` go back to develop once.
+#   working (local, simulated), in the run folder; it never blocks and the verifier uses it. It
+#   no longer judges the UI (#151).
+#   UI changes (#151): develop ─► developer_screenshots (machine, every mode) ─► code_review, a
+#   fan-out of the reviewer and the ui_reviewer (ui-conventions + design-system skills) in parallel.
+#   Code findings and blocking `ui_findings` go back to develop together; the UI once. The fix round
+#   is captured and reviewed again before test/suite/E2E/build. No UI change: the reviewer alone.
 #   Declared gaps (`left_out`: requirements of the task the developer did not implement): never
 #   reviewed. The first time, develop ─► develop with the list (no reviewer call); still there
 #   after that ─► requirements_left_out (human gate: continue without them / stop). An entry led
@@ -65,7 +68,8 @@
 #   develop with the text, then back to the gate) or stops. Only the first implementation and the
 #   owner's own change requests stop there; review fix rounds too with validate_every_round: true.
 #   Before the gate, developer_screenshots (no agent, #144) captures the UI states develop listed in
-#   `screenshots`, original and modified, into evidence/developer/round-<n>/; the gate shows them.
+#   `screenshots`, original and modified, into evidence/developer/round-<n>/; the gate shows them
+#   (in auto mode it runs too for a UI change, then goes straight to code_review, #151).
 # RUN LOCALLY (gates with `local_preview: true`: developer_check, human_review)
 #   Offered when the project (Projects › Local preview) or `orchestrator.local_preview`
 #   ({ install, command, url }) says how to run the worktree. It never answers the gate.
@@ -357,6 +361,23 @@ agents:
       You are the code reviewer of this workflow. Follow the code-review skill:
       detect the languages in the diff and read the rules for each one before the verdict.
 
+  # #151: the visual review of the UI, in parallel with the reviewer (code_review's fan-out), on the
+  # screenshots developer_screenshots takes right after develop; it never runs on a change without UI
+  ui_reviewer:
+    color: "#C77DFF"
+    provider: claude
+    # cost: it looks at a few screenshots and a CSS diff (like evidence)
+    model: claude-sonnet-5
+    session: persistent
+    capabilities: { tools: [read, *toolchains], web: false }
+    skills: [ui-conventions, design-system]
+    system_prompt: |
+      You are the UI Reviewer of this workflow. You review how a change looks and is used, on its
+      screenshots (original and modified) and its styles, against the ui-conventions skill (shared
+      components, controls, states) and the design-system skill (colours, spacing, typography,
+      alignment from the app's tokens). You do not review the code's logic (the code reviewer
+      does), do not change code, do not commit and do not run tests.
+
   test_writer:
     color: "#FF8A3D" # #224: its role's colour in the run chat and the runs list
     provider: claude
@@ -429,8 +450,8 @@ agents:
     model: claude-sonnet-5
     session: ephemeral
     capabilities: { tools: [read, *toolchains], web: false }
-    # ui-conventions: the visual review of the UI screenshots (ui_findings)
-    skills: [implementation-evidence, ui-conventions]
+    # #151: it collects evidence only; the visual review is the ui_reviewer's, in code_review
+    skills: [implementation-evidence]
     system_prompt: |
       You collect evidence that the change works: UI screenshots, HTTP requests and their
       responses, CLI output or log lines, local and simulated only. You do not change code, do not
@@ -629,24 +650,28 @@ steps:
       The owner chose to continue without the issues you could not do; leave them out.
       {% endif %}
       {% endif %}
-      {% if steps.code_review.output and steps.code_review.output.verdict == 'changes_requested' %}
+      {% set review = steps.code_review.output.results.reviewer if steps.code_review.output and steps.code_review.output.results else none %}
+      {% if review and review.verdict == 'changes_requested' %}
       The reviewer requested these changes (iteration {{ loop.iteration }}):
-      {{ steps.code_review.output.findings | to_yaml }}
+      {{ review.findings | to_yaml }}
       Fix the blocking items, make a new commit and answer each one.
       A finding that needs no production change (it asks for tests or screenshots, which the
       test writer owns, or you disagree with it): answer it in `summary` with the reason, make no
       empty commit, and set `no_change: true` when no finding of this round needed a code change.
       {% endif %}
+      {% set ui_blocking = ((steps.code_review.output.results.ui_reviewer.ui_findings if steps.code_review.output and steps.code_review.output.results and steps.code_review.output.results.ui_reviewer else none) or []) | selectattr('blocking') | list %}
+      {% if previous_step == 'code_review' and ui_blocking | length %}
+      The UI Reviewer found these UI problems on the screenshots (ui-conventions and design-system
+      skills; one UI fix round):
+      {{ ui_blocking | to_yaml }}
+      Fix them on the same branch with a new commit and answer each one in `summary` (one you
+      disagree with: say why). Keep `screenshots` listing the states to capture: they are taken
+      again and the UI Reviewer looks once more.
+      {% endif %}
       {% if previous_step == 'developer_check' %}
       The owner tried your change and asks for these changes (change request {{ steps.developer_check.visits }}):
       {{ steps.developer_check.output.feedback }}
       Fix them on the same branch with a new commit, and answer each point in `summary`.
-      {% endif %}
-      {% if previous_step == 'evidence' %}
-      The visual review of the screenshots found these UI problems (ui-conventions skill; one round):
-      {{ steps.evidence.output.ui_findings | selectattr('blocking') | list | to_yaml }}
-      Fix them on the same branch with a new commit and answer each one in `summary` (one you
-      disagree with: say why). Keep `evidence_plan` listing the states to capture.
       {% endif %}
       {% set acc = steps.acceptance_tests.output %}
       {% if not steps.develop.output %}
@@ -804,6 +829,11 @@ steps:
         goto: developer_screenshots
       # the review findings needed no production change (e.g. they ask for tests, which the test
       # writer owns): the reviewer gets the answer; a disagreement ends at human_review, never in a loop
+      # #151: a committed UI change (screens to capture, or files under src/renderer/) is captured
+      # right after develop in every mode too, for the ui_reviewer in code_review (a UI fix round
+      # included); a change without UI skips it
+      - when: "output.committed and inputs.screenshots != 'off' and ((output.screenshots or []) | length or 'src/renderer/' in ((output.files_changed or []) | join(' ') | replace('\\\\', '/')))"
+        goto: developer_screenshots
       - when: "output.no_change and steps.code_review.output"
         goto: code_review
       - when: "output.committed"
@@ -813,19 +843,22 @@ steps:
         max_visits: 3
         on_exhausted: fail
 
-  # Screenshots of the developer's UI states before the owner's check (#144): no agent, no model
-  # cost. The project's screenshot command runs once per entry of develop's `screenshots`, modified
-  # (the worktree) and original (--ref the base), into evidence/developer/round-<n>/ (one round per
-  # visit). Never blocks: an empty list, a simulated run or a failed capture is in its output's
-  # message, which developer_check shows.
+  # Screenshots of the developer's UI states before the owner's check (#144) and the UI Reviewer
+  # (#151): no agent, no model cost. The project's screenshot command runs once per entry of
+  # develop's `screenshots`, modified (the worktree) and original (--ref the base), into
+  # evidence/developer/round-<n>/ (one round per visit). Never blocks: an empty list, a simulated run
+  # or a failed capture is in its output's message, which developer_check and the ui_reviewer read.
   - id: developer_screenshots
     type: screenshots
     from: develop
     folder: developer
     base: "{{ inputs.base_branch }}"
     transitions:
-      - when: "true"
+      # validated mode: the owner's gate first (the same rounds as develop's transitions)
+      - when: "inputs.mode == 'validated' and (vars.owner_validated != 'yes' or inputs.validate_every_round)"
         goto: developer_check
+      - when: "true"
+        goto: code_review
 
   # Validated mode (inputs.mode): the owner tries the developer's work before any review or test
   # token is spent. Ask for changes goes back to the developer with the text, and the run comes
@@ -907,6 +940,10 @@ steps:
       - when: "choice == 'continue' and inputs.mode == 'validated' and vars.owner_validated != 'yes'"
         goto: developer_screenshots
         set: *accepted_gaps
+      # #151: a UI change is captured for the ui_reviewer, as in develop's transitions
+      - when: "choice == 'continue' and inputs.screenshots != 'off' and ((steps.develop.output.screenshots or []) | length or 'src/renderer/' in ((steps.develop.output.files_changed or []) | join(' ') | replace('\\\\', '/')))"
+        goto: developer_screenshots
+        set: *accepted_gaps
       - when: "choice == 'continue'"
         goto: code_review
         set: *accepted_gaps
@@ -933,6 +970,9 @@ steps:
         goto: developer_check
       - when: "choice == 'continue' and inputs.mode == 'validated' and vars.owner_validated != 'yes'"
         goto: developer_screenshots
+      # #151: a UI change is captured for the ui_reviewer, as in develop's transitions
+      - when: "choice == 'continue' and inputs.screenshots != 'off' and ((steps.develop.output.screenshots or []) | length or 'src/renderer/' in ((steps.develop.output.files_changed or []) | join(' ') | replace('\\\\', '/')))"
+        goto: developer_screenshots
       - when: "choice == 'continue'"
         goto: code_review
       - when: "choice == 'stop'"
@@ -941,10 +981,41 @@ steps:
 
   # After a merge conflict (vars.recheck == 'resolution', set by resolve_merge) the review covers
   # the resolution only: the rebase compared with the commit that was last approved.
+  # #151: a fan-out, the reviewer and the ui_reviewer in parallel. The ui_reviewer runs only on a
+  # round whose UI change was just captured (developer_screenshots, or the owner's gate after it);
+  # otherwise the reviewer runs alone. min_success 1 + required_agents: a failed UI Reviewer never
+  # blocks the run, a failed reviewer fails the step as before. output.results.<agent> holds each answer.
   - id: code_review
-    agent: reviewer
+    agents: [reviewer, ui_reviewer]
+    min_success: 1
+    required_agents: [reviewer]
+    agent_when:
+      ui_reviewer: "previous_step in ['developer_screenshots', 'developer_check'] and inputs.screenshots != 'off' and ((steps.develop.output.screenshots or []) | length or 'src/renderer/' in ((steps.develop.output.files_changed or []) | join(' ') | replace('\\\\', '/')))"
     prompt: |
-      {% if vars.recheck == 'resolution' %}
+      {% if agent == 'ui_reviewer' %}
+      {% set shots = steps.developer_screenshots.output %}
+      Review how the change on branch `{{ steps.develop.output.branch }}` looks and is used (base
+      `{{ inputs.base_branch }}`), against the ui-conventions and design-system skills.
+      Task: {{ inputs.task }}
+      Developer summary: {{ steps.develop.output.summary }}
+      Files changed: {{ steps.develop.output.files_changed | join(', ') }}
+      {% if steps.develop.output.evidence_plan %}The developer's evidence plan (the states the change adds): {{ steps.develop.output.evidence_plan }}{% endif %}
+      Screenshots: {{ shots.message if shots else 'none taken' }}{% if shots and shots.dir %}, in `{{ run_dir }}/{{ shots.dir }}`
+      as `<name>.original.png` (the base) and `<name>.modified.png` (the change){% endif %}.
+      {% if shots and (shots.screenshots or []) | length %}{{ shots.screenshots | to_yaml }}{% endif %}
+      Look at each PNG once, original and modified. When there is no screenshot (a simulated run, a
+      failed capture, or no screen listed), review the diff of the styles and markup instead:
+      `git diff {{ inputs.base_branch }}...{{ steps.develop.output.branch }} -- src/renderer/`.
+      Judge only what the change touched, never the rest of the app, and never the code's logic.
+      List each problem in `ui_findings` (`element`, `problem`, `convention`: the rule of either skill
+      it breaks, `screenshot`: the file it shows in, `blocking`: true when it makes the screen hard
+      to read or use, false for polish); an empty list when there is none.
+      {% if inputs.issues | length > 1 %}This run implements several issues: set `issue` (its URL) on each UI finding.{% endif %}
+      {% if vars.ui_review_returned == 'yes' %}This is the look after the developer's UI fix round:
+      report what is still wrong; it is recorded for the owner, not sent back.{% endif %}
+      The code verdict is the code reviewer's: answer `verdict: approved` and `findings: []`; your
+      review is `ui_findings`.
+      {% elif vars.recheck == 'resolution' %}
       {% set approved = (action_error.head if action_error and action_error.head else '') or steps.resolve_merge.output.previous_head %}
       Review the RESOLUTION of a merge conflict on branch `{{ steps.develop.output.branch }}`, not the
       whole change: the change was already reviewed, tested and verified at commit `{{ approved }}`,
@@ -1002,24 +1073,46 @@ steps:
               line:        { type: integer }
               description: { type: string }
               issue:       { type: string }
+        # the ui_reviewer's answer (#151): the visual review of the screenshots (ui-conventions and
+        # design-system skills); the reviewer leaves it out
+        ui_findings:
+          type: array
+          items:
+            type: object
+            required: [element, problem, convention, blocking]
+            properties:
+              issue:      { type: string }
+              element:    { type: string }
+              problem:    { type: string }
+              convention: { type: string }
+              screenshot: { type: string }
+              blocking:   { type: boolean }
     transitions:
-      # #203: unit tests written after the review → the test writer; only the existing suite → no
-      # test writer. #223: the E2E scenarios were written first (acceptance_tests): the machine runs
-      # them (e2e) after the suite, or right after the review when there is no suite.
-      - when: "output.verdict == 'approved' and inputs.unit_tests == 'write_and_run'"
-        goto: test
-      - when: "output.verdict == 'approved' and inputs.unit_tests == 'run_existing'"
-        goto: suite
-      - when: "output.verdict == 'approved' and inputs.e2e_tests == 'write_and_run' and steps.acceptance_tests.output.e2e_scope == 'scenarios'"
-        goto: e2e
-      - when: "output.verdict == 'approved'"
-        goto: build
-      - when: "output.verdict == 'changes_requested'"
+      # code findings, with the blocking UI findings when there are, go back to develop in one turn;
+      # the UI is sent back once (vars.ui_review_returned), like evidence did before #151
+      - when: "output.results.reviewer.verdict == 'changes_requested'"
         goto: develop
+        set: { ui_review_returned: "{% if (output.results.ui_reviewer.ui_findings or []) | selectattr('blocking') | list | length %}yes{% else %}{{ vars.ui_review_returned }}{% endif %}" }
         loop:
           name: review_cycle
           max_iterations: 3
           on_exhausted: human_review
+      # #151: blocking UI findings alone: one UI fix round, back through developer_screenshots and
+      # this review, never through test/suite/E2E/build
+      - when: "(output.results.ui_reviewer.ui_findings or []) | selectattr('blocking') | list | length and vars.ui_review_returned != 'yes'"
+        goto: develop
+        set: { ui_review_returned: "yes" }
+      # #203: unit tests written after the review → the test writer; only the existing suite → no
+      # test writer. #223: the E2E scenarios were written first (acceptance_tests): the machine runs
+      # them (e2e) after the suite, or right after the review when there is no suite.
+      - when: "output.results.reviewer.verdict == 'approved' and inputs.unit_tests == 'write_and_run'"
+        goto: test
+      - when: "output.results.reviewer.verdict == 'approved' and inputs.unit_tests == 'run_existing'"
+        goto: suite
+      - when: "output.results.reviewer.verdict == 'approved' and inputs.e2e_tests == 'write_and_run' and steps.acceptance_tests.output.e2e_scope == 'scenarios'"
+        goto: e2e
+      - when: "output.results.reviewer.verdict == 'approved'"
+        goto: build
 
   - id: human_review
     type: human_approval
@@ -1069,9 +1162,10 @@ steps:
       What the developer says should be tested:
       {{ steps.develop.output.test_notes }}
       {% endif %}
-      {% if steps.code_review.output and steps.code_review.output.for_test_writer %}
+      {% set review = steps.code_review.output.results.reviewer if steps.code_review.output and steps.code_review.output.results else none %}
+      {% if review and review.for_test_writer %}
       What the reviewer says should be tested:
-      {{ steps.code_review.output.for_test_writer }}
+      {{ review.for_test_writer }}
       {% endif %}
 
       This run's tests (#203): {{ tests_plan }}
@@ -1472,8 +1566,8 @@ steps:
       {% endif %}
       {% if inputs.screenshots == 'off' %}
       Screenshots are off in this run (input `screenshots`): never run `npm run screenshot` or start the
-      app. The evidence is the diff (`git diff --stat`), the logs and the test results, and
-      `ui_findings` is an empty list. Say "Screenshots: off" in `note`.
+      app. The evidence is the diff (`git diff --stat`), the logs and the test results. Say
+      "Screenshots: off" in `note`.
       {% elif inputs.screenshots == 'changed' %}
       Screenshots: only the screens this issue changes (input `screenshots`), original and modified;
       no other screen.
@@ -1483,10 +1577,8 @@ steps:
       `{{ evidence_dir }}` as `<issue>-<screen>-<state>.original.png` / `.modified.png`, HTTP
       request and response, CLI output, log lines of a simulated run), local and simulated only,
       and stay read-only on the working tree. Nothing observable, or no way to capture it: say why in `note`.
-      UI screenshots: review them against the ui-conventions skill and list each problem in
-      `ui_findings` (`blocking` when it makes the screen hard to read or use); an empty list when
-      there is none or the change has no UI.{% if vars.ui_review_returned == 'yes' %} This is the
-      check after the developer's UI fix round: report what is still wrong, it is recorded for the owner.{% endif %}
+      You collect evidence only: the UI was already reviewed in code_review (#151), so do not judge
+      the screenshots against UI rules.
     output_schema:
       type: object
       required: [evidence]
@@ -1515,25 +1607,8 @@ steps:
               path:    { type: string }
               caption: { type: string }
         note: { type: string }
-        # the visual review of the UI screenshots (ui-conventions skill; #111)
-        ui_findings:
-          type: array
-          items:
-            type: object
-            required: [element, problem, convention, blocking]
-            properties:
-              issue:      { type: string }
-              element:    { type: string }
-              problem:    { type: string }
-              convention: { type: string }
-              screenshot: { type: string }
-              blocking:   { type: boolean }
     transitions:
-      # blocking UI findings go back to the developer once, like review findings (one UI fix round:
-      # develop ─► code_review ─► test ─► build ─► evidence again); after it they are only recorded
-      - when: "(output.ui_findings or []) | selectattr('blocking') | list | length and vars.ui_review_returned != 'yes'"
-        goto: develop
-        set: { ui_review_returned: "yes" }
+      # #151: never back to develop: the UI verdict is the ui_reviewer's, in code_review
       - when: "true"
         goto: verify_change
 
