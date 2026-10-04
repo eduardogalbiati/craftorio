@@ -85,7 +85,9 @@ test('ai-development e2e: the e2e step has no agent and runs only the issue\'s s
 test('ai-development e2e: a UI issue gets its scenarios written first, run by the machine after the suite, green without an agent', { timeout: 120000 }, async (t) => {
   const { transitions, sent, finished } = await runAiDevE2e(t, { mockSequences: { suite: GREEN } });
   assert.equal(finished.status, 'success', finished.error);
-  assert.deepEqual(transitions, [
+  // #246: the test id check after develop (test/testid-check-246.test.js) is left out of this path
+  const route = transitions.join(',').replace(/develop>testid_check,testid_check>/g, 'develop>').split(',');
+  assert.deepEqual(route, [
     'acceptance_tests>red_check',
     'red_check>develop',
     // #151: the mock developer lists one screen: captured for the ui_reviewer in automatic mode too

@@ -30,14 +30,16 @@ function makeRepo(t) {
 
 // A mock run of the workflow. `mockSequences` shapes the mock's answers (suite.red_check: the red
 // check's runner result per visit); `onTurn(repo, n)` plays the developer's side effects before its n-th turn.
-async function runAiDev(t, { mockSequences = {}, onTurn, failAgent } = {}) {
+// `answers: { stepId: [[choice, feedback], ...] }`: the owner's answer per visit of a gate (default: the
+// first choice); `beforeAnswer(stepId, n)` runs just before the n-th answer of a gate (e.g. a long wait).
+async function runAiDev(t, { mockSequences = {}, onTurn, failAgent, inputs = {}, answers = {}, beforeAnswer } = {}) {
   const repo = makeRepo(t);
   const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ai-dev-runs-'));
   t.after(() => fs.rmSync(runsDir, { recursive: true, force: true }));
   const run = new WorkflowRun({
     file: WORKFLOW,
     // the paths below are the lean ones (no extra test step, no E2E); the defaults are pinned by their own test
-    inputs: { task: 'Add the feature', repo_path: repo, unit_tests: 'run_existing', e2e_tests: 'off' },
+    inputs: { task: 'Add the feature', repo_path: repo, unit_tests: 'run_existing', e2e_tests: 'off', ...inputs },
     mock: true,
     runsDir,
     // the reviewer approves the change on its first look, unless a test says otherwise
@@ -50,15 +52,24 @@ async function runAiDev(t, { mockSequences = {}, onTurn, failAgent } = {}) {
   }
   const events = [];
   let turn = 0;
+  const answered = {};
   run.on('event', (ev) => {
     events.push(ev);
-    if (ev.type === 'approval.requested') setImmediate(() => run.resolveApproval(ev.approval_id, ev.choices[0].id, 'user', undefined));
+    if (ev.type === 'approval.requested') {
+      const n = (answered[ev.step_id] = (answered[ev.step_id] || 0) + 1);
+      const [choice, feedback] = (answers[ev.step_id] || [])[n - 1] || [ev.choices[0].id, undefined];
+      setImmediate(() => {
+        if (beforeAnswer) beforeAnswer(ev.step_id, n);
+        run.resolveApproval(ev.approval_id, choice, 'user', feedback);
+      });
+    }
     if (ev.type === 'session.message_sent' && ev.step_id === 'develop' && onTurn) onTurn(repo, ++turn);
   });
   await run.start();
   const transitions = events.filter((e) => e.type === 'step.transition').map((e) => `${e.from}>${e.to}`);
-  const prompts = events.filter((e) => e.type === 'session.message_sent' && e.step_id === 'develop').map((e) => e.prompt);
-  return { events, transitions, prompts, finished: events.find((e) => e.type === 'workflow.finished'), repo };
+  const promptsOf = (step) => events.filter((e) => e.type === 'session.message_sent' && e.step_id === step).map((e) => e.prompt);
+  const prompts = promptsOf('develop');
+  return { events, transitions, prompts, promptsOf, finished: events.find((e) => e.type === 'workflow.finished'), repo };
 }
 
 test('ai-development-local-hero: the normal path runs the acceptance tests, the red check, develop, review, suite, then merges', { timeout: 120000 }, async (t) => {
@@ -428,4 +439,105 @@ test('ai-development-local-hero: the developer runs on Opus 5.5 by default, on F
   assert.equal(fable.turnTimeout(dev(fable)), 45 * 60e3);
   assert.equal(fable.wf.agents.reviewer.model, 'claude-opus-5-5', 'the reviewer keeps its own model');
   assert.equal(loadWorkflow(WORKFLOW).orchestrator.limits.max_total_cost_usd, 120);
+});
+
+// #247 (acceptance tests, written before the code): Ask for changes at the owner's validation gate
+// goes to the test writer first. It triages the request: criteria changed → it updates the affected
+// acceptance tests and scenarios, the red check runs on them, then develop; a simple change → nothing
+// changes and the run goes straight to develop. The output gains `criteria_changed` and `criteria_note`.
+const REQUEST = 'Move the Archive button into the three-dots menu at the top right of the card';
+const VALIDATED = { mode: 'validated', screenshots: 'off' };
+const withoutSkills = (prompt) => String(prompt || '').replace(/<skill name="[^"]*"[\s\S]*?<\/skill>/g, '');
+
+test('ai-development-local-hero (#247): Ask for changes at developer_check goes to acceptance_tests; Approve and Stop are unchanged', () => {
+  const gate = loadWorkflow(WORKFLOW).steps.find((s) => s.id === 'developer_check');
+  const scope = (choice) => ({ choice, inputs: { mode: 'validated', validate_every_round: false, screenshots: 'off', e2e_tests: 'off', unit_tests: 'run_existing' }, vars: {}, steps: {}, output: { choice } });
+  assert.equal(firstGoto(gate, scope('changes')), 'acceptance_tests', 'the test writer sees the owner\'s request first');
+  assert.equal(firstGoto(gate, scope('approve')), 'code_review');
+  assert.equal(firstGoto(gate, scope('stop')), 'end');
+});
+
+test('ai-development-local-hero (#247): the acceptance tests step answers criteria_changed and criteria_note', () => {
+  const acceptance = loadWorkflow(WORKFLOW).steps.find((s) => s.id === 'acceptance_tests');
+  const props = acceptance.output_schema.properties;
+  assert.equal(props.criteria_changed?.type, 'boolean');
+  assert.equal(props.criteria_note?.type, 'string');
+});
+
+test('ai-development-local-hero (#247): changed criteria: acceptance_tests, the red check on the changed tests, then develop with the owner\'s request and the test writer\'s note', { timeout: 120000 }, async (t) => {
+  const { transitions, prompts, finished } = await runAiDev(t, {
+    inputs: VALIDATED,
+    answers: { developer_check: [['changes', REQUEST], ['approve']] },
+    mockSequences: { suite: { red_check: ['fail', 'fail'], suite: ['pass'] }, criteria_changed: [true] },
+  });
+  assert.equal(finished.status, 'success', finished.error);
+  assert.deepEqual(transitions.slice(0, 8), [
+    'acceptance_tests>red_check',
+    'red_check>develop',
+    'develop>developer_check',
+    'developer_check>acceptance_tests',
+    'acceptance_tests>red_check',
+    'red_check>develop',
+    'develop>developer_check',
+    'developer_check>code_review',
+  ]);
+  assert.equal(prompts.length, 2);
+  assert.ok(prompts[1].includes(REQUEST), 'the developer still receives the owner\'s request');
+  assert.match(prompts[1], /\(simulated\) criteria_note/, 'and the test writer\'s note on what changed in the tests');
+});
+
+test('ai-development-local-hero (#247): a simple change no test covers goes from acceptance_tests straight to develop, with no red check', { timeout: 120000 }, async (t) => {
+  const { transitions, prompts, finished } = await runAiDev(t, {
+    inputs: VALIDATED,
+    answers: { developer_check: [['changes', REQUEST], ['approve']] },
+    // false on every visit: the first visit (not from the gate) still goes to the red check
+    mockSequences: { suite: { red_check: ['fail'], suite: ['pass'] }, criteria_changed: [false] },
+  });
+  assert.equal(finished.status, 'success', finished.error);
+  assert.deepEqual(transitions.slice(0, 6), [
+    'acceptance_tests>red_check',
+    'red_check>develop',
+    'develop>developer_check',
+    'developer_check>acceptance_tests',
+    'acceptance_tests>develop',
+    'develop>developer_check',
+  ]);
+  assert.equal(transitions.filter((x) => x === 'acceptance_tests>red_check').length, 1, 'the red check runs only after the first visit');
+  assert.ok(prompts[1].includes(REQUEST), 'the developer receives the owner\'s request');
+});
+
+test('ai-development-local-hero (#247): on the visit from the gate the acceptance prompt quotes the owner\'s request and asks for a triage first', { timeout: 120000 }, async (t) => {
+  const { promptsOf, finished } = await runAiDev(t, {
+    inputs: VALIDATED,
+    answers: { developer_check: [['changes', REQUEST], ['approve']] },
+    mockSequences: { suite: { red_check: ['fail'], suite: ['pass'] }, criteria_changed: [false] },
+  });
+  assert.equal(finished.status, 'success', finished.error);
+  const [first, fromGate] = promptsOf('acceptance_tests').map(withoutSkills);
+  assert.ok(fromGate, 'acceptance_tests ran a second time');
+  assert.ok(!first.includes(REQUEST), 'the first visit has no owner request');
+  assert.ok(fromGate.includes(REQUEST), 'the owner\'s request is quoted');
+  assert.match(fromGate, /validat/i, 'it says the request comes from the owner\'s validation');
+  assert.match(fromGate, /triage/i, 'a quick triage first');
+  assert.match(fromGate, /criteria_changed/, 'the answer says whether the criteria changed');
+  assert.match(fromGate, /weaken/i, 'it never weakens a test to make the current code pass');
+  // a short wait: the test writer's session is resumed (the prompt cache is still warm)
+  assert.doesNotMatch(fromGate, /<handoff_note>/);
+});
+
+test('ai-development-local-hero (#247): after a gate wait longer than the prompt cache, the visit from the gate starts a fresh test-writer session from its handoff note', { timeout: 120000 }, async (t) => {
+  const { promptsOf, finished } = await runAiDev(t, {
+    inputs: VALIDATED,
+    answers: { developer_check: [['changes', REQUEST], ['approve']] },
+    mockSequences: { suite: { red_check: ['fail'], suite: ['pass'] }, criteria_changed: [false] },
+    // the owner answers 7 hours later (the run of #238 waited 6.8 h)
+    beforeAnswer(stepId, n) {
+      if (stepId === 'developer_check' && n === 1) t.mock.timers.enable({ apis: ['Date'], now: Date.now() + 7 * 3600e3 });
+    },
+  });
+  assert.equal(finished.status, 'success', finished.error);
+  const fromGate = promptsOf('acceptance_tests')[1];
+  assert.ok(fromGate, 'acceptance_tests ran a second time');
+  assert.match(fromGate, /<handoff_note>/, 'a fresh session that starts from the test writer\'s handoff note');
+  assert.ok(fromGate.includes(REQUEST), 'with the owner\'s request');
 });

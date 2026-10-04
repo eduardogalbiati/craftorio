@@ -132,11 +132,13 @@ test('steps assert through role and test-id locators, and every test id they use
   assert.match(steps, /getByRole\(/, 'steps use getByRole');
   assert.match(steps, /getByTestId\(/, 'steps use getByTestId');
   assert.match(steps, /expect\(/, 'steps make assertions');
-  const ids = [...new Set([...steps.matchAll(/getByTestId\(\s*(['"])([^'"$`]+)\1/g)].map((m) => m[2]))];
+  // #246: the same rule as the orchestrator's check after develop (one module, so they never disagree)
+  const { testIdsUsed, missingTestIds } = require('../src/engine/test-ids');
+  const ids = testIdsUsed(steps);
   assert.ok(ids.length >= 5, `at least 5 stable test ids used by the steps (got ${ids.length})`);
   const renderer = walk(path.join('src', 'renderer'), ['.js', '.html']).map((f) => read(f)).join('\n');
   assert.match(renderer, /data-testid/, 'the renderer has data-testid attributes');
-  const missing = ids.filter((id) => !renderer.includes(id));
+  const missing = missingTestIds(root).map((m) => m.id);
   assert.deepEqual(missing, [], 'each test id the steps use is defined in src/renderer');
 });
 
