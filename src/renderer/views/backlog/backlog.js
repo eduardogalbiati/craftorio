@@ -9,6 +9,8 @@
 // Work a local workflow merged into the local base but did not push shows in "Merged locally"; the
 // bar above the list pushes it (and updates from origin first when origin moved); a conflict on
 // the update goes to a run of the local workflow, whose developer resolves it.
+// Archive (#238, rules in backlog-archive.js): the selection bar's Archive (n) and each open issue's
+// menu close issues as not planned with the `archived` label; the Archived chip lists them, with Restore.
 // The list narrows by state, by text and by labels (the rule is in backlog-labels.js: AND across
 // label groups, OR within one); the selected labels are remembered per project and a label chip
 // on an issue toggles its label. Selection and assignment only count the issues shown.
@@ -49,11 +51,14 @@
   const LABELS_KEY = 'multiagent.backlogLabels.'; // + project id
   const SORT_KEY = 'multiagent.backlogSort';
   const SORTS = ['complexity', 'impact', 'updated'];
+  // #238: the one-time banner of the issues still labelled with the retired `deprioritized` (per project)
+  const DEPRIORITIZED_KEY = 'multiagent.backlogDeprioritized';
   const ISSUE_TRACKER = 'issue-tracker.yaml';
   const REFRESH = 'backlog-refresh.yaml';
   // the one-off seed of #138: the Product Owner proposes epics for the open issues (same text as its chip)
   const ORGANIZE = 'Organize the open issues into epics';
-  const FILTERS = [['open', 'Open'], ['closed', 'Closed'], ['all', 'All']];
+  // #238: Archived = closed with the `archived` label; Closed shows the other closed issues
+  const FILTERS = [['open', 'Open'], ['closed', 'Closed'], ['archived', 'Archived'], ['all', 'All']];
   // 'local': merged into the local base by a local workflow, not pushed yet (shown when there is any)
   const COLUMNS = [['todo', 'To do'], ['in_progress', 'In progress'], ['waiting', 'Waiting for approval'], ['local', 'Merged locally'], ['done', 'Done']];
 
@@ -63,7 +68,7 @@
   const bl = {
     projects: [], projectId: null, platform: null, data: null, error: null, syncing: false,
     mode: ['kanban', 'roadmap', 'epics'].includes(load(MODE_KEY)) ? load(MODE_KEY) : 'list', filter: 'open', q: '', expanded: new Set(), seq: 0,
-    selected: new Set(), workflows: [], labels: [], labelsOpen: false, epic: '',
+    selected: new Set(), workflows: [], labels: [], labelsOpen: false, epic: '', menu: null,
     sort: SORTS.includes(load(SORT_KEY)) ? load(SORT_KEY) : 'updated',
     board: load(BOARD_KEY) === 'kanban' || (load(BOARD_KEY) == null && load(MODE_KEY) === 'kanban') ? 'kanban' : 'list',
     showAll: load(SHOW_ALL_KEY) === '1',
@@ -92,7 +97,14 @@
     NONE: NO_EPIC,
     pruneEpic,
   } = window.BacklogEpics;
-  const $b = (sel) => document.querySelector(sel);
+  const {
+    archiveBlockReason,
+    archiveConfirmText,
+    deprioritizedIssues,
+    isArchived,
+    issueState,
+  } = window.BacklogArchive;
+  const $b =(sel) => document.querySelector(sel);
   const project = () => bl.projects.find((p) => p.id === bl.projectId) || null;
   const visible = () => state.view === 'backlog';
   const selectable = (i) => i.state === 'open' && i.column === 'todo';
@@ -606,8 +618,9 @@
     const hay = `#${i.number} ${i.title} ${i.labels.map((l) => l.name).join(' ')} ${i.author || ''} ${i.assignees.join(' ')}`.toLowerCase();
     return hay.includes(bl.q.toLowerCase());
   };
-  // The state chips only apply to the list (the kanban shows every state in its columns).
-  const inState = (i) => bl.mode === 'kanban' || bl.filter === 'all' || i.state === bl.filter;
+  // The state chips only apply to the list (the kanban shows every state in its columns, archived
+  // issues aside: they only show under the Archived chip, #238).
+  const inState = (i) => (bl.mode === 'kanban' ? issueState(i) !== 'archived' : bl.filter === 'all' || issueState(i) === bl.filter);
   const isShown = (i) => inState(i) && matches(i);
   // Selected issues the filters hide stay selected, but are neither counted nor assigned.
   function shownSelected() {
@@ -768,20 +781,37 @@
   const refreshedBadge = (i) => (i.refreshed
     ? `<span class="badge bl-refreshed" title="${esc(`Paths, lines or tasks updated by the Backlog Refresh run ${bl.data?.refresh?.lastRun?.runId || ''}`)}">refreshed</span>` : '');
 
+  // The issue's actions (#238): an open issue has a menu with Archive (disabled, with the reason shown,
+  // while it is planned in the roadmap or has a run in progress); an archived issue has Restore.
+  function issueMenu(i) {
+    if (isArchived(i)) return `<button class="btn sm ghost" type="button" data-restore="${i.number}" data-testid="backlog-restore" title="Reopen it on the platform and remove its archived label">Restore</button>`;
+    if (i.state !== 'open') return '';
+    const why = archiveBlockReason(i);
+    const open = bl.menu === i.number;
+    return `<span class="bl-menu-wrap">
+        <button class="btn sm ghost" type="button" data-menu="${i.number}" data-testid="backlog-issue-menu" aria-haspopup="menu" aria-expanded="${open}" aria-label="Actions for #${i.number}" title="Actions">⋯</button>
+        ${open ? `<div class="bl-menu" role="menu" aria-label="Actions for #${i.number}">
+          <button type="button" role="menuitem" data-archive="${i.number}" data-testid="backlog-archive"${why ? ' disabled' : ''} title="${esc(why || 'Close it as not planned on the platform and label it archived')}">Archive</button>
+          ${why ? `<p class="muted small bl-menu-why">${esc(why)}</p>` : ''}
+        </div>` : ''}
+      </span>`;
+  }
+
   function issueRow(i) {
     const open = bl.expanded.has(i.number);
     const host = PLATFORMS[bl.data?.platform]?.label || 'the platform';
+    const st = issueState(i);
     return `
-      <div class="pr-run bl-issue${open ? ' open' : ''}${bl.selected.has(i.number) ? ' selected' : ''}" data-n="${i.number}">
+      <div class="pr-run bl-issue${open ? ' open' : ''}${bl.selected.has(i.number) ? ' selected' : ''}" data-n="${i.number}" data-testid="backlog-issue">
         <div class="bl-row" data-act="toggle">
           <span class="bl-sel">${checkbox(i)}</span>
-          <span class="bl-state ${i.state}" title="${i.state === 'open' ? 'Open' : 'Closed'}"></span>
+          <span class="bl-state ${st}" title="${st === 'open' ? 'Open' : st === 'archived' ? 'Archived' : 'Closed'}"></span>
           <span class="bl-num mono">#${i.number}</span>
           <div class="bl-main">
             <div class="bl-title">${esc(i.title)}</div>
             <div class="bl-labels">${refreshedBadge(i)}${epicBadge(i)}${triage(i)}${labels(i)}</div>
           </div>
-          <span class="bl-status">${prBadges(i)}${status(i)}${enrichBtn(i)}</span>
+          <span class="bl-status">${prBadges(i)}${status(i)}${enrichBtn(i)}${issueMenu(i)}</span>
           ${tasks(i) || '<span></span>'}
           <span class="pr-meta"><label>Updated</label>${esc(dateOf(i.updatedAt))}</span>
           <span class="pr-chev">${open ? '▾' : '▸'}</span>
@@ -803,7 +833,7 @@
       <div class="bl-labels">${refreshedBadge(i)}${epicBadge(i)}${triage(i)}${labels(i)}</div>
       ${tasks(i)}
       ${prBadges(i) || status(i) ? `<div class="bl-card-run">${prBadges(i)}${status(i)}</div>` : ''}
-      ${enrichBtn(i) ? `<div class="bl-card-actions">${enrichBtn(i)}</div>` : ''}
+      ${enrichBtn(i) || issueMenu(i) ? `<div class="bl-card-actions">${enrichBtn(i)}${issueMenu(i)}</div>` : ''}
     </div>`;
 
   function renderList(issues) {
@@ -841,6 +871,53 @@
       ${skips}
       <span class="spacer"></span>
       <button class="btn sm${q.paused ? ' primary' : ' ghost'}" type="button" data-pause="${q.paused ? 'off' : 'on'}">${q.paused ? 'Resume' : 'Pause'}</button>`;
+  }
+
+  // Archive (#238): closes the issues as not planned on the platform and labels them archived, after a
+  // confirm naming them. Issues that cannot be archived (archiveBlockReason) are left out of it; a
+  // refusal or a failure is reported per issue and the others still go through. True when it was sent.
+  async function archive(numbers) {
+    const issues = (bl.data?.issues || []).filter((i) => numbers.includes(i.number));
+    const blocked = issues.filter((i) => archiveBlockReason(i)).map((i) => `#${i.number}: ${archiveBlockReason(i)}`);
+    const ok = issues.filter((i) => !archiveBlockReason(i)).map((i) => i.number);
+    if (!ok.length) { bl.error = blocked.length ? `Not archived: ${blocked.join(' · ')}` : null; render(); return false; }
+    if (!await confirmDialog(`Archive ${ok.length === 1 ? 'issue' : `${ok.length} issues`}`, archiveConfirmText(ok, bl.data?.platform || bl.platform), 'Archive')) return false;
+    try {
+      const out = await api.archiveIssues(bl.projectId, ok);
+      if (out.backlog) setData(out.backlog);
+      const failed = out.results.filter((r) => !r.ok).map((r) => `#${r.number}: ${r.error}`);
+      bl.error = failed.length || blocked.length ? `Not archived: ${[...blocked, ...failed].join(' · ')}` : null;
+    } catch (err) { bl.error = errMsg(err); }
+    render();
+    return true;
+  }
+
+  // Restore (#238): reopens an archived issue and removes its label, after a confirm.
+  async function restore(number) {
+    const host = PLATFORMS[bl.data?.platform]?.label || 'the platform';
+    if (!await confirmDialog('Restore issue', `Reopen #${number} on ${host} and remove its archived label?`, 'Restore')) return;
+    try {
+      const out = await api.restoreIssues(bl.projectId, [number]);
+      if (out.backlog) setData(out.backlog);
+      const failed = out.results.filter((r) => !r.ok).map((r) => `#${r.number}: ${r.error}`);
+      bl.error = failed.length ? `Not restored: ${failed.join(' · ')}` : null;
+    } catch (err) { bl.error = errMsg(err); }
+    render();
+  }
+
+  // The retired `deprioritized` label (#238): its open issues get a one-time banner offering to archive
+  // them; Archive or Dismiss hides it for good (per project).
+  const deprioritizedKey = () => `${DEPRIORITIZED_KEY}.${bl.projectId}`;
+  function renderDeprioritized() {
+    const box = $b('#bl-deprioritized');
+    const list = load(deprioritizedKey()) ? [] : deprioritizedIssues(bl.data?.issues || []);
+    box.classList.toggle('hidden', !list.length);
+    if (!list.length) { box.innerHTML = ''; return; }
+    const names = list.map((i) => `#${i.number}`).join(', ');
+    box.innerHTML = `<span title="${esc(list.map((i) => `#${i.number} ${i.title}`).join('\n'))}"><b>${esc(names)} still ${list.length === 1 ? 'carries' : 'carry'} the retired deprioritized label.</b> <span class="muted small">Archive replaces it: closed as not planned, labelled archived, restorable from the Archived chip.</span></span>
+      <span class="spacer"></span>
+      <button class="btn sm primary" type="button" data-deprioritized-archive="${esc(list.map((i) => i.number).join(','))}" data-testid="backlog-deprioritized-archive">Archive (${list.length})</button>
+      <button class="btn sm ghost" type="button" data-deprioritized-dismiss data-testid="backlog-deprioritized-dismiss">Dismiss</button>`;
   }
 
   // The Backlog Refresh banner (#161, src/backlog-refresh.js): above every view when the last refresh
@@ -1010,14 +1087,22 @@
     $b('#btn-bl-send-po').dataset.n = String(n);
     $b('#btn-bl-send-po').textContent = `Send to Product Owner (${n})`;
     window.BacklogPO?.syncSendButton();
+    // #238: disabled (with the reasons) when no selected issue can be archived
+    $b('#btn-bl-archive').classList.toggle('hidden', !n);
+    $b('#btn-bl-archive').textContent = `Archive (${n})`;
+    const blocked = (bl.data?.issues || []).filter((i) => shownSelected().includes(i.number) && archiveBlockReason(i));
+    $b('#btn-bl-archive').disabled = !!n && blocked.length === n;
+    $b('#btn-bl-archive').title = blocked.length
+      ? blocked.map((i) => `#${i.number}: ${archiveBlockReason(i)}`).join('\n')
+      : 'Close the selected issues as not planned on the platform and label them archived (restorable from the Archived chip)';
     $b('#btn-bl-clear').classList.toggle('hidden', !n);
 
     const issues = bl.data?.issues || [];
-    const count = (f) => issues.filter((i) => f === 'all' || i.state === f).length;
+    const count = (f) => issues.filter((i) => f === 'all' || issueState(i) === f).length;
     const filters = $b('#bl-filters');
     filters.classList.toggle('hidden', bl.mode !== 'list');
     filters.innerHTML = FILTERS.map(([f, label]) =>
-      `<button class="chip${bl.filter === f ? ' active' : ''}" data-f="${f}">${label} <span class="muted">${count(f)}</span></button>`).join('');
+      `<button class="chip${bl.filter === f ? ' active' : ''}" data-f="${f}" data-testid="backlog-state-${f}">${label} <span class="muted">${count(f)}</span></button>`).join('');
     renderLabelFilter(issues);
     renderEpicFilter(issues);
     // (after renderLabelFilter, which shows the labels button whenever there are labels)
@@ -1027,6 +1112,7 @@
     const prError = bl.data?.pullRequestsError ? `Open ${bl.data.platform === 'gitlab' ? 'MRs' : 'PRs'} could not be read: ${bl.data.pullRequestsError}` : '';
     $b('#bl-error').textContent = bl.error || prError;
     renderRefresh();
+    renderDeprioritized();
     renderLive();
     renderLocal();
     renderQueue();
@@ -1176,6 +1262,7 @@
     $b('#btn-bl-assign').onclick = () => openAssign();
     // #169: the selection stays selected; the drawer only attaches it
     $b('#btn-bl-send-po').onclick = () => window.BacklogPO.attach(shownSelected());
+    $b('#btn-bl-archive').onclick = () => archive(shownSelected());
     $b('#btn-bl-clear').onclick = () => { bl.selected.clear(); render(); };
     $b('#bl-search').oninput = (e) => { bl.q = e.target.value.trim(); render(); };
     $b('#bl-mode').onclick = (e) => {
@@ -1201,7 +1288,17 @@
     // the label menu closes on a click outside it
     document.addEventListener('click', (e) => {
       if (bl.labelsOpen && e.target.isConnected && !e.target.closest('#bl-labels-wrap')) { bl.labelsOpen = false; render(); }
+      // an issue's actions menu (#238) too
+      if (bl.menu != null && e.target.isConnected && !e.target.closest('.bl-menu-wrap')) { bl.menu = null; render(); }
     });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && bl.menu != null && visible()) { bl.menu = null; render(); }
+    });
+    $b('#bl-deprioritized').onclick = async (e) => {
+      const go = e.target.closest('[data-deprioritized-archive]');
+      if (go && !await archive(go.dataset.deprioritizedArchive.split(',').map(Number))) return;
+      if (go || e.target.closest('[data-deprioritized-dismiss]')) { save(deprioritizedKey(), '1'); render(); }
+    };
     $b('#bl-filters').onclick = (e) => {
       const f = e.target.closest('[data-f]')?.dataset.f;
       if (f) { bl.filter = f; render(); }
@@ -1304,6 +1401,14 @@
       if (out) { await removeQueued(Number(out.dataset.unqueue)); return; }
       const enrich = e.target.closest('[data-enrich]');
       if (enrich) { enrichIssue(Number(enrich.dataset.enrich)); return; }
+      // #238: an issue's actions menu, its Archive, and Restore
+      const menu = e.target.closest('[data-menu]');
+      if (menu) { bl.menu = bl.menu === Number(menu.dataset.menu) ? null : Number(menu.dataset.menu); render(); return; }
+      const arch = e.target.closest('[data-archive]');
+      if (arch) { bl.menu = null; render(); if (!arch.disabled) await archive([Number(arch.dataset.archive)]); return; }
+      const back = e.target.closest('[data-restore]');
+      if (back) { await restore(Number(back.dataset.restore)); return; }
+      if (e.target.closest('.bl-menu')) return;
       if (e.target.closest('a')) return;
       const row = e.target.closest('[data-act="toggle"]');
       if (!row) return;
@@ -1362,11 +1467,13 @@
           </select>
           <button id="btn-bl-assign" class="btn sm primary hidden" type="button">Assign workflow…</button>
           <button id="btn-bl-send-po" class="btn sm ghost hidden" type="button" title="Ask the Product Owner about the selected issues before planning them">Send to Product Owner</button>
+          <button id="btn-bl-archive" class="btn sm ghost hidden" type="button" data-testid="backlog-archive-selection">Archive</button>
           <button id="btn-bl-clear" class="btn sm ghost hidden" type="button">Clear selection</button>
           <span class="spacer"></span>
           <span id="bl-synced" class="muted small"></span>
         </div>
         <div id="bl-refresh" class="bl-queue bl-refresh hidden" role="status"></div>
+        <div id="bl-deprioritized" class="bl-queue bl-refresh hidden" role="status" data-testid="backlog-deprioritized"></div>
         <div id="bl-live" class="bl-live hidden" role="status"></div>
         <div id="bl-local" class="bl-queue bl-local hidden"></div>
         <div id="bl-queue" class="bl-queue hidden"></div>

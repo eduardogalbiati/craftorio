@@ -216,6 +216,8 @@ const DEMO_ISSUES = [
   { number: 10, title: 'Dark scrollbars in the terminal dock', state: 'open', labels: [{ name: 'ui', color: '#c5def5' }, { name: 'complexity:1', color: '#ededed' }, { name: 'impact:1', color: '#d93f0b' }], body: '' },
   { number: 9, title: 'Add a /health endpoint', state: 'open', labels: [{ name: 'enhancement', color: '#a2eeef' }, { name: 'server', color: '#fbca04' }, { name: 'complexity:3', color: '#ededed' }], body: '- [ ] Endpoint\n- [ ] Docs' },
   { number: 8, title: 'Document the workflow YAML', state: 'closed', labels: [{ name: 'docs', color: '#0075ca' }], body: '' },
+  // #238: an archived idea (the Backlog's Archived chip)
+  { number: 7, title: 'Splash screen with the workspace name on start', state: 'closed', labels: [{ name: 'archived', color: '#ededed' }, { name: 'ui', color: '#c5def5' }], body: 'An idea for later.' },
 ];
 
 function demoBacklog(projectId, taskProgress) {
@@ -1165,6 +1167,8 @@ function simulateChannels(ipcMain, keepAwake = null, missing = null, holdOracle 
     if (channel === 'oracle:reset') return handle(channel, (e, arg) => fn(e, { ...arg, mock: true }));
     // Save to issue (Write & Review) only previews: never calls gh/glab
     if (channel === 'backlog:save-doc') return handle(channel, (e, arg) => fn(e, { ...arg, preview: true }));
+    // Archive and Restore (#238) are only recorded in the demo backlog: never call gh/glab
+    if (channel === 'backlog:archive' || channel === 'backlog:restore') return handle(channel, (e, arg) => fn(e, { ...arg, simulate: true }));
     // the diff viewer (#118): a demo branch, since a simulated run has no diff of its own
     if (channel === 'run:diff') return handle(channel, (e, arg) => demoRunDiff(arg?.commit));
     if (channel === 'run:diffFile') return handle(channel, (e, arg) => demoRunDiffFile(arg?.file));

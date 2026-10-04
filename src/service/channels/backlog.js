@@ -1,6 +1,6 @@
 // Backlog screen: a project's issues (the last sync, instant, and a new sync with gh/glab, each
 // issue with the runs working on it), the assignment queue and the local merges not pushed, and
-// saving a Write & Review document back to its issue.
+// saving a Write & Review document back to its issue, archiving and restoring issues (#238).
 
 const path = require('path');
 const backlog = require('../../backlog');
@@ -13,6 +13,17 @@ const workspace = require('../../workspace');
 module.exports = (ctx) => {
   const project = (projectId) => path.basename(String(projectId));
   const current = (projectId) => ctx.withIssueRuns(backlog.readBacklog(ctx.ws.backlog, projectId));
+  // where a platform write goes: the synced backlog's platform and repository (else the project's);
+  // simulation-only, or `simulate` (scripts/screenshot.js), answers every CLI call with nothing
+  const platformTarget = (projectId, simulate) => {
+    const data = backlog.readBacklog(ctx.ws.backlog, projectId);
+    const proj = projects.listProjects(ctx.ws.projects).find((p) => p.id === projectId);
+    return {
+      platform: data?.platform || workspace.readSettings(ctx.ws).backlogPlatform || backlog.DEFAULT_PLATFORM,
+      repo: data?.repo || proj?.repo,
+      ...(simulate || simulation.simulationOnly() ? { exec: async () => '' } : {}),
+    };
+  };
   return [
     { channel: 'backlog:get', method: 'getBacklog', params: ['projectId'], fn: ({ projectId }) => current(projectId) },
     // the Backlog Refresh banner's "Dismiss for today" (#161, src/backlog-refresh.js)
@@ -116,6 +127,30 @@ module.exports = (ctx) => {
           dir: ctx.ws.backlog, projectId: run.projectId,
         });
         return { ...res, backlog: res.saved && data ? current(run.projectId) : null };
+      },
+    },
+    // Archive (#238): close issues as not planned with the `archived` label (refused for an issue
+    // planned in the roadmap or with a run in progress), or restore them. The owner confirms in the
+    // screen; agents never call this. Simulation-only never calls gh/glab: the change is only recorded
+    // in the synced backlog. Both answer { results: [{ number, ok, error? }], backlog }.
+    {
+      channel: 'backlog:archive',
+      method: 'archiveIssues',
+      params: ['projectId', 'numbers'],
+      fn: async ({ projectId, numbers, simulate }) => {
+        const id = project(projectId);
+        const { results } = await backlog.archiveIssues({ ...platformTarget(id, simulate), numbers, issues: current(id)?.issues || [], dir: ctx.ws.backlog, projectId: id });
+        return { results, backlog: current(id) };
+      },
+    },
+    {
+      channel: 'backlog:restore',
+      method: 'restoreIssues',
+      params: ['projectId', 'numbers'],
+      fn: async ({ projectId, numbers, simulate }) => {
+        const id = project(projectId);
+        const { results } = await backlog.restoreIssues({ ...platformTarget(id, simulate), numbers, dir: ctx.ws.backlog, projectId: id });
+        return { results, backlog: current(id) };
       },
     },
     // cancelGroup: an issue of a group takes the whole group out (else it only leaves the group)
