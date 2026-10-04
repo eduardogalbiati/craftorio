@@ -286,7 +286,7 @@ test('ask: a question is refused while another is pending, and the simulated fla
   assert.match(fn, /const calibration = mode === 'plan' \? window\.BacklogPoSettings\?\.override\(\) \?\? null : null;/);
   assert.match(fn, /const cost = mode === 'plan' \? window\.BacklogPoSettings\?\.costOverride\?\.\(\) \?\? null : null;/);
   assert.match(fn, /if \(mode === 'plan'\) window\.BacklogPoSettings\?\.clearOverride\(\);/);
-  assert.match(fn, /await api\.askProductOwner\(projectId, q, devMode\(\), mode, files, issues, devMode\(\) \? po\.scenario \|\| null : null, calibration, cost\);/);
+  assert.match(fn, /await api\.askProductOwner\(projectId, q, devMode\(\), mode, files, issues, devMode\(\) \? po\.scenario \|\| null : null, calibration, costOff \? null : cost, workflow, inputs\);/);
 });
 
 // Runs ask() for real (po, watching and api stubbed): the busy flag is set synchronously, before the
@@ -312,6 +312,8 @@ function loadAsk() {
     // real live-turn.js runs here too, so po.live has its real shape
     window: { LiveTurn: require('../src/renderer/live-turn'), BacklogPoSettings: { override: () => settings.override, costOverride: () => settings.costOverride, clearOverride: settings.clearOverride } },
     renderLive: () => {},
+    // #234: the question just sent kept in view (needs a real layout)
+    questionInView: () => {},
     setInterval: () => 0,
     clearInterval: () => {},
     state: { view: 'backlog' },
@@ -337,7 +339,8 @@ test('ask (#189, plan mode): sends window.BacklogPoSettings.override() as the 8t
   settings.override = 5;
   settings.costOverride = 1;
   ask('Plan this one for quality');
-  assert.equal(calls.askProductOwner[0].length, 9);
+  // #235: then the workflow and its options (10th and 11th)
+  assert.equal(calls.askProductOwner[0].length, 11);
   assert.equal(calls.askProductOwner[0][7], 5);
   assert.equal(calls.askProductOwner[0][8], 1);
   assert.equal(calls.clearOverride, 1);
@@ -608,11 +611,11 @@ test('apply and fileDraft always render with the default ("keep") scroll: applyi
   assert.doesNotMatch(fileDraftFn, /render\(\{ scroll: 'end' \}\)/);
 });
 
-test('open scrolls to the end when the drawer opens (and again once the history reload lands); ask and setMode keep the default (the owner\'s own new message scrolls down only if they were already there)', () => {
+test('open scrolls to the end when the drawer opens (and again once the history reload lands); ask scrolls to the question and the live turn (#234); setMode keeps the default', () => {
   const openFn = /async function open\(\)[\s\S]*?\n  \}/.exec(src)[0];
   assert.match(openFn, /render\(\{ scroll: 'end' \}\);[\s\S]*render\(\{ scroll: 'end' \}\);/);
   const askFn = /async function ask\(question\)[\s\S]*?\n  \}/.exec(src)[0];
-  assert.doesNotMatch(askFn, /render\(\{ scroll: 'end' \}\)/);
+  assert.match(askFn, /render\(\{ scroll: 'end' \}\)/);
 });
 
 // ---- #148: the simulation-only scenario picker, orange and never in the production UI ------------

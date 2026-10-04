@@ -279,11 +279,16 @@ function sizeGroup(numbers, issues, history) {
 // `defaultWorkflow` (#195): the setting; a group without a known workflow gets it (or its fallback).
 // `cost` (#205, 1..5): the Cost step it was planned with, recorded on the answer, applied to the groups
 // (see the header); `runs` (#206): the past runs, for each group's `costEstimate` and the plan's `estimateUsd`.
-function normalizeAnswer(answer, { issues, history, workflows, epics: epicList = [], selection = [], mock = false, calibration = null, defaultWorkflow = null, cost = null, runs = null, prices = {} }) {
+// `workflow` (#235): the workflow the owner chose in the drawer: every group gets it (never another
+// one), with `inputs` (the owner's choices for its options) in its inputs; the Cost step is skipped
+// when it does not apply to that workflow (poCalibration.costApplies: tests first, or no such inputs).
+function normalizeAnswer(answer, { issues, history, workflows, epics: epicList = [], selection = [], mock = false, calibration = null, defaultWorkflow = null, cost = null, runs = null, prices = {}, workflow = null, inputs = null }) {
   const numbers = new Set((issues || []).map((i) => i.number));
   const byNumber = new Map((issues || []).map((i) => [i.number, i]));
   const files = (workflows || []).map((w) => w.file);
   const fallback = files.length ? DefaultWorkflow.resolve(defaultWorkflow, files).file : '';
+  const chosen = workflow && files.includes(workflow) ? workflow : null;
+  const chosenInputs = chosen && inputs && typeof inputs === 'object' && !Array.isArray(inputs) ? inputs : {};
   const keep = (list) => [...new Set((list || []).map(Number).filter((n) => numbers.has(n)))];
   const isOpen = (n) => byNumber.get(n)?.state === 'open';
   const attached = new Set(keep(selection));
@@ -303,8 +308,8 @@ function normalizeAnswer(answer, { issues, history, workflows, epics: epicList =
     return {
       name: String(g.name || `Group ${n + 1}`),
       issues: nums,
-      workflow: files.includes(g.workflow) ? g.workflow : fallback,
-      inputs: g.inputs && typeof g.inputs === 'object' && !Array.isArray(g.inputs) ? g.inputs : {},
+      workflow: chosen || (files.includes(g.workflow) ? g.workflow : fallback),
+      inputs: { ...(g.inputs && typeof g.inputs === 'object' && !Array.isArray(g.inputs) ? g.inputs : {}), ...chosenInputs },
       reason: String(g.reason || ''),
       ...(g.mode_reason ? { modeReason: String(g.mode_reason) } : {}),
       files: (g.files || []).map(String).slice(0, 20),
@@ -316,7 +321,8 @@ function normalizeAnswer(answer, { issues, history, workflows, epics: epicList =
     };
   }).filter((g) => g.issues.length);
   const level = calibration == null ? null : poCalibration.clamp(calibration);
-  const costLevel = cost == null ? null : poCalibration.cost.clamp(cost);
+  const costOff = !!chosen && !poCalibration.costApplies((workflows || []).find((w) => w.file === chosen));
+  const costLevel = cost == null || costOff ? null : poCalibration.cost.clamp(cost);
   const planned = costedGroups(groups, { level, costLevel, issues, history, workflows, runs, prices });
   const known = planned.map((g) => g.costEstimate?.usd ?? g.estimate?.costUsd).filter((x) => x != null);
   return {
@@ -361,7 +367,8 @@ function costedGroups(groups, { level, costLevel, issues, history, workflows, ru
   if (costStep) {
     const cap = poCalibration.groupCap(level ?? poCalibration.DEFAULT, costLevel);
     if (costStep.pack) out = packGroups(out, cap, { issues, history });
-    out = out.map((g) => ({ ...g, ...costInputs(g, costStep, workflows) }));
+    // #235: a tests-first workflow's test inputs are not the Cost step's to set
+    out = out.map((g) => (poCalibration.testsFirst((workflows || []).find((w) => w.file === g.workflow) || { file: g.workflow }) ? g : { ...g, ...costInputs(g, costStep, workflows) }));
     const base = level ? poCalibration.step(level) : { maxRuns: null };
     out = calibrateGroups(out, { ...base, maxComplexity: cap, name: poCalibration.plannedFor(level ?? poCalibration.DEFAULT, costLevel) });
     if (costStep.testBatch) out = testBatchStages(out, { issues, history, workflows });
@@ -523,8 +530,10 @@ const plannable = (i) => i.state === 'open' && (!i.column || i.column === 'todo'
  * workflows. Capped at MAX_REPORT characters. The issues the owner attached (`selection`, #169) come
  * first and whole, closed ones included (marked), outside the cap; the open issues then skip them.
  */
-function backlogReport({ data, activeRuns = [], history = [], workflows = [], question = '', selection = [], shared = null, defaultWorkflow = null }) {
+function backlogReport({ data, activeRuns = [], history = [], workflows = [], question = '', selection = [], shared = null, defaultWorkflow = null, workflow = null }) {
   const byDefault = DefaultWorkflow.resolve(defaultWorkflow, workflows.map((w) => w.file)).file;
+  // #235: the workflow the owner chose for this plan replaces the default
+  const mark = (file) => (workflow ? (file === workflow ? ' (chosen by the owner: every group uses it)' : '') : file === byDefault ? ' (default)' : '');
   const named = new Set([...String(question).matchAll(/#(\d+)/g)].map((m) => Number(m[1])));
   const all = data?.issues || [];
   const attached = [...new Set(selection.map(Number))].map((n) => all.find((i) => i.number === n)).filter(Boolean);
@@ -549,7 +558,7 @@ function backlogReport({ data, activeRuns = [], history = [], workflows = [], qu
   const stages = data?.roadmap?.stages || [];
   const sections = [
     `# Backlog of ${data?.projectId || 'the project'} (${issues.length} open issues, ${issues.filter(plannable).length} to do)`,
-    `## Workflows\n${workflows.map((w) => `- ${w.file}${w.file === byDefault ? ' (default)' : ''}: ${w.name}${w.inputs ? ` (inputs: ${Object.keys(w.inputs).join(', ')})` : ''}`).join('\n') || '(none)'}`,
+    `## Workflows\n${workflows.map((w) => `- ${w.file}${mark(w.file)}: ${w.name}${w.inputs ? ` (inputs: ${Object.keys(w.inputs).join(', ')})` : ''}`).join('\n') || '(none)'}`,
     `## Queue\n${queue.map((q) => `- ${(q.issues || [q]).map((i) => `#${i.number}`).join(' + ')} → ${q.workflowName || q.workflow}`).join('\n') || '(empty)'}`,
     `## Runs in progress\n${activeRuns.map((r) => `- ${r.runId} ${r.workflow || ''} ${r.status}${r.waiting || r.gates?.length ? ' (waiting at a gate)' : ''}${r.issues?.length ? ` issues ${r.issues.map((i) => `#${i.number ?? i}`).join(', ')}` : ''}`).join('\n') || '(none)'}`,
     `## Merged locally, not pushed\n${local && !local.error ? `${local.ahead || 0} commits ahead${local.issues?.length ? `, issues ${local.issues.map((n) => `#${n}`).join(', ')}` : ''}` : '(unknown or none)'}`,
@@ -1218,19 +1227,27 @@ function checkBudget(budget) {
  * @returns { message, messages }  the answer ({ role: 'po', text, answer | issue, model, costUsd }) and the whole conversation
  */
 // `defaultWorkflow` (#195): the setting (settings.defaultWorkflow); the plan's groups get it unless an issue needs another.
-async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns, runs, workflows, folder, agent, skillsDirs, resolveCommand, budget, mock, mode = 'plan', attachments = [], selection = [], scenario = null, onItem = null, signal = null, calibration = null, defaultWorkflow = null, cost = null, prices = {} }) {
+// `workflow` / `inputs` (#235): the workflow the owner chose in the drawer and its options: every
+// group gets them (recorded on the messages: lastWorkflow); no Cost step where it does not apply.
+async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns, runs, workflows, folder, agent, skillsDirs, resolveCommand, budget, mock, mode = 'plan', attachments = [], selection = [], scenario = null, onItem = null, signal = null, calibration = null, defaultWorkflow = null, cost = null, prices = {}, workflow = null, inputs = null }) {
   const q = String(question || '').trim();
   if (!q) throw new Error('Ask a question.');
   const byDefault = DefaultWorkflow.resolve(defaultWorkflow, (workflows || []).map((w) => w.file)).file;
   const issueMode = mode === 'issue';
+  const chosenWf = issueMode || !workflow ? null : (workflows || []).find((w) => w.file === workflow) || null;
+  const chosen = chosenWf?.file || null;
+  const costOff = !!chosenWf && !poCalibration.costApplies(chosenWf);
   const saved = poCalibration.clamp(agent?.calibration);
   const level = poCalibration.clamp(calibration, null) ?? poCalibration.fromQuestion(q) ?? saved;
   const savedCost = poCalibration.cost.clamp(agent?.cost);
-  const costLevel = poCalibration.cost.clamp(cost, null) ?? poCalibration.costFromQuestion(q) ?? savedCost;
+  const costLevel = costOff ? null : poCalibration.cost.clamp(cost, null) ?? poCalibration.costFromQuestion(q) ?? savedCost;
   const calib = issueMode ? {} : {
     calibration: level, ...(level !== saved ? { calibrationOverride: true } : {}),
-    cost: costLevel, ...(costLevel !== savedCost ? { costOverride: true } : {}),
+    ...(costLevel == null ? {} : { cost: costLevel, ...(costLevel !== savedCost ? { costOverride: true } : {}) }),
+    ...(chosen ? { workflow: chosen } : {}),
   };
+  // the owner's options, recorded on the question only (lastWorkflow)
+  const chosenInputs = chosen && inputs && typeof inputs === 'object' && !Array.isArray(inputs) && Object.keys(inputs).length ? { inputs } : {};
   // #169: the attached issues the backlog knows (plan mode only)
   const known = new Set((data?.issues || []).map((i) => i.number));
   const selected = issueMode ? [] : [...new Set((selection || []).map(Number))].filter((n) => known.has(n));
@@ -1242,7 +1259,7 @@ async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns,
   const record = (message) => (issueMode ? recordIssueMessage(where, message) : appendMessage(backlogDir, projectId, message));
   const staged = issueMode ? (attachments || []).filter((f) => isAttachment(backlogDir, projectId, f)).map((f) => path.resolve(f)) : [];
   const files = moveAttachments(where, thread, staged);
-  record({ role: 'user', text: q, ...tag, ...calib, ...(files.length ? { attachments: files } : {}), ...(selected.length ? { issues: selected } : {}) });
+  record({ role: 'user', text: q, ...tag, ...calib, ...chosenInputs, ...(files.length ? { attachments: files } : {}), ...(selected.length ? { issues: selected } : {}) });
   const questionsLeft = MAX_QUESTIONS - questionsAsked(previous);
   let raw;
   let costUsd = 0;
@@ -1261,10 +1278,10 @@ async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns,
       try {
         // a scenario of the other mode is ignored (the default simulated answer)
         if (scenario && (MOCK_SCENARIOS[scenario] ?? mode) === mode) {
-          raw = mockScenario(scenario, { data, question: q, previous, files, workflow: byDefault });
+          raw = mockScenario(scenario, { data, question: q, previous, files, workflow: chosen || byDefault });
           analysis = `Simulated (scenario "${scenario}"): no model was called, no code was read.`;
         } else {
-          raw = issueMode ? mockIssueAnswer({ data, question: q, previous }) : mockAnswer({ data, question: q, selection: selected, calibration: level, workflow: byDefault, cost: costLevel });
+          raw = issueMode ? mockIssueAnswer({ data, question: q, previous }) : mockAnswer({ data, question: q, selection: selected, calibration: level, workflow: chosen || byDefault, cost: costLevel });
           analysis = 'Simulated: no model was called, no code was read.';
         }
       } catch (e) { failure = e; }
@@ -1280,9 +1297,9 @@ async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns,
       checkBudget(budget);
       let tokens;
       const shared = issueMode ? null : await sharedFiles({ runs: (runs || []).filter((r) => !r.mock).slice(0, SHARED_FILE_RUNS), repo: folder, store: storeFor(runsDir), limit: SHARED_FILES });
-      const report = (issueMode ? issueReport : backlogReport)({ data, activeRuns, history, workflows, question: q, selection: selected, shared, defaultWorkflow: byDefault });
+      const report = (issueMode ? issueReport : backlogReport)({ data, activeRuns, history, workflows, question: q, selection: selected, shared, defaultWorkflow: byDefault, workflow: chosen });
       ({ raw, costUsd, model, invalid, tokens, text: analysis } = await callAgent({
-        mode, question: q, report, previous, attachments: files, selection: selected, folder, agent: issueMode ? ISSUE_AGENT : agent, skillsDirs, resolveCommand, onItem: seen, signal, calibration: level, cost: costLevel,
+        mode, question: q, report, previous, attachments: files, selection: selected, folder, agent: issueMode ? ISSUE_AGENT : agent, skillsDirs, resolveCommand, onItem: seen, signal, calibration: level, cost: costLevel, workflow: chosen, costOff,
       }));
       recordUsage(backlogDir, { projectId, model, tokens, costUsd });
     }
@@ -1302,7 +1319,7 @@ async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns,
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, `${message.ts.replace(/[:.]/g, '-')}.md`), `${String(analysis || '').trim()}\n\n\`\`\`json\n${JSON.stringify(raw, null, 2)}\n\`\`\`\n`);
   } else {
-    const answer = normalizeAnswer(raw, { issues: data?.issues, history, workflows, epics: data?.epics, selection: selected, mock: !!mock, calibration: level, defaultWorkflow: byDefault, cost: costLevel, runs: (runs || []).filter((r) => !r.mock), prices });
+    const answer = normalizeAnswer(raw, { issues: data?.issues, history, workflows, epics: data?.epics, selection: selected, mock: !!mock, calibration: level, defaultWorkflow: byDefault, cost: costLevel, runs: (runs || []).filter((r) => !r.mock), prices, workflow: chosen, inputs });
     message = appendMessage(backlogDir, projectId, {
       role: 'po', text: answer.summary, answer, model, costUsd, ...calib, ...(invalid ? { invalid } : {}),
     });
@@ -1314,7 +1331,25 @@ async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns,
 // prose (no second call: one call per question). Mode 'issue': the issue skills, ISSUE_SCHEMA, and
 // read access to the attachments' folder. A plan turn states its calibration (#189) and its Cost step
 // (#205) after the rules.
-async function callAgent({ mode = 'plan', question, report, previous, attachments = [], selection = [], folder, agent, skillsDirs, resolveCommand, onItem = () => {}, signal = null, calibration = null, cost = null }) {
+// #235: the prompt's section for the workflow the owner chose (it replaces the default; the
+// orchestrator puts every group on it and adds the owner's options to the groups' inputs)
+function workflowSection(workflow, costOff) {
+  return [
+    `## Workflow: ${workflow} (chosen by the owner)`,
+    `The owner fixed the workflow of this plan: give every group \`${workflow}\`, never another workflow and no test-batch stage. The owner's choices for its options are added to every group's inputs: do not set them yourself.`,
+    ...(costOff ? ['This workflow writes its acceptance tests first and runs them every time: there is no Cost step for this plan; do not name one (no "Economy" or "Generous") in the summary.'] : []),
+  ].join('\n');
+}
+
+// #235: the workflow (and its options) last chosen in the drawer for the project, as its plan
+// questions recorded them: { workflow, inputs }, or null (the live roadmap's refill plans with it)
+function lastWorkflow(backlogDir, projectId) {
+  const list = readConversation(backlogDir, projectId);
+  for (let i = list.length - 1; i >= 0; i--) if (list[i].role === 'user' && list[i].workflow) return { workflow: list[i].workflow, inputs: list[i].inputs || {} };
+  return null;
+}
+
+async function callAgent({ mode = 'plan', question, report, previous, attachments = [], selection = [], folder, agent, skillsDirs, resolveCommand, onItem = () => {}, signal = null, calibration = null, cost = null, workflow = null, costOff = false }) {
   const { extractJson, validateSchema, render } = require('./engine/workflow');
   const { runTurn, isImagePath } = require('./engine/providers');
   const { resolveSkill, skillPrompt } = require('./skills');
@@ -1337,7 +1372,8 @@ async function callAgent({ mode = 'plan', question, report, previous, attachment
     ...skills.map(skillPrompt),
     issueMode ? ISSUE_RULES : RULES,
     issueMode ? '' : poCalibration.promptSection(calibration ?? agent?.calibration),
-    issueMode ? '' : poCalibration.costPromptSection(cost ?? agent?.cost, poCalibration.clamp(calibration ?? agent?.calibration)),
+    issueMode || costOff ? '' : poCalibration.costPromptSection(cost ?? agent?.cost, poCalibration.clamp(calibration ?? agent?.calibration)),
+    issueMode || !workflow ? '' : workflowSection(workflow, costOff),
     selection.length ? SELECTION_RULES : '',
     report,
     issueMode ? issueContext(previous) : previousExchanges(previous),
@@ -1379,6 +1415,7 @@ module.exports = {
   fileDraft,
   ISSUE_AGENT,
   ISSUE_SCHEMA,
+  lastWorkflow,
   MOCK_SCENARIOS,
   mockAnswer,
   mockIssueAnswer,

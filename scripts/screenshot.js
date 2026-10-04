@@ -49,7 +49,8 @@
 //                      activity line, timer, Stop and the last steps) | writing (the answer as it is
 //                      written, its JSON block hidden) | stopped (an answer stopped by the owner) |
 //                      failed (an error with what was written kept); Stop: --click "#po-log [data-live-stop]",
-//                      the steps folded: --click "#po-log [data-live-steps]"
+//                      the steps folded: --click "#po-log [data-live-steps]"; with --workflow <file>
+//                      the drawer plans with that workflow (#235, e.g. ai-development-local-hero.yaml)
 //   --click <css>      clicks this element once the view is open (repeatable, in order)
 //   --context <css>    then right-clicks this element (repeatable): e.g. an artifact's copy menu
 //   --paste <css>      then pastes a demo screenshot into this prompt field (repeatable, #130): the
@@ -1419,6 +1420,8 @@ function main() {
     }
     if (args.mode) await click(`#view-backlog [data-mode="${args.mode}"]`);
     // --po (#180): the Product Owner's drawer, asking (working, writing) or with its last answer
+    // (#235: with --workflow, the workflow it plans with, as if the owner had chosen it for the project)
+    if (args.po && args.workflowGiven) await js(`localStorage.setItem('po.workflow.' + window.BacklogActions.projectId(), ${JSON.stringify(args.workflow)});`);
     if (['working', 'writing'].includes(args.po)) await js('window.BacklogPO.ask(\'Analyze the backlog and propose runs\'); await new Promise((r) => setTimeout(r, 500));');
     else if (args.po) await js('await window.BacklogPO.open();');
     // the demo runs are simulated, which Artifacts hides by default

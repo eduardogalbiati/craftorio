@@ -47,6 +47,16 @@
 // Calibration (#189, backlog-po-settings.js): the header's chip and settings button; a plan question
 // sends the chip's step for that question only, and each answer shows the step it was planned with.
 // Its button and drawer are part of the Backlog's markup (backlog.js registerView): wired as it loads.
+// While a question is in flight (#234) the pills, "Register an issue…" and Ask/Send are locked (the
+// text box stays free; Enter sends nothing), the log jumps to the question and the live turn, and
+// a working line under the pills (#po-working) shows the elapsed time; a click with no project says
+// so (#po-notice). The workflow a plan is for (#235, #po-workflow, Plan mode): the workflows that take
+// a task by their display name, starting on the last one chosen for the project (localStorage), else
+// the default (DefaultWorkflow); its own options below (#po-workflow-options, WorkflowInputs.formHtml,
+// never task, issue(s), base_branch or paths) go with the question (api.askProductOwner's `workflow`
+// and `inputs`) and into every group. The Cost chip shows only where the Cost axis applies
+// (PoCalibration.costApplies: not on a tests-first workflow). The header (#po-for) names the project
+// and the workflow ("Planning for <project> · <workflow>").
 // load: after robots.js views/backlog/backlog.js (the button's robot is drawn and the drawer wired as it loads)
 /* global api, Robots */
 (() => {
@@ -68,7 +78,8 @@
   const SELECTION_QUESTION = 'What is the best strategy to put these issues in the roadmap? Should any other open issue join them?';
   // attached: issue numbers sent from the Backlog (#169); extras: `${m}:${n}` → the suggested issues checked in a group
   // unread: an answer the owner has not seen yet (#149); scenario: the simulated answer forced (#148)
-  const po = { open: false, busy: false, projectId: null, messages: [], pending: null, error: null, notes: {}, mode: 'plan', files: [], placeEpic: {}, attached: [], extras: {}, unread: false, scenario: '', live: null };
+  const po = { open: false, busy: false, projectId: null, messages: [], pending: null, error: null, notes: {}, mode: 'plan', files: [], placeEpic: {}, attached: [], extras: {}, unread: false, scenario: '', live: null, since: 0, notice: '', workflow: null, optionsFor: '' };
+  const NO_PROJECT = 'Choose a project in the Backlog first: the Product Owner plans for the project of the Backlog\'s project select.';
   const $p = (sel) => document.querySelector(sel);
   const actions = () => window.BacklogActions;
   const issueOf = (n) => (actions()?.data()?.issues || []).find((i) => i.number === n);
@@ -111,19 +122,24 @@
   }
 
   async function open() {
-    const projectId = actions()?.projectId();
-    if (!projectId) return;
+    // #234: with no project selected the drawer opens and says so (nothing can be asked)
+    const projectId = actions()?.projectId() || null;
     // attachments not sent yet belong to the other project's conversation
     if (po.projectId !== projectId) po.files = [];
     if (po.projectId !== projectId) po.placeEpic = {};
     if (po.projectId !== projectId) Object.assign(po, { attached: [], extras: {} });
     if (po.projectId !== projectId) Object.assign(po, { projectId, messages: [], pending: null, error: null, notes: {} });
     Object.assign(po, { open: true, unread: false });
+    po.notice = projectId ? '' : NO_PROJECT;
     $p('#po-drawer').classList.add('open');
     $p('#po-drawer').setAttribute('aria-hidden', 'false');
     $p('#po-backdrop').classList.remove('hidden');
     window.reportNotifyContext?.();
+    // #235: the workflow last chosen for this project (the list may have changed meanwhile)
+    po.workflow = chosenWorkflow();
+    renderWorkflow();
     render({ scroll: 'end' });
+    if (!projectId) return;
     // while a question is in flight the service already recorded it: render() leaves out the pending bubble
     try { po.messages = await api.productOwnerHistory(projectId); } catch (e) { po.error = errMsg(e); }
     // a draft still to file: back to Register an issue
@@ -147,8 +163,26 @@
     $p('#po-question').focus();
   }
 
+  // #234: a short message where the owner clicked (no project selected)
+  function showNotice(text) {
+    po.notice = text;
+    const el = $p('#po-notice');
+    el.textContent = text;
+    el.classList.toggle('hidden', !text);
+  }
+
+  // The text box's question (Ask, Enter): cleared once sent; a pill's question keeps what is typed (#234)
+  function askFromBox() {
+    const box = $p('#po-question');
+    const idle = !po.busy;
+    ask(box.value);
+    if (idle && po.busy) box.value = '';
+  }
+
   async function ask(question) {
     const q = String(question || '').trim();
+    // #234: no silent no-op when no project is selected
+    if (q && !po.busy && !po.projectId) showNotice(NO_PROJECT);
     if (!q || po.busy || !po.projectId) return;
     const projectId = po.projectId;
     const mode = po.mode;
@@ -160,14 +194,20 @@
     // #205: the Cost chip's step, the same way
     const cost = mode === 'plan' ? window.BacklogPoSettings?.costOverride?.() ?? null : null;
     if (mode === 'plan') window.BacklogPoSettings?.clearOverride();
-    Object.assign(po, { busy: true, pending: q, error: null, live: window.LiveTurn.create({ agent: 'Product Owner' }) });
-    $p('#po-question').value = '';
-    render();
+    // #235: the workflow chosen in the drawer and its options, for every group of the plan; no Cost
+    // step where the Cost axis does not apply to it (the chip is hidden then)
+    const workflow = mode === 'plan' ? po.workflow || null : null;
+    const inputs = mode === 'plan' ? window.WorkflowInputs?.read($p('#po-workflow-options'), { all: true }) ?? null : null;
+    const costOff = !!workflow && window.PoCalibration?.costApplies?.((state.workflows || []).find((w) => w.file === workflow)) === false;
+    Object.assign(po, { busy: true, pending: q, error: null, notice: '', since: Date.now(), live: window.LiveTurn.create({ agent: 'Product Owner' }) });
+    // #234: the question and the live turn in view, whatever the scroll position was
+    render({ scroll: 'end' });
+    if (po.open) questionInView();
     // #180: the timer and "Still working" move even when no item arrives
     const tick = setInterval(renderLive, 1000);
     try {
       // #148: the simulation-only scenario picker forces the simulated answer
-      const out = await api.askProductOwner(projectId, q, devMode(), mode, files, issues, devMode() ? po.scenario || null : null, calibration, cost);
+      const out = await api.askProductOwner(projectId, q, devMode(), mode, files, issues, devMode() ? po.scenario || null : null, calibration, costOff ? null : cost, workflow, inputs);
       if (po.projectId === projectId) {
         po.messages = out.messages;
         if (mode === 'issue') po.files = [];
@@ -186,6 +226,7 @@
   // #180: only the live turn is redrawn on each event and each second (the conversation above keeps
   // its inputs and selection); an owner at the end of the log stays there as the answer grows
   function renderLive() {
+    renderWorking();
     const el = $p('#po-live');
     if (!el || !po.live || !po.open) return;
     const log = $p('#po-log');
@@ -334,11 +375,79 @@
   const workflowOf = (file) => (state.workflows || []).find((w) => w.file === file) || null;
   // A workflow as people read it: software-development-local-hero → "Software development, local
   // hero" (the variant of another workflow after a comma), ai-development → "AI development".
+  const VARIANTS = [
+    'local-hero',
+  ];
   const words = (slug) => WorkflowInputs.humanize(slug).replace(/\b(ai|ci|e2e|pr|ui)\b/gi, (m) => m.toUpperCase());
   function workflowTitle(wf, file) {
     const slug = String(wf?.name || file || '').replace(/\.ya?ml$/i, '');
-    const base = (state.workflows || []).map((w) => w.name).filter((s) => s && slug.startsWith(`${s}-`)).sort((a, b) => b.length - a.length)[0];
+    // a known variant names its base even when the base workflow is not installed (#235: AI Development, local hero)
+    const variant = VARIANTS.find((v) => slug.endsWith(`-${v}`));
+    const base = (state.workflows || []).map((w) => w.name).filter((s) => s && slug.startsWith(`${s}-`)).sort((a, b) => b.length - a.length)[0]
+      || (variant ? slug.slice(0, -variant.length - 1) : '');
     return base ? `${words(base)}, ${words(slug.slice(base.length + 1)).replace(/^\w/, (c) => c.toLowerCase())}` : words(slug);
+  }
+
+  // ---- the workflow a plan is for (#235) ----------------------------------------------------------
+  // its options leave out what the Backlog sets per run (the task, the issues, the repository, the
+  // branch) and the project's language (detected from its files when the run starts: a default here
+  // would override it in every group)
+  const SKIP_INPUTS = [
+    'base_branch',
+    'issue',
+    'issues',
+    'language',
+    'repo_path',
+    'task',
+  ];
+  const isPathInput = (key) => /path|dir/i.test(key);
+  const workflowKey = (projectId) => `po.workflow.${projectId}`;
+  const planWorkflows = () => (state.workflows || []).filter((w) => !w.error && w.inputs?.task);
+  /** The workflow last chosen for the project, else the default development workflow. */
+  function chosenWorkflow() {
+    let saved = null;
+    try { saved = po.projectId ? localStorage.getItem(workflowKey(po.projectId)) : null; } catch { /* none */ }
+    return saved && planWorkflows().some((w) => w.file === saved) ? saved : DefaultWorkflow.current().file;
+  }
+  const optionDefs = (wf) => Object.fromEntries(Object.entries(wf?.inputs || {}).filter(([k]) => !SKIP_INPUTS.includes(k) && !isPathInput(k)));
+  // the Cost chip and its steps: not on a tests-first workflow, nor one without the inputs it sets
+  const costOn = () => window.PoCalibration.costApplies(workflowOf(po.workflow));
+
+  // The select and the chosen workflow's options; the options are drawn again only when the
+  // workflow (or the project) changed, so what the owner set stays while the drawer redraws.
+  function renderWorkflow() {
+    const file = po.workflow || chosenWorkflow();
+    const list = planWorkflows();
+    const options = list.some((w) => w.file === file) ? list : [{ file, name: file }, ...list];
+    const select = $p('#po-workflow');
+    select.innerHTML = options.map((w) => `<option value="${esc(w.file)}"${w.file === file ? ' selected' : ''}>${esc(workflowTitle(w, w.file))}</option>`).join('');
+    select.value = file;
+    const key = `${po.projectId}:${file}`;
+    if (po.optionsFor === key) return;
+    po.optionsFor = key;
+    const defs = optionDefs(workflowOf(file));
+    const box = $p('#po-workflow-options');
+    box.innerHTML = Object.keys(defs).length
+      ? `<div class="po-wf-fields"${WorkflowInputs.scopeAttrs()}>${WorkflowInputs.formHtml(defs, { id: (k) => `po-wi-${k}` })}</div>` : '';
+    box.classList.toggle('hidden', !Object.keys(defs).length);
+  }
+
+  function chooseWorkflow(file) {
+    if (!file || file === po.workflow) return;
+    po.workflow = file;
+    try { if (po.projectId) localStorage.setItem(workflowKey(po.projectId), file); } catch { /* not remembered */ }
+    renderWorkflow();
+    render();
+  }
+
+  const projectName = () => actions()?.project?.()?.name || (state.projects || []).find((p) => p.id === po.projectId)?.name || po.projectId;
+  // #234: "Product Owner is working… 0:12" while a question is in flight
+  const elapsed = (ms) => { const s = Math.max(0, Math.floor(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+  function renderWorking() {
+    const el = $p('#po-working');
+    const on = po.busy && !!po.pending;
+    el.innerHTML = on ? `<span class="spinner" aria-hidden="true"></span><span>Product Owner is working… <span class="mono">${elapsed(Date.now() - po.since)}</span></span>` : '';
+    el.classList.toggle('hidden', !on);
   }
 
   function groupHtml(g, m, n) {
@@ -498,7 +607,7 @@
       const files = [...(msg.issues || []).map(issueRef), ...(msg.attachments || []).map((f) => `<span class="badge" title="${esc(f)}">${esc(f.split(/[\\/]/).pop())}</span>`)].join(' ');
       const once = [msg.calibrationOverride ? window.PoCalibration.step(msg.calibration).name : '', msg.costOverride ? window.PoCalibration.cost.step(msg.cost).name : ''].filter(Boolean)
         .map((name) => ` · <span class="badge" title="For this question only: the saved setting is unchanged">for ${esc(name)}</span>`).join('');
-      return `<div class="sup-wmsg user"><div class="sup-wmsg-meta">You · ${esc(time)}${once}</div><div>${esc(msg.text)}</div>${files ? `<div class="po-files">${files}</div>` : ''}</div>`;
+      return `<div class="sup-wmsg user" data-testid="po-message-you"><div class="sup-wmsg-meta">You · ${esc(time)}${once}</div><div>${esc(msg.text)}</div>${files ? `<div class="po-files">${files}</div>` : ''}</div>`;
     }
     // #189: the calibration it planned with (marked when it was for this question only)
     // #205: and the Cost step ("Planned for Speed · Economy")
@@ -533,7 +642,12 @@
     const issueMode = po.mode === 'issue';
     // registering an issue uses the issue tracker's cheaper analysis model (ISSUE_AGENT in src/product-owner.js)
     const model = issueMode ? 'claude-sonnet-5 · medium' : `${agent?.model || 'claude-opus-5-5'}${agent?.effort && agent.effort !== 'default' ? ` · ${agent.effort}` : ''}`;
-    $p('#po-sub').textContent = `${po.projectId || ''} · ${simulated ? 'simulated (developer mode)' : model}`;
+    // #235: what the drawer plans for, the project by its name
+    $p('#po-for').textContent = !po.projectId ? 'Choose a project in the Backlog first'
+      : issueMode ? `Registering an issue for ${projectName()}` : `Planning for ${projectName()} · ${workflowTitle(workflowOf(po.workflow), po.workflow)}`;
+    // cut with an ellipsis in a narrow drawer: the whole line on hover (no app tooltip there)
+    $p('#po-for').title = $p('#po-for').textContent;
+    $p('#po-sub').textContent = simulated ? 'simulated (developer mode)' : model;
     const log = $p('#po-log');
     const top = log.scrollTop;
     const toEnd = scroll === 'end' || atEnd(log);
@@ -544,7 +658,7 @@
     log.innerHTML = (po.messages.length || po.pending ? '' : `<div class="po-empty"><span class="po-empty-robot" aria-hidden="true">${avatar()}</span>
         <p class="muted small">${empty}</p></div>`)
       + po.messages.map(messageHtml).join('')
-      + (pendingShown() ? `<div class="sup-wmsg user"><div class="sup-wmsg-meta">You</div><div>${esc(po.pending)}</div></div>` : '')
+      + (pendingShown() ? `<div class="sup-wmsg user" data-testid="po-message-you"><div class="sup-wmsg-meta">You</div><div>${esc(po.pending)}</div></div>` : '')
       + (po.live ? `<div id="po-live">${window.LiveTurn.html(po.live)}</div>` : '')
       + (po.busy && !po.live ? `<div class="sup-loading"><span class="spinner"></span><span>${issueMode ? 'The Product Owner is reading the code and the backlog…' : 'The Product Owner is reading the backlog…'}</span></div>` : '')
       + (po.error ? `<p class="error small">${esc(po.error)}</p>` : '');
@@ -555,9 +669,15 @@
       b.classList.toggle('active', b.dataset.poMode === po.mode);
       b.disabled = po.busy;
     });
-    $p('#po-chips').innerHTML = issueMode ? '' : [...QUESTIONS.map((q) => `<button class="chip" type="button" data-q="${esc(q)}"${po.busy ? ' disabled' : ''}>${esc(q)}</button>`),
-      `<button class="chip" type="button" data-mode="issue"${po.busy ? ' disabled' : ''} title="Describe an issue; the Product Owner drafts it and you file it">${esc(REGISTER)}…</button>`].join('');
+    // #234: locked while a question is in flight (the text box stays free)
+    $p('#po-chips').innerHTML = issueMode ? '' : [...QUESTIONS.map((q) => `<button class="chip" type="button" data-testid="po-pill" data-q="${esc(q)}"${po.busy ? ' disabled' : ''}>${esc(q)}</button>`),
+      `<button class="chip" type="button" data-testid="po-pill" data-mode="issue"${po.busy ? ' disabled' : ''} title="Describe an issue; the Product Owner drafts it and you file it">${esc(REGISTER)}…</button>`].join('');
     $p('#po-chips').classList.toggle('hidden', issueMode);
+    // #235: the workflow of a plan question and its options (Plan mode only)
+    $p('#po-wf-row').classList.toggle('hidden', issueMode || !po.projectId);
+    $p('#po-workflow').disabled = po.busy;
+    renderWorking();
+    showNotice(po.notice);
     $p('#po-files').classList.toggle('hidden', !issueMode || !po.files.length);
     // #148: an attachment sent with the question in flight can't be removed until the answer
     const sent = po.busy ? ' disabled title="Already sent with this question: you can remove it once the Product Owner answers"' : '';
@@ -581,9 +701,19 @@
     $p('#btn-po-clear').disabled = po.busy || !po.messages.length;
     // #189: the calibration chip (backlog-po-settings.js)
     window.BacklogPoSettings?.renderChip({ busy: po.busy, issueMode });
+    // #235: the Cost chip only where the Cost axis applies to the chosen workflow
+    if (!costOn()) $p('#po-cost-chip').classList.add('hidden');
     $p('#po-note').textContent = `${simulated ? `Simulated: no model is called and nothing is spent.${issueMode ? ' Filing only previews: nothing reaches GitHub/GitLab.' : ''}` : 'Each question is one call to the model: it uses your Claude Code subscription.'}${cost ? ` Conversation cost ${fmtCost(cost)}.` : ''}`;
     // last: the footer above may have changed the log's height
     log.scrollTop = toEnd ? log.scrollHeight : top;
+  }
+
+  // #234: the log at its end, the question just sent stays in view above the live turn
+  function questionInView() {
+    const log = $p('#po-log');
+    const you = [...log.querySelectorAll('[data-testid="po-message-you"]')].at(-1);
+    const above = you ? you.getBoundingClientRect().top - log.getBoundingClientRect().top : 0;
+    if (above < 0) log.scrollTop += above - 8;
   }
 
   // ---- applying a proposal (the owner's click) ------------------------------------------------------
@@ -684,11 +814,12 @@
   $p('#btn-bl-po').onclick = open;
   $p('#btn-po-close').onclick = close;
   $p('#po-backdrop').onclick = close;
-  $p('#btn-po-ask').onclick = () => ask($p('#po-question').value);
+  $p('#btn-po-ask').onclick = askFromBox;
   $p('#po-question').addEventListener('keydown', (e) => {
-    // an Enter that ends an IME composition is not a send
-    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); ask(e.target.value); }
+    // an Enter that ends an IME composition is not a send; while busy it sends nothing (#234)
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); askFromBox(); }
   });
+  $p('#po-workflow').onchange = (e) => chooseWorkflow(e.target.value);
   $p('#po-scenario').onclick = (e) => { const b = e.target.closest('[data-po-scenario]'); if (b && !po.busy) setScenario(b.dataset.poScenario); };
   // a pasted screenshot becomes an attachment (and switches to Register an issue); text pastes as usual
   $p('#po-question').addEventListener('paste', (e) => {

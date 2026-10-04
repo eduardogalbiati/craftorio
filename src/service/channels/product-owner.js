@@ -52,8 +52,8 @@ module.exports = (ctx) => {
     {
       channel: 'po:ask',
       method: 'askProductOwner',
-      params: ['projectId', 'question', 'mock', 'mode', 'attachments', 'issues', 'scenario', 'calibration', 'cost'],
-      fn: async ({ projectId, question, mock, mode, attachments, issues, scenario, calibration, cost }) => {
+      params: ['projectId', 'question', 'mock', 'mode', 'attachments', 'issues', 'scenario', 'calibration', 'cost', 'workflow', 'inputs'],
+      fn: async ({ projectId, question, mock, mode, attachments, issues, scenario, calibration, cost, workflow, inputs }) => {
         const id = project(projectId);
         const p = projects.readProject(ctx.ws.projects, id);
         const data = ctx.withIssueRuns(backlog.readBacklog(ctx.ws.backlog, id));
@@ -92,6 +92,9 @@ module.exports = (ctx) => {
             // #205: the drawer's Cost chip, for this question only (null: the saved one); #206: the prices of the estimates
             cost: cost ?? null,
             prices: settings.prices || {},
+            // #235: the drawer's workflow (every group on it) and its options (in every group's inputs)
+            workflow: typeof workflow === 'string' && workflow ? workflow : null,
+            inputs: inputs && typeof inputs === 'object' && !Array.isArray(inputs) ? inputs : null,
             onItem: turn.onItem,
             signal: turn.signal,
           });

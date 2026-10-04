@@ -1066,12 +1066,13 @@
   // the Product Owner's drawer (backlog-po.js): inside the app shell, like the other drawers
   const PO_DRAWER = `
     <div id="po-backdrop" class="drawer-backdrop sup-backdrop hidden"></div>
-    <aside id="po-drawer" class="drawer sup-drawer po-drawer" aria-hidden="true" aria-label="Product Owner">
+    <aside id="po-drawer" class="drawer sup-drawer po-drawer" aria-hidden="true" aria-label="Product Owner" data-testid="po-drawer">
       <div class="drawer-head">
         <div class="po-head">
           <span id="po-avatar" class="po-avatar" aria-hidden="true"></span>
           <div class="sup-head">
             <h2 class="drawer-title">Product Owner</h2>
+            <div id="po-for" class="po-for small" data-testid="po-for"></div>
             <div id="po-sub" class="muted small"></div>
           </div>
         </div>
@@ -1087,7 +1088,7 @@
           </button>
         </div>
       </div>
-      <div id="po-log" class="drawer-body po-log"></div>
+      <div id="po-log" class="drawer-body po-log" data-testid="po-log"></div>
       <div class="drawer-foot po-foot">
         <div id="po-sim" class="po-sim hidden" role="group" aria-label="Simulated scenario" title="Simulation only, not part of the app: forces the simulated Product Owner's next answers">
           <span class="po-sim-label">Simulated scenario</span><span id="po-scenario" class="po-sim-opts"></span>
@@ -1097,14 +1098,24 @@
           <button type="button" data-po-mode="issue">Register an issue</button>
         </div>
         <div id="po-chips" class="chips po-chips"></div>
+        <!-- #235: the workflow a plan question is for, and that workflow's own options -->
+        <div id="po-wf-row" class="po-wf-row hidden">
+          <label class="po-wf-pick small"><span class="muted">Plan with</span>
+            <select id="po-workflow" class="po-wf" data-testid="po-workflow" aria-label="Workflow the Product Owner plans with"></select>
+          </label>
+          <div id="po-workflow-options" class="po-wf-options" data-testid="po-workflow-options"></div>
+        </div>
         <div id="po-files" class="po-files hidden"></div>
         <div id="po-attached" class="po-files po-attached hidden" aria-label="Attached issues"></div>
+        <!-- #234: the turn in flight, where the click happened; a click with no project says why nothing was sent -->
+        <div id="po-working" class="po-working small hidden" data-testid="po-working" role="status" aria-live="polite"></div>
+        <p id="po-notice" class="error small hidden" data-testid="po-notice" role="alert"></p>
         <div class="row po-ask">
-          <textarea id="po-question" rows="2" placeholder="Ask about the backlog: which issues should go first?"></textarea>
+          <textarea id="po-question" rows="2" placeholder="Ask about the backlog: which issues should go first?" data-testid="po-question"></textarea>
           <button id="btn-po-attach" class="icon-btn hidden" type="button" title="Attach screenshots or files (you can also paste or drop them)" aria-label="Attach files">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5l-8.5 8.5a5 5 0 0 1-7-7L14 4.5a3.5 3.5 0 0 1 5 5L10.5 18a2 2 0 0 1-3-3L15 7.5" /></svg>
           </button>
-          <button id="btn-po-ask" class="btn primary" type="button">Ask</button>
+          <button id="btn-po-ask" class="btn primary" type="button" data-testid="po-ask">Ask</button>
           <input id="po-file-input" type="file" multiple hidden />
         </div>
         <p id="po-note" class="muted small"></p>
@@ -1449,6 +1460,8 @@
     // the project the next refresh shows (a notification's click, before showView('backlog'))
     focusProject: (id) => { if (id) bl.projectId = id; },
     openStage,
+    // the project of the page-head select ({ id, name }): the Product Owner's header names it (#235)
+    project: () => project() || null,
     projectId: () => bl.projectId,
     roadmapGroup,
     // the backlog synced again after the Product Owner filed or updated an issue (#117)

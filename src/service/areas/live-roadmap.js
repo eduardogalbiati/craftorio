@@ -73,11 +73,15 @@ module.exports = (ctx) => {
     const picks = live.candidates(data, opts).slice(0, opts.maxStages * maxGroup);
     const nothing = `Live roadmap: nothing left under complexity ${opts.complexityCap}. Start tries again.`;
     if (!picks.length) { record(projectId, { status: 'empty', message: nothing }, p); return false; }
+    // #235: the workflow and options last chosen in the Product Owner's drawer for this project
+    const chosen = productOwner.lastWorkflow(ws.backlog, projectId);
     const out = await productOwner.ask({
       backlogDir: ws.backlog,
       projectId,
       runsDir: ws.runs,
       question: live.refillQuestion(opts),
+      workflow: chosen?.workflow || null,
+      inputs: chosen?.inputs || null,
       data,
       activeRuns: ctx.activeRuns().filter((r) => r.projectId === projectId),
       runs: runs.runsForProject(runs.listRuns(ws.runs), p),

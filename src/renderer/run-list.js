@@ -389,9 +389,15 @@ function progressAvatar(a, chip, names, workflow) {
   const color = !a.human && window.AgentColors ? AgentColors.colorFor(a.agent, def) : '';
   const art = a.human ? PERSON_SVG : a.provider ? robotAvatar(a.provider, a.model, st, workflow, a.agent) : ENGINE_SVG;
   // the hover card: the agent's name with its role chip (#227), then the steps, provider, time and cost
-  const card = a.human ? '' : `<span class="rp-card" role="tooltip"><span><b>${esc(agentLabel(a.agent, names))}</b>${window.AgentColors ? AgentColors.roleChip(a.agent, def) : ''}</span><span class="muted">${esc(tip)}</span></span>`;
-  return `<span class="rp-av${a.human ? ' human' : a.provider ? '' : ' engine'}"${color ? ` style="--agent-color:${esc(color)}"` : ''}${a.human ? ` title="${esc(tip)}"` : ` tabindex="0" aria-label="${esc(tip)}"`}>${art}${card}</span>`;
+  // (#236: the human gate's too; never a native title, which would open over the card)
+  const card = a.human
+    ? `<span class="rp-card" role="tooltip"><span><b>You (human gate)</b></span><span class="muted">${esc(tip)}</span></span>`
+    : `<span class="rp-card" role="tooltip"><span><b>${esc(agentLabel(a.agent, names))}</b>${window.AgentColors ? AgentColors.roleChip(a.agent, def) : ''}</span><span class="muted">${esc(tip)}</span></span>`;
+  return `<span class="rp-av${a.human ? ' human' : a.provider ? '' : ' engine'}" data-testid="progress-agent"${color ? ` style="--agent-color:${esc(color)}"` : ''} tabindex="0" aria-label="${esc(tip)}">${art}${card}</span>`;
 }
+
+// A small app tooltip (#236) for the strip's "+N" badges: the names it folds, as a card.
+const foldCard = (text) => `<span class="rp-card" role="tooltip"><span class="muted">${esc(text)}</span></span>`;
 
 function progressChip(c, names, workflow) {
   const label = {
@@ -402,11 +408,14 @@ function progressChip(c, names, workflow) {
     stopped: `stopped at ${c.current}`,
   }[c.status];
   const agents = c.agents.length ? c.agents : [{ agent: 'orchestrator', steps: c.steps.map((e) => e.step), cost: 0, durationMs: 0 }];
-  const avs = agents.slice(0, 4).map((a) => progressAvatar(a, c, names, workflow)).join('') + (agents.length > 4 ? `<span class="rp-av rp-more" title="${esc(agents.slice(4).map((a) => agentLabel(a.agent, names)).join(', '))}">+${agents.length - 4}</span>` : '');
+  const avs = agents.slice(0, 4).map((a) => progressAvatar(a, c, names, workflow)).join('') + (agents.length > 4 ? (() => {
+    const more = `Also: ${agents.slice(4).map((a) => agentLabel(a.agent, names)).join(', ')}`;
+    return `<span class="rp-av rp-more" tabindex="0" aria-label="${esc(more)}">+${agents.length - 4}${foldCard(more)}</span>`;
+  })() : '');
   return `<div class="rp-chip st-${c.status}${c.status === 'done' ? ' still' : ''}">
     <div class="rp-avs">${avs}</div>
     <div class="rp-name${c.grouped ? '' : ' mono'}">${esc(c.name)}${c.round > 1 ? ` <span class="rp-round">×${c.round}</span>` : ''}</div>
-    <div class="rp-state" title="${esc(c.steps.map((e) => e.step).join(' › '))}">${esc(label)}</div>
+    <div class="rp-state">${esc(label)}</div>
   </div>`;
 }
 
@@ -418,5 +427,40 @@ function runProgressStrip(r) {
   const status = live?.trail ? live.run?.status || r.status : r.status;
   const chips = RunProgress.progressGroups(steps, r.groups || live?.groups, status);
   const skipped = chips.length - MAX_CHIPS;
-  return `<div class="rp-strip">${skipped > 0 ? `<span class="rp-skip" title="${esc(chips.slice(0, skipped).map((c) => c.name).join(' › '))}">+${skipped}</span><span class="rp-sep">›</span>` : ''}${chips.slice(Math.max(0, skipped)).map((c) => progressChip(c, r.agentNames || live?.run?.agentNames, r.workflow || live?.run?.workflow)).join('<span class="rp-sep">›</span>')}</div>`;
+  const folded = skipped > 0 ? `Earlier steps: ${chips.slice(0, skipped).map((c) => c.name).join(' › ')}` : '';
+  return `<div class="rp-strip">${skipped > 0 ? `<span class="rp-skip" tabindex="0" aria-label="${esc(folded)}">+${skipped}${foldCard(folded)}</span><span class="rp-sep">›</span>` : ''}${chips.slice(Math.max(0, skipped)).map((c) => progressChip(c, r.agentNames || live?.run?.agentNames, r.workflow || live?.run?.workflow)).join('<span class="rp-sep">›</span>')}</div>`;
 }
+
+// #236: the app's tooltips stay on screen. The agent card (.rp-card) and the Roadmap's steps popover
+// (.rm-steps) are placed in the window as they show (position: fixed, so no scrolling container
+// clips them), next to what opened them, moved left or flipped up when there is no room; long lines
+// wrap within their max width (style.css). Without this (before the first hover) the CSS places them.
+const POP_EDGE = 6;
+function placePopover(pop, anchor, { gap = 4, alignRight = false } = {}) {
+  if (!pop || !anchor || !pop.getClientRects().length) return;
+  const a = anchor.getBoundingClientRect();
+  const vw = document.documentElement.clientWidth;
+  const vh = document.documentElement.clientHeight;
+  Object.assign(pop.style, { position: 'fixed', left: '0px', top: '0px', right: 'auto', bottom: 'auto', maxWidth: `${Math.max(120, vw - 2 * POP_EDGE)}px` });
+  const r = pop.getBoundingClientRect();
+  const left = Math.min(Math.max(POP_EDGE, alignRight ? a.right - r.width : a.left), Math.max(POP_EDGE, vw - r.width - POP_EDGE));
+  const below = a.bottom + gap;
+  const top = below + r.height <= vh - POP_EDGE || a.top - gap - r.height < POP_EDGE ? below : a.top - gap - r.height;
+  pop.style.left = `${left}px`;
+  pop.style.top = `${Math.max(POP_EDGE, Math.min(top, vh - r.height - POP_EDGE))}px`;
+}
+function placeShown(from) {
+  const progress = from?.closest?.('.rm-progress');
+  const av = from?.closest?.('.rp-av, .rp-skip');
+  requestAnimationFrame(() => {
+    // the popover first: the card inside it is placed from where the popover now is
+    if (progress) placePopover(progress.querySelector(':scope > .rm-steps'), progress, { gap: 6, alignRight: true });
+    if (av) placePopover(av.querySelector(':scope > .rp-card'), av);
+  });
+}
+document.addEventListener('mouseover', (e) => placeShown(e.target));
+document.addEventListener('focusin', (e) => placeShown(e.target));
+// a pinned popover (the ring's click) follows its ring when the page scrolls
+document.addEventListener('scroll', () => {
+  for (const p of document.querySelectorAll('.rm-progress.open, .rm-progress:hover, .rm-progress:focus-within')) placeShown(p);
+}, true);

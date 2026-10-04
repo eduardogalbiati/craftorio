@@ -52,6 +52,24 @@ span.po-applied { cursor: default; }
 /* Register an issue (#117): attachments, the draft preview and its actions */
 .po-foot > .seg { justify-self: start; }
 .po-foot.dropping { outline: 2px dashed #2DD4BF; outline-offset: -4px; }
+/* #235: what the drawer plans for, and the workflow of a plan with its options (a framed, compact grid
+   whose height is capped so the conversation keeps its room) */
+.po-for { color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.po-wf-row { display: grid; gap: 6px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel-2); }
+.po-wf-pick { display: flex; align-items: center; gap: 8px; }
+.po-wf-pick select { flex: 1; min-width: 0; max-width: 320px; }
+.po-wf-options { max-height: 22vh; overflow: auto; }
+.po-wf-fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 4px 14px; align-items: center; }
+.po-wf-fields .field { display: flex; align-items: center; gap: 8px; margin: 0; min-width: 0; }
+.po-wf-fields .field[hidden] { display: none; }
+.po-wf-fields .field > label { flex: none; width: 70px; margin: 0; font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.po-wf-fields .wi-control { flex: 1; min-width: 0; }
+.po-wf-fields .seg button { padding: 2px 6px; font-size: 11px; white-space: nowrap; }
+.po-wf-fields select, .po-wf-fields input[type="text"], .po-wf-fields input[type="number"] { width: 100%; padding: 2px 6px; font-size: 12px; min-height: 0; height: 24px; }
+.po-wf-fields .hint { display: none; }
+/* #234: the turn in flight, next to the controls it locked */
+.po-working { display: flex; align-items: center; gap: 6px; color: var(--accent); }
+.po-working .spinner { width: 12px; height: 12px; }
 .po-files { display: flex; gap: 6px; flex-wrap: wrap; }
 .po-file { display: inline-flex; align-items: center; gap: 4px; max-width: 220px; }
 .po-file span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -339,6 +357,9 @@ select.po-wf { width: auto; max-width: 220px; padding: 3px 6px; font-size: 12px;
 .rm-steps { display: none; position: absolute; right: 0; top: calc(100% + 6px); z-index: 30; width: max-content; max-width: min(560px, 80vw); padding: 8px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 12px 32px rgba(0,0,0,.4); }
 .rm-progress:hover .rm-steps, .rm-progress:focus-within .rm-steps, .rm-progress.open .rm-steps { display: block; }
 .rm-steps .rp-strip { flex-wrap: wrap; }
+/* #236: the run's summary heads the popover; the popover stays inside a narrow window */
+.rm-steps { max-width: min(560px, calc(100vw - 12px)); }
+.rm-run-summary { display: grid; gap: 1px; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid var(--border); font-size: 11px; line-height: 1.45; }
 .rm-chip { padding: 0; border: 0; background: none; font: inherit; color: inherit; cursor: pointer; border-radius: 8px; text-align: inherit; }
 .rm-chip:hover .rp-chip { outline: 1px solid var(--accent); }
 .rm-chip:focus-visible { outline: var(--focus-ring); outline-offset: 1px; }

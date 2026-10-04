@@ -36,6 +36,8 @@
 // estimateProgress over the item's `run` from the service: its trail and its workflow's typical step
 // times), the current step or group with its agent, the gate / failure / done states; hovering or
 // clicking the ring shows the run's steps (the runs list's chips), a chip opens the run at that group.
+// The run's summary (estimate, elapsed and time left, now, gate, run id) heads that popover (#236):
+// the ring, the step text and the chips carry no native title over the app's popover and cards.
 // A refused start (#196: kept work, the item that paused the roadmap, an error without a run) offers
 // Retry / Skip like a failed run; the bar's "Show the item" scrolls to the item that paused it.
 // Start, Resume and Run this stage list the items whose workflow pushes while the default development
@@ -274,31 +276,33 @@
     const basis = est.basis === 'history'
       ? `${est.done} of ${est.total} steps along the usual path, each weighted by its typical time in ${run.history} past run${run.history === 1 ? '' : 's'} of this workflow`
       : `${est.done} of ${est.total} steps of the workflow, each counted the same (no finished run to time them yet)`;
-    const tip = [
+    // #236: the run's summary heads the steps popover (no native title over the app's popover)
+    const summary = [
       `Estimate: ${est.state === 'done' ? 100 : est.percent}%${est.state === 'done' ? ' (finished)' : ''}`,
-      `How: ${basis}. A return to an earlier step lowers it; it stays under 100% until the run ends.`,
       `Elapsed ${dur(est.elapsedMs)}${est.state === 'done' ? '' : ` · about ${dur(est.leftMs)} left`}`,
       `Now: ${label}${est.state === 'running' || est.state === 'waiting' ? ` (${who})` : ''}`,
       // the gate's "What happened" line (#213)
       est.state === 'waiting' && run.gate ? `Gate: ${run.gate}` : '',
-      `Run ${x.runId}${run.mock ? ' (simulated)' : ''}. Hover or click the ring for its steps.`,
-    ].filter(Boolean).join('\n');
+      `Run ${x.runId}${run.mock ? ' (simulated)' : ''}`,
+    ].filter(Boolean);
+    const how = `How: ${basis}. A return to an earlier step lowers it; it stays under 100% until the run ends.`;
     const pct = est.state === 'done' ? 100 : est.percent;
     const chips = RunProgress.progressGroups(run.progress || [], run.groups || [], run.status === 'running' || run.status === 'pending' ? 'running' : run.status);
     const steps = chips.length
-      ? `<div class="rp-strip">${chips.map((c) => `<button type="button" class="rm-chip" data-rm-chip="${esc(c.name)}" data-grouped="${c.grouped ? '1' : ''}" title="${esc(`Open the run at ${c.name}`)}">${progressChip(c, run.agentNames, run.workflow)}</button>`).join('<span class="rp-sep">›</span>')}</div>`
+      ? `<div class="rp-strip">${chips.map((c) => `<button type="button" class="rm-chip" data-rm-chip="${esc(c.name)}" data-grouped="${c.grouped ? '1' : ''}" aria-label="${esc(`Open the run at ${c.name}`)}">${progressChip(c, run.agentNames, run.workflow)}</button>`).join('<span class="rp-sep">›</span>')}</div>`
       : '<p class="small muted">No step has started yet.</p>';
+    const head = `<div class="rm-run-summary small" data-testid="roadmap-run-summary">${summary.map((l) => `<div>${esc(l)}</div>`).join('')}<div class="muted">${esc(how)}</div><div class="muted">Click a step to open the run there.</div></div>`;
     return `
       <div class="rm-progress st-${est.state}${run.mock ? ' sim' : ''}${ringOpen === x.runId ? ' open' : ''}" data-rm-progress="${esc(x.runId)}" data-workflow="${esc(run.workflow || x.workflowName || '')}">
-        <button type="button" class="rm-ring" data-rm-ring aria-expanded="${ringOpen === x.runId}" aria-label="${esc(`${pct}% estimated, ${label}. Show the run's steps`)}" title="${esc(tip)}">
+        <button type="button" class="rm-ring" data-rm-ring aria-expanded="${ringOpen === x.runId}" aria-label="${esc(`${pct}% estimated, ${label}. Show the run's steps`)}">
           <svg viewBox="0 0 36 36" aria-hidden="true"><circle class="rm-ring-track" cx="18" cy="18" r="15.9155"/><circle class="rm-ring-bar" cx="18" cy="18" r="15.9155" stroke-dasharray="${pct} ${100 - pct}"/></svg>
           <span class="rm-ring-pct">${pct}%</span>
         </button>
-        <div class="rm-progress-text" title="${esc(tip)}">
+        <div class="rm-progress-text">
           <span class="rm-progress-step"><span class="rp-av${human ? ' human' : agent?.provider ? '' : ' engine'}" aria-hidden="true">${art}</span><span>${esc(label)}</span></span>
           ${run.mock ? '<span class="badge p-mock">simulated</span>' : ''}
         </div>
-        <div class="rm-steps" role="group" aria-label="The run's steps">${steps}</div>
+        <div class="rm-steps" role="group" aria-label="The run's steps">${head}${steps}</div>
       </div>`;
   }
 
