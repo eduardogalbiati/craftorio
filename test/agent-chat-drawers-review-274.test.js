@@ -83,7 +83,8 @@ test('#274 a daily-budget refusal gives the question back in the box and shows t
   part(page, '#oracle-drawer', 'agent-chat-send').click();
   await settle();
   assert.equal(part(page, '#oracle-drawer', 'agent-chat-input').value, question, 'the question is back in the box');
-  assert.equal(page.$('#oracle-drawer [data-testid="agent-chat-error"]'), null, 'no error line');
+  // booleans, never a sandbox element: a failing assert would serialise the whole page
+  assert.equal(!!page.$('#oracle-drawer [data-testid="agent-chat-error"]'), false, 'no error line');
   assert.match(textOf(page.$('#oracle-drawer')), /Paused by budget/);
   assert.match(textOf(page.$('#oracle-drawer')), /Spent \$5\.00 of \$5\.00 today/);
 });
@@ -113,7 +114,8 @@ test('#274 a Supervisor suggestion chip sends without the images pasted in the b
   const asks = page.callsTo('askSupervisorChat');
   assert.equal(asks.length, 1, 'the chip asked its question');
   assert.equal(asks[0][0].attachments, undefined, 'the chip\'s question carries no image');
-  assert.deepEqual(page.sandbox.PasteImage.attachments(input).map((a) => a.path), ['C:/shots/image-1.png'], 'the pasted image stays in the box');
+  // copied into this realm: the sandbox's arrays have their own Array.prototype
+  assert.deepEqual(Array.from(page.sandbox.PasteImage.attachments(input), (a) => a.path),['C:/shots/image-1.png'], 'the pasted image stays in the box');
 });
 
 test('#274 a Supervisor history that failed to load and then loads clears its error', async () => {
@@ -128,7 +130,7 @@ test('#274 a Supervisor history that failed to load and then loads clears its er
   fail = false;
   page.sandbox.openSupervisorChat();
   await settle();
-  assert.equal(page.$('#svc-drawer [data-testid="agent-chat-error"]'), null, 'the error is gone once the history loads');
+  assert.equal(!!page.$('#svc-drawer [data-testid="agent-chat-error"]'), false, 'the error is gone once the history loads');
 });
 
 // ---- the Product Owner ---------------------------------------------------------------------------------
