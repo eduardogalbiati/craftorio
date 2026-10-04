@@ -34,6 +34,7 @@ const simulation = require('../../engine/simulation');
 const usage = require('../../usage');
 const workspace = require('../../workspace');
 const { resolveCommand } = require('../../engine/providers');
+const { isArchived } = require('../../renderer/views/backlog/backlog-archive');
 
 module.exports = (ctx) => {
   const project = (projectId) => path.basename(String(projectId));
@@ -112,6 +113,9 @@ module.exports = (ctx) => {
       const issues = syncedIssues(id);
       const unknown = numbers.filter((n) => !issues.some((i) => i.number === n));
       if (unknown.length) throw new Error(`${refs(unknown)} ${unknown.length > 1 ? 'are' : 'is'} not in the synced backlog.`);
+      // propose leaves archived issues out silently: refuse them here, so none is reported as added
+      const archived = numbers.filter((n) => isArchived(issues.find((i) => i.number === n)));
+      if (archived.length) throw new Error(`${refs(archived)} ${archived.length > 1 ? 'are' : 'is'} archived: restore ${archived.length > 1 ? 'them' : 'it'} in the Backlog before planning. Nothing was added.`);
       const files = ctx.listWorkflows().filter((w) => !w.error && w.inputs?.task).map((w) => w.file);
       const workflow = p.workflow ? path.basename(String(p.workflow)) : DefaultWorkflow.resolve(workspace.readSettings(ctx.ws).defaultWorkflow, files).file;
       if (!files.includes(workflow)) throw new Error(`Workflow ${workflow} is not installed, or has no task input to receive an issue.`);
@@ -253,7 +257,13 @@ module.exports = (ctx) => {
       fn: async ({ projectId, mock, ...request } = {}) => {
         const id = project(projectId || '');
         // no project, no conversation to record it in
-        if (!projectId || !projects.readProject(ctx.ws.projects, id)) {
+        let known = null;
+        try {
+          known = projectId ? projects.readProject(ctx.ws.projects, id) : null;
+        } catch {
+          // readProject throws for a missing project file
+        }
+        if (!known) {
           const error = `Unknown project: ${projectId || '(none)'}`;
           return { ok: false, text: error, costUsd: 0, error };
         }
