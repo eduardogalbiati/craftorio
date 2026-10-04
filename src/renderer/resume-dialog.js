@@ -81,7 +81,7 @@ async function openResumeDialog(runId) {
   openModal('#resume-modal');
   let o;
   try { o = await api.resumeOptions(runId); } catch (e) { body.innerHTML = `<p class="error small">${esc(errMsg(e))}</p>`; return; }
-  $('#resume-run').innerHTML = `<span class="mono">${esc(o.runId)}</span> · ${esc(o.workflow || '')} <span class="pill pill-${esc(o.status)}">${esc(o.status)}</span>${o.mock ? ' <span class="badge p-mock">simulated</span>' : ''}`;
+  $('#resume-run').innerHTML = `<span class="mono">${esc(o.runId)}</span> · ${esc(o.workflow || '')} ${StatusPill.statusPill(o.status)}${o.mock ? ' <span class="badge p-mock">Simulated</span>' : ''}`;
   if (o.active) { body.innerHTML = '<p class="error small">The run is still active: it can be resumed once it ends.</p>'; return; }
   body.innerHTML = `${resumeFields('resume', o.steps.map((s) => ({ id: s.id, label: resumeStepLabel(o, s), disabled: !!s.blockedBy && !s.confirm?.ok })), o.suggested)}
     <div id="resume-gate" class="field"></div>

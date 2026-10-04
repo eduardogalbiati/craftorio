@@ -264,7 +264,11 @@ changed in `style.css` goes into that skill too. In this app:
 
 - **Reuse what `style.css` has**: `.btn` (`.primary`, `.ghost`, `.sm`), `.link-btn` for small
   actions ("add note", "Edit"); `.badge` (neutral; `.warn`, `.live`, `.p-mock`…) and `.pill`
-  (`-idle`, `-running`, `-success`, `-failed`, `-cancelled`, `-interrupted`) for states; `.field`
+  (`-idle`, `-running`, `-success`, `-failed`, `-cancelled`, `-interrupted`) for states: a run's
+  or an item's status is always drawn by `StatusPill` (`status-pill.js`, #266:
+  `statusPill(status, { waiting })`, or `statusLabel` for plain text), never as its raw id: the
+  label is readable ("Running" with the pulsing dot, "Waiting for you", "Merged locally"), the id
+  stays in `data-status` (tests and E2E steps read it); a new status gets its label there; `.field`
   (label above the control, `.hint` for the help line, `.row` for a pair); `.s-group`/`.s-row` for
   settings-like lists; `.switch` and `.check` for flags; `.seg` (`.sm`) for a small set of choices;
   `.empty-state`; the standard `select` / `input[type=text]` styles (their focus is on the control).

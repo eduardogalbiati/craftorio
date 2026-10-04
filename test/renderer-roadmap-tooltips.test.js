@@ -44,6 +44,7 @@ function loadRunList() {
   };
   sandbox.window = sandbox;
   vm.createContext(sandbox);
+  vm.runInContext(read('status-pill.js'), sandbox);
   vm.runInContext(read('run-progress-model.js'), sandbox);
   vm.runInContext(read('run-list.js'), sandbox);
   // PERSON_SVG / ENGINE_SVG are top-level consts: script-scoped, read through the context
@@ -87,6 +88,7 @@ function loadRoadmap() {
   sandbox.window = sandbox;
   sandbox.window.showRun = () => {};
   vm.createContext(sandbox);
+  vm.runInContext(read('status-pill.js'), sandbox);
   vm.runInContext(read('run-progress-model.js'), sandbox);
   vm.runInContext(read('default-workflow.js'), sandbox);
   vm.runInContext(read('workflow-inputs.js'), sandbox);

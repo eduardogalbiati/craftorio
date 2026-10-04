@@ -51,7 +51,8 @@ Then('the sidebar does not offer {string}', async ({ e2e }, name) => {
 });
 
 Then('the run status shows {string}', async ({ e2e }, text) => {
-  await expect(e2e.window.getByTestId('run-status')).toHaveText(text);
+  // the status id (#266: the pill reads "Idle", "Running"…; its id stays in data-status)
+  await expect(e2e.window.getByTestId('run-status')).toHaveAttribute('data-status', text);
 });
 
 Then('the Start a workflow button is enabled', async ({ e2e }) => {

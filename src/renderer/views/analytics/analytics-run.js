@@ -86,7 +86,7 @@
     return `<div class="card an-card an-run-head" data-testid="an-run-header">
         <div class="row an-card-head"><div><h3 class="an-run-title" title="${esc(f.title || f.runId)}">${esc(f.title || f.workflow || f.runId)}</h3>
           <div class="muted small"><span class="badge">${esc(f.workflow || '—')}</span> ${f.issues?.length ? esc(issuesText(f.issues)) : ''} · <span class="mono" title="${esc(f.runId)}">${esc(f.runId)}</span>${f.startedAt ? ` · ${esc(dateOf(f.startedAt))}` : ''}${f.mock ? ' · <span class="badge">simulated</span>' : ''}</div></div>
-          <div class="row"><span class="badge ${f.status === 'success' ? 'cat-monitor' : f.status === 'failed' ? 'warn' : ''}">${esc(f.status)}</span><button type="button" class="btn sm ghost" data-an-open-run="${esc(f.runId)}" data-workflow="${esc(f.file || '')}">Open run</button></div></div>
+          <div class="row"><span class="badge ${f.status === 'success' ? 'cat-monitor' : f.status === 'failed' ? 'warn' : ''}" data-status="${esc(f.status)}">${esc(StatusPill.statusLabel(f.status))}</span><button type="button" class="btn sm ghost" data-an-open-run="${esc(f.runId)}" data-workflow="${esc(f.file || '')}">Open run</button></div></div>
         <div class="an-totals">
           ${stat('Total cost', `${fmtUsd(f.costUsd)}${marksOf(f)}`, '', 'an-run-total-cost')}
           ${stat('Cost per issue', fmt(f.costPerIssue, 'usd'))}

@@ -1,9 +1,12 @@
 // The Roadmap screen (#106; Code & Build › Roadmap since #254, drawn by backlog.js): a project's ordered stages of runs (src/roadmap.js), each stage started
 // when the previous one has finished and merged. Each item leads with its issues' titles (a list,
-// one line per issue, linked; #110), then badges: its state (planned / running / waiting at a gate /
-// done / failed / skipped), the workflow's short name, the mode (a one-click toggle on planned and
-// failed items, saved at once), the complexity total of its `complexity:n` labels, a link to the
-// run; and the Product Owner's reason (#105) under the titles. The other inputs are edited in an
+// one line per issue, linked; #110), then badges: its status (#266, StatusPill: the kanban's run chip
+// when it has a run: the readable status, pulsing while it runs, the workflow's name and the run's
+// title, a click opens the run; a pill otherwise: Planned, Skipped, "Failed to start" with the error
+// when the start was refused before any run), the workflow's short name (while it has no run: the
+// chip names the workflow; kept when the workflow pushes, #195), the mode (a one-click toggle
+// on planned and failed items, saved at once), the complexity total of its `complexity:n` labels;
+// and the Product Owner's reason (#105) under the titles. The other inputs are edited in an
 // Edit form built from the workflow's input definitions (api.listWorkflows, loaded once) by
 // WorkflowInputs (workflow-inputs.js, #116: human labels, pills, switches, show_if), with Save / Cancel. The plan is edited too:
 // stages and items up/down or by drag, an issue dragged from one item to another, items removed, a
@@ -29,15 +32,27 @@
 // the longest step in the tooltip; while it runs, "58 min of ≈ 1 h 45", amber or red once past it.
 // A finished stage shows its real total against its estimate the same way.
 // Inputs (#216): the item's inputs as WorkflowInputs.inputPills ("Unit tests: Run existing").
-// Open work (#217): html()'s `view` ({ epic, showAll }, the Backlog's filter shared with the Board
-// tab) hides finished stages ("N finished stages hidden") and folds a stage's done items ("+N done")
-// unless Show all; the epic keeps only its items. Stage numbers and edits use the real indexes.
+// What it shows (#217, #268): html()'s `view` ({ epic, showAll, since }, remembered by backlog.js). The
+// Planned | All switch: Planned (showAll off) is the open work, every item but the done and skipped
+// ones, a stage with nothing left hidden; All is every item. The date range (`since`: last 24 hours
+// by default … Total) filters by an item's last activity (added, its run's start, its run's end): in
+// Planned the open items show whatever their date and the range picks the finished items folded
+// under a stage's green "+n done" chip (#267: a click unfolds that stage only, remembered per stage
+// id while it has something to fold); in All it filters every item. The header counts "N of M items
+// · last 24 hours"; the epic keeps only its items. Stage numbers and edits use the real indexes.
+// Pages (#268): about 15 stages (60 items) at a time, from a little before the current stage; a
+// "Loading…" row loads the next page when it comes near the screen (mounted), "earlier stages" the
+// page above; a change of the view goes back to the first page, a re-read of the file keeps them.
 // An item with a run (#194) has a progress ring on the right of its card: the estimated % (RunProgress.
 // estimateProgress over the item's `run` from the service: its trail and its workflow's typical step
 // times), the current step or group with its agent, the gate / failure / done states; hovering or
 // clicking the ring shows the run's steps (the runs list's chips), a chip opens the run at that group.
 // The run's summary (estimate, elapsed and time left, now, gate, run id) heads that popover (#236):
 // the ring, the step text and the chips carry no native title over the app's popover and cards.
+// Under the ring (#272): the run's timer ("23:41", gate waits left out, frozen at the end; tick()
+// moves it every second), green within the item's time estimate, amber up to 130% of it, red beyond.
+// A run sent back to a step it had done (a fix round) keeps the progress it had earned and says
+// "round 2 · fix round after Code review" under the step: the same run, not a new one.
 // A refused start (#196: kept work, the item that paused the roadmap, an error without a run) offers
 // Retry / Skip like a failed run; the bar's "Show the item" scrolls to the item that paused it.
 // Start, Resume and Run this stage list the items whose workflow pushes while the default development
@@ -49,21 +64,11 @@
 // finished stage hidden by the open-work filter still shows its line while it waits, and so does
 // the view grouped by epic (the waiting lines lead it, each with its stage).
 // Rendered into #bl-list by backlog.js (mode 'roadmap'), which passes `ctx`
-// ({ projectId, setData, render, setError }). Uses app.js globals (esc, state, errMsg, devMode, confirmDialog,
+// ({ projectId, setData, render, setError, setShowAll, setSince }). Uses app.js globals (esc, state, errMsg, devMode, confirmDialog,
 // fmtDur, agentLabel, scheduleRender), run-list.js's (progressChip, robotAvatar, PERSON_SVG, ENGINE_SVG),
-// choiceDialog (kept-work-dialog.js), RunProgress and DefaultWorkflow.
+// choiceDialog (kept-work-dialog.js), RunProgress, StatusPill and DefaultWorkflow.
 /* global api */
 (() => {
-  const STATE_LABEL = { planned: 'planned', running: 'running', paused: 'paused', done: 'done' };
-  // an item's state: [pill colour, label]
-  const ITEM_STATE = {
-    planned: ['idle', 'planned'],
-    running: ['running', 'running'],
-    waiting: ['cancelled', 'waiting at a gate'],
-    done: ['success', 'done'],
-    failed: ['failed', 'failed'],
-    skipped: ['interrupted', 'skipped'],
-  };
   const ICON = {
     validated: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>',
     auto: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 3 14h9l-1 8 10-12h-9z"/></svg>',
@@ -111,7 +116,7 @@
   function badge(i) {
     const released = i.released ? `<span class="badge bl-released" data-testid="issue-released" title="${esc(`Shipped with the release ${i.released}`)}">Released ${esc(i.released)}</span>` : '';
     if (!i.roadmap) return released;
-    return `<span class="badge bl-roadmap" title="${esc(`${i.roadmap.name}: ${i.roadmap.status}`)}">Roadmap: stage ${i.roadmap.stage}${i.roadmap.status === 'planned' ? '' : ` · ${esc(i.roadmap.status)}`}</span>${released}`;
+    return `<span class="badge bl-roadmap" data-status="${esc(i.roadmap.status)}" title="${esc(`${i.roadmap.name}: ${i.roadmap.status}`)}">Roadmap: stage ${i.roadmap.stage}${i.roadmap.status === 'planned' ? '' : ` · ${esc(StatusPill.statusLabel(i.roadmap.status))}`}</span>${released}`;
   }
 
   // An id as people read it (#245, display-name.js; `names`: the run's own names for them)
@@ -266,8 +271,69 @@
     const run = x.run;
     if (!x.runId || !run) return null;
     const path = (workflows?.get(x.workflow)?.steps || []).map((st) => st.id);
-    const est = RunProgress.estimateProgress({ steps: run.progress || [], path, typical: run.stepTimes || {}, status: run.status, startedAt: run.startedAt });
+    const est = RunProgress.estimateProgress({ steps: run.progress || [], path, typical: run.stepTimes || {}, status: run.status, startedAt: run.startedAt, keep: true });
     return x.waiting && est.state === 'running' ? { ...est, state: 'waiting' } : est;
+  }
+
+  // ---- the run's timer (#272): its working time under the ring, against the item's time estimate ----
+  const toMs = (ts) => { const t = Date.parse(ts || ''); return Number.isFinite(t) ? t : null; };
+  const pad2 = (n) => String(n).padStart(2, '0');
+  // "23:41", "1:05:12"
+  function clockText(ms) {
+    const s = Math.floor(Math.max(0, ms) / 1000);
+    const h = Math.floor(s / 3600);
+    return `${h ? `${h}:${pad2(Math.floor((s % 3600) / 60))}` : Math.floor(s / 60)}:${pad2(s % 60)}`;
+  }
+  // within the estimate, up to 130% of it, beyond; neutral without an estimate
+  function timerTone(ms, minutes) {
+    if (!(minutes > 0)) return 'neutral';
+    const ratio = ms / (minutes * 60000);
+    return ratio < 1 ? 'ok' : ratio <= 1.3 ? 'warn' : 'over';
+  }
+  /**
+   * How long a run has worked, gate waits left out as #215 counts them (a finished human gate's
+   * duration, and the time since the gate it waits at started): → { ms, since }, or null when the run
+   * has no start. `since`: the instant the timer counts from while it ticks (the run's start moved by
+   * its gate waits); null while it is paused at a gate or frozen at the run's end.
+   */
+  function runClock(run, now = Date.now()) {
+    const start = toMs(run.startedAt) ?? toMs(run.progress?.[0]?.ts);
+    const active = run.status === 'running' || run.status === 'pending';
+    const end = active ? now : toMs(run.finishedAt);
+    if (start == null || end == null) return null;
+    let gates = 0;
+    let paused = false;
+    for (const e of run.progress || []) {
+      if (e.type !== 'human_approval' && e.status !== 'waiting') continue;
+      if (e.status !== 'waiting' && e.status !== 'running') gates += e.durationMs || 0;
+      else if (active && toMs(e.ts) != null) { gates += Math.max(0, now - toMs(e.ts)); paused = true; }
+    }
+    return { ms: Math.max(0, end - start - gates), since: active && !paused ? start + gates : null };
+  }
+  // "23 min of ≈ 22 min (estimate from 30 past runs)"
+  function timeAgainst(ms, e) {
+    const spent = mins(Math.floor(ms / 60000));
+    if (!(e?.minutes > 0)) return `${spent} so far (no estimate yet)`;
+    return `${spent} of ≈ ${mins(e.minutes)} (${e.runs ? `estimate from ${plural(e.runs, 'past run')}` : e.timeBasis || 'estimated'})`;
+  }
+  // data-tone is what the E2E steps read, data-timer-state the unit tests: the same value
+  function timerHtml(clock, e) {
+    const tone = timerTone(clock.ms, e?.minutes);
+    return `<span class="rm-timer rm-timer-${tone}" role="timer" data-rm-timer="${clock.since ?? ''}" data-estimate="${Number(e?.minutes) || ''}" data-testid="roadmap-run-timer" data-timer-state="${tone}" data-tone="${tone}" aria-label="${esc(timeAgainst(clock.ms, e))}">${clockText(clock.ms)}</span>`;
+  }
+  /** Every second (backlog.js): the timers of the runs at work read the clock again, without a redraw. */
+  function tick(root) {
+    for (const el of root?.querySelectorAll('[data-rm-timer]') || []) {
+      const since = Number(el.dataset.rmTimer);
+      if (!since) continue; // paused at a gate, or frozen at the run's end
+      const ms = Math.max(0, Date.now() - since);
+      const tone = timerTone(ms, Number(el.dataset.estimate));
+      el.textContent = clockText(ms);
+      if (el.dataset.tone === tone) continue;
+      el.classList.replace(`rm-timer-${el.dataset.tone}`, `rm-timer-${tone}`);
+      el.dataset.tone = tone;
+      el.dataset.timerState = tone;
+    }
   }
 
   function progressHtml(x) {
@@ -280,6 +346,10 @@
     const where = est.step ? groupOf.get(est.step) || readable(est.step, run.stepNames) : 'starting';
     const whereId = est.step && !groupOf.has(est.step) ? ` (${est.step})` : '';
     const label = { waiting: 'Waiting for you', failed: `Failed at ${where}`, stopped: `Stopped at ${where}`, done: 'Done' }[est.state] || where;
+    // #272: a fix round (the run went back to a step it had done): the same run, said under the step
+    const sender = est.sentBackBy ? groupOf.get(est.sentBackBy) || readable(est.sentBackBy, run.stepNames) : '';
+    const round = est.round > 1 && est.state !== 'done' ? `round ${est.round}${sender ? ` · fix round after ${sender}` : ''}` : '';
+    const clock = runClock(run);
     // who works there: the human at a gate, else the step's first agent (the engine when none yet)
     // (before its first message the trail has no provider yet: the workflow's agent definition gives it)
     const first = last?.agents?.[0];
@@ -295,12 +365,14 @@
     const summary = [
       `Estimate: ${est.state === 'done' ? 100 : est.percent}%${est.state === 'done' ? ' (finished)' : ''}`,
       `Elapsed ${dur(est.elapsedMs)}${est.state === 'done' ? '' : ` · about ${dur(est.leftMs)} left`}`,
-      `Now: ${label}${est.state === 'running' || est.state === 'waiting' ? ` (${who})` : ''}`,
+      clock ? `Working time (gate waits left out): ${timeAgainst(clock.ms, x.estimate)}` : '',
+      round ? `Same run, ${round}` : '',
+      `Now:${label}${est.state === 'running' || est.state === 'waiting' ? ` (${who})` : ''}`,
       // the gate's "What happened" line (#213)
       est.state === 'waiting' && run.gate ? `Gate: ${run.gate}` : '',
       `Run ${x.runId}${run.mock ? ' (simulated)' : ''}`,
     ].filter(Boolean);
-    const how = `How: ${basis}. A return to an earlier step lowers it; it stays under 100% until the run ends.`;
+    const how = `How: ${basis}. A return to an earlier step (a fix round) keeps what the run had earned; it stays under 100% until the run ends.`;
     const pct = est.state === 'done' ? 100 : est.percent;
     const chips = RunProgress.progressGroups(run.progress || [], run.groups || [], run.status === 'running' || run.status === 'pending' ? 'running' : run.status);
     const steps = chips.length
@@ -309,22 +381,44 @@
     const head = `<div class="rm-run-summary small" data-testid="roadmap-run-summary">${summary.map((l) => `<div>${esc(l)}</div>`).join('')}<div class="muted">${esc(how)}</div><div class="muted">Click a step to open the run there.</div></div>`;
     return `
       <div class="rm-progress st-${est.state}${run.mock ? ' sim' : ''}${ringOpen === x.runId ? ' open' : ''}" data-rm-progress="${esc(x.runId)}" data-workflow="${esc(run.workflow || x.workflowName || '')}">
-        <button type="button" class="rm-ring" data-rm-ring aria-expanded="${ringOpen === x.runId}" aria-label="${esc(`${pct}% estimated, ${label}${whereId}. Show the run's steps`)}">
-          <svg viewBox="0 0 36 36" aria-hidden="true"><circle class="rm-ring-track" cx="18" cy="18" r="15.9155"/><circle class="rm-ring-bar" cx="18" cy="18" r="15.9155" stroke-dasharray="${pct} ${100 - pct}"/></svg>
-          <span class="rm-ring-pct">${pct}%</span>
-        </button>
+        <div class="rm-ring-col">
+          <button type="button" class="rm-ring" data-rm-ring aria-expanded="${ringOpen === x.runId}" aria-label="${esc(`${pct}% estimated, ${label}${whereId}${round ? `, ${round}` : ''}. Show the run's steps`)}">
+            <svg viewBox="0 0 36 36" aria-hidden="true"><circle class="rm-ring-track" cx="18" cy="18" r="15.9155"/><circle class="rm-ring-bar" cx="18" cy="18" r="15.9155" stroke-dasharray="${pct} ${100 - pct}"/></svg>
+            <span class="rm-ring-pct">${pct}%</span>
+          </button>
+          ${clock ? timerHtml(clock, x.estimate) : ''}
+        </div>
         <div class="rm-progress-text">
           <span class="rm-progress-step" data-testid="roadmap-progress-step"><span class="rp-av${human ? ' human' : agent?.provider ? '' : ' engine'}" aria-hidden="true">${art}</span><span>${esc(label)}</span></span>
-          ${run.mock ? '<span class="badge p-mock">simulated</span>' : ''}
+          ${round ? `<span class="rm-round" data-testid="roadmap-round">${esc(round)}</span>` : ''}
+          ${run.mock ? '<span class="badge p-mock">Simulated</span>' : ''}
         </div>
         <div class="rm-steps" role="group" aria-label="The run's steps">${head}${steps}</div>
       </div>`;
   }
 
+  // ---- an item's status (#266): the kanban's run chip when it has a run, a pill otherwise ----------------
+  // how a run that ended reads on an item planned again (the roadmap stopped, a Retry not started yet)
+  const RUN_END = { success: 'done', failed: 'failed', cancelled: 'stopped', interrupted: 'interrupted' };
+  function chipStatus(x) {
+    if (x.waiting) return 'waiting';
+    if (x.status !== 'planned') return x.status;
+    return RUN_END[x.run?.status] || x.run?.status || 'planned';
+  }
+  function statusHtml(x) {
+    // refused before any run: nothing to open, the error is the tooltip (and under the card)
+    if (refusedStart(x)) return StatusPill.statusPill('failed_to_start', { title: x.error, className: 'rm-state' });
+    const gate = x.waiting && x.run?.gate ? x.run.gate : '';
+    if (!x.runId) return StatusPill.statusPill(x.waiting ? 'waiting' : x.status, { title: gate, className: 'rm-state' });
+    const workflow = readable(String(x.run?.workflow || x.workflow || '').replace(/\.ya?ml$/i, ''));
+    const named = x.workflowName || x.workflow || '';
+    const title = window.runTitle ? runTitle({ runId: x.runId, workflow: named, issues: refs(x) }) : '';
+    return `<button class="bl-run rm-run-chip" type="button" data-testid="run-chip" data-run="${esc(x.runId)}" data-workflow="${esc(x.workflowName || '')}" title="${esc(`Open the run ${x.runId} of ${x.workflow} (Resume from step… is there)`)}">${StatusPill.statusPill(chipStatus(x), { title: gate })}<span class="rm-run-wf">${esc(workflow)}</span>${title && title !== named ? `<span>${esc(title)}</span>` : ''}</button>`;
+  }
+
   // `r`: the roadmap (which item paused it, #196)
   function itemHtml(x, s, n, byNumber, r) {
     const status = x.waiting ? 'waiting' : x.status;
-    const [pill, stateLabel] = ITEM_STATE[status] || ['idle', status];
     const locked = !editable(x);
     const refused = refusedStart(x);
     const push = pushesAgainstDefault(x);
@@ -335,8 +429,10 @@
       const text = i.url ? `<a class="rm-title" href="${esc(i.url)}" target="_blank" rel="noopener" draggable="false">${esc(title || 'Open the issue')}</a>` : `<span class="rm-title">${esc(title)}</span>`;
       return `<li class="rm-issue"${locked || open ? '' : ` draggable="true" data-drag-issue="${i.number}" data-from="${esc(x.id)}"`} title="${esc(`#${i.number} ${title}`.trim())}"><span class="rm-num mono">#${i.number}</span>${text}</li>`;
     }).join('');
+    // the card carries its status id once the item has started or ended (E2E steps count the done,
+    // running and skipped cards); a planned item's id is on its pill only
     return `
-      <div class="rm-item rm-${esc(status)}" data-testid="roadmap-item" data-item="${esc(x.id)}" data-stage="${s}"${locked || open ? '' : ' draggable="true" data-drag-item'}>
+      <div class="rm-item rm-${esc(status)}" data-testid="roadmap-item"${status === 'planned' ? '' : ` data-status="${esc(status)}"`} data-item="${esc(x.id)}" data-stage="${s}"${locked || open ? '' : ' draggable="true" data-drag-item'}>
         <div class="rm-item-head">
           <ul class="rm-titles">${titles}</ul>
           <div class="rm-actions">
@@ -348,15 +444,14 @@
           ${progressHtml(x)}
         </div>
         <div class="rm-meta">
-          <span class="pill pill-${pill} rm-state"${x.waiting && x.run?.gate ? ` title="${esc(x.run.gate)}"` : ''}>${esc(stateLabel)}</span>
-          <span class="badge rm-wf${push ? ' rm-wf-push' : ''}" title="${esc(`${x.workflowName && x.workflowName !== x.workflow ? `${x.workflowName} (${x.workflow})` : x.workflow}${push ? `. It pushes a branch and opens a PR/MR, while the default development workflow (${DefaultWorkflow.current().file}) merges locally` : ''}`)}">${push ? '<span aria-hidden="true">⇡ </span>' : ''}${esc(shortWorkflow(x.workflow))}</span>
+          ${statusHtml(x)}
+          ${x.runId && !push ? '' : `<span class="badge rm-wf${push ? ' rm-wf-push' : ''}" title="${esc(`${x.workflowName && x.workflowName !== x.workflow ? `${x.workflowName} (${x.workflow})` : x.workflow}${push ? `. It pushes a branch and opens a PR/MR, while the default development workflow (${DefaultWorkflow.current().file}) merges locally` : ''}`)}">${push ? '<span aria-hidden="true">⇡ </span>' : ''}${esc(shortWorkflow(x.workflow))}</span>`}
           ${modeHtml(x, locked)}
           ${size != null ? `<span class="badge rm-size" title="The sum of the issues' complexity:n labels">complexity ${size}</span>` : ''}
           ${costHtml(x)}
-          ${x.mock ? '<span class="badge p-mock">simulated</span>' : ''}
+          ${x.mock ? '<span class="badge p-mock">Simulated</span>' : ''}
           ${x.then ? ChainModel.chainBadgesHtml({ then: x.then }) : ''}
           ${WorkflowInputs.inputPills(workflows?.get(x.workflow) || null, x.inputs, { skip: ['mode'] })}
-          ${x.runId ? `<button class="bl-run link-btn small" type="button" data-run="${esc(x.runId)}" data-workflow="${esc(x.workflowName || '')}" title="Open the run (Resume from step… is there)">run ${esc(x.runId)}</button>` : ''}
           ${locked || open ? '' : '<button class="link-btn small" type="button" data-rm-edit title="Edit this item\'s inputs">Edit</button>'}
         </div>
         ${reasonHtml(x)}
@@ -373,10 +468,24 @@
     return `Stages ${n.every((x, k) => !k || x === n[k - 1] + 1) ? `${n[0]}–${n[n.length - 1]}` : n.join(', ')}`;
   }
 
-  // `scoped`: the index of the stage run on its own (#141), -1 when none; `r`: the roadmap; `show`:
-  // which items the view shows (#217, every item by default); `folded`: its finished items hidden.
-  function stageHtml(stage, s, count, current, byNumber, scoped, r, show = () => true, folded = 0) {
+  // "#240 Agent inboxes (done), #246+#247 (done)": the items a stage's "+n done" chip folds
+  const foldedNames = (items) => items.map((x) => {
+    const of = refs(x);
+    return `${of.length === 1 ? `#${of[0].number} ${of[0].title || ''}`.trim() : of.map((i) => `#${i.number}`).join('+')} (${x.status})`;
+  }).join(', ');
+
+  // `scoped`: the index of the stage run on its own (#141), -1 when none; `r`: the roadmap; `shown`:
+  // what the view draws of it (visibleStages, pageOf): its `items`, its finished items `folded` under
+  // the "+n done" chip (#267; `open`: unfolded, drawn below the chip), `cut`: only its first cards (#268,
+  // the rest comes with the next page).
+  function stageHtml(stage, s, count, current, byNumber, scoped, r, shown) {
     const done = stage.items.every(finished);
+    const { items, folded, open, cut = Infinity } = shown;
+    const card = (x) => itemHtml(x, s, stage.items.indexOf(x), byNumber, r);
+    const n = folded.length;
+    const chip = n && cut >= items.length
+      ? `<button type="button" class="rm-done-chip" data-rm-done="${esc(stageKey(stage, s))}" data-testid="roadmap-done-chip" aria-expanded="${open}" aria-label="${open ? 'Hide' : 'Show'} ${n} done item${n === 1 ? '' : 's'} of stage ${s + 1}" title="${esc(foldedNames(folded))}">${open ? `Hide ${n}` : `+${n}`} done</button>` : '';
+    const cards = items.slice(0, cut).map(card).join('') + chip + (open ? folded.slice(0, Math.max(0, cut - items.length)).map(card).join('') : '');
     const noteOpen = noteEditing != null && noteEditing === stage.id;
     const note = noteOpen
       ? `<input type="text" class="rm-note small" data-rm-note value="${esc(stage.note || '')}" placeholder="Why this order" aria-label="Stage note" autofocus />`
@@ -384,7 +493,7 @@
     const runnable = r.state !== 'running' && stage.items.some((x) => x.status === 'planned');
     const runTitle = r.state === 'running' ? 'The roadmap is running: pause or stop it first' : runnable ? 'Run only this stage\'s items; the roadmap pauses when they are done' : 'No planned item in this stage';
     const stateBadge = s === scoped ? `<span class="badge ${r.state === 'running' ? 'live' : 'warn'}">${r.state === 'running' ? 'Running this stage only' : 'This stage only · paused'}</span>`
-      : s === current ? '<span class="badge live">current</span>' : done ? '<span class="badge">done</span>' : '';
+      : s === current ? '<span class="badge live">current</span>' : done ? '<span class="badge" data-status="done">Done</span>' : '';
     return `
       <section class="rm-stage${s === current ? ' current' : ''}${s === scoped ? ' scoped' : ''}${done ? ' finished' : ''}" data-stage="${s}" data-drop-stage="${s}" data-testid="roadmap-stage">
         <div class="rm-stage-head">
@@ -400,8 +509,7 @@
           <button class="btn sm ghost" type="button" data-rm-stage="down" title="Run this stage later"${s === count - 1 ? ' disabled' : ''}>↓</button>
         </div>
         ${note}
-        <div class="rm-items">${stage.items.map((x, n) => (show(x) ? itemHtml(x, s, n, byNumber, r) : '')).join('')}${folded
-    ? `<button class="link-btn small rm-folded" type="button" data-rm-show-all title="Done or skipped items of this stage, hidden: Show all brings them back">+${folded} done</button>` : ''}</div>
+        <div class="rm-items">${cards}</div>
       </section>`;
   }
 
@@ -453,8 +561,38 @@
     });
   }
 
-  // ---- what the Roadmap shows (#217): the open work by default, Show all, the epic filter ------
+  // ---- what the Roadmap shows (#217, #268): Planned | All, the date range, the epic filter, in pages ------
   const finished = (x) => x.status === 'done' || x.status === 'skipped';
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  // the date ranges: [id, the option, in the header's count, its length in ms (null: no limit)]
+  const SINCE = [
+    ['24h', 'Last 24 hours', 'last 24 hours', DAY_MS],
+    ['2d', 'Last 2 days', 'last 2 days', 2 * DAY_MS],
+    ['3d', 'Last 3 days', 'last 3 days', 3 * DAY_MS],
+    ['1w', 'Last week', 'last week', 7 * DAY_MS],
+    ['15d', 'Last 15 days', 'last 15 days', 15 * DAY_MS],
+    ['1m', 'Last month', 'last month', 30 * DAY_MS],
+    ['total', 'Total', 'all time', null],
+  ];
+  // An item's last activity: the latest of when it joined the roadmap (`origin`), its run's start and
+  // its run's end; a run in progress is active now. An item without any date is in every range.
+  function inRange(x, v, now) {
+    if (v.rangeMs == null || x.status === 'running' || x.waiting) return true;
+    const at = [x.origin, x.run?.startedAt, x.run?.finishedAt].map(toMs).filter((t) => t != null);
+    return !at.length || Math.max(...at) >= now - v.rangeMs;
+  }
+  // #267: the stages whose "+n done" chip is unfolded, by stage id (kept across the re-reads of the file)
+  const unfolded = new Set();
+  const stageKey = (stage, s) => String(stage.id || `#${s}`);
+  // #268: the pages drawn of the current view (`key`): `more` pages after the first, `earlier` before it
+  const PAGE_STAGES = 15;
+  const PAGE_ITEMS = 60;
+  const LEAD_STAGES = 2; // the first page starts this many stages before the current one
+  let pages = { key: '', more: 0, earlier: 0, fresh: false };
+  /** The next page (the "Loading…" row came near the screen); the owner redraws. */
+  function loadMore() {
+    pages.more += 1;
+  }
   const NO_EPIC = 'none'; // BacklogEpics.NONE
   // the item belongs to the epic filter ('' every item, NO_EPIC an issue in no epic, else an epic's id)
   function inEpic(x, epic, byNumber) {
@@ -465,22 +603,72 @@
     });
   }
   /**
-   * The stages the view shows: [{ stage, s (its real index), show (item → bool), folded }] and how
-   * many finished stages it hides. `view`: { epic, showAll } (the Backlog's filter, both tabs).
+   * The stages the view shows: [{ stage, s (its real index), items (the ones drawn, in order), folded
+   * (Planned: its finished items of the date range, under the "+n done" chip), open (the chip is
+   * unfolded: they are drawn too) }]. `v`: { epic, showAll, rangeMs }.
    */
-  function visibleStages(r, view, byNumber) {
+  function visibleStages(r, v, byNumber, now) {
     const out = [];
-    let hidden = 0;
     r.stages.forEach((stage, s) => {
-      const mine = stage.items.filter((x) => inEpic(x, view.epic, byNumber));
-      if (!stage.items.length && !view.epic) { out.push({ stage, s, show: () => true, folded: 0 }); return; }
-      if (!mine.length) return;
-      const open = mine.filter((x) => !finished(x));
-      if (view.showAll) { out.push({ stage, s, show: (x) => mine.includes(x), folded: 0 }); return; }
-      if (!open.length) { hidden++; return; }
-      out.push({ stage, s, show: (x) => open.includes(x), folded: mine.length - open.length });
+      if (!stage.items.length && !v.epic) { out.push({ stage, s, items: [], folded: [], open: false }); return; }
+      const mine = stage.items.filter((x) => inEpic(x, v.epic, byNumber));
+      if (v.showAll) {
+        const items = mine.filter((x) => inRange(x, v, now));
+        if (items.length) out.push({ stage, s, items, folded: [], open: false });
+        return;
+      }
+      const items = mine.filter((x) => !finished(x));
+      const folded = mine.filter((x) => finished(x) && inRange(x, v, now));
+      const key = stageKey(stage, s);
+      // nothing left to fold (or to show): the stage's choice is forgotten
+      if (!items.length || !folded.length) unfolded.delete(key);
+      if (items.length) out.push({ stage, s, items, folded, open: unfolded.has(key) });
     });
-    return { stages: out, hidden };
+    return out;
+  }
+  const cardCount = (x) => x.items.length + (x.open ? x.folded.length : 0);
+  /**
+   * The page of the visible stages to draw: from LEAD_STAGES before the current stage (so it is in
+   * the first page however long the finished history is), PAGE_STAGES stages or PAGE_ITEMS cards per
+   * page (a longer stage is cut: `cut`, its first cards). → { drawn, earlier (visible stages above
+   * the page), more (something is left below it) }
+   */
+  function pageOf(list, current) {
+    const at = Math.max(0, list.findIndex((x) => x.s >= current));
+    const base = Math.max(0, at - LEAD_STAGES);
+    const start = Math.max(0, base - pages.earlier * PAGE_STAGES);
+    let stagesLeft = PAGE_STAGES * (1 + pages.more);
+    let cardsLeft = PAGE_ITEMS * (1 + pages.more);
+    const drawn = list.slice(start, base);
+    let more = false;
+    for (let k = base; k < list.length && !more; k++) {
+      const cards = cardCount(list[k]);
+      if (stagesLeft <= 0 || cardsLeft <= 0) more = true;
+      else if (cards > cardsLeft) { drawn.push({ ...list[k], cut: cardsLeft }); more = true; } else drawn.push(list[k]);
+      stagesLeft -= 1;
+      cardsLeft -= cards;
+    }
+    return { drawn, earlier: start, more };
+  }
+  // After backlog.js drew the view: the "Loading…" row asks for the next page when it comes near the
+  // screen (as the runs list's does), never under an open Edit form; a view just changed whose page
+  // starts below earlier stages shows its current stage.
+  let observer = null;
+  function mounted(list, rerender) {
+    observer?.disconnect();
+    observer = null;
+    const row = list?.querySelector('[data-rm-load-more]');
+    if (row && typeof IntersectionObserver === 'function') {
+      observer = new IntersectionObserver((entries) => {
+        if (!entries.some((e) => e.isIntersecting) || busy()) return;
+        loadMore();
+        rerender();
+      }, { rootMargin: '300px' });
+      observer.observe(row);
+    }
+    if (!pages.fresh) return;
+    pages.fresh = false;
+    if (list?.querySelector('[data-rm-earlier]')) list.querySelector('.rm-stage.current')?.scrollIntoView({ block: 'nearest' });
   }
 
   // ---- Live roadmap (#164, src/live-roadmap.js) ----------------------------------------------------
@@ -506,7 +694,7 @@
     const [text, tone] = refillText(r);
     const idle = r.state !== 'running';
     return `<span class="bl-live-dot${idle ? ' idle' : ''}" aria-hidden="true"></span>
-      <span class="bl-live-text"><b>Live roadmap</b>: refills itself from the backlog · <span class="${tone ? `${tone}-text` : ''}" title="${esc(r.liveRefill?.message || '')}">${esc(text)}</span>${idle ? ` · <span class="muted">roadmap ${esc(STATE_LABEL[r.state] || r.state)}</span>` : ''}</span>
+      <span class="bl-live-text"><b>Live roadmap</b>: refills itself from the backlog · <span class="${tone ? `${tone}-text` : ''}" title="${esc(r.liveRefill?.message || '')}">${esc(text)}</span>${idle ? ` · <span class="muted">roadmap ${esc(r.state)}</span>` : ''}</span>
       <span class="spacer"></span>
       <button class="btn sm ghost" type="button" data-live-off title="The current stages finish; nothing more is added">Turn off</button>`;
   }
@@ -549,20 +737,24 @@
 
   /**
    * The Roadmap view (into #bl-list): its bar, the plain queue's items, the stages in order. `rerender`
-   * redraws once the workflows are loaded. `view` (#217): the Backlog's filter shared with the Board
-   * tab, { epic, showAll }: without Show all, only the open work (finished stages hidden, a stage's
-   * finished items folded); the epic keeps only its items and hides the stages left empty.
+   * redraws once the workflows are loaded. `view` (#217, #268): what backlog.js remembers, { epic,
+   * showAll, since }: Planned (showAll off) is the open work, a stage's finished items of the date
+   * range folded; All is every item of the range; the epic keeps only its items and hides the stages
+   * left empty. A change of the view goes back to the first page.
    */
   function html(data, rerender, view = {}) {
     loadWorkflows(rerender);
-    const v = { epic: view.epic || '', showAll: !!view.showAll };
+    const [since, , sinceText, rangeMs] = SINCE.find(([id]) => id === view.since) || SINCE[0];
+    const v = { epic: view.epic || '', showAll: !!view.showAll, since, rangeMs };
+    const key = `${v.showAll ? 'all' : 'planned'}|${since}|${v.epic}`;
+    if (pages.key !== key) pages = { key, more: 0, earlier: 0, fresh: true };
     const r = data?.roadmap || { state: 'planned', stages: [] };
     const q = data?.queue?.items || [];
     const byNumber = new Map((data?.issues || []).map((i) => [i.number, i]));
     // a stage run on its own (#141) is the one in progress; the others keep their planned look
     const scoped = scopedStage(r);
     const current = scoped >= 0 ? scoped : r.stages.findIndex((s) => s.items.some((x) => x.status !== 'done' && x.status !== 'skipped'));
-    const stateBadge = `<span class="badge ${r.state === 'running' ? 'live' : r.state === 'paused' ? 'warn' : ''}">${esc(STATE_LABEL[r.state] || r.state)}${scoped >= 0 ? ` · stage ${scoped + 1} only` : ''}${r.simulated ? ' · simulated' : ''}</span>`;
+    const stateBadge = `<span class="badge ${r.state === 'running' ? 'live' : r.state === 'paused' ? 'warn' : ''}" data-status="${esc(r.state)}">${esc(StatusPill.statusLabel(r.state))}${scoped >= 0 ? ` · stage ${scoped + 1} only` : ''}${r.simulated ? ' · simulated' : ''}</span>`;
     const bar = `
       <div class="bl-queue rm-bar" data-testid="roadmap-bar">
         <span><b>Roadmap</b> ${stateBadge} ${r.stages.length} stage${r.stages.length === 1 ? '' : 's'}</span>
@@ -586,40 +778,59 @@
     const epics = data?.epics || [];
     const grouped = byEpic && epics.length > 0 && r.stages.length > 0;
     const toggle = epics.length && r.stages.length ? `<label class="check small rm-by-epic" title="Show the roadmap's items under their issues' epics (the stages keep their order)"><input type="checkbox" data-rm-by-epic${grouped ? ' checked' : ''} /><span>Group by epic</span></label>` : '';
-    const showAllToggle = r.stages.length ? `<label class="check small rm-show-all" title="Show the done and skipped stages and items too (by default only the open work: running, waiting, failed and planned)"><input type="checkbox" data-rm-show-all-toggle${v.showAll ? ' checked' : ''} /><span>Show all</span></label>` : '';
-    const vis = visibleStages(r, v, byNumber);
+    // #268: the Planned | All switch (the remembered open-work flag) and the date range
+    const SWITCH = [
+      ['planned', 'Planned', 'The open work: every item but the done and skipped ones; a stage\'s finished items of the date range fold under its "+n done"'],
+      ['all', 'All', 'Every item of the date range, the done and skipped ones too'],
+    ];
+    const viewSeg = r.stages.length ? `<span class="seg sm rm-view-seg" role="group" aria-label="Roadmap items">${SWITCH.map(([id, label, tip]) => {
+      const on = (id === 'all') === v.showAll;
+      return `<button type="button"${on ? ' class="active"' : ''} data-rm-view="${id}" aria-pressed="${on}" title="${esc(tip)}">${label}</button>`;
+    }).join('')}</span>` : '';
+    const sinceSelect = r.stages.length ? `<select class="rm-since" data-rm-since data-testid="roadmap-date-filter" aria-label="Date range" title="Filter by each item's last activity (added, its run's start, its run's end); in Planned the open items always show">${SINCE.map(([id, label]) =>
+      `<option value="${id}"${id === since ? ' selected' : ''}>${label}</option>`).join('')}</select>` : '';
+    const now = Date.now();
+    const vis = visibleStages(r, v, byNumber, now);
     const allItems = r.stages.flatMap((s) => s.items);
-    const shownItems = vis.stages.reduce((a, x) => a + x.stage.items.filter(x.show).length, 0);
+    const shownItems = vis.reduce((a, x) => a + cardCount(x), 0);
     const epicName = v.epic === NO_EPIC ? 'with no epic' : `in epic ${epics.find((e) => e.id === v.epic)?.title || v.epic}`;
-    const count = r.stages.length && (v.epic || !v.showAll) ? `<span class="small muted rm-count">${shownItems} of ${allItems.length} item${allItems.length === 1 ? '' : 's'} shown</span>` : '';
-    const hiddenLine = vis.hidden ? `<p class="small muted rm-hidden-line">${vis.hidden} finished stage${vis.hidden === 1 ? '' : 's'} hidden${v.epic ? ` (${esc(epicName)})` : ''} · <button class="link-btn small" type="button" data-rm-show-all>Show all</button></p>` : '';
-    const nothing = `<div class="empty-state"><b>No ${v.showAll ? '' : 'open '}roadmap items${v.epic ? ` ${esc(epicName)}` : ''}.</b>
-      <p class="muted">${v.showAll ? 'Pick another epic, or All epics.' : 'Finished work is hidden.'}</p>${v.showAll ? '' : '<button class="btn sm ghost" type="button" data-rm-show-all>Show all</button>'}</div>`;
-    // #260: each shown stage with its cut line; a hidden (finished) stage's line still shows while its release has not shipped
-    const shown = new Map(vis.stages.map((x) => [x.s, x]));
+    const count = r.stages.length ? `<span class="small muted rm-count" data-testid="roadmap-count"${v.epic ? ` title="${esc(`Items ${epicName}`)}"` : ''}>${shownItems} of ${allItems.length} item${allItems.length === 1 ? '' : 's'} · ${sinceText}</span>` : '';
+    const nothing = `<div class="empty-state"><b>No ${v.showAll ? '' : 'open '}roadmap items${v.showAll && rangeMs ? ` in the ${sinceText}` : ''}${v.epic ? ` ${esc(epicName)}` : ''}.</b>
+      <p class="muted">${v.showAll ? 'Pick a longer date range, or another epic.' : 'Done and skipped items are under All.'}</p>${v.showAll ? '' : '<button class="btn sm ghost" type="button" data-rm-view="all">Show all items</button>'}</div>`;
+    // the page to draw; #260: each drawn stage with its cut line; a hidden (finished) stage's line
+    // still shows while its release has not shipped (between the drawn stages, and beyond them when
+    // the page reaches that end of the roadmap)
+    const page = pageOf(vis, current);
+    const drawn = new Map(page.drawn.map((x) => [x.s, x]));
+    const from = page.earlier ? page.drawn[0].s : 0;
+    const to = page.more ? page.drawn.at(-1).s : r.stages.length - 1;
     const staged = r.stages.map((stage, s) => {
-      const x = shown.get(s);
-      if (x) return stageHtml(stage, s, r.stages.length, current, byNumber, scoped, r, x.show, x.folded) + cutLineHtml(stage, s);
+      if (s < from || s > to) return '';
+      const x = drawn.get(s);
+      if (x) return stageHtml(stage, s, r.stages.length, current, byNumber, scoped, r, x) + cutLineHtml(stage, s);
       return !v.epic && stage.release?.status !== 'shipped' ? cutLineHtml(stage, s) : '';
     }).join('');
+    const earlier = page.earlier ? `<button class="link-btn small rm-earlier" type="button" data-rm-earlier title="Draw the stages before these">↑ ${plural(page.earlier, 'earlier stage')}</button>` : '';
+    const loadingRow = page.more ? '<div class="rm-loading small muted" role="status" data-rm-load-more data-testid="roadmap-loading">Loading…</div>' : '';
     const stages = !r.stages.length
       ? '<div class="empty-state"><b>No roadmap yet</b><p class="muted">Select issues, Assign workflow…, then Add to roadmap: each addition is a stage that starts when the previous one has finished and merged.</p></div>'
       // grouped by epic: no stages to draw the lines between, so the ones still waiting lead the list
-      : grouped ? r.stages.map((stage, s) => (stage.release?.status !== 'shipped' ? cutLineHtml(stage, s, true) : '')).join('') + byEpicHtml(r, epics, byNumber, v)
-        : staged.trim() ? staged : nothing;
+      : grouped ? r.stages.map((stage, s) => (stage.release?.status !== 'shipped' ? cutLineHtml(stage, s, true) : '')).join('') + byEpicHtml(r, epics, byNumber, v, (x) => (v.showAll ? inRange(x, v, now) : !finished(x)))
+        : staged.trim() ? `${earlier}${staged}${loadingRow}` : nothing;
     const liveHtml = r.stages.length ? liveBox(r) : '';
-    return `<div class="rm">${bar.replace('<span class="spacer"></span>', `${count}<span class="spacer"></span>${showAllToggle}${toggle}`)}${queued}${grouped ? '' : hiddenLine}${stages}${liveHtml}${importBox}</div>`;
+    return `<div class="rm">${bar.replace('<span class="spacer"></span>', `${count}<span class="spacer"></span>${viewSeg}${sinceSelect}${toggle}`)}${queued}${stages}${liveHtml}${importBox}</div>`;
   }
 
   // #138: the items under their issues' epics (an item of issues in two epics shows under both; "No
-  // epic" last), each with its stage; editing stays in the stage view. `v`: the view's filter (#217).
-  function byEpicHtml(r, epics, byNumber, v = {}) {
+  // epic" last), each with its stage; editing stays in the stage view. `v`: the view's filter (#217);
+  // `shows`: the items the view keeps (#268: Planned | All, the date range).
+  function byEpicHtml(r, epics, byNumber, v = {}, shows = () => true) {
     const sections = [...epics.map((e) => ({ id: e.id, title: e.title })), { id: '', title: 'No epic' }].map((e) => {
       if (v.epic && v.epic !== (e.id || NO_EPIC)) return '';
       const rows = [];
       r.stages.forEach((stage, s) => stage.items.forEach((x, n) => {
         const ids = new Set(refs(x).map((i) => byNumber.get(i.number)?.epic || ''));
-        if (ids.has(e.id) && (v.showAll || !finished(x))) rows.push(itemHtml(x, s, n, byNumber, r).replace('<div class="rm-meta">', `<div class="rm-meta"><span class="badge" title="Its stage in the roadmap">stage ${s + 1}</span>`));
+        if (ids.has(e.id) && shows(x)) rows.push(itemHtml(x, s, n, byNumber, r).replace('<div class="rm-meta">', `<div class="rm-meta"><span class="badge" title="Its stage in the roadmap">stage ${s + 1}</span>`));
       }));
       if (!rows.length) return '';
       const items = r.stages.flatMap((st) => st.items).filter((x) => refs(x).some((i) => (byNumber.get(i.number)?.epic || '') === e.id));
@@ -797,8 +1008,26 @@
   async function onClick(e, ctx, data) {
     const r = data?.roadmap;
     if (!r) return false;
-    // #217: "Show all" (the hidden-stages line, a stage's "+N done", the empty state)
-    if (e.target.closest('[data-rm-show-all]')) { ctx.setShowAll?.(true); return true; }
+    // #268: the Planned | All switch (and the empty state's "Show all items")
+    const viewBtn = e.target.closest('[data-rm-view]');
+    if (viewBtn) { ctx.setShowAll?.(viewBtn.dataset.rmView === 'all'); return true; }
+    // #267: a stage's "+n done" chip unfolds its finished items, that stage only
+    const doneChip = e.target.closest('[data-rm-done]');
+    if (doneChip) {
+      const key = doneChip.dataset.rmDone;
+      if (!unfolded.delete(key)) unfolded.add(key);
+      ctx.render();
+      return true;
+    }
+    // #268: the page above; the stage that led the list stays where the owner reads
+    const earlier = e.target.closest('[data-rm-earlier]');
+    if (earlier) {
+      const first = earlier.closest('.rm')?.querySelector('.rm-stage')?.dataset.stage;
+      pages.earlier += 1;
+      ctx.render();
+      document.querySelector(`#bl-list .rm-stage[data-stage="${first}"]`)?.scrollIntoView({ block: 'start' });
+      return true;
+    }
     // the ring (#194): a click pins its steps open (hover shows them too); a chip opens the run there
     const chip = e.target.closest('[data-rm-chip]');
     if (chip) { openRunAt(chip); return true; }
@@ -945,8 +1174,9 @@
       await setLive(ctx, r, el.checked);
       return true;
     }
-    if (el.matches('[data-rm-show-all-toggle]')) {
-      ctx.setShowAll?.(el.checked);
+    // #268: the date range (remembered by the owner)
+    if (el.matches('[data-rm-since]')) {
+      ctx.setSince?.(el.value);
       return true;
     }
     if (el.matches('[data-rm-by-epic]')) {
@@ -1088,7 +1318,9 @@
     dropProblem,
     html,
     liveBanner,
+    loadMore,
     mountChain,
+    mounted,
     moveIssue,
     onChange,
     onClick,
@@ -1096,5 +1328,6 @@
     onDragOver,
     onDragStart,
     onDrop,
+    tick,
   };
 })();

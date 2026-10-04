@@ -121,9 +121,9 @@
   }
 
   function groupHtml(it) {
-    const state = !it.done ? '<span class="pill pill-running">running</span>'
-      : it.error ? '<span class="pill pill-failed">failed</span>'
-        : it.failed?.length ? `<span class="pill pill-warn">${it.failed.length} failed</span>` : '<span class="pill pill-success">done</span>';
+    const state = !it.done ? StatusPill.statusPill('running')
+      : it.error ? StatusPill.statusPill('failed')
+        : it.failed?.length ? `<span class="pill pill-warn">${it.failed.length} failed</span>` : StatusPill.statusPill('done');
     return `<div class="rc-group" data-item="${it.id}"><div class="rc-group-head">
       <span>Parallel · ${stepTag(it.stepId, it.visit)} · ${it.agents.map((a) => `<b${colorStyle(a)} title="${esc(a)}">${esc(nameOf(a))}</b>`).join(', ')}</span>${state}</div>
       <div class="rc-group-body"></div></div>`;
@@ -136,7 +136,7 @@
         const issue = it.issues.length ? `${it.issues.length > 1 ? 'Issues' : 'Issue'} ${it.issues.map((i) => `<a href="${esc(i.url)}" target="_blank" rel="noopener">#${esc(i.number)}</a> ${esc(i.title || '')}`).join(' · ')}` : '';
         const inputs = Object.entries(it.inputs).filter(([k, v]) => k !== 'task' && v !== '' && v != null);
         return `<div data-item="${it.id}" class="rc-start"><div class="duo-msg user"><div class="duo-bubble">
-          <div class="duo-meta"><b>${esc(it.workflow)}</b>${it.version ? `<span class="tag">v${esc(it.version)}</span>` : ''}${it.mock ? '<span class="badge p-mock">simulated</span>' : ''}<span class="time">${clock(it.ts)}</span></div>
+          <div class="duo-meta"><b>${esc(it.workflow)}</b>${it.version ? `<span class="tag">v${esc(it.version)}</span>` : ''}${it.mock ? '<span class="badge p-mock">Simulated</span>' : ''}<span class="time">${clock(it.ts)}</span></div>
           ${it.task ? `<div class="rc-body md">${md(it.task)}</div>` : '<p class="muted small">No task.</p>'}
           ${inputs.length ? `<details class="rc-more"><summary>Inputs</summary><dl class="rc-inputs">${inputs.map(([k, v]) => `<dt class="mono">${esc(k)}</dt><dd class="mono">${esc(typeof v === 'string' ? v : JSON.stringify(v))}</dd>`).join('')}</dl></details>` : ''}
           </div></div>${it.resumedFrom ? `<div class="duo-note plain"><span>Resumed from ${esc(it.resumedFrom.run_id)} at <span title="${esc(it.resumedFrom.step)}">${esc(stepName(it.resumedFrom.step))}</span></span></div>` : ''}${issue ? `<div class="duo-note plain"><span>${issue}</span></div>` : ''}</div>`;
@@ -155,7 +155,7 @@
         ${SUP_WHAT[it.action] ? `<p class="muted small">${SUP_WHAT[it.action]}</p>` : ''}</div></div>`;
       case 'end': {
         const ok = it.status === 'success';
-        return `<div class="duo-note ${ok ? 'done' : 'failed'}" data-item="${it.id}"><span><b>${ok ? 'Done' : esc(it.status)}</b>${!ok && it.error ? ` · ${esc(it.error.slice(0, 240))}` : ''} · $${(it.cost || 0).toFixed(2)} · ${fmtSecs(it.durationMs)}</span>
+        return `<div class="duo-note ${ok ? 'done' : 'failed'}" data-item="${it.id}"><span><b data-status="${esc(it.status)}">${ok ? 'Done' : esc(StatusPill.statusLabel(it.status))}</b>${!ok && it.error ? ` · ${esc(it.error.slice(0, 240))}` : ''} · $${(it.cost || 0).toFixed(2)} · ${fmtSecs(it.durationMs)}</span>
           <button type="button" class="link-btn small" data-resume title="Start a new run from a step of this one, keeping the previous outputs (no supervisor call)">Resume from step…</button></div>`;
       }
       default: return '';
@@ -215,13 +215,14 @@
     // the run's title (editable) and PR (#84, app.js), its workflow next to them
     const run = { ...r, id: r.id };
     if (!$c('#rc-title .run-title-input')) $c('#rc-title').innerHTML = r.id
-      ? `<b>${window.runTitleHtml ? runTitleHtml(run) : esc(r.workflow)}</b> ${window.runPrBadge ? runPrBadge(run) : ''} <span class="muted small">${esc(r.workflow)}</span>${r.mock ? ' <span class="badge p-mock">simulated</span>' : ''}${r.chain && window.ChainModel ? ` ${ChainModel.chainBadgesHtml(r.chain)}` : ''} <span class="muted small mono">${esc(r.id)}</span>`
+      ? `<b>${window.runTitleHtml ? runTitleHtml(run) : esc(r.workflow)}</b> ${window.runPrBadge ? runPrBadge(run) : ''} <span class="muted small">${esc(r.workflow)}</span>${r.mock ? ' <span class="badge p-mock">Simulated</span>' : ''}${r.chain && window.ChainModel ? ` ${ChainModel.chainBadgesHtml(r.chain)}` : ''} <span class="muted small mono">${esc(r.id)}</span>`
       : `<span class="muted mono">${esc(chat.runId || '')}</span>`;
     const status = chat.loading ? 'loading' : r.status === 'running' && !chat.live ? 'interrupted' : r.status || 'unknown';
     const waiting = chat.live && chat.model.pendingGates().length;
     const pill = $c('#rc-status');
     pill.className = `pill pill-${waiting ? 'warn' : status}`;
-    pill.textContent = waiting ? 'waiting for you' : status;
+    pill.dataset.status = waiting ? 'waiting' : status;
+    pill.textContent = StatusPill.statusLabel(status, { waiting: !!waiting });
     $c('#rc-cost').textContent = r.cost ? `$${r.cost.toFixed(2)}` : '';
     $c('#rc-stop').classList.toggle('hidden', !chat.live);
   }

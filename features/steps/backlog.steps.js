@@ -234,7 +234,7 @@ When('I press Cancel in the confirm dialog', async ({ e2e }) => {
   await expect(dialog).toBeHidden();
 });
 
-// the roadmap bar's text: its state badge ("paused · stage 5 only") and its message; the roadmap
+// the roadmap bar's text: its state badge ("Paused · stage 5 only", #266: a readable status) and its message; the roadmap
 // may change on its own (the app's sequencing), hence the longer wait
 Then('the roadmap bar shows {string}', async ({ e2e }, text) => {
   await expect(rmBar(e2e.window)).toContainText(text, { timeout: 20000 });

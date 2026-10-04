@@ -56,11 +56,11 @@ Feature: Backlog Board and Roadmap
     Given the app is open
     When I open "Backlog" in the sidebar
     And I open the Roadmap
-    Then the roadmap bar shows "paused"
+    Then the roadmap bar shows "Paused"
     When I press Resume on the roadmap with Simulated off
     Then the confirm dialog is titled "Resume the roadmap" with a "Resume" button
     When I press Cancel in the confirm dialog
-    Then the roadmap bar shows "paused"
+    Then the roadmap bar shows "Paused"
 
   @issue-243
   Scenario: Resume on a stage run on its own asks to resume that stage
@@ -68,12 +68,12 @@ Feature: Backlog Board and Roadmap
     And the roadmap was paused while stage 5 ran on its own
     When I open "Backlog" in the sidebar
     And I open the Roadmap
-    Then the roadmap bar shows "paused · stage 5 only"
+    Then the roadmap bar shows "Paused · stage 5 only"
     When I press Resume on the roadmap with Simulated off
     Then the confirm dialog is titled "Resume stage 5" with a "Resume" button
     And the confirm dialog says the roadmap pauses again when the stage is done
     When I press Cancel in the confirm dialog
-    Then the roadmap bar shows "paused · stage 5 only"
+    Then the roadmap bar shows "Paused · stage 5 only"
 
   @issue-237
   Scenario: A stage run on its own that finished while paused no longer holds the roadmap

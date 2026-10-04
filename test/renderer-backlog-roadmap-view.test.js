@@ -53,6 +53,7 @@ function loadRoadmap({ listWorkflows } = {}) {
   sandbox.window = sandbox;
   sandbox.window.showRun = () => {};
   vm.createContext(sandbox);
+  vm.runInContext(read('status-pill.js'), sandbox);
   vm.runInContext(read('run-progress-model.js'), sandbox);
   vm.runInContext(read('default-workflow.js'), sandbox);
   vm.runInContext(read('workflow-inputs.js'), sandbox);
@@ -112,11 +113,13 @@ function roadmapData() {
 
 // ---- #217: open work by default, Show all, the epic filter ------------------------------------
 
-test('#217 roadmap default: finished stages are hidden, the open ones keep their real stage numbers, and a line says how many are hidden', () => {
+// #268: the "N finished stages hidden · Show all" line is gone (the Planned | All switch replaces it); the header counts the items shown
+test('#217 roadmap default: finished stages are hidden, the open ones keep their real stage numbers, and the header counts the items shown', () => {
   const html = loadRoadmap().html(roadmapData(), () => {});
   const t = text(html);
   assert.doesNotMatch(t, /Done one|Skipped two/);
-  assert.match(t, /\b1 finished stage hidden\b/);
+  assert.doesNotMatch(t, /finished stages? hidden/);
+  assert.match(t, /\b3 of 6 items · last 24 hours\b/);
   assert.doesNotMatch(html, />\s*Stage 1\s*</);
   assert.match(html, />\s*Stage 2\s*</);
   assert.match(t, /Planned four/);

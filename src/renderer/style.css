@@ -451,6 +451,10 @@ input.s-num.invalid { border-color: var(--red); outline-color: var(--red); }
 .st-success .status-dot { background: var(--green); }
 .st-failed .status-dot, .st-error .status-dot { background: var(--red); }
 .st-cancelled .status-dot { background: var(--orange); }
+/* a running status pill (#266, status-pill.js): its label leads with the sidebar's blue dot, same colour and pulse */
+.pill .status-dot { width: auto; height: auto; border-radius: 0; background: none; animation: none; }
+.pill .status-dot::before { content: ''; display: inline-block; width: 7px; height: 7px; margin-right: 5px; border-radius: 50%; vertical-align: 1px; background: var(--accent); animation: pulse 1.2s infinite; }
+@media (prefers-reduced-motion: reduce) { .pill .status-dot::before { animation: none; } }
 
 .badges { display: flex; gap: 6px; margin: 6px 0 8px; flex-wrap: wrap; }
 .badge { font-size: 11px; padding: 1px 7px; border-radius: 5px; background: var(--panel-2); border: 1px solid var(--border); font-family: var(--mono); }

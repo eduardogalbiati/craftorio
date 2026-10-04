@@ -34,7 +34,7 @@ When('I start a simulated run with the task {string}', async ({ e2e }, task) => 
 });
 
 Then('the run is running', async ({ e2e }) => {
-  await expect(e2e.window.getByTestId('run-status')).not.toHaveText('idle', { timeout: 30000 });
+  await expect(e2e.window.getByTestId('run-status')).not.toHaveAttribute('data-status', 'idle', { timeout: 30000 });
 });
 
 Then('a gate card waits for my approval', async ({ e2e }) => {

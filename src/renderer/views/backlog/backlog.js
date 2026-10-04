@@ -49,9 +49,11 @@
   const PLATFORMS = { github: { label: 'GitHub' }, gitlab: { label: 'GitLab' }, bitbucket: { label: 'Bitbucket', soon: true } };
   window.BACKLOG_PLATFORMS = PLATFORMS;
   const MODE_KEY = 'multiagent.backlogMode';
-  // #217: the Board tab's last view (list or kanban) and the Roadmap's Show all
+  // #217: the Board tab's last view (list or kanban) and the Roadmap's Show all (#268: its Planned |
+  // All switch, All when set) with its date range
   const BOARD_KEY = 'multiagent.backlogBoard';
   const SHOW_ALL_KEY = 'multiagent.roadmapShowAll';
+  const SINCE_KEY = 'multiagent.roadmapSince';
   const WORKFLOW_KEY = 'multiagent.backlogWorkflow';
   const LABELS_KEY = 'multiagent.backlogLabels.'; // + project id
   const SORT_KEY = 'multiagent.backlogSort';
@@ -77,6 +79,7 @@
     sort: SORTS.includes(load(SORT_KEY)) ? load(SORT_KEY) : 'updated',
     board: load(BOARD_KEY) === 'kanban' || (load(BOARD_KEY) == null && load(MODE_KEY) === 'kanban') ? 'kanban' : 'list',
     showAll: load(SHOW_ALL_KEY) === '1',
+    since: load(SINCE_KEY) || '',
   };
   // #217: the page tab of a mode (Board: list / kanban); 'roadmap' is the Roadmap screen's (#254)
   const tabOf = (mode) => (mode === 'roadmap' || mode === 'epics' ? mode : 'board');
@@ -262,6 +265,10 @@
     const busy = bl.data?.queue?.items?.length || bl.data?.issues?.some((i) => i.runs?.[0]?.status === 'running') || bl.data?.roadmap?.live || bl.data?.refresh?.running;
     if (visible() && (busy || (!watching && bl.mode === 'roadmap'))) liveReload();
   }, 5000);
+  // #272: the Roadmap cards' run timers move every second (their text only: nothing is redrawn)
+  setInterval(() => {
+    if (visible() && !document.hidden && bl.mode === 'roadmap') window.BacklogRoadmap.tick($b('#bl-list'));
+  }, 1000);
 
   // #204: the screen follows the backlog/ files live (the service watches the folder and pushes
   // backlog:changed, debounced). The owner is never disturbed: while they type in a field of the
@@ -614,8 +621,9 @@
   }
   const roadmapCtx = () => ({
     projectId: bl.projectId, setData, render, setError: (msg) => { bl.error = msg; },
-    // #217: the Roadmap's Show all (remembered)
+    // #217, #268: the Roadmap's Planned | All switch (All when on) and its date range (remembered)
     setShowAll: (on) => { bl.showAll = !!on; save(SHOW_ALL_KEY, bl.showAll ? '1' : ''); render(); },
+    setSince: (id) => { bl.since = String(id || ''); save(SINCE_KEY, bl.since); render(); },
   });
 
   // An issue of a queued group: remove it from the group (the others still go as one run) or
@@ -772,9 +780,9 @@
     const pct = Math.round((i.tasks.done / i.tasks.total) * 100);
     return `<span class="bl-tasks" title="${i.tasks.done} of ${i.tasks.total} tasks done"><span class="bl-bar"><span style="width:${pct}%"></span></span><span class="mono small">${i.tasks.done}/${i.tasks.total}</span></span>`;
   };
-  // the run's title and its PR (#84: state icon, #n link opening the PR, not the run)
-  const runLink = (r) => `<button class="bl-run" type="button" data-run="${esc(r.runId)}" data-workflow="${esc(r.workflow || '')}" title="Open run ${esc(r.runId)} (${esc(r.workflow || 'workflow')})">
-      <span class="pill pill-${esc(r.status)}">${esc(r.waiting ? 'waiting' : r.status)}</span><span>${esc(window.runTitle ? runTitle(r) : r.workflow || 'workflow')}</span>${window.runPrBadge ? runPrBadge(r, { compact: true }) : ''}${r.mock ? '<span class="badge p-mock">simulated</span>' : ''}</button>`;
+  // the run's readable status (#266), its title and its PR (#84: state icon, #n link opening the PR, not the run)
+  const runLink = (r) => `<button class="bl-run" type="button" data-testid="run-chip" data-run="${esc(r.runId)}" data-workflow="${esc(r.workflow || '')}" title="Open run ${esc(r.runId)} (${esc(r.workflow || 'workflow')})">
+      ${StatusPill.statusPill(r.status, { waiting: r.waiting })}<span>${esc(window.runTitle ? runTitle(r) : r.workflow || 'workflow')}</span>${window.runPrBadge ? runPrBadge(r, { compact: true }) : ''}${r.mock ? '<span class="badge p-mock">Simulated</span>' : ''}</button>`;
   // Open PRs/MRs that refer to the issue, each a link to it.
   const prBadges = (i) => (i.pullRequests || []).map((p) =>
     `<a class="badge bl-pr${p.draft ? ' draft' : ''}" href="${esc(p.url)}" target="_blank" rel="noopener" title="${esc(`Open ${p.draft ? 'draft ' : ''}${prName(p)}: ${p.title}`)}">${esc(prName(p))}</a>`).join('');
@@ -787,7 +795,7 @@
     // its place in the roadmap ("Roadmap: stage 2", backlog-roadmap.js)
     const rm = window.BacklogRoadmap.badge(i);
     if (i.queued) {
-      return `${rm}<span class="bl-queued"><span class="badge">queued #${i.queued.position}</span><span class="small">${esc(i.queued.workflow)}</span>${i.queued.mock ? '<span class="badge p-mock">simulated</span>' : ''}${groupBadge(i.queued.groupedWith)}
+      return `${rm}<span class="bl-queued"><span class="badge">queued #${i.queued.position}</span><span class="small">${esc(i.queued.workflow)}</span>${i.queued.mock ? '<span class="badge p-mock">Simulated</span>' : ''}${groupBadge(i.queued.groupedWith)}
         <button class="link-btn small" type="button" data-unqueue="${i.number}" title="Take it out of the queue">remove</button></span>`;
     }
     const e = enriching(i);
@@ -1165,9 +1173,12 @@
     } else if (!bl.data) {
       list.innerHTML = bl.syncing ? '<p class="muted">Loading issues…</p>' : '<p class="muted">Not synced yet.</p>';
     } else {
-      list.innerHTML = bl.mode === 'roadmap' ? window.BacklogRoadmap.html(bl.data, render, { epic: bl.epic, showAll: bl.showAll }) :bl.mode === 'epics' ? renderEpics(issues) : bl.mode === 'kanban' ? renderKanban(board) : renderList(board);
-      // the open item's "When it finishes" (#134)
-      if (bl.mode === 'roadmap') window.BacklogRoadmap.mountChain(bl.data);
+      list.innerHTML = bl.mode === 'roadmap' ? window.BacklogRoadmap.html(bl.data, render, { epic: bl.epic, showAll: bl.showAll, since: bl.since }) :bl.mode === 'epics' ? renderEpics(issues) : bl.mode === 'kanban' ? renderKanban(board) : renderList(board);
+      // the open item's "When it finishes" (#134); the next page when its "Loading…" row comes near (#268)
+      if (bl.mode === 'roadmap') {
+        window.BacklogRoadmap.mountChain(bl.data);
+        window.BacklogRoadmap.mounted(list, render);
+      }
     }
   }
 

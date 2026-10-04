@@ -7,7 +7,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 // the full roadmap (#217: by default the Roadmap tab shows only the open work)
-const SHOW_ALL = { showAll: true };
+const SHOW_ALL = { showAll: true, since: 'total' }; // #268: All, whatever the items' dates
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -24,6 +24,8 @@ const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'views
 const workflowInputsSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'workflow-inputs.js'), 'utf8');
 const runProgressSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'run-progress-model.js'), 'utf8');
 const defaultWorkflowSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'default-workflow.js'), 'utf8');
+const statusPillSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'status-pill.js'), 'utf8');
+const estimatesSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'estimates.js'), 'utf8');
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
 // `choiceDialog`: #195's push confirmation (checkPushes); `showRunCalls`/`scheduleRenderCalls`: #194's
@@ -81,6 +83,8 @@ function loadRoadmap({ listWorkflows, confirmDialog, keptWorkDialog, choiceDialo
   // objects never compare equal) can check it without reaching into the sandbox.
   sandbox.window.showRun = (runId, opts) => showRunCalls.push({ runId, workflow: opts?.workflow });
   vm.createContext(sandbox);
+  vm.runInContext(statusPillSrc, sandbox); // the real StatusPill module (#266: the readable statuses)
+  vm.runInContext(estimatesSrc, sandbox); // the real Estimates module (#215; #272: the run timer's tooltip)
   vm.runInContext(runProgressSrc, sandbox); // the real RunProgress module (#194), not reimplemented
   vm.runInContext(defaultWorkflowSrc, sandbox); // the real DefaultWorkflow module (#195)
   vm.runInContext(workflowInputsSrc, sandbox); // the real WorkflowInputs module (#116), not reimplemented
@@ -433,9 +437,10 @@ test('html: status pill classes for a planned, a waiting-at-a-gate and a skipped
     issues: [],
   };
   const html = BacklogRoadmap.html(data, () => {}, SHOW_ALL);
-  assert.match(html, /<span class="pill pill-idle rm-state">planned<\/span>/);
-  assert.match(html, /<span class="pill pill-cancelled rm-state">waiting at a gate<\/span>/);
-  assert.match(html, /<span class="pill pill-interrupted rm-state">skipped<\/span>/);
+  // #266: readable labels, the id in data-status
+  assert.match(html, /<span class="pill pill-idle rm-state" data-status="planned"[^>]*>Planned<\/span>/);
+  assert.match(html, /<span class="pill pill-cancelled rm-state" data-status="waiting"[^>]*>Waiting for you<\/span>/);
+  assert.match(html, /<span class="pill pill-interrupted rm-state" data-status="skipped"[^>]*>Skipped<\/span>/);
 });
 
 test('html: reason and modeReason render inside details.rm-reason', () => {
@@ -484,9 +489,9 @@ test('html: the stage run on its own is highlighted (running or paused), the bar
   const { BacklogRoadmap } = loadRoadmap();
   const running = BacklogRoadmap.html(threeStageData(['done', 'running', 'planned'], { state: 'running', scope: { stage: 'st2' } }), () => {}, SHOW_ALL);
   assert.match(running, /<section class="rm-stage current scoped" data-stage="1"[^>]*>[\s\S]*?<span class="badge live">Running this stage only<\/span>/);
-  assert.match(running, /<b>Roadmap<\/b> <span class="badge live">running · stage 2 only<\/span>/);
+  assert.match(running, /<b>Roadmap<\/b> <span class="badge live" data-status="running">Running · stage 2 only<\/span>/);
   // stage 1 (done) and stage 3 (planned, not scoped, not current) keep their own plain badges
-  assert.match(running, /<section class="rm-stage finished" data-stage="0"[^>]*>[\s\S]*?<span class="badge">done<\/span>/);
+  assert.match(running, /<section class="rm-stage finished" data-stage="0"[^>]*>[\s\S]*?<span class="badge" data-status="done">Done<\/span>/);
   assert.doesNotMatch(running, /data-stage="2"[^>]*>[\s\S]{0,400}badge live/);
 
   const paused = BacklogRoadmap.html(threeStageData(['done', 'failed', 'planned'], { state: 'paused', scope: { stage: 'st2' } }), () => {}, SHOW_ALL);
@@ -608,7 +613,7 @@ test('#237 html: a paused roadmap whose scoped stage is finished or gone no long
   const { BacklogRoadmap } = loadRoadmap();
   const finished = BacklogRoadmap.html(threeStageData(['done', 'done', 'planned'], { state: 'paused', scope: { stage: 'st2' } }), () => {}, SHOW_ALL);
   assert.doesNotMatch(finished, /stage \d+ only/);
-  assert.match(finished, /<span class="badge warn">paused<\/span>/);
+  assert.match(finished, /<span class="badge warn" data-status="paused">Paused<\/span>/);
   const gone = BacklogRoadmap.html(threeStageData(['done', 'done', 'planned'], { state: 'paused', scope: { stage: 'gone' } }), () => {}, SHOW_ALL);
   assert.doesNotMatch(gone, /stage \d+ only/);
 });
@@ -812,7 +817,7 @@ test('html: a simulated run\'s ring carries the "simulated" badge; a planned ite
   const data = { roadmap: { state: 'running', stages: [{ id: 'st1', name: '', note: '', items: [simItem, plannedItem] }] }, issues: [] };
   const html = BacklogRoadmap.html(data, () => {}, SHOW_ALL);
   assert.match(html, /class="rm-progress st-running sim"/);
-  assert.match(html, /<span class="badge p-mock">simulated<\/span>/);
+  assert.match(html, /<span class="badge p-mock">Simulated<\/span>/);
   const perItem = html.split('data-item="it2"')[1];
   assert.doesNotMatch(perItem.split('data-item="it1"')[0] || perItem, /class="rm-progress/);
 });

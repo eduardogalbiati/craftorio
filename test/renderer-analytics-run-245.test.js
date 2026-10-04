@@ -39,6 +39,7 @@ async function renderTab(figures = FIGURES) {
   const window = {};
   const sandbox = {
     window, console, displayName,
+    StatusPill: require('../src/renderer/status-pill.js'), // the real readable statuses (#266)
     sessionStorage: { getItem: () => null, setItem: () => {} },
     api: { getRunAnalysis: async () => ({ runs: [{ runId: figures.runId, title: figures.title, status: 'success', workflow: figures.workflow }], figures, comparison: null }) },
     esc, errMsg: (e) => String(e?.message || e),

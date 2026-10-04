@@ -414,8 +414,8 @@ function childRunsStrip(r) {
     // a resumed parent's children (#175): reused when they had succeeded, else resumed
     const how = k.reused ? `, reused from the previous run` : k.resumed_from ? `, resumes ${k.resumed_from}` : '';
     return k.run_id
-      ? `<span class="child-run">${link(k.run_id, name, `Open run ${k.run_id} (${k.workflow || 'workflow'}, step ${k.step_id}${how}${k.cost_usd ? `, ${fmtCost(k.cost_usd)}` : ''})`)} <span class="pill pill-${esc(k.status)}">${esc(k.status)}</span>${k.reused ? ' <span class="badge">reused</span>' : k.resumed_from ? ' <span class="badge">resumed</span>' : ''}</span>`
-      : `<span class="child-run muted small">${esc(name)} <span class="pill pill-${esc(k.status)}">${esc(k.status)}</span></span>`;
+      ? `<span class="child-run">${link(k.run_id, name, `Open run ${k.run_id} (${k.workflow || 'workflow'}, step ${k.step_id}${how}${k.cost_usd ? `, ${fmtCost(k.cost_usd)}` : ''})`)} ${StatusPill.statusPill(k.status)}${k.reused ? ' <span class="badge">reused</span>' : k.resumed_from ? ' <span class="badge">resumed</span>' : ''}</span>`
+      : `<span class="child-run muted small">${esc(name)} ${StatusPill.statusPill(k.status)}</span>`;
   }).join('')}` : '';
   return `<div class="chain-banner-pipe child-runs">${parent}${children}</div>`;
 }
@@ -531,7 +531,7 @@ function renderSessions() {
       <div class="sc-head">
         <span class="name" title="${esc(s.agent)}">${esc(agentLabel(s.agent, selectedView()?.run?.agentNames))}</span>
         <span class="id">${esc(s.id)}</span>
-        <span class="status st-${esc(s.status)}"><span class="status-dot"></span>${esc(s.status)}</span>
+        <span class="status st-${esc(s.status)}" data-status="${esc(s.status)}"><span class="status-dot"></span>${esc(StatusPill.statusLabel(s.status))}</span>
       </div>
       <div class="badges">
         <span class="badge p-${esc(s.provider)}">${esc(s.provider)}</span>
@@ -601,7 +601,7 @@ function renderDetail() {
       <dl class="kv">
         <dt>session</dt><dd>${esc(s.id)}</dd>
         <dt>provider session</dt><dd>${esc(s.provider_session_id || '—')}</dd>
-        <dt>status</dt><dd>${esc(s.status)}</dd>
+        <dt>status</dt><dd data-status="${esc(s.status)}">${esc(StatusPill.statusLabel(s.status))}</dd>
         <dt>opened at</dt><dd>${esc(timeOf(s.opened_at))}${s.closed_at ? ' → ' + esc(timeOf(s.closed_at)) : ''}</dd>
         <dt>duration / active / idle</dt><dd>${fmtDur(liveDuration(s))} / ${fmtDur(s.active_ms)} / ${fmtDur(s.idle_ms)}</dd>
         <dt>tokens</dt><dd>in ${fmtNum(s.tokens?.input)} · cache r/w ${fmtNum(s.tokens?.cache_read)}/${fmtNum(s.tokens?.cache_write)} · out ${fmtNum(s.tokens?.output)} · reasoning ${fmtNum(s.tokens?.reasoning)}</dd>

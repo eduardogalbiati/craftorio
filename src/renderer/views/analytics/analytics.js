@@ -342,7 +342,7 @@
     return `<table class="u-table an-sessions"><thead><tr><th>Run</th><th class="num">Started</th><th>Through</th><th class="num">Cost</th><th>Files the conflict named</th></tr></thead><tbody>
       ${list.map((c) => `<tr>
         <td class="an-title"><button type="button" class="link-btn" data-an-run="${esc(c.runId)}" data-workflow="${esc(c.workflow || '')}" title="${esc(c.title)}">${esc(c.title)}</button>
-          <div class="muted small">${esc(c.runId)} · ${esc(c.status || '')}</div></td>
+          <div class="muted small">${esc(c.runId)} · <span data-status="${esc(c.status || '')}">${esc(c.status ? StatusPill.statusLabel(c.status) : '')}</span></div></td>
         <td class="num nowrap">${c.startedAt ? esc(dateOf(c.startedAt)) : '—'}</td>
         <td><span class="badge${c.via === 'failed PR/MR merge' ? ' warn' : ''}">${esc(c.via)}</span></td>
         <td class="num">${fmtUsd(c.costUsd)}</td>

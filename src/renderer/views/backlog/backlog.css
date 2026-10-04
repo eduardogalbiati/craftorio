@@ -332,10 +332,18 @@ a.rm-title:hover { text-decoration: underline; }
 .badge.rm-verdict-warn { color: var(--yellow); background: color-mix(in srgb, var(--yellow) 12%, var(--panel)); border-color: color-mix(in srgb, var(--yellow) 45%, transparent); }
 .badge.rm-verdict-bad { color: var(--red); background: color-mix(in srgb, var(--red) 12%, var(--panel)); border-color: color-mix(in srgb, var(--red) 45%, transparent); }
 .rm-verdict .rm-sign { font-size: .85em; }
-/* #217: what the Roadmap hides by default, and how to bring it back */
-.rm-show-all { margin-right: 6px; }
-.rm-hidden-line { margin: 0 0 8px; }
-.rm-folded { align-self: flex-start; }
+/* #268: what the Roadmap shows: the Planned | All switch, the date range, the pages (earlier stages, "Loading…") */
+.rm-view-seg, select.rm-since { margin-right: 6px; }
+select.rm-since { width: auto; padding: 3px 6px; font-size: 12px; }
+.rm-earlier { display: block; margin: 0 auto 8px; }
+.rm-loading { padding: 10px; text-align: center; }
+/* #267: a stage's folded finished items: a chip in the run chat's done green (.duo-note.done) */
+.rm-done-chip { justify-self: start; padding: 2px 9px; border: 1px solid rgba(74, 222, 128, .35); border-radius: 99px; background: rgba(74, 222, 128, .1); color: var(--green); font: inherit; font-size: 11px; font-weight: 600; cursor: pointer; }
+.rm-done-chip:hover { background: rgba(74, 222, 128, .18); }
+.rm-done-chip:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
+/* #266: the kanban's run chip on the card: the status, the workflow's name, the run's title */
+.rm-run-chip > span:not(.pill) { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.rm-run-wf { color: var(--muted); }
 .rm-item.flash { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); transition: box-shadow .3s; }
 /* #195: a workflow that pushes while the default development workflow merges locally */
 .badge.rm-wf-push { color: var(--orange); background: color-mix(in srgb, var(--orange) 14%, var(--panel)); border-color: color-mix(in srgb, var(--orange) 45%, transparent); }
@@ -365,6 +373,14 @@ select.po-wf { width: auto; max-width: 220px; padding: 3px 6px; font-size: 12px;
 .rm-progress.st-failed .rm-progress-step { color: var(--red); }
 .rm-progress .rm-progress-step .rp-av { width: 22px; height: 22px; flex: none; }
 .rm-progress-text .badge { font-size: 10px; padding: 0 5px; }
+/* #272: the run's timer under the ring, coloured against the item's estimate (green within it, amber up
+   to 130%, red beyond; its tooltip says both times), and the fix round under the step */
+.rm-ring-col { display: grid; justify-items: center; gap: 3px; flex: none; }
+.rm-timer { font: 600 10.5px/1 var(--mono); font-variant-numeric: tabular-nums; color: var(--muted); }
+.rm-timer-ok { color: var(--green); }
+.rm-timer-warn { color: var(--yellow); }
+.rm-timer-over { color: var(--red); }
+.rm-round { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; color: var(--yellow); }
 .rm-steps { display: none; position: absolute; right: 0; top: calc(100% + 6px); z-index: 30; width: max-content; max-width: min(560px, 80vw); padding: 8px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 12px 32px rgba(0,0,0,.4); }
 .rm-progress:hover .rm-steps, .rm-progress:focus-within .rm-steps, .rm-progress.open .rm-steps { display: block; }
 .rm-steps .rp-strip { flex-wrap: wrap; }

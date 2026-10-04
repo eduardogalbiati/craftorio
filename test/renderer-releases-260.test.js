@@ -138,6 +138,7 @@ function loadRoadmap() {
   sandbox.window = sandbox;
   sandbox.window.showRun = () => {};
   vm.createContext(sandbox);
+  vm.runInContext(read('status-pill.js'), sandbox);
   vm.runInContext(read('run-progress-model.js'), sandbox);
   vm.runInContext(read('default-workflow.js'), sandbox);
   vm.runInContext(read('workflow-inputs.js'), sandbox);

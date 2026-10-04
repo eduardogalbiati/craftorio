@@ -185,7 +185,7 @@ function renderArtifactList() {
     return `
     <div class="art-run ${open ? 'open' : ''}" data-run="${esc(r.runId)}">
       <button class="art-run-head" title="${esc(r.task || '')}" aria-expanded="${open}">
-        <div class="row"><span class="art-chev" aria-hidden="true">${open ? '▾' : '▸'}</span><b class="art-run-name">${esc(r.workflow || 'workflow')}</b><span class="pill pill-${esc(r.status)}">${esc(r.status)}</span>${r.mock ? '<span class="badge p-mock">simulated</span>' : ''}</div>
+        <div class="row"><span class="art-chev" aria-hidden="true">${open ? '▾' : '▸'}</span><b class="art-run-name">${esc(r.workflow || 'workflow')}</b>${StatusPill.statusPill(r.status)}${r.mock ? '<span class="badge p-mock">Simulated</span>' : ''}</div>
         <div class="muted small art-run-sub">${r.project ? `${esc(r.project.name)} · ` : ''}${r.startedAt ? esc(dateOf(r.startedAt)) : ''} · ${files}${r.imageCount ? ` · ${r.imageCount} image${r.imageCount === 1 ? '' : 's'}` : ''}</div>
       </button>
       ${open ? artFilesHtml(a.files.get(r.runId)) : ''}

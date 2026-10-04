@@ -405,7 +405,8 @@ function renderWorkspacePaths() {
 }
 
 const runSessionStatus = (st) => ({ running: 'active', success: 'success', failed: 'failed', interrupted: 'failed', cancelled: 'cancelled' })[st] || 'idle';
-const statusLabel = (r) => ({ idle: 'idle', running: r?.mock ? 'running (simulation)' : 'running', success: 'completed', failed: 'failed', cancelled: 'cancelled' })[r?.status || 'idle'] || r.status;
+// a run's status as people read it (#266, StatusPill): "Running (simulation)", "Succeeded", "Idle" without a run
+const statusLabel = (r) => `${StatusPill.statusLabel(r?.status || 'idle')}${r?.status === 'running' && r.mock ? ' (simulation)' : ''}`;
 
 // Stops the run shown in the top bar (only that one).
 async function stopRun() {
@@ -866,6 +867,7 @@ function renderHeader() {
   const pill = $('#run-status');
   const st = r?.status || 'idle';
   pill.className = `pill pill-${st}`;
+  pill.dataset.status = st;
   pill.textContent = statusLabel(r);
   $('#run-meta').classList.toggle('clickable', !!r);
   $('#run-meta').title = r ? `View ${runLabel(r)}` : 'View the current run';
@@ -941,7 +943,7 @@ function renderNavRuns() {
     const gate = [...approvals.values()][0];
     const refs = issueRefs(r);
     const step = [...steps].filter(([, s]) => s.status === 'running').map(([id]) => id).join(', ');
-    const at = gate ? `waiting for you · ${gate.step_id}` : r.status === 'running' ? step || 'starting' : statusLabel(r);
+    const at = gate ? `Waiting for you · ${gate.step_id}` : r.status === 'running' ? step || 'starting' : statusLabel(r);
     const title = gate ? `${runLabel(r)} — waiting for you at ${gate.step_id}: click to answer` : `${runLabel(r)} — ${statusLabel(r)}${step && r.status === 'running' ? ` at ${step}` : ''}`;
     return `<button type="button" class="nav-run-item st-${gate ? 'waiting' : runSessionStatus(r.status)}${r.id === state.runId ? ' selected' : ''}" data-run="${esc(r.id)}"${gate ? ' data-gate="1"' : ''} title="${esc(refs ? `${title} · ${refs}` : title)}">
       <span class="status-dot"></span>

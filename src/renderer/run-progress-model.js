@@ -196,10 +196,15 @@
    * `path`: the workflow's step ids in order; with history, only the steps past runs went through (or
    * this run did). A return to an earlier step (a review → developer loop) lowers the estimate; it
    * never says more than 99% before the run ends.
+   * `keep` (#272, the roadmap card): a return to a step already visited (a fix round) keeps what the
+   * run had earned, the furthest step it reached counted as a step in progress at its cap, so the
+   * percentage never falls (`leftMs` still counts the steps to redo), and the result says the round.
    * → { percent, state: running | waiting | failed | stopped | done, step, elapsedMs, leftMs (null:
-   *   unknown), basis: 'history' | 'steps', done, total }
+   *   unknown), basis: 'history' | 'steps', done, total }; with `keep` also round (the visit of the
+   *   current step: 2 in its first fix round) and sentBackBy (the step the run last went back from,
+   *   while round > 1)
    */
-  function estimateProgress({ steps = [], path = [], typical = {}, status = 'running', startedAt = null, now = Date.now() } = {}) {
+  function estimateProgress({ steps = [], path = [], typical = {}, status = 'running', startedAt = null, now = Date.now(), keep = false } = {}) {
     const last = steps.at(-1) || null;
     const state = status === 'success' ? 'done' : status === 'failed' ? 'failed' : STOPPED.has(status) ? 'stopped'
       : last?.status === 'waiting' ? 'waiting' : last?.status === 'failed' ? 'failed' : 'running';
@@ -213,18 +218,28 @@
     const avg = known.length ? known.reduce((a, b) => a + b, 0) / known.length : 1;
     const weight = (id) => (typical?.[id] > 0 ? typical[id] : avg);
     const total = route.reduce((a, id) => a + weight(id), 0) || 1;
-    const out = { state, step: last?.step || null, elapsedMs, basis, total: route.length };
+    // #272 a fix round: the visit of the current step, and the latest step the run went back from
+    // (to a step at or before it on the route)
+    const places = steps.map((e) => route.indexOf(e.step));
+    const round = last ? steps.filter((e) => e.step === last.step).length : 1;
+    let back = -1;
+    for (let k = steps.length - 2; k >= 0 && back < 0; k--) if (places[k] >= 0 && places[k + 1] >= 0 && places[k + 1] <= places[k]) back = k;
+    const out = { state, step: last?.step || null, elapsedMs, basis, total: route.length, ...(keep ? { round, sentBackBy: round > 1 && back >= 0 ? steps[back].step : null } : {}) };
     if (state === 'done') return { ...out, percent: 100, leftMs: 0, done: route.length };
     const at = last ? route.indexOf(last.step) : -1;
     // the steps before the current one on the route; a step off the route: the route steps visited
     const before = at >= 0 ? route.slice(0, at) : route.filter((id) => visited.has(id) && id !== last?.step);
     let doneW = before.reduce((a, id) => a + weight(id), 0);
+    // a step in progress: its time so far against its typical time (90% at most), half a step without history
+    const cap = basis === 'history' ? 0.9 : 0.5;
     if (last && at >= 0 && state === 'running') {
-      // the current step: its time so far against its typical time (90% at most), half a step without history
       const inStep = toMs(last.ts) != null ? Math.max(0, now - toMs(last.ts)) : 0;
-      doneW += basis === 'history' ? Math.min(inStep, 0.9 * weight(last.step)) : 0.5 * weight(last.step);
+      doneW += basis === 'history' ? Math.min(inStep, cap * weight(last.step)) : cap * weight(last.step);
     }
-    const percent = Math.max(0, Math.min(99, Math.floor((100 * doneW) / total)));
+    // what the run had earned before it went back
+    const far = keep && back >= 0 ? Math.max(...places.slice(0, -1)) : -1;
+    const earnedW = far >= 0 ? route.slice(0, far).reduce((a, id) => a + weight(id), 0) + cap * weight(route[far]) : 0;
+    const percent = Math.max(0, Math.min(99, Math.floor((100 * Math.max(doneW, earnedW)) / total)));
     const leftMs = basis === 'history' ? Math.max(0, Math.round(total - doneW)) : percent > 0 ? Math.round((elapsedMs * (100 - percent)) / percent) : null;
     return { ...out, percent, leftMs, done: before.length };
   }
