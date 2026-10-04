@@ -1,8 +1,11 @@
 /* global api */
-// Workflows screen and its sidebar sub-items (state.workflowsTab): Runs (every run, in the shared run
-// list of run-list.js), Definitions (#137: the workflows in sections by category, compact cards with
-// origin badge, Restore default, Open in builder, Run, and the saved pipelines connected) and Builder (builder.js, with its two dialogs). The header has the
-// Keep awake switch on Runs and Definitions (keep-awake.js, #162). The deep links
+// Workflows screen and its tabs (state.workflowsTab; #254: each is an entry of the menu's Workflows
+// group and a tab of the screen): Definitions (#137: the workflows in sections by category, compact cards with
+// origin badge, Restore default, Open in builder, Run, and the saved pipelines connected), Runs (every run, in the shared run
+// list of run-list.js; its Artifacts tab opens views/artifacts/), Builder (builder.js, with its two dialogs) and Pipelines (the saved
+// pipelines alone). The header's Supervisor button opens the Supervisor's chat as a drawer (#264,
+// views/supervisor/). The header has the
+// Keep awake switch on Runs, Definitions and Pipelines (keep-awake.js, #162). The deep links
 // showRunInList (app.js openPastRun) and showWorkflowDefinition (the Agents menu), and the runs'
 // reload on run events (loadWorkflowRunsThrottled, workflowRunsVisible, renderWorkflowRuns) stay
 // globals. Registers itself with registerView (view-registry.js); uses app.js globals ($, esc, state,
@@ -12,7 +15,9 @@ const WORKFLOW_PAGES = {
   runs: 'Every run, live or finished.',
   definitions: 'Workflows are YAML files in the workflows folder.',
   builder: 'Draw a workflow: desks in a line, each with an agent, and approval gates. Saved as YAML in the workflows folder.',
+  pipelines: 'Pipelines chain workflows: each stage starts when the one before it has finished. Saved as YAML next to the workflows.',
 };
+const WORKFLOW_TITLES = { runs: 'Runs', definitions: 'Definitions', builder: 'Builder', pipelines: 'Pipelines' };
 function showWorkflowsTab(tab) {
   if (!WORKFLOW_PAGES[tab]) tab = 'runs';
   state.workflowsTab = tab;
@@ -20,15 +25,19 @@ function showWorkflowsTab(tab) {
   document.querySelectorAll('[data-wtab]').forEach((b) => {
     const on = b.dataset.wtab === tab;
     b.classList.toggle('active', on);
-    b.setAttribute('aria-current', on ? 'page' : 'false');
+    b.setAttribute('aria-selected', String(on));
   });
-  document.querySelectorAll('[data-wpage]').forEach((p) => p.classList.toggle('hidden', p.dataset.wpage !== tab));
-  $('#workflows-page-title').textContent = { runs: 'Runs', definitions: 'Definitions', builder: 'Builder' }[tab];
+  // the menu's entry of the tab (app.js)
+  paintNav();
+  // Pipelines is the Definitions page showing the pipelines alone
+  const page = tab === 'pipelines' ? 'definitions' : tab;
+  document.querySelectorAll('[data-wpage]').forEach((p) => p.classList.toggle('hidden', p.dataset.wpage !== page));
+  $('#workflows-page-title').textContent = WORKFLOW_TITLES[tab];
   $('#workflows-page-hint').textContent = WORKFLOW_PAGES[tab];
-  // Keep awake (#162) on Runs and Definitions; the Builder needs the room
+  // Keep awake (#162) on Runs, Definitions and Pipelines; the Builder needs the room
   $('#workflows-keep-awake').classList.toggle('hidden', tab === 'builder');
   if (tab !== 'builder') refreshKeepAwake();
-  if (tab === 'definitions') refreshWorkflows();
+  if (page === 'definitions') refreshWorkflows();
   // back on the list: the pages it had, again (a deep link starts over to reach its run)
   if (tab === 'runs') { renderWorkflowRuns(); loadWorkflowRuns(state.wr.runs && !state.wr.upTo ? 'refresh' : 'reset'); }
   if (tab === 'builder') window.showBuilder?.();
@@ -122,14 +131,19 @@ async function refreshWorkflows() {
 function renderWorkflowDefinitions() {
   const box = $('#workflows-list');
   const filters = $('#wf-sections');
-  if (!state.workflows.length) {
+  // #254: the Pipelines tab is this page with the pipelines alone
+  const pipesOnly = state.workflowsTab === 'pipelines';
+  const pipesError = wfDefs.pipelinesError ? `<p class="error small">Pipelines could not be read: ${esc(wfDefs.pipelinesError)}</p>` : '';
+  if (pipesOnly ? !wfDefs.pipelines.length : !state.workflows.length) {
     filters.innerHTML = '';
-    box.innerHTML = '<div class="empty-state"><b>No workflows</b><p class="muted">Add .yaml files to the workflows folder.</p></div>';
+    box.innerHTML = pipesOnly
+      ? `${pipesError}<div class="empty-state"><b>No pipelines yet</b><p class="muted">A pipeline chains workflows. Start a workflow with a "When it finishes" chain, then use Save as pipeline on its run.</p></div>`
+      : '<div class="empty-state"><b>No workflows</b><p class="muted">Add .yaml files to the workflows folder.</p></div>';
     return;
   }
   const q = wfDefs.query.trim().toLowerCase();
   const keys = [...Object.keys(CATEGORIES), 'other'];
-  const workflows = state.workflows.filter((w) => wfMatches(w, q));
+  const workflows = pipesOnly ? [] : state.workflows.filter((w) => wfMatches(w, q));
   const pipelines = wfDefs.pipelines.filter((p) => pipeMatches(p, q));
   const inSection = (key) => ({
     // bundled workflows first, then yours, each by name
@@ -146,19 +160,19 @@ function renderWorkflowDefinitions() {
 
   const shown = keys.filter((k) => (wfDefs.section === 'all' || wfDefs.section === k) && count(k));
   if (!shown.length) {
-    box.innerHTML = `<div class="empty-state"><b>No workflow matches</b><p class="muted">Nothing${q ? ` matches "${esc(wfDefs.query.trim())}"` : ''} in ${esc(wfDefs.section === 'all' ? 'any section' : wfSectionName(wfDefs.section))}.</p><button class="btn ghost sm" data-clear>Clear the filters</button></div>`;
+    box.innerHTML = `<div class="empty-state"><b>No ${pipesOnly ? 'pipeline' : 'workflow'} matches</b><p class="muted">Nothing${q ? ` matches "${esc(wfDefs.query.trim())}"` : ''} in ${esc(wfDefs.section === 'all' ? 'any section' : wfSectionName(wfDefs.section))}.</p><button class="btn ghost sm" data-clear>Clear the filters</button></div>`;
     box.querySelector('[data-clear]').onclick = () => { wfDefs.section = 'all'; wfDefs.query = ''; $('#wf-search').value = ''; renderWorkflowDefinitions(); };
     return;
   }
-  box.innerHTML = (wfDefs.pipelinesError ? `<p class="error small">Pipelines could not be read: ${esc(wfDefs.pipelinesError)}</p>` : '') + shown.map((k) => {
+  box.innerHTML = pipesError + shown.map((k) => {
     const s = sections[k];
     const n = (x, one) => `${x} ${one}${x === 1 ? '' : 's'}`;
     return `
     <section class="wf-section" data-section="${k}">
       <header class="wf-section-head">
         <h2>${esc(wfSectionName(k))}</h2>
-        <span class="badge cat-${k}">${n(s.workflows.length, 'workflow')}</span>
-        ${s.pipelines.length ? `<span class="badge">${n(s.pipelines.length, 'pipeline')}</span>` : ''}
+        ${pipesOnly ? '' : `<span class="badge cat-${k}">${n(s.workflows.length, 'workflow')}</span>`}
+        ${s.pipelines.length ? `<span class="badge${pipesOnly ? ` cat-${k}` : ''}">${n(s.pipelines.length, 'pipeline')}</span>` : ''}
         <span class="muted small">${esc(WF_SECTIONS[k])}</span>
       </header>
       ${s.pipelines.length ? `<div class="wf-pipes">${s.pipelines.map(pipelineCard).join('')}</div>` : ''}
@@ -362,7 +376,13 @@ function showWorkflowDefinition(file) {
 
 registerView({
   id: 'workflows',
-  nav: { label: 'Workflows', order: 60, icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="6" r="2.5" /><circle cx="18" cy="12" r="2.5" /><circle cx="6" cy="18" r="2.5" /><path d="M8.5 6H12a3 3 0 0 1 3 3v.5M8.5 18H12a3 3 0 0 0 3-3v-.5" /></svg>' },
+  // #254: one menu entry per tab, under the menu's Workflows group
+  nav: [
+    { label: 'Definitions', order: 60, group: 'workflows', tab: 'definitions', icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><path d="M14 3v5h5" /><path d="M9 13h6M9 17h4" /></svg>' },
+    { label: 'Runs', order: 61, group: 'workflows', tab: 'runs', icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="m10 8.5 5.5 3.5-5.5 3.5z" /></svg>' },
+    { label: 'Builder', order: 62, group: 'workflows', tab: 'builder', icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="6" r="2.5" /><circle cx="18" cy="12" r="2.5" /><circle cx="6" cy="18" r="2.5" /><path d="M8.5 6H12a3 3 0 0 1 3 3v.5M8.5 18H12a3 3 0 0 0 3-3v-.5" /></svg>' },
+    { label: 'Pipelines', order: 63, group: 'workflows', tab: 'pipelines', icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="9" width="5" height="6" rx="1.5" /><rect x="16" y="9" width="5" height="6" rx="1.5" /><path d="M8 12h8" /><path d="m13 9.5 2.5 2.5-2.5 2.5" /></svg>' },
+  ],
   markup: `
       <section id="view-workflows" class="view hidden">
         <div class="page-head">
@@ -380,11 +400,23 @@ registerView({
               <span class="muted small">Keeps this computer from sleeping while runs or a roadmap are active (this workspace). Sleep, the lid and the power plan still apply.</span>
               <span class="error small" data-keep-awake-error></span>
             </div>
+            <button id="btn-wf-supervisor" class="btn ghost sup-btn nowrap" type="button" title="Ask the Supervisor about workflows and runs: its chat opens at the side"><span class="sup-mark" aria-hidden="true">◆</span> Supervisor</button>
             <button id="btn-workflows-folder" class="btn ghost">Open folder</button>
           </div>
         </div>
+        <div class="tabs page-tabs" role="tablist" aria-label="Workflows">
+          <button type="button" class="tab" role="tab" data-wtab="definitions">Definitions</button>
+          <button type="button" class="tab" role="tab" data-wtab="runs">Runs</button>
+          <button type="button" class="tab" role="tab" data-wtab="builder">Builder</button>
+          <button type="button" class="tab" role="tab" data-wtab="pipelines">Pipelines</button>
+        </div>
         <div data-wpage="runs">
           <div class="pr-toolbar">
+            <!-- #254: the runs' artifacts (views/artifacts/) are a tab of Runs -->
+            <div class="seg sm" role="tablist" aria-label="Runs">
+              <button type="button" class="active" role="tab" aria-selected="true">All runs</button>
+              <button type="button" role="tab" id="wf-tab-artifacts" aria-selected="false" title="The files the runs produced: a run's artifacts and the list of every run's">Artifacts</button>
+            </div>
             <div id="workflow-run-filters" class="chips"></div>
             <span class="spacer"></span>
             <input type="text" id="workflow-run-search" class="pr-search" placeholder="Search runs" aria-label="Search runs" spellcheck="false" />
@@ -456,15 +488,11 @@ registerView({
     </div>
   </div>`,
   mount() {
-    // the sub-items, right under the sidebar entry (showView shows them on this screen only)
-    $('nav.sidebar [data-view="workflows"]').insertAdjacentHTML('afterend', `
-      <div class="nav-sub hidden" id="nav-workflows-sub" role="group" aria-label="Workflows">
-        <button class="nav-subitem" data-wtab="runs">Runs</button>
-        <button class="nav-subitem" data-wtab="definitions">Definitions</button>
-        <button class="nav-subitem" data-wtab="builder">Builder</button>
-      </div>`);
     $('#btn-workflows-folder').onclick = () => api.openPath(state.ws.workflows);
-    document.querySelectorAll('[data-wtab]').forEach((b) => (b.onclick = () => { state.workflowsTab = b.dataset.wtab; showView('workflows'); }));
+    // #264: the Supervisor's chat, a drawer over this screen (views/supervisor/)
+    $('#btn-wf-supervisor').onclick = () => window.openSupervisorChat();
+    document.querySelectorAll('[data-wtab]').forEach((b) => (b.onclick = () => showWorkflowsTab(b.dataset.wtab)));
+    $('#wf-tab-artifacts').onclick = () => showView('artifacts');
     $('#btn-workflow-runs-refresh').onclick = () => loadWorkflowRuns();
     $('#workflow-show-sim').onchange = (e) => { state.wr.showSim = e.target.checked; loadWorkflowRuns(); };
     let wrSearchTimer = null;

@@ -1,10 +1,10 @@
-/* Supervisor everywhere (views/supervisor/supervisor.js): the drawer on every screen and the full page.
-   Messages reuse .sup-wmsg and .sup-loading (style.css). */
-.svc-open { gap: 6px; }
-.svc-open, .svc-clear { white-space: nowrap; }
+/* Supervisor chat (views/supervisor/supervisor.js): the drawer opened from Workflows, and its
+   expanded form over the whole screen. Messages reuse .sup-wmsg and .sup-loading (style.css). */
+.svc-clear { white-space: nowrap; }
 .svc-drawer .drawer-head .row { gap: 6px; }
 .svc-body { display: flex; flex-direction: column; gap: 10px; }
 .svc-body .svc-log { flex: 1; min-height: 0; }
+.svc-main { flex: 1; display: flex; flex-direction: column; gap: 10px; min-width: 0; min-height: 0; }
 .svc-log { display: flex; flex-direction: column; gap: 10px; overflow: auto; }
 .svc-empty { padding: 8px 2px; }
 .svc-msg .md { margin-top: 2px; }
@@ -13,8 +13,8 @@
 .svc-form { display: flex; gap: 8px; align-items: flex-end; }
 .svc-form textarea { flex: 1; min-width: 0; resize: vertical; }
 .svc-note { margin: 0; }
-.svc-page { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; min-height: 0; }
-.svc-main { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
-.svc-page .svc-log { max-height: calc(100vh - 330px); min-height: 200px; }
-.svc-side { padding: 12px 14px; align-self: start; }
+/* Expand (#264): every message, and what the supervisor can read at the side */
+.svc-drawer.full { width: 100%; max-width: none; }
+.svc-drawer.full .svc-body { flex-direction: row; gap: 16px; }
+.svc-side { width: 300px; flex: none; padding: 12px 14px; align-self: start; max-height: 100%; overflow: auto; }
 .svc-tools { margin: 0; padding-left: 16px; display: grid; gap: 6px; }

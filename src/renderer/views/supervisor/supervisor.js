@@ -1,7 +1,8 @@
-// Supervisor everywhere (#28): the app-wide Supervisor chat, in two places that show one conversation:
-// - the drawer (#svc-drawer), opened from the top bar's "Supervisor" button on every screen;
-// - the Supervisor page (menu item), the whole conversation history full page.
-// Each message carries what the person is looking at (screenContext(): "Builder, editing workflow X",
+// Supervisor chat (#28): the app-wide conversation with the Supervisor, in a right-side drawer
+// (#svc-drawer) opened from the Workflows screen's Supervisor button (#254, #264: no screen of its
+// own and no top bar button; window.openSupervisorChat, also used by the Oracle's request links).
+// The drawer shows the latest exchanges; Expand widens it to the whole conversation and what the
+// supervisor can read. Each message carries what the person is looking at (screenContext(): "Builder, editing workflow X",
 // "Analytics, range 2026-09-01 to 2026-09-30"), so requests need not repeat it. The supervisor reads the
 // app's data with its read-only MCP tools (src/supervisor-tools.js); it cannot change anything yet.
 // Developer or simulated mode asks the simulated supervisor (no model call).
@@ -10,7 +11,7 @@
 // Uses app.js globals ($, esc, state, api, errMsg, devMode, fmtCost, markdownHtml, confirmDialog,
 // shownRunId, registerView).
 (() => {
-  const sv = { messages: [], busy: false, pending: null, error: null, loaded: false, drawer: false, tools: [], live: null };
+  const sv = { messages: [], busy: false, pending: null, error: null, loaded: false, drawer: false, full: false, tools: [], live: null };
   const SUGGESTIONS = [
     'What am I looking at?',
     'Which runs failed recently, and why?',
@@ -18,9 +19,9 @@
     'Which workflow fits a small bug fix?',
   ];
   const LABELS = {
-    sessions: 'Sessions', dashboard: 'Dashboard', projects: 'Projects', project: 'Project', backlog: 'Backlog', artifacts: 'Artifacts',
+    sessions: 'Sessions', dashboard: 'Home', project: 'Project', backlog: 'Backlog', roadmap: 'Roadmap', artifacts: 'Artifacts',
     workflows: 'Workflows', agents: 'Agents', skills: 'Skills', usage: 'Usage', analytics: 'Analytics', duo: 'Write & Review',
-    arena: 'AI Arena', run: 'Run details', runchat: 'Run chat', settings: 'Settings', supervisor: 'Supervisor',
+    arena: 'AI Arena', run: 'Run details', runchat: 'Run chat', settings: 'Settings', nightwatch: 'Night watch',
   };
 
   // What the current screen shows, in one line for the supervisor.
@@ -36,7 +37,7 @@
     }
     if (view === 'analytics' && window.analyticsContext) parts.push(window.analyticsContext());
     if (view === 'project' && state.pv?.project) parts.push(`project ${state.pv.project.name || state.pv.id} (id ${state.pv.id})`);
-    if (view === 'backlog' && window.BacklogActions?.projectId?.()) parts.push(`project ${window.BacklogActions.projectId()}`);
+    if ((view === 'backlog' || view === 'roadmap') && window.BacklogActions?.projectId?.()) parts.push(`project ${window.BacklogActions.projectId()}`);
     if (view === 'artifacts') {
       const sel = state.art?.sel;
       const file = typeof sel === 'string' ? sel : sel?.path;
@@ -112,6 +113,19 @@
   }
   window.openSupervisorChat = openDrawerPanel;
 
+  // Expand (#264, where the Supervisor page was): the drawer over the whole screen, with every
+  // message and the list of what the supervisor can read
+  function setFull(on) {
+    sv.full = on;
+    $('#svc-drawer').classList.toggle('full', on);
+    $('#svc-side').classList.toggle('hidden', !on);
+    const btn = $('#btn-svc-full');
+    btn.textContent = on ? 'Collapse' : 'Expand';
+    btn.setAttribute('aria-pressed', String(on));
+    render();
+    if (on && !sv.tools.length) api.supervisorTools().then((t) => { sv.tools = t; render(); }).catch(() => {});
+  }
+
   // ---- rendering ---------------------------------------------------------------------------------
   function messageHtml(msg, i, all) {
     const time = msg.ts ? new Date(msg.ts).toLocaleString() : '';
@@ -143,19 +157,12 @@
     if (sv.drawer) {
       $('#svc-screen').textContent = screenContext();
       const log = $('#svc-log-drawer');
-      // the drawer shows the latest exchanges; the Supervisor page has them all
-      log.innerHTML = logHtml(sv.messages.slice(-20));
+      // the drawer shows the latest exchanges; expanded, all of them
+      log.innerHTML = logHtml(sv.full ? sv.messages : sv.messages.slice(-20));
       log.scrollTop = log.scrollHeight;
       $('#svc-chips-drawer').innerHTML = chips;
       $('#svc-note-drawer').textContent = note;
-    }
-    if (state.view === 'supervisor') {
-      const log = $('#svc-log-page');
-      log.innerHTML = logHtml(sv.messages);
-      log.scrollTop = log.scrollHeight;
-      $('#svc-chips-page').innerHTML = chips;
-      $('#svc-note-page').textContent = note;
-      $('#svc-tools').innerHTML = sv.tools.map((t) => `<li><span class="mono">${esc(t.name)}</span> <span class="muted">${esc(t.description)}</span></li>`).join('');
+      if (sv.full) $('#svc-tools').innerHTML = sv.tools.map((t) => `<li><span class="mono">${esc(t.name)}</span> <span class="muted">${esc(t.description)}</span></li>`).join('');
     }
     document.querySelectorAll('.svc-send').forEach((b) => (b.disabled = sv.busy));
     document.querySelectorAll('.svc-clear').forEach((b) => (b.disabled = sv.busy || !sv.messages.length));
@@ -171,27 +178,6 @@
 
   registerView({
     id: 'supervisor',
-    nav: { label: 'Supervisor', order: 110, title: 'Talk to the supervisor: the whole conversation', icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 21 12 12 21 3 12Z" /><path d="M8 12h8" /></svg>' },
-    markup: `
-      <section id="view-supervisor" class="view hidden">
-        <div class="page-head">
-          <div>
-            <h1><span class="sup-mark">◆</span> Supervisor</h1>
-            <p class="muted small">Your companion on every screen (the Supervisor button in the top bar opens it anywhere). It reads the app's data and never the repositories' code, never answers a human gate, and routes code problems to the workflow's agents.</p>
-          </div>
-          <div class="row"><button class="btn ghost svc-clear" type="button">New conversation</button></div>
-        </div>
-        <div class="svc-page">
-          <div class="svc-main">
-            <div id="svc-log-page" class="svc-log"></div>
-            ${inputBox('page')}
-          </div>
-          <aside class="svc-side card">
-            <div class="sup-h">What it can read</div>
-            <ul id="svc-tools" class="svc-tools small"></ul>
-          </aside>
-        </div>
-      </section>`,
     modals: `
   <div id="svc-backdrop" class="drawer-backdrop sup-backdrop hidden"></div>
   <aside id="svc-drawer" class="drawer sup-drawer svc-drawer" data-testid="svc-drawer" aria-hidden="true" aria-label="Supervisor">
@@ -201,40 +187,35 @@
         <div class="muted small">On: <span id="svc-screen"></span></div>
       </div>
       <div class="row">
-        <button id="btn-svc-full" class="btn ghost sm" type="button" title="The whole conversation on the Supervisor page">Full page</button>
-        <button class="btn ghost sm svc-clear" type="button">New</button>
+        <button id="btn-svc-full" class="btn ghost sm" type="button" aria-pressed="false" title="The whole conversation and what the supervisor can read, over the whole screen">Expand</button>
+        <button class="btn ghost sm svc-clear" type="button" title="New conversation: the supervisor forgets this one">New</button>
         <button id="btn-svc-close" class="icon-btn" title="Close (Esc)">
           <svg viewBox="0 0 24 24" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" /></svg>
         </button>
       </div>
     </div>
     <div class="drawer-body sup-body svc-body">
-      <div id="svc-log-drawer" class="svc-log"></div>
-      ${inputBox('drawer')}
+      <div class="svc-main">
+        <div id="svc-log-drawer" class="svc-log"></div>
+        ${inputBox('drawer')}
+      </div>
+      <aside id="svc-side" class="svc-side card hidden">
+        <div class="sup-h">What it can read</div>
+        <ul id="svc-tools" class="svc-tools small"></ul>
+      </aside>
     </div>
   </aside>`,
     mount() {
-      // the top bar's button: the drawer on every screen
-      const btn = document.createElement('button');
-      btn.id = 'btn-svc-open';
-      btn.type = 'button';
-      btn.className = 'btn ghost svc-open';
-      btn.title = 'Ask the supervisor about this screen';
-      btn.innerHTML = '<span class="sup-mark" aria-hidden="true">◆</span> Supervisor';
-      btn.onclick = () => (sv.drawer ? closeDrawerPanel() : openDrawerPanel());
-      document.querySelector('.topbar .actions')?.prepend(btn);
       $('#btn-svc-close').onclick = closeDrawerPanel;
       $('#svc-backdrop').onclick = closeDrawerPanel;
-      $('#btn-svc-full').onclick = () => { closeDrawerPanel(); showView('supervisor'); };
+      $('#btn-svc-full').onclick = () => setFull(!sv.full);
       document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && sv.drawer) closeDrawerPanel(); });
       document.querySelectorAll('.svc-clear').forEach((b) => (b.onclick = clear));
-      // the screen is read when the message is sent: from the drawer, the screen under it
-      const screenFor = (where) => (where === 'drawer' ? screenContext() : 'Supervisor page (no other screen in view)');
+      // the screen is read when the message is sent: the one under the drawer
       document.querySelectorAll('[data-svc-form]').forEach((form) => {
-        const where = form.dataset.svcForm;
         const input = form.querySelector('textarea');
-        form.onsubmit = (e) => { e.preventDefault(); ask(input.value, screenFor(where), input); };
-        input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ask(input.value, screenFor(where), input); } });
+        form.onsubmit = (e) => { e.preventDefault(); ask(input.value, screenContext(), input); };
+        input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ask(input.value, screenContext(), input); } });
       });
       // #180: the question in flight, as the service reports it
       api.onChatProgress?.((p) => {
@@ -254,15 +235,8 @@
         // #180: the live turn's Stop and its steps' toggle
         if (e.target.closest('.svc-live') && window.LiveTurn.onClick(e, sv.live, { onStop: () => api.cancelChatTurn('supervisor', '').catch((err) => { sv.error = errMsg(err); render(); }), render: renderLive })) return;
         const chip = e.target.closest('[data-svc-q]');
-        if (!chip) return;
-        const where = chip.closest('#svc-drawer') ? 'drawer' : 'page';
-        ask(chip.dataset.svcQ, screenFor(where));
+        if (chip) ask(chip.dataset.svcQ, screenContext());
       });
-    },
-    show() {
-      render();
-      load();
-      if (!sv.tools.length) api.supervisorTools().then((t) => { sv.tools = t; render(); }).catch(() => {});
     },
   });
 })();

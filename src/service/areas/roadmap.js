@@ -93,7 +93,7 @@ module.exports = (ctx) => {
     const stageUsd = known.length ? Math.round(known.reduce((a, v) => a + v, 0) * 100) / 100 : null;
     const message = budget.pauseMessage(block, stageUsd);
     roadmaps.budgetPause(ctx.ws.backlog, projectId, { period: block.period, spentUsd: block.spentUsd, limitUsd: block.limitUsd, nextUsd: block.nextUsd, stageUsd, at: new Date().toISOString() }, message);
-    ctx.notify({ kind: 'run', event: 'failed', title: 'Budget reached', body: message.slice(0, 180), target: { view: 'backlog', projectId } }, { projectId });
+    ctx.notify({ kind: 'run', event: 'failed', title: 'Budget reached', body: message.slice(0, 180), target: { view: 'roadmap', projectId } }, { projectId });
     return true;
   }
 

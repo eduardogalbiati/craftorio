@@ -1,13 +1,16 @@
 /* global api */
-// Projects screen: the project cards (Start workflow, Open folder, Edit, Remove; a click opens the
-// project's page, views/project/) and the New / Edit project dialog with its Local preview fields
-// and the run command detected in the folder (#115). The dialog is also opened from the Start
-// drawer (app.js), so openProjectModal stays a global. Registers itself with registerView
-// (view-registry.js); uses app.js globals ($, esc, state, api, errMsg, openModal, closeModal,
-// confirmDialog, openDrawer, renderProjectOptions, runAppCommandHtml).
+// Projects, inside Settings (#254: Settings › Projects, no menu entry of its own): the project cards
+// (Start workflow, Open folder, Edit, Remove; a click opens the project's page, views/project/) and
+// the New / Edit project dialog with its Local preview fields and the run command detected in the
+// folder (#115). The dialog is also opened from the Start drawer (app.js) and the header's project
+// selector (current-project.js), so openProjectModal stays a global; showProjects opens the tab.
+// load: after views/settings/settings.js (the cards go into its Projects page)
+// Registers itself with registerView (view-registry.js); uses app.js globals ($, esc, state, api,
+// errMsg, openModal, closeModal, confirmDialog, openDrawer, renderProjectOptions, runAppCommandHtml).
 
 async function refreshProjects() {
   state.projects = await api.listProjects();
+  window.CurrentProject.refresh();
   const box = $('#projects-list');
   if (!state.projects.length) {
     box.innerHTML = `<div class="empty-state"><b>No projects yet</b><p class="muted">Create a project that points to a local folder or a git repository.</p><button class="btn primary" id="empty-new-project">New project</button></div>`;
@@ -50,11 +53,20 @@ async function refreshProjects() {
   }));
 }
 
+// Settings › Projects: where the links to the Projects screen lead (a project's page, a Run App copy)
+function showProjects() {
+  showView('settings');
+  showSettingsTab('projects');
+}
+
 let editingProject = null;
 let projectFromDrawer = false;
-function openProjectModal(p, { fromDrawer = false } = {}) {
+let projectFromHeader = false;
+// fromDrawer / fromHeader: the new project becomes the Start drawer's / the app's (the header selector's)
+function openProjectModal(p, { fromDrawer = false, fromHeader = false } = {}) {
   editingProject = p;
   projectFromDrawer = fromDrawer;
+  projectFromHeader = fromHeader;
   $('#project-modal-title').textContent = p ? 'Edit project' : 'New project';
   $('#btn-pj-save').textContent = p ? 'Save' : 'Create project';
   $('#pj-name').value = p?.name || '';
@@ -116,8 +128,10 @@ async function saveProject(e) {
     const p = editingProject ? await api.updateProject(editingProject.id, data) : await api.createProject(data);
     closeModal('#project-modal');
     state.projects = await api.listProjects();
+    window.CurrentProject.refresh();
     if (projectFromDrawer) renderProjectOptions(p.id);
-    if (state.view === 'projects') refreshProjects();
+    if (projectFromHeader) window.CurrentProject.set(p.id);
+    if (state.view === 'settings') refreshProjects();
   } catch (err) {
     $('#pj-error').textContent = errMsg(err);
   } finally {
@@ -128,21 +142,6 @@ async function saveProject(e) {
 
 registerView({
   id: 'projects',
-  nav: { label: 'Projects', order: 30, icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /></svg>' },
-  markup: `
-      <section id="view-projects" class="view hidden">
-        <div class="page-head">
-          <div>
-            <h1>Projects</h1>
-            <p class="muted small">Each project points to a local folder and, optionally, a git repository. Stored in <span id="projects-dir" class="mono"></span></p>
-          </div>
-          <div class="row">
-            <button id="btn-projects-folder" class="btn ghost">Open folder</button>
-            <button id="btn-new-project" class="btn primary">New project</button>
-          </div>
-        </div>
-        <div id="projects-list" class="card-grid"></div>
-      </section>`,
   modals: `
   <div id="project-modal" class="modal hidden">
     <form id="project-form" class="modal-card wide">
@@ -186,11 +185,25 @@ registerView({
     </form>
   </div>`,
   mount() {
+    // the page of Settings › Projects (settings.js has its tab and its empty page)
+    $('#settings-projects').innerHTML = `
+              <div class="page-head">
+                <div>
+                  <h2 class="settings-title">Projects</h2>
+                  <p class="muted small">Each project points to a local folder and, optionally, a git repository. Stored in <span id="projects-dir" class="mono"></span></p>
+                </div>
+                <div class="row">
+                  <button id="btn-projects-folder" class="btn ghost">Open folder</button>
+                  <button id="btn-new-project" class="btn primary">New project</button>
+                </div>
+              </div>
+              <div id="projects-list" class="card-grid"></div>`;
     $('#btn-new-project').onclick = () => openProjectModal(null);
     $('#btn-projects-folder').onclick = () => api.openPath(state.ws.projects);
     $('#project-form').onsubmit = saveProject;
     $('#btn-pj-cancel').onclick = () => closeModal('#project-modal');
     $('#btn-pj-pick').onclick = async () => { const d = await api.pickFolder(); if (d) { $('#pj-folder').value = d; detectProjectRun(); } };
   },
-  show: refreshProjects,
+  // showView('projects') (an older link, a Run App copy's start screen) lands on Settings › Projects
+  show: showProjects,
 });

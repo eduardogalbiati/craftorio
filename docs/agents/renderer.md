@@ -6,7 +6,7 @@ Read this before changing anything in `src/renderer/`.
   (UMD): xterm, addon-fit, marked, DOMPurify. Sandboxed: no Node, only `window.api` (`src/preload.js`,
   or `api-http.js` over the engine server; a test keeps their method lists equal).
 - Views: dashboard, sessions, projects (+ project detail with runs/sessions/artifacts), backlog,
-  artifacts, workflows (sidebar sub-items Runs / Definitions / Builder, `state.workflowsTab`;
+  artifacts, workflows (one menu entry and one tab per `state.workflowsTab`: Definitions / Runs / Builder / Pipelines;
   Definitions shows agents with their session mode and capabilities, Builder is `views/workflows/builder.js`), agents, skills, usage,
   settings, run (+ run chat); terminal dock; supervisor drawer. The code map
   ([code-map.md](code-map.md)) says which file draws which screen.
@@ -50,12 +50,23 @@ Read this before changing anything in `src/renderer/`.
   Mind the cascade when moving a rule: the views' stylesheets load after every top-level one, so a
   base rule another top-level file builds on (`.run-gate` under `.run-gate-wide`) stays top level.
   The script calls
-  `registerView({ id, nav: { label, icon, order, title }, markup, modals, mount, show })`
+  `registerView({ id, nav: { label, icon, order, title, group, tab }, section, menu, markup, modals, mount, show })`
   (`view-registry.js`, loaded before `app.js`): `markup` is the screen's whole
   `<section id="view-<id>" class="view hidden">`, added to `main.content`; `modals` its own dialogs,
   added to the body; `nav` its sidebar entry, placed by `order` among the other entries'
-  `data-order` (10 = Sessions … 130 = AI Arena: pick a free number between two); `mount()` wires its
-  controls once (and adds what `nav` can't: a badge, sub-items); `show()` runs on each `showView(id)`.
+  `data-order` (20 = Home … 130 = AI Arena: pick a free number between two); `mount()` wires its
+  controls once (and adds what `nav` can't: a badge); `show()` runs on each `showView(id)`.
+  The menu is grouped by the flow (#254, `nav-groups.js`): `nav.group` (`plan`, `code`, `workflows`,
+  `ai`, or none) puts the entry under that group's title, which folds and remembers it; a group sits
+  at its own order among the entries without one (Home, Analytics, Night watch, Settings), and its
+  entries by theirs inside it. `nav` may be a list: each entry opens the screen on its `tab`
+  (`data-tab`; Workflows: Definitions, Runs, Builder, Pipelines). `section: '<id>'` draws the screen
+  in another screen's section (the Roadmap in the Backlog's) and `menu: '<id>'` names the entry lit
+  on a screen that has none (a project's page and Artifacts). The menu stays generated from the
+  views: a new screen names its group in its own `nav`, there is no shared list to edit.
+  The project is the app's (#254, `current-project.js`): a screen reads `window.CurrentProject.get()`
+  in its `show()` and never adds a project picker of its own; choosing another project in the header
+  (`#header-project`) calls `showView` on the current screen again.
   Sidebar clicks are delegated, so registered entries need no wiring. View scripts load after `app.js`
   and use its globals (`$`, `esc`, `state`, `api`, `errMsg`, `openModal`…); functions other files call
   (`renderDashboard`, `openArtifactsAt`, `loadProjectRunsThrottled`…) are plain top-level functions, so
@@ -189,8 +200,8 @@ Read this before changing anything in `src/renderer/`.
 
 `views/oracle/oracle.js` registers a view with no screen of its own: it docks `#oracle-dock` inside
 `#view-dashboard` (class `oracle-docked`, a two-column grid) and adds `#oracle-drawer` (a `.drawer`
-like `#svc-drawer`) and the sidebar's `#nav-oracle` button, appended after the runs list. The
-button is a `.nav-item` without `data-view` (its click stops before the sidebar's navigation): on
+like `#svc-drawer`) and the header's `#nav-oracle` button, inserted before the notifications bell
+(#254: `.topbar .actions`, top right). On
 the Dashboard it focuses the dock, elsewhere it toggles the drawer. Both places render the same
 state from `OracleChatModel` (`views/oracle/oracle-chat-model.js`, pure, tested in Node):
 

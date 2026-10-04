@@ -4,7 +4,7 @@
 // Two tabs (the selected one is remembered with the scope and range): Usage (the above) and Repository
 // performance (#159: per project, the files most runs edit, the runs that hit a merge conflict, the
 // runs at once, split before/after a marker; channel analytics:performance, src/repo-performance.js).
-// #197: the analysed project is picked at the top of that tab (remembered per window), and each file
+// #197, #254: the analysed project is the header's (window.CurrentProject), named at the top of that tab, and each file
 // over the shared limit has a recommendation, "Create issue" (or its open issue) and "Ask for a plan".
 // More tabs register in window.AnalyticsTabs before this file loads: Run (#228, analytics-run.js) and
 // 24/7 (#188, analytics-occupancy.js), each { id, label, order, load(), render(body), sub(), context() }.
@@ -14,8 +14,6 @@
 (() => {
   const $a = (sel) => document.querySelector(sel);
   const LS = 'multiagent.analytics';
-  // the analysed project is remembered per window (#197)
-  const SS_PROJECT = 'multiagent.analytics.project';
   const extraTabs = () => Object.values(window.AnalyticsTabs || {}).sort((a, b) => (a.order || 0) - (b.order || 0));
   const extraTab = (id) => (window.AnalyticsTabs || {})[id] || null;
   const TAB_IDS = () => ['usage', 'performance', ...extraTabs().map((t) => t.id)];
@@ -33,15 +31,14 @@
     sortKey: 'tokens',
     // inline (not TAB_IDS): the Supervisor's context test evaluates this literal on its own
     tab: ['usage', 'performance', ...Object.keys(window.AnalyticsTabs || {})].includes(saved.tab) ? saved.tab : 'usage',
-    project: (() => { try { return sessionStorage.getItem(SS_PROJECT) || saved.project || null; } catch { return saved.project || null; } })(),
+    project: null, // the project the performance on screen is of (asked for the header's, #254)
     marker: saved.marker || '',
     perf: null, perfError: null, perfLoading: false, perfSort: 'runs',
     perfIssues: null, plan: null, planError: null, planning: false,
   };
   const persist = () => {
     try {
-      localStorage.setItem(LS, JSON.stringify({ scope: ax.scope, days: ax.days, tab: ax.tab, project: ax.project, marker: ax.marker }));
-      if (ax.project) sessionStorage.setItem(SS_PROJECT, ax.project);
+      localStorage.setItem(LS, JSON.stringify({ scope: ax.scope, days: ax.days, tab: ax.tab, marker: ax.marker }));
     } catch { /* ignore */ }
   };
   const today = () => new Date().toISOString().slice(0, 10);
@@ -88,11 +85,12 @@
     ax.perfLoading = true;
     renderControls();
     try {
-      ax.perf = await api.getRepositoryPerformance({ projectId: ax.project, marker: ax.marker, ...range() });
-      if (ax.project !== (ax.perf.project?.id || null)) ax.plan = null;
+      // #254: the header's project; another one than the one on screen drops its issues and plan
+      const projectId = window.CurrentProject.get();
+      if (projectId !== ax.project) Object.assign(ax, { perfIssues: null, plan: null, planError: null });
+      ax.perf = await api.getRepositoryPerformance({ projectId, marker: ax.marker, ...range() });
       ax.project = ax.perf.project?.id || null;
       ax.perfError = null;
-      persist();
     } catch (e) { ax.perfError = errMsg(e); }
     ax.perfLoading = false;
     render();
@@ -329,16 +327,12 @@
     box.innerHTML = ax.plan ? `<div class="card an-card an-report"><div class="md">${markdownHtml(ax.plan.markdown || '')}</div>${ax.plan.reportPath ? `<p class="muted small">Saved in ${esc(ax.plan.reportPath)}${ax.plan.costUsd ? ` · ${fmtUsd(ax.plan.costUsd)}` : ''}</p>` : ''}</div>` : '';
   }
 
-  // #197: the analysed project, at the top of the tab, and what the page counts
+  // #197: the analysed project (#254: the one chosen in the header), at the top of the tab, and what the page counts
   function projectHeader(p) {
-    const list = p.projects || [];
-    const selected = p.project?.id || ax.project;
-    const options = list.map((x) => `<option value="${esc(x.id)}" title="${esc(x.folder || 'No folder')}"${x.id === selected ? ' selected' : ''}${x.isGit ? '' : ' disabled'}>${esc(x.name)}${x.isGit ? '' : ` — ${esc(x.reason || 'not a git repository')}`}</option>`).join('');
     const pr = p.project;
     const summary = pr ? `<b>${esc(pr.name)}</b> · ${fmtNum(p.runs || 0)} run${p.runs === 1 ? '' : 's'} · ${esc(p.from || '')} to ${esc(p.to || '')}` : '';
-    return `<div class="card an-project-pick">
-      <label class="an-field"><span class="small muted">Project analysed</span>
-        <select id="an-project" data-testid="an-project" aria-label="Project analysed" title="${esc(pr?.folder || '')}">${options || '<option value="">No projects</option>'}</select></label>
+    return `<div class="card an-project-shown" title="The project chosen in the header">
+      <span class="small muted">Project analysed</span>
       <div class="an-project-summary" data-testid="an-project-summary"><div>${summary}</div>${pr?.folder ? `<div class="muted small mono an-file" title="${esc(pr.folder)}">${esc(pr.folder)}</div>` : ''}</div>
     </div>`;
   }
@@ -462,12 +456,6 @@
     };
     $a('#an-from').addEventListener('change', onDate);
     $a('#an-to').addEventListener('change', onDate);
-    // the project select is redrawn with the tab (#197): one listener on the view
-    view.addEventListener('change', (e) => {
-      if (e.target.id !== 'an-project') return;
-      ax.project = e.target.value || null; ax.perfIssues = null; ax.plan = null; ax.planError = null;
-      persist(); load();
-    });
     $a('#an-marker').addEventListener('change', (e) => { ax.marker = e.target.value.trim(); persist(); load(); });
     $a('#an-refresh').addEventListener('click', load);
     $a('#an-analyze').addEventListener('click', analyze);

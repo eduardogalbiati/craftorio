@@ -977,7 +977,10 @@
 
   /** A new stage at the end with the assign dialog's issues: one item (group) or one per issue; `reason`/`modeReason`/`origin`: the Product Owner's. */
   // then: the items' chain (#134), from the Assign dialog's "When it finishes"
-  async function addStage(ctx, data, { issues, workflow, workflowName, inputs, mock, group, reason, modeReason, origin, then, cost }) {
+  async function addStage(ctx, data, { issues: asked, workflow, workflowName, inputs, mock, group, reason, modeReason, origin, then, cost }) {
+    // #253: an epic groups issues, it is never planned as work
+    const issues = asked.filter((i) => !i?.isEpic);
+    if (!issues.length) return;
     const stages = clone(data?.roadmap?.stages);
     const why = { ...(reason ? { reason } : {}), ...(modeReason ? { modeReason } : {}), ...(origin ? { origin } : {}), ...(then ? { then } : {}), ...(cost ? { cost } : {}) };
     const items = group ? [{ workflow, workflowName, inputs, mock, issues, ...why }] : issues.map((n) => ({ workflow, workflowName, inputs, mock, issues: [n], ...why }));

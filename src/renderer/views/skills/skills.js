@@ -67,7 +67,7 @@ async function saveSkill(e) {
 
 registerView({
   id: 'skills',
-  nav: { label: 'Skills', order: 80, icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z" /></svg>' },
+  nav: { label: 'Skills', order: 80, group: 'ai', icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z" /></svg>' },
   markup: `
       <section id="view-skills" class="view hidden">
         <div class="page-head">

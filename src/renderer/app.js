@@ -172,8 +172,8 @@ async function init() {
   $('nav.sidebar').addEventListener('click', (e) => {
     const b = e.target.closest('.nav-item');
     if (!b) return;
-    // Workflows opens on Runs; Definitions and Builder are its sub-items
-    if (b.dataset.view === 'workflows') state.workflowsTab = 'runs';
+    // a Workflows entry opens its tab (#254: Definitions, Runs, Builder, Pipelines)
+    if (b.dataset.view === 'workflows') state.workflowsTab = b.dataset.tab || 'runs';
     // the Run item opens the run shown in the top bar in the remembered view
     if (b.dataset.view === 'run' && state.runs.has(state.runId)) { selectRun(state.runId); return; }
     showView(b.dataset.view);
@@ -227,13 +227,14 @@ async function init() {
   $('#sim-only-badge').classList.toggle('hidden', !state.simulationOnly);
   applyDeveloperMode();
   [state.workflows, state.projects, state.skills] = await Promise.all([api.listWorkflows(), api.listProjects(), api.listSkills()]);
+  window.CurrentProject.refresh();
   renderWorkspacePaths();
   await loadActiveRuns();
   initCodeBanner();
   initKeepAwake();
   renderDashboard();
-  // a Run App copy opens on the screen the change is about (#119): its nav item, as a click would
-  if (appInfo.startView) document.querySelector(`.nav-item[data-view="${CSS.escape(appInfo.startView)}"]`)?.click();
+  // a Run App copy opens on the screen the change is about (#119)
+  if (viewRegistry.has(appInfo.startView)) showView(appInfo.startView);
 
   // only a missing CLI is worth a line on the Start drawer: the warning before a real run fails
   const env = await api.checkEnv();
@@ -284,11 +285,19 @@ function scheduleActiveSync() {
 // ---------------------------------------------------------------------------
 function showView(view) {
   state.view = view;
-  document.querySelectorAll('.view').forEach((v) => v.classList.toggle('hidden', v.id !== `view-${view}`));
-  document.querySelectorAll('.nav-item').forEach((b) => b.classList.toggle('active', b.dataset.view === (view === 'project' ? 'projects' : view)));
-  $('#nav-workflows-sub').classList.toggle('hidden', view !== 'workflows');
-  viewRegistry.get(view)?.show?.();
+  const def = viewRegistry.get(view);
+  // a screen drawn in another one's section (#254: the Roadmap, in the Backlog's)
+  const section = def?.section || view;
+  document.querySelectorAll('.view').forEach((v) => v.classList.toggle('hidden', v.id !== `view-${section}`));
+  def?.show?.();
+  paintNav();
   reportNotifyContext();
+}
+// The open screen's menu entry (a screen without one names it in `menu`); a Workflows entry is its tab's.
+function paintNav() {
+  const lit = viewRegistry.get(state.view)?.menu || state.view;
+  document.querySelectorAll('.nav-item').forEach((b) => b.classList.toggle('active',
+    b.dataset.view === lit && (!b.dataset.tab || b.dataset.tab === state.workflowsTab)));
 }
 
 // ---------------------------------------------------------------------------
@@ -314,7 +323,7 @@ function reportNotifyContext() {
       runId: shownRunId(),
       terminalId: state.view === 'sessions' ? window.SessionsView?.shownTerminalId() || null : null,
       // #149: the Product Owner's answers are not notified while its drawer shows them
-      poProjectId: state.view === 'backlog' ? window.BacklogPO?.openProjectId() || null : null,
+      poProjectId: ['backlog', 'roadmap'].includes(state.view) ? window.BacklogPO?.openProjectId() || null : null,
     });
   }, 0);
 }
@@ -328,9 +337,10 @@ function openNotificationTarget(t) {
   if (t.openOracle) { window.OracleChat?.open(); return; }
   // a Night watch's morning summary (#172)
   if (t.view === 'nightwatch') { showView('nightwatch'); return; }
-  if (t.view === 'backlog') {
+  // (a roadmap's notice opens the Roadmap screen, #254)
+  if (t.view === 'backlog' || t.view === 'roadmap') {
     window.BacklogActions?.focusProject(t.projectId);
-    showView('backlog');
+    showView(t.view);
     if (t.openPO) window.BacklogPO?.open();
     return;
   }

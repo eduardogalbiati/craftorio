@@ -99,7 +99,8 @@
   ];
   const SIM_FILES = 8;
   // the owner reads the drawer: an answer arriving now is seen (#149)
-  const watching = () => po.open && state.view === 'backlog' && !document.hidden;
+  // (#254: the drawer also opens on the Roadmap screen)
+  const watching = () => (po.open && state.view === 'backlog' && !document.hidden) || (po.open && state.view === 'roadmap' && !document.hidden);
 
   function renderButton() {
     // #149: the sidebar's yellow status dot while an answer is unseen (the robot thinks while busy)
@@ -141,7 +142,8 @@
     render({ scroll: 'end' });
     if (!projectId) return;
     // while a question is in flight the service already recorded it: render() leaves out the pending bubble
-    try { po.messages = await api.productOwnerHistory(projectId); } catch (e) { po.error = errMsg(e); }
+    // (no history yet may come back empty-handed: an empty conversation)
+    try { po.messages = await api.productOwnerHistory(projectId) || []; } catch (e) { po.error = errMsg(e); }
     // a draft still to file: back to Register an issue
     if (openDraftIndex() >= 0 && !po.busy) po.mode = 'issue';
     render({ scroll: 'end' });

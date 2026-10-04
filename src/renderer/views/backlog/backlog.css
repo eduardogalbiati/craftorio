@@ -119,7 +119,6 @@ span.po-applied { cursor: default; }
 
 /* ---- Backlog ---- */
 #bl-search { width: 240px; }
-#bl-project { width: 220px; }
 #bl-platform { width: 130px; }
 .bl-row {
   /* the title keeps 160px: a long status (run title, badges) wraps instead; the last column holds the
@@ -263,7 +262,7 @@ button.bl-label { font-family: inherit; cursor: pointer; }
 #view-backlog .page-head { flex-wrap: wrap; gap: 8px 16px; }
 #view-backlog .page-head > * { min-width: 0; }
 #view-backlog .page-head > .row { flex-wrap: wrap; }
-#bl-project, #bl-platform { min-width: 0; max-width: 100%; }
+#bl-platform { min-width: 0; max-width: 100%; }
 /* #193: no horizontal scroll. Every grid of the roadmap has one track that may shrink below its
    content (minmax(0, 1fr), not the default auto track sized by the longest nowrap line), so a long
    reason ends with "…" at the card's edge and the other long texts wrap inside the card. */

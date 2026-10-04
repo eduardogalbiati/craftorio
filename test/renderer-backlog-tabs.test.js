@@ -9,11 +9,12 @@ const path = require('path');
 
 const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'views', 'backlog', 'backlog.js'), 'utf8');
 
-test('the Backlog has page tabs Board and Roadmap', () => {
+// #254: the Roadmap left the Backlog's tabs for a screen of its own (Code & Build › Roadmap)
+test('the Backlog has page tabs Board and Epics; the Roadmap is no longer one of them', () => {
   assert.match(src, /role="tab"[^>]*>\s*Board\s*</);
-  assert.match(src, /role="tab"[^>]*>\s*Roadmap\s*</);
+  assert.match(src, /role="tab"[^>]*>\s*Epics\s*</);
   assert.match(src, /data-[a-z-]*tab="board"/);
-  assert.match(src, /data-[a-z-]*tab="roadmap"/);
+  assert.doesNotMatch(src, /data-[a-z-]*tab="roadmap"/);
 });
 
 test('the Board tab has a List / Kanban switch', () => {

@@ -1,7 +1,7 @@
 /* global api */
-// Project screen (Projects › a project): its folder, repository and unpushed commits, and its runs
+// Project screen (Settings › Projects › a project): its folder, repository and unpushed commits, and its runs
 // in the shared run list (run-list.js: paged with an infinite scroll, filters and search answered by
-// the service, #200). No sidebar entry of its own: showView highlights Projects.
+// the service, #200). No sidebar entry of its own: Settings stays lit (`menu`).
 // openProjectView (the Projects cards, scripts/screenshot.js) and loadProjectRunsThrottled (app.js
 // run events) stay globals. Registers itself with registerView (view-registry.js); uses app.js
 // globals ($, esc, state, api, errMsg, showView, openDrawer, noteRunMeta).
@@ -73,6 +73,7 @@ function renderProjectView() {
 
 registerView({
   id: 'project',
+  menu: 'settings',
   markup: `
       <section id="view-project" class="view hidden">
         <button id="btn-project-back" class="link-btn back-link" type="button">← Projects</button>
@@ -88,7 +89,8 @@ registerView({
         <div id="project-runs" class="pr-list"></div>
       </section>`,
   mount() {
-    $('#btn-project-back').onclick = () => showView('projects');
+    // Settings › Projects (views/projects/projects.js, which loads after this file)
+    $('#btn-project-back').onclick = () => showProjects();
     $('#btn-project-refresh').onclick = () => loadProjectRuns();
     $('#project-show-sim').onchange = (e) => { if (state.pv) { state.pv.showSim = e.target.checked; loadProjectRuns(); } };
     let searchTimer = null;

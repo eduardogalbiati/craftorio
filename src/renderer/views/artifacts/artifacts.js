@@ -404,12 +404,17 @@ function renderMarkdownDoc(body, text, notice) {
 
 registerView({
   id: 'artifacts',
-  nav: { label: 'Artifacts', order: 50, icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><polyline points="14 3 14 8 19 8" /><line x1="9" y1="13" x2="15" y2="13" /><line x1="9" y1="17" x2="13" y2="17" /></svg>' },
+  // #254: a tab of Workflows › Runs (no menu entry of its own: Runs stays lit)
+  menu: 'workflows',
   markup: `
       <section id="view-artifacts" class="view hidden">
         <div class="art-layout">
           <aside class="art-side">
             <div class="art-side-head">
+              <div class="seg sm art-tabs" role="tablist" aria-label="Runs">
+                <button type="button" role="tab" id="art-tab-runs" aria-selected="false" title="Every run, live or finished">All runs</button>
+                <button type="button" class="active" role="tab" aria-selected="true">Artifacts</button>
+              </div>
               <div class="row">
                 <h1>Artifacts</h1>
                 <span class="spacer"></span>
@@ -436,6 +441,7 @@ registerView({
         </div>
       </section>`,
   mount() {
+    $('#art-tab-runs').onclick = () => showWorkflowsTab('runs');
     $('#btn-art-refresh').onclick = () => loadArtifacts();
     $('#art-project').onchange = (e) => { state.art.projectId = e.target.value; loadArtifacts(); };
     // the service searches every run's files (#200): asked once the typing pauses
@@ -449,6 +455,8 @@ registerView({
     $('#art-show-sim').onchange = (e) => { state.art.showSim = e.target.checked; loadArtifacts(); };
   },
   show() {
+    // the menu's Runs entry stays lit, wherever the screen was opened from
+    state.workflowsTab = 'runs';
     renderArtifacts();
     loadArtifacts();
   },

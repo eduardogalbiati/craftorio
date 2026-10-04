@@ -37,7 +37,8 @@ function renderDashboard() {
 
 registerView({
   id: 'dashboard',
-  nav: { label: 'Dashboard', order: 20, icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1.5" /><rect x="14" y="3" width="7" height="5" rx="1.5" /><rect x="14" y="12" width="7" height="9" rx="1.5" /><rect x="3" y="16" width="7" height="5" rx="1.5" /></svg>' },
+  // #254: the menu's first entry, Home (the screen's content is the Dashboard's until #255)
+  nav: { label: 'Home', order: 20, icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 11 9-8 9 8" /><path d="M5 9.5V20h14V9.5" /><path d="M10 20v-6h4v6" /></svg>' },
   // the only section shown before any showView: no `hidden`
   markup: `
       <section id="view-dashboard" class="view">

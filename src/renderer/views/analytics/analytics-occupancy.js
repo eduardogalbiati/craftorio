@@ -185,7 +185,7 @@
     body.querySelectorAll('[data-occ-hint]').forEach((b) => {
       b.onclick = () => {
         const cause = b.dataset.occHint;
-        if (cause === 'noWork') { window.BacklogActions?.showRoadmap?.(); showView('backlog'); }
+        if (cause === 'noWork') showView('roadmap');
         else if (cause === 'gate') showView('nightwatch');
         else { showView('settings'); if (typeof showSettingsTab === 'function') showSettingsTab('execution'); }
       };

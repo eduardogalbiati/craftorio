@@ -3,11 +3,14 @@
 //
 //   npx electron scripts/screenshot.js --view <view> [options]      (or: npm run screenshot -- ...)
 //
-//   --view <name>      dashboard, sessions, projects, project, backlog, artifacts, workflows, agents,
-//                      skills, usage, analytics, supervisor, oracle, nightwatch, settings, duo, arena,
+//   --view <name>      dashboard, sessions, projects, project, backlog, roadmap, artifacts, workflows, agents,
+//                      skills, usage, analytics, oracle, nightwatch, settings, duo, arena,
 //                      run-chat, run
-//                      (default dashboard; oracle: Projects with the Oracle's drawer open from its
-//                      sidebar button; the Dashboard shows its docked panel; nightwatch (#172): two
+//                      (default dashboard, the menu's Home; projects: Settings › Projects; roadmap: the
+//                      same as backlog --mode roadmap; the Supervisor's drawer: --view workflows --click
+//                      "#btn-wf-supervisor"; a folded menu group: --click ".nav-group[data-group=workflows]
+//                      .nav-group-title"; oracle: Settings with the Oracle's drawer open from its
+//                      header button; the Dashboard shows its docked panel; nightwatch (#172): two
 //                      replayed nights, src/night-watch-demo.js, also the Dashboard's morning
 //                      summary; its turn-on form: --click "#nw-switch", the permissions' Save /
 //                      Cancel: --click ".nw-perm-check[data-perm=skip]")
@@ -17,10 +20,10 @@
 //                      "#oracle-dock [data-oracle-night]") (unread: on a view other
 //                      than the Dashboard, whose panel reads the answers; the Edit form of its
 //                      memory: --click "#oracle-dock [data-oracle-memory]")
-//   --tab <name>       settings: general | agents | execution | about; workflows: runs | definitions;
+//   --tab <name>       settings: general | projects | agents | execution | phone | about; workflows: runs | definitions | builder | pipelines;
 //                      analytics: usage | performance | run | occupancy (performance: a demo git repository and a
 //                      marker; run: AI Development runs, the newest shown; occupancy: 30 days of runs and nights)
-//   --mode <name>      backlog: list | kanban | roadmap | epics
+//   --mode <name>      backlog: list | kanban | epics (roadmap: the Roadmap screen, #254)
 //   --run <mock|dir>   run-chat: a simulated software-development run (default) or a copy of a run folder
 //   --workflow <file>  the workflow of the simulated run (default software-development.yaml)
 //   --pipeline <file>  run: starts this saved pipeline instead (#135, e.g. develop-to-retrospective.yaml):
@@ -97,16 +100,17 @@ const machineSlot = require('../src/engine/machine-slot');
 
 const VIEWS = {
   dashboard: {}, sessions: {}, projects: {}, project: {}, artifacts: {}, agents: {}, skills: {}, usage: {}, duo: {}, arena: {},
-  supervisor: {},
-  // the Oracle's drawer (#171), opened from its sidebar button on another screen (Projects)
+  // the Oracle's drawer (#171), opened from its header button on another screen (Settings)
   oracle: {},
+  // #254: the Roadmap screen; the same as --view backlog --mode roadmap (its tab until then)
+  roadmap: {},
   // the Night watch (#172): two replayed nights
   nightwatch: {},
   // run: one AI Development run in depth against its workflow's runs (#228); occupancy: the 24/7 tab (#188)
   analytics: { tabs: ['usage', 'performance', 'run', 'occupancy'] },
   backlog: { modes: ['list', 'kanban', 'roadmap', 'epics'] },
-  workflows: { tabs: ['runs', 'definitions'] },
-  settings: { tabs: ['general', 'agents', 'execution', 'phone', 'about'] },
+  workflows: { tabs: ['runs', 'definitions', 'builder', 'pipelines'] },
+  settings: { tabs: ['general', 'projects', 'agents', 'execution', 'phone', 'about'] },
   'run-chat': { run: true },
   run: { live: true },
 };
@@ -159,8 +163,10 @@ function parseArgs(argv) {
     else if (k === '--po') a.po = next();
     else throw new Error(`Unknown argument: ${k}`);
   }
+  if (!VIEWS[a.view]) throw new Error(`Unknown view: ${a.view}. Views: ${Object.keys(VIEWS).join(', ')}`);
+  // #254: the Roadmap screen shows the Backlog's demo data in its roadmap mode
+  if (a.view === 'roadmap') Object.assign(a, { view: 'backlog', mode: a.mode || 'roadmap' });
   const v = VIEWS[a.view];
-  if (!v) throw new Error(`Unknown view: ${a.view}. Views: ${Object.keys(VIEWS).join(', ')}`);
   if (a.tab && !v.tabs?.includes(a.tab)) throw new Error(`--tab ${a.tab} does not apply to ${a.view}${v.tabs ? ` (tabs: ${v.tabs.join(', ')})` : ''}`);
   if (a.mode && !v.modes?.includes(a.mode)) throw new Error(`--mode ${a.mode} does not apply to ${a.view}${v.modes ? ` (modes: ${v.modes.join(', ')})` : ''}`);
   if (a.theme && !THEMES.includes(a.theme)) throw new Error(`--theme takes ${THEMES.join(' | ')}`);
@@ -1580,12 +1586,17 @@ function main() {
         clearInterval(approve);
       }
     } else if (v === 'oracle') {
-      await click('.nav-item[data-view="projects"]');
+      await click('.nav-item[data-view="settings"]');
       await pause(300);
       await click('#nav-oracle');
     } else {
       if (v === 'artifacts' && run?.simulated && args.demoShots) await demoEvidence(win, run.dir);
-      await click(`.nav-item[data-view="${v}"]`);
+      // #254: the screen's menu entry (Workflows has one per tab, the Roadmap its own); Projects
+      // (Settings › Projects) and Artifacts (a tab of Runs) have none
+      if (v === 'workflows') await click(`.nav-item[data-view="workflows"][data-tab="${args.tab || 'runs'}"]`);
+      else if (v === 'backlog' && args.mode === 'roadmap') await click('.nav-item[data-view="roadmap"]');
+      else if (['projects', 'artifacts'].includes(v)) await js(`showView(${JSON.stringify(v)})`);
+      else await click(`.nav-item[data-view="${v}"]`);
     }
     await pause(500);
     // the Oracle's states set in the window: unread answers (the Dashboard, the start screen, read
@@ -1605,7 +1616,6 @@ function main() {
         if (q) { q.value = 'Why is this gate red?'; q.dispatchEvent(new Event('input')); }`);
     }
     if (args.tab && v === 'settings') await click(`.settings-tab[data-stab="${args.tab}"]`);
-    if (args.tab && v === 'workflows') await click(`[data-wtab="${args.tab}"]`);
     if (args.tab && v === 'analytics') await click(`[data-an-tab="${args.tab}"]`);
     // the demo's last night started after this marker: the before/after table shows the difference
     if (args.tab === 'performance') {
@@ -1614,7 +1624,7 @@ function main() {
       await js(`const m = document.querySelector('#an-marker'); m.value = ${JSON.stringify(marker)}; m.dispatchEvent(new Event('change'));`);
       await pause(1500);
     }
-    if (args.mode) await click(`#view-backlog [data-mode="${args.mode}"]`);
+    if (args.mode && args.mode !== 'roadmap') await click(`#view-backlog [data-mode="${args.mode}"]`);
     // --po (#180): the Product Owner's drawer, asking (working, writing) or with its last answer
     // (#235: with --workflow, the workflow it plans with, as if the owner had chosen it for the project)
     if (args.po && args.workflowGiven) await js(`localStorage.setItem('po.workflow.' + window.BacklogActions.projectId(), ${JSON.stringify(args.workflow)});`);

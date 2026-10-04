@@ -40,8 +40,15 @@
 </head>
 <body>
   <header class="topbar">
+    <!-- #254: the bar's own content (it wraps, #208; its children keep their indentation), then the top right corner -->
+    <div class="topbar-main">
     <div class="brand">Multiagent <span>Orchestrator</span></div>
     <span id="sim-only-badge" class="sim-only-badge hidden" title="MULTIAGENT_SIMULATION_ONLY is set: real runs and CLI terminals are refused, only simulations run.">Simulation only</span>
+    <!-- the app's project (#254, current-project.js): the Backlog, the Roadmap, Analytics and the Product Owner read it -->
+    <label class="header-project" title="The project every screen shows">
+      <span class="small muted">Project</span>
+      <select id="header-project" data-testid="header-project" aria-label="Project"></select>
+    </label>
     <button id="run-meta" class="run-meta" type="button" title="View the current run">
       <span id="run-status" class="pill pill-idle" data-testid="run-status">idle</span>
       <span id="run-id" class="muted mono"></span>
@@ -99,6 +106,25 @@
         </div>
       </div>
     </div>
+    </div>
+    <!-- #254: the top right corner: the Oracle's button (views/oracle/oracle.js adds it here) and the notifications bell with its centre (notification-center.js) -->
+    <div class="header-right">
+      <div class="notif-wrap">
+        <button id="nav-notifications" class="btn ghost btn-icon header-bell" type="button" title="Notifications" aria-haspopup="dialog" aria-expanded="false" aria-controls="notification-center">
+          <svg class="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" /><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0" /></svg>
+          <span class="sr-only">Notifications</span>
+          <span id="nav-notifications-count" class="nav-badge hidden"></span>
+        </button>
+        <div id="notification-center" class="notification-center hidden" role="dialog" aria-label="Notifications">
+          <div class="nc-head">
+            <b>Notifications</b>
+            <button id="nc-read-all" class="btn sm ghost" type="button">Mark all read</button>
+            <button id="nc-close" class="icon-btn" type="button" aria-label="Close" title="Close">×</button>
+          </div>
+          <div id="nc-list" class="nc-list"></div>
+        </div>
+      </div>
+    </div>
   </header>
   <!-- the code changed on disk while the app runs (#83), or the runs a restart interrupted -->
   <div id="code-banner" class="code-banner hidden" role="status"></div>
@@ -111,11 +137,6 @@
       <button id="nav-keep-awake" class="nav-item nav-keep-awake hidden" type="button">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" /><line x1="3" y1="3" x2="21" y2="21" /></svg>
         <span>Keeping awake</span>
-      </button>
-      <button id="nav-notifications" class="nav-item" type="button" title="Notifications" aria-haspopup="true" aria-expanded="false" aria-controls="notification-center">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" /><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0" /></svg>
-        <span>Notifications</span>
-        <span id="nav-notifications-count" class="nav-badge hidden"></span>
       </button>
       <button id="nav-run" class="nav-item nav-run st-idle hidden" data-view="run" title="No run in progress">
         <span id="nav-run-dot" class="status-dot"></span>
@@ -227,14 +248,6 @@
   </div>
 
   <div id="toast" class="toast hidden" role="status"></div>
-  <div id="notification-center" class="notification-center hidden" role="dialog" aria-label="Notifications">
-    <div class="nc-head">
-      <b>Notifications</b>
-      <button id="nc-read-all" class="btn sm ghost" type="button">Mark all read</button>
-      <button id="nc-close" class="icon-btn" type="button" aria-label="Close" title="Close">×</button>
-    </div>
-    <div id="nc-list" class="nc-list"></div>
-  </div>
 
   <!-- ================= Terminal dock ================= -->
   <section id="term-dock" class="term-dock hidden" aria-label="Terminals">
@@ -308,6 +321,7 @@
   <script src="api-http.js"></script>
   <script src="default-workflow.js"></script>
   <script src="display-name.js"></script>
+  <script src="nav-groups.js"></script>
   <script src="po-calibration.js"></script>
   <script src="run-badges.js"></script>
   <script src="run-progress-model.js"></script>
@@ -324,6 +338,7 @@
   <script src="chat-models.js"></script>
   <script src="code-banner.js"></script>
   <script src="command-hint.js"></script>
+  <script src="current-project.js"></script>
   <script src="diff-viewer-model.js"></script>
   <script src="diff-viewer.js"></script>
   <script src="estimates.js"></script>
@@ -370,13 +385,13 @@
   <script src="views/oracle/oracle-chat-model.js"></script>
   <script src="views/oracle/oracle.js"></script>
   <script src="views/project/project.js"></script>
-  <script src="views/projects/projects.js"></script>
   <script src="views/run/run.js"></script>
   <script src="views/runchat/run-chat-model.js"></script>
   <script src="views/runchat/runchat.js"></script>
   <script src="views/sessions/sessions.js"></script>
   <script src="views/settings/settings-phone.js"></script>
   <script src="views/settings/settings.js"></script>
+  <script src="views/projects/projects.js"></script>
   <script src="views/skills/skills.js"></script>
   <script src="views/supervisor/supervisor.js"></script>
   <script src="views/usage/usage.js"></script>

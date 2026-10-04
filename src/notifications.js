@@ -138,8 +138,8 @@ function liveRoadmapNotice({ project = {}, refill = {} } = {}) {
   return {
     kind: 'run', event: refill.status === 'added' ? 'refilled' : refill.status || 'refilled',
     title: `${title}: ${clip(project.name || project.id || 'project', 60)}`,
-    body: clip(refill.message) || 'Open the Backlog to see the roadmap.',
-    target: { view: 'backlog', projectId: project.id || null },
+    body: clip(refill.message) || 'Open the Roadmap to see it.',
+    target: { view: 'roadmap', projectId: project.id || null },
   };
 }
 

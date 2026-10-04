@@ -422,7 +422,7 @@
 
   registerView({
     id: 'agents',
-    nav: { label: 'Agents', order: 70, icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="8" width="16" height="12" rx="3" /><path d="M12 8V4" /><circle cx="12" cy="3.5" r="1" /><circle cx="9" cy="14" r="1.2" /><circle cx="15" cy="14" r="1.2" /><path d="M2 13v3M22 13v3" /></svg>' },
+    nav: { label: 'Agents', order: 70, group: 'ai', icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="8" width="16" height="12" rx="3" /><path d="M12 8V4" /><circle cx="12" cy="3.5" r="1" /><circle cx="9" cy="14" r="1.2" /><circle cx="15" cy="14" r="1.2" /><path d="M2 13v3M22 13v3" /></svg>' },
     markup: `
       <section id="view-agents" class="view hidden">
         <div class="page-head">

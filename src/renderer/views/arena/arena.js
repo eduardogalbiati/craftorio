@@ -820,7 +820,7 @@
 
   registerView({
     id: 'arena',
-    nav: { label: 'AI Arena', order: 130, title: 'Up to five models write the same document, critique each other, and the best parts are merged',
+    nav: { label: 'AI Arena', order: 130, group: 'plan', title: 'Up to five models write the same document, critique each other, and the best parts are merged',
       icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0z" /><path d="M7 6H4a3 3 0 0 0 3 4M17 6h3a3 3 0 0 1-3 4" /></svg>' },
     markup: `
       <section id="view-arena" class="view hidden">
@@ -992,8 +992,8 @@
     </div>
   </div>`,
     mount() {
-      // the screen is a preview: a badge after its label
-      document.querySelector('.nav-item[data-view="arena"]').insertAdjacentHTML('beforeend', '<span class="nav-badge">lab</span>');
+      // the screen is a preview: a badge after its label (drawn by CSS, so the entry's name stays its label)
+      document.querySelector('.nav-item[data-view="arena"]').insertAdjacentHTML('beforeend', '<span class="nav-badge nav-lab" aria-hidden="true"></span>');
       init();
     },
   });

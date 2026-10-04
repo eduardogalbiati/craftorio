@@ -26,7 +26,7 @@ const CAUSES = ['noWork', 'blocked', 'gate', 'appClosed', 'other'];
 // a cause holding more than this share of the idle time gets a hint
 const DOMINANT = 0.5;
 const HINTS = {
-  noWork: { text: 'Most idle time had no work queued: plan the next items in the Live roadmap.', view: 'backlog', mode: 'roadmap' },
+  noWork: { text: 'Most idle time had no work queued: plan the next items in the Live roadmap.', view: 'roadmap' },
   appClosed: { text: 'Most idle time the app was closed or the machine asleep: turn on Keep Awake.', view: 'settings', tab: 'execution' },
   gate: { text: 'Most idle time runs waited for you at a gate: schedule validated items for the day, not the night.', view: 'nightwatch' },
 };

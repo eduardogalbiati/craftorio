@@ -1,7 +1,7 @@
-/* Notification center (notification-center.js): the panel opened by the sidebar's bell. */
+/* Notification center (notification-center.js): the panel opened by the header's bell (#254). */
 .notification-center {
-  /* next to the sidebar (200px wide), level with its bell */
-  position: fixed; left: 208px; bottom: 12px; z-index: 60; width: 380px; max-height: min(70vh, 560px);
+  /* under the bell, at the header's right (.notif-wrap), like the usage popover */
+  position: absolute; top: calc(100% + 8px); right: 0; z-index: 60; width: 380px; max-width: calc(100vw - 24px); max-height: min(70vh, 560px);
   display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--border);
   border-radius: var(--radius); box-shadow: 0 12px 32px rgba(0, 0, 0, .45);
 }

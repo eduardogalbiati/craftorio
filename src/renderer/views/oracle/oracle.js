@@ -1,8 +1,8 @@
 // The Oracle's chat (#171; the service is #122, src/oracle.js): one conversation in two places.
 // - the dock (#oracle-dock): docked on the Dashboard, open there;
-// - the drawer (#oracle-drawer): an overlay opened on any other screen from the sidebar's Oracle
-//   button (#nav-oracle, at the bottom left below the runs list; on the Dashboard it focuses the
-//   dock). Esc and the backdrop close it. The button's .nav-badge counts the answers that arrived
+// - the drawer (#oracle-drawer): an overlay opened on any other screen from the header's Oracle
+//   button (#nav-oracle, at the top right next to the notifications bell, #254; on the Dashboard it
+//   focuses the dock). Esc and the backdrop close it. The button's .nav-badge counts the answers that arrived
 //   while neither was in view (oracle:state readAt, saved by oracle:markRead: survives a reload).
 // The state (empty, conversation, answering, error, paused by budget, unavailable in another app
 // process), Send, the pasted images and the memory form come from OracleChatModel
@@ -622,16 +622,16 @@
       const dash = $('#view-dashboard');
       dash.classList.add('oracle-docked');
       dash.insertAdjacentHTML('beforeend', `<aside id="oracle-dock" class="card oracle-dock" aria-label="Oracle">${surfaceHtml('dock')}</aside>`);
-      // the sidebar's button, below the runs list
+      // the header's button (#254), at the top right before the notifications bell
       const btn = document.createElement('button');
       btn.id = 'nav-oracle';
       btn.type = 'button';
-      btn.className = 'nav-item nav-oracle';
-      btn.title = 'Talk to the Oracle (on the Dashboard: its panel)';
+      btn.className = 'btn ghost btn-icon nav-oracle';
+      btn.title = 'Talk to the Oracle (on Home: its panel)';
       btn.innerHTML = `${avatar('nav')}<span>Oracle</span><span id="nav-oracle-count" class="nav-badge oracle-unread hidden"></span>`;
-      // its own action: not a screen of the sidebar's navigation
       btn.onclick = (e) => { e.stopPropagation(); if (or.drawer) closeDrawer(); else openDrawer(); };
-      $('nav.sidebar').append(btn);
+      const corner = $('.topbar .header-right');
+      corner.insertBefore(btn, corner.querySelector('.notif-wrap'));
       // the Dashboard shows the dock: the drawer closes there
       const dashView = viewRegistry.get('dashboard');
       const showDash = dashView.show;

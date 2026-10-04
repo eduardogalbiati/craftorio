@@ -726,7 +726,7 @@
 
   registerView({
     id: 'duo',
-    nav: { label: 'Write &amp; Review', order: 120, title: 'Layout preview: writer and reviewer agents in a chat',
+    nav: { label: 'Write &amp; Review', order: 120, group: 'plan', title: 'Layout preview: writer and reviewer agents in a chat',
       icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z" /><path d="M9 10h6M9 13.5h4" /></svg>' },
     markup: `
       <section id="view-duo" class="view hidden">
@@ -951,8 +951,8 @@
     </div>
   </div>`,
     mount() {
-      // the screen is a preview: a badge after its label
-      document.querySelector('.nav-item[data-view="duo"]').insertAdjacentHTML('beforeend', '<span class="nav-badge">lab</span>');
+      // the screen is a preview: a badge after its label (drawn by CSS, so the entry's name stays its label)
+      document.querySelector('.nav-item[data-view="duo"]').insertAdjacentHTML('beforeend', '<span class="nav-badge nav-lab" aria-hidden="true"></span>');
       init();
     },
   });

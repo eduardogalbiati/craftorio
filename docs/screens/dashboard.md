@@ -1,5 +1,5 @@
 ---
-menu: Dashboard
+menu: Home
 order: 20
 ---
 

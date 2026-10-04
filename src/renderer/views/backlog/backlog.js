@@ -31,8 +31,14 @@
 // roadmap) and members, the "Auto-place new issues" option (project.autoEpic) and "Organize into
 // epics…", which asks the Product Owner (window.BacklogPO).
 // Page tabs (#217): Board (the list or the kanban, a List / Kanban switch, with the state, search,
-// label and sort filters), Roadmap (open work by default, Show all remembered) and Epics; the tab and
-// the Board's view are remembered. The epic select is one choice for the Board and the Roadmap.
+// label and sort filters) and Epics; the tab and the Board's view are remembered. The epic select is
+// one choice for the Board and the Roadmap.
+// The Roadmap is a screen of its own (#254, Code & Build › Roadmap: open work by default, Show all
+// remembered): the second view this file registers, drawn in the Backlog's section (the registry's
+// `section`) with the same data, banners and Product Owner drawer; bl.mode is 'roadmap' on it.
+// The project is the app's, chosen in the header (#254, window.CurrentProject).
+// Epics are not work (#253): an issue with `isEpic` is left out of the Board (list, kanban, their
+// counts and filters), cannot be selected, assigned or planned, and shows only in the Epics view.
 // Registers itself with registerView (view-registry.js), with the Product Owner drawer and the
 // assign / push / unqueue dialogs; mount() wires them and adds the sidebar's unpushed badge.
 // Uses app.js globals ($, esc, state, errMsg, dateOf, markdownHtml, showView, openModal,
@@ -42,9 +48,8 @@
   // Must match PLATFORMS in src/backlog.js (soon = no sync yet).
   const PLATFORMS = { github: { label: 'GitHub' }, gitlab: { label: 'GitLab' }, bitbucket: { label: 'Bitbucket', soon: true } };
   window.BACKLOG_PLATFORMS = PLATFORMS;
-  const PROJECT_KEY = 'multiagent.backlogProject';
   const MODE_KEY = 'multiagent.backlogMode';
-  // #217: the Board tab's last view (list or kanban) and the Roadmap tab's Show all
+  // #217: the Board tab's last view (list or kanban) and the Roadmap's Show all
   const BOARD_KEY = 'multiagent.backlogBoard';
   const SHOW_ALL_KEY = 'multiagent.roadmapShowAll';
   const WORKFLOW_KEY = 'multiagent.backlogWorkflow';
@@ -67,19 +72,35 @@
 
   const bl = {
     projects: [], projectId: null, platform: null, data: null, error: null, syncing: false,
-    mode: ['kanban', 'roadmap', 'epics'].includes(load(MODE_KEY)) ? load(MODE_KEY) : 'list', filter: 'open', q: '', expanded: new Set(), seq: 0,
+    mode: 'list', filter: 'open', q: '', expanded: new Set(), seq: 0,
     selected: new Set(), workflows: [], labels: [], labelsOpen: false, epic: '', menu: null,
     sort: SORTS.includes(load(SORT_KEY)) ? load(SORT_KEY) : 'updated',
     board: load(BOARD_KEY) === 'kanban' || (load(BOARD_KEY) == null && load(MODE_KEY) === 'kanban') ? 'kanban' : 'list',
     showAll: load(SHOW_ALL_KEY) === '1',
   };
-  // #217: the page tab of a mode (Board: list / kanban)
+  // #217: the page tab of a mode (Board: list / kanban); 'roadmap' is the Roadmap screen's (#254)
   const tabOf = (mode) => (mode === 'roadmap' || mode === 'epics' ? mode : 'board');
   const onRoadmapTab = () => bl.mode === 'roadmap';
+  // the Backlog screen's remembered tab: Epics, or the Board in its last view
+  const backlogMode = () => (load(MODE_KEY) === 'epics' ? 'epics' : bl.board);
+  bl.mode = backlogMode();
   function setMode(mode) {
     bl.mode = mode;
     save(MODE_KEY, mode);
     if (tabOf(mode) === 'board') { bl.board = mode; save(BOARD_KEY, mode); }
+  }
+  // #254: the Backlog and the Roadmap screens show one project's backlog. Opened from the menu, a
+  // screen reads and syncs it again; a switch this file makes (keepData) keeps what is loaded.
+  let keepData = false;
+  function openScreen(roadmap) {
+    if (roadmap) bl.mode = 'roadmap';
+    else if (bl.mode === 'roadmap') bl.mode = backlogMode();
+    if (keepData && bl.data) render(); else refreshBacklog();
+    keepData = false;
+  }
+  function switchScreen(view) {
+    keepData = true;
+    showView(view);
   }
   const {
     hasLabel,
@@ -106,8 +127,9 @@
   } = window.BacklogArchive;
   const $b =(sel) => document.querySelector(sel);
   const project = () => bl.projects.find((p) => p.id === bl.projectId) || null;
-  const visible = () => state.view === 'backlog';
-  const selectable = (i) => i.state === 'open' && i.column === 'todo';
+  const visible = () => state.view === 'backlog' || state.view === 'roadmap';
+  // #253: an epic groups issues, it is never work to assign
+  const selectable = (i) => i.state === 'open' && i.column === 'todo' && !i.isEpic;
 
   async function refreshBacklog() {
     try {
@@ -118,14 +140,14 @@
       return;
     }
     $b('#backlog-dir').textContent = state.ws?.backlog || '';
-    const ids = bl.projects.map((p) => p.id);
-    const withRepo = bl.projects.find((p) => p.repo)?.id;
-    bl.projectId = [bl.projectId, load(PROJECT_KEY), state.settings.lastProject, withRepo, ids[0]].find((id) => id && ids.includes(id)) || null;
-    await selectProject(bl.projectId);
+    // #254: the app's project, chosen in the header (current-project.js)
+    await selectProject(window.CurrentProject.refresh(bl.projects));
   }
 
   async function selectProject(id) {
     bl.projectId = id;
+    // the Product Owner's drawer, open for another project (the header stays reachable): this one's conversation
+    if (window.BacklogPO?.openProjectId() && window.BacklogPO.openProjectId() !== id) window.BacklogPO.open();
     bl.seq++; // a sync still running for the previous project is ignored
     bl.syncing = false;
     bl.data = null;
@@ -135,7 +157,6 @@
     bl.labels = loadLabels(id);
     bl.labelsOpen = false;
     bl.epic = '';
-    if (id) save(PROJECT_KEY, id);
     if (!id) { render(); return; }
     try { setData(await api.getBacklog(id)); } catch (e) { bl.error = errMsg(e); }
     bl.platform = bl.data?.platform || state.settings.backlogPlatform || 'github';
@@ -469,7 +490,8 @@
     const numbers = issues.filter((n) => todo.some((i) => i.number === n));
     const skipped = issues.filter((n) => !numbers.includes(n));
     if (!numbers.length) return skipped;
-    if (bl.mode === 'roadmap') setMode(bl.board);
+    // from the Roadmap screen (the Product Owner's drawer there): to the Board, where the selection shows
+    if (bl.mode === 'roadmap') { bl.mode = bl.board; switchScreen('backlog'); }
     if (numbers.some((n) => !isShown(todo.find((i) => i.number === n)))) {
       bl.q = '';
       $b('#bl-search').value = '';
@@ -484,7 +506,8 @@
   }
 
   async function roadmapGroup({ issues, workflow, inputs, reason, modeReason, origin, cost }) {
-    const list = issues.map((n) => (bl.data?.issues || []).find((i) => i.number === n)).filter(Boolean);
+    // (#253: an epic is left out, like an issue that is not synced)
+    const list = issues.map((n) => (bl.data?.issues || []).find((i) => i.number === n)).filter((i) => i && !i.isEpic);
     const skipped = issues.filter((n) => !list.some((i) => i.number === n));
     if (!list.length) return skipped;
     const wf = (await api.listWorkflows()).find((w) => w.file === workflow);
@@ -495,12 +518,11 @@
     return skipped;
   }
 
-  // After a roadmap change from outside the screen (the Product Owner's "Add all to the roadmap").
+  // The Roadmap screen (#254), after a roadmap change made elsewhere (the Product Owner's "Add all to
+  // the roadmap", the assign dialog's Add to roadmap): drawn at once with what is loaded.
   function showRoadmap(data) {
     if (data) setData(data);
-    bl.mode = 'roadmap';
-    save(MODE_KEY, bl.mode);
-    render();
+    if (state.view === 'roadmap') render(); else switchScreen('roadmap');
   }
 
   // The Roadmap scrolled to stage `n` (1-based; an applied group's badge in the Product Owner's drawer, #140).
@@ -569,10 +591,8 @@
       });
       save(WORKFLOW_KEY, workflow);
       bl.selected.clear();
-      bl.mode = 'roadmap';
-      save(MODE_KEY, bl.mode);
       closeModal('#assign-modal');
-      render();
+      showRoadmap();
     } catch (err) {
       $b('#assign-error').textContent = errMsg(err);
     } finally {
@@ -613,6 +633,8 @@
 
   // ---- rendering ---------------------------------------------------------------------------
   const matches = (i) => {
+    // #253: an epic is never on the Board, whatever the filters (the Epics view lists it)
+    if (i.isEpic) return false;
     if (!matchesLabels(i, bl.labels) || !matchesEpic(i, bl.epic)) return false;
     if (!bl.q) return true;
     const hay = `#${i.number} ${i.title} ${i.labels.map((l) => l.name).join(' ')} ${i.author || ''} ${i.assignees.join(' ')}`.toLowerCase();
@@ -690,7 +712,7 @@
     const cards = epics.map((e) => {
       const p = epicProgress(e, issues);
       const pct = p.total ? Math.round((p.done / p.total) * 100) : 0;
-      return `<section class="bl-epic-card" data-epic="${esc(e.id)}">
+      return `<section class="bl-epic-card" data-epic="${esc(e.id)}" data-testid="backlog-epic">
         <div class="bl-epic-head">
           <span class="bl-state ${e.state}"></span>
           ${e.url ? `<a class="bl-epic-title" href="${esc(e.url)}" target="_blank" rel="noopener" title="${esc(`${e.id} ${e.title}`)}">${esc(e.title)}</a>` : `<b class="bl-epic-title" title="${esc(e.title)}">${esc(e.title)}</b>`}
@@ -1047,11 +1069,13 @@
   }
 
   function render() {
-    const sel = $b('#bl-project');
-    sel.innerHTML = bl.projects.length
-      ? bl.projects.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}${p.repo ? '' : ' (no repository)'}</option>`).join('')
-      : '<option value="">No projects</option>';
-    sel.value = bl.projectId || '';
+    // #254: the Backlog screen (Board and Epics tabs) or the Roadmap screen, in the same section
+    const roadmap = onRoadmapTab();
+    $b('#bl-title').textContent = roadmap ? 'Roadmap' : 'Backlog';
+    $b('#bl-hint').textContent = roadmap
+      ? 'Ordered stages of runs: each stage starts when the previous one has finished and merged.'
+      : 'A project\'s issues, synced from its git platform.';
+    $b('#bl-tabs').classList.toggle('hidden', roadmap);
     const plat = $b('#bl-platform');
     plat.innerHTML = Object.entries(PLATFORMS).map(([id, p]) => `<option value="${id}">${esc(p.label)}${p.soon ? ' (soon)' : ''}</option>`).join('');
     plat.value = bl.platform || state.settings.backlogPlatform || 'github';
@@ -1064,8 +1088,8 @@
     $b('#bl-sort').value = bl.sort;
     $b('#bl-sort').classList.toggle('hidden', bl.mode === 'roadmap' || bl.mode === 'epics');
 
-    // #217: the page tabs (Board / Roadmap / Epics) and the Board's List / Kanban switch; the
-    // search and the labels belong to the Board (and the Epics view), the epic filter to both tabs
+    // #217: the page tabs (Board / Epics) and the Board's List / Kanban switch; the search and the
+    // labels belong to the Board (and the Epics view), the epic filter to the Board and the Roadmap
     const tab = tabOf(bl.mode);
     document.querySelectorAll('#bl-tabs [data-bl-tab]').forEach((b) => {
       b.classList.toggle('active', b.dataset.blTab === tab);
@@ -1097,13 +1121,15 @@
     $b('#btn-bl-clear').classList.toggle('hidden', !n);
 
     const issues = bl.data?.issues || [];
-    const count = (f) => issues.filter((i) => f === 'all' || issueState(i) === f).length;
+    // #253: the Board's counts and filters leave the epics out, like its list and kanban (matches)
+    const board = issues.filter((i) => !i.isEpic);
+    const count = (f) => board.filter((i) => f === 'all' || issueState(i) === f).length;
     const filters = $b('#bl-filters');
     filters.classList.toggle('hidden', bl.mode !== 'list');
     filters.innerHTML = FILTERS.map(([f, label]) =>
       `<button class="chip${bl.filter === f ? ' active' : ''}" data-f="${f}" data-testid="backlog-state-${f}">${label} <span class="muted">${count(f)}</span></button>`).join('');
-    renderLabelFilter(issues);
-    renderEpicFilter(issues);
+    renderLabelFilter(board);
+    renderEpicFilter(board);
     // (after renderLabelFilter, which shows the labels button whenever there are labels)
     for (const id of ['#bl-search', '#bl-label-active']) $b(id).classList.toggle('hidden', tab === 'roadmap');
     if (tab === 'roadmap') $b('#bl-labels-wrap').classList.add('hidden');
@@ -1118,15 +1144,15 @@
 
     const list = $b('#bl-list');
     if (!bl.projects.length) {
-      list.innerHTML = '<div class="empty-state"><b>No projects yet</b><p class="muted">Create a project with a repository in Projects to see its issues here.</p></div>';
+      list.innerHTML = '<div class="empty-state"><b>No projects yet</b><p class="muted">Create a project with a repository (New project… in the header, or Settings › Projects) to see its issues here.</p></div>';
     } else if (!p?.repo) {
-      list.innerHTML = '<div class="empty-state"><b>This project has no repository</b><p class="muted">Add a repository URL to the project in Projects to sync its issues.</p></div>';
+      list.innerHTML = '<div class="empty-state"><b>This project has no repository</b><p class="muted">Add a repository URL to the project in Settings › Projects to sync its issues, or choose another project in the header.</p></div>';
     } else if (PLATFORMS[bl.platform]?.soon) {
       list.innerHTML = `<div class="empty-state"><b>${esc(PLATFORMS[bl.platform].label)} sync is not available yet</b><p class="muted">Pick GitHub or GitLab.</p></div>`;
     } else if (!bl.data) {
       list.innerHTML = bl.syncing ? '<p class="muted">Loading issues…</p>' : '<p class="muted">Not synced yet.</p>';
     } else {
-      list.innerHTML = bl.mode === 'roadmap' ? window.BacklogRoadmap.html(bl.data, render, { epic: bl.epic, showAll: bl.showAll }) :bl.mode === 'epics' ? renderEpics(issues) : bl.mode === 'kanban' ? renderKanban(issues) : renderList(issues);
+      list.innerHTML = bl.mode === 'roadmap' ? window.BacklogRoadmap.html(bl.data, render, { epic: bl.epic, showAll: bl.showAll }) :bl.mode === 'epics' ? renderEpics(issues) : bl.mode === 'kanban' ? renderKanban(board) : renderList(board);
       // the open item's "When it finishes" (#134)
       if (bl.mode === 'roadmap') window.BacklogRoadmap.mountChain(bl.data);
     }
@@ -1246,7 +1272,6 @@
     $b('.shell').insertAdjacentHTML('beforeend', PO_DRAWER);
     // the sidebar entry's count of commits merged locally and not pushed (app.js refreshUnpushed)
     $b('nav.sidebar [data-view="backlog"]').insertAdjacentHTML('beforeend', '<span id="nav-backlog-unpushed" class="nav-badge warn hidden"></span>');
-    $b('#bl-project').onchange = (e) => selectProject(e.target.value || null);
     $b('#bl-platform').onchange = (e) => {
       bl.platform = e.target.value;
       bl.seq++;
@@ -1425,16 +1450,15 @@
 
   registerView({
     id: 'backlog',
-    nav: { label: 'Backlog', order: 40, icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 6 1.5 1.5L8 5" /><path d="m4 12 1.5 1.5L8 11" /><path d="m4 18 1.5 1.5L8 17" /><path d="M11 6h9M11 12h9M11 18h9" /></svg>' },
+    nav: { label: 'Backlog', order: 40, group: 'code', icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 6 1.5 1.5L8 5" /><path d="m4 12 1.5 1.5L8 11" /><path d="m4 18 1.5 1.5L8 17" /><path d="M11 6h9M11 12h9M11 18h9" /></svg>' },
     markup: `
       <section id="view-backlog" class="view hidden">
         <div class="page-head">
           <div>
-            <h1>Backlog</h1>
-            <p class="muted small">A project's issues, synced from its git platform. The last sync is kept in <span id="backlog-dir" class="mono"></span></p>
+            <h1 id="bl-title">Backlog</h1>
+            <p class="muted small"><span id="bl-hint">A project's issues, synced from its git platform.</span> The last sync is kept in <span id="backlog-dir" class="mono"></span></p>
           </div>
           <div class="row">
-            <select id="bl-project" aria-label="Project"></select>
             <select id="bl-platform" aria-label="Platform"></select>
             <button id="btn-bl-sync" class="btn primary nowrap">Sync</button>
             <button id="btn-bl-new-issue" class="btn ghost nowrap" type="button" title="Describe a problem or an idea in a few words: the issue-tracker workflow analyses the code, rates impact and complexity, drafts the issue and files it once you approve">New issue…</button>
@@ -1442,7 +1466,6 @@
         </div>
         <div id="bl-tabs" class="tabs page-tabs" role="tablist" aria-label="Backlog">
           <button type="button" class="tab" role="tab" data-bl-tab="board" title="The issues as a list or a kanban">Board</button>
-          <button type="button" class="tab" role="tab" data-bl-tab="roadmap" data-mode="roadmap" title="Ordered stages of runs: each stage starts when the previous one has finished and merged">Roadmap</button>
           <button type="button" class="tab" role="tab" data-bl-tab="epics" data-mode="epics" title="The epics: themes of issues, with their progress and members">Epics</button>
         </div>
         <div class="pr-toolbar">
@@ -1450,7 +1473,7 @@
             <button type="button" data-mode="list">List</button>
             <button type="button" data-mode="kanban">Kanban</button>
           </span>
-          <span id="bl-count" class="small muted"></span>
+          <span id="bl-count" class="small muted" data-testid="backlog-count"></span>
           <div id="bl-filters" class="chips"></div>
           <input type="text" id="bl-search" placeholder="Search issues, labels…" aria-label="Search" />
           <div id="bl-labels-wrap" class="bl-labels-wrap">
@@ -1545,7 +1568,14 @@
     </form>
   </div>`,
     mount,
-    show: refreshBacklog,
+    show: () => openScreen(false),
+  });
+  // #254: the Roadmap, a screen of its own in the menu, drawn in the Backlog's section by this file
+  registerView({
+    id: 'roadmap',
+    nav: { label: 'Roadmap', order: 45, group: 'code', title: 'Ordered stages of runs: each stage starts when the previous one has finished and merged', icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 21V4" /><path d="M5 4h12l-2.5 4 2.5 4H5" /></svg>' },
+    section: 'backlog',
+    show: () => openScreen(true),
   });
 
   window.refreshBacklog = refreshBacklog;
@@ -1563,10 +1593,10 @@
       const input = $b('#bl-search');
       if (input) input.value = bl.q;
     },
-    // the project the next refresh shows (a notification's click, before showView('backlog'))
-    focusProject: (id) => { if (id) bl.projectId = id; },
+    // the project the next refresh shows (a notification's click, before showView('backlog')): the app's (#254)
+    focusProject: (id) => window.CurrentProject.set(id, { redraw: false }),
     openStage,
-    // the project of the page-head select ({ id, name }): the Product Owner's header names it (#235)
+    // the header's project ({ id, name }): the Product Owner's header names it (#235)
     project: () => project() || null,
     projectId: () => bl.projectId,
     roadmapGroup,

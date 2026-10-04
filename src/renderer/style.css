@@ -89,6 +89,17 @@ body:not(.dev-mode) .dev-only { display: none !important; }
 .kpi label { display: block; font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
 .kpi b { font-family: var(--mono); font-size: 14px; font-weight: 600; }
 .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+/* #254: the bar's own content wraps at the left (#208); the Oracle's button and the notifications
+   bell stay at the top right whatever wraps */
+.topbar-main { flex: 1 1 0; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px; }
+.header-right { flex: none; align-self: flex-start; display: flex; align-items: center; gap: 8px; }
+/* the app's project (current-project.js), and the notifications bell with its centre */
+.header-project { display: flex; align-items: center; gap: 8px; min-width: 0; margin: 0; }
+.header-project select { width: 200px; max-width: 100%; min-width: 0; }
+.notif-wrap { position: relative; display: flex; }
+.header-bell { position: relative; }
+.header-bell .nav-badge { margin-left: 0; }
+.sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 
 /* ---------- pills / buttons ---------- */
 .pill { padding: 2px 9px; border-radius: 99px; font-size: 11px; font-weight: 600; border: 1px solid transparent; }
@@ -134,7 +145,7 @@ body:not(.dev-mode) .dev-only { display: none !important; }
 .shell { flex: 1; min-height: 0; display: flex; position: relative; overflow: clip; }
 .sidebar {
   width: 200px; flex: none; background: var(--panel); border-right: 1px solid var(--border);
-  padding: 12px 10px; display: flex; flex-direction: column; gap: 2px;
+  padding: 12px 10px; display: flex; flex-direction: column; gap: 2px; overflow-y: auto;
 }
 .nav-item {
   display: flex; align-items: center; gap: 10px; width: 100%;
@@ -145,6 +156,21 @@ body:not(.dev-mode) .dev-only { display: none !important; }
 .nav-item:hover { background: var(--panel-2); color: var(--text); }
 .nav-item.active { background: rgba(124,156,255,.12); color: var(--text); }
 .nav-item.active svg { color: var(--accent); }
+/* the menu's groups (#254, view-registry.js): a title that folds its entries (remembered) */
+.nav-group { display: flex; flex-direction: column; gap: 2px; margin-top: 8px; flex: none; }
+.nav-group-title {
+  display: flex; align-items: center; gap: 6px; width: 100%; padding: 4px 10px; border: none; border-radius: 6px; background: none;
+  color: var(--muted); font: inherit; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  cursor: pointer; text-align: left;
+}
+.nav-group-title:hover { color: var(--text); }
+.nav-group-title svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; flex: none; transition: transform .12s; }
+.nav-group.collapsed .nav-group-title svg { transform: rotate(-90deg); }
+/* a folded group that holds the open screen */
+.nav-group.collapsed:has(.nav-item.active) .nav-group-title { color: var(--accent); }
+.nav-group-items { display: flex; flex-direction: column; gap: 2px; }
+.nav-group + .nav-item { margin-top: 8px; }
+.nav-item { flex: none; }
 .nav-spacer { flex: 1; }
 .nav-run { border: 1px solid var(--border); }
 .nav-run .status-dot { margin: 0 4px; }
@@ -975,5 +1001,7 @@ body.resizing-dock .term-body { pointer-events: none; }
   padding: 1px 5px; border-radius: 4px; background: var(--supervisor-soft); color: var(--supervisor);
 }
 .nav-badge.warn { background: var(--orange); color: #1a1a1a; }
+/* a preview screen's badge: drawn here so the entry's text and accessible name stay its label */
+.nav-lab::after { content: 'lab'; }
 .bl-grouping { border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px 8px; margin: 8px 0; display: grid; gap: 4px; }
 .bl-grouping legend { padding: 0 4px; color: var(--muted); }
