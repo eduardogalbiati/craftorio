@@ -133,8 +133,10 @@ function oracleTools(ctx, hooks = {}) {
   // #184: the gh / glab target of a project's issues: its synced backlog's platform and repository
   const issueTarget = (id) => {
     const pid = path.basename(String(id || ''));
-    const p = projects.readProject(ws().projects, pid);
-    const data = backlog.readBacklog(ws().backlog, pid);
+    // a missing file is an unknown project, not a path leaked into the answer
+    const orNull = (read) => { try { return read(); } catch { return null; } };
+    const p = orNull(() => projects.readProject(ws().projects, pid));
+    const data = orNull(() => backlog.readBacklog(ws().backlog, pid));
     if (!p && !data) throw new Error(`Unknown project: ${id}`);
     const kind = data?.platform || require('./workspace').readSettings(ws()).backlogPlatform || backlog.DEFAULT_PLATFORM;
     return { platform: kind, target: backlog.cliTarget(kind, data?.repo || p?.repo) };
