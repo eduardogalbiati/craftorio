@@ -17,6 +17,8 @@
     "serve": "node scripts/serve.js",
     "pretest": "node scripts/docs.js --derived",
     "test": "node scripts/test.js",
+    "pretest:coverage": "node scripts/docs.js --derived",
+    "test:coverage": "node scripts/test.js --experimental-test-coverage",
     "screenshot": "electron scripts/screenshot.js",
     "test:e2e": "bddgen && playwright test",
     "test:e2e:update": "bddgen && playwright test --update-snapshots",

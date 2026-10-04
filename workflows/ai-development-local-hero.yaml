@@ -1195,6 +1195,8 @@ steps:
   - id: suite
     type: suite
     command: "{{ inputs.test_command }}"
+    # #225: node's coverage (an npm script's <name>:coverage, or a plain node --test) as a Tests artifact
+    coverage: true
     transitions:
       # #223: the issue's scenarios, written first, run after the suite
       - when: "output.status == 'pass' and inputs.e2e_tests == 'write_and_run' and steps.acceptance_tests.output.e2e_scope == 'scenarios'"

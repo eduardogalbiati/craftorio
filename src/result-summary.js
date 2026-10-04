@@ -54,11 +54,14 @@ function commitsSection(summary) {
   return lines.length ? ['## Commits', '', ...lines, ''] : [];
 }
 
+// a suite output's log is relative to the run folder (logs/suite-1.log); an absolute one is made so
+const logPath = (runDir, log) => (path.isAbsolute(log) ? path.relative(runDir, log) : String(log)).split(path.sep).join('/');
+
 function testsSection(runDir, summary) {
   const lines = [];
   for (const { id, output: o } of outputs(summary).filter((s) => s.output.kind === 'suite')) {
     const counts = [o.passed != null ? `${o.passed} passed` : '', o.failed != null ? `${o.failed} failed` : ''].filter(Boolean).join(', ');
-    lines.push(`- \`${id}\`: **${o.status || 'unknown'}**${counts ? ` (${counts})` : ''}${o.log ? `, ${link(path.relative(runDir, o.log) || o.log, 'log')}` : ''}`);
+    lines.push(`- \`${id}\`: **${o.status || 'unknown'}**${counts ? ` (${counts})` : ''}${o.log ? `, ${link(logPath(runDir, o.log), 'log')}` : ''}`);
   }
   if (exists(runDir, 'coverage/coverage-summary.md')) lines.push(`- Coverage: ${link('coverage/coverage-summary.md')}`);
   for (const rel of ['e2e/results.json', 'e2e/scenarios.feature']) if (exists(runDir, rel)) lines.push(`- E2E: ${link(rel)}`);

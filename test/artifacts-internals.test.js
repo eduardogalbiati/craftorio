@@ -31,6 +31,25 @@ test('coverageCommand: a node --test command gets --experimental-test-coverage o
   assert.equal(coverageCommand('npm test'), 'npm test');
 });
 
+test('coverageCommand: an npm script runs its :coverage script, or its plain node --test inlined; others unchanged', (t) => {
+  const dir = tmp(t);
+  const pkg = (scripts) => fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ scripts }));
+  pkg({ test: 'node scripts/test.js', 'test:coverage': 'node scripts/test.js --experimental-test-coverage' });
+  assert.equal(coverageCommand('npm test', dir), 'npm run test:coverage');
+  assert.equal(coverageCommand('npm test -- test/a.test.js', dir), 'npm run test:coverage -- test/a.test.js');
+  pkg({ unit: 'node --test test/' });
+  assert.equal(coverageCommand('npm run unit', dir), 'node --test --experimental-test-coverage test/');
+  pkg({ test: 'jest' });
+  assert.equal(coverageCommand('npm test', dir), 'npm test');
+  assert.equal(coverageCommand('npm test', path.join(dir, 'missing')), 'npm test');
+});
+
+test('renderResultSummary: the suite log links relative to the run folder', (t) => {
+  const run = tmp(t);
+  const md = renderResultSummary(run, { status: 'completed', steps: { suite: { output: { kind: 'suite', status: 'pass', log: 'logs/suite-1.log' } } } });
+  assert.match(md, /\]\(logs\/suite-1\.log\)/);
+});
+
 test('saveCoverage: writes coverage/coverage-summary.md with the changed files, returns the totals; null without a report', (t) => {
   const run = tmp(t);
   const cov = saveCoverage(REPORT, run, () => ['src/runs.js']);

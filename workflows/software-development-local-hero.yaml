@@ -996,6 +996,8 @@ steps:
     type: suite
     command: "{{ inputs.test_command }}"
     scope: affected
+    # #225: node's coverage (an npm script's <name>:coverage, or a plain node --test) as a Tests artifact
+    coverage: true
     transitions:
       # build: after a merge-conflict resolution it goes on to verify_change (evidence kept)
       - when: "output.status == 'pass'"

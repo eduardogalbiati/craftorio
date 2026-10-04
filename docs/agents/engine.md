@@ -68,8 +68,11 @@ same features for users; this is the implementer's summary.
     `affected_reasons` from `relatedTests` (the existing tests reaching the sources the new tests
     import) and a `message` for the next prompt. Simulation: default red; `mockSequences.suite`
     `pass` = all green, `broken` = all broken.
-  - **`coverage: true`** on a suite step (#225): a `node --test` command runs with
-    `--experimental-test-coverage` (`suiteStep.coverageCommand`). Whenever the output (or the #219
+  - **`coverage: true`** on a suite step (#225; set on the bundled development workflows' `suite`):
+    a `node --test` command runs with `--experimental-test-coverage` (`suiteStep.coverageCommand`);
+    an npm script (`npm test`, `npm run <name>`, with `-- <files>`) runs its `<name>:coverage`
+    script when package.json has one (this project: `npm run test:coverage`), else a script that is
+    a plain `node --test …` runs inlined with the flag; any other command runs without coverage. Whenever the output (or the #219
     human log) has node's coverage table, `coverage/coverage-summary.md` (totals and the changed
     files' coverage, `src/coverage-summary.js`) is saved as a Tests artifact and the output gets
     `coverage { lines, branches, functions, files, path }`. No model call.

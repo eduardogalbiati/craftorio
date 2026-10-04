@@ -12,6 +12,9 @@
 // to MULTIAGENT_TEST_HUMAN_LOG (default .test-output/human.log), named in the JSON's `human_log`.
 //   npm test
 //   npm test -- test/a.test.js test/b.test.js
+// --experimental-test-coverage (`npm run test:coverage`, the suite step's `coverage: true`, #225)
+// passes on to node --test: its coverage table ends the report.
+//   npm run test:coverage [-- test/a.test.js]
 
 const fs = require('fs');
 const os = require('os');
@@ -57,7 +60,8 @@ say(`\n== Unit tests (${files.length} file(s), concurrency ${concurrency}, avail
 if (inspector) say('warning: an inspector is enabled (NODE_OPTIONS or execArgv): node --test runs one file at a time');
 if (process.env.NODE_TEST_CONTEXT) say(`warning: NODE_TEST_CONTEXT=${process.env.NODE_TEST_CONTEXT} is set: node --test acts as a test file, not a runner`);
 const reporters = agent ? ['--test-reporter=spec', '--test-reporter-destination=stdout', '--test-reporter=./scripts/test-reporter-agent.js', `--test-reporter-destination=${reportFile}`] : [];
-const unitStatus = run(['--test', `--test-concurrency=${concurrency}`, ...reporters, ...files]);
+const coverage = process.argv.includes('--experimental-test-coverage') ? ['--experimental-test-coverage'] : [];
+const unitStatus = run(['--test', `--test-concurrency=${concurrency}`, ...coverage, ...reporters, ...files]);
 
 // The last lines of the human log: why something failed that the reporter could not see.
 const tail = () => {

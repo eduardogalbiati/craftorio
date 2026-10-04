@@ -465,12 +465,25 @@ function parseCounts(text) {
   return { passed: null, failed: null };
 }
 
-// `node --test …` → `node --test --experimental-test-coverage …` (#225); any other command, or one
-// that already asks for coverage, unchanged
-function coverageCommand(command) {
+// `node --test …` → `node --test --experimental-test-coverage …` (#225). An npm script (`npm test`,
+// `npm run <name>`, optionally `-- <files>`; cwd: where its package.json is): its `<name>:coverage`
+// script when there is one (this project's `test:coverage`), else a script that is a plain
+// `node --test …` runs inlined with the flag. Any other command, or one that already asks for
+// coverage, unchanged.
+function coverageCommand(command, cwd = null) {
   const c = String(command || '');
   if (/--experimental-test-coverage\b/.test(c)) return c;
-  return c.replace(/\bnode(\.exe)?(\s+)--test\b/, (m, exe, sp) => `node${exe || ''}${sp}--test --experimental-test-coverage`);
+  const withFlag = (s) => s.replace(/\bnode(\.exe)?(\s+)--test\b/, (m, exe, sp) => `node${exe || ''}${sp}--test --experimental-test-coverage`);
+  const npm = /^npm\s+(?:(test|t)|run(?:-script)?\s+([\w:.-]+))(\s+--\s+(.*))?$/.exec(c.trim());
+  if (!npm || !cwd) return withFlag(c);
+  let scripts = {};
+  try { scripts = JSON.parse(fs.readFileSync(path.join(cwd, 'package.json'), 'utf8')).scripts || {}; } catch { return c; }
+  const name = npm[2] || 'test';
+  const rest = npm[3] || '';
+  if (scripts[`${name}:coverage`]) return `npm run ${name}:coverage${rest}`;
+  const script = String(scripts[name] || '').trim();
+  if (/^node(\.exe)?\s+--test\b/.test(script) && !/[&|;<>]/.test(script)) return `${withFlag(script)}${npm[4] ? ` ${npm[4]}` : ''}`;
+  return c;
 }
 
 // The coverage report of a suite's output → <run_dir>/coverage/coverage-summary.md and its numbers
@@ -500,7 +513,7 @@ function saveCoverage(text, runDir, changedFiles) {
 // and a command that cannot take files runs whole. selection: why these files (affected-tests.js),
 // kept in the output; logName: the log's name (default suite-<round>). Only whole-suite runs
 // measure the history the timeouts come from. Output adds scope (full | files), selection, passed, failed.
-// coverage (#225): a `node --test` command runs with --experimental-test-coverage; whenever the output
+// coverage (#225): the command runs with node's coverage (coverageCommand); whenever the output
 // has node's coverage report, <run_dir>/coverage/coverage-summary.md (the totals and the changed files',
 // changedFiles(): the files the run changed) is written and `coverage` added to the output.
 async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = 'pass', preexisting = [], signal, timeoutMs, history, base, baseCacheDir, run = runCommand, log = () => {}, files = null, selection = null, logName = null, coverage = false, changedFiles = null }) {
@@ -537,7 +550,7 @@ async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = '
     if (filtered) { out.scope = 'files'; out.command = filtered; measure = false; }
     else if (out.selection) out.selection = { ...out.selection, why: `${out.selection.why}; \`${out.command}\` cannot run single test files: the whole suite ran` };
   }
-  if (coverage && !mock) out.command = coverageCommand(out.command);
+  if (coverage && !mock) out.command = coverageCommand(out.command, cwd);
   const recent = mock ? [] : suiteDurations(hist);
   out.timeout_ms = timeoutMs || suiteTimeout(recent);
   const timeoutWhy = timeoutMs ? 'the step\'s timeout' : recent.length ? `${TIMEOUT_FACTOR}× the median of the last ${plural(recent.length, 'suite run')}` : 'the default, no suite run measured yet';
