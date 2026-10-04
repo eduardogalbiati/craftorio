@@ -1,8 +1,11 @@
 // Steps of features/backlog.feature and features/visual.feature (#222): the Backlog's Board (list,
 // kanban) and Roadmap on the demo project, and their visual baselines; the Roadmap's progress ring
-// popover (#236) and features/product-owner.feature's Product Owner drawer (#234, #235). Locators
-// are roles and data-testid only (skills/ui-conventions).
+// popover (#236), its Resume confirm (#243) and a finished stage scope (#237), and
+// features/product-owner.feature's Product Owner drawer (#234, #235). Locators are roles and
+// data-testid only (skills/ui-conventions).
 
+const fs = require('fs');
+const path = require('path');
 const { expect } = require('@playwright/test');
 const { Given, When, Then } = require('./fixtures');
 
@@ -114,6 +117,87 @@ Then('the agent card is shown inside the window', async ({ e2e }) => {
   expect(box.y).toBeGreaterThanOrEqual(0);
   expect(box.x + box.width).toBeLessThanOrEqual(view.width);
   expect(box.y + box.height).toBeLessThanOrEqual(view.height);
+});
+
+// ---- the Roadmap's Resume (#243) and a stage run on its own that finished while paused (#237) --------
+
+// The demo roadmap (scripts/screenshot.js demoRoadmap) in the scratch workspace, rewritten before the
+// Backlog opens (the app follows the file live): stage N is the Nth of its stages, Show all or not.
+const roadmapFile = (e2e) => path.join(e2e.scratch, 'workspace', 'backlog', `${e2e.project.id}.roadmap.json`);
+function editRoadmap(e2e, fn) {
+  const file = roadmapFile(e2e);
+  const r = JSON.parse(fs.readFileSync(file, 'utf8'));
+  fn(r);
+  const tmp = `${file}.${process.pid}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify({ ...r, updatedAt: new Date().toISOString() }, null, 2));
+  fs.renameSync(tmp, file);
+}
+const stageAt = (r, n) => {
+  const stage = r.stages[n - 1];
+  expect(stage, `the demo roadmap's stage ${n}`).toBeTruthy();
+  return stage;
+};
+
+// "Run this stage", then Pause: the roadmap paused with that stage as its scope (#141)
+Given('the roadmap was paused while stage {int} ran on its own', async ({ e2e }, n) => {
+  editRoadmap(e2e, (r) => Object.assign(r, { state: 'paused', pausedBy: null, error: null, budget: null, scope: { stage: stageAt(r, n).id } }));
+});
+
+Given('every item of stage {int} is done', async ({ e2e }, n) => {
+  editRoadmap(e2e, (r) => { for (const item of stageAt(r, n).items) Object.assign(item, { status: 'done', error: null }); });
+});
+
+const rmBar = (page) => page.getByTestId('roadmap-bar');
+const confirmModal = (page) => page.getByTestId('confirm-modal');
+const simulatedBox = (page) => rmBar(page).getByRole('checkbox', { name: 'Simulated', exact: true });
+
+// Simulated off: a start of real runs asks first (the scenario cancels it; the engine refuses real
+// runs anyway). The demo's stage 5 item pushes while the default workflow merges locally: the
+// "will push and open PRs" choice (#195) comes first, "Start anyway" goes on to the confirm.
+When('I press Resume on the roadmap with Simulated off', async ({ e2e }) => {
+  const page = e2e.window;
+  await simulatedBox(page).uncheck();
+  await rmBar(page).getByRole('button', { name: 'Resume', exact: true }).click();
+  const dialog = confirmModal(page);
+  await expect(dialog).toBeVisible();
+  const anyway = dialog.getByRole('button', { name: 'Start anyway', exact: true });
+  if (await anyway.isVisible()) await anyway.click();
+});
+
+When('I resume the roadmap as a simulation', async ({ e2e }) => {
+  const page = e2e.window;
+  await simulatedBox(page).check();
+  await rmBar(page).getByRole('button', { name: 'Resume', exact: true }).click();
+});
+
+Then('the confirm dialog is titled {string} with a {string} button', async ({ e2e }, title, button) => {
+  const dialog = e2e.window.getByRole('dialog', { name: title, exact: true });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole('button', { name: button, exact: true })).toBeVisible();
+});
+
+Then('the confirm dialog says the roadmap pauses again when the stage is done', async ({ e2e }) => {
+  await expect(confirmModal(e2e.window)).toContainText(/pauses again when (this|that|the) stage is done/i);
+});
+
+When('I press Cancel in the confirm dialog', async ({ e2e }) => {
+  const dialog = confirmModal(e2e.window);
+  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(dialog).toBeHidden();
+});
+
+// the roadmap bar's text: its state badge ("paused · stage 5 only") and its message; the roadmap
+// may change on its own (the app's sequencing), hence the longer wait
+Then('the roadmap bar shows {string}', async ({ e2e }, text) => {
+  await expect(rmBar(e2e.window)).toContainText(text, { timeout: 20000 });
+});
+
+Then('the roadmap bar does not show {string}', async ({ e2e }, text) => {
+  await expect(rmBar(e2e.window)).not.toContainText(text, { timeout: 20000 });
+});
+
+Then('the Backlog shows no error {string}', async ({ e2e }, text) => {
+  await expect(e2e.window.getByText(text, { exact: false })).toHaveCount(0);
 });
 
 // ---- Backlog › Product Owner (#234, #235) ------------------------------------------------------------

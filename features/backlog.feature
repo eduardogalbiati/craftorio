@@ -49,3 +49,41 @@ Feature: Backlog Board and Roadmap
     And I hover the progress ring of the roadmap item "Keyboard focus is lost after closing a dialog"
     And I hover an agent in the run's steps popover
     Then the agent card is shown inside the window
+
+  # The demo roadmap is paused (a refused start); its stage 5 is the unnamed stage with one planned item
+  @issue-243
+  Scenario: Resume on a paused roadmap asks to resume it, not to start it
+    Given the app is open
+    When I open "Backlog" in the sidebar
+    And I open the Roadmap
+    Then the roadmap bar shows "paused"
+    When I press Resume on the roadmap with Simulated off
+    Then the confirm dialog is titled "Resume the roadmap" with a "Resume" button
+    When I press Cancel in the confirm dialog
+    Then the roadmap bar shows "paused"
+
+  @issue-243
+  Scenario: Resume on a stage run on its own asks to resume that stage
+    Given the app is open
+    And the roadmap was paused while stage 5 ran on its own
+    When I open "Backlog" in the sidebar
+    And I open the Roadmap
+    Then the roadmap bar shows "paused · stage 5 only"
+    When I press Resume on the roadmap with Simulated off
+    Then the confirm dialog is titled "Resume stage 5" with a "Resume" button
+    And the confirm dialog says the roadmap pauses again when the stage is done
+    When I press Cancel in the confirm dialog
+    Then the roadmap bar shows "paused · stage 5 only"
+
+  @issue-237
+  Scenario: A stage run on its own that finished while paused no longer holds the roadmap
+    Given the app is open
+    And the roadmap was paused while stage 5 ran on its own
+    And every item of stage 5 is done
+    When I open "Backlog" in the sidebar
+    And I open the Roadmap
+    Then the roadmap bar does not show "stage 5 only"
+    And the roadmap bar shows "Stage 5 done"
+    When I resume the roadmap as a simulation
+    Then the roadmap bar does not show "Stage 5 done"
+    And the Backlog shows no error "Every item of this stage is done or skipped."

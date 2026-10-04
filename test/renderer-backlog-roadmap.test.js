@@ -542,6 +542,58 @@ test('onClick [data-rm=start]: resuming a paused, scoped roadmap passes that sta
   assert.equal(startCalls[1].stage, null);
 });
 
+// ---- #243: the confirm of Resume says Resume, not Start ------------------------------------
+
+function captureStartConfirm() {
+  const confirms = [];
+  const loaded = loadRoadmap({ confirmDialog: async (...args) => { confirms.push(args); return false; } });
+  return { ...loaded, confirms };
+}
+
+test('#243 onClick [data-rm=start] on a paused roadmap (no scope) confirms "Resume the roadmap": runs in progress keep going, cost money, button Resume; cancel starts nothing', async () => {
+  const { BacklogRoadmap, startCalls, confirms } = captureStartConfirm();
+  await BacklogRoadmap.onClick({ target: startButtonTarget() }, makeCtx(), threeStageData(['done', 'planned', 'planned'], { state: 'paused' }));
+  assert.equal(confirms.length, 1);
+  const [title, body, label] = confirms[0];
+  assert.equal(title, 'Resume the roadmap');
+  assert.equal(label, 'Resume');
+  assert.match(body, /keep going/i);
+  assert.match(body, /cost money/i);
+  assert.equal(startCalls.length, 0);
+});
+
+test('#243 onClick [data-rm=start] on a paused roadmap scoped to stage 40 confirms "Resume stage 40": the roadmap pauses again when that stage is done', async () => {
+  const { BacklogRoadmap, startCalls, confirms } = captureStartConfirm();
+  const statuses = Array.from({ length: 41 }, (_, n) => (n < 39 ? 'done' : 'planned'));
+  const ids = statuses.map((_, n) => `st${n + 1}`);
+  const data = {
+    roadmap: {
+      state: 'paused', scope: { stage: 'st40' },
+      stages: ids.map((id, n) => ({ id, name: `Stage ${n + 1}`, note: '', items: [{ id: `it${n + 1}`, status: statuses[n], workflow: 'w.yaml', mock: false, issues: [{ number: n + 1, title: `#${n + 1}`, url: 'u' }] }] })),
+    },
+    issues: [],
+  };
+  await BacklogRoadmap.onClick({ target: startButtonTarget() }, makeCtx(), data);
+  assert.equal(confirms.length, 1);
+  const [title, body, label] = confirms[0];
+  assert.equal(title, 'Resume stage 40');
+  assert.equal(label, 'Resume');
+  assert.match(body, /pauses again/i);
+  assert.equal(startCalls.length, 0);
+});
+
+test('#243 guard: onClick [data-rm=start] on a planned or done roadmap still confirms "Start the roadmap" with Start', async () => {
+  const { BacklogRoadmap, startCalls, confirms } = captureStartConfirm();
+  await BacklogRoadmap.onClick({ target: startButtonTarget() }, makeCtx(), threeStageData(['planned', 'planned', 'planned'], { state: 'planned' }));
+  await BacklogRoadmap.onClick({ target: startButtonTarget() }, makeCtx(), threeStageData(['done', 'done', 'planned'], { state: 'done' }));
+  assert.equal(confirms.length, 2);
+  for (const [title, , label] of confirms) {
+    assert.equal(title, 'Start the roadmap');
+    assert.equal(label, 'Start');
+  }
+  assert.equal(startCalls.length, 0);
+});
+
 // ---- Retry on a failed item: the kept-work question (#170) --------------------------------
 
 test('onClick [data-rm-item=retry]: a plain retry (no kept work) calls roadmapItem once, unconfirmed, and never opens the kept-work dialog', async () => {
