@@ -24,6 +24,23 @@ Use `canonicalPath`/`samePath` from `src/engine/worktree.js`.
   read app.asar); `scripts/package.js` sets `asar.unpack` for it.
 - `kill()` after exit prints "AttachConsole failed" (harmless).
 
+## Memory: commit, not the working set (#276)
+
+- A runaway Windows process is measured by its **committed (private) bytes**, not its working set:
+  in the #274 incident a `node --test` process passed 70 GB of commit while its working set stayed
+  near 22 GB. Windows grows the page file until the commit limit is reached, then everything that
+  allocates fails. The memory guard (`src/engine/memory-guard.js`) reads `Win32_Process.PrivatePageCount`
+  and the free commit (`Win32_OperatingSystem.FreeVirtualMemory`) through **one long-lived
+  PowerShell helper**: when the commit is gone, starting a new process (even `git`) fails.
+- Out-of-memory signatures in other runs' logs (they are the machine's, not the change's):
+  `Mingw-w64 runtime failure: VirtualProtect failed with code 0x5af` (git), `O arquivo de paginação
+  é muito pequeno para que esta operação seja concluída` / "The paging file is too small for this
+  operation to complete", `spawnSync git UNKNOWN`, exit code 3221225794 (0xC0000142, a DLL that could
+  not initialize), and waits that time out. A suite round that fails while the guard recorded an
+  incident reruns by itself (engine.md, "Memory guard").
+- A failing `assert` serialises both operands: a fake DOM node or a `vm` sandbox drags the whole
+  graph into the message (the #274 cause). Compare primitives (`skills/testing-principles`).
+
 ## Packaged exe
 
 - Hardened (`scripts/package.js` flips Electron fuses): no `ELECTRON_RUN_AS_NODE`, no

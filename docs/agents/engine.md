@@ -151,6 +151,27 @@ same features for users; this is the implementer's summary.
   `test-batch.yaml` writes the skipped tests later, for a range of local commits, in one session.
 - **`base_worktree: true`** on an agent step (#198; needs `orchestrator.worktree`): before each visit the engine prepares the run's checkout of the base (`<worktreesDir>/<run_id>-base`, detached at the current base, dependencies linked from the shared cache) and gives it as `base_worktree_dir` (empty without a worktree), for the test writer's pre-existing-failure check. See [worktrees.md](worktrees.md).
 - **`deps.ready`** (#198): the run's dependencies from the shared cache, after `worktree.ready`, for the base checkout and after an agent step that changed the lockfile (`{ for: worktree|base, after, status, hit, lockfile, manager, key, entry, seconds, waited, reason }`; nothing when the folder already links its key). Agents with commands get a line about it in their command guide (`depsGuide`). See [worktrees.md](worktrees.md).
+- **Memory guard** (#276, `src/engine/memory-guard.js`; Settings › Execution, `settings.memoryGuard`
+  `{ enabled, limitPercent: 25, floorPercent: 10 }`): a deterministic watcher, no AI call. While a
+  real run's agent turn, `suite` / `e2e` execution or screenshot capture runs, its process tree is
+  sampled every 5 s (Windows: committed bytes through one long-lived PowerShell helper; Linux:
+  /proc; macOS: one `sh` loop around `ps`) and a descendant over the limit is stopped with its
+  children: a `process.killed` event `{ pid, command_line (300 chars), bytes, limit_bytes, step_id,
+  session }`, the agent's next prompt says "The orchestrator stopped `<command>` at <n> GB for
+  passing the memory limit", a suite's `message` names it, and the second stop of the same command
+  in a step carries `notify: true` (one notification). Never stopped: the app, the agent CLI's root
+  process (a `memory_over_limit` log instead), anything outside the run's tree. A sampler that fails
+  logs `memory_guard_off` once and the run goes on. Before each suite / e2e execution the step waits
+  while free memory (Windows: free commit) is under the floor, at most 10 min (`memory_hold` log,
+  `memory.hold` event); a new real run is refused meanwhile (`memoryHold` in
+  `src/service/areas/runs.js`; the roadmap and the queue hold the item and a 30 s timer dispatches
+  again when memory recovers). A round that fails while the guard recorded a stop or a low-memory
+  period in its time window reruns in the same visit (`<log>-env.log`, output
+  `environment_reruns`, at most 2): only the last result is routed, so it uses no visit of the
+  suite → test transition. A simulation has no guard (`run.memoryGuard` null) unless one is given
+  (`new WorkflowRun({ memoryGuard })`); `mockSequences.suite.<step>` is indexed by execution (a visit
+  plus its environment reruns). The Night watch records `process.killed` and a hold over 5 min as a
+  `memory` incident and takes no action.
 - `orchestrator.limits.max_total_context` (e.g. `20M`): the context the run's agents read (input + cache, summed over every turn). Past it, `contextGate` pauses the run before the next agent turn with a `<step>:context_limit` gate (choices `continue` = allow another block of the same size, `stop` = cancel; the worktree is kept). A turn is never cut; `limit.exceeded` is emitted with `paused: true`.
 - `groups: [{ name, steps }]` (optional, top level): progress views only, the graph ignores it;
   `validateGroups` in `loadWorkflow`. Recorded in `workflow.started` and `summary.groups`, with
@@ -234,6 +255,15 @@ same features for users; this is the implementer's summary.
   cost in the session (`estimated_cost_usd`), the step's record, the run and `max_total_cost_usd`;
   the `attempt N/M failed` log line says what it cost. `workflow.started` and the summary carry
   `cost_accounting: 'per_turn'`; runs without it are read corrected by `src/run-costs.js`.
+- Several `result` events in one Claude turn (#277): a turn that used sub-agents (the `Agent` tool)
+  ends with 2 to 4 `result` events one ms apart, all with the same (or a growing) session
+  `total_cost_usd`. `parseClaude` records the turn's cost once: the highest total seen in the turn
+  minus the session's total before the turn (a later event never lowers it; `--resume` and forked
+  sessions as above). Their usages overlap (the total does not grow with the later, smaller ones), so
+  the turn's tokens are the largest of each field. The raw `result` events of such a turn are kept
+  as `raw` items of `session.stream`. The summary carries `turn_cost: 'max_result'`; a per-turn run
+  without it is read by `src/run-costs.js` with each turn at the highest cost among its `usage`
+  stream items when that is more than its recorded `cost_usd` (the files are never rewritten).
 - Idle agents (`src/engine/idle.js`, #46): an agent with no stream item for `idleWarnMs` (setting
   `idleWarningMinutes`, default 5, 0 = off) while a tool call is open → one `log` warn
   `kind: agent_idle` per silence, with `step_id`, `agent`, `tool`, `command`, `idle_ms` (run log,

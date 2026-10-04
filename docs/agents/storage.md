@@ -45,6 +45,11 @@ Read this before touching run listings, the Backlog queue, pending gates, notifi
   answered from a paired phone it adds `answered_by: "owner"`, `via: "mobile"`, `device` (the
   device id of `phone-gates/devices.json`) next to the event's `ts`. Only the phone page writes
   them (`answerPhoneGate`, never a channel); the `gates` index row is closed by the same event.
+- **Costs and memory events** (#277, #276): a Claude turn with several `result` events keeps them
+  as `raw` items of `session.stream` and records its highest total once; `summary.json` carries
+  `turn_cost: 'max_result'`. A per-turn run without it is read through its `usage` stream items
+  (`src/run-costs.js`, `src/runs.js` `fromEvents`); the files are never rewritten. The memory guard
+  writes `process.killed` and `memory.hold` events (engine.md, "Memory guard").
 - Never make the database the only copy of something a run produced.
 
 ## Issues: the git platform is the source of truth (#168)
