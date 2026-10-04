@@ -46,6 +46,14 @@ test('the analytics view offers the Run (#228) and 24/7 (#188) tabs, alongside u
   assert.equal(parseArgs(['--view', 'analytics', '--tab', 'occupancy', '--theme', 'light']).name, 'analytics-occupancy-light');
 });
 
+test('--view home-empty (#255) is a view of its own: Home of a new workspace, named home-empty, with no tab or mode', () => {
+  assert.ok(VIEWS['home-empty'], 'a home-empty view');
+  assert.equal(parseArgs(['--view', 'home-empty']).name, 'home-empty');
+  assert.equal(parseArgs(['--view', 'home-empty', '--theme', 'light']).name, 'home-empty-light');
+  assert.throws(() => parseArgs(['--view', 'home-empty', '--mode', 'kanban']), /does not apply to home-empty/);
+  assert.match(usage(), /home-empty/);
+});
+
 test('parseArgs names the file after the scenario and checks options against the view', () => {
   assert.equal(parseArgs(['--view', 'backlog', '--mode', 'kanban', '--theme', 'light']).name, 'backlog-kanban-light');
   assert.deepEqual(parseArgs(['--view', 'settings', '--tab', 'about', '--size', '1200x800']).size, [1200, 800]);
