@@ -503,7 +503,7 @@
     const current = scoped >= 0 ? scoped : r.stages.findIndex((s) => s.items.some((x) => x.status !== 'done' && x.status !== 'skipped'));
     const stateBadge = `<span class="badge ${r.state === 'running' ? 'live' : r.state === 'paused' ? 'warn' : ''}">${esc(STATE_LABEL[r.state] || r.state)}${scoped >= 0 ? ` · stage ${scoped + 1} only` : ''}${r.simulated ? ' · simulated' : ''}</span>`;
     const bar = `
-      <div class="bl-queue rm-bar">
+      <div class="bl-queue rm-bar" data-testid="roadmap-bar">
         <span><b>Roadmap</b> ${stateBadge} ${r.stages.length} stage${r.stages.length === 1 ? '' : 's'}</span>
         ${r.error ? `<span class="${r.state === 'paused' ? 'warn-text' : 'error'} small">${esc(r.error)}${r.pausedBy ? ` <button class="link-btn small" type="button" data-rm-goto="${esc(r.pausedBy)}" title="Scroll to the item that paused the roadmap: Retry or Skip it there">Show the item</button>` : ''}${r.state === 'paused' && r.budget ? ` <button class="btn sm primary" type="button" data-rm="budget-raise" title="${esc(`The ${r.budget.period === 'night' ? 'night' : 'daily'} budget becomes what is spent plus the next stage, for ${r.budget.period === 'night' ? 'tonight' : 'today'} only; the roadmap goes on`)}">Raise for ${r.budget.period === 'night' ? 'tonight' : 'today'}</button> <button class="btn sm ghost" type="button" data-rm="budget-resume" title="${esc(`This roadmap ignores the budget until ${r.budget.period === 'night' ? 'the night' : 'the day'} ends; the budget stays as it is`)}">Resume anyway</button>` : ''}</span>` : ''}
         <span class="spacer"></span>
