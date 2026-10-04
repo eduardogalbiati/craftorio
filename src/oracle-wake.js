@@ -15,6 +15,9 @@
 // (a project's watch: until its roadmap is no longer running) or the owner unwatches it.
 // The first waking event starts a batch window (BATCH_MS); every event of the window goes in the same
 // wake-up, one short turn. The mutes and watches are kept in <oracle dir>/wake.json.
+// #244: routine events (a run finished, cancelled or interrupted, a supervisor retry or resume) are
+// code-only notices (routineNotice → onWake's `notices`), with no model call; only the events that
+// need a decision are `lines` and start a model turn.
 
 const fs = require('fs');
 const path = require('path');
@@ -97,6 +100,33 @@ function wakeLine(ev, kind) {
   }
 }
 
+// #244: supervisor decisions that need nothing from the owner (the run goes on by itself)
+const ROUTINE_DECISIONS = new Set(['resume', 'retry']);
+
+/**
+ * #244: the code-only notice of a routine event (a run finished, cancelled or interrupted, a
+ * supervisor retry or resume): { runId, status, costUsd, text }, posted with no model call. null: the
+ * event needs a decision (a gate, a merge, a limit, a stall, invalid outputs) and wakes the model.
+ */
+function routineNotice(ev, kind) {
+  const run = ev.run_id || '?';
+  const of = (status, text, costUsd = null) => ({ runId: run, status, costUsd, text });
+  if (kind === 'finished') {
+    const cost = Number(ev.summary?.cost_usd ?? ev.summary?.costUsd ?? ev.cost_usd) || 0;
+    return of(ev.status || 'finished', `Run ${run} finished ${ev.status || '?'}, cost ${money(cost)}${ev.error ? ` (${clip(ev.error, 200)})` : ''}.`, cost);
+  }
+  if (kind === 'interrupted') {
+    if (ev.type === 'run.elsewhere') return of('elsewhere', `Run ${run} is in progress in another app process.`);
+    if (ev.type === 'log') return of('interrupted', `Run ${run}: an agent was interrupted${ev.step_id ? ` at ${ev.step_id}` : ''}.`);
+    return of('interrupted', `Run ${run} was interrupted (the app closed while it ran).`);
+  }
+  const action = String(ev.action || ev.decision || '');
+  if (ev.type === 'supervisor.decision' && ROUTINE_DECISIONS.has(action)) {
+    return of(action, `Run ${run}: the supervisor decided ${action}${ev.step_id ? ` at ${ev.step_id}` : ''}; nothing for you to do.`);
+  }
+  return null;
+}
+
 /**
  * The wake-ups of a service. `events`: the service's EventEmitter (run:event, run:interrupted in);
  * `settings()` the workspace settings; `file()` the wake.json path; `projectOf(runId)` a live run's
@@ -132,8 +162,14 @@ function createWake({ events, settings, file, projectOf = () => null, projectRun
     if (!batch.length) return null;
     const taken = batch;
     batch = [];
+    const wakes = taken.filter((b) => !b.notice);
     let res;
-    try { res = await onWake({ lines: taken.map((b) => b.line), runIds: [...new Set(taken.map((b) => b.runId))], kinds: [...new Set(taken.map((b) => b.kind))] }); } catch { res = { deferred: true }; }
+    try {
+      res = await onWake({
+        lines: wakes.map((b) => b.line), runIds: [...new Set(wakes.map((b) => b.runId))], kinds: [...new Set(wakes.map((b) => b.kind))],
+        notices: taken.filter((b) => b.notice).map((b) => b.notice),
+      });
+    } catch { res = { deferred: true }; }
     if (res?.deferred) { batch = [...taken, ...batch]; arm(); }
     return res;
   }
@@ -161,7 +197,7 @@ function createWake({ events, settings, file, projectOf = () => null, projectRun
     if (!wakeOn.includes(kind)) return false;
     const inScope = wakeScope === 'all' && !s.muted.includes(ev.run_id);
     if (!inScope && !watch) return false;
-    batch.push({ line: wakeLine(ev, kind), runId: ev.run_id, kind });
+    batch.push({ line: wakeLine(ev, kind), runId: ev.run_id, kind, notice: routineNotice(ev, kind) });
     arm();
     return true;
   }
@@ -206,6 +242,7 @@ module.exports = {
   BATCH_MS,
   createWake,
   KIND_LABELS,
+  routineNotice,
   SCOPES,
   WAKE_KINDS,
   wakeKind,

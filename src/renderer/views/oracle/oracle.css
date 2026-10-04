@@ -12,6 +12,9 @@
 .oracle-drawer .drawer-head .row, .oracle-dock .drawer-head .row { margin-left: auto; }
 .oracle-who { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1 1 auto; }
 .oracle-who .sup-head { min-width: 0; }
+/* #244: the model and the last turn's session (fresh or resumed) */
+.oracle-status { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
+.oracle-status:empty { display: none; }
 .oracle-title { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 
 /* #183: beside a gate (the drawer opened from it): no backdrop, the screen narrows to stay answerable */

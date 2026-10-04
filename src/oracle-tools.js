@@ -32,7 +32,9 @@ const DELEGATES = [
   'supervisor',
 ];
 const GIT_TIMEOUT_MS = 30e3;
-const MAX_FILE_BYTES = 400e3;
+// #244: what one tool call may add to the Oracle's context (a result stays there for the whole session)
+const MAX_FILE_BYTES = 40 * 1024;
+const DEFAULT_LAST_EVENTS = 200;
 const ATTACHMENT_TYPES = { gif: 'image/gif', jpg: 'image/jpeg', png: 'image/png', webp: 'image/webp' };
 // git subcommands the Oracle may run: they only read (checkout, commit, reset, branch... are refused)
 const READ_GIT_COMMANDS = [
@@ -73,14 +75,19 @@ function insidePath(root, rel) {
   return real;
 }
 
-function readInside(root, rel) {
+// A folder listing, or at most MAX_FILE_BYTES of a file from byte `offset`, with a note when more follows.
+function readInside(root, rel, offset = 0) {
   const file = insidePath(root, rel);
-  if (fs.statSync(file).isDirectory()) {
+  const st = fs.statSync(file);
+  if (st.isDirectory()) {
     return fs.readdirSync(file, { withFileTypes: true }).map((e) => (e.isDirectory() ? `${e.name}/` : e.name)).sort().join('\n');
   }
-  const buf = fs.readFileSync(file);
-  const text = buf.subarray(0, MAX_FILE_BYTES).toString('utf8');
-  return buf.length > MAX_FILE_BYTES ? `${text}\n… (cut: the file has ${buf.length} bytes)` : text;
+  const start = Math.min(Math.max(0, Math.floor(Number(offset) || 0)), st.size);
+  const buf = Buffer.alloc(Math.min(MAX_FILE_BYTES, st.size - start));
+  const fd = fs.openSync(file, 'r');
+  try { fs.readSync(fd, buf, 0, buf.length, start); } finally { fs.closeSync(fd); }
+  const end = start + buf.length;
+  return end < st.size ? `${buf.toString('utf8')}\n… (cut: the file has ${st.size} bytes; read on with offset ${end})` : buf.toString('utf8');
 }
 
 function git(folder, command, args) {
@@ -118,18 +125,19 @@ function oracleTools(ctx, hooks = {}) {
     },
     {
       name: 'run_events',
-      description: 'One run\'s events (events.jsonl, live while it runs). activity: true adds the agents\' tool calls and thinking, compacted. last: only the last N events.',
-      inputSchema: obj({ runId: str('The run id'), activity: { type: 'boolean' }, last: { type: 'number' } }, ['runId']),
-      run: ({ runId, activity, last } = {}) => {
+      description: `One run's events (events.jsonl, live while it runs). activity: true adds the agents' tool calls and thinking, compacted. Only the last ${DEFAULT_LAST_EVENTS} events by default; last: only the last N events; all: true for every event.`,
+      inputSchema: obj({ runId: str('The run id'), activity: { type: 'boolean' }, last: { type: 'number' }, all: { type: 'boolean', description: 'Every event (large: prefer last)' } }, ['runId']),
+      run: ({ runId, activity, last, all } = {}) => {
         const events = runs.runEvents(ctx.runFolder(runId), { activity: !!activity });
-        return json(Number(last) > 0 ? events.slice(-Math.floor(Number(last))) : events);
+        if (all) return json(events);
+        return json(events.slice(-(Number(last) > 0 ? Math.floor(Number(last)) : DEFAULT_LAST_EVENTS)));
       },
     },
     {
       name: 'run_file',
-      description: 'A file or folder listing inside one run\'s folder: summary.json, decisions.tsv, handoff notes, sessions, artifacts. path is relative to the run folder ("." lists it).',
-      inputSchema: obj({ runId: str('The run id'), path: str('Relative path in the run folder') }, ['runId']),
-      run: ({ runId, path: rel } = {}) => readInside(ctx.runFolder(runId), rel || '.'),
+      description: 'A file or folder listing inside one run\'s folder: summary.json, decisions.tsv, handoff notes, sessions, artifacts. path is relative to the run folder ("." lists it). At most 40 KB per call: offset (bytes) reads on.',
+      inputSchema: obj({ runId: str('The run id'), path: str('Relative path in the run folder'), offset: { type: 'number', description: 'Byte offset to start from (default 0)' } }, ['runId']),
+      run: ({ runId, path: rel, offset } = {}) => readInside(ctx.runFolder(runId), rel || '.', offset),
     },
     {
       name: 'roadmap',
@@ -177,9 +185,9 @@ function oracleTools(ctx, hooks = {}) {
     },
     {
       name: 'repo_read',
-      description: 'A file of a project\'s repository (or a folder listing), read-only. path is relative to the project folder.',
-      inputSchema: obj({ projectId, path: str('Relative path, "." for the root') }, ['projectId']),
-      run: ({ projectId: id, path: rel } = {}) => readInside(project(id).folder, rel || '.'),
+      description: 'A file of a project\'s repository (or a folder listing), read-only. path is relative to the project folder. At most 40 KB per call: offset (bytes) reads on.',
+      inputSchema: obj({ projectId, path: str('Relative path, "." for the root'), offset: { type: 'number', description: 'Byte offset to start from (default 0)' } }, ['projectId']),
+      run: ({ projectId: id, path: rel, offset } = {}) => readInside(project(id).folder, rel || '.', offset),
     },
     {
       name: 'app_source',

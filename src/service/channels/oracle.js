@@ -364,7 +364,7 @@ module.exports = (ctx) => {
     file: () => path.join(dir(), 'wake.json'),
     projectOf: (runId) => ctx.liveRun(runId)?.projectId || null,
     projectRunning: (projectId) => roadmaps.readRoadmap(ctx.ws.backlog, projectId).state === 'running',
-    onWake: ({ lines, runIds }) => (ctx.ws ? get().wake({ lines, runIds, mock: simulation.simulationOnly() || runIds.every(runMock) }) : { skipped: 'no-workspace' }),
+    onWake: ({ lines, runIds, notices }) => (ctx.ws ? get().wake({ lines, runIds, notices, mock: simulation.simulationOnly() || runIds.every(runMock) }) : { skipped: 'no-workspace' }),
     onChange: () => ctx.events.emit('oracle:changed', { kind: 'wake' }),
   });
   // runs of this workspace in progress in another app process (#112): each wakes the Oracle once

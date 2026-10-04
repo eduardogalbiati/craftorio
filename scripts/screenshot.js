@@ -1082,6 +1082,8 @@ function demoOracle(ws, workspace, which, runId) {
   fs.writeFileSync(path.join(dir, 'memory.md'), '- UI issues need UI acceptance criteria and screenshots.\n- Use the validated mode for UI changes.\n- Reply in Portuguese; everything for the product stays in English.\n');
   const spent = which === 'paused' ? 2.4 : 3.12;
   fs.writeFileSync(path.join(dir, 'usage.jsonl'), `${JSON.stringify({ ts: at(29), provider: 'claude', model: 'claude-opus-5-5', tokens: { input: 1200, output: 860 }, costUsd: spent, sessionId: 'demo' })}\n`);
+  // #244: the status shows the model and that the last turn resumed a warm session
+  fs.writeFileSync(path.join(dir, 'state.json'), JSON.stringify({ sessionId: 'demo', model: 'claude-opus-5-5', contextTokens: 50060, lastTurnAt: at(29), lastTurnFresh: false }));
   if (which === 'paused') workspace.writeSettings(ws, { oracle: { dailyBudgetUsd: 2, compactAtTokens: 150000 } });
   fs.writeFileSync(path.join(dir, 'read.json'), JSON.stringify({ readAt: which === 'unread' ? at(31) : at(0) }));
   if (which !== 'unavailable') return null;
@@ -1113,6 +1115,8 @@ function demoOracleActions(dir, at, run) {
       title: 'Retry roadmap item i3 (#14 Report export)', change: 'The item runs again (a new run).', where: 'The roadmap of project demo-app',
       backup: 'A copy of the roadmap file, taken before the change (Undo puts it back).', why: `${failedRun} failed on invalid outputs, not on the code: a retry usually passes (2 of the last 3 did).`,
     }),
+    // #244: a routine event is a code-only notice (no model call)
+    { id: 'nt1', ts: at(17), role: 'system', kind: 'notice', runId: '20260119-231000-7c2d1e90', status: 'succeeded', runCostUsd: 2.14, text: 'Run 20260119-231000-7c2d1e90 finished succeeded, cost $2.14.' },
     { id: 'd1', ts: at(15), role: 'system', kind: 'delegation', to: 'product-owner', question: 'Which planned items of demo-app can run in parallel without merge conflicts?', text: 'Stage 2 can split in two: #15 and #18 touch disjoint folders (src/export, src/settings); #16 must wait for #15 (same report module).', costUsd: 0.6342, model: 'claude-opus-5-5', failed: false, ref: 'the Product Owner\'s conversation of demo-app' },
     card('c2', 12, {
       kind: 'issue.update', label: 'Update an issue', params: { projectId: 'demo-app', number: 14, body: '…', mode: 'comment' }, requestedBy: 'content', source: 'issue #14 body',

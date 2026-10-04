@@ -307,7 +307,7 @@
   function messageHtml(m, ref = '') {
     if (m.role === 'user') {
       loadAttachments(m.attachments);
-      return `<div class="sup-wmsg user"><div class="sup-wmsg-meta oracle-meta">You · ${esc(time(m.ts))}${m.screen ? ` · <span class="oracle-cut" title="${esc(m.screen)}">${esc(m.screen)}</span>` : ''}${m.unanswered ? ' · <span class="badge warn">no answer</span>' : ''}</div>${m.context?.label ? `<div class="oracle-cut small muted" title="${esc(m.context.label)}">About: ${esc(m.context.label)}</div>` : ''}<div class="oracle-text">${esc(m.text)}</div>${thumbsHtml(m.attachments)}</div>`;
+      return `<div class="sup-wmsg user"><div class="sup-wmsg-meta oracle-meta">You · ${esc(time(m.ts))}${m.screen ? ` · <span class="oracle-cut" title="${esc(m.screen)}">${esc(m.screen)}</span>` : ''}${m.unanswered ? ' · <span class="badge warn">no answer</span>' : ''}${m.refused ? ` · <span class="badge warn" title="${esc(m.refused.text || '')}">not sent: ${m.refused.reason === 'daily-budget' ? 'daily budget' : 'monthly budget'}</span>` : ''}</div>${m.context?.label ? `<div class="oracle-cut small muted" title="${esc(m.context.label)}">About: ${esc(m.context.label)}</div>` : ''}<div class="oracle-text">${esc(m.text)}</div>${thumbsHtml(m.attachments)}</div>`;
     }
     if (m.kind === 'action' && m.action) return cardHtml(m);
     if (m.kind === 'delegation') {
@@ -322,6 +322,15 @@
       }).join('');
       return `<div class="sup-wmsg system oracle-wake"><details class="oracle-fold"><summary><span class="sup-wmsg-meta">${esc(time(m.ts))}</span> ${esc(m.text)}</summary>
         <ul class="oracle-events small">${(m.events || []).map((l) => `<li>${esc(l)}</li>`).join('')}</ul>${mutes ? `<div class="row oracle-card-actions">${mutes}</div>` : ''}</details></div>`;
+    }
+    // #244: a routine run event, written by the app (no model call): the status leads, the run id opens the run
+    if (m.kind === 'notice') {
+      return `<div class="sup-wmsg system oracle-notice-msg" data-testid="oracle-run-notice" data-run="${esc(m.runId || '')}"><div class="sup-wmsg-meta oracle-meta">${esc(time(m.ts))} · <span class="pill pill-${esc(m.status || 'done')}">${esc(m.status || 'notice')}</span>${m.runId ? ` · <a href="#" data-oracle-open-run="${esc(m.runId)}" title="Open the run">${esc(m.runId)}</a>` : ''}</div><div>${esc(m.text)}</div></div>`;
+    }
+    // #244: the wake-ups a budget refused, as one digest
+    if (m.kind === 'wake-refused') {
+      return `<div class="sup-wmsg system oracle-wake"><details class="oracle-fold"><summary><span class="sup-wmsg-meta">${esc(time(m.lastTs || m.ts))}</span> <span class="badge warn">Paused by budget</span> ${esc(m.text)}</summary>
+        <ul class="oracle-events small">${(m.events || []).map((l) => `<li>${esc(l)}</li>`).join('')}</ul></details></div>`;
     }
     if (m.role === 'system') return `<div class="sup-wmsg system${m.error ? ' error' : ''}"><div class="sup-wmsg-meta">${esc(time(m.ts))}</div><div>${esc(m.text)}</div></div>`;
     const meta = M.metaParts(m, { fmtTime: time, fmtCost }).map(esc).join(' · ');
@@ -425,6 +434,16 @@
       <div class="row"><button class="btn primary sm" type="submit"${f.saving ? ' disabled' : ''}>Save</button><button class="btn ghost sm" type="button" data-oracle-mem-cancel>Cancel</button></div>
     </form>`;
   }
+  // #244: the model every turn uses, and whether the last turn started a fresh session or resumed it
+  function statusHtml() {
+    const s = or.service;
+    if (!s?.model) return '';
+    const mode = s.sessionMode === 'fresh'
+      ? '<span class="badge" data-testid="oracle-session-mode" title="The last turn started a new session from the skill, the memory and the app\'s state note">fresh session</span>'
+      : s.sessionMode === 'resumed'
+        ? '<span class="badge" data-testid="oracle-session-mode" title="The last turn went on with the same session (its cache was warm)">resumed session</span>' : '';
+    return `<span class="badge" data-testid="oracle-model" title="${esc(s.model)}${s.effort ? `, effort ${esc(s.effort)}` : ''}">${esc(Robots.plaqueFor(s.model))}</span> ${mode}`;
+  }
   function footHtml(v) {
     const t = v.today;
     const budget = !t ? '' : t.limitUsd ? `Today ${money(t.spentUsd)} of ${money(t.limitUsd)} daily budget.` : `Today ${money(t.spentUsd)} (no daily cap).`;
@@ -463,6 +482,7 @@
       document.querySelectorAll('[data-oracle-night]').forEach((b) => (b.disabled = nightOn || v.state === 'unavailable'));
       $(`#oracle-screen-${w}`).textContent = where;
       $(`#oracle-screen-${w}`).title = where;
+      $(`#oracle-status-${w}`).innerHTML = statusHtml();
       $(`#oracle-notice-${w}`).innerHTML = noticeHtml(v);
       // #183: with a context chip, its starters stay under the box (asked while busy, they queue)
       $(`#oracle-context-${w}`).innerHTML = or.context ? `<span class="oracle-context-chip" data-testid="oracle-context-chip" title="${esc(or.context.label)}"><span class="oracle-cut">${esc(or.context.label)}</span><button class="icon-btn" type="button" data-oracle-uncontext aria-label="Remove the gate context" title="Remove the gate context: the next questions are not about this gate"><svg viewBox="0 0 24 24" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" /></svg></button></span>` : '';
@@ -526,6 +546,7 @@
         <div class="sup-head">
           <h2 class="drawer-title oracle-title">Oracle</h2>
           <div class="muted small oracle-cut">On: <span id="oracle-screen-${w}"></span></div>
+          <div class="small oracle-status" id="oracle-status-${w}"></div>
         </div>
       </div>
       <div class="row">
@@ -635,6 +656,8 @@
         if (dismiss) { dismissAction(dismiss.dataset.oracleDismiss); return; }
         const undoBtn = t.closest('[data-oracle-undo]');
         if (undoBtn) { undoAction(undoBtn.dataset.oracleUndo); return; }
+        const runLink = t.closest('[data-oracle-open-run]');
+        if (runLink) { e.preventDefault(); closeDrawer(); window.showRun(runLink.dataset.oracleOpenRun); return; }
         const mute = t.closest('[data-oracle-mute]');
         if (mute) { setWatch(() => api.muteOracleRun({ runId: mute.dataset.oracleMute, on: mute.dataset.on === '1' })); return; }
         const unwatch = t.closest('[data-oracle-unwatch]');
