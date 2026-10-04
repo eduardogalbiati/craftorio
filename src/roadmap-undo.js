@@ -9,6 +9,9 @@
 // It refuses, changing nothing, when an issue it brings back is planned in another unfinished item
 // now, or when nothing of the edit is left to put back. An edit without `after` is an earlier version
 // (src/roadmap-history.js, Restore): the same rule, with nothing known to have been added.
+// The current stages carry each item's status as derived from its run (`running`, `done`…): the file
+// stores an item with a run as `planned` (src/roadmap.js persisted), so the channels overlay the
+// derived statuses before calling it.
 // Pure (no file access, the stages given are never changed): used by the roadmap channels
 // (src/service/channels/roadmap.js) and src/roadmap-history.js.
 

@@ -890,7 +890,8 @@
     const options = view.epicOptions || [];
     const epicSelect = options.length ? `<select class="rm-epic${v.epic ? ' active' : ''}" data-rm-epic aria-label="Epic" title="Show the items of one epic, or those in no epic"><option value="">All epics</option>${options.map((o) =>
       `<option value="${esc(o.id)}"${o.id === v.epic ? ' selected' : ''}>${esc(o.title)} (${o.count})</option>`).join('')}</select>` : '';
-    const filters = epicSelect || viewSeg || sinceSelect || toggle ? `<div class="rm-filters" data-testid="filter-row">${epicSelect}${viewSeg}${sinceSelect}${toggle}</div>` : '';
+    // (`view.synced`: the Board toolbar's "Synced … from GitHub", which is hidden on this screen)
+    const filters = epicSelect || viewSeg || sinceSelect || toggle ? `<div class="rm-filters" data-testid="filter-row">${epicSelect}${viewSeg}${sinceSelect}${toggle}${view.synced ? `<span class="spacer"></span><span class="muted small">${esc(view.synced)}</span>` : ''}</div>` : '';
     return `<div class="rm">${filters}${bar.replace('<span class="spacer"></span>', `${count}<span class="spacer"></span>`)}${queued}${stages}${liveHtml}${importBox}</div>`;
   }
 
@@ -1160,7 +1161,16 @@
   function undoToast(ctx, out, title, detail) {
     if (!out?.edit?.id) return;
     window.showToast?.(title, detail || '', null, null, {
-      action: { label: 'Undo', run: async () => { ctx.setData(await api.undoRoadmap(ctx.projectId, out.edit.id)); ctx.render(); } },
+      action: {
+        label: 'Undo',
+        run: async () => {
+          const back = await api.undoRoadmap(ctx.projectId, out.edit.id);
+          // the screen moved to another project meanwhile: its data stays, the undo was done
+          if (ctx.current?.() === false) return;
+          ctx.setData(back);
+          ctx.render();
+        },
+      },
     });
   }
   const numbers = (x) => refs(x).map((i) => `#${i.number}`).join(', ');
@@ -1263,6 +1273,8 @@
       ctx.render();
       return true;
     }
+    // a link to an item of the roadmap (the paused roadmap's "Show the item" is the page alert's since
+    // #270 and calls showItem itself; a `data-rm-goto` element inside the Roadmap still works)
     const goto = e.target.closest('[data-rm-goto]');
     if (goto) { showItem(goto.dataset.rmGoto); return true; }
     // #260: a cut line's release run
@@ -1299,7 +1311,8 @@
         ctx.setData(await api.pauseRoadmap(ctx.projectId, act === 'stop'));
       } else if (act === 'clear') {
         menuOpen = false;
-        if (!await confirmDialog('Clear the roadmap', 'Every stage is removed. Runs in progress go on.', 'Clear')) { ctx.render(); return true; }
+        ctx.render();
+        if (!await confirmDialog('Clear the roadmap', 'Every stage is removed. Runs in progress go on.', 'Clear')) return true;
         const out = await api.clearRoadmap(ctx.projectId);
         ctx.setData(out);
         undoToast(ctx, out, 'Cleared the roadmap', `${plural(r.stages.length, 'stage')} removed.`);

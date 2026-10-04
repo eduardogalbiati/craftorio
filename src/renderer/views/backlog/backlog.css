@@ -266,7 +266,8 @@ button.bl-label { font-family: inherit; cursor: pointer; }
 .rm .bl-queue { margin-bottom: 0; }
 .rm-bar > span { min-width: 0; overflow-wrap: anywhere; }
 /* the bar (#269): its state dot before the title (the sidebar's run indicator: blue and pulsing while
-   running; amber paused, red paused by a failure, grey planned, green done), Stop in red, the ⋮ menu */
+   running; amber paused (--yellow, the waiting colour), red paused by a failure, grey planned, green
+   done), Stop in red, the ⋮ menu */
 .rm-bar-title { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .rm-state-dot { position: relative; flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--muted); }
 .rm-state-dot.is-running { background: var(--accent); animation: pulse 1.2s infinite; }

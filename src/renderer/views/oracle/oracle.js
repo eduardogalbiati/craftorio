@@ -562,8 +562,9 @@
     $('#oracle-drawer').setAttribute('aria-hidden', 'false');
     $('#oracle-backdrop').classList.toggle('hidden', side);
     render();
-    load();
+    const loading = load();
     setTimeout(() => $('#oracle-q-drawer')?.focus({ preventScroll: true }), 200);
+    return loading;
   }
   function closeDrawer() {
     if (!or.drawer) return;
@@ -576,11 +577,12 @@
   }
   // #183: the chat about something on screen (a gate): its context chip and starters, the drawer beside it
   // #271: a context with a first `question` (a failed roadmap item) asks it at once, once the chat is
-  // loaded; while the Oracle answers another question it waits in line with its context (ask)
+  // loaded (a chat that could not load shows its error, nothing is asked); while the Oracle answers
+  // another question it waits in line with its context (ask)
   function openWith(context) {
     or.context = context || null;
-    openDrawer({ side: true });
-    if (context?.question) Promise.resolve(or.loaded || load()).then(() => { if (or.context === context) ask(context.question); });
+    const loading = openDrawer({ side: true });
+    if (context?.question) Promise.resolve(loading).then(() => { if (or.loaded && or.context === context) ask(context.question); });
   }
 
   const surfaceHtml = (w) => `

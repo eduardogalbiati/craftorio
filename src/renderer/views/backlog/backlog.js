@@ -627,6 +627,8 @@
     // #269: the filter row's epic (the Board's choice too); #270: "Open the Roadmap" of the Board's alert
     setEpic: (id) => { bl.epic = String(id || ''); render(); },
     showRoadmap: () => showRoadmap(),
+    // #281: whether the screen still shows this project (an Undo clicked after the project changed)
+    current: ((id) => () => bl.projectId === id)(bl.projectId),
     // #217, #268: the Roadmap's Planned | All switch (All when on) and its date range (remembered)
     setShowAll: (on) => { bl.showAll = !!on; save(SHOW_ALL_KEY, bl.showAll ? '1' : ''); render(); },
     setSince: (id) => { bl.since = String(id || ''); save(SINCE_KEY, bl.since); render(); },
@@ -1268,7 +1270,7 @@
     } else if (!bl.data) {
       list.innerHTML = bl.syncing ? '<p class="muted">Loading issues…</p>' : '<p class="muted">Not synced yet.</p>';
     } else {
-      list.innerHTML = bl.mode === 'roadmap' ? window.BacklogRoadmap.html(bl.data, render, { epic: bl.epic, epicOptions: epicChoices(board), showAll: bl.showAll, since: bl.since, project: bl.projectId }) :bl.mode === 'epics' ? renderEpics(issues) : bl.mode === 'kanban' ? renderKanban(board) : renderList(board);
+      list.innerHTML = bl.mode === 'roadmap' ? window.BacklogRoadmap.html(bl.data, render, { epic: bl.epic, epicOptions: epicChoices(board), showAll: bl.showAll, since: bl.since, project: bl.projectId, synced: $b('#bl-synced').textContent }) :bl.mode === 'epics' ? renderEpics(issues) : bl.mode === 'kanban' ? renderKanban(board) : renderList(board);
       // the open item's "When it finishes" (#134); the next page when its "Loading…" row comes near (#268)
       if (bl.mode === 'roadmap') {
         window.BacklogRoadmap.mountChain(bl.data);

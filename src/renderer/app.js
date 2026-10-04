@@ -986,17 +986,20 @@ function showToast(title, detail, runId = null, gate = null, { action = null } =
     for (const [type, what] of [['mouseenter', 'pause'], ['focusin', 'pause'], ['mouseleave', 'resume'], ['focusout', 'resume']]) el.addEventListener(type, () => toastHold?.[what]());
   }
   let ran = false;
+  let dismissed = false;
   const onclick = async (e) => {
     if (action && !e.target.closest('.toast-close')) {
       // only its button runs the action, once; its outcome ("Restored", or the error) takes the toast's place
       if (ran || !e.target.closest('[data-toast-action]')) return;
       ran = true;
       let outcome;
-      try { await action.run(); outcome = action.done || 'Restored'; } catch (err) { outcome = errMsg(err); }
-      // unless a newer toast is shown meanwhile
-      if (el.onclick === onclick) { draw(outcome, '', null); el.classList.remove('hidden'); countdown(); }
+      let failed = false;
+      try { await action.run(); outcome = action.done || 'Restored'; } catch (err) { outcome = errMsg(err); failed = true; }
+      // unless a newer toast is shown meanwhile, or × was pressed while it ran (an error still shows)
+      if (el.onclick === onclick && (failed || !dismissed)) { draw(outcome, '', null); el.classList.remove('hidden'); countdown(); }
       return;
     }
+    dismissed = true;
     hide();
     if (e.target.closest('.toast-close')) return; // dismissed only
     // a gate still waiting opens inside its run (its chat, or the Run screen's gate card)

@@ -278,13 +278,15 @@ function saveStages(dir, projectId, stages, { issues } = {}) {
 /**
  * #281: Undo and Restore put stages back as they were stored, ids and run states included (saveStages
  * would plan a returned item again under a new id). `change(stages)` gives the new stages, or throws
- * to refuse; the state is kept.
+ * to refuse. The state is kept, except that a roadmap that was done and gets unfinished items back
+ * is paused: it never starts them by itself, the owner resumes it.
  */
 function restoreStages(dir, projectId, change) {
   return updateRoadmap(dir, projectId, (r) => {
     const stages = change(r.stages).filter((s) => s.items.length);
     assertUnique(stages);
-    return { ...r, stages };
+    const next = { ...r, stages };
+    return r.state === 'done' && currentStage(next) >= 0 ? { ...next, state: 'paused' } : next;
   });
 }
 

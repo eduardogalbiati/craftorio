@@ -2,10 +2,11 @@
 // previous one merged. Every channel returns the Backlog (withIssueRuns), whose `roadmap` the
 // screen shows (src/renderer/backlog-roadmap.js); the service's dispatchRoadmaps runs it.
 // #281: an owner edit (save, propose, from-queue, clear, restore) first keeps the stages as they were
-// (src/roadmap-history.js: backlog/<project>.roadmap.history/, the last 20) and answers with `edit`
-// ({ id, label }): the last edit of a project is the one roadmap:undo takes back (src/roadmap-undo.js),
-// kept in memory until the next edit. roadmap:versions lists the kept versions and
-// roadmap:restore-version puts one back; both follow Undo's rule and never stop a run.
+// (src/roadmap-history.js: backlog/<project>.roadmap.history/, the last 20). A save, a proposal that
+// replaces the roadmap, Clear and a restore answer with `edit` ({ id, label }): the last such edit of
+// a project is the one roadmap:undo takes back (src/roadmap-undo.js), kept in memory until the next
+// one. roadmap:versions lists the kept versions and roadmap:restore-version puts one back; both
+// follow Undo's rule and never stop a run.
 
 const path = require('path');
 const backlog = require('../../backlog');
@@ -26,21 +27,29 @@ module.exports = (ctx) => {
   const keep = (id, stages, label) => {
     try { history.saveVersion(workspace(), id, stages, label); } catch (e) { console.error('roadmap history:', id, e.message); }
   };
-  // After an owner edit: the version before it is kept and the edit becomes the one to undo.
-  // → { id, label } for the screen's toast, or null when the edit changed nothing.
-  function edited(id, before, label) {
+  // After an owner edit: the version before it is kept and the edit becomes the one to undo
+  // (`undoable: false`: kept only, e.g. the queue moved in, which Undo could not give back).
+  // → { id, label } for the screen's toast, or null when there is nothing to undo.
+  function edited(id, before, label, { undoable = true } = {}) {
     const after = stagesOf(id);
     if (JSON.stringify(before) === JSON.stringify(after)) return null;
     keep(id, before, label);
+    if (!undoable) return null;
     edits += 1;
     const edit = { id: `${Date.now()}-${edits}`, ...undo.recordEdit(before, after, label) };
     lastEdit.set(id, edit);
     return { id: edit.id, label: edit.label };
   }
   const withEdit = (projectId, edit) => ({ ...current(projectId), ...(edit ? { edit } : {}) });
+  // the stored stages with each item's status as its run says (the file keeps an item with a run as
+  // planned): Undo and Restore never change an item that is running or done
+  const withRunStatus = (id, stages) => {
+    const status = new Map((ctx.roadmapView(id)?.stages || []).flatMap((s) => s.items.map((x) => [x.id, x.status])));
+    return stages.map((s) => ({ ...s, items: s.items.map((x) => ({ ...x, status: status.get(x.id) || x.status })) }));
+  };
   // the stages put back by Undo or Restore (`change` → { ok, stages | reason }): a refusal changes nothing
   const putBack = (id, change) => roadmaps.restoreStages(ctx.ws.backlog, id, (stages) => {
-    const out = change(stages);
+    const out = change(withRunStatus(id, stages));
     if (!out.ok) throw new Error(out.reason);
     return out.stages;
   });
@@ -103,7 +112,7 @@ module.exports = (ctx) => {
       fn: ({ projectId, proposal, replace }) => {
         const before = stagesOf(project(projectId));
         const { dropped } = roadmaps.propose(ctx.ws.backlog, project(projectId), proposal, { replace: !!replace, issues: synced(projectId), alive: ctx.runAlive });
-        const edit = edited(project(projectId), before, replace ? 'Replaced the roadmap' : 'Added a proposal to the roadmap');
+        const edit = edited(project(projectId), before, replace ? 'Replaced the roadmap' : 'Added a proposal to the roadmap', { undoable: !!replace });
         return { ...withEdit(projectId, edit), dropped };
       },
     },
@@ -119,7 +128,7 @@ module.exports = (ctx) => {
         const before = stagesOf(id);
         roadmaps.propose(ctx.ws.backlog, id, [roadmaps.fromQueue(queue.items)], { issues: synced(id) });
         for (const item of queue.items) backlog.unqueue(ctx.ws.backlog, id, item.number, { cancelGroup: true });
-        edited(id, before, 'Moved the queue into the roadmap');
+        edited(id, before, 'Moved the queue into the roadmap', { undoable: false });
         return current(id);
       },
     },

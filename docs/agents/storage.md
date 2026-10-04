@@ -114,7 +114,9 @@ owner actions write to the platform (Save to issue, create, close, epics: `src/b
   keeps its run (`status`, `runId`, `runs`, `error`), one that is running or done is not changed,
   items and stages added since stay, and both refuse (changing nothing) when an issue they bring
   back is planned in another unfinished item. They write through `roadmap.restoreStages` (ids and
-  run states kept), never stop a run and never answer a gate.
+  run states kept), never stop a run and never answer a gate. The roadmap's state is kept: stages
+  that come back after a Clear are planned again (Start is the owner's), and a roadmap that was done
+  and gets unfinished items back is paused, never started by itself.
 - `src/service/areas/backlog-watch.js` watches the folder (one `fs.watch` per workspace, started by
   `setWorkspace`, closed on a switch and on `shutdown`) and pushes `backlog:changed { projectId,
   file: roadmap | queue | issues | local | refresh, watching: true }` once per file, 300 ms after
