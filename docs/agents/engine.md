@@ -126,6 +126,20 @@ same features for users; this is the implementer's summary.
   `timeout`) is a `log` warn `kind: tool_timeout` with the command and `timeout_ms` (null = the
   default), counted in `summary.tool_timeouts`. Simulation: `mockSequences.tool_timeouts: { <step>: n }`
   (the first n answers of that step have one test command cut at the default).
+- A **test id step** (`type: test_ids`, no agent, no model call, #246; `runTestIdsStep` →
+  `src/engine/test-ids.js`): the static `getByTestId('…')` ids of the E2E step definitions (`steps`,
+  default `features/steps`) that the renderer's source (`renderer`, default `src/renderer`) does not
+  contain; both folders are repository-relative templates. Output `{ kind: 'test_ids', status: pass |
+  missing | skipped, missing: [{ id, files }], steps, renderer, round, message }`; `skipped` when the
+  project has no step definitions. The same rule backs the `missing_test_ids` filter
+  (`{{ worktree_dir | missing_test_ids }}`, one line per id) and test/e2e-playwright.test.js.
+  ai-development-local-hero runs it as `testid_check` after each develop commit when the scenarios
+  were written first (`e2e_scope: scenarios`): missing ids go back to develop at most twice
+  (`vars.testid_returns`), then develop's own routes follow.
+- **Ask for changes through the test writer (#247)**: in ai-development-local-hero, `developer_check`'s
+  `changes` goes to `acceptance_tests` (`vars.criteria_triage`), whose prompt quotes the owner's request
+  and asks for a triage: `criteria_changed: false` → develop; `true` → `red_check` on `tests_changed`
+  only, then develop. The developer's prompt gets the request and the test writer's `criteria_note`.
 - **Test inputs (#203)**: the development workflows' `unit_tests` (write_and_run | run_existing |
   off) and `e2e_tests` (off | write | write_and_run) route the transitions (code_review/human_review
   → test, suite or build; test → suite or build; suite failures → test writer or developer) and
@@ -203,6 +217,11 @@ same features for users; this is the implementer's summary.
 - `max_context` (e.g. `150k`, agent or `defaults`): a persistent turn whose largest request went
   above it marks the agent; its next non-retry turn opens a new session (the old one is closed) and
   starts from the note. Logged as `log` `kind: context_rotation`. Never cuts a turn.
+- `fresh_after_idle` (#247, a duration such as `55m`, agent or `defaults`): a persistent agent's
+  non-retry turn that comes longer than that after its previous turn ended (a long gate wait, past
+  the prompt cache's lifetime) opens a new session from its handoff note instead of resuming a cold
+  conversation; without a note it resumes. Logged as `log` `kind: idle_rotation`. local-hero's
+  test writer uses it for the visit from the owner's validation gate.
 - Metrics: every turn is a `turnLog` record (context at the first request, peak, tokens, waste:
   `refused` = every tool call refused, `blocked` = a blocked `/loop` iteration);
   `summary.context = { agents: { <name>: { turns, fresh_sessions, tokens, peak, waste_tokens, per_turn } }, waste_tokens }`.

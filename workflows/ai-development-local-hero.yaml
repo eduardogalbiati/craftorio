@@ -398,6 +398,10 @@ agents:
     # #176: its re-read context is the largest controllable cost; past this, the next turn starts a
     # fresh session from its handoff note (never mid-turn)
     max_context: 120k
+    # #247: Ask for changes at the owner's validation gate comes back to it after a wait of hours,
+    # past the prompt cache: resuming would rewrite its whole context, so it starts a fresh session
+    # from its handoff note (the lesson of #244)
+    fresh_after_idle: 55m
     # edits test files only (a convention of its role: the tools can't tell tests from code)
     # subagents: exploration sub-agents map the behaviours and tests, so the main context stays small
     capabilities: { tools: [read, edit, write, *toolchains], web: false, subagents: true }
@@ -489,7 +493,7 @@ agents:
 
 groups:
   - name: Develop
-    steps: [develop, requirements_left_out, issue_not_done, developer_screenshots, developer_check]
+    steps: [develop, testid_check, requirements_left_out, issue_not_done, developer_screenshots, developer_check]
   - name: Review
     steps: [code_review, human_review]
   - name: Validate
@@ -524,6 +528,31 @@ steps:
       Fix those files (a syntax error, a wrong import path, a crash before the tests) on the same
       branch, commit, and answer again in full. They must load and fail on the missing behaviour.
       {% endif %}
+      {% if previous_step == 'developer_check' %}
+      {% set prev = steps.acceptance_tests.output %}
+      This visit comes from the owner's validation gate: the owner tried the developer's change and
+      asks for changes (change request {{ steps.developer_check.visits }}):
+      <owner_request>
+      {{ steps.developer_check.output.feedback }}
+      </owner_request>
+      The developer implements the request after you and may not change your acceptance tests{% if inputs.e2e_tests != 'off' %} nor
+      your E2E scenarios and their step definitions{% endif %}. First a quick triage, before any rewrite: does the request
+      change the acceptance criteria your files assert? Read only the tests and scenarios it touches.
+      - Criteria changed (a control moves, or a behaviour, a text or a state your tests or scenarios
+        assert changes): update only the affected acceptance tests{% if inputs.e2e_tests != 'off' %}, scenarios and step definitions{% endif %} to the
+        requested behaviour, commit on the run's branch (it already exists), set
+        `criteria_changed: true` and list in `tests_changed` exactly the test files you changed (the
+        orchestrator runs only them; they may fail on the new behaviour, the others are not re-judged).
+        The other tests stay as they are.
+      - Simple change (a detail no test or scenario asserts: spacing, a colour, wording no scenario
+        reads): change nothing, set `criteria_changed: false`.
+      In `criteria_note`, tell the developer in a line or two what changed in the tests and why, or
+      why nothing did. Never weaken a test to make the current code pass. Never ask the owner: when
+      the request is ambiguous, record your assumption in `criteria_note`.
+      Keep `tests_added`{% if inputs.e2e_tests != 'off' %} and `e2e_files`{% endif %} the complete lists of the run's acceptance files (the
+      developer may not change them), with any new file added: so far `tests_added`: {{ ((prev.tests_added if prev else []) or []) | join(', ') or 'none' }}{% if inputs.e2e_tests != 'off' %}; `e2e_files`: {{ ((prev.e2e_files if prev else []) or []) | join(', ') or 'none' }}{% endif %}.
+      Keep `criteria`, `not_testable`{% if inputs.e2e_tests != 'off' %}, `e2e_scope` and `scenarios`{% endif %} from your previous answer, updated.
+      {% else %}
       Write the ACCEPTANCE TESTS of this task BEFORE any code is written (tests first). The developer
       implements the change after you and must make your tests pass without editing them.
       1. Create the run's branch where the worktree starts (the local {{ inputs.base_branch }}):
@@ -578,6 +607,7 @@ steps:
         developer may not change them) and the scenarios in `scenarios` (status `pending`).
       {% endif %}
       {% endif %}
+      {% endif %}
     output_schema:
       type: object
       required: [branch, tests_added, committed, summary]
@@ -616,10 +646,21 @@ steps:
               status:  { type: string, enum: [pending, skipped, passed, failed] }
               reason:  { type: string }
         e2e_note:       { type: string }
+        # #247, the visit from the owner's validation gate: whether the owner's request changes the
+        # acceptance criteria, the note for the developer, and the test files changed in this visit
+        # (the red check runs only them; tests_added stays the complete list, for protect_files)
+        criteria_changed: { type: boolean }
+        criteria_note:    { type: string }
+        tests_changed:    { type: array, items: { type: string } }
     transitions:
       # nothing testable: straight to develop
       - when: "(output.tests_added or []) | length == 0"
         goto: develop
+        set: { criteria_triage: "no" }
+      # #247: the owner's request changes no criterion (or no test file): straight to develop
+      - when: "vars.criteria_triage == 'yes' and (not output.criteria_changed or (output.tests_changed or []) | length == 0)"
+        goto: develop
+        set: { criteria_triage: "no" }
       - when: "true"
         goto: red_check
 
@@ -631,7 +672,8 @@ steps:
     display: Red check (tests fail first)
     type: suite
     command: "{{ inputs.test_command }}"
-    files: "{{ steps.acceptance_tests.output.tests_added }}"
+    # #247: after the owner's request changed the criteria, only the test files changed in that visit
+    files: "{{ steps.acceptance_tests.output.tests_changed if vars.criteria_triage == 'yes' else steps.acceptance_tests.output.tests_added }}"
     expect: red
     transitions:
       - when: "output.status == 'broken'"
@@ -641,6 +683,7 @@ steps:
         on_exhausted: develop
       - when: "true"
         goto: develop
+        set: { criteria_triage: "no" }
 
   - id: develop
     agent: developer
@@ -680,12 +723,22 @@ steps:
       disagree with: say why). Keep `screenshots` listing the states to capture: they are taken
       again and the UI Reviewer looks once more.
       {% endif %}
-      {% if previous_step == 'developer_check' %}
+      {% set acc = steps.acceptance_tests.output %}
+      {# #247: Ask for changes goes through the test writer first (acceptance_tests, then the red check when the criteria changed) #}
+      {% if previous_step in ['developer_check', 'acceptance_tests', 'red_check'] and steps.developer_check.output and steps.developer_check.output.choice == 'changes' %}
       The owner tried your change and asks for these changes (change request {{ steps.developer_check.visits }}):
       {{ steps.developer_check.output.feedback }}
       Fix them on the same branch with a new commit, and answer each point in `summary`.
+      {% if acc and acc.criteria_note %}
+      The test writer read the request first{% if acc.criteria_changed and (acc.tests_changed or []) | length %} and updated these acceptance tests to it: {{ acc.tests_changed | join(', ') }}{% else %} and changed no test{% endif %}. Its note: {{ acc.criteria_note }}
       {% endif %}
-      {% set acc = steps.acceptance_tests.output %}
+      {% endif %}
+      {% if previous_step == 'testid_check' and steps.testid_check.output.status == 'missing' %}
+      The orchestrator checked the E2E scenarios' test ids after your commit (#246): {{ steps.testid_check.output.message }}
+      Add each one to the screen its scenario exercises (`data-testid="<id>"`, with the role and
+      accessible name the step uses), commit, and answer again in full. Never edit the scenarios or
+      their step definitions.
+      {% endif %}
       {% if not steps.develop.output %}
       Tests first: the test writer already worked on this task, on the run's branch
       `{{ acc.branch if acc else '(none: create it with git switch -c)' }}`{% if acc and acc.commit %} (commit {{ acc.commit }}){% endif %}.
@@ -717,6 +770,10 @@ steps:
       They are acceptance files too: never edit them or their step definitions (the orchestrator
       refuses the turn). Their steps may locate controls that do not exist yet: add the
       `data-testid`s (and the roles and accessible names) they use to the screens you build.
+      {% set ids = worktree_dir | missing_test_ids %}{% if ids and not steps.develop.output %}Add these test ids: their step definitions use them and the renderer does not have them yet
+      (the orchestrator checks them right after your commit, before the review):
+      {{ ids }}
+      {% endif %}
       {% if inputs.e2e_tests == 'write_and_run' %}The orchestrator runs them, with the @smoke journeys, after the review. When your change
       intentionally changes a screen with a `toHaveScreenshot` baseline, update that baseline on
       the branch (the reviewer approves it). Their run's screenshots and traces are the evidence of
@@ -829,6 +886,10 @@ steps:
         set: { gaps_returned: "yes" }
       - when: "output.left_out | developer_gaps | length"
         goto: requirements_left_out
+      # #246: scenarios written first: their test ids are checked right after each commit
+      # (testid_check, no model call); it then takes the routes below
+      - when: "output.committed and inputs.e2e_tests != 'off' and steps.acceptance_tests.output and steps.acceptance_tests.output.e2e_scope == 'scenarios'"
+        goto: testid_check
       # an issue of the group could not be done: the owner decides (once) whether the run goes on without it
       - when: "output.committed and inputs.issues | length > 1 and not steps.issue_not_done.output and (output.issues or []) | rejectattr('done') | list | length"
         goto: issue_not_done
@@ -855,6 +916,32 @@ steps:
         max_visits: 3
         on_exhausted: fail
 
+  # #246: the test ids of the E2E scenarios written first, checked by the orchestrator right after
+  # develop commits (no agent, no model call, milliseconds): every static getByTestId('…') of the
+  # step definitions must be in the renderer (src/engine/test-ids.js, the rule of
+  # test/e2e-playwright.test.js). Missing ones go back to the developer with the list and where each
+  # is used, at most twice in the run; then the run goes on and the suite's test reports them. A
+  # project without BDD step definitions is skipped (a note in the output). Another project's
+  # folders: `steps:` / `renderer:` (repository-relative; default features/steps, src/renderer).
+  - id: testid_check
+    display: Test id check (scenarios)
+    type: test_ids
+    transitions:
+      - when: "output.status == 'missing' and (vars.testid_returns or 0) | int < 2"
+        goto: develop
+        set: { testid_returns: "{{ (vars.testid_returns or 0) | int + 1 }}" }
+      # then develop's own routes after a commit (its output is steps.develop.output here)
+      - when: "inputs.issues | length > 1 and not steps.issue_not_done.output and (steps.develop.output.issues or []) | rejectattr('done') | list | length"
+        goto: issue_not_done
+      - when: "(inputs.mode == 'validated' and (vars.owner_validated != 'yes' or inputs.validate_every_round)) and inputs.screenshots == 'off'"
+        goto: developer_check
+      - when: "inputs.mode == 'validated' and (vars.owner_validated != 'yes' or inputs.validate_every_round)"
+        goto: developer_screenshots
+      - when: "inputs.screenshots != 'off' and ((steps.develop.output.screenshots or []) | length or 'src/renderer/' in ((steps.develop.output.files_changed or []) | join(' ') | replace('\\\\', '/')))"
+        goto: developer_screenshots
+      - when: "true"
+        goto: code_review
+
   # Screenshots of the developer's UI states before the owner's check (#144) and the UI Reviewer
   # (#151): no agent, no model cost. The project's screenshot command runs once per entry of
   # develop's `screenshots`, modified (the worktree) and original (--ref the base), into
@@ -873,7 +960,8 @@ steps:
         goto: code_review
 
   # Validated mode (inputs.mode): the owner tries the developer's work before any review or test
-  # token is spent. Ask for changes goes back to the developer with the text, and the run comes
+  # token is spent. Ask for changes goes to the test writer's triage (#247), then back to the
+  # developer with the text, and the run comes
   # back here; no automatic limit, the owner decides when to stop. A human gate: no timeout, and
   # neither the supervisor nor a retry ever answers it.
   - id: developer_check
@@ -908,15 +996,18 @@ steps:
     feedback: { label: "Your change request for the developer (required with \"Ask for changes\")", placeholder: "What to change, point by point" }
     choices:
       - { id: approve, label: "Approve: go on to the code review", help: "The code review, the tests and the verification run next; you are asked again only on a failure." }
-      - { id: changes, label: "Ask for changes: back to the developer", feedback_required: true, help: "Sends your text to the developer; the run comes back to this gate after the fix." }
+      - { id: changes, label: "Ask for changes: back to the developer", feedback_required: true, help: "The test writer reads your text first and updates the acceptance tests only if it changes what they check; then the developer gets it. The run comes back to this gate after the fix." }
       - { id: stop,    label: "Stop the run (branch kept to resume)", help: "Ends the run as cancelled; nothing is merged and its branch keeps the work to resume it." }
     transitions:
       - when: "choice == 'approve'"
         goto: code_review
         set: { owner_validated: "yes" }
+      # #247: the test writer triages the request first (criteria_changed), so the acceptance tests
+      # locked from the developer never contradict it. requirements_left_out and issue_not_done take
+      # no owner text (continue / stop only), so nothing there can change the criteria.
       - when: "choice == 'changes'"
-        goto: develop
-        set: { owner_validated: "no" }
+        goto: acceptance_tests
+        set: { owner_validated: "no", criteria_triage: "yes" }
       - when: "choice == 'stop'"
         goto: end
         status: cancelled

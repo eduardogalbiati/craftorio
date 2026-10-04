@@ -8,13 +8,15 @@
 // transition's `status`, `mockSequences` to steer the mock per field in tests, gates with their
 // details kept for runs:active (`pendingGates`), `preexisting_failures` reported by a step).
 // Session modes (`persistent` / `ephemeral` / `handoff`), handoff notes (`takeHandoff`, `saveHandoff`,
-// `requestHandoffNote`), `max_context` rotation, per-turn context metrics (`turnLog`,
+// `requestHandoffNote`), `max_context` rotation, `fresh_after_idle` rotation (#247), per-turn context metrics (`turnLog`,
 // `contextSummary` → `summary.context`). `sendToAgent` builds one turn; `invokeTurn` runs it against
 // the provider (templated `timeout` via `turnTimeout`; a failed attempt's tool calls go to the next
 // one, `attemptSummary`). Exports `render` (nunjucks, autoescape off, filters `to_yaml`, `to_json`,
 // `shuffle(seed)`, `clamp(lo, hi)`, `e2e_scenarios`), `takeHandoff`, `parseTokens`. Steps without an agent: gates
 // (`type: human_approval`), `type: screenshots` (`runScreenshots`, #144) and `type: workflow`
-// (`runChildWorkflows`, #174: child runs, once or `foreach` item, src/engine/workflow-step.js).
+// (`runChildWorkflows`, #174: child runs, once or `foreach` item, src/engine/workflow-step.js),
+// `type: test_ids` (`runTestIdsStep`, #246: the E2E steps' test ids missing from the renderer,
+// src/engine/test-ids.js; filter `missing_test_ids`).
 // Chaining (#134): the declared `outputs:` (`computeOutputs`, in workflow.finished and summary.json),
 // the run's `then` (option, a gate choice's `then`, `setThen`) and `from`; the service starts what
 // comes next. Child runs (#174): `parent_run` in workflow.started and summary, `child_runs` in the summary.
@@ -84,6 +86,7 @@ const {
 const mergeQueue = require('./merge-queue');
 const { IdleWatch } = require('./idle');
 const testPaths = require('./test-paths');
+const testIds = require('./test-ids');
 const { StepTrail } = require('../renderer/run-progress-model');
 const chain = require('../renderer/chain-model');
 const { displayName } = require('../renderer/display-name');
@@ -170,6 +173,17 @@ tpl.addFilter('e2e_scenarios', (output) => scenarios.scenariosMessage(output));
 //   {{ steps.suite.output | suite_failures }}
 tpl.addFilter('suite_failures', (output) => suiteStep.suiteMessage(output));
 
+// The test ids the E2E step definitions of a checkout use and its renderer lacks (#246, the rule of
+// src/engine/test-ids.js), one line per id with the step files that use it; '' when none or without
+// a folder. Optional folders, repository-relative: steps (features/steps), renderer (src/renderer).
+//   {{ worktree_dir | missing_test_ids }}
+tpl.addFilter('missing_test_ids', (dir, steps, renderer) => {
+  if (!dir || !fs.existsSync(String(dir))) return '';
+  try {
+    return testIds.missingTestIdLines(testIds.missingTestIds(String(dir), { steps: steps || undefined, renderer: renderer || undefined }));
+  } catch { return ''; }
+});
+
 // The numbers of the run's issues (#223: their BDD tags @issue-<n>), from `issue` and `issues` (URLs
 // ending in the number), without duplicates; [] without an issue.
 //   {% for n in inputs | issue_numbers %}@issue-{{ n }}|{% endfor %}@smoke
@@ -249,6 +263,14 @@ const END_STATUSES = ['success', 'failed', 'cancelled'];
 // once a turn ends above it); ephemeral: a fresh session per turn with only the step prompt;
 // handoff: a fresh session per turn that starts from the agent's latest handoff note.
 const SESSION_MODES = ['persistent', 'ephemeral', 'handoff'];
+// Step types without an agent: the engine does the work (no supervisor, no stall check, no agent keys)
+const MACHINE_STEP_TYPES = [
+  'human_approval',
+  'screenshots',
+  'suite',
+  'test_ids',
+  'workflow',
+];
 const DISPLAY_MAX = 40;
 
 // #245: `display` on an agent or a step, the name the screens show instead of its key or id
@@ -265,6 +287,7 @@ function loadWorkflow(file) {
   for (const [name, a] of [['defaults', wf.defaults || {}], ...Object.entries(wf.agents).map(([n, a]) => [`Agent "${n}"`, a || {}])]) {
     if (a.session !== undefined && !SESSION_MODES.includes(a.session)) throw new Error(`${name}: session must be one of ${SESSION_MODES.join(', ')}.`);
     if (a.max_context !== undefined && !String(a.max_context).includes('{{') && !parseTokens(a.max_context)) throw new Error(`${name}: max_context must be a token count such as 150k.`);
+    if (a.fresh_after_idle !== undefined && parseDuration(a.fresh_after_idle, null) == null) throw new Error(`${name}: fresh_after_idle must be a duration such as 55m.`);
     if (a.persona !== undefined && a.persona !== 'random') throw new Error(`${name}: persona must be "random".`);
     if (a.edits_tests !== undefined && typeof a.edits_tests !== 'boolean') throw new Error(`${name}: edits_tests must be true or false.`);
     validateFileList(a.protect_files, `${name}: protect_files`);
@@ -280,8 +303,8 @@ function loadWorkflow(file) {
     // #220: files its agent may not change (a template, e.g. another step's tests_added), and the
     // code → tests map given to its prompt as {{ test_map }} (#219)
     validateFileList(s.protect_files, `Step "${s.id}": protect_files`);
-    if (s.protect_files !== undefined && ['human_approval', 'screenshots', 'suite', 'workflow'].includes(s.type)) throw new Error(`Step "${s.id}": protect_files is only valid on an agent step.`);
-    if (s.test_map !== undefined && (typeof s.test_map !== 'boolean' || ['human_approval', 'screenshots', 'suite', 'workflow'].includes(s.type))) throw new Error(`Step "${s.id}": test_map must be true or false, on an agent step.`);
+    if (s.protect_files !== undefined && MACHINE_STEP_TYPES.includes(s.type)) throw new Error(`Step "${s.id}": protect_files is only valid on an agent step.`);
+    if (s.test_map !== undefined && (typeof s.test_map !== 'boolean' || MACHINE_STEP_TYPES.includes(s.type))) throw new Error(`Step "${s.id}": test_map must be true or false, on an agent step.`);
     if (s.type === 'screenshots') {
       // `type: screenshots` (#144): no agent; the screens listed in `from`'s `screenshots` output
       if (s.agent || s.agents) throw new Error(`Step "${s.id}": a screenshots step has no agent.`);
@@ -303,6 +326,12 @@ function loadWorkflow(file) {
     } else if (s.type === 'workflow') {
       // `type: workflow` (#174): a child run of another workflow, once or per `foreach` item
       validateWorkflowStep(s, file);
+    } else if (s.type === 'test_ids') {
+      // `type: test_ids` (#246): no agent; the test ids the E2E step definitions use and the renderer lacks
+      if (s.agent || s.agents) throw new Error(`Step "${s.id}": a test_ids step has no agent.`);
+      for (const key of ['steps', 'renderer']) {
+        if (s[key] !== undefined && (typeof s[key] !== 'string' || !s[key].trim())) throw new Error(`Step "${s.id}": ${key} must be a repository-relative folder (a template).`);
+      }
     } else if (s.type !== 'human_approval') {
       // `agents: [...]` = fan-out: the same prompt goes to several agents in parallel
       if (s.agents && (!Array.isArray(s.agents) || !s.agents.length)) throw new Error(`Step "${s.id}": agents must be a non-empty list.`);
@@ -324,9 +353,9 @@ function loadWorkflow(file) {
       if (w.grace !== undefined && parseDuration(w.grace, null) == null) throw new Error(`Step "${s.id}": wait.grace must be a duration such as 10m.`);
     }
     if (s.choices && s.type !== 'human_approval') throw new Error(`Step "${s.id}": choices is only valid for human_approval.`);
-    if (s.full_suite !== undefined && (s.full_suite !== 'warn' || ['human_approval', 'screenshots', 'suite', 'workflow'].includes(s.type))) throw new Error(`Step "${s.id}": full_suite must be "warn", on an agent step (a whole-suite command its agent starts is noted, #177).`);
-    if (s.commit_tests !== undefined && (s.commit_tests !== true || ['human_approval', 'screenshots', 'suite', 'workflow'].includes(s.type) || s.agents)) throw new Error(`Step "${s.id}": commit_tests must be true, on a single-agent step (the orchestrator commits the test files its agent left uncommitted, #209).`);
-    if (s.base_worktree !== undefined && (typeof s.base_worktree !== 'boolean' || ['human_approval', 'screenshots', 'suite', 'workflow'].includes(s.type) || !wf.orchestrator?.worktree)) throw new Error(`Step "${s.id}": base_worktree must be true or false, on an agent step of a workflow with orchestrator.worktree.`);
+    if (s.full_suite !== undefined && (s.full_suite !== 'warn' || MACHINE_STEP_TYPES.includes(s.type))) throw new Error(`Step "${s.id}": full_suite must be "warn", on an agent step (a whole-suite command its agent starts is noted, #177).`);
+    if (s.commit_tests !== undefined && (s.commit_tests !== true || MACHINE_STEP_TYPES.includes(s.type) || s.agents)) throw new Error(`Step "${s.id}": commit_tests must be true, on a single-agent step (the orchestrator commits the test files its agent left uncommitted, #209).`);
+    if (s.base_worktree !== undefined && (typeof s.base_worktree !== 'boolean' || MACHINE_STEP_TYPES.includes(s.type) || !wf.orchestrator?.worktree)) throw new Error(`Step "${s.id}": base_worktree must be true or false, on an agent step of a workflow with orchestrator.worktree.`);
     if (s.local_preview !== undefined && (s.type !== 'human_approval' || typeof s.local_preview !== 'boolean')) throw new Error(`Step "${s.id}": local_preview must be true or false, on a human_approval step.`);
     if (s.diff_base !== undefined && (s.type !== 'human_approval' || typeof s.diff_base !== 'string' || !s.diff_base.trim())) throw new Error(`Step "${s.id}": diff_base must be a ref (e.g. "origin/{{ inputs.base_branch }}"), on a human_approval step.`);
     if (s.save_to_issue !== undefined && (s.type !== 'human_approval' || !(s.choices || []).some((c) => c.id === s.save_to_issue))) throw new Error(`Step "${s.id}": save_to_issue must be the id of one of the step's choices (e.g. accept), on a human_approval step.`);
@@ -930,7 +959,7 @@ class WorkflowRun extends EventEmitter {
       if (!enabled) delete this.wf.agents[name];
     }
     for (const s of this.wf.steps) {
-      if (s.type === 'human_approval' || s.type === 'screenshots' || s.type === 'suite' || s.type === 'workflow') continue;
+      if (MACHINE_STEP_TYPES.includes(s.type)) continue;
       if (!s.agents) {
         if (!this.wf.agents[s.agent]) throw new Error(`Step "${s.id}" uses agent "${s.agent}", which is disabled for this run.`);
         continue;
@@ -1501,6 +1530,11 @@ class WorkflowRun extends EventEmitter {
       if (this.abort.signal.aborted) throw new Error('Cancelled');
       st.output = output;
       scope = { ...this.ctx, output, iteration: st.iteration };
+    } else if (step.type === 'test_ids') {
+      // no agent, no model call (#246): the missing test ids are the output, the transitions route it
+      output = this.runTestIdsStep(step, st);
+      st.output = output;
+      scope = { ...this.ctx, output, iteration: st.iteration };
     } else if (step.type === 'workflow') {
       // child runs (#174): their gates wait for the owner, and so does this run; no supervisor here
       output = await this.runChildWorkflows(step, st);
@@ -1561,7 +1595,7 @@ class WorkflowRun extends EventEmitter {
       if (step.wait) await this.afterAgentTurn(step, st);
     }
     const next = await this.finishStep(step, st, output, scope, t0);
-    return ['human_approval', 'screenshots', 'suite', 'workflow'].includes(step.type) ? next : this.checkStalls(step, st, output, t0, next, again);
+    return MACHINE_STEP_TYPES.includes(step.type) ? next : this.checkStalls(step, st, output, t0, next, again);
   }
 
   // ---- stall detection and the supervisor on call (#41) ---------------------------------------
@@ -2665,7 +2699,8 @@ class WorkflowRun extends EventEmitter {
   // One turn of an agent. `session` in the YAML (agent or defaults):
   // - persistent (default): one conversation for the whole run. With `max_context` (e.g. 150k), a turn
   //   that ends above it makes the next turn start a fresh session from the agent's handoff note
-  //   (never in the middle of a turn);
+  //   (never in the middle of a turn); with `fresh_after_idle` (e.g. 55m), so does a turn that comes
+  //   longer than that after the last one (#247: a cold prompt cache after a long gate wait);
   // - ephemeral: a fresh session per turn with only the prompt;
   // - handoff: a fresh session per turn that starts from the agent's latest handoff note.
   // Persistent and handoff agents end each turn with a handoff note (runs/<id>/handoffs/).
@@ -2844,6 +2879,19 @@ class WorkflowRun extends EventEmitter {
       if (old) this.closeSession(old, 'success');
       this.agentSessions.delete(agentName);
     }
+    // #247 `fresh_after_idle` (e.g. 55m, the prompt cache's lifetime): a persistent agent idle longer
+    // than that (a long gate wait) continues in a fresh session from its handoff note; resuming would
+    // rewrite its whole context at the cache-write price (the lesson of #244)
+    const idleMax = persistent && !retry && agent.fresh_after_idle !== undefined ? parseDuration(agent.fresh_after_idle, null) : null;
+    const warm = idleMax ? this.sessions.get(this.agentSessions.get(agentName)) : null;
+    if (warm?.lastTurnAt && Date.now() - warm.lastTurnAt > idleMax && this.handoffNotes.has(agentName)) {
+      this.closeSession(warm, 'success');
+      this.agentSessions.delete(agentName);
+      this.emitEvent('log', {
+        level: 'info', kind: 'idle_rotation', agent: agentName, step_id: stepId,
+        message: `[${agentName}] idle for ${Math.round((Date.now() - warm.lastTurnAt) / 60e3)} min (fresh_after_idle ${agent.fresh_after_idle}): this turn starts a fresh session from its handoff note`,
+      });
+    }
     let session = persistent ? this.sessions.get(this.agentSessions.get(agentName)) : null;
     if (!session) {
       session = this.openSession({
@@ -2945,6 +2993,7 @@ class WorkflowRun extends EventEmitter {
     };
     this.turnLog.push(rec);
     res.turnRec = rec;
+    session.lastTurnAt = Date.now();
     const max = persistent && !retry ? parseTokens(render(String(agent.max_context ?? ''), this.ctx)) : null;
     if (max && res.context.peak > max) {
       this.rotate.add(agentName);
@@ -3562,6 +3611,31 @@ class WorkflowRun extends EventEmitter {
     if (output.base_check?.log) this.emitEvent('file.saved', { step_id: step.id, path: path.join(this.runDir, output.base_check.log) });
     if (output.coverage?.path) this.emitEvent('file.saved', { step_id: step.id, path: path.join(this.runDir, output.coverage.path) });
     this.emitEvent('log', { level: output.status === 'pass' ? 'info' : 'warn', kind: 'suite', step_id: step.id, status: output.status, failures: output.failures.length, message: `${step.id}: ${output.message}` });
+    return output;
+  }
+
+  // `type: test_ids` (#246): the test ids the E2E step definitions use and the renderer lacks, in the
+  // run's checkout (src/engine/test-ids.js, the rule test/e2e-playwright.test.js uses too), with the
+  // project's own folders when the step names them (`steps`, `renderer`: templates, repository-relative).
+  // Output: { kind: 'test_ids', status: pass | missing | skipped, missing: [{ id, files }], message };
+  // skipped when the project has no step definitions (no BDD steps) or the run has no checkout.
+  runTestIdsStep(step, st) {
+    const dir = this.ctx.worktree_dir;
+    const folder = (key, def) => (step[key] ? render(String(step[key]), this.ctx).trim() : '') || def;
+    const folders = { steps: folder('steps', testIds.DEFAULT_STEPS), renderer: folder('renderer', testIds.DEFAULT_RENDERER) };
+    const base = { kind: 'test_ids', round: st.visits, steps: folders.steps, renderer: folders.renderer, missing: [] };
+    let output;
+    if (!dir || !fs.existsSync(dir)) {
+      output = { ...base, status: 'skipped', message: 'Test id check skipped: the run has no checkout.' };
+    } else if (!testIds.stepFiles(dir, folders).length) {
+      output = { ...base, status: 'skipped', message: `Test id check skipped: the project has no BDD step definitions in ${folders.steps}.` };
+    } else {
+      const missing = testIds.missingTestIds(dir, folders);
+      output = missing.length
+        ? { ...base, status: 'missing', missing, message: `${missing.length} test id(s) the E2E step definitions use are not in ${folders.renderer}:\n${testIds.missingTestIdLines(missing)}` }
+        : { ...base, status: 'pass', message: `Every test id the E2E step definitions use is in ${folders.renderer}.` };
+    }
+    this.emitEvent('log', { level: output.status === 'missing' ? 'warn' : 'info', kind: 'test_ids', step_id: step.id, status: output.status, message: `${step.id}: ${output.message}` });
     return output;
   }
 
