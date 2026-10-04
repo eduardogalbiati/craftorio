@@ -525,8 +525,30 @@ test('ai-development-local-hero (#247): on the visit from the gate the acceptanc
   assert.doesNotMatch(fromGate, /<handoff_note>/);
 });
 
+test('ai-development-local-hero (#247): changed tests the red check cannot run go back to the test writer once, are checked again, then develop gets the owner\'s request', { timeout: 120000 }, async (t) => {
+  const { transitions, prompts, promptsOf, finished } = await runAiDev(t, {
+    inputs: VALIDATED,
+    answers: { developer_check: [['changes', REQUEST], ['approve']] },
+    mockSequences: { suite: { red_check: ['fail', 'broken', 'fail'], suite: ['pass'] }, criteria_changed: [true] },
+  });
+  assert.equal(finished.status, 'success', finished.error);
+  const gate = transitions.indexOf('developer_check>acceptance_tests');
+  assert.deepEqual(transitions.slice(gate, gate + 6), [
+    'developer_check>acceptance_tests',
+    'acceptance_tests>red_check',
+    'red_check>acceptance_tests',
+    'acceptance_tests>red_check',
+    'red_check>develop',
+    'develop>developer_check',
+  ]);
+  const fix = withoutSkills(promptsOf('acceptance_tests')[2]);
+  assert.match(fix, /cannot run/, 'the test writer is told which changed files cannot run');
+  assert.equal(prompts.length, 2);
+  assert.ok(prompts[1].includes(REQUEST), 'the developer still receives the owner\'s request after the detour');
+});
+
 test('ai-development-local-hero (#247): after a gate wait longer than the prompt cache, the visit from the gate starts a fresh test-writer session from its handoff note', { timeout: 120000 }, async (t) => {
-  const { promptsOf, finished } = await runAiDev(t, {
+  const { events, promptsOf, finished } = await runAiDev(t, {
     inputs: VALIDATED,
     answers: { developer_check: [['changes', REQUEST], ['approve']] },
     mockSequences: { suite: { red_check: ['fail'], suite: ['pass'] }, criteria_changed: [false] },
@@ -540,4 +562,6 @@ test('ai-development-local-hero (#247): after a gate wait longer than the prompt
   assert.ok(fromGate, 'acceptance_tests ran a second time');
   assert.match(fromGate, /<handoff_note>/, 'a fresh session that starts from the test writer\'s handoff note');
   assert.ok(fromGate.includes(REQUEST), 'with the owner\'s request');
+  const rotation = events.filter((e) => e.type === 'log' && e.kind === 'idle_rotation');
+  assert.deepEqual(rotation.map((e) => [e.agent, e.step_id]), [['test_writer', 'acceptance_tests']], 'the run notes the fresh start once, for the test writer only');
 });

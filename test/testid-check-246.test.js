@@ -181,7 +181,51 @@ test('#246 run: an id still missing after two returns to develop does not loop: 
   assert.ok(transitions.includes('code_review>suite'), 'the run goes on to the review and the suite');
 });
 
-test('#246 run: a run without scenarios skips the check', { timeout: 120000 }, async (t) => {
+test('#246 run: on a review-fix round after the two returns are used up, the check goes on to the review instead of develop', { timeout: 120000 }, async (t) => {
+  const { transitions, finished } = await runWithScenarios(t, { mockSequences: { verdict: ['changes_requested', 'approved'] } });
+  assert.equal(finished.status, 'success', finished.error);
+  assert.equal(transitions.filter((x) => x === 'testid_check>develop').length, 2, `still at most twice in the run (got ${transitions.join(', ')})`);
+  const fix = transitions.indexOf('code_review>develop');
+  assert.ok(fix >= 0, `the reviewer asks for changes (got ${transitions.join(', ')})`);
+  assert.equal(transitions[fix + 1], 'develop>testid_check', 'the fix is checked');
+  const after = transitions.slice(fix + 2);
+  assert.notEqual(after[0], 'testid_check>develop', 'no third return');
+  const review = after.findIndex((x) => x.endsWith('>code_review'));
+  assert.ok(review >= 0 && !after.slice(0, review).some((x) => x.endsWith('>develop')), `develop's own routes lead back to the review (got ${after.join(', ')})`);
+});
+
+// a workflow with only a test_ids step on the given folders, run on `repo` (worktree_dir = the repository)
+async function runCheckOnly(t, repo, folders) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'testid-check-wf-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const file = path.join(dir, 'wf.yaml');
+  fs.writeFileSync(file, JSON.stringify({
+    name: 'testid-only',
+    orchestrator: { worktree: { repo: repo.replace(/\\/g, '/'), base: 'main', remote: false } },
+    agents: { dev: { provider: 'claude' } },
+    steps: [{ id: 'check', type: 'test_ids', ...folders, transitions: [{ when: 'true', goto: 'end' }] }],
+  }));
+  const run = new WorkflowRun({ file, inputs: { task: 'check' }, mock: true, runsDir: dir });
+  const events = [];
+  run.on('event', (ev) => events.push(ev));
+  await run.start();
+  return { finished: events.find((e) => e.type === 'workflow.finished'), output: events.find((e) => e.type === 'step.finished' && e.step_id === 'check')?.output };
+}
+
+test('#246 run: a test_ids step uses the project\'s own step and renderer folders, and is skipped with a note when its step folder has no definitions', { timeout: 60000 }, async (t) => {
+  const repo = makeRepo(t, { steps: false });
+  write(repo, 'e2e/steps/login.steps.ts', "page.getByTestId('login-button'); page.getByTestId('po-split-card');\n");
+  write(repo, 'web/ui/login.html', '<button data-testid="login-button">Log in</button>\n');
+  const own = await runCheckOnly(t, repo, { steps: 'e2e/steps', renderer: 'web/ui' });
+  assert.equal(own.finished.status, 'success', own.finished.error);
+  assert.equal(own.output.status, 'missing');
+  assert.deepEqual(own.output.missing, [{ id: 'po-split-card', files: ['e2e/steps/login.steps.ts'] }], 'login-button is in web/ui; src/renderer is not read');
+  const none = await runCheckOnly(t, repo, { steps: 'tests/bdd/steps', renderer: 'web/ui' });
+  assert.equal(none.output.status, 'skipped');
+  assert.match(none.output.message, /tests\/bdd\/steps/, 'the note names the folder it looked in');
+});
+
+test('#246 run: a run without scenarios skips the check',{ timeout: 120000 }, async (t) => {
   const { transitions, finished } = await runWithScenarios(t, { mockSequences: { e2e_scope: ['none'] } });
   assert.equal(finished.status, 'success', finished.error);
   assert.ok(!transitions.some((x) => x.includes('testid_check')), `no testid_check (got ${transitions.join(', ')})`);
