@@ -286,9 +286,9 @@ function demoLocalMerge(ws, projectId) {
   }, null, 2));
 }
 
-// The project's release history (#260, src/releases.js): two shipped releases, the last one with a
-// long issue title, a red-then-fixed history (its notes) and both suites' counts; the next release
-// is what demoLocalMerge merged locally (#11). The Backlog shows #8 as Released.
+// The project's release history (#260, src/releases.js): two shipped releases of closed issues, each
+// with its runs, cost, both suites' counts and notes (the last one fixed a regression before Ship);
+// the next release is what demoLocalMerge merged locally (#11). The Backlog shows #8 as Released.
 function demoReleases(ws, projectId) {
   const dir = path.join(ws.root, 'releases');
   fs.mkdirSync(dir, { recursive: true });
@@ -303,10 +303,10 @@ function demoReleases(ws, projectId) {
       },
       {
         version: 'v0.9', tag: 'v0.9', date: '2026-01-10T18:00:00.000Z', commit: 'c9d8e7f6a5b4c3d2e1f0a9b8c7d6e5f4a3b2c1d0', base: 'main',
-        issues: [{ number: 8, title: title(8) }, { number: 15, title: title(15) }],
-        runs: ['20260109-210000-demo0008', '20260110-093000-demo0015', '20260110-170000-rel00009'], cost: 21.84,
+        issues: [{ number: 8, title: title(8) }],
+        runs: ['20260109-210000-demo0008', '20260110-170000-rel00009'], cost: 6.84,
         tests: { unit: { status: 'pass', passed: 412, failed: 0 }, e2e: { status: 'pass', passed: 37, failed: 0 } },
-        notes: '# v0.9\n\n- #8 Document the workflow YAML\n- #15 Run safety\n\nThe release run found a regression in the resume dialog (the unit suite was red after #15 merged) and fixed it before Ship.\n\n3 runs, $21.84.',
+        notes: '# v0.9\n\n- #8 Document the workflow YAML\n\nThe release run found a regression in the workflow loader (the unit suite was red once the YAML examples merged) and fixed it before Ship.\n\n2 runs, $6.84.',
         status: 'shipped',
       },
     ],

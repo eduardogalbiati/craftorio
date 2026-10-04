@@ -101,7 +101,9 @@ module.exports = (ctx) => {
   function settleRelease(projectId, runId, summary = readSummary(runId)) {
     if (!summary) return null;
     const { ws } = ctx;
-    const shipped = summary.status === 'success' && summary.release ? summary.release : null;
+    // a real release that went out (it has its commit) is shipped whatever the run did next (a build
+    // that failed after the push and the tag); a simulated one only when its run succeeded
+    const shipped = summary.release && (summary.release.commit || summary.status === 'success') ? summary.release : null;
     const outcome = shipped ? 'shipped' : summary.status === 'cancelled' ? 'held' : 'failed';
     const stage = roadmaps.readRoadmap(ws.backlog, projectId).stages.find((s) => s.release?.runId === runId);
     const history = releases.readReleases(ws.releases, projectId);
