@@ -594,6 +594,25 @@ test('#243 guard: onClick [data-rm=start] on a planned or done roadmap still con
   assert.equal(startCalls.length, 0);
 });
 
+test('#237 onClick [data-rm=start] on a paused roadmap whose scoped stage is finished resumes the whole roadmap: "Resume the roadmap", no stage sent', async () => {
+  const confirms = [];
+  const { BacklogRoadmap, startCalls } = loadRoadmap({ confirmDialog: async (...args) => { confirms.push(args); return true; } });
+  const ctx = makeCtx('proj-f');
+  await BacklogRoadmap.onClick({ target: startButtonTarget() }, ctx, threeStageData(['done', 'done', 'planned'], { state: 'paused', scope: { stage: 'st2' } }));
+  await BacklogRoadmap.onClick({ target: startButtonTarget() }, ctx, threeStageData(['done', 'done', 'planned'], { state: 'paused', scope: { stage: 'gone' } }));
+  assert.deepEqual(confirms.map(([title, , label]) => [title, label]), [['Resume the roadmap', 'Resume'], ['Resume the roadmap', 'Resume']]);
+  assert.deepEqual(startCalls.map((c) => c.stage), [null, null]);
+});
+
+test('#237 html: a paused roadmap whose scoped stage is finished or gone no longer shows "stage N only"', () => {
+  const { BacklogRoadmap } = loadRoadmap();
+  const finished = BacklogRoadmap.html(threeStageData(['done', 'done', 'planned'], { state: 'paused', scope: { stage: 'st2' } }), () => {}, SHOW_ALL);
+  assert.doesNotMatch(finished, /stage \d+ only/);
+  assert.match(finished, /<span class="badge warn">paused<\/span>/);
+  const gone = BacklogRoadmap.html(threeStageData(['done', 'done', 'planned'], { state: 'paused', scope: { stage: 'gone' } }), () => {}, SHOW_ALL);
+  assert.doesNotMatch(gone, /stage \d+ only/);
+});
+
 // ---- Retry on a failed item: the kept-work question (#170) --------------------------------
 
 test('onClick [data-rm-item=retry]: a plain retry (no kept work) calls roadmapItem once, unconfirmed, and never opens the kept-work dialog', async () => {
