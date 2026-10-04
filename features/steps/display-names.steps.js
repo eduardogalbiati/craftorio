@@ -55,7 +55,8 @@ Given('the running demo run {string} has moved on to the step {string}', async (
 When('I search the runs for {string}', async ({ e2e }, text) => {
   const page = e2e.window;
   await page.getByRole('textbox', { name: 'Search runs', exact: true }).filter({ visible: true }).first().fill(text);
-  await expect(page.getByTestId('run-list-row').filter({ visible: true }).first()).toContainText(text, { timeout: LOAD_TIMEOUT });
+  // the row shows its task and title, not the run id: the id is its data-run attribute
+  await expect(page.locator(`[data-testid="run-list-row"][data-run$="${text}"]`).filter({ visible: true }).first()).toBeVisible({ timeout: LOAD_TIMEOUT });
 });
 
 // the Run screen's Chat / Details switch
