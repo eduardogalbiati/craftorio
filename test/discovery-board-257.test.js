@@ -116,6 +116,29 @@ test('a move within the same column with an index reorders it and adds no histor
   assert.equal(discovery.readCard(dir, P, c).column, 'shape');
 });
 
+test('a reorder within the column snapshots no version of the document', (t) => {
+  const { dir } = tmp(t);
+  const a = cardIn(dir, 'shape', { title: 'A', text: 'doc' });
+  cardIn(dir, 'shape', { title: 'B' });
+  const before = discovery.listVersions(dir, P, a).length;
+  discovery.moveCard(dir, P, a, 'shape', { by: 'tester', index: 1 });
+  assert.equal(orderOf(dir, 'shape')[1], a);
+  assert.equal(discovery.listVersions(dir, P, a).length, before);
+});
+
+test('a board.json from before the board (Inbox and Triage only) gains Shape and Define with a limit of 5, its order kept', (t) => {
+  const { dir } = tmp(t);
+  const id = discovery.createCard(dir, P, { title: 'Old card' }).id;
+  discovery.moveCard(dir, P, id, 'triage', { by: 'tester' });
+  const file = path.join(dir, P, 'board.json');
+  fs.writeFileSync(file, JSON.stringify({ columns: [{ id: 'inbox', title: 'Inbox', wip: null }, { id: 'triage', title: 'Triage', wip: null }], order: { inbox: [], triage: [id] } }));
+  const board = discovery.readBoard(dir, P);
+  assert.deepEqual(board.columns.map((c) => [c.id, c.wip]), [['inbox', null], ['triage', null], ['shape', 5], ['define', 5], ['ready', null]]);
+  assert.deepEqual(board.order.triage, [id]);
+  discovery.moveCard(dir, P, id, 'shape', { by: 'tester' });
+  assert.deepEqual(orderOf(dir, 'shape'), [id]);
+});
+
 // ---- 4. past a WIP limit --------------------------------------------------------------------------
 
 test('the store never refuses a move past a WIP limit: a 6th card moves into Shape', (t) => {

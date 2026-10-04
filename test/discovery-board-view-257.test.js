@@ -180,6 +180,28 @@ test('the type filter hides the cards of other types', async () => {
   assert.deepEqual(page.visibleCardIds(), [rfc.id]);
 });
 
+test('the tag filter shows only the cards with that tag', async () => {
+  const csv = card({ title: 'Export CSV', column: 'triage', tags: ['export', 'runs'] });
+  const pdf = card({ title: 'Export PDF', column: 'shape', tags: ['export'] });
+  const dark = card({ title: 'Dark mode', column: 'triage', tags: ['ui'] });
+  const page = await openBoard({ cards: [csv, pdf, dark] });
+  await page.setField(page.$('[data-testid="discovery-filter-tag"]'), 'export');
+  assert.deepEqual(page.visibleCardIds().sort(), [csv.id, pdf.id].sort());
+  await page.setField(page.$('[data-testid="discovery-filter-tag"]'), '');
+  assert.equal(page.visibleCardIds().length, 3, 'All tags shows every card again');
+});
+
+test('the author filter shows only that author\'s cards, combined with the type filter', async () => {
+  const anaBug = card({ title: 'Crash', type: 'bug', column: 'triage', author: 'ana' });
+  const anaIdea = card({ title: 'Themes', column: 'shape', author: 'ana' });
+  const bo = card({ title: 'Sync', column: 'triage', author: 'bo' });
+  const page = await openBoard({ cards: [anaBug, anaIdea, bo] });
+  await page.setField(page.$('[data-testid="discovery-filter-author"]'), 'ana');
+  assert.deepEqual(page.visibleCardIds().sort(), [anaBug.id, anaIdea.id].sort());
+  await page.setField(page.$('[data-testid="discovery-filter-type"]'), 'idea');
+  assert.deepEqual(page.visibleCardIds(), [anaIdea.id]);
+});
+
 test('the search matches card titles and documents', async () => {
   const byTitle = card({ title: 'Keyboard shortcuts', column: 'triage' });
   const byDoc = card({ title: 'Power users', column: 'shape', document: 'They want keyboard navigation everywhere.' });

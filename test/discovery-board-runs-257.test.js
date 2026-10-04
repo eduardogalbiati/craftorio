@@ -42,6 +42,19 @@ test('a run that failed, was cancelled or wrote nothing records nothing, and ano
   assert.equal(page.callsTo('recordDiscoveryResult').length, 0);
 });
 
+test('a failed or cancelled run drops its link to the card; a run still going keeps it', async () => {
+  const c = card({ title: 'Export', column: 'shape', document: 'draft' });
+  const page = await openBoard({ cards: [c] });
+  startLink(page, 'run-f', { projectId: P, cardId: c.id, source: 'write-review' });
+  startLink(page, 'run-c', { projectId: P, cardId: c.id, source: 'ai-arena' });
+  startLink(page, 'run-on', { projectId: P, cardId: c.id, source: 'write-review' });
+  finished(page, { run_id: 'run-f', status: 'failed', outputs: {} });
+  finished(page, { run_id: 'run-c', status: 'cancelled', outputs: {} });
+  await settle(40);
+  assert.deepEqual(Object.keys(JSON.parse(page.sandbox.localStorage.getItem('discovery.runs') || '{}')), ['run-on']);
+  assert.equal(page.callsTo('recordDiscoveryResult').length, 0);
+});
+
 test('the result shows in the open card: the new document, without closing the panel', async () => {
   const c = card({ title: 'Export', column: 'shape', document: 'draft' });
   const page = await openBoard({ cards: [c] });
