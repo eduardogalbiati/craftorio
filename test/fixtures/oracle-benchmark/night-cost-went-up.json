@@ -1,0 +1,15 @@
+{
+  "date": "2026-10-02",
+  "question": "Why did the cost go up last night?",
+  "outsideSession": {
+    "answer": "Broke the night's cost down by agent and step: the test writer's turns re-read a growing context, whole suites were started by agents and commands were cut by the tool's timeout (the analysis behind #176-#179).",
+    "evidence": ["cost by agent and step per run", "test writer turns x context and cache re-read", "full-suite starts and durations", "commands cut by a tool timeout"]
+  },
+  "oracleMistake": "Had no tool to break a run's cost down by agent and step.",
+  "tools": ["run_analysis"],
+  "delegates": ["analyzer"],
+  "skillRules": [
+    "run_analysis",
+    "delegate"
+  ]
+}

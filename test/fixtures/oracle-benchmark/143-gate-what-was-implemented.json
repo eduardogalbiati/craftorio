@@ -1,0 +1,19 @@
+{
+  "date": "2026-10-02",
+  "question": "#143 is at the gate: what was implemented, is it right?",
+  "outsideSession": {
+    "answer": "All five E2E skills (js, python, go, java, csharp) run scenarios by tag; Go, Java and C# had it since the run's first commit.",
+    "evidence": ["git log/diff main...branch (every commit of the run)", "commit 4fde176", "scripts/screenshot.js:991-996"]
+  },
+  "oracleMistake": "Said only the JS and Python skills run scenarios by tag (it read only the second round's diff), and blamed the screenshot script before reading it.",
+  "tools": ["repo_git", "repo_read", "run_events"],
+  "delegates": [],
+  "skillRules": [
+    "whole branch",
+    "base\\.\\.\\.branch",
+    "primary source",
+    "file:line",
+    "hypothes",
+    "correct"
+  ]
+}
