@@ -25,6 +25,21 @@ Read this before touching run listings, the Backlog queue, pending gates, notifi
   `lastSeen`); Revoke removes the entry. `phone-gates/secret`: the key that signs the gate links,
   created once, so a link keeps working across restarts until it expires. Pairing codes live in
   memory only: a restart voids them.
+- `discovery/<project id>/` (#256, `src/discovery.js`): the discovery cards, private to the
+  workspace (`discovery/.gitignore` ignores everything; never committed, never sent to the git
+  platform). `board.json` (columns `{ id, title, wip }`, the card order per column),
+  `cards/<card id>/` (`<yyyymmdd>-<4 hex>`) with `card.json` (id, title, type `idea | prd | rfc | bug |
+  hotfix`, column, author, created, updated, tags, clarity, estimate, links, history `[{ ts, from,
+  to, by }]`), `document.md`, `acceptance.md`, `versions/<iso ts>-<reason>.md` (a snapshot of the
+  document on each column move and before a merge; `snapshotVersion` is there for agent outputs),
+  `attachments/` (any file up to 50 MB, original names, a taken name gets a `-2` suffix, the same
+  content is stored once) and `conversation.jsonl` (the thread, appended). `archive/<card id>/`: a
+  discarded or merged card, same layout, `card.archived = { ts, reason, by, mergedInto? }`. Every
+  file is written whole (temp file + rename, `writeFileAtomic` in `src/state-file.js`); project
+  ids, card ids and attachment names are checked before a path is built, so nothing outside a
+  card's folder is read or written. No index row: the folders are read directly. Screens, the
+  Oracle and agents reach a card only through the `discovery:` channels
+  (`src/service/channels/discovery.js`), never by reading the folder.
 - **The gate answer record**: a gate's `approval.resolved` event in `events.jsonl` carries
   `approval_id`, `step_id`, `choice` (or `approved`), `by`, `wait_ms`, `feedback?`, `commit?`;
   answered from a paired phone it adds `answered_by: "owner"`, `via: "mobile"`, `device` (the

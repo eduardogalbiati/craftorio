@@ -26,6 +26,19 @@ function writeJsonSafe(file, data, { validate } = {}) {
   return data;
 }
 
+/**
+ * Writes a text or binary file whole or not at all (temp file + rename), without a .bak: the
+ * discovery store's card files (#256, src/discovery.js).
+ * @param {string} file
+ * @param {string | Buffer} content
+ */
+function writeFileAtomic(file, content) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const tmp = `${file}.${process.pid}.tmp`;
+  fs.writeFileSync(tmp, content);
+  renameWithRetry(tmp, file);
+}
+
 // Windows: a reader holding the file open makes the rename fail with EPERM/EBUSY/EACCES for a
 // moment. Retry the rename only (never copy over the file: a crash mid-copy would leave half a
 // file); when it keeps failing, drop the temp file and throw, the old file stays whole.
@@ -47,5 +60,7 @@ function renameWithRetry(tmp, file, attempts = 10) {
 }
 
 module.exports = {
+  renameWithRetry,
+  writeFileAtomic,
   writeJsonSafe,
 };

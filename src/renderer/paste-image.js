@@ -19,7 +19,7 @@
   const TYPES = { 'image/gif': 'gif', 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
   const HINT = 'Paste an image (Ctrl+V)';
   // fields that already handle a pasted image themselves
-  const OWN_PASTE = '#po-question, .oracle-input';
+  const OWN_PASTE = '#inbox-text, #po-question, .oracle-input';
 
   const mb = (n) => `${Math.round(n / 1024 / 1024)} MB`;
   const formatSize = (n) => (n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);

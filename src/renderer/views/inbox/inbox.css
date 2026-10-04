@@ -1,0 +1,43 @@
+/* The Inbox (views/inbox/inbox.js, #256): the quick capture box, the list of Inbox cards and the
+   open card next to it. Reuses .field, .btn, .badge, .empty-state, .md and .modal (style.css). */
+.inbox-capture { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; max-width: 820px; margin-bottom: 16px; }
+.inbox-capture.dropping { outline: 2px dashed var(--accent); outline-offset: -4px; }
+.inbox-capture textarea { min-height: 64px; }
+
+.inbox-files { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.inbox-files:empty { display: none; }
+.inbox-file { display: inline-flex; align-items: center; gap: 6px; max-width: 260px; padding: 3px 4px 3px 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel-2); font-size: 12px; }
+.inbox-file.image { padding-left: 4px; }
+.inbox-file-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.inbox-file-x { flex: none; border: none; background: none; color: var(--muted); font: inherit; font-size: 14px; line-height: 1; padding: 2px 5px; border-radius: 5px; cursor: pointer; }
+.inbox-file-x:hover { color: var(--red); }
+.inbox-file-x:focus-visible, .inbox-card-title:focus-visible, .inbox-thumb:focus-visible { outline: var(--focus-ring); outline-offset: 1px; }
+.inbox-thumb { flex: none; width: 44px; height: 44px; object-fit: cover; border-radius: 5px; cursor: zoom-in; }
+
+.inbox-layout { display: grid; grid-template-columns: minmax(0, 820px); gap: 16px; align-items: start; }
+.inbox-layout.with-detail { grid-template-columns: minmax(280px, 2fr) minmax(0, 3fr); }
+.inbox-list { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.inbox-card { display: flex; align-items: center; gap: 12px; padding: 10px 12px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; cursor: pointer; }
+.inbox-card:hover { border-color: #3a4152; }
+.inbox-card.active { border-color: var(--accent); }
+.inbox-card-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.inbox-card-title { border: none; background: none; padding: 0; color: var(--text); font: inherit; font-weight: 600; text-align: left; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border-radius: 4px; }
+.inbox-card-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: 0; }
+.inbox-card-files { display: inline-flex; align-items: center; gap: 3px; }
+.inbox-clip { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+.inbox-detail { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.inbox-detail-head { display: flex; align-items: flex-start; gap: 12px; }
+.inbox-detail-head h2 { flex: 1; min-width: 0; margin: 0; font-size: 17px; font-weight: 700; color: var(--text); text-transform: none; letter-spacing: 0; overflow-wrap: anywhere; }
+.inbox-detail .error:empty { display: none; }
+.inbox-section { border-top: 1px solid var(--border); padding-top: 10px; min-width: 0; }
+.inbox-section-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.inbox-section-head h3 { flex: 1; margin: 0; font-size: 13px; }
+.inbox-doc { max-width: none; font-size: 13px; }
+.inbox-edit { border: 1px solid var(--border); border-radius: 10px; padding: 12px; background: var(--panel-2); }
+.inbox-thread { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
+.inbox-entry-text { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; }
+.inbox-note { display: flex; align-items: flex-end; gap: 8px; }
+.inbox-note textarea { flex: 1; min-height: 44px; }
+
+@media (max-width: 1000px) { .inbox-layout.with-detail { grid-template-columns: minmax(0, 1fr); } }

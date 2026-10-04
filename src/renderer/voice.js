@@ -10,11 +10,12 @@
 // uses app.js globals when present (showToast, errMsg).
 (function (root) {
   // fields where talking helps: supervisor questions, gate feedback, the Start drawer (task, issue
-  // intake), Write & Review and Arena prompts, the backlog PO question, the resume instruction
+  // intake), Write & Review and Arena prompts, the Inbox capture box, the backlog PO question, the resume instruction
   const VOICE_FIELDS = [
     '#arena-task',
     '#duo-goal',
     '#duo-prompt',
+    '#inbox-text',
     '#po-question',
     '#sup-question',
     '.duo-ask-text',

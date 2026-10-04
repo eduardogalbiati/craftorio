@@ -4,7 +4,7 @@
 //   npx electron scripts/screenshot.js --view <view> [options]      (or: npm run screenshot -- ...)
 //
 //   --view <name>      dashboard, sessions, projects, project, backlog, roadmap, artifacts, workflows, agents,
-//                      skills, usage, analytics, oracle, nightwatch, settings, duo, arena,
+//                      skills, usage, analytics, oracle, nightwatch, settings, duo, arena, inbox,
 //                      run-chat, run
 //                      (default dashboard, the menu's Home; projects: Settings › Projects; roadmap: the
 //                      same as backlog --mode roadmap; the Supervisor's drawer: --view workflows --click
@@ -24,6 +24,8 @@
 //                      analytics: usage | performance | run | occupancy (performance: a demo git repository and a
 //                      marker; run: AI Development runs, the newest shown; occupancy: 30 days of runs and nights)
 //   --mode <name>      backlog: list | kanban | epics (roadmap: the Roadmap screen, #254)
+//                      inbox (#256): empty (no card: the empty state; without it, demo cards, the
+//                      newest with an image; a card open: --click "[data-testid=inbox-card]")
 //   --run <mock|dir>   run-chat: a simulated software-development run (default) or a copy of a run folder
 //   --workflow <file>  the workflow of the simulated run (default software-development.yaml)
 //   --pipeline <file>  run: starts this saved pipeline instead (#135, e.g. develop-to-retrospective.yaml):
@@ -109,6 +111,8 @@ const VIEWS = {
   // run: one AI Development run in depth against its workflow's runs (#228); occupancy: the 24/7 tab (#188)
   analytics: { tabs: ['usage', 'performance', 'run', 'occupancy'] },
   backlog: { modes: ['list', 'kanban', 'roadmap', 'epics'] },
+  // the Inbox (#256): demo discovery cards; empty: none (the empty state)
+  inbox: { modes: ['empty'] },
   workflows: { tabs: ['runs', 'definitions', 'builder', 'pipelines'] },
   settings: { tabs: ['general', 'projects', 'agents', 'execution', 'phone', 'about'] },
   'run-chat': { run: true },
@@ -664,6 +668,36 @@ function solidPng(w, h, [r, g, b]) {
   const row = Buffer.concat([Buffer.from([0]), Buffer.from(Array.from({ length: w }, () => [r, g, b]).flat())]);
   const raw = Buffer.concat(Array.from({ length: h }, () => row));
   return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]);
+}
+
+// The Inbox's discovery cards (#256): three ideas in the Inbox (the newest with an image, a CSV and
+// two notes; one from another author; one with a long title, an audio file and a PDF) and one
+// already in Triage (a target for Merge into…).
+function demoDiscovery(ws, projectId) {
+  const discovery = require('../src/discovery');
+  const min = 60000;
+  const card = (minsAgo, author, title, text, column) => {
+    const c = discovery.createCard(ws.discovery, projectId, { title, text, author, column });
+    // created in the past, so the list shows different ages
+    const file = path.join(ws.discovery, projectId, 'cards', c.id, 'card.json');
+    const at = new Date(Date.now() - minsAgo * min).toISOString();
+    fs.writeFileSync(file, JSON.stringify({ ...JSON.parse(fs.readFileSync(file, 'utf8')), created: at, updated: at }, null, 2));
+    return c.id;
+  };
+  card(6 * 24 * 60, 'eduardo', 'Guided setup wizard', 'A first-run wizard that checks the CLIs and creates the first project.', 'triage');
+  const call = card(2 * 24 * 60, 'support', 'Customer call: onboarding takes too long, people give up at the CLI install step before they ever start a run',
+    'Three customers this week stopped at the CLI install step. The recording and the notes are attached.');
+  discovery.addAttachment(ws.discovery, projectId, call, { name: 'call-2026-10-02.m4a', data: Buffer.from('demo audio') });
+  discovery.addAttachment(ws.discovery, projectId, call, { name: 'call-notes.pdf', data: Buffer.from('%PDF-1.4 demo') });
+  card(3 * 60, 'marina', 'Dark mode for the run log', 'The run log is hard to read at night: follow the app theme.');
+  const csv = card(5, 'eduardo', 'Export the night\'s runs as CSV', [
+    'The owner wants a spreadsheet of the night\'s runs: the morning summary is read on the phone, the numbers are compared in a spreadsheet.', '',
+    '## Open questions', '', '- Which columns: cost, duration, status, issue?', '- One file per night or per week?',
+  ].join('\n'));
+  discovery.addAttachment(ws.discovery, projectId, csv, { name: 'runs-table.png', data: solidPng(320, 180, [124, 156, 255]) });
+  discovery.addAttachment(ws.discovery, projectId, csv, { name: 'night-2026-10-03.csv', data: Buffer.from('run,status,cost_usd\n20261003-2210,success,1.84\n') });
+  discovery.appendConversation(ws.discovery, projectId, csv, { kind: 'note', author: 'eduardo', text: 'Asked for it twice this month.', ts: new Date(Date.now() - 4 * min).toISOString() });
+  discovery.appendConversation(ws.discovery, projectId, csv, { kind: 'note', author: 'marina', text: 'The Analytics screen already has the numbers: reuse its query.', ts: new Date(Date.now() - 2 * min).toISOString() });
 }
 
 // #225, #185, #182: finished runs whose artifacts the E2E scenarios (features/artifacts.feature,
@@ -1383,6 +1417,7 @@ function main() {
     if (args.view === 'backlog') demoRoadmap(ws, project.id, args.live, args.budget);
     if (args.view === 'backlog') demoPoConversation(ws, project.id, args.po);
     if (args.view === 'backlog' && project.folder) demoBacklogRefresh(ws, project.folder, project.id);
+    if (args.view === 'inbox' && args.mode !== 'empty') demoDiscovery(ws, project.id);
     // also on Artifacts: a second run group (its document.md) for Collapse all / Expand all (#126)
     if (['artifacts', 'backlog', 'duo'].includes(args.view)) demoEnrichRun(ws, project.id);
     if (args.view === 'analytics') demoAnalyticsRuns(ws, project.id);
@@ -1626,7 +1661,7 @@ function main() {
       await js(`const m = document.querySelector('#an-marker'); m.value = ${JSON.stringify(marker)}; m.dispatchEvent(new Event('change'));`);
       await pause(1500);
     }
-    if (args.mode && args.mode !== 'roadmap') await click(`#view-backlog [data-mode="${args.mode}"]`);
+    if (v === 'backlog' && args.mode && args.mode !== 'roadmap') await click(`#view-backlog [data-mode="${args.mode}"]`);
     // --po (#180): the Product Owner's drawer, asking (working, writing) or with its last answer
     // (#235: with --workflow, the workflow it plans with, as if the owner had chosen it for the project)
     if (args.po && args.workflowGiven) await js(`localStorage.setItem('po.workflow.' + window.BacklogActions.projectId(), ${JSON.stringify(args.workflow)});`);

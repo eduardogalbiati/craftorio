@@ -129,6 +129,8 @@ function layout(root) {
     oracle: path.join(root, 'oracle'),
     // images pasted into the AI prompt fields (#130, src/pasted-images.js): pending/ until submitted
     attachments: path.join(root, 'attachments'),
+    // discovery cards, private to the workspace (#256, src/discovery.js): <project id>/cards/<card id>/, created on demand
+    discovery: path.join(root, 'discovery'),
     settings: path.join(root, 'settings.json'),
     // titles the user gave to CLI sessions on the Sessions screen ({ "<provider>:<id>": title })
     sessionTitles: path.join(root, 'session-titles.json'),
