@@ -80,3 +80,54 @@ test('engine: a killed attempt without a price for its model is "cost not record
   assert.equal(finished.summary.sessions.find((s) => s.agent === 'a').cost_not_recorded, true);
   assert.equal(finished.summary.cost_accounting, 'per_turn');
 });
+
+// A run built but not started: its sessions and stopped attempts are driven directly, the way a real
+// (non-mock) turn reaches them (a mock run never prices a CLI error result nor checks budgets).
+function idleRun(opts = {}) {
+  const run = new WorkflowRun({ file: path.join(__dirname, 'fixtures', 'attempt-timeout.yaml'), inputs: {}, mock: true, runsDir: os.tmpdir(), ...opts });
+  const events = [];
+  run.on('event', (ev) => events.push(ev));
+  const session = run.openSession({ agent: 'a', provider: 'claude', model: 'm', stepId: 'work' });
+  return { run, events, session };
+}
+const stoppedError = (message, partial) => Object.assign(new Error(message), { partial });
+
+test('countStoppedAttempt: an error result that reported its cost counts that cost, not an estimate', () => {
+  const { run, events, session } = idleRun({ prices: { m: { input: 1000, output: 1000 } } });
+  const { costUsd, note } = run.countStoppedAttempt({ session, agent: { model: 'm' }, stepId: 'work', turn: 1, attempt: 1 },
+    stoppedError('Claude reported an error', { usage: { input: 10, output: 5 }, costUsd: 0.42, modelCalls: 3 }));
+  assert.equal(costUsd, 0.42);
+  assert.equal(note, ' (US$ 0.42)');
+  const stopped = events.find((e) => e.type === 'session.attempt_stopped');
+  assert.equal(stopped.cost_usd, 0.42);
+  assert.equal(stopped.estimated, false);
+  assert.equal(stopped.session.cost_usd, 0.42);
+  assert.equal(stopped.session.estimated_cost_usd, undefined, 'a reported cost is not estimated');
+  assert.equal(stopped.session.tokens.input, 10, 'its tokens are counted in the session');
+});
+
+test('countStoppedAttempt: an attempt with no model call and no cost (failed before the CLI ran) counts nothing', () => {
+  const { run, events, session } = idleRun({ prices: { m: { input: 1000 } } });
+  const res = run.countStoppedAttempt({ session, agent: { model: 'm' }, stepId: 'work', turn: 1, attempt: 1 },
+    stoppedError('Command "claude" not found in PATH.', { usage: null, costUsd: null, modelCalls: 0 }));
+  assert.deepEqual(res, { costUsd: 0, note: '' });
+  assert.equal(events.some((e) => e.type === 'session.attempt_stopped'), false);
+  assert.equal(session.costUsd, 0);
+});
+
+test('checkBudget: the provider budget sees the estimated cost of a stopped attempt', () => {
+  // US$ 1 per million input tokens: 9 M tokens = US$ 9 of a US$ 10 budget
+  const { run, events, session } = idleRun({
+    prices: { m: { input: 1, output: 1 } },
+    budget: { claude: { name: 'Claude Code', limitUsd: 10, usedUsd: 0, blockOnLimit: true } },
+  });
+  run.checkBudget('claude');
+  assert.equal(events.some((e) => e.type === 'log' && /monthly budget/.test(e.message)), false, 'nothing spent yet');
+  run.countStoppedAttempt({ session, agent: { model: 'm' }, stepId: 'work', turn: 1, attempt: 1 },
+    stoppedError('Timed out after 1800s', { usage: { input: 9e6 }, costUsd: null, modelCalls: 359 }));
+  run.checkBudget('claude');
+  assert.ok(events.some((e) => e.type === 'log' && /90% of its monthly budget \(\$9\.00 of \$10\)/.test(e.message)));
+  run.countStoppedAttempt({ session, agent: { model: 'm' }, stepId: 'work', turn: 1, attempt: 2 },
+    stoppedError('Timed out after 1800s', { usage: { input: 2e6 }, costUsd: null, modelCalls: 40 }));
+  assert.throws(() => run.checkBudget('claude'), /Monthly budget for Claude Code reached \(\$11\.00 of \$10\)/);
+});

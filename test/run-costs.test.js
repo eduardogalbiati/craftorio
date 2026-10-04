@@ -344,3 +344,25 @@ test('past runs (#233): a stopped attempt of an old run is "cost not recorded", 
   assert.equal(figures.timeline.find((b) => b.step === 'work').costNotRecorded, true, 'the step\'s bar is flagged as not recorded');
   assert.equal(fs.readFileSync(path.join(dir, 'events.jsonl'), 'utf8'), eventsText);
 });
+
+test('past runs (#233): an old run\'s stopped attempt flags only the bar of its agent\'s step running at that time', () => {
+  const z = tokens(0, 0, 0, 0);
+  const events = [
+    { ts: at(0), type: 'workflow.started', run_id: 'r-two', workflow: 'AI Development', file: 'ai-development.yaml', mock: false, inputs: { task: 'Old task' } },
+    { ts: at(0), type: 'step.started', step_id: 'plan', visit: 1, step_type: 'agent', agent: 'developer' },
+    { ts: at(0), type: 'session.opened', session_id: 's1', session: snap('s1', 'developer', 'claude', 'handoff', 0, 0, z) },
+    { ts: at(10), type: 'step.finished', step_id: 'plan', visit: 1, duration_ms: 10 * 60e3, output: {} },
+    { ts: at(10), type: 'step.started', step_id: 'implement', visit: 1, step_type: 'agent', agent: 'developer' },
+    { ts: at(41), type: 'log', level: 'error', message: '[developer] attempt 1/2 failed: Timed out after 1800s' },
+    { ts: at(45), type: 'step.finished', step_id: 'implement', visit: 1, duration_ms: 35 * 60e3, output: {} },
+    { ts: at(45), type: 'step.started', step_id: 'review', visit: 1, step_type: 'agent', agent: 'reviewer' },
+    { ts: at(50), type: 'step.finished', step_id: 'review', visit: 1, duration_ms: 5 * 60e3, output: {} },
+  ];
+  const summary = {
+    run_id: 'r-two', workflow: 'AI Development', status: 'success', mock: false, started_at: at(0), finished_at: at(50), duration_ms: 50 * 60e3,
+    inputs: { task: 'Old task' }, tokens: z, cost_usd: 0, sessions: [{ ...snap('s1', 'developer', 'claude', 'handoff', 1, 0, z), status: 'success' }],
+  };
+  events.push({ ts: at(50), type: 'workflow.finished', status: 'success', error: null, summary });
+  const bars = runFigures({ summary, events }).timeline;
+  assert.deepEqual(['plan', 'implement', 'review'].map((s) => !!bars.find((b) => b.step === s).costNotRecorded), [false, true, false]);
+});
