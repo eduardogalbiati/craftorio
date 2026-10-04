@@ -153,6 +153,15 @@ textconv, and refuses options that write or start a program (`--output`, `-O`, `
 `--exec`...). Any other command (checkout, commit, reset, push) is refused, and with no built-in
 tool there is no shell or file write to try: read-only is enforced, not a convention. `app_source`
 points at the project holding the orchestrator's source (its `package.json` name), the only way to
-read the app's code (the packaged app's is in app.asar). The service, not the model, writes its
+read the app's code (the packaged app's is in app.asar). #184 adds: `run_analysis` (runs' cost and
+tokens by agent and step, review rounds, timeouts, invalid outputs, refused calls, merge conflicts,
+tool timeouts, the test writer's context, whole-suite starts; `src/oracle-run-analysis.js`, no
+model); `issues_search`, `issue_view` and `labels` (`src/oracle-platform.js`: gh / glab `issue
+list`, `issue view` and `label list` only, built by the app on the synced backlog's repository,
+never a command from the model); and the `checker` delegate (`src/oracle-check.js`): one test
+runner (node, npm, npx, pytest, go, dotnet, mvn...) with plain arguments, no shell syntax or inline
+code, on a detached scratch worktree under `<workspace>/oracle/checks/` removed afterwards, with
+`MULTIAGENT_SIMULATION_ONLY=1`, stopped after 2 min; a longer check is a `check.run` card (20 min)
+the owner confirms. The service, not the model, writes its
 files (storage.md). The Oracle's chat replies are in the owner's language, a deliberate exception
 to the English rule; everything it writes for the product is in English (skill `oracle`).

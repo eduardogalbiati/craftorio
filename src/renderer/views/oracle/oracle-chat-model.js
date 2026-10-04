@@ -111,7 +111,7 @@
     dismissed: ['Dismissed', 'idle'],
     undone: ['Undone', 'idle'],
   };
-  const DELEGATES = { analyzer: 'Analyzer', 'issue-draft': 'Product Owner (issue draft)', 'product-owner': 'Product Owner', supervisor: 'Supervisor' };
+  const DELEGATES = { analyzer: 'Analyzer', checker: 'Checker', 'issue-draft': 'Product Owner (issue draft)', 'product-owner': 'Product Owner', supervisor: 'Supervisor' };
 
   /**
    * An action card's view: its status badge, who asked for it, and which buttons it shows.

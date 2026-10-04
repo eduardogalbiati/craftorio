@@ -13,7 +13,8 @@
 //   Every backup is a copy in <oracle dir>/backups/ (Undo puts it back).
 // - delegation: the Product Owner (a plan, an issue draft), the supervisor (a run diagnosis) and a
 //   read-only analyzer (a run's tool calls and costs, no model); only the answer and its cost come
-//   back, recorded in the chat.
+//   back, recorded in the chat. #184: the checker runs a test command on a scratch checkout of a
+//   branch (src/oracle-check.js, no model); a long one is a check.run card.
 // - oracle:changed is pushed when a message is added (a wake-up, a card, a result).
 
 const fs = require('fs');
@@ -24,6 +25,7 @@ const agents = require('../../agents');
 const backlog = require('../../backlog');
 const notifier = require('../../notifications');
 const oracle = require('../../oracle');
+const oracleCheck = require('../../oracle-check');
 const productOwner = require('../../product-owner');
 const projects = require('../../projects');
 const roadmaps = require('../../roadmap');
@@ -83,7 +85,18 @@ module.exports = (ctx) => {
   };
   const preview = (what) => ({ ok: true, preview: true, text: `Simulation only: nothing was changed. The app would ${what}.` });
 
+  // #184: a check on a scratch checkout of a project's branch (src/oracle-check.js), in the Oracle's folder
+  const check = ({ projectId, branch, command }, timeoutMs) => {
+    const p = projects.readProject(ctx.ws.projects, pid(projectId));
+    if (!p?.folder) throw new Error(`Unknown project: ${projectId}`);
+    return oracleCheck.runCheck({ folder: p.folder, branch, command, checksDir: path.join(dir(), 'checks'), timeoutMs });
+  };
+
   const PERFORM = {
+    'check.run': async (a) => {
+      const out = await check(a.params, oracleCheck.LONG_MS);
+      return { ok: out.ok, text: out.text };
+    },
     'dispatch.restart': async () => {
       await ctx.dispatchRoadmaps();
       await ctx.dispatchQueue();
@@ -303,7 +316,7 @@ module.exports = (ctx) => {
     };
   }
 
-  async function delegate({ to, question, projectId, runId } = {}, { mock } = {}) {
+  async function delegate({ to, question, projectId, runId, branch, command } = {}, { mock } = {}) {
     const sim = simulated({ mock });
     const q = String(question || '').trim();
     if (!q) throw new Error('Say what to ask.');
@@ -322,6 +335,10 @@ module.exports = (ctx) => {
       } else if (to === 'analyzer') {
         if (!runId) throw new Error('Say which run (runId) to analyze.');
         out = analyzeRunUse(runId);
+      } else if (to === 'checker') {
+        // #184: no model; a test command runs with MULTIAGENT_SIMULATION_ONLY=1, stopped after ~2 min
+        const res = await check({ projectId, branch, command }, oracleCheck.QUICK_MS);
+        out = { text: res.text, costUsd: 0, model: null, error: false, ref: `a check of ${branch}` };
       } else throw new Error(`Unknown agent: ${to}`);
     } catch (e) {
       out = { text: e.message || String(e), costUsd: 0, model: null, error: true, ref: null };
@@ -415,7 +432,7 @@ module.exports = (ctx) => {
     { channel: 'oracle:act', method: 'oracleAct', params: 'opts', fn: ({ actionId, mock } = {}) => get().act(actionId, { mock: simulated({ mock }) }) },
     // a pasted image of the conversation (its file name in a user message's attachments) → data: URL or null
     { channel: 'oracle:attachment', method: 'oracleAttachment', params: 'name', fn: (name) => get().attachment(name) },
-    // asks another agent (product-owner, issue-draft, supervisor, analyzer) → { to, text, costUsd, error, ref }; recorded in the chat
+    // asks another agent (product-owner, issue-draft, supervisor, analyzer, checker) → { to, text, costUsd, error, ref }; recorded in the chat
     {
       channel: 'oracle:delegate',
       method: 'oracleDelegate',
@@ -424,6 +441,9 @@ module.exports = (ctx) => {
     },
     { channel: 'oracle:dismiss', method: 'oracleDismiss', params: 'opts', fn: ({ actionId } = {}) => get().dismiss(actionId) },
     { channel: 'oracle:history', method: 'oracleHistory', fn: () => get().history() },
+    // #184: { text (pasted, e.g. a Claude Code memory index), base (the draft; default the saved memory) } →
+    // { text }: the draft with the pasted decisions added; nothing is saved (the owner saves it)
+    { channel: 'oracle:importMemory', method: 'importOracleMemory', params: 'opts', fn: (opts) => get().importMemory(opts || {}) },
     // the owner read the conversation up to { at } (default now) → { readAt }: the unread badge counts after it
     { channel: 'oracle:markRead', method: 'markOracleRead', params: 'opts', fn: (opts) => get().markRead(opts?.at) },
     { channel: 'oracle:memory', method: 'oracleMemory', fn: () => get().memory() },

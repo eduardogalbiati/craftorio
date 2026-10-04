@@ -77,6 +77,8 @@
 .oracle-memory-head .spacer { flex: 1; }
 .oracle-memory-text { white-space: pre-wrap; max-height: 180px; overflow: auto; margin-top: 6px; }
 .oracle-mem-error { margin: 4px 0 0; }
+.oracle-memory .row .spacer { flex: 1; }
+.oracle-mem-import { border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; margin-top: 8px; background: var(--panel); }
 
 /* #123: action cards (the title leads, then what changes, where, the backup, why), wake-ups and
    delegations folded, the Night watch form and strip, the runs watched or muted */

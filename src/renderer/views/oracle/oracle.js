@@ -188,6 +188,21 @@
     or.memory = await M.saveMemory(or.memory, (text) => api.saveOracleMemory(text));
     render();
   }
+  // #184: Import, the decisions of a pasted text added to the draft (saved with Save); `rev` redraws the form
+  function toggleImport(on) {
+    or.memory = { ...or.memory, importing: on, importText: on ? or.memory.importText || '' : '', rev: (or.memory.rev || 0) + 1 };
+    render();
+    if (on) document.querySelector(`#oracle-mem-import-${or.drawer ? 'drawer' : 'dock'}`)?.focus({ preventScroll: true });
+  }
+  async function importMemory() {
+    try {
+      const out = await api.importOracleMemory({ text: or.memory.importText || '', base: or.memory.draft });
+      or.memory = { ...or.memory, draft: out.text, importing: false, importText: '', error: null, rev: (or.memory.rev || 0) + 1 };
+    } catch (e) {
+      or.memory = { ...or.memory, error: errMsg(e) };
+    }
+    render();
+  }
 
   // ---- drafts and pasted images ------------------------------------------------------------
   function setDraftText(text) {
@@ -428,10 +443,16 @@
       <div class="field">
         <label for="oracle-mem-${w}">Memory</label>
         <textarea id="oracle-mem-${w}" class="oracle-mem-input" rows="8"${f.saving ? ' disabled' : ''}>${esc(f.draft)}</textarea>
-        <div class="hint">Your standing decisions (e.g. "UI issues need UI criteria", "reply in Portuguese"). The Oracle reads them at every session start; only you change them.</div>
+        <div class="hint">Your standing decisions (e.g. "UI issues need UI criteria", "reply in Portuguese"). The Oracle reads them at every session start; only you change them. Import adds decisions from a pasted text.</div>
         ${f.error ? `<p class="error small oracle-mem-error">${esc(f.error)}</p>` : ''}
       </div>
-      <div class="row"><button class="btn primary sm" type="submit"${f.saving ? ' disabled' : ''}>Save</button><button class="btn ghost sm" type="button" data-oracle-mem-cancel>Cancel</button></div>
+      <div class="row"><button class="btn primary sm" type="submit"${f.saving ? ' disabled' : ''}>Save</button><button class="btn ghost sm" type="button" data-oracle-mem-cancel>Cancel</button><span class="spacer"></span><button class="btn ghost sm" type="button" data-oracle-mem-import-open data-testid="oracle-memory-import-open" title="Add standing decisions from a pasted text, e.g. a Claude Code memory index"${f.importing ? ' aria-expanded="true"' : ''}>Import</button></div>
+      ${f.importing ? `<div class="field oracle-mem-import" data-testid="oracle-memory-import">
+        <label for="oracle-mem-import-${w}">Pasted text</label>
+        <textarea id="oracle-mem-import-${w}" class="oracle-mem-import-input" rows="4" placeholder="e.g. a Claude Code memory index: - [Title](file.md) - the decision">${esc(f.importText || '')}</textarea>
+        <div class="hint">One decision per line; headings and links to memory files are dropped. They are added to the memory above, and kept when you Save.</div>
+        <div class="row"><button class="btn primary sm" type="button" data-oracle-mem-import>Import</button><button class="btn ghost sm" type="button" data-oracle-mem-import-cancel>Cancel</button></div>
+      </div>` : ''}
     </form>`;
   }
   // #244: the model every turn uses, and whether the last turn started a fresh session or resumed it
@@ -465,9 +486,10 @@
       const memBox = $(`#oracle-memory-${w}`);
       const editingHere = memBox.querySelector('textarea');
       // the form is redrawn on its own changes only, never while typing
-      if (!editingHere || !or.memory.editing || or.memory.saving || or.memory.error !== memBox.dataset.error) {
+      if (!editingHere || !or.memory.editing || or.memory.saving || or.memory.error !== memBox.dataset.error || String(or.memory.rev || 0) !== memBox.dataset.rev) {
         memBox.innerHTML = memoryHtml(w);
         memBox.dataset.error = or.memory.error || '';
+        memBox.dataset.rev = String(or.memory.rev || 0);
       }
       memBox.classList.toggle('hidden', !or.memoryOpen);
       // the Night watch form is redrawn on its own changes only, never while picking the time
@@ -557,7 +579,7 @@
       </div>
     </div>
     <div class="drawer-body svc-body oracle-body">
-      <div id="oracle-memory-${w}" class="oracle-memory hidden"></div>
+      <div id="oracle-memory-${w}" class="oracle-memory hidden" data-testid="oracle-memory"></div>
       <div id="oracle-ops-${w}" class="oracle-ops hidden"></div>
       <div id="oracle-log-${w}" class="svc-log oracle-log"></div>
       <div id="oracle-notice-${w}" class="oracle-notice"></div>
@@ -623,6 +645,7 @@
       }));
       document.addEventListener('input', (e) => {
         if (e.target.classList?.contains('oracle-mem-input')) or.memory = { ...or.memory, draft: e.target.value };
+        if (e.target.classList?.contains('oracle-mem-import-input')) or.memory = { ...or.memory, importText: e.target.value };
         if (e.target.classList?.contains('oracle-night-until') && or.nightForm) or.nightForm = { ...or.nightForm, until: e.target.value };
       });
       document.addEventListener('submit', (e) => {
@@ -650,6 +673,9 @@
         if (t.closest('[data-oracle-mem-cancel]')) { or.memory = M.cancelMemory(or.memory); or.memoryOpen = false; render(); return; }
         if (t.closest('[data-oracle-mem-close]')) { or.memoryOpen = false; render(); return; }
         if (t.closest('[data-oracle-mem-edit]')) { or.memory = M.editMemory(or.memory); render(); return; }
+        if (t.closest('[data-oracle-mem-import-open]')) { toggleImport(!or.memory.importing); return; }
+        if (t.closest('[data-oracle-mem-import-cancel]')) { toggleImport(false); return; }
+        if (t.closest('[data-oracle-mem-import]')) { importMemory(); return; }
         const act = t.closest('[data-oracle-act]');
         if (act) { act.disabled = true; doAction(act.dataset.oracleAct); return; }
         const dismiss = t.closest('[data-oracle-dismiss]');

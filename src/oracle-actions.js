@@ -28,6 +28,13 @@ const need = (params, names) => {
 const roadmapBackup = 'A copy of the roadmap file, taken before the change (Undo puts it back).';
 
 const ACTIONS = {
+  // #184: a check that costs money or takes long (src/oracle-check.js); a quick one is the checker delegate
+  'check.run': {
+    label: 'Run a check',
+    night: () => false,
+    check: (p) => need(p, ['projectId', 'branch', 'command']),
+    describe: (p) => ({ title: `Run \`${s(p.command)}\` on ${s(p.branch)}`, change: `Runs \`${s(p.command)}\` on a scratch checkout of branch ${s(p.branch)} with MULTIAGENT_SIMULATION_ONLY=1 (up to 20 min) and posts the result with its evidence.`, where: `A scratch checkout of project ${s(p.projectId)}, removed afterwards (the project's own checkout is untouched)`, backup: 'Nothing changes: the checkout is removed after the check.' }),
+  },
   'dispatch.restart': {
     label: 'Restart the dispatch',
     night: () => true,
@@ -38,7 +45,8 @@ const ACTIONS = {
     label: 'File an issue',
     night: () => true,
     check: (p) => need(p, ['projectId', 'title', 'body']),
-    describe: (p) => ({ title: `File an issue: ${s(p.title)}`, change: `Creates a new issue "${s(p.title)}"${Array.isArray(p.labels) && p.labels.length ? ` with labels ${p.labels.join(', ')}` : ''}.`, where: `The issue tracker of project ${s(p.projectId)} (gh / glab)`, backup: 'Nothing is replaced: a new issue.' }),
+    // #184: the card says whether a duplicate was searched (issues_search) and what was found
+    describe: (p) => ({ title: `File an issue: ${s(p.title)}`, change: `Creates a new issue "${s(p.title)}"${Array.isArray(p.labels) && p.labels.length ? ` with labels ${p.labels.join(', ')}` : ''}. ${s(p.duplicateSearch) ? `Duplicate search: ${s(p.duplicateSearch)}` : 'No duplicate search was recorded: check the backlog for one first.'}`, where: `The issue tracker of project ${s(p.projectId)} (gh / glab)`, backup: 'Nothing is replaced: a new issue.' }),
   },
   'issue.update': {
     label: 'Update an issue',

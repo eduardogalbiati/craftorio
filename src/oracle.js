@@ -15,8 +15,10 @@
 //                    when the last turn ran and whether it started the session
 //   state.md         #244: what a fresh session needs (runs watched, open questions, last exchanges
 //                    clipped), rewritten by the service after every turn, without a model call
-//   memory.md        the owner's standing decisions, saved only through oracle:saveMemory
-//   session.md       the opening prompt of the current session (skill, memory, state.md)
+//   memory.md        the owner's standing decisions, saved only through oracle:saveMemory; #184: the
+//                    first start seeds it (src/oracle-knowledge.js SEED_MEMORY), never rewritten after
+//   session.md       the opening prompt of the current session (skill, the digest of the skills it
+//                    knows (#184, skills/oracle/knowledge.md), memory, state.md)
 //   handoffs/        one note per compaction or reset (<stamp>-<reason>.md)
 //   usage.jsonl      one line per real answer: tokens, the turn's own cost and the session's
 //                    cumulative cost (#244; older lines hold the cumulative cost only: usageLines)
@@ -54,12 +56,16 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const actions = require('./oracle-actions');
+const knowledge = require('./oracle-knowledge');
 const { mockSteps, partialText } = require('./chat-progress');
 const night = require('./night-watch');
 const { hold, ownerAlive } = require('./run-owner');
 
 const DEFAULT_MODEL = 'claude-opus-5-5';
 const DEFAULTS = Object.freeze({ dailyBudgetUsd: 20, compactAtTokens: 150000 });
+// #184: the cache one answer may re-read over its tool calls before the next question starts a fresh
+// session (a 60k context re-read by ~17 calls is 1M tokens); settings.oracle.compactAtCacheReadTokens
+const COMPACT_AT_CACHE_READ = 1000000;
 const MCP_NAME = 'orchestrator';
 const SKILL_ID = 'oracle';
 const TIMEOUT_MS = 20 * 60e3;
@@ -99,6 +105,21 @@ function oracleSettings(settings = {}) {
   const o = { ...DEFAULTS, ...(settings.oracle || {}) };
   const n = (v, d) => (Number.isFinite(Number(v)) && Number(v) >= 0 ? Number(v) : d);
   return { dailyBudgetUsd: n(o.dailyBudgetUsd, DEFAULTS.dailyBudgetUsd), compactAtTokens: n(o.compactAtTokens, DEFAULTS.compactAtTokens) || DEFAULTS.compactAtTokens };
+}
+
+/** #184: the cache re-read per answer past which the next question starts a fresh session. */
+function cacheReadCap(settings = {}) {
+  const v = Number(settings.oracle?.compactAtCacheReadTokens);
+  return Number.isFinite(v) && v > 0 ? v : COMPACT_AT_CACHE_READ;
+}
+
+/**
+ * #184: whether the next question starts a fresh session: the context reached compactAtTokens, or
+ * the last answer re-read more than the cache-read cap (each tool call re-reads the whole context:
+ * an answer's cost grows with both).
+ */
+function shouldCompact({ contextTokens = 0, cacheReadTokens = 0 } = {}, settings = {}) {
+  return (Number(contextTokens) || 0) >= oracleSettings(settings).compactAtTokens || (Number(cacheReadTokens) || 0) >= cacheReadCap(settings);
 }
 
 const usageFile = (dir) => path.join(dir, 'usage.jsonl');
@@ -309,6 +330,11 @@ function createOracle({
   function memory() {
     let text = '';
     let updatedAt = null;
+    // #184: the first start seeds the owner's standing decisions; a saved memory (even an emptied
+    // one) is never written again
+    if (!fs.existsSync(files().memory)) {
+      try { ensure(); fs.writeFileSync(files().memory, knowledge.SEED_MEMORY, { flag: 'wx' }); } catch { /* another process seeded it, or a read-only folder */ }
+    }
     try { text = fs.readFileSync(files().memory, 'utf8'); updatedAt = fs.statSync(files().memory).mtime.toISOString(); } catch { /* none yet */ }
     return { text, updatedAt };
   }
@@ -472,11 +498,14 @@ function createOracle({
     const { resolveSkill } = require('./skills');
     let skill = '';
     try { skill = resolveSkill(skillsDirs(), SKILL_ID).body || ''; } catch { /* the rules below suffice */ }
+    // #184: the digest of the skills it knows besides its own (skills/oracle/knowledge.md)
+    const known = knowledge.knowledgeDigest(skillsDirs().map((d) => path.join(d, SKILL_ID)));
     const mem = memory().text.trim();
     let note = '';
     try { note = fs.readFileSync(files().stateNote, 'utf8').trim(); } catch { note = latestHandoff().trim(); }
     const prompt = [
       skill || 'You are the Oracle of the Multiagent Orchestrator: read-only, grounded in your tools, answer in the owner\'s language and write everything for the product in English.',
+      known,
       `## Memory (the owner's standing decisions; only the owner changes it)\n${mem || '(empty)'}`,
       note && `## Where the conversation stands (kept by the app; your previous session is gone)\n${note}`,
       `## ${heading}\n${question}`,
@@ -508,16 +537,18 @@ function createOracle({
   async function exchange({ text, heading, mock, mockContextTokens, screen = null, attachments = [], about = null, wake = null, extra = {}, onItem = null, signal = null, timeoutMs = TIMEOUT_MS }) {
     const a = agent();
     const model = String(a.model || DEFAULT_MODEL);
-    const { compactAtTokens } = oracleSettings(settings());
     let st = state();
-    const full = st.compactNext || (Number(st.contextTokens) || 0) >= compactAtTokens;
+    const full = st.compactNext || shouldCompact({ contextTokens: st.contextTokens }, settings());
     if (st.sessionId && (full || (!mock && st.model !== model))) {
       const why = full ? 'compaction' : 'model-change';
       const h = await writeHandoff(why);
+      const reached = Number(st.cacheReadTokens) >= cacheReadCap(settings())
+        ? `The last answer re-read ${st.cacheReadTokens} tokens of cache`
+        : `The context reached ${st.contextTokens} tokens`;
       post({
         role: 'system', kind: why, handoff: path.basename(h.file),
         text: full
-          ? `The context reached ${st.contextTokens} tokens: a new session starts from the skill, the memory and the handoff note ${path.basename(h.file)}.`
+          ? `${reached}: a new session starts from the skill, the memory and the handoff note ${path.basename(h.file)}.`
           : `The model changed to ${model}: a new session starts from the skill, the memory and the handoff note ${path.basename(h.file)}.`,
       });
       st = { ...st, sessionId: null, compactNext: false, contextTokens: 0 };
@@ -535,9 +566,11 @@ function createOracle({
     // #180: with a live view, the simulated turn streams fake steps and its text
     if (mock && onItem) await mockSteps(onItem, { steps: MOCK_STEPS, text: res.text, signal });
     const now = new Date().toISOString();
+    const cacheReadTokens = Number(res.tokens?.cache_read) || 0;
     saveState({
       sessionId: res.sessionId || st.sessionId || null, model: mock ? st.model || model : model,
-      contextTokens: res.contextTokens || 0, compactNext: (res.contextTokens || 0) >= compactAtTokens,
+      contextTokens: res.contextTokens || 0, cacheReadTokens,
+      compactNext: shouldCompact({ contextTokens: res.contextTokens, cacheReadTokens }, settings()),
       sessionStartedAt: fresh ? now : st.sessionStartedAt || null, lastTurnAt: now, lastTurnFresh: fresh,
     });
     const m = post({
@@ -840,6 +873,16 @@ ${partial}` : ''}`, error: true });
       return memory();
     },
 
+    /**
+     * #184: the decisions of a pasted text (e.g. a Claude Code memory index) added to `base` (the
+     * owner's draft; the saved memory when absent). Nothing is saved: the owner saves the result.
+     */
+    importMemory({ text, base } = {}) {
+      const merged = knowledge.importMemory(base ?? memory().text, text);
+      if (merged.length > MAX_MEMORY) throw new Error(`The memory would be too long (max ${MAX_MEMORY} characters).`);
+      return { text: merged };
+    },
+
     /** Lets another process answer (the service shuts down). */
     release() { owner?.release(); owner = null; },
   };
@@ -855,6 +898,7 @@ module.exports = {
   oracleSettings,
   questionText,
   readOnlyArgs,
+  shouldCompact,
   spentOn,
   usageLines,
   usageRuns,
