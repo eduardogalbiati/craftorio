@@ -55,10 +55,13 @@ module.exports = (ctx) => {
                 capabilities: capabilities.describe(a.capabilities), isolated: d.isolation !== false,
                 // #224: the agent's colour in the run chat and the runs list (wins over its role's)
                 ...(a.color ? { color: String(a.color) } : {}),
+                // #245: the name the screens show instead of its key
+                ...(a.display ? { display: a.display } : {}),
               }];
             })),
             steps: wf.steps.map((s) => ({
               id: s.id,
+              ...(s.display ? { display: s.display } : {}), // #245
               type: s.type || 'agent',
               agent: s.agents ? s.agents.join(' · ') : s.agent || null,
               agents: s.agents || null,

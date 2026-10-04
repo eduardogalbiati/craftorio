@@ -10,6 +10,8 @@
 // Uses app.js globals: api, esc, fmtTok, fmtUsd, fmtDur, fmtNum, dateOf, errMsg, window.showRun.
 (() => {
   const SS = 'multiagent.analytics.run';
+  // a step or agent id as people read it (#245, display-name.js); the id stays in the tooltip
+  const readable = (id) => (typeof displayName === 'function' ? displayName(id) : String(id || ''));
   const TOKEN_COLORS = { input: 'var(--accent)', output: 'var(--green)', cache_read: 'var(--purple)', cache_write: 'var(--orange)' };
   const TOKEN_LABELS = { input: 'new input', output: 'output', cache_read: 'cache read', cache_write: 'cache creation' };
   const FIGURES = [['costUsd', 'Total cost', 'usd'], ['durationMs', 'Duration', 'ms'], ['costPerIssue', 'Cost per issue', 'usd']];
@@ -121,8 +123,8 @@
     const bars = f.timeline.map((b) => {
       const y = rows.indexOf(b.row) * RH + 4;
       const w = Math.max(2, x(b.to) - x(b.from));
-      return `<rect x="${x(b.from).toFixed(1)}" y="${y}" width="${w.toFixed(1)}" height="${RH - 8}" rx="3" style="fill:${colorOf(b.row)}"><title>${esc(b.step)} · visit ${b.visit} · ${esc(fmtDur(b.durationMs))}${b.costUsd ? ` · ${esc(fmtUsd(b.costUsd))}` : ''}${b.costEstimatedUsd ? ` (${esc(fmtUsd(b.costEstimatedUsd))} estimated)` : ''}${b.costNotRecorded ? ' · cost not recorded' : ''}</title></rect>
-        ${w > 60 ? `<text x="${(x(b.from) + 4).toFixed(1)}" y="${y + RH / 2 + 1}" class="an-gantt-label">${esc(b.step)}</text>` : ''}`;
+      return `<rect x="${x(b.from).toFixed(1)}" y="${y}" width="${w.toFixed(1)}" height="${RH - 8}" rx="3" style="fill:${colorOf(b.row)}"><title>${esc(readable(b.step))} (${esc(b.step)}) · visit ${b.visit} · ${esc(fmtDur(b.durationMs))}${b.costUsd ? ` · ${esc(fmtUsd(b.costUsd))}` : ''}${b.costEstimatedUsd ? ` (${esc(fmtUsd(b.costEstimatedUsd))} estimated)` : ''}${b.costNotRecorded ? ' · cost not recorded' : ''}</title></rect>
+        ${w > 60 ? `<text x="${(x(b.from) + 4).toFixed(1)}" y="${y + RH / 2 + 1}" class="an-gantt-label">${esc(readable(b.step))}</text>` : ''}`;
     }).join('');
     const gy = rows.length * RH + 4;
     const gates = f.gates.map((g) => {
@@ -182,7 +184,7 @@
 
   function tables(f) {
     const steps = f.steps.length ? `<table class="u-table an-sessions"><thead><tr><th>Step</th><th>Agent</th><th class="num">Visits</th><th class="num">Duration</th></tr></thead><tbody>
-      ${f.steps.map((s) => `<tr><td>${esc(s.step)}</td><td>${s.agent ? `<span class="an-agent"><i style="background:${colorOf(s.agent)}"></i>${esc(s.agent)}</span>` : '<span class="muted">orchestrator</span>'}</td><td class="num">${s.visits}</td><td class="num">${fmtDur(s.durationMs)}</td></tr>`).join('')}</tbody></table>`
+      ${f.steps.map((s) => `<tr><td title="${esc(s.step)}">${esc(readable(s.step))}</td><td>${s.agent ? `<span class="an-agent" title="${esc(s.agent)}"><i style="background:${colorOf(s.agent)}"></i>${esc(readable(s.agent))}</span>` : '<span class="muted">orchestrator</span>'}</td><td class="num">${s.visits}</td><td class="num">${fmtDur(s.durationMs)}</td></tr>`).join('')}</tbody></table>`
       : '<p class="muted small an-empty">No step recorded.</p>';
     const suite = f.suiteRounds.length ? `<table class="u-table an-sessions"><thead><tr><th class="num">Round</th><th>Result</th><th class="num">Duration</th><th class="num">Failures</th><th class="num">Pre-existing</th></tr></thead><tbody>
       ${f.suiteRounds.map((r) => `<tr><td class="num">${r.round}</td><td><span class="badge ${r.status === 'pass' ? 'cat-monitor' : 'warn'}">${esc(r.status || '—')}</span></td><td class="num">${fmtDur(r.durationMs)}</td><td class="num">${r.failures}</td><td class="num">${r.preexisting}</td></tr>`).join('')}</tbody></table>`

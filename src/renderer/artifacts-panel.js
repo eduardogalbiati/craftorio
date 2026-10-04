@@ -129,7 +129,7 @@
 
   function mount(root, opts = {}) {
     const p = {
-      root, runId: null, flat: !!opts.flat, extras: opts.extras || null, onCount: opts.onCount || null,
+      root, runId: null, flat: !!opts.flat, extras: opts.extras || null, onCount: opts.onCount || null, stepNames: opts.stepNames || null,
       files: null, run: null, evidence: undefined, error: null, sel: null, doc: null, seq: 0, historyOpen: false,
       filter: newFilter(), context: [],
       setRun(runId) {
@@ -178,11 +178,12 @@
 
   // ---------------------------------------------------------------- list
   function fileHtml(f) {
-    const who = [f.step, f.agent].filter(Boolean).join(' · ');
+    // #245: the step and agent by their readable names (ids in the title's path); a bare path is code
+    const who = window.displayName ? [f.step, f.agent].filter(Boolean).map((x) => window.displayName(x)).join(' · ') : [f.step, f.agent].filter(Boolean).join(' · ');
     return `<button type="button" class="ap-file${f.exists === false ? ' missing' : ''}" data-testid="artifact-item" data-ap-file="${esc(f.path)}" title="${esc(f.path)}">
       ${artKindIcon(f.kind)}
       <span class="ap-file-main"><span class="ap-file-name">${esc(f.name)}${f.location === 'external' ? ' <span class="badge">project copy</span>' : ''}${f.exists === false ? ' <span class="badge">deleted</span>' : ''}</span>
-      <span class="ap-file-sub muted">${esc(who || slash(f.rel || ''))}</span></span>
+      <span class="ap-file-sub muted">${who ? esc(who) : `<code>${esc(slash(f.rel || ''))}</code>`}</span></span>
       <span class="ap-file-size muted">${esc(fmtSize(f.size))}</span></button>`;
   }
 
@@ -336,6 +337,11 @@
     return summary + lines.map((t) => `<p class="error small ap-pad" data-testid="screenshot-error" title="${esc(t)}">${esc(t)}</p>`).join('');
   }
 
+  // A round's head, "<step> · round <n>" (#245: the step's readable name; `stepNames` from the run's
+  // workflow.started when the caller has them), the step id in its tooltip
+  const stepLabel = (p, step) => (window.displayName ? window.displayName(step, p.stepNames || p.run?.stepNames) : step);
+  const roundText = (p, step, round) => `${stepLabel(p, step)} · round ${round}`;
+
   // The gate right after a screenshots step (#144, extras.capture: its output): only that step's
   // round, original/modified side by side with captions, the failed captures listed; every other
   // round in History (no stale screenshots of an older commit, not even as a failed side's pair);
@@ -348,7 +354,7 @@
     const fresh = newElementKeys(cap);
     const body = shots.length ? shots.map((s) => shotCardHtml(ev, s, fresh)).join('')
       : `<div class="ap-empty"><b>No screenshots:</b> <span class="muted">${esc(cap.reason || 'none were captured')}</span></div>`;
-    return `<div class="ap-group ap-shots"><div class="ap-group-head">Screenshots <span class="badge">latest</span> <span class="muted" title="Captured before this gate">${esc(`${cap.folder} · round ${cap.round}`)}</span></div>
+    return `<div class="ap-group ap-shots"><div class="ap-group-head">Screenshots <span class="badge">latest</span> <span class="muted" title="${esc(`Captured before this gate (${cap.folder})`)}">${esc(roundText(p, cap.folder, cap.round))}</span></div>
       ${captureSummaryHtml(cap)}${body}${ev?.images?.length ? historyHtml(p, ev, (x) => !latest(x)) : ''}</div>`;
   }
 
@@ -362,7 +368,8 @@
     const issues = [...new Set(shots.map((s) => s.issue || ''))];
     const cap = captureFor(p, ev);
     const fresh = newElementKeys(cap);
-    const where = ev.legacy ? 'recorded before evidence rounds' : ev.final ? `${ev.final.step} · round ${ev.final.round}` : '';
+    const where = ev.legacy ? 'recorded before evidence rounds' : ev.final ? roundText(p, ev.final.step, ev.final.round) : '';
+    const whereTip = `The last round that captured${ev.final && !ev.legacy ? ` (${ev.final.step})` : ''}`;
     const ordered = [];
     const body = issues.map((iss) => {
       const head = issues.length > 1 || iss ? `<div class="ap-sub-head">${iss ? `Issue #${esc(iss)}` : 'Other screens'}</div>` : '';
@@ -372,7 +379,7 @@
     }).join('');
     p.context = ordered;
     p.cards = ordered.length;
-    return `<div class="ap-group ap-shots"><div class="ap-group-head">Screenshots <span class="badge">final</span> <span class="muted" title="The last round that captured">${esc(where)}</span></div>${captureSummaryHtml(cap)}${body}${historyHtml(p, ev)}</div>`;
+    return `<div class="ap-group ap-shots"><div class="ap-group-head">Screenshots <span class="badge">final</span> <span class="muted" title="${esc(whereTip)}">${esc(where)}</span></div>${captureSummaryHtml(cap)}${body}${historyHtml(p, ev)}</div>`;
   }
 
   // Older rounds and steps (isOld: the images that are not shown above), newest first, each image
@@ -385,7 +392,7 @@
       <span class="ap-file-main"><span class="ap-file-name">${esc(x.caption || x.key)}</span><span class="ap-file-sub muted">${esc(x.key)}</span></span><span class="badge">${esc(x.side)}</span></button>`;
     const groups = rounds.map((r) => {
       const list = old.filter((x) => x.step === r.step && x.round === r.round);
-      return list.length ? `<div class="ap-sub-head">${esc(r.step)} · round ${r.round}</div>${list.map(item).join('')}` : '';
+      return list.length ? `<div class="ap-sub-head" title="${esc(r.step)}">${esc(roundText(p, r.step, r.round))}</div>${list.map(item).join('')}` : '';
     }).join('');
     return `<details class="ap-history"${p.historyOpen ? ' open' : ''}><summary class="ap-group-head" data-ap-history>History <span class="muted">${old.length}</span></summary>${groups}</details>`;
   }
@@ -407,10 +414,10 @@
 
   // ---------------------------------------------------------------- the image viewer (#145, #182)
   // A shot as one item of the viewer's sequence: its sides, original first
-  function shotItem(ev, s) {
+  function shotItem(ev, s, p) {
     return {
       title: s.caption || s.key,
-      images: SIDES.map((k) => s.sides[k]).filter(Boolean).map((i) => ({ file: i.file, src: thumbs.get(tkey(i)) || null, label: sideLabel(ev, i), caption: `${i.step} · round ${i.round}`, side: i.side })),
+      images: SIDES.map((k) => s.sides[k]).filter(Boolean).map((i) => ({ file: i.file, src: thumbs.get(tkey(i)) || null, label: sideLabel(ev, i), caption: roundText(p || {}, i.step, i.round), side: i.side })),
     };
   }
   const fileItem = (file, src = null, title = '') => ({ title: title || baseOf(file), images: [{ file, src, label: '', caption: '' }] });
@@ -441,7 +448,7 @@
     const ev = p.evidence;
     const carded = new Set((ev?.images || []).map((x) => slash(x.file)));
     const others = p.flat ? [] : filterFiles(p.files || [], p.filter).filter((f) => f.kind === 'image' && !carded.has(slash(f.path))).sort(newest);
-    return [...(p.context || []).map((s) => shotItem(ev, s)), ...others.map((f) => fileItem(f.path, null, f.name))];
+    return [...(p.context || []).map((s) => shotItem(ev, s, p)), ...others.map((f) => fileItem(f.path, null, f.name))];
   }
 
   function openInViewer(p, file, src = null, title = '') {
@@ -450,7 +457,7 @@
     // an older round's image: the history is its context
     if (x && !(p.context || []).some((s) => Object.values(s.sides).includes(x))) {
       const old = (p.evidence.images || []).filter((y) => !(p.context || []).some((s) => Object.values(s.sides).includes(y)));
-      openItems(historyShots(p.evidence, old).map((s) => shotItem(p.evidence, s)), file, src, title);
+      openItems(historyShots(p.evidence, old).map((s) => shotItem(p.evidence, s, p)), file, src, title);
       return;
     }
     openItems(panelItems(p), file, src, title);

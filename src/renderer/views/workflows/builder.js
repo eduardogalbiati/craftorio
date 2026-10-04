@@ -110,7 +110,7 @@
       <button type="button" class="wb-desk${i === b.sel ? ' active' : ''}${s.kind === 'gate' ? ` gate ${s.reviewer === 'ai' ? 'gate-ai' : 'gate-human'}` : ''}" data-i="${i}" title="${esc(s.kind === 'gate' ? (s.reviewer === 'ai' ? 'AI check: an agent approves or sends the work back' : 'Human approval: a person approves or rejects') : 'Agent desk')}">
         <span class="wb-art">${deskSvg(s)}</span>
         <span class="wb-info">
-          <span class="wb-cap"><b class="mono">${esc(s.id)}</b>${back(s)}</span>
+          <span class="wb-cap"><b title="${esc(s.id)}">${esc(s.display || readable(s.id))}</b>${back(s)}</span>
           <span class="wb-sub muted small">${esc(sub(s))}</span>
           ${text(s) ? `<span class="wb-brief small">${esc(String(text(s)).slice(0, 240))}</span>` : ''}
           ${extras(s) ? `<span class="wb-extras">${extras(s)}</span>` : ''}
@@ -121,6 +121,11 @@
   }
 
   const opt = (v, label, cur) => `<option value="${esc(v)}"${v === cur ? ' selected' : ''}>${esc(label)}</option>`;
+  // #245: the optional name the screens show instead of a step's id or an agent's key (YAML `display`)
+  const readable = (id) => (typeof displayName === 'function' ? displayName(id) : String(id || ''));
+  const displayField = (id, label, value, key) => `<div class="field"><label for="${id}">${label} <span class="muted small">(optional)</span></label>
+      <input type="text" id="${id}" data-testid="${id}" maxlength="40" value="${esc(value || '')}" placeholder="${esc(readable(key))}" spellcheck="false" />
+      <div class="hint">What the screens show instead of <span class="mono">${esc(key)}</span>; empty: "${esc(readable(key))}".</div></div>`;
   const fixedText = (label, value) => `<div class="field"><label>${label}</label><div class="wb-fixed mono small" title="Set from the run's inputs when it starts">${esc(value)}</div></div>`;
 
   // The agent's fields (who it is, skills, CLI, model, effort), shared by desks and AI gates.
@@ -132,6 +137,7 @@
         <div class="field"><label>Agent${name ? ` <span class="muted mono">${esc(name)}</span>` : ''}${a.optional ? ' <span class="badge">optional</span>' : ''}</label>
           <div class="seg sm" id="wb-source">${sources.map(([k, l]) => `<button type="button" data-src="${k}" class="${a.source === k ? 'active' : ''}">${l}</button>`).join('')}</div>
           ${sharedWith.length ? `<div class="hint">Also sits at: ${sharedWith.map(esc).join(', ')}. Changes apply there too.</div>` : ''}</div>
+        ${b.spec.fixed && name ? displayField('wb-agent-display', 'Agent display name', a.display, name) : ''}
         ${a.source === 'agent' ? `<div class="field"><label>Imported agent</label>
           <div class="wb-imported">${a.agentId ? `<span class="wb-imported-avatar" aria-hidden="true">${Robots.svg(robotOf(a), 'idle', { bubble: false, plaque: '' })}</span><b>${esc(a.name || a.agentId)}</b>` : '<span class="muted small">None yet</span>'}
             <span class="spacer"></span><button type="button" class="btn ghost sm" id="wb-agent-btn">${a.agentId ? 'Change…' : 'Choose an agent…'}</button></div>
@@ -152,6 +158,7 @@
   function bindAgentFields(a) {
     const box = $('#wb-panel');
     bind('#wb-system', 'input', (e) => { a.system_prompt = e.target.value; });
+    bind('#wb-agent-display', 'input', (e) => { a.display = e.target.value; });
     bind('#wb-provider', 'change', (e) => { a.provider = e.target.value; a.model = PROVIDERS[TYPE_OF[a.provider]].models[0]; redraw(); });
     bind('#wb-model', 'change', (e) => { a.model = e.target.value; renderCanvas(); });
     const agentBtn = $('#wb-panel #wb-agent-btn');
@@ -189,7 +196,8 @@
         <button type="button" class="btn sm ghost danger" data-act="remove" ${last ? '' : 'disabled'}>Remove</button>
       </div>` : '';
     const idField = `<div class="field"><label for="wb-id">Id</label><input type="text" id="wb-id" class="mono" value="${esc(s.id)}" spellcheck="false" ${structural() ? '' : 'disabled'} />
-      ${structural() ? '<div class="hint">Lowercase letters, digits and _. Used in the run log.</div>' : ''}</div>`;
+      ${structural() ? '<div class="hint">Lowercase letters, digits and _. Used in the run log.</div>' : ''}</div>
+      ${displayField('wb-display', 'Display name', s.display, s.id)}`;
     const flow = (s.badges?.length || s.branches?.length) ? `<p class="muted small">${[...(s.badges || []), ...(s.branches?.length ? [`can go to ${s.branches.join(', ')}`] : [])].map(esc).join(' · ')}</p>` : '';
     if (s.kind === 'gate') {
       const ai = s.reviewer === 'ai';
@@ -238,6 +246,8 @@
       box.querySelectorAll('#wb-access [data-access]').forEach((el) => (el.onclick = () => { s.access = el.dataset.access; touch(); redraw(); }));
     }
     bind('#wb-id', 'change', (e) => renameStep(s, e.target.value.trim()));
+    bind('#wb-display', 'input', (e) => { s.display = e.target.value; });
+    bind('#wb-display', 'change', () => renderCanvas());
     box.querySelectorAll('.wb-tools [data-act]').forEach((el) => (el.onclick = () => deskAction(el.dataset.act)));
     // read-only: everything is shown, nothing can change (the parallel agents can still be browsed)
     if (!editable()) box.querySelectorAll('input, textarea, select, button').forEach((el) => { if (el.id !== 'wb-pick') el.disabled = true; });

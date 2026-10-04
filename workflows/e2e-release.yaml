@@ -210,6 +210,7 @@ steps:
 
   # the whole suite, run by the orchestrator: no agent, no tokens while it is green (#222)
   - id: e2e
+    display: E2E scenarios
     type: suite
     command: "{{ inputs.e2e_command }}"
     timeout: "{{ inputs.time_budget_minutes }}m"

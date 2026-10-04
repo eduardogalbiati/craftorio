@@ -843,6 +843,7 @@ body.resizing-dock .term-body { pointer-events: none; }
 .ap-file-main { display: flex; flex-direction: column; min-width: 0; flex: 1; }
 .ap-file-name, .ap-file-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ap-file-sub { font-size: 11px; }
+.ap-file-sub code { font: inherit; background: none; padding: 0; color: inherit; }
 .ap-file-size { font-size: 11px; flex: none; }
 .ap-add { color: var(--green); }
 .ap-del { color: var(--red); }

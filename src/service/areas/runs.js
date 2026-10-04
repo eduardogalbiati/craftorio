@@ -143,7 +143,7 @@ module.exports = (ctx) => {
       return {
         runId: r.runId, workflow: r.wf.metadata?.name || path.basename(r.file), file: path.basename(r.file), mock: r.mock,
         projectId: r.projectId, issues: r.issues, startedAt: r.startedAt ? new Date(r.startedAt).toISOString() : null,
-        status: r.status, waiting: gates.length, gates, inputs: r.inputs, agent_names: r.agentNames(),
+        status: r.status, waiting: gates.length, gates, inputs: r.inputs, agent_names: r.agentNames(), display: r.displayNames(),
         ...ctx.liveTitle(r), pr: ctx.withPrState(r.pr, r.mock), passedGates: passedGates(r),
         // what happens with its result when it finishes, and the run whose chain started it (#134)
         chain: r.then || r.from ? { then: r.then, from: r.from, state: r.then ? 'waiting' : undefined } : null,

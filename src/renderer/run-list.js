@@ -188,11 +188,11 @@ function runListRow(r, pv) {
   const firstLine = task.split('\n')[0];
   const dur = r.status === 'running' && r.startedAt ? Date.now() - Date.parse(r.startedAt) : r.durationMs;
   return `
-    <div class="pr-run ${open ? 'open' : ''}${r.nested ? ' pr-child' : ''}" data-run="${esc(r.runId)}"${r.nested ? ` style="--nest:${r.nested}"` : ''}>
+    <div class="pr-run ${open ? 'open' : ''}${r.nested ? ' pr-child' : ''}" data-testid="run-list-row" data-run="${esc(r.runId)}"${r.nested ? ` style="--nest:${r.nested}"` : ''}>
       <div class="pr-row" title="${open ? 'Hide' : 'Show'} sessions">
         <span class="pill pill-${esc(r.status)}">${esc(r.status)}</span>
         <div class="pr-main">
-          <div><b>${runTitleHtml(r)}</b> ${prBadge(r)} <span class="muted small" title="workflow">${esc(r.workflow || r.file || 'workflow')}${r.version ? ` v${esc(r.version)}` : ''}</span>${r.mock ? ' <span class="badge p-mock">simulated</span>' : ''}${r.current ? ' <span class="badge live">this window</span>' : ''}${r.runningElsewhere ? ' <span class="badge" title="Another app process on this workspace runs it: stop or resume it there">another window</span>' : ''}${r.retryOf ? ` <span class="badge" title="Started by a retry of the same roadmap item: the two runs do the same work">retry of ${esc(String(r.retryOf).slice(9))}</span>` : ''}${issueFallbackBadge(r)}${r.chain && window.ChainModel ? ` ${ChainModel.chainBadgesHtml(r.chain)}` : ''}${childRunBadges(r)}${!pv.id && r.project ? ` <span class="badge" title="project">${esc(r.project.name)}</span>` : ''}</div>
+          <div><b>${runTitleHtml(r)}</b> ${prBadge(r)} <span class="muted small" title="${esc(`Workflow: ${r.workflow || r.file || ''}`)}">${esc(stepName(String(r.workflow || r.file || 'workflow').replace(/\.ya?ml$/i, '')))}${r.version ? ` v${esc(r.version)}` : ''}</span>${r.mock ? ' <span class="badge p-mock">simulated</span>' : ''}${r.current ? ' <span class="badge live">this window</span>' : ''}${r.runningElsewhere ? ' <span class="badge" title="Another app process on this workspace runs it: stop or resume it there">another window</span>' : ''}${r.retryOf ? ` <span class="badge" title="Started by a retry of the same roadmap item: the two runs do the same work">retry of ${esc(String(r.retryOf).slice(9))}</span>` : ''}${issueFallbackBadge(r)}${r.chain && window.ChainModel ? ` ${ChainModel.chainBadgesHtml(r.chain)}` : ''}${childRunBadges(r)}${!pv.id && r.project ? ` <span class="badge" title="project">${esc(r.project.name)}</span>` : ''}</div>
           <div class="muted small pr-task" title="${esc(task)}">${esc(firstLine || 'No task')}</div>
         </div>
         <span class="pr-meta"><label>started</label>${r.startedAt ? esc(dateOf(r.startedAt)) : '—'}</span>
@@ -384,10 +384,15 @@ const ENGINE_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" 
 const CHIP_ROBOT_STATE = { running: 'thinking', waiting: 'waiting', failed: 'error', stopped: 'sleeping', done: 'idle' };
 const MAX_CHIPS = 8;
 
-function progressAvatar(a, chip, names, workflow) {
+// A step as people read it (#245): the run's own name for it (`stepNames`, from its workflow.started
+// display), else its id made readable; the id itself stays for the tooltips.
+const stepName = (id, stepNames) => (typeof displayName === 'function' ? displayName(id, stepNames) : String(id || ''));
+const stepsTip = (ids, stepNames) => ids.map((s) => `${stepName(s, stepNames)} (${s})`).join(', ');
+
+function progressAvatar(a, chip, names, workflow, stepNames) {
   const tip = a.human
-    ? `${a.steps.join(', ')} · You (human gate)${a.durationMs ? ` · ${fmtDur(a.durationMs)}` : ''}`
-    : `${a.steps.join(', ')} · ${agentLabel(a.agent, names)} (${a.agent})${a.provider ? ` · ${a.provider}${a.model ? `/${a.model}` : ''}` : ''}${a.durationMs ? ` · ${fmtDur(a.durationMs)}` : ''} · ${fmtUsd(a.cost)}`;
+    ? `${stepsTip(a.steps, stepNames)} · You (human gate)${a.durationMs ? ` · ${fmtDur(a.durationMs)}` : ''}`
+    : `${stepsTip(a.steps, stepNames)} · ${agentLabel(a.agent, names)} (${a.agent})${a.provider ? ` · ${a.provider}${a.model ? `/${a.model}` : ''}` : ''}${a.durationMs ? ` · ${fmtDur(a.durationMs)}` : ''} · ${fmtUsd(a.cost)}`;
   // the last chip's working agents show the run's state; the others rest
   const st = chip.status === 'done' ? 'idle' : CHIP_ROBOT_STATE[chip.status];
   // the agent's fixed colour (#224): its robot is painted in it (#227), the engine's gear is drawn in it
@@ -405,22 +410,24 @@ function progressAvatar(a, chip, names, workflow) {
 // A small app tooltip (#236) for the strip's "+N" badges: the names it folds, as a card.
 const foldCard = (text) => `<span class="rp-card" role="tooltip"><span class="muted">${esc(text)}</span></span>`;
 
-function progressChip(c, names, workflow) {
+// stepNames (#245): step id → the run's name for it; a grouped chip keeps its group's name
+function progressChip(c, names, workflow, stepNames) {
+  const current = c.current ? stepName(c.current, stepNames) : c.current;
   const label = {
     done: '✓',
-    running: `${c.current}…`,
+    running: `${current}…`,
     waiting: 'waiting for you',
-    failed: `✕ ${c.current}`,
-    stopped: `stopped at ${c.current}`,
+    failed: `✕ ${current}`,
+    stopped: `stopped at ${current}`,
   }[c.status];
   const agents = c.agents.length ? c.agents : [{ agent: 'orchestrator', steps: c.steps.map((e) => e.step), cost: 0, durationMs: 0 }];
-  const avs = agents.slice(0, 4).map((a) => progressAvatar(a, c, names, workflow)).join('') + (agents.length > 4 ? (() => {
+  const avs = agents.slice(0, 4).map((a) => progressAvatar(a, c, names, workflow, stepNames)).join('') + (agents.length > 4 ? (() => {
     const more = `Also: ${agents.slice(4).map((a) => agentLabel(a.agent, names)).join(', ')}`;
     return `<span class="rp-av rp-more" tabindex="0" aria-label="${esc(more)}">+${agents.length - 4}${foldCard(more)}</span>`;
   })() : '');
   return `<div class="rp-chip st-${c.status}${c.status === 'done' ? ' still' : ''}">
     <div class="rp-avs">${avs}</div>
-    <div class="rp-name${c.grouped ? '' : ' mono'}">${esc(c.name)}${c.round > 1 ? ` <span class="rp-round">×${c.round}</span>` : ''}</div>
+    <div class="rp-name">${esc(c.grouped ? c.name : stepName(c.name, stepNames))}${c.round > 1 ? ` <span class="rp-round">×${c.round}</span>` : ''}</div>
     <div class="rp-state">${esc(label)}</div>
   </div>`;
 }
@@ -433,8 +440,9 @@ function runProgressStrip(r) {
   const status = live?.trail ? live.run?.status || r.status : r.status;
   const chips = RunProgress.progressGroups(steps, r.groups || live?.groups, status);
   const skipped = chips.length - MAX_CHIPS;
-  const folded = skipped > 0 ? `Earlier steps: ${chips.slice(0, skipped).map((c) => c.name).join(' › ')}` : '';
-  return `<div class="rp-strip">${skipped > 0 ? `<span class="rp-skip" tabindex="0" aria-label="${esc(folded)}">+${skipped}${foldCard(folded)}</span><span class="rp-sep">›</span>` : ''}${chips.slice(Math.max(0, skipped)).map((c) => progressChip(c, r.agentNames || live?.run?.agentNames, r.workflow || live?.run?.workflow)).join('<span class="rp-sep">›</span>')}</div>`;
+  const stepNames = r.stepNames || live?.run?.stepNames;
+  const folded = skipped > 0 ? `Earlier steps: ${chips.slice(0, skipped).map((c) => (c.grouped ? c.name : stepName(c.name, stepNames))).join(' › ')}` : '';
+  return `<div class="rp-strip" data-testid="run-progress-strip">${skipped > 0 ? `<span class="rp-skip" tabindex="0" aria-label="${esc(folded)}">+${skipped}${foldCard(folded)}</span><span class="rp-sep">›</span>` : ''}${chips.slice(Math.max(0, skipped)).map((c) => progressChip(c, r.agentNames || live?.run?.agentNames, r.workflow || live?.run?.workflow, stepNames)).join('<span class="rp-sep">›</span>')}</div>`;
 }
 
 // #236: the app's tooltips stay on screen. The agent card (.rp-card) and the Roadmap's steps popover

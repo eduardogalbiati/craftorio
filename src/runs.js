@@ -243,8 +243,10 @@ function readRun(runsDir, runId) {
     sessions,
     // null: recorded before groups existed (the workflow file may have them now)
     groups: summary?.groups || started?.groups || null,
-    // agents from the Agents menu: key → their own name (workflow.started)
-    agentNames: started?.agent_names || null,
+    // agent key → name (workflow.started, #245: the YAML's display; the Agents menu's own names win)
+    agentNames: (started?.display?.agents || started?.agent_names) ? { ...started?.display?.agents, ...started?.agent_names } : null,
+    // step id → name (#245, workflow.started display.steps); runs from before it have none
+    stepNames: started?.display?.steps || null,
     progress,
   };
 }

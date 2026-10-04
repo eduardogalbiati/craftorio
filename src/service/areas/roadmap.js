@@ -56,7 +56,7 @@ module.exports = (ctx) => {
       const gate = live?.pendingGates?.()[0]?.brief?.headline || null;
       return {
         status: r.status, mock: !!r.mock, startedAt: r.startedAt || null, finishedAt: r.finishedAt || null, waiting, gate,
-        progress, groups: r.groups || [], agentNames: r.agentNames || null, workflow: r.workflow || null, error: r.error || null,
+        progress, groups: r.groups || [], agentNames: r.agentNames || null, stepNames: r.stepNames || null, workflow: r.workflow || null, error: r.error || null,
         stepTimes: times, history: count,
       };
     };

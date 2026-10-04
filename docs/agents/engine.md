@@ -168,6 +168,13 @@ same features for users; this is the implementer's summary.
 - `capabilities` (agent, overridable per step) and `isolation: false`: see [capabilities.md](capabilities.md).
 - `color: "#RRGGBB"` (agent, #224): the agent's colour in the run chat and the runs list, over its role's
   fixed colour (`src/renderer/agent-colors.js`); the engine ignores it, `workflows:list` passes it on.
+- `display: "Final verification"` (agent or step, #245, optional, a string of 1 to 40 characters,
+  `validateDisplay` in `loadWorkflow`): the name the screens show instead of the key or id; without it
+  `displayName(id)` (`src/renderer/display-name.js`: `verify_change` → "Verify change"). `workflow.started`
+  records `display: { agents: { key: name }, steps: { id: name } }` for every agent and step
+  (`displayNames()`), so a past run keeps its own version's names; `readRun` gives the renderer
+  `stepNames` and `agentNames` (the Agents menu's own names win). Ids stay in tooltips and details;
+  prompts, events, transitions and files keep the ids. The Workflows editor edits it ("Display name").
 - `edits_tests: false` (agent or `defaults`, overridable per step, e.g. `resolve_merge: true`) + workflow-level
   `tests_paths` (globs; default `TESTS_PATHS` in `src/engine/test-paths.js`): `sendToAgent` snapshots the
   working dir before every turn of that agent (steps and delegations) and, after it, lists the test files the

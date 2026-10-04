@@ -56,7 +56,9 @@
     return `<span class="rc-who" tabindex="0" aria-label="${esc(`${nameOf(who.agent)}: ${lines.join(', ')}`)}">${avatar(who)}</span>
       <span class="rc-card" role="tooltip">${lines.map((l) => `<span>${esc(l)}</span>`).join('')}<span class="mono muted">${esc(who.agent)}</span></span>`;
   }
-  const stepTag = (stepId, visit, sub) => `<span class="rc-step" title="Step">${esc(stepId)}${sub ? ` · ${esc(sub)}` : ''}${visit > 1 ? ` · visit ${visit}` : ''}</span>`;
+  // #245: a step by its readable name, its id in the tooltip
+  const stepName = (stepId) => (stepId ? chat.model.stepName(stepId) : '');
+  const stepTag = (stepId, visit, sub) => `<span class="rc-step" data-testid="run-chat-step" title="${esc(`Step ${stepId || ''}`.trim())}">${esc(stepName(stepId))}${sub ? ` · ${esc(sub)}` : ''}${visit > 1 ? ` · visit ${visit}` : ''}</span>`;
 
   // ---------------------------------------------------------------- items → HTML
   function turnHtml(it) {
@@ -137,13 +139,13 @@
           <div class="duo-meta"><b>${esc(it.workflow)}</b>${it.version ? `<span class="tag">v${esc(it.version)}</span>` : ''}${it.mock ? '<span class="badge p-mock">simulated</span>' : ''}<span class="time">${clock(it.ts)}</span></div>
           ${it.task ? `<div class="rc-body md">${md(it.task)}</div>` : '<p class="muted small">No task.</p>'}
           ${inputs.length ? `<details class="rc-more"><summary>Inputs</summary><dl class="rc-inputs">${inputs.map(([k, v]) => `<dt class="mono">${esc(k)}</dt><dd class="mono">${esc(typeof v === 'string' ? v : JSON.stringify(v))}</dd>`).join('')}</dl></details>` : ''}
-          </div></div>${it.resumedFrom ? `<div class="duo-note plain"><span>Resumed from ${esc(it.resumedFrom.run_id)} at ${esc(it.resumedFrom.step)}</span></div>` : ''}${issue ? `<div class="duo-note plain"><span>${issue}</span></div>` : ''}</div>`;
+          </div></div>${it.resumedFrom ? `<div class="duo-note plain"><span>Resumed from ${esc(it.resumedFrom.run_id)} at <span title="${esc(it.resumedFrom.step)}">${esc(stepName(it.resumedFrom.step))}</span></span></div>` : ''}${issue ? `<div class="duo-note plain"><span>${issue}</span></div>` : ''}</div>`;
       }
       case 'turn': return turnHtml(it);
       case 'group': return groupHtml(it);
       case 'gate': return gateHtml(it);
       case 'system': return `<div class="rc-sys ${it.level}" data-item="${it.id}"><span>${esc(it.text)}</span><time>${clock(it.ts)}</time></div>`;
-      case 'fail': return `<div class="rc-sys error" data-item="${it.id}"><span>${esc(it.stepId)} failed: ${esc(it.text.slice(0, 400))}</span><time>${clock(it.ts)}</time></div>`;
+      case 'fail': return `<div class="rc-sys error" data-item="${it.id}"><span title="${esc(it.stepId)}">${esc(stepName(it.stepId))} failed:${esc(it.text.slice(0, 400))}</span><time>${clock(it.ts)}</time></div>`;
       case 'reply': return `<div class="duo-msg user reply" data-item="${it.id}"><div class="duo-bubble">
         <div class="duo-meta"><b>${it.by === 'user' ? 'You' : esc(it.by)}</b>${stepTag(it.stepId)}<span class="time">${clock(it.ts)}</span></div>
         <p><b>${esc(it.label)}</b></p>${it.feedback ? `<p class="duo-msg-text">${esc(it.feedback)}</p>` : ''}</div></div>`;
@@ -205,7 +207,7 @@
     if (el.dataset.key === key) return;
     el.dataset.key = key;
     el.innerHTML = active.map((a) => `<div class="duo-typing${a.side === 'right' ? ' rc-right' : ''}"${colorStyle(a.agent)} title="${esc([a.agent, ...(isSupervisor(a.agent) ? [] : cardLines(a))].join('\n'))}"><span class="duo-robot" aria-hidden="true">${robot(a, a.state)}</span>
-      <span class="duo-dots"><i></i><i></i><i></i></span><span><b>${esc(nameOf(a.agent))}</b> ${DOING[a.state] || DOING.thinking}… <span class="muted">(${esc(a.stepId)})</span></span></div>`).join('');
+      <span class="duo-dots"><i></i><i></i><i></i></span><span><b>${esc(nameOf(a.agent))}</b> ${DOING[a.state] || DOING.thinking}… <span class="muted" title="${esc(a.stepId)}">(${esc(stepName(a.stepId))})</span></span></div>`).join('');
   }
 
   function drawHead() {

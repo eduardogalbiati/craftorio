@@ -107,11 +107,14 @@
     return `<span class="badge bl-roadmap" title="${esc(`${i.roadmap.name}: ${i.roadmap.status}`)}">Roadmap: stage ${i.roadmap.stage}${i.roadmap.status === 'planned' ? '' : ` · ${esc(i.roadmap.status)}`}</span>`;
   }
 
-  /** A workflow's short name for its badge ("local hero", "software dev"); the file is in the tooltip. */
+  // An id as people read it (#245, display-name.js; `names`: the run's own names for them)
+  const readable = (id, names) => (typeof displayName === 'function' ? displayName(id, names) : String(id || ''));
+
+  /** A workflow's short name for its badge ("Local hero", "Software dev", "AI development local hero"); the file is in the tooltip. */
   function shortWorkflow(file) {
     const base = String(file || '').replace(/\.ya?ml$/i, '');
-    if (base === 'software-development') return 'software dev';
-    return base.replace(/^software-development-/, '').replace(/[-_]+/g, ' ');
+    if (base === 'software-development') return 'Software dev';
+    return readable(base.replace(/^software-development-/, ''));
   }
 
   /** The sum of the item's issues' `complexity:n` labels (null when none has one). */
@@ -266,7 +269,9 @@
     const run = x.run;
     const last = (run.progress || []).at(-1);
     const groupOf = new Map((run.groups || []).flatMap((g) => (g.steps || []).map((id) => [id, g.name])));
-    const where = est.step ? groupOf.get(est.step) || est.step : 'starting';
+    // #245: the step's readable name (the run's own `stepNames`), its id only in the tooltips
+    const where = est.step ? groupOf.get(est.step) || readable(est.step, run.stepNames) : 'starting';
+    const whereId = est.step && !groupOf.has(est.step) ? ` (${est.step})` : '';
     const label = { waiting: 'Waiting for you', failed: `Failed at ${where}`, stopped: `Stopped at ${where}`, done: 'Done' }[est.state] || where;
     // who works there: the human at a gate, else the step's first agent (the engine when none yet)
     // (before its first message the trail has no provider yet: the workflow's agent definition gives it)
@@ -292,17 +297,17 @@
     const pct = est.state === 'done' ? 100 : est.percent;
     const chips = RunProgress.progressGroups(run.progress || [], run.groups || [], run.status === 'running' || run.status === 'pending' ? 'running' : run.status);
     const steps = chips.length
-      ? `<div class="rp-strip">${chips.map((c) => `<button type="button" class="rm-chip" data-rm-chip="${esc(c.name)}" data-grouped="${c.grouped ? '1' : ''}" aria-label="${esc(`Open the run at ${c.name}`)}">${progressChip(c, run.agentNames, run.workflow)}</button>`).join('<span class="rp-sep">›</span>')}</div>`
+      ? `<div class="rp-strip">${chips.map((c) => `<button type="button" class="rm-chip" data-rm-chip="${esc(c.name)}" data-grouped="${c.grouped ? '1' : ''}" aria-label="${esc(`Open the run at ${c.grouped ? c.name : `${readable(c.name, run.stepNames)} (${c.name})`}`)}">${progressChip(c, run.agentNames, run.workflow, run.stepNames)}</button>`).join('<span class="rp-sep">›</span>')}</div>`
       : '<p class="small muted">No step has started yet.</p>';
     const head = `<div class="rm-run-summary small" data-testid="roadmap-run-summary">${summary.map((l) => `<div>${esc(l)}</div>`).join('')}<div class="muted">${esc(how)}</div><div class="muted">Click a step to open the run there.</div></div>`;
     return `
       <div class="rm-progress st-${est.state}${run.mock ? ' sim' : ''}${ringOpen === x.runId ? ' open' : ''}" data-rm-progress="${esc(x.runId)}" data-workflow="${esc(run.workflow || x.workflowName || '')}">
-        <button type="button" class="rm-ring" data-rm-ring aria-expanded="${ringOpen === x.runId}" aria-label="${esc(`${pct}% estimated, ${label}. Show the run's steps`)}">
+        <button type="button" class="rm-ring" data-rm-ring aria-expanded="${ringOpen === x.runId}" aria-label="${esc(`${pct}% estimated, ${label}${whereId}. Show the run's steps`)}">
           <svg viewBox="0 0 36 36" aria-hidden="true"><circle class="rm-ring-track" cx="18" cy="18" r="15.9155"/><circle class="rm-ring-bar" cx="18" cy="18" r="15.9155" stroke-dasharray="${pct} ${100 - pct}"/></svg>
           <span class="rm-ring-pct">${pct}%</span>
         </button>
         <div class="rm-progress-text">
-          <span class="rm-progress-step"><span class="rp-av${human ? ' human' : agent?.provider ? '' : ' engine'}" aria-hidden="true">${art}</span><span>${esc(label)}</span></span>
+          <span class="rm-progress-step" data-testid="roadmap-progress-step"><span class="rp-av${human ? ' human' : agent?.provider ? '' : ' engine'}" aria-hidden="true">${art}</span><span>${esc(label)}</span></span>
           ${run.mock ? '<span class="badge p-mock">simulated</span>' : ''}
         </div>
         <div class="rm-steps" role="group" aria-label="The run's steps">${head}${steps}</div>

@@ -515,7 +515,7 @@ async function hydrateRun(runId) {
   // the gates it still waits at say so, as when they were asked (the badge and gate card read v.approvals)
   const shown = (state.view === 'run' && state.runId === runId) || window.duoShowsRun?.(runId) || window.arenaShowsRun?.(runId) || window.runChatShowsRun?.(runId);
   if (!v.past && !shown) {
-    for (const g of v.approvals.values()) showToast(`Approval waiting: ${runLabel(v.run)}`, `Step ${g.step_id}. Click to open its run.`, runId, g);
+    for (const g of v.approvals.values()) showToast(`Approval waiting: ${runLabel(v.run)}`, `Step ${agentLabel(g.step_id, v.run?.stepNames)}. Click to open its run.`, runId, g);
   }
   renderRunListsSoon();
   scheduleRender();
@@ -528,7 +528,9 @@ function runInfo(x) {
   return {
     id: x.run_id || x.runId, startedAt: Date.parse(x.ts || x.startedAt) || Date.now(), mock: !!x.mock, workflow: x.workflow,
     version: x.version, inputs, issues: issuesOfRun(x), project: project?.name || null,
-    agentNames: x.agent_names || null, // agents from the Agents menu: key → their own name
+    // agent key → name: the YAML's display (#245), the Agents menu's own names winning
+    agentNames: x.display?.agents || x.agent_names ? { ...x.display?.agents, ...x.agent_names } : null,
+    stepNames: x.display?.steps || null, // step id → name (#245)
     chain: ChainModel.runChain(x), // its chain (#134)
     // `type: workflow` steps (#174): the run that started this one, the runs this one started
     parentRun: x.parent_run || x.parentRun || null, childRuns: [...(x.childRuns || [])],
@@ -551,7 +553,8 @@ function openSaveAfterAccept(v) {
   setTimeout(() => window.openDuoSaveToIssue({ runId: v.run.id, issue, mock: v.run.mock, docSkill: v.run.inputs?.document_skill || '' }), 500);
 }
 
-// An agent's readable name (display-name.js); the slug stays in tooltips.
+// An agent's readable name (display-name.js); the slug stays in tooltips. A step's too (#245), with
+// the run's stepNames.
 const agentLabel = (slug, names) => (window.displayName ? displayName(slug, names) : String(slug || ''));
 
 // Finished runs that are not shown are forgotten (their chat and files keep everything).

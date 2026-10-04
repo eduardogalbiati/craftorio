@@ -617,6 +617,7 @@ steps:
   # tests related to them (the code → tests graph) go to develop; a file that cannot run goes back to
   # the test writer once. A red check that cannot run at all (no test command) goes on to develop.
   - id: red_check
+    display: Red check (tests fail first)
     type: suite
     command: "{{ inputs.test_command }}"
     files: "{{ steps.acceptance_tests.output.tests_added }}"
@@ -1329,6 +1330,7 @@ steps:
   # page's accessibility snapshot under .test-output/e2e/artifacts/. The visual baselines of the
   # screens the issue changes are checked in the same run. Green: no LLM at all. Red: the healer.
   - id: e2e
+    display: E2E scenarios
     type: suite
     command: '{{ inputs.e2e_command or "npm run test:e2e" }} -- --grep "{% for n in inputs | issue_numbers %}@issue-{{ n }}|{% endfor %}@smoke"'
     timeout: 30m
@@ -1619,6 +1621,7 @@ steps:
   # Verifier: does the change do what the task asked? Same command on the base and on
   # the branch. inconclusive (nothing observable, e.g. a refactor) does not block.
   - id: verify_change
+    display: Final verification
     agent: verifier
     prompt: |
       Task: {{ inputs.task }}

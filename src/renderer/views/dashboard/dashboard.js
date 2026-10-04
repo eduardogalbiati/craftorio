@@ -27,7 +27,7 @@ function renderDashboard() {
     const r = state.runs.get(g.run_id)?.run;
     return `<div class="dash-run-row">
       <span class="status st-waiting"><span class="status-dot"></span></span>
-      <span><b>${esc(r?.workflow || 'workflow')}</b>${r?.project ? ` · ${esc(r.project)}` : ''}${issueRefs(r) ? ` · ${esc(issueRefs(r))}` : ''} <span class="muted">— step ${esc(g.step_id)}</span></span>
+      <span><b title="${esc(r?.workflow || '')}">${esc(typeof displayName === 'function' && r?.workflow ? displayName(r.workflow) : r?.workflow || 'workflow')}</b>${r?.project ? ` · ${esc(r.project)}` : ''}${issueRefs(r) ? ` · ${esc(issueRefs(r))}` : ''} <span class="muted" title="${esc(g.step_id)}">— step ${esc(typeof displayName === 'function' ? displayName(g.step_id, r?.stepNames) : g.step_id)}</span></span>
       <button class="btn sm primary" data-gate-run="${esc(g.run_id)}">Open run</button></div>`;
   }).join('')}` : '';
   gbox.querySelectorAll('[data-gate-run]').forEach((b) => (b.onclick = () => openGateOf(b.dataset.gateRun)));

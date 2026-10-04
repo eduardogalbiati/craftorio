@@ -86,6 +86,7 @@ const { IdleWatch } = require('./idle');
 const testPaths = require('./test-paths');
 const { StepTrail } = require('../renderer/run-progress-model');
 const chain = require('../renderer/chain-model');
+const { displayName } = require('../renderer/display-name');
 
 // Skills bundled with the app (skills/ folder at the root). Workspace skills take precedence.
 const BUNDLED_SKILLS = path.join(__dirname, '..', '..', 'skills');
@@ -248,6 +249,13 @@ const END_STATUSES = ['success', 'failed', 'cancelled'];
 // once a turn ends above it); ephemeral: a fresh session per turn with only the step prompt;
 // handoff: a fresh session per turn that starts from the agent's latest handoff note.
 const SESSION_MODES = ['persistent', 'ephemeral', 'handoff'];
+const DISPLAY_MAX = 40;
+
+// #245: `display` on an agent or a step, the name the screens show instead of its key or id
+function validateDisplay(v, what) {
+  if (v === undefined) return;
+  if (typeof v !== 'string' || !v.trim() || v.length > DISPLAY_MAX) throw new Error(`${what}: display must be a name of 1 to ${DISPLAY_MAX} characters.`);
+}
 
 function loadWorkflow(file) {
   const wf = yaml.load(fs.readFileSync(file, 'utf8'));
@@ -261,11 +269,13 @@ function loadWorkflow(file) {
     if (a.edits_tests !== undefined && typeof a.edits_tests !== 'boolean') throw new Error(`${name}: edits_tests must be true or false.`);
     validateFileList(a.protect_files, `${name}: protect_files`);
     capabilities.validate(a.capabilities, name, mcpServers);
+    validateDisplay(a.display, name);
   }
   testPaths.validateTestsPaths(wf.tests_paths);
   const ids = new Set(wf.steps.map((s) => s.id));
   for (const s of wf.steps) {
     capabilities.validate(s.capabilities, `Step "${s.id}"`, mcpServers);
+    validateDisplay(s.display, `Step "${s.id}"`);
     if (s.edits_tests !== undefined && typeof s.edits_tests !== 'boolean') throw new Error(`Step "${s.id}": edits_tests must be true or false.`);
     // #220: files its agent may not change (a template, e.g. another step's tests_added), and the
     // code → tests map given to its prompt as {{ test_map }} (#219)
@@ -1073,6 +1083,16 @@ class WorkflowRun extends EventEmitter {
     return Object.keys(names).length ? names : undefined;
   }
 
+  // #245: what the screens call each agent and step (the YAML's `display`, else the readable id),
+  // recorded in workflow.started so a past run keeps its own version's names
+  displayNames() {
+    const named = (id, x) => (typeof x?.display === 'string' && x.display.trim()) || displayName(id);
+    return {
+      agents: Object.fromEntries(Object.entries(this.wf.agents).map(([k, a]) => [k, named(k, a)])),
+      steps: Object.fromEntries(this.wf.steps.map((s) => [s.id, named(s.id, s)])),
+    };
+  }
+
   snapshot(s) {
     const duration = (s.closedAt || Date.now()) - s.openedAt;
     return {
@@ -1118,6 +1138,7 @@ class WorkflowRun extends EventEmitter {
       parent_run: this.parent || undefined,
       personas: Object.keys(this.personas).length ? this.personas : undefined,
       agent_names: this.agentNames(),
+      display: this.displayNames(),
       steps: this.wf.steps.map((s) => ({ id: s.id, type: s.type || 'agent', agent: stepAgentLabel(s) })),
       groups: this.wf.groups,
     });

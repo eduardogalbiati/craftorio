@@ -1231,6 +1231,7 @@ steps:
   # Verifier: does the change do what the task asked? Same command on the base and on
   # the branch. inconclusive (nothing observable, e.g. a refactor) does not block.
   - id: verify_change
+    display: Final verification
     agent: verifier
     prompt: |
       Task: {{ inputs.task }}

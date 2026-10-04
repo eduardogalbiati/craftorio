@@ -170,9 +170,12 @@ function renderWorkflowDefinitions() {
 
 // The step list collapsed into one line of step chips (gates dashed); a long flow shows its first
 // steps and how many more (its last steps in the file are often failure branches, not the end).
+// A step of a workflow definition as people read it (#245): its YAML `display`, else its id made
+// readable (the same in stepList, for agents too); the id stays in the tooltip.
 function stepFlow(w) {
   const steps = w.steps || [];
-  const chip = (s) => `<span class="step-chip ${s.type === 'human_approval' ? 'human' : ''}" title="${esc(s.type === 'human_approval' ? `${s.id} (human approval)` : s.id)}">${esc(s.id)}</span>`;
+  const wfReadable = (id, def) => def?.display || (typeof displayName === 'function' ? displayName(id) : String(id || ''));
+  const chip = (s) => `<span class="step-chip ${s.type === 'human_approval' ? 'human' : ''}" title="${esc(s.type === 'human_approval' ? `${s.id} (human approval)` : s.id)}">${esc(wfReadable(s.id, s))}</span>`;
   const shown = steps.length > 7 ? steps.slice(0, 6) : steps;
   return shown.map(chip).join('<span class="arrow">›</span>') + (steps.length > shown.length ? `<span class="muted small">+${steps.length - shown.length} more</span>` : '');
 }
@@ -295,20 +298,21 @@ function wireWorkflowDefinitions(box) {
 
 // The whole step list of a workflow card, when its flow is expanded.
 function stepList(w) {
+  const wfReadable = (id, def) => def?.display || (typeof displayName === 'function' ? displayName(id) : String(id || ''));
   return (w.steps || []).map((s, i) => {
     const human = s.type === 'human_approval';
     const names = s.agents || [s.agent];
-    const who = names.map((n) => `${esc(n)}${w.agents?.[n] ? ` · <span class="mono">${esc(w.agents[n].model)}</span>` : ''}`).join(s.agents ? '<br>' : '');
+    const who = names.map((n) => `<span title="${esc(n)}">${esc(wfReadable(n, w.agents?.[n]))}</span>${w.agents?.[n] ? ` · <span class="mono">${esc(w.agents[n].model)}</span>` : ''}`).join(s.agents ? '<br>' : '');
     const skillNames = [...new Set([...(s.skills || []), ...names.flatMap((n) => w.agents?.[n]?.skills || [])])];
     const others = s.next.filter((n) => n !== w.steps[i + 1]?.id);
     return `<li class="wf-step ${human ? 'human' : ''}">
       <span class="wf-step-n">${i + 1}</span>
       <div class="wf-step-body">
-        <div class="wf-step-head"><b>${esc(s.id)}</b>
+        <div class="wf-step-head" title="${esc(s.id)}"><b>${esc(wfReadable(s.id, s))}</b>
           ${s.agents ? '<span class="badge">parallel</span>' : ''}${s.goal ? '<span class="badge">/goal</span>' : ''}${s.loop ? '<span class="badge">/loop</span>' : ''}
           ${skillNames.map((k) => `<span class="badge" title="skill">⚡ ${esc(k.replace(/\{\{\s*inputs\.(\w+)\s*\}\}/g, '‹$1›'))}</span>`).join('')}</div>
         <div class="muted small">${human ? 'human approval' : s.type === 'screenshots' ? 'screenshots (no agent)' : s.type === 'suite' ? 'test suite (no agent)' : s.type === 'workflow' ? `runs ${esc(s.workflow || 'a workflow')}${s.foreach ? ` for each item${s.max_parallel ? `, ${esc(String(s.max_parallel))} at a time` : ''}` : ''}` : who}</div>
-        ${others.length ? `<div class="wf-step-next small">↳ ${others.map((n) => `<span class="mono">${esc(n)}</span>`).join(', ')}</div>` : ''}
+        ${others.length ? `<div class="wf-step-next small">↳ ${others.map((n) => `<span title="${esc(n)}">${esc(wfReadable(n, w.steps.find((x) => x.id === n)))}</span>`).join(', ')}</div>` : ''}
       </div>
     </li>`;
   }).join('');

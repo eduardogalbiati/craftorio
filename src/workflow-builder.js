@@ -85,6 +85,15 @@ function validateAgent(a = {}, where, errs) {
 }
 
 /** Throws with every problem of a spec at once (the builder shows them together). */
+// #245: a step's (or agent's) `display`, the name the screens show instead of its id; empty: none
+const DISPLAY_MAX = 40;
+const displayOf = (x) => (str(x?.display) ? { display: str(x.display) } : {});
+function setDisplay(d, value, where) {
+  const v = str(value);
+  if (v.length > DISPLAY_MAX) throw new Error(`${where}: the display name must be at most ${DISPLAY_MAX} characters.`);
+  if (v) d.display = v; else delete d.display;
+}
+
 function validateSpec(spec) {
   const errs = [];
   if (!spec || typeof spec !== 'object') throw new Error('Nothing to save.');
@@ -97,6 +106,7 @@ function validateSpec(spec) {
     if (!ID.test(s?.id || '') || RESERVED.has(s.id)) errs.push(`${where}: the id must start with a letter and use only lowercase letters, digits and _ (not "end" or "fail").`);
     else if (seen.has(s.id)) errs.push(`${where}: another desk already uses this id.`);
     seen.add(s?.id);
+    if (str(s?.display).length > DISPLAY_MAX) errs.push(`${where}: the display name must be at most ${DISPLAY_MAX} characters.`);
     if (s?.kind === 'gate') {
       if (!REVIEWERS.includes(s.reviewer || 'human')) errs.push(`${where}: who approves must be "human" or "ai".`);
       if (!str(s.message)) errs.push(isAiGate(s) ? `${where}: write what the agent checks.` : `${where}: write what the approver should check.`);
@@ -183,6 +193,7 @@ function buildDoc(spec, base = null) {
       agents[s.id] = agentYaml(s.agent, 'read');
       out.push({
         id: s.id,
+        ...displayOf(s),
         agent: s.id,
         prompt: checkPrompt(s, prevAgent),
         output_schema: AI_SCHEMA,
@@ -199,6 +210,7 @@ function buildDoc(spec, base = null) {
     if (s.kind === 'gate') {
       out.push({
         id: s.id,
+        ...displayOf(s),
         type: 'human_approval',
         message: `${str(s.message)}\n`,
         feedback: { label: FEEDBACK_LABEL },
@@ -211,7 +223,7 @@ function buildDoc(spec, base = null) {
     }
     agents[s.id] = agentYaml(s.agent, s.access);
     const aiBacks = steps.filter((g) => isAiGate(g) && g.onReject === s.id).map((g) => g.id);
-    out.push({ id: s.id, agent: s.id, prompt: stepPrompt(s, prevAgent, hasGates, aiBacks) });
+    out.push({ id: s.id, ...displayOf(s), agent: s.id, prompt: stepPrompt(s, prevAgent, hasGates, aiBacks) });
     meta[s.id] = { brief: str(s.brief), context: s.context !== false, ...agentMeta(s.agent) };
     prevAgent = s;
   });
@@ -254,9 +266,9 @@ function toYaml(spec, base = null) {
   return header + yaml.dump(doc, { lineWidth: -1, noRefs: true });
 }
 
-const STEP_KEYS = new Set(['id', 'agent', 'prompt']);
-const CHECK_KEYS = new Set(['id', 'agent', 'prompt', 'output_schema', 'transitions']);
-const GATE_KEYS = new Set(['id', 'type', 'message', 'feedback', 'transitions']);
+const STEP_KEYS = new Set(['id', 'display', 'agent', 'prompt']);
+const CHECK_KEYS = new Set(['id', 'display', 'agent', 'prompt', 'output_schema', 'transitions']);
+const GATE_KEYS = new Set(['id', 'display', 'type', 'message', 'feedback', 'transitions']);
 const AGENT_KEYS = new Set(['provider', 'model', 'effort', 'persona', 'session', 'capabilities', 'working_dir', 'system_prompt', 'skills']);
 const TOP_KEYS = new Set(['apiVersion', 'kind', 'metadata', 'inputs', 'providers', 'defaults', 'orchestrator', 'agents', 'steps', 'observability', 'x-builder', 'x-tools']);
 const has = (o, k) => o[k] !== undefined;
@@ -321,7 +333,7 @@ function fromWorkflow(doc) {
         if (!shape) add(`transitions of gate "${s.id}"`);
         else if (no.goto !== 'end') onReject = no.goto;
       }
-      steps.push({ id: s.id, kind: 'gate', reviewer: 'human', message: str(s.message), onReject });
+      steps.push({ id: s.id, ...displayOf(s), kind: 'gate', reviewer: 'human', message: str(s.message), onReject });
       continue;
     }
     if (m.kind === 'ai_gate') {
@@ -329,7 +341,7 @@ function fromWorkflow(doc) {
       const no = (s.transitions || [])[1] || {};
       const { agent } = readAgent(s, m);
       steps.push({
-        id: s.id, kind: 'gate', reviewer: 'ai', message: str(m.criteria),
+        id: s.id, ...displayOf(s), kind: 'gate', reviewer: 'ai', message: str(m.criteria),
         onReject: no.goto && no.goto !== 'end' ? no.goto : 'stop',
         maxRounds: Number(no.loop?.max_iterations ?? 3),
         agent,
@@ -341,6 +353,7 @@ function fromWorkflow(doc) {
     const { access, agent } = readAgent(s, m);
     steps.push({
       id: s.id,
+      ...displayOf(s),
       kind: 'agent',
       brief: m.brief !== undefined ? str(m.brief) : str(s.prompt),
       context: m.brief !== undefined ? m.context !== false : false,
@@ -392,6 +405,7 @@ function describeWorkflow(doc) {
       source: look.agent_id ? 'agent' : 'custom',
       agentId: look.agent_id || null,
       name: look.agent_name || '',
+      display: str(a.display),
       appearance: look.appearance || null,
       provider: templated.provider ? null : providerOf(doc, a.provider),
       model: templated.model ? '' : str(a.model),
@@ -413,7 +427,7 @@ function describeWorkflow(doc) {
     if (st.save_as) badges.push('saves files');
     if (st.choices) badges.push(`choices: ${st.choices.map((c) => c.id).join(' / ')}`);
     if (st.type && st.type !== 'human_approval') badges.push(st.type);
-    const common = { id: st.id, badges, branches };
+    const common = { id: st.id, display: str(st.display), badges, branches };
     if (st.type === 'human_approval') return { ...common, kind: 'gate', message: str(st.message), onReject: null };
     const names = st.agents || (st.agent ? [st.agent] : []);
     return { ...common, kind: names.length ? 'agent' : 'other', agentNames: names, brief: str(st.prompt) };
@@ -446,11 +460,13 @@ function patchWorkflow(doc, spec, header = '') {
     if (str(a.system_prompt)) d.system_prompt = `${str(a.system_prompt)}\n`; else delete d.system_prompt;
     const skills = [...new Set((a.skills || []).map(str).filter(Boolean))];
     if (skills.length) d.skills = skills; else delete d.skills;
+    if (a.display !== undefined) setDisplay(d, a.display, `Agent "${name}"`);
     if (a.appearance || a.agentId) looks[name] = { ...(a.agentId ? { agent_id: a.agentId, agent_name: str(a.name) || a.agentId } : {}), ...(a.appearance ? { appearance: a.appearance } : {}) };
   }
   for (const st of spec.steps || []) {
     const d = (out.steps || []).find((x) => x.id === st.id);
     if (!d) continue;
+    if (st.display !== undefined) setDisplay(d, st.display, `Step "${st.id}"`);
     if (st.kind === 'agent' && str(st.brief) !== str(d.prompt)) {
       if (!str(st.brief)) throw new Error(`Step "${st.id}": the prompt can't be empty.`);
       d.prompt = `${str(st.brief)}\n`;
