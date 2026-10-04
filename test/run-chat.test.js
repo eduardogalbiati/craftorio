@@ -447,3 +447,22 @@ test('providerType maps workflow provider keys to the CLI types the robots use',
   assert.deepEqual(['claude-opus-5-5', 'gpt-6-luna', 'grok-4.7', 'model-a', ''].map((m) => providerType('mock', m)), ['claude-code', 'codex-cli', 'grok-cli', 'mock', 'mock']);
   assert.equal(providerType('codex', 'claude-opus-5-5'), 'codex-cli');
 });
+
+// #245: the run's workflow.started carries its display names; the chat names steps and agents by them
+test('#245 run chat: steps and agents are named by the run\'s display names, else their ids made readable; Agents-menu names win', () => {
+  const model = chatOf([{
+    seq: 1, type: 'workflow.started', run_id: 'r1', workflow: 'wf', inputs: {},
+    display: { agents: { test_writer: 'Test author', developer: 'Developer' }, steps: { red_check: 'Red check (tests fail first)' } },
+    agent_names: { developer: 'Ada' },
+  }]);
+  assert.equal(model.stepName('red_check'), 'Red check (tests fail first)');
+  assert.equal(model.stepName('acceptance_tests'), 'Acceptance tests');
+  assert.equal(model.nameOf('test_writer'), 'Test author');
+  assert.equal(model.nameOf('developer'), 'Ada');
+});
+
+test('#245 run chat: a run recorded before display names (no display in workflow.started) still reads "Verify change"', () => {
+  const model = chatOf([{ seq: 1, type: 'workflow.started', run_id: 'r1', workflow: 'wf', inputs: {} }]);
+  assert.equal(model.stepName('verify_change'), 'Verify change');
+  assert.equal(model.nameOf('test_writer'), 'Test writer');
+});

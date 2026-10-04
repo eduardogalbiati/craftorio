@@ -7,10 +7,10 @@ const { GATE_RUN_APP_WORKFLOW, gitRepo, makeService, resolveAndWait, untilTrue }
 
 // A finished run with several files, saved through events.jsonl (so each has a step), for
 // artifacts:list's paging/filtering/search (#200).
-function addRunWithFiles(ws, id, { startedAt, projectId = null, mock = true, files }) {
+function addRunWithFiles(ws, id, { startedAt, projectId = null, mock = true, files, display }) {
   const dir = path.join(ws.runs, id);
   fs.mkdirSync(dir, { recursive: true });
-  const lines = [{ type: 'workflow.started', ts: startedAt, workflow: 'software-development', file: 'software-development.yaml', project_id: projectId, inputs: {}, mock }];
+  const lines = [{ type: 'workflow.started', ts: startedAt, workflow: 'software-development', file: 'software-development.yaml', project_id: projectId, inputs: {}, mock, ...(display ? { display } : {}) }];
   for (const f of files) {
     fs.mkdirSync(path.dirname(path.join(dir, f.rel)), { recursive: true });
     fs.writeFileSync(path.join(dir, f.rel), f.content || 'x');
@@ -182,4 +182,16 @@ test('artifacts:list { q }: a matching run comes with a preview of only its matc
   assert.equal(res[0].runId, 'run1');
   assert.equal(res[0].matchCount, 1);
   assert.deepEqual(res[0].artifacts.map((a) => a.rel), ['needle.md']);
+});
+
+// #245: the artifacts panel (Run screen, gate panel) names a round's step from the run it lists, so
+// the run carries the display names its workflow.started recorded
+test('#245 artifacts:list { runId }: the run carries its step display names (stepNames) from workflow.started', async (t) => {
+  const { api, service } = makeService(t);
+  addRunWithFiles(service.workspace(), 'run245', {
+    startedAt: '2026-10-04T00:00:00Z', files: [{ rel: 'evidence/verify_change/round-1/245-home.modified.png', step: 'verify_change' }],
+    display: { agents: { developer: 'Developer' }, steps: { verify_change: 'Final verification' } },
+  });
+  const [run] = await api['artifacts:list']({ runId: 'run245' });
+  assert.equal(run.stepNames?.verify_change, 'Final verification');
 });
