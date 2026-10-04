@@ -99,6 +99,44 @@ test('triage through the channels: Accept moves to triage, Discard archives with
   assert.deepEqual((await api['discovery:list']({ projectId: 'p1', column: 'inbox' })).map((x) => x.id), [b.id]);
 });
 
+test('discovery:add-attachment refuses a file path: a screen attaches a file by its name and data only', async (t) => {
+  const { service, root, discovery } = makeService(t);
+  const card = await service.api['discovery:create']({ projectId: 'p1', title: 'A', text: '' });
+  const secret = path.join(root, 'secret.txt');
+  fs.writeFileSync(secret, 'private');
+  await assert.rejects(async () => service.api['discovery:add-attachment']({ projectId: 'p1', cardId: card.id, path: secret }), /path/i);
+  await assert.rejects(async () => service.api['discovery:add-attachment']({ projectId: 'p1', cardId: card.id, path: secret, name: 'x.txt', data: 'eA==' }));
+  const box = path.join(discovery, 'p1', 'cards', card.id, 'attachments');
+  assert.deepEqual(fs.existsSync(box) ? fs.readdirSync(box) : [], [], 'nothing was copied');
+});
+
+test('discovery:attachment returns a pasted image with a data: URL for its thumbnail', async (t) => {
+  const { service } = makeService(t);
+  const api = service.api;
+  const card = await api['discovery:create']({ projectId: 'p1', title: 'A', text: '' });
+  const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(8)]).toString('base64');
+  const name = await api['discovery:add-attachment']({ projectId: 'p1', cardId: card.id, name: 'shot.png', data: png });
+  const a = await api['discovery:attachment']({ projectId: 'p1', cardId: card.id, name });
+  assert.equal(a.name, 'shot.png');
+  assert.equal(a.dataUrl, `data:image/png;base64,${png}`);
+  await assert.rejects(async () => api['discovery:attachment']({ projectId: 'p1', cardId: card.id, name: '../card.json' }));
+});
+
+test('discovery:append-conversation adds a note by the person at this machine, stamps its own time and refuses an empty text', async (t) => {
+  const { service } = makeService(t);
+  const api = service.api;
+  const card = await api['discovery:create']({ projectId: 'p1', title: 'A', text: '' });
+  await api['discovery:append-conversation']({ projectId: 'p1', cardId: card.id, entry: { text: 'A first note', ts: '1999-01-01T00:00:00.000Z' } });
+  await assert.rejects(async () => api['discovery:append-conversation']({ projectId: 'p1', cardId: card.id, entry: { text: '   ' } }));
+  const thread = await api['discovery:conversation']({ projectId: 'p1', cardId: card.id });
+  assert.equal(thread.length, 1);
+  assert.equal(thread[0].text, 'A first note');
+  assert.equal(thread[0].kind, 'note');
+  assert.ok(thread[0].author, 'the note has an author');
+  assert.notEqual(thread[0].ts, '1999-01-01T00:00:00.000Z', 'the caller\'s ts is ignored');
+  assert.ok(Date.now() - Date.parse(thread[0].ts) < 60000);
+});
+
 test('a channel refuses a project or card id that is a path', async (t) => {
   const { service } = makeService(t);
   assert.equal(typeof service.api['discovery:create'], 'function', 'discovery:create is not a channel');

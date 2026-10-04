@@ -311,6 +311,88 @@ test('mergeCard joins the documents and attachments into the target and archives
   assert.throws(() => d.mergeCard(dir, P, into.id, into.id, { by: 'a' }), 'a card cannot merge into itself');
 });
 
+test('addAttachment stores the same content under the same name once, and drops trailing dots and spaces from a name', (t) => {
+  const d = load();
+  const { dir } = tmp(t);
+  const c = d.createCard(dir, P, { title: 'A', text: '', author: 'a' });
+  const first = d.addAttachment(dir, P, c.id, { name: 'shot.png', data: Buffer.from('same') });
+  const again = d.addAttachment(dir, P, c.id, { name: 'shot.png', data: Buffer.from('same') });
+  assert.equal(again, first);
+  assert.equal(d.addAttachment(dir, P, c.id, { name: 'shot.png', data: Buffer.from('other') }), 'shot-2.png');
+  assert.equal(d.addAttachment(dir, P, c.id, { name: 'notes.txt. . ', data: Buffer.from('n') }), 'notes.txt');
+  assert.deepEqual(d.readCard(dir, P, c.id).attachments.sort(), ['notes.txt', 'shot-2.png', 'shot.png']);
+});
+
+test('readAttachment gives an image as a data: URL for a preview, another file without one, and refuses a name with a path', (t) => {
+  const d = load();
+  const { dir } = tmp(t);
+  const c = d.createCard(dir, P, { title: 'A', text: '', author: 'a' });
+  // the 8-byte PNG signature followed by a few bytes: sniffed as an image by its content
+  const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(16)]);
+  const img = d.addAttachment(dir, P, c.id, { name: 'screen.png', data: png });
+  const doc = d.addAttachment(dir, P, c.id, { name: 'spec.txt', data: Buffer.from('plain text') });
+  const a = d.readAttachment(dir, P, c.id, img);
+  assert.equal(a.name, 'screen.png');
+  assert.equal(a.size, png.length);
+  assert.equal(a.folder, path.join(cardDir(dir, c.id), 'attachments'));
+  assert.equal(a.dataUrl, `data:image/png;base64,${png.toString('base64')}`);
+  assert.equal(d.readAttachment(dir, P, c.id, doc).dataUrl, null);
+  assert.throws(() => d.readAttachment(dir, P, c.id, '../card.json'));
+  assert.throws(() => d.readAttachment(dir, P, c.id, '..\\document.md'));
+});
+
+test('updateCard merges clarity, estimate and links into the card\'s, and refuses one that is not an object', (t) => {
+  const d = load();
+  const { dir } = tmp(t);
+  const c = d.createCard(dir, P, { title: 'A', text: '', author: 'a' });
+  d.updateCard(dir, P, c.id, { estimate: { usd: 4.5 } });
+  d.updateCard(dir, P, c.id, { estimate: { minutes: 30 }, links: { issues: [12] } });
+  const r = d.readCard(dir, P, c.id);
+  assert.equal(r.estimate.usd, 4.5);
+  assert.equal(r.estimate.minutes, 30);
+  assert.deepEqual(r.links, { issues: [12], release: null });
+  for (const bad of [{ clarity: 3 }, { estimate: 'cheap' }, { links: ['x'] }]) {
+    assert.throws(() => d.updateCard(dir, P, c.id, bad), `${JSON.stringify(bad)} was accepted`);
+  }
+  assert.equal(d.readCard(dir, P, c.id).estimate.usd, 4.5, 'a refused update changes nothing');
+  assert.throws(() => d.updateCard(dir, P, c.id, { title: '   ' }), 'an empty title is refused');
+});
+
+test('archive and restore add history entries to and from the archive; a card whose column is gone comes back to the inbox', (t) => {
+  const d = load();
+  const { dir } = tmp(t);
+  const c = d.createCard(dir, P, { title: 'A', text: '', author: 'a' });
+  d.moveCard(dir, P, c.id, 'triage', { by: 'a' });
+  d.archiveCard(dir, P, c.id, { reason: 'later', by: 'eve' });
+  // the card's column no longer exists on the board when it is restored
+  const card = JSON.parse(fs.readFileSync(path.join(archiveDir(dir, c.id), 'card.json'), 'utf8'));
+  fs.writeFileSync(path.join(archiveDir(dir, c.id), 'card.json'), JSON.stringify({ ...card, column: 'gone' }));
+  const back = d.restoreCard(dir, P, c.id, { by: 'eve' });
+  assert.equal(back.column, 'inbox');
+  assert.equal(back.archived, undefined, 'a restored card is no longer marked archived');
+  const steps = d.readCard(dir, P, c.id).history.map((h) => `${h.from}>${h.to}`);
+  assert.deepEqual(steps.slice(-2), ['triage>archive', 'archive>inbox']);
+  const board = JSON.parse(fs.readFileSync(path.join(dir, P, 'board.json'), 'utf8'));
+  assert.ok(board.order.inbox.includes(c.id));
+  assert.throws(() => d.restoreCard(dir, P, c.id), 'a card that is not archived cannot be restored');
+});
+
+test('mergeCard tried again after a failed archive does not join the source document twice', (t) => {
+  const d = load();
+  const { dir } = tmp(t);
+  const into = d.createCard(dir, P, { title: 'Target', text: 'Target text.', author: 'a' });
+  const from = d.createCard(dir, P, { title: 'Source', text: 'Source text.', author: 'b' });
+  // the first merge joins the documents, then the archive of the source fails: archive/ is a file
+  fs.writeFileSync(path.join(dir, P, 'archive'), 'blocks the archive');
+  assert.throws(() => d.mergeCard(dir, P, from.id, into.id, { by: 'a' }));
+  assert.ok(fs.existsSync(path.join(cardDir(dir, from.id), 'card.json')), 'the source is still a card');
+  fs.rmSync(path.join(dir, P, 'archive'));
+  d.mergeCard(dir, P, from.id, into.id, { by: 'a' });
+  const doc = d.readCard(dir, P, into.id).document;
+  assert.equal(doc.split('Source text.').length - 1, 1, doc);
+  assert.deepEqual(d.listCards(dir, P).map((x) => x.id), [into.id]);
+});
+
 test('never public: discovery/ carries a .gitignore that ignores everything', (t) => {
   const d = load();
   const { dir } = tmp(t);
