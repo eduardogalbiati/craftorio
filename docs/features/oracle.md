@@ -22,15 +22,22 @@ The button's badge counts the answers that arrived while the conversation was ou
 - **Memory**: your standing decisions ("reply in Portuguese", "validated mode for UI changes"),
   edited only by you from the drawer's **Memory** button and read at every session start.
   **New session** starts over from a handoff note; the conversation and the memory are kept. Past
-  the context threshold it compacts on its own the same way.
-- **Cost**: each answer shows its time, model, cost and tokens; the footer shows today's spend
+  the context threshold, or after an idle gap longer than the model's cache (55 min), the next
+  turn starts a fresh session from the skill, the memory and a state note the app keeps
+  (`oracle/state.md`), with no extra model call; the drawer's header shows the model and whether
+  the last turn resumed or started fresh.
+- **Cost**: each answer shows its time, model, cost and tokens (the turn's own cost: Claude reports
+  a resumed session's total, the app keeps the difference); the footer shows today's spend
   against the **daily budget** (Settings › Execution, default 20 USD, 0 = no cap). Once reached,
-  the Oracle is paused until the next day (UTC). Its spend counts in the monthly budgets like the
-  runs. Developer mode and automated checks answer from the simulated Oracle: no model call, no cost.
-- **Woken by run events**: a gate waiting, a run that finished (status and cost), a merge
-  conflict, a limit, a stall or a supervisor decision, repeated invalid outputs, an interrupted run
-  or one seen in another app process. Events are batched over 30 seconds, each batch is one short
-  turn; routine events never wake it. Settings › Execution › Oracle chooses which runs (every run,
+  the Oracle is paused until the next day (UTC); a refused question stays in the chat. Its spend
+  counts in the monthly budgets like the runs. `node scripts/oracle-usage-report.js --dir
+  <workspace>/oracle` prints the spend per day. Developer mode and automated checks answer from the
+  simulated Oracle: no model call, no cost.
+- **Woken by run events**: a gate waiting, a merge conflict, a limit, a stall or a supervisor
+  decision, repeated invalid outputs. A run that finished, was cancelled or interrupted (or seen in
+  another app process) and a supervisor retry or resume are notices written by the app, with no
+  model call. Events are batched over 30 seconds, each batch is one short turn (3 min at most); a
+  question sent meanwhile waits for it; routine events never wake it. Settings › Execution › Oracle chooses which runs (every run,
   watched runs only, off) and which events; **Mute** on a wake-up silences one run. Ask it to
   "watch this run" (or a project's roadmap): it follows that run until it ends.
 - **Asks the other agents**: the Product Owner (a backlog analysis, a roadmap proposal, an issue

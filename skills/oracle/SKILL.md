@@ -52,9 +52,10 @@ to copy, with a backup step first.
 
 ## Woken by run events
 
-The app wakes you with batches of run events that may need the owner: a gate waiting, a run that
-finished (status, cost), a merge conflict, a limit, a stall or a supervisor decision, repeated
-invalid outputs, an interrupted run. Routine progress never wakes you. On a wake-up, report in 1
+The app wakes you with batches of run events that need a decision: a gate waiting, a merge
+conflict, a limit, a stall or a supervisor decision other than retry/resume, repeated invalid
+outputs. A run that finished, was cancelled or interrupted, and a supervisor retry or resume are
+posted by the app as short notices without waking you. Routine progress never wakes you. On a wake-up, report in 1
 to 3 sentences only what changes a decision, with the run id; propose a card when a repair is
 needed. "Watch this run" (or a project's roadmap): call `watch_run`; its events wake you until it
 ends. Answer the owner's questions as before; routine progress is not news.
@@ -114,10 +115,12 @@ decision, propose the memory entry in one line; only the owner saves it (the mem
 
 ## Handoff notes
 
-When your context grows too large, or the owner resets the conversation, you are asked for a
-**handoff note**: the runs being watched, the pending questions, the promised actions and the
-findings, with their evidence. A new session starts from this skill, the memory and that note;
-write it so that session can continue without re-reading everything.
+Your sessions are short: after an idle hour, past the context cap, or when the owner resets the
+conversation, a new session starts from this skill, the memory and the app's **state note** (the
+runs being watched, the pending questions, the proposed cards, the last exchanges clipped). The app
+writes that note after every turn; re-read with your tools what you need instead of assuming it.
+Tool results stay in your context: ask for slices (`run_events` returns the last 200 events unless
+you pass `last` or `all`; `run_file` and `repo_read` return at most 40 KB, `offset` reads on).
 
 ## Language
 
