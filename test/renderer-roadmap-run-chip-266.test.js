@@ -90,13 +90,16 @@ test('#266 roadmap card: an item that failed before any run started says "Failed
   assert.ok(H.findEl(box.outer, (e) => e.attrs['data-rm-item'] === 'skip'), 'Skip stays');
 });
 
-test('#266 roadmap bar: the roadmap\'s state badge reads "Running", not "running"', () => {
+// #269: the bar's state is a dot (no text badge); its readable state is in its title and aria-label.
+test('#266 roadmap bar: the roadmap\'s state dot reads "Running", not "running"', () => {
   const html = render(H.item('a', 'planned', 1, 'Login page', { origin: H.iso(H.NOW - H.HOUR) }));
   const bar = H.findEl(html, (e) => e.attrs['data-testid'] === 'roadmap-bar');
   assert.ok(bar, 'the roadmap bar is rendered');
-  const nodes = H.textNodes(bar.inner);
-  assert.ok(nodes.some((t) => /^Running\b/.test(t)), `a "Running" badge in ${JSON.stringify(nodes)}`);
-  assert.ok(!nodes.includes('running'));
+  const dot = H.findEl(bar.inner, (e) => /\brm-state-dot\b/.test(e.attrs.class || ''));
+  assert.ok(dot, 'the bar has a state dot');
+  assert.match(dot.attrs['aria-label'] || '', /^Running\b/);
+  assert.match(dot.attrs.title || '', /^Running\b/);
+  assert.ok(!H.textNodes(bar.inner).includes('running'));
 });
 
 test('#266 roadmap card: a planned item\'s state pill reads "Planned" with data-status="planned"', () => {

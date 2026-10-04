@@ -170,3 +170,134 @@ Feature: Roadmap statuses, done items, filters and run timers
     And I open the Roadmap
     Then the roadmap item "Planned item 1001" offers no "Update the app after this" switch
     And the roadmap item "Keyboard focus is lost after closing a dialog" offers no "Update the app after this" switch
+
+  # ---- #269: the bar's state dot, Pause and Stop icons, the ⋮ menu, the filter row -------------------
+  # The demo roadmap is paused by a refused start (a failure); the running one is set simulated, its
+  # refused item skipped, so nothing real starts.
+
+  @issue-269
+  Scenario: A running roadmap shows a pulsing "Running" dot before its name, with Pause and Stop
+    Given the app is open
+    And the roadmap is running as a simulation
+    When I open "Backlog" in the sidebar
+    And I open the Roadmap
+    Then the roadmap bar's state dot is "running" and reads "Running"
+    And the roadmap bar's state dot pulses
+    And the roadmap bar's state dot comes before "Roadmap"
+    And the roadmap bar offers "Pause" with a pause icon
+    And the roadmap bar's "Pause" button is amber
+    And the roadmap bar offers "Stop" with a stop icon
+    And the roadmap bar's "Stop" button is red
+    When I click "Stop" on the roadmap bar
+    Then the confirm dialog asks before it stops, with a "Stop" button
+    When I press Cancel in the confirm dialog
+    Then the roadmap bar's state dot is "running" and reads "Running"
+
+  @issue-269
+  Scenario: Clear lives in the roadmap's ⋮ menu, which the keyboard opens and Escape closes
+    Given the app is open
+    When I open "Backlog" in the sidebar
+    And I open the Roadmap
+    Then the roadmap bar's state dot is "paused-failed" and reads "Paused"
+    And the roadmap bar offers no "Clear" button of its own
+    And the roadmap's ⋮ menu button ends the roadmap bar
+    When I open the roadmap's ⋮ menu with the keyboard
+    Then the roadmap's menu offers "Clear", focused
+    When I press Escape
+    Then the roadmap's menu is closed, its ⋮ button focused
+    When I open the roadmap's ⋮ menu
+    And I choose "Clear" in the roadmap's menu
+    Then the confirm dialog is titled "Clear the roadmap" with a "Clear" button
+    When I press Cancel in the confirm dialog
+    Then the roadmap shows at least 2 stages
+
+  @issue-269
+  Scenario: The roadmap's filters sit on one filter row above the bar
+    Given the app is open
+    When I open "Backlog" in the sidebar
+    And I open the Roadmap
+    Then the roadmap's filter row holds the epic filter, the Planned and All switch, the date filter and "Group by epic"
+    And the roadmap bar holds none of the filters
+    And the filter row is above the roadmap bar
+
+  # ---- #270: the alerts at the top of the page ------------------------------------------------------
+  # The demo workspace has an error (the roadmap paused: "Could not start #14: …") and an info (2 commits
+  # merged locally, not pushed); errors come first.
+
+  @issue-270
+  Scenario: With several alerts the roadmap's error shows first, the arrows go to the next one
+    Given the app is open
+    When I open "Backlog" in the sidebar
+    And I open the Roadmap
+    Then the alerts are at the top of the page, above the filter row
+    And the alerts show alert 1 of at least 2
+    And the shown alert is at level "error" and says "Could not start #14"
+    And the shown alert offers "Retry" and "Skip"
+    When I show the next alert
+    Then the alerts show alert 2 of at least 2
+    And the shown alert is not at level "error"
+    When I show the previous alert
+    Then the alerts show alert 1 of at least 2
+    And the shown alert is at level "error" and says "Could not start #14"
+
+  @issue-270
+  Scenario: The Board's "Not pushed" info alert opens the push dialog
+    Given the app is open
+    When I open "Backlog" in the sidebar
+    And I open the Board as a kanban
+    Then the alerts are at the top of the page, above the filter row
+    When I show the alert "Not pushed"
+    Then the shown alert is at level "info" and says "Not pushed"
+    When I click "Push…" in the shown alert
+    Then the push dialog opens, titled "Push 2 commits to origin/main"
+
+  # ---- #271: Ask the Oracle about a failed item ------------------------------------------------------
+  # Simulation only: the scenario checks the drawer, its context chip and the prefilled question, never
+  # an answer (nothing is sent).
+
+  @issue-271
+  Scenario: A failed roadmap item asks the Oracle about its run, with the question prefilled
+    Given the app is open
+    When I open "Backlog" in the sidebar
+    And I open the Roadmap
+    Then the roadmap item "Run reports" offers "Ask the Oracle about this failure" beside Retry and Skip
+    When I click "Ask the Oracle about this failure" on the roadmap item "Run reports"
+    Then the Oracle drawer opens
+    And the Oracle's context chip names the run of the roadmap item "Run reports"
+    And the Oracle is asked "What happened to this run, and what should I do: retry, resume from a step, skip or fix something first?"
+
+  @issue-271
+  Scenario: A running roadmap item does not offer to ask the Oracle about a failure
+    Given the app is open
+    When I open "Backlog" in the sidebar
+    And I open the Roadmap
+    Then the roadmap item "Keyboard focus is lost after closing a dialog" shows a run chip reading "Running"
+    And the roadmap item "Keyboard focus is lost after closing a dialog" offers no "Ask the Oracle about this failure" button
+
+  # ---- #281: Undo a removal, earlier versions ---------------------------------------------------------
+  # "Dark scrollbars in the terminal dock" (#10) is the planned item of the demo roadmap's last stage.
+
+  @issue-281
+  Scenario: Removing a roadmap item can be undone from its toast
+    Given the app is open
+    When I open "Backlog" in the sidebar
+    And I open the Roadmap
+    And I remove the roadmap item "Dark scrollbars in the terminal dock"
+    Then a toast says "Removed #10 from the roadmap" with an "Undo" button
+    And the roadmap no longer shows the item "Dark scrollbars in the terminal dock"
+    When I click "Undo" in the toast
+    Then the toast says "Restored"
+    And the roadmap shows the item "Dark scrollbars in the terminal dock"
+
+  @issue-281
+  Scenario: The roadmap's ⋮ menu restores an earlier version
+    Given the app is open
+    When I open "Backlog" in the sidebar
+    And I open the Roadmap
+    And I remove the roadmap item "Dark scrollbars in the terminal dock"
+    Then the roadmap no longer shows the item "Dark scrollbars in the terminal dock"
+    When I open the roadmap's ⋮ menu
+    And I choose "Restore an earlier version…" in the roadmap's menu
+    Then the earlier versions of the roadmap are listed, at least 1
+    When I restore the most recent earlier version
+    Then the roadmap shows the item "Dark scrollbars in the terminal dock"

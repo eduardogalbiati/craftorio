@@ -1,6 +1,8 @@
 // Steps of features/roadmap.feature: the Roadmap's readable statuses and run chip (#266), a stage's
 // "+n done" chip (#267), the date filter, the Planned | All switch, infinite scroll and the header
-// count (#268), the live run timer and a fix round (#272), no "Update the app after this" switch (#279), on the demo roadmap (scripts/screenshot.js
+// count (#268), the live run timer and a fix round (#272), no "Update the app after this" switch (#279),
+// the bar's state dot, icons, ⋮ menu and filter row (#269), "Ask the Oracle about this failure" (#271),
+// Undo a removal and earlier versions (#281), on the demo roadmap (scripts/screenshot.js
 // demoRoadmap / demoRoadmapRuns). Locators are roles and data-testid only (skills/ui-conventions).
 //
 // What the screens expose (the renderer's contract for these steps):
@@ -378,4 +380,261 @@ Then('the roadmap item {string} offers no {string} switch', async ({ e2e }, titl
   await expect(item).toBeVisible({ timeout: LOAD_TIMEOUT });
   await expect(item.getByTestId('roadmap-update-after')).toHaveCount(0);
   await expect(item.getByRole('checkbox', { name, exact: true })).toHaveCount(0);
+});
+
+// ---- #269: the roadmap bar's state dot, Pause / Stop icons, the ⋮ menu, the filter row --------------
+// What the screen exposes (new for #269):
+// - data-testid="roadmap-state-dot": the dot before "Roadmap" in the bar; data-state = running | paused |
+//   paused-failed | planned | done; aria-label (and title) = the readable state ("Running", "Paused"…).
+//   A running one pulses (a CSS animation on it or its ::before / ::after).
+// - the bar's "Pause" and "Stop" buttons carry an icon element with data-icon="pause" / data-icon="stop"
+//   (aria-hidden: the accessible name stays "Pause" / "Stop"); Pause amber, Stop red (their text colour).
+// - data-testid="roadmap-menu-button": the ⋮ button at the end of the bar, accessible name "Roadmap
+//   actions", aria-haspopup="menu", aria-expanded; its menu role="menu" (data-testid="roadmap-menu")
+//   with role="menuitem" entries ("Clear", "Restore an earlier version…"); Enter opens it and focuses
+//   its first entry, Esc closes it and gives the focus back to the ⋮ button.
+// - data-testid="filter-row": the row above the bar (and above the Board) with the filters.
+// The roadmap set running for #269 is simulated, its refused item skipped, so nothing real starts and
+// no refused start pauses it again (MULTIAGENT_SIMULATION_ONLY=1 anyway).
+
+const rmBar = (page) => page.getByTestId('roadmap-bar');
+const stateDot = (page) => rmBar(page).getByTestId('roadmap-state-dot');
+const menuButton = (page) => rmBar(page).getByRole('button', { name: 'Roadmap actions', exact: true });
+const rmMenu = (page) => page.getByRole('menu').filter({ visible: true }).first();
+const filterRow = (page) => page.getByTestId('filter-row').filter({ visible: true }).first();
+const FILTERS = (scope) => [
+  ['the epic filter', scope.getByRole('combobox', { name: 'Epic', exact: true })],
+  ['the Planned | All switch', scope.getByRole('group', { name: 'Roadmap items', exact: true })],
+  ['the date filter', scope.getByRole('combobox', { name: 'Date range', exact: true })],
+  ['"Group by epic"', scope.getByRole('checkbox', { name: 'Group by epic', exact: true })],
+];
+const rgb = (css) => (String(css).match(/\d+(\.\d+)?/g) || []).slice(0, 3).map(Number);
+
+Given('the roadmap is running as a simulation', async ({ e2e }) => {
+  editRoadmap(e2e, (r) => {
+    Object.assign(r, { state: 'running', simulated: true, pausedBy: null, error: null, scope: null, budget: null });
+    for (const item of r.stages.flatMap((s) => s.items)) if (!item.runId && item.error) Object.assign(item, { status: 'skipped' });
+  });
+});
+
+Then("the roadmap bar's state dot is {string} and reads {string}", async ({ e2e }, id, label) => {
+  const dot = stateDot(e2e.window);
+  await expect(dot).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(dot).toHaveAttribute('data-state', id, { timeout: 20000 });
+  await expect(dot).toHaveAttribute('aria-label', new RegExp(`^${escapeRe(label)}`));
+  await expect(dot).toHaveAttribute('title', new RegExp(`^${escapeRe(label)}`));
+});
+
+Then("the roadmap bar's state dot pulses", async ({ e2e }) => {
+  const animated = await stateDot(e2e.window).evaluate((el) => [getComputedStyle(el), getComputedStyle(el, '::before'), getComputedStyle(el, '::after')]
+    .some((s) => s.animationName && s.animationName !== 'none'));
+  expect(animated, 'the running dot has a pulse animation').toBe(true);
+});
+
+// the dot is drawn left of the bar's "Roadmap" title
+Then("the roadmap bar's state dot comes before {string}", async ({ e2e }, title) => {
+  const dot = await stateDot(e2e.window).boundingBox();
+  const text = await rmBar(e2e.window).getByText(title, { exact: true }).first().boundingBox();
+  expect(dot && text, 'the dot and the title are shown').toBeTruthy();
+  expect(dot.x + dot.width, 'the dot ends before the title starts').toBeLessThanOrEqual(text.x + 1);
+});
+
+Then('the roadmap bar offers {string} with a {word} icon', async ({ e2e }, name, icon) => {
+  const button = rmBar(e2e.window).getByRole('button', { name, exact: true });
+  await expect(button).toBeEnabled();
+  await expect(button.locator(`[data-icon="${icon}"]`)).toHaveCount(1);
+});
+
+// "amber" (red and green over blue) or "red" (red well over green and blue): the button's text colour
+Then("the roadmap bar's {string} button is {word}", async ({ e2e }, name, colour) => {
+  const [r, g, b] = rgb(await rmBar(e2e.window).getByRole('button', { name, exact: true }).evaluate((el) => getComputedStyle(el).color));
+  if (colour === 'red') expect(r > g + 40 && r > b + 40, `"${name}" reads red, not rgb(${r}, ${g}, ${b})`).toBe(true);
+  else if (colour === 'amber') expect(r > b + 40 && g > b + 20, `"${name}" reads amber, not rgb(${r}, ${g}, ${b})`).toBe(true);
+  else throw new Error(`unknown colour "${colour}"`);
+});
+
+When("I click {string} on the roadmap bar", async ({ e2e }, name) => {
+  await rmBar(e2e.window).getByRole('button', { name, exact: true }).click();
+});
+
+Then('the confirm dialog asks before it stops, with a {string} button', async ({ e2e }, button) => {
+  const dialog = e2e.window.getByTestId('confirm-modal');
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText(/stop/i);
+  await expect(dialog.getByRole('button', { name: button, exact: true })).toBeVisible();
+});
+
+Then('the roadmap bar offers no {string} button of its own', async ({ e2e }, name) => {
+  await expect(menuButton(e2e.window)).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(rmBar(e2e.window).getByRole('button', { name, exact: true })).toHaveCount(0);
+});
+
+// the ⋮ button is the bar's last control, at its right end
+Then("the roadmap's ⋮ menu button ends the roadmap bar", async ({ e2e }) => {
+  const page = e2e.window;
+  await expect(menuButton(page)).toHaveAttribute('aria-haspopup', 'menu');
+  const last = await rmBar(page).locator('button, select, input').filter({ visible: true }).last().getAttribute('aria-label');
+  expect(last).toBe('Roadmap actions');
+});
+
+When("I open the roadmap's ⋮ menu with the keyboard", async ({ e2e }) => {
+  const page = e2e.window;
+  await menuButton(page).focus();
+  await page.keyboard.press('Enter');
+  await expect(rmMenu(page)).toBeVisible();
+  await expect(menuButton(page)).toHaveAttribute('aria-expanded', 'true');
+});
+
+When("I open the roadmap's ⋮ menu", async ({ e2e }) => {
+  await menuButton(e2e.window).click();
+  await expect(rmMenu(e2e.window)).toBeVisible();
+});
+
+Then("the roadmap's menu offers {string}, focused", async ({ e2e }, name) => {
+  const entry = rmMenu(e2e.window).getByRole('menuitem', { name, exact: true });
+  await expect(entry).toBeVisible();
+  await expect(entry).toBeFocused();
+});
+
+Then("the roadmap's menu offers {string}", async ({ e2e }, name) => {
+  await expect(rmMenu(e2e.window).getByRole('menuitem', { name, exact: true })).toBeVisible();
+});
+
+Then("the roadmap's menu is closed, its ⋮ button focused", async ({ e2e }) => {
+  const page = e2e.window;
+  await expect(page.getByRole('menu').filter({ visible: true })).toHaveCount(0);
+  await expect(menuButton(page)).toHaveAttribute('aria-expanded', 'false');
+  await expect(menuButton(page)).toBeFocused();
+});
+
+When("I choose {string} in the roadmap's menu", async ({ e2e }, name) => {
+  await rmMenu(e2e.window).getByRole('menuitem', { name, exact: true }).click();
+});
+
+Then("the roadmap's filter row holds the epic filter, the Planned and All switch, the date filter and {string}", async ({ e2e }, groupBy) => {
+  expect(groupBy).toBe('Group by epic');
+  const row = filterRow(e2e.window);
+  await expect(row).toBeVisible({ timeout: LOAD_TIMEOUT });
+  for (const [what, control] of FILTERS(row)) await expect(control, `${what} in the filter row`).toBeVisible();
+});
+
+Then('the roadmap bar holds none of the filters', async ({ e2e }) => {
+  await expect(rmBar(e2e.window)).toBeVisible();
+  for (const [what, control] of FILTERS(rmBar(e2e.window))) await expect(control, `${what} in the roadmap bar`).toHaveCount(0);
+});
+
+Then('the filter row is above the roadmap bar', async ({ e2e }) => {
+  const row = await filterRow(e2e.window).boundingBox();
+  const bar = await rmBar(e2e.window).boundingBox();
+  expect(row && bar, 'the filter row and the bar are shown').toBeTruthy();
+  expect(row.y + row.height, 'the filter row ends above the bar').toBeLessThanOrEqual(bar.y + 1);
+});
+
+// ---- #271: "Ask the Oracle about this failure" on a failed item ----------------------------------------
+// data-testid="roadmap-ask-oracle" (new): a button named "Ask the Oracle about this failure" in a failed
+// item's actions, beside Retry and Skip, with the Oracle's avatar (data-testid="oracle-avatar"). It
+// opens the Oracle drawer with a context chip for the item's run (data-testid="oracle-context-chip",
+// "Run <run id>", as the gate's "Interact with Oracle") and the question prefilled and sent.
+
+const ASK_ORACLE = 'Ask the Oracle about this failure';
+const askOracle = (page, title) => roadmapItem(page, title).getByRole('button', { name: ASK_ORACLE, exact: true });
+const oracleDrawer = (page) => page.getByRole('complementary', { name: 'Oracle', exact: true });
+
+Then('the roadmap item {string} offers {string} beside Retry and Skip', async ({ e2e }, title, name) => {
+  expect(name).toBe(ASK_ORACLE);
+  const item = roadmapItem(e2e.window, title);
+  const button = askOracle(e2e.window, title);
+  await expect(button).toBeEnabled({ timeout: LOAD_TIMEOUT });
+  await expect(button).toHaveAttribute('data-testid', 'roadmap-ask-oracle');
+  await expect(button.getByTestId('oracle-avatar')).toBeVisible();
+  // in the same row of actions as Retry and Skip
+  const at = await button.boundingBox();
+  for (const other of ['Retry', 'Skip']) {
+    const b = await item.getByRole('button', { name: other, exact: true }).boundingBox();
+    expect(b, `${other} is shown`).toBeTruthy();
+    expect(Math.abs((b.y + b.height / 2) - (at.y + at.height / 2)), `"${name}" on the row of ${other}`).toBeLessThan(Math.max(b.height, at.height));
+  }
+});
+
+Then('the roadmap item {string} offers no {string} button', async ({ e2e }, title, name) => {
+  const item = roadmapItem(e2e.window, title);
+  await expect(item).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(item.getByRole('button', { name, exact: true })).toHaveCount(0);
+  await expect(item.getByTestId('roadmap-ask-oracle')).toHaveCount(0);
+});
+
+When('I click {string} on the roadmap item {string}', async ({ e2e }, name, title) => {
+  const item = roadmapItem(e2e.window, title);
+  await item.scrollIntoViewIfNeeded();
+  await item.getByRole('button', { name, exact: true }).click();
+});
+
+Then("the Oracle's context chip names the run of the roadmap item {string}", async ({ e2e }, title) => {
+  const page = e2e.window;
+  const runId = await runChip(page, title).getAttribute('data-run');
+  expect(runId, `the roadmap item "${title}" has a run`).toBeTruthy();
+  const chip = oracleDrawer(page).getByTestId('oracle-context-chip');
+  await expect(chip).toBeVisible();
+  await expect(chip).toContainText(`Run ${runId}`);
+});
+
+// The first question is prefilled and sent (#271): it shows in the chat, not left in the box.
+Then('the Oracle is asked {string}', async ({ e2e }, question) => {
+  const drawer = oracleDrawer(e2e.window);
+  await expect(drawer).toContainText(question, { timeout: LOAD_TIMEOUT });
+  await expect(drawer.getByRole('textbox')).not.toHaveValue(question);
+});
+
+// ---- #281: Undo a removal, earlier versions of the roadmap ---------------------------------------------
+// data-testid="toast" (new) on the app's toast (#toast, role status), with an "Undo" button after a
+// removal. "Restore an earlier version…" in the ⋮ menu opens a dialog named "Restore an earlier version"
+// (data-testid="roadmap-versions") listing the saved versions (data-testid="roadmap-version", newest
+// first, each with a "Restore" button); a restore may ask first (confirm-modal, its "Restore" button).
+
+const toast = (page) => page.getByTestId('toast');
+const versions = (page) => page.getByTestId('roadmap-versions');
+
+When('I remove the roadmap item {string}', async ({ e2e }, title) => {
+  const item = roadmapItem(e2e.window, title);
+  await expect(item).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await item.scrollIntoViewIfNeeded();
+  await item.getByRole('button', { name: /^remove$/i }).click();
+});
+
+Then('a toast says {string} with an {string} button', async ({ e2e }, text, button) => {
+  const t = toast(e2e.window);
+  await expect(t).toBeVisible();
+  await expect(t).toContainText(text);
+  await expect(t.getByRole('button', { name: button, exact: true })).toBeEnabled();
+});
+
+When('I click {string} in the toast', async ({ e2e }, button) => {
+  await toast(e2e.window).getByRole('button', { name: button, exact: true }).click();
+});
+
+Then('the toast says {string}', async ({ e2e }, text) => {
+  await expect(toast(e2e.window)).toContainText(text);
+});
+
+Then('the roadmap no longer shows the item {string}', async ({ e2e }, title) => {
+  const page = e2e.window;
+  await expect(page.getByTestId('roadmap-item').first()).toBeVisible();
+  await expect(page.getByTestId('roadmap-item').filter({ hasText: title })).toHaveCount(0);
+});
+
+Then('the earlier versions of the roadmap are listed, at least {int}', async ({ e2e }, n) => {
+  const page = e2e.window;
+  await expect(page.getByRole('dialog', { name: 'Restore an earlier version', exact: true })).toBeVisible();
+  const rows = versions(page).getByTestId('roadmap-version');
+  await expect(rows.first()).toBeVisible();
+  expect(await rows.count()).toBeGreaterThanOrEqual(n);
+  await expect(rows.first().getByRole('button', { name: 'Restore', exact: true })).toBeEnabled();
+});
+
+When('I restore the most recent earlier version', async ({ e2e }) => {
+  const page = e2e.window;
+  await versions(page).getByTestId('roadmap-version').first().getByRole('button', { name: 'Restore', exact: true }).click();
+  const confirm = page.getByTestId('confirm-modal');
+  if (await confirm.isVisible()) await confirm.getByRole('button', { name: 'Restore', exact: true }).click();
+  await expect(versions(page)).toBeHidden();
 });

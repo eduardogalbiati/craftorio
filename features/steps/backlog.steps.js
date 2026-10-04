@@ -2,8 +2,8 @@
 // kanban) and Roadmap on the demo project, and their visual baselines; the Roadmap's progress ring
 // popover (#236), its Resume confirm (#243) and a finished stage scope (#237), and
 // features/product-owner.feature's Product Owner drawer (#234, #235); epics kept off the Board and
-// listed on the Epics view (#253); the Roadmap opened from the menu (#254). Locators are roles and
-// data-testid only (skills/ui-conventions).
+// listed on the Epics view (#253); the Roadmap opened from the menu (#254); the alerts at the top of
+// the Board and the Roadmap (#270). Locators are roles and data-testid only (skills/ui-conventions).
 
 const fs = require('fs');
 const path = require('path');
@@ -246,6 +246,81 @@ Then('the roadmap bar does not show {string}', async ({ e2e }, text) => {
 
 Then('the Backlog shows no error {string}', async ({ e2e }, text) => {
   await expect(e2e.window.getByText(text, { exact: false })).toHaveCount(0);
+});
+
+// ---- the alerts at the top of the Board and the Roadmap (#270) ---------------------------------------
+// What the screen exposes (new for #270):
+// - data-testid="page-alerts": the alerts component, one alert at a time, at the top of the page (above
+//   data-testid="filter-row"); hidden when there is no alert.
+// - data-testid="page-alert": the alert shown, data-level = error | warning | info, with its actions
+//   (buttons: "Retry", "Skip", "Resume", "Push…", "Refresh now", "Dismiss for today"…).
+// - data-testid="alerts-counter": "1/3" (the alert shown / how many); buttons "Previous alert" and
+//   "Next alert". Errors come first, then warnings, then infos.
+// The demo workspace has a roadmap paused by a refused start ("Could not start #14: …", an error) and
+// 2 commits merged locally and not pushed ("Not pushed", an info; the project's folder is not a git
+// repository, so the cached status in backlog/<id>.local.json stays).
+
+const alerts = (page) => page.getByTestId('page-alerts').filter({ visible: true }).first();
+const shownAlert = (page) => alerts(page).getByTestId('page-alert').filter({ visible: true }).first();
+const counter = (page) => alerts(page).getByTestId('alerts-counter');
+const counted = async (page) => {
+  await expect(counter(page)).toHaveText(/^\d+\/\d+$/, { timeout: 20000 });
+  return (await counter(page).innerText()).trim().split('/').map(Number);
+};
+
+Then('the alerts show alert {int} of at least {int}', async ({ e2e }, n, least) => {
+  await expect.poll(async () => (await counted(e2e.window))[0]).toBe(n);
+  const [, total] = await counted(e2e.window);
+  expect(total).toBeGreaterThanOrEqual(least);
+});
+
+Then('the shown alert is at level {string} and says {string}', async ({ e2e }, level, text) => {
+  const alert = shownAlert(e2e.window);
+  await expect(alert).toHaveAttribute('data-level', level, { timeout: 20000 });
+  await expect(alert).toContainText(text);
+});
+
+Then('the shown alert is not at level {string}', async ({ e2e }, level) => {
+  await expect(shownAlert(e2e.window)).not.toHaveAttribute('data-level', level);
+});
+
+Then('the shown alert offers {string} and {string}', async ({ e2e }, a, b) => {
+  for (const name of [a, b]) await expect(shownAlert(e2e.window).getByRole('button', { name, exact: true })).toBeEnabled();
+});
+
+When('I show the next alert', async ({ e2e }) => {
+  await alerts(e2e.window).getByRole('button', { name: 'Next alert', exact: true }).click();
+});
+
+When('I show the previous alert', async ({ e2e }) => {
+  await alerts(e2e.window).getByRole('button', { name: 'Previous alert', exact: true }).click();
+});
+
+// Next alert until the alert with `text` is shown (at most one round of the alerts)
+When('I show the alert {string}', async ({ e2e }, text) => {
+  const page = e2e.window;
+  const [, total] = await counted(page);
+  for (let k = 0; k < total && !(await shownAlert(page).innerText()).includes(text); k += 1) {
+    await alerts(page).getByRole('button', { name: 'Next alert', exact: true }).click();
+  }
+  await expect(shownAlert(page)).toContainText(text);
+});
+
+Then('the alerts are at the top of the page, above the filter row', async ({ e2e }) => {
+  const page = e2e.window;
+  const box = await alerts(page).boundingBox();
+  const row = await page.getByTestId('filter-row').filter({ visible: true }).first().boundingBox();
+  expect(box && row, 'the alerts and the filter row are shown').toBeTruthy();
+  expect(box.y + box.height, 'the alerts end above the filter row').toBeLessThanOrEqual(row.y + 1);
+});
+
+When('I click {string} in the shown alert', async ({ e2e }, name) => {
+  await shownAlert(e2e.window).getByRole('button', { name, exact: true }).click();
+});
+
+// the push dialog (#push-modal): its title names the commits and the base
+Then('the push dialog opens, titled {string}', async ({ e2e }, title) => {
+  await expect(e2e.window.getByRole('heading', { name: title, exact: true })).toBeVisible();
 });
 
 // ---- Backlog › Product Owner (#234, #235) ------------------------------------------------------------

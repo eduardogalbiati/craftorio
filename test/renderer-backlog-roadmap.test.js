@@ -613,7 +613,10 @@ test('#237 html: a paused roadmap whose scoped stage is finished or gone no long
   const { BacklogRoadmap } = loadRoadmap();
   const finished = BacklogRoadmap.html(threeStageData(['done', 'done', 'planned'], { state: 'paused', scope: { stage: 'st2' } }), () => {}, SHOW_ALL);
   assert.doesNotMatch(finished, /stage \d+ only/);
-  assert.match(finished, /<span class="badge warn" data-status="paused">Paused<\/span>/);
+  // #269: the paused state is the bar's amber dot, readable in its aria-label
+  const dot = (finished.match(/<span [^>]*\brm-state-dot\b[^>]*>/) || [''])[0];
+  assert.match(dot, /\bis-paused\b/);
+  assert.match(dot, /aria-label="Paused/);
   const gone = BacklogRoadmap.html(threeStageData(['done', 'done', 'planned'], { state: 'paused', scope: { stage: 'gone' } }), () => {}, SHOW_ALL);
   assert.doesNotMatch(gone, /stage \d+ only/);
 });
