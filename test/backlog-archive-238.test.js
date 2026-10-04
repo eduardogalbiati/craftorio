@@ -268,6 +268,50 @@ test('archiveIssues: a missing CLI is reported per issue (no exception), and not
 
 // ---- restore -----------------------------------------------------------------------------------
 
+test('archiveIssues: when the label fails after the close went through, the issue is reopened and the cache is left as it was', async (t) => {
+  const archiveIssues = archiveFn();
+  const dir = tmp(t);
+  const issues = [openIssue(12)];
+  writeCache(dir, issues);
+  const gh = fakePlatform({
+    labels: ['bug', 'archived'],
+    fail: (cli, args) => (args[0] === 'issue' && args[1] === 'edit' && args.includes('--add-label') ? new Error('gh: HTTP 403: Resource not accessible by integration') : null),
+  });
+
+  const res = await archiveIssues({ platform: 'github', repo: GH_REPO, numbers: [12], issues, dir, projectId: 'demo', exec: gh.exec });
+
+  assert.equal(res.results.length, 1);
+  assert.equal(res.results[0].ok, false);
+  assert.match(res.results[0].error, /403/);
+  assert.ok(called(gh.calls, ['gh', 'issue', 'close', '12', '--repo', 'o/r', '--reason', 'not planned']), JSON.stringify(gh.calls));
+  assert.ok(called(gh.calls, ['gh', 'issue', 'reopen', '12', '--repo', 'o/r']), 'the close is undone');
+  assert.equal(gh.state.get(12).state, 'open', 'the issue is open again on the platform');
+  const c12 = cached(dir, 12);
+  assert.equal(c12.state, 'open');
+  assert.equal(hasArchived(c12), false);
+});
+
+test('archiveIssues: the missing label is created once for several issues; when creating it fails, every issue fails with that message and none is closed', async (t) => {
+  const archiveIssues = archiveFn();
+  const dir = tmp(t);
+  const issues = [openIssue(12), openIssue(13), openIssue(14)];
+  writeCache(dir, issues);
+  const gh = fakePlatform({
+    labels: ['bug'],
+    fail: (cli, args) => (args[0] === 'label' && args[1] === 'create' ? new Error('gh label create: HTTP 403: Must have admin rights') : null),
+  });
+
+  const res = await archiveIssues({ platform: 'github', repo: GH_REPO, numbers: [12, 13, 14], issues, dir, projectId: 'demo', exec: gh.exec });
+
+  assert.deepEqual(res.results.map((r) => [r.number, r.ok]), [[12, false], [13, false], [14, false]]);
+  for (const r of res.results) assert.match(r.error, /Must have admin rights/);
+  assert.equal(gh.calls.filter((c) => c[1] === 'label' && c[2] === 'create').length, 1, 'the label is tried once, not per issue');
+  for (const n of [12, 13, 14]) {
+    assert.equal(touched(gh.calls, n), false, `#${n} is not closed`);
+    assert.equal(cached(dir, n).state, 'open');
+  }
+});
+
 test('restoreIssues (GitHub): reopens the issue and removes the archived label; the cache shows it open, without the label', async (t) => {
   const restoreIssues = restoreFn();
   const dir = tmp(t);

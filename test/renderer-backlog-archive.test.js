@@ -149,6 +149,53 @@ test('archived issues have Restore (data-restore), which calls api.restoreIssues
   assert.match(src, /api\.restoreIssues\(bl\.projectId, /);
 });
 
+// ---- the issue's ⋯ menu (change request 1) -----------------------------------------------------------
+
+test('the ⋯ menu holds Enrich in Write & Review above Archive; rows and cards draw Enrich only through the menu', () => {
+  const menu = chunk('issueMenu');
+  assert.ok(menu, 'issueMenu found');
+  const enrichAt = menu.search(/role="menuitem" data-enrich="\$\{i\.number\}"/);
+  const archiveAt = menu.search(/role="menuitem" data-archive="\$\{i\.number\}"/);
+  assert.ok(enrichAt >= 0, 'Enrich is a menu item');
+  assert.ok(archiveAt > enrichAt, 'Enrich sits above Archive');
+  assert.match(menu, /data-testid="backlog-enrich"/);
+  assert.match(menu, />Enrich in Write &amp; Review</);
+  // the separate link is gone: Enrich appears in the view only inside the menu
+  const drawers = chunks.filter((c) => /data-enrich="/.test(c.text)).map((c) => c.name);
+  assert.deepEqual(drawers, ['issueMenu']);
+  assert.doesNotMatch(chunk('issueRow'), /data-enrich/);
+  assert.doesNotMatch(chunk('card'), /data-enrich/);
+});
+
+test('choosing Enrich closes the menu, then opens Write & Review for the issue', () => {
+  const handler = /const enrich = e\.target\.closest\('\[data-enrich\]'\);\s*\n\s*if \(enrich\) \{([^\n]*)\}/.exec(src)?.[1] || '';
+  assert.ok(handler, 'the Enrich click handler is found');
+  assert.match(handler, /bl\.menu = null/);
+  assert.match(handler, /enrichIssue\(Number\(enrich\.dataset\.enrich\)\)/);
+});
+
+test('a list row ends with the issue menu (or Restore) instead of the expand chevron', () => {
+  const row = chunk('issueRow');
+  assert.doesNotMatch(row, /[▸▾]/, 'no chevron left in the row');
+  assert.doesNotMatch(src, /[▸▾]/, 'no chevron anywhere in the view');
+  // the menu is the row head's last cell
+  const head = /<div class="bl-row"[\s\S]*?\n {8}<\/div>/.exec(row)?.[0] || '';
+  assert.match(head, /<span class="bl-actions">\$\{issueMenu\(i\)\}<\/span>\s*<\/div>$/);
+});
+
+test('a kanban card draws its ⋯ menu in the card head, after the title', () => {
+  const head = /<div class="bl-card-head">[^\n]*<\/div>/.exec(chunk('card'))?.[0] || '';
+  assert.ok(head, 'the card head is found');
+  assert.match(head, /bl-card-title[^\n]*\$\{issueMenu\(i\)\}<\/div>$/);
+});
+
+test('the deprioritized banner: Dismiss (or archiving from it) is remembered per project', () => {
+  assert.match(src, /data-deprioritized-dismiss/);
+  assert.match(src, /const deprioritizedKey = \(\) => `\$\{DEPRIORITIZED_KEY\}\.\$\{bl\.projectId\}`/);
+  assert.match(src, /load\(deprioritizedKey\(\)\) \? \[\] : deprioritizedIssues\(/, 'once remembered, the banner lists nothing');
+  assert.match(src, /\[data-deprioritized-dismiss\]'\)\) \{ save\(deprioritizedKey\(\), '1'\)/);
+});
+
 test('issues still labelled `deprioritized` get a one-time banner offering to archive them', () => {
   assert.match(src, /deprioritizedIssues\(/);
   assert.match(src, /deprioritized/);
