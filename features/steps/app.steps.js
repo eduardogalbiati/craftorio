@@ -2,7 +2,7 @@
 // #254, #264): open the app, move through the sidebar's menu (grouped by the flow: Home, Plan &
 // Design, Code & Build, Workflows, AI, Night watch, Settings; a group's title collapses it), the
 // header (project selector, Oracle, notifications bell), the Workflows screen's tabs, Settings
-// (#276: Execution's Memory guard group).
+// (#276: Execution's Memory guard group), the failed app update banner (#279).
 // Locators are roles and data-testid only (skills/ui-conventions).
 // #254: a menu group is a role="group" named by its title, holding its title's toggle button
 // (aria-expanded, named like the group) and its items' buttons; the header's project selector is a
@@ -203,6 +203,50 @@ Then('the notification centre is open', async ({ e2e }) => {
 
 Then('the header offers {string}', async ({ e2e }, name) => {
   await expect(header(e2e.window).getByRole('button', { name: entryName(name) })).toBeVisible();
+});
+
+// ---- a failed app update (#279) -----------------------------------------------------------------------
+// <workspace>/oracle/app-update.json is the intent Self-healing writes before it applies merged fixes to
+// the app: { from, to, subjects, roadmaps, appDir, at }. Still there with `at` over 2 minutes old: the new
+// code did not start. The app then shows data-testid="app-update-failed-banner" (what was updated and
+// `git -C <appDir> checkout <from>`, not role="banner": that is the header) with a "Dismiss" button,
+// kept until dismissed. The app checks when the window loads, so the step reloads it.
+
+const failedUpdateBanner = (page) => page.getByTestId('app-update-failed-banner');
+
+Given('an app update from {string} to {string} was started {int} minutes ago without finishing', async ({ e2e }, from, to, minutes) => {
+  const dir = path.join(e2e.scratch, 'workspace', 'oracle');
+  fs.mkdirSync(dir, { recursive: true });
+  const intent = {
+    from, to,
+    subjects: ['Fix the roadmap dispatch after a restart'],
+    roadmaps: [],
+    appDir: root,
+    at: new Date(Date.now() - minutes * 60000).toISOString(),
+  };
+  fs.writeFileSync(path.join(dir, 'app-update.json'), JSON.stringify(intent, null, 2));
+  await e2e.window.reload();
+  await e2e.window.waitForLoadState('domcontentloaded');
+});
+
+Then('a banner says the app update to {string} did not start', async ({ e2e }, to) => {
+  const banner = failedUpdateBanner(e2e.window);
+  await expect(banner).toBeVisible({ timeout: 30000 });
+  await expect(banner).toContainText(to);
+  await expect(banner).toContainText('Fix the roadmap dispatch after a restart');
+});
+
+Then('the banner gives the command to go back to {string}', async ({ e2e }, from) => {
+  await expect(failedUpdateBanner(e2e.window)).toContainText(new RegExp(`git -C .+ checkout ${escapeRe(from)}`));
+});
+
+When('I dismiss the failed app update banner', async ({ e2e }) => {
+  await failedUpdateBanner(e2e.window).getByRole('button', { name: /^Dismiss/ }).click();
+});
+
+Then('no failed app update banner shows', async ({ e2e }) => {
+  await expect(navItem(e2e.window, 'Home')).toBeVisible();
+  await expect(failedUpdateBanner(e2e.window)).toHaveCount(0);
 });
 
 // ---- no Supervisor in the header (#264) ---------------------------------------------------------------

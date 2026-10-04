@@ -76,3 +76,16 @@ Feature: Night watch
     And I open "Night watch" in the sidebar
     Then the Night watch is off
     And the Night watch does not say "Self-healing is on"
+
+  # #279: "Apply merged fixes to this app", under Self-healing, only applies when the app runs from
+  # source and a project of the workspace is this app's repository. The E2E app runs from source, but
+  # the demo project (github.com/example/demo-app, no clone) is not this app's repository.
+  @issue-279
+  Scenario: Applying merged fixes to the app is unavailable when no project is this app's repository
+    Given the app is open
+    When I open "Settings" in the sidebar
+    And I open the "Execution" settings tab
+    And I turn Self-healing on
+    Then the "Apply merged fixes to this app" switch is disabled
+    And applying merged fixes to the app says "no project of this workspace is this app's repository"
+    And applying merged fixes to the app names no source

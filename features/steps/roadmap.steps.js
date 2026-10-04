@@ -1,6 +1,6 @@
 // Steps of features/roadmap.feature: the Roadmap's readable statuses and run chip (#266), a stage's
 // "+n done" chip (#267), the date filter, the Planned | All switch, infinite scroll and the header
-// count (#268), the live run timer and a fix round (#272), on the demo roadmap (scripts/screenshot.js
+// count (#268), the live run timer and a fix round (#272), no "Update the app after this" switch (#279), on the demo roadmap (scripts/screenshot.js
 // demoRoadmap / demoRoadmapRuns). Locators are roles and data-testid only (skills/ui-conventions).
 //
 // What the screens expose (the renderer's contract for these steps):
@@ -367,4 +367,15 @@ Then('the progress of the roadmap item {string} has not dropped', async ({ e2e }
   const before = noted.get(e2e);
   expect(before, 'the progress noted earlier').not.toBeUndefined();
   expect(await percentOf(e2e.window, title)).toBeGreaterThanOrEqual(before);
+});
+
+// ---- #279: "Update the app after this" ---------------------------------------------------------------
+// data-testid="roadmap-update-after": a switch (checkbox named "Update the app after this") on an item
+// card, only when applying merged fixes to the app applies in this workspace (item.updateAfter).
+
+Then('the roadmap item {string} offers no {string} switch', async ({ e2e }, title, name) => {
+  const item = roadmapItem(e2e.window, title);
+  await expect(item).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(item.getByTestId('roadmap-update-after')).toHaveCount(0);
+  await expect(item.getByRole('checkbox', { name, exact: true })).toHaveCount(0);
 });

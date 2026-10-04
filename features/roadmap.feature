@@ -154,3 +154,19 @@ Feature: Roadmap statuses, done items, filters and run timers
     Then the roadmap item "Keyboard focus is lost after closing a dialog" shows "round 2"
     And the run chip of the roadmap item "Keyboard focus is lost after closing a dialog" still opens the run "run00016"
     And the progress of the roadmap item "Keyboard focus is lost after closing a dialog" has not dropped
+
+  # ---- #279: "Update the app after this" ----------------------------------------------------------------
+  # Only offered when applying merged fixes to the app applies; the demo project is not this app's
+  # repository, so no card offers it, even with Self-healing on.
+
+  @issue-279
+  Scenario: A roadmap item does not offer "Update the app after this" when no project is this app's repository
+    Given the app is open
+    And the roadmap has a stage of 2 planned items
+    When I open "Settings" in the sidebar
+    And I open the "Execution" settings tab
+    And I turn Self-healing on
+    And I open "Backlog" in the sidebar
+    And I open the Roadmap
+    Then the roadmap item "Planned item 1001" offers no "Update the app after this" switch
+    And the roadmap item "Keyboard focus is lost after closing a dialog" offers no "Update the app after this" switch

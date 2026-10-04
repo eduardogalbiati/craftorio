@@ -1,6 +1,7 @@
 // Steps of features/nightwatch.feature (#239): the Night watch screen's permissions (what the
 // Oracle may do without asking), ticked, saved and found again; #278: Self-healing, its switch in
-// Settings › Execution › Oracle and what the Night watch screen shows of it. Locators are roles and data-testid
+// Settings › Execution › Oracle and what the Night watch screen shows of it; #279: the "Apply merged
+// fixes to this app" row under it. Locators are roles and data-testid
 // only (skills/ui-conventions).
 
 const { expect } = require('@playwright/test');
@@ -106,4 +107,29 @@ Then('the Night watch shows no end time', async ({ e2e }) => {
 
 Then('the Night watch is off', async ({ e2e }) => {
   await expect(watchSwitch(e2e.window)).not.toBeChecked();
+});
+
+// ---- Self-healing applies merged fixes to the app (#279) ---------------------------------------------
+// Under the Self-healing row: data-testid="app-update-row" (the row), data-testid="app-update-switch"
+// (its checkbox, accessible name "Apply merged fixes to this app"), data-testid="app-update-reason"
+// (why it is disabled: "the packaged app updates with a new install" or "no project of this workspace
+// is this app's repository"), data-testid="app-update-source" (the source line, only when it applies).
+
+const appUpdateRow = (page) => page.getByTestId('app-update-row');
+
+Then('the {string} switch is disabled', async ({ e2e }, name) => {
+  // a switch is a checkbox named by its label (aria-label)
+  const box = e2e.window.getByRole('checkbox', { name, exact: true });
+  await expect(box).toBeVisible();
+  await expect(box).toBeDisabled();
+  await expect(box).not.toBeChecked();
+});
+
+Then('applying merged fixes to the app says {string}', async ({ e2e }, text) => {
+  await expect(appUpdateRow(e2e.window).getByTestId('app-update-reason')).toContainText(text);
+});
+
+Then('applying merged fixes to the app names no source', async ({ e2e }) => {
+  await expect(appUpdateRow(e2e.window)).toBeVisible();
+  await expect(appUpdateRow(e2e.window).getByTestId('app-update-source')).toHaveCount(0);
 });
