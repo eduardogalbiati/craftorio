@@ -20,6 +20,12 @@ const overlaps = (a, b) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b
 
 When('I open the Oracle', async ({ e2e }) => {
   const page = e2e.window;
+  // a drawer the scenario left open (the Product Owner's, the Supervisor chat's) covers the sidebar:
+  // the owner closes it first, by its backdrop, as a person would
+  for (const backdrop of await page.locator('.drawer-backdrop:not(.hidden)').all()) {
+    await backdrop.click({ position: { x: 5, y: 5 } });
+    await expect(backdrop).toBeHidden();
+  }
   await page.getByRole('navigation').getByRole('button', { name: /^Oracle(\s+\d+)?$/ }).click();
   const panel = oraclePanel(page);
   await expect(panel).toBeVisible();
