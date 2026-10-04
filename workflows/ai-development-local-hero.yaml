@@ -613,6 +613,8 @@ steps:
     agent: developer
     # {{ test_map }}: the checkout's code → tests map (#219), for the tests of the files it changes
     test_map: true
+    # the self-review (#179) reads the diff against the reviewer's checklist and its rules/*.md (read access to its folder)
+    skills: [code-review]
     prompt: |
       Task: {{ inputs.task }}
 

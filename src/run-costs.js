@@ -7,7 +7,8 @@
 //   its own cost is the difference with the previous turn of the same CLI session, and the session
 //   costs its last total (handoff sessions, one turn each, and other providers are unchanged);
 // - an `attempt N/M failed` log line is an attempt whose cost was never recorded.
-// Pure: the files are read by the callers and never rewritten.
+// Pure: the files are read by the callers and never rewritten. The Run screen reads a live or
+// replayed run's events itself (src/renderer/app.js) with the same two regexes below.
 
 const ATTEMPT_FAILED = /^\[([^\]]+)\] attempt \d+\/\d+ failed: (.*)$/;
 // failures before the CLI ran: nothing was paid

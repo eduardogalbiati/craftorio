@@ -329,12 +329,13 @@ function tokensCell(t) {
   const tip = TOKEN_PARTS.map(([k, label]) => `${label}: ${fmtNum(t[k])}`).join('\n');
   return `<td class="num mono" title="${esc(tip)}">${fmtTok(t.total)}</td>`;
 }
-// Tokens with no cost: a model with no price (Codex, unpriced models), not a free session.
 // #233: a cost that includes an estimate (attempts stopped before their result, priced from their
-// model calls), or that misses a stopped attempt of a run recorded before costs were estimated
+// model calls), or that misses a stopped attempt of a run recorded before costs were estimated.
+// The one badge pair for it: the run lists, the Run screen (views/run/run.js) and Analytics' Run tab.
 function costMarks(estimatedUsd, notRecorded) {
   return `${estimatedUsd > 0 ? ` <span class="badge" title="${esc(`${fmtUsd(estimatedUsd)} of it estimated from the model calls of attempts stopped before their result`)}">estimated</span>` : ''}${notRecorded ? ' <span class="badge warn" title="An attempt stopped before its result: its cost was not recorded">cost not recorded</span>' : ''}`;
 }
+// Tokens with no cost: a model with no price (Codex, unpriced models), not a free session.
 function sessionCostCell(s) {
   if (!s.costUsd && s.tokens?.total && s.provider !== 'mock' && !s.costNotRecorded) return '<td class="num mono muted" title="No price for this model: see Usage › Prices">—</td>';
   return `<td class="num mono">${fmtUsd(s.costUsd)}${costMarks(s.costEstimatedUsd, s.costNotRecorded)}</td>`;

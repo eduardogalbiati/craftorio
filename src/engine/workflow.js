@@ -35,6 +35,7 @@ const {
   isToolTimeout,
   refreshWindowsPath,
   runTurn,
+  seedClaudeTotal,
   sleep,
   storeAttachments,
 } = require('./providers');
@@ -1064,6 +1065,8 @@ class WorkflowRun extends EventEmitter {
       // #233: the part of cost_usd estimated from the stream of attempts killed before their result
       ...(s.estimatedUsd ? { estimated_cost_usd: +s.estimatedUsd.toFixed(6) } : {}),
       ...(s.costNotRecorded ? { cost_not_recorded: true } : {}),
+      // the CLI's own running total of its session (Claude): seeds the per-turn cost when a resumed run continues it
+      ...(s.cliTotalUsd != null ? { cli_total_cost_usd: s.cliTotalUsd } : {}),
     };
   }
 
@@ -2802,7 +2805,11 @@ class WorkflowRun extends EventEmitter {
       this.resumeSessions ??= { ...(this.resume?.sessions || {}) };
       const previous = persistent && !this.mock && this.resumeSessions[agentName];
       delete this.resumeSessions[agentName];
-      if (previous) { session.providerSessionId = previous; session.turns = 1; }
+      if (previous) {
+        session.providerSessionId = previous; session.turns = 1;
+        // #233: the CLI's running total of that session, so the next turn costs only its own part
+        seedClaudeTotal(previous, this.resume?.cliTotals?.[previous]);
+      }
     }
 
     const turn = ++session.turns;
@@ -3075,6 +3082,7 @@ class WorkflowRun extends EventEmitter {
         const dur = Date.now() - t0;
         session.activeMs += dur;
         if (res.providerSessionId) session.providerSessionId = res.providerSessionId;
+        if (res.cliTotalCostUsd != null) session.cliTotalUsd = res.cliTotalCostUsd;
         addUsage(session.tokens, res.usage);
         session.costUsd += res.costUsd || 0;
         session.status = 'idle';

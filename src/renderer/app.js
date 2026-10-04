@@ -769,9 +769,11 @@ function onEvent(ev) {
 
     case 'log': {
       orch(ev, ev.message, ev.level);
-      // #233: a run recorded before costs were estimated: its agent's stopped attempt cost was never recorded
-      const failed = !v.run?.costPerTurn && ev.level === 'error' && /^\[([^\]]+)\] attempt \d+\/\d+ failed: /.exec(String(ev.message || ''));
-      const owner = failed && [...v.sessions.values()].reverse().find((s) => s.agent === failed[1]);
+      // #233: a run recorded before costs were estimated: its agent's stopped attempt cost was never
+      // recorded, unless it failed before the CLI ran (src/run-costs.js's ATTEMPT_FAILED and NOT_STARTED)
+      const failed = !v.run?.costPerTurn && ev.level === 'error' && /^\[([^\]]+)\] attempt \d+\/\d+ failed: (.*)$/.exec(String(ev.message || ''));
+      const paid = failed && !/not found in PATH|Working directory does not exist|Provider ".*" is not defined/.test(failed[2]);
+      const owner = paid && [...v.sessions.values()].reverse().find((s) => s.agent === failed[1]);
       if (owner) owner.costNotRecorded = true;
       break;
     }

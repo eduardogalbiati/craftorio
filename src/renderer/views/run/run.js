@@ -513,7 +513,7 @@ function renderSessions() {
   // #233: the part of a cost estimated from attempts stopped before their result, or not recorded
   const estimated = list.reduce((a, s) => a + (Number(s.estimated_cost_usd) || 0), 0);
   const notRecorded = (ss) => ss.some((s) => s.cost_not_recorded || s.costNotRecorded);
-  const marks = (usd, missing) => `${usd > 0 ? ` <span class="badge" title="${esc(`${fmtCost(usd)} of it estimated from the model calls of attempts stopped before their result`)}">estimated</span>` : ''}${missing ? ' <span class="badge warn" title="An attempt stopped before its result: its cost was not recorded">cost not recorded</span>' : ''}`;
+  const marks = costMarks; // run-list.js: the badges shared with the run lists and Analytics
   box.innerHTML = list.map((s) => {
     const isOrch = s.id === 'orchestrator';
     const t = s.tokens || {};

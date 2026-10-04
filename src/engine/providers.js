@@ -102,9 +102,14 @@ const contextTokens = (u) => (u.input_tokens || 0) + (u.cache_read_input_tokens 
 
 // #233: on a resumed session (`--resume`), the `result` event's `total_cost_usd` is the whole CLI
 // session's cost so far (its `usage` is the turn's own): the turn costs the difference with the
-// session's previous total, kept here per CLI session id. A session resumed after the app restarted
-// has no previous total here: its first turn counts the whole session again.
+// session's previous total, kept here per CLI session id. The engine records the last total in the
+// session's snapshot (cli_total_cost_usd) and seeds it back with seedClaudeTotal when a resumed run
+// continues the CLI session after the app restarted.
 const claudeTotals = new Map();
+
+function seedClaudeTotal(sessionId, totalUsd) {
+  if (sessionId && totalUsd > 0 && !(claudeTotals.get(sessionId) >= totalUsd)) claudeTotals.set(sessionId, totalUsd);
+}
 
 // The tokens of a turn's distinct model calls (Claude Code repeats a message's usage on each of its
 // content blocks): what a turn killed before its `result` still paid for, priced by the engine.
@@ -167,6 +172,7 @@ function parseClaude(ev, emit, acc) {
         // a total below the previous one is a new count (a forked session): taken whole
         acc.costUsd = ev.total_cost_usd >= before ? +(ev.total_cost_usd - before).toFixed(6) : ev.total_cost_usd;
         if (sid) claudeTotals.set(sid, ev.total_cost_usd);
+        acc.cliTotalCostUsd = ev.total_cost_usd;
       }
       if (ev.is_error) acc.error = `Claude returned an error: ${ev.subtype} ${ev.result || ''}`;
       emit({ kind: 'usage', usage: acc.usage, costUsd: acc.costUsd });
@@ -494,6 +500,7 @@ function runCli(opts, parser) {
         text: acc.text || acc.lastText,
         usage: acc.usage || emptyUsage(),
         costUsd: acc.costUsd,
+        ...(acc.cliTotalCostUsd != null ? { cliTotalCostUsd: acc.cliTotalCostUsd } : {}),
         providerSessionId: acc.providerSessionId,
         exitCode: code,
       });
@@ -771,6 +778,7 @@ module.exports = {
   refreshWindowsPath,
   resolveCommand,
   runTurn,
+  seedClaudeTotal,
   sleep,
   sniffImage,
   storeAttachments,

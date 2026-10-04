@@ -75,11 +75,8 @@
     return `<span class="an-verdict ${esc(c.level)}" title="${c.verdict === 'worse' ? 'Worse' : 'Better'} than the median of the compared runs (p25–p75: ${esc(fmt(c.p25, kind))} – ${esc(fmt(c.p75, kind))})">${pctText}${esc(fmt(Math.abs(c.diff), kind))} ${c.diff > 0 ? 'more' : 'less'} than the median · <b>${c.verdict}</b></span>`;
   }
 
-  // #233: a cost that includes an estimate (attempts stopped before their result, priced from their
-  // model calls), or that misses a stopped attempt of a run recorded before costs were estimated
-  function costMarks(x) {
-    return `${x.costEstimatedUsd > 0 ? ` <span class="badge" title="${esc(`${fmtUsd(x.costEstimatedUsd)} of it estimated from the model calls of attempts stopped before their result`)}">estimated</span>` : ''}${x.costNotRecorded ? ' <span class="badge warn" title="An attempt stopped before its result: its cost was not recorded">cost not recorded</span>' : ''}`;
-  }
+  // #233: the estimated / cost not recorded badges (run-list.js's costMarks, a renderer global)
+  const marksOf = (x) => costMarks(x.costEstimatedUsd, x.costNotRecorded);
 
   function header(f, cmp) {
     const stat = (label, value, title = '', testid = '') => `<div class="u-stat"${title ? ` title="${esc(title)}"` : ''}${testid ? ` data-testid="${testid}"` : ''}><label>${esc(label)}</label><b>${value}</b></div>`;
@@ -88,7 +85,7 @@
           <div class="muted small"><span class="badge">${esc(f.workflow || '—')}</span> ${f.issues?.length ? esc(issuesText(f.issues)) : ''} · <span class="mono" title="${esc(f.runId)}">${esc(f.runId)}</span>${f.startedAt ? ` · ${esc(dateOf(f.startedAt))}` : ''}${f.mock ? ' · <span class="badge">simulated</span>' : ''}</div></div>
           <div class="row"><span class="badge ${f.status === 'success' ? 'cat-monitor' : f.status === 'failed' ? 'warn' : ''}">${esc(f.status)}</span><button type="button" class="btn sm ghost" data-an-open-run="${esc(f.runId)}" data-workflow="${esc(f.file || '')}">Open run</button></div></div>
         <div class="an-totals">
-          ${stat('Total cost', `${fmtUsd(f.costUsd)}${costMarks(f)}`, '', 'an-run-total-cost')}
+          ${stat('Total cost', `${fmtUsd(f.costUsd)}${marksOf(f)}`, '', 'an-run-total-cost')}
           ${stat('Cost per issue', fmt(f.costPerIssue, 'usd'))}
           ${stat('Duration', fmtDur(f.durationMs))}
           ${stat('Active', fmtDur(f.activeMs), 'The duration minus the time waiting for you at gates')}
@@ -166,7 +163,7 @@
       const c = cmp?.agents?.[a.agent]?.costUsd;
       return {
         label: a.agent, chip: chip(a.agent), value: a.costUsd, sub: `${fmtUsd(a.costUsd)}${c ? ` (${c.diff > 0 ? '▲' : c.diff < 0 ? '▼' : '='} median ${fmtUsd(c.median)})` : ''}`, color: colorOf(a.agent),
-        marks: costMarks(a), keep: !!a.costNotRecorded, testid: 'an-agent-cost',
+        marks: marksOf(a), keep: !!a.costNotRecorded, testid: 'an-agent-cost',
       };
     }));
     const tokens = hbars(f.agents.map((a) => ({
