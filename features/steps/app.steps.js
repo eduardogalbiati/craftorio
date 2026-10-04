@@ -17,8 +17,8 @@ const root = path.join(__dirname, '..', '..');
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const sidebar = (page) => page.getByRole('navigation');
 const header = (page) => page.getByRole('banner');
-// a sidebar entry by its label; a count badge may follow it ("Backlog 2")
-const entryName = (name) => new RegExp(`^${escapeRe(name)}(\\s+\\d+)?$`);
+// a sidebar entry by its label; a count badge may follow it ("Backlog 2", or "Night watch ☾ 0" while a watch is on)
+const entryName = (name) => new RegExp(`^${escapeRe(name)}(\\s+(☾\\s+)?\\d+)?$`);
 const navItem = (page, name) => sidebar(page).getByRole('button', { name: entryName(name) });
 const menuGroup = (page, name) => sidebar(page).getByRole('group', { name, exact: true });
 const groupToggle = (page, name) => menuGroup(page, name).getByRole('button', { name, exact: true });
