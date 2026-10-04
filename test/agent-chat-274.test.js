@@ -435,3 +435,22 @@ test('#274 docs/agents/renderer.md names agent-chat.js and says new agent chats 
     || doc.split(/\n\s*\n|\n-\s/).find((p) => /agent-chat\.js/.test(p) && /\bnew\b[^.]*\bchats?\b/i.test(p));
   assert.ok(sentence, 'a sentence (or bullet) with agent-chat.js says a new agent chat uses it');
 });
+
+// ---- after the review ----------------------------------------------------------------------------
+
+test('#274 a view\'s onDone that throws after a send leaves no unhandled rejection, and the chat is ready again', async () => {
+  const unhandled = [];
+  const onUnhandled = (reason) => unhandled.push(reason);
+  process.on('unhandledRejection', onUnhandled);
+  try {
+    const c = mount({ onDone() { throw new Error('the view failed to redraw'); } });
+    c.type('hello');
+    c.parts.send().click();
+    c.pending[0].resolve({});
+    await settle(10);
+    assert.deepEqual(unhandled.map((r) => String(r?.message || r)), [], 'no unhandled rejection');
+    assert.equal(c.parts.send().disabled, false, 'Send is free again');
+  } finally {
+    process.off('unhandledRejection', onUnhandled);
+  }
+});
