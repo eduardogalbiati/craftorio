@@ -5,6 +5,10 @@ Feature: Shape accepted ideas on the Discovery board
   attachment and thread counts. Shape and Define have a WIP limit (5 by default, the header shows
   `n / limit`): a move past it asks to confirm and the column turns amber, it is never blocked
   silently. Bug and hotfix cards run in a fast lane at the top and may skip Shape.
+  Each card has a clarity score (`clarity 72%`); its panel lists the missing points, when and by whom
+  it was scored. A card below the bar (85% by default) cannot go to Ready: it offers "Grill me" and
+  "Move anyway", which needs a reason and is recorded on the card. The board forecasts the ready
+  work as nights of agent work.
 
   @issue-257
   Scenario: An idea accepted in the Inbox shows in Triage and moves to Shape with "Move to…"
@@ -40,3 +44,46 @@ Feature: Shape accepted ideas on the Discovery board
     When I move the Discovery card "Crash when a run is stopped" to "Define"
     Then the fast lane shows the card "Crash when a run is stopped" in "Define"
     And the Discovery column "Define" counts "1 / 5"
+
+  @issue-166
+  Scenario: A card shows its clarity score and its panel lists what is missing
+    Given the app is open
+    And the Discovery card "Export runs as CSV" waits in "Shape", scored 72% clear by "Product Owner" on "2026-10-01T09:00:00.000Z", missing:
+      | point                        |
+      | Who reads the exported file  |
+      | Which columns the file holds |
+    When I open "Discovery" in the sidebar
+    Then the Discovery card "Export runs as CSV" shows the clarity "clarity 72%"
+    When I open the Discovery card "Export runs as CSV"
+    Then the card's panel lists the missing points "Who reads the exported file" and "Which columns the file holds"
+    And the card's panel says it was scored by "Product Owner" on "2026-10-01T09:00:00.000Z"
+
+  @issue-166
+  Scenario: A card below the clarity bar is refused in Ready and can be moved anyway with a reason
+    Given the app is open
+    And the Discovery card "Share a run report" waits in "Define", 60% clear with about 2 h of work
+    When I open "Discovery" in the sidebar
+    And I move the Discovery card "Share a run report" to "Ready"
+    Then the move is refused because the card is below the clarity bar of 85%
+    And the Discovery column "Define" shows the card "Share a run report"
+    And the Discovery card "Share a run report" offers "Grill me"
+    When I choose to move the Discovery card "Share a run report" anyway
+    Then moving it anyway needs a reason
+    When I give the reason "The owner explained it in the thread" and confirm
+    Then the Discovery column "Ready" shows the card "Share a run report"
+    And the Discovery card "Share a run report" shows it was moved anyway because "The owner explained it in the thread"
+
+  @issue-166
+  Scenario: The board shows how many nights of agent work are ready, counting only clear cards
+    Given the app is open
+    And these Discovery cards wait in "Define":
+      | title                      | clarity | hours |
+      | Per-project budget         | 94      | 2     |
+      | Keyboard shortcuts         | 85      | 1     |
+      | Compare two runs           | 40      | 30    |
+    When I open "Discovery" in the sidebar
+    And I move the Discovery card "Per-project budget" to "Ready"
+    And I move the Discovery card "Keyboard shortcuts" to "Ready"
+    And I move the Discovery card "Compare two runs" to "Ready" anyway because "Needed for the demo"
+    Then the Discovery column "Ready" shows the card "Compare two runs"
+    And the board shows "1 night ready" with "about 3 h of agent work", labelled as an estimate

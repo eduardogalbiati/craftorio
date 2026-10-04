@@ -16,6 +16,23 @@
 //   confirm-modal, #btn-confirm-yes          the app's confirm dialog (index.html) and its confirm
 //                                            button (its label depends on the question)
 // The fresh simulated workspace starts with an empty discovery store.
+// #166, the clarity score (the bar: 85% by default) and the ready forecast:
+//   clarity-badge                            a card's clarity badge on the board ("clarity 72%")
+//   clarity-missing                          in the card's panel: the list of missing points, one
+//                                            role=listitem per point
+//   clarity-scored                           in the card's panel: who scored it, with a <time> whose
+//                                            datetime is the score's ISO time
+//   clarity-refused                          the message of a move to Ready refused under the bar
+//   grill-me                                 a card's "Grill me" button (an interview in its thread)
+//   clarity-move-anyway                      a card's "Move anyway" button (the forced override)
+//   clarity-override-dialog                  the override's dialog (role=dialog): its reason textbox
+//   clarity-override-reason, -confirm        and its confirm button, disabled while the reason is empty
+//   clarity-override                         the recorded override, on the card's face and in its
+//                                            panel (the panel shows the reason)
+//   ready-forecast                           the board's "n nights ready (about h of agent work)"
+// A card gets its score and estimate through the app's service (window.api: discovery:create,
+// discovery:update with clarity { score, gaps, ts, by } and estimate { minutes }, discovery:move),
+// the way the scoring agent will record them.
 
 const { expect } = require('@playwright/test');
 const { Given, When, Then } = require('./fixtures');
@@ -133,4 +150,129 @@ Then('the fast lane shows the card {string} in {string}', async ({ e2e }, title,
   const card = fastLane(e2e.window).getByTestId('discovery-card').filter({ hasText: title });
   await expect(card).toBeVisible();
   await expect(card).toHaveAttribute('data-column', columnKey(colTitle));
+});
+
+// ---- #166: the clarity score, the bar and the ready forecast ----------------------------------------
+
+const overrideDialog = (page) => page.getByTestId('clarity-override-dialog');
+
+// A card in `colTitle` (not Ready: a move there goes through the bar) with its clarity and estimate,
+// recorded through the app's service; the board shows it when Discovery is opened.
+async function seedCard(e2e, { title, colTitle, clarity, minutes }) {
+  const res = await e2e.window.evaluate(async ({ projectId, title, column, clarity, minutes }) => {
+    try {
+      const card = await window.api.createDiscoveryCard(projectId, title, `Notes about ${title}`, 'idea');
+      const fields = { clarity };
+      if (minutes != null) fields.estimate = { minutes };
+      await window.api.updateDiscoveryCard(projectId, card.id, fields);
+      await window.api.moveDiscoveryCard(projectId, card.id, column);
+      return { id: card.id };
+    } catch (e) {
+      return { thrown: String(e?.message || e) };
+    }
+  }, { projectId: e2e.project.id, title, column: columnKey(colTitle), clarity, minutes });
+  expect(res?.thrown, `the card "${title}" could not be recorded`).toBeFalsy();
+}
+
+const scoredNow = (score) => ({ score, gaps: [], ts: new Date().toISOString(), by: 'Product Owner' });
+
+// the card's "Move anyway": the reason is required, then the card goes to Ready
+async function moveAnyway(page, title, reason) {
+  await boardCard(page, title).getByTestId('clarity-move-anyway').click();
+  const dialog = overrideDialog(page);
+  await expect(dialog).toBeVisible();
+  await dialog.getByTestId('clarity-override-reason').fill(reason);
+  await dialog.getByTestId('clarity-override-confirm').click();
+  await expect(dialog).toBeHidden();
+}
+
+Given('the Discovery card {string} waits in {string}, scored {int}% clear by {string} on {string}, missing:', async ({ e2e }, title, colTitle, score, by, ts, table) => {
+  const gaps = table.hashes().map((r) => r.point);
+  await seedCard(e2e, { title, colTitle, clarity: { score, gaps, ts, by } });
+});
+
+Given('the Discovery card {string} waits in {string}, {int}% clear with about {int} h of work', async ({ e2e }, title, colTitle, score, hours) => {
+  await seedCard(e2e, { title, colTitle, clarity: scoredNow(score), minutes: hours * 60 });
+});
+
+Given('these Discovery cards wait in {string}:', async ({ e2e }, colTitle, table) => {
+  for (const r of table.hashes()) {
+    await seedCard(e2e, { title: r.title, colTitle, clarity: scoredNow(Number(r.clarity)), minutes: Number(r.hours) * 60 });
+  }
+});
+
+Then('the Discovery card {string} shows the clarity {string}', async ({ e2e }, title, text) => {
+  await expect(boardCard(e2e.window, title).getByTestId('clarity-badge')).toHaveText(text);
+});
+
+When('I open the Discovery card {string}', async ({ e2e }, title) => {
+  await boardCard(e2e.window, title).getByTestId('discovery-card-title').click();
+  await expect(cardDetail(e2e.window)).toBeVisible();
+});
+
+Then('the card\'s panel lists the missing points {string} and {string}', async ({ e2e }, first, second) => {
+  const items = cardDetail(e2e.window).getByTestId('clarity-missing').getByRole('listitem');
+  await expect(items).toHaveText([first, second]);
+});
+
+Then('the card\'s panel says it was scored by {string} on {string}', async ({ e2e }, by, ts) => {
+  const scored = cardDetail(e2e.window).getByTestId('clarity-scored');
+  await expect(scored).toContainText(by);
+  await expect(scored.locator('time')).toHaveAttribute('datetime', ts);
+});
+
+Then('the move is refused because the card is below the clarity bar of {int}%', async ({ e2e }, bar) => {
+  const msg = e2e.window.getByTestId('clarity-refused');
+  await expect(msg).toBeVisible();
+  await expect(msg).toContainText(`${bar}%`);
+  await expect(msg).toContainText(/clarity/i);
+});
+
+Then('the Discovery card {string} offers {string}', async ({ e2e }, title, action) => {
+  const button = boardCard(e2e.window, title).getByTestId('grill-me');
+  await expect(button).toBeVisible();
+  await expect(button).toHaveAccessibleName(action);
+});
+
+When('I choose to move the Discovery card {string} anyway', async ({ e2e }, title) => {
+  const button = boardCard(e2e.window, title).getByTestId('clarity-move-anyway');
+  await expect(button).toHaveAccessibleName('Move anyway');
+  await button.click();
+  await expect(overrideDialog(e2e.window)).toBeVisible();
+});
+
+Then('moving it anyway needs a reason', async ({ e2e }) => {
+  const dialog = overrideDialog(e2e.window);
+  await expect(dialog).toHaveRole('dialog');
+  await expect(dialog.getByTestId('clarity-override-reason')).toHaveValue('');
+  await expect(dialog.getByTestId('clarity-override-confirm')).toBeDisabled();
+});
+
+When('I give the reason {string} and confirm', async ({ e2e }, reason) => {
+  const dialog = overrideDialog(e2e.window);
+  await dialog.getByTestId('clarity-override-reason').fill(reason);
+  await expect(dialog.getByTestId('clarity-override-confirm')).toBeEnabled();
+  await dialog.getByTestId('clarity-override-confirm').click();
+  await expect(dialog).toBeHidden();
+});
+
+When('I move the Discovery card {string} to {string} anyway because {string}', async ({ e2e }, title, target, reason) => {
+  const page = e2e.window;
+  await moveCard(page, title, target);
+  await expect(page.getByTestId('clarity-refused')).toBeVisible();
+  await moveAnyway(page, title, reason);
+});
+
+Then('the Discovery card {string} shows it was moved anyway because {string}', async ({ e2e }, title, reason) => {
+  const page = e2e.window;
+  await expect(boardCard(page, title).getByTestId('clarity-override')).toBeVisible();
+  await boardCard(page, title).getByTestId('discovery-card-title').click();
+  await expect(cardDetail(page).getByTestId('clarity-override')).toContainText(reason);
+});
+
+Then('the board shows {string} with {string}, labelled as an estimate', async ({ e2e }, nights, hours) => {
+  const forecast = board(e2e.window).getByTestId('ready-forecast');
+  await expect(forecast).toContainText(new RegExp(`(^|\\D)${escapeRe(nights)}`));
+  await expect(forecast).toContainText(hours);
+  await expect(forecast).toContainText(/estimate/i);
 });
