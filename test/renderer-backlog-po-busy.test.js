@@ -130,6 +130,7 @@ function loadDrawer({ projectId = 'demo' } = {}) {
   vm.runInContext(read('po-calibration.js'), sandbox);
   vm.runInContext(read('default-workflow.js'), sandbox);
   vm.runInContext(read('workflow-inputs.js'), sandbox);
+  vm.runInContext(read('agent-request.js'), sandbox);
   if (fs.existsSync(path.join(R, 'estimates.js'))) vm.runInContext(read('estimates.js'), sandbox);
   vm.runInContext(read('views', 'backlog', 'backlog-po-settings.js'), sandbox);
   vm.runInContext(read('views', 'backlog', 'backlog-po.js'), sandbox);
