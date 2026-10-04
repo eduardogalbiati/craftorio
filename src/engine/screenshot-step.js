@@ -7,7 +7,10 @@
 // It never fails: no entries, a simulated run, no worktree, no screenshot command, an invalid entry,
 // a timeout or a crash end up in the output (`errors`, `reason`, `message`), and the run goes on to
 // the next step (the developer_check gate, which says what failed). Nothing is retried by an agent.
-// Output: { kind: 'screenshots', folder, round, dir, taken, screens, screenshots, errors, reason, message }.
+// Output: { kind: 'screenshots', folder, round, dir, taken, screens, screenshots, errors, new_elements,
+// reason, message }. new_elements (#185): screens whose original side failed only because a --click /
+// context / paste selector matched nothing ("screenshot: nothing matches <selector>") while the
+// modified side was taken: an element the change adds, counted apart in the message, not an error.
 // Each capture waits for the machine-wide screenshot slot (#199): one Electron screenshot at a time.
 
 const fs = require('fs');
@@ -26,6 +29,8 @@ const SHOT_TIMEOUT_MS = 180000;
 // set by the step itself: the round folder, the file name, the side and the base
 const RESERVED = ['--caption', '--name', '--out', '--ref', '--side'];
 const NAME = /^[\w.-]+$/;
+// scripts/screenshot.js's last line when a selector matches nothing
+const NOTHING_MATCHES = /^screenshot: nothing matches (.+)$/;
 
 // "--view run --click \"[data-x] .y\"" → ['--view', 'run', '--click', '[data-x] .y'] (a list stays a list)
 function splitArgs(v) {
@@ -117,13 +122,14 @@ async function captureScreenshots({ entries, cwd, runDir, folder, round, base, e
   const dir = runDir ? evidence.roundDir(runDir, folder, round) : null;
   const out = {
     kind: 'screenshots', folder, round, dir: dir ? path.relative(runDir, dir).split(path.sep).join('/') : null,
-    taken: 0, screens: 0, screenshots: [], errors: [], reason: null, message: '',
+    taken: 0, screens: 0, screenshots: [], errors: [], new_elements: [], reason: null, message: '',
   };
   const finish = () => {
     if (!out.taken && !out.reason) out.reason = `every capture failed (${out.errors[0]?.name}: ${out.errors[0]?.error})`;
+    const fresh = out.new_elements.length ? `; ${plural(out.new_elements.length, 'new element')} (no original)` : '';
     const failed = out.errors.length ? `; ${plural(out.errors.length, 'error')}: ${out.errors.map((e) => `${e.name}${e.side ? ` (${e.side})` : ''}: ${e.error}`).join('; ')}` : '';
     out.message = out.taken
-      ? `${plural(out.taken, 'screenshot')} of ${plural(out.screens, 'screen')} taken in round ${round}${failed}`
+      ? `${plural(out.taken, 'screenshot')} of ${plural(out.screens, 'screen')} taken in round ${round}${fresh}${failed}`
       : `No screenshots: ${out.reason}${failed}`;
     return out;
   };
@@ -147,6 +153,7 @@ async function captureScreenshots({ entries, cwd, runDir, folder, round, base, e
   fs.mkdirSync(dir, { recursive: true });
   for (const e of valid) {
     let shot = false;
+    let modified = false;
     for (const side of base ? ['modified', 'original'] : ['modified']) {
       const args = [...e.args, '--out', dir, '--name', e.name, '--side', side, ...(side === 'original' ? ['--ref', base] : [])];
       const t0 = Date.now();
@@ -156,12 +163,16 @@ async function captureScreenshots({ entries, cwd, runDir, folder, round, base, e
       if (r.code === 0 && fs.existsSync(file)) {
         out.taken++;
         shot = true;
+        if (side === 'modified') modified = true;
         out.screenshots.push({ path: path.relative(runDir, file).split(path.sep).join('/'), caption: e.caption, side, duration_ms: Date.now() - t0 });
         continue;
       }
       const error = r.timedOut ? `timed out after ${Math.round(timeoutMs / 1000)} s`
         : r.code === 0 ? 'the command wrote no image'
           : `exit ${r.code ?? '?'}: ${lastLine(r.output) || 'no output'}`;
+      // #185: the base has no element the change adds; its modified side was taken, so not an error
+      const missing = side === 'original' && modified && !r.timedOut && r.code !== 0 ? NOTHING_MATCHES.exec(lastLine(r.output)) : null;
+      if (missing) { out.new_elements.push({ name: e.name, side, selector: missing[1].trim(), error }); continue; }
       out.errors.push({ name: e.name, side, error });
       // an invalid option (exit 2) fails the same way on the other side; a cancelled run stops here
       if (r.code === 2 || signal?.aborted) break;

@@ -6,7 +6,8 @@
 // state, caption and pair, and marks the final set: the round that captured last (the last round of
 // the last step that captured). The folders are the source of truth: the manifest is rebuilt from
 // them (writeManifest, by the engine after each step and by scripts/screenshot.js --caption) and
-// keeps the captions and commits of earlier builds.
+// keeps the captions and commits of earlier builds. It also keeps each screenshots step's outcome
+// (`captures`, #185: its new elements, an element only the change adds, and its errors).
 //
 // Runs recorded before #146 have a flat screenshots/ folder with screenshots.json ([{ path, caption,
 // before }]): readEvidence reads them as a single legacy set (no migration of the old folders).
@@ -118,6 +119,9 @@ function buildManifest(runDir, opts = {}) {
     if (x.caption === '' && other?.caption) x.caption = other.caption;
   }
   images.sort((a, b) => rankOf(a) - rankOf(b) || a.key.localeCompare(b.key) || SIDES.indexOf(a.side) - SIDES.indexOf(b.side));
+  // the screenshots steps' outcomes (#185), one per round, a newer one of the same round replacing it
+  const captures = (opts.previous?.captures || []).filter((c) => !(opts.capture && c.step === opts.capture.step && c.round === opts.capture.round));
+  if (opts.capture) captures.push(opts.capture);
   return {
     version: 1,
     base: opts.base ?? opts.previous?.base ?? null,
@@ -125,6 +129,25 @@ function buildManifest(runDir, opts = {}) {
     final: final ? { step: final.step, round: final.round } : null,
     rounds: order.map((r) => ({ ...r, final: r === final })),
     images,
+    ...(captures.length ? { captures } : {}),
+  };
+}
+
+/**
+ * A screenshots step's output (src/engine/screenshot-step.js) as the manifest keeps it (#185):
+ * { step, round, taken, screens, message, new_elements: [{ name, caption, selector }], errors:
+ * [{ name, caption, side, error }] }; captions: name → the screen's caption.
+ */
+function captureOf(output, captions = {}) {
+  const caption = (name) => captions[name] || '';
+  return {
+    step: output.folder,
+    round: output.round,
+    taken: output.taken || 0,
+    screens: output.screens || 0,
+    message: output.message || '',
+    new_elements: (output.new_elements || []).map((x) => ({ name: x.name, caption: caption(x.name), selector: x.selector || null })),
+    errors: (output.errors || []).map((x) => ({ name: x.name, caption: caption(x.name), side: x.side || null, error: x.error })),
   };
 }
 
@@ -187,6 +210,7 @@ function orphanImages(runDir, manifest = readJson(manifestPath(runDir))) {
 
 module.exports = {
   buildManifest,
+  captureOf,
   evidenceRoot,
   legacyManifest,
   manifestPath,

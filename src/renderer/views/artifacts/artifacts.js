@@ -6,11 +6,13 @@
 // (run events) and renderArtifactList (developer mode) stay globals for app.js and the shared modules.
 // Registers itself with registerView (view-registry.js); uses app.js globals ($, esc, state, api,
 // errMsg, ART_KIND, artKindIcon, fmtSize, markdownHtml, sanitizeHtml, slugify, renderJsonText,
-// renderDelimited), run-list.js (groupArtifacts, ART_PAGE) and window.ArtifactMenu / window.ArtifactsPanel.
+// renderDelimited), run-list.js (ART_PAGE) and window.ArtifactMenu / window.ArtifactsPanel.
 //
 // Lazily loaded (#200): the list is the runs that produced files, with their counts, filtered by the
 // service (project, search, simulated); a run's files load when its group opens (artifacts:list
-// { runId }), grouped by step, ART_PAGE at a time. A search brings the first matching files of each
+// { runId }), ART_PAGE at a time, what the run produced first (#225): grouped by category, with the
+// Artifacts panel's Produced / Show all switch and chips (one filter for the screen); a screenshot
+// is named by its caption (the run's evidence manifest) and opens the viewer with the group's images. A search brings the first matching files of each
 // matching run along. state.art.files: run id → { status: loading | ok | error, files, total, count, q, shown }.
 
 let artLoading = null;
@@ -51,11 +53,22 @@ function loadArtifacts() {
   return artLoading;
 }
 
-// One run's files (all, or those matching the search the list was loaded with).
+// One run's files (all, or those matching the search the list was loaded with), then its evidence
+// manifest (screenshot captions and pairs, #225), once.
 function ensureArtFiles(r) {
   const a = state.art;
   a.files ||= new Map();
-  if (a.files.has(r.runId)) return;
+  const cur = a.files.get(r.runId);
+  if (cur) {
+    if (cur.status === 'ok' && cur.evidence === undefined && api.runEvidence) {
+      cur.evidence = null;
+      api.runEvidence(r.runId).then((ev) => {
+        cur.evidence = ev || null;
+        if (ev?.images?.length && a.files.get(r.runId) === cur && state.view === 'artifacts') renderArtifactList();
+      }, () => {});
+    }
+    return;
+  }
   const entry = { status: 'loading', files: [], total: 0, count: r.artifactCount, q: a.loadedQ || '', shown: ART_PAGE, error: null };
   a.files.set(r.runId, entry);
   fetchArtFiles(r.runId, entry);
@@ -113,28 +126,42 @@ function artifactRunsFiltered() {
   return state.art.runs || [];
 }
 
+// a screenshot of the run's evidence manifest leads with its caption, the file name under it
 function artFileHtml(f) {
   const a = state.art;
+  const caption = f.caption || '';
+  const where = `${esc(f.rel || '')}${f.step ? ` · ${esc(f.step)}${f.agent ? ` · ${esc(f.agent)}` : ''}` : f.agent ? ` · ${esc(f.agent)}` : ''}`;
   return `
-        <button class="art-file ${a.sel === f.path ? 'active' : ''} ${f.exists ? '' : 'missing'}" data-path="${esc(f.path)}" title="${esc(f.path)}">
+        <button class="art-file ${a.sel === f.path ? 'active' : ''} ${f.exists ? '' : 'missing'}" data-testid="artifact-item" data-path="${esc(f.path)}" title="${esc(f.path)}">
           ${artKindIcon(f.kind)}
           <span class="art-file-main">
-            <span class="art-file-name">${esc(f.name)}${f.location === 'external' ? ' <span class="badge">project copy</span>' : ''}${f.exists ? '' : ' <span class="badge">deleted</span>'}</span>
-            <span class="art-file-sub muted">${esc(f.rel || '')}${f.step ? ` · ${esc(f.step)}${f.agent ? ` · ${esc(f.agent)}` : ''}` : f.agent ? ` · ${esc(f.agent)}` : ''}</span>
+            <span class="art-file-name">${esc(caption || f.name)}${f.location === 'external' ? ' <span class="badge">project copy</span>' : ''}${f.exists ? '' : ' <span class="badge">deleted</span>'}</span>
+            <span class="art-file-sub muted">${caption ? `${esc(f.name)} · ` : ''}${where}</span>
           </span>
           <span class="art-file-size muted">${esc(fmtSize(f.size))}</span>
         </button>`;
 }
 
-// An open group's files: loading, error (Retry), or grouped by step with "Show more".
+// An open group's files: loading, error (Retry), or what the run produced first, grouped by category
+// (the panel's switch and chips; state.art.filter, one for the screen), with "Show more".
 function artFilesHtml(e) {
   if (!e || e.status === 'loading') return '<p class="muted small art-pad">Loading…</p>';
   if (e.status === 'error') return `<p class="error small art-pad">Could not load the files: ${esc(e.error)} <button type="button" class="btn sm ghost" data-art-retry>Retry</button></p>`;
-  const shown = e.files.slice(0, e.shown);
-  const left = Math.max(0, e.total - shown.length);
-  const groups = groupArtifacts(shown);
-  return groups.map(([label, files]) => (groups.length > 1 ? `<div class="art-step muted">${esc(label)} · ${files.length}</div>` : '') + files.map(artFileHtml).join('')).join('')
-    + (left > 0 ? `<button type="button" class="btn sm ghost art-more" data-art-more ${e.pending ? 'disabled' : ''}>${e.pending ? 'Loading…' : `Show ${Math.min(left, ART_PAGE)} more${left > ART_PAGE ? ` <span class="muted">(${left} left)</span>` : ''}`}</button>` : '');
+  const filter = (state.art.filter ||= ArtifactsPanel.newFilter());
+  const all = ArtifactsPanel.filterFiles(e.files, filter, { ignoreCategory: true });
+  const files = ArtifactsPanel.filterFiles(e.files, filter);
+  const shown = files.slice(0, e.shown);
+  // the filtered files not shown yet, plus those the service has not sent (a search's first matches)
+  const left = Math.max(0, files.length - shown.length) + Math.max(0, e.total - e.files.length);
+  const count = (list, fn) => list.reduce((acc, f) => { acc[fn(f)] = (acc[fn(f)] || 0) + 1; return acc; }, {});
+  const kindOfChip = (f) => (['image', 'markdown', 'json'].includes(f.kind) ? f.kind : /\.log$/i.test(f.name || '') ? 'log' : 'other');
+  const groups = ArtifactsPanel.CATEGORIES.map(([id, label]) => [label, shown.filter((f) => ArtifactsPanel.categoryOf(f) === id)]).filter(([, list]) => list.length);
+  const body = groups.length
+    ? groups.map(([label, list]) => `<div class="art-step muted" data-testid="artifact-category-title">${esc(label)} · ${list.length}</div>${list.map((f) => artFileHtml(e.evidence ? { ...f, caption: ArtifactsPanel.captionOf(e.evidence, f.path) } : f)).join('')}`).join('')
+    : `<p class="muted small art-pad">${filter.show === 'produced' && !filter.category && !filter.kind ? 'Nothing produced: Show all lists the handoff notes, decisions and logs.' : 'Nothing matches this filter.'}</p>`;
+  return `<div class="art-files" data-testid="artifact-list">${ArtifactsPanel.filtersHtml(filter, count(all, ArtifactsPanel.categoryOf), count(ArtifactsPanel.filterFiles(e.files, { ...filter, kind: null }, { ignoreCategory: true }), kindOfChip))}${body}`
+    + (left > 0 ? `<button type="button" class="btn sm ghost art-more" data-art-more ${e.pending ? 'disabled' : ''}>${e.pending ? 'Loading…' : `Show ${Math.min(left, ART_PAGE)} more${left > ART_PAGE ? ` <span class="muted">(${left} left)</span>` : ''}`}</button>` : '')
+    + '</div>';
 }
 
 function renderArtifactList() {
@@ -181,8 +208,12 @@ function renderArtifactList() {
     if (!e) return;
     e.shown += ART_PAGE;
     // a search brought only the first matches: the rest come now
-    if (e.files.length < Math.min(e.total, e.shown)) fetchArtFiles(runId, e);
+    if (e.files.length < e.total) fetchArtFiles(runId, e);
     renderArtifactList();
+  }));
+  // Produced / Show all and the chips (#225): one filter for every run group of the screen
+  box.querySelectorAll('[data-artifact-filter], [data-artifact-category], [data-artifact-kind]').forEach((b) => (b.onclick = () => {
+    if (ArtifactsPanel.onFilterClick(state.art.filter ||= ArtifactsPanel.newFilter(), b)) renderArtifactList();
   }));
   box.querySelectorAll('[data-art-retry]').forEach((b) => (b.onclick = () => {
     a.files.delete(b.closest('.art-run').dataset.run);
@@ -317,9 +348,12 @@ function renderArtifactViewer() {
     body.innerHTML = `<div class="art-image"><img ${ImageViewer.THUMB} src="${esc(d.image)}" alt="${esc(name)}" /></div>`;
     const img = body.querySelector('.art-image img');
     img.oncontextmenu = (e) => ArtifactMenu.open(e, { path: d.path, name, image: true });
-    // the shared viewer (#145), with the screenshot's original/modified pair when it has one (#146)
+    // the shared viewer (#145), with the screenshot's original/modified pair when it has one (#146),
+    // and every image of its run group as listed (#182)
     const runId = artifactRunOf(d.path);
-    img.onclick = () => ArtifactsPanel.openImage({ runId, file: d.path, src: d.image, title: name });
+    const files = [...document.querySelectorAll(`#art-list .art-run[data-run="${CSS.escape(runId || '')}"] .art-file`)]
+      .map((b) => b.dataset.path).filter((p) => findArtifactMeta(p)?.kind === 'image');
+    img.onclick = () => ArtifactsPanel.openImage({ runId, file: d.path, src: d.image, title: name, files });
     img.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); img.click(); } };
     return;
   }

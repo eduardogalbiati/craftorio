@@ -45,6 +45,7 @@ const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
 const { parseAgentReport } = require('./agent-test-report');
+const { parseNodeCoverage, renderCoverageSummary } = require('../coverage-summary');
 const { processTreeCommands } = require('./processes');
 const { killTree } = require('./providers');
 
@@ -464,6 +465,30 @@ function parseCounts(text) {
   return { passed: null, failed: null };
 }
 
+// `node --test …` → `node --test --experimental-test-coverage …` (#225); any other command, or one
+// that already asks for coverage, unchanged
+function coverageCommand(command) {
+  const c = String(command || '');
+  if (/--experimental-test-coverage\b/.test(c)) return c;
+  return c.replace(/\bnode(\.exe)?(\s+)--test\b/, (m, exe, sp) => `node${exe || ''}${sp}--test --experimental-test-coverage`);
+}
+
+// The coverage report of a suite's output → <run_dir>/coverage/coverage-summary.md and its numbers
+// ({ lines, branches, functions, files, path }), or null without a report. No model call.
+function saveCoverage(text, runDir, changedFiles) {
+  const head = parseNodeCoverage(text);
+  if (!head || !runDir) return null;
+  let changed = [];
+  try { changed = (typeof changedFiles === 'function' ? changedFiles() : changedFiles) || []; } catch { changed = []; }
+  const summary = parseNodeCoverage(text, { changedFiles: changed });
+  const rel = 'coverage/coverage-summary.md';
+  try {
+    fs.mkdirSync(path.join(runDir, 'coverage'), { recursive: true });
+    fs.writeFileSync(path.join(runDir, rel), renderCoverageSummary(summary));
+  } catch { return null; }
+  return { ...summary.totals, files: summary.files.length, path: rel };
+}
+
 // command: rendered (empty: detected); cwd: the worktree; runDir: the run folder (log under logs/);
 // round: the step's visit; env: the engine's environment (suiteEnv cleans it);
 // preexisting: the run's known pre-existing failures [{ test, file, reason }]; mockResult: see above;
@@ -475,7 +500,10 @@ function parseCounts(text) {
 // and a command that cannot take files runs whole. selection: why these files (affected-tests.js),
 // kept in the output; logName: the log's name (default suite-<round>). Only whole-suite runs
 // measure the history the timeouts come from. Output adds scope (full | files), selection, passed, failed.
-async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = 'pass', preexisting = [], signal, timeoutMs, history, base, baseCacheDir, run = runCommand, log = () => {}, files = null, selection = null, logName = null }) {
+// coverage (#225): a `node --test` command runs with --experimental-test-coverage; whenever the output
+// has node's coverage report, <run_dir>/coverage/coverage-summary.md (the totals and the changed files',
+// changedFiles(): the files the run changed) is written and `coverage` added to the output.
+async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = 'pass', preexisting = [], signal, timeoutMs, history, base, baseCacheDir, run = runCommand, log = () => {}, files = null, selection = null, logName = null, coverage = false, changedFiles = null }) {
   const logFile = runDir ? path.join(runDir, 'logs', `${logName || `suite-${round}`}.log`) : null;
   const out = {
     kind: 'suite', status: 'blocked', round, scope: 'full', command: null, log: logFile ? path.relative(runDir, logFile).split(path.sep).join('/') : null,
@@ -509,6 +537,7 @@ async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = '
     if (filtered) { out.scope = 'files'; out.command = filtered; measure = false; }
     else if (out.selection) out.selection = { ...out.selection, why: `${out.selection.why}; \`${out.command}\` cannot run single test files: the whole suite ran` };
   }
+  if (coverage && !mock) out.command = coverageCommand(out.command);
   const recent = mock ? [] : suiteDurations(hist);
   out.timeout_ms = timeoutMs || suiteTimeout(recent);
   const timeoutWhy = timeoutMs ? 'the step\'s timeout' : recent.length ? `${TIMEOUT_FACTOR}× the median of the last ${plural(recent.length, 'suite run')}` : 'the default, no suite run measured yet';
@@ -551,6 +580,11 @@ async function runSuite({ command, cwd, runDir, round, env, mock, mockResult = '
   // a run that ended (not cut by the timeout, not cancelled) measures the suite for the next timeouts
   if (!mock && measure && !out.timed_out && !signal?.aborted) recordDuration(hist, out.duration_ms);
   Object.assign(out, parseCounts(text));
+  // agent mode (#219): the coverage table is in the human-readable report
+  let human = '';
+  if (out.human_log) { try { human = fs.readFileSync(path.join(runDir, out.human_log), 'utf8'); } catch { human = ''; } }
+  const cov = saveCoverage(`${clean(text)}\n${clean(human)}`, runDir, changedFiles);
+  if (cov) out.coverage = cov;
   if (out.exit_code === 0 && !out.timed_out) { out.status = 'pass'; return finish(); }
   const failures = parseFailures(text, { cwd });
   out.preexisting = failures.filter((f) => preexisting.some((p) => sameTest(f, p)));
@@ -639,6 +673,7 @@ function redCheck(output, files, { mock, mockResult } = {}) {
 
 module.exports = {
   checkOnBase,
+  coverageCommand,
   detectTestCommand,
   filteredCommand,
   isFullSuiteCommand,
@@ -649,6 +684,7 @@ module.exports = {
   runCommand,
   runningTestFiles,
   runSuite,
+  saveCoverage,
   SUITE_TIMEOUT_MS,
   suiteEnv,
   suiteMessage,

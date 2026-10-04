@@ -204,7 +204,9 @@ function mountGateScenarios(root) {
     if (box && !box.onclick) {
       const open = (el) => {
         const all = [...box.querySelectorAll('img[data-gate-shot]')];
-        ImageViewer.open({ title: `Scenario: ${el.dataset.gateScenario}`, images: all.map((i) => ({ file: i.dataset.gateShot, src: i.getAttribute('src') || undefined, label: i.alt })), index: all.indexOf(el) });
+        // every screenshot of the scenario, one item each (#182)
+        const title = `Scenario: ${el.dataset.gateScenario}`;
+        ImageViewer.open({ title, items: all.map((i) => ({ title, images: [{ file: i.dataset.gateShot, src: i.getAttribute('src') || undefined, label: i.alt }] })), index: all.indexOf(el) });
       };
       box.onclick = (e) => { const el = e.target.closest('img[data-gate-shot]'); if (el) open(el); };
       box.onkeydown = (e) => { const el = e.target.closest('img[data-gate-shot]'); if (el && e.key === 'Enter') open(el); };

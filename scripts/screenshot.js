@@ -562,6 +562,7 @@ function demoRoadmapRuns(ws, projectId) {
     status: 'failed', error: 'The suite failed: 3 tests in test/report.test.js', started_at: new Date(now - 190 * min).toISOString(), finished_at: new Date(f.end).toISOString(), duration_ms: f.end - (now - 190 * min), progress: ft,
   });
   demoCostRuns(ws, projectId);
+  demoArtifactRuns(ws, projectId);
   return { running, waiting, failed, better, worse };
 }
 
@@ -629,6 +630,118 @@ function demoCostRuns(ws, projectId) {
   ], {
     status: 'failed', error: 'Timed out after 1800s', finished_at: new Date(old + 31 * min).toISOString(), duration_ms: 31 * min, cost_usd: 0,
     tokens: tokens(0, 0, 0), sessions: [{ ...oldDev({ turns: 1 }), status: 'failed' }],
+  });
+}
+
+// A solid-colour PNG of w × h (a demo screenshot written without a window)
+function solidPng(w, h, [r, g, b]) {
+  const zlib = require('zlib');
+  const table = Array.from({ length: 256 }, (_, n) => { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; return c >>> 0; });
+  const crc = (buf) => { let c = 0xffffffff; for (const x of buf) c = table[(c ^ x) & 0xff] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; };
+  const chunk = (type, data) => {
+    const body = Buffer.concat([Buffer.from(type, 'ascii'), data]);
+    const out = Buffer.alloc(body.length + 8);
+    out.writeUInt32BE(data.length, 0);
+    body.copy(out, 4);
+    out.writeUInt32BE(crc(body), body.length + 4);
+    return out;
+  };
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(w, 0);
+  ihdr.writeUInt32BE(h, 4);
+  ihdr[8] = 8; ihdr[9] = 2; // 8-bit RGB
+  const row = Buffer.concat([Buffer.from([0]), Buffer.from(Array.from({ length: w }, () => [r, g, b]).flat())]);
+  const raw = Buffer.concat(Array.from({ length: h }, () => row));
+  return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]);
+}
+
+// #225, #185, #182: finished runs whose artifacts the E2E scenarios (features/artifacts.feature,
+// features/image-viewer.feature) and the screenshots look at, days back so tonight's runs stay as
+// they are: `-res00225` (a result summary, a screenshot, test results, a review report, process
+// files and internal ones never listed), `-new00185` (a pair, a new element with no original, a
+// screenshot that failed), `-img00182` (3 screens, the second a pair) and `-one00182` (one pair).
+function demoArtifactRuns(ws, projectId) {
+  const min = 6e4;
+  const workflow = 'software-development-local-hero';
+  const PNG = { before: solidPng(64, 40, [90, 98, 120]), after: solidPng(64, 40, [86, 140, 230]) };
+  const run = (suffix, daysBack, task, files, shots = null) => {
+    const start = Date.now() - daysBack * 864e5;
+    const runId = `${new Date(start).toISOString().slice(0, 10).replace(/-/g, '')}-101500-${suffix}`;
+    const dir = path.join(ws.runs, runId);
+    fs.mkdirSync(dir, { recursive: true });
+    const at = (m) => new Date(start + m * min).toISOString();
+    const events = [
+      { ts: at(0), type: 'workflow.started', workflow, file: `${workflow}.yaml`, project_id: projectId, mock: false, inputs: { task } },
+      { ts: at(42), type: 'workflow.finished', status: 'success' },
+    ];
+    fs.writeFileSync(path.join(dir, 'events.jsonl'), `${events.map((e) => JSON.stringify(e)).join('\n')}\n`);
+    fs.writeFileSync(path.join(dir, 'summary.json'), JSON.stringify({
+      run_id: runId, workflow, project_id: projectId, mock: false, inputs: { task }, status: 'success', started_at: at(0), finished_at: at(42), duration_ms: 42 * min, sessions: [],
+    }, null, 2));
+    for (const [rel, content] of Object.entries(files)) {
+      fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true });
+      fs.writeFileSync(path.join(dir, rel), content);
+    }
+    if (shots) {
+      const captions = {};
+      for (const [name, caption, sides] of shots.list) {
+        for (const side of sides) {
+          const rel = `evidence/${shots.step}/round-1/${name}.${side}.png`;
+          fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true });
+          fs.writeFileSync(path.join(dir, rel), side === 'original' ? PNG.before : PNG.after);
+          captions[rel] = { caption };
+        }
+      }
+      evidence.writeManifest(dir, { captions, base: 'main', branch: `feat/${suffix}`, commit: 'a1b2c3d4e5f6', baseCommit: '0f9e8d7c6b5a', ...(shots.capture ? { capture: shots.capture } : {}) });
+    }
+    return runId;
+  };
+
+  const result = [
+    '# Result: software-development-local-hero',
+    '',
+    '- Status: **success**',
+    '- Duration: 42 min',
+    '',
+    '## Issues',
+    '',
+    '- ✓ #225: the run\'s artifacts open on what it produced',
+    '',
+    '## Tests',
+    '',
+    '- `suite`: **pass** (412 passed, 0 failed)',
+    '',
+  ].join('\n');
+  run('res00225', 6, 'Artifacts: what the run produced first', {
+    'result.md': result,
+    'test-results.json': JSON.stringify({ passed: 412, failed: 0 }, null, 2),
+    'review-report.md': '# Review report\n\nApproved: the change follows the conventions.\n',
+    'handoffs/developer-1.md': '# Handoff\n\n- Goal: artifacts by category.\n',
+    'decisions.tsv': 'ts\tagent\tphase\tdecision\n2026-10-01T10:00:00Z\tdeveloper\timplement\tcategories from the path\n',
+    'logs/develop-1.log': 'developer turn 1\n',
+    'owner.json': JSON.stringify({ pid: 4242, host: 'studio-pc', role: 'run', heartbeat_at: new Date(Date.now() - 6 * 864e5).toISOString() }),
+    'scratch/skills/demo-skill/SKILL.md': '# A seeded skill\n',
+    'scratch/workflows/software-development.yaml': 'kind: Workflow\n',
+  }, { step: 'evidence', list: [['225-dashboard-after', 'Dashboard after the change', ['modified']]] });
+
+  run('new00185', 6, 'Export: a new export button', { 'result.md': '# Result: software-development-local-hero\n\n- Status: **success**\n' }, {
+    step: 'developer_screenshots',
+    list: [['185-export-dialog', 'Export dialog', ['original', 'modified']], ['185-export-button', 'New export button', ['modified']]],
+    capture: {
+      step: 'developer_screenshots', round: 1, taken: 3, screens: 2,
+      message: '3 screenshots of 2 screens taken in round 1; 1 new element (no original); 1 error: 185-settings-page (modified): exit 1: Error: the window never loaded',
+      new_elements: [{ name: '185-export-button', caption: 'New export button', selector: '[data-export-now]' }],
+      errors: [{ name: '185-settings-page', caption: 'Settings page', side: 'modified', error: 'exit 1: Error: the window never loaded' }],
+    },
+  });
+
+  run('img00182', 5, 'Image viewer: browse the run\'s screenshots', { 'result.md': '# Result: software-development-local-hero\n\n- Status: **success**\n' }, {
+    step: 'evidence',
+    list: [['182-a-dashboard', 'Dashboard', ['modified']], ['182-b-backlog', 'Backlog board', ['original', 'modified']], ['182-c-report', 'Run report', ['modified']]],
+  });
+
+  run('one00182', 5, 'Image viewer: one screenshot pair', { 'result.md': '# Result: software-development-local-hero\n\n- Status: **success**\n' }, {
+    step: 'evidence', list: [['182-settings-page', 'Settings page', ['original', 'modified']]],
   });
 }
 

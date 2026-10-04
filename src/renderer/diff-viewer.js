@@ -331,10 +331,24 @@
     paintMain();
   }
 
-  function openImages(label) {
-    const st = fileState(cur.selected);
-    const images = [['Before', st.contents?.before], ['After', st.contents?.after]].filter(([, src]) => src).map(([l, src]) => ({ src, label: l, caption: cur.selected }));
-    if (window.ImageViewer && images.length) ImageViewer.open({ title: cur.selected, images, index: Math.max(0, images.findIndex((im) => im.label === label)) });
+  // The viewer with every changed image of the list (#182), in its order, each before/after pair one
+  // item, at the selected file's side
+  async function openImages(label) {
+    if (!window.ImageViewer) return;
+    const selected = cur.selected;
+    const changed = orderedFiles().filter((f) => f.binary && f.image);
+    await Promise.all(changed.map((f) => loadFile(f.file)));
+    if (!cur || cur.selected !== selected) return;
+    const itemOf = (path) => {
+      const st = fileState(path);
+      const images = [['Before', st.contents?.before], ['After', st.contents?.after]].filter(([, src]) => src).map(([l, src]) => ({ src, label: l, caption: path }));
+      return images.length ? { title: path, images } : null;
+    };
+    const paths = changed.some((f) => f.file === selected) ? changed.map((f) => f.file) : [selected];
+    const items = paths.map((p) => (p === selected || fileState(p).contents ? itemOf(p) : null)).filter(Boolean);
+    const index = items.findIndex((it) => it.title === selected);
+    if (index < 0) return;
+    ImageViewer.open({ title: selected, items, index, imageIndex: Math.max(0, items[index].images.findIndex((im) => im.label === label)) });
   }
 
   function onClick(e) {

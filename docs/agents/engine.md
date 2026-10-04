@@ -68,6 +68,18 @@ same features for users; this is the implementer's summary.
     `affected_reasons` from `relatedTests` (the existing tests reaching the sources the new tests
     import) and a `message` for the next prompt. Simulation: default red; `mockSequences.suite`
     `pass` = all green, `broken` = all broken.
+  - **`coverage: true`** on a suite step (#225): a `node --test` command runs with
+    `--experimental-test-coverage` (`suiteStep.coverageCommand`). Whenever the output (or the #219
+    human log) has node's coverage table, `coverage/coverage-summary.md` (totals and the changed
+    files' coverage, `src/coverage-summary.js`) is saved as a Tests artifact and the output gets
+    `coverage { lines, branches, functions, files, path }`. No model call.
+  - **`result.md`** (#225): `finish` writes the run's result summary (`src/result-summary.js`: status,
+    issues, commits, suite results, coverage, screenshots, key artifacts) before `workflow.finished`;
+    it is the run's first artifact (category `result`, `src/artifact-categories.js`).
+  - **New elements** (#185): a screenshots step's original side that failed only with
+    `screenshot: nothing matches <selector>` while its modified side was taken goes to
+    `new_elements`, not `errors`; the message counts them (`2 new elements (no original)`) and
+    `recordEvidence` keeps the step's outcome in the evidence manifest (`captures`).
   - **`protect_files`** on an agent or an agent step (#220, the step's wins): a file list template
     rendered before each turn; `sendToAgent` snapshots exactly those files (`testPaths.snapshot`
     with the paths as patterns) and refuses a turn that changes one, like `edits_tests: false`

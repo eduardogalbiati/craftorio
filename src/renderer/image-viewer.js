@@ -1,37 +1,55 @@
 // Image viewer (#145): the one viewer every artifact image of the app opens in (the Artifacts panel
-// of a gate and of the Run screen, the Artifacts screen; a new place that shows an artifact image
-// uses it too). Almost full screen over a dark overlay, above the screen, which does not change
-// (a gate keeps its choice and its feedback text):
+// of a gate and of the Run screen, the Artifacts screen, the diff viewer, the chats; a new place
+// that shows an image uses it too). Almost full screen over a dark overlay, above the screen, which
+// does not change (a gate keeps its choice and its feedback text):
 // - the image fitted to the window (a small one at 100%, never upscaled), its title and caption on
 //   top, a close button; Esc, the button or a click on the overlay outside the image close it;
 // - zoom: a click zooms in at the point clicked (magnifier cursor), the wheel zooms around the
 //   cursor, + / − / Fit / 100% buttons with the percentage (keys + - 0 1), from fit to 400%;
 // - zoomed, a drag pans the image (grab cursor), clamped so it never leaves the view; a press that
 //   does not move is still a click;
-// - an original/modified pair (#146): tabs (or ← / →) switch to the other image at the same zoom
-//   and position, to compare them;
-// - an image that does not load: "Could not load the image"; right-click: the copy menu (#114).
-// ImageViewer.open({ title, images: [{ src?, file?, label?, caption? }], index }) (file: an
+// - the whole context (#182): every image of the place it was opened from, in the order shown there;
+//   an original/modified pair is one item. Previous / next arrows on the sides and ← / →, Home / End
+//   (no wrap-around), a counter "3 / 12"; going to another item fits it, the neighbours are
+//   preloaded. One item: no arrows, no counter;
+// - an original/modified pair (#146): tabs (or Space, O / M) switch to the other image at the same
+//   zoom and position, to compare them;
+// - an image that does not load: "Could not load the image" (the arrows still work); right-click:
+//   the copy menu (#114).
+// ImageViewer.open({ title, items: [{ title, images }], index, imageIndex }) or, for one item,
+// ImageViewer.open({ title, images: [{ src?, file?, label?, caption?, side? }], index }) (file: an
 // artifact's path, read with artifacts:read when there is no src, and the copy menu's target);
 // ImageViewer.THUMB: the attributes of a clickable thumbnail (hand cursor, hint, focusable).
-// The zoom/pan math is image-viewer-model.js. Uses app.js's helpers (esc, api) and ArtifactMenu.
+// The zoom/pan math is image-viewer-model.js, the browsing model image-sequence.js. Uses app.js's
+// helpers (esc, api) and ArtifactMenu.
 (() => {
   const M = window.ImageViewerModel;
+  const S = window.ImageSequence;
   const THUMB = 'tabindex="0" role="button" title="Click to enlarge" data-iv-thumb';
   let cur = null;
 
+  // { title, items } or { title, images, index } → the items and where to start
+  function itemsOf(opts) {
+    if (Array.isArray(opts.items)) return { items: opts.items.map((it) => ({ ...it, images: (it?.images || []).filter(Boolean) })), index: opts.index || 0, imageIndex: opts.imageIndex || 0 };
+    return { items: [{ title: opts.title || '', images: (opts.images || []).filter(Boolean) }], index: 0, imageIndex: opts.index || 0 };
+  }
+
   function open(opts = {}) {
     close();
-    const images = (opts.images || []).filter(Boolean);
-    if (!images.length) return;
+    const { items, index, imageIndex } = itemsOf(opts);
+    const seq = S.createImageSequence(items, index, imageIndex);
+    if (!seq.length) return;
+    const nav = seq.navigable();
     const el = document.createElement('div');
     el.className = 'iv';
+    el.tabIndex = -1;
+    el.setAttribute('data-testid', 'image-viewer');
     el.setAttribute('role', 'dialog');
     el.setAttribute('aria-modal', 'true');
     el.setAttribute('aria-label', opts.title || 'Image');
     el.innerHTML = `<div class="iv-bar">
-        <div class="iv-title"><b title="${esc(opts.title || '')}">${esc(opts.title || '')}</b><span class="iv-caption muted small"></span></div>
-        ${images.length > 1 ? `<div class="seg sm iv-tabs" role="tablist">${images.map((im, i) => `<button type="button" role="tab" data-iv-tab="${i}" title="${esc(im.label || '')} (← / → to switch)">${esc(im.label || `Image ${i + 1}`)}</button>`).join('')}</div>` : ''}
+        <div class="iv-title"><b data-testid="image-viewer-title"></b>${nav ? '<span class="badge iv-counter" data-testid="image-viewer-counter" aria-live="polite"></span>' : ''}<span class="iv-caption muted small"></span></div>
+        <div class="iv-tabs-slot"></div>
         <div class="iv-zoom">
           <button type="button" class="btn sm ghost" data-iv-zoom="out" title="Zoom out (−)" aria-label="Zoom out">−</button>
           <span class="iv-pct mono small" aria-live="polite"></span>
@@ -41,9 +59,11 @@
         </div>
         <button type="button" class="btn sm ghost iv-close" data-iv-close title="Close (Esc)" aria-label="Close">✕</button>
       </div>
-      <div class="iv-stage"><img class="iv-img" alt="" draggable="false" /><p class="iv-msg muted hidden"></p></div>`;
+      <div class="iv-stage"><img class="iv-img" alt="" draggable="false" /><p class="iv-msg muted hidden"></p>${nav ? `
+        <button type="button" class="iv-arrow iv-prev" data-iv-nav="prev" aria-label="Previous image" title="Previous image (←, Home: the first)">‹</button>
+        <button type="button" class="iv-arrow iv-next" data-iv-nav="next" aria-label="Next image" title="Next image (→, End: the last)">›</button>` : ''}</div>`;
     document.body.appendChild(el);
-    cur = { el, images, index: -1, view: null, size: null, opener: document.activeElement, drag: null, seq: 0 };
+    cur = { el, seq, item: -1, image: -1, view: null, size: null, opener: document.activeElement, drag: null, load: 0 };
     const stage = el.querySelector('.iv-stage');
     const img = el.querySelector('.iv-img');
     el.addEventListener('click', onClick);
@@ -53,15 +73,16 @@
     img.addEventListener('pointerup', onPointerUp);
     img.addEventListener('pointercancel', () => { if (cur) { cur.drag = null; cur.el.classList.remove('iv-grabbing'); } });
     img.addEventListener('contextmenu', (e) => {
-      const file = cur?.images[cur.index]?.file;
+      const file = cur?.seq.current().image?.file;
       if (file && window.ArtifactMenu) ArtifactMenu.open(e, { path: file, image: true });
     });
     img.addEventListener('load', onLoad);
     img.addEventListener('error', () => failed());
     window.addEventListener('keydown', onKey, true);
     window.addEventListener('resize', onResize);
-    show(Math.min(Math.max(0, opts.index || 0), images.length - 1));
-    el.querySelector('[data-iv-close]').focus({ preventScroll: true });
+    show('reset');
+    // the dialog itself, not a button: Space switches inside a pair instead of pressing the button
+    el.focus({ preventScroll: true });
   }
 
   function close() {
@@ -77,34 +98,84 @@
   const parts = () => ({ stage: cur.el.querySelector('.iv-stage'), img: cur.el.querySelector('.iv-img'), msg: cur.el.querySelector('.iv-msg') });
   const stageSize = () => { const s = parts().stage; return { w: s.clientWidth, h: s.clientHeight }; };
 
-  // Shows image i; the view (zoom and position) is kept when switching inside a pair.
-  async function show(i) {
-    if (!cur || i === cur.index || i < 0 || i >= cur.images.length) return;
-    cur.index = i;
-    const im = cur.images[i];
+  // The current item's tabs (a pair), its title, the counter and the arrows
+  function paintItem() {
+    const { item, index } = cur.seq.current();
+    const images = item.images;
+    cur.el.querySelector('[data-testid="image-viewer-title"]').textContent = item.title || cur.el.getAttribute('aria-label') || '';
+    cur.el.querySelector('[data-testid="image-viewer-title"]').title = item.title || '';
+    const counter = cur.el.querySelector('[data-testid="image-viewer-counter"]');
+    if (counter) counter.textContent = cur.seq.counter();
+    const prev = cur.el.querySelector('[data-iv-nav="prev"]');
+    const next = cur.el.querySelector('[data-iv-nav="next"]');
+    if (prev) prev.disabled = !cur.seq.hasPrev();
+    if (next) next.disabled = !cur.seq.hasNext();
+    if (cur.item === index) return;
+    cur.item = index;
+    const keyOf = (im) => (im.side === 'original' ? 'O' : im.side === 'modified' ? 'M' : '');
+    cur.el.querySelector('.iv-tabs-slot').innerHTML = images.length > 1
+      ? `<div class="seg sm iv-tabs" role="tablist">${images.map((im, i) => `<button type="button" role="tab" data-iv-tab="${i}" title="${esc(im.label || '')} (${keyOf(im) ? `${keyOf(im)} or ` : ''}Space to switch)">${esc(im.label || `Image ${i + 1}`)}</button>`).join('')}</div>`
+      : '';
+  }
+
+  // Shows the sequence's current image; zoom 'reset' fits it (another item), 'keep' keeps the view
+  // (the other image of a pair).
+  async function show(zoomMode) {
+    if (!cur) return;
+    const { image: im, imageIndex } = cur.seq.current();
+    paintItem();
+    if (zoomMode === 'reset') cur.view = null;
+    cur.image = imageIndex;
     const { img, msg } = parts();
     cur.el.querySelectorAll('[data-iv-tab]').forEach((b) => {
-      const on = +b.dataset.ivTab === i;
+      const on = +b.dataset.ivTab === imageIndex;
       b.classList.toggle('active', on);
       b.setAttribute('aria-selected', String(on));
     });
     cur.el.querySelector('.iv-caption').textContent = [im.label, im.caption].filter(Boolean).join(' · ');
     img.alt = im.caption || im.label || '';
-    const seq = ++cur.seq;
+    const load = ++cur.load;
     let src = im.src || null;
     if (!src && im.file) {
       msg.textContent = 'Loading…';
       msg.classList.remove('hidden');
-      try { src = (await api.readArtifact(im.file))?.image || null; } catch { src = null; }
-      if (!cur || seq !== cur.seq) return;
-      im.src = src;
+      img.classList.add('hidden');
+      src = await readSrc(im);
+      if (!cur || load !== cur.load) return;
     }
+    preload();
     if (!src) { failed(); return; }
     msg.classList.add('hidden');
     cur.el.classList.remove('iv-failed');
     img.classList.remove('hidden');
     if (img.getAttribute('src') === src && img.complete && img.naturalWidth) onLoad();
     else img.src = src;
+  }
+
+  // An image's data URL (artifacts:read, once)
+  async function readSrc(im) {
+    if (im.src) return im.src;
+    if (!im.file) return null;
+    try { im.src = (await api.readArtifact(im.file))?.image || null; } catch { im.src = null; }
+    return im.src;
+  }
+
+  // The previous and next items' images, loaded before they are shown
+  function preload() {
+    const wanted = new Set(cur.seq.preload());
+    for (const it of cur.seq.items) {
+      for (const im of it.images) {
+        if (!wanted.has(im.src || im.file) || im.preloaded) continue;
+        im.preloaded = true;
+        readSrc(im).then((src) => { if (src) { const pre = new Image(); pre.src = src; } });
+      }
+    }
+  }
+
+  function go(action) {
+    if (!cur) return;
+    const r = cur.seq.apply(action);
+    if (r.moved) show(r.zoom);
   }
 
   function failed() {
@@ -157,8 +228,15 @@
   function onClick(e) {
     const t = e.target;
     if (t.closest('[data-iv-close]')) { close(); return; }
+    const navBtn = t.closest('[data-iv-nav]');
+    if (navBtn) { go(navBtn.dataset.ivNav); return; }
     const tab = t.closest('[data-iv-tab]');
-    if (tab) { show(+tab.dataset.ivTab); return; }
+    if (tab) {
+      const side = cur.seq.current().item.images[+tab.dataset.ivTab]?.side;
+      if (side) go(side);
+      else if (+tab.dataset.ivTab !== cur.seq.imageIndex) go('switch');
+      return;
+    }
     const z = t.closest('[data-iv-zoom]');
     if (z) { zoom(z.dataset.ivZoom); return; }
     // the overlay outside the image (the image's own clicks are pointerup)
@@ -210,13 +288,18 @@
 
   function onKey(e) {
     if (!cur || e.target?.closest?.('.ctx-menu')) return; // the copy menu handles its own keys
-    const keys = { Escape: () => close(), ArrowLeft: () => show(cur.index - 1), ArrowRight: () => show(cur.index + 1), '+': () => zoom('in'), '=': () => zoom('in'), '-': () => zoom('out'), 0: () => zoom('fit'), 1: () => zoom('actual') };
     if (e.key === 'Tab') { trapFocus(e); return; }
-    const fn = keys[e.key];
-    if (!fn) return;
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    const action = S.keyAction(e.key);
+    if (!action) return;
+    // Space on a focused button presses it (an arrow, a tab), like a click
+    if (action === 'switch' && e.target?.closest?.('button')) return;
     e.preventDefault();
     e.stopPropagation(); // the screen behind never sees the viewer's keys (Esc closes only the viewer)
-    fn();
+    if (action === 'close') close();
+    else if (action.startsWith('zoom-')) zoom(action.slice(5));
+    else if (action === 'fit' || action === 'actual') zoom(action);
+    else go(action);
   }
 
   // Tab stays inside the viewer

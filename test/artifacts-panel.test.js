@@ -106,28 +106,30 @@ test('ArtifactsPanel.groupOf: handoffs, decisions, evidence (images/screenshots)
   assert.equal(ArtifactsPanel.groupOf({ rel: 'summary.json', kind: 'json' }), 'other');
 });
 
-test('mount/setRun: lists a fixture run\'s artifacts (a document, a screenshot pair, a handoff note) with the right count, newest first', async () => {
+test('mount/setRun: lists a fixture run\'s artifacts (a document, a screenshot pair, a handoff note) with the right count, by category (#225), newest first', async () => {
   const files = [
-    { path: '/r/decisions.tsv', name: 'decisions.tsv', rel: 'decisions.tsv', kind: 'table', size: 40, mtime: '2026-01-01T00:00:00Z' },
-    { path: '/r/handoffs/developer.md', name: 'developer.md', rel: 'handoffs/developer.md', kind: 'markdown', size: 500, mtime: '2026-01-03T00:00:00Z', step: 'develop', agent: 'developer' },
-    { path: '/r/screenshots/before.png', name: 'before.png', rel: 'screenshots/before.png', kind: 'image', size: 10, mtime: '2026-01-02T00:00:00Z' },
-    { path: '/r/screenshots/after.png', name: 'after.png', rel: 'screenshots/after.png', kind: 'image', size: 10, mtime: '2026-01-02T00:00:01Z' },
+    { path: '/r/decisions.tsv', name: 'decisions.tsv', rel: 'decisions.tsv', kind: 'table', category: 'process', size: 40, mtime: '2026-01-01T00:00:00Z' },
+    { path: '/r/handoffs/developer.md', name: 'developer.md', rel: 'handoffs/developer.md', kind: 'markdown', category: 'process', size: 500, mtime: '2026-01-03T00:00:00Z', step: 'develop', agent: 'developer' },
+    { path: '/r/screenshots/before.png', name: 'before.png', rel: 'screenshots/before.png', kind: 'image', category: 'screenshots', size: 10, mtime: '2026-01-02T00:00:00Z' },
+    { path: '/r/screenshots/after.png', name: 'after.png', rel: 'screenshots/after.png', kind: 'image', category: 'screenshots', size: 10, mtime: '2026-01-02T00:00:01Z' },
   ];
   const { ArtifactsPanel } = loadPanel({ listArtifacts: async () => [{ artifacts: files }] });
-  const { root } = fakeRoot();
+  const { root, listeners } = fakeRoot();
   let count = null;
   const panel = ArtifactsPanel.mount(root, { runId: 'r1', onCount: (n) => { count = n; } });
   await waitTick();
   assert.equal(count, 4, 'every artifact counted, screenshots included');
   assert.equal(panel.count(), 4);
-  assert.match(root.innerHTML, /Handoff notes/);
+  // Produced (the default): the screenshots, not the handoff note nor the decision log
+  assert.match(root.innerHTML, /Screenshots & images/);
+  assert.doesNotMatch(root.innerHTML, /developer\.md/);
+  listeners.click({ target: closestTarget('[data-artifact-filter]', { artifactFilter: 'all' }) });
   assert.match(root.innerHTML, /developer\.md/);
-  assert.match(root.innerHTML, /Screenshots and evidence/);
-  assert.match(root.innerHTML, /Decisions/);
-  // groups are rendered in a fixed order (documents, evidence, handoffs, decisions, other), not by recency
-  const groupOrder = ['Screenshots and evidence', 'Handoff notes', 'Decisions'].map((g) => root.innerHTML.indexOf(g));
+  assert.match(root.innerHTML, /decisions\.tsv/);
+  // categories are rendered in a fixed order (result, screenshots, tests, reports, process), not by recency
+  const groupOrder = ['Screenshots & images', 'Process'].map((g) => root.innerHTML.indexOf(g));
   assert.deepEqual(groupOrder, [...groupOrder].sort((a, b) => a - b));
-  // within the evidence group, after.png (newer) comes before before.png
+  // within the screenshots category, after.png (newer) comes before before.png
   assert.ok(root.innerHTML.indexOf('after.png') < root.innerHTML.indexOf('before.png'));
 });
 

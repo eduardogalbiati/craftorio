@@ -132,7 +132,8 @@
   function view(ta, id) {
     const shown = ta._paste.items.filter((i) => i.dataUrl && i.status !== 'error');
     const index = shown.findIndex((i) => i.id === id);
-    if (index >= 0 && root.ImageViewer) root.ImageViewer.open({ title: 'Pasted images', images: shown.map((i) => ({ src: i.dataUrl, label: i.name })), index });
+    // every pasted image of the field, one item each (#182)
+    if (index >= 0 && root.ImageViewer) root.ImageViewer.open({ title: 'Pasted images', items: shown.map((i) => ({ title: i.name || 'Pasted image', images: [{ src: i.dataUrl, label: i.name }] })), index });
   }
 
   // ---- what the screens that submit a field call ----------------------------------------------

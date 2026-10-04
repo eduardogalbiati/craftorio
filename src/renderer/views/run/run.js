@@ -228,7 +228,8 @@ function mountInputImages(box) {
   imgs.forEach(async (img) => {
     try { const src = (await api.readArtifact(img.dataset.runImage))?.image; if (src) img.src = src; } catch { /* deleted since */ }
   });
-  const open = (img) => ImageViewer.open({ title: 'Input images', images: imgs.map((i) => ({ file: i.dataset.runImage, src: i.getAttribute('src') || undefined, label: i.alt })), index: imgs.indexOf(img) });
+  // every input image of the run, one item each (#182)
+  const open = (img) => ImageViewer.open({ title: 'Input images', items: imgs.map((i) => ({ title: i.alt || 'Input image', images: [{ file: i.dataset.runImage, src: i.getAttribute('src') || undefined, label: i.alt }] })), index: imgs.indexOf(img) });
   const row = box.querySelector('.run-input-images');
   row.onclick = (e) => { const img = e.target.closest('[data-run-image]'); if (img) open(img); };
   row.onkeydown = (e) => { const img = e.target.closest('[data-run-image]'); if (img && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); open(img); } };
@@ -694,7 +695,7 @@ registerView({
             <div class="tabs">
               <button class="tab active" data-tab="detail">Session</button>
               <button class="tab" data-tab="events">Events</button>
-              <button class="tab" data-tab="artifacts" title="The files this run produced">Artifacts <span id="tab-artifacts-count" class="tab-count hidden"></span></button>
+              <button class="tab" data-tab="artifacts" data-testid="run-tab-artifacts" title="The files this run produced">Artifacts <span id="tab-artifacts-count" class="tab-count hidden"></span></button>
             </div>
             <div id="tab-detail" class="tab-body">
               <p class="empty muted">Select a session to see prompts, thinking, tool calls and output.</p>

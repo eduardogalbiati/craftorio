@@ -123,18 +123,28 @@ Read this before changing anything in `src/renderer/`.
   those checks.
 - Artifacts previews images (`kind: image`, read as a data URL; the CSP allows `img-src data:`).
 - **Artifact images open in the shared viewer** (#145, `image-viewer.js`, math in
-  `image-viewer-model.js`): `ImageViewer.open({ title, images: [{ src | file, label, caption }],
-  index })`, almost full screen, fitted (never upscaled), click / wheel / + − Fit 100% zoom up to
-  400%, drag to pan when zoomed, tabs or ← / → between the two images of an original/modified
-  pair, Esc or a click outside closes, right-click keeps the copy menu. Every artifact image must
-  use it: give the thumbnail `ImageViewer.THUMB` (hand cursor, "Click to enlarge", focusable,
-  Enter opens) and open it on click; no per-screen viewer. Users today: the Artifacts panel and
-  the Artifacts screen (`ArtifactsPanel.openImage`). The chat renders no images.
+  `image-viewer-model.js`, browsing in `image-sequence.js`), **with the whole context** (#182):
+  `ImageViewer.open({ title, items: [{ title, images: [{ src | file, label, caption, side }] }],
+  index, imageIndex })` gets every image of the place the click happened, in the order shown there
+  (an original/modified pair is one item), and the clicked one; `open({ title, images, index })`
+  still opens one item. Almost full screen, fitted (never upscaled), click / wheel / + − Fit 100%
+  zoom up to 400%, drag to pan when zoomed; previous / next arrows on the sides (hover or Tab,
+  disabled at the ends, no wrap-around), ← / → and Home / End between items (a new item is fitted,
+  the neighbours preloaded), a counter "2 / 3"; one item shows neither. Tabs, Space or O / M switch
+  inside a pair at the same zoom; Esc or a click outside closes, right-click keeps the copy menu.
+  Every artifact image must use it: give the thumbnail `ImageViewer.THUMB` (hand cursor, "Click to
+  enlarge", focusable, Enter opens) and open it on click with its context; no per-screen viewer.
+  Users today: the Artifacts panel (its screenshot cards and image files), the Artifacts screen
+  (`ArtifactsPanel.openImage({ files })`: the run group's images), the gate's E2E scenario
+  screenshots, the diff viewer (the changed images), the run's input images and pasted images.
 - **The Run screen's tabs** (#109): the Details panel has Session, Events and Artifacts
   (`switchTab`, `#tab-artifacts`, with a count on the tab). The Artifacts tab and the approval
   gate's side panel are one component, `artifacts-panel.js` (`ArtifactsPanel.mount(root, { runId,
-  flat, extras })`): the run's files from `artifacts:list { runId }` grouped by kind (newest first
-  in a group; `flat` for the gate), a preview in place (markdown, images with their original/modified
+  flat, extras })`): the run's files from `artifacts:list { runId }`, what the run produced first
+  (#225: each file's `category` from `src/artifact-categories.js`; "Produced" = Result, Screenshots &
+  images, Tests, Reports by default, "Show all" adds Process, Internal is never listed; category and
+  kind chips; the Artifacts screen reuses `filtersHtml` / `filterFiles` / `onFilterClick`),
+  grouped by category (newest first in one; `flat` for the gate), a preview in place (markdown, images with their original/modified
   pair from the evidence manifest, TSV as a table, JSON, text) and "Open in Artifacts"
   (`openArtifactsAt`). `onEvent` calls `ArtifactsPanel.refreshRun(runId)` on the events that add a
   file (`ARTIFACT_EVENTS`), so a running run's list follows without a reload. Above the files, the

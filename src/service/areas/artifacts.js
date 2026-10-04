@@ -38,14 +38,14 @@ module.exports = (ctx) => {
    * With `runId`: [that run with `artifacts`] (its files filtered by `q` unless the run itself matches,
    * and by `kind`; `offset`/`limit` page them: `total`, `hasMore`). Without: the runs that produced
    * files, newest first, with `artifactCount` / `imageCount` and no list; filtered by `projectId`,
-   * `showSim: false` and `q` (a run matching by its workflow, task or project, or by a file name: those
+   * `showSim: false` and `q` (a run matching by its workflow, task, project or id, or by a file name: those
    * files come along, at most SEARCH_PREVIEW, with `matchCount`). `summary: true` answers
    * { runs, hiddenSim } instead of the array.
    */
   async function artifactRuns({ projectId, runId, q, kind, showSim, offset, limit, summary } = {}) {
     const projectList = projects.listProjects(ctx.ws.projects);
     const needle = String(q || '').trim().toLowerCase();
-    const runHit = (base) => !needle || [base.workflow, base.task, base.project?.name].some((x) => String(x || '').toLowerCase().includes(needle));
+    const runHit = (base) => !needle || [base.workflow, base.task, base.project?.name, base.runId].some((x) => String(x || '').toLowerCase().includes(needle));
     const fileHit = (f) => `${f.name} ${f.rel}`.toLowerCase().includes(needle);
 
     if (runId) {

@@ -63,6 +63,7 @@ const depsCache = require('./deps-cache');
 const evidence = require('../evidence');
 const gateSummary = require('./gate-summary');
 const { scratchWorkspace } = require('../local-preview');
+const { writeResultSummary } = require('../result-summary');
 const { stopProcessesIn } = require('./processes');
 const { PROBES, runProbe, parseTarget } = require('./probes');
 const scenarios = require('./scenarios');
@@ -70,6 +71,7 @@ const { captureScreenshots } = require('./screenshot-step');
 const suiteStep = require('./suite-step');
 const {
   affectedTests,
+  changedFiles,
   relatedTests,
   selectionLines,
   testMap,
@@ -3352,8 +3354,16 @@ class WorkflowRun extends EventEmitter {
           if (!captions[key]) captions[key] = { caption: `Scenario: ${s.name}` };
         }
       }
+      // a screenshots step (#185): its new elements and errors, with the captions of the developer's list
+      let capture = null;
+      if (output?.kind === 'screenshots' && output.folder) {
+        const entries = this.ctx.steps[step.from]?.output?.screenshots;
+        const names = Object.fromEntries((Array.isArray(entries) ? entries : []).filter((e) => e && typeof e.name === 'string').map((e) => [e.name, String(e.caption || '')]));
+        capture = evidence.captureOf(output, names);
+      }
       evidence.writeManifest(this.runDir, {
         captions, commit: this.worktreeHead(), baseCommit: this.worktree?.commit || null, base: this.worktree?.base || null, branch: this.worktreeBranch(),
+        ...(capture ? { capture } : {}),
       });
     } catch (e) {
       this.emitEvent('log', { level: 'warn', message: `evidence manifest: ${e.message}` });
@@ -3399,7 +3409,7 @@ class WorkflowRun extends EventEmitter {
       });
     } catch (e) {
       const reason = `the capture failed: ${e.message}`;
-      return { kind: 'screenshots', folder, round: st.visits, dir: null, taken: 0, screens: 0, screenshots: [], errors: [], reason, message: `No screenshots: ${reason}` };
+      return { kind: 'screenshots', folder, round: st.visits, dir: null, taken: 0, screens: 0, screenshots: [], errors: [], new_elements: [], reason, message: `No screenshots: ${reason}` };
     }
   }
 
@@ -3454,6 +3464,12 @@ class WorkflowRun extends EventEmitter {
           log: (level, message) => this.emitEvent('log', { level, message }),
           // a suite step other than `suite` (an e2e step, #223) logs under its own name
           ...(step.id === 'suite' ? {} : { logName: `${step.id}-${st.visits}` }),
+          // #225: `coverage: true` adds node's coverage; the summary covers the files the run changed
+          coverage: step.coverage === true,
+          changedFiles: () => {
+            const base = this.worktree?.base;
+            return this.ctx.worktree_dir && base ? changedFiles(this.ctx.worktree_dir, base) : [];
+          },
           ...extra,
         });
       } catch (e) {
@@ -3495,6 +3511,7 @@ class WorkflowRun extends EventEmitter {
     }
     if (output.log) this.emitEvent('file.saved', { step_id: step.id, path: path.join(this.runDir, output.log) });
     if (output.base_check?.log) this.emitEvent('file.saved', { step_id: step.id, path: path.join(this.runDir, output.base_check.log) });
+    if (output.coverage?.path) this.emitEvent('file.saved', { step_id: step.id, path: path.join(this.runDir, output.coverage.path) });
     this.emitEvent('log', { level: output.status === 'pass' ? 'info' : 'warn', kind: 'suite', step_id: step.id, status: output.status, failures: output.failures.length, message: `${step.id}: ${output.message}` });
     return output;
   }
@@ -3684,42 +3701,45 @@ ${stderr || stdout}`.slice(0, 1500)));
     const tokens = emptyUsage();
     sessions.forEach((s) => addUsage(tokens, s.tokens));
     const outputs = this.computeOutputs();
+    const summary = {
+      run_id: this.runId, workflow: this.wf.metadata?.name, project_id: this.projectId, issues: this.issues || undefined, status,
+      started_at: new Date(this.startedAt).toISOString(), finished_at: new Date().toISOString(),
+      duration_ms: Date.now() - this.startedAt, inputs: this.inputs, mock: this.mock, worktree: this.worktreeSummary(),
+      // `merge: local`: what landed on the local base, not pushed (Backlog: "Local" column, Push)
+      local_merge: this.ctx.local_merge ? { branch: this.ctx.local_merge.branch, base: this.ctx.local_merge.base, commit: this.ctx.local_merge.commit } : null,
+      tokens, cost_usd: +sessions.reduce((a, s) => a + s.cost_usd, 0).toFixed(6), cost_accounting: 'per_turn',
+      context: this.contextSummary(),
+      timing: this.timingSummary(),
+      // `wait:` steps: checks made without an agent turn, agent turns they asked for, steps they finished
+      ...(Object.keys(this.probeStats).length ? { probes: this.probeStats } : {}),
+      steps: Object.fromEntries(Object.entries(this.ctx.steps).map(([k, v]) => [k, { visits: v.visits, output: v.output }])),
+      // failures that also fail on the base, reported by a step and not chased in this run: follow-up issues for the owner
+      ...(this.preexisting.length ? { preexisting_failures: this.preexisting } : {}),
+      // #203: the unit / E2E test inputs and where each value came from; #177: whole-suite runs
+      // by the engine's suite steps and by the agents' own commands (the measure of the change)
+      ...(this.testsPlan.length ? { tests_plan: this.testsPlan } : {}),
+      ...(Object.values(this.suiteRuns).some(Boolean) ? { suite_runs: this.suiteRuns } : {}),
+      // #209: test files the engine committed for the test writer; #178: commands cut by the tool's timeout
+      ...(this.testsAutocommitted.length ? { tests_autocommitted: this.testsAutocommitted } : {}),
+      ...(this.toolTimeouts ? { tool_timeouts: this.toolTimeouts } : {}),
+      // step visits in order with their agents (runs list); this event's own update lands in it
+      groups: this.wf.groups, progress: this.trail.steps,
+      ...(outputs ? { outputs } : {}),
+      ...(this.then ? { then: this.then } : {}),
+      ...(this.from ? { from: this.from } : {}),
+      // `type: workflow` steps (#174): the run that started this one, the runs this one started
+      ...(this.parent ? { parent_run: this.parent } : {}),
+      ...(this.childRuns.length ? { child_runs: this.childRuns, children_cost_usd: +this.childrenCostUsd().toFixed(6) } : {}),
+      sessions,
+    };
+    // #225: result.md, the run's first artifact, written before the event that refreshes the lists
+    writeResultSummary(this.runDir, { ...summary, error: err?.message || null });
     this.emitEvent('workflow.finished', {
       status, error: err?.message || null,
       // the declared outputs (#134) and the chain, for what starts next
       ...(outputs ? { outputs } : {}),
       ...(this.then ? { then: this.then } : {}),
-      summary: {
-        run_id: this.runId, workflow: this.wf.metadata?.name, project_id: this.projectId, issues: this.issues || undefined, status,
-        started_at: new Date(this.startedAt).toISOString(), finished_at: new Date().toISOString(),
-        duration_ms: Date.now() - this.startedAt, inputs: this.inputs, mock: this.mock, worktree: this.worktreeSummary(),
-        // `merge: local`: what landed on the local base, not pushed (Backlog: "Local" column, Push)
-        local_merge: this.ctx.local_merge ? { branch: this.ctx.local_merge.branch, base: this.ctx.local_merge.base, commit: this.ctx.local_merge.commit } : null,
-        tokens, cost_usd: +sessions.reduce((a, s) => a + s.cost_usd, 0).toFixed(6), cost_accounting: 'per_turn',
-        context: this.contextSummary(),
-        timing: this.timingSummary(),
-        // `wait:` steps: checks made without an agent turn, agent turns they asked for, steps they finished
-        ...(Object.keys(this.probeStats).length ? { probes: this.probeStats } : {}),
-        steps: Object.fromEntries(Object.entries(this.ctx.steps).map(([k, v]) => [k, { visits: v.visits, output: v.output }])),
-        // failures that also fail on the base, reported by a step and not chased in this run: follow-up issues for the owner
-        ...(this.preexisting.length ? { preexisting_failures: this.preexisting } : {}),
-        // #203: the unit / E2E test inputs and where each value came from; #177: whole-suite runs
-        // by the engine's suite steps and by the agents' own commands (the measure of the change)
-        ...(this.testsPlan.length ? { tests_plan: this.testsPlan } : {}),
-        ...(Object.values(this.suiteRuns).some(Boolean) ? { suite_runs: this.suiteRuns } : {}),
-        // #209: test files the engine committed for the test writer; #178: commands cut by the tool's timeout
-        ...(this.testsAutocommitted.length ? { tests_autocommitted: this.testsAutocommitted } : {}),
-        ...(this.toolTimeouts ? { tool_timeouts: this.toolTimeouts } : {}),
-        // step visits in order with their agents (runs list); this event's own update lands in it
-        groups: this.wf.groups, progress: this.trail.steps,
-        ...(outputs ? { outputs } : {}),
-        ...(this.then ? { then: this.then } : {}),
-        ...(this.from ? { from: this.from } : {}),
-        // `type: workflow` steps (#174): the run that started this one, the runs this one started
-        ...(this.parent ? { parent_run: this.parent } : {}),
-        ...(this.childRuns.length ? { child_runs: this.childRuns, children_cost_usd: +this.childrenCostUsd().toFixed(6) } : {}),
-        sessions,
-      },
+      summary,
     });
   }
 }

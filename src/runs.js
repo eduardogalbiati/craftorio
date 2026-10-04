@@ -18,7 +18,12 @@ const { trailOf } = require('./renderer/run-progress-model');
 const { defaultTitle, prOfEvents, readMeta } = require('./run-pr');
 const { ownerAlive, readOwner } = require('./run-owner');
 const { storeFor } = require('./store');
-const { kindOf, walkFiles } = require('./run-artifacts');
+const {
+  artifactEntry,
+  kindOf,
+  listed,
+  walkFiles,
+} = require('./run-artifacts');
 const { correctSessions, needsEvents, runCosts } = require('./run-costs');
 
 const SESSION_EVENTS = new Set(['session.attempt_stopped', 'session.closed', 'session.message_received', 'session.opened']);
@@ -404,36 +409,25 @@ function projectOf(run, projectList) {
 // the cached, asynchronous index of src/run-artifacts.js (#200); runArtifacts reads one run at once.
 // ---------------------------------------------------------------------------
 
-/** Files produced by a run, read now (sync): [{ path, name, rel, location, kind, size, mtime, step, agent, exists }] */
+/**
+ * Files produced by a run, read now (sync): [{ path, name, rel, location, kind, category, size, mtime,
+ * step, agent, exists }], the run's result.md first, without internal files (#225).
+ */
 function runArtifacts(runDir) {
   const byPath = new Map();
-  const add = (file, extra = {}) => {
-    const key = normPath(file);
-    const cur = byPath.get(key) || {};
+  const add = (file, step, agent, event) => {
     let st = null;
     try { st = fs.statSync(file); } catch { /* deleted since */ }
-    const inside = key.startsWith(normPath(runDir) + path.sep);
-    byPath.set(key, {
-      ...cur,
-      path: file,
-      name: path.basename(file),
-      rel: inside ? path.relative(runDir, file) : file,
-      location: inside ? 'run' : 'external',
-      kind: kindOf(file),
-      size: st ? st.size : null,
-      mtime: st ? st.mtime.toISOString() : null,
-      exists: !!st,
-      ...extra,
-    });
+    byPath.set(normPath(file), artifactEntry(runDir, file, st, step, agent, event));
   };
   for (const ev of readEvents(path.join(runDir, 'events.jsonl'))) {
-    if ((ev.type === 'file.saved' || ev.type === 'handoff.saved') && ev.path) add(ev.path, { step: ev.step_id || null, agent: ev.agent || null });
+    if ((ev.type === 'file.saved' || ev.type === 'handoff.saved') && ev.path) add(ev.path, ev.step_id, ev.agent, ev.type);
   }
   for (const rel of walkFiles(runDir)) {
     const file = path.join(runDir, rel);
-    if (!byPath.has(normPath(file))) add(file, { step: null, agent: null });
+    if (!byPath.has(normPath(file))) add(file, null, null, null);
   }
-  return [...byPath.values()].sort((a, b) => a.rel.localeCompare(b.rel));
+  return listed([...byPath.values()]);
 }
 
 /** The run's scratch workspace (#201), for the Run screen: { dir, files, bytes }, or null when there is none. */
