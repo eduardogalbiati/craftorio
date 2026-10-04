@@ -298,6 +298,8 @@ module.exports = (ctx) => {
           .then(() => ctx.continueChain(run, ev)).catch((e) => console.error('run chain:', e.message));
         // a Backlog Refresh run edited or closed issues: the Backlog syncs the project (#161)
         ctx.afterBacklogRefresh(run).catch((e) => console.error('backlog refresh sync:', e.message));
+        // a release run (#260): a shipped release is recorded and its cut line lets the roadmap go on
+        ctx.afterRelease(run, ev).catch((e) => console.error('release:', e.message));
         // a roadmap's next items first (its stage may be over), then the plain queue; a shutdown
         // cancels it (#186: it would run after the workspace was closed, e.g. a test's removed one)
         const dispatch = setTimeout(() => {

@@ -283,6 +283,13 @@ input[type=text].rm-name:hover { border-color: var(--border); }
 input[type=text].rm-name:focus { border-color: var(--accent); background: var(--panel-2); }
 input[type=text].rm-note { max-width: 520px; }
 .rm-note-text { margin: 0; overflow-wrap: anywhere; }
+/* #260: a cut line after a stage ("Release here"): a dashed rule on both sides of its label */
+.rm-cut { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; color: var(--accent); }
+.rm-cut::before, .rm-cut::after { content: ""; flex: 1 1 24px; border-top: 2px dashed currentColor; opacity: .6; }
+.rm-cut-label { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; white-space: nowrap; }
+.rm-cut-name { color: var(--text); min-width: 0; overflow-wrap: anywhere; }
+.rm-cut.shipped { color: var(--muted); }
+.badge.bl-released { color: var(--green); background: color-mix(in srgb, var(--green) 12%, var(--panel)); border-color: color-mix(in srgb, var(--green) 45%, transparent); }
 .rm-items { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; }
 .rm-item { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; min-width: 0; }
 /* an item's error (a failed run, a refused start #196): wrapped inside the card, then what to do */

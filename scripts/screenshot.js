@@ -106,6 +106,8 @@ const VIEWS = {
   oracle: {},
   // #254: the Roadmap screen; the same as --view backlog --mode roadmap (its tab until then)
   roadmap: {},
+  // #260: the Releases screen (two shipped releases and the next one: #11, merged locally)
+  releases: {},
   // the Night watch (#172): two replayed nights
   nightwatch: {},
   // run: one AI Development run in depth against its workflow's runs (#228); occupancy: the 24/7 tab (#188)
@@ -284,6 +286,34 @@ function demoLocalMerge(ws, projectId) {
   }, null, 2));
 }
 
+// The project's release history (#260, src/releases.js): two shipped releases, the last one with a
+// long issue title, a red-then-fixed history (its notes) and both suites' counts; the next release
+// is what demoLocalMerge merged locally (#11). The Backlog shows #8 as Released.
+function demoReleases(ws, projectId) {
+  const dir = path.join(ws.root, 'releases');
+  fs.mkdirSync(dir, { recursive: true });
+  const title = (n) => DEMO_ISSUES.find((x) => x.number === n).title;
+  fs.writeFileSync(path.join(dir, `${projectId}.json`), JSON.stringify({
+    releases: [
+      {
+        version: 'v0.8', tag: 'v0.8', date: '2025-12-19T17:30:00.000Z', commit: '4f2a9c1d7e3b5a6088c1d2e3f4a5b6c7d8e9f001', base: 'main',
+        issues: [{ number: 7, title: title(7) }], runs: ['20251219-160000-demo0007', '20251219-171500-rel00008'], cost: 3.12,
+        tests: { unit: { status: 'pass', passed: 388, failed: 0 }, e2e: { status: 'pass', passed: 31, failed: 0 } },
+        notes: '# v0.8\n\n- #7 Splash screen with the workspace name on start\n\n2 runs, $3.12.', status: 'shipped',
+      },
+      {
+        version: 'v0.9', tag: 'v0.9', date: '2026-01-10T18:00:00.000Z', commit: 'c9d8e7f6a5b4c3d2e1f0a9b8c7d6e5f4a3b2c1d0', base: 'main',
+        issues: [{ number: 8, title: title(8) }, { number: 15, title: title(15) }],
+        runs: ['20260109-210000-demo0008', '20260110-093000-demo0015', '20260110-170000-rel00009'], cost: 21.84,
+        tests: { unit: { status: 'pass', passed: 412, failed: 0 }, e2e: { status: 'pass', passed: 37, failed: 0 } },
+        notes: '# v0.9\n\n- #8 Document the workflow YAML\n- #15 Run safety\n\nThe release run found a regression in the resume dialog (the unit suite was red after #15 merged) and fixed it before Ship.\n\n3 runs, $21.84.',
+        status: 'shipped',
+      },
+    ],
+    next: { notes: '' },
+  }, null, 2));
+}
+
 // The Product Owner registering an issue (#117): a short request with a screenshot, one question,
 // the owner's answer, then a draft (long title, labels, Related, a close issue: #12), then a plan
 // answer whose groups the demo roadmap already holds (#140), then a question about issues sent from
@@ -454,7 +484,8 @@ function demoRoadmap(ws, projectId, live = 'off', budget = null) {
         inputs: { language: 'js', mode: 'auto', unit_tests: 'run_existing', e2e_tests: 'write', screenshots: 'off', ...(tonight ? { base_branch: 'release/2026-01-reports-and-health-with-a-very-long-branch-name-for-the-roadmap-card' } : {}) },
         cost: { level: 1, name: 'Economy', inputs: { unit_tests: 'run_existing', e2e_tests: 'write', screenshots: 'off' }, grouping: 'Grouped to pay the run overhead once (same area or files).', notAdjustable: ['Agents: not adjustable (the workflow has no model or effort input)'] },
       })] },
-      { id: 'stage-2-tests', name: 'Test batch', note: '', items: [item('item-8', 'test-batch.yaml', [12, 9], {
+      // #260: a cut line after this stage ("Release here"): the last stage waits for the release v0.10
+      { id: 'stage-2-tests', name: 'Test batch', note: '', release: { name: 'v0.10' }, items: [item('item-8', 'test-batch.yaml', [12, 9], {
         inputs: {}, reason: 'Economy: these issues ran with their existing tests only; one test writer session writes their unit tests together, after their stage.',
       })] },
       { id: 'stage-3', name: '', note: '', items: [item('item-3', 'software-development.yaml', [10], {
@@ -1413,7 +1444,9 @@ function main() {
     fs.mkdirSync(ws.backlog, { recursive: true });
     fs.writeFileSync(path.join(ws.backlog, `${project.id}.json`), JSON.stringify(demoBacklog(project.id, src('backlog').taskProgress), null, 2));
     // also on Project: its run list shows the run's "issue from cache" badge (#168)
-    if (['backlog', 'project'].includes(args.view)) demoLocalMerge(ws, project.id);
+    if (['backlog', 'project', 'releases'].includes(args.view)) demoLocalMerge(ws, project.id);
+    // #260: the Releases screen's history; the Backlog's "Released" badge on the issues it shipped
+    if (['backlog', 'releases'].includes(args.view)) demoReleases(ws, project.id);
     if (args.view === 'backlog') demoRoadmap(ws, project.id, args.live, args.budget);
     if (args.view === 'backlog') demoPoConversation(ws, project.id, args.po);
     if (args.view === 'backlog' && project.folder) demoBacklogRefresh(ws, project.folder, project.id);

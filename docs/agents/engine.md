@@ -370,6 +370,25 @@ same features for users; this is the implementer's summary.
   Rejecting a failure gate → `failed`; rejecting `human_review`/`approve_merge` → `cancelled`.
   Non-success keeps the worktree. When `max_visits`/`loop.max_iterations` runs out, the transition
   goes to `on_exhausted` WITHOUT its `delegate` (no unchecked "one more fix").
+- `ship: { tag, build? }` on a transition (#260, release.yaml's `ship` and `ship_failed` gates; both
+  templates): after the transition's `action` and `merge: local`, `shipRelease` (src/releases.js)
+  pushes the local base to origin (never forced; a rejected push throws) and tags that commit, then
+  runs `build` when it renders non-empty. `loadWorkflow` only accepts it on a `human_approval` step
+  without `kind: escalation` and without `timeout`, with `orchestrator.worktree`; at run time the
+  gate must have been answered by `'user'` (`st.answeredBy`: not the supervisor, a timeout, or
+  scripts/run.js `--auto-approve`, which answers as `'auto'`), else the transition fails and nothing
+  is pushed. A failure goes to the transition's `on_error` like a failed merge. Event
+  `release.shipped`; `summary.release` = `{ tag, base, commit, pushed, issues }`. A simulation pushes
+  nothing (`action.executed` skipped, `summary.release.simulated`); `mockSequences.action_errors`
+  counts it like an action.
+- Cut lines (#260, service): a roadmap stage with `release: { name }` holds every stage after it.
+  `advance` returns `release: { stage, name }` once the stages up to the line are finished; the
+  service (`roadmapRelease`, src/service/areas/releases.js) starts release.yaml with the project's
+  folder, base and the history since the last release, and records `runId` / `status` on the line
+  (`running` → `shipped`, or `held` / `failed`, which pause the roadmap; Resume starts a new release
+  run, a resumed release run is adopted by `adoptResumed`). A shipped real run is recorded in
+  `<workspace>/releases/<project id>.json` (`afterRelease`); a simulated roadmap's release run is a
+  simulation whose Ship only opens the line.
 - Human gates can offer `choices` (each with its own transition); failure gates use them so every
   option does something different (e.g. `preview_failed`: publish again / send to developer / stop).
   software-development (0.12.0): the deployer returns `failure_class: code | infra | unknown`; a

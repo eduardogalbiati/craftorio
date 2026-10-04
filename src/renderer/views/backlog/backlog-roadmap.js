@@ -42,6 +42,11 @@
 // Retry / Skip like a failed run; the bar's "Show the item" scrolls to the item that paused it.
 // Start, Resume and Run this stage list the items whose workflow pushes while the default development
 // workflow (#195, DefaultWorkflow) merges locally: switch them to the default, or start anyway.
+// Cut lines (#260): "Release here" on a stage's head asks for the release's name (the #cut-line-modal
+// dialog of backlog.js) and draws a cut line after the stage (`stage.release`, saved with the stages):
+// its name, the state of its release run (in progress, on hold, failed, shipped) with a link to the
+// run, Rename and Remove while no run is going. The stages below wait until the release shipped; a
+// finished stage hidden by the open-work filter still shows its line while it waits.
 // Rendered into #bl-list by backlog.js (mode 'roadmap'), which passes `ctx`
 // ({ projectId, setData, render, setError }). Uses app.js globals (esc, state, errMsg, devMode, confirmDialog,
 // fmtDur, agentLabel, scheduleRender), run-list.js's (progressChip, robotAvatar, PERSON_SVG, ENGINE_SVG),
@@ -101,10 +106,11 @@
   const BY_EPIC_KEY = 'multiagent.roadmapByEpic';
   let byEpic = (() => { try { return localStorage.getItem(BY_EPIC_KEY) === '1'; } catch { return false; } })();
 
-  /** The badge of an issue card: its place in the roadmap ("Roadmap: stage 2"). */
+  /** The badges of an issue card: its place in the roadmap ("Roadmap: stage 2") and the release that shipped it (#260, "Released v1.4"). */
   function badge(i) {
-    if (!i.roadmap) return '';
-    return `<span class="badge bl-roadmap" title="${esc(`${i.roadmap.name}: ${i.roadmap.status}`)}">Roadmap: stage ${i.roadmap.stage}${i.roadmap.status === 'planned' ? '' : ` · ${esc(i.roadmap.status)}`}</span>`;
+    const released = i.released ? `<span class="badge bl-released" data-testid="issue-released" title="${esc(`Shipped with the release ${i.released}`)}">Released ${esc(i.released)}</span>` : '';
+    if (!i.roadmap) return released;
+    return `<span class="badge bl-roadmap" title="${esc(`${i.roadmap.name}: ${i.roadmap.status}`)}">Roadmap: stage ${i.roadmap.stage}${i.roadmap.status === 'planned' ? '' : ` · ${esc(i.roadmap.status)}`}</span>${released}`;
   }
 
   // An id as people read it (#245, display-name.js; `names`: the run's own names for them)
@@ -387,6 +393,7 @@
           ${stageCostHtml(stage, done && stage.items.length > 0)}
           ${stage.note || noteOpen ? '' : '<button class="link-btn small" type="button" data-rm-addnote>add note</button>'}
           <span class="spacer"></span>
+          ${stage.release?.name ? '' : '<button class="btn sm ghost" type="button" data-rm-release="add" title="Draw a cut line after this stage: when the roadmap reaches it, the whole unit and E2E suites run and you Ship or Hold; the stages below wait for it"><span aria-hidden="true">✂</span> Release here</button>'}
           <button class="btn sm ghost rm-run-stage" type="button" data-rm-run-stage title="${esc(runTitle)}"${runnable ? '' : ' disabled'}><span aria-hidden="true">▶</span> Run this stage</button>
           <button class="btn sm ghost" type="button" data-rm-stage="up" title="Run this stage earlier"${s === 0 ? ' disabled' : ''}>↑</button>
           <button class="btn sm ghost" type="button" data-rm-stage="down" title="Run this stage later"${s === count - 1 ? ' disabled' : ''}>↓</button>
@@ -395,6 +402,52 @@
         <div class="rm-items">${stage.items.map((x, n) => (show(x) ? itemHtml(x, s, n, byNumber, r) : '')).join('')}${folded
     ? `<button class="link-btn small rm-folded" type="button" data-rm-show-all title="Done or skipped items of this stage, hidden: Show all brings them back">+${folded} done</button>` : ''}</div>
       </section>`;
+  }
+
+  // ---- cut lines (#260): "Release here" after a stage, the stages below wait for its release run ----
+  // a line's state: [badge tone, label, what it means]
+  const RELEASE_STATE = {
+    running: ['live', 'release run in progress', 'The whole unit and E2E suites run, then its Ship gate waits for you'],
+    held: ['warn', 'on hold', 'Its release run ended without shipping: resume that run from its Ship gate, or Resume the roadmap to check the release again'],
+    failed: ['warn', 'release run failed', 'Its release run failed: open it, then Resume the roadmap to check the release again'],
+    shipped: ['', 'shipped', 'Pushed and tagged: the stages below run'],
+  };
+  function cutLineHtml(stage, s) {
+    const rel = stage.release;
+    if (!rel?.name) return '';
+    const [tone, label, help] = RELEASE_STATE[rel.status] || ['', '', 'The stages below wait until this release shipped'];
+    const locked = rel.status === 'running' || rel.status === 'shipped';
+    return `
+      <div class="rm-cut${rel.status === 'shipped' ? ' shipped' : ''}" data-testid="roadmap-cut-line" data-cut-stage="${s}" title="${esc(help)}">
+        <span class="rm-cut-label"><span aria-hidden="true">✂</span> Release here</span>
+        <b class="rm-cut-name">${esc(rel.name)}</b>
+        ${label ? `<span class="badge ${tone}">${esc(label)}</span>` : ''}
+        ${rel.runId ? `<button class="link-btn small" type="button" data-rm-release-run="${esc(rel.runId)}" title="Open the release run ${esc(rel.runId)}">Open the run</button>` : ''}
+        ${locked ? '' : `<button class="link-btn small" type="button" data-rm-release="edit" aria-label="Rename the release ${esc(rel.name)}">Rename</button>
+        <button class="link-btn small" type="button" data-rm-release="remove" aria-label="Remove the cut line ${esc(rel.name)}" title="The stages below no longer wait for a release">Remove</button>`}
+      </div>`;
+  }
+
+  // The cut line's dialog (the #cut-line-modal of backlog.js): → the release's name, or null when cancelled.
+  function cutLineDialog(current) {
+    const q = (sel) => document.querySelector(sel);
+    const modal = q('#cut-line-modal');
+    const input = q('#cut-line-name');
+    input.value = current;
+    q('#cut-line-error').textContent = '';
+    q('#btn-cut-line-ok').textContent = current ? 'Save' : 'Add cut line';
+    modal.classList.remove('hidden');
+    input.focus({ preventScroll: true });
+    return new Promise((resolve) => {
+      const close = (value) => { modal.classList.add('hidden'); resolve(value); };
+      q('#cut-line-form').onsubmit = (e) => {
+        e.preventDefault();
+        const name = input.value.trim();
+        if (!name) { q('#cut-line-error').textContent = 'Give the release a name or a version.'; return; }
+        close(name);
+      };
+      q('#btn-cut-line-cancel').onclick = () => close(null);
+    });
   }
 
   // ---- what the Roadmap shows (#217): the open work by default, Show all, the epic filter ------
@@ -539,10 +592,17 @@
     const hiddenLine = vis.hidden ? `<p class="small muted rm-hidden-line">${vis.hidden} finished stage${vis.hidden === 1 ? '' : 's'} hidden${v.epic ? ` (${esc(epicName)})` : ''} · <button class="link-btn small" type="button" data-rm-show-all>Show all</button></p>` : '';
     const nothing = `<div class="empty-state"><b>No ${v.showAll ? '' : 'open '}roadmap items${v.epic ? ` ${esc(epicName)}` : ''}.</b>
       <p class="muted">${v.showAll ? 'Pick another epic, or All epics.' : 'Finished work is hidden.'}</p>${v.showAll ? '' : '<button class="btn sm ghost" type="button" data-rm-show-all>Show all</button>'}</div>`;
+    // #260: each shown stage with its cut line; a hidden (finished) stage's line still shows while its release has not shipped
+    const shown = new Map(vis.stages.map((x) => [x.s, x]));
+    const staged = r.stages.map((stage, s) => {
+      const x = shown.get(s);
+      if (x) return stageHtml(stage, s, r.stages.length, current, byNumber, scoped, r, x.show, x.folded) + cutLineHtml(stage, s);
+      return !v.epic && stage.release?.status !== 'shipped' ? cutLineHtml(stage, s) : '';
+    }).join('');
     const stages = !r.stages.length
       ? '<div class="empty-state"><b>No roadmap yet</b><p class="muted">Select issues, Assign workflow…, then Add to roadmap: each addition is a stage that starts when the previous one has finished and merged.</p></div>'
       : grouped ? byEpicHtml(r, epics, byNumber, v)
-        : vis.stages.length ? vis.stages.map((x) => stageHtml(x.stage, x.s, r.stages.length, current, byNumber, scoped, r, x.show, x.folded)).join('') : nothing;
+        : staged.trim() ? staged : nothing;
     const liveHtml = r.stages.length ? liveBox(r) : '';
     return `<div class="rm">${bar.replace('<span class="spacer"></span>', `${count}<span class="spacer"></span>${showAllToggle}${toggle}`)}${queued}${grouped ? '' : hiddenLine}${stages}${liveHtml}${importBox}</div>`;
   }
@@ -747,6 +807,9 @@
     }
     const goto = e.target.closest('[data-rm-goto]');
     if (goto) { showItem(goto.dataset.rmGoto); return true; }
+    // #260: a cut line's release run
+    const releaseRun = e.target.closest('[data-rm-release-run]');
+    if (releaseRun) { window.showRun(releaseRun.dataset.rmReleaseRun); return true; }
     const act = e.target.closest('[data-rm]')?.dataset.rm;
     const stages = clone(r.stages);
     try {
@@ -821,6 +884,22 @@
         applyForm(item, e.target.closest('.rm-form'));
         editing = null;
         adding = false;
+        await save(ctx, stages);
+        return true;
+      } else if (e.target.closest('[data-rm-release]')) {
+        // #260: a cut line after the stage: named in the dialog (add, rename) or removed, saved at once
+        const el = e.target.closest('[data-rm-release]');
+        const cut = el.closest('[data-cut-stage]');
+        const stage = stages[cut ? Number(cut.dataset.cutStage) : locate(stages, el).s];
+        if (!stage) return true;
+        if (el.dataset.rmRelease === 'remove') {
+          if (!await confirmDialog('Remove the cut line', `The stages after it no longer wait for the release ${stage.release?.name || ''}. Nothing is pushed either way.`, 'Remove')) return true;
+          delete stage.release;
+        } else {
+          const name = await cutLineDialog(stage.release?.name || '');
+          if (!name) return true;
+          stage.release = { name };
+        }
         await save(ctx, stages);
         return true;
       } else if (e.target.closest('[data-rm-addnote]')) {

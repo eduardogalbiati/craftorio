@@ -5,6 +5,7 @@
 // Cost (#206): the view gives each item and stage its estimate (src/cost-estimate.js, from the
 // project's past runs) and each item with a run its real cost; a real start that would pass the
 // budget cap (areas/budget.js) pauses the roadmap instead (budgetStop) and notifies the owner.
+// Cut lines (#260): a roadmap that reached one starts its release run (areas/releases.js roadmapRelease).
 
 const path = require('path');
 const { loadWorkflow } = require('../../engine/workflow');
@@ -144,7 +145,7 @@ module.exports = (ctx) => {
     // an item that reads its issues from the platform at its start (#168) is never skipped on the
     // cache's state (an issue reopened since the sync still runs): the fresh read decides below
     const fromPlatform = (item) => !mockOf(item) && !!known?.repo;
-    const { roadmap, start, refill } = roadmaps.advance(before, {
+    const { roadmap, start, refill, release } = roadmaps.advance(before, {
       runOf: roadmapRun, closed: (n, item) => !fromPlatform(item) && closed.has(n), canStart: (item) => !ctx.slotProblem({ mock: mockOf(item), projectId }),
     });
     // derived statuses are not stored (roadmaps.persisted): only a stored change is written
@@ -160,6 +161,9 @@ module.exports = (ctx) => {
     // a live roadmap's last stage ended (#164): the Product Owner adds the next stages (not awaited:
     // its answer takes minutes; the refill dispatches the roadmap again)
     if (refill) ctx.refillRoadmap(projectId);
+    // a cut line (#260): the release run starts and everything after the line waits for it; a line
+    // whose release shipped meanwhile lets the next stage start in the same dispatch
+    if (release && await ctx.roadmapRelease(projectId, roadmap, release)) roadmapAgain = true;
     for (const item of start) {
       // a slot may have been taken by the previous start
       if (ctx.slotProblem({ mock: mockOf(item), projectId })) break;

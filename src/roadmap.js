@@ -25,6 +25,12 @@
 // may name issues another item holds and runs even when they are closed. The budget cap (src/budget.js)
 // pauses a roadmap before a start (`budget`: the period, spent, cap and next stage); "Resume anyway"
 // records `budgetWaived` (the day or night it covers) and Start clears the pause.
+// Cut lines (#260, src/releases.js): a stage with `release: { name }` ends a release ("Release here",
+// drawn after it). When every stage up to the line is finished, `advance` starts nothing after it and
+// asks for the release run (`release: { stage, name }`); the service starts the bundled release
+// workflow and records it on the line (`runId`, `status`: running, held, failed), and the stages
+// after the line wait until it shipped (`status: 'shipped'`, `setRelease`). A roadmap running one
+// stage (`scope`) and a roadmap without cut lines never wait.
 // Screen: src/renderer/views/backlog/backlog-roadmap.js; channels: src/service/channels/roadmap.js.
 
 const fs = require('fs');
@@ -69,6 +75,7 @@ function roadmapProblem(r) {
   if (r.live != null && typeof r.live !== 'boolean') return 'live is not true or false';
   for (const s of r.stages) {
     if (!s || !Array.isArray(s.items)) return 'a stage has no items list';
+    if (s.release != null && !String(s.release?.name || '').trim()) return 'a cut line has no release name';
     for (const x of s.items) {
       if (!x?.id || !x.workflow) return 'an item has no id or workflow';
       if (!ITEM_STATES.includes(x.status)) return `item ${x.id} has an unknown status ${JSON.stringify(x.status)}`;
@@ -139,6 +146,7 @@ function roadmapProjects(dir) {
 
 const allItems = (roadmap) => (roadmap.stages || []).flatMap((s) => s.items || []);
 const findItem = (roadmap, itemId) => allItems(roadmap).find((x) => x.id === itemId) || null;
+const findStage = (roadmap, stageId) => (roadmap.stages || []).find((s) => s.id === stageId) || null;
 /** Index of the stage in progress: the first one with an item not done or skipped (-1: none left). */
 const currentStage = (roadmap) => (roadmap.stages || []).findIndex((s) => (s.items || []).some((x) => !FINISHED.has(x.status)));
 
@@ -222,18 +230,33 @@ function assertUnique(stages) {
   }
 }
 
+// A stage's cut line (#260): its release name, trimmed (none without a name). What the release run
+// did to it (status, runId, when it shipped) comes from the same line already in the roadmap, never
+// from the edit: an edit cannot mark a release shipped, and a renamed line is a new release.
+function cleanRelease(raw, old) {
+  const name = String(raw?.name || '').trim();
+  if (!name) return null;
+  return old?.name === name ? { ...old, name } : { name };
+}
+
 /**
- * Validated stages from the UI or a proposal: [{ id?, name?, note?, items: [...] }]. Empty stages are
- * dropped. `known`: the synced backlog's issues (titles, URLs, bodies); `previous`: the roadmap edited.
+ * Validated stages from the UI or a proposal: [{ id?, name?, note?, release?: { name }, items: [...] }].
+ * Empty stages are dropped. `known`: the synced backlog's issues (titles, URLs, bodies); `previous`:
+ * the roadmap edited.
  */
 function cleanStages(stages, { issues = [], previous = null } = {}) {
   const known = new Map((issues || []).map((i) => [i.number, i]));
   const prevItems = new Map(allItems(previous || emptyRoadmap()).map((x) => [x.id, x]));
-  const out = (Array.isArray(stages) ? stages : []).map((s) => ({
-    // no name: shown as "Stage <n>" wherever it is when shown (reordering renumbers it)
-    id: s?.id || newId('stage'), name: String(s?.name || '').trim(), note: String(s?.note || '').trim(),
-    items: (Array.isArray(s?.items) ? s.items : []).map((x) => cleanItem(x, known, prevItems)),
-  })).filter((s) => s.items.length);
+  const prevReleases = new Map((previous?.stages || []).filter((s) => s?.id && s.release).map((s) => [s.id, s.release]));
+  const out = (Array.isArray(stages) ? stages : []).map((s) => {
+    const release = cleanRelease(s?.release, prevReleases.get(s?.id));
+    return {
+      // no name: shown as "Stage <n>" wherever it is when shown (reordering renumbers it)
+      id: s?.id || newId('stage'), name: String(s?.name || '').trim(), note: String(s?.note || '').trim(),
+      ...(release ? { release } : {}),
+      items: (Array.isArray(s?.items) ? s.items : []).map((x) => cleanItem(x, known, prevItems)),
+    };
+  }).filter((s) => s.items.length);
   assertUnique(out);
   return out;
 }
@@ -384,6 +407,15 @@ function adoptResumed(dir, projectId, oldRunId, newRunId) {
   if (!fs.existsSync(roadmapFile(dir, projectId))) return null;
   const r = readRoadmap(dir, projectId);
   const item = allItems(r).find((x) => x.runId === oldRunId) || allItems(r).find((x) => (x.runs || []).includes(oldRunId));
+  // #260: a cut line's release run resumed (from its Ship gate after a Hold): the new run is the line's,
+  // and a roadmap paused at that line waits for it again
+  const line = item ? null : r.stages.find((s) => s.release?.runId === oldRunId);
+  if (line) {
+    return updateRoadmap(dir, projectId, (cur) => ({
+      ...cur, ...(cur.state === 'paused' && !cur.pausedBy && ['failed', 'held'].includes(line.release.status) ? { state: 'running', error: null } : {}),
+      stages: cur.stages.map((s) => (s.id === line.id && s.release ? { ...s, release: { ...s.release, runId: newRunId, status: 'running' } } : s)),
+    }));
+  }
   if (!item) return null;
   return updateRoadmap(dir, projectId, (cur) => ({
     ...cur, ...(cur.pausedBy === item.id ? { state: 'running', pausedBy: null, error: null } : {}),
@@ -402,6 +434,21 @@ function mergedPullRequest(runDir) {
       return ev.exit_code === 0 && !ev.skipped && /\b(gh\s+pr|glab\s+mr)\s+merge\b/.test(ev.command || '');
     } catch { return false; }
   });
+}
+
+// The first cut line (#260) the roadmap reached and whose release has not shipped: a stage with a
+// `release` before stage `at` (every stage when `at` < 0: the roadmap is over), all finished by then.
+function pendingRelease(r, at) {
+  const reached = at < 0 ? r.stages : r.stages.slice(0, at);
+  return reached.find((s) => s.release && s.release.status !== 'shipped') || null;
+}
+
+/** Records what the release run did on a stage's cut line (#260): `patch` = { status, runId, ... }; null when the line is gone. */
+function setRelease(dir, projectId, stageId, patch) {
+  if (!findStage(readRoadmap(dir, projectId), stageId)?.release) return null;
+  return updateRoadmap(dir, projectId, (r) => ({
+    ...r, stages: r.stages.map((s) => (s.id === stageId && s.release ? { ...s, release: { ...s.release, ...patch } } : s)),
+  }));
 }
 
 const refs = (item) => itemIssues(item).map((i) => `#${i.number}`).join(', ');
@@ -435,7 +482,9 @@ function stageStep(r, at, { closed, canStart }) {
  * @param {{ runOf: (runId) => ({ status, waiting?, merged? } | null), closed?: (number, item) => boolean, canStart?: (item) => boolean }} env
  * A live roadmap (#164) whose last stage ends stays running and asks for a refill (`refill: true`):
  * the caller adds the next stages, or ends it (src/live-roadmap.js applyRefill).
- * @returns {{ roadmap: object, start: object[], refill?: true }} the items to start (still `planned`: the caller marks them)
+ * A cut line (#260) the roadmap reached and whose release has not shipped holds everything after it:
+ * nothing starts and the caller is asked for the release run (`release: { stage, name }`).
+ * @returns {{ roadmap: object, start: object[], refill?: true, release?: { stage: string, name: string } }} the items to start (still `planned`: the caller marks them)
  */
 function advance(roadmap, { runOf, closed = () => false, canStart = () => true }) {
   // Statuses follow the runs whatever the roadmap state (#112): `runOf` reports a run another live
@@ -466,6 +515,8 @@ function advance(roadmap, { runOf, closed = () => false, canStart = () => true }
   }
   for (;;) {
     const at = currentStage(r);
+    const line = pendingRelease(r, at);
+    if (line) return { roadmap: r, start: [], release: { stage: line.id, name: line.release.name } };
     if (at < 0) return r.live ? { roadmap: r, start: [], refill: true } : { roadmap: finished, start: [] };
     const step = stageStep(r, at, { closed, canStart });
     if (step) return step;
@@ -524,6 +575,7 @@ module.exports = {
   currentStage,
   dropIssues,
   findItem,
+  findStage,
   fromQueue,
   issueStages,
   itemAction,
@@ -537,6 +589,7 @@ module.exports = {
   roadmapProjects,
   saveStages,
   setLive,
+  setRelease,
   setState,
   skipClosed,
   testsLater,

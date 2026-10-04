@@ -83,6 +83,11 @@ owner actions write to the platform (Save to issue, create, close, epics: `src/b
   dispatch and live refill, the Oracle's `roadmap.stages`, the Product Owner), the refresh banner's
   dismissal (`<project>.refresh.json`), and anything outside the app (another window, a script).
   The roadmap and the queue go through `src/state-file.js` (temp file + rename, `.bak`).
+- Releases (#260): `<workspace>/releases/<project>.json` (`src/releases.js`, through
+  `src/state-file.js` too) holds the shipped releases and the next release's notes. It is the only
+  record of what a release shipped: an issue's "Released" badge is read from it on every Backlog
+  read (`releasedIssues`), never written into the synced `<project>.json`, which each sync rewrites.
+  A roadmap's cut line keeps its release run in `<project>.roadmap.json` (`stage.release`).
 - `src/service/areas/backlog-watch.js` watches the folder (one `fs.watch` per workspace, started by
   `setWorkspace`, closed on a switch and on `shutdown`) and pushes `backlog:changed { projectId,
   file: roadmap | queue | issues | local | refresh, watching: true }` once per file, 300 ms after

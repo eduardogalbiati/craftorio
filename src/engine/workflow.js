@@ -84,6 +84,7 @@ const {
   validateWorkflowStep,
 } = require('./workflow-step');
 const mergeQueue = require('./merge-queue');
+const { shipRelease } = require('../releases');
 const { IdleWatch } = require('./idle');
 const testPaths = require('./test-paths');
 const testIds = require('./test-ids');
@@ -426,6 +427,12 @@ function loadWorkflow(file) {
       if (t.merge !== undefined) {
         if (t.merge !== 'local') throw new Error(`Step "${s.id}": transition merge must be "local".`);
         if (!wf.orchestrator?.worktree) throw new Error(`Step "${s.id}": merge: local needs orchestrator.worktree (the run's branch lives in its worktree).`);
+      }
+      // `ship: { tag }` (#260): only the answer a person gives at a decision gate ships a release
+      if (t.ship !== undefined) {
+        if (!t.ship || typeof t.ship !== 'object' || !String(t.ship.tag || '').trim()) throw new Error(`Step "${s.id}": transition ship needs a tag (ship: { tag: "{{ inputs.version }}" }).`);
+        if (s.type !== 'human_approval' || s.kind === 'escalation' || s.timeout !== undefined) throw new Error(`Step "${s.id}": ship belongs to a human gate nobody else answers (type: human_approval, no kind: escalation, no timeout).`);
+        if (!wf.orchestrator?.worktree) throw new Error(`Step "${s.id}": ship needs orchestrator.worktree (the repository and its base branch).`);
       }
     }
   }
@@ -1500,6 +1507,8 @@ class WorkflowRun extends EventEmitter {
       if (gate.recover) return gate.recover;
       const { answer, feedback } = gate;
       const by = routed ? { by: 'supervisor' } : {};
+      // who answered (#260): a `ship:` transition only follows the owner's own answer
+      st.answeredBy = routed ? 'supervisor' : gate.by || 'user';
       if (step.choices) {
         output = { choice: answer, feedback, ...by };
         scope = { ...this.ctx, output, choice: answer, feedback };
@@ -1879,7 +1888,7 @@ class WorkflowRun extends EventEmitter {
       const act = async () => {
         if (precheck) await this.runCheck(precheck, step, 'precheck', scope, { failIfNot: true });
         // simulation: mockSequences.action_errors: { step: n } fails the first n actions/merges of that step
-        if (this.mock && (action || t.merge === 'local')) {
+        if (this.mock && (action || t.merge === 'local' || t.ship)) {
           const n = (this.mockActionCalls[step.id] = (this.mockActionCalls[step.id] || 0) + 1);
           if (n <= (this.mockSequences?.action_errors?.[step.id] || 0)) {
             throw new Error(`(simulated) ${t.merge === 'local' ? 'local merge: the branch conflicts with the local base in src/simulated.js' : `action failed: ${action}`}`);
@@ -1888,10 +1897,12 @@ class WorkflowRun extends EventEmitter {
         if (action) await this.runAction(action);
         // `merge: local`: the engine merges the run's branch into the local base (no push, no PR)
         if (t.merge === 'local') await this.mergeWorktreeLocally();
+        // `ship: { tag }` (#260): the local base is pushed and tagged, after the merge when there is one
+        if (t.ship) await this.shipRelease(step, t.ship, scope);
       };
       try {
-        // a merge (checked, or local) waits for the other runs' merges into the same repository
-        if (precheck || t.merge === 'local') {
+        // a merge (checked, or local) and a ship wait for the other runs' merges into the same repository
+        if (precheck || t.merge === 'local' || t.ship) {
           const key = this.mergeKey(precheck, scope);
           await mergeQueue.serialize(key, act);
           mergeQueue.notifyMerged({ key, runId: this.runId });
@@ -3773,8 +3784,32 @@ class WorkflowRun extends EventEmitter {
     this.emitEvent('approval.resolved', { approval_id: id, step_id: a.stepId, ...data, by, ...(answeredBy || {}), wait_ms: waitMs, ...(commit ? { commit } : {}), ...(text ? { feedback: text } : {}), ...(stored.length ? { attachments: stored } : {}) });
     if (text) this.ctx.feedback.push({ step: a.stepId, choice: typeof answer === 'boolean' ? String(answer) : answer, text, ts: new Date().toISOString(), ...(stored.length ? { images: stored } : {}) });
     this.setStatus(this.orchestrator, 'active');
-    a.resolve({ answer, feedback: text });
+    a.resolve({ answer, feedback: text, by });
     return true;
+  }
+
+  // The `ship: { tag, build? }` transition (#260, the release workflow's Ship): pushes the local base to
+  // origin, never forced, and tags that commit (shipRelease in src/releases.js). Only the owner's own
+  // answer ships: a gate answered by anything else (the supervisor, a timeout, --auto-approve) fails
+  // the transition and nothing is pushed. A simulation pushes nothing. A failure (origin moved, the
+  // tag exists elsewhere) goes to the transition's `on_error`, like a failed merge.
+  async shipRelease(step, ship, scope) {
+    const tag = render(String(ship.tag), scope).trim();
+    if (this.mock) {
+      this.emitEvent('action.executed', { command: `ship: ${tag}`, skipped: true, output: '[mock] release not pushed, not tagged' });
+      this.ctx.release = { tag, simulated: true };
+      return;
+    }
+    const by = this.ctx.steps[step.id]?.answeredBy;
+    if (by !== 'user') throw new Error(`ship: only the owner's own answer at the gate ships a release (${step.id} was answered by ${by || 'nobody'}); nothing was pushed.`);
+    const wt = this.worktree;
+    if (!wt) throw new Error('ship needs the run\'s git worktree (orchestrator.worktree on a git repository).');
+    const r = await shipRelease({ repo: wt.repo, base: wt.base, tag });
+    this.emitEvent('release.shipped', { tag: r.tag, base: r.base, commit: r.commit, pushed: r.pushed, commits: r.commits.length, issues: r.issues });
+    this.ctx.release = { tag: r.tag, base: r.base, commit: r.commit, pushed: r.pushed, issues: r.issues };
+    // `build:` an optional command run once the release is out (a template; empty: none)
+    const build = ship.build ? render(String(ship.build), scope).trim() : '';
+    if (build) await this.runAction(build);
   }
 
   // The `merge: local` transition (local workflows): fast-forwards the local base to the run's
@@ -3830,6 +3865,8 @@ ${stderr || stdout}`.slice(0, 1500)));
       duration_ms: Date.now() - this.startedAt, inputs: this.inputs, mock: this.mock, worktree: this.worktreeSummary(),
       // `merge: local`: what landed on the local base, not pushed (Backlog: "Local" column, Push)
       local_merge: this.ctx.local_merge ? { branch: this.ctx.local_merge.branch, base: this.ctx.local_merge.base, commit: this.ctx.local_merge.commit } : null,
+      // `ship:` (#260): the release the owner shipped ({ tag, base, commit, pushed, issues }; `simulated` in a simulation)
+      ...(this.ctx.release ? { release: this.ctx.release } : {}),
       tokens, cost_usd: +sessions.reduce((a, s) => a + s.cost_usd, 0).toFixed(6), cost_accounting: 'per_turn',
       context: this.contextSummary(),
       timing: this.timingSummary(),

@@ -39,8 +39,11 @@ module.exports = (ctx) => {
     const stages = roadmaps.issueStages(roadmap);
     const refresh = refreshBanner(project, live, local);
     const refreshed = new Set(refresh.refreshed);
+    // the issues a release shipped (#260): `released` = its version, shown on the card
+    const released = ctx.releasedIssues(data.projectId);
     const issues = backlog.linkRuns(data.issues, live, queue, local)
       .map((i) => (stages.has(i.number) ? { ...i, roadmap: stages.get(i.number) } : i))
+      .map((i) => (released.has(i.number) ? { ...i, released: released.get(i.number) } : i))
       .map((i) => (refreshed.has(i.number) && i.state === 'open' ? { ...i, refreshed: true } : i));
     return { ...data, queue, local, roadmap, refresh, autoPush: !!project?.autoPush, autoEpic: !!project?.autoEpic, issues };
   }

@@ -121,6 +121,8 @@ function layout(root) {
     localPreviews: path.join(root, 'local-previews'),
     // last issue sync of each project (see src/backlog.js)
     backlog: path.join(root, 'backlog'),
+    // each project's release history and next release notes (#260, src/releases.js), created on demand
+    releases: path.join(root, 'releases'),
     // the supervisor's reports on the sessions of a date range (Analytics), created on demand
     reports: path.join(root, 'reports'),
     // the app-wide Supervisor chat (src/supervisor-chat.js), created on demand

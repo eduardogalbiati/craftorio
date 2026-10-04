@@ -1533,6 +1533,22 @@
       </div>
     </div>
   </div>
+  <div id="cut-line-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="cut-line-title" data-testid="cut-line-modal">
+    <form id="cut-line-form" class="modal-card">
+      <h3 id="cut-line-title">Release here</h3>
+      <p class="muted small">A cut line after this stage. When the roadmap reaches it, a release run checks the whole unit and E2E suites, then you Ship or Hold; the stages after the line wait for it.</p>
+      <div class="field">
+        <label for="cut-line-name">Release name</label>
+        <input type="text" id="cut-line-name" placeholder="e.g. v1.4" autocomplete="off" />
+        <div class="hint">A name or a version: Ship tags the release with it.</div>
+      </div>
+      <p id="cut-line-error" class="error small"></p>
+      <div class="modal-actions">
+        <button type="button" id="btn-cut-line-cancel" class="btn ghost">Cancel</button>
+        <button type="submit" id="btn-cut-line-ok" class="btn primary">Add cut line</button>
+      </div>
+    </form>
+  </div>
   <div id="assign-modal" class="modal hidden">
     <form id="assign-form" class="modal-card">
       <h3 id="assign-title">Assign a workflow</h3>
