@@ -119,7 +119,11 @@ test('progress strip: each agent\'s robot is painted in its role colour (test wr
 test('progress strip of an AI Development run: every agent step\'s robot differs from its neighbour\'s', () => {
   const rl = loadRunList({ workflows: [AI_DEV_WF] });
   const steps = [['acceptance_tests', 'test_writer'], ['develop', 'developer'], ['code_review', 'reviewer'], ['build', 'builder'], ['evidence', 'evidence'], ['verify_change', 'verifier']];
-  for (const [step, agent] of steps) assert.equal(AI_DEV.steps.find((s) => s.id === step)?.agent, agent, `${step} is ${agent}'s step`);
+  // code_review is a fan-out (#151): its agents include the reviewer
+  for (const [step, agent] of steps) {
+    const s = AI_DEV.steps.find((x) => x.id === step);
+    assert.ok(s?.agent === agent || (s?.agents || []).includes(agent), `${step} is ${agent}'s step`);
+  }
   const arts = steps.map(([step, agent]) => normal(rl.progressAvatar(agentEntry(step, agent), doneChip, null, 'ai-development-local-hero.yaml').replace(/ style="[^"]*"| title="[^"]*"/g, '')));
   for (let i = 1; i < arts.length; i++) assert.notEqual(arts[i], arts[i - 1], `${steps[i - 1][0]} and ${steps[i][0]} have the same robot`);
 });

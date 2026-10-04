@@ -88,7 +88,9 @@ test('ai-development e2e: a UI issue gets its scenarios written first, run by th
   assert.deepEqual(transitions, [
     'acceptance_tests>red_check',
     'red_check>develop',
-    'develop>code_review',
+    // #151: the mock developer lists one screen: captured for the ui_reviewer in automatic mode too
+    'develop>developer_screenshots',
+    'developer_screenshots>code_review',
     'code_review>suite',
     'suite>e2e',
     'e2e>build',

@@ -30,7 +30,7 @@ function makeRepo(t) {
 
 // A mock run of the workflow. `mockSequences` shapes the mock's answers (suite.red_check: the red
 // check's runner result per visit); `onTurn(repo, n)` plays the developer's side effects before its n-th turn.
-async function runAiDev(t, { mockSequences = {}, onTurn } = {}) {
+async function runAiDev(t, { mockSequences = {}, onTurn, failAgent } = {}) {
   const repo = makeRepo(t);
   const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ai-dev-runs-'));
   t.after(() => fs.rmSync(runsDir, { recursive: true, force: true }));
@@ -43,6 +43,11 @@ async function runAiDev(t, { mockSequences = {}, onTurn } = {}) {
     // the reviewer approves the change on its first look, unless a test says otherwise
     mockSequences: { verdict: ['approved'], ...mockSequences },
   });
+  // failAgent: that agent's turn fails, as when its CLI crashes (the boundary of the mock provider)
+  if (failAgent) {
+    const turnOf = run.runAgentStep.bind(run);
+    run.runAgentStep = (step, st, name) => (name === failAgent ? Promise.reject(new Error(`${name} crashed (simulated)`)) : turnOf(step, st, name));
+  }
   const events = [];
   let turn = 0;
   run.on('event', (ev) => {
@@ -358,6 +363,46 @@ test('ai-development-local-hero (#151): the design-system skill holds the app\'s
   }
   for (const topic of [/colou?r/i, /spacing/i, /typograph/i, /align/i]) assert.match(skill, topic);
   assert.notEqual(skill, fsRead('skills', 'ui-conventions', 'SKILL.md'));
+});
+
+// #151 review round: the one UI round, then a code-only round; fan-out visits are told apart for stalls
+const UI_THEN_CODE = { suite: { red_check: ['fail'], suite: ['pass'] }, verdict: ['approved', 'changes_requested', 'approved'], ui_findings: true };
+
+test('ai-development-local-hero (#151): after the UI round, a code-only fix round does not show develop the UI findings again', { timeout: 120000 }, async (t) => {
+  const { transitions, finished, prompts } = await runAiDev(t, { mockSequences: UI_THEN_CODE });
+  assert.equal(finished.status, 'success', finished.error);
+  assert.equal(transitions.filter((x) => x === 'code_review>develop').length, 2, 'the UI round, then the code round');
+  assert.equal(prompts.length, 3);
+  assert.match(prompts[1], /\(simulated\) problem/, 'the UI round shows the blocking UI finding');
+  assert.match(prompts[2], /\(simulated\) description/, 'the code round shows the reviewer\'s finding');
+  assert.doesNotMatch(prompts[2], /\(simulated\) problem/, 'the UI findings are not sent a second time');
+});
+
+test('ai-development-local-hero (#151): code_review visits with different reviewer verdicts are not a same-answer stall', { timeout: 120000 }, async (t) => {
+  const { events, transitions, finished } = await runAiDev(t, { mockSequences: UI_THEN_CODE });
+  assert.equal(finished.status, 'success', finished.error);
+  assert.equal(transitions.filter((x) => x === 'developer_screenshots>code_review').length, 3, 'code_review is visited 3 times');
+  const stalls = events.filter((e) => e.type === 'log' && e.kind === 'stall' && e.stall === 'same_output' && e.step_id === 'code_review');
+  assert.deepEqual(stalls.map((e) => e.message), []);
+});
+
+test('ai-development-local-hero (#151): a failed ui_reviewer does not block the run: the reviewer\'s approval goes on to the suite', { timeout: 120000 }, async (t) => {
+  const { events, transitions, finished } = await runAiDev(t, { mockSequences: { suite: { red_check: ['fail'], suite: ['pass'] } }, failAgent: 'ui_reviewer' });
+  assert.equal(finished.status, 'success', finished.error);
+  assert.ok(transitions.includes('code_review>suite'), 'the run goes on after the review');
+  assert.ok(transitions.includes('suite>build'));
+  const review = events.find((e) => e.type === 'step.finished' && e.step_id === 'code_review');
+  assert.deepEqual(review.output.failed.map((f) => f.agent), ['ui_reviewer']);
+  assert.deepEqual(review.output.succeeded, ['reviewer']);
+});
+
+test('ai-development-local-hero (#151): a failed reviewer fails code_review even though the ui_reviewer answered', { timeout: 120000 }, async (t) => {
+  const { events, transitions, finished } = await runAiDev(t, { mockSequences: { suite: { red_check: ['fail'], suite: ['pass'] } }, failAgent: 'reviewer' });
+  assert.ok(!transitions.some((x) => /^code_review>(suite|test|e2e|build)$/.test(x)), 'no approval without the code reviewer');
+  const reviews = events.filter((e) => e.type === 'step.finished' && e.step_id === 'code_review');
+  assert.ok(reviews.length && reviews.every((e) => e.error === true), 'code_review only finishes as failed');
+  assert.ok(events.some((e) => /required: reviewer/.test(String(e.message || e.error || ''))), 'the failure names the required reviewer');
+  assert.notEqual(finished?.status, 'success');
 });
 
 test('ai-development-local-hero (#151): the docs name the ui_reviewer, the code_review fan-out and the design-system skill', () => {
