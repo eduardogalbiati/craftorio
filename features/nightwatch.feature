@@ -30,3 +30,49 @@ Feature: Night watch
     When I open "Home" in the sidebar
     And I open "Night watch" in the sidebar
     Then no permission is ticked
+
+  # #278: Self-healing (Settings › Execution › Oracle, off by default) keeps the Oracle watching with
+  # no end time; it saves like the rest of the Execution tab. The demo workspace can start the
+  # Oracle (simulated answers), so the row is enabled here.
+  @issue-278
+  Scenario: With Self-healing on, the Night watch shows it in place of an end time
+    Given the app is open
+    When I open "Settings" in the sidebar
+    And I open the "Execution" settings tab
+    Then Self-healing is off
+    When I turn Self-healing on
+    And I reload the app
+    And I open "Settings" in the sidebar
+    And I open the "Execution" settings tab
+    Then Self-healing is on
+    When I open "Night watch" in the sidebar
+    Then the Night watch says "Self-healing is on"
+    And the Night watch shows no end time
+
+  @issue-278
+  Scenario: Self-healing's permissions link opens the Night watch checklist with the never-allowed items locked
+    Given the app is open
+    When I open "Settings" in the sidebar
+    And I open the "Execution" settings tab
+    And I open what Self-healing may do alone
+    Then the permissions checklist is shown
+    And the permission "Retry a failed roadmap item" is ticked
+    And the never-allowed item "Answer a human gate" is shown locked
+    And the never-allowed item "Push" is shown locked
+    And the never-allowed item "Close issues" is shown locked
+    And the never-allowed item "Delete data" is shown locked
+
+  @issue-278
+  Scenario: Turning Self-healing off ends the watch at once
+    Given the app is open
+    When I open "Settings" in the sidebar
+    And I open the "Execution" settings tab
+    And I turn Self-healing on
+    And I open "Night watch" in the sidebar
+    Then the Night watch says "Self-healing is on"
+    When I open "Settings" in the sidebar
+    And I open the "Execution" settings tab
+    And I turn Self-healing off
+    And I open "Night watch" in the sidebar
+    Then the Night watch is off
+    And the Night watch does not say "Self-healing is on"
