@@ -42,7 +42,7 @@ const FIXTURE = path.join(__dirname, 'fixtures', 'memory-guard-suite.yaml');
 // A fake guard: records what the engine asks; `kills[step]` = events fired (synchronously) in the
 // first watch of that step; `incidents(call)` = what the n-th incidentsBetween call returns;
 // `low` = waitForMemory reports a low-memory wait through onWait before resolving.
-function fakeGuard({ kills = {}, incidents = () => [], low = false } = {}) {
+function fakeGuard({ kills = {}, incidents = () => [], low = false, waitedMs = 0 } = {}) {
   const g = {
     watches: [], stopped: 0, waits: [], incidentCalls: [], order: [],
     watch(opts) {
@@ -56,7 +56,7 @@ function fakeGuard({ kills = {}, incidents = () => [], low = false } = {}) {
       g.waits.push(opts);
       g.order.push('wait');
       if (low) opts.onWait?.({ freeBytes: 1.5 * GB, totalBytes: 32 * GB, floorBytes: 3.2 * GB });
-      return { recovered: true, waitedMs: 0 };
+      return { recovered: true, waitedMs };
     },
     incidentsBetween(start, end) {
       g.incidentCalls.push([start, end]);
@@ -170,6 +170,36 @@ test('memory guard (#276): a suite waits for memory before it starts (at most 10
   assert.ok(i >= 0, 'a log names the free memory and the floor');
   const suiteDone = events.findIndex((e) => e.type === 'step.finished' && e.step_id === 'suite');
   assert.ok(i < suiteDone, 'logged before the suite ran');
+});
+
+test('memory guard (#276): a hold before a suite is recorded as memory.hold with its length and numbers; the Night watch counts a 6-minute one', { timeout: 60000 }, async (t) => {
+  const guard = fakeGuard({ low: true, waitedMs: 6 * 60e3 });
+  const { events, finished } = await runFixture(t, { memoryGuard: guard, mockSequences: { suite: { suite: ['pass'] } } });
+  assert.equal(finished.status, 'success', finished.error);
+  const holds = events.filter((e) => e.type === 'memory.hold');
+  assert.equal(holds.length, 1);
+  assert.equal(holds[0].step_id, 'suite');
+  assert.equal(holds[0].waited_ms, 360000);
+  assert.equal(holds[0].free_bytes, 1.5 * GB);
+  assert.equal(holds[0].floor_bytes, 3.2 * GB);
+  const { incidentOf } = require('../src/night-watch');
+  assert.equal(incidentOf(holds[0]), 'memory');
+});
+
+test('memory guard (#276): a suite with enough free memory records no hold', { timeout: 60000 }, async (t) => {
+  const guard = fakeGuard();
+  const { events } = await runFixture(t, { memoryGuard: guard, mockSequences: { suite: { suite: ['pass'] } } });
+  assert.ok(guard.waits.length >= 1, 'the suite still asked for memory');
+  assert.equal(events.filter((e) => e.type === 'memory.hold').length, 0);
+});
+
+test('memory guard (#276): the engine\'s process.killed event is a memory incident for the Night watch', { timeout: 60000 }, async (t) => {
+  const guard = fakeGuard({ kills: { suite: [{ pid: 777, commandLine: 'node --test test/huge.test.js', bytes: 5 * GB, limitBytes: 4 * GB }] } });
+  const { events } = await runFixture(t, { memoryGuard: guard, mockSequences: { suite: { suite: ['pass'] } } });
+  const killed = events.find((e) => e.type === 'process.killed');
+  assert.ok(killed);
+  const { incidentOf } = require('../src/night-watch');
+  assert.equal(incidentOf(killed), 'memory');
 });
 
 // ---------------------------------------------------------------------------

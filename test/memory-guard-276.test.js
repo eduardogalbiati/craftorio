@@ -157,11 +157,25 @@ test('memory guard (#276): a stopped watch stops nothing more; nothing is sample
   } finally { guard.close(); }
 });
 
+test('memory guard (#276): protectChildren spares the root\'s direct children (the CLI under a .cmd shim) and still stops deeper descendants', async () => {
+  const { guard, kills } = guardWith(load);
+  try {
+    const killed = [];
+    const reported = [];
+    guard.watch({ rootPid: 100, protectChildren: true, step: 'work', session: 's1', onKill: (e) => killed.push(e), onReport: (e) => reported.push(e) });
+    await guard.tick();
+    assert.deepEqual(kills, [103], 'only the grandchild over the limit is stopped');
+    assert.deepEqual(killed.map((e) => e.pid), [103]);
+    await guard.tick();
+    assert.deepEqual(reported.map((e) => e.pid).sort((a, b) => a - b), [100, 101, 104], 'the root and its children over the limit are reported once each');
+  } finally { guard.close(); }
+});
+
 test('memory guard (#276): a stop is an incident inside its time window, not outside', async () => {
   let clock = 1000;
   const { guard } = guardWith(load, { now: () => clock });
   try {
-    guard.watch({ rootPid: 100, step: 'suite', session: null, onKill: () => {} });
+    guard.watch({ rootPid: 100, protectedPids: [104], step: 'suite', session: null, onKill: () => {} });
     await guard.tick();
     clock = 5000;
     const inside = guard.incidentsBetween(900, 1100);

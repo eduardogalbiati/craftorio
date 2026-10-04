@@ -92,6 +92,19 @@ test('captureScreenshots: exit 2 (an invalid option) fails the modified side and
   assert.match(out.reason, /every capture failed/);
 });
 
+test('captureScreenshots: each capture\'s process is handed to onSpawn, so the memory guard watches it (#276)', async (t) => {
+  let next = 4321;
+  const run = async (opts) => {
+    opts.onSpawn?.(next++);
+    const arg = (name) => opts.args[opts.args.indexOf(name) + 1];
+    fs.writeFileSync(path.join(arg('--out'), `${arg('--name')}.${arg('--side')}.png`), 'png');
+    return { code: 0, output: '', timedOut: false };
+  };
+  const spawned = [];
+  await captureScreenshots(captureOpts(t, { run, onSpawn: (pid) => spawned.push(pid) }));
+  assert.deepEqual(spawned, [4321, 4322], 'the modified and the original captures');
+});
+
 test('captureScreenshots: a timed out command is reported with the timeout, in seconds', async (t) => {
   const run = async () => { await new Promise((r) => setTimeout(r, 1)); return { code: null, output: '', timedOut: true }; };
   const out = await captureScreenshots(captureOpts(t, { run, base: null, timeoutMs: 5000 }));

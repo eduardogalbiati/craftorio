@@ -95,6 +95,39 @@ test('the run list reads the recorded multi-result turn at 15.123904 and never r
   assert.equal(fs.readFileSync(path.join(dir, 'events.jsonl'), 'utf8'), eventsText);
 });
 
+// A turn whose first attempt ended on an error result (cost X, counted by its session.attempt_stopped)
+// and whose retry succeeded with a smaller cost Y: the retry costs Y, the run X + Y (X never twice).
+function stoppedThenRetried(summaryExtra = {}) {
+  const X = 4.8;
+  const Y = 1.3;
+  const events = [
+    { ts: at(0), type: 'workflow.started', run_id: 'r-277', workflow: 'AI Development', file: 'ai-development.yaml', mock: false, inputs: { task: 'Task' }, cost_accounting: 'per_turn' },
+    { ts: at(0), type: 'session.opened', session_id: 's1', session: snap(0, 0, zero) },
+    { ts: at(1), type: 'step.started', step_id: 'implement', visit: 1, step_type: 'agent', agent: 'developer' },
+    { ts: at(2), type: 'session.message_sent', session_id: 's1', turn: 1, step_id: 'implement', prompt: 'do it' },
+    usageItem(at(60), 1, big, X),
+    { ts: at(60), type: 'session.attempt_stopped', session_id: 's1', turn: 1, attempt: 1, step_id: 'implement', cost_usd: X, estimated: false, session: snap(0, X, big) },
+    usageItem(at(120), 1, small, Y),
+    { ts: at(120), type: 'session.message_received', session_id: 's1', turn: 1, step_id: 'implement', text: 'done', usage: small, cost_usd: Y,
+      duration_ms: 60e3, active_ms: 60e3, waiting_ms: 0, stalled_ms: 0, session: snap(1, X + Y, small) },
+    { ts: at(121), type: 'step.finished', step_id: 'implement', visit: 1, duration_ms: 120e3, output: {} },
+  ];
+  const summary = {
+    run_id: 'r-277', workflow: 'AI Development', status: 'success', mock: false, started_at: at(0), finished_at: at(121), duration_ms: 121e3,
+    inputs: { task: 'Task' }, tokens: small, cost_usd: X + Y, cost_accounting: 'per_turn', sessions: [{ ...snap(1, X + Y, small), status: 'success' }], ...summaryExtra,
+  };
+  events.push({ ts: at(121), type: 'workflow.finished', status: 'success', error: null, summary });
+  return { events, summary, X, Y };
+}
+
+for (const [label, extra] of [['a run recorded before the fix', {}], ['a run recorded with the fix (turn_cost max_result)', { turn_cost: 'max_result' }]]) {
+  test(`${label}: a retry after a stopped attempt costs its own result, and the stopped attempt is counted once`, () => {
+    const { events, summary, X, Y } = stoppedThenRetried(extra);
+    near(runCosts(events, summary).turnCost(receivedOf(events, 1)), Y, 'the retry\'s cost');
+    near(runFigures({ summary, events }).costUsd, X + Y, 'the run\'s cost');
+  });
+}
+
 test('recorded per-turn costs that match their usage items are read as recorded; a turn never takes another turn\'s usage item', () => {
   const { events, summary } = recordedRun([['plan', [15.123904], 15.123904], ['implement', [2.5], 2.5]]);
   const costs = runCosts(events, summary);

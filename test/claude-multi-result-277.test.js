@@ -5,8 +5,8 @@
 // their results). Its tokens cover all the turn's result events, not only the last one's.
 // Seam: parseClaude(ev, emit, acc) fed the stream-json events directly, a fresh acc per turn (as
 // runCli gives it), a distinct CLI session id per test (claudeTotals is module-level).
-// Not tested here: the raw `result` lines kept in the run (no clean seam in the parser; the
-// developer picks the event or the logs/ file).
+// The raw `result` events of a turn with more than one are streamed as `raw` items (the engine records
+// them as session.stream), so the token rule can be checked against a real stream.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const crypto = require('crypto');
@@ -92,4 +92,20 @@ test('a turn with a single result event keeps its cost and usage as reported', (
   const { acc } = turn([init(sid), result(sid, 1.75, apiUsage(12, 3000, 340000, 41000))]);
   assert.equal(acc.costUsd, 1.75);
   assert.deepEqual(acc.usage, { input: 12, output: 3000, cache_read: 340000, cache_write: 41000, reasoning: 0 });
+});
+
+test('the raw result events of a turn with several are kept, each once and in order', () => {
+  const sid = newSid();
+  const r1 = result(sid, 15.123904, apiUsage(102, 84376, 7714400, 198504));
+  const r2 = result(sid, 15.123904, apiUsage(22, 18805, 2198766, 21202));
+  const r3 = result(sid, 15.2, apiUsage(7, 900, 1000, 0));
+  const { items } = turn([init(sid), r1, r2, r3]);
+  const raw = items.filter((i) => i.kind === 'raw').map((i) => i.event);
+  assert.deepEqual(raw, [r1, r2, r3]);
+});
+
+test('a turn with a single result event keeps no raw result', () => {
+  const sid = newSid();
+  const { items } = turn([init(sid), result(sid, 1.75)]);
+  assert.equal(items.filter((i) => i.kind === 'raw').length, 0);
 });
