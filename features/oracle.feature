@@ -69,3 +69,58 @@ Feature: The Oracle
     When I ask the Oracle "Where do my tokens go?"
     Then the Oracle's status shows the session "resumed"
     And the Oracle's status shows the model "Opus 5.5"
+
+  # #184: on first start the Oracle's memory is seeded with the owner's standing decisions.
+  # Assumes data-testid="oracle-memory" (new) on the Oracle's memory panel.
+  @issue-184
+  Scenario: A fresh workspace's Oracle memory holds the owner's standing decisions
+    Given the app is open
+    When I open "Backlog" in the sidebar
+    And I open the Oracle
+    And I open the Oracle's "Memory" form
+    Then the Oracle's memory mentions "owner's language"
+    And the Oracle's memory mentions "English"
+    And the Oracle's memory mentions "UI criteria"
+    And the Oracle's memory mentions "test writer"
+    And the Oracle's memory mentions "one app per workspace"
+    And the Oracle's memory mentions "cost money"
+
+  # #184: an edit is saved and the seed never writes over it
+  @issue-184
+  Scenario: The owner's edit of the Oracle memory stays after reopening it
+    Given the app is open
+    When I open "Backlog" in the sidebar
+    And I open the Oracle
+    And I open the Oracle's "Memory" form
+    And I add the standing decision "Night watch never merges a pull request" to the Oracle's memory
+    And I save the Oracle's memory
+    And I reload the app
+    And I open "Backlog" in the sidebar
+    And I open the Oracle
+    And I open the Oracle's "Memory" form
+    Then the Oracle's memory mentions "Night watch never merges a pull request"
+    And the Oracle's memory mentions "English"
+
+  # #184: "Import" takes standing decisions from a pasted text (e.g. a Claude Code memory index).
+  # Assumes the memory form has an "Import" button that shows data-testid="oracle-memory-import" (new):
+  # a text box for the pasted text and its own "Import" button, which adds the decisions to the draft.
+  @issue-184
+  Scenario: The owner imports standing decisions from a pasted memory index
+    Given the app is open
+    When I open "Backlog" in the sidebar
+    And I open the Oracle
+    And I open the Oracle's "Memory" form
+    And I import into the Oracle's memory the pasted text:
+      """
+      # Memory index
+      - [Release cadence](release-cadence.md): ship a release every second Friday
+      - [Screenshots](screenshots.md): every UI pull request carries a before and after screenshot
+      """
+    And I save the Oracle's memory
+    And I reload the app
+    And I open "Backlog" in the sidebar
+    And I open the Oracle
+    And I open the Oracle's "Memory" form
+    Then the Oracle's memory mentions "ship a release every second Friday"
+    And the Oracle's memory mentions "before and after screenshot"
+    And the Oracle's memory mentions "English"

@@ -2,6 +2,8 @@
 // elsewhere) in a narrow window: the app never shifts sideways, the panel's header stays readable.
 // #244: a routine wake-up is a code-only notice, the daily budget counts each turn's own cost (not
 // Claude's cumulative session cost), the status shows the model and a fresh or resumed session.
+// #184: the Oracle's memory is seeded with the owner's standing decisions, edited and saved by the
+// owner, and imported from a pasted text (e.g. a Claude Code memory index).
 // Locators are roles and data-testid only (skills/ui-conventions).
 
 const fs = require('fs');
@@ -139,4 +141,55 @@ Then('the Oracle\'s status shows the model {string}', async ({ e2e }, model) => 
 // "fresh" (the last turn started a new session) or "resumed" (it went on with the session)
 Then('the Oracle\'s status shows the session {string}', async ({ e2e }, mode) => {
   await expect(oraclePanel(e2e.window).getByTestId('oracle-session-mode')).toContainText(mode, { timeout: 30000 });
+});
+
+// ---- #184 ------------------------------------------------------------------------------------------
+
+// the memory panel (data-testid="oracle-memory"): its saved view, or its form with the "Memory" text box
+const memoryPanel = (page) => oraclePanel(page).getByTestId('oracle-memory');
+const memoryBox = (page) => memoryPanel(page).getByRole('textbox', { name: 'Memory', exact: true });
+
+// what the memory shows, saved view or form: its text plus the values of its text boxes
+const memoryText = (page) => memoryPanel(page).evaluate((el) => [el.innerText, ...[...el.querySelectorAll('textarea')].map((t) => t.value)].join('\n'));
+
+// the form in edit mode (the saved view offers "Edit")
+async function editMemory(page) {
+  const edit = memoryPanel(page).getByRole('button', { name: 'Edit', exact: true });
+  if (await edit.isVisible()) await edit.click();
+  await expect(memoryBox(page)).toBeEditable();
+}
+
+Then('the Oracle\'s memory mentions {string}', async ({ e2e }, text) => {
+  await expect(memoryPanel(e2e.window)).toBeVisible();
+  await expect.poll(() => memoryText(e2e.window).then((t) => t.toLowerCase())).toContain(text.toLowerCase());
+});
+
+When('I add the standing decision {string} to the Oracle\'s memory', async ({ e2e }, decision) => {
+  const page = e2e.window;
+  await editMemory(page);
+  const box = memoryBox(page);
+  // the seeded decisions are loaded before the edit
+  await expect(box).not.toHaveValue('');
+  const current = await box.inputValue();
+  await box.fill(`${current.replace(/\s+$/, '')}\n- ${decision}\n`);
+});
+
+// "Import" in the memory form shows a box for the pasted text (data-testid="oracle-memory-import") with
+// its own "Import" button; the decisions it finds are added to the memory's draft, saved with Save
+When('I import into the Oracle\'s memory the pasted text:', async ({ e2e }, pasted) => {
+  const page = e2e.window;
+  await editMemory(page);
+  await memoryPanel(page).getByRole('button', { name: 'Import', exact: true }).first().click();
+  const importer = memoryPanel(page).getByTestId('oracle-memory-import');
+  await expect(importer).toBeVisible();
+  await importer.getByRole('textbox').fill(pasted);
+  await importer.getByRole('button', { name: 'Import', exact: true }).click();
+  await expect(importer).toBeHidden();
+});
+
+When('I save the Oracle\'s memory', async ({ e2e }) => {
+  const panel = memoryPanel(e2e.window);
+  await panel.getByRole('button', { name: 'Save', exact: true }).click();
+  // saved: the panel goes back to its view, which offers "Edit"
+  await expect(panel.getByRole('button', { name: 'Edit', exact: true })).toBeVisible();
 });
