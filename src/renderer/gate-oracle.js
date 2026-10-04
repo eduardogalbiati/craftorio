@@ -107,7 +107,9 @@
   root.GateOracle = api$;
 
   // ---- the browser side: the gate's data, opening the Oracle, Use this text, repainting ----------
-  const cardOf = (approvalId) => document.querySelector(`[data-gate-oracle="${CSS.escape(approvalId)}"]`)?.closest('.run-gate, .duo-ask') || null;
+  // the gate's card in a visible view: a hidden screen (Details behind Chat) keeps its old cards
+  const cardOf = (approvalId) => [...document.querySelectorAll(`[data-gate-oracle="${CSS.escape(approvalId)}"]`)]
+    .find((b) => !b.closest('.view.hidden, .hidden'))?.closest('.run-gate, .duo-ask') || null;
 
   function gateData(runId, approvalId, stepId) {
     const entry = state.runs.get(runId) || {};
@@ -138,13 +140,15 @@
   // "Use this text" from an Oracle answer: the gate's card (opening its run when it is not in view)
   function useText(ref, text) {
     const approvalId = String(ref || '').replace(/^gate:/, '');
-    let card = cardOf(approvalId);
-    if (!card) {
-      const runId = [...state.runs.entries()].find(([, v]) => v.approvals?.has?.(approvalId))?.[0];
-      if (runId) selectRun(runId);
-      card = cardOf(approvalId);
-    }
-    if (!fillGateFeedback(card, text)) showToast('The gate has no feedback box to fill', 'It was answered, or it takes no text: copy the text instead.');
+    const fill = () => {
+      if (!fillGateFeedback(cardOf(approvalId), text)) showToast('The gate has no feedback box to fill', 'It was answered, or it takes no text: copy the text instead.');
+    };
+    if (cardOf(approvalId)) { fill(); return; }
+    const runId = [...state.runs.entries()].find(([, v]) => v.approvals?.has?.(approvalId))?.[0];
+    if (!runId) { fill(); return; }
+    // selectRun only schedules the render (a frame): fill the box in the frame after it
+    selectRun(runId);
+    requestAnimationFrame(() => requestAnimationFrame(fill));
   }
 
   /** Repaints every gate button (the Oracle started or finished answering). */

@@ -119,14 +119,15 @@
     api.markOracleRead({ at: last.ts }).catch(() => {});
   }
 
-  async function ask(question) {
+  // queued: the context the question was asked with (a queued gate question keeps its gate)
+  async function ask(question, queued) {
     const q = String(question ?? or.drafts.text).trim();
-    // #183: a question asked while another is answered waits in line
-    if (or.pending) { if (q) { or.queue.push(q); render(); } return; }
-    const images = or.drafts.images;
+    // #183: a question asked while another is answered waits in line, with its context
+    if (or.pending) { if (q) { or.queue.push({ q, context: queued ? queued.context : or.context }); render(); } return; }
+    const images = queued ? [] : or.drafts.images;
     const v = view();
     if ((!q && !images.length) || !v.chipsEnabled) return;
-    const ctx = or.context;
+    const ctx = queued ? queued.context : or.context;
     Object.assign(or, { pending: q || `(${images.length} image${images.length > 1 ? 's' : ''})`, pendingRef: ctx?.ref || '', error: null, pasteError: null, live: window.LiveTurn.create({ agent: 'Oracle' }) });
     render();
     // #180: the timer and "Still working" move even when no item arrives
@@ -138,7 +139,7 @@
       or.service = out.state;
       // a daily budget shows as the paused state; a monthly one as an error
       if (out.refused && out.refused.reason !== 'daily-budget') or.error = out.refused.text;
-      if (!out.refused) {
+      if (!out.refused && !queued) {
         if (or.drafts.text.trim() === q) setDraftText('');
         or.drafts.images = [];
       }
@@ -148,8 +149,8 @@
       clearInterval(tick);
       Object.assign(or, { pending: null, pendingRef: null, live: null });
       render();
-      const next = or.queue.shift();
-      if (next) ask(next);
+      // paused (daily budget) or unavailable: the queue stays on screen, sent after the next question
+      if (or.queue.length && view().chipsEnabled) { const next = or.queue.shift(); ask(next.q, next); }
     }
   }
 
@@ -393,7 +394,7 @@
       + messagesHtml()
       + (or.pending ? `<div class="sup-wmsg user"><div class="sup-wmsg-meta">You</div><div class="oracle-text">${esc(or.pending)}</div>${or.drafts.images.length ? `<div class="oracle-thumbs">${or.drafts.images.map((i) => `<span class="oracle-thumb"><img src="${esc(i.dataUrl)}" alt="" /></span>`).join('')}</div>` : ''}</div>` : '')
       + (or.live ? `<div class="oracle-live">${window.LiveTurn.html(or.live)}</div>` : v.state === 'answering' ? '<div class="sup-loading"><span class="spinner"></span><span>The Oracle is reading…</span></div>' : '')
-      + or.queue.map((q) => `<div class="sup-wmsg user oracle-queued"><div class="sup-wmsg-meta">You · <span class="badge">queued</span></div><div class="oracle-text">${esc(q)}</div></div>`).join('')
+      + or.queue.map(({ q, context }) => `<div class="sup-wmsg user oracle-queued"><div class="sup-wmsg-meta">You · <span class="badge">queued</span>${context ? ` · <span class="muted" title="${esc(context.label)}">${esc(context.label)}</span>` : ''}</div><div class="oracle-text">${esc(q)}</div></div>`).join('')
       + (or.error ? `<div class="sup-wmsg system error"><div class="sup-wmsg-meta">now</div><div>${esc(or.error)}</div></div>` : '');
   }
   function noticeHtml(v) {
