@@ -100,6 +100,26 @@ function killTree(child) {
 // Tokens in one request's context window (Anthropic-style usage: new + cached input).
 const contextTokens = (u) => (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0);
 
+// #233: on a resumed session (`--resume`), the `result` event's `total_cost_usd` is the whole CLI
+// session's cost so far (its `usage` is the turn's own): the turn costs the difference with the
+// session's previous total, kept here per CLI session id. A session resumed after the app restarted
+// has no previous total here: its first turn counts the whole session again.
+const claudeTotals = new Map();
+
+// The tokens of a turn's distinct model calls (Claude Code repeats a message's usage on each of its
+// content blocks): what a turn killed before its `result` still paid for, priced by the engine.
+function addStreamUsage(acc, id, u) {
+  acc.seenCalls ??= new Set();
+  if (id && acc.seenCalls.has(id)) return;
+  if (id) acc.seenCalls.add(id);
+  acc.modelCalls = (acc.modelCalls || 0) + 1;
+  acc.streamUsage ??= emptyUsage();
+  acc.streamUsage.input += u.input_tokens || 0;
+  acc.streamUsage.output += u.output_tokens || 0;
+  acc.streamUsage.cache_read += u.cache_read_input_tokens || 0;
+  acc.streamUsage.cache_write += u.cache_creation_input_tokens || 0;
+}
+
 function parseClaude(ev, emit, acc) {
   switch (ev.type) {
     case 'system':
@@ -111,6 +131,8 @@ function parseClaude(ev, emit, acc) {
     case 'assistant':
       // each model request's context window (the main conversation's, not a sub-agent's)
       if (ev.message?.usage && !ev.parent_tool_use_id) emit({ kind: 'context', tokens: contextTokens(ev.message.usage) });
+      // a sub-agent's model calls are paid too
+      if (ev.message?.usage) addStreamUsage(acc, ev.message.id, ev.message.usage);
       for (const b of ev.message?.content || []) {
         // Claude Code may omit the thinking content (it only sends the signature)
         if (b.type === 'thinking') { if (b.thinking) emit({ kind: 'thinking', text: b.thinking }); }
@@ -130,7 +152,6 @@ function parseClaude(ev, emit, acc) {
     case 'result': {
       const u = ev.usage || {};
       acc.text = ev.result ?? acc.lastText ?? '';
-      acc.costUsd = ev.total_cost_usd ?? null;
       acc.usage = {
         input: u.input_tokens || 0,
         output: u.output_tokens || 0,
@@ -139,6 +160,14 @@ function parseClaude(ev, emit, acc) {
         reasoning: 0, // the Anthropic API counts thinking inside output_tokens
       };
       if (ev.session_id) acc.providerSessionId = ev.session_id;
+      acc.costUsd = null;
+      if (ev.total_cost_usd != null) {
+        const sid = acc.providerSessionId;
+        const before = (sid && claudeTotals.get(sid)) || 0;
+        // a total below the previous one is a new count (a forked session): taken whole
+        acc.costUsd = ev.total_cost_usd >= before ? +(ev.total_cost_usd - before).toFixed(6) : ev.total_cost_usd;
+        if (sid) claudeTotals.set(sid, ev.total_cost_usd);
+      }
       if (ev.is_error) acc.error = `Claude returned an error: ${ev.subtype} ${ev.result || ''}`;
       emit({ kind: 'usage', usage: acc.usage, costUsd: acc.costUsd });
       break;
@@ -171,6 +200,8 @@ function parseCodex(ev, emit, acc) {
       }
       break;
     }
+    // #233: per turn (summed here over the turn's `turn.completed` events); Codex reports no cost,
+    // the engine prices its tokens. Not streamed per model call: a killed Codex turn leaves nothing.
     case 'turn.completed': {
       const u = ev.usage || {};
       acc.usage = acc.usage || emptyUsage();
@@ -226,6 +257,8 @@ function parseGrok(ev, emit, acc) {
         emit({ kind: 'tool_result', id: ev.toolCallId, output: String(out).slice(0, 4000), is_error: ev.status === 'failed' });
       }
       break;
+    // #233: `total_cost_usd` taken as the turn's own: not checked against a resumed real session
+    // yet (no recorded multi-turn Grok session); if it proves cumulative, do as parseClaude does.
     case 'end': {
       const u = ev.usage || {};
       acc.text = acc.segment ?? acc.lastText ?? '';
@@ -432,6 +465,8 @@ function runCli(opts, parser) {
     const finish = (err, val) => {
       if (done) return;
       done = true;
+      // #233: a turn that ends without its result (timeout, cancel, crash) still paid for its model calls
+      if (err) err.partial = { usage: acc.usage || acc.streamUsage || null, costUsd: acc.costUsd, modelCalls: acc.modelCalls || 0 };
       clearTimeout(timer);
       if (promptFile) fs.rm(promptFile, { force: true }, () => {});
       signal?.removeEventListener('abort', onAbort);
@@ -655,9 +690,11 @@ async function runMock({ providerSessionId, model, hint, signal, onItem, attempt
     }
   }
   // sequences.timeouts: { stepId: n }: the first n attempts of each of that step's turns are killed
-  // at their timeout after their tool call (the engine retries with the attempt's summary)
+  // at their timeout after their tool call (the engine retries with the attempt's summary); the two
+  // model calls it made are reported as runCli does (#233: the engine prices them)
   if (hint?.stepId != null && attempt <= (hint?.sequences?.timeouts?.[hint.stepId] || 0)) {
-    throw new Error(`Timed out after ${Math.round((timeoutMs || 0) / 1000)}s`);
+    const usage = { input: 1500, output: 400, cache_read: 2 * start + 10000, cache_write: 0, reasoning: 0 };
+    throw Object.assign(new Error(`Timed out after ${Math.round((timeoutMs || 0) / 1000)}s`), { partial: { usage, costUsd: null, modelCalls: 2 } });
   }
   await d(800);
 
@@ -729,6 +766,7 @@ module.exports = {
   isRetryable,
   isToolTimeout,
   killTree,
+  parseClaude,
   parseGrok,
   refreshWindowsPath,
   resolveCommand,

@@ -558,7 +558,75 @@ function demoRoadmapRuns(ws, projectId) {
   write(failed, [...f.lines, ev(f.end, 'workflow.finished', { status: 'failed', error: 'The suite failed: 3 tests in test/report.test.js' })], {
     status: 'failed', error: 'The suite failed: 3 tests in test/report.test.js', started_at: new Date(now - 190 * min).toISOString(), finished_at: new Date(f.end).toISOString(), duration_ms: f.end - (now - 190 * min), progress: ft,
   });
+  demoCostRuns(ws, projectId);
   return { running, waiting, failed, better, worse };
+}
+
+// #233: two runs whose develop attempt was stopped at its timeout: `-run00233` with its estimated
+// cost (priced from the attempt's model calls), `-old00233` recorded before costs were estimated
+// (its cost "not recorded"). Days back, so tonight's roadmap runs stay as they are.
+function demoCostRuns(ws, projectId) {
+  const min = 6e4;
+  const workflow = 'ai-development-local-hero';
+  const file = `${workflow}.yaml`;
+  const tokens = (input, output, cacheRead) => ({ input, output, cache_read: cacheRead, cache_write: 0, reasoning: 0 });
+  const snap = (id, agent, model, extra) => ({
+    id, agent, provider: 'claude', model, effort: null, parent_id: 'orchestrator', step_id: null, turns: 0, tokens: tokens(0, 0, 0), cost_usd: 0,
+    status: 'idle', provider_session_id: `${id}-cli`, cwd: null, mode: 'persistent', ...extra,
+  });
+  const write = (runId, start, list, summary) => {
+    const dir = path.join(ws.runs, runId);
+    fs.mkdirSync(dir, { recursive: true });
+    const at = (m) => new Date(start + m * min).toISOString();
+    fs.writeFileSync(path.join(dir, 'events.jsonl'), `${list.map(([m, type, extra]) => JSON.stringify({ ts: at(m), type, ...extra })).join('\n')}\n`);
+    fs.writeFileSync(path.join(dir, 'summary.json'), JSON.stringify({
+      run_id: runId, workflow, project_id: projectId, mock: false, inputs: { task: 'Demo run with a timed-out attempt' }, started_at: at(0), ...summary,
+    }, null, 2));
+  };
+  const day = (n) => new Date(Date.now() - n * 864e5).toISOString().slice(0, 10).replace(/-/g, '');
+
+  // estimated: attempt 1 killed at 30 min after 212 model calls, attempt 2 answered
+  const start = Date.now() - 4 * 864e5;
+  const dev = (extra) => snap('s1', 'developer', 'claude-opus-5-5', extra);
+  const rev = (extra) => snap('s2', 'reviewer', 'claude-sonnet-5-5', extra);
+  const devDone = dev({ turns: 1, tokens: tokens(9200, 41000, 2100000), cost_usd: 4.06, estimated_cost_usd: 1.84, status: 'idle', step_id: 'develop' });
+  const revDone = rev({ turns: 1, tokens: tokens(2100, 3800, 240000), cost_usd: 0.52, status: 'idle', step_id: 'code_review' });
+  write(`${day(4)}-201500-run00233`, start, [
+    [0, 'workflow.started', { workflow, file, project_id: projectId, mock: false, inputs: { task: 'Demo run with a timed-out attempt' }, cost_accounting: 'per_turn' }],
+    [0, 'step.started', { step_id: 'develop', visit: 1, step_type: 'agent', agent: 'developer' }],
+    [0, 'session.opened', { session_id: 's1', session: dev() }],
+    [0, 'session.message_sent', { session_id: 's1', turn: 1, step_id: 'develop', prompt: 'Implement the task', timeout_ms: 1800e3 }],
+    [30, 'session.attempt_stopped', { session_id: 's1', turn: 1, step_id: 'develop', attempt: 1, error: 'Timed out after 1800s', usage: tokens(6100, 23000, 1500000), model_calls: 212, cost_usd: 1.84, estimated: true, session: dev({ tokens: tokens(6100, 23000, 1500000), cost_usd: 1.84, estimated_cost_usd: 1.84 }) }],
+    [30, 'log', { level: 'error', message: '[developer] attempt 1/2 failed: Timed out after 1800s (US$ 1.84, estimated from 212 model calls)' }],
+    [44, 'session.message_received', { session_id: 's1', turn: 1, step_id: 'develop', text: 'Done.', usage: tokens(3100, 18000, 600000), cost_usd: 2.22, duration_ms: 14 * min, active_ms: 14 * min, waiting_ms: 0, stalled_ms: 0, session: devDone }],
+    [44, 'step.finished', { step_id: 'develop', visit: 1, duration_ms: 44 * min, output: {} }],
+    [44, 'step.started', { step_id: 'code_review', visit: 1, step_type: 'agent', agent: 'reviewer' }],
+    [44, 'session.opened', { session_id: 's2', session: rev() }],
+    [45, 'session.message_sent', { session_id: 's2', turn: 1, step_id: 'code_review', prompt: 'Review the change' }],
+    [53, 'session.message_received', { session_id: 's2', turn: 1, step_id: 'code_review', text: 'Approved.', usage: revDone.tokens, cost_usd: 0.52, duration_ms: 8 * min, active_ms: 8 * min, waiting_ms: 0, stalled_ms: 0, session: revDone }],
+    [53, 'step.finished', { step_id: 'code_review', visit: 1, duration_ms: 9 * min, output: {} }],
+    [53, 'workflow.finished', { status: 'success', error: null }],
+  ], {
+    status: 'success', finished_at: new Date(start + 53 * min).toISOString(), duration_ms: 53 * min, cost_usd: 4.58, cost_accounting: 'per_turn',
+    tokens: tokens(11300, 44800, 2340000), sessions: [{ ...devDone, status: 'success' }, { ...revDone, status: 'success' }],
+  });
+
+  // recorded before #233: the stopped attempt left no cost at all
+  const old = Date.now() - 5 * 864e5;
+  const oldDev = (extra) => snap('s1', 'developer', 'claude-opus-5-5', { step_id: 'develop', ...extra });
+  write(`${day(5)}-193000-old00233`, old, [
+    [0, 'workflow.started', { workflow, file, project_id: projectId, mock: false, inputs: { task: 'Demo run with a timed-out attempt' } }],
+    [0, 'step.started', { step_id: 'develop', visit: 1, step_type: 'agent', agent: 'developer' }],
+    [0, 'session.opened', { session_id: 's1', session: oldDev() }],
+    [1, 'session.message_sent', { session_id: 's1', turn: 1, step_id: 'develop', prompt: 'Implement the task', timeout_ms: 1800e3 }],
+    [31, 'log', { level: 'error', message: '[developer] attempt 1/1 failed: Timed out after 1800s' }],
+    [31, 'session.status', { session_id: 's1', status: 'error' }],
+    [31, 'step.finished', { step_id: 'develop', visit: 1, duration_ms: 31 * min, output: { error: 'Timed out after 1800s' }, error: true }],
+    [31, 'workflow.finished', { status: 'failed', error: 'Timed out after 1800s' }],
+  ], {
+    status: 'failed', error: 'Timed out after 1800s', finished_at: new Date(old + 31 * min).toISOString(), duration_ms: 31 * min, cost_usd: 0,
+    tokens: tokens(0, 0, 0), sessions: [{ ...oldDev({ turns: 1 }), status: 'failed' }],
+  });
 }
 
 // Settings › General › Dependency cache (#198): two complete entries of the demo project (sizes

@@ -19,8 +19,9 @@ const { defaultTitle, prOfEvents, readMeta } = require('./run-pr');
 const { ownerAlive, readOwner } = require('./run-owner');
 const { storeFor } = require('./store');
 const { kindOf, walkFiles } = require('./run-artifacts');
+const { correctSessions, needsEvents, runCosts } = require('./run-costs');
 
-const SESSION_EVENTS = new Set(['session.opened', 'session.message_received', 'session.closed']);
+const SESSION_EVENTS = new Set(['session.attempt_stopped', 'session.closed', 'session.message_received', 'session.opened']);
 
 // The saves of a run's document to its issue (written by backlog.saveRunToIssue), oldest first.
 function readIssueSaves(dir) {
@@ -74,8 +75,10 @@ function fromEvents(file) {
     if (ev.type === 'workflow.child_started') children.set(ev.child_run_id, { run_id: ev.child_run_id, step_id: ev.step_id, ...(ev.index !== undefined ? { index: ev.index } : {}), workflow: ev.workflow, status: 'running' });
     else if (ev.type === 'workflow.child_finished' && children.has(ev.child_run_id)) Object.assign(children.get(ev.child_run_id), { status: ev.status, ...(ev.cost_usd !== undefined ? { cost_usd: ev.cost_usd } : {}) });
   }
+  // #233: a run recorded before per-turn costs counted each resumed Claude turn's whole session
+  const costs = runCosts(events);
   // the PR the run opened (#84): the latest step output with pr_url / pr_number
-  const out = { key, sessions: [...byId.values()], progress: trailOf(events), localMerge, recovery, pr: prOfEvents(events), childRuns: [...children.values()] };
+  const out = { key, sessions: correctSessions([...byId.values()], costs), costs, progress: trailOf(events), localMerge, recovery, pr: prOfEvents(events), childRuns: [...children.values()] };
   derived.set(file, out);
   return out;
 }
@@ -161,6 +164,8 @@ function readRun(runsDir, runId) {
   let progress;
   if (summary) {
     sessions = summary.sessions || [];
+    // #233: costs of a run recorded before per-turn costs, read corrected from its events
+    if (needsEvents(summary)) sessions = correctSessions(sessions, fromEvents(path.join(dir, 'events.jsonl')).costs);
     status = summary.status;
     finishedAt = summary.finished_at;
     // runs recorded before summary.progress existed
@@ -244,10 +249,12 @@ function readRun(runsDir, runId) {
 // a run whose files changed since it was indexed (signature below), or that has no row, is read
 // again and its row replaced; rows of deleted folders go. The files stay the source of truth.
 const SIG_FILES = ['events.jsonl', 'summary.json', 'meta.json', 'issue-saves.json', 'chain.json'];
+// how a row is read: a new reading (#233: corrected past costs) reads every run again once
+const READ_VERSION = 'costs-per-turn';
 function runSignature(dir) {
-  return SIG_FILES.map((f) => {
+  return `${SIG_FILES.map((f) => {
     try { const st = fs.statSync(path.join(dir, f)); return `${st.mtimeMs}:${st.size}`; } catch { return '-'; }
-  }).join('|');
+  }).join('|')}|${READ_VERSION}`;
 }
 
 const readSummaryText = (dir) => { try { return fs.readFileSync(path.join(dir, 'summary.json'), 'utf8'); } catch { return null; } };
@@ -285,8 +292,8 @@ function currentRow(runsDir, id, row, sig, live) {
   return null;
 }
 
-const statSignature = async (dir) => (await Promise.all(SIG_FILES.map((f) => fs.promises.stat(path.join(dir, f))
-  .then((st) => `${st.mtimeMs}:${st.size}`, () => '-')))).join('|');
+const statSignature = async (dir) => `${(await Promise.all(SIG_FILES.map((f) => fs.promises.stat(path.join(dir, f))
+  .then((st) => `${st.mtimeMs}:${st.size}`, () => '-')))).join('|')}|${READ_VERSION}`;
 const nextTick = () => new Promise((resolve) => setImmediate(resolve));
 
 /**

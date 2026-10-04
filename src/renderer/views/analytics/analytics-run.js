@@ -34,8 +34,9 @@
       } else rx.data = rx.runId ? out : null;
       rx.error = null;
     } catch (e) {
-      // the remembered run is gone (deleted): the latest one instead
-      if (rx.runId && /Run not found/.test(errMsg(e))) { select(null); rx.loading = false; return load(); }
+      // the remembered run is gone (deleted): the latest one instead (only that run: another one
+      // missing would pick the same run again, forever)
+      if (rx.runId && errMsg(e).includes(`Run not found: ${rx.runId}`)) { select(null); rx.loading = false; return load(); }
       rx.error = errMsg(e); rx.data = null;
     }
     rx.loading = false;
@@ -74,14 +75,20 @@
     return `<span class="an-verdict ${esc(c.level)}" title="${c.verdict === 'worse' ? 'Worse' : 'Better'} than the median of the compared runs (p25–p75: ${esc(fmt(c.p25, kind))} – ${esc(fmt(c.p75, kind))})">${pctText}${esc(fmt(Math.abs(c.diff), kind))} ${c.diff > 0 ? 'more' : 'less'} than the median · <b>${c.verdict}</b></span>`;
   }
 
+  // #233: a cost that includes an estimate (attempts stopped before their result, priced from their
+  // model calls), or that misses a stopped attempt of a run recorded before costs were estimated
+  function costMarks(x) {
+    return `${x.costEstimatedUsd > 0 ? ` <span class="badge" title="${esc(`${fmtUsd(x.costEstimatedUsd)} of it estimated from the model calls of attempts stopped before their result`)}">estimated</span>` : ''}${x.costNotRecorded ? ' <span class="badge warn" title="An attempt stopped before its result: its cost was not recorded">cost not recorded</span>' : ''}`;
+  }
+
   function header(f, cmp) {
-    const stat = (label, value, title = '') => `<div class="u-stat"${title ? ` title="${esc(title)}"` : ''}><label>${esc(label)}</label><b>${value}</b></div>`;
+    const stat = (label, value, title = '', testid = '') => `<div class="u-stat"${title ? ` title="${esc(title)}"` : ''}${testid ? ` data-testid="${testid}"` : ''}><label>${esc(label)}</label><b>${value}</b></div>`;
     return `<div class="card an-card an-run-head" data-testid="an-run-header">
         <div class="row an-card-head"><div><h3 class="an-run-title" title="${esc(f.title || f.runId)}">${esc(f.title || f.workflow || f.runId)}</h3>
           <div class="muted small"><span class="badge">${esc(f.workflow || '—')}</span> ${f.issues?.length ? esc(issuesText(f.issues)) : ''} · <span class="mono" title="${esc(f.runId)}">${esc(f.runId)}</span>${f.startedAt ? ` · ${esc(dateOf(f.startedAt))}` : ''}${f.mock ? ' · <span class="badge">simulated</span>' : ''}</div></div>
           <div class="row"><span class="badge ${f.status === 'success' ? 'cat-monitor' : f.status === 'failed' ? 'warn' : ''}">${esc(f.status)}</span><button type="button" class="btn sm ghost" data-an-open-run="${esc(f.runId)}" data-workflow="${esc(f.file || '')}">Open run</button></div></div>
         <div class="an-totals">
-          ${stat('Total cost', fmtUsd(f.costUsd))}
+          ${stat('Total cost', `${fmtUsd(f.costUsd)}${costMarks(f)}`, '', 'an-run-total-cost')}
           ${stat('Cost per issue', fmt(f.costPerIssue, 'usd'))}
           ${stat('Duration', fmtDur(f.durationMs))}
           ${stat('Active', fmtDur(f.activeMs), 'The duration minus the time waiting for you at gates')}
@@ -117,7 +124,7 @@
     const bars = f.timeline.map((b) => {
       const y = rows.indexOf(b.row) * RH + 4;
       const w = Math.max(2, x(b.to) - x(b.from));
-      return `<rect x="${x(b.from).toFixed(1)}" y="${y}" width="${w.toFixed(1)}" height="${RH - 8}" rx="3" style="fill:${colorOf(b.row)}"><title>${esc(b.step)} · visit ${b.visit} · ${esc(fmtDur(b.durationMs))}${b.costUsd ? ` · ${esc(fmtUsd(b.costUsd))}` : ''}</title></rect>
+      return `<rect x="${x(b.from).toFixed(1)}" y="${y}" width="${w.toFixed(1)}" height="${RH - 8}" rx="3" style="fill:${colorOf(b.row)}"><title>${esc(b.step)} · visit ${b.visit} · ${esc(fmtDur(b.durationMs))}${b.costUsd ? ` · ${esc(fmtUsd(b.costUsd))}` : ''}${b.costEstimatedUsd ? ` (${esc(fmtUsd(b.costEstimatedUsd))} estimated)` : ''}${b.costNotRecorded ? ' · cost not recorded' : ''}</title></rect>
         ${w > 60 ? `<text x="${(x(b.from) + 4).toFixed(1)}" y="${y + RH / 2 + 1}" class="an-gantt-label">${esc(b.step)}</text>` : ''}`;
     }).join('');
     const gy = rows.length * RH + 4;
@@ -135,16 +142,17 @@
   }
 
   function hbars(items, { stacked = false } = {}) {
-    const list = items.filter((x) => (stacked ? x.parts.reduce((s, p) => s + p.value, 0) : x.value) > 0);
+    // `keep`: shown even at zero (a cost not recorded); `marks`: HTML after the value; `testid`: per bar
+    const list = items.filter((x) => x.keep || (stacked ? x.parts.reduce((s, p) => s + p.value, 0) : x.value) > 0);
     if (!list.length) return '<p class="muted small">None recorded.</p>';
     const totalOf = (x) => (stacked ? x.parts.reduce((s, p) => s + p.value, 0) : x.value);
-    const max = Math.max(...list.map(totalOf));
-    return `<div class="an-bars">${list.map((x) => `<div class="an-bar" title="${esc(x.title || x.label)}">
+    const max = Math.max(...list.map(totalOf)) || 1;
+    return `<div class="an-bars">${list.map((x) => `<div class="an-bar" title="${esc(x.title || x.label)}"${x.testid ? ` data-testid="${x.testid}"` : ''}>
         <span class="an-bar-label">${x.chip || esc(x.label)}</span>
         <span class="an-bar-track">${stacked
     ? x.parts.filter((p) => p.value > 0).map((p) => `<span style="width:${(p.value / max) * 100}%;background:${p.color}" title="${esc(p.title)}"></span>`).join('')
     : `<span style="width:${Math.max(1, (x.value / max) * 100)}%;background:${x.color}"></span>`}</span>
-        <span class="an-bar-val">${esc(x.sub)}</span></div>`).join('')}</div>`;
+        <span class="an-bar-val">${esc(x.sub)}${x.marks || ''}</span></div>`).join('')}</div>`;
   }
 
   function agentCharts(f, cmp) {
@@ -156,7 +164,10 @@
     const turns = hbars(f.agents.map((a) => ({ label: a.agent, chip: chip(a.agent), value: a.turns, sub: `${fmtNum(a.turns)} turn${a.turns === 1 ? '' : 's'}`, color: colorOf(a.agent) })));
     const cost = hbars(f.agents.map((a) => {
       const c = cmp?.agents?.[a.agent]?.costUsd;
-      return { label: a.agent, chip: chip(a.agent), value: a.costUsd, sub: `${fmtUsd(a.costUsd)}${c ? ` (${c.diff > 0 ? '▲' : c.diff < 0 ? '▼' : '='} median ${fmtUsd(c.median)})` : ''}`, color: colorOf(a.agent) };
+      return {
+        label: a.agent, chip: chip(a.agent), value: a.costUsd, sub: `${fmtUsd(a.costUsd)}${c ? ` (${c.diff > 0 ? '▲' : c.diff < 0 ? '▼' : '='} median ${fmtUsd(c.median)})` : ''}`, color: colorOf(a.agent),
+        marks: costMarks(a), keep: !!a.costNotRecorded, testid: 'an-agent-cost',
+      };
     }));
     const tokens = hbars(f.agents.map((a) => ({
       label: a.agent, chip: chip(a.agent), sub: `${fmtTok(a.totalTokens)} · ${a.usdPerMTokens == null ? '—' : `${fmtUsd(a.usdPerMTokens)}/M`}`,

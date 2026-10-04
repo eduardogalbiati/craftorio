@@ -573,10 +573,27 @@ function onEvent(ev) {
   }
   v.events.push(ev);
   const sess = ev.session_id ? v.sessions.get(ev.session_id) : null;
+  // #233 (as src/run-costs.js reads past runs): a run recorded before per-turn costs stored, for each
+  // resumed Claude turn, the CLI session's cumulative total; its turn's own cost is the difference
+  // with the previous turn of the same CLI session, and the session's snapshot counted the rest twice
+  const pastTurnCost = () => {
+    const recorded = Number(ev.cost_usd) || 0;
+    if (v.run?.costPerTurn || (ev.session?.provider || sess.provider) !== 'claude') return ev.cost_usd;
+    const cli = ev.session?.provider_session_id || null;
+    const prev = sess.cliLast;
+    sess.cliLast = { cli, total: recorded };
+    if (!prev || !cli || prev.cli !== cli || recorded < prev.total) return ev.cost_usd;
+    sess.overcount = (sess.overcount || 0) + prev.total;
+    return recorded - prev.total;
+  };
+  const withSnapshot = () => {
+    Object.assign(sess, ev.session);
+    if (sess.overcount) sess.cost_usd = Math.max(0, (Number(sess.cost_usd) || 0) - sess.overcount);
+  };
 
   switch (ev.type) {
     case 'workflow.started':
-      v.run = { ...runInfo(ev), status: 'running' };
+      v.run = { ...runInfo(ev), status: 'running', costPerTurn: ev.cost_accounting === 'per_turn' };
       v.events = [ev];
       v.steps = new Map((ev.steps || []).map((s) => [s.id, { ...s, visits: 0, status: 'pending' }]));
       v.trail = new RunProgress.StepTrail();
@@ -634,7 +651,7 @@ function onEvent(ev) {
       break;
 
     case 'session.closed':
-      if (sess) Object.assign(sess, ev.session);
+      if (sess) withSnapshot();
       if (ev.session_id !== 'orchestrator') orch(ev, `session ${ev.session_id} closed (${ev.status})`);
       break;
 
@@ -656,11 +673,17 @@ function onEvent(ev) {
 
     case 'session.message_received':
       if (sess) {
-        getTurn(sess, ev.turn).result = { usage: ev.usage, cost: ev.cost_usd, duration: ev.duration_ms };
-        Object.assign(sess, ev.session);
+        const cost = pastTurnCost();
+        getTurn(sess, ev.turn).result = { usage: ev.usage, cost, duration: ev.duration_ms };
+        withSnapshot();
         orch(ev, `← ${ev.session_id} replied in ${fmtDur(ev.duration_ms)}`);
       }
       if (v.run?.status === 'running' && !replaying) loadUsageThrottled();
+      break;
+
+    // #233: an attempt stopped before its result: its estimated cost is in the session's snapshot
+    case 'session.attempt_stopped':
+      if (sess) withSnapshot();
       break;
 
     case 'step.started': {
@@ -744,9 +767,14 @@ function onEvent(ev) {
       orch(ev, `📝 ${ev.agent} logged ${ev.count} decision(s) in ${ev.path}`);
       break;
 
-    case 'log':
+    case 'log': {
       orch(ev, ev.message, ev.level);
+      // #233: a run recorded before costs were estimated: its agent's stopped attempt cost was never recorded
+      const failed = !v.run?.costPerTurn && ev.level === 'error' && /^\[([^\]]+)\] attempt \d+\/\d+ failed: /.exec(String(ev.message || ''));
+      const owner = failed && [...v.sessions.values()].reverse().find((s) => s.agent === failed[1]);
+      if (owner) owner.costNotRecorded = true;
       break;
+    }
 
     case 'supervisor.started':
       orch(ev, `◆ supervisor called on ${ev.step_id}: ${ev.error || 'step failed'}`, 'supervisor');

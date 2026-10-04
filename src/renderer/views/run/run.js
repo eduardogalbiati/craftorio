@@ -510,6 +510,10 @@ function renderSessions() {
   const box = $('#sessions');
   if (!state.sessions.size) return;
   const list = [...state.sessions.values()];
+  // #233: the part of a cost estimated from attempts stopped before their result, or not recorded
+  const estimated = list.reduce((a, s) => a + (Number(s.estimated_cost_usd) || 0), 0);
+  const notRecorded = (ss) => ss.some((s) => s.cost_not_recorded || s.costNotRecorded);
+  const marks = (usd, missing) => `${usd > 0 ? ` <span class="badge" title="${esc(`${fmtCost(usd)} of it estimated from the model calls of attempts stopped before their result`)}">estimated</span>` : ''}${missing ? ' <span class="badge warn" title="An attempt stopped before its result: its cost was not recorded">cost not recorded</span>' : ''}`;
   box.innerHTML = list.map((s) => {
     const isOrch = s.id === 'orchestrator';
     const t = s.tokens || {};
@@ -530,11 +534,11 @@ function renderSessions() {
         ${isOrch ? `
         <div class="metric"><label>steps</label><b>${[...state.steps.values()].reduce((a, x) => a + x.visits, 0)}</b></div>
         <div class="metric"><label>child sessions</label><b>${list.length - 1}</b></div>
-        <div class="metric"><label>total cost</label><b>${fmtCost(totals().cost)}</b></div>${state.run?.childRuns?.length ? `
+        <div class="metric"><label>total cost</label><b>${fmtCost(totals().cost)}${marks(estimated, notRecorded(list))}</b></div>${state.run?.childRuns?.length ? `
         <div class="metric" title="What its child runs cost (their own children included), not in its total cost"><label>child runs cost</label><b>${fmtCost(childRunsCost(state.run))}</b></div>` : ''}` : `
         <div class="metric"><label>active</label><b>${fmtDur(s.active_ms)}</b></div>
         <div class="metric"><label>in / out</label><b>${fmtNum((t.input || 0) + (t.cache_read || 0))} / ${fmtNum(t.output)}</b></div>
-        <div class="metric"><label>cost</label><b>${fmtCost(s.cost_usd)}</b></div>`}
+        <div class="metric"><label>cost</label><b>${fmtCost(s.cost_usd)}${marks(Number(s.estimated_cost_usd) || 0, notRecorded([s]))}</b></div>`}
       </div>
     </div>`;
   }).join('');

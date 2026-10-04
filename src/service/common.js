@@ -40,6 +40,9 @@ function sessionView(x, live) {
     providerSessionId: live ? x.providerSessionId : x.provider_session_id || null,
     cwd: x.cwd || null, turns: x.turns || 0, costUsd: live ? x.costUsd : x.cost_usd || 0,
     tokens: tokensView(x.tokens),
+    // #233: the part of costUsd estimated from attempts stopped before their result; one not recorded
+    ...((live ? x.estimatedUsd : x.estimated_cost_usd) ? { costEstimatedUsd: live ? x.estimatedUsd : x.estimated_cost_usd } : {}),
+    ...((live ? x.costNotRecorded : x.cost_not_recorded) ? { costNotRecorded: true } : {}),
   };
 }
 

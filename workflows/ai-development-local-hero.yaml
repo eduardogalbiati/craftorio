@@ -722,18 +722,26 @@ steps:
       impossible in this run, each with the reason: the owner then decides whether the run goes on
       without them.
       {% endif %}
+      Self-review (#179), the last thing before answering: read your branch's diff,
+      `git diff {{inputs.base_branch}}...HEAD` (the diff, not the whole files again), against the
+      code-review skill's checklist and its rules for the change's language (`rules/*.md`), as the
+      reviewer will. On a large diff, one exploration sub-agent may check it against the rules and
+      return only the findings. Fix what you find with a new commit (never in an acceptance test),
+      and say in `self_review`, in a few lines, what you checked and what you changed.
     # a fix round with a new commit, summary or set of files is progress, not "the same answer" (#121)
     stall:
       same_output_fields: [commit_sha, summary, files_changed]
     output_schema:
       type: object
-      required: [branch, summary, files_changed, test_notes, committed, left_out]
+      required: [branch, summary, files_changed, test_notes, committed, left_out, self_review]
       properties:
         branch:        { type: string }
         summary:       { type: string }
         files_changed: { type: array, items: { type: string } }
         # for the test writer: behaviours, edge cases and files to test
         test_notes:    { type: string }
+        # for the reviewer (#179): what the developer's own review of its diff checked and changed
+        self_review:   { type: string }
         # for the evidence step: per issue, the screen/command/request that shows the change
         evidence_plan: { type: string }
         # for developer_screenshots (#144): each UI state as the screenshot command's options;
@@ -952,6 +960,9 @@ steps:
       `{{ inputs.base_branch }}` (`git diff {{ inputs.base_branch }}...{{ steps.develop.output.branch }}`).
       Task (the spec for the spec axis): {{ inputs.task }}
       Developer summary: {{ steps.develop.output.summary }}
+      {% if steps.develop.output.self_review %}The developer's self-review of its diff against the code-review rules (review independently all the same):
+      {{ steps.develop.output.self_review }}
+      {% endif %}
       {% if vars.accepted_gaps %}The owner accepted that the run goes on without these requirements (not blocking): {{ vars.accepted_gaps }}{% endif %}
       {% endif %}
       {% if inputs.issues | length > 1 and vars.recheck != 'resolution' %}

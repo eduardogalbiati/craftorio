@@ -184,7 +184,8 @@ module.exports = (ctx) => {
   function figuresOf(runId) {
     const dir = ctx.runFolder ? ctx.runFolder(runId) : path.join(ctx.ws.runs, runId);
     const sigOf = (f) => { try { const st = fs.statSync(path.join(dir, f)); return `${st.size}:${st.mtimeMs}`; } catch { return '-'; } };
-    const sig = `${sigOf('events.jsonl')} ${sigOf('summary.json')}`;
+    // costs-per-turn: figures cached before #233 counted resumed Claude turns twice
+    const sig = `${sigOf('events.jsonl')} ${sigOf('summary.json')} costs-per-turn`;
     const cached = ctx.store?.runFigures?.(runId, sig);
     if (cached) return cached;
     const summary = readJson(path.join(dir, 'summary.json')) || {};
@@ -204,7 +205,8 @@ module.exports = (ctx) => {
     if (!all.some((r) => r.runId === runId) && !fs.existsSync(path.join(ctx.ws.runs, String(runId)))) throw new Error(`Run not found: ${runId}`);
     const figures = figuresOf(String(runId));
     const peers = all.filter((r) => r.runId !== figures.runId && r.workflow === figures.workflow && r.status === 'success' && !r.mock).slice(0, Number(limit) || 30);
-    const history = peers.map((r) => figuresOf(r.runId));
+    // a peer that cannot be read (a summary.json without its events.jsonl) is left out of the comparison
+    const history = peers.flatMap((r) => { try { return [figuresOf(r.runId)]; } catch { return []; } });
     return { runs: choices, figures, comparison: runAnalysisLib.compareWithWorkflow(figures, history, { limit: Number(limit) || 30 }) };
   }
 

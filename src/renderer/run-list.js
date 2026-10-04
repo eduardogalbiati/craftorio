@@ -233,7 +233,7 @@ function projectRunBody(r, pv) {
       <thead><tr><th>Agent</th><th>Provider · model</th><th>Status</th><th class="num">Turns</th><th class="num">Tokens</th><th class="num">Cost</th><th></th></tr></thead>
       <tbody>${[...sessions].sort((a, b) => isOrchSession(b) - isOrchSession(a)).map((s) => {
         const m = pv.msgs.get(`${r.runId}:${s.id}`);
-        return `<tr data-session="${esc(s.id)}" data-agent="${esc(s.agent)}">
+        return `<tr data-session="${esc(s.id)}" data-agent="${esc(s.agent)}" data-testid="run-session-card">
           <td><b title="${esc(s.agent)}">${esc(agentLabel(s.agent, r.agentNames))}</b> <span class="muted small mono">${esc(s.id)}</span></td>
           <td><span class="badge p-${esc(s.provider)}">${esc(s.provider)}</span> <span class="mono small">${esc(s.model || '')}</span></td>
           <td><span class="status st-${esc(s.status)}"><span class="status-dot"></span>${esc(s.status)}</span></td>
@@ -330,15 +330,20 @@ function tokensCell(t) {
   return `<td class="num mono" title="${esc(tip)}">${fmtTok(t.total)}</td>`;
 }
 // Tokens with no cost: a model with no price (Codex, unpriced models), not a free session.
+// #233: a cost that includes an estimate (attempts stopped before their result, priced from their
+// model calls), or that misses a stopped attempt of a run recorded before costs were estimated
+function costMarks(estimatedUsd, notRecorded) {
+  return `${estimatedUsd > 0 ? ` <span class="badge" title="${esc(`${fmtUsd(estimatedUsd)} of it estimated from the model calls of attempts stopped before their result`)}">estimated</span>` : ''}${notRecorded ? ' <span class="badge warn" title="An attempt stopped before its result: its cost was not recorded">cost not recorded</span>' : ''}`;
+}
 function sessionCostCell(s) {
-  if (!s.costUsd && s.tokens?.total && s.provider !== 'mock') return '<td class="num mono muted" title="No price for this model: see Usage › Prices">—</td>';
-  return `<td class="num mono">${fmtUsd(s.costUsd)}</td>`;
+  if (!s.costUsd && s.tokens?.total && s.provider !== 'mock' && !s.costNotRecorded) return '<td class="num mono muted" title="No price for this model: see Usage › Prices">—</td>';
+  return `<td class="num mono">${fmtUsd(s.costUsd)}${costMarks(s.costEstimatedUsd, s.costNotRecorded)}</td>`;
 }
 function sessionsTotalRow(sessions) {
   const sum = (f) => sessions.reduce((a, s) => a + (f(s) || 0), 0);
   const tokens = Object.fromEntries([...TOKEN_PARTS.map(([k]) => [k, sum((s) => s.tokens?.[k])]), ['total', sum((s) => s.tokens?.total)]]);
   return `<tfoot><tr class="pr-total"><td colspan="3">Total</td><td class="num mono">${fmtNum(sum((s) => s.turns))}</td>
-    ${tokensCell(tokens)}<td class="num mono">${fmtUsd(sum((s) => s.costUsd))}</td><td></td></tr></tfoot>`;
+    ${tokensCell(tokens)}<td class="num mono" data-testid="run-total-cost">${fmtUsd(sum((s) => s.costUsd))}${costMarks(sum((s) => s.costEstimatedUsd), sessions.some((s) => s.costNotRecorded))}</td><td></td></tr></tfoot>`;
 }
 
 function runTaskBlock(r) {

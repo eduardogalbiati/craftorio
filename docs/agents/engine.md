@@ -173,6 +173,14 @@ same features for users; this is the implementer's summary.
   `refused` = every tool call refused, `blocked` = a blocked `/loop` iteration);
   `summary.context = { agents: { <name>: { turns, fresh_sessions, tokens, peak, waste_tokens, per_turn } }, waste_tokens }`.
   `session.message_received` carries `context: { start, peak }` and `handoff`.
+- Costs (#233): a turn's `cost_usd` is its own: Claude's `total_cost_usd` is cumulative over a
+  resumed CLI session, so `parseClaude` subtracts the session's previous total. An attempt stopped
+  before its result (timeout, cancel, crash) keeps the tokens of its model calls (`err.partial`,
+  summed from the stream), priced with the run's `prices` (`countStoppedAttempt`): a
+  `session.attempt_stopped` event (`estimated: true`, or `cost_not_recorded` without a price), its
+  cost in the session (`estimated_cost_usd`), the step's record, the run and `max_total_cost_usd`;
+  the `attempt N/M failed` log line says what it cost. `workflow.started` and the summary carry
+  `cost_accounting: 'per_turn'`; runs without it are read corrected by `src/run-costs.js`.
 - Idle agents (`src/engine/idle.js`, #46): an agent with no stream item for `idleWarnMs` (setting
   `idleWarningMinutes`, default 5, 0 = off) while a tool call is open → one `log` warn
   `kind: agent_idle` per silence, with `step_id`, `agent`, `tool`, `command`, `idle_ms` (run log,

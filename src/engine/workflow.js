@@ -1061,6 +1061,9 @@ class WorkflowRun extends EventEmitter {
       duration_ms: duration, active_ms: s.activeMs, idle_ms: Math.max(0, duration - s.activeMs),
       turns: s.turns, tokens: { ...s.tokens }, cost_usd: +s.costUsd.toFixed(6),
       status: s.status, provider_session_id: s.providerSessionId, cwd: s.cwd || null, mode: s.mode || null,
+      // #233: the part of cost_usd estimated from the stream of attempts killed before their result
+      ...(s.estimatedUsd ? { estimated_cost_usd: +s.estimatedUsd.toFixed(6) } : {}),
+      ...(s.costNotRecorded ? { cost_not_recorded: true } : {}),
     };
   }
 
@@ -1080,6 +1083,8 @@ class WorkflowRun extends EventEmitter {
       workflow: this.wf.metadata?.name, version: this.wf.metadata?.version, project_id: this.projectId,
       issues: this.issues || undefined,
       file: path.basename(this.file), inputs: this.inputs, mock: this.mock, run_dir: this.runDir,
+      // #233: each turn's cost_usd is its own (runs without it recorded Claude's cumulative totals)
+      cost_accounting: 'per_turn',
       // the unit / E2E test inputs and where each value came from (#203)
       tests_plan: this.testsPlan.length ? this.testsPlan : undefined,
       attachments: Object.keys(this.attachments).length ? this.attachments : undefined,
@@ -2877,7 +2882,7 @@ class WorkflowRun extends EventEmitter {
     const rec = {
       agent: agentName, step: stepId, visit, session: session.id, mode, fresh: turn === 1,
       context_start: res.context.start, context_peak: res.context.peak,
-      tokens: totalTokens(res.usage), cost_usd: res.costUsd || 0, subagent_calls: res.tools.subagents || 0,
+      tokens: totalTokens(res.usage), cost_usd: (res.costUsd || 0) + (res.stoppedCostUsd || 0), subagent_calls: res.tools.subagents || 0,
       waste: res.tools.ran === 0 && res.tools.denials > 0 ? 'refused' : null,
     };
     this.turnLog.push(rec);
@@ -2913,7 +2918,7 @@ class WorkflowRun extends EventEmitter {
     try {
       const res = await this.invokeTurn({ ...call, hint: { ...call.hint, handoffOnly: true }, attempts: 1, attachments: [] }, ++session.turns, HANDOFF_ONLY);
       rec.tokens += totalTokens(res.usage);
-      rec.cost_usd += res.costUsd || 0;
+      rec.cost_usd += (res.costUsd || 0) + (res.stoppedCostUsd || 0);
       const plain = String(res.text || '').trim();
       return res.handoff || (plain && !plain.includes('```') ? plain.slice(0, 4000) : null);
     } catch (e) {
@@ -2975,6 +2980,8 @@ class WorkflowRun extends EventEmitter {
     const maxAttempts = attempts || retry.max_attempts || 1;
     let delay = this.mock ? 1000 : parseDuration(retry.initial_delay, 5000);
     let lastErr;
+    // #233: what this turn's attempts stopped before their result cost (the step's record counts it)
+    let stoppedUsd = 0;
 
     for (let a = 1; a <= maxAttempts; a++) {
       const t0 = Date.now();
@@ -3056,6 +3063,7 @@ class WorkflowRun extends EventEmitter {
         const { active_ms, waiting_ms, stalled_ms } = timing();
         res.tools = tools;
         res.context = context;
+        res.stoppedCostUsd = stoppedUsd;
         [res.text, res.handoff] = takeHandoff(res.text);
         if (tools.maxStreak >= DENIAL_WARN) {
           // the agent is fighting its allowlist (cli_args): visible in the run, the supervisor's timeline and the run chat
@@ -3081,6 +3089,8 @@ class WorkflowRun extends EventEmitter {
         timing();
         session.activeMs += Date.now() - t0;
         lastErr = e;
+        const spent = this.countStoppedAttempt({ session, agent, stepId, turn, attempt: a }, e);
+        stoppedUsd += spent.costUsd;
         if (this.abort.signal.aborted) break;
         if (interrupted?.slow) {
           lastErr = Object.assign(new Error(`[${agentName}] turn interrupted by the supervisor on call: ${stepId} ran far longer than usual`),
@@ -3095,7 +3105,7 @@ class WorkflowRun extends EventEmitter {
           this.emitEvent('log', { level: 'warn', kind: 'agent_interrupted', step_id: stepId, agent: agentName, message: lastErr.message });
           break;
         }
-        this.emitEvent('log', { level: 'error', message: `[${agentName}] attempt ${a}/${maxAttempts} failed: ${e.message}` });
+        this.emitEvent('log', { level: 'error', message: `[${agentName}] attempt ${a}/${maxAttempts} failed: ${e.message}${spent.note}` });
         if (!isRetryable(e)) {
           this.emitEvent('log', { level: 'error', message: `[${agentName}] non-retryable error, giving up.` });
           break;
@@ -3117,6 +3127,31 @@ class WorkflowRun extends EventEmitter {
       }
     }
     throw lastErr;
+  }
+
+  // #233: an attempt that ended without its result (timeout, cancel, crash, usage limit) still paid
+  // for the model calls it made: their tokens (summed by the adapter from the stream) are priced with
+  // the run's price table and counted in the session, the step and the run, marked estimated; without
+  // a price for the model its cost is "not recorded". Returns the cost and the note of its log line.
+  countStoppedAttempt({ session, agent, stepId, turn, attempt }, e) {
+    const p = e?.partial;
+    if (!p || !(p.modelCalls || p.costUsd != null)) return { costUsd: 0, note: '' };
+    const reported = p.costUsd != null;
+    const costUsd = reported ? p.costUsd : sessionCost({ model: agent.model || session.model, tokens: p.usage || {} }, this.prices);
+    if (p.usage) addUsage(session.tokens, p.usage);
+    if (costUsd != null) session.costUsd += costUsd;
+    if (costUsd != null && !reported) session.estimatedUsd = (session.estimatedUsd || 0) + costUsd;
+    if (costUsd == null) session.costNotRecorded = true;
+    const calls = `${p.modelCalls || 0} model call${p.modelCalls === 1 ? '' : 's'}`;
+    this.emitEvent('session.attempt_stopped', {
+      session_id: session.id, turn, step_id: stepId, attempt, error: e.message, usage: p.usage || null, model_calls: p.modelCalls || 0,
+      cost_usd: costUsd, estimated: costUsd != null && !reported, ...(costUsd == null ? { cost_not_recorded: true } : {}),
+      session: this.snapshot(session),
+    });
+    const note = reported ? ` (US$ ${costUsd.toFixed(2)})`
+      : costUsd != null ? ` (US$ ${costUsd.toFixed(2)}, estimated from ${calls})`
+        : ` (cost not recorded: no price for ${agent.model || 'the model'}, ${calls})`;
+    return { costUsd: costUsd || 0, note };
   }
 
   // An agent silent for idleWarnMs while a command is waiting: probably polling for output that never
@@ -3650,7 +3685,7 @@ ${stderr || stdout}`.slice(0, 1500)));
         duration_ms: Date.now() - this.startedAt, inputs: this.inputs, mock: this.mock, worktree: this.worktreeSummary(),
         // `merge: local`: what landed on the local base, not pushed (Backlog: "Local" column, Push)
         local_merge: this.ctx.local_merge ? { branch: this.ctx.local_merge.branch, base: this.ctx.local_merge.base, commit: this.ctx.local_merge.commit } : null,
-        tokens, cost_usd: +sessions.reduce((a, s) => a + s.cost_usd, 0).toFixed(6),
+        tokens, cost_usd: +sessions.reduce((a, s) => a + s.cost_usd, 0).toFixed(6), cost_accounting: 'per_turn',
         context: this.contextSummary(),
         timing: this.timingSummary(),
         // `wait:` steps: checks made without an agent turn, agent turns they asked for, steps they finished
