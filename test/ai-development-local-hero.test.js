@@ -155,6 +155,52 @@ test('ai-development-local-hero: the transition from acceptance_tests goes to de
 // a run cannot write "nothing testable" yet: the route to develop is checked above, the run is left out here.
 test('ai-development-local-hero: a task with nothing testable goes straight from acceptance_tests to develop, through a mock run', { skip: 'the mock cannot return an empty tests_added (src/engine/providers.js, array case): needs a sequence for it' }, () => {});
 
+// #179: the developer reviews its own diff (code-review skill's checklist and rules) before answering,
+// and says what it checked in `self_review`, which the reviewer reads.
+test('ai-development-local-hero (#179): the develop prompt ends with a self-review of `git diff <base>...HEAD` against the code-review skill', () => {
+  const develop = loadWorkflow(WORKFLOW).steps.find((s) => s.id === 'develop');
+  assert.match(develop.prompt, /self[- ]review/i);
+  assert.match(develop.prompt, /git diff [^\s`]+\.\.\.HEAD/, 'the diff of the branch against its base');
+  assert.match(develop.prompt, /code-review/, 'against the code-review skill\'s checklist and rules');
+  assert.match(develop.prompt, /self_review/, 'the answer lists what it checked and changed in self_review');
+  assert.match(develop.prompt, /sub-agent/i, 'one exploration sub-agent may read a large diff');
+});
+
+test('ai-development-local-hero (#179): develop\'s output schema accepts self_review; the acceptance tests stay protected in develop', () => {
+  const wf = loadWorkflow(WORKFLOW);
+  const develop = wf.steps.find((s) => s.id === 'develop');
+  assert.ok(develop.output_schema.properties.self_review, 'develop output_schema has a self_review property');
+  assert.equal(develop.agent, 'developer');
+  const protect = (wf.agents.developer.protect_files || []).join('\n');
+  assert.match(protect, /steps\.acceptance_tests\.output\.tests_added/, 'the developer\'s protect_files still cover the acceptance tests');
+});
+
+test('ai-development-local-hero (#179): software-development workflows are not changed: no self_review in their develop step', () => {
+  const dir = path.join(__dirname, '..', 'workflows');
+  const files = fs.readdirSync(dir).filter((f) => /^software-development.*\.yaml$/.test(f));
+  assert.ok(files.includes('software-development.yaml'));
+  for (const f of files) {
+    const develop = loadWorkflow(path.join(dir, f)).steps.find((s) => s.id === 'develop');
+    if (!develop) continue;
+    assert.equal(develop.output_schema?.properties?.self_review, undefined, `${f}: develop schema has no self_review`);
+    assert.doesNotMatch(develop.prompt, /self_review/, `${f}: develop prompt has no self_review`);
+  }
+});
+
+test('ai-development-local-hero (#179): a mock run shows the developer\'s self_review in the code_review prompt', { timeout: 120000 }, async (t) => {
+  const { events, finished, prompts } = await runAiDev(t, { mockSequences: { suite: { red_check: ['fail'], suite: ['pass'] } } });
+  assert.equal(finished.status, 'success', finished.error);
+  // rendered: the base branch is filled in
+  assert.match(prompts[0], /git diff [^\s`{]+\.\.\.HEAD/);
+  const developed = events.find((e) => e.type === 'step.finished' && e.step_id === 'develop');
+  assert.ok(developed.output.self_review, 'the mock developer answers a self_review (from the schema)');
+  const review = events.find((e) => e.type === 'session.message_sent' && e.step_id === 'code_review');
+  assert.ok(review, 'code_review ran');
+  assert.match(review.prompt, /self[- ]review/i, 'the reviewer is told about the developer\'s self-review');
+  // the mock's value for a string field named self_review (src/engine/providers.js mockString)
+  assert.match(review.prompt, /\(simulated\) self_review/, 'the developer\'s self_review is in the prompt');
+});
+
 test('ai-development-local-hero: quality first by default, the change\'s unit tests and its E2E scenarios are written and run', () => {
   const wf = loadWorkflow(WORKFLOW);
   assert.equal(wf.inputs.unit_tests.default, 'write_and_run');

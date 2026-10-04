@@ -53,3 +53,40 @@ Then('the gate card shows its summary and its buttons', async ({ e2e }) => {
 Then('the run shows the pill {string}', async ({ e2e }, text) => {
   await expect(e2e.window.getByTestId('input-pill').filter({ hasText: text }).first()).toBeVisible({ timeout: 30000 });
 });
+
+// #233: Analytics › Run and the run page mark an estimated cost (a timed-out attempt) and an old
+// run's stopped attempt ("cost not recorded")
+When('I open the {string} Analytics tab', async ({ e2e }, name) => {
+  await e2e.window.getByRole('tablist', { name: 'Analytics' }).getByRole('tab', { name, exact: true }).click();
+});
+
+// picks the run whose id contains `fragment` (searched first: the list shows the latest 80)
+When('I pick the run {string} in Analytics', async ({ e2e }, fragment) => {
+  const page = e2e.window;
+  await page.getByTestId('an-run-search').fill(fragment);
+  const option = page.getByTestId('an-run-pick').locator(`option[value*="${fragment}"]`);
+  await expect(option).toHaveCount(1, { timeout: 30000 });
+  await page.getByTestId('an-run-pick').selectOption(await option.getAttribute('value'));
+  await expect(page.getByTestId('an-run-header')).toContainText(fragment, { timeout: 30000 });
+});
+
+Then('the run\'s total cost in Analytics is marked as estimated', async ({ e2e }) => {
+  await expect(e2e.window.getByTestId('an-run-total-cost')).toContainText(/estimated/i);
+});
+
+Then('the cost of the agent {string} in Analytics is marked as estimated', async ({ e2e }, agent) => {
+  await expect(e2e.window.getByTestId('an-agent-cost').filter({ hasText: agent }).first()).toContainText(/estimated/i);
+});
+
+When('I open the run from Analytics', async ({ e2e }) => {
+  await e2e.window.getByTestId('an-run-header').getByRole('button', { name: 'Open run', exact: true }).click();
+});
+
+Then('the run\'s total cost is marked as estimated', async ({ e2e }) => {
+  await expect(e2e.window.getByTestId('run-total-cost')).toContainText(/estimated/i, { timeout: 30000 });
+});
+
+Then('the run\'s {string} session shows {string}', async ({ e2e }, agent, text) => {
+  const card = e2e.window.getByTestId('run-session-card').filter({ hasText: new RegExp(agent, 'i') }).first();
+  await expect(card).toContainText(text, { timeout: 30000 });
+});
