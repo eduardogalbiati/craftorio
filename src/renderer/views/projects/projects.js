@@ -55,8 +55,8 @@ async function refreshProjects() {
 
 // Settings › Projects: where the links to the Projects screen lead (a project's page, a Run App copy)
 function showProjects() {
-  showView('settings');
   showSettingsTab('projects');
+  if (state.view !== 'settings') showView('settings');
 }
 
 let editingProject = null;
@@ -128,10 +128,12 @@ async function saveProject(e) {
     const p = editingProject ? await api.updateProject(editingProject.id, data) : await api.createProject(data);
     closeModal('#project-modal');
     state.projects = await api.listProjects();
+    // created from the header's selector: it becomes the app's project, and the open screen shows it
+    if (projectFromHeader) window.CurrentProject.set(p.id, { redraw: false });
     window.CurrentProject.refresh();
     if (projectFromDrawer) renderProjectOptions(p.id);
-    if (projectFromHeader) window.CurrentProject.set(p.id);
-    if (state.view === 'settings') refreshProjects();
+    if (projectFromHeader) showView(state.view);
+    else if (state.view === 'settings') refreshProjects();
   } catch (err) {
     $('#pj-error').textContent = errMsg(err);
   } finally {
@@ -193,8 +195,8 @@ registerView({
                   <p class="muted small">Each project points to a local folder and, optionally, a git repository. Stored in <span id="projects-dir" class="mono"></span></p>
                 </div>
                 <div class="row">
-                  <button id="btn-projects-folder" class="btn ghost">Open folder</button>
-                  <button id="btn-new-project" class="btn primary">New project</button>
+                  <button id="btn-projects-folder" class="btn ghost nowrap">Open folder</button>
+                  <button id="btn-new-project" class="btn primary nowrap">New project</button>
                 </div>
               </div>
               <div id="projects-list" class="card-grid"></div>`;

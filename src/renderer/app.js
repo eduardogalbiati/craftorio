@@ -63,7 +63,7 @@ const state = {
   // runs:list, runs:active, the project's runs and 'run:meta' (PR state changes, a title set)
   runMeta: new Map(),
   tab: 'detail',
-  workflowsTab: 'runs', // 'runs' | 'definitions' | 'builder' (sub-items of Workflows in the sidebar)
+  workflowsTab: 'runs', // 'definitions' | 'runs' | 'builder' | 'pipelines' (the Workflows screen's tabs, each a menu entry)
   pendingProject: null, // project to preselect in the panel on open
   mainKey: null,      // the Start drawer's main free-text input (usually `task`), never remembered
   starting: false,    // a startRun() request is pending: both start buttons stay disabled

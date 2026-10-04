@@ -1,5 +1,5 @@
 /* The Oracle (views/oracle/oracle.js): its dock on the Dashboard, its drawer on the other screens and
-   the sidebar button. Messages reuse .sup-wmsg, .sup-loading (style.css) and the .svc-* layout
+   the header button. Messages reuse .sup-wmsg, .sup-loading (style.css) and the .svc-* layout
    (views/supervisor/supervisor.css); card states use the shared .pill status styles. */
 #view-dashboard.oracle-docked { display: grid; grid-template-columns: minmax(0, 1fr) 400px; grid-template-rows: minmax(0, 1fr); gap: 20px; overflow: hidden; }
 #view-dashboard.oracle-docked > .dash { overflow: auto; min-height: 0; width: 100%; padding-top: 4vh; }

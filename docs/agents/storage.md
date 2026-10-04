@@ -73,7 +73,7 @@ owner actions write to the platform (Save to issue, create, close, epics: `src/b
   file: roadmap | queue | issues | local | refresh, watching: true }` once per file, 300 ms after
   its last write; a write that leaves the same mtime and size pushes nothing. A watcher error
   pushes `{ projectId: null, watching: false }` (`backlogWatching()` answers the same): the Backlog
-  screen then polls every 5 s while its Roadmap tab is visible.
+  screen then polls every 5 s while the Roadmap screen is visible.
 - The Backlog screen reloads the project's data on its project's event, unless the owner types in
   one of its fields, drags, or edits a roadmap item or a stage's note: the reload waits until they
   are done (an open Edit form shows "The roadmap changed. Reload"). Scroll and expanded rows stay.

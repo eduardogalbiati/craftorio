@@ -1,5 +1,5 @@
-// The app-wide Supervisor chat (#28): the person's companion on every screen (the drawer) and on the
-// Supervisor page (the whole conversation). One conversation per workspace, resumed turn after turn
+// The app-wide Supervisor chat (#28): one conversation, in the drawer opened from the Workflows
+// screen (#254, #264; expanded, the whole conversation). One conversation per workspace, resumed turn after turn
 // (claude --resume), kept in <workspace>/supervisor/chat.jsonl (messages) and chat.json (the CLI
 // session and model); the images attached to questions in attachments/ (#129).
 //

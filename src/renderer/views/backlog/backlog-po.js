@@ -142,8 +142,12 @@
     render({ scroll: 'end' });
     if (!projectId) return;
     // while a question is in flight the service already recorded it: render() leaves out the pending bubble
-    // (no history yet may come back empty-handed: an empty conversation)
-    try { po.messages = await api.productOwnerHistory(projectId) || []; } catch (e) { po.error = errMsg(e); }
+    // (no history yet may come back empty-handed: an empty conversation;
+    // and one that comes back after the drawer moved to another project is not this one's)
+    try {
+      const messages = await api.productOwnerHistory(projectId) || [];
+      if (po.projectId === projectId) po.messages = messages;
+    } catch (e) { po.error = errMsg(e); }
     // a draft still to file: back to Register an issue
     if (openDraftIndex() >= 0 && !po.busy) po.mode = 'issue';
     render({ scroll: 'end' });

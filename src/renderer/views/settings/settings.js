@@ -4,7 +4,7 @@
 // its Rebuild index, src/store.js), Agents & CLIs (installed CLIs and
 // their sign-in), Execution (developer mode, Keep awake (keep-awake.js), notifications, concurrent runs, the Oracle's daily budget and compaction threshold) and About. Registers
 // itself with registerView (view-registry.js); uses app.js globals ($, esc, errMsg, state,
-// applyDeveloperMode, renderHeader, renderWorkspacePaths), commandHint (command-hint.js: the install
+// applyDeveloperMode, renderHeader, renderWorkspacePaths), refreshProjects (views/projects/projects.js: the Projects tab, #254), commandHint (command-hint.js: the install
 // commands of missing CLIs) and window.BACKLOG_PLATFORMS (backlog.js).
 
 let settingsTab = 'general';
@@ -12,8 +12,8 @@ function showSettingsTab(tab) {
   settingsTab = tab;
   document.querySelectorAll('.settings-tab').forEach((b) => b.classList.toggle('active', b.dataset.stab === tab));
   document.querySelectorAll('.settings-page').forEach((p) => p.classList.toggle('hidden', p.dataset.spage !== tab));
-  // #254: the projects live here (views/projects/projects.js draws them)
-  if (tab === 'projects') refreshProjects();
+  // #254: the projects live here (views/projects/projects.js draws them; from another screen, show() reads them)
+  if (tab === 'projects' && state.view === 'settings') refreshProjects();
   if (tab === 'agents') renderTools();
   if (tab === 'about') renderAbout();
   if (tab === 'phone') window.PhoneGatesSettings.render();
@@ -476,7 +476,7 @@ registerView({
                   <label class="switch"><input type="checkbox" data-setting="notifyOracle" /><span></span></label>
                 </div>
                 <div class="s-row">
-                  <div class="s-label"><b>Keep notifications</b><span>Days the notification center (the bell in the sidebar) keeps notifications; older ones are deleted. 0: keep them all.</span></div>
+                  <div class="s-label"><b>Keep notifications</b><span>Days the notification center (the bell at the top right) keeps notifications; older ones are deleted. 0: keep them all.</span></div>
                   <div class="s-ctrl"><input type="number" id="set-notif-retention" min="0" max="3650" step="1" class="s-num" aria-label="Days to keep notifications" /></div>
                 </div>
               </div>

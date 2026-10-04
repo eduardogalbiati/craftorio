@@ -203,7 +203,7 @@ run as a warning. The summary counts the suite runs (`suite_runs: { engine, agen
 
 **Run App at a gate.** `developer_check`, `human_review` and `approve_merge` (any gate with
 `local_preview: true`) always offer **Run App** (its label says what it runs, e.g. "Run App: npm
-start"). It uses the project's Local preview (Projects › Edit › Local preview), else the
+start"). It uses the project's Local preview (Settings › Projects › Edit › Local preview), else the
 workflow's:
 
 ```yaml
@@ -224,7 +224,7 @@ models or touch your workspace; **real workspace** (with a warning) points it at
 app's state (running / stopped / failed, with the busy-port message), **Terminal** to show or hide
 its terminal and **Open URL** when a URL is set.
 
-Which command runs, first match wins: the project's Local preview (Projects › Edit) > the
+Which command runs, first match wins: the project's Local preview (Settings › Projects › Edit) > the
 repository's `.multiagent/local-preview.yaml` > the workflow's `orchestrator.local_preview` >
 detection. A repository declares how it runs once, committed, and everyone gets one-click Run App:
 
@@ -248,7 +248,7 @@ published port), a dev container's `postStartCommand` (forwarded port), a Procfi
 Makefile `run`/`dev`/`start` target, the README's run command, Django, Go, Rust or .NET; each
 suggestion says where it came from. **Run** saves a detected command as the project's Local preview;
 **Edit** opens the fields, and **Save and run** can also write them to
-`.multiagent/local-preview.yaml` in the project folder (a change you commit). Projects › Add / Edit
+`.multiagent/local-preview.yaml` in the project folder (a change you commit). Settings › Projects › Add / Edit
 shows what the folder declares or is detected to run with (**Use it**), before any gate. For this
 app itself it proposes `npm ci` and `npm start`. In a simulation (no git worktree) the gate's
 **Changed files** are the ones the simulated developer reported, labelled "simulated".
@@ -974,7 +974,7 @@ Engine details: [docs/agents/engine.md](docs/agents/engine.md#a-workflow-as-a-st
 
 A finished, failed, cancelled or interrupted run (e.g. by an app restart) can go on from any step
 without asking the supervisor: **Resume from step…** in the Run view (Details), in the run's row in
-**Workflows › Runs** and **Projects › Project**, and in the run chat's end-of-run note. It is not
+**Workflows › Runs** and **Settings › Projects › Project**, and in the run chat's end-of-run note. It is not
 offered while the run is active, and it makes no LLM call.
 
 The dialog lists the workflow's steps in order, marks the ones the run reached and where it stopped,
@@ -1095,7 +1095,7 @@ groups:                        # optional; the graph ignores it (transitions sti
     steps: [test, test_failed, build, build_failed, evidence, verify_change, verify_failed]
 ```
 
-- Each run in the runs lists (Workflows › Runs, Projects › Project) shows the groups it has
+- Each run in the runs lists (Workflows › Runs, Settings › Projects › Project) shows the groups it has
   visited so far, in order: the robot of each agent that worked there (a person for a human gate;
   hover for step, agent, provider/model, duration and cost), the group name and its state: ✓ done,
   the step running, "waiting for you" at a gate, ✕ and the step where the run failed. Coming back
@@ -1129,7 +1129,7 @@ groups:                        # optional; the graph ignores it (transitions sti
   task. Hover it and click the pencil to give it your own ("Notifications, 2nd try after
   conflict"); an empty title goes back to the default. It is saved in `runs/<id>/meta.json`
   (`events.jsonl` is never changed), a resumed run inherits it, and it is shown everywhere a run is
-  listed: Workflows › Runs, Projects › Project, the left sidebar's run list, the Run screen, the run
+  listed: Workflows › Runs, Settings › Projects › Project, the left sidebar's run list, the Run screen, the run
   chat, Backlog cards, toasts and desktop notifications. The workflow name stays next to it.
 - A run that opened a pull/merge request (the latest step output with `pr_url` / `pr_number`, e.g.
   the `ci` step; a resumed run shows the PR of the run it resumes) shows it in the same places: the

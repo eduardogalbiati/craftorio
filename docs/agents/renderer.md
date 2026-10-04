@@ -17,14 +17,14 @@ Read this before changing anything in `src/renderer/`.
   file lists. The folders:
   - `views/dashboard/`: the start screen (its section has no `hidden`; `renderDashboard` is also called on run events);
   - `views/sessions/`: `sessions.js` (`window.SessionsView` for notifications and terminal events) and `sessions.css`;
-  - `views/projects/`: the project cards and the New / Edit project dialog (`openProjectModal`, also opened from the Start drawer);
-  - `views/project/`: one project's page (no sidebar entry: `showView` highlights Projects);
+  - `views/projects/`: the project cards, drawn inside Settings › Projects (#254: no screen or menu entry of its own; `showProjects`), and the New / Edit project dialog (`openProjectModal`, also opened from the Start drawer and the header's project selector);
+  - `views/project/`: one project's page (no sidebar entry: its `menu` keeps Settings lit);
   - `views/backlog/`: `backlog.js` (the screen, its dialogs, the sidebar's unpushed badge), `backlog-epics.js`,
     `backlog-labels.js`, `backlog-roadmap.js` (no DOM as they load), `backlog-po.js` and `backlog-po-proposals.js`
     (the Product Owner drawer, put inside `.shell` like the other drawers; `backlog-po.js` wires it as it loads, so
     its header says `load: after views/backlog/backlog.js`) and `backlog.css`;
-  - `views/artifacts/`: the Artifacts screen (`openArtifactsAt` stays a global deep link);
-  - `views/workflows/`: `workflows.js` (Runs, Definitions, the sidebar sub-items it adds after its entry, the deep links
+  - `views/artifacts/`: the Artifacts screen, a tab of Workflows › Runs (#254: no menu entry, its `menu` keeps Runs lit; `openArtifactsAt` stays a global deep link);
+  - `views/workflows/`: `workflows.js` (Definitions, Runs, Pipelines, the screen's tablist and its menu entries, the Supervisor button, the deep links
     `showRunInList` / `showWorkflowDefinition`), `builder.js` + `builder.css` (Builder and its two dialogs);
   - `views/run/`: Run Details (no sidebar entry: the Run item and the runs menu are the shell's): the
     failure banner, the gate cards (`renderRunGates`), the summary, the steps, the sessions and the tabs;

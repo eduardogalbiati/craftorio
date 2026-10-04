@@ -35,7 +35,8 @@ async function openDrawer({ category = null, workflow = null, project = null, in
   if (inputs && (!workflow || state.wf?.file === workflow)) {
     for (const [k, v] of Object.entries(inputs)) WorkflowInputs.set($('#drawer'), k, v);
   }
-  renderProjectOptions(project || state.settings.lastProject);
+  // (#254: with no project given, the app's, chosen in the header)
+  renderProjectOptions(project || window.CurrentProject.get() || state.settings.lastProject);
   $('#drawer').classList.add('open');
   $('#drawer').setAttribute('aria-hidden', 'false');
   $('#drawer-backdrop').classList.remove('hidden');

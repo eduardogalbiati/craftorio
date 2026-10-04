@@ -163,12 +163,12 @@ function parseArgs(argv) {
     else if (k === '--po') a.po = next();
     else throw new Error(`Unknown argument: ${k}`);
   }
-  if (!VIEWS[a.view]) throw new Error(`Unknown view: ${a.view}. Views: ${Object.keys(VIEWS).join(', ')}`);
-  // #254: the Roadmap screen shows the Backlog's demo data in its roadmap mode
-  if (a.view === 'roadmap') Object.assign(a, { view: 'backlog', mode: a.mode || 'roadmap' });
-  const v = VIEWS[a.view];
+  let v = VIEWS[a.view];
+  if (!v) throw new Error(`Unknown view: ${a.view}. Views: ${Object.keys(VIEWS).join(', ')}`);
   if (a.tab && !v.tabs?.includes(a.tab)) throw new Error(`--tab ${a.tab} does not apply to ${a.view}${v.tabs ? ` (tabs: ${v.tabs.join(', ')})` : ''}`);
   if (a.mode && !v.modes?.includes(a.mode)) throw new Error(`--mode ${a.mode} does not apply to ${a.view}${v.modes ? ` (modes: ${v.modes.join(', ')})` : ''}`);
+  // #254: the Roadmap screen shows the Backlog's demo data in its roadmap mode
+  if (a.view === 'roadmap') { Object.assign(a, { view: 'backlog', mode: 'roadmap' }); v = VIEWS.backlog; }
   if (a.theme && !THEMES.includes(a.theme)) throw new Error(`--theme takes ${THEMES.join(' | ')}`);
   if (a.keepAwake && !KEEP_AWAKE.includes(a.keepAwake)) throw new Error(`--keep-awake takes ${KEEP_AWAKE.join(' | ')}`);
   if (a.oracle && !ORACLE_STATES.includes(a.oracle)) throw new Error(`--oracle takes ${ORACLE_STATES.join(' | ')}`);
@@ -1525,6 +1525,8 @@ function main() {
       el.focus();
       el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));`);
     await pause(1500); // the app's first load (account, settings, workflows)
+    // every capture starts with the menu's groups open: a fold made in an earlier capture is remembered (#254)
+    await js('document.querySelectorAll(\'.nav-group.collapsed .nav-group-title\').forEach((b) => b.click());');
     const v = args.view;
     if (args.workflowGiven && v !== 'run') await js(`await api.setSettings({ lastWorkflow: ${JSON.stringify(args.workflow)} });`);
     if (v === 'project') await js(`openProjectView(${JSON.stringify(project.id)})`);

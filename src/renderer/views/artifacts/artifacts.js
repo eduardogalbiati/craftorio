@@ -1,5 +1,5 @@
 /* global api */
-// Artifacts screen: the documents and files the runs produced, grouped per run (filter by project and
+// Artifacts screen (#254: a tab of Workflows › Runs, no menu entry of its own): the documents and files the runs produced, grouped per run (filter by project and
 // text, simulated runs in developer mode, collapse all), and the viewer (markdown with its table of
 // contents, JSON, tables, images, text; the copy menu is artifact-menu.js). openArtifactsAt (the deep
 // link from run lists, the Artifacts panel and the supervisor), loadArtifacts, loadArtifactsThrottled

@@ -325,7 +325,7 @@ a.rm-title:hover { text-decoration: underline; }
 .badge.rm-verdict-warn { color: var(--yellow); background: color-mix(in srgb, var(--yellow) 12%, var(--panel)); border-color: color-mix(in srgb, var(--yellow) 45%, transparent); }
 .badge.rm-verdict-bad { color: var(--red); background: color-mix(in srgb, var(--red) 12%, var(--panel)); border-color: color-mix(in srgb, var(--red) 45%, transparent); }
 .rm-verdict .rm-sign { font-size: .85em; }
-/* #217: what the Roadmap tab hides by default, and how to bring it back */
+/* #217: what the Roadmap hides by default, and how to bring it back */
 .rm-show-all { margin-right: 6px; }
 .rm-hidden-line { margin: 0 0 8px; }
 .rm-folded { align-self: flex-start; }

@@ -1,4 +1,4 @@
-// Backlog › Roadmap (#106): a project's ordered stages of runs (src/roadmap.js), each stage started
+// The Roadmap screen (#106; Code & Build › Roadmap since #254, drawn by backlog.js): a project's ordered stages of runs (src/roadmap.js), each stage started
 // when the previous one has finished and merged. Each item leads with its issues' titles (a list,
 // one line per issue, linked; #110), then badges: its state (planned / running / waiting at a gate /
 // done / failed / skipped), the workflow's short name, the mode (a one-click toggle on planned and
@@ -397,7 +397,7 @@
       </section>`;
   }
 
-  // ---- what the Roadmap tab shows (#217): the open work by default, Show all, the epic filter ------
+  // ---- what the Roadmap shows (#217): the open work by default, Show all, the epic filter ------
   const finished = (x) => x.status === 'done' || x.status === 'skipped';
   const NO_EPIC = 'none'; // BacklogEpics.NONE
   // the item belongs to the epic filter ('' every item, NO_EPIC an issue in no epic, else an epic's id)

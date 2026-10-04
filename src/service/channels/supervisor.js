@@ -80,7 +80,7 @@ module.exports = (ctx) => {
     { channel: 'supervisor:watchAsk', method: 'askWatch', params: ['runId', 'question'], fn: ({ runId, question }) => watches.ask(runId, question) },
     { channel: 'supervisor:watchState', method: 'watchState', params: 'runId', fn: (runId) => watches.state(runId) },
     { event: 'supervisor:watch', method: 'onWatch' },
-    // The app-wide chat (drawer on every screen, Supervisor page): { question, screen, mock, model }.
+    // The app-wide chat (the drawer opened from Workflows): { question, screen, mock, model }.
     // `mock` and MULTIAGENT_SIMULATION_ONLY answer from the simulated supervisor (no model call).
     {
       channel: 'supervisor:chat',
@@ -118,7 +118,7 @@ module.exports = (ctx) => {
         return { ...answer(out), messages: chat().history() };
       },
     },
-    // what the MCP server offers (names and descriptions), for the Supervisor page
+    // what the MCP server offers (names and descriptions), for the expanded Supervisor drawer
     { channel: 'supervisor:tools', method: 'supervisorTools', fn: () => tools.map(({ name, description }) => ({ name, description })) },
   ];
 };

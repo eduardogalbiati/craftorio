@@ -244,7 +244,7 @@
   });
   // The queue also changes without run events (a start that fails, the next issue starting), and a
   // live roadmap's refill (#164) with none. Also the fallback of the file watch (#204): while the
-  // service cannot watch backlog/, the Roadmap tab is polled every 5 s.
+  // service cannot watch backlog/, the Roadmap screen is polled every 5 s.
   let watching = true;
   api.backlogWatching?.().then((w) => { watching = w !== false; }).catch(() => {});
   setInterval(() => {
@@ -601,7 +601,7 @@
   }
   const roadmapCtx = () => ({
     projectId: bl.projectId, setData, render, setError: (msg) => { bl.error = msg; },
-    // #217: the Roadmap tab's Show all (remembered)
+    // #217: the Roadmap's Show all (remembered)
     setShowAll: (on) => { bl.showAll = !!on; save(SHOW_ALL_KEY, bl.showAll ? '1' : ''); render(); },
   });
 
@@ -676,7 +676,7 @@
 
   // The epic filter (#138): every epic with how many issues the other filters show, then "No epic".
   // Hidden when the backlog has no epic, and in the Epics view. One choice for the Board and the
-  // Roadmap tabs (#217); on the Roadmap it counts the issues the roadmap plans.
+  // Roadmap (#217); on the Roadmap it counts the issues the roadmap plans.
   function renderEpicFilter(issues) {
     const sel = $b('#bl-epic');
     const epics = bl.data?.epics || [];
@@ -1594,7 +1594,11 @@
       if (input) input.value = bl.q;
     },
     // the project the next refresh shows (a notification's click, before showView('backlog')): the app's (#254)
-    focusProject: (id) => window.CurrentProject.set(id, { redraw: false }),
+    focusProject: (id) => {
+      if (!id) return;
+      bl.projectId = id;
+      window.CurrentProject.set(id, { redraw: false });
+    },
     openStage,
     // the header's project ({ id, name }): the Product Owner's header names it (#235)
     project: () => project() || null,

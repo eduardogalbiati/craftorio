@@ -1,4 +1,4 @@
-// Dashboard screen (the start screen): the three workflow categories (each opens the Start drawer
+// Dashboard screen (the start screen; the menu's Home, #254): the three workflow categories (each opens the Start drawer
 // on it), the last Night watch's morning summary, the gates waiting for approval across runs and the runs in progress. Registers itself with
 // registerView (view-registry.js); uses app.js globals ($, esc, state, liveRuns, selectedView,
 // pendingGates, selectRun, openGateOf, openDrawer, issueRefs, runSessionStatus, statusLabel).
