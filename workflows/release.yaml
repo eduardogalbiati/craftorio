@@ -282,7 +282,9 @@ steps:
       - { id: ship, label: Ship, help: "Pushes the local {{ inputs.base_branch }} to origin and tags it; the release's issues become Released." }
       - { id: hold, label: Hold, help: "Ends the run: nothing is pushed or tagged. Stages after the roadmap's cut line keep waiting." }
     transitions:
-      - when: "choice == 'ship' and steps.fix.output and steps.fix.output.committed"
+      # the worktree has commits the local base has not (a fix of any round): they are what the
+      # suites passed on, so they merge before the push
+      - when: "choice == 'ship' and (worktree_dir | git_commits(inputs.base_branch))"
         merge: local
         ship: &ship { tag: "{{ inputs.version or ('release-' ~ run_id) }}", build: "{{ inputs.build_command }}" }
         goto: end
@@ -301,13 +303,14 @@ steps:
     type: human_approval
     message: |
       The release was not shipped completely: {{ action_error.message if action_error else 'unknown error' }}
-      Try again: {% if steps.fix.output and steps.fix.output.committed and not local_merge %}merge the fix into the local {{ inputs.base_branch }}, {% endif %}push the local {{ inputs.base_branch }} and the tag again (what already went out is kept){% if inputs.build_command %}, then the build{% endif %}.
+      Try again: {% if worktree_dir | git_commits(inputs.base_branch) %}merge the fix into the local {{ inputs.base_branch }}, {% endif %}push the local {{ inputs.base_branch }} and the tag again (what already went out is kept){% if inputs.build_command %}, then the build{% endif %}.
       Stop: end the run as failed; what was not pushed stays local.
     choices:
       - { id: retry, label: "Try again", help: "Runs Ship again; safe to repeat: a push or a tag already on origin is left as it is." }
       - { id: stop,  label: "Stop the run as failed", help: "Ends the run as failed; nothing more is pushed." }
     transitions:
-      - when: "choice == 'retry' and steps.fix.output and steps.fix.output.committed and not local_merge"
+      # the fix is not merged yet (the merge itself failed)
+      - when: "choice == 'retry' and (worktree_dir | git_commits(inputs.base_branch))"
         merge: local
         ship: *ship
         goto: end
