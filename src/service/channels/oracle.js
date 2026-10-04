@@ -19,6 +19,7 @@
 const fs = require('fs');
 const path = require('path');
 const { execFile } = require('child_process');
+const actions = require('../../oracle-actions');
 const agents = require('../../agents');
 const backlog = require('../../backlog');
 const notifier = require('../../notifications');
@@ -366,6 +367,7 @@ module.exports = (ctx) => {
     projectRunning: (projectId) => roadmaps.readRoadmap(ctx.ws.backlog, projectId).state === 'running',
     onWake: ({ lines, runIds, notices }) => (ctx.ws ? get().wake({ lines, runIds, notices, mock: simulation.simulationOnly() || runIds.every(runMock) }) : { skipped: 'no-workspace' }),
     onChange: () => ctx.events.emit('oracle:changed', { kind: 'wake' }),
+    nightWatch: () => !!ctx.ws && actions.nightWatch(dir()).active,
   });
   // runs of this workspace in progress in another app process (#112): each wakes the Oracle once
   const seenElsewhere = new Set();

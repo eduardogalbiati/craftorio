@@ -275,15 +275,19 @@ function createOracle({
     const all = raw();
     const results = new Map();
     for (const m of all) if (m.kind === 'action-result') results.set(m.actionId, m);
-    // #244: consecutive wake-ups refused by a budget read as one digest
+    // #244: wake-ups refused by a budget read as one digest, across the code-only notices posted
+    // between them; any other message closes the digest
     const list = [];
+    let open = -1; // index in `list` of the digest still open
     for (const m of all) {
       if (m.kind === 'action-result') continue;
-      const prev = list.at(-1);
-      if (m.kind !== 'wake-refused' || prev?.kind !== 'wake-refused') { list.push(m); continue; }
+      if (m.kind === 'notice') { list.push(m); continue; }
+      if (m.kind !== 'wake-refused') { list.push(m); open = -1; continue; }
+      if (open < 0) { open = list.push(m) - 1; continue; }
+      const prev = list[open];
       const count = (prev.count || 1) + 1;
       const events = [...(prev.events || []), ...(m.events || [])];
-      list[list.length - 1] = {
+      list[open] = {
         ...prev, count, events, runIds: [...new Set([...(prev.runIds || []), ...(m.runIds || [])])], lastTs: m.ts,
         text: `${count} wake-ups not answered (${events.length} run events). ${m.refusal || ''}`.trim(),
       };

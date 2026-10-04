@@ -107,10 +107,14 @@ const ROUTINE_DECISIONS = new Set(['resume', 'retry']);
  * #244: the code-only notice of a routine event (a run finished, cancelled or interrupted, a
  * supervisor retry or resume): { runId, status, costUsd, text }, posted with no model call. null: the
  * event needs a decision (a gate, a merge, a limit, a stall, invalid outputs) and wakes the model.
+ * `nightWatch`: the Night watch is on; a failed or interrupted run then wakes the model, which may
+ * repair it (a retry of a roadmap item) while nobody watches.
  */
-function routineNotice(ev, kind) {
+function routineNotice(ev, kind, { nightWatch = false } = {}) {
   const run = ev.run_id || '?';
   const of = (status, text, costUsd = null) => ({ runId: run, status, costUsd, text });
+  if (nightWatch && kind === 'interrupted' && ev.type !== 'run.elsewhere') return null;
+  if (nightWatch && kind === 'finished' && ev.status === 'failed') return null;
   if (kind === 'finished') {
     const cost = Number(ev.summary?.cost_usd ?? ev.summary?.costUsd ?? ev.cost_usd) || 0;
     return of(ev.status || 'finished', `Run ${run} finished ${ev.status || '?'}, cost ${money(cost)}${ev.error ? ` (${clip(ev.error, 200)})` : ''}.`, cost);
@@ -132,9 +136,9 @@ function routineNotice(ev, kind) {
  * `settings()` the workspace settings; `file()` the wake.json path; `projectOf(runId)` a live run's
  * project id; `projectRunning(projectId)` whether its roadmap still runs; `onWake({ lines, runIds,
  * kinds })` the Oracle's turn (a rejected or `{ deferred: true }` answer puts the batch back);
- * `onChange()` the watches or mutes changed.
+ * `onChange()` the watches or mutes changed; `nightWatch()` whether the Night watch is on (#244).
  */
-function createWake({ events, settings, file, projectOf = () => null, projectRunning = () => false, onWake, onChange = () => {}, batchMs = BATCH_MS }) {
+function createWake({ events, settings, file, projectOf = () => null, projectRunning = () => false, onWake, onChange = () => {}, nightWatch = () => false, batchMs = BATCH_MS }) {
   let batch = [];
   let timer = null;
   const invalid = new Map(); // `${runId} ${step}` → invalid outputs seen
@@ -197,7 +201,7 @@ function createWake({ events, settings, file, projectOf = () => null, projectRun
     if (!wakeOn.includes(kind)) return false;
     const inScope = wakeScope === 'all' && !s.muted.includes(ev.run_id);
     if (!inScope && !watch) return false;
-    batch.push({ line: wakeLine(ev, kind), runId: ev.run_id, kind, notice: routineNotice(ev, kind) });
+    batch.push({ line: wakeLine(ev, kind), runId: ev.run_id, kind, notice: routineNotice(ev, kind, { nightWatch: !!nightWatch() }) });
     arm();
     return true;
   }
