@@ -671,8 +671,8 @@ function demoArtifactRuns(ws, projectId) {
     fs.mkdirSync(dir, { recursive: true });
     const at = (m) => new Date(start + m * min).toISOString();
     const events = [
-      { ts: at(0), type: 'workflow.started', workflow, file: `${workflow}.yaml`, project_id: projectId, mock: false, inputs: { task } },
-      { ts: at(42), type: 'workflow.finished', status: 'success' },
+      { seq: 1, ts: at(0), type: 'workflow.started', run_id: runId, workflow, file: `${workflow}.yaml`, project_id: projectId, mock: false, inputs: { task } },
+      { seq: 2, ts: at(42), type: 'workflow.finished', run_id: runId, status: 'success' },
     ];
     fs.writeFileSync(path.join(dir, 'events.jsonl'), `${events.map((e) => JSON.stringify(e)).join('\n')}\n`);
     fs.writeFileSync(path.join(dir, 'summary.json'), JSON.stringify({
