@@ -28,6 +28,8 @@
 //   assertCanRun({ mock })  optional; throws when the account may not start or resume a run
 //   readPrJson(cmd, args)   optional; replaces the gh/glab call that reads a run's PR (tests, UI checks)
 //   userDataDir      optional; the app's user data folder, where speech models live (src/speech.js)
+//   appDir           optional; the app folder Self-healing updates (#279, areas/app-update.js)
+//   relaunch()       optional; restarts the app (src/main.js); without it the app never updates itself
 
 const fs = require('fs');
 const path = require('path');

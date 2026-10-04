@@ -122,6 +122,38 @@ async function applyUpdate({ appDir, sourceDir, install }) {
   return { ok: true, from, to, subjects, installed: lockChanged };
 }
 
+/**
+ * The Undo of an update ("Go back to <from>"): moves the app folder back to `to`, an ancestor of its
+ * commit (nothing is lost: the source clone's main still has the commits). Same result and refusals
+ * as applyUpdate; `subjects` are the commits taken out.
+ */
+async function goBack({ appDir, to, install }) {
+  const dirty = tryGit(appDir, ['status', '--porcelain', '--untracked-files=no']);
+  if (dirty === null) return { ok: false, reason: 'the app folder is not a git checkout' };
+  if (dirty) return { ok: false, reason: 'the app folder has uncommitted changes' };
+  const from = git(appDir, ['rev-parse', 'HEAD']);
+  const target = tryGit(appDir, ['rev-parse', '--verify', '--quiet', `${to}^{commit}`]);
+  if (!target) return { ok: false, reason: `the app folder does not know the commit ${short(to)}` };
+  if (target === from) return { ok: false, reason: `the app is already on ${short(to)}` };
+  if (tryGit(appDir, ['merge-base', '--is-ancestor', target, from]) === null) return { ok: false, reason: `${short(to)} is not an earlier commit of the app folder` };
+  const subjects = git(appDir, ['log', '--format=%s', `${target}..${from}`]).split('\n').filter(Boolean);
+  const lockChanged = tryGit(appDir, ['diff', '--quiet', target, from, '--', 'package-lock.json']) === null;
+  try {
+    git(appDir, ['reset', '--keep', '--quiet', target]);
+  } catch (e) {
+    return { ok: false, reason: `the app folder could not go back (${firstLine(e)})` };
+  }
+  if (lockChanged) {
+    try {
+      await install({ cwd: appDir });
+    } catch (e) {
+      tryGit(appDir, ['reset', '--keep', '--quiet', from]);
+      return { ok: false, reason: `the dependencies did not install (${firstLine(e)}); the app folder is back on ${short(from)}` };
+    }
+  }
+  return { ok: true, from, to: target, subjects, installed: lockChanged };
+}
+
 function firstLine(e) {
   const s = String((e && e.stderr && e.stderr.toString()) || (e && e.message) || e || '').trim();
   return s.split('\n')[0].slice(0, 200);
@@ -202,9 +234,10 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
  * The whole update, in order: pause (nothing new starts), wait for every run in progress (a run at a
  * human gate is waited for, never answered; the owner is told once), update, write the intent, log
  * and announce it, restart. A refusal or a failed install resumes the roadmaps and tells the owner.
- * `cancelled()` (optional) stops the wait without resuming (the owner took over).
+ * `cancelled()` (optional) stops the wait without resuming (the owner took over); `apply` (optional,
+ * applyUpdate by default) changes the app folder: goBack for the Undo.
  */
-async function runUpdateCycle({ workspaceDir, appDir, sourceDir, pause, resume, activeRuns, pollMs = POLL_MS, install, notify, relaunch, cancelled = () => false, now = () => Date.now() }) {
+async function runUpdateCycle({ workspaceDir, appDir, sourceDir, pause, resume, activeRuns, pollMs = POLL_MS, install, notify, relaunch, cancelled = () => false, now = () => Date.now(), apply = applyUpdate }) {
   const roadmaps = (await pause(PAUSE_REASON)) || [];
   let gateTold = false;
   for (;;) {
@@ -220,10 +253,10 @@ async function runUpdateCycle({ workspaceDir, appDir, sourceDir, pause, resume, 
   }
   const refuse = async (reason) => {
     await resume(roadmaps);
-    notify({ title: 'The app was not updated', body: `${reason}. Nothing was changed; the roadmap resumed.` });
+    notify({ title: 'The app was not updated', body: `${reason}. Nothing was changed; the roadmap resumed.`, ok: false });
     return { ok: false, reason, roadmaps };
   };
-  const res = await applyUpdate({ appDir, sourceDir, install });
+  const res = await apply({ appDir, sourceDir, install });
   if (!res.ok) return refuse(res.reason);
   const intent = writeIntent(workspaceDir, { from: res.from, to: res.to, subjects: res.subjects, roadmaps, appDir }, { now: now() });
   night.logNight(path.join(workspaceDir, 'oracle'), 'oracle.action', {
@@ -236,7 +269,7 @@ async function runUpdateCycle({ workspaceDir, appDir, sourceDir, pause, resume, 
   } catch (e) {
     dismissFailedUpdate(workspaceDir);
     await resume(roadmaps);
-    notify({ title: 'The app did not restart', body: `${firstLine(e)}. The app folder is on ${short(res.to)}: restart the app to run it; the roadmap resumed.` });
+    notify({ title: 'The app did not restart', body: `${firstLine(e)}. The app folder is on ${short(res.to)}: restart the app to run it; the roadmap resumed.`, ok: false });
     return { ok: false, reason: firstLine(e), roadmaps };
   }
   return { ok: true, ...res, roadmaps, intent };
@@ -249,6 +282,7 @@ module.exports = {
   dismissFailedUpdate,
   failedUpdate,
   findSource,
+  goBack,
   intentFile,
   normalizeUrl,
   PAUSE_REASON,
