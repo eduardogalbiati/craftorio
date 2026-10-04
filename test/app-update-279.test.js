@@ -346,3 +346,48 @@ test('#279 after restart: no "after" record within 2 minutes leaves the intent a
   dismissFailedUpdate(ws);
   assert.equal(fs.existsSync(path.join(ws, 'oracle', 'app-update.json')), false);
 });
+
+// ---- After review: the cycle's other endings, the Night watch's Go back --------------------------
+
+test('#279 cycle: the owner taking over during the wait stops the cycle, the app folder untouched and no restart', async (t) => {
+  const { runUpdateCycle } = load();
+  const r = appAndClone(t);
+  let polls = 0;
+  const { workspaceDir, calls, opts } = cycleHarness(t, r, { runs: () => { polls++; return [{ runId: 'run-1', gate: false }]; } });
+  opts.cancelled = () => polls >= 3;
+  const res = await runUpdateCycle(opts);
+  assert.equal(res.ok, false);
+  assert.equal(res.reason, 'cancelled');
+  assert.equal(head(r.git, r.appDir), r.from);
+  assert.equal(calls.relaunched, 0);
+  assert.deepEqual(calls.resumed, []); // the owner resumed it: the cycle does not resume it again
+  assert.equal(fs.existsSync(path.join(workspaceDir, 'oracle', 'app-update.json')), false);
+});
+
+test('#279 cycle: a restart that fails deletes the intent, resumes the roadmap and tells the owner', async (t) => {
+  const { runUpdateCycle } = load();
+  const r = appAndClone(t);
+  const { workspaceDir, calls, opts } = cycleHarness(t, r);
+  opts.relaunch = () => { calls.relaunched++; throw new Error('Runs are in progress'); };
+  const res = await runUpdateCycle(opts);
+  assert.equal(res.ok, false);
+  assert.equal(calls.relaunched, 1);
+  assert.equal(fs.existsSync(path.join(workspaceDir, 'oracle', 'app-update.json')), false); // no failed-update banner later
+  assert.deepEqual(calls.resumed, [['p1']]);
+  assert.ok(calls.notes.some((n) => /did not restart/i.test(n) && n.includes('Runs are in progress')), calls.notes.join(' | '));
+});
+
+test('#279 Night watch: an app update action offers "Go back to <from>" instead of the backup Undo', () => {
+  const { nightMetrics } = night;
+  const W0 = Date.parse('2026-10-04T08:00:00Z');
+  const iso = (m) => new Date(W0 + m * 60e3).toISOString();
+  const log = [
+    { ts: iso(10), type: 'oracle.action', actionId: 'app-update-1', kind: 'app.update', title: 'Updated the app: febef8b → 5d9be33', from: 'febef8b1234', to: '5d9be331234', subjects: ['fix 1'], permission: 'Self-healing', auto: true, ok: true, result: 'restart' },
+    { ts: iso(20), type: 'oracle.action', actionId: 'other-1', kind: 'roadmap.resume', title: 'Resumed the roadmap', permission: 'Self-healing', auto: true, ok: true, undoable: true, backup: 'b.json' },
+  ];
+  const m = nightMetrics({ night: { startedAt: iso(0), until: iso(540) }, log, runs: [], now: W0 + 60 * 60e3 });
+  const update = m.actionList.find((a) => a.actionId === 'app-update-1');
+  assert.equal(update.from, 'febef8b1234');
+  assert.equal(update.undoable, false);
+  assert.equal(m.actionList.find((a) => a.actionId === 'other-1').from, undefined);
+});
