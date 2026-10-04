@@ -7,7 +7,9 @@
 // failure) pauses the roadmap at the line. A release run named like the waiting cut line is that
 // line's run, whoever started it. Nothing here pushes: Ship is the run's own gate and the engine's
 // `ship:` transition. A simulated release run records nothing; its Ship only opens the cut line of
-// a simulated roadmap. `markReleasedIssues` marks the Backlog's issues a release shipped.
+// a simulated roadmap. `markReleasedIssues` marks the Backlog's issues a release shipped; the
+// discovery cards linked to them are marked in the card store when the release is recorded
+// (`markCards`; the store, src/discovery.js, comes with #256: a checkout without it has no card).
 
 const fs = require('fs');
 const path = require('path');
@@ -19,6 +21,15 @@ const roadmaps = require('../../roadmap');
 const runs = require('../../runs');
 
 const RELEASE_WORKFLOW = 'release.yaml';
+
+// The discovery card store (src/discovery.js, #256), or null in a checkout that does not have it
+// (it was written in parallel with #260): without the store there is no card to mark.
+function cardStore() {
+  try { return require('../../discovery'); } catch (e) {
+    if (e.code === 'MODULE_NOT_FOUND' && e.message.split('\n')[0].includes('discovery')) return null;
+    throw e;
+  }
+}
 
 module.exports = (ctx) => {
   const idOf = (projectId) => path.basename(String(projectId));
@@ -124,9 +135,23 @@ module.exports = (ctx) => {
     if (was === 'running') ctx.notify({ kind: 'run', event: 'failed', title: 'Roadmap paused', body: message.slice(0, 180), target: { view: 'roadmap', projectId } }, { projectId });
   }
 
+  // The discovery cards linked to an issue of the recorded release (found by its tag) become Released
+  // (a card already released is left alone). A card that cannot be written is logged: it never
+  // keeps the release from being settled.
+  function markCards(projectId, tag) {
+    try {
+      const store = cardStore();
+      const release = store && releases.readReleases(ctx.ws.releases, projectId).releases.find((r) => r.tag === tag);
+      if (release) releases.releaseCards(store, ctx.ws.discovery, projectId, { version: release.version, issues: (release.issues || []).map((i) => i.number) });
+    } catch (e) {
+      console.error(`release ${tag}: discovery cards not marked Released:`, e.message);
+    }
+  }
+
   // What a release run that ended leaves (idempotent: the run's event and the roadmap's dispatcher
-  // both call it). A real shipped run is recorded once in the project's history (by its tag) and the
-  // cut line it was started for becomes shipped; a run that did not ship holds its line (`holdLine`).
+  // both call it). A real shipped run is recorded once in the project's history (by its tag), the
+  // discovery cards linked to its issues are marked Released (`markCards`) and the cut line it was
+  // started for becomes shipped; a run that did not ship holds its line (`holdLine`).
   // → 'shipped' | 'held' | 'failed' | null (no recorded end)
   function settleRelease(projectId, runId, summary = readSummary(runId)) {
     if (!summary) return null;
@@ -155,6 +180,7 @@ module.exports = (ctx) => {
         notes: next.generated ? releases.releaseNotes({ version, issues: [...issues.values()], runs: next.runs }) : next.notes,
       });
     }
+    if (shipped && !summary.mock) markCards(projectId, shipped.tag);
     if (shipped && stage && stage.release.status !== 'shipped') {
       roadmaps.setRelease(ws.backlog, projectId, stage.id, { status: 'shipped', shippedAt: summary.finished_at || new Date().toISOString() });
     } else if (!shipped && stage?.release.status === 'running') {

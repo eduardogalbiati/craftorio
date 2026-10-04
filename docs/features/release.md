@@ -24,5 +24,5 @@ line wait until that release shipped (a held or failed release pauses the roadma
 run of that name started from the Releases screen is the line's too). Roadmaps without cut lines
 run as before. Shipping records the release (version, date, issues, runs, cost, test results,
 notes) in `<workspace>/releases/<project>.json` and marks its issues **Released** on the Backlog.
-The discovery cards linked to those issues are not marked yet: there is no discovery card store
-before #256; `markReleased` (src/releases.js) already handles cards for it to call.
+The discovery cards linked to one of those issues (`links.issues`) are marked Released too: their
+`links.release` becomes the release's version, and a card keeps the first release that shipped it.

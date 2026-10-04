@@ -12,7 +12,9 @@
 // `shipRelease`: `git push origin <base>` (never forced) and the tag at that commit. Nothing else
 // in this module touches origin. Shipping marks the release's issues and the discovery cards linked
 // to them Released (`markReleased`, pure). The Backlog applies it to its issues on every read, from
-// the history; the cards half has no caller yet: there is no discovery card store before #256.
+// the history; the cards are marked in the discovery card store when the release is recorded
+// (`releaseCards`: `links.release` of each card whose `links.issues` holds a shipped issue; the
+// store is src/discovery.js of #256, handed in by the service).
 // Service: src/service/areas/releases.js; channels: src/service/channels/releases.js; screen:
 // src/renderer/views/releases/releases.js.
 
@@ -96,6 +98,22 @@ function markReleased({ issues = [], cards = [] } = {}, { version, issues: numbe
     issues: issues.map((i) => (shipped.has(Number(i.number)) ? mark(i) : i)),
     cards: cards.map((c) => ((c.issues || []).some((n) => shipped.has(Number(n))) ? mark(c) : c)),
   };
+}
+
+/**
+ * Marks the discovery cards linked to one of the release's issues Released in the card store:
+ * their `links.release` becomes the version. A card already released keeps its first release.
+ * @param {{ listCards: Function, updateCard: Function }} store the discovery card store (src/discovery.js, #256)
+ * @param {string} dir the workspace's discovery folder
+ * @param {{ version: string, issues: number[] }} release
+ * @returns {string[]} the ids of the cards marked
+ */
+function releaseCards(store, dir, projectId, { version, issues = [] } = {}) {
+  if (!String(version || '').trim()) return [];
+  const open = store.listCards(dir, projectId).filter((c) => !c.links?.release).map((c) => ({ id: c.id, issues: c.links?.issues || [] }));
+  const marked = markReleased({ cards: open }, { version, issues }).cards.filter((c) => c.status === 'released');
+  for (const c of marked) store.updateCard(dir, projectId, c.id, { links: { release: version } });
+  return marked.map((c) => c.id);
 }
 
 /**
@@ -201,6 +219,7 @@ module.exports = {
   nextRelease,
   readReleases,
   recordRelease,
+  releaseCards,
   releaseNotes,
   releasesFile,
   saveNextNotes,
