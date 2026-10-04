@@ -61,10 +61,10 @@ steps:
 `;
 
 // A service with `n` mock runs waiting at their gate, and the mobile server on a random port.
-async function setup(t, n = 1) {
+async function setup(t, n = 1, workflow = WORKFLOW) {
   const { createMobileGatesServer } = load(); // the module does not exist yet: fail before starting runs
   const { service, api } = makeService(t);
-  fs.writeFileSync(path.join(service.workspace().workflows, 'fixture-mobile.yaml'), WORKFLOW);
+  fs.writeFileSync(path.join(service.workspace().workflows, 'fixture-mobile.yaml'), workflow);
   api['settings:set']({ concurrentRuns: { enabled: true, max: 1, perProject: null, countSimulations: false } }); // several gates open at once
   const gates = new Map(); // runId → approval.requested
   const resolved = [];
@@ -95,7 +95,10 @@ async function pairDevice(base, m, name = 'Pixel') {
 }
 const tokenOf = (link) => new URL(link).searchParams.get('t');
 const gatePath = (g) => `/gates/${encodeURIComponent(g.run_id)}/${encodeURIComponent(g.approval_id)}`;
-function answer(base, g, { t, device, answer: a = 'ship', confirm = true } = {}) {
+// `confirm` defaults to true; passing `confirm: undefined` sends no confirm field at all.
+function answer(base, g, opts = {}) {
+  const { t, device, answer: a = 'ship' } = opts;
+  const confirm = 'confirm' in opts ? opts.confirm : true;
   const headers = { 'Content-Type': 'application/json', ...(device ? { Authorization: `Bearer ${device}` } : {}) };
   return fetch(`${base}${gatePath(g)}/answer`, { method: 'POST', headers, body: JSON.stringify({ t, answer: a, ...(confirm === undefined ? {} : { confirm }) }) });
 }
@@ -220,6 +223,48 @@ test('#226 a confirmed answer from a paired device resolves the gate, recorded a
   await untilTrue(() => fs.readFileSync(file, 'utf8').includes('"via":"mobile"'));
   // answering again: the gate is no longer open
   assert.equal((await answer(base, g, { t: tk, device: token })).status, 409);
+});
+
+const YES_NO_WORKFLOW = `apiVersion: multiagent/v1
+kind: Workflow
+metadata:
+  name: fixture-mobile
+agents:
+  a: { provider: claude, model: m, session: ephemeral }
+steps:
+  - id: work
+    agent: a
+    prompt: "do the work"
+  - id: merge
+    type: human_approval
+    message: "Tests failed. Merge anyway?"
+    approve_label: Merge anyway
+    reject_label: Send back
+    transitions:
+      - when: "approved"
+        goto: end
+      - when: "rejected"
+        goto: rework
+  - id: rework
+    agent: a
+    prompt: "redo the work"
+`;
+
+test('#226 Reject on an Approve / Reject gate from the phone records approved false and takes the reject route', async (t) => {
+  const { service, m, base, gates, resolved } = await setup(t, 1, YES_NO_WORKFLOW);
+  const [g] = gates;
+  const started = [];
+  service.events.on('run:event', (ev) => { if (ev.type === 'step.started' && ev.run_id === g.run_id) started.push(ev.step_id); });
+  const { token } = await pairDevice(base, m);
+  const tk = tokenOf(m.gateLink(g.run_id, g.approval_id));
+  const res = await answer(base, g, { t: tk, device: token, answer: 'reject' });
+  assert.equal(res.status, 200);
+  await untilTrue(() => resolved.length === 1);
+  assert.equal(resolved[0].approved, false);
+  assert.equal(resolved[0].via, 'mobile');
+  await untilTrue(() => started.includes('rework'));
+  const file = path.join(service.workspace().runs, g.run_id, 'events.jsonl');
+  await untilTrue(() => fs.readFileSync(file, 'utf8').split('\n').some((l) => l.includes('"approval.resolved"') && l.includes('"approved":false') && l.includes('"via":"mobile"')));
 });
 
 test('#226 nothing but the gates is served on the mobile port (no API, no app UI, no terminals, no files)', async (t) => {
