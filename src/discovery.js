@@ -12,6 +12,11 @@
 //       attachments/              any file, original names, deduplicated
 //       conversation.jsonl        the card's thread, one JSON entry per line
 //     archive/<card id>/          discarded or merged cards (same layout, card.archived says why)
+// The Discovery board (#257): the columns Inbox, Triage, Shape, Define, Ready, a WIP limit on Shape
+// and Define (setWip; a move past it is never refused here: the screen asks), a card's place within
+// its column (moveCard's `index`), and the document's history: versions/ also gets the document a
+// restored version or a run's result replaced (before-restore, before-result) and the result itself
+// (result-<source>: Write & Review, AI Arena), which the thread notes too ({ kind: 'result' }).
 // Every file is written whole (temp file + rename, src/state-file.js); the thread is appended one
 // line at a time. Project ids, card ids and attachment names are checked before any path is built:
 // nothing outside a card's folder is read or written. Used by the discovery: channels
@@ -24,10 +29,14 @@ const { sniffImage } = require('./engine/providers');
 const { renameWithRetry, writeFileAtomic } = require('./state-file');
 
 const TYPES = ['idea', 'prd', 'rfc', 'bug', 'hotfix'];
-// the columns this store knows; the Discovery board adds its own (#261)
+// the board's columns, in order: the Inbox screen shows the first, the Discovery board the others
+// (#257); `wip` is the column's WIP limit (null: none), changed with setWip
 const BOARD_COLUMNS = [
   { id: 'inbox', title: 'Inbox', wip: null },
   { id: 'triage', title: 'Triage', wip: null },
+  { id: 'shape', title: 'Shape', wip: 5 },
+  { id: 'define', title: 'Define', wip: 5 },
+  { id: 'ready', title: 'Ready', wip: null },
 ];
 const COLUMNS = BOARD_COLUMNS.map((c) => c.id);
 const MAX_ATTACHMENT_BYTES = 50 * 1024 * 1024;
@@ -41,6 +50,10 @@ const EDITABLE = ['title', 'type', 'tags', 'clarity', 'estimate', 'links'];
 
 // a file being written (writeFileAtomic, addAttachment): <name>.<pid>.tmp, never listed as an attachment
 const TEMP_FILE = /\.\d+\.tmp$/;
+// a version of the document: <iso time with - for : and .>-<reason>.md (snapshotVersion)
+const VERSION_FILE = /^(\d{4}-\d{2}-\d{2}T\d{2})-(\d{2})-(\d{2})-(\d{3}Z)-([\w-]+)\.md$/;
+// the runs whose result comes back to a card (recordResult), by the `source` they are recorded under
+const RESULT_SOURCES = { 'ai-arena': 'AI Arena', 'write-review': 'Write & Review' };
 
 const now = () => new Date().toISOString();
 const mb = (n) => `${Math.ceil(n / 1024 / 1024)} MB`;
@@ -80,6 +93,12 @@ function attachmentFile(folder, name) {
   return path.join(folder, 'attachments', base);
 }
 
+// The file of a version of the card's document: `name` is a plain file name of versions/, nothing else.
+function versionFile(folder, name) {
+  if (!VERSION_FILE.test(String(name ?? ''))) throw new Error(`Not a version of this card: ${name}`);
+  return path.join(folder, 'versions', String(name));
+}
+
 // The project's folder with its cards/, and the .gitignore that keeps discovery/ out of any repository.
 function ensureProject(dir, projectId) {
   const folder = projectDir(dir, projectId);
@@ -101,15 +120,33 @@ function readBoard(dir, projectId) {
   return { columns: columns.map((c) => ({ ...c, wip: c.wip ?? null })), order };
 }
 
-// Takes the card off every column, then puts it in `column` (first: a new card; last: a moved one).
-function placeOnBoard(dir, projectId, id, column, { first = false } = {}) {
+// Takes the card off every column, then puts it in `column`: first (a new card), at `index` among
+// the column's other cards (a card dropped at a place), else last (a moved one).
+function placeOnBoard(dir, projectId, id, column, { first = false, index } = {}) {
   const board = readBoard(dir, projectId);
   for (const c of Object.keys(board.order)) board.order[c] = board.order[c].filter((x) => x !== id);
   if (column) {
-    board.order[column] = board.order[column] || [];
-    if (first) board.order[column].unshift(id); else board.order[column].push(id);
+    const list = board.order[column] || [];
+    board.order[column] = list;
+    if (first) list.unshift(id);
+    else if (Number.isInteger(index) && index >= 0 && index < list.length) list.splice(index, 0, id);
+    else list.push(id);
   }
   writeJson(path.join(ensureProject(dir, projectId), 'board.json'), board);
+}
+
+/**
+ * Sets a column's WIP limit (a positive integer) and returns the board. The limit warns, it never
+ * blocks: moveCard does not look at it (the Discovery board asks before a move past it).
+ */
+function setWip(dir, projectId, column, limit) {
+  const board = readBoard(dir, projectId);
+  const col = board.columns.find((c) => c.id === column);
+  if (!col) throw new Error(`Unknown column: ${column}`);
+  if (!Number.isInteger(limit) || limit < 1) throw new Error(`A WIP limit is a whole number from 1: ${limit}`);
+  col.wip = limit;
+  writeJson(path.join(ensureProject(dir, projectId), 'board.json'), board);
+  return board;
 }
 
 // ---- cards ----------------------------------------------------------------------------------------
@@ -136,7 +173,18 @@ function attachmentNames(folder) {
   } catch { return []; }
 }
 
-// card.json with the document, the acceptance criteria and the attachment names.
+// The thread's entries, oldest first (a line cut by a crash is skipped).
+function threadOf(folder) {
+  const out = [];
+  for (const line of readText(path.join(folder, 'conversation.jsonl')).split('\n')) {
+    if (!line.trim()) continue;
+    try { out.push(JSON.parse(line)); } catch { /* a broken line */ }
+  }
+  return out;
+}
+
+// card.json with the document, the acceptance criteria, the attachment names and the number of
+// thread entries (`threadCount`: a card's face shows it without reading the thread).
 function load(folder) {
   const card = JSON.parse(fs.readFileSync(path.join(folder, 'card.json'), 'utf8'));
   return {
@@ -144,12 +192,13 @@ function load(folder) {
     document: readText(path.join(folder, 'document.md')),
     acceptance: readText(path.join(folder, 'acceptance.md')),
     attachments: attachmentNames(folder),
+    threadCount: threadOf(folder).length,
   };
 }
 
-// Writes card.json from a loaded card (its files' content is not part of it).
+// Writes card.json from a loaded card (its files' content and counts are not part of it).
 function saveCard(folder, card) {
-  const { document, acceptance, attachments, ...json } = card;
+  const { document, acceptance, attachments, threadCount, ...json } = card;
   writeJson(path.join(folder, 'card.json'), json);
 }
 
@@ -258,19 +307,92 @@ function snapshotVersion(dir, projectId, id, reason) {
   return name;
 }
 
-/** Moves a card to another column: a history entry { ts, from, to, by }, a version of its document, the board's order. */
-function moveCard(dir, projectId, id, column, { by = 'owner' } = {}) {
+/**
+ * Moves a card to another column: a history entry { ts, from, to, by }, a version of its document,
+ * the board's order (last in the column, or at `index` among its other cards). A move within its
+ * own column only changes its place (with an `index`): no history entry, no version.
+ */
+function moveCard(dir, projectId, id, column, { by = 'owner', index } = {}) {
   const folder = existingCard(dir, projectId, id);
   checkColumn(dir, projectId, column);
   const card = load(folder);
-  if (card.column === column) return card;
+  if (card.column === column) {
+    if (Number.isInteger(index)) placeOnBoard(dir, projectId, id, column, { index });
+    return card;
+  }
   snapshotVersion(dir, projectId, id, `move-${column}`);
   const ts = now();
   card.history = [...(card.history || []), { ts, from: card.column, to: column, by: String(by || 'owner') }];
   card.column = column;
   card.updated = ts;
   saveCard(folder, card);
-  placeOnBoard(dir, projectId, id, column);
+  placeOnBoard(dir, projectId, id, column, { index });
+  return load(folder);
+}
+
+// ---- versions -------------------------------------------------------------------------------------
+
+/** The versions of the card's document, newest first: { name (the file in versions/), ts, reason }. */
+function listVersions(dir, projectId, id) {
+  const folder = existingCard(dir, projectId, id);
+  let names = [];
+  try { names = fs.readdirSync(path.join(folder, 'versions')); } catch { /* no version yet */ }
+  return names
+    .map((name) => {
+      const m = VERSION_FILE.exec(name);
+      return m ? { name, ts: `${m[1]}:${m[2]}:${m[3]}.${m[4]}`, reason: m[5] } : null;
+    })
+    .filter(Boolean)
+    // the name starts with the time; within one millisecond a result sorts as newer than the
+    // document it replaced (result-… > before-…)
+    .sort((a, b) => (a.name < b.name ? 1 : -1));
+}
+
+/** The text of a version. `name` is one of listVersions' names: anything else (a path) throws. */
+function readVersion(dir, projectId, id, name) {
+  const file = versionFile(existingCard(dir, projectId, id), name);
+  if (!fs.existsSync(file)) throw new Error(`Version not found: ${name}`);
+  return fs.readFileSync(file, 'utf8');
+}
+
+// Keeps the document about to be replaced as a version, unless the newest version already holds it.
+function keepDocument(dir, projectId, id, reason) {
+  const [newest] = listVersions(dir, projectId, id);
+  const current = readCard(dir, projectId, id).document;
+  if (!newest || readVersion(dir, projectId, id, newest.name) !== current) snapshotVersion(dir, projectId, id, reason);
+}
+
+/**
+ * Makes a version the card's document again. The document it replaces is kept as a new version
+ * (before-restore), so nothing is lost, and the thread notes who restored what.
+ */
+function restoreVersion(dir, projectId, id, name, { by = 'owner' } = {}) {
+  const folder = existingCard(dir, projectId, id);
+  const text = readVersion(dir, projectId, id, name);
+  keepDocument(dir, projectId, id, 'before-restore');
+  writeFileAtomic(path.join(folder, 'document.md'), text);
+  touch(folder);
+  appendConversation(dir, projectId, id, { kind: 'restore', author: String(by || 'owner'), version: String(name), text: `Restored the version ${name} as the document.` });
+  return load(folder);
+}
+
+/**
+ * The result of a run started from the card comes back (`source`: 'write-review' or 'ai-arena'):
+ * `text` becomes the document, kept as the version result-<source> (the document it replaces is
+ * kept too), and the thread gets an entry { kind: 'result', source, runId }. Returns the card.
+ */
+function recordResult(dir, projectId, id, { source, text, runId = null, by = 'owner' } = {}) {
+  const folder = existingCard(dir, projectId, id);
+  if (!Object.hasOwn(RESULT_SOURCES, String(source))) throw new Error(`Unknown result source: ${source} (one of ${Object.keys(RESULT_SOURCES).join(', ')})`);
+  if (!String(text ?? '').trim()) throw new Error('A result needs a text.');
+  keepDocument(dir, projectId, id, 'before-result');
+  writeFileAtomic(path.join(folder, 'document.md'), String(text));
+  const version = snapshotVersion(dir, projectId, id, `result-${source}`);
+  touch(folder);
+  appendConversation(dir, projectId, id, {
+    kind: 'result', source, runId: runId ? String(runId) : null, author: String(by || 'owner'), version,
+    text: `${RESULT_SOURCES[source]} finished: its result is the document now (version ${version}).`,
+  });
   return load(folder);
 }
 
@@ -356,13 +478,7 @@ function appendConversation(dir, projectId, id, entry = {}) {
 
 /** The card's thread, oldest first (a line cut by a crash is skipped). */
 function readConversation(dir, projectId, id) {
-  const folder = existingCard(dir, projectId, id);
-  const out = [];
-  for (const line of readText(path.join(folder, 'conversation.jsonl')).split('\n')) {
-    if (!line.trim()) continue;
-    try { out.push(JSON.parse(line)); } catch { /* a broken line */ }
-  }
-  return out;
+  return threadOf(existingCard(dir, projectId, id));
 }
 
 /**
@@ -449,6 +565,7 @@ module.exports = {
   createCard,
   listArchived,
   listCards,
+  listVersions,
   listWaiting,
   MAX_ATTACHMENT_BYTES,
   mergeCard,
@@ -457,8 +574,12 @@ module.exports = {
   readBoard,
   readCard,
   readConversation,
+  readVersion,
+  recordResult,
   removeAttachment,
   restoreCard,
+  restoreVersion,
+  setWip,
   snapshotVersion,
   TYPES,
   updateCard,

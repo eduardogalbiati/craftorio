@@ -1,4 +1,6 @@
-// Discovery cards (#256, src/discovery.js): the card API of the Inbox screen (views/inbox/), and the
+// Discovery cards (#256, src/discovery.js): the card API of the Inbox screen (views/inbox/) and of
+// the Discovery board (#257, views/discovery/: the board, its WIP limits, a card's place in its
+// column, the document's versions, a run's result coming back), and the
 // only way a screen, the Oracle or an agent reaches a card. Every channel works on the workspace's
 // discovery folder (layout().discovery), private to the workspace; the store refuses a project id,
 // a card id or an attachment name that is a path. The author of a card, a move or a note is the
@@ -43,12 +45,56 @@ module.exports = (ctx) => {
       params: ['projectId', 'cardId', 'fields'],
       fn: ({ projectId, cardId, fields }) => discovery.updateCard(dir(), projectId, cardId, fields || {}),
     },
-    // to another column (Accept: 'triage'): a history entry and a version of the document
+    // to another column (Accept: 'triage'): a history entry and a version of the document; `index`
+    // (optional) is its place among the column's other cards, also for a move within its column
     {
       channel: 'discovery:move',
       method: 'moveDiscoveryCard',
-      params: ['projectId', 'cardId', 'column'],
-      fn: ({ projectId, cardId, column }) => discovery.moveCard(dir(), projectId, cardId, column, { by: owner() }),
+      params: ['projectId', 'cardId', 'column', 'index'],
+      fn: ({ projectId, cardId, column, index }) => discovery.moveCard(dir(), projectId, cardId, column, { by: owner(), index }),
+    },
+    // the board (#257): { columns: [{ id, title, wip }], order: { <column>: [card ids] } }
+    {
+      channel: 'discovery:board',
+      method: 'discoveryBoard',
+      params: ['projectId'],
+      fn: ({ projectId }) => discovery.readBoard(dir(), projectId),
+    },
+    // a column's WIP limit (a positive integer) → the board; the limit warns, the store never blocks a move
+    {
+      channel: 'discovery:set-wip',
+      method: 'setDiscoveryWip',
+      params: ['projectId', 'column', 'limit'],
+      fn: ({ projectId, column, limit }) => discovery.setWip(dir(), projectId, column, limit),
+    },
+    // the versions of the card's document, newest first: [{ name, ts, reason }]
+    {
+      channel: 'discovery:versions',
+      method: 'discoveryVersions',
+      params: ['projectId', 'cardId'],
+      fn: ({ projectId, cardId }) => discovery.listVersions(dir(), projectId, cardId),
+    },
+    // a version's text (`name`: one of discovery:versions' names)
+    {
+      channel: 'discovery:version',
+      method: 'discoveryVersion',
+      params: ['projectId', 'cardId', 'name'],
+      fn: ({ projectId, cardId, name }) => discovery.readVersion(dir(), projectId, cardId, name),
+    },
+    // the version becomes the document again (the replaced document is kept as a version) → the card
+    {
+      channel: 'discovery:restore-version',
+      method: 'restoreDiscoveryVersion',
+      params: ['projectId', 'cardId', 'name'],
+      fn: ({ projectId, cardId, name }) => discovery.restoreVersion(dir(), projectId, cardId, name, { by: owner() }),
+    },
+    // the result of a run started from the card (`source`: 'write-review' | 'ai-arena'): the new
+    // document, a version and a thread entry → the card
+    {
+      channel: 'discovery:record-result',
+      method: 'recordDiscoveryResult',
+      params: ['projectId', 'cardId', 'source', 'text', 'runId'],
+      fn: ({ projectId, cardId, source, text, runId }) => discovery.recordResult(dir(), projectId, cardId, { source, text, runId, by: owner() }),
     },
     // a pasted, dropped or picked file (`name` + base64 `data`) → the stored name. A `path` is refused:
     // a screen (the browser UI too) never makes the service read a file of this machine by its path

@@ -2,7 +2,9 @@
 // between the contenders, the synthesizer, the verifier and the platform's supervisor. Like Write &
 // Review (views/duo/), the chat is rebuilt from the run's events, live (run:event) or from a past
 // run's events.jsonl (Workflows › Runs › "Open chat"). Styles: chat.css + arena.css; models:
-// chat-models.js. Registers itself with registerView, with its guide dialog.
+// chat-models.js. From a Discovery card (window.openArenaForCard, #257) the request is prefilled
+// with the card's document and the run's final document goes back to the card (DiscoveryRuns).
+// Registers itself with registerView, with its guide dialog.
 (() => {
   const $a = (sel) => document.querySelector(sel);
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -130,8 +132,9 @@
     try { mock = wantsSimulation($a('#arena-mock')); } catch (e) { err.textContent = e.message; return; }
     const scenario = $a('#arena-scenario').value;
     try {
+      // a request prefilled from a Discovery card is not kept as the next default
       localStorage.setItem(LS, JSON.stringify({
-        contenders: setup.contenders, task: inputs.task, skill: inputs.document_skill, peer: inputs.peer_review, lenses: inputs.lenses,
+        contenders: setup.contenders, task: fromCard ? saved.task : inputs.task, skill: fromCard ? saved.skill : inputs.document_skill, peer: inputs.peer_review, lenses: inputs.lenses,
         scenario, project: $a('#arena-project').value,
       }));
     } catch { /* ignore */ }
@@ -143,6 +146,12 @@
       const { runId } = await api.startRun({ file: FILE, inputs, mock, mockSequences: mock ? SCENARIOS[scenario]?.seq : null, ...(images.length ? { attachments: { task: images } } : {}) });
       PasteImage.clear($a('#arena-task'));
       bindLive(runId);
+      // started for a Discovery card: its final document goes back to the card when the run finishes
+      if (fromCard) {
+        window.DiscoveryRuns.started(runId, { projectId: fromCard.projectId, cardId: fromCard.cardId, source: 'ai-arena' });
+        fromCard = null;
+        renderCardBanner();
+      }
     } catch (e) {
       starting = false;
       buffer = [];
@@ -183,6 +192,43 @@
     if (!types.some(([id]) => id === current)) types.push([current, current]);
     sel.innerHTML = types.map(([id, label]) => `<option value="${esc(id)}"${id === current ? ' selected' : ''}>${esc(label)}${label === id ? '' : ` (${esc(id)})`}</option>`).join('');
   }
+
+  // ---------------------------------------------------------------- from a Discovery card (#257)
+  // "Open in AI Arena" on a card in Shape (views/discovery/discovery.js) fills the request with the
+  // card's document. Nothing starts by itself; the run started here is told to DiscoveryRuns, which
+  // records its final document on the card when it finishes.
+  let fromCard = null; // { projectId, cardId, title }
+  function renderCardBanner() {
+    const box = $a('#arena-card');
+    box.classList.toggle('hidden', !fromCard);
+    if (!fromCard) { box.innerHTML = ''; return; }
+    box.innerHTML = `<span>For the Discovery card <b>${esc(fromCard.title)}</b>: when the run finishes, its final document comes back to the card as a new version.</span>
+      <button type="button" class="link-btn small" id="arena-card-clear" title="Write a document that is not about this card">not about this card</button>`;
+    $a('#arena-card-clear').onclick = () => { fromCard = null; renderCardBanner(); };
+  }
+
+  async function openForCard({ projectId, cardId, title, task, skill }) {
+    if (typeof showView === 'function') showView('arena');
+    $a('#arena-chat').classList.add('hidden');
+    $a('#arena-setup').classList.remove('hidden');
+    fromCard = { projectId, cardId, title };
+    $a('#arena-task').value = task;
+    $a('#arena-error').textContent = '';
+    renderCardBanner();
+    await Promise.all([loadProjects(), loadSkills()]);
+    const pick = (sel, value) => {
+      if (!value || ![...sel.options].some((o) => o.value === value && !o.disabled)) return;
+      sel.value = value;
+      sel.onchange?.();
+    };
+    pick($a('#arena-project'), projectId);
+    pick($a('#arena-skill'), skill);
+    const box = $a('#arena-task');
+    box.focus({ preventScroll: true });
+    box.setSelectionRange(0, 0);
+    box.scrollTop = 0;
+  }
+  window.openArenaForCard = openForCard;
 
   // ---------------------------------------------------------------- reference documents
   // Text files the user attaches: read here and sent as the `attachments` input, each one after
@@ -835,6 +881,8 @@
           </div>
 
           <div class="duo-brief">
+            <!-- prefilled from a Discovery card ("Open in AI Arena", arena.js openArenaForCard) -->
+            <div id="arena-card" class="duo-issue hidden"></div>
             <div class="field">
               <label for="arena-task">Request <span class="req">*</span></label>
               <textarea id="arena-task" rows="3" placeholder="What should the models write? E.g. a PRD for an appointment-booking app for small clinics.">Write a PRD for an appointment-booking app for small clinics: problem, users, scope, non-goals, rollout and success metrics.</textarea>

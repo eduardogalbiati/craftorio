@@ -8,7 +8,8 @@
 // another card, Discard (archived with a reason). Enter captures, Esc closes the open card.
 // Registers itself with registerView (view-registry.js); uses app.js globals ($, esc, state, api,
 // errMsg, dateOf, openModal, closeModal, confirmDialog), ncAgo (notification-center.js),
-// markdownHtml (artifact-render.js), CurrentProject and ImageViewer.
+// markdownHtml (artifact-render.js), CurrentProject and ImageViewer. Shares how a card's files and
+// thread are read and drawn with the Discovery board (window.DiscoveryCardParts, views/discovery/).
 (() => {
   const MAX_BYTES = 50 * 1024 * 1024; // the store's limit (discovery.MAX_ATTACHMENT_BYTES)
   const IMAGE = /\.(png|jpe?g|gif|webp)$/i;
@@ -286,16 +287,12 @@
     loadPreviews();
   }
 
-  function renderAttachments() {
-    const c = inbox.open;
-    const box = $('#inbox-detail-files');
-    if (!c || !box) return;
-    if (!c.attachments.length) {
-      box.innerHTML = '<p class="muted small">No attachment. Paste or drop images and files on this card.</p>';
-      return;
-    }
-    box.innerHTML = c.attachments.map((name) => {
-      const url = inbox.previews.get(`${c.id}/${name}`)?.dataUrl;
+  // A card's attachments (`previews`: "<card id>/<name>" → discovery:attachment's answer): each
+  // with data-detail="view" / "unattach" and data-name, for the panel's click handler.
+  function attachmentsHtml(c, previews) {
+    if (!c.attachments.length) return '<p class="muted small">No attachment. Paste or drop images and files on this card.</p>';
+    return c.attachments.map((name) => {
+      const url = previews.get(`${c.id}/${name}`)?.dataUrl;
       return `
       <span class="inbox-file${url ? ' image' : ''}" title="${esc(name)}">
         ${url ? `<img class="inbox-thumb" ${window.ImageViewer?.THUMB || 'tabindex="0" role="button"'} src="${esc(url)}" alt="${esc(name)}" data-detail="view" data-name="${esc(name)}" />` : ''}
@@ -303,6 +300,13 @@
         <button type="button" class="inbox-file-x" data-detail="unattach" data-name="${esc(name)}" aria-label="Remove ${esc(name)}">×</button>
       </span>`;
     }).join('');
+  }
+
+  function renderAttachments() {
+    const c = inbox.open;
+    const box = $('#inbox-detail-files');
+    if (!c || !box) return;
+    box.innerHTML = attachmentsHtml(c, inbox.previews);
   }
 
   // The images' thumbnails, read once per card and name.
@@ -316,14 +320,17 @@
     if (inbox.open?.id === c.id) renderAttachments();
   }
 
-  function renderThread() {
-    const box = $('#inbox-detail-thread');
-    if (!box) return;
-    box.innerHTML = inbox.thread.length ? inbox.thread.map((m) => `
+  // A card's thread, oldest first: who, when, the entry's kind when it is not a note, its text.
+  const threadHtml = (thread) => (thread.length ? thread.map((m) => `
       <div class="inbox-entry">
         <div class="muted small"><b>${esc(m.author || 'unknown')}</b> <span title="${esc(m.ts ? dateOf(m.ts) : '')}">${esc(m.ts ? ncAgo(m.ts) : '')}</span>${m.kind && m.kind !== 'note' ? ` <span class="badge">${esc(m.kind)}</span>` : ''}</div>
         <div class="inbox-entry-text">${esc(m.text || '')}</div>
-      </div>`).join('') : '<p class="muted small">No note yet.</p>';
+      </div>`).join('') : '<p class="muted small">No note yet.</p>');
+
+  function renderThread() {
+    const box = $('#inbox-detail-thread');
+    if (!box) return;
+    box.innerHTML = threadHtml(inbox.thread);
   }
 
   const editIsDirty = () => inbox.editing && ($('#inbox-edit-title')?.value !== inbox.open.title || $('#inbox-edit-doc')?.value !== inbox.open.document);
@@ -498,6 +505,16 @@
   // Home's "What needs you" (#255): the Inbox with one card open, to answer its question in the thread
   window.InboxActions = {
     openCard: (id) => { showView('inbox'); return openCard(id); },
+  };
+
+  // a card's files and thread, drawn the same way in the Discovery board's card panel (#257)
+  window.DiscoveryCardParts = {
+    attachmentsHtml,
+    CLIP,
+    hasFiles,
+    IMAGE,
+    readFiles,
+    threadHtml,
   };
 
   registerView({

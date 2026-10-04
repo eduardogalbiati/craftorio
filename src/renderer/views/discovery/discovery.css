@@ -1,0 +1,75 @@
+/* The Discovery board (views/discovery/discovery.js, #257): the filters, the columns with the fast
+   lane across them, the cards and the open card's side panel. Reuses .field, .btn, .badge, .seg,
+   .icon-btn, .drawer, .empty-state and .md (style.css), .bl-menu (views/backlog/backlog.css) and
+   the Inbox's card parts (.inbox-section, .inbox-edit, .inbox-file, .inbox-thread: views/inbox/inbox.css). */
+.dsc-toolbar { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 12px; margin-bottom: 12px; }
+.dsc-toolbar .field { margin: 0; }
+.dsc-toolbar select { min-width: 130px; }
+.dsc-search { flex: 1; min-width: 180px; max-width: 320px; }
+.dsc-search input { width: 100%; }
+#dsc-error:empty { display: none; }
+.dsc-note { margin: 0 0 10px; }
+
+/* Three rows: the columns' headers, the fast lane, the columns' cards. A column is one box over
+   the three (subgrid: its header in the first, its cards in the last); the lane lies across them. */
+.dsc-board { display: grid; grid-template-columns: repeat(var(--dsc-cols, 4), minmax(0, 1fr)); grid-template-rows: auto auto 1fr; column-gap: 12px; }
+.dsc-col { grid-row: 1 / span 3; display: grid; grid-template-rows: subgrid; min-width: 0; padding: 10px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; }
+.dsc-col-head { grid-row: 1; display: flex; align-items: center; gap: 6px; min-height: 30px; margin-bottom: 8px; padding: 0 4px 6px; border-bottom: 2px solid transparent; }
+.dsc-col-head h3 { flex: 1; min-width: 0; margin: 0; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.dsc-col-body { grid-row: 3; display: grid; gap: 8px; align-content: start; min-height: 72px; }
+/* past its WIP limit: the header turns amber */
+.dsc-col[data-over-wip="true"] { border-color: rgba(250,204,21,.45); }
+.dsc-col[data-over-wip="true"] .dsc-col-head { border-bottom-color: var(--yellow); background: rgba(250,204,21,.08); border-radius: 6px 6px 0 0; }
+.dsc-col[data-over-wip="true"] .dsc-col-head h3 { color: var(--yellow); }
+.dsc-count { flex: none; }
+.dsc-wip-edit { flex: none; padding: 3px; }
+.dsc-wip-edit svg { width: 12px; height: 12px; stroke-linejoin: round; }
+.dsc-wip-form { display: inline-flex; align-items: center; gap: 4px; }
+.dsc-wip-input { width: 54px; padding: 2px 6px; font: inherit; font-size: 12px; color: var(--text); background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px; }
+
+.dsc-lane { grid-column: 1 / -1; grid-row: 2; position: relative; z-index: 1; display: grid; grid-template-columns: subgrid; margin-bottom: 8px; padding: 6px 0 8px; background: rgba(251,146,60,.07); border-top: 1px dashed rgba(251,146,60,.5); border-bottom: 1px dashed rgba(251,146,60,.5); }
+.dsc-lane-title { grid-column: 1 / -1; margin: 0 15px 6px; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--orange); }
+.dsc-lane-title .muted { margin-left: 6px; text-transform: none; letter-spacing: 0; font-weight: 400; }
+/* inset like a column's cards (its border and padding) */
+.dsc-lane-cell { display: grid; gap: 8px; align-content: start; min-width: 0; min-height: 30px; margin: 0 11px; border-radius: 8px; }
+.dsc-col.dsc-drop, .dsc-lane-cell.dsc-drop { outline: 2px dashed var(--accent); outline-offset: -3px; }
+
+.dsc-card { display: grid; gap: 6px; min-width: 0; padding: 10px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; cursor: grab; }
+.dsc-card:hover { border-color: #3a4152; }
+.dsc-card.active { border-color: var(--accent); }
+.dsc-card.dragging { opacity: .5; }
+.dsc-card[data-type="bug"], .dsc-card[data-type="hotfix"] { border-left: 3px solid var(--orange); }
+.dsc-card-title { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; border: none; background: none; padding: 0; color: var(--text); font: inherit; font-weight: 600; text-align: left; overflow-wrap: anywhere; cursor: pointer; border-radius: 4px; }
+.dsc-card-title:hover { text-decoration: underline; }
+.dsc-card-title:focus-visible, .dsc-wip-input:focus-visible { outline: var(--focus-ring); outline-offset: 1px; }
+.dsc-card-foot { display: flex; align-items: flex-end; gap: 6px; }
+.dsc-card-meta { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.dsc-card-meta > span { white-space: nowrap; }
+.dsc-card[data-type="prd"] .dsc-type { color: var(--accent); }
+.dsc-card[data-type="rfc"] .dsc-type { color: var(--purple); }
+.dsc-card[data-type="bug"] .dsc-type, .dsc-card[data-type="hotfix"] .dsc-type { color: var(--orange); }
+.dsc-move { flex: none; }
+.dsc-move .btn { padding: 1px 6px; font-size: 11px; white-space: nowrap; }
+.dsc-menu { min-width: 140px; }
+
+/* the open card: the app's right drawer, wider for a document */
+.dsc-detail { width: 600px; }
+.dsc-detail-title { flex: 1; min-width: 0; margin-right: 12px; overflow-wrap: anywhere; }
+.dsc-detail-body { display: flex; flex-direction: column; gap: 10px; }
+.dsc-detail-body .error:empty { display: none; }
+.dsc-detail-body .inbox-card-meta, .dsc-actions-hint { margin: 0; }
+.dsc-fields { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 12px; }
+.dsc-fields .field { margin: 0; }
+.dsc-fields select, .dsc-fields input { width: 100%; }
+.dsc-actions { flex-wrap: wrap; margin-bottom: 4px; }
+.dsc-versions { display: grid; gap: 6px; }
+.dsc-version { padding: 6px 8px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; }
+.dsc-version-row { display: flex; align-items: center; gap: 8px; }
+.dsc-version-label { font-size: 13px; font-weight: 600; }
+.dsc-version-text { max-height: 320px; overflow: auto; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); }
+
+/* a narrow window: the columns keep a readable width and the board scrolls sideways (room below
+   for a card's open "Move to…" menu) */
+@media (max-width: 1100px) {
+  .dsc-board { grid-template-columns: repeat(var(--dsc-cols, 4), minmax(180px, 1fr)); overflow-x: auto; padding-bottom: 130px; }
+}

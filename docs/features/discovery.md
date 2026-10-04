@@ -3,7 +3,7 @@ order: 260
 ---
 
 <!-- section:workspace-tree -->
-  discovery/<project>/  private discovery cards (Inbox): board.json, cards/<id>/ (card.json, document.md, acceptance.md, versions/, attachments/, conversation.jsonl), archive/<id>/
+  discovery/<project>/  private discovery cards (Inbox, Discovery board): board.json, cards/<id>/ (card.json, document.md, acceptance.md, versions/, attachments/, conversation.jsonl), archive/<id>/
 
 <!-- section:workspace -->
 - **Discovery cards stay private.** Ideas captured in **Plan & Design › Inbox** are cards in
@@ -14,6 +14,10 @@ order: 260
   `question`) waits for the owner: Home lists it under **What needs you** until a note answers it.
   `board.json` keeps the columns and the card order; a discarded or
   merged card moves to `archive/<card id>/` with its reason (and the card it was merged into).
+  An accepted card lands in Triage on the **Plan & Design › Discovery** board (Triage → Shape →
+  Define → Ready): `board.json` also keeps the WIP limits of Shape and Define (5 by default) and
+  each card's place in its column, and `versions/` also gets the document a restored version or a
+  Write & Review / AI Arena result replaced, and the result itself (also noted in the thread).
   Nothing under `discovery/` goes to the git platform: the folder carries a `.gitignore` that ignores
   everything, and the screens, the Oracle and agents reach a card only through the card API (the
   `discovery:` channels). Through the browser UI (`npm run serve`) a pasted or dropped file is

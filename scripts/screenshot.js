@@ -5,7 +5,7 @@
 //
 //   --view <name>      dashboard, sessions, projects, project, backlog, roadmap, artifacts, workflows, agents,
 //                      skills, usage, analytics, oracle, nightwatch, settings, duo, arena, inbox,
-//                      run-chat, run, home-empty
+//                      discovery, run-chat, run, home-empty
 //                      (default dashboard, the menu's Home (#255: the flow strip, "What needs you" and
 //                      "Today" on demo data; its Analytics tab: --view analytics; home-empty: Home in a
 //                      new workspace, no project and no run: how to start); projects: Settings › Projects; roadmap: the
@@ -28,6 +28,10 @@
 //   --mode <name>      backlog: list | kanban | epics (roadmap: the Roadmap screen, #254)
 //                      inbox (#256): empty (no card: the empty state; without it, demo cards, the
 //                      newest with an image; a card open: --click "[data-testid=inbox-card]")
+//                      discovery (#257): empty (no card: the empty board; without it, demo cards in
+//                      every column, a bug and a hotfix in the fast lane, Define over its WIP limit;
+//                      a card's panel: --click "[data-testid=discovery-card][data-type=prd]
+//                      [data-testid=discovery-card-title]"; a narrow window: --size 820x900)
 //   --run <mock|dir>   run-chat: a simulated software-development run (default) or a copy of a run folder
 //   --workflow <file>  the workflow of the simulated run (default software-development.yaml)
 //   --pipeline <file>  run: starts this saved pipeline instead (#135, e.g. develop-to-retrospective.yaml):
@@ -119,6 +123,8 @@ const VIEWS = {
   backlog: { modes: ['list', 'kanban', 'roadmap', 'epics'] },
   // the Inbox (#256): demo discovery cards; empty: none (the empty state)
   inbox: { modes: ['empty'] },
+  // the Discovery board (#257): demo cards in every column and the fast lane; empty: none
+  discovery: { modes: ['empty'] },
   workflows: { tabs: ['runs', 'definitions', 'builder', 'pipelines'] },
   settings: { tabs: ['general', 'projects', 'agents', 'execution', 'phone', 'about'] },
   'run-chat': { run: true },
@@ -735,6 +741,50 @@ function demoDiscovery(ws, projectId) {
   discovery.addAttachment(ws.discovery, projectId, csv, { name: 'night-2026-10-03.csv', data: Buffer.from('run,status,cost_usd\n20261003-2210,success,1.84\n') });
   discovery.appendConversation(ws.discovery, projectId, csv, { kind: 'note', author: 'eduardo', text: 'Asked for it twice this month.', ts: new Date(Date.now() - 4 * min).toISOString() });
   discovery.appendConversation(ws.discovery, projectId, csv, { kind: 'note', author: 'marina', text: 'The Analytics screen already has the numbers: reuse its query.', ts: new Date(Date.now() - 2 * min).toISOString() });
+}
+
+// The Discovery board's cards (#257), next to demoDiscovery's one in Triage: cards in every column,
+// a bug (Triage) and a hotfix (Define) in the fast lane, Define over a WIP limit of 2, and in Shape
+// a PRD with tags, a clarity score, an estimate, acceptance criteria, an image, notes and a
+// Write & Review result (a version and a thread entry).
+function demoDiscoveryBoard(ws, projectId) {
+  const discovery = require('../src/discovery');
+  const dir = ws.discovery;
+  const hour = 3600000;
+  const columns = ['triage', 'shape', 'define', 'ready'];
+  const card = (hoursAgo, to, { title, text = '', type = 'idea', author = 'eduardo', tags, clarity, estimate, acceptance }) => {
+    const c = discovery.createCard(dir, projectId, { title, text, type, author, tags, column: 'triage' });
+    // a bug or a hotfix takes the fast lane: Triage → Define
+    const fast = ['bug', 'hotfix'].includes(type);
+    for (const column of columns.slice(1, columns.indexOf(to) + 1)) if (!(fast && column === 'shape')) discovery.moveCard(dir, projectId, c.id, column, { by: author });
+    discovery.updateCard(dir, projectId, c.id, { ...(clarity ? { clarity: { score: clarity } } : {}), ...(estimate ? { estimate } : {}), ...(acceptance ? { acceptance } : {}) });
+    // created and moved in the past, so the cards show different ages
+    const file = path.join(dir, projectId, 'cards', c.id, 'card.json');
+    const json = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const at = new Date(Date.now() - hoursAgo * hour).toISOString();
+    fs.writeFileSync(file, JSON.stringify({ ...json, created: at, updated: at, history: json.history.map((h) => ({ ...h, ts: at })) }, null, 2));
+    return c.id;
+  };
+  card(3, 'triage', { title: 'Crash when a run is stopped twice', type: 'bug', author: 'support', text: 'Stopping a run that is already stopping throws in the engine.' });
+  card(30, 'shape', { title: 'Plugin API for custom steps', type: 'rfc', author: 'marina', tags: ['engine'], text: 'Let a workflow call a step implemented by a workspace plugin.' });
+  const report = card(52, 'shape', {
+    title: 'Weekly cost report by project', type: 'prd', tags: ['cost', 'reports'], clarity: 62, estimate: { usd: 4.2, minutes: 35 },
+    text: ['# Weekly cost report', '', 'A report of what each project spent in the week, sent on Monday morning.', '', '## Open questions', '', '- Per workflow too, or per project only?', '- In the app only, or by e-mail?'].join('\n'),
+    acceptance: ['- [ ] One row per project with its runs, cost and tokens of the week', '- [ ] The report opens from the Dashboard on Monday'].join('\n'),
+  });
+  discovery.addAttachment(dir, projectId, report, { name: 'report-sketch.png', data: solidPng(320, 180, [124, 156, 255]) });
+  discovery.appendConversation(dir, projectId, report, { kind: 'note', author: 'eduardo', text: 'The Usage screen has the weekly totals already.', ts: new Date(Date.now() - 50 * hour).toISOString() });
+  discovery.recordResult(dir, projectId, report, {
+    source: 'write-review', runId: '20261003-1012-ab12', by: 'eduardo',
+    text: ['# Weekly cost report by project', '', '## Problem', '', 'The owner compares what each project spent week by week, and today adds the numbers up by hand from the Usage screen.', '',
+      '## Goals', '', '- One report per week: runs, cost and tokens per project', '- Opened from the Dashboard on Monday morning', '',
+      '## Non-goals', '', '- Budgets and alerts (the spending budget covers them)', '', '## Open questions', '', '- Per workflow too, or per project only?'].join('\n'),
+  });
+  card(20, 'define', { title: 'Keyboard shortcuts for the Roadmap', author: 'marina', tags: ['ux'], clarity: 88, estimate: { usd: 2.1, minutes: 20 }, text: 'Move an item between stages without the mouse.' });
+  card(96, 'define', { title: 'Compare two runs side by side', type: 'prd', tags: ['reports'], clarity: 81, text: 'Two runs of the same workflow next to each other: cost, duration, steps.' });
+  card(1, 'define', { title: 'Login loop after the token refresh', type: 'hotfix', author: 'support', text: 'The phone page asks to log in again after every refresh.' });
+  card(140, 'ready', { title: 'Per-project spending budget', type: 'prd', tags: ['cost'], clarity: 94, estimate: { usd: 7.5, minutes: 60 }, text: 'A daily budget per project, next to the workspace one.' });
+  discovery.setWip(dir, projectId, 'define', 2);
 }
 
 // #225, #185, #182: finished runs whose artifacts the E2E scenarios (features/artifacts.feature,
@@ -1458,7 +1508,8 @@ function main() {
     if (home || args.view === 'backlog') demoRoadmap(ws, project.id, args.live, args.budget);
     if (args.view === 'backlog') demoPoConversation(ws, project.id, args.po);
     if (args.view === 'backlog' && project.folder) demoBacklogRefresh(ws, project.folder, project.id);
-    if (home || (args.view === 'inbox' && args.mode !== 'empty')) demoDiscovery(ws, project.id);
+    if (home || (['inbox', 'discovery'].includes(args.view) && args.mode !== 'empty')) demoDiscovery(ws, project.id);
+    if (args.view === 'discovery' && args.mode !== 'empty') demoDiscoveryBoard(ws, project.id);
     // also on Artifacts: a second run group (its document.md) for Collapse all / Expand all (#126)
     if (['artifacts', 'backlog', 'duo'].includes(args.view)) demoEnrichRun(ws, project.id);
     if (args.view === 'analytics') demoAnalyticsRuns(ws, project.id);

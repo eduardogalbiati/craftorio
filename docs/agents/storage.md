@@ -32,6 +32,14 @@ Read this before touching run listings, the Backlog queue, pending gates, notifi
   hotfix`, column, author, created, updated, tags, clarity, estimate, links, history `[{ ts, from,
   to, by }]`), `document.md`, `acceptance.md`, `versions/<iso ts>-<reason>.md` (a snapshot of the
   document on each column move and before a merge; `snapshotVersion` is there for agent outputs),
+  the Discovery board's (#257) columns `inbox, triage, shape, define, ready` with `wip` 5 on Shape
+  and Define (`setWip`; the store never refuses a move past a limit, the screen asks), a card's
+  place in `order[column]` (`moveCard`'s `index`; a move within its column adds no history entry
+  and no version), the versions `before-restore` / `before-result` (the document a restored version
+  or a run's result replaced, unless the newest version already holds it) and `result-<source>`
+  (`recordResult`, source `write-review` | `ai-arena`, with a thread entry `{ kind: 'result',
+  source, runId, version }`), read with `listVersions` / `readVersion` (a name that is not a
+  version file is refused),
   `attachments/` (any file up to 50 MB, original names, a taken name gets a `-2` suffix, the same
   content is stored once) and `conversation.jsonl` (the thread, appended). `archive/<card id>/`: a
   discarded or merged card, same layout, `card.archived = { ts, reason, by, mergedInto? }`. Every

@@ -4,7 +4,9 @@
 // The document type is the workflow's `document_skill` (duo-issue.js). From a Backlog issue
 // (window.openDuoForIssue) the setup is prefilled and the run records the issue; once accepted,
 // "Save to issue" (window.openDuoSaveToIssue, also in Run Details) previews and, on the owner's
-// click, saves the document to it (backlog:save-doc). Registers itself with registerView, with
+// click, saves the document to it (backlog:save-doc). From a Discovery card
+// (window.openDuoForCard, #257) the prompt is the card's document and the run's document goes back
+// to the card when it finishes (DiscoveryRuns). Registers itself with registerView, with
 // its Save to issue and guide dialogs; the chat look it shares with AI Arena and the run chat is
 // chat.css, the models it offers chat-models.js.
 // load: after views/duo/duo-issue.js (window.DuoIssue as it loads)
@@ -107,9 +109,10 @@
     let mock;
     try { mock = wantsSimulation($d('#duo-mock')); } catch (e) { err.textContent = e.message; return; }
     const scenario = $d('#duo-scenario').value;
-    // a prompt prefilled from an issue is not kept as the next default
-    const own = fromIssue ? { prompt: saved.prompt, goal: saved.goal, project: saved.project } : { prompt: inputs.prompt, goal: inputs.goal, project: $d('#duo-project').value };
-    try { localStorage.setItem(LS, JSON.stringify({ writer: config.writer, reviewer: config.reviewer, ...own, threshold: inputs.threshold, max_rounds: inputs.max_rounds, scenario, skill: fromIssue ? saved.skill : inputs.document_skill })); } catch { /* ignore */ }
+    // a prompt prefilled from an issue or a Discovery card is not kept as the next default
+    const prefilled = fromIssue || fromCard;
+    const own = prefilled ? { prompt: saved.prompt, goal: saved.goal, project: saved.project } : { prompt: inputs.prompt, goal: inputs.goal, project: $d('#duo-project').value };
+    try { localStorage.setItem(LS, JSON.stringify({ writer: config.writer, reviewer: config.reviewer, ...own, threshold: inputs.threshold, max_rounds: inputs.max_rounds, scenario, skill: prefilled ? saved.skill : inputs.document_skill })); } catch { /* ignore */ }
     $d('#duo-run').disabled = true;
     try {
       starting = true; // the run's first events may arrive before startRun resolves
@@ -131,6 +134,12 @@
       PasteImage.clear($d('#duo-prompt'));
       PasteImage.clear($d('#duo-goal'));
       bindLive(out.runId);
+      // started for a Discovery card: its document goes back to the card when the run finishes
+      if (fromCard) {
+        window.DiscoveryRuns.started(out.runId, { projectId: fromCard.projectId, cardId: fromCard.cardId, source: 'write-review' });
+        fromCard = null;
+        renderIssueBanner();
+      }
     } catch (e) {
       starting = false;
       buffer = [];
@@ -160,6 +169,7 @@
   // "Enrich in Write & Review" fills the setup with the issue (DuoIssue.enrichInputs): an enriched
   // issue by default, in the Backlog's project. Nothing starts by itself; the owner can edit it all.
   let fromIssue = null; // { projectId, platform, issue: { number, title, url, body, labels } }
+  let fromCard = null; // a Discovery card instead (#257, openForCard): { projectId, cardId, title }
   const { DOC_TYPES, DEFAULT_ISSUE_SKILL } = window.DuoIssue;
   const docLabel = (skill) => DOC_TYPES.find((t) => t.skill === (skill || ''))?.label || skill;
 
@@ -172,7 +182,13 @@
 
   function renderIssueBanner() {
     const box = $d('#duo-issue');
-    box.classList.toggle('hidden', !fromIssue);
+    box.classList.toggle('hidden', !fromIssue && !fromCard);
+    if (fromCard) {
+      box.innerHTML = `<span>For the Discovery card <b>${esc(fromCard.title)}</b>: when the run finishes, its document comes back to the card as a new version.</span>
+      <button type="button" class="link-btn small" id="duo-card-clear" title="Write a document that is not about this card">not about this card</button>`;
+      $d('#duo-card-clear').onclick = () => { fromCard = null; renderIssueBanner(); };
+      return;
+    }
     if (!fromIssue) { box.innerHTML = ''; return; }
     const i = fromIssue.issue;
     box.innerHTML = `<span>Enriching issue <a href="${esc(i.url)}" target="_blank" rel="noopener">#${esc(i.number)}</a> <b>${esc(i.title)}</b>: once you accept the document, you can save it back to the issue.</span>
@@ -196,10 +212,17 @@
     $d('#duo-chat').classList.add('hidden');
     $d('#duo-setup').classList.remove('hidden');
     fromIssue = { projectId, platform, issue, skill };
+    fromCard = null;
     const inputs = window.DuoIssue.enrichInputs(issue, skill);
+    await prefill({ projectId, skill, prompt: inputs.prompt, goal: inputs.goal });
+  }
+  window.openDuoForIssue = openForIssue;
+
+  // The setup filled for an issue or a card, in its project, the cursor at the top of the prompt.
+  async function prefill({ projectId, skill, prompt: text, goal }) {
     fillSkills(skill);
-    $d('#duo-prompt').value = inputs.prompt;
-    $d('#duo-goal').value = inputs.goal;
+    $d('#duo-prompt').value = text;
+    $d('#duo-goal').value = goal;
     $d('#duo-error').textContent = '';
     renderIssueBanner();
     await loadProjects();
@@ -210,7 +233,20 @@
     prompt.setSelectionRange(0, 0);
     prompt.scrollTop = 0;
   }
-  window.openDuoForIssue = openForIssue;
+
+  // ---------------------------------------------------------------- from a Discovery card (#257)
+  // "Open in Write & Review" on a card in Shape (views/discovery/discovery.js) fills the setup with
+  // the card's document as the prompt. Nothing starts by itself; the run started here is told to
+  // DiscoveryRuns, which records its document on the card when it finishes.
+  async function openForCard({ projectId, cardId, title, prompt, goal, skill = '' }) {
+    if (typeof showView === 'function') showView('duo');
+    $d('#duo-chat').classList.add('hidden');
+    $d('#duo-setup').classList.remove('hidden');
+    fromIssue = null;
+    fromCard = { projectId, cardId, title };
+    await prefill({ projectId, skill, prompt, goal });
+  }
+  window.openDuoForCard = openForCard;
 
   // ---------------------------------------------------------------- chat state
   const chat = { runId: null, live: false, running: false };
