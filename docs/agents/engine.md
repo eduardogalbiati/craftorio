@@ -172,6 +172,27 @@ same features for users; this is the implementer's summary.
   (`new WorkflowRun({ memoryGuard })`); `mockSequences.suite.<step>` is indexed by execution (a visit
   plus its environment reruns). The Night watch records `process.killed` and a hold over 5 min as a
   `memory` incident and takes no action.
+- **Self-healing** (#278, `settings.oracle.selfHealing`, default off): the Oracle's watch stays on day
+  and night with no end time (`oracle-actions.watchState`: `{ active: true, until: null,
+  selfHealing: true }`; off, it is the Night watch as before). Under it an action whose permission
+  is checked runs alone by day as at night (`nightDecision`: the permission, the kind's `night`,
+  `LOOP_CAP` per item, counted per UTC day: `watchSince`); the others stay cards in their owner's
+  inbox. Detectors in code (`night-watch.detectSelfHealing`, pure functions over run events, no
+  model call until one fires): `memory` (`process.killed`, or a `memory.hold` over 5 min),
+  `cost-gap` (a `session.message_received` with `cost_usd` 0 and tokens, or below a `usage` stream
+  item of the same turn; never a simulated run), `environment` (a test file in the `failures` of a
+  suite `step.finished` whose base check ran, in two runs of different issues within one hour) and
+  `repeat` (the same command failing, a `tool_call` whose `tool_result` has `is_error`, or stopped
+  by the memory guard, three times in one step). The service (`channels/nightwatch.js`) keeps a
+  small per-run buffer of the events they read, logs each finding once per run and kind
+  (`oracle.detected` with `evidence`) and wakes the Oracle with it (`wake({ findings })`, batched
+  over 30 s; not when `wakeScope` is `off`): the Oracle asks the Product Owner to file an issue in
+  the run's project and append it to the roadmap (`issue.file`, `roadmap.add`: the `file-issue` and
+  `append` permissions), never edits code, and only reports a cause in this app when the app's
+  repository is not a project of the workspace. Those turns count in the Oracle's daily budget;
+  while it is paused the findings are still logged and the owner gets one notification. A human
+  gate is logged `oracle.escalated`, never answered; nothing in `NEVER_ALLOWED` gains a permission.
+  The report has one window per Self-healing day (`selfHealingDays`, `selfHealingMetrics`).
 - `orchestrator.limits.max_total_context` (e.g. `20M`): the context the run's agents read (input + cache, summed over every turn). Past it, `contextGate` pauses the run before the next agent turn with a `<step>:context_limit` gate (choices `continue` = allow another block of the same size, `stop` = cancel; the worktree is kept). A turn is never cut; `limit.exceeded` is emitted with `paused: true`.
 - `groups: [{ name, steps }]` (optional, top level): progress views only, the graph ignores it;
   `validateGroups` in `loadWorkflow`. Recorded in `workflow.started` and `summary.groups`, with

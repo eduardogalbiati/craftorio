@@ -409,7 +409,7 @@
         <div class="row"><button class="btn primary sm" type="submit"${f.saving ? ' disabled' : ''}>Start</button><button class="btn ghost sm" type="button" data-oracle-night-cancel>Cancel</button></div>
       </form>`);
     } else if (nw.active) {
-      parts.push(`<div class="row oracle-ops-row"><span class="badge warn" title="Repairs that keep the roadmap going run without asking; everything else waits for you">${esc(nw.label)}</span><span class="spacer"></span><button class="btn ghost sm" type="button" data-oracle-night-off>Turn off</button></div>`);
+      parts.push(`<div class="row oracle-ops-row"><span class="badge warn" title="Repairs that keep the roadmap going run without asking; everything else waits for you${nw.selfHealing ? '. Turn it off in Settings › Execution › Oracle' : ''}">${esc(nw.label)}</span><span class="spacer"></span>${nw.selfHealing ? '' : '<button class="btn ghost sm" type="button" data-oracle-night-off>Turn off</button>'}</div>`);
     }
     // the runs and roadmaps watched, the runs muted: one compact row (the full id on hover)
     const watching = (or.wake?.watching || []).map((x) => {

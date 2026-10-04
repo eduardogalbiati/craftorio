@@ -42,13 +42,15 @@ function requestText({ from, kind, reason }) {
  * the owner's kinds that start a paid run; `confirmKinds`: the kinds that publish or are hard to
  * reverse, which wait by day (the Night watch off); under an active Night watch (`watch.active`) a
  * kind runs alone only when the owner allowed its permission (src/night-watch.js permissionOf, `allowed`).
+ * The watch is also active, by day, under Self-healing (#278: `watch.selfHealing`).
  */
 function waitReason(kind, params, { clickKinds = [], confirmKinds = [], watch = null, allowed = [] } = {}) {
   if (clickKinds.includes(kind)) return 'It starts a run, which can cost money: it waits for the owner\'s click.';
   if (!watch?.active) return confirmKinds.includes(kind) ? 'It publishes or is hard to reverse: it waits for the owner\'s click.' : null;
   const permission = permissionOf(kind, params);
-  if (!permission) return 'The Night watch never runs it alone: it waits for the owner\'s click.';
-  if (!allowed.includes(permission)) return `The Night watch does not allow it (permission "${permission}"): it waits for the owner's click.`;
+  const name = watch.selfHealing ? 'Self-healing' : 'The Night watch';
+  if (!permission) return `${name} never runs it alone: it waits for the owner's click.`;
+  if (!allowed.includes(permission)) return `${name} does not allow it (permission "${permission}"): it waits for the owner's click.`;
   return null;
 }
 

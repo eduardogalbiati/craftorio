@@ -159,6 +159,12 @@ and a one-minute roadmap check), `oracle.action` / `oracle.blocked` / `oracle.es
 (`src/night-watch.js` `nightMetrics`) is recomputed on read from that log, the runs'
 `events.jsonl` (start, end, status, cost, progress events, gates) and the Oracle's `usage.jsonl`.
 Lines unblocked come from `git diff --shortstat` of a run's local merge commit.
+Self-healing (#278): the switch is `settings.oracle.selfHealing` (settings.json);
+`self-healing.json` (`since`) records when the standing watch was turned on and is removed when it
+is turned off. Each change writes an `oracle.watch` entry with `selfHealing: true` and `until:
+null`; those are not nights but days of the report (`selfHealingDays`: one window per UTC day).
+A detector's `oracle.detected` carries its `evidence` and is written once per run and kind (the
+log is read at the first finding after a start, so a restart does not log it again).
 
 ## Rules
 

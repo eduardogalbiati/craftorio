@@ -197,8 +197,9 @@ const DEFAULT_SETTINGS = {
   budget: { dailyUsd: null, nightlyUsd: null, raised: null },
   // the Oracle (src/oracle.js): its daily spend limit in USD (0 = no cap) and the context size
   // (tokens) past which its next turn starts a new session from a handoff note; what wakes it (#123,
-  // src/oracle-wake.js): wakeScope all | watched | off, wakeOn the event kinds
-  oracle: { dailyBudgetUsd: 20, compactAtTokens: 150000, wakeScope: 'all', wakeOn: ['finished', 'gate', 'interrupted', 'invalid', 'limit', 'merge', 'stall'] },
+  // src/oracle-wake.js): wakeScope all | watched | off, wakeOn the event kinds; selfHealing (#278):
+  // its watch stays on day and night, with no end time (src/oracle-actions.js watchState)
+  oracle: { dailyBudgetUsd: 20, compactAtTokens: 150000, wakeScope: 'all', wakeOn: ['finished', 'gate', 'interrupted', 'invalid', 'limit', 'merge', 'stall'], selfHealing: false },
   // USD per 1M tokens, for CLIs that do not report cost: { model: { input, output, cache_read } }
   prices: {},
   // GitHub Actions quota minutes included per month (GitHub Free: 2,000), see src/actions-usage.js

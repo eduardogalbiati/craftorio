@@ -2,7 +2,7 @@
 // Settings screen (Phone gates, #226: settings-phone.js): General (workspace folder, backlog defaults with the default development workflow
 // (#195, default-workflow.js), voice input, the workspace index and
 // its Rebuild index, src/store.js), Agents & CLIs (installed CLIs and
-// their sign-in), Execution (developer mode, Keep awake (keep-awake.js), notifications, concurrent runs, the Oracle's daily budget and compaction threshold) and About. Registers
+// their sign-in), Execution (developer mode, Keep awake (keep-awake.js), notifications, concurrent runs, the Oracle's Self-healing switch (#278), daily budget and compaction threshold) and About. Registers
 // itself with registerView (view-registry.js); uses app.js globals ($, esc, errMsg, state,
 // applyDeveloperMode, renderHeader, renderWorkspacePaths), refreshProjects (views/projects/projects.js: the Projects tab, #254), commandHint (command-hint.js: the install
 // commands of missing CLIs) and window.BACKLOG_PLATFORMS (backlog.js).
@@ -44,6 +44,7 @@ async function renderSettings() {
   renderConcurrency();
   renderMemoryGuard();
   renderOracleSettings();
+  renderSelfHealing();
   renderLiveSettings();
   renderBudgetSettings();
   renderOracleWake();
@@ -175,19 +176,52 @@ function renderOracleSettings() {
   const o = state.settings.oracle || {};
   $('#set-oracle-budget').value = o.dailyBudgetUsd ?? 20;
   $('#set-oracle-compact').value = o.compactAtTokens || 150000;
+  const healing = $('#set-oracle-self-healing');
+  if (healing) healing.checked = o.selfHealing === true;
 }
 
 async function saveOracleSettings() {
   const budget = Number($('#set-oracle-budget').value);
   const compact = Math.floor(Number($('#set-oracle-compact').value));
   const prev = state.settings.oracle || {};
+  const healing = $('#set-oracle-self-healing');
   const oracle = {
     ...prev,
     dailyBudgetUsd: $('#set-oracle-budget').value !== '' && Number.isFinite(budget) && budget >= 0 ? Math.min(budget, 10000) : (prev.dailyBudgetUsd ?? 20),
     compactAtTokens: Number.isFinite(compact) && compact >= 10000 ? Math.min(compact, 1000000) : (prev.compactAtTokens || 150000),
+    ...(healing ? { selfHealing: !!healing.checked } : {}),
   };
   state.settings = await api.setSettings({ oracle });
   renderOracleSettings();
+}
+
+// Self-healing (#278, settings.oracle.selfHealing): the Oracle section's first row. `o`: settings.oracle;
+// `nw`: the nightwatch:state result (null until it is read): its permissions give "N of M", and an
+// Oracle that cannot start in this workspace (nw.oracle false) disables the switch, with the reason.
+function selfHealingHtml(o, nw) {
+  const p = nw && nw.permissions;
+  const count = p ? ` (${p.allowed.length} of ${p.catalog.length})` : '';
+  const unavailable = !!nw && !nw.oracle;
+  return `<div class="s-label"><b>Self-healing</b>
+      <span>The Oracle watches every run and roadmap, day and night, and repairs what its permissions allow. It never answers a gate, pushes, closes an issue or deletes data.</span>
+      <span><button type="button" class="link-btn" id="set-oracle-self-healing-perms" data-testid="self-healing-permissions" title="Opens the Night watch's checklist: one list for both">What it may do alone${esc(count)} ›</button></span>
+      ${unavailable ? '<span class="error small" data-testid="self-healing-unavailable">The Oracle cannot start in this workspace, so Self-healing cannot be turned on.</span>' : ''}
+    </div>
+    <label class="switch"${unavailable ? ' title="The Oracle cannot start in this workspace"' : ''}><input type="checkbox" id="set-oracle-self-healing" data-testid="oracle-self-healing" aria-label="Self-healing"${o && o.selfHealing === true ? ' checked' : ''}${unavailable ? ' disabled' : ''} /><span></span></label>`;
+}
+
+// Draws the Self-healing row again with the permissions' count and whether the Oracle can start
+// here; the switch saves with the Oracle's other fields (saveOracleSettings).
+async function renderSelfHealing() {
+  const row = $('#set-oracle-self-healing-row');
+  if (!row) return;
+  let nw = null;
+  try { nw = await api.nightWatchState(); } catch { nw = null; }
+  // a click made while the state was read is kept
+  const checked = $('#set-oracle-self-healing')?.checked ?? (state.settings.oracle || {}).selfHealing === true;
+  row.innerHTML = selfHealingHtml({ selfHealing: checked }, nw);
+  $('#set-oracle-self-healing').onchange = saveOracleSettings;
+  $('#set-oracle-self-healing-perms').onclick = () => showView('nightwatch');
 }
 
 // The Oracle's wake-ups (#123, src/oracle-wake.js): which runs wake it and on which events, saved
@@ -551,6 +585,7 @@ registerView({
               </div>
               <h3 class="s-subtitle">Oracle</h3>
               <div id="set-oracle" class="s-group">
+                <div class="s-row" id="set-oracle-self-healing-row">${selfHealingHtml({}, null)}</div>
                 <div class="s-row">
                   <div class="s-label"><b>Daily budget (USD)</b><span>Once today's Oracle spend reaches it, questions are refused until tomorrow (UTC); an answer already running is not cut. It also counts in the monthly Claude Code budget. 0: no cap.</span></div>
                   <div class="s-ctrl"><input type="number" id="set-oracle-budget" min="0" max="10000" step="0.5" class="s-num" aria-label="Oracle daily budget in USD" /></div>
@@ -619,7 +654,8 @@ registerView({
     };
     for (const sel of ['#set-cr-enabled', '#set-cr-max', '#set-cr-project', '#set-cr-sims']) $(sel).onchange = saveConcurrency;
     for (const sel of ['#set-mg-enabled', '#set-mg-limit', '#set-mg-floor']) $(sel).onchange = saveMemoryGuard;
-    for (const sel of ['#set-oracle-budget', '#set-oracle-compact']) $(sel).onchange = saveOracleSettings;
+    for (const sel of ['#set-oracle-budget', '#set-oracle-compact', '#set-oracle-self-healing']) $(sel).onchange = saveOracleSettings;
+    $('#set-oracle-self-healing-perms').onclick = () => showView('nightwatch');
     for (const sel of ['#set-live-cap', '#set-live-stages', '#set-live-budget', '#set-live-refresh']) $(sel).onchange = saveLiveSettings;
     for (const sel of ['#set-budget-day', '#set-budget-night']) $(sel).onchange = saveBudgetSettings;
     $('#set-oracle-wake').onchange = saveOracleWake;

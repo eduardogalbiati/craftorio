@@ -53,5 +53,22 @@ The button's badge counts the answers that arrived while the conversation was ou
   stops the roadmap without asking (retry or skip a failed item, regroup or reorder planned items,
   refresh issue text, restore a default, restart the dispatch), notifies each action and posts a
   summary with Undo when it ends. Turning it off stops at once. Gates stay yours.
+- **Self-healing** (Settings › Execution › Oracle, off by default): the same watch, day and night,
+  with no end time. While it is on, an action whose permission you checked ("What it may do alone":
+  the Night watch's checklist, one list for both) runs alone by day exactly as at night, with its
+  backup, its Undo and its notification; anything else stays a card in its owner's inbox. Detectors
+  in code, with no model call until one fires, look inside the runs: `memory` (a process stopped by
+  the memory guard, or a low-memory hold), `cost-gap` (a turn recorded at US$ 0 with tokens, or below
+  what the CLI reported for it), `environment` (test files failing in runs of different issues within
+  an hour and passing on the base) and `repeat` (the same command failing or stopped three times in
+  one step). Each finding is logged once per run and kind with its evidence and wakes the Oracle,
+  which may ask the Product Owner to file an issue with that evidence in the run's project and to
+  append it to that project's roadmap ("File an issue" and "Append" permissions); it never edits a
+  project's code: the roadmap's workflow agents implement the fix. A cause in this app, when the
+  app's repository is not a project of the workspace, is only reported to you. Its turns count in
+  the Oracle's daily budget; while the budget pauses it the detectors keep logging and you get one
+  notification that findings are waiting. The Night watch screen and Home's morning card report each
+  Self-healing day (detected, repaired alone, waiting for you, cost with tokens). Turning it off ends
+  the watch at once. It never answers a gate, pushes, closes an issue or deletes data.
 - One app process answers: in a second window the drawer shows the conversation and names the
   process that owns it; that window is read-only (no wake-ups, no actions).

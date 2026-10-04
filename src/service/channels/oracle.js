@@ -273,19 +273,21 @@ module.exports = (ctx) => {
   // what waits are in the night log.
   // `owner`: 'product-owner' | 'supervisor'; `project`: the PO's project, added to the params it checks.
   ctx.inboxRules = (owner, { clickKinds = [], confirmKinds = [], project = null, byContent = false, byModel = false } = {}) => {
-    const watch = actions.nightWatch(dir());
+    // the watch in force: the Night watch, or by day Self-healing's standing watch (#278)
+    const watch = actions.watchState(dir(), workspace.readSettings(ctx.ws));
     const allowed = night.readPermissions(dir()).allowed;
     const withProject = (params) => (project ? { ...params, projectId: project } : params);
     // the watch actions the owners already ran alone on this item tonight (as nightDecision counts them)
     const actionsOn = (params) => {
       const { target } = night.targetOf(withProject(params));
-      return night.readNightLog(dir()).filter((e) => e.type === 'oracle.action' && e.auto && e.target === target && (!watch.startedAt || e.ts >= watch.startedAt)).length;
+      const since = actions.watchSince(watch);
+      return night.readNightLog(dir()).filter((e) => e.type === 'oracle.action' && e.auto && e.target === target && (!since || e.ts >= since)).length;
     };
     const why = (kind, params) => {
       if (byContent) return { reason: 'content', text: 'Content the Oracle read asked for it: it waits for the owner\'s click.' };
       const text = agentInbox.waitReason(kind, params, { clickKinds, confirmKinds: byModel ? confirmKinds : [], watch, allowed });
       if (text) return { reason: 'permission', text };
-      if (watch.active && actionsOn(params) >= night.LOOP_CAP) return { reason: 'loop', text: `The item already had ${night.LOOP_CAP} watch actions tonight: it waits for the owner's click.` };
+      if (watch.active && actionsOn(params) >= night.LOOP_CAP) return { reason: 'loop', text: `The item already had ${night.LOOP_CAP} watch actions ${watch.selfHealing ? 'today' : 'tonight'}: it waits for the owner's click.` };
       return null;
     };
     return {
@@ -482,8 +484,11 @@ module.exports = (ctx) => {
     projectRunning: (projectId) => roadmaps.readRoadmap(ctx.ws.backlog, projectId).state === 'running',
     onWake: ({ lines, runIds, notices }) => (ctx.ws ? get().wake({ lines, runIds, notices, mock: simulation.simulationOnly() || runIds.every(runMock) }) : { skipped: 'no-workspace' }),
     onChange: () => ctx.events.emit('oracle:changed', { kind: 'wake' }),
-    nightWatch: () => !!ctx.ws && actions.nightWatch(dir()).active,
+    nightWatch: () => !!ctx.ws && actions.watchState(dir(), workspace.readSettings(ctx.ws)).active,
   });
+  // #278: Self-healing's findings (src/service/channels/nightwatch.js) wake the Oracle with their
+  // evidence, as lines: one short turn, simulated when every run is → oracle.wake's result
+  ctx.oracleFindings = ({ lines, runIds = [] }) => get().wake({ findings: lines, runIds, mock: simulation.simulationOnly() || (runIds.length > 0 && runIds.every(runMock)) });
   // runs of this workspace in progress in another app process (#112): each wakes the Oracle once
   const seenElsewhere = new Set();
   const elsewhere = setInterval(() => {

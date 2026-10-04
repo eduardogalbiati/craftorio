@@ -143,10 +143,11 @@
     return [`Asked the ${DELEGATES[m.to] || m.to || 'agent'}`, fmtCost(m.costUsd || 0), m.ts ? fmtTime(m.ts) : ''].filter(Boolean);
   }
 
-  /** The Night watch's view from oracle:state's nightWatch ({ on, until, active }). */
+  /** The Night watch's view from oracle:state's nightWatch ({ on, until, active, selfHealing }); #278: under Self-healing it is on with no end time, and turned off in Settings. */
   function nightWatchView(nw = null, { fmtTime = (t) => t } = {}) {
     const active = !!nw?.active;
-    return { active, until: active ? nw.until || null : null, label: active ? (nw.until ? `Night watch until ${fmtTime(nw.until)}` : 'Night watch on') : 'Night watch off' };
+    const selfHealing = active && !!nw.selfHealing;
+    return { active, selfHealing, until: active ? nw.until || null : null, label: selfHealing ? 'Self-healing is on' : active ? (nw.until ? `Night watch until ${fmtTime(nw.until)}` : 'Night watch on') : 'Night watch off' };
   }
 
   /** The default end of a Night watch: the next 07:00 local time, as a datetime-local value. */

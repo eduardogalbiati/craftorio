@@ -12,6 +12,9 @@
 // else still waits for the click. An action requested by content the Oracle read (an issue body, a
 // run output, a file: requestedBy 'content') always waits for the click.
 // Every proposal, action and result is appended to <oracle dir>/actions.jsonl.
+// Self-healing (#278, settings.oracle.selfHealing): the same watch, standing: active day and night
+// with no end time (watchState), under the same permissions and LOOP_CAP (counted per UTC day:
+// watchSince). <oracle dir>/self-healing.json { since } records when it was turned on (markSelfHealing).
 // #241: each area has one owner. The kinds an owner holds (OWNED: the Backlog's for the Product Owner,
 // the runs', workflows' and skills' for the Supervisor) keep their checks and descriptions here (the
 // owners' inboxes run them through the service), but the Oracle never performs them: ownerOf() routes
@@ -226,6 +229,45 @@ function setNightWatch(dir, { on, until, by } = {}, now = Date.now()) {
   return nightWatch(dir, now);
 }
 
+const selfHealingFile = (dir) => path.join(dir, 'self-healing.json');
+
+/**
+ * The watch in force (#278): { on, until, startedAt, by, active, selfHealing }. With
+ * settings.oracle.selfHealing on it is the standing watch: active with no end time (until null),
+ * whatever night-watch.json says; otherwise the Night watch (nightWatch), with selfHealing false.
+ */
+function watchState(dir, settings, now = Date.now()) {
+  if (settings?.oracle?.selfHealing !== true) return { ...nightWatch(dir, now), selfHealing: false };
+  let since = null;
+  try { since = JSON.parse(fs.readFileSync(selfHealingFile(dir), 'utf8')).since || null; } catch { /* not recorded yet */ }
+  return { on: true, until: null, startedAt: since, by: 'Self-healing', active: true, selfHealing: true };
+}
+
+/**
+ * Records the standing watch turned on (writes self-healing.json { since }) or off (removes it).
+ * → { changed (false when it already was in that state: nothing to log), since }.
+ */
+function markSelfHealing(dir, on, now = Date.now()) {
+  let since = null;
+  try { since = JSON.parse(fs.readFileSync(selfHealingFile(dir), 'utf8')).since || null; } catch { /* off */ }
+  if (!!on === !!since) return { changed: false, since };
+  if (!on) {
+    fs.rmSync(selfHealingFile(dir), { force: true });
+    return { changed: true, since };
+  }
+  fs.mkdirSync(dir, { recursive: true });
+  const started = new Date(now).toISOString();
+  fs.writeFileSync(selfHealingFile(dir), JSON.stringify({ since: started }, null, 2));
+  return { changed: true, since: started };
+}
+
+/** Since when a watch's actions on an item count for LOOP_CAP (ISO): the night's start; under Self-healing, the start of the UTC day (or of the watch, if later). */
+function watchSince(watch, now = Date.now()) {
+  if (!watch?.selfHealing) return watch?.startedAt || null;
+  const day = `${new Date(now).toISOString().slice(0, 10)}T00:00:00.000Z`;
+  return watch.startedAt && watch.startedAt > day ? watch.startedAt : day;
+}
+
 /**
  * Whether Night watch runs this card without the owner's click (#172): { alone, reason, permission }.
  * Under an active watch, reason says why not: 'content' (content asked for it), 'permission' (the
@@ -258,6 +300,7 @@ module.exports = {
   ACTIONS,
   actsAlone,
   logAction,
+  markSelfHealing,
   NIGHT_WATCH_KINDS,
   nightDecision,
   nightWatch,
@@ -265,4 +308,6 @@ module.exports = {
   ownerOf,
   REQUESTERS,
   setNightWatch,
+  watchSince,
+  watchState,
 };

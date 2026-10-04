@@ -26,6 +26,9 @@
 //                      analytics: usage | performance | run | occupancy (performance: a demo git repository and a
 //                      marker; run: AI Development runs, the newest shown; occupancy: 30 days of runs and nights)
 //   --mode <name>      backlog: list | kanban | epics (roadmap: the Roadmap screen, #254)
+//                      nightwatch (#278): self-healing (Self-healing on since yesterday: "Self-healing
+//                      is on" in place of the end time, a finding of each detector, its days in the
+//                      report; its switch: --view settings --tab execution)
 //                      inbox (#256): empty (no card: the empty state; without it, demo cards, the
 //                      newest with an image; a card open: --click "[data-testid=inbox-card]")
 //                      discovery (#257): empty (no card: the empty board; without it, demo cards in
@@ -116,8 +119,9 @@ const VIEWS = {
   roadmap: {},
   // #260: the Releases screen (two shipped releases and the next one: #11, merged locally)
   releases: {},
-  // the Night watch (#172): two replayed nights
-  nightwatch: {},
+  // the Night watch (#172): two replayed nights; self-healing (#278): Self-healing on since yesterday
+  // ("Self-healing is on" in place of the end time, its days in the report)
+  nightwatch: { modes: ['self-healing'] },
   // run: one AI Development run in depth against its workflow's runs (#228); occupancy: the 24/7 tab (#188)
   analytics: { tabs: ['usage', 'performance', 'run', 'occupancy'] },
   backlog: { modes: ['list', 'kanban', 'roadmap', 'epics'] },
@@ -1529,7 +1533,10 @@ function main() {
     }
     // the Night watch's nights (#172): its screen, and Home's morning summary (an app before it: nothing)
     if (home || args.view === 'nightwatch') {
-      try { src('night-watch-demo').writeDemoNights(ws, project.id); } catch (e) { if (e.code !== 'MODULE_NOT_FOUND') throw e; }
+      const selfHealing = args.view === 'nightwatch' && args.mode === 'self-healing';
+      try { src('night-watch-demo').writeDemoNights(ws, project.id, { selfHealing }); } catch (e) { if (e.code !== 'MODULE_NOT_FOUND') throw e; }
+      // #278: the switch itself is a setting (Settings › Execution › Oracle)
+      if (selfHealing) workspace.writeSettings(ws, { oracle: { ...workspace.readSettings(ws).oracle, selfHealing: true } });
     }
     // Run App's setup at a gate is prefilled from the worktree's package.json (#108); the Backlog's
     // Assign dialog shows the language detected from it (#116)

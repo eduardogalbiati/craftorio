@@ -116,6 +116,17 @@ function nightWatchNotice({ ran, did, waits, safety, alarm = false } = {}) {
   };
 }
 
+// #278: Self-healing findings the Oracle cannot answer while a budget pauses it (sent once per pause).
+// `text`: the refusal's text (what paused it and when it resumes).
+function findingsWaitingNotice({ text = '' } = {}) {
+  return {
+    kind: 'oracle', event: 'findings-waiting',
+    title: 'Self-healing: findings are waiting',
+    body: clip(`The Oracle is paused, so it cannot look at what Self-healing detected. ${text}`, 240),
+    target: { view: 'nightwatch' },
+  };
+}
+
 // The notice for a run's chain (#134, src/service/areas/chain.js): `state` started | paused | done,
 // `message` what happened; opens the run (paused: to resume or drop the chain), or the next run.
 const CHAIN_TITLE = { done: 'Chain done', paused: 'Chain paused', started: 'Chain: next run started' };
@@ -287,6 +298,7 @@ class WaitDetector {
 module.exports = {
   attentionSignal,
   chainNotice,
+  findingsWaitingNotice,
   interruptedNotice,
   liveRoadmapNotice,
   nightWatchNotice,
