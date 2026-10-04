@@ -18,7 +18,7 @@
 const fs = require('fs');
 const path = require('path');
 const { git, repoRoot } = require('./engine/worktree');
-const { pushBase } = require('./local-push');
+const { defaultBase, pushBase } = require('./local-push');
 const { writeJsonSafe } = require('./state-file');
 
 const PUSH_TIMEOUT_MS = 120e3;
@@ -108,7 +108,9 @@ function releasedIssues(history) {
 
 /**
  * Ship: pushes the local <base> to origin/<base> (never forced) and tags that commit, locally and
- * on origin. A push origin rejects (it moved) ships nothing: update the local base first.
+ * on origin. A push origin rejects (it moved) ships nothing: update the local base first. A tag
+ * that already names another commit, locally or on origin, is refused before anything is pushed;
+ * shipping the same release twice is safe (what is already on origin stays).
  * @param {{ repo: string, base?: string, tag: string }} o
  * @returns {Promise<{ tag, base, commit, pushed: boolean, commits, issues }>} pushed: false when origin already had the base
  */
@@ -118,14 +120,26 @@ async function shipRelease({ repo, base = null, tag }) {
   const root = await repoRoot(repo);
   if (!root) throw new Error(`${repo || '(no folder)'} is not a git repository.`);
   await git(['check-ref-format', `refs/tags/${name}`], root).catch(() => { throw new Error(`"${name}" is not a valid tag name.`); });
+  base = base || await defaultBase(root);
+  const commit = await git(['rev-parse', '--verify', '--quiet', `refs/heads/${base}^{commit}`], root).catch(() => null);
+  if (!commit) throw new Error(`The local branch ${base} does not exist.`);
+  // the tag is checked before anything goes out: one that names another commit, here or on origin, ships nothing
+  const local = await git(['rev-parse', '--verify', '--quiet', `refs/tags/${name}^{commit}`], root).catch(() => null);
+  const remote = await remoteTag(root, name);
+  const taken = [local, remote].find((sha) => sha && sha !== commit);
+  if (taken) throw new Error(`The tag ${name} already exists at ${taken.slice(0, 8)}: choose another release name. Nothing was pushed.`);
   const result = await pushBase({ repo: root, base });
-  if (result.rejected) throw new Error(`origin/${result.status.base} has commits the local ${result.status.base} has not: update the local ${result.status.base} (Backlog › Update and push), then ship again. Nothing was tagged.`);
-  const commit = await git(['rev-parse', `refs/heads/${result.status.base}^{commit}`], root);
-  const existing = await git(['rev-parse', '--verify', '--quiet', `refs/tags/${name}^{commit}`], root).catch(() => null);
-  if (existing && existing !== commit) throw new Error(`The tag ${name} already exists at ${existing.slice(0, 8)}: choose another release name.`);
-  if (!existing) await git(['tag', name, commit], root);
-  await git(['push', 'origin', `refs/tags/${name}:refs/tags/${name}`], root, { timeout: PUSH_TIMEOUT_MS, auth: true });
-  return { tag: name, base: result.status.base, commit, pushed: !!result.pushed, commits: result.commits, issues: result.issues };
+  if (result.rejected) throw new Error(`origin/${base} has commits the local ${base} has not: update the local ${base} (Backlog › Update and push), then ship again. Nothing was tagged.`);
+  if (!local) await git(['tag', name, commit], root);
+  if (!remote) await git(['push', 'origin', `refs/tags/${name}:refs/tags/${name}`], root, { timeout: PUSH_TIMEOUT_MS, auth: true });
+  return { tag: name, base, commit, pushed: !!result.pushed, commits: result.commits, issues: result.issues };
+}
+
+// The commit a tag names on origin (an annotated tag peeled), or null when origin has no such tag.
+async function remoteTag(root, name) {
+  const out = await git(['ls-remote', '--tags', 'origin', `refs/tags/${name}`, `refs/tags/${name}^{}`], root, { timeout: PUSH_TIMEOUT_MS, auth: true });
+  const lines = out.split('\n').map((l) => l.trim().split(/\s+/)).filter((l) => l[1]);
+  return (lines.find((l) => l[1].endsWith('^{}')) || lines[0])?.[0] || null;
 }
 
 /**
