@@ -251,7 +251,7 @@ Then('the Backlog shows no error {string}', async ({ e2e }, text) => {
 // ---- Backlog › Product Owner (#234, #235) ------------------------------------------------------------
 
 const poDrawer = (page) => page.getByRole('complementary', { name: 'Product Owner', exact: true });
-const poAsk = (page) => poDrawer(page).getByTestId('po-ask');
+const poAsk = (page) => poDrawer(page).getByTestId('agent-chat-send');
 const poPills = (page) => poDrawer(page).getByTestId('po-pill');
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -274,15 +274,15 @@ When("I watch the Product Owner's drawer", async ({ e2e }) => {
     const watch = { states: [], firstInView: {} };
     const snap = () => {
       const pills = [...drawer.querySelectorAll('[data-testid="po-pill"]')];
-      const log = q('po-log');
+      const log = q('agent-chat-messages');
       const working = q('po-working');
       const shown = (el) => !!el && el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden';
       const state = {
         pills: pills.length,
         pillsDisabled: pills.length > 0 && pills.every((p) => p.disabled),
         registerDisabled: pills.some((p) => /Register an issue/.test(p.textContent) && p.disabled),
-        askDisabled: !!q('po-ask')?.disabled,
-        questionEnabled: !!q('po-question') && !q('po-question').disabled && !q('po-question').readOnly,
+        askDisabled: !!q('agent-chat-send')?.disabled,
+        questionEnabled: !!q('agent-chat-input') && !q('agent-chat-input').disabled && !q('agent-chat-input').readOnly,
         working: shown(working) ? working.textContent.replace(/\s+/g, ' ').trim() : '',
       };
       watch.states.push(state);
@@ -315,7 +315,7 @@ When('I click the suggested question {string}', async ({ e2e }, question) => {
 
 When('I ask the Product Owner {string}', async ({ e2e }, question) => {
   const page = e2e.window;
-  await poDrawer(page).getByTestId('po-question').fill(question);
+  await poDrawer(page).getByTestId('agent-chat-input').fill(question);
   await poAsk(page).click();
 });
 
@@ -352,7 +352,7 @@ Then('the suggested questions, {string} and Ask are enabled again', async ({ e2e
   for (let n = 0, count = await pills.count(); n < count; n += 1) await expect(pills.nth(n)).toBeEnabled();
   await expect(pills.filter({ hasText: register })).toBeEnabled();
   await expect(poAsk(page)).toBeEnabled();
-  await expect(poDrawer(page).getByTestId('po-question')).toBeEnabled();
+  await expect(poDrawer(page).getByTestId('agent-chat-input')).toBeEnabled();
 });
 
 Then('the working line is gone', async ({ e2e }) => {
@@ -438,7 +438,7 @@ Then('the split card of {string} fits within the drawer', async ({ e2e }, title)
 });
 
 Then('the conversation does not scroll sideways', async ({ e2e }) => {
-  const log = poDrawer(e2e.window).getByTestId('po-log');
+  const log = poDrawer(e2e.window).getByTestId('agent-chat-messages');
   const { scroll, client } = await log.evaluate((el) => ({ scroll: el.scrollWidth, client: el.clientWidth }));
   expect(scroll, 'the conversation\'s content width').toBeLessThanOrEqual(client);
 });

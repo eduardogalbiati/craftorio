@@ -57,7 +57,10 @@
 // and `inputs`) and into every group. The Cost chip shows only where the Cost axis applies
 // (PoCalibration.costApplies: not on a tests-first workflow). The header (#po-for) names the project
 // and the workflow ("Planning for <project> · <workflow>").
-// load: after robots.js views/backlog/backlog.js (the button's robot is drawn and the drawer wired as it loads)
+// The conversation, the text box, Ask and the working line go through the agents' shared chat (#274,
+// agent-chat.js, adopting #po-chat's markup): the box empties as soon as Ask is clicked and gets the
+// question back when it fails; the pills (#po-chips, its 'pills' slot) and BacklogPO.ask send through it.
+// load: after robots.js agent-chat.js views/backlog/backlog.js (the button's robot is drawn and the drawer wired as it loads)
 /* global api, Robots */
 (() => {
   const QUESTIONS = [
@@ -177,14 +180,6 @@
     el.classList.toggle('hidden', !text);
   }
 
-  // The text box's question (Ask, Enter): cleared once sent; a pill's question keeps what is typed (#234)
-  function askFromBox() {
-    const box = $p('#po-question');
-    const idle = !po.busy;
-    ask(box.value);
-    if (idle && po.busy) box.value = '';
-  }
-
   async function ask(question) {
     const q = String(question || '').trim();
     // #234: no silent no-op when no project is selected
@@ -229,16 +224,10 @@
     }
   }
 
-  // #180: only the live turn is redrawn on each event and each second (the conversation above keeps
-  // its inputs and selection); an owner at the end of the log stays there as the answer grows
+  // #180: only the live turn is redrawn on each event (the conversation above keeps its inputs and
+  // selection); the chat keeps an owner at the end of the log there as the answer grows (#274)
   function renderLive() {
-    renderWorking();
-    const el = $p('#po-live');
-    if (!el || !po.live || !po.open) return;
-    const log = $p('#po-log');
-    const end = atEnd(log);
-    el.innerHTML = window.LiveTurn.html(po.live);
-    if (end) log.scrollTop = log.scrollHeight;
+    if (po.live && po.open) chat.setLiveTurn(po.live);
   }
 
   function stopTurn() {
@@ -447,15 +436,6 @@
   }
 
   const projectName = () => actions()?.project?.()?.name || (state.projects || []).find((p) => p.id === po.projectId)?.name || po.projectId;
-  // #234: "Product Owner is working… 0:12" while a question is in flight
-  const elapsed = (ms) => { const s = Math.max(0, Math.floor(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
-  function renderWorking() {
-    const el = $p('#po-working');
-    const on = po.busy && !!po.pending;
-    el.innerHTML = on ? `<span class="spinner" aria-hidden="true"></span><span>Product Owner is working… <span class="mono">${elapsed(Date.now() - po.since)}</span></span>` : '';
-    el.classList.toggle('hidden', !on);
-  }
-
   function groupHtml(g, m, n) {
     const wf = workflowOf(g.workflow);
     const key = `${m}:${n}`;
@@ -661,16 +641,8 @@
     const top = log.scrollTop;
     const toEnd = scroll === 'end' || atEnd(log);
     const cost = po.messages.reduce((a, x) => a + (x.costUsd || 0), 0);
-    const empty = issueMode
-      ? 'Describe the issue in a few words: type it, dictate it, or paste a screenshot. I look at the code and the backlog for evidence and duplicates, ask a question if I must, and draft it. Nothing is filed until you click Create or Add to #n.'
-      : 'I read the synced issues, the queue, the runs in progress and past runs (and the code, read-only), and propose which issues to run together, which not, and in what order. I never start runs or edit issues: you apply a proposal with a click.';
-    log.innerHTML = (po.messages.length || po.pending ? '' : `<div class="po-empty"><span class="po-empty-robot" aria-hidden="true">${avatar()}</span>
-        <p class="muted small">${empty}</p></div>`)
-      + po.messages.map(messageHtml).join('')
-      + (pendingShown() ? `<div class="sup-wmsg user" data-testid="po-message-you"><div class="sup-wmsg-meta">You</div><div>${esc(po.pending)}</div></div>` : '')
-      + (po.live ? `<div id="po-live">${window.LiveTurn.html(po.live)}</div>` : '')
-      + (po.busy && !po.live ? `<div class="sup-loading"><span class="spinner"></span><span>${issueMode ? 'The Product Owner is reading the code and the backlog…' : 'The Product Owner is reading the backlog…'}</span></div>` : '')
-      + (po.error ? `<p class="error small">${esc(po.error)}</p>` : '');
+    // #274: the messages, the question in flight, the live turn and the error, through the shared chat
+    chat.update({ messages: po.messages, live: po.live, error: po.error, busy: po.busy });
     // #148: the simulation-only scenario picker (never in the production UI)
     $p('#po-sim').classList.toggle('hidden', !simulated);
     $p('#po-scenario').innerHTML = simulated ? SCENARIOS.map((s) => `<button type="button" class="po-sim-opt${s.id === po.scenario ? ' active' : ''}" data-po-scenario="${esc(s.id)}" aria-pressed="${s.id === po.scenario}"${po.busy ? ' disabled' : ''}>${esc(s.label)}</button>`).join('') : '';
@@ -685,7 +657,6 @@
     // #235: the workflow of a plan question and its options (Plan mode only)
     $p('#po-wf-row').classList.toggle('hidden', issueMode || !po.projectId);
     $p('#po-workflow').disabled = po.busy;
-    renderWorking();
     showNotice(po.notice);
     $p('#po-files').classList.toggle('hidden', !issueMode || !po.files.length);
     // #148: an attachment sent with the question in flight can't be removed until the answer
@@ -706,7 +677,6 @@
       ? (openDraftIndex() >= 0 ? 'What should change? Or "add this to #n"…' : 'Describe the issue in a few words (paste or drop screenshots)…')
       : attached ? 'Ask about the attached issues…' : 'Ask about the backlog: which issues should go first?';
     $p('#btn-po-ask').textContent = issueMode ? 'Send' : 'Ask';
-    $p('#btn-po-ask').disabled = po.busy;
     $p('#btn-po-clear').disabled = po.busy || !po.messages.length;
     // #189: the calibration chip (backlog-po-settings.js)
     window.BacklogPoSettings?.renderChip({ busy: po.busy, issueMode });
@@ -819,11 +789,32 @@
     }
   }
 
+  // ---- the chat (#274) ------------------------------------------------------------------------------
+  function emptyHtml() {
+    const empty = po.mode === 'issue'
+      ? 'Describe the issue in a few words: type it, dictate it, or paste a screenshot. I look at the code and the backlog for evidence and duplicates, ask a question if I must, and draft it. Nothing is filed until you click Create or Add to #n.'
+      : 'I read the synced issues, the queue, the runs in progress and past runs (and the code, read-only), and propose which issues to run together, which not, and in what order. I never start runs or edit issues: you apply a proposal with a click.';
+    return `<div class="po-empty"><span class="po-empty-robot" aria-hidden="true">${avatar()}</span>
+        <p class="muted small">${empty}</p></div>`;
+  }
+  // ask() keeps the turn's own state (busy, the live turn, unread); a failed one gives the question back
+  const chat = window.AgentChat.create($p('#po-chat'), {
+    agent: 'Product Owner',
+    parts: { log: $p('#po-log'), input: $p('#po-question'), send: $p('#btn-po-ask'), working: $p('#po-working'), slots: { pills: $p('#po-chips') } },
+    renderMessage: (msg, m) => messageHtml(msg, m),
+    emptyHtml,
+    pendingHtml: () => (pendingShown() ? `<div class="sup-wmsg user" data-testid="po-message-you"><div class="sup-wmsg-meta">You</div><div>${esc(po.pending)}</div></div>` : ''),
+    // #234: no silent no-op when no project is selected (the text stays in the box)
+    beforeSend: () => { if (po.projectId) return true; showNotice(NO_PROJECT); return false; },
+    send: async (q) => { await ask(q); return po.error ? { ok: false } : null; },
+    onStop: stopTurn,
+    onDone: () => render(),
+  });
+
   // ---- events ----------------------------------------------------------------------------------------
   $p('#btn-bl-po').onclick = open;
   $p('#btn-po-close').onclick = close;
   $p('#po-backdrop').onclick = close;
-  $p('#btn-po-ask').onclick = askFromBox;
   // #241: the owner's Do it / Dismiss / Undo on a request card (agent-request.js)
   window.addEventListener('agent-request:changed', async (e) => {
     const { owner, projectId, messages, error } = e.detail || {};
@@ -831,10 +822,6 @@
     try { po.messages = messages || await api.productOwnerHistory(projectId); } catch (err) { po.error = errMsg(err); }
     if (error) po.error = error;
     render();
-  });
-  $p('#po-question').addEventListener('keydown', (e) => {
-    // an Enter that ends an IME composition is not a send; while busy it sends nothing (#234)
-    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); askFromBox(); }
   });
   $p('#po-workflow').onchange = (e) => chooseWorkflow(e.target.value);
   $p('#po-scenario').onclick = (e) => { const b = e.target.closest('[data-po-scenario]'); if (b && !po.busy) setScenario(b.dataset.poScenario); };
@@ -872,12 +859,10 @@
   $p('#po-chips').onclick = (e) => {
     const c = e.target.closest('[data-q], [data-mode]');
     if (c?.dataset.mode) setMode(c.dataset.mode);
-    else if (c) ask(c.dataset.q);
+    else if (c) chat.ask(c.dataset.q);
   };
   const DRAFT_ACTS = ['append', 'comment', 'create', 'create-assign', 'create-roadmap', 'discard', 'revise'];
   $p('#po-log').onclick = (e) => {
-    // #180: the live turn's Stop and its steps' toggle
-    if (window.LiveTurn.onClick(e, po.live, { onStop: stopTurn, render: renderLive })) return;
     // an applied group's badge (#140): the Roadmap at its stage, or its run
     const stage = e.target.closest('[data-po-stage]');
     if (stage) { close(); actions().openStage(Number(stage.dataset.poStage)); return; }
@@ -940,7 +925,7 @@
     ask: async (question) => {
       await open();
       if (po.mode !== 'plan') setMode('plan');
-      ask(question);
+      chat.ask(question);
     },
     // the Backlog's Send to Product Owner (#169)
     attach,

@@ -8,10 +8,13 @@
 // Developer or simulated mode asks the simulated supervisor (no model call).
 // Live progress (#180, window.LiveTurn, live-turn.js): while it answers, what the supervisor does and
 // its answer as it is written (chat:progress 'supervisor'); Stop (api.cancelChatTurn) keeps what was written.
+// The conversation, the text box and Send go through the agents' shared chat (#274, agent-chat.js): the
+// box empties as soon as Send is clicked and gets the question back with the error when it fails.
 // Uses app.js globals ($, esc, state, api, errMsg, devMode, fmtCost, markdownHtml, confirmDialog,
 // shownRunId, registerView).
 (() => {
-  const sv = { messages: [], busy: false, pending: null, error: null, loaded: false, drawer: false, full: false, tools: [], live: null };
+  const sv = { messages: [], busy: false, loaded: false, drawer: false, full: false, tools: [], live: null };
+  let chat = null; // the shared chat (agent-chat.js), mounted with the drawer
   const SUGGESTIONS = [
     'What am I looking at?',
     'Which runs failed recently, and why?',
@@ -52,46 +55,32 @@
     try {
       sv.messages = await api.supervisorChatHistory();
       sv.loaded = true;
-      sv.error = null;
-    } catch (e) { sv.error = errMsg(e); }
+    } catch (e) { chat.setError(errMsg(e)); }
     render();
   }
+  // the drawer shows the latest exchanges; expanded, all of them
+  const shown = () => (sv.full ? sv.messages : sv.messages.slice(-20));
 
-  // field: the input the question was typed in, whose pasted images go with it (#130)
-  async function ask(question, screen, field = null) {
-    const q = String(question || '').trim();
-    if (!q || sv.busy) return;
-    Object.assign(sv, { busy: true, pending: q, error: null, live: window.LiveTurn.create({ agent: 'supervisor' }) });
-    const attachments = await PasteImage.collect(field);
-    document.querySelectorAll('.svc-input').forEach((el) => { el.value = ''; PasteImage.clear(el); });
-    render();
-    // #180: the timer and "Still working" move even when no item arrives
-    const tick = setInterval(renderLive, 1000);
+  // The chat's send (#274): the question with the screen it was asked on and the images pasted in the
+  // box (#130); a failure goes back to the chat (the question back in the box, the error shown)
+  async function send(q) {
+    const screen = screenContext();
+    Object.assign(sv, { busy: true, live: window.LiveTurn.create({ agent: 'supervisor' }) });
+    chat.setLiveTurn(sv.live);
     try {
+      const attachments = await PasteImage.collect(chat.input);
+      PasteImage.clear(chat.input);
       const out = await api.askSupervisorChat({ question: q, screen, mock: devMode(), ...(attachments.length ? { attachments } : {}) });
       sv.messages = out.messages;
-    } catch (e) {
-      sv.error = errMsg(e);
+      return { messages: shown() };
     } finally {
-      clearInterval(tick);
-      Object.assign(sv, { busy: false, pending: null, live: null });
-      render();
+      Object.assign(sv, { busy: false, live: null });
     }
-  }
-
-  // #180: only the live turn is redrawn on each event and each second
-  function renderLive() {
-    if (!sv.live) return;
-    document.querySelectorAll('.svc-live').forEach((el) => {
-      el.innerHTML = window.LiveTurn.html(sv.live);
-      const log = el.parentElement;
-      if (log) log.scrollTop = log.scrollHeight;
-    });
   }
 
   async function clear() {
     if (!await confirmDialog('New conversation', 'The supervisor forgets this conversation and its history is deleted.', 'Clear')) return;
-    try { sv.messages = await api.clearSupervisorChat(); } catch (e) { sv.error = errMsg(e); }
+    try { sv.messages = await api.clearSupervisorChat(); } catch (e) { chat.setError(errMsg(e)); }
     render();
   }
 
@@ -140,14 +129,7 @@
     return `<div class="sup-wmsg svc-msg"><div class="sup-wmsg-meta"><span class="sup-mark">◆</span> ${meta}</div><div class="md md-compact">${markdownHtml(msg.text || '')}</div></div>`;
   }
 
-  function logHtml(messages) {
-    return (messages.length || sv.pending ? '' : `<div class="svc-empty muted small">Ask about anything in the app: workflows, projects, runs, skills, agents, usage. I know which screen you are on, and I read the app's data (never your repositories' code). I cannot change anything yet: I tell you what to change and where.</div>`)
-      + messages.map(messageHtml).join('')
-      + (sv.pending ? `<div class="sup-wmsg user"><div class="sup-wmsg-meta">You</div><div>${esc(sv.pending)}</div></div>` : '')
-      + (sv.live ? `<div class="svc-live">${window.LiveTurn.html(sv.live)}</div>` : '')
-      + (sv.busy && !sv.live ? '<div class="sup-loading"><span class="spinner"></span><span>The supervisor is reading the app\'s data…</span></div>' : '')
-      + (sv.error ? `<p class="error small">${esc(sv.error)}</p>` : '');
-  }
+  const emptyHtml = () => '<div class="svc-empty muted small">Ask about anything in the app: workflows, projects, runs, skills, agents, usage. I know which screen you are on, and I read the app\'s data (never your repositories\' code). I cannot change anything yet: I tell you what to change and where.</div>';
 
   function render() {
     const simulated = devMode();
@@ -156,25 +138,14 @@
     const chips = SUGGESTIONS.map((q) => `<button class="chip" type="button" data-svc-q="${esc(q)}"${sv.busy ? ' disabled' : ''}>${esc(q)}</button>`).join('');
     if (sv.drawer) {
       $('#svc-screen').textContent = screenContext();
-      const log = $('#svc-log-drawer');
-      // the drawer shows the latest exchanges; expanded, all of them
-      log.innerHTML = logHtml(sv.full ? sv.messages : sv.messages.slice(-20));
-      log.scrollTop = log.scrollHeight;
+      // the pills first: the chat locks them while a message is in flight
       $('#svc-chips-drawer').innerHTML = chips;
+      chat.setMessages(shown());
       $('#svc-note-drawer').textContent = note;
       if (sv.full) $('#svc-tools').innerHTML = sv.tools.map((t) => `<li><span class="mono">${esc(t.name)}</span> <span class="muted">${esc(t.description)}</span></li>`).join('');
     }
-    document.querySelectorAll('.svc-send').forEach((b) => (b.disabled = sv.busy));
     document.querySelectorAll('.svc-clear').forEach((b) => (b.disabled = sv.busy || !sv.messages.length));
   }
-
-  const inputBox = (where) => `
-        <div id="svc-chips-${where}" class="svc-chips"></div>
-        <form class="svc-form" data-svc-form="${where}">
-          <textarea id="svc-q-${where}" class="svc-input" rows="2" placeholder="Ask the supervisor… (Enter to send, Shift+Enter for a new line)"></textarea>
-          <button class="btn primary svc-send" type="submit">Send</button>
-        </form>
-        <p id="svc-note-${where}" class="muted small svc-note"></p>`;
 
   registerView({
     id: 'supervisor',
@@ -195,10 +166,7 @@
       </div>
     </div>
     <div class="drawer-body sup-body svc-body">
-      <div class="svc-main">
-        <div id="svc-log-drawer" class="svc-log"></div>
-        ${inputBox('drawer')}
-      </div>
+      <div id="svc-chat" class="svc-main"></div>
       <aside id="svc-side" class="svc-side card hidden">
         <div class="sup-h">What it can read</div>
         <ul id="svc-tools" class="svc-tools small"></ul>
@@ -211,31 +179,38 @@
       $('#btn-svc-full').onclick = () => setFull(!sv.full);
       document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && sv.drawer) closeDrawerPanel(); });
       document.querySelectorAll('.svc-clear').forEach((b) => (b.onclick = clear));
-      // the screen is read when the message is sent: the one under the drawer
-      document.querySelectorAll('[data-svc-form]').forEach((form) => {
-        const input = form.querySelector('textarea');
-        form.onsubmit = (e) => { e.preventDefault(); ask(input.value, screenContext(), input); };
-        input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ask(input.value, screenContext(), input); } });
+      // #274: the shared chat (the live turn's Stop included); the screen is read when the message
+      // is sent: the one under the drawer
+      chat = window.AgentChat.create($('#svc-chat'), {
+        agent: 'Supervisor',
+        ids: { messages: 'svc-log-drawer', input: 'svc-q-drawer' },
+        classes: { messages: 'svc-log', form: 'svc-form', input: 'svc-input', send: 'svc-send' },
+        placeholder: 'Ask the supervisor… (Enter to send, Shift+Enter for a new line)',
+        renderMessage: messageHtml,
+        emptyHtml,
+        send,
+        onStop: () => api.cancelChatTurn('supervisor', '').catch((err) => chat.setError(errMsg(err))),
+        onDone: render,
       });
+      chat.slot('pills').innerHTML = '<div id="svc-chips-drawer" class="svc-chips"></div>';
+      chat.slot('foot').innerHTML = '<p id="svc-note-drawer" class="muted small svc-note"></p>';
       // #180: the question in flight, as the service reports it
       api.onChatProgress?.((p) => {
         if (p?.chat !== 'supervisor' || !sv.live) return;
         window.LiveTurn.apply(sv.live, p);
-        renderLive();
+        chat.setLiveTurn(sv.live);
       });
       // #241: the owner's Do it / Dismiss / Undo on a request card (agent-request.js)
       window.addEventListener('agent-request:changed', async (e) => {
         if (e.detail?.owner !== 'supervisor') return;
         if (e.detail.messages) sv.messages = e.detail.messages;
         else await load();
-        sv.error = e.detail.error || null;
+        chat.setError(e.detail.error || '');
         render();
       });
       document.addEventListener('click', (e) => {
-        // #180: the live turn's Stop and its steps' toggle
-        if (e.target.closest('.svc-live') && window.LiveTurn.onClick(e, sv.live, { onStop: () => api.cancelChatTurn('supervisor', '').catch((err) => { sv.error = errMsg(err); render(); }), render: renderLive })) return;
         const chip = e.target.closest('[data-svc-q]');
-        if (chip) ask(chip.dataset.svcQ, screenContext());
+        if (chip) chat.ask(chip.dataset.svcQ);
       });
     },
   });

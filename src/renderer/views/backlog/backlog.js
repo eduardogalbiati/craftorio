@@ -1199,7 +1199,9 @@
           </button>
         </div>
       </div>
-      <div id="po-log" class="drawer-body po-log" data-testid="po-log"></div>
+      <!-- #274: the conversation and its text box, driven by the agents' shared chat (agent-chat.js marks them) -->
+      <div id="po-chat" class="agent-chat-flat">
+      <div id="po-log" class="drawer-body po-log"></div>
       <div class="drawer-foot po-foot">
         <div id="po-sim" class="po-sim hidden" role="group" aria-label="Simulated scenario" title="Simulation only, not part of the app: forces the simulated Product Owner's next answers">
           <span class="po-sim-label">Simulated scenario</span><span id="po-scenario" class="po-sim-opts"></span>
@@ -1222,14 +1224,15 @@
         <div id="po-working" class="po-working small hidden" data-testid="po-working" role="status" aria-live="polite"></div>
         <p id="po-notice" class="error small hidden" data-testid="po-notice" role="alert"></p>
         <div class="row po-ask">
-          <textarea id="po-question" rows="2" placeholder="Ask about the backlog: which issues should go first?" data-testid="po-question"></textarea>
+          <textarea id="po-question" rows="2" placeholder="Ask about the backlog: which issues should go first?" aria-label="Message to Product Owner"></textarea>
           <button id="btn-po-attach" class="icon-btn hidden" type="button" title="Attach screenshots or files (you can also paste or drop them)" aria-label="Attach files">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5l-8.5 8.5a5 5 0 0 1-7-7L14 4.5a3.5 3.5 0 0 1 5 5L10.5 18a2 2 0 0 1-3-3L15 7.5" /></svg>
           </button>
-          <button id="btn-po-ask" class="btn primary" type="button" data-testid="po-ask">Ask</button>
+          <button id="btn-po-ask" class="btn primary" type="button">Ask</button>
           <input id="po-file-input" type="file" multiple hidden />
         </div>
         <p id="po-note" class="muted small"></p>
+      </div>
       </div>
       <!-- #189: the Product Owner's settings (backlog-po-settings.js), over the conversation -->
       <div id="po-settings" class="po-settings hidden" role="region" aria-label="Calibrate the Product Owner">

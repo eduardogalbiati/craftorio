@@ -18,10 +18,14 @@
 // answer as it is written (chat:progress 'oracle'); Stop (api.cancelChatTurn) keeps what was written.
 // A gate's "Interact with Oracle" (#183, gate-oracle.js) calls OracleChat.openWith: the drawer opens
 // beside the screen (no backdrop, the content narrows), the question box shows a removable context
-// chip and the gate's starters; each question carries that context (oracle:ask `context`). A question
-// asked while another is answered queues. An answer's ```gate-feedback block becomes a card whose
+// chip and the gate's starters; each question carries that context (oracle:ask `context`). A starter
+// clicked while another question is answered queues. An answer's ```gate-feedback block becomes a card whose
 // "Use this text" fills the gate's feedback box. #208: fields are focused with preventScroll and the
 // head wraps its buttons under the title in the narrow dock.
+// Each surface's conversation, text box and Send go through the agents' shared chat (#274,
+// agent-chat.js): the box empties as soon as Send is clicked (the question shows at once) and gets
+// the question back with the error when the send fails or a budget refuses it; while it answers Send
+// is locked and the box stays free.
 // Uses app.js globals ($, esc, state, api, errMsg, devMode, fmtCost, markdownHtml, confirmDialog,
 // selectRun, showView, openArtifactsAt, showSettingsTab, registerView, viewRegistry, Robots).
 (() => {
@@ -29,12 +33,13 @@
   const or = {
     messages: [], service: null, pending: null, error: null, loaded: false, drawer: false,
     drafts: { text: '', images: [] }, pasteError: null, memory: M.memoryForm(''), memoryOpen: false, refilledFor: null,
-    wake: null, nightForm: null, acting: new Set(), live: null,
+    wake: null, nightForm: null, acting: new Set(), live: null, liveIn: null,
     // #183: the question box's context chip ({ label, ref, text, starters }), the questions waiting
     // for the one in flight, and the context of the one in flight
     context: null, queue: [], pendingRef: null,
   };
   const SURFACES = ['dock', 'drawer'];
+  const chats = {}; // each surface's shared chat (#274, agent-chat.js), mounted with it
   const SUGGESTIONS = [
     'What happened overnight?',
     'Which runs failed this week, and why?',
@@ -119,49 +124,44 @@
     api.markOracleRead({ at: last.ts }).catch(() => {});
   }
 
-  // queued: the context the question was asked with (a queued gate question keeps its gate)
-  async function ask(question, queued) {
-    const q = String(question ?? or.drafts.text).trim();
+  // A question without the text box (a suggestion, a gate's starter, OracleChat.ask), through the chat
+  // in view. queued: the context the question was asked with (a queued gate question keeps its gate)
+  function ask(question, queued) {
+    const q = String(question ?? '').trim();
     // #183: a question asked while another is answered waits in line, with its context
     if (or.pending) { if (q) { or.queue.push({ q, context: queued ? queued.context : or.context }); render(); } return; }
+    if (!q || !view().chipsEnabled) return;
+    nextQueued = queued || null;
+    chats[or.drawer || !onDashboard() ? 'drawer' : 'dock'].ask(q);
+  }
+  // The chat's send (#274; the box is already empty, a failure or a refusal gives the question back):
+  // the question with the screen, the pasted images and the gate context (#183); w: the surface it came from
+  let nextQueued = null;
+  async function send(q, w) {
+    const queued = nextQueued;
+    nextQueued = null;
     const images = queued ? [] : or.drafts.images;
-    const v = view();
-    if ((!q && !images.length) || !v.chipsEnabled) return;
     const ctx = queued ? queued.context : or.context;
-    Object.assign(or, { pending: q || `(${images.length} image${images.length > 1 ? 's' : ''})`, pendingRef: ctx?.ref || '', error: null, pasteError: null, live: window.LiveTurn.create({ agent: 'Oracle' }) });
+    Object.assign(or, { pending: q || `(${images.length} image${images.length > 1 ? 's' : ''})`, pendingRef: ctx?.ref || '', error: null, pasteError: null, live: window.LiveTurn.create({ agent: 'Oracle' }), liveIn: w });
+    chats[w].setLiveTurn(or.live);
     render();
-    // #180: the timer and "Still working" move even when no item arrives
-    const tick = setInterval(renderLive, 1000);
     try {
       const context = ctx ? { label: ctx.label, ref: ctx.ref, text: ctx.text } : undefined;
       const out = await api.askOracle({ question: q, screen: screen(), images: images.map((i) => ({ dataUrl: i.dataUrl })), context, mock: devMode() });
       or.messages = out.messages;
       or.service = out.state;
       // a daily budget shows as the paused state; a monthly one as an error
-      if (out.refused && out.refused.reason !== 'daily-budget') or.error = out.refused.text;
-      if (!out.refused && !queued) {
-        if (or.drafts.text.trim() === q) setDraftText('');
-        or.drafts.images = [];
-      }
-    } catch (e) {
-      or.error = errMsg(e); // the question stays in the input, to resend
+      if (out.refused) return { ok: false, error: out.refused.reason === 'daily-budget' ? '' : out.refused.text, messages: out.messages };
+      if (!queued) or.drafts.images = [];
+      return { messages: out.messages };
     } finally {
-      clearInterval(tick);
       Object.assign(or, { pending: null, pendingRef: null, live: null });
-      render();
-      // paused (daily budget) or unavailable: the queue stays on screen, sent after the next question
-      if (or.queue.length && view().chipsEnabled) { const next = or.queue.shift(); ask(next.q, next); }
     }
   }
-
-  // #180: only the live turn is redrawn on each event and each second
-  function renderLive() {
-    if (!or.live) return;
-    document.querySelectorAll('.oracle-live').forEach((el) => {
-      el.innerHTML = window.LiveTurn.html(or.live);
-      const log = el.parentElement;
-      if (log) log.scrollTop = log.scrollHeight;
-    });
+  // after a send: paused (daily budget) or unavailable, the queue stays on screen, sent after the next question
+  function sent() {
+    render();
+    if (or.queue.length && view().chipsEnabled) { const next = or.queue.shift(); ask(next.q, next); }
   }
 
   async function reset() {
@@ -423,21 +423,16 @@
     return parts.join('');
   }
   // an answer's "Use this text" belongs to the gate its question was about
-  function messagesHtml() {
-    let ref = '';
-    return or.messages.map((m) => {
-      if (m.role === 'user') ref = m.context?.ref || '';
-      return messageHtml(m, ref);
-    }).join('');
+  function refAt(all, i) {
+    for (let j = i; j >= 0; j--) if (all[j].role === 'user') return all[j].context?.ref || '';
+    return '';
   }
-  function logHtml(v) {
-    return (v.state === 'empty' ? '<div class="svc-empty muted small">The Oracle keeps one conversation for the whole app. It reads your runs (events, sessions, decisions, costs), the roadmaps and the Backlog, the workflows and skills, and your projects\' repositories, read-only. Ask it why a run failed, where the tokens go or what to do next. Run events wake it when they need you. It changes nothing itself: it sends each change to the agent that owns it (the Product Owner for the Backlog, the Supervisor for runs, workflows and skills), where it is done or waits for your click.</div>' : '')
-      + messagesHtml()
-      + (or.pending ? `<div class="sup-wmsg user"><div class="sup-wmsg-meta">You</div><div class="oracle-text">${esc(or.pending)}</div>${or.drafts.images.length ? `<div class="oracle-thumbs">${or.drafts.images.map((i) => `<span class="oracle-thumb"><img src="${esc(i.dataUrl)}" alt="" /></span>`).join('')}</div>` : ''}</div>` : '')
-      + (or.live ? `<div class="oracle-live">${window.LiveTurn.html(or.live)}</div>` : v.state === 'answering' ? '<div class="sup-loading"><span class="spinner"></span><span>The Oracle is reading…</span></div>' : '')
-      + or.queue.map(({ q, context }) => `<div class="sup-wmsg user oracle-queued"><div class="sup-wmsg-meta">You · <span class="badge">queued</span>${context ? ` · <span class="muted" title="${esc(context.label)}">${esc(context.label)}</span>` : ''}</div><div class="oracle-text">${esc(q)}</div></div>`).join('')
-      + (or.error ? `<div class="sup-wmsg system error"><div class="sup-wmsg-meta">now</div><div>${esc(or.error)}</div></div>` : '');
-  }
+  // the conversation's own parts around the shared chat's messages (#274)
+  const emptyHtml = () => '<div class="svc-empty muted small">The Oracle keeps one conversation for the whole app. It reads your runs (events, sessions, decisions, costs), the roadmaps and the Backlog, the workflows and skills, and your projects\' repositories, read-only. Ask it why a run failed, where the tokens go or what to do next. Run events wake it when they need you. It changes nothing itself: it sends each change to the agent that owns it (the Product Owner for the Backlog, the Supervisor for runs, workflows and skills), where it is done or waits for your click.</div>';
+  const pendingHtml = (f) => `<div class="sup-wmsg user"><div class="sup-wmsg-meta">You</div><div class="oracle-text">${esc(or.pending || f.text)}</div>${or.drafts.images.length ? `<div class="oracle-thumbs">${or.drafts.images.map((i) => `<span class="oracle-thumb"><img src="${esc(i.dataUrl)}" alt="" /></span>`).join('')}</div>` : ''}</div>`;
+  // the questions waiting for the one in flight (#183), and an error of the Oracle's own buttons
+  const afterHtml = () => or.queue.map(({ q, context }) => `<div class="sup-wmsg user oracle-queued"><div class="sup-wmsg-meta">You · <span class="badge">queued</span>${context ? ` · <span class="muted" title="${esc(context.label)}">${esc(context.label)}</span>` : ''}</div><div class="oracle-text">${esc(q)}</div></div>`).join('')
+    + (or.error ? `<div class="sup-wmsg system error"><div class="sup-wmsg-meta">now</div><div>${esc(or.error)}</div></div>` : '');
   function noticeHtml(v) {
     if (v.state === 'paused') {
       const t = v.today || {};
@@ -496,10 +491,8 @@
     const where = screen();
     for (const w of SURFACES) {
       if (w === 'drawer' ? !or.drawer : !onDashboard()) continue;
-      const log = $(`#oracle-log-${w}`);
-      log.innerHTML = logHtml(v);
-      log.querySelectorAll('.oracle-md').forEach(decorate);
-      log.scrollTop = log.scrollHeight;
+      const chat = chats[w];
+      chat.setMessages(or.messages);
       const memBox = $(`#oracle-memory-${w}`);
       const editingHere = memBox.querySelector('textarea');
       // the form is redrawn on its own changes only, never while typing
@@ -532,10 +525,9 @@
       $(`#oracle-chips-${w}`).innerHTML = !starters && (v.state === 'empty' || (v.state === 'answering' && !or.messages.length))
         ? SUGGESTIONS.map((q) => `<button class="chip" type="button" data-oracle-q="${esc(q)}"${v.chipsEnabled ? '' : ' disabled'}>${esc(q)}</button>`).join('') : '';
       $(`#oracle-thumbs-${w}`).innerHTML = v.attachments.map((i) => `<span class="oracle-thumb draft" title="${esc(i.name || 'Pasted image')}"><img src="${esc(i.dataUrl)}" alt="Pasted image" /><button class="icon-btn" type="button" data-oracle-unpaste="${esc(i.id)}" title="Remove this image" aria-label="Remove this image"><svg viewBox="0 0 24 24" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" /></svg></button></span>`).join('');
-      const form = $(`[data-oracle-form="${w}"]`);
-      form.classList.toggle('hidden', v.state === 'unavailable');
-      form.querySelector('textarea').disabled = !v.inputEnabled;
-      form.querySelector('.oracle-send').disabled = !v.canSend;
+      chat.form.classList.toggle('hidden', v.state === 'unavailable');
+      // Send and the text box follow the state (paused, unavailable, answering); the chips just redrawn get the busy lock
+      chat.refresh();
       const pe = $(`#oracle-paste-error-${w}`);
       pe.textContent = or.pasteError || '';
       pe.classList.toggle('hidden', !or.pasteError);
@@ -595,22 +587,41 @@
         ${w === 'drawer' ? '<button id="btn-oracle-close" class="icon-btn" type="button" title="Close (Esc)"><svg viewBox="0 0 24 24" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" /></svg></button>' : ''}
       </div>
     </div>
-    <div class="drawer-body svc-body oracle-body">
-      <div id="oracle-memory-${w}" class="oracle-memory hidden" data-testid="oracle-memory"></div>
-      <div id="oracle-ops-${w}" class="oracle-ops hidden"></div>
-      <div id="oracle-log-${w}" class="svc-log oracle-log"></div>
-      <div id="oracle-notice-${w}" class="oracle-notice"></div>
-      <div id="oracle-chips-${w}" class="svc-chips"></div>
-      <div id="oracle-thumbs-${w}" class="oracle-thumbs"></div>
-      <div id="oracle-context-${w}" class="oracle-context"></div>
-      <form class="svc-form" data-oracle-form="${w}">
-        <textarea id="oracle-q-${w}" class="svc-input oracle-input" rows="2" placeholder="Ask the Oracle… (Enter to send, Shift+Enter for a new line; paste a screenshot)"></textarea>
-        <button class="btn primary oracle-send" type="submit">Send</button>
-      </form>
-      <div id="oracle-starters-${w}" class="svc-chips oracle-starters" role="group" aria-label="Suggested questions about the gate"></div>
+    <div id="oracle-chat-${w}" class="drawer-body svc-body oracle-body"></div>`;
+  // #274: each surface's conversation, text box and Send go through the shared chat; the Oracle's own
+  // parts sit in its slots (memory and Night watch above the conversation, the gate's starters below)
+  function mountChat(w) {
+    const chat = window.AgentChat.create($(`#oracle-chat-${w}`), {
+      agent: 'Oracle',
+      ids: { messages: `oracle-log-${w}`, input: `oracle-q-${w}` },
+      classes: { messages: 'svc-log oracle-log', form: 'svc-form', input: 'svc-input oracle-input', send: 'oracle-send', live: 'oracle-live' },
+      placeholder: 'Ask the Oracle… (Enter to send, Shift+Enter for a new line; paste a screenshot)',
+      renderMessage: (m, i, all) => messageHtml(m, refAt(all, i)),
+      emptyHtml,
+      pendingHtml,
+      afterHtml,
+      onRender: (log) => log.querySelectorAll('.oracle-md').forEach(decorate),
+      // typing only changes Send (the log is not redrawn on every key)
+      onInput: setDraftText,
+      canSend: () => view().canSend,
+      inputEnabled: () => view().inputEnabled,
+      hasDraft: () => or.drafts.images.length > 0,
+      onPaste,
+      send: (q) => send(q, w),
+      onStop: () => api.cancelChatTurn('oracle', '').catch((err) => { or.error = errMsg(err); render(); }),
+      onDone: sent,
+    });
+    chat.slot('top').innerHTML = `<div id="oracle-memory-${w}" class="oracle-memory hidden" data-testid="oracle-memory"></div>
+      <div id="oracle-ops-${w}" class="oracle-ops hidden"></div>`;
+    chat.slot('pills').innerHTML = `<div id="oracle-notice-${w}" class="oracle-notice"></div>
+      <div id="oracle-chips-${w}" class="svc-chips"></div>`;
+    chat.slot('compose').innerHTML = `<div id="oracle-thumbs-${w}" class="oracle-thumbs"></div>
+      <div id="oracle-context-${w}" class="oracle-context"></div>`;
+    chat.slot('foot').innerHTML = `<div id="oracle-starters-${w}" class="svc-chips oracle-starters" role="group" aria-label="Suggested questions about the gate"></div>
       <p id="oracle-paste-error-${w}" class="error small oracle-paste-error hidden"></p>
-      <p id="oracle-foot-${w}" class="muted small svc-note"></p>
-    </div>`;
+      <p id="oracle-foot-${w}" class="muted small svc-note"></p>`;
+    chats[w] = chat;
+  }
 
   registerView({
     id: 'oracle',
@@ -633,6 +644,7 @@
       const corner = $('.topbar .header-right');
       corner.insertBefore(btn, corner.querySelector('.notif-wrap'));
       // the Dashboard shows the dock: the drawer closes there
+      SURFACES.forEach(mountChat);
       const dashView = viewRegistry.get('dashboard');
       const showDash = dashView.show;
       dashView.show = () => { showDash(); closeDrawer(); render(); };
@@ -642,18 +654,6 @@
       document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && or.drawer) closeDrawer(); });
       document.querySelectorAll('[data-oracle-reset]').forEach((b) => (b.onclick = reset));
       document.querySelectorAll('[data-oracle-memory]').forEach((b) => (b.onclick = () => (or.memoryOpen && or.memory.editing ? null : openMemory())));
-      document.querySelectorAll('[data-oracle-form]').forEach((form) => {
-        const input = form.querySelector('textarea');
-        form.onsubmit = (e) => { e.preventDefault(); ask(); };
-        // typing only changes Send (the log is not redrawn on every key)
-        input.addEventListener('input', () => {
-          setDraftText(input.value);
-          const canSend = view().canSend;
-          document.querySelectorAll('.oracle-send').forEach((b) => (b.disabled = !canSend));
-        });
-        input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ask(); } });
-        input.addEventListener('paste', onPaste);
-      });
       document.querySelectorAll('[data-oracle-night]').forEach((b) => (b.onclick = () => {
         if (M.nightWatchView(or.service?.nightWatch).active) return;
         or.nightForm = or.nightForm ? null : { until: M.defaultNightEnd(), saving: false, error: null };
@@ -674,12 +674,10 @@
       api.onChatProgress?.((p) => {
         if (p?.chat !== 'oracle' || !or.live) return;
         window.LiveTurn.apply(or.live, p);
-        renderLive();
+        chats[or.liveIn]?.setLiveTurn(or.live);
       });
       document.addEventListener('click', (e) => {
         const t = e.target;
-        // #180: the live turn's Stop and its steps' toggle
-        if (t.closest('.oracle-live') && window.LiveTurn.onClick(e, or.live, { onStop: () => api.cancelChatTurn('oracle', '').catch((err) => { or.error = errMsg(err); render(); }), render: renderLive })) return;
         const chip = t.closest('[data-oracle-q]');
         if (chip) { ask(chip.dataset.oracleQ); return; }
         if (t.closest('[data-oracle-uncontext]')) { or.context = null; render(); return; }

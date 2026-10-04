@@ -226,6 +226,19 @@ Artifacts links (`openArtifactsAt`) and other absolute paths into copy-on-click 
 `--view oracle` (Projects with the drawer open) and `--oracle <state>` on any view (see
 `scripts/screenshot.js --help`).
 
+## The agents' chat (#274)
+
+`agent-chat.js` (`window.AgentChat.create(container, options)`, with `agent-chat.css`) is the one
+chat of the Oracle, the Product Owner and the Supervisor drawers: the messages (Markdown, cost and
+tokens), Send (the text box empties at once; a failure or a refusal puts the text back with the
+error), the busy lock (#234), the working line, the live turn (#180), scroll to the end on send,
+attachments, the unread state (#149) and slots for each agent's own parts (`head`, `top`, `pills`,
+`compose`, `actions`, `foot`). Its header lists what it owns. A new agent chat uses agent-chat.js
+(never a copy of a drawer's chat code), and a chat fix goes there so every drawer gets it. A drawer
+keeps its ids and classes through the `ids` / `classes` options, and draws its own message markup
+with `renderMessage`; the component wraps each message in `[data-testid="agent-chat-message"]`
+(`display: contents`, the look is the drawer's).
+
 ## Pasted images in the prompt fields (#130)
 
 `paste-image.js` (`window.PasteImage`, loaded after `voice.js`) shares voice.js's `VOICE_FIELDS`
