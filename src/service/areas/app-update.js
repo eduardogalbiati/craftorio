@@ -7,12 +7,13 @@
 // (appUpdateAfterRestart). Never in simulation-only mode, never without a host that can restart.
 
 const path = require('path');
-const { spawn } = require('child_process');
 const appUpdate = require('../../app-update');
 const backlog = require('../../backlog');
+const { resolveCommand } = require('../../engine/providers');
 const notifier = require('../../notifications');
 const projects = require('../../projects');
 const roadmaps = require('../../roadmap');
+const { runShim } = require('../../shell');
 const simulation = require('../../engine/simulation');
 const workspace = require('../../workspace');
 
@@ -23,7 +24,12 @@ const SOURCE_TTL_MS = 15000;
 // `npm install` in the app folder (not `npm ci`: the running Electron's files stay in place)
 function npmInstall({ cwd }) {
   return new Promise((resolve, reject) => {
-    const child = spawn('npm', ['install', '--no-audit', '--no-fund'], { cwd, shell: process.platform === 'win32', windowsHide: true, stdio: ['ignore', 'ignore', 'pipe'] });
+    const npm = resolveCommand('npm');
+    if (!npm) { reject(new Error('npm not found in PATH')); return; }
+    let child;
+    try {
+      child = runShim(npm.file, ['install', '--no-audit', '--no-fund'], { cwd, windowsHide: true, stdio: ['ignore', 'ignore', 'pipe'] });
+    } catch (e) { reject(e); return; }
     let err = '';
     child.stderr.on('data', (d) => { err = `${err}${d}`.slice(-2000); });
     child.on('error', reject);
