@@ -4,7 +4,8 @@
 // recorded: each turn's cost_usd is its own and an attempt stopped before its result has a
 // `session.attempt_stopped` event (estimated, or cost not recorded), except a Claude turn with several
 // `result` events recorded before #277 (summary without `turn_cost: 'max_result'`): its cost_usd is
-// the last event's (often 0), so it costs the highest cost among its `usage` stream items. Runs
+// the last event's (often 0), so it costs the highest cost among its `usage` stream items after its
+// last stopped attempt (that attempt's items are its own cost). Runs
 // recorded before per-turn costs:
 // - a Claude turn recorded the CLI's `total_cost_usd`, cumulative over the CLI session on `--resume`:
 //   its own cost is the difference with the previous turn of the same CLI session, and the session
@@ -28,18 +29,22 @@ const perTurn = (summary, events) => summary?.cost_accounting === 'per_turn'
  */
 function runCosts(events = [], summary = null) {
   const fixed = perTurn(summary, events);
+  // a run recorded with #277's fix: each turn's cost_usd already is its highest result
+  const maxResult = summary?.turn_cost === 'max_result'
+    || (events || []).some((e) => e.type === 'workflow.finished' && e.summary?.turn_cost === 'max_result');
   const own = new Map();
   const overcount = new Map();
   const stopped = [];
   const provider = new Map();
   const agentOf = new Map();
   const last = new Map();
-  const streamed = new Map(); // `${session_id}:${turn}` → the highest cost among the turn's usage items
+  // `${session_id}:${turn}` → the highest cost among the usage items of the turn's current attempt
+  const streamed = new Map();
   for (const e of events) {
     if (e.type === 'session.stream') {
       const c = e.item?.kind === 'usage' ? Number(e.item.costUsd) : NaN;
       const k = `${e.session_id}:${e.turn}`;
-      if (fixed && c > (streamed.get(k) || 0)) streamed.set(k, c);
+      if (fixed && !maxResult && c > (streamed.get(k) || 0)) streamed.set(k, c);
       continue;
     }
     const snap = e.session;
@@ -48,6 +53,8 @@ function runCosts(events = [], summary = null) {
       if (snap.agent) agentOf.set(e.session_id, snap.agent);
     }
     if (e.type === 'session.attempt_stopped') {
+      // its usage items are its own cost, never the retry's
+      streamed.delete(`${e.session_id}:${e.turn}`);
       stopped.push({ agent: agentOf.get(e.session_id) || null, sessionId: e.session_id, step: e.step_id || null, t: Date.parse(e.ts || ''),
         costUsd: Number(e.cost_usd) || 0, estimated: !!e.estimated, notRecorded: !!e.cost_not_recorded });
       continue;
