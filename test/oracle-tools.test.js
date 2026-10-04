@@ -300,6 +300,33 @@ test.describe('#244 tool output budgets', () => {
     assert.ok(out.text.length <= BUDGET + NOTE);
   });
 
+  test('run_file with an offset past the end of the file returns no content and no error', async (t) => {
+    const { ctx, service } = makeCtx(t);
+    seedRun(service, 'run-244-past', 1, { 'small.log': numbered(5 * LINE) });
+    const out = await callTool(oracleTools(ctx), 'run_file', { runId: 'run-244-past', path: 'small.log', offset: 10 * 1024 });
+    assert.equal(out.isError, false);
+    assert.equal(out.text, '');
+  });
+
+  test('run_file reads a 100 KB file whole by following the offset its note gives', async (t) => {
+    const { ctx, service } = makeCtx(t);
+    const size = 100 * 1024;
+    const content = numbered(size);
+    seedRun(service, 'run-244-chain', 1, { 'big.log': content });
+    let offset = 0;
+    let joined = '';
+    for (let i = 0; i < 10; i++) {
+      const out = await callTool(oracleTools(ctx), 'run_file', { runId: 'run-244-chain', path: 'big.log', offset });
+      assert.equal(out.isError, false);
+      const cut = out.text.match(/\n… \(cut: .*offset (\d+)\)$/);
+      joined += cut ? out.text.slice(0, cut.index) : out.text;
+      if (!cut) break;
+      offset = Number(cut[1]);
+    }
+    assert.equal(joined.length, size);
+    assert.equal(joined, content);
+  });
+
   test('repo_read on a 100 KB file returns at most 40 KB', async (t) => {
     const { ctx, api } = makeCtx(t);
     const folder = tmpRepo(t);

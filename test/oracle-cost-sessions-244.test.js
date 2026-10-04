@@ -232,6 +232,33 @@ test('#244 sessions: the Oracle resumes while warm (last turn under 55 min ago) 
   assert.notEqual(o.state().sessionId, first, 'idle past the cache lifetime: a fresh session');
 });
 
+test('#244 sessions: a session idle for 2 h (state.json) starts fresh from state.md, with no compaction handoff', async (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: Date.parse('2026-10-03T10:00:00Z') });
+  const dir = tmpDir(t);
+  fs.writeFileSync(path.join(dir, 'state.json'), JSON.stringify({ sessionId: 's-old', model: 'claude-opus-5-5', contextTokens: 20000, lastTurnAt: '2026-10-03T08:00:00Z' }));
+  fs.writeFileSync(path.join(dir, 'state.md'), '# Oracle state\n\nWatching run r-idle-marker.\n');
+  const o = makeOracle(dir);
+  t.after(() => o.release());
+  await o.ask({ question: 'Anything new?', mock: true });
+  const msgs = o.history();
+  assert.equal(msgs.filter((m) => m.role === 'oracle').at(-1).session, 'fresh');
+  assert.equal(msgs.filter((m) => m.kind === 'compaction' || m.kind === 'model-change').length, 0, 'no handoff message');
+  assert.notEqual(o.state().sessionId, 's-old');
+  assert.ok(!fs.existsSync(path.join(dir, 'handoffs')) || fs.readdirSync(path.join(dir, 'handoffs')).length === 0, 'no handoff note written');
+  assert.match(fs.readFileSync(path.join(dir, 'session.md'), 'utf8'), /r-idle-marker/);
+});
+
+test('#244 sessions: a session whose last turn was 10 min ago (state.json) is resumed', async (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: Date.parse('2026-10-03T10:00:00Z') });
+  const dir = tmpDir(t);
+  fs.writeFileSync(path.join(dir, 'state.json'), JSON.stringify({ sessionId: 's-warm', model: 'claude-opus-5-5', contextTokens: 20000, lastTurnAt: '2026-10-03T09:50:00Z' }));
+  const o = makeOracle(dir);
+  t.after(() => o.release());
+  await o.ask({ question: 'Anything new?', mock: true });
+  assert.equal(o.history().filter((m) => m.role === 'oracle').at(-1).session, 'resumed');
+  assert.equal(o.state().sessionId, 's-warm');
+});
+
 test('#244 state file: it survives a restart and seeds the fresh session that follows an idle gap', async (t) => {
   t.mock.timers.enable({ apis: ['Date'], now: Date.parse('2026-10-03T08:00:00Z') });
   const dir = tmpDir(t);
