@@ -8,7 +8,7 @@ order: 150
 The Oracle is a built-in agent (Agents lists it; model and effort editable, default
 `claude-opus-5-5`, high) with **one persistent conversation for the whole app**: it plays Product
 Owner, supervisor, reliability engineer and operator's assistant in the same context. Its panel is
-docked on the **Dashboard**; on every other screen the **Oracle** button at the top right of the
+docked on **Home** (its Overview tab); on every other screen the **Oracle** button at the top right of the
 header opens the same conversation as a drawer that knows the screen you are on (Esc closes it).
 The button's badge counts the answers that arrived while the conversation was out of view.
 

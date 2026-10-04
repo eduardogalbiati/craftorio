@@ -2,7 +2,10 @@
    the header button. Messages reuse .sup-wmsg, .sup-loading (style.css) and the .svc-* layout
    (views/supervisor/supervisor.css); card states use the shared .pill status styles. */
 #view-dashboard.oracle-docked { display: grid; grid-template-columns: minmax(0, 1fr) 400px; grid-template-rows: minmax(0, 1fr); gap: 20px; overflow: hidden; }
-#view-dashboard.oracle-docked > .dash { overflow: auto; min-height: 0; width: 100%; padding-top: 4vh; }
+#view-dashboard.oracle-docked > .home-main { overflow: auto; min-height: 0; width: 100%; }
+/* #255: Home's Analytics tab takes the whole width: no dock there (the Oracle is its drawer, as on the other screens) */
+#view-dashboard.oracle-docked.home-on-analytics { display: block; overflow: auto; }
+#view-dashboard.home-on-analytics > .oracle-dock { display: none; }
 @media (max-width: 1150px) { #view-dashboard.oracle-docked { grid-template-columns: minmax(0, 1fr) 340px; } }
 .oracle-dock { padding: 0; display: flex; flex-direction: column; min-height: 0; min-width: 0; overflow: hidden; }
 .oracle-dock .drawer-body { min-height: 0; }

@@ -15,7 +15,7 @@ Read this before changing anything in `src/renderer/`.
   folder; `index.html` holds no screen, only the app frame (top bar, sidebar with the Run item and
   runs menu, `main.content`, the drawers, the terminal dock, the shared dialogs) and the generated
   file lists. The folders:
-  - `views/dashboard/`: the start screen (its section has no `hidden`; `renderDashboard` is also called on run events);
+  - `views/dashboard/`: Home, the start screen (#255: the flow overview and the Analytics tab; its section has no `hidden`; `renderDashboard` is also called on run events: it paints from the last read and reads again at most every 30 s);
   - `views/sessions/`: `sessions.js` (`window.SessionsView` for notifications and terminal events) and `sessions.css`;
   - `views/projects/`: the project cards, drawn inside Settings › Projects (#254: no screen or menu entry of its own; `showProjects`), and the New / Edit project dialog (`openProjectModal`, also opened from the Start drawer and the header's project selector);
   - `views/project/`: one project's page (no sidebar entry: its `menu` keeps Settings lit);
@@ -33,7 +33,8 @@ Read this before changing anything in `src/renderer/`.
     screen's Chat button, so its header says `load: after … views/run/run.js`);
   - `views/duo/` (Write & Review: `duo.js`, `duo-issue.js`, its Save to issue and guide dialogs) and
     `views/arena/` (AI Arena: `arena.js`, `arena-shuffle.js`, its guide); both add their "lab" badge in `mount`;
-  - `views/agents/`, `views/skills/`, `views/analytics/`, `views/settings/`, `views/usage/`, `views/supervisor/`.
+  - `views/analytics/`: a tab of Home (#255): no menu entry and no section of its own (`section: 'dashboard'`, `menu: 'dashboard'`); Home's markup holds its `panel` (`#view-analytics`), `showView('analytics')` opens Home on that tab;
+  - `views/agents/`, `views/skills/`, `views/settings/`, `views/usage/`, `views/supervisor/`.
 
   **Shared pieces stay outside the folders**, one file each: `gate-panel.js` (what a gate offers on the
   Run screen, the run chat and Write & Review: choices, brief, Artifacts side panel, Run App, Show the
@@ -58,7 +59,7 @@ Read this before changing anything in `src/renderer/`.
   controls once (and adds what `nav` can't: a badge); `show()` runs on each `showView(id)`.
   The menu is grouped by the flow (#254, `nav-groups.js`): `nav.group` (`plan`, `code`, `workflows`,
   `ai`, or none) puts the entry under that group's title, which folds and remembers it; a group sits
-  at its own order among the entries without one (Home, Analytics, Night watch, Settings), and its
+  at its own order among the entries without one (Home, Night watch, Settings), and its
   entries by theirs inside it. `nav` may be a list: each entry opens the screen on its `tab`
   (`data-tab`; Workflows: Definitions, Runs, Builder, Pipelines). `section: '<id>'` draws the screen
   in another screen's section (the Roadmap in the Backlog's) and `menu: '<id>'` names the entry lit
@@ -95,7 +96,7 @@ Read this before changing anything in `src/renderer/`.
   selected one. Route anything run-specific by `ev.run_id` and pass the `runId` to `stopRun`,
   `resolveApproval` and the terminals. There is no approval dialog: a gate is answered inside its run
   (the run chats, or the gate card on its Run screen, `renderRunGates`); elsewhere the Run badge, a
-  dismissable toast, the dashboard's pending approvals list and a desktop notification say it waits.
+  dismissable toast, Home's "What needs you" list and a desktop notification say it waits.
   Nothing a run raises may cover the screen: dialogs are for the user's own clicks.
 - **Where run state comes from** (#74): a run's view is built only by `onEvent`, the reducer of
   live `run:event`s, and `hydrateRun(runId)` replays the recorded events (`runs:events` with
@@ -202,7 +203,7 @@ Read this before changing anything in `src/renderer/`.
 `#view-dashboard` (class `oracle-docked`, a two-column grid) and adds `#oracle-drawer` (a `.drawer`
 like `#svc-drawer`) and the header's `#nav-oracle` button, inserted before the notifications bell
 (#254: `.topbar .actions`, top right). On
-the Dashboard it focuses the dock, elsewhere it toggles the drawer. Both places render the same
+Home's Overview it focuses the dock, elsewhere (Home's Analytics tab included, #255: the dock is hidden there) it toggles the drawer. Both places render the same
 state from `OracleChatModel` (`views/oracle/oracle-chat-model.js`, pure, tested in Node):
 
 - **states**: `empty` (a line on what it reads, 4 `.chip` suggestions), `conversation`,

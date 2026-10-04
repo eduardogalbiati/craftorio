@@ -463,9 +463,12 @@
 
   registerView({
     id: 'analytics',
-    nav: { label: 'Analytics', order: 100, icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10" /><path d="M10 20V4" /><path d="M16 20v-7" /><path d="M22 20H2" /></svg>' },
-    markup: `
-      <section id="view-analytics" class="view hidden">
+    // #255: a tab of Home (views/dashboard/), without a menu entry: Home's section holds `panel`,
+    // showView('analytics') opens Home on this tab
+    section: 'dashboard',
+    menu: 'dashboard',
+    panel: `
+      <div id="view-analytics" class="hidden" role="tabpanel">
         <div class="page-head">
           <div>
             <h1>Analytics</h1>
@@ -481,11 +484,12 @@
             <button class="btn primary an-usage-only" id="an-analyze" type="button" title="The supervisor writes a report on these sessions (a real model call)">Ask the supervisor</button>
           </div>
         </div>
-        <div class="tabs page-tabs" role="tablist" aria-label="Analytics"><button type="button" class="tab" role="tab" data-an-tab="usage">Usage</button><button type="button" class="tab" role="tab" data-an-tab="performance">Repository performance</button>${extraTabs().map((t) => `<button type="button" class="tab" role="tab" data-an-tab="${t.id}" data-testid="an-tab-${t.id}">${t.label}</button>`).join('')}</div>
+        <div class="tabs page-tabs" role="tablist" aria-label="Analytics"><button type="button" class="tab" role="tab" data-an-tab="usage">Usage</button><button type="button" class="tab" role="tab" data-an-tab="performance" title="Repository performance: how well the repository takes parallel runs">Performance</button>${extraTabs().map((t) => `<button type="button" class="tab" role="tab" data-an-tab="${t.id}" data-testid="an-tab-${t.id}">${t.label}</button>`).join('')}</div>
         <div id="an-body"></div>
-      </section>`,
-    mount: wire,
+      </div>`,
     show() {
+      paintHomeTabs();
+      wire(); // once: the panel is in place when Home is
       render();
       load();
     },

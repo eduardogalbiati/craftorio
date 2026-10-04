@@ -1,6 +1,6 @@
 // The menu's groups (#254): the sidebar follows the flow from an idea to a release (Plan & Design,
 // Code & Build, Workflows, AI). A view's `nav` entry names its group (`group: 'code'`); an entry
-// without one stands alone (Home, Analytics, Night watch, Settings). Everything sits by `order`: a
+// without one stands alone (Home, Night watch, Settings; Analytics is a tab of Home, #255). Everything sits by `order`: a
 // group at its own, its entries by theirs inside it. A group folds, and the choice is remembered.
 // No DOM here: view-registry.js draws the groups; a test feeds navLayout the views' entries.
 // load: early (view-registry.js reads the groups when the views register)

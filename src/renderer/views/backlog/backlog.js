@@ -755,7 +755,7 @@
       <button class="link-btn small" type="button" data-label-clear title="Remove every label from the filter">clear</button>` : '';
   }
   const tasks = (i) => {
-    if (!i.tasks.total) return '';
+    if (!i.tasks?.total) return '';
     const pct = Math.round((i.tasks.done / i.tasks.total) * 100);
     return `<span class="bl-tasks" title="${i.tasks.done} of ${i.tasks.total} tasks done"><span class="bl-bar"><span style="width:${pct}%"></span></span><span class="mono small">${i.tasks.done}/${i.tasks.total}</span></span>`;
   };
@@ -1623,6 +1623,9 @@
     project: () => project() || null,
     projectId: () => bl.projectId,
     roadmapGroup,
+    // the board with its columns (Home's flow strip, #255: the To do and Merged locally counts open
+    // them), for this visit: the preferred board is not changed
+    showColumns: () => { bl.mode = 'kanban'; },
     // the backlog synced again after the Product Owner filed or updated an issue (#117)
     showData: (data) => { if (data) { setData(data); render(); } },
     showRoadmap,

@@ -181,6 +181,9 @@ module.exports = (ctx) => {
     return [...active.values()].map((r) => {
       let gates = r.pendingGates();
       try { if (ctx.store) gates = ctx.store.openGates(r.runId); } catch (e) { console.error('index.db gates:', e.message); }
+      // while Phone gates is on, each gate with its phone page link (#226; Home's "What needs you", #255)
+      const phoneLink = ctx.phoneGateLink?.();
+      if (phoneLink) gates = gates.map((g) => ({ ...g, phoneUrl: phoneLink(r.runId, g.approval_id) }));
       return {
         runId: r.runId, workflow: r.wf.metadata?.name || path.basename(r.file), file: path.basename(r.file), mock: r.mock,
         projectId: r.projectId, issues: r.issues, startedAt: r.startedAt ? new Date(r.startedAt).toISOString() : null,

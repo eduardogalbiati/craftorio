@@ -5,8 +5,10 @@
 //
 //   --view <name>      dashboard, sessions, projects, project, backlog, roadmap, artifacts, workflows, agents,
 //                      skills, usage, analytics, oracle, nightwatch, settings, duo, arena, inbox,
-//                      run-chat, run
-//                      (default dashboard, the menu's Home; projects: Settings › Projects; roadmap: the
+//                      run-chat, run, home-empty
+//                      (default dashboard, the menu's Home (#255: the flow strip, "What needs you" and
+//                      "Today" on demo data; its Analytics tab: --view analytics; home-empty: Home in a
+//                      new workspace, no project and no run: how to start); projects: Settings › Projects; roadmap: the
 //                      same as backlog --mode roadmap; the Supervisor's drawer: --view workflows --click
 //                      "#btn-wf-supervisor"; a folded menu group: --click ".nav-group[data-group=workflows]
 //                      .nav-group-title"; oracle: Settings with the Oracle's drawer open from its
@@ -104,6 +106,8 @@ const VIEWS = {
   dashboard: {}, sessions: {}, projects: {}, project: {}, artifacts: {}, agents: {}, skills: {}, usage: {}, duo: {}, arena: {},
   // the Oracle's drawer (#171), opened from its header button on another screen (Settings)
   oracle: {},
+  // Home in a new workspace (#255): no project and no run, how to start
+  'home-empty': {},
   // #254: the Roadmap screen; the same as --view backlog --mode roadmap (its tab until then)
   roadmap: {},
   // #260: the Releases screen (two shipped releases and the next one: #11, merged locally)
@@ -1441,16 +1445,18 @@ function main() {
     const created = await projects.createProject(ws.projects, { name: 'demo-app', description: 'Sample project (simulated data)' });
     const project = projects.updateProject(ws.projects, created.id, { repo: DEMO_REPO });
     workspace.writeSettings(ws, { developerMode: true, lastWorkflow: 'software-development.yaml', lastProject: project.id, keepAwake: !!args.keepAwake && args.keepAwake !== 'off' });
+    // Home (#255) shows every stage of the flow: the Inbox, the backlog, the roadmap's runs, the local merge, the releases
+    const home = args.view === 'dashboard';
     fs.mkdirSync(ws.backlog, { recursive: true });
     fs.writeFileSync(path.join(ws.backlog, `${project.id}.json`), JSON.stringify(demoBacklog(project.id, src('backlog').taskProgress), null, 2));
     // also on Project: its run list shows the run's "issue from cache" badge (#168)
-    if (['backlog', 'project', 'releases'].includes(args.view)) demoLocalMerge(ws, project.id);
+    if (home || ['backlog', 'project', 'releases'].includes(args.view)) demoLocalMerge(ws, project.id);
     // #260: the Releases screen's history; the Backlog's "Released" badge on the issues it shipped
-    if (['backlog', 'releases'].includes(args.view)) demoReleases(ws, project.id);
-    if (args.view === 'backlog') demoRoadmap(ws, project.id, args.live, args.budget);
+    if (home || ['backlog', 'releases'].includes(args.view)) demoReleases(ws, project.id);
+    if (home || args.view === 'backlog') demoRoadmap(ws, project.id, args.live, args.budget);
     if (args.view === 'backlog') demoPoConversation(ws, project.id, args.po);
     if (args.view === 'backlog' && project.folder) demoBacklogRefresh(ws, project.folder, project.id);
-    if (args.view === 'inbox' && args.mode !== 'empty') demoDiscovery(ws, project.id);
+    if (home || (args.view === 'inbox' && args.mode !== 'empty')) demoDiscovery(ws, project.id);
     // also on Artifacts: a second run group (its document.md) for Collapse all / Expand all (#126)
     if (['artifacts', 'backlog', 'duo'].includes(args.view)) demoEnrichRun(ws, project.id);
     if (args.view === 'analytics') demoAnalyticsRuns(ws, project.id);
@@ -1469,7 +1475,7 @@ function main() {
       } catch (e) { if (e.code !== 'MODULE_NOT_FOUND') throw e; }
     }
     // the Night watch's nights (#172): its screen, and the Dashboard's morning summary (an app before it: nothing)
-    if (['dashboard', 'nightwatch'].includes(args.view)) {
+    if (home || args.view === 'nightwatch') {
       try { src('night-watch-demo').writeDemoNights(ws, project.id); } catch (e) { if (e.code !== 'MODULE_NOT_FOUND') throw e; }
     }
     // Run App's setup at a gate is prefilled from the worktree's package.json (#108); the Backlog's
@@ -1479,7 +1485,13 @@ function main() {
       fs.writeFileSync(path.join(project.folder, 'package.json'), JSON.stringify({ name: 'demo-app', private: true, scripts: { start: 'node server.js' } }, null, 2));
     }
     let run = null;
-    if (VIEWS[args.view].run || ['artifacts', 'workflows', 'project', 'usage', 'dashboard'].includes(args.view)) run = recordRun(project);
+    if (VIEWS[args.view].run || home || ['artifacts', 'workflows', 'project', 'usage'].includes(args.view)) run = recordRun(project);
+    // Home's empty state: a workspace without a project
+    if (args.view === 'home-empty') {
+      projects.removeProject(ws.projects, project.id);
+      fs.rmSync(path.join(ws.backlog, `${project.id}.json`), { force: true });
+      workspace.writeSettings(ws, { lastProject: null });
+    }
     demoOracle(ws, workspace, args.oracle, run?.runId);
     return { project, run };
   })();
@@ -1662,10 +1674,11 @@ function main() {
     } else {
       if (v === 'artifacts' && run?.simulated && args.demoShots) await demoEvidence(win, run.dir);
       // #254: the screen's menu entry (Workflows has one per tab, the Roadmap its own); Projects
-      // (Settings › Projects) and Artifacts (a tab of Runs) have none
+      // (Settings › Projects), Artifacts (a tab of Runs) and Analytics (a tab of Home, #255) have none
       if (v === 'workflows') await click(`.nav-item[data-view="workflows"][data-tab="${args.tab || 'runs'}"]`);
       else if (v === 'backlog' && args.mode === 'roadmap') await click('.nav-item[data-view="roadmap"]');
-      else if (['projects', 'artifacts'].includes(v)) await js(`showView(${JSON.stringify(v)})`);
+      else if (v === 'home-empty') await click('.nav-item[data-view="dashboard"]');
+      else if (['analytics', 'artifacts', 'projects'].includes(v)) await js(`showView(${JSON.stringify(v)})`);
       else await click(`.nav-item[data-view="${v}"]`);
     }
     await pause(500);

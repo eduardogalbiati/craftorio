@@ -281,23 +281,25 @@
     });
   }
 
-  // ---- the Dashboard's morning summary -------------------------------------------------------
-  // renderDashboard runs on every run event: the summary is fetched at most once a minute
+  // ---- Home's morning summary ----------------------------------------------------------------
+  // renderDashboard runs on every run event: the summary is fetched at most once a minute.
+  // Answers the summary shown ({ window, summary }, #255: Home dates "Cost last night" by its window) or null.
   const morning = { at: 0, value: null };
   async function renderMorning(box) {
-    if (!box || !api.nightWatchMorning) return;
+    if (!box || !api.nightWatchMorning) return null;
     if (Date.now() - morning.at > 60e3) {
       morning.at = Date.now();
       try { morning.value = await api.nightWatchMorning(); } catch { morning.value = null; }
     }
     const m = morning.value;
     box.classList.toggle('hidden', !m);
-    if (!m) { box.innerHTML = ''; return; }
+    if (!m) { box.innerHTML = ''; return null; }
     const s = m.summary;
     box.innerHTML = `<div class="dash-gates-title"><b>☾ Night watch · ${esc(hm(m.window.from))} → ${esc(hm(m.window.to))}</b>${s.alarm ? ' <span class="pill pill-failed">safety alarm</span>' : ''}</div>
       <div class="nw-dash-lines small"><div>${esc(s.ran)}</div><div>${esc(s.did)}</div><div>${esc(s.waits)}</div><div class="${s.alarm ? 'error' : 'muted'}">${esc(s.safety)}</div></div>
       <div class="row"><span class="spacer"></span><button class="btn sm ghost" type="button" id="dash-nw-open">Open Night watch</button></div>`;
     $('#dash-nw-open').onclick = () => showView('nightwatch');
+    return m;
   }
   // opens the view on the night that started at `startedAt` (ISO)
   function openNight(startedAt) {
