@@ -358,7 +358,7 @@
     }
     // #244: a routine run event, written by the app (no model call): the status leads, the run id opens the run
     if (m.kind === 'notice') {
-      return `<div class="sup-wmsg system oracle-notice-msg" data-testid="oracle-run-notice" data-run="${esc(m.runId || '')}"><div class="sup-wmsg-meta oracle-meta">${esc(time(m.ts))} · <span class="pill pill-${esc(m.status || 'done')}">${esc(m.status || 'notice')}</span>${m.runId ? ` · <a href="#" data-oracle-open-run="${esc(m.runId)}" title="Open the run">${esc(m.runId)}</a>` : ''}</div><div>${esc(m.text)}</div></div>`;
+      return `<div class="sup-wmsg system oracle-notice-msg" data-testid="oracle-run-notice" data-run="${esc(m.runId || '')}"><div class="sup-wmsg-meta oracle-meta">${esc(time(m.ts))} · ${StatusPill.statusPill(m.status || 'notice')}${m.runId ? ` · <a href="#" data-oracle-open-run="${esc(m.runId)}" title="Open the run">${esc(m.runId)}</a>` : ''}</div><div>${esc(m.text)}</div></div>`;
     }
     // #244: the wake-ups a budget refused, as one digest
     if (m.kind === 'wake-refused') {

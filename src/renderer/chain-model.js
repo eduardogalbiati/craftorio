@@ -288,7 +288,6 @@
   }
 
   const STAGE_TARGETS = { product_owner: 'Product Owner (roadmap)', queue: 'Queue (Backlog)' };
-  const STATUS_PILLS = ['cancelled', 'failed', 'interrupted', 'running', 'success'];
 
   /**
    * A pipeline's stages as a strip (#135): the Start drawer and the Assign dialog before it starts
@@ -304,8 +303,7 @@
       const map = i ? Object.entries(s.map || {}).map(([input, output]) => `<span class="badge" title="${esc(`Input "${input}" ← output "${output}" of the previous stage`)}">${esc(output === RUN_SOURCE ? 'the run' : output)} → ${esc(input)}</span>`).join('') : '';
       const fixed = Object.entries(s.inputs || {}).map(([k, v]) => `${k}: ${typeof v === 'object' ? JSON.stringify(v) : v}`).join('\n');
       const run = runs?.[i];
-      const status = run?.status && STATUS_PILLS.includes(run.status) ? run.status : run ? 'idle' : '';
-      const pill = run ? `<span class="pill pill-${status}">${esc(run.status || 'queued')}</span>` : '';
+      const pill = run ? StatusPill.statusPill(run.status || 'queued') : '';
       const head = run?.runId ? `<button type="button" class="link-btn pipe-stage-name" data-run-link="${esc(run.runId)}" title="${esc(`Open run ${run.runId}`)}">${esc(label)}</button>` : `<span class="pipe-stage-name" title="${esc(s.workflow || label)}">${esc(label)}</span>`;
       return `${i ? `<li class="pipe-arrow" aria-hidden="true">→${map ? `<span class="pipe-map">${map}</span>` : ''}</li>` : ''}<li class="pipe-stage${i === current ? ' current' : ''}"${fixed ? ` title="${esc(`Fixed inputs:\n${fixed}`)}"` : ''}><span class="pipe-stage-n">${i + 1}</span>${head}${pill}</li>`;
     }).join('')}</ol>`;
