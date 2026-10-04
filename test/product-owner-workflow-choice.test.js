@@ -104,3 +104,34 @@ test('#235 the backlog-product-owner skill says the workflow is chosen (fixed) b
   const skill = fs.readFileSync(path.join(__dirname, '..', 'skills', 'backlog-product-owner', 'SKILL.md'), 'utf8');
   assert.match(skill, /workflow[^.\n]*\b(chosen|fixed|picked)\b[^.\n]*\bowner\b|\bowner\b[^.\n]*\b(chose|chooses|chosen|picks|picked|fixes|fixed)\b[^.\n]*\bworkflow/i);
 });
+
+test('#235 normalizeAnswer: the drawer\'s options go into every group on the chosen workflow, over what the model proposed', () => {
+  const raw = { summary: 'ok', groups: [{ name: 'One', issues: [1], workflow: AI_DEV, inputs: { mode: 'auto', e2e_tests: 'write' }, reason: 'r', stage: 1 }] };
+  const out = productOwner.normalizeAnswer(raw, { issues: ISSUES, history: [], workflows: WORKFLOWS, workflow: AI_DEV, inputs: { e2e_tests: 'off', screenshots: 'changed' } });
+  assert.deepEqual({ ...out.groups[0].inputs }, { mode: 'auto', e2e_tests: 'off', screenshots: 'changed' });
+});
+
+// Precedence on software-development-local-hero (reviewer): the drawer's options are applied first and
+// the Cost chip's step then sets the inputs it manages; options the Cost step does not manage are kept.
+test('#235 normalizeAnswer on software-development-local-hero with chosen options and an Economy cost: the Cost step sets the inputs it manages, the other chosen options are kept', () => {
+  const raw = { summary: 'ok', groups: [{ name: 'One', issues: [1], workflow: SW_DEV, reason: 'r', stage: 1 }] };
+  const opts = { issues: ISSUES, history: [], workflows: WORKFLOWS, workflow: SW_DEV, inputs: { unit_tests: 'off', mode: 'auto' } };
+  const costed = productOwner.normalizeAnswer(raw, { ...opts, cost: ECONOMY }).groups.find((g) => g.workflow === SW_DEV);
+  assert.equal(costed.inputs.unit_tests, 'run_existing');
+  assert.equal(costed.inputs.mode, 'auto');
+  const plain = productOwner.normalizeAnswer(raw, opts).groups.find((g) => g.workflow === SW_DEV);
+  assert.equal(plain.inputs.unit_tests, 'off', 'without a Cost step the chosen option stays');
+  assert.equal(plain.cost, undefined);
+});
+
+test('#235 lastWorkflow returns the workflow and options of the project\'s last plan question that chose one, null when none did', async (t) => {
+  const dir = tmp(t);
+  assert.equal(productOwner.lastWorkflow(dir, 'demo'), null);
+  const base = { backlogDir: dir, projectId: 'demo', data: { projectId: 'demo', issues: ISSUES }, activeRuns: [], runs: [], workflows: WORKFLOWS, defaultWorkflow: SW_DEV, mock: true };
+  await productOwner.ask({ ...base, question: 'Analyze the backlog and propose runs', workflow: SW_DEV, inputs: { mode: 'auto' } });
+  await productOwner.ask({ ...base, question: 'Build a roadmap', workflow: AI_DEV, inputs: { e2e_tests: 'off' } });
+  const last = productOwner.lastWorkflow(dir, 'demo');
+  assert.equal(last.workflow, AI_DEV);
+  assert.deepEqual({ ...last.inputs }, { e2e_tests: 'off' });
+  assert.equal(productOwner.lastWorkflow(dir, 'other'), null, 'per project');
+});

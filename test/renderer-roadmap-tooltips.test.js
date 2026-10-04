@@ -187,3 +187,48 @@ test('#236 the run list\'s progress strip (runProgressStrip) carries no title, t
   assert.match(html, /\+2/, 'the two earliest steps are folded into "+2"');
   assert.deepEqual(titles(html), []);
 });
+
+// #236 (reviewer): the agent card / steps popover placement (run-list.js placePopover) with stubbed
+// rects: a 400x300 window, a 6px edge margin. `pop` measures `w` x `h` wherever it is put.
+function place({ anchor, w, h, opts, vw = 400, vh = 300 }) {
+  const rl = loadRunList();
+  rl.document.documentElement = { clientWidth: vw, clientHeight: vh };
+  const pop = { style: {}, getClientRects: () => [1], getBoundingClientRect: () => ({ width: w, height: h }) };
+  const a = { getBoundingClientRect: () => ({ ...anchor, right: anchor.left + anchor.width, bottom: anchor.top + anchor.height }) };
+  rl.placePopover(pop, a, opts);
+  return pop.style;
+}
+
+test('#236 placePopover puts the card below its anchor, left-aligned, when there is room', () => {
+  const s = place({ anchor: { left: 50, top: 40, width: 20, height: 20 }, w: 100, h: 50 });
+  assert.equal(s.position, 'fixed');
+  assert.equal(s.left, '50px');
+  assert.equal(s.top, '64px'); // 60 + the 4px gap
+});
+
+test('#236 placePopover near the right edge clamps the card inside the window', () => {
+  const s = place({ anchor: { left: 360, top: 40, width: 20, height: 20 }, w: 150, h: 50 });
+  assert.equal(s.left, '244px'); // 400 - 150 - 6
+});
+
+test('#236 placePopover near the bottom edge flips the card above its anchor', () => {
+  const s = place({ anchor: { left: 50, top: 260, width: 20, height: 20 }, w: 100, h: 80 });
+  assert.equal(s.top, '176px'); // 260 - 4 - 80
+});
+
+test('#236 placePopover with alignRight lines the popover up with its anchor\'s right side, never past the left edge', () => {
+  assert.equal(place({ anchor: { left: 300, top: 40, width: 40, height: 20 }, w: 200, h: 50, opts: { alignRight: true } }).left, '140px'); // 340 - 200
+  assert.equal(place({ anchor: { left: 10, top: 40, width: 40, height: 20 }, w: 200, h: 50, opts: { alignRight: true } }).left, '6px');
+});
+
+test('#236 placePopover caps the card\'s width to the window so long lines wrap instead of running off', () => {
+  assert.equal(place({ anchor: { left: 50, top: 40, width: 20, height: 20 }, w: 100, h: 50 }).maxWidth, '388px'); // 400 - 2 * 6
+});
+
+test('#236 placePopover leaves a hidden card alone', () => {
+  const rl = loadRunList();
+  rl.document.documentElement = { clientWidth: 400, clientHeight: 300 };
+  const pop = { style: {}, getClientRects: () => [], getBoundingClientRect: () => ({ width: 0, height: 0 }) };
+  rl.placePopover(pop, { getBoundingClientRect: () => ({ left: 0, top: 0, right: 0, bottom: 0 }) });
+  assert.deepEqual({ ...pop.style }, {});
+});

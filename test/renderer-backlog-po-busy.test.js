@@ -252,3 +252,30 @@ test('#234 style.css gives a disabled pill (.chip:disabled) its own look: lower 
   assert.match(body, /opacity\s*:/);
   assert.match(body, /cursor\s*:\s*not-allowed/);
 });
+
+test('#234 with no project selected the drawer still opens, and a pill click shows the notice under the footer', async () => {
+  const d = loadDrawer({ projectId: null });
+  await d.open();
+  assert.ok(d.$('#po-drawer').classList.contains('open'), 'the drawer opened');
+  d.clickPill();
+  await tick();
+  const notice = d.$('#po-notice');
+  assert.match(notice.textContent, /Choose a project in the Backlog first/);
+  assert.equal(notice.classList.contains('hidden'), false, 'the notice is visible');
+  assert.equal(d.asks.length, 0);
+});
+
+test('#234 a drawer closed while busy and reopened after the answer has its pills and Ask enabled again', async () => {
+  const d = loadDrawer();
+  await d.open();
+  d.clickPill();
+  d.$('#btn-po-close').onclick();
+  assert.equal(d.$('#po-drawer').classList.contains('open'), false, 'the drawer closed');
+  d.answer();
+  await tick();
+  await d.open();
+  await tick();
+  for (const tag of pillTags(d)) assert.ok(!isDisabledTag(tag), `pill still disabled: ${tag}`);
+  assert.equal(d.$('#btn-po-ask').disabled, false);
+  assert.doesNotMatch(d.allText(), /Product Owner is working/);
+});
