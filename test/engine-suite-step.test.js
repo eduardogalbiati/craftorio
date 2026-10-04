@@ -498,3 +498,72 @@ test('runSuite with files: a command that cannot take files runs whole and says 
   assert.equal(out.scope, 'full');
   assert.match(out.selection.why, /`make test` cannot run single test files: the whole suite ran$/);
 });
+
+// ---------------------------------------------------------------------------
+// runSuite with coverage (#225)
+// ---------------------------------------------------------------------------
+
+const COVERAGE_REPORT = [
+  'ℹ tests 3',
+  'ℹ pass 3',
+  'ℹ fail 0',
+  'ℹ start of coverage report',
+  'ℹ ---------------------------------------------------------------------',
+  'ℹ file               | line % | branch % | funcs % | uncovered lines',
+  'ℹ ---------------------------------------------------------------------',
+  'ℹ src                |        |          |         | ',
+  'ℹ  evidence.js       |  92.46 |    81.82 |  100.00 | 45-48 120',
+  'ℹ  runs.js           |  78.10 |    70.59 |   85.71 | 12-20 300-310',
+  'ℹ ---------------------------------------------------------------------',
+  'ℹ all files          |  85.33 |    76.47 |   92.31 | ',
+  'ℹ ---------------------------------------------------------------------',
+  'ℹ end of coverage report',
+  '',
+].join('\n');
+
+function coverageProject(t) {
+  const cwd = tmp(t);
+  fs.writeFileSync(path.join(cwd, 'package.json'), JSON.stringify({ scripts: { test: 'node scripts/test.js', 'test:coverage': 'node scripts/test.js --experimental-test-coverage' } }));
+  return cwd;
+}
+
+test('runSuite with coverage: a filtered npm test runs the test:coverage script with the same files', async (t) => {
+  const runDir = tmp(t);
+  const cwd = coverageProject(t);
+  const seen = [];
+  const run = async ({ command }) => { seen.push(command); return { code: 0, timedOut: false, error: null }; };
+  await runSuite({ command: 'npm test', cwd, runDir, round: 1, run, files: ['test/a.test.js'], selection: { why: 'x', files: ['test/a.test.js'], reasons: {} }, coverage: true });
+  assert.deepEqual(seen, ['npm run test:coverage -- test/a.test.js']);
+});
+
+test('runSuite with coverage: node\'s coverage report becomes coverage/coverage-summary.md with the totals and the changed files', async (t) => {
+  const runDir = tmp(t);
+  const cwd = coverageProject(t);
+  const run = async ({ logFile }) => { fs.appendFileSync(logFile, COVERAGE_REPORT); return { code: 0, timedOut: false, error: null }; };
+  const out = await runSuite({ command: 'npm test', cwd, runDir, round: 1, run, coverage: true, changedFiles: () => ['src/runs.js'] });
+  assert.equal(out.status, 'pass');
+  assert.deepEqual(out.coverage, { lines: 85.33, branches: 76.47, functions: 92.31, files: 1, path: 'coverage/coverage-summary.md' });
+  const md = fs.readFileSync(path.join(runDir, 'coverage', 'coverage-summary.md'), 'utf8');
+  assert.match(md, /85\.33/);
+  assert.match(md, /src\/runs\.js/);
+  assert.doesNotMatch(md, /src\/evidence\.js/);
+});
+
+test('the bundled development workflows record coverage on their suite step', () => {
+  const yaml = require('js-yaml');
+  for (const name of ['software-development.yaml', 'software-development-local-hero.yaml', 'ai-development-local-hero.yaml']) {
+    const wf = yaml.load(fs.readFileSync(path.join(__dirname, '..', 'workflows', name), 'utf8'));
+    const suite = wf.steps.find((s) => s.id === 'suite');
+    assert.equal(suite?.coverage, true, name);
+  }
+});
+
+test('runSuite with coverage: an output without a coverage report saves no summary', async (t) => {
+  const runDir = tmp(t);
+  const cwd = coverageProject(t);
+  const run = async ({ logFile }) => { fs.appendFileSync(logFile, 'ℹ pass 3\nℹ fail 0\n'); return { code: 0, timedOut: false, error: null }; };
+  const out = await runSuite({ command: 'npm test', cwd, runDir, round: 1, run, coverage: true });
+  assert.equal(out.status, 'pass');
+  assert.equal(out.coverage, undefined);
+  assert.equal(fs.existsSync(path.join(runDir, 'coverage', 'coverage-summary.md')), false);
+});
