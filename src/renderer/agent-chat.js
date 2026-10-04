@@ -12,6 +12,8 @@
 //   its attachments back in the box and shows the error line ([data-testid="agent-chat-error"]);
 // - the busy lock (#234): while a message is in flight (or setBusy), Send and the buttons of the
 //   'pills' slot are disabled, the text box stays free and Enter sends nothing;
+// - a turn started elsewhere (setTurn: another surface's send, the service's own turn) locks and shows
+//   like a send of this chat;
 // - the working line ("<agent> is working… 0:12") and the live turn (#180, window.LiveTurn: drawn at
 //   the end of the conversation, redrawn each second, its Stop calls onStop);
 // - scroll: the owner's position is kept on a redraw unless they were at the end; Send scrolls to the end;
@@ -94,7 +96,8 @@
   }
 
   /**
-   * Mounts a chat in `container`. Options: agent (its name), send(text, attachments) → result,
+   * Mounts a chat in `container`. Options: agent (its name), send(text, attachments, { fromBox }) →
+   * result (fromBox false: a pill or ask(), not the text box),
    * placeholder, sendLabel, onUnreadChange(unread); and for a view's own parts: renderMessage(m, i, all)
    * (markup, '' to skip one, undefined for the default), roleOf(m), emptyHtml(), pendingHtml(flight),
    * afterHtml() (after the live turn), onRender(log), workingText(), canSend() / inputEnabled() (the
@@ -107,11 +110,13 @@
     const o = { agent: 'Agent', ...opts };
     const ids = o.ids || {};
     const cls = o.classes || {};
-    const s = { messages: [], extBusy: false, flight: null, live: null, error: '', attachments: [], visible: true, unread: false, seen: 0, started: false, timer: null };
+    const s = { messages: [], extBusy: false, flight: null, turn: null, live: null, error: '', attachments: [], visible: true, unread: false, seen: 0, started: false, timer: null };
     const p = o.parts ? adopt(container, o) : build(container, o, ids, cls);
     const { root: rootEl, log, input, send: sendBtn, form, working, chips, slots } = p;
 
-    const isBusy = () => s.extBusy || !!s.flight;
+    // a turn of the agent in flight: this chat's send, or one started elsewhere (setTurn)
+    const inFlight = () => s.flight || s.turn;
+    const isBusy = () => s.extBusy || !!inFlight();
     const roleOf = (m) => (o.roleOf ? o.roleOf(m) : m?.role === 'user' ? 'user' : 'agent');
     const atEnd = () => log.scrollHeight - log.scrollTop - log.clientHeight <= NEAR_END;
     const scrollToEnd = () => { log.scrollTop = log.scrollHeight; };
@@ -142,24 +147,26 @@
     // ---- rendering --------------------------------------------------------------------------------
     // the message in flight, until the conversation shows it (a history reloaded meanwhile)
     function pendingShown() {
-      if (!s.flight) return false;
+      const f = inFlight();
+      if (!f || !f.text) return false;
       const last = s.messages[s.messages.length - 1];
-      return !(last && roleOf(last) === 'user' && String(last.text || '').trim() === s.flight.text);
+      return !(last && roleOf(last) === 'user' && String(last.text || '').trim() === f.text);
     }
     const wrap = (role, html, extra = '') => `<div class="agent-chat-msg${extra}" data-testid="agent-chat-message" data-role="${role}">${html}</div>`;
     const liveHtml = () => (s.live && root.LiveTurn ? root.LiveTurn.html(s.live, { stop: !!o.onStop }) : '');
     function logHtml() {
       const list = s.messages;
       const out = [];
-      if (!list.length && !s.flight && o.emptyHtml) out.push(o.emptyHtml());
+      if (!list.length && !inFlight() && o.emptyHtml) out.push(o.emptyHtml());
       list.forEach((m, i) => {
         const own = o.renderMessage ? o.renderMessage(m, i, list) : undefined;
         const html = own === undefined || own === null ? messageHtml(m, o.agent) : own;
         if (html) out.push(wrap(roleOf(m), html));
       });
       if (pendingShown()) {
-        const own = o.pendingHtml ? o.pendingHtml(s.flight) : undefined;
-        if (own !== '') out.push(wrap('user', own || messageHtml({ role: 'user', text: s.flight.text }, o.agent), ' pending'));
+        const f = inFlight();
+        const own = o.pendingHtml ? o.pendingHtml(f) : undefined;
+        if (own !== '') out.push(wrap('user', own || messageHtml({ role: 'user', text: f.text }, o.agent), ' pending'));
       }
       if (s.live) out.push(`<div class="agent-chat-live ${cls.live || ''}" data-agent-chat-live>${liveHtml()}</div>`);
       if (o.afterHtml) out.push(o.afterHtml());
@@ -168,8 +175,9 @@
     }
     function renderWorking() {
       if (!working) return;
-      const on = !!s.flight;
-      working.innerHTML = on ? `<span class="spinner" aria-hidden="true"></span><span>${e(o.workingText ? o.workingText() : `${o.agent} is working…`)} <span class="mono">${elapsed(Date.now() - s.flight.since)}</span></span>` : '';
+      const f = inFlight();
+      const on = !!f;
+      working.innerHTML = on ? `<span class="spinner" aria-hidden="true"></span><span>${e(o.workingText ? o.workingText() : `${o.agent} is working…`)} <span class="mono">${elapsed(Date.now() - (f.since || Date.now()))}</span></span>` : '';
       working.classList.toggle('hidden', !on);
     }
     function renderLive() {
@@ -206,9 +214,9 @@
 
     // ---- sending ----------------------------------------------------------------------------------
     // the timer of the working line and the live turn move even when no progress arrives (#180)
-    function startTick() {
-      clearInterval(s.timer);
-      s.timer = setInterval(() => { renderWorking(); renderLive(); }, 1000);
+    // (only while a turn is in flight)
+    function syncTick() {
+      if (!inFlight()) { clearInterval(s.timer); s.timer = null; } else if (!s.timer) s.timer = setInterval(() => { renderWorking(); renderLive(); }, 1000);
     }
     function fail(message) {
       const f = s.flight;
@@ -228,19 +236,20 @@
       s.flight = { text, attachments, fromBox, since: Date.now() };
       s.error = '';
       s.started = true;
-      startTick();
+      syncTick();
       render({ end: true });
       let out;
-      try { out = Promise.resolve(o.send(text, attachments)); } catch (x) { out = Promise.reject(x); }
+      try { out = Promise.resolve(o.send(text, attachments, { fromBox })); } catch (x) { out = Promise.reject(x); }
       out.then((res) => {
         if (res && Array.isArray(res.messages)) { s.messages = res.messages; noteArrivals(); }
         if (res && res.ok === false) fail(res.error);
       }, (x) => fail(errText(x))).finally(() => {
-        clearInterval(s.timer);
         s.flight = null;
         s.live = null;
+        syncTick();
         render();
-        o.onDone?.();
+        // a view's redraw that throws must not leave the send's promise rejected with no handler
+        try { o.onDone?.(); } catch (x) { console.error(x); }
       });
       return true;
     }
@@ -288,6 +297,15 @@
         syncControls();
       },
       isBusy,
+      /**
+       * A turn of the agent started elsewhere (another surface, the service on its own): { text?, since? },
+       * null when over. Like a send: busy, the working line, its question (text) in the conversation.
+       */
+      setTurn(turn) {
+        s.turn = turn || null;
+        syncTick();
+        render();
+      },
       /** A LiveTurn state drawn at the end of the conversation; null removes it. */
       setLiveTurn(turn) {
         const had = !!log.querySelector('[data-agent-chat-live]');
@@ -296,9 +314,10 @@
       },
       /** A message sent without the text box (a pill, a starter): what is typed stays. */
       ask: (text) => submit(text),
-      /** Several of the view's states in one redraw: { messages, busy, live, error } (each optional). */
+      /** Several of the view's states in one redraw: { messages, busy, turn, live, error } (each optional). */
       update(patch = {}) {
         if ('busy' in patch) s.extBusy = !!patch.busy;
+        if ('turn' in patch) { s.turn = patch.turn || null; syncTick(); }
         if ('live' in patch) s.live = patch.live || null;
         if ('error' in patch) s.error = patch.error || '';
         if ('messages' in patch) { s.messages = Array.isArray(patch.messages) ? patch.messages : []; noteArrivals(); }

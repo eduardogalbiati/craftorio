@@ -142,7 +142,7 @@
     nextQueued = null;
     const images = queued ? [] : or.drafts.images;
     const ctx = queued ? queued.context : or.context;
-    Object.assign(or, { pending: q || `(${images.length} image${images.length > 1 ? 's' : ''})`, pendingRef: ctx?.ref || '', error: null, pasteError: null, live: window.LiveTurn.create({ agent: 'Oracle' }), liveIn: w });
+    Object.assign(or, { pending: q || `(${images.length} image${images.length > 1 ? 's' : ''})`, pendingSince: Date.now(), pendingRef: ctx?.ref || '', error: null, pasteError: null, live: window.LiveTurn.create({ agent: 'Oracle' }), liveIn: w });
     chats[w].setLiveTurn(or.live);
     render();
     try {
@@ -483,16 +483,24 @@
     return `${budget} ${devMode() ? 'Simulated (developer mode): no model is called and nothing is spent.' : 'Each message is one call to the model.'}`;
   }
 
+  // #274: the turn a surface shows without having sent it: the other surface's question in flight, or
+  // the Oracle's own turn
+  function turnElsewhere(w) {
+    if (or.pending) return or.liveIn === w ? null : { text: or.pending, since: or.pendingSince };
+    return or.service?.busy ? { since: or.busySince } : null;
+  }
   function render() {
     const v = view();
     // a failed answer keeps its question in the input, once
     const last = or.messages.at(-1);
     if (v.state === 'error' && v.resendText && !or.drafts.text && last && or.refilledFor !== last.id) { or.refilledFor = last.id; setDraftText(v.resendText); }
     const where = screen();
+    // a turn the Oracle answers on its own (the service is busy, no send here) runs since it was first seen
+    if (!or.service?.busy) or.busySince = null; else if (!or.busySince) or.busySince = Date.now();
     for (const w of SURFACES) {
       if (w === 'drawer' ? !or.drawer : !onDashboard()) continue;
       const chat = chats[w];
-      chat.setMessages(or.messages);
+      chat.update({ messages: or.messages, turn: turnElsewhere(w) });
       const memBox = $(`#oracle-memory-${w}`);
       const editingHere = memBox.querySelector('textarea');
       // the form is redrawn on its own changes only, never while typing

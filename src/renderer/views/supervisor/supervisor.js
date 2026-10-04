@@ -62,14 +62,15 @@
   const shown = () => (sv.full ? sv.messages : sv.messages.slice(-20));
 
   // The chat's send (#274): the question with the screen it was asked on and the images pasted in the
-  // box (#130); a failure goes back to the chat (the question back in the box, the error shown)
-  async function send(q) {
+  // box (#130; a suggestion chip sends without them, they stay in the box); a failure goes back to the
+  // chat (the question back in the box, the error shown)
+  async function send(q, _attachments, { fromBox } = {}) {
     const screen = screenContext();
     Object.assign(sv, { busy: true, live: window.LiveTurn.create({ agent: 'supervisor' }) });
     chat.setLiveTurn(sv.live);
     try {
-      const attachments = await PasteImage.collect(chat.input);
-      PasteImage.clear(chat.input);
+      const attachments = fromBox ? await PasteImage.collect(chat.input) : [];
+      if (fromBox) PasteImage.clear(chat.input);
       const out = await api.askSupervisorChat({ question: q, screen, mock: devMode(), ...(attachments.length ? { attachments } : {}) });
       sv.messages = out.messages;
       return { messages: shown() };
