@@ -39,6 +39,9 @@ const PROJECT_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 // card.json's fields a caller may change (the column changes with moveCard, the rest never)
 const EDITABLE = ['title', 'type', 'tags', 'clarity', 'estimate', 'links'];
 
+// a file being written (writeFileAtomic, addAttachment): <name>.<pid>.tmp, never listed as an attachment
+const TEMP_FILE = /\.\d+\.tmp$/;
+
 const now = () => new Date().toISOString();
 const mb = (n) => `${Math.ceil(n / 1024 / 1024)} MB`;
 const readText = (file) => { try { return fs.readFileSync(file, 'utf8'); } catch { return ''; } };
@@ -66,7 +69,7 @@ function existingCard(dir, projectId, id, box = 'cards') {
 
 // A file name without any path (what a paste, a drop or a source path calls the file), or ''.
 function fileName(name) {
-  const base = String(name ?? '').split(/[\\/]/).pop().replace(/[<>:"|?*\x00-\x1f]/g, '-').trim().slice(-120);
+  const base = String(name ?? '').split(/[\\/]/).pop().replace(/[<>:"|?*\x00-\x1f]/g, '-').replace(/[. ]+$/, '').trim().slice(-120);
   return /^\.*$/.test(base) ? '' : base;
 }
 
@@ -129,7 +132,7 @@ const tagList = (tags) => [...new Set((Array.isArray(tags) ? tags : []).map((t) 
 function attachmentNames(folder) {
   try {
     return fs.readdirSync(path.join(folder, 'attachments'), { withFileTypes: true })
-      .filter((e) => e.isFile() && !e.name.endsWith('.tmp')).map((e) => e.name).sort();
+      .filter((e) => e.isFile() && !TEMP_FILE.test(e.name)).map((e) => e.name).sort();
   } catch { return []; }
 }
 
@@ -224,8 +227,9 @@ function listArchived(dir, projectId) {
 }
 
 /**
- * Changes a card: `title`, `type`, `tags`, `clarity`, `estimate`, `links`, and the `document` and
- * `acceptance` files. The id, column, author and history never change here.
+ * Changes a card: `title`, `type`, `tags`, `clarity`, `estimate`, `links` (objects, merged into
+ * the card's), and the `document` and `acceptance` files. The id, column, author and history
+ * never change here.
  */
 function updateCard(dir, projectId, id, fields = {}) {
   const folder = existingCard(dir, projectId, id);
@@ -235,7 +239,8 @@ function updateCard(dir, projectId, id, fields = {}) {
     if (k === 'title') card.title = checkTitle(fields.title);
     else if (k === 'type') card.type = checkType(fields.type);
     else if (k === 'tags') card.tags = tagList(fields.tags);
-    else card[k] = fields[k];
+    else if (fields[k] && typeof fields[k] === 'object' && !Array.isArray(fields[k])) card[k] = { ...card[k], ...fields[k] };
+    else throw new Error(`${k} must be an object.`);
   }
   if (fields.document !== undefined) writeFileAtomic(path.join(folder, 'document.md'), String(fields.document ?? ''));
   if (fields.acceptance !== undefined) writeFileAtomic(path.join(folder, 'acceptance.md'), String(fields.acceptance ?? ''));
@@ -320,7 +325,7 @@ function removeAttachment(dir, projectId, id, name) {
   return true;
 }
 
-/** An attachment for the screen: { name, size, path, dataUrl } (dataUrl: an image up to MAX_PREVIEW_BYTES, else null). */
+/** An attachment for the screen: { name, size, folder, dataUrl } (folder: the card's attachments/; dataUrl: an image up to MAX_PREVIEW_BYTES, else null). */
 function readAttachment(dir, projectId, id, name) {
   const file = attachmentFile(existingCard(dir, projectId, id), name);
   const size = fs.statSync(file).size;
@@ -330,7 +335,7 @@ function readAttachment(dir, projectId, id, name) {
     const type = sniffImage(buf);
     if (type) dataUrl = `data:image/${type};base64,${buf.toString('base64')}`;
   }
-  return { name: path.basename(file), size, path: file, dataUrl };
+  return { name: path.basename(file), size, folder: path.dirname(file), dataUrl };
 }
 
 function touch(folder) {
@@ -409,7 +414,8 @@ function mergeCard(dir, projectId, fromId, intoId, { by = 'owner' } = {}) {
   const from = load(fromFolder);
   const into = readCard(dir, projectId, intoId);
   const heading = `## Merged from: ${from.title} (${from.id})`;
-  const join = (a, b) => (b.trim() ? `${a.trimEnd()}${a.trim() ? '\n\n---\n\n' : ''}${heading}\n\n${b.trim()}\n` : undefined);
+  // a merge tried again after a failed archive joins nothing twice
+  const join = (a, b) => (b.trim() && !a.includes(heading) ? `${a.trimEnd()}${a.trim() ? '\n\n---\n\n' : ''}${heading}\n\n${b.trim()}\n` : undefined);
   snapshotVersion(dir, projectId, intoId, 'merge');
   for (const name of from.attachments) addAttachment(dir, projectId, intoId, { path: path.join(fromFolder, 'attachments', name) });
   updateCard(dir, projectId, intoId, {

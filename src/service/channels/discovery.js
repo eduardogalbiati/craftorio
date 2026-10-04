@@ -50,12 +50,16 @@ module.exports = (ctx) => {
       params: ['projectId', 'cardId', 'column'],
       fn: ({ projectId, cardId, column }) => discovery.moveCard(dir(), projectId, cardId, column, { by: owner() }),
     },
-    // a file on disk (`path`) or a pasted or dropped one (`name` + base64 `data`) → the stored name
+    // a pasted, dropped or picked file (`name` + base64 `data`) → the stored name. A `path` is refused:
+    // a screen (the browser UI too) never makes the service read a file of this machine by its path
     {
       channel: 'discovery:add-attachment',
       method: 'addDiscoveryAttachment',
       params: ['projectId', 'cardId', 'path', 'name', 'data'],
-      fn: ({ projectId, cardId, path, name, data }) => discovery.addAttachment(dir(), projectId, cardId, { path, name, data }),
+      fn: ({ projectId, cardId, path, name, data }) => {
+        if (path) throw new Error('A file is attached by its name and data, not by a path.');
+        return discovery.addAttachment(dir(), projectId, cardId, { name, data });
+      },
     },
     {
       channel: 'discovery:remove-attachment',
@@ -63,7 +67,7 @@ module.exports = (ctx) => {
       params: ['projectId', 'cardId', 'name'],
       fn: ({ projectId, cardId, name }) => discovery.removeAttachment(dir(), projectId, cardId, name),
     },
-    // { name, size, path, dataUrl }: dataUrl is the image itself for a thumbnail, null for another file
+    // { name, size, folder, dataUrl }: dataUrl is the image itself for a thumbnail, null for another file
     {
       channel: 'discovery:attachment',
       method: 'discoveryAttachment',

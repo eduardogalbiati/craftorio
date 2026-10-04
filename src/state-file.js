@@ -35,7 +35,12 @@ function writeJsonSafe(file, data, { validate } = {}) {
 function writeFileAtomic(file, content) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const tmp = `${file}.${process.pid}.tmp`;
-  fs.writeFileSync(tmp, content);
+  try {
+    fs.writeFileSync(tmp, content);
+  } catch (e) {
+    fs.rmSync(tmp, { force: true }); // a write cut short (disk full) leaves no temp file
+    throw e;
+  }
   renameWithRetry(tmp, file);
 }
 

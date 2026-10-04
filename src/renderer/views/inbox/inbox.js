@@ -16,7 +16,7 @@
 
   // files: staged for the next capture ({ name, size, data }); open: the opened card with its thread;
   // previews: "<card id>/<name>" → what discovery:attachment returned (an image's data: URL)
-  const inbox = { projectId: null, cards: [], files: [], busy: false, open: null, thread: [], editing: false, previews: new Map(), seq: 0 };
+  const inbox = { projectId: null, cards: [], files: [], busy: false, open: null, thread: [], editing: false, previews: new Map(), seq: 0, openSeq: 0, acting: false };
 
   const formatSize = (n) => (n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
   const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
@@ -156,23 +156,44 @@
   // ---- the open card ------------------------------------------------------------------------------
   const detailError = (msg) => { const p = $('#inbox-detail-error'); if (p) p.textContent = msg || ''; };
 
+  // One request of the open card at a time: a second Enter or click while one is in flight does nothing.
+  async function once(fn) {
+    if (inbox.acting) return;
+    inbox.acting = true;
+    try { await fn(); } finally { inbox.acting = false; }
+  }
+
+  // An edit with changes is never dropped by another action: Save or Cancel first.
+  function editBlocks() {
+    if (!editIsDirty()) return false;
+    detailError('Save or cancel the edit first.');
+    return true;
+  }
+
   async function openCard(id) {
+    if (editBlocks()) return;
+    const seq = ++inbox.openSeq;
+    let card;
+    let thread;
     try {
-      const [card, thread] = await Promise.all([api.getDiscoveryCard(inbox.projectId, id), api.discoveryConversation(inbox.projectId, id)]);
-      inbox.open = card;
-      inbox.thread = thread;
-      inbox.editing = false;
+      [card, thread] = await Promise.all([api.getDiscoveryCard(inbox.projectId, id), api.discoveryConversation(inbox.projectId, id)]);
     } catch (e) {
       $('#inbox-list-error').textContent = errMsg(e);
       return refresh();
     }
+    if (seq !== inbox.openSeq) return; // another card was opened, or this one closed, meanwhile
+    inbox.open = card;
+    inbox.thread = thread;
+    inbox.editing = false;
     renderList();
     renderDetail();
   }
 
   function closeCard() {
+    inbox.openSeq++;
     inbox.open = null;
     inbox.editing = false;
+    inbox.previews.clear();
     $('#inbox-detail').innerHTML = '';
     $('#inbox-layout').classList.remove('with-detail');
     renderList();
@@ -307,13 +328,16 @@
 
   const editIsDirty = () => inbox.editing && ($('#inbox-edit-title')?.value !== inbox.open.title || $('#inbox-edit-doc')?.value !== inbox.open.document);
 
-  async function saveEdit() {
+  const saveEdit = () => once(async () => {
+    const id = inbox.open?.id;
+    if (!id) return;
     try {
-      await api.updateDiscoveryCard(inbox.projectId, inbox.open.id, { title: $('#inbox-edit-title').value, document: $('#inbox-edit-doc').value });
+      await api.updateDiscoveryCard(inbox.projectId, id, { title: $('#inbox-edit-title').value, document: $('#inbox-edit-doc').value });
+      if (inbox.open?.id !== id) return;
       inbox.editing = false;
       await reloadCard();
     } catch (e) { detailError(errMsg(e)); }
-  }
+  });
 
   async function attachToCard(list) {
     const id = inbox.open?.id;
@@ -338,7 +362,8 @@
       if (!inbox.previews.has(key)) inbox.previews.set(key, await api.discoveryAttachment(inbox.projectId, c.id, name));
       const a = inbox.previews.get(key);
       if (a.dataUrl && window.ImageViewer) window.ImageViewer.open({ title: c.title, images: [{ src: a.dataUrl, label: name }] });
-      else await api.openPath(a.path);
+      // another file is never opened from here (it could be a program): its folder is
+      else await api.openPath(a.folder);
     } catch (e) { detailError(errMsg(e)); }
   }
 
@@ -355,20 +380,24 @@
     } catch (e) { detailError(errMsg(e)); }
   }
 
-  async function addNote() {
+  const addNote = () => once(async () => {
+    const id = inbox.open?.id;
     const box = $('#inbox-note');
     const text = String(box?.value || '').trim();
-    if (!text) return;
+    if (!id || !text) return;
     try {
-      await api.appendDiscoveryConversation(inbox.projectId, inbox.open.id, { text });
+      await api.appendDiscoveryConversation(inbox.projectId, id, { text });
+      const thread = await api.discoveryConversation(inbox.projectId, id);
+      if (inbox.open?.id !== id) return;
       box.value = '';
-      inbox.thread = await api.discoveryConversation(inbox.projectId, inbox.open.id);
+      inbox.thread = thread;
       renderThread();
     } catch (e) { detailError(errMsg(e)); }
-  }
+  });
 
   // ---- triage -------------------------------------------------------------------------------------
   async function accept(id) {
+    if (inbox.open?.id === id && editBlocks()) return;
     try {
       await api.moveDiscoveryCard(inbox.projectId, id, 'triage');
       if (inbox.open?.id === id) closeCard();
@@ -379,6 +408,7 @@
   }
 
   function openDiscard() {
+    if (editBlocks()) return;
     $('#inbox-discard-what').textContent = `"${inbox.open.title}" moves to the archive with this reason.`;
     $('#inbox-discard-reason').value = '';
     $('#inbox-discard-error').textContent = '';
@@ -386,22 +416,28 @@
     $('#inbox-discard-reason').focus({ preventScroll: true });
   }
 
-  async function discard(e) {
+  function discard(e) {
     e.preventDefault();
+    const id = inbox.open?.id;
+    if (!id) return closeModal('#inbox-discard-modal');
     const reason = String($('#inbox-discard-reason').value || '').trim();
-    if (!reason) { $('#inbox-discard-error').textContent = 'Say why the card is discarded.'; return; }
-    try {
-      await api.archiveDiscoveryCard(inbox.projectId, inbox.open.id, reason);
-      closeModal('#inbox-discard-modal');
-      closeCard();
-      await refresh();
-    } catch (err) { $('#inbox-discard-error').textContent = errMsg(err); }
+    if (!reason) { $('#inbox-discard-error').textContent = 'Say why the card is discarded.'; return undefined; }
+    return once(async () => {
+      try {
+        await api.archiveDiscoveryCard(inbox.projectId, id, reason);
+        closeModal('#inbox-discard-modal');
+        if (inbox.open?.id === id) closeCard();
+        await refresh();
+      } catch (err) { $('#inbox-discard-error').textContent = errMsg(err); }
+    });
   }
 
   async function openMerge() {
+    if (editBlocks()) return;
     const id = inbox.open.id;
     let others = [];
     try { others = (await api.listDiscoveryCards(inbox.projectId)).filter((c) => c.id !== id); } catch (e) { return detailError(errMsg(e)); }
+    if (inbox.open?.id !== id) return;
     $('#inbox-merge-what').textContent = `The document and the attachments of "${inbox.open.title}" join the card chosen here; this card is archived with a link to it.`;
     $('#inbox-merge-target').innerHTML = others.map((c) => `<option value="${esc(c.id)}">${esc(c.title)} (${esc(c.column)})</option>`).join('');
     $('#inbox-merge-error').textContent = others.length ? '' : 'There is no other card to merge into.';
@@ -410,23 +446,27 @@
     $('#inbox-merge-target').focus({ preventScroll: true });
   }
 
-  async function merge(e) {
+  function merge(e) {
     e.preventDefault();
+    const id = inbox.open?.id;
+    if (!id) return closeModal('#inbox-merge-modal');
     const intoId = $('#inbox-merge-target').value;
-    if (!intoId) return;
-    try {
-      await api.mergeDiscoveryCard(inbox.projectId, inbox.open.id, intoId);
-      closeModal('#inbox-merge-modal');
-      closeCard();
-      await refresh();
-    } catch (err) { $('#inbox-merge-error').textContent = errMsg(err); }
+    if (!intoId) return undefined;
+    return once(async () => {
+      try {
+        await api.mergeDiscoveryCard(inbox.projectId, id, intoId);
+        closeModal('#inbox-merge-modal');
+        if (inbox.open?.id === id) closeCard();
+        await refresh();
+      } catch (err) { $('#inbox-merge-error').textContent = errMsg(err); }
+    });
   }
 
   function onDetailClick(e) {
     const b = e.target.closest('[data-detail]');
     if (!b || !inbox.open) return;
     const act = b.dataset.detail;
-    if (act === 'close') closeCard();
+    if (act === 'close') { if (!editBlocks()) closeCard(); }
     else if (act === 'accept') accept(inbox.open.id);
     else if (act === 'merge') openMerge();
     else if (act === 'discard') openDiscard();
