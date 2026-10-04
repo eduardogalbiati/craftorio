@@ -6,6 +6,9 @@
 // owner's conversation: [data-testid="po-request"] in the Product Owner's drawer,
 // [data-testid="svc-request"] in the Supervisor chat drawer (#svc-drawer, not the run's #sup-drawer,
 // which has the same aria-label). Locators are roles and data-testid only (skills/ui-conventions).
+// #241: the Oracle's request_agent tool (window.api.oracleRequestAgent, channel oracle:requestAgent)
+// routes a change to its owner: a mechanical kind is done there, a run retry waits for the owner's
+// click on a Do it / Dismiss card in the Supervisor chat (none in the Oracle's), a gate is refused.
 
 const fs = require('fs');
 const path = require('path');
@@ -109,4 +112,63 @@ Then('the request in the Supervisor chat shows that it failed, naming the run {s
   const message = requestIn['the Supervisor chat'](e2e.window);
   await expect(message).toContainText(runId);
   await expect(message).toContainText(/fail|error|not found|does not exist|no such run|unknown run/i);
+});
+
+// ---- #241: the Oracle's request_agent tool routes a change to its owner -----------------------------
+
+// The Oracle's tool, called the way the Oracle calls it: window.api.oracleRequestAgent (channel
+// oracle:requestAgent) with { to: 'po' | 'supervisor', kind, params, reason, mock }. The answer says
+// what the owner did: ok (done), pending (a card waits for the owner's click) or refused / failed.
+const requestAgent = (e2e, request) => sendRequest(e2e, 'oracleRequestAgent', { ...request, mock: true });
+
+When('the Oracle sends the Product Owner a request to add the issue {string} to the roadmap because {string}', async ({ e2e }, title, reason) => {
+  const res = await requestAgent(e2e, {
+    to: 'po', kind: 'roadmap.add', params: { projectId: e2e.project.id, issues: [issueNumber(e2e, title)] }, reason, projectId: e2e.project.id,
+  });
+  expect(res?.ok, `the Product Owner's answer: ${res?.error || res?.text}`).toBe(true);
+});
+
+// the demo workspace's run whose id ends in `-<fragment>` (features/support/app.js)
+const demoRunId = (e2e, fragment) => {
+  const runs = path.join(e2e.scratch, 'workspace', 'runs');
+  const id = (fs.existsSync(runs) ? fs.readdirSync(runs) : []).find((d) => d.endsWith(`-${fragment}`));
+  expect(id, `the demo workspace has no run ending in -${fragment}`).toBeTruthy();
+  return id;
+};
+
+// a retry starts a run (a real one costs money): it waits for the owner's click in the Supervisor chat
+When('the Oracle sends the Supervisor a request to retry the demo run {string} because {string}', async ({ e2e }, fragment, reason) => {
+  const res = await requestAgent(e2e, { to: 'supervisor', kind: 'run.retry', params: { runId: demoRunId(e2e, fragment) }, reason });
+  expect(res?.error, `the Supervisor's answer: ${res?.error}`).toBeFalsy();
+});
+
+// the run of the gate card in view: asking the Supervisor to approve its human gate
+When('the Oracle sends the Supervisor a request to approve the gate of the run in view because {string}', async ({ e2e }, reason) => {
+  const runId = await e2e.window.getByTestId('run-gate').first().getAttribute('data-run');
+  expect(runId, 'the gate card names its run').toBeTruthy();
+  await requestAgent(e2e, { to: 'supervisor', kind: 'approval.resolve', params: { runId, answer: 'approve' }, reason });
+});
+
+Then("the Oracle's request was refused, naming the human gate", async ({ e2e }) => {
+  expect(e2e.lastRequest?.ok).toBe(false);
+  expect(String(e2e.lastRequest?.error || e2e.lastRequest?.text || '')).toMatch(/gate/i);
+});
+
+Then('the request in the Supervisor chat offers {string} and {string}', async ({ e2e }, a, b) => {
+  const card = requestIn['the Supervisor chat'](e2e.window);
+  for (const name of [a, b]) await expect(card.getByRole('button', { name, exact: true })).toBeEnabled();
+});
+
+// the Oracle's panel in view (features/steps/oracle.steps.js); its line for a request it sent:
+// [data-testid="oracle-request"], "Sent to the <owner> · <kind> · ..."
+const oraclePanel = (page) => page.getByRole('complementary', { name: 'Oracle', exact: true });
+
+Then("the Oracle's chat shows its request {string} sent to the {string}", async ({ e2e }, kind, owner) => {
+  const line = oraclePanel(e2e.window).getByTestId('oracle-request').filter({ hasText: kind }).last();
+  await expect(line).toBeVisible();
+  await expect(line).toContainText(`Sent to the ${owner}`);
+});
+
+Then("the Oracle's chat offers no {string} button", async ({ e2e }, name) => {
+  await expect(oraclePanel(e2e.window).getByRole('button', { name, exact: true })).toHaveCount(0);
 });
