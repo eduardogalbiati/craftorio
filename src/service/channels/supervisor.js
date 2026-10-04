@@ -1,6 +1,6 @@
 // The AI supervisor on demand: analysis of any run (running, failed or finished), the watch mode
 // that follows a running run in a chat (src/supervisor-watch.js), and the app-wide Supervisor chat
-// with its read-only tools over the service (src/supervisor-chat.js, #28).
+// with its read-only tools over the service (src/supervisor-chat.js, #28), and its request inbox (#240).
 
 const path = require('path');
 const simulation = require('../../engine/simulation');
@@ -77,6 +77,23 @@ module.exports = (ctx) => {
     },
     { channel: 'supervisor:chatHistory', method: 'supervisorChatHistory', fn: () => chat().history() },
     { channel: 'supervisor:chatClear', method: 'clearSupervisorChat', fn: () => chat().clear() },
+    // #240: another agent's request in the Supervisor's inbox: { kind, params, reason, from, ref, mock } →
+    // { ok, text, costUsd: 0, error? }. Every kind runs the app's own code (the Oracle's action functions,
+    // ctx.performAction), never a model; the request and its result are messages of the chat, and a
+    // request from the Oracle leaves a short line in its chat. A refused or failed one is ok: false.
+    {
+      channel: 'supervisor:request',
+      method: 'supervisorRequest',
+      params: 'opts',
+      fn: async ({ mock, ...request } = {}) => {
+        const simulated = !!mock || simulation.simulationOnly();
+        const out = await chat().handleRequest(request, { perform: (kind, params) => ctx.performAction(kind, params, { mock: simulated }) });
+        if (out.from === 'oracle') {
+          ctx.oracleService?.().requested({ to: 'supervisor', ref: out.ref, ownerTs: out.ownerTs, requestKind: out.kind, text: out.text, costUsd: out.costUsd, error: out.error });
+        }
+        return { ok: out.ok, text: out.text, costUsd: out.costUsd, ...(out.error ? { error: out.error } : {}) };
+      },
+    },
     // what the MCP server offers (names and descriptions), for the Supervisor page
     { channel: 'supervisor:tools', method: 'supervisorTools', fn: () => tools.map(({ name, description }) => ({ name, description })) },
   ];

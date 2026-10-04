@@ -11,10 +11,25 @@
 // `mock` (and MULTIAGENT_SIMULATION_ONLY) answers from the simulated supervisor: no model call, no
 // cost, but the same tools, called in-process.
 // Live progress (#180, src/chat-progress.js): ask's `onItem` and `signal` stream and stop a question.
+// Its inbox (#240, src/agent-inbox.js): handleRequest takes another agent's request (the Oracle's) of
+// a kind in REQUEST_KINDS, all mechanical: the code of the app's own buttons, given by the service
+// (`perform`), no model call, US$ 0. The request and its result are messages of this chat.
 
 const fs = require('fs');
 const path = require('path');
+const agentInbox = require('./agent-inbox');
 const { mockSteps, partialText } = require('./chat-progress');
+
+// the kinds another agent may ask the Supervisor for (#240)
+const REQUEST_KINDS = [
+  'dispatch.restart',
+  'run.resume',
+  'run.retry',
+  'run.stop',
+  'skill.restore',
+  'workflow.commit',
+  'workflow.restore',
+];
 
 const DEFAULT_MODEL = 'claude-opus-5-5';
 const MCP_NAME = 'orchestrator';
@@ -171,6 +186,14 @@ function createSupervisorChat({ dir, tools, bridge, mcpCommand, skillsDirs, reso
       }
     },
 
+    /**
+     * Another agent's request (#240): { kind, params, reason, from, ref } → { ok, text, costUsd, error?, ownerTs }.
+     * `perform(kind, params)` runs it with the app's own code (→ { text }); never a model call.
+     */
+    handleRequest(request, { perform } = {}) {
+      return agentInbox.handle(request, { kinds: REQUEST_KINDS, role: 'supervisor', record: post, perform });
+    },
+
     /** A new conversation: the messages and the CLI session are forgotten. */
     clear() {
       fs.rmSync(files().log, { force: true });
@@ -184,5 +207,6 @@ module.exports = {
   createSupervisorChat,
   DEFAULT_MODEL,
   questionText,
+  REQUEST_KINDS,
   RULES,
 };

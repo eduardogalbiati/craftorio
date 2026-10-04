@@ -603,6 +603,9 @@
 
   function messageHtml(msg, m) {
     const time = msg.ts ? new Date(msg.ts).toLocaleTimeString() : '';
+    // #240: another agent's request and its result, one card (agent-request.js)
+    if (msg.role === 'request') return window.AgentRequest.cardHtml(msg, po.messages, { testid: 'po-request' });
+    if (window.AgentRequest.inCard(msg)) return '';
     if (msg.role === 'user') {
       const files = [...(msg.issues || []).map(issueRef), ...(msg.attachments || []).map((f) => `<span class="badge" title="${esc(f)}">${esc(f.split(/[\\/]/).pop())}</span>`)].join(' ');
       const once = [msg.calibrationOverride ? window.PoCalibration.step(msg.calibration).name : '', msg.costOverride ? window.PoCalibration.cost.step(msg.cost).name : ''].filter(Boolean)

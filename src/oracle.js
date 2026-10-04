@@ -831,6 +831,14 @@ ${partial}` : ''}`, error: true });
       return post({ role: 'system', kind: 'delegation', to: String(to || ''), question: String(question || ''), text: String(text || ''), costUsd: Number(costUsd) || 0, model, failed: !!error, ref });
     },
 
+    /**
+     * A request it sent to an owner's inbox (#240), as a short line linking to the owner's result
+     * message: { to ('product-owner' | 'supervisor'), ref (its own message id), ownerTs, requestKind, projectId, text, costUsd, error }.
+     */
+    requested({ to, ref, ownerTs = null, requestKind = '', projectId = null, text = '', costUsd = 0, error = false } = {}) {
+      return post({ role: 'system', kind: 'request', to: String(to || ''), ref: String(ref || ''), ownerTs, requestKind: String(requestKind || ''), projectId, text: String(text || ''), costUsd: Number(costUsd) || 0, failed: !!error });
+    },
+
     /** The Night watch switch: { on, until (ISO), by (who) }. Turning it off stops autonomous actions at once and posts its summary. */
     setNightWatch({ on, until, by } = {}) {
       claim();

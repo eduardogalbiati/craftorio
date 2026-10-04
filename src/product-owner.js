@@ -53,9 +53,15 @@
 // ask for groups of these issues only, with similar open issues that could join as each group's
 // `suggested` (never in its `issues`: the owner adds one with a checkbox). Closed ones are left out of
 // the groups and listed in the answer's `closed`. The user message records them (`issues`).
+//
+// Its inbox (#240, src/agent-inbox.js): `handleRequest` takes another agent's request (the Oracle's)
+// of a kind in REQUEST_KINDS. The mechanical kinds run the code of the owner's buttons, given by the
+// service (`perform`); `plan` is a question to its model (`ask`). The request and its result are in
+// the conversation, tagged `request: { from, kind, ref }`.
 
 const fs = require('fs');
 const path = require('path');
+const agentInbox = require('./agent-inbox');
 const backlog = require('./backlog');
 const { isArchived } = require('./renderer/views/backlog/backlog-archive');
 const costEstimate = require('./cost-estimate');
@@ -702,6 +708,36 @@ function clearConversation(backlogDir, projectId) {
   return [];
 }
 
+// ---- its inbox (#240) -----------------------------------------------------------------------------
+// The kinds another agent may ask for; `plan` is the only judgment kind (a question to the model).
+const REQUEST_KINDS = [
+  'issue.file',
+  'issue.update',
+  'plan',
+  'queue.assign',
+  'roadmap.add',
+  'roadmap.move',
+  'roadmap.regroup',
+  'roadmap.skip',
+];
+const JUDGMENT_KINDS = ['plan'];
+
+/**
+ * Another agent's request (#240): { kind, params, reason, from, ref } → { ok, text, costUsd, error?, ownerTs }.
+ * `perform(kind, params)` runs a mechanical kind with the owner's buttons' code (→ { text });
+ * `ask({ question, request })` asks the model a plan question tagged with the request (→ { message }).
+ */
+function handleRequest({ backlogDir, projectId, request, perform, ask: askModel }) {
+  return agentInbox.handle(request, {
+    kinds: REQUEST_KINDS,
+    judgment: JUDGMENT_KINDS,
+    role: 'po',
+    record: (message) => appendMessage(backlogDir, projectId, message),
+    perform,
+    ask: (params, tag, reason) => askModel({ question: String(params.question || reason || '').trim(), request: tag }),
+  });
+}
+
 // The last exchanges, so a follow-up question has its context (answers as their summary only).
 function previousExchanges(messages) {
   const recent = messages.filter((m) => m.role === 'user' || m.role === 'po').slice(-PREVIOUS_EXCHANGES * 2);
@@ -1231,7 +1267,7 @@ function checkBudget(budget) {
 // `defaultWorkflow` (#195): the setting (settings.defaultWorkflow); the plan's groups get it unless an issue needs another.
 // `workflow` / `inputs` (#235): the workflow the owner chose in the drawer and its options: every
 // group gets them (recorded on the messages: lastWorkflow); no Cost step where it does not apply.
-async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns, runs, workflows, folder, agent, skillsDirs, resolveCommand, budget, mock, mode = 'plan', attachments = [], selection = [], scenario = null, onItem = null, signal = null, calibration = null, defaultWorkflow = null, cost = null, prices = {}, workflow = null, inputs = null }) {
+async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns, runs, workflows, folder, agent, skillsDirs, resolveCommand, budget, mock, mode = 'plan', attachments = [], selection = [], scenario = null, onItem = null, signal = null, calibration = null, defaultWorkflow = null, cost = null, prices = {}, workflow = null, inputs = null, request = null }) {
   const q = String(question || '').trim();
   if (!q) throw new Error('Ask a question.');
   const byDefault = DefaultWorkflow.resolve(defaultWorkflow, (workflows || []).map((w) => w.file)).file;
@@ -1257,7 +1293,8 @@ async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns,
   const previous = readConversation(backlogDir, projectId);
   const where = { backlogDir, projectId, runsDir };
   const thread = issueMode ? threadOf(previous, projectId) : null;
-  const tag = issueMode ? { mode: 'issue', thread } : {};
+  // #240: a plan question another agent sent (handleRequest): its messages carry the request
+  const tag = issueMode ? { mode: 'issue', thread } : request ? { request } : {};
   const record = (message) => (issueMode ? recordIssueMessage(where, message) : appendMessage(backlogDir, projectId, message));
   const staged = issueMode ? (attachments || []).filter((f) => isAttachment(backlogDir, projectId, f)).map((f) => path.resolve(f)) : [];
   const files = moveAttachments(where, thread, staged);
@@ -1323,7 +1360,7 @@ async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns,
   } else {
     const answer = normalizeAnswer(raw, { issues: data?.issues, history, workflows, epics: data?.epics, selection: selected, mock: !!mock, calibration: level, defaultWorkflow: byDefault, cost: costLevel, runs: (runs || []).filter((r) => !r.mock), prices, workflow: chosen, inputs });
     message = appendMessage(backlogDir, projectId, {
-      role: 'po', text: answer.summary, answer, model, costUsd, ...calib, ...(invalid ? { invalid } : {}),
+      role: 'po', ...tag, text: answer.summary, answer, model, costUsd, ...calib, ...(invalid ? { invalid } : {}),
     });
   }
   return { message, messages: readConversation(backlogDir, projectId) };
@@ -1415,6 +1452,7 @@ module.exports = {
   discardDraft,
   estimate,
   fileDraft,
+  handleRequest,
   ISSUE_AGENT,
   ISSUE_SCHEMA,
   lastWorkflow,
@@ -1427,6 +1465,7 @@ module.exports = {
   normalizeIssueAnswer,
   packGroups,
   readConversation,
+  REQUEST_KINDS,
   runHistory,
   saveAttachment,
   SELECTION_RULES,

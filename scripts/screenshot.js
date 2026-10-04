@@ -346,6 +346,9 @@ function demoPoConversation(ws, projectId, po = null) {
       closed: [8],
       conflicts: [], enrich: [], splits: [], epics: { place: [], create: [], merge: [], split: [] },
     } },
+    // #240: a request from the Oracle, mechanical (no model call, US$ 0): one card with its result
+    { ts: at(160), role: 'request', text: 'Request from the Oracle: roadmap.add (The owner wants it in tonight\'s runs)', request: { from: 'oracle', kind: 'roadmap.add', ref: 'demo-request-1' }, reason: 'The owner wants it in tonight\'s runs', params: { issues: [16] } },
+    { ts: at(161), role: 'po', text: 'Done: #16: added to the roadmap in stage 3 (software-development.yaml).', request: { from: 'oracle', kind: 'roadmap.add', ref: 'demo-request-1' }, costUsd: 0 },
   ];
   // --po stopped | failed (#180): the last answer stopped by the owner, or failed, with what was written kept
   const partial = 'Two runs so far: **#16** on its own (validated), then **#10** with the dock styles.\n\nI was checking whether #15 fits under complexity 5';

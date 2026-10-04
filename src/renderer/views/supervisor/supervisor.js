@@ -100,7 +100,8 @@
     $('#svc-drawer').setAttribute('aria-hidden', 'false');
     $('#svc-backdrop').classList.remove('hidden');
     render();
-    if (!sv.loaded) load();
+    // #240: requests from other agents arrive while it is closed
+    load();
     setTimeout(() => $('#svc-q-drawer').focus({ preventScroll: true }), 200);
   }
   function closeDrawerPanel() {
@@ -112,8 +113,11 @@
   window.openSupervisorChat = openDrawerPanel;
 
   // ---- rendering ---------------------------------------------------------------------------------
-  function messageHtml(msg) {
+  function messageHtml(msg, i, all) {
     const time = msg.ts ? new Date(msg.ts).toLocaleString() : '';
+    // #240: another agent's request and its result, one card (agent-request.js)
+    if (msg.role === 'request') return window.AgentRequest.cardHtml(msg, all, { testid: 'svc-request' });
+    if (window.AgentRequest.inCard(msg)) return '';
     if (msg.role === 'user') {
       return `<div class="sup-wmsg user"><div class="sup-wmsg-meta">You · ${esc(time)}${msg.screen ? ` · <span title="What the supervisor was told about the screen">${esc(msg.screen)}</span>` : ''}</div><div>${esc(msg.text)}</div></div>`;
     }
@@ -190,7 +194,7 @@
       </section>`,
     modals: `
   <div id="svc-backdrop" class="drawer-backdrop sup-backdrop hidden"></div>
-  <aside id="svc-drawer" class="drawer sup-drawer svc-drawer" aria-hidden="true" aria-label="Supervisor">
+  <aside id="svc-drawer" class="drawer sup-drawer svc-drawer" data-testid="svc-drawer" aria-hidden="true" aria-label="Supervisor">
     <div class="drawer-head">
       <div class="sup-head">
         <h2 class="drawer-title"><span class="sup-mark">◆</span> Supervisor</h2>
@@ -216,7 +220,7 @@
       btn.type = 'button';
       btn.className = 'btn ghost svc-open';
       btn.title = 'Ask the supervisor about this screen';
-      btn.innerHTML = '<span class="sup-mark">◆</span> Supervisor';
+      btn.innerHTML = '<span class="sup-mark" aria-hidden="true">◆</span> Supervisor';
       btn.onclick = () => (sv.drawer ? closeDrawerPanel() : openDrawerPanel());
       document.querySelector('.topbar .actions')?.prepend(btn);
       $('#btn-svc-close').onclick = closeDrawerPanel;

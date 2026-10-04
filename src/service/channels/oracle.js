@@ -16,6 +16,8 @@
 //   back, recorded in the chat. #184: the checker runs a test command on a scratch checkout of a
 //   branch (src/oracle-check.js, no model); a long one is a check.run card.
 // - oracle:changed is pushed when a message is added (a wake-up, a card, a result).
+// - inboxes (#240): ctx.performAction runs an action's code for the owners' inboxes (po:request,
+//   supervisor:request); a request the Oracle sent gets a short line in its chat (requested()).
 
 const fs = require('fs');
 const path = require('path');
@@ -230,6 +232,12 @@ module.exports = (ctx) => {
     const out = await fn(a, { mock: !!mock, sim: simulation.simulationOnly() });
     return { ok: true, ...out };
   }
+  // #240: the owners' inboxes (po:request, supervisor:request) run their mechanical kinds with these
+  // same functions, checked like a card; the backups go to the Oracle's folder, as a card's do
+  ctx.performAction = (kind, params, { mock } = {}) => {
+    actions.ACTIONS[kind]?.check?.(params);
+    return perform({ id: `request-${Date.now().toString(36)}`, kind, params }, { mock });
+  };
 
   // Undo: puts back the backup an action took.
   async function restore(a, undo) {

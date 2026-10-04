@@ -230,6 +230,18 @@
   }
 
   // ---- links in the answers ----------------------------------------------------------------
+  // #240: a request's line opens its owner's conversation at the request's card
+  const OWNERS = { 'product-owner': 'Product Owner', supervisor: 'Supervisor' };
+  async function openRequest({ oracleOpenRequest: to, ref, project }) {
+    closeDrawer();
+    if (to === 'supervisor') window.openSupervisorChat?.();
+    else {
+      if (project) window.BacklogActions?.focusProject?.(project);
+      showView('backlog');
+      await window.BacklogPO?.open();
+    }
+    window.AgentRequest.reveal(ref);
+  }
   function follow(target) {
     if (target.kind === 'run') { closeDrawer(); selectRun(target.runId); }
     else if (target.kind === 'issue') {
@@ -329,6 +341,11 @@
       return `<div class="sup-wmsg system oracle-delegation${m.failed ? ' error' : ''}"><div class="sup-wmsg-meta oracle-meta">${M.delegationParts(m, { fmtTime: time, fmtCost }).map(esc).join(' · ')}${m.failed ? ' · <span class="pill pill-failed">Failed</span>' : ''}</div>
         <div class="oracle-cut small" title="${esc(m.question)}">${esc(m.question)}</div>
         <details class="oracle-fold"><summary>Answer${m.ref ? ` <span class="muted small">(${esc(m.ref)})</span>` : ''}</summary><div class="md md-compact oracle-md">${markdownHtml(m.text || '')}</div></details></div>`;
+    }
+    // #240: a request it sent to an owner's inbox: one short line, the link opens the owner's message
+    if (m.kind === 'request') {
+      const owner = OWNERS[m.to] || m.to;
+      return `<div class="sup-wmsg system oracle-request${m.failed ? ' error' : ''}" data-testid="oracle-request"><div class="sup-wmsg-meta oracle-meta">Sent to the ${esc(owner)} · <span class="badge">${esc(m.requestKind)}</span> · <span class="pill ${m.failed ? 'pill-failed">Failed' : 'pill-success">Done'}</span> · ${esc(window.AgentRequest.usd(m.costUsd))} · ${esc(time(m.ts))} · <a href="#" data-oracle-open-request="${esc(m.to)}" data-ref="${esc(m.ref)}" data-project="${esc(m.projectId || '')}" title="The request and its result in the ${esc(owner)}'s conversation">Open</a></div><div class="oracle-cut small" title="${esc(m.text)}">${esc(m.text)}</div></div>`;
     }
     if (m.kind === 'wake') {
       const mutes = (m.runIds || []).map((id) => {
@@ -684,6 +701,8 @@
         if (undoBtn) { undoAction(undoBtn.dataset.oracleUndo); return; }
         const runLink = t.closest('[data-oracle-open-run]');
         if (runLink) { e.preventDefault(); closeDrawer(); window.showRun(runLink.dataset.oracleOpenRun); return; }
+        const requestLink = t.closest('[data-oracle-open-request]');
+        if (requestLink) { e.preventDefault(); openRequest(requestLink.dataset); return; }
         const mute = t.closest('[data-oracle-mute]');
         if (mute) { setWatch(() => api.muteOracleRun({ runId: mute.dataset.oracleMute, on: mute.dataset.on === '1' })); return; }
         const unwatch = t.closest('[data-oracle-unwatch]');
