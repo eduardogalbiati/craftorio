@@ -260,7 +260,7 @@ async function runUpdateCycle({ workspaceDir, appDir, sourceDir, pause, resume, 
   if (!res.ok) return refuse(res.reason);
   const intent = writeIntent(workspaceDir, { from: res.from, to: res.to, subjects: res.subjects, roadmaps, appDir }, { now: now() });
   night.logNight(path.join(workspaceDir, 'oracle'), 'oracle.action', {
-    kind: 'app.update', title: `Updated the app: ${short(res.from)} → ${short(res.to)}`, from: res.from, to: res.to, subjects: res.subjects,
+    actionId: `app-update-${now()}`, permission: 'Self-healing', kind: 'app.update', title:`Updated the app: ${short(res.from)} → ${short(res.to)}`, from: res.from, to: res.to, subjects: res.subjects,
     target: appDir, auto: true, ok: true, result: 'restart', undo: `Go back to ${short(res.from)}`,
   });
   notify({ title: `Updating the app: ${short(res.from)} → ${short(res.to)}, ${plural(res.subjects.length, 'commit')}`, body: `${res.subjects.slice(0, 5).join('; ')}${res.subjects.length > 5 ? '; …' : ''}. The app restarts now.` });

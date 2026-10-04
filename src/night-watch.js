@@ -607,6 +607,8 @@ function nightMetrics({ night, log = [], runs = [], usage = [], now = Date.now()
     actionList: actions.map((a) => ({
       actionId: a.actionId, at: a.ts, kind: a.kind, title: a.title || a.kind, target: a.target, permission: a.permission || null, auto: !!a.auto,
       backup: a.backup || null, result: a.result || '', ok: a.ok !== false, undone: undone.has(a.actionId), undoable: !!a.undoable && !undone.has(a.actionId),
+      // #279: an app update's Undo is "Go back to <from>" (the same cycle, back to that commit)
+      ...(a.kind === 'app.update' && a.from ? { from: a.from } : {}),
     })),
   };
 }

@@ -39,4 +39,20 @@ the workspace folder.
   the interrupted runs are listed with Resume. A missing channel shows "This feature needs an app
   restart" instead of the IPC error. So: pull, then restart. With the browser UI, restart the server
   and reload the page.
+- **The app updates itself** (#279, `src/app-update.js`, `areas/app-update.js`): with Self-healing
+  and Settings › Execution › Oracle › "Apply merged fixes to this app" on, a source checkout
+  (`app.isPackaged` false) whose repository is a project of the workspace (same `origin`, or the
+  app's commit in the clone's local main) takes the fixes merged into that clone's **local main**
+  (never the network): after a merged roadmap item marked "Update the app after this" (or after
+  every stage, in that mode) it pauses the roadmaps ("Updating the app") and the Backlog queues,
+  waits for every run in progress (a gate is waited for, never answered), refuses a dirty app
+  folder or a history that is not a fast-forward (`git merge --ff-only`), runs `npm install` only
+  when `package-lock.json` changed (a failure resets the folder to the previous commit), writes
+  `<workspace>/oracle/app-update.json` and restarts through `app:relaunch`'s path (`host.relaunch`).
+  The new process seeds the workspace copies as at every start (so a copy is never newer than the
+  app, nor reverted), sets the paused roadmaps back to running **before** the start-up dispatch and
+  deletes the intent. Still there 2 minutes after the restart: the new code did not start, a banner
+  gives `git -C <app folder> checkout <from>` until dismissed. Undo ("Go back to <from>", the
+  Night watch's actions) is the same cycle with `git reset --keep <from>`. Never in
+  simulation-only mode, never pushes, never touches a packaged install.
 - The owner uses **subscription plans** (Claude, ChatGPT free for Codex, SuperGrok), not API keys.

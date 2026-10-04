@@ -15,6 +15,8 @@
 // roadmap pauses; out of order after a confirmation). A Product Owner proposal (#105, JSON) is added or replaces the
 // roadmap as planned; the plain queue's items can be moved in. Every edit saves the whole list of
 // stages (api.saveRoadmap); the service keeps each item's runs by id.
+// #279: when Self-healing can apply merged fixes to this app (api.appUpdateState), a card not finished
+// has an "Update the app after this" switch (item.updateAfter), saved at once.
 // "Group by epic" (#138, shown when the backlog has epics) lists the items under their issues' epics,
 // each with its stage and the epic's items done.
 // Live roadmap (#164): a box under the last stage with its switch (on only while running: turning it
@@ -96,6 +98,24 @@
       .finally(() => { loading = false; });
   }
   const inputDefs = (x) => workflows?.get(x.workflow)?.inputs || {};
+
+  // #279: whether Self-healing can apply merged fixes to this app (api.appUpdateState): the cards
+  // offer "Update the app after this" only then. Read when the Roadmap is drawn, at most once a minute.
+  let updateApplies = false;
+  let updateCheckedAt = 0;
+  function loadAppUpdate(rerender) {
+    // a main process older than #279 has no such channel: never offered then
+    if (Date.now() - updateCheckedAt < 60000 || typeof api.appUpdateState !== 'function') return;
+    updateCheckedAt = Date.now();
+    Promise.resolve(api.appUpdateState(false))
+      .then((s) => { const next = !!s?.applies; if (next !== updateApplies) { updateApplies = next; rerender?.(); } })
+      .catch(() => { updateApplies = false; });
+  }
+  // the switch on a card not finished (saved at once; only planned and failed items can change it)
+  function updateAfterHtml(x, locked) {
+    if (!updateApplies || ['done', 'skipped'].includes(x.status)) return '';
+    return `<label class="rm-update-after small" title="Self-healing updates the app (and restarts it) once this item's run has merged"><input type="checkbox" data-testid="roadmap-update-after" data-rm-update-after aria-label="Update the app after this"${x.updateAfter ? ' checked' : ''}${locked ? ' disabled' : ''} /> Update the app after this</label>`;
+  }
   // #195: an item whose workflow pushes (a branch, a PR/MR, CI minutes) while the default merges locally
   function pushesAgainstDefault(x) {
     const def = window.DefaultWorkflow?.current();
@@ -451,6 +471,7 @@
           ${costHtml(x)}
           ${x.mock ? '<span class="badge p-mock">Simulated</span>' : ''}
           ${x.then ? ChainModel.chainBadgesHtml({ then: x.then }) : ''}
+          ${updateAfterHtml(x, locked)}
           ${WorkflowInputs.inputPills(workflows?.get(x.workflow) || null, x.inputs, { skip: ['mode'] })}
           ${locked || open ? '' : '<button class="link-btn small" type="button" data-rm-edit title="Edit this item\'s inputs">Edit</button>'}
         </div>
@@ -745,6 +766,7 @@
    */
   function html(data, rerender, view = {}) {
     loadWorkflows(rerender);
+    loadAppUpdate(rerender);
     const [since, , sinceText, rangeMs] = SINCE.find(([id]) => id === view.since) || SINCE[0];
     const v = { epic: view.epic || '', showAll: !!view.showAll, since, rangeMs };
     const key = `${view.project || ''}|${v.showAll ? 'all' : 'planned'}|${since}|${v.epic}`;
@@ -1101,6 +1123,14 @@
         const item = stages[s]?.items[n];
         if (!item || !editable(item)) return true;
         item.inputs = { ...item.inputs, mode: e.target.closest('[data-rm-mode]').dataset.rmMode };
+        await save(ctx, stages);
+        return true;
+      } else if (e.target.matches?.('input[data-rm-update-after]')) {
+        // #279 "Update the app after this": saved at once, like the mode
+        const { s, n } = locate(stages, e.target);
+        const item = stages[s]?.items[n];
+        if (!item || !editable(item)) return true;
+        item.updateAfter = !!e.target.checked;
         await save(ctx, stages);
         return true;
       } else if (e.target.closest('[data-rm-edit]')) {

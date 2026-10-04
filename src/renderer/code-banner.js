@@ -1,7 +1,8 @@
 /* global api */
 // The code banner (#83): the code on disk changed while the app runs, with a safe restart (it
 // lists the runs in progress first); after a restart, the runs it interrupted, each with Resume.
-// initCodeBanner() runs from app.js's init(), once the runs in progress are known.
+// initCodeBanner() runs from app.js's init(), once the runs in progress are known. Also the banner of
+// an app update whose new code did not start (#279, checkFailedAppUpdate).
 
 // The code changed on disk while the app runs (#83): a pull or a merge updated src/ and a reload
 // (Ctrl+R) runs the new UI against the old main process (or server), where new channels are
@@ -81,7 +82,28 @@ function showRestartInterrupted() {
   el.classList.remove('hidden');
 }
 
+// #279: an app update whose new code did not start within 2 minutes (api.appUpdateFailed, the intent
+// <workspace>/oracle/app-update.json is still there): what was updated and the command to go back,
+// kept (at every start) until the owner dismisses it. Checked when the window loads.
+async function checkFailedAppUpdate() {
+  const box = $('#app-update-banner');
+  if (!box || typeof api.appUpdateFailed !== 'function') return;
+  let f = null;
+  try { f = await api.appUpdateFailed(); } catch { return; }
+  if (!f) { box.innerHTML = ''; return; }
+  const subjects = (f.subjects || []).slice(0, 5);
+  box.innerHTML = `<div class="code-banner app-update-banner" role="alert" data-testid="app-update-failed-banner">
+    <span>The app update to <b class="mono">${esc(String(f.to || '').slice(0, 7))}</b> did not start: no record came from the new code within 2 minutes of the restart.${subjects.length ? ` It brought: ${subjects.map((s) => esc(s)).join('; ')}${f.subjects.length > subjects.length ? '; …' : ''}.` : ''}</span>
+    <span>To go back to <span class="mono">${esc(String(f.from || '').slice(0, 7))}</span>, close the app and run <code class="mono">${esc(f.command)}</code>, then open it again.</span>
+    <button class="btn sm ghost" type="button" data-app-update="dismiss" title="Deletes the update's record: the banner does not come back">Dismiss</button>
+  </div>`;
+  box.querySelector('[data-app-update="dismiss"]').onclick = async () => {
+    try { await api.dismissAppUpdate(); box.innerHTML = ''; } catch (e) { showToast('Could not dismiss', errMsg(e)); }
+  };
+}
+
 function initCodeBanner() {
+  checkFailedAppUpdate();
   $('#code-banner').onclick = (e) => {
     const b = e.target.closest('[data-code]');
     if (!b) return;

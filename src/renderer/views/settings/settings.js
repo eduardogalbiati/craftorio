@@ -2,7 +2,7 @@
 // Settings screen (Phone gates, #226: settings-phone.js): General (workspace folder, backlog defaults with the default development workflow
 // (#195, default-workflow.js), voice input, the workspace index and
 // its Rebuild index, src/store.js), Agents & CLIs (installed CLIs and
-// their sign-in), Execution (developer mode, Keep awake (keep-awake.js), notifications, concurrent runs, the Oracle's Self-healing switch (#278), daily budget and compaction threshold) and About. Registers
+// their sign-in), Execution (developer mode, Keep awake (keep-awake.js), notifications, concurrent runs, the Oracle's Self-healing switch (#278) and its "Apply merged fixes to this app" row (#279), daily budget and compaction threshold) and About. Registers
 // itself with registerView (view-registry.js); uses app.js globals ($, esc, errMsg, state,
 // applyDeveloperMode, renderHeader, renderWorkspacePaths), refreshProjects (views/projects/projects.js: the Projects tab, #254), commandHint (command-hint.js: the install
 // commands of missing CLIs) and window.BACKLOG_PLATFORMS (backlog.js).
@@ -45,6 +45,7 @@ async function renderSettings() {
   renderMemoryGuard();
   renderOracleSettings();
   renderSelfHealing();
+  renderAppUpdate();
   renderLiveSettings();
   renderBudgetSettings();
   renderOracleWake();
@@ -222,8 +223,49 @@ async function renderSelfHealing() {
   // a click made while the state was read is kept
   const checked = $('#set-oracle-self-healing')?.checked ?? (state.settings.oracle || {}).selfHealing === true;
   row.innerHTML = selfHealingHtml({ selfHealing: checked }, nw);
-  $('#set-oracle-self-healing').onchange = saveOracleSettings;
+  // the app update row below needs Self-healing: drawn again with the saved switch
+  $('#set-oracle-self-healing').onchange = async () => { await saveOracleSettings(); renderAppUpdate(false); };
   $('#set-oracle-self-healing-perms').onclick = () => showView('nightwatch');
+}
+
+// "Apply merged fixes to this app" (#279, settings.oracle.appUpdate / appUpdateWhen, src/app-update.js):
+// the row under Self-healing. `o`: settings.oracle; `info`: the app-update:state result (null while it
+// is read): { applies, reason } or { applies, project, short, behind }. Off and disabled, with the
+// reason, when it does not apply or Self-healing is off; the source line and the When modes otherwise.
+function appUpdateHtml(o, info) {
+  const healing = !!o && o.selfHealing === true;
+  const applies = !!info && info.applies === true;
+  const why = !info ? 'Checking whether this app runs from a project of this workspace…'
+    : !applies ? `Unavailable: ${info.reason}.`
+      : !healing ? 'Turn Self-healing on first.' : '';
+  const on = applies && healing && o.appUpdate === true;
+  const when = o?.appUpdateWhen === 'stage' ? 'stage' : 'marked';
+  const behind = applies ? (info.behind > 0 ? `${info.behind} commit${info.behind === 1 ? '' : 's'} ahead of this app` : 'the app is up to date') : '';
+  const mode = (value, label) => `<button type="button" data-app-update-when="${value}" aria-pressed="${when === value}" class="${when === value ? 'active' : ''}"${on ? '' : ' disabled'}>${esc(label)}</button>`;
+  return `<div class="s-label"><b>Apply merged fixes to this app</b>
+      <span>The app updates itself from the local main of the project that is its repository: it pauses the roadmap, waits for the runs in progress (a gate is never answered), fast-forwards, restarts and resumes the roadmap. It never pushes.</span>
+      ${applies ? `<span data-testid="app-update-source">Source: <b>${esc(info.project?.name || info.project?.id || '')}</b>, local main (<code>${esc(info.short)}</code>, ${esc(behind)})</span>` : ''}
+      ${why ? `<span class="muted small" data-testid="app-update-reason">${esc(why)}</span>` : ''}
+      ${applies ? `<span class="row">When: <span class="seg sm" role="group" aria-label="When to apply merged fixes" data-testid="app-update-when">${mode('stage', 'After every roadmap stage')}${mode('marked', 'Only after items marked “Update the app after this”')}</span></span>` : ''}
+    </div>
+    <label class="switch"><input type="checkbox" id="set-app-update" data-testid="app-update-switch" aria-label="Apply merged fixes to this app"${on ? ' checked' : ''}${applies && healing ? '' : ' disabled'} /><span></span></label>`;
+}
+
+// Draws the row; `fresh` reads where it applies again (when the screen opens), else the last answer.
+let appUpdateInfo = null;
+async function renderAppUpdate(fresh = true) {
+  const row = $('#set-app-update-row');
+  if (!row) return;
+  if (fresh || !appUpdateInfo) {
+    try { appUpdateInfo = await api.appUpdateState(true); } catch (e) { appUpdateInfo = { applies: false, reason: errMsg(e) }; }
+  }
+  row.innerHTML = appUpdateHtml(state.settings.oracle || {}, appUpdateInfo);
+  const save = async (patch) => {
+    state.settings = await api.setSettings({ oracle: { ...(state.settings.oracle || {}), ...patch } });
+    renderAppUpdate(false);
+  };
+  $('#set-app-update').onchange = (e) => save({ appUpdate: !!e.target.checked });
+  row.querySelectorAll('[data-app-update-when]').forEach((b) => { b.onclick = () => save({ appUpdateWhen: b.dataset.appUpdateWhen }); });
 }
 
 // The Oracle's wake-ups (#123, src/oracle-wake.js): which runs wake it and on which events, saved
@@ -588,6 +630,7 @@ registerView({
               <h3 class="s-subtitle">Oracle</h3>
               <div id="set-oracle" class="s-group">
                 <div class="s-row" id="set-oracle-self-healing-row">${selfHealingHtml({}, null)}</div>
+                <div class="s-row" id="set-app-update-row" data-testid="app-update-row">${appUpdateHtml({}, null)}</div>
                 <div class="s-row">
                   <div class="s-label"><b>Daily budget (USD)</b><span>Once today's Oracle spend reaches it, questions are refused until tomorrow (UTC); an answer already running is not cut. It also counts in the monthly Claude Code budget. 0: no cap.</span></div>
                   <div class="s-ctrl"><input type="number" id="set-oracle-budget" min="0" max="10000" step="0.5" class="s-num" aria-label="Oracle daily budget in USD" /></div>

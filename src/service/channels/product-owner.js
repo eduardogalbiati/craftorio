@@ -122,7 +122,9 @@ module.exports = (ctx) => {
       const workflow = p.workflow ? path.basename(String(p.workflow)) : DefaultWorkflow.resolve(workspace.readSettings(ctx.ws).defaultWorkflow, files).file;
       if (!files.includes(workflow)) throw new Error(`Workflow ${workflow} is not installed, or has no task input to receive an issue.`);
       const inputs = p.inputs && typeof p.inputs === 'object' ? p.inputs : {};
-      const items = p.group ? [{ workflow, inputs, issues: numbers }] : numbers.map((n) => ({ workflow, inputs, issues: [n] }));
+      // #279: updateAfter marks an item whose fix the running app needs (Self-healing updates the app after it)
+      const mark = p.updateAfter === true ? { updateAfter: true } : {};
+      const items = p.group ? [{ workflow, inputs, issues: numbers, ...mark }] : numbers.map((n) => ({ workflow, inputs, issues: [n], ...mark }));
       const { roadmap, dropped } = roadmaps.propose(ctx.ws.backlog, id, [{ items }], { issues, alive: ctx.runAlive });
       const added = numbers.filter((n) => !dropped.includes(n));
       if (!added.length) throw new Error(`${refs(numbers)} ${numbers.length > 1 ? 'are' : 'is'} already planned in the roadmap: nothing was added.`);

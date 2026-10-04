@@ -196,7 +196,8 @@
         <td>${a.auto ? `<span class="badge">${esc(a.permission || '?')}</span>` : '<span class="badge" title="You clicked Do it">your click</span>'}</td>
         <td class="muted small nw-cut" title="${esc(a.backup || '')}">${esc(a.backup || '—')}</td>
         <td><span class="pill pill-${a.undone ? 'cancelled' : a.ok ? 'success' : 'failed'}">${a.undone ? 'undone' : a.ok ? 'done' : 'failed'}</span></td>
-        <td class="num">${a.undoable ? `<button class="btn ghost sm" type="button" data-nw-undo="${esc(a.actionId)}" title="Put the backup back">Undo</button>` : ''}</td>
+        <td class="num">${a.undoable ? `<button class="btn ghost sm" type="button" data-nw-undo="${esc(a.actionId)}" title="Put the backup back">Undo</button>`
+    : a.from ? `<button class="btn ghost sm" type="button" data-nw-app-back="${esc(a.from)}" data-testid="app-update-back" title="The same cycle as the update: pause, wait for the runs, move the app folder back, restart">Go back to ${esc(String(a.from).slice(0, 7))}</button>` : ''}</td>
       </tr>`).join('');
     return `<div class="card nw-card">
       <div class="row nw-card-head"><h3>Actions</h3><span class="muted small">${m.actions.auto} without asking${m.actions.undone ? `, ${m.actions.undone} undone` : ''}</span></div>
@@ -294,6 +295,14 @@
       b.onclick = async () => {
         if (!await confirmDialog('Undo this action', 'The backup taken before the action is put back.', 'Undo')) return;
         try { await api.oracleUndo({ actionId: b.dataset.nwUndo }); nw.error = null; } catch (e) { nw.error = errMsg(e); }
+        await load();
+      };
+    });
+    document.querySelectorAll('[data-nw-app-back]').forEach((b) => {
+      b.onclick = async () => {
+        const to = b.dataset.nwAppBack;
+        if (!await confirmDialog(`Go back to ${to.slice(0, 7)}`, 'The roadmap pauses, the runs in progress finish, the app folder goes back to that commit and the app restarts.', 'Go back')) return;
+        try { await api.appUpdateBack(to); nw.error = null; } catch (e) { nw.error = errMsg(e); }
         await load();
       };
     });

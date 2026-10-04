@@ -70,5 +70,17 @@ The button's badge counts the answers that arrived while the conversation was ou
   notification that findings are waiting. The Night watch screen and Home's morning card report each
   Self-healing day (detected, repaired alone, waiting for you, cost with tokens). Turning it off ends
   the watch at once. It never answers a gate, pushes, closes an issue or deletes data.
+- **Apply merged fixes to this app** (under Self-healing, off by default; only when the app runs
+  from a source checkout and a project of the workspace is its repository, else the row says why):
+  the app takes the fixes merged into that project's local main, after every roadmap stage or only
+  after items marked "Update the app after this" (a switch on the roadmap card; the Oracle marks an
+  item it appends for a fix the running app needs). In code, with no model call: the roadmap pauses
+  ("Updating the app"), the runs in progress finish (a gate is waited for, never answered), the app
+  folder is fast-forwarded (refused with uncommitted changes or a diverged history: nothing changes
+  and the roadmap resumes), dependencies are installed only when `package-lock.json` changed (a
+  failed install goes back), the app restarts and the roadmap resumes by itself. You get a
+  notification before ("Updating the app: febef8b → 5d9be33, 11 commits") and after; Undo is "Go
+  back to <commit>" in the Night watch's actions. If the new code does not start, the next start
+  shows a banner with the command to go back.
 - One app process answers: in a second window the drawer shows the conversation and names the
   process that owns it; that window is read-only (no wake-ups, no actions).

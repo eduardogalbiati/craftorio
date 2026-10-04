@@ -165,6 +165,12 @@ is turned off. Each change writes an `oracle.watch` entry with `selfHealing: tru
 null`; those are not nights but days of the report (`selfHealingDays`: one window per UTC day).
 A detector's `oracle.detected` carries its `evidence` and is written once per run and kind (the
 log is read at the first finding after a start, so a restart does not log it again).
+An app update (#279, `src/app-update.js`) writes `oracle/app-update.json` `{ from, to, subjects,
+roadmaps, appDir, at }` right before its restart, and an `oracle.action` entry of kind `app.update`
+(`from`, `to`, `subjects`). The next start reads it before the roadmap dispatch: within 2 minutes of
+`at` it resumes the listed roadmaps and deletes it; later it is kept for the failed-update banner
+until the owner dismisses it (`app-update:dismiss`). Settings: `oracle.appUpdate`,
+`oracle.appUpdateWhen` (`marked` | `stage`); a roadmap item's mark is `updateAfter: true`.
 
 ## Rules
 
