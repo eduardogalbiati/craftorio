@@ -272,3 +272,63 @@ Then("the plan shows the workflow's options", async ({ e2e }) => {
 Then("the Product Owner's header says {string}", async ({ e2e }, text) => {
   await expect(poDrawer(e2e.window).getByText(/^Planning for /)).toHaveText(new RegExp(`^${escapeRe(text)}$`, 'i'));
 });
+
+// ---- Backlog › Product Owner: a split proposal's card (#242) ------------------------------------------
+
+const splitCard = (page, title) => poDrawer(page).getByTestId('po-split-card').filter({ hasText: title }).first();
+// `inner` lies inside `outer` (1px of rounding allowed)
+const inside = (inner, outer) => inner.x >= outer.x - 1 && inner.y >= outer.y - 1
+  && inner.x + inner.width <= outer.x + outer.width + 1 && inner.y + inner.height <= outer.y + outer.height + 1;
+
+Then('the Product Owner proposes to split {string}', async ({ e2e }, title) => {
+  const card = splitCard(e2e.window, title);
+  await card.scrollIntoViewIfNeeded();
+  await expect(card).toBeVisible();
+});
+
+Then('the split card of {string} fits within the drawer', async ({ e2e }, title) => {
+  const page = e2e.window;
+  const card = splitCard(page, title);
+  await card.scrollIntoViewIfNeeded();
+  const drawer = await poDrawer(page).boundingBox();
+  const box = await card.boundingBox();
+  expect(drawer).not.toBeNull();
+  expect(box).not.toBeNull();
+  expect(box.x, 'the card starts inside the drawer').toBeGreaterThanOrEqual(drawer.x - 1);
+  expect(box.x + box.width, 'the card ends inside the drawer').toBeLessThanOrEqual(drawer.x + drawer.width + 1);
+  // nothing inside the card spills past its sides (no element wider than the card)
+  const spill = await card.evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    return [...el.querySelectorAll('*')].filter((c) => c.getClientRects().length && getComputedStyle(c).visibility !== 'hidden')
+      .map((c) => c.getBoundingClientRect()).filter((c) => c.width && (c.left < r.left - 1 || c.right > r.right + 1)).length;
+  });
+  expect(spill, 'elements of the card past its sides').toBe(0);
+});
+
+Then('the conversation does not scroll sideways', async ({ e2e }) => {
+  const log = poDrawer(e2e.window).getByTestId('po-log');
+  const { scroll, client } = await log.evaluate((el) => ({ scroll: el.scrollWidth, client: el.clientWidth }));
+  expect(scroll, 'the conversation\'s content width').toBeLessThanOrEqual(client);
+});
+
+Then('the task lines of the split card of {string} show no Markdown marks', async ({ e2e }, title) => {
+  const tasks = splitCard(e2e.window, title).getByTestId('po-split-task');
+  await expect(tasks.first()).toBeVisible();
+  for (const text of await tasks.allTextContents()) {
+    expect(text, 'a task line with bold marks').not.toContain('**');
+    expect(text, 'a task line with backticks').not.toContain('`');
+  }
+});
+
+Then('the split card of {string} shows {string} and {string} inside it', async ({ e2e }, title, a, b) => {
+  const card = splitCard(e2e.window, title);
+  await card.scrollIntoViewIfNeeded();
+  const box = await card.boundingBox();
+  for (const name of [a, b]) {
+    const button = card.getByRole('button', { name, exact: true });
+    await expect(button).toBeVisible();
+    const at = await button.boundingBox();
+    expect(at).not.toBeNull();
+    expect(inside(at, box), `"${name}" inside the card`).toBe(true);
+  }
+});

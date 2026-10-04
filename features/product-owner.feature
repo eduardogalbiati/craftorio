@@ -52,3 +52,23 @@ Feature: Backlog Product Owner
     And I plan with the workflow "Software development, local hero"
     Then the Cost chip is shown
     And the Product Owner's header says "Planning for demo-app · Software development, local hero"
+
+  # The simulated plan answer proposes to split the demo's big issue #15 (a long title, 12 tasks whose
+  # text has `code` spans): its split card is the one checked
+  @issue-242
+  Scenario Outline: A split proposal fits in the Product Owner's drawer in a <window> window
+    Given the app is open in a <size> window
+    When I open "Backlog" in the sidebar
+    And I open the Product Owner
+    And I click the suggested question "Build a roadmap"
+    Then the Product Owner answers
+    And the Product Owner proposes to split "Run safety: one app per workspace"
+    And the split card of "Run safety: one app per workspace" fits within the drawer
+    And the conversation does not scroll sideways
+    And the task lines of the split card of "Run safety: one app per workspace" show no Markdown marks
+    And the split card of "Run safety: one app per workspace" shows "Split" and "Edit…" inside it
+
+    Examples:
+      | window  | size     |
+      | default | 1400x900 |
+      | narrow  | 900x800  |
