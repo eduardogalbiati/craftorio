@@ -18,8 +18,8 @@ const clip = (s) => (s.length > MAX_CHARS ? `${s.slice(0, MAX_CHARS)}\n… (clip
 const json = (x) => JSON.stringify(x, null, 1);
 const obj = (properties = {}, required = []) => ({ type: 'object', properties, required, additionalProperties: false });
 const str = (description) => ({ type: 'string', description });
-// Drops what only the UI shows (an input's label, an agent's colour) from list_workflows.
-const withoutUi = (map, field) => Object.fromEntries(Object.entries(map || {}).map(([k, { [field]: _, ...v }]) => [k, v]));
+// Drops what only the UI shows (an input's label and its options' labels, an agent's colour) from list_workflows.
+const withoutUi = (map, ...fields) => Object.fromEntries(Object.entries(map || {}).map(([k, v]) => [k, Object.fromEntries(Object.entries(v).filter(([f]) => !fields.includes(f)))]));
 // Drops a step's empty fields (agents null, goal/loop false, no skills): an absent field reads the same.
 const compactStep = (step) => Object.fromEntries(Object.entries(step || {}).filter(([, v]) => v != null && v !== false && !(Array.isArray(v) && !v.length)));
 
@@ -36,8 +36,9 @@ function supervisorTools(ctx) {
       // Compact JSON: the indented list of the bundled workflows alone passed MAX_CHARS.
       // Nor the inputs' labels and agents' colours (#216, #224): they pushed the bundled workflows over MAX_CHARS again.
       // Nor the steps' empty fields (#223: the e2e and heal steps pushed them over again).
+      // Nor the inputs' options (#260: release.yaml pushed them over again): the labels of the values `enum` already lists.
       run: () => JSON.stringify(ctx.listWorkflows().map(({ file, origin, name, version, description, category, tags, inputs, outputs, agents: a, steps }) => (
-        { file, origin, name, version, description, category, tags, inputs: withoutUi(inputs, 'label'), outputs, agents: withoutUi(a, 'color'), steps: (steps || []).map(compactStep) }))),
+        { file, origin, name, version, description, category, tags, inputs: withoutUi(inputs, 'label', 'options'), outputs, agents: withoutUi(a, 'color'), steps: (steps || []).map(compactStep) }))),
     },
     {
       name: 'read_workflow',
