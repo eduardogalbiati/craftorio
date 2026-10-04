@@ -11,8 +11,8 @@
 // (selfHealing: true) when it turns on or off. The detectors of src/night-watch.js (detectSelfHealing:
 // memory, cost-gap, environment, repeat) run in code over a small per-run buffer of the events they
 // read; a finding is logged once per run and kind (oracle.detected with its evidence) and wakes the
-// Oracle with that evidence (ctx.oracleFindings, batched; never when settings.oracle.wakeScope is
-// off). While a budget pauses the Oracle the findings are still logged and the owner gets one
+// Oracle with that evidence (ctx.oracleFindings, batched; in the wake-ups' scope only:
+// ctx.oracleFindingsScope). While a budget pauses the Oracle the findings are still logged and the owner gets one
 // notification. The report gains one window per Self-healing day (selfHealingDays).
 
 const crypto = require('crypto');
@@ -63,7 +63,8 @@ module.exports = (ctx) => {
   // the watch in force: the Night watch, or Self-healing's standing watch (#278)
   const watch = () => {
     const w = actions.watchState(dir(), settings());
-    const key = w.selfHealing ? 'self-healing' : w.startedAt;
+    // the open incidents belong to one night; under Self-healing, to one UTC day
+    const key = w.selfHealing ? `self-healing ${actions.watchSince(w)}` : w.startedAt;
     if (openFor !== key) { open.clear(); openFor = key; }
     return w;
   };
@@ -165,10 +166,12 @@ module.exports = (ctx) => {
   function found(f, liveProject) {
     const key = `${f.kind} ${f.runId}`;
     if (loggedFindings().has(key)) return;
-    loggedFindings().add(key);
     const projectId = liveProject || f.projectId || null;
+    open.delete(key);
     detect({ kind: f.kind, runId: f.runId, projectId, since: f.since, key, evidence: f.evidence });
-    if (!ctx.oracleFindings || settings().oracle?.wakeScope === 'off') return;
+    loggedFindings().add(key);
+    // the Oracle is woken as for run events: never with wake-ups off, a muted run or, under "watched", an unwatched one
+    if (!ctx.oracleFindings || !ctx.oracleFindingsScope?.(f.runId)) return;
     const line = `Self-healing finding (${f.kind}: ${night.INCIDENT_KINDS[f.kind]}) in run ${f.runId}${projectId ? ` of project ${projectId}` : ''}${f.evidence.step ? `, step ${f.evidence.step}` : ''}, since ${f.since}. Evidence: ${JSON.stringify(f.evidence)}`;
     pending.push({ line: line.length > FINDING_LINE_CHARS ? `${line.slice(0, FINDING_LINE_CHARS - 1)}…` : line, runId: f.runId });
     // paused by its budget: asked at once (no model call), so the owner hears of it now

@@ -283,11 +283,13 @@ module.exports = (ctx) => {
       const since = actions.watchSince(watch);
       return night.readNightLog(dir()).filter((e) => e.type === 'oracle.action' && e.auto && e.target === target && (!since || e.ts >= since)).length;
     };
+    // by day under Self-healing the owner's own requests (not the Oracle's model) keep the daytime rules
+    const ruling = watch.selfHealing && !byModel ? { ...watch, active: false } : watch;
     const why = (kind, params) => {
       if (byContent) return { reason: 'content', text: 'Content the Oracle read asked for it: it waits for the owner\'s click.' };
-      const text = agentInbox.waitReason(kind, params, { clickKinds, confirmKinds: byModel ? confirmKinds : [], watch, allowed });
+      const text = agentInbox.waitReason(kind, params, { clickKinds, confirmKinds: byModel ? confirmKinds : [], watch: ruling, allowed });
       if (text) return { reason: 'permission', text };
-      if (watch.active && actionsOn(params) >= night.LOOP_CAP) return { reason: 'loop', text: `The item already had ${night.LOOP_CAP} watch actions ${watch.selfHealing ? 'today' : 'tonight'}: it waits for the owner's click.` };
+      if (ruling.active && actionsOn(params) >= night.LOOP_CAP) return { reason: 'loop', text: `The item already had ${night.LOOP_CAP} watch actions ${watch.selfHealing ? 'today' : 'tonight'}: it waits for the owner's click.` };
       return null;
     };
     return {
@@ -489,6 +491,15 @@ module.exports = (ctx) => {
   // #278: Self-healing's findings (src/service/channels/nightwatch.js) wake the Oracle with their
   // evidence, as lines: one short turn, simulated when every run is → oracle.wake's result
   ctx.oracleFindings = ({ lines, runIds = [] }) => get().wake({ findings: lines, runIds, mock: simulation.simulationOnly() || (runIds.length > 0 && runIds.every(runMock)) });
+  // ... in the wake-ups' own scope (settings.oracle.wakeScope): every run but the muted ones, or the
+  // runs and roadmaps the Oracle watches; never when wake-ups are off
+  ctx.oracleFindingsScope = (runId) => {
+    const s = wake.state();
+    if (s.wakeScope === 'off') return false;
+    const project = ctx.liveRun(runId)?.projectId || null;
+    const watched = (s.watching || []).some((w) => w.runId === runId || (!!w.projectId && w.projectId === project));
+    return watched || (s.wakeScope === 'all' && !(s.muted || []).includes(runId));
+  };
   // runs of this workspace in progress in another app process (#112): each wakes the Oracle once
   const seenElsewhere = new Set();
   const elsewhere = setInterval(() => {

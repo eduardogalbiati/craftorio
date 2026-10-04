@@ -201,13 +201,15 @@ async function saveOracleSettings() {
 function selfHealingHtml(o, nw) {
   const p = nw && nw.permissions;
   const count = p ? ` (${p.allowed.length} of ${p.catalog.length})` : '';
-  const unavailable = !!nw && !nw.oracle;
+  const on = !!o && o.selfHealing === true;
+  // it can always be turned off: only turning it on needs the Oracle
+  const unavailable = !!nw && !nw.oracle && !on;
   return `<div class="s-label"><b>Self-healing</b>
       <span>The Oracle watches every run and roadmap, day and night, and repairs what its permissions allow. It never answers a gate, pushes, closes an issue or deletes data.</span>
       <span><button type="button" class="link-btn" id="set-oracle-self-healing-perms" data-testid="self-healing-permissions" title="Opens the Night watch's checklist: one list for both">What it may do alone${esc(count)} ›</button></span>
       ${unavailable ? '<span class="error small" data-testid="self-healing-unavailable">The Oracle cannot start in this workspace, so Self-healing cannot be turned on.</span>' : ''}
     </div>
-    <label class="switch"${unavailable ? ' title="The Oracle cannot start in this workspace"' : ''}><input type="checkbox" id="set-oracle-self-healing" data-testid="oracle-self-healing" aria-label="Self-healing"${o && o.selfHealing === true ? ' checked' : ''}${unavailable ? ' disabled' : ''} /><span></span></label>`;
+    <label class="switch"${unavailable ? ' title="The Oracle cannot start in this workspace"' : ''}><input type="checkbox" id="set-oracle-self-healing" data-testid="oracle-self-healing" aria-label="Self-healing"${on ? ' checked' : ''}${unavailable ? ' disabled' : ''} /><span></span></label>`;
 }
 
 // Draws the Self-healing row again with the permissions' count and whether the Oracle can start

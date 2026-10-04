@@ -264,7 +264,7 @@ function selfHealingEvent(ev) {
  * kind; `since` is the ts of the first event that shows it, `evidence` what was seen.
  *   memory       a process stopped by the memory guard, or a low-memory hold over MEMORY_HOLD_MS (#276)
  *   cost-gap     a turn recorded at US$ 0 with tokens, or below a usage item of the same turn (#277);
- *                never in a simulated run
+ *                never in a simulated run, nor for a CLI that reports no cost (cost_usd null)
  *   environment  a test file failing in the suite (passing on the base: the base check ran and the
  *                file is not in `preexisting`) of two runs of different issues within ENVIRONMENT_WINDOW_MS
  *   repeat       the same command failing (a tool call's result with is_error) or stopped by the
@@ -328,9 +328,10 @@ function detectSelfHealing(runs = []) {
         default:
       }
     }
+    // a CLI that reports no cost (cost_usd null: Codex) has no cost to lose: only a recorded 0 counts
     const gaps = mock ? [] : turns.filter((ev) => {
       const cost = Number(ev.cost_usd) || 0;
-      return (cost === 0 && tokensOf(ev.usage) > 0) || (usageUsd.get(`${ev.session_id} ${ev.turn}`) || 0) > cost + 1e-9;
+      return (ev.cost_usd != null && cost === 0 && tokensOf(ev.usage) > 0) || (usageUsd.get(`${ev.session_id} ${ev.turn}`) || 0) > cost + 1e-9;
     });
     if (gaps.length) {
       const g = gaps[0];
@@ -371,8 +372,8 @@ function selfHealingDays(log, now = Date.now()) {
   let start = null;
   for (const e of log) {
     if (e.type !== 'oracle.watch' || !e.selfHealing) continue;
-    if (e.on) start ??= Number.isFinite(ms(e.startedAt)) ? ms(e.startedAt) : ms(e.ts);
-    else if (start != null) { span(start, ms(e.ts), true); start = null; }
+    const t = Number.isFinite(ms(e.startedAt)) && e.on ? ms(e.startedAt) : ms(e.ts);
+    if (e.on) { if (start == null && Number.isFinite(t)) start = t; } else if (start != null) { span(start, t, true); start = null; }
   }
   if (start != null) span(start, now, false);
   return [...days.values()];

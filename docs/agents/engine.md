@@ -177,16 +177,18 @@ same features for users; this is the implementer's summary.
   selfHealing: true }`; off, it is the Night watch as before). Under it an action whose permission
   is checked runs alone by day as at night (`nightDecision`: the permission, the kind's `night`,
   `LOOP_CAP` per item, counted per UTC day: `watchSince`); the others stay cards in their owner's
-  inbox. Detectors in code (`night-watch.detectSelfHealing`, pure functions over run events, no
+  inbox. In the inboxes (`agent-inbox.waitReason`) that rule applies to what the Oracle's model
+  asks: a kind no permission covers, and the owner's own requests, keep the daytime rules. Detectors in code (`night-watch.detectSelfHealing`, pure functions over run events, no
   model call until one fires): `memory` (`process.killed`, or a `memory.hold` over 5 min),
   `cost-gap` (a `session.message_received` with `cost_usd` 0 and tokens, or below a `usage` stream
-  item of the same turn; never a simulated run), `environment` (a test file in the `failures` of a
+  item of the same turn; never a simulated run, nor a CLI that reports no cost: `cost_usd` null),
+  `environment` (a test file in the `failures` of a
   suite `step.finished` whose base check ran, in two runs of different issues within one hour) and
   `repeat` (the same command failing, a `tool_call` whose `tool_result` has `is_error`, or stopped
   by the memory guard, three times in one step). The service (`channels/nightwatch.js`) keeps a
   small per-run buffer of the events they read, logs each finding once per run and kind
   (`oracle.detected` with `evidence`) and wakes the Oracle with it (`wake({ findings })`, batched
-  over 30 s; not when `wakeScope` is `off`): the Oracle asks the Product Owner to file an issue in
+  over 30 s; in the wake-ups' scope only: not when `wakeScope` is `off`, nor for a muted run): the Oracle asks the Product Owner to file an issue in
   the run's project and append it to the roadmap (`issue.file`, `roadmap.add`: the `file-issue` and
   `append` permissions), never edits code, and only reports a cause in this app when the app's
   repository is not a project of the workspace. Those turns count in the Oracle's daily budget;
