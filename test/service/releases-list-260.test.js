@@ -121,4 +121,25 @@ test('a cut line whose release run was held pauses the roadmap; Resume checks th
   assert.equal(again.stages[0].release.status, 'running');
   assert.notEqual(again.stages[0].release.runId, '20260301-100000-rel00002');
   assert.equal(api['runs:active']().some((r) => hasIssue(r, 2)), false);
+  // the project folder has no test:e2e script: the release run skips the E2E suite
+  const release = api['runs:active']().find((r) => r.file === 'release.yaml');
+  assert.equal(release.inputs.e2e_suite, 'skip');
+  assert.equal(release.inputs.version, 'v1.0');
+});
+
+test('a release run of the cut line\'s name started from the Releases screen takes the line and the paused roadmap waits for it (#260)', async (t) => {
+  const { api, p } = await roadmapAtLine(t, 'release-by-hand', '20260301-100000-rel00003', { status: 'failed' });
+  await api['roadmap:start']({ projectId: p.id, simulated: true });
+  assert.equal(api['roadmap:get']({ projectId: p.id }).stages[0].release.status, 'failed');
+  assert.equal(api['roadmap:get']({ projectId: p.id }).state, 'paused');
+
+  const started = await api['releases:start']({ projectId: p.id, version: 'v1.0', simulated: true });
+  const roadmap = api['roadmap:get']({ projectId: p.id });
+  assert.deepEqual([roadmap.stages[0].release.status, roadmap.stages[0].release.runId], ['running', started.runId]);
+  assert.equal(roadmap.state, 'running');
+  assert.equal(roadmap.error, null);
+  assert.equal(api['releases:list']({ projectId: p.id }).run.runId, started.runId);
+  await assert.rejects(api['releases:start']({ projectId: p.id, version: 'v1.0', simulated: true }), /in progress/);
+  // a release of another name is not the line's
+  assert.equal(api['runs:active']().some((r) => hasIssue(r, 2)), false);
 });

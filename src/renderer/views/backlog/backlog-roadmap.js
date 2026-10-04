@@ -46,7 +46,8 @@
 // dialog of backlog.js) and draws a cut line after the stage (`stage.release`, saved with the stages):
 // its name, the state of its release run (in progress, on hold, failed, shipped) with a link to the
 // run, Rename and Remove while no run is going. The stages below wait until the release shipped; a
-// finished stage hidden by the open-work filter still shows its line while it waits.
+// finished stage hidden by the open-work filter still shows its line while it waits, and so does
+// the view grouped by epic (the waiting lines lead it, each with its stage).
 // Rendered into #bl-list by backlog.js (mode 'roadmap'), which passes `ctx`
 // ({ projectId, setData, render, setError }). Uses app.js globals (esc, state, errMsg, devMode, confirmDialog,
 // fmtDur, agentLabel, scheduleRender), run-list.js's (progressChip, robotAvatar, PERSON_SVG, ENGINE_SVG),
@@ -412,7 +413,8 @@
     failed: ['warn', 'release run failed', 'Its release run failed: open it, then Resume the roadmap to check the release again'],
     shipped: ['', 'shipped', 'Pushed and tagged: the stages below run'],
   };
-  function cutLineHtml(stage, s) {
+  // `where`: says after which stage it sits (the view grouped by epic shows no stages)
+  function cutLineHtml(stage, s, where = false) {
     const rel = stage.release;
     if (!rel?.name) return '';
     const [tone, label, help] = RELEASE_STATE[rel.status] || ['', '', 'The stages below wait until this release shipped'];
@@ -421,6 +423,7 @@
       <div class="rm-cut${rel.status === 'shipped' ? ' shipped' : ''}" data-testid="roadmap-cut-line" data-cut-stage="${s}" title="${esc(help)}">
         <span class="rm-cut-label"><span aria-hidden="true">✂</span> Release here</span>
         <b class="rm-cut-name">${esc(rel.name)}</b>
+        ${where ? `<span class="muted small">after stage ${s + 1}</span>` : ''}
         ${label ? `<span class="badge ${tone}">${esc(label)}</span>` : ''}
         ${rel.runId ? `<button class="link-btn small" type="button" data-rm-release-run="${esc(rel.runId)}" title="Open the release run ${esc(rel.runId)}">Open the run</button>` : ''}
         ${locked ? '' : `<button class="link-btn small" type="button" data-rm-release="edit" aria-label="Rename the release ${esc(rel.name)}">Rename</button>
@@ -601,7 +604,8 @@
     }).join('');
     const stages = !r.stages.length
       ? '<div class="empty-state"><b>No roadmap yet</b><p class="muted">Select issues, Assign workflow…, then Add to roadmap: each addition is a stage that starts when the previous one has finished and merged.</p></div>'
-      : grouped ? byEpicHtml(r, epics, byNumber, v)
+      // grouped by epic: no stages to draw the lines between, so the ones still waiting lead the list
+      : grouped ? r.stages.map((stage, s) => (stage.release?.status !== 'shipped' ? cutLineHtml(stage, s, true) : '')).join('') + byEpicHtml(r, epics, byNumber, v)
         : staged.trim() ? staged : nothing;
     const liveHtml = r.stages.length ? liveBox(r) : '';
     return `<div class="rm">${bar.replace('<span class="spacer"></span>', `${count}<span class="spacer"></span>${showAllToggle}${toggle}`)}${queued}${grouped ? '' : hiddenLine}${stages}${liveHtml}${importBox}</div>`;

@@ -11,7 +11,8 @@
 // owner's: Ship is the `ship:` transition of the engine (src/engine/workflow.js), which calls
 // `shipRelease`: `git push origin <base>` (never forced) and the tag at that commit. Nothing else
 // in this module touches origin. Shipping marks the release's issues and the discovery cards linked
-// to them Released (`markReleased`, pure; `releasedIssues` for the Backlog's cards).
+// to them Released (`markReleased`, pure). The Backlog applies it to its issues on every read, from
+// the history; the cards half has no caller yet: there is no discovery card store before #256.
 // Service: src/service/areas/releases.js; channels: src/service/channels/releases.js; screen:
 // src/renderer/views/releases/releases.js.
 
@@ -97,24 +98,16 @@ function markReleased({ issues = [], cards = [] } = {}, { version, issues: numbe
   };
 }
 
-/** Every released issue of a project's history: number → the version that shipped it (the first one). */
-function releasedIssues(history) {
-  const out = new Map();
-  for (const r of [...(history?.releases || [])].sort(byDate)) {
-    for (const i of r.issues || []) if (!out.has(Number(i.number))) out.set(Number(i.number), r.version);
-  }
-  return out;
-}
-
 /**
  * Ship: pushes the local <base> to origin/<base> (never forced) and tags that commit, locally and
  * on origin. A push origin rejects (it moved) ships nothing: update the local base first. A tag
  * that already names another commit, locally or on origin, is refused before anything is pushed;
  * shipping the same release twice is safe (what is already on origin stays).
- * @param {{ repo: string, base?: string, tag: string }} o
+ * @param {{ repo: string, base?: string, tag: string, expect?: string }} o expect: the commit the release
+ *   was checked on; a local base at another commit (it moved meanwhile) ships nothing
  * @returns {Promise<{ tag, base, commit, pushed: boolean, commits, issues }>} pushed: false when origin already had the base
  */
-async function shipRelease({ repo, base = null, tag }) {
+async function shipRelease({ repo, base = null, tag, expect = null }) {
   const name = tagName(tag);
   if (!name) throw new Error('A release needs a name or version to tag.');
   const root = await repoRoot(repo);
@@ -123,11 +116,12 @@ async function shipRelease({ repo, base = null, tag }) {
   base = base || await defaultBase(root);
   const commit = await git(['rev-parse', '--verify', '--quiet', `refs/heads/${base}^{commit}`], root).catch(() => null);
   if (!commit) throw new Error(`The local branch ${base} does not exist.`);
-  // the tag is checked before anything goes out: one that names another commit, here or on origin, ships nothing
+  if (expect && commit !== expect) throw new Error(`The local ${base} is at ${commit.slice(0, 8)}, not at the commit the release was checked on (${String(expect).slice(0, 8)}): check the release again. Nothing was pushed.`);
+  // the tag is checked before anything goes out: one that names another commit, here or on origin, ships nothing more
   const local = await git(['rev-parse', '--verify', '--quiet', `refs/tags/${name}^{commit}`], root).catch(() => null);
   const remote = await remoteTag(root, name);
   const taken = [local, remote].find((sha) => sha && sha !== commit);
-  if (taken) throw new Error(`The tag ${name} already exists at ${taken.slice(0, 8)}: choose another release name. Nothing was pushed.`);
+  if (taken) throw new Error(`The tag ${name} already names another commit (${taken.slice(0, 8)}, an earlier release or Ship): choose another release name. Nothing was pushed this time.`);
   const result = await pushBase({ repo: root, base });
   if (result.rejected) throw new Error(`origin/${base} has commits the local ${base} has not: update the local ${base} (Backlog › Update and push), then ship again. Nothing was tagged.`);
   if (!local) await git(['tag', name, commit], root);
@@ -207,7 +201,6 @@ module.exports = {
   nextRelease,
   readReleases,
   recordRelease,
-  releasedIssues,
   releaseNotes,
   releasesFile,
   saveNextNotes,

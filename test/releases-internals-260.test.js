@@ -69,7 +69,6 @@ test('the release history: recorded releases, the next notes, the released issue
   assert.deepEqual(h.releases.map((r) => [r.version, r.status]), [['v1', 'shipped'], ['v2', 'shipped']]);
   assert.equal(h.next.notes, '', 'a shipped release starts the next one with empty notes');
   assert.equal(releases.lastRelease(h).version, 'v2');
-  assert.deepEqual([...releases.releasedIssues(h)], [[12, 'v1'], [14, 'v2']], 'an issue keeps the first version that shipped it');
   assert.throws(() => releases.recordRelease(dir, 'p', { version: '  ' }), /no version/);
 });
 
@@ -132,8 +131,12 @@ test('shipRelease: a push origin rejects ships nothing and tags nothing (#260)',
 test('shipRelease: a tag that exists at another commit is refused; shipping twice is safe (#260)', async (t) => {
   const f = fixture(t);
   git(f.repo, 'tag', 'v1', 'HEAD~1');
-  await assert.rejects(releases.shipRelease({ repo: f.repo, base: 'main', tag: 'v1' }), /already exists/);
+  await assert.rejects(releases.shipRelease({ repo: f.repo, base: 'main', tag: 'v1' }), /already names another commit/);
   assert.equal(originTags(f), '');
+  assert.notEqual(git(f.origin, 'rev-parse', 'refs/heads/main'), f.local, 'a refused tag pushes nothing');
+  // the local base is not the commit the release was checked on: nothing goes out either
+  await assert.rejects(releases.shipRelease({ repo: f.repo, base: 'main', tag: 'v2', expect: git(f.repo, 'rev-parse', 'HEAD~1') }), /not at the commit the release was checked on/);
+  assert.notEqual(git(f.origin, 'rev-parse', 'refs/heads/main'), f.local);
   const first = await releases.shipRelease({ repo: f.repo, base: 'main', tag: 'Sprint 12' });
   assert.equal(first.tag, 'Sprint-12');
   assert.equal(first.pushed, true);
@@ -159,15 +162,33 @@ test('an edit keeps the cut line\'s release state under the same name, never tak
   assert.equal(roadmaps.setRelease(dir, 'p', 'no-such-stage', { status: 'shipped' }), null);
 });
 
-test('a resumed release run takes the cut line and a roadmap paused at it waits again (#260)', (t) => {
+test('a held release pauses a running roadmap at its line; a resumed release run takes the line and the roadmap waits again (#260)', (t) => {
   const dir = tmp(t, 'roadmap-line-');
   const [s1] = roadmaps.saveStages(dir, 'p', [stageOf(null, 1, { release: { name: 'v1' } }), stageOf(null, 2)]).stages;
-  roadmaps.setRelease(dir, 'p', s1.id, { status: 'held', runId: 'r1' });
-  roadmaps.updateRoadmap(dir, 'p', (r) => ({ ...r, state: 'paused', pausedBy: null, error: 'Release v1 was not shipped' }));
+  roadmaps.setState(dir, 'p', 'running');
+  roadmaps.takeRelease(dir, 'p', s1.id, 'r1');
+  const held = roadmaps.holdRelease(dir, 'p', s1.id, 'held', 'Release v1 was not shipped');
+  assert.deepEqual(held.stages[0].release, { name: 'v1', status: 'held', runId: 'r1' });
+  assert.deepEqual([held.state, held.error, held.releaseHold], ['paused', 'Release v1 was not shipped', s1.id]);
   const after = roadmaps.adoptResumed(dir, 'p', 'r1', 'r2');
   assert.deepEqual(after.stages[0].release, { name: 'v1', status: 'running', runId: 'r2' });
-  assert.equal(after.state, 'running');
-  assert.equal(after.error, null);
+  assert.deepEqual([after.state, after.error, after.releaseHold], ['running', null, null]);
+});
+
+test('a pause of the owner\'s is not undone by a release run that takes the line (#260)', (t) => {
+  const dir = tmp(t, 'roadmap-line-');
+  const [s1] = roadmaps.saveStages(dir, 'p', [stageOf(null, 1, { release: { name: 'v1' } }), stageOf(null, 2)]).stages;
+  roadmaps.setState(dir, 'p', 'running');
+  roadmaps.takeRelease(dir, 'p', s1.id, 'r1');
+  roadmaps.holdRelease(dir, 'p', s1.id, 'failed', 'Release v1 was not shipped');
+  roadmaps.setState(dir, 'p', 'paused');
+  const after = roadmaps.takeRelease(dir, 'p', s1.id, 'r2');
+  assert.equal(after.state, 'paused');
+  assert.equal(after.stages[0].release.runId, 'r2');
+  // a held line of a roadmap that is not running only records the outcome
+  roadmaps.setState(dir, 'p', 'planned');
+  assert.equal(roadmaps.holdRelease(dir, 'p', s1.id, 'held', 'x').state, 'planned');
+  assert.equal(roadmaps.takeRelease(dir, 'p', 'no-such-stage', 'r3'), null);
 });
 
 test('advance: a cut line after the last stage keeps the roadmap open; a stage run on its own ignores cut lines (#260)', () => {
@@ -232,6 +253,39 @@ test('loadWorkflow accepts ship: only on a human gate nobody else answers (#260)
         goto: end`;
   assert.throws(() => loadWorkflow(workflowFile(t, SHIP_WORKFLOW(agentStep))), /ship belongs to a human gate/);
   assert.throws(() => loadWorkflow(workflowFile(t, SHIP_WORKFLOW(GATE()).replace('ship: { tag: "v1" }', 'ship: {}'))), /ship needs a tag/);
+});
+
+test('release.yaml: its suites never wave a failure through as failing on the base too, and a project without an E2E suite skips it (#260)', () => {
+  const wf = loadWorkflow(path.join(__dirname, '..', 'workflows', 'release.yaml'));
+  const suites = wf.steps.filter((s) => s.type === 'suite');
+  assert.deepEqual(suites.map((s) => [s.id, s.base_check]), [['unit', false], ['e2e', false]]);
+  const skip = wf.steps[0].transitions.find((t) => /inputs\.e2e_suite == 'skip'/.test(t.when));
+  assert.equal(skip.goto, 'ship');
+  assert.ok(wf.steps[0].transitions.indexOf(skip) < wf.steps[0].transitions.findIndex((t) => t.goto === 'e2e'), 'checked before the transition to the E2E suite');
+});
+
+// shipGuard on a run built by hand (a real run cannot start in tests): who answered, and whether the
+// local base moved since the worktree's commit.
+test('shipGuard: only the owner\'s answer ships, and never a local base that moved since the suites ran (#260)', (t) => {
+  const f = fixture(t);
+  const run = new WorkflowRun({ file: workflowFile(t, SHIP_WORKFLOW(GATE())), inputs: { repo_path: f.repo }, mock: true, runsDir: tmp(t, 'ship-runs-') });
+  const step = { id: 'ship' };
+  run.shipGuard(step); // a simulation: nothing to guard
+  run.mock = false;
+  // the run's worktree: detached at the local main
+  const wt = path.join(f.dir, 'wt');
+  git(f.repo, 'worktree', 'add', '-q', '--detach', wt, 'main');
+  run.worktree = { repo: f.repo, dir: wt, base: 'main' };
+  for (const by of ['auto', 'supervisor', 'timeout', 'unknown', undefined]) {
+    run.ctx.steps.ship = { answeredBy: by };
+    assert.throws(() => run.shipGuard(step), (e) => e.fatal === true && /only the owner's own answer/.test(e.message), `answered by ${by}`);
+  }
+  run.ctx.steps.ship = { answeredBy: 'user' };
+  run.shipGuard(step); // the base is the worktree's commit
+  commit(wt, 'fix.txt', 'fix\n', 'a fix on the worktree');
+  run.shipGuard(step); // the worktree is ahead of the base: its fix merges, then ships
+  commit(f.repo, 'other.txt', 'x\n', 'another run merged');
+  assert.throws(() => run.shipGuard(step), (e) => !e.fatal && /has commits this run did not check/.test(e.message));
 });
 
 test('a simulated Ship pushes nothing: the action is skipped and the summary says simulated (#260)', { timeout: 60000 }, async (t) => {

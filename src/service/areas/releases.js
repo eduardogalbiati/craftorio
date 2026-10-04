@@ -4,9 +4,10 @@
 // from the screen or by a roadmap's cut line, `roadmapRelease`) and what a release run that ended
 // leaves (`afterRelease`): a shipped one is recorded in the history with its issues, runs, cost,
 // test results and notes, and its cut line lets the roadmap go on; one that did not ship (Hold, a
-// failure) pauses the roadmap at the line. Nothing here pushes: Ship is the run's own gate and the
-// engine's `ship:` transition. A simulated release run records nothing; its Ship only opens the cut
-// line of a simulated roadmap.
+// failure) pauses the roadmap at the line. A release run named like the waiting cut line is that
+// line's run, whoever started it. Nothing here pushes: Ship is the run's own gate and the engine's
+// `ship:` transition. A simulated release run records nothing; its Ship only opens the cut line of
+// a simulated roadmap. `markReleasedIssues` marks the Backlog's issues a release shipped.
 
 const fs = require('fs');
 const path = require('path');
@@ -69,10 +70,14 @@ module.exports = (ctx) => {
     const local = backlog.readLocal(ws.backlog, project.id);
     const base = list.find((r) => r.localMerge?.base)?.localMerge.base || local?.base || null;
     const name = String(version || '').trim();
+    // the default E2E command is an npm script: a project without it has no E2E suite to run (a
+    // missing script would read as a red suite and call the developer for nothing)
+    const noE2e = !!wf.inputs?.e2e_suite && wf.inputs?.e2e_command?.default === 'npm run test:e2e' && !npmScript(project.folder, 'test:e2e');
     const inputs = {
-      task: `Check the release${name ? ` ${name}` : ''} of ${project.name}: the whole unit suite and the whole E2E suite, then Ship or Hold.`,
+      task: `Check the release${name ? ` ${name}` : ''} of ${project.name}: the whole unit suite${noE2e ? ' (the project has no test:e2e script: no E2E suite)' : ' and the whole E2E suite'}, then Ship or Hold.`,
       version: name,
       history: releases.historyText(nextOf(project, list), { runsDir: ws.runs, commits: local?.commits || [] }),
+      ...(noE2e ? { e2e_suite: 'skip' } : {}),
     };
     for (const [k, def] of Object.entries(wf.inputs || {})) {
       if (k in inputs) continue;
@@ -81,23 +86,48 @@ module.exports = (ctx) => {
     return Object.fromEntries(Object.entries(inputs).filter(([k]) => wf.inputs?.[k]));
   }
 
-  // Starts the project's release run (one at a time). `simulated`: a simulation (nothing is run or pushed).
+  // Starts the project's release run (one at a time). `simulated`: a simulation (nothing is run or
+  // pushed). A run named like the roadmap's waiting cut line is that line's release run, whoever
+  // started it (the roadmap, or the owner on the Releases screen): shipping it opens the line, and a
+  // roadmap paused at the line (a held or failed release) waits for it again. A simulation only takes
+  // the line of a simulated roadmap.
   async function startRelease({ projectId, version = '', simulated = false }) {
-    const project = projects.readProject(ctx.ws.projects, idOf(projectId));
+    const { ws } = ctx;
+    const project = projects.readProject(ws.projects, idOf(projectId));
     const going = [...ctx.active.values()].find((r) => r.projectId === project.id && isReleaseRun(r));
     if (going) throw new Error(`A release run of ${project.name} is in progress (${going.runId}): answer its Ship gate, or stop it first.`);
     const wf = loadWorkflow(ctx.workflowPath(RELEASE_WORKFLOW).file);
-    return ctx.startWorkflowRun({ file: RELEASE_WORKFLOW, inputs: releaseInputs(wf, project, version || waitingLine(project.id)?.name), mock: !!simulated, projectId: project.id });
+    const line = waitingLine(project.id);
+    const name = String(version || '').trim() || line?.name || '';
+    const started = await ctx.startWorkflowRun({ file: RELEASE_WORKFLOW, inputs: releaseInputs(wf, project, name), mock: !!simulated, projectId: project.id });
+    if (line && line.name === name && !!simulated === !!roadmaps.readRoadmap(ws.backlog, project.id).simulated) {
+      roadmaps.takeRelease(ws.backlog, project.id, line.stage, started.runId);
+    }
+    return started;
+  }
+
+  // Whether the project's package.json has this npm script.
+  function npmScript(folder, script) {
+    try { return !!JSON.parse(fs.readFileSync(path.join(folder, 'package.json'), 'utf8')).scripts?.[script]; } catch { return false; }
   }
 
   const readSummary = (runId) => {
     try { return JSON.parse(fs.readFileSync(path.join(ctx.ws.runs, path.basename(String(runId)), 'summary.json'), 'utf8')); } catch { return null; }
   };
 
+  // A cut line's release run ended without shipping: the line is held (Hold) or failed and a running
+  // roadmap pauses there, once (the owner is told).
+  function holdLine(projectId, stage, outcome, runId) {
+    const was = roadmaps.readRoadmap(ctx.ws.backlog, projectId).state;
+    const message = `Release ${stage.release.name} was not shipped (${outcome === 'held' ? 'on hold' : `its run ${runId} failed`}): the stages after its cut line wait. Resume the run from its Ship gate, or press Resume here to check the release again.`;
+    roadmaps.holdRelease(ctx.ws.backlog, projectId, stage.id, outcome, message);
+    if (was === 'running') ctx.notify({ kind: 'run', event: 'failed', title: 'Roadmap paused', body: message.slice(0, 180), target: { view: 'roadmap', projectId } }, { projectId });
+  }
+
   // What a release run that ended leaves (idempotent: the run's event and the roadmap's dispatcher
   // both call it). A real shipped run is recorded once in the project's history (by its tag) and the
-  // cut line that started it becomes shipped; a run that did not ship is the dispatcher's
-  // (`roadmapRelease` pauses the roadmap). → 'shipped' | 'held' | 'failed' | null (no recorded end)
+  // cut line it was started for becomes shipped; a run that did not ship holds its line (`holdLine`).
+  // → 'shipped' | 'held' | 'failed' | null (no recorded end)
   function settleRelease(projectId, runId, summary = readSummary(runId)) {
     if (!summary) return null;
     const { ws } = ctx;
@@ -127,43 +157,45 @@ module.exports = (ctx) => {
     }
     if (shipped && stage && stage.release.status !== 'shipped') {
       roadmaps.setRelease(ws.backlog, projectId, stage.id, { status: 'shipped', shippedAt: summary.finished_at || new Date().toISOString() });
+    } else if (!shipped && stage?.release.status === 'running') {
+      holdLine(projectId, stage, outcome, runId);
     }
     return outcome;
   }
 
-  // A release run ended: its outcome is settled, the project's commits not pushed are counted again
-  // (a ship pushed them) and the roadmap goes on (or pauses at the line).
+  // A release run ended: its outcome is settled (the roadmap goes on, or pauses at the line) and the
+  // project's commits not pushed are counted again (a Ship pushed them, maybe before it failed).
   async function afterRelease(run, ev) {
     if (!isReleaseRun(run) || !run.projectId || !ctx.ws) return;
     const outcome = settleRelease(run.projectId, run.runId, ev.summary);
-    if (outcome !== 'shipped' || run.mock) return;
-    const release = ev.summary.release;
-    ctx.notify({ kind: 'run', event: 'succeeded', title: `Release ${release.tag} shipped`, body: `The local ${release.base} and the tag ${release.tag} are on origin.`, target: { view: 'releases', projectId: run.projectId } }, { projectId: run.projectId });
-    await ctx.refreshLocal(run.projectId, { fetch: false, base: release.base });
+    if (run.mock) return;
+    const release = outcome === 'shipped' ? ev.summary.release : null;
+    if (release) ctx.notify({ kind: 'run', event: 'succeeded', title: `Release ${release.tag} shipped`, body: `The local ${release.base} and the tag ${release.tag} are on origin.`, target: { view: 'releases', projectId: run.projectId } }, { projectId: run.projectId });
+    await ctx.refreshLocal(run.projectId, { fetch: false, base: release?.base || run.inputs?.base_branch || null });
   }
 
   // A roadmap reached a cut line (#260, roadmaps.advance `release`): its release run starts once
   // (the stages after the line wait for it). A run that ended without shipping pauses the roadmap
-  // at the line; Resume then starts a new release run. → true when the roadmap changed (dispatch again).
+  // at the line (its end usually did already: `afterRelease`; here for a run that ended while the
+  // app was closed, or died without a summary); a line already held or failed means the owner
+  // pressed Resume: the release is checked again. → true when the roadmap changed (dispatch again).
   async function roadmapRelease(projectId, roadmap, { stage: stageId, name }) {
     const { ws } = ctx;
-    const line = roadmaps.findStage(roadmap, stageId)?.release;
+    const stage = roadmaps.findStage(roadmap, stageId);
+    const line = stage?.release;
     if (!line) return false;
     if (line.runId && (ctx.active.has(line.runId) || ctx.runAlive(line.runId))) return false;
     if (line.runId && line.status === 'running') {
-      const outcome = settleRelease(projectId, line.runId) || 'failed';
+      const outcome = settleRelease(projectId, line.runId);
       if (outcome === 'shipped') return true;
-      roadmaps.setRelease(ws.backlog, projectId, stageId, { status: outcome });
-      const message = `Release ${name} was not shipped (${outcome === 'held' ? 'on hold' : `its run ${line.runId} failed`}): the stages after its cut line wait. Resume the run from its Ship gate, or press Resume here to check the release again.`;
-      roadmaps.updateRoadmap(ws.backlog, projectId, (r) => (r.state === 'running' ? { ...r, state: 'paused', pausedBy: null, error: message } : null));
-      ctx.notify({ kind: 'run', event: 'failed', title: 'Roadmap paused', body: message.slice(0, 180), target: { view: 'roadmap', projectId } }, { projectId });
+      if (!outcome) holdLine(projectId, stage, 'failed', line.runId);
       return false;
     }
     const mock = !!roadmap.simulated;
     if (ctx.slotProblem({ mock, projectId })) return false;
     try {
-      const started = await startRelease({ projectId, version: name, simulated: mock });
-      roadmaps.setRelease(ws.backlog, projectId, stageId, { status: 'running', runId: started.runId });
+      // (startRelease records the run on the line)
+      await startRelease({ projectId, version: name, simulated: mock });
     } catch (e) {
       const message = `Could not start the release run of ${name}: ${e.message}`;
       roadmaps.updateRoadmap(ws.backlog, projectId, (r) => ({ ...r, state: 'paused', pausedBy: null, error: message }));
@@ -172,13 +204,17 @@ module.exports = (ctx) => {
     return false;
   }
 
-  /** Every released issue of a project: number → the version that shipped it (the Backlog's cards). */
-  const releasedIssues = (projectId) => releases.releasedIssues(releases.readReleases(ctx.ws.releases, idOf(projectId)));
+  /** The Backlog's issues with the ones a release shipped marked Released (`released`: the first version that shipped them). */
+  function markReleasedIssues(projectId, issues) {
+    // newest first, so the oldest release that shipped an issue is the one it keeps
+    const shipped = [...releases.readReleases(ctx.ws.releases, idOf(projectId)).releases].sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+    return shipped.reduce((list, r) => releases.markReleased({ issues: list }, { version: r.version, issues: (r.issues || []).map((i) => i.number) }).issues, issues);
+  }
 
   return {
     afterRelease,
     listReleases,
-    releasedIssues,
+    markReleasedIssues,
     roadmapRelease,
     saveReleaseNotes,
     startRelease,

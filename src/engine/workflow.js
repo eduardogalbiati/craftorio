@@ -1508,7 +1508,7 @@ class WorkflowRun extends EventEmitter {
       const { answer, feedback } = gate;
       const by = routed ? { by: 'supervisor' } : {};
       // who answered (#260): a `ship:` transition only follows the owner's own answer
-      st.answeredBy = routed ? 'supervisor' : gate.by || 'user';
+      st.answeredBy = routed ? 'supervisor' : gate.by || 'unknown';
       if (step.choices) {
         output = { choice: answer, feedback, ...by };
         scope = { ...this.ctx, output, choice: answer, feedback };
@@ -1886,6 +1886,8 @@ class WorkflowRun extends EventEmitter {
       // `precheck:` the PR/MR is checked right before the action (`true` = the gate's own `check:`)
       const precheck = t.precheck === true ? step.check : t.precheck || null;
       const act = async () => {
+        // `ship:` (#260): refused before anything happens (its merge included) unless the owner answered
+        if (t.ship) this.shipGuard(step);
         if (precheck) await this.runCheck(precheck, step, 'precheck', scope, { failIfNot: true });
         // simulation: mockSequences.action_errors: { step: n } fails the first n actions/merges of that step
         if (this.mock && (action || t.merge === 'local' || t.ship)) {
@@ -1911,7 +1913,8 @@ class WorkflowRun extends EventEmitter {
         // `on_error: <step>` on the transition: a failed check, action or merge goes there (the error
         // is in the template context as `action_error`) instead of ending the run; with `recover:`
         // the supervisor decides first whether to go back to one of those steps
-        if (!t.on_error || this.abort.signal.aborted) throw e;
+        // (`fatal`: a ship nobody may retry, e.g. the gate was not answered by the owner)
+        if (!t.on_error || this.abort.signal.aborted || e.fatal) throw e;
         return this.recoverFromActionError(step, { on_error: t.on_error, recover: t.recover }, e);
       }
       // `set:` run variables for the next steps' templates (`vars.<name>`)
@@ -3568,7 +3571,9 @@ class WorkflowRun extends EventEmitter {
           signal: this.abort.signal,
           timeoutMs: step.timeout ? parseDuration(render(String(step.timeout), this.ctx).trim(), suiteStep.SUITE_TIMEOUT_MS) : null,
           history: project ? { file: path.join(root, 'cache', 'suite-durations.json'), project } : null,
-          base: () => this.suiteBase(),
+          // `base_check: false` (#260, release.yaml): the worktree is the base itself, so a test that
+          // fails there too is the regression to fix, never a pre-existing failure to wave through
+          base: step.base_check === false ? null : () => this.suiteBase(),
           baseCacheDir: path.join(root, 'cache', 'base-tests'),
           log: (level, message) => this.emitEvent('log', { level, message }),
           // a suite step other than `suite` (an e2e step, #223) logs under its own name
@@ -3788,11 +3793,29 @@ class WorkflowRun extends EventEmitter {
     return true;
   }
 
-  // The `ship: { tag, build? }` transition (#260, the release workflow's Ship): pushes the local base to
-  // origin, never forced, and tags that commit (shipRelease in src/releases.js). Only the owner's own
-  // answer ships: a gate answered by anything else (the supervisor, a timeout, --auto-approve) fails
-  // the transition and nothing is pushed. A simulation pushes nothing. A failure (origin moved, the
-  // tag exists elsewhere) goes to the transition's `on_error`, like a failed merge.
+  // What a `ship:` transition needs before it does anything, its `merge: local` included (#260). Only
+  // the owner's own answer ships: a gate answered by anything else (the supervisor, a timeout,
+  // --auto-approve) ends the run as failed (`fatal`: no `on_error` gate to try it again). And the
+  // local base must still be what the suites ran on: when it moved (another run merged meanwhile), the
+  // release would hold commits nobody checked, so the transition fails (to its `on_error`).
+  shipGuard(step) {
+    if (this.mock) return;
+    const by = this.ctx.steps[step.id]?.answeredBy;
+    if (by !== 'user') throw Object.assign(new Error(`ship: only the owner's own answer at the gate ships a release (${step.id} was answered by ${by || 'nobody'}); nothing was merged or pushed.`), { fatal: true });
+    const wt = this.worktree;
+    if (!wt) throw new Error('ship needs the run\'s git worktree (orchestrator.worktree on a git repository).');
+    try {
+      execFileSync('git', ['merge-base', '--is-ancestor', `refs/heads/${wt.base}`, 'HEAD'], { cwd: wt.workDir || wt.dir, windowsHide: true, timeout: 10000, stdio: 'ignore' });
+    } catch {
+      throw new Error(`ship: the local ${wt.base} has commits this run did not check (it moved since the suites ran). Stop this run and check the release again; nothing was merged or pushed.`);
+    }
+  }
+
+  // The `ship: { tag, build? }` transition (#260, the release workflow's Ship), after `shipGuard` and
+  // the transition's merge: pushes the local base to origin, never forced, and tags that commit
+  // (shipRelease in src/releases.js), which must be the worktree's (what the suites ran on). A
+  // simulation pushes nothing. A failure (origin moved, the tag exists elsewhere) goes to the
+  // transition's `on_error`, like a failed merge.
   async shipRelease(step, ship, scope) {
     const tag = render(String(ship.tag), scope).trim();
     if (this.mock) {
@@ -3800,11 +3823,8 @@ class WorkflowRun extends EventEmitter {
       this.ctx.release = { tag, simulated: true };
       return;
     }
-    const by = this.ctx.steps[step.id]?.answeredBy;
-    if (by !== 'user') throw new Error(`ship: only the owner's own answer at the gate ships a release (${step.id} was answered by ${by || 'nobody'}); nothing was pushed.`);
     const wt = this.worktree;
-    if (!wt) throw new Error('ship needs the run\'s git worktree (orchestrator.worktree on a git repository).');
-    const r = await shipRelease({ repo: wt.repo, base: wt.base, tag });
+    const r = await shipRelease({ repo: wt.repo, base: wt.base, tag, expect: this.worktreeHead() });
     this.emitEvent('release.shipped', { tag: r.tag, base: r.base, commit: r.commit, pushed: r.pushed, commits: r.commits.length, issues: r.issues });
     this.ctx.release = { tag: r.tag, base: r.base, commit: r.commit, pushed: r.pushed, issues: r.issues };
     // `build:` an optional command run once the release is out (a template; empty: none)

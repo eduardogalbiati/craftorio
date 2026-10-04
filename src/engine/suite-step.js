@@ -14,6 +14,8 @@
 // output: the engine adds them to the run's list and to the workspace's failing-on-main.json); files
 // the base does not have are the run's. The base's result per file is cached by base commit + file
 // (<workspace>/cache/base-tests/<commit>.json), so the next round and other runs reuse it.
+// A step with `base_check: false` (#260, release.yaml: its worktree is the base itself) gets no
+// `base`: nothing is checked there, every failing test fails the step.
 // The suite runs as from a shell (#210): `suiteEnv` drops the app's variables (Electron's, npm's, an
 // inspector in NODE_OPTIONS that forces node --test to one file at a time, the scratch workspace that
 // every test process would share) and gives the suite its own lock folder (MULTIAGENT_LOCKS_DIR,

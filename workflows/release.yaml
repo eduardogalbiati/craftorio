@@ -14,14 +14,19 @@
 #
 # 1. unit:  a suite step (#177: no agent, no tokens): the project's WHOLE unit suite in the run's own
 #           worktree of the local base.
-# 2. e2e:   a suite step: the project's WHOLE end-to-end suite (`e2e_command`, no filter).
+# 2. e2e:   a suite step: the project's WHOLE end-to-end suite (`e2e_command`, no filter; skipped
+#           with `e2e_suite: skip`, for a project without an E2E suite).
+#           Both suites run with `base_check: false`: the worktree is the base, so nothing that
+#           fails there is "pre-existing".
 # 3. fix:   only for a red suite: the developer gets the history since the last release (the runs,
 #           their issues, decisions and handoff notes, the commits), finds the change that broke it
 #           and fixes the production code on the run's branch; then both suites run again.
 # 4. ship:  your gate, never answered by automation (a decision gate: not the supervisor, no
 #           timeout, not --auto-approve). Ship: a fix made here is merged into the local base
 #           (merge: local), the local base is pushed to origin (never forced) and tagged with the
-#           release's name, then the optional build command runs (`ship:`, src/releases.js). Hold:
+#           release's name, then the optional build command runs (`ship:`, src/releases.js). A
+#           local base that moved since the suites ran (another run merged) is refused: it would
+#           ship commits nobody checked. Hold:
 #           the run ends, nothing is pushed or tagged; its branch keeps a fix, resume the run from
 #           this gate to ship later.
 # The release notes are edited in Code & Build › Releases until you ship; shipping records the
@@ -67,10 +72,18 @@ inputs:
     type: string
     default: ""
     description: "The command that runs the project's whole unit suite, run by the orchestrator (e.g. npm test). Empty: found from the project's files."
+  e2e_suite:
+    label: "E2E suite"
+    type: string
+    enum: [run, skip]
+    default: run
+    options: { run: Run, skip: "Skip (the project has none)" }
+    description: "Skip only for a project without an end-to-end suite: the unit suite alone then decides. A roadmap's cut line skips it when the project has no test:e2e script."
   e2e_command:
     label: "E2E command"
     type: string
     default: "npm run test:e2e"
+    show_if: "e2e_suite == 'run'"
     description: The command that runs the whole E2E suite, run by the orchestrator (no agent, no filter).
   build_command:
     label: "Build command"
@@ -175,7 +188,13 @@ steps:
     display: Unit tests
     type: suite
     command: "{{ inputs.unit_command }}"
+    # the worktree IS the local base: a test that fails here is the regression, not a failure
+    # "that fails on the base too" to wave through (#211)
+    base_check: false
     transitions:
+      # a project without an E2E suite (e2e_suite: skip): the unit suite alone decides
+      - when: "output.status == 'pass' and inputs.e2e_suite == 'skip'"
+        goto: ship
       - when: "output.status == 'pass'"
         goto: e2e
       - when: "output.status == 'blocked'"
@@ -194,6 +213,7 @@ steps:
     type: suite
     command: "{{ inputs.e2e_command }}"
     timeout: "{{ inputs.time_budget_minutes }}m"
+    base_check: false
     transitions:
       - when: "output.status == 'pass'"
         goto: ship
@@ -260,13 +280,13 @@ steps:
     display: Ship
     type: human_approval
     summary: |
-      {{ inputs.version or 'The release' }}: both suites are green on the local {{ inputs.base_branch }}{% if steps.fix.visits %} after {{ steps.fix.visits }} fix round(s){% endif %}.
+      {{ inputs.version or 'The release' }}: {{ 'the unit suite is' if inputs.e2e_suite == 'skip' else 'both suites are' }} green on the local {{ inputs.base_branch }}{% if steps.fix.visits %} after {{ steps.fix.visits }} fix round(s){% endif %}.
       Unit: {{ steps.unit.output.message | one_line(160) }}
-      E2E: {{ steps.e2e.output.message | one_line(160) }}
+      E2E: {{ 'skipped (the project has no E2E suite)' if inputs.e2e_suite == 'skip' else (steps.e2e.output.message | one_line(160)) }}
     message: |
-      Release {{ inputs.version or ('release-' ~ run_id) }}: the whole unit suite and the whole E2E suite pass on the local {{ inputs.base_branch }}.
+      Release {{ inputs.version or ('release-' ~ run_id) }}: the whole unit suite {{ 'passes (the E2E suite was skipped: the project has none)' if inputs.e2e_suite == 'skip' else 'and the whole E2E suite pass' }} on the local {{ inputs.base_branch }}.
       Unit: {{ steps.unit.output.message }}
-      E2E: {{ steps.e2e.output.message }}
+      {% if inputs.e2e_suite != 'skip' %}E2E: {{ steps.e2e.output.message }}{% endif %}
       {% if steps.fix.visits %}
       A regression was fixed on branch `release-fix-{{ run_id }}` ({{ steps.fix.visits }} round(s)): {{ steps.fix.output.summary }}
       {% if steps.fix.output.regression %}What broke it: {{ steps.fix.output.regression }}{% endif %}

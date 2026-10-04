@@ -374,10 +374,16 @@ same features for users; this is the implementer's summary.
   templates): after the transition's `action` and `merge: local`, `shipRelease` (src/releases.js)
   pushes the local base to origin (never forced; a rejected push throws) and tags that commit, then
   runs `build` when it renders non-empty. `loadWorkflow` only accepts it on a `human_approval` step
-  without `kind: escalation` and without `timeout`, with `orchestrator.worktree`; at run time the
-  gate must have been answered by `'user'` (`st.answeredBy`: not the supervisor, a timeout, or
-  scripts/run.js `--auto-approve`, which answers as `'auto'`), else the transition fails and nothing
-  is pushed. A failure goes to the transition's `on_error` like a failed merge. Event
+  without `kind: escalation` and without `timeout`, with `orchestrator.worktree`. `shipGuard` runs
+  before anything else of the transition (its merge included): the gate must have been answered by
+  `'user'` (`st.answeredBy`: not the supervisor, a timeout, or scripts/run.js `--auto-approve`,
+  which answers as `'auto'`), else the run fails (`fatal`: no `on_error` retry) with nothing merged
+  or pushed; and the local base must still be an ancestor of the worktree's HEAD (it did not move
+  since the suites ran), else the transition fails. `shipRelease` gets the worktree's HEAD as
+  `expect` and pushes nothing when the base is another commit. A failure goes to the transition's
+  `on_error` like a failed merge. `base_check: false` on a `type: suite` step (release.yaml's
+  suites, whose worktree is the base itself) skips the "fails on the base too" check (#211), so
+  every failing test fails the step. Event
   `release.shipped`; `summary.release` = `{ tag, base, commit, pushed, issues }`. A simulation pushes
   nothing (`action.executed` skipped, `summary.release.simulated`); `mockSequences.action_errors`
   counts it like an action.
@@ -385,8 +391,10 @@ same features for users; this is the implementer's summary.
   `advance` returns `release: { stage, name }` once the stages up to the line are finished; the
   service (`roadmapRelease`, src/service/areas/releases.js) starts release.yaml with the project's
   folder, base and the history since the last release, and records `runId` / `status` on the line
-  (`running` → `shipped`, or `held` / `failed`, which pause the roadmap; Resume starts a new release
-  run, a resumed release run is adopted by `adoptResumed`). A shipped real run is recorded in
+  (`takeRelease`: `running` → `shipped`, or `held` / `failed` through `holdRelease`, which pauses a
+  running roadmap with `releaseHold`; Resume starts a new release run; a resumed release run, or
+  one of the line's name started from the Releases screen, takes the line and undoes that pause).
+  A shipped real run is recorded in
   `<workspace>/releases/<project id>.json` (`afterRelease`); a simulated roadmap's release run is a
   simulation whose Ship only opens the line.
 - Human gates can offer `choices` (each with its own transition); failure gates use them so every

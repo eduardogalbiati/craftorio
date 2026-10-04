@@ -28,9 +28,11 @@
 // Cut lines (#260, src/releases.js): a stage with `release: { name }` ends a release ("Release here",
 // drawn after it). When every stage up to the line is finished, `advance` starts nothing after it and
 // asks for the release run (`release: { stage, name }`); the service starts the bundled release
-// workflow and records it on the line (`runId`, `status`: running, held, failed), and the stages
-// after the line wait until it shipped (`status: 'shipped'`, `setRelease`). A roadmap running one
-// stage (`scope`) and a roadmap without cut lines never wait.
+// workflow and records it on the line (`takeRelease`: `runId`, `status: 'running'`), and the stages
+// after the line wait until it shipped (`status: 'shipped'`, `setRelease`). A release run that ends
+// otherwise leaves the line held or failed and pauses the roadmap there (`holdRelease`,
+// `releaseHold`); Resume checks the release again. A roadmap running one stage (`scope`) and a
+// roadmap without cut lines never wait.
 // Screen: src/renderer/views/backlog/backlog-roadmap.js; channels: src/service/channels/roadmap.js.
 
 const fs = require('fs');
@@ -364,7 +366,7 @@ function setState(dir, projectId, state, { simulated, stage = null } = {}) {
       scope = { stage: s.id };
     }
     return {
-      ...r, state, scope, error: null, pausedBy: null, budget: null, ...(simulated !== undefined ? { simulated: !!simulated } : {}), ...(state === 'planned' && r.live ? { live: false } : {}),
+      ...r, state, scope, error: null, pausedBy: null, budget: null, ...(r.releaseHold ? { releaseHold: null } : {}), ...(simulated !== undefined ? { simulated: !!simulated } : {}), ...(state === 'planned' && r.live ? { live: false } : {}),
     };
   });
 }
@@ -410,12 +412,7 @@ function adoptResumed(dir, projectId, oldRunId, newRunId) {
   // #260: a cut line's release run resumed (from its Ship gate after a Hold): the new run is the line's,
   // and a roadmap paused at that line waits for it again
   const line = item ? null : r.stages.find((s) => s.release?.runId === oldRunId);
-  if (line) {
-    return updateRoadmap(dir, projectId, (cur) => ({
-      ...cur, ...(cur.state === 'paused' && !cur.pausedBy && ['failed', 'held'].includes(line.release.status) ? { state: 'running', error: null } : {}),
-      stages: cur.stages.map((s) => (s.id === line.id && s.release ? { ...s, release: { ...s.release, runId: newRunId, status: 'running' } } : s)),
-    }));
-  }
+  if (line) return takeRelease(dir, projectId, line.id, newRunId);
   if (!item) return null;
   return updateRoadmap(dir, projectId, (cur) => ({
     ...cur, ...(cur.pausedBy === item.id ? { state: 'running', pausedBy: null, error: null } : {}),
@@ -448,6 +445,33 @@ function setRelease(dir, projectId, stageId, patch) {
   if (!findStage(readRoadmap(dir, projectId), stageId)?.release) return null;
   return updateRoadmap(dir, projectId, (r) => ({
     ...r, stages: r.stages.map((s) => (s.id === stageId && s.release ? { ...s, release: { ...s.release, ...patch } } : s)),
+  }));
+}
+
+/**
+ * A cut line's release run started (#260: by the roadmap, by the owner on the Releases screen, or a
+ * resumed one): it is the line's run, and a roadmap that the line's last release paused
+ * (`releaseHold`) waits for it again. Null when the line is gone.
+ */
+function takeRelease(dir, projectId, stageId, runId) {
+  if (!findStage(readRoadmap(dir, projectId), stageId)?.release) return null;
+  return updateRoadmap(dir, projectId, (r) => ({
+    ...r, ...(r.releaseHold ? { releaseHold: null } : {}), ...(r.releaseHold === stageId && r.state === 'paused' ? { state: 'running', error: null } : {}),
+    stages: r.stages.map((s) => (s.id === stageId && s.release ? { ...s, release: { ...s.release, status: 'running', runId } } : s)),
+  }));
+}
+
+/**
+ * A cut line's release run ended without shipping (#260; `status`: held | failed): the line says so
+ * and a running roadmap pauses at it (`releaseHold`: the stage, so only this pause is undone when a
+ * release run takes the line again). Start / Resume clears it: the release is then checked again.
+ * @returns {object|null} the roadmap, or null when the line is gone
+ */
+function holdRelease(dir, projectId, stageId, status, message) {
+  if (!findStage(readRoadmap(dir, projectId), stageId)?.release) return null;
+  return updateRoadmap(dir, projectId, (r) => ({
+    ...r, ...(r.state === 'running' ? { state: 'paused', pausedBy: null, error: message, releaseHold: stageId } : {}),
+    stages: r.stages.map((s) => (s.id === stageId && s.release ? { ...s, release: { ...s.release, status } } : s)),
   }));
 }
 
@@ -577,6 +601,7 @@ module.exports = {
   findItem,
   findStage,
   fromQueue,
+  holdRelease,
   issueStages,
   itemAction,
   markStarted,
@@ -592,6 +617,7 @@ module.exports = {
   setRelease,
   setState,
   skipClosed,
+  takeRelease,
   testsLater,
   updateRoadmap,
   waiveBudget,
