@@ -30,14 +30,15 @@
   const PENCIL = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" /></svg>';
 
   // menu: the card whose "Move to…" menu is open; wipEdit: the column whose limit is being edited;
-  // drag: the card being dragged; open: the opened card with its thread and versions; viewing: the
-  // version shown ({ name, text }); previews: "<card id>/<name>" → what discovery:attachment returned
+  // drag: the card being dragged; open: the opened card (of the project openProject) with its
+  // thread and versions; viewing: the version shown ({ name, text }); previews: "<card id>/<name>" →
+  // what discovery:attachment returned; recording: the runs whose result is being recorded
   const dv = {
     projectId: null, board: null, cards: [], loadError: '', error: '', seq: 0,
     filter: { type: '', tag: '', author: '', q: '' }, searchTimer: null,
     menu: null, wipEdit: null, wipSaving: false, drag: null,
-    open: null, thread: [], versions: [], viewing: null, tab: 'preview', editAcceptance: false,
-    previews: new Map(), openSeq: 0, acting: false,
+    open: null, openProject: null, thread: [], versions: [], viewing: null, tab: 'preview', editAcceptance: false,
+    previews: new Map(), openSeq: 0, acting: false, recording: new Set(),
   };
 
   const parts = () => window.DiscoveryCardParts;
@@ -81,9 +82,11 @@
     const seq = ++dv.seq;
     const projectId = window.CurrentProject?.get() || null;
     if (projectId !== dv.projectId) {
-      // another project: its own board, nothing of the previous one stays open
+      // another project: its own board; the open card goes with its project, unless an edit with
+      // changes holds it (it is saved to its own project, openProject)
       Object.assign(dv, { board: null, cards: [], menu: null, wipEdit: null });
-      if (dv.open) closeCard();
+      if (dv.open && (documentDirty() || acceptanceDirty())) detailError('This card belongs to the project chosen before: save or cancel the edit first.');
+      else if (dv.open) closeCard();
     }
     dv.projectId = projectId;
     let board = null;
@@ -96,9 +99,10 @@
     dv.board = board;
     dv.loadError = error;
     dv.cards = (cards || []).filter((c) => columnOf(c.column));
-    const open = dv.open && cardOf(dv.open.id);
+    const here = !!dv.open && dv.openProject === projectId;
+    const open = here && cardOf(dv.open.id);
     // the open card left the board (archived, merged, back in the Inbox)
-    if (dv.open && !open && !error) closeCard();
+    if (here && !open && !error) closeCard();
     if (open) {
       Object.assign(dv.open, { column: open.column, type: open.type });
       renderActions();
@@ -246,6 +250,7 @@
   async function requestMove(id, column, index) {
     const card = cardOf(id);
     const col = columnOf(column);
+    const projectId = dv.projectId;
     if (!card || !col) return;
     const order = dv.board.order?.[column] || [];
     if (card.column === column) {
@@ -258,8 +263,9 @@
       if (!isFast(card) && skipsShape(card.column, column)) why.push('This card skips Shape: only bugs and hotfixes take the fast lane.');
       if (why.length && !(await confirmDialog(`Move to ${col.title}`, `${why.join(' ')} Move "${card.title}" there anyway?`, 'Move anyway'))) return;
     }
+    if (projectId !== dv.projectId) return; // another project was chosen while the question was open
     dv.error = '';
-    try { await api.moveDiscoveryCard(dv.projectId, id, column, index); } catch (e) { dv.error = errMsg(e); }
+    try { await api.moveDiscoveryCard(projectId, id, column, index); } catch (e) { dv.error = errMsg(e); }
     await refresh();
     focusMove(id);
     // the move kept a version of the open card's document
@@ -327,9 +333,14 @@
       return;
     }
     if (limit !== col.wip) {
+      const projectId = dv.projectId;
       dv.wipSaving = true;
-      try { dv.board = await api.setDiscoveryWip(dv.projectId, column, limit); } catch (e) { dv.error = errMsg(e); }
+      try {
+        const board = await api.setDiscoveryWip(projectId, column, limit);
+        if (projectId === dv.projectId) dv.board = board;
+      } catch (e) { dv.error = errMsg(e); }
       dv.wipSaving = false;
+      if (projectId !== dv.projectId) return; // another project's board is shown now
     }
     if (!dv.error) dv.wipEdit = null;
     render();
@@ -384,24 +395,27 @@
     return true;
   }
 
-  const readCard = (id) => Promise.all([
-    api.getDiscoveryCard(dv.projectId, id), api.discoveryConversation(dv.projectId, id), api.discoveryVersions(dv.projectId, id),
+  const readCard = (projectId, id) => Promise.all([
+    api.getDiscoveryCard(projectId, id), api.discoveryConversation(projectId, id), api.discoveryVersions(projectId, id),
   ]);
 
+  // The open card keeps its own project (openProject): every request of the panel goes there, also
+  // when an edit with changes holds the panel open after another project was chosen in the header.
   async function openCard(id) {
     if (editBlocks()) return;
     const seq = ++dv.openSeq;
+    const projectId = dv.projectId;
     let card;
     let thread;
     let versions;
     try {
-      [card, thread, versions] = await readCard(id);
+      [card, thread, versions] = await readCard(projectId, id);
     } catch (e) {
       dv.error = errMsg(e);
       return refresh();
     }
-    if (seq !== dv.openSeq) return; // another card was opened, or this one closed, meanwhile
-    Object.assign(dv, { open: card, thread: thread || [], versions: versions || [], viewing: null, tab: 'preview', editAcceptance: false, menu: null });
+    if (seq !== dv.openSeq || projectId !== dv.projectId) return; // another card or project was opened, or this one closed, meanwhile
+    Object.assign(dv, { open: card, openProject: projectId, thread: thread || [], versions: versions || [], viewing: null, tab: 'preview', editAcceptance: false, menu: null });
     render();
     renderDetail();
     $('#dsc-detail [data-detail="close"]')?.focus({ preventScroll: true });
@@ -410,7 +424,7 @@
   function closeCard() {
     const id = dv.open?.id;
     dv.openSeq++;
-    Object.assign(dv, { open: null, thread: [], versions: [], viewing: null, editAcceptance: false });
+    Object.assign(dv, { open: null, openProject: null, thread: [], versions: [], viewing: null, editAcceptance: false });
     dv.previews.clear();
     $('#dsc-detail').innerHTML = '';
     render();
@@ -421,7 +435,7 @@
   async function reloadCard() {
     const id = dv.open?.id;
     if (!id) return;
-    const [card, thread, versions] = await readCard(id);
+    const [card, thread, versions] = await readCard(dv.openProject, id);
     if (dv.open?.id !== id) return;
     Object.assign(dv, { open: card, thread: thread || [], versions: versions || [], viewing: null, tab: 'preview', editAcceptance: false });
     renderDetail();
@@ -432,7 +446,7 @@
     const id = dv.open?.id;
     if (!id) return;
     try {
-      const [thread, versions] = await Promise.all([api.discoveryConversation(dv.projectId, id), api.discoveryVersions(dv.projectId, id)]);
+      const [thread, versions] = await Promise.all([api.discoveryConversation(dv.openProject, id), api.discoveryVersions(dv.openProject, id)]);
       if (dv.open?.id !== id) return;
       Object.assign(dv, { thread: thread || [], versions: versions || [] });
       renderThread();
@@ -596,7 +610,7 @@
     const missing = c.attachments.filter((n) => parts().IMAGE.test(n) && !dv.previews.has(`${c.id}/${n}`));
     if (!missing.length) return;
     await Promise.all(missing.map(async (n) => {
-      try { dv.previews.set(`${c.id}/${n}`, await api.discoveryAttachment(dv.projectId, c.id, n)); } catch { /* shown by its name only */ }
+      try { dv.previews.set(`${c.id}/${n}`, await api.discoveryAttachment(dv.openProject, c.id, n)); } catch { /* shown by its name only */ }
     }));
     if (dv.open?.id === c.id) renderAttachments();
   }
@@ -642,7 +656,7 @@
       return;
     }
     try {
-      const text = await api.discoveryVersion(dv.projectId, id, name);
+      const text = await api.discoveryVersion(dv.openProject, id, name);
       if (dv.open?.id !== id) return;
       dv.viewing = { name, text: String(text ?? '') };
       renderVersions();
@@ -653,7 +667,7 @@
     const id = dv.open?.id;
     if (!id || editBlocks()) return;
     try {
-      await api.restoreDiscoveryVersion(dv.projectId, id, name);
+      await api.restoreDiscoveryVersion(dv.openProject, id, name);
       await reloadCard();
       refresh();
     } catch (e) { detailError(errMsg(e)); }
@@ -664,7 +678,7 @@
     const id = dv.open?.id;
     if (!id) return;
     try {
-      const card = await api.updateDiscoveryCard(dv.projectId, id, { title: $('#dsc-title').value, document: $('#dsc-doc').value });
+      const card = await api.updateDiscoveryCard(dv.openProject, id, { title: $('#dsc-title').value, document: $('#dsc-doc').value });
       if (dv.open?.id !== id) return;
       Object.assign(dv.open, { title: card.title, document: card.document });
       const title = $('#dsc-detail .dsc-detail-title');
@@ -688,7 +702,7 @@
     const id = dv.open?.id;
     if (!id) return;
     try {
-      const card = await api.updateDiscoveryCard(dv.projectId, id, { acceptance: $('#dsc-acc').value });
+      const card = await api.updateDiscoveryCard(dv.openProject, id, { acceptance: $('#dsc-acc').value });
       if (dv.open?.id !== id) return;
       dv.open.acceptance = card.acceptance;
       dv.editAcceptance = false;
@@ -701,7 +715,7 @@
   async function saveField(fields) {
     const id = dv.open.id;
     try {
-      const card = await api.updateDiscoveryCard(dv.projectId, id, fields);
+      const card = await api.updateDiscoveryCard(dv.openProject, id, fields);
       if (dv.open?.id === id) Object.assign(dv.open, { type: card.type, tags: card.tags });
       detailError('');
     } catch (e) { detailError(errMsg(e)); }
@@ -717,11 +731,11 @@
     if (!id) return;
     const { files, errors } = await parts().readFiles(list);
     for (const f of files) {
-      try { await api.addDiscoveryAttachment(dv.projectId, id, undefined, f.name, f.data); } catch (e) { errors.push(`${f.name}: ${errMsg(e)}`); }
+      try { await api.addDiscoveryAttachment(dv.openProject, id, undefined, f.name, f.data); } catch (e) { errors.push(`${f.name}: ${errMsg(e)}`); }
     }
     if (dv.open?.id !== id) return;
     // only the attachments are redrawn: an edit in progress keeps its text
-    try { dv.open.attachments = (await api.getDiscoveryCard(dv.projectId, id)).attachments; } catch (e) { errors.push(errMsg(e)); }
+    try { dv.open.attachments = (await api.getDiscoveryCard(dv.openProject, id)).attachments; } catch (e) { errors.push(errMsg(e)); }
     renderAttachments();
     loadPreviews();
     detailError(errors.join('; '));
@@ -732,7 +746,7 @@
     const c = dv.open;
     try {
       const key = `${c.id}/${name}`;
-      if (!dv.previews.has(key)) dv.previews.set(key, await api.discoveryAttachment(dv.projectId, c.id, name));
+      if (!dv.previews.has(key)) dv.previews.set(key, await api.discoveryAttachment(dv.openProject, c.id, name));
       const a = dv.previews.get(key);
       if (a.dataUrl && window.ImageViewer) window.ImageViewer.open({ title: c.title, images: [{ src: a.dataUrl, label: name }] });
       // another file is never opened from here (it could be a program): its folder is
@@ -744,7 +758,7 @@
     const id = dv.open.id;
     if (!(await confirmDialog('Remove attachment', `Delete "${name}" from this card?`, 'Remove'))) return;
     try {
-      await api.removeDiscoveryAttachment(dv.projectId, id, name);
+      await api.removeDiscoveryAttachment(dv.openProject, id, name);
       dv.previews.delete(`${id}/${name}`);
       if (dv.open?.id !== id) return;
       dv.open.attachments = dv.open.attachments.filter((n) => n !== name);
@@ -759,8 +773,8 @@
     const text = String(box?.value || '').trim();
     if (!id || !text) return;
     try {
-      await api.appendDiscoveryConversation(dv.projectId, id, { text });
-      const thread = await api.discoveryConversation(dv.projectId, id);
+      await api.appendDiscoveryConversation(dv.openProject, id, { text });
+      const thread = await api.discoveryConversation(dv.openProject, id);
       if (dv.open?.id !== id) return;
       box.value = '';
       dv.thread = thread || [];
@@ -832,7 +846,7 @@
       `<document>\n${String(c.document || '').trim() || '(no document yet)'}\n</document>`,
       ...(String(c.acceptance || '').trim() ? [`<acceptance_criteria>\n${c.acceptance.trim()}\n</acceptance_criteria>`] : []),
     ].join('\n');
-    const card = { projectId: dv.projectId, cardId: c.id, title: c.title };
+    const card = { projectId: dv.openProject, cardId: c.id, title: c.title };
     if (source === 'ai-arena') {
       window.openArenaForCard({ ...card, task: request, skill });
       return;
@@ -850,34 +864,51 @@
     writeRuns({ ...readRuns(), [runId]: { projectId, cardId, source } });
   }
 
-  // A card's run ended (`ev`: its workflow.finished): a successful run's document goes back to the card.
-  async function runEnded(runId, ev) {
+  function forgetRun(runId) {
     const runs = readRuns();
-    const link = runs[runId];
-    if (!link) return;
     delete runs[runId];
     writeRuns(runs);
+  }
+
+  // A card's run ended (`ev`: its workflow.finished): a successful run's document goes back to the
+  // card. The link goes once the result is recorded, or when there is nothing to record (the run
+  // failed, its card is gone); after another failure it stays, tried again when the board opens.
+  async function runEnded(runId, ev) {
+    const link = readRuns()[runId];
+    if (!link || dv.recording.has(runId)) return;
     const text = String(ev.outputs?.document ?? '');
-    if (ev.status !== 'success' || !text.trim()) return;
+    if (ev.status !== 'success' || !text.trim()) {
+      forgetRun(runId);
+      return;
+    }
+    dv.recording.add(runId);
     try {
       await api.recordDiscoveryResult(link.projectId, link.cardId, link.source, text, runId);
+      forgetRun(runId);
     } catch (e) {
+      if (/not found/i.test(errMsg(e))) forgetRun(runId);
       dv.error = `The ${SOURCES[link.source] || link.source} result of the run ${runId} did not reach its card: ${errMsg(e)}`;
+    } finally {
+      dv.recording.delete(runId);
     }
     if (state.view !== 'discovery') return;
     await refresh();
     // an edit in progress keeps its text: the result is in the version history
-    if (dv.open?.id === link.cardId && link.projectId === dv.projectId) {
+    if (dv.open?.id === link.cardId && link.projectId === dv.openProject) {
       if (documentDirty() || acceptanceDirty()) reloadHistory(); else reloadCard().catch((e) => detailError(errMsg(e)));
     }
   }
 
-  // The runs that ended while nobody listened (the app was closed): read from their events.
+  // The runs that ended while nobody listened (the app was closed): read from their events. A run
+  // that no longer exists takes its link with it; another failure leaves the link for the next visit.
   async function catchUpRuns() {
     for (const runId of Object.keys(readRuns())) {
-      let events = null;
-      try { events = await api.runEvents(runId); } catch { /* the run is gone: so is its link */ }
-      const end = events ? events.find((e) => e.type === 'workflow.finished') : { status: 'gone' };
+      let end = null;
+      try {
+        end = (await api.runEvents(runId) || []).find((e) => e.type === 'workflow.finished');
+      } catch (e) {
+        if (/not found/i.test(errMsg(e))) end = { status: 'gone' };
+      }
       if (end) await runEnded(runId, end);
     }
   }

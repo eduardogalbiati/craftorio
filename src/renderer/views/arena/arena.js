@@ -135,7 +135,7 @@
       // a request prefilled from a Discovery card is not kept as the next default
       localStorage.setItem(LS, JSON.stringify({
         contenders: setup.contenders, task: fromCard ? saved.task : inputs.task, skill: fromCard ? saved.skill : inputs.document_skill, peer: inputs.peer_review, lenses: inputs.lenses,
-        scenario, project: $a('#arena-project').value,
+        scenario, project: fromCard ? saved.project : $a('#arena-project').value,
       }));
     } catch { /* ignore */ }
     $a('#arena-run').disabled = true;

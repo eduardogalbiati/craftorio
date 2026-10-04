@@ -173,14 +173,9 @@ function attachmentNames(folder) {
   } catch { return []; }
 }
 
-// The thread's entries, oldest first (a line cut by a crash is skipped).
-function threadOf(folder) {
-  const out = [];
-  for (const line of readText(path.join(folder, 'conversation.jsonl')).split('\n')) {
-    if (!line.trim()) continue;
-    try { out.push(JSON.parse(line)); } catch { /* a broken line */ }
-  }
-  return out;
+// The number of thread entries, without parsing them (a line cut by a crash has no closing brace).
+function countThread(folder) {
+  return readText(path.join(folder, 'conversation.jsonl')).split('\n').filter((line) => /^\{.*\}\s*$/.test(line)).length;
 }
 
 // card.json with the document, the acceptance criteria, the attachment names and the number of
@@ -192,7 +187,7 @@ function load(folder) {
     document: readText(path.join(folder, 'document.md')),
     acceptance: readText(path.join(folder, 'acceptance.md')),
     attachments: attachmentNames(folder),
-    threadCount: threadOf(folder).length,
+    threadCount: countThread(folder),
   };
 }
 
@@ -302,7 +297,10 @@ function updateCard(dir, projectId, id, fields = {}) {
 function snapshotVersion(dir, projectId, id, reason) {
   const folder = existingCard(dir, projectId, id);
   const label = String(reason || 'snapshot').replace(/[^\w-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'snapshot';
-  const name = `${now().replace(/[:.]/g, '-')}-${label}.md`;
+  const stamp = now().replace(/[:.]/g, '-');
+  let name = `${stamp}-${label}.md`;
+  // a second snapshot for the same reason in the same millisecond never replaces the first
+  for (let n = 2; fs.existsSync(path.join(folder, 'versions', name)); n++) name = `${stamp}-${label}-${n}.md`;
   writeFileAtomic(path.join(folder, 'versions', name), readText(path.join(folder, 'document.md')));
   return name;
 }
@@ -478,7 +476,13 @@ function appendConversation(dir, projectId, id, entry = {}) {
 
 /** The card's thread, oldest first (a line cut by a crash is skipped). */
 function readConversation(dir, projectId, id) {
-  return threadOf(existingCard(dir, projectId, id));
+  const folder = existingCard(dir, projectId, id);
+  const out = [];
+  for (const line of readText(path.join(folder, 'conversation.jsonl')).split('\n')) {
+    if (!line.trim()) continue;
+    try { out.push(JSON.parse(line)); } catch { /* a broken line */ }
+  }
+  return out;
 }
 
 /**
