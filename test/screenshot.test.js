@@ -32,6 +32,14 @@ test('the backlog view offers roadmap and epics modes, alongside list and kanban
   assert.equal(parseArgs(['--view', 'backlog', '--mode', 'epics']).name, 'backlog-epics');
 });
 
+test('--view roadmap (#254: the Roadmap screen) draws the Backlog in its roadmap mode, named backlog-roadmap, and takes no --mode', () => {
+  const args = parseArgs(['--view', 'roadmap']);
+  assert.equal(args.view, 'backlog');
+  assert.equal(args.mode, 'roadmap');
+  assert.equal(args.name, 'backlog-roadmap');
+  assert.throws(() => parseArgs(['--view', 'roadmap', '--mode', 'kanban']), /--mode kanban does not apply to roadmap/);
+});
+
 test('the analytics view offers the Run (#228) and 24/7 (#188) tabs, alongside usage and performance', () => {
   for (const tab of ['usage', 'performance', 'run', 'occupancy']) assert.ok(VIEWS.analytics.tabs.includes(tab), `analytics tab ${tab}`);
   assert.equal(parseArgs(['--view', 'analytics', '--tab', 'run']).name, 'analytics-run');

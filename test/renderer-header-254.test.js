@@ -148,6 +148,80 @@ test('Analytics (Repository performance) analyses the header\'s project', async 
   assert.equal(projectArgs(app, 'getRepositoryPerformance').at(-1), 'p2');
 });
 
+// the project dialog's form submitted with `fields` (the harness has no FormData: the page reads the form through it)
+async function submitProjectForm(app, fields) {
+  // the dialog always sends its Local preview fields, empty when not filled
+  app.sandbox.__fields = Object.entries({ description: '', repo: '', folder: '', lp_install: '', lp_command: '', lp_url: '', ...fields });
+  app.run('FormData = class { constructor() { this.entries = __fields; } [Symbol.iterator]() { return this.entries[Symbol.iterator](); } }');
+  await app.el('#project-form').onsubmit({ preventDefault() {} });
+  await app.settle(10);
+}
+
+test('a project created from the header\'s "New project…" becomes the app\'s project, and the open screen shows it', async () => {
+  let projects = [...PROJECTS];
+  const app = page({
+    api: {
+      listProjects: async () => projects,
+      createProject: async (data) => { const p = { id: 'p3', name: data.name }; projects = [...projects, p]; return p; },
+    },
+  });
+  await app.boot();
+  app.run("showView('backlog')");
+  await app.settle(10);
+  const sel = app.el('#header-project');
+  sel.value = '__new__';
+  await sel.onchange({ target: sel });
+  await submitProjectForm(app, { name: 'Project Three' });
+  assert.deepEqual(app.callsTo('createProject').map(([d]) => d.name), ['Project Three']);
+  assert.equal(app.run('window.CurrentProject.get()'), 'p3');
+  assert.equal(app.state().view, 'backlog');
+  assert.equal(projectArgs(app, 'getBacklog').at(-1), 'p3');
+  assert.match(text(sel.innerHTML), /Project Three/);
+});
+
+test('the first project, created from the header with none before, becomes the app\'s project', async () => {
+  let projects = [];
+  const app = loadApp({
+    api: {
+      listProjects: async () => projects,
+      createProject: async (data) => { const p = { id: 'first', name: data.name }; projects = [p]; return p; },
+    },
+  });
+  await app.boot();
+  assert.equal(app.run('window.CurrentProject.get()'), null);
+  const sel = app.el('#header-project');
+  sel.value = '__new__';
+  await sel.onchange({ target: sel });
+  await submitProjectForm(app, { name: 'First' });
+  assert.equal(app.run('window.CurrentProject.get()'), 'first');
+});
+
+test('a project created from Settings › Projects does not change the app\'s project', async () => {
+  let projects = [...PROJECTS];
+  const app = page({
+    storage: { 'multiagent.currentProject': 'p1' },
+    api: {
+      listProjects: async () => projects,
+      createProject: async (data) => { const p = { id: 'p3', name: data.name }; projects = [...projects, p]; return p; },
+    },
+  });
+  await app.boot();
+  app.run('openProjectModal(null)');
+  await submitProjectForm(app, { name: 'Project Three' });
+  assert.equal(app.run('window.CurrentProject.get()'), 'p1');
+});
+
+test('a notification\'s project (focusProject) becomes the app\'s, and the Product Owner opens on it', async () => {
+  const app = page({ storage: { 'multiagent.currentProject': 'p1' } });
+  await app.boot();
+  app.run("window.BacklogActions.focusProject('p2')");
+  app.run("showView('backlog')");
+  await app.run('window.BacklogPO.open()');
+  await app.settle(10);
+  assert.equal(app.run('window.CurrentProject.get()'), 'p2');
+  assert.equal(app.run('window.BacklogPO.openProjectId()'), 'p2');
+});
+
 test('the Product Owner plans for the header\'s project', async () => {
   const app = page();
   await app.boot();

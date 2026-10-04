@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { runNotice, interruptedNotice, sessionNotice, productOwnerNotice, shouldNotify, attentionSignal, promptLine, WaitDetector } = require('../src/notifications');
+const { runNotice, interruptedNotice, sessionNotice, productOwnerNotice, liveRoadmapNotice, shouldNotify, attentionSignal, promptLine, WaitDetector } = require('../src/notifications');
 const { setupWorkspace } = require('../src/workspace');
 const { createService } = require('../src/service');
 
@@ -79,6 +79,16 @@ test('notices respect the per-kind setting and what the focused window shows', (
   assert.equal(shouldNotify(started, { context: { focused: true, runId: null } }), true);
   assert.equal(shouldNotify(started, { context: { focused: true, runId: 'r1' } }), false);
   assert.equal(shouldNotify(null, {}), false);
+});
+
+// ---- Live roadmap (#164): its notice opens the Roadmap screen (#254), not the Backlog -----------
+
+test('liveRoadmapNotice: names the project and the refill, and its click opens the project\'s Roadmap screen', () => {
+  const n = liveRoadmapNotice({ project: { id: 'demo', name: 'Demo' }, refill: { status: 'added', added: 2, message: 'Two stages added.' } });
+  assert.equal(n.title, 'Live roadmap: +2 stages: Demo');
+  assert.equal(n.body, 'Two stages added.');
+  assert.deepEqual(n.target, { view: 'roadmap', projectId: 'demo' });
+  assert.deepEqual(liveRoadmapNotice({ refill: { status: 'budget' } }).target, { view: 'roadmap', projectId: null });
 });
 
 // ---- Product Owner (#149): a notice for an answer the owner has not seen yet -------------------

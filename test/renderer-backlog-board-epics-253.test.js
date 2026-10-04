@@ -131,6 +131,24 @@ test('an epic in a Product Owner\'s proposed group is left out of the assignment
   assert.deepEqual([...skipped], [10]);
 });
 
+test('a Product Owner\'s "Add to the roadmap" (roadmapGroup) plans the issues and returns the epics as skipped', async () => {
+  const saved = [];
+  const app = await backlog(GITHUB, { saved });
+  const skipped = await app.run('window.BacklogActions.roadmapGroup({ issues: [10, 1, 2], workflow: "software-development.yaml", inputs: {} })');
+  assert.deepEqual([...skipped], [10]);
+  const planned = saved.flat().flatMap((stage) => stage.items || []).flatMap((item) => item.issues || [])
+    .map((x) => (typeof x === 'object' ? x.number : x));
+  assert.deepEqual([...new Set(planned)].sort(), [1, 2]);
+});
+
+test('a roadmapGroup of epics alone saves no stage', async () => {
+  const saved = [];
+  const app = await backlog(GITHUB, { saved });
+  const skipped = await app.run('window.BacklogActions.roadmapGroup({ issues: [10, 11], workflow: "software-development.yaml", inputs: {} })');
+  assert.deepEqual([...skipped], [10, 11]);
+  assert.deepEqual(saved, []);
+});
+
 test('an epic is never added to a roadmap stage', async () => {
   const saved = [];
   const app = await backlog(GITHUB, { saved });

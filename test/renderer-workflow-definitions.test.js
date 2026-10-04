@@ -321,6 +321,29 @@ test('renderWorkflowDefinitions: the search box narrows workflows and pipelines 
   helpers.wfDefs.query = '';
 });
 
+test('renderWorkflowDefinitions: the Pipelines tab (#254) shows the pipelines alone; the Definitions tab shows both', () => {
+  const workflows = [workflow('a.yaml', 'Alpha', 'plan'), workflow('b.yaml', 'Beta', 'build')];
+  const pipelines = [{ file: 'p1.yaml', name: 'Release chain', category: 'build', stages: [{ workflow: 'a.yaml', when: null, map: {} }] }];
+  const { sandbox, helpers, box } = loadDefs({ workflows, pipelines });
+  sandbox.state.workflowsTab = 'pipelines';
+  helpers.renderWorkflowDefinitions();
+  assert.match(box.innerHTML, /Release chain/);
+  assert.doesNotMatch(box.innerHTML, />Beta</);
+  sandbox.state.workflowsTab = 'definitions';
+  helpers.renderWorkflowDefinitions();
+  assert.match(box.innerHTML, /Release chain/);
+  assert.match(box.innerHTML, /Beta/);
+});
+
+test('renderWorkflowDefinitions: the Pipelines tab with no pipeline shows its empty state, though workflows exist', () => {
+  const { sandbox, helpers, box, filters } = loadDefs({ workflows: [workflow('a.yaml', 'Alpha', 'plan')], pipelines: [] });
+  sandbox.state.workflowsTab = 'pipelines';
+  helpers.renderWorkflowDefinitions();
+  assert.match(box.innerHTML, /No pipelines yet/);
+  assert.doesNotMatch(box.innerHTML, /Alpha/);
+  assert.equal(filters.innerHTML, '');
+});
+
 test('renderWorkflowDefinitions: custom workflows sort after bundled ones within their section', () => {
   const workflows = [workflow('z.yaml', 'Zzz custom', 'build', 'custom'), workflow('a.yaml', 'Aaa bundled', 'build', 'default')];
   const { helpers, box } = loadDefs({ workflows });

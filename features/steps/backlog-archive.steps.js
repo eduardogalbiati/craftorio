@@ -76,8 +76,9 @@ Then('the list shows the issue {string}', async ({ e2e }, title) => {
   await expect(issueRow(e2e.window, title)).toBeVisible();
 });
 
+// matched by the row's title, not its whole text: a member issue's epic badge carries the epic's title (#253)
 Then('the list does not show the issue {string}', async ({ e2e }, title) => {
-  await expect(list(e2e.window).getByTestId('backlog-issue').filter({ hasText: title })).toHaveCount(0);
+  await expect(list(e2e.window).getByTestId('backlog-issue').locator('.bl-title').getByText(title, { exact: true })).toHaveCount(0);
 });
 
 // "at once": the Open chip still active, the issues gone without a reload or a filter change

@@ -163,3 +163,57 @@ test('Settings has a Projects tab (Settings › Projects)', () => {
   const app = loadApp();
   assert.match(app.defs.get('settings').markup, /data-stab="projects"/);
 });
+
+// a group's element in the sidebar, its title button and its items' box
+function navGroup(app, id) {
+  const el = app.created.find((e) => e.dataset.group === id && e.classList.contains('nav-group'));
+  assert.ok(el, `no "${id}" group in the sidebar`);
+  return {
+    el,
+    title: el.appended.find((n) => n.classList.contains('nav-group-title')),
+    items: el.appended.find((n) => n.classList.contains('nav-group-items')),
+  };
+}
+
+test('a click on a group\'s title folds it (aria-expanded false, its items hidden), remembered; a second click unfolds it', () => {
+  const app = loadApp();
+  const code = navGroup(app, 'code');
+  assert.equal(code.title.getAttribute('aria-expanded'), 'true');
+  assert.equal(code.items.classList.contains('hidden'), false);
+  code.title.onclick();
+  assert.equal(code.title.getAttribute('aria-expanded'), 'false');
+  assert.equal(code.items.classList.contains('hidden'), true);
+  assert.equal(code.el.classList.contains('collapsed'), true);
+  assert.deepEqual(JSON.parse(app.sandbox.localStorage.getItem('multiagent.navCollapsed')), ['code']);
+  // the other groups stay open
+  assert.equal(navGroup(app, 'plan').items.classList.contains('hidden'), false);
+  code.title.onclick();
+  assert.equal(code.title.getAttribute('aria-expanded'), 'true');
+  assert.equal(code.items.classList.contains('hidden'), false);
+});
+
+test('a group folded in a previous window is drawn folded', () => {
+  const app = loadApp({ storage: { 'multiagent.navCollapsed': JSON.stringify(['ai']) } });
+  const ai = navGroup(app, 'ai');
+  assert.equal(ai.title.getAttribute('aria-expanded'), 'false');
+  assert.equal(ai.items.classList.contains('hidden'), true);
+  assert.equal(navGroup(app, 'code').items.classList.contains('hidden'), false);
+});
+
+test('showView(\'projects\') (an older link) lands on Settings › Projects and reads the projects once', async () => {
+  const app = loadApp({
+    api: {
+      listProjects: async () => [{ id: 'p1', name: 'Project One' }],
+      // Settings draws its other pages too (the CLIs, the voice CLI's status)
+      envDetails: async () => [],
+      speechStatus: async () => ({ path: null, command: 'whisper', installHint: 'pip install whisper', models: [], model: 'base', languages: ['en'], language: 'en' }),
+    },
+  });
+  await app.boot();
+  const before = app.callsTo('listProjects').length;
+  app.run("showView('projects')");
+  await app.settle(10);
+  assert.equal(app.state().view, 'settings');
+  assert.equal(app.run('settingsTab'), 'projects');
+  assert.equal(app.callsTo('listProjects').length - before, 1);
+});
