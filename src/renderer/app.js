@@ -13,7 +13,8 @@
 //   confirm dialog, toasts.
 // Shared pieces with a file of their own: start-drawer.js, usage-widget.js, gate-panel.js,
 // run-list.js, run-meta.js (run titles, issues and PRs), artifact-render.js, supervisor-drawer.js,
-// resume-dialog.js, code-banner.js, term-dock.js, account.js, chat-models.js, kept-work-dialog.js.
+// resume-dialog.js, code-banner.js, term-dock.js, account.js, chat-models.js, kept-work-dialog.js,
+// toast.js (the toast's countdown and its action).
 const $ = (sel) => document.querySelector(sel);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const fmtNum = (n) => (n || 0).toLocaleString('en-US');
@@ -957,57 +958,20 @@ function renderNavRuns() {
   box.querySelectorAll('[data-run]').forEach((b) => (b.onclick = () => (b.dataset.gate ? openGateOf(b.dataset.run) : selectRun(b.dataset.run))));
 }
 
-let toastTimer = null;
-let toastHold = null; // #281: { pause, resume } of the countdown of a toast with an action
-let toastBound = false;
 // runId: the run it is about (a click shows it); gate: an approval.requested event to open.
 // Never blocks anything: it hides by itself and its × dismisses it.
-// action (#281): { label, run, done? }, a button inside the toast ("Undo"). The toast then stays 10 s
-// (7 without), a click on the button runs it once and the toast says its outcome (`done`, "Restored"
-// by default, or the error); a click elsewhere on such a toast does nothing.
+// action (#281): { label, run, done? }, a button inside the toast ("Undo"). toast.js (openToast)
+// draws it, runs it and counts the toast down: 10 s with an action, 15 for a gate, 7 otherwise.
 function showToast(title, detail, runId = null, gate = null, { action = null } = {}) {
-  const el = $('#toast');
-  const draw = (head, text, button) => {
-    el.innerHTML = `<button type="button" class="toast-close" aria-label="Dismiss" title="Dismiss">×</button><b>${esc(head)}</b>${text ? `<span>${esc(String(text).slice(0, 220))}</span>` : ''}${button ? `<button type="button" class="btn sm toast-action" data-toast-action>${esc(button.label)}</button>` : ''}`;
-    el.classList.toggle('has-action', !!button);
-  };
-  const hide = () => el.classList.add('hidden');
-  const countdown = () => {
-    clearTimeout(toastTimer);
-    toastTimer = setTimeout(hide, action ? 10000 : gate ? 15000 : 7000);
-  };
-  draw(title, detail, action);
-  el.classList.remove('hidden');
-  countdown();
-  // #281: with an action the countdown waits while the pointer is over the toast or its button has the focus
-  toastHold = action ? { pause: () => clearTimeout(toastTimer), resume: countdown } : null;
-  if (!toastBound) {
-    toastBound = true;
-    for (const [type, what] of [['mouseenter', 'pause'], ['focusin', 'pause'], ['mouseleave', 'resume'], ['focusout', 'resume']]) el.addEventListener(type, () => toastHold?.[what]());
-  }
-  let ran = false;
-  let dismissed = false;
-  const onclick = async (e) => {
-    if (action && !e.target.closest('.toast-close')) {
-      // only its button runs the action, once; its outcome ("Restored", or the error) takes the toast's place
-      if (ran || !e.target.closest('[data-toast-action]')) return;
-      ran = true;
-      let outcome;
-      let failed = false;
-      try { await action.run(); outcome = action.done || 'Restored'; } catch (err) { outcome = errMsg(err); failed = true; }
-      // unless a newer toast is shown meanwhile, or × was pressed while it ran (an error still shows)
-      if (el.onclick === onclick && (failed || !dismissed)) { draw(outcome, '', null); el.classList.remove('hidden'); countdown(); }
-      return;
-    }
-    dismissed = true;
-    hide();
+  const html = (head, text) => `<button type="button" class="toast-close" aria-label="Dismiss" title="Dismiss">×</button><b>${esc(head)}</b>${text ? `<span>${esc(String(text).slice(0, 220))}</span>` : ''}`;
+  const onClick = (e) => {
     if (e.target.closest('.toast-close')) return; // dismissed only
     // a gate still waiting opens inside its run (its chat, or the Run screen's gate card)
     if (gate && state.runs.get(gate.run_id)?.approvals.has(gate.approval_id)) return openGateOf(gate.run_id);
     if (runId && state.runs.has(runId)) selectRun(runId);
     else if (state.run) selectRun(state.run.id);
   };
-  el.onclick = onclick;
+  openToast($('#toast'), { html, title, detail, action, ms: gate ? 15000 : 7000, onClick });
 }
 
 // #208: the page itself never scrolls (each view scrolls inside); a clipped root still scrolls

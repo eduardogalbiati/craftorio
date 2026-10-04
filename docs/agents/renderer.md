@@ -300,7 +300,8 @@ changed in `style.css` goes into that skill too. In this app:
   leaves by itself when the page stops listing it; × hides an info or a warning until its condition
   comes back. The component has no screen code: the Backlog's list is `renderAlerts` in `backlog.js`
   (the roadmap's own alert comes from `BacklogRoadmap.alerts`).
-- **A toast with an action** (#281, `showToast(title, detail, runId, gate, { action })` in `app.js`):
+- **A toast with an action** (#281, `showToast(title, detail, runId, gate, { action })` in `app.js`;
+  the countdown and the action live in `toast.js`, `openToast`):
   `action: { label, run, done? }` draws a button inside the toast ("Undo"). Such a toast stays 10 s
   (7 without), waits while the pointer is over it or its button has the focus, runs the action once
   and then says its outcome (`done`, "Restored" by default, or the error's message); a click
