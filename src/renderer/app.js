@@ -960,20 +960,47 @@ function renderNavRuns() {
 let toastTimer = null;
 // runId: the run it is about (a click shows it); gate: an approval.requested event to open.
 // Never blocks anything: it hides by itself and its × dismisses it.
-function showToast(title, detail, runId = null, gate = null) {
+// action (#281): { label, run, done? }, a button inside the toast ("Undo"). The toast then stays 10 s
+// (7 without), a click on the button runs it once and the toast says its outcome (`done`, "Restored"
+// by default, or the error); a click elsewhere on such a toast does nothing.
+function showToast(title, detail, runId = null, gate = null, { action = null } = {}) {
   const el = $('#toast');
-  el.innerHTML = `<button type="button" class="toast-close" aria-label="Dismiss" title="Dismiss">×</button><b>${esc(title)}</b>${detail ? `<span>${esc(String(detail).slice(0, 220))}</span>` : ''}`;
+  const draw = (head, text, button) => {
+    el.innerHTML = `<button type="button" class="toast-close" aria-label="Dismiss" title="Dismiss">×</button><b>${esc(head)}</b>${text ? `<span>${esc(String(text).slice(0, 220))}</span>` : ''}${button ? `<button type="button" class="btn sm toast-action" data-toast-action>${esc(button.label)}</button>` : ''}`;
+    el.classList.toggle('has-action', !!button);
+  };
+  const hide = () => el.classList.add('hidden');
+  const countdown = () => {
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(hide, action ? 10000 : gate ? 15000 : 7000);
+  };
+  draw(title, detail, action);
   el.classList.remove('hidden');
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.add('hidden'), gate ? 15000 : 7000);
-  el.onclick = (e) => {
-    el.classList.add('hidden');
+  countdown();
+  // #281: with an action the countdown waits while the pointer is over the toast or its button has the focus
+  const pause = action ? () => clearTimeout(toastTimer) : null;
+  const resume = action ? countdown : null;
+  Object.assign(el, { onmouseenter: pause, onmouseleave: resume, onfocusin: pause, onfocusout: resume });
+  let ran = false;
+  const onclick = async (e) => {
+    if (action && !e.target.closest('.toast-close')) {
+      // only its button runs the action, once; its outcome ("Restored", or the error) takes the toast's place
+      if (ran || !e.target.closest('[data-toast-action]')) return;
+      ran = true;
+      let outcome;
+      try { await action.run(); outcome = action.done || 'Restored'; } catch (err) { outcome = errMsg(err); }
+      // unless a newer toast is shown meanwhile
+      if (el.onclick === onclick) { draw(outcome, '', null); el.classList.remove('hidden'); countdown(); }
+      return;
+    }
+    hide();
     if (e.target.closest('.toast-close')) return; // dismissed only
     // a gate still waiting opens inside its run (its chat, or the Run screen's gate card)
     if (gate && state.runs.get(gate.run_id)?.approvals.has(gate.approval_id)) return openGateOf(gate.run_id);
     if (runId && state.runs.has(runId)) selectRun(runId);
     else if (state.run) selectRun(state.run.id);
   };
+  el.onclick = onclick;
 }
 
 // #208: the page itself never scrolls (each view scrolls inside); a clipped root still scrolls

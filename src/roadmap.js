@@ -275,6 +275,19 @@ function saveStages(dir, projectId, stages, { issues } = {}) {
   });
 }
 
+/**
+ * #281: Undo and Restore put stages back as they were stored, ids and run states included (saveStages
+ * would plan a returned item again under a new id). `change(stages)` gives the new stages, or throws
+ * to refuse; the state is kept.
+ */
+function restoreStages(dir, projectId, change) {
+  return updateRoadmap(dir, projectId, (r) => {
+    const stages = change(r.stages).filter((s) => s.items.length);
+    assertUnique(stages);
+    return { ...r, stages };
+  });
+}
+
 // The issue numbers of the items not finished yet.
 function plannedNumbers(roadmap) {
   return new Set(allItems(roadmap).filter((x) => !FINISHED.has(x.status) && !testsLater(x)).flatMap((x) => itemIssues(x).map((i) => i.number)));
@@ -614,6 +627,7 @@ module.exports = {
   propose,
   readRoadmap,
   refreshCopies,
+  restoreStages,
   roadmapProjects,
   saveStages,
   setLive,

@@ -621,6 +621,9 @@
   }
   const roadmapCtx = () => ({
     projectId: bl.projectId, setData, render, setError: (msg) => { bl.error = msg; },
+    // #269: the filter row's epic (the Board's choice too); #270: "Open the Roadmap" of the Board's alert
+    setEpic: (id) => { bl.epic = String(id || ''); render(); },
+    showRoadmap: () => showRoadmap(),
     // #217, #268: the Roadmap's Planned | All switch (All when on) and its date range (remembered)
     setShowAll: (on) => { bl.showAll = !!on; save(SHOW_ALL_KEY, bl.showAll ? '1' : ''); render(); },
     setSince: (id) => { bl.since = String(id || ''); save(SINCE_KEY, bl.since); render(); },
@@ -698,13 +701,18 @@
   // The epic filter (#138): every epic with how many issues the other filters show, then "No epic".
   // Hidden when the backlog has no epic, and in the Epics view. One choice for the Board and the
   // Roadmap (#217); on the Roadmap it counts the issues the roadmap plans.
+  // (#269: on the Roadmap the choices are drawn in its own filter row, backlog-roadmap.js)
+  function epicChoices(issues) {
+    const epics = bl.data?.epics || [];
+    if (!epics.length) return [];
+    return epicOptions(epics, onRoadmapTab() ? issues.filter((i) => i.roadmap) : issues.filter((i) => inState(i) && matchesLabels(i, bl.labels)));
+  }
   function renderEpicFilter(issues) {
     const sel = $b('#bl-epic');
     const epics = bl.data?.epics || [];
     sel.classList.toggle('hidden', !epics.length || bl.mode === 'epics');
     if (!epics.length) return;
-    const shown = onRoadmapTab() ? issues.filter((i) => i.roadmap) : issues.filter((i) => inState(i) && matchesLabels(i, bl.labels));
-    sel.innerHTML = `<option value="">All epics</option>${epicOptions(epics, shown).map((o) => `<option value="${esc(o.id)}">${esc(o.title)} (${o.count})</option>`).join('')}`;
+    sel.innerHTML = `<option value="">All epics</option>${epicChoices(issues).map((o) => `<option value="${esc(o.id)}">${esc(o.title)} (${o.count})</option>`).join('')}`;
     sel.value = bl.epic;
     sel.classList.toggle('active', !!bl.epic);
   }
@@ -909,7 +917,6 @@
       <button class="link-btn small" type="button" data-unqueue="${s.number}" title="Dismiss">dismiss</button></span>`).join('');
     box.innerHTML = `
       <span><b>Queue</b> ${mode} ${n ? `${n} run${n > 1 ? 's' : ''} waiting · next ${esc((q.items[0].issues || [q.items[0]]).map((x) => `#${x.number}`).join(', '))} (${esc(q.items[0].workflowName || q.items[0].workflow)})` : 'empty'}</span>
-      ${q.error ? `<span class="error small">${esc(q.error)}</span>` : ''}
       ${skips}
       <span class="spacer"></span>
       <button class="btn sm${q.paused ? ' primary' : ' ghost'}" type="button" data-pause="${q.paused ? 'off' : 'on'}">${q.paused ? 'Resume' : 'Pause'}</button>`;
@@ -947,42 +954,69 @@
     render();
   }
 
-  // The retired `deprioritized` label (#238): its open issues get a one-time banner offering to archive
-  // them; Archive or Dismiss hides it for good (per project).
+  // The retired `deprioritized` label (#238): its open issues get a one-time alert (a warning, #270)
+  // offering to archive them; Archive or Dismiss hides it for good (per project).
   const deprioritizedKey = () => `${DEPRIORITIZED_KEY}.${bl.projectId}`;
-  function renderDeprioritized() {
-    const box = $b('#bl-deprioritized');
+  function deprioritizedAlert() {
     const list = load(deprioritizedKey()) ? [] : deprioritizedIssues(bl.data?.issues || []);
-    box.classList.toggle('hidden', !list.length);
-    if (!list.length) { box.innerHTML = ''; return; }
-    const names = list.map((i) => `#${i.number}`).join(', ');
-    box.innerHTML = `<span title="${esc(list.map((i) => `#${i.number} ${i.title}`).join('\n'))}"><b>${esc(names)} still ${list.length === 1 ? 'carries' : 'carry'} the retired deprioritized label.</b> <span class="muted small">Archive replaces it: closed as not planned, labelled archived, restorable from the Archived chip.</span></span>
-      <span class="spacer"></span>
-      <button class="btn sm primary" type="button" data-deprioritized-archive="${esc(list.map((i) => i.number).join(','))}" data-testid="backlog-deprioritized-archive">Archive (${list.length})</button>
-      <button class="btn sm ghost" type="button" data-deprioritized-dismiss data-testid="backlog-deprioritized-dismiss">Dismiss</button>`;
+    if (!list.length) return [];
+    return [{
+      id: `deprioritized:${bl.projectId}`,
+      level: 'warning',
+      title: `${list.map((i) => `#${i.number}`).join(', ')} still ${list.length === 1 ? 'carries' : 'carry'} the retired deprioritized label.`,
+      text: 'Archive replaces it: closed as not planned, labelled archived, restorable from the Archived chip.',
+      dismissible: false,
+      actions: [
+        {
+          label: `Archive (${list.length})`,
+          primary: true,
+          title: list.map((i) => `#${i.number} ${i.title}`).join('\n'),
+          attrs: { 'data-testid': 'backlog-deprioritized-archive' },
+          onClick: async () => { if (await archive(list.map((i) => i.number))) { save(deprioritizedKey(), '1'); render(); } },
+        },
+        // its click is handled on the alerts box (bind), where the dismissal is remembered
+        { label: 'Dismiss', attrs: { 'data-deprioritized-dismiss': '', 'data-testid': 'backlog-deprioritized-dismiss' } },
+      ],
+    }];
   }
 
-  // The Backlog Refresh banner (#161, src/backlog-refresh.js): above every view when the last refresh
-  // is older than Settings › General › Backlog's interval and the base got merges since (or none
-  // ever ran); "Refreshing…" with a link while a refresh run is live. Never starts a run by itself.
+  // The Backlog Refresh alert (#161, src/backlog-refresh.js; a warning, #270): on every view when the
+  // last refresh is older than Settings › General › Backlog's interval and the base got merges since
+  // (or none ever ran); "Refreshing…" (an info) with a link while a refresh run is live. Never starts
+  // a run by itself. "Dismiss for today" is remembered by the service; × hides it until it is due again.
   const ago = (h) => (h >= 48 ? `${Math.floor(h / 24)} days ago` : `${h} h ago`);
-  function renderRefresh() {
-    const box = $b('#bl-refresh');
+  function refreshAlert() {
     const r = bl.data?.refresh;
-    const show = !!project()?.repo && !!r && (!!r.running || r.due);
-    box.classList.toggle('hidden', !show);
-    if (!show) { box.innerHTML = ''; return; }
+    if (!project()?.repo || !r || !(r.running || r.due)) return [];
     if (r.running) {
-      box.innerHTML = `<span><b>Refreshing the backlog…</b> <span class="badge live">running</span></span><span class="spacer"></span>
-        <button class="link-btn small" type="button" data-run="${esc(r.running.runId)}" data-workflow="${esc(r.running.workflow || '')}">Open the run</button>`;
-      return;
+      return [{
+        id: `refreshing:${bl.projectId}`,
+        level: 'info',
+        title: 'Refreshing the backlog…',
+        text: 'A Backlog Refresh run is in progress.',
+        dismissible: true,
+        actions: [{ label: 'Open the run', onClick: () => openRun({ dataset: { run: r.running.runId, workflow: r.running.workflow || '' } }) }],
+      }];
     }
     const when = r.lastRun ? `Backlog refreshed ${ago(r.hoursAgo)}${r.merges != null ? ` · ${r.merges} merge${r.merges === 1 ? '' : 's'} since` : ''}` : 'Backlog never refreshed';
-    const tip = r.lastRun ? `Last Backlog Refresh: run ${r.lastRun.runId}, ${dateOf(r.lastRun.startedAt)}` : 'No Backlog Refresh run yet for this project';
-    box.innerHTML = `<span title="${esc(tip)}"><b>${esc(when)}</b> <span class="muted small">Issues may cite moved files or tasks already done.</span></span>
-      <span class="spacer"></span>
-      <button class="btn sm primary" type="button" data-refresh-now title="Opens the Start panel for the Backlog Refresh workflow, prefilled; nothing starts until you press Start">Refresh now</button>
-      <button class="btn sm ghost" type="button" data-refresh-dismiss>Dismiss for today</button>`;
+    return [{
+      id: `refresh:${bl.projectId}`,
+      level: 'warning',
+      title: when,
+      text: `Issues may cite moved files or tasks already done.${r.lastRun ? ` Last Backlog Refresh: run ${r.lastRun.runId}, ${dateOf(r.lastRun.startedAt)}.` : ''}`,
+      dismissible: true,
+      actions: [
+        { label: 'Refresh now', primary: true, title: 'Opens the Start panel for the Backlog Refresh workflow, prefilled; nothing starts until you press Start', attrs: { 'data-refresh-now': '' }, onClick: refreshNow },
+        {
+          label: 'Dismiss for today',
+          attrs: { 'data-refresh-dismiss': '' },
+          onClick: async () => {
+            try { setData(await api.dismissBacklogRefresh(bl.projectId)); } catch (err) { bl.error = errMsg(err); }
+            render();
+          },
+        },
+      ],
+    }];
   }
 
   // Refresh now: the Start drawer on backlog-refresh, prefilled with the project, its platform, the
@@ -1004,25 +1038,81 @@
   }
 
   // ---- local merges not pushed (software-development-local-hero) ---------------------------
-  // The project's local <base> has commits origin/<base> has not: what they close, Push, auto-push.
+  // The project's local <base> has commits origin/<base> has not: what they close, Push, auto-push
+  // (an info alert, #270); a push status that could not be read is a warning with "Check again".
   const issueRefs = (numbers) => numbers.map((n) => `#${n}`).join(', ');
-  function renderLocal() {
-    const box = $b('#bl-local');
+  function localAlert() {
     const l = bl.data?.local;
-    const localIssues = (bl.data?.issues || []).filter((i) => i.column === 'local');
-    const show = l && (l.ahead > 0 || (l.error && localIssues.length));
-    box.classList.toggle('hidden', !show);
-    if (!show) { box.innerHTML = ''; return; }
-    const commits = `${l.ahead} commit${l.ahead === 1 ? '' : 's'}`;
-    box.innerHTML = l.ahead > 0 ? `
-      <span><b>Not pushed</b> ${commits} on the local ${esc(l.base)}${l.issues?.length ? ` · closes ${esc(issueRefs(l.issues))} when pushed` : ''}</span>
-      ${l.behind > 0 ? `<span class="warn-text small">origin/${esc(l.base)} has ${l.behind} new commit${l.behind === 1 ? '' : 's'}: the push updates first</span>` : ''}
-      ${l.fetchError ? `<span class="warn-text small" title="${esc(l.fetchError)}">origin not reached: last known state</span>` : ''}
-      <span class="spacer"></span>
-      <label class="check small" title="Push the local ${esc(l.base)} after every successful local merge"><input type="checkbox" data-autopush${bl.data?.autoPush ? ' checked' : ''} /><span>Auto-push</span></label>
-      <button class="btn sm primary" type="button" data-push>Push…</button>`
-      : `<span><b>Push status unknown</b> <span class="error small">${esc(l.error)}</span></span><span class="spacer"></span>
-      <button class="btn sm ghost" type="button" data-check>Check again</button>`;
+    if (!l) return [];
+    if (l.ahead > 0) {
+      const commits = `${l.ahead} commit${l.ahead === 1 ? '' : 's'}`;
+      return [{
+        id: `push:${bl.projectId}`,
+        level: 'info',
+        title: 'Not pushed',
+        text: [
+          `${commits} on the local ${l.base}${l.issues?.length ? ` · closes ${issueRefs(l.issues)} when pushed` : ''}`,
+          l.behind > 0 ? `origin/${l.base} has ${l.behind} new commit${l.behind === 1 ? '' : 's'}: the push updates first` : '',
+          l.fetchError ? 'origin not reached: last known state' : '',
+        ].filter(Boolean).join(' · '),
+        dismissible: true,
+        actions: [
+          {
+            label: 'Auto-push',
+            pressed: !!bl.data?.autoPush,
+            title: `Push the local ${l.base} after every successful local merge`,
+            attrs: { 'data-autopush': '' },
+            onClick: async () => {
+              const on = !bl.data?.autoPush;
+              try {
+                await api.setAutoPush(bl.projectId, on);
+                if (bl.data) bl.data.autoPush = on;
+              } catch (err) { bl.error = errMsg(err); }
+              render();
+            },
+          },
+          { label: 'Push…', primary: true, attrs: { 'data-push': '' }, onClick: openPush },
+        ],
+      }];
+    }
+    if (!l.error || !(bl.data?.issues || []).some((i) => i.column === 'local')) return [];
+    return [{
+      id: `push-unknown:${bl.projectId}`,
+      level: 'warning',
+      title: 'Push status unknown',
+      text: l.error,
+      dismissible: true,
+      actions: [{
+        label: 'Check again',
+        attrs: { 'data-check': '' },
+        onClick: async () => {
+          try {
+            const r = await api.checkLocal(bl.projectId);
+            if (r.backlog) setData(r.backlog);
+            window.refreshUnpushed?.();
+          } catch (err) { bl.error = errMsg(err); }
+          render();
+        },
+      }],
+    }];
+  }
+
+  // ---- the page's alerts (#270, alerts.js) ---------------------------------------------------
+  // On top of the Board, the Epics view and the Roadmap, above the filter row, one at a time: a roadmap
+  // paused by an item and the queue's error (errors), a stale Backlog Refresh and the retired
+  // deprioritized label (warnings), local merges not pushed (an info). Set on every render: an alert
+  // leaves when its condition clears.
+  let pageAlerts = null;
+  function renderAlerts() {
+    pageAlerts ||= window.Alerts.mount($b('#bl-alerts'));
+    const q = bl.data?.queue;
+    pageAlerts.set([
+      ...(window.BacklogRoadmap?.alerts(bl.data, roadmapCtx(), { shown: onRoadmapTab() }) || []),
+      ...(q?.error ? [{ id: `queue:${bl.projectId}`, level: 'error', title: 'Queue', text: q.error, dismissible: false, actions: [] }] : []),
+      ...refreshAlert(),
+      ...deprioritizedAlert(),
+      ...localAlert(),
+    ]);
   }
 
   // What the push sends (the commits and the issues they close), then the push; a rejected push
@@ -1097,6 +1187,8 @@
       ? 'Ordered stages of runs: each stage starts when the previous one has finished and merged.'
       : 'A project\'s issues, synced from its git platform.';
     $b('#bl-tabs').classList.toggle('hidden', roadmap);
+    // #269: the Roadmap draws its own filter row (the epic with its view filters), above its bar
+    $b('#bl-toolbar').classList.toggle('hidden', roadmap);
     const plat = $b('#bl-platform');
     plat.innerHTML = Object.entries(PLATFORMS).map(([id, p]) => `<option value="${id}">${esc(p.label)}${p.soon ? ' (soon)' : ''}</option>`).join('');
     plat.value = bl.platform || state.settings.backlogPlatform || 'github';
@@ -1157,10 +1249,10 @@
     $b('#bl-synced').textContent = bl.syncing ? 'Syncing…' : bl.data ? `Synced ${dateOf(bl.data.syncedAt)} from ${PLATFORMS[bl.data.platform]?.label || bl.data.platform}` : '';
     const prError = bl.data?.pullRequestsError ? `Open ${bl.data.platform === 'gitlab' ? 'MRs' : 'PRs'} could not be read: ${bl.data.pullRequestsError}` : '';
     $b('#bl-error').textContent = bl.error || prError;
-    renderRefresh();
-    renderDeprioritized();
+    // (#269: an empty error line takes no room between the alerts, the filter row and the list)
+    $b('#bl-error').classList.toggle('hidden', !(bl.error || prError));
+    renderAlerts();
     renderLive();
-    renderLocal();
     renderQueue();
 
     const list = $b('#bl-list');
@@ -1173,7 +1265,7 @@
     } else if (!bl.data) {
       list.innerHTML = bl.syncing ? '<p class="muted">Loading issues…</p>' : '<p class="muted">Not synced yet.</p>';
     } else {
-      list.innerHTML = bl.mode === 'roadmap' ? window.BacklogRoadmap.html(bl.data, render, { epic: bl.epic, showAll: bl.showAll, since: bl.since, project: bl.projectId }) :bl.mode === 'epics' ? renderEpics(issues) : bl.mode === 'kanban' ? renderKanban(board) : renderList(board);
+      list.innerHTML = bl.mode === 'roadmap' ? window.BacklogRoadmap.html(bl.data, render, { epic: bl.epic, epicOptions: epicChoices(board), showAll: bl.showAll, since: bl.since, project: bl.projectId }) :bl.mode === 'epics' ? renderEpics(issues) : bl.mode === 'kanban' ? renderKanban(board) : renderList(board);
       // the open item's "When it finishes" (#134); the next page when its "Loading…" row comes near (#268)
       if (bl.mode === 'roadmap') {
         window.BacklogRoadmap.mountChain(bl.data);
@@ -1341,15 +1433,18 @@
       if (bl.labelsOpen && e.target.isConnected && !e.target.closest('#bl-labels-wrap')) { bl.labelsOpen = false; render(); }
       // an issue's actions menu (#238) too
       if (bl.menu != null && e.target.isConnected && !e.target.closest('.bl-menu-wrap')) { bl.menu = null; render(); }
+      // the Roadmap bar's ⋮ menu (#269) too (a click inside the Roadmap closes it there)
+      if (bl.mode === 'roadmap' && e.target.isConnected && !e.target.closest('#bl-list') && window.BacklogRoadmap.closeMenu()) render();
     });
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && bl.menu != null && visible()) { bl.menu = null; render(); }
+      // #269: the Roadmap bar's ⋮ menu (Escape closes it, the arrows move in it)
+      if (bl.mode === 'roadmap' && visible()) window.BacklogRoadmap.onKeyDown(e, roadmapCtx());
     });
-    $b('#bl-deprioritized').onclick = async (e) => {
-      const go = e.target.closest('[data-deprioritized-archive]');
-      if (go && !await archive(go.dataset.deprioritizedArchive.split(',').map(Number))) return;
-      if (go || e.target.closest('[data-deprioritized-dismiss]')) { save(deprioritizedKey(), '1'); render(); }
-    };
+    // the deprioritized alert's Dismiss (#238, #270): remembered per project (its Archive remembers it too)
+    $b('#bl-alerts').addEventListener('click', (e) => {
+      if (e.target.closest('[data-deprioritized-dismiss]')) { save(deprioritizedKey(), '1'); render(); }
+    });
     $b('#bl-filters').onclick = (e) => {
       const f = e.target.closest('[data-f]')?.dataset.f;
       if (f) { bl.filter = f; render(); }
@@ -1372,41 +1467,11 @@
       } catch (err) { bl.error = errMsg(err); }
       render();
     };
-    $b('#bl-refresh').onclick = async (e) => {
-      if (e.target.closest('[data-refresh-now]')) { refreshNow(); return; }
-      const run = e.target.closest('[data-run]');
-      if (run) { openRun(run); return; }
-      const dismiss = e.target.closest('[data-refresh-dismiss]');
-      if (!dismiss) return;
-      dismiss.disabled = true;
-      try { setData(await api.dismissBacklogRefresh(bl.projectId)); } catch (err) { bl.error = errMsg(err); }
-      render();
-    };
     $b('#bl-live').onclick = async (e) => {
       const off = e.target.closest('[data-live-off]');
       if (!off) return;
       off.disabled = true;
       try { setData(await api.setRoadmapLive(bl.projectId, false)); } catch (err) { bl.error = errMsg(err); }
-      render();
-    };
-    $b('#bl-local').onclick = async (e) => {
-      if (e.target.closest('[data-push]')) { openPush(); return; }
-      const auto = e.target.closest('[data-autopush]');
-      if (auto) {
-        try {
-          await api.setAutoPush(bl.projectId, auto.checked);
-          if (bl.data) bl.data.autoPush = auto.checked;
-        } catch (err) { bl.error = errMsg(err); render(); }
-        return;
-      }
-      const check = e.target.closest('[data-check]');
-      if (!check) return;
-      check.disabled = true;
-      try {
-        const r = await api.checkLocal(bl.projectId);
-        if (r.backlog) setData(r.backlog);
-        window.refreshUnpushed?.();
-      } catch (err) { bl.error = errMsg(err); }
       render();
     };
     $b('#btn-push-ok').onclick = () => doPush(false);
@@ -1495,7 +1560,8 @@
           <button type="button" class="tab" role="tab" data-bl-tab="board" title="The issues as a list or a kanban">Board</button>
           <button type="button" class="tab" role="tab" data-bl-tab="epics" data-mode="epics" title="The epics: themes of issues, with their progress and members">Epics</button>
         </div>
-        <div class="pr-toolbar">
+        <div id="bl-alerts" class="hidden"></div>
+        <div class="pr-toolbar" id="bl-toolbar" data-testid="filter-row">
           <span id="bl-mode" class="seg sm" role="group" aria-label="Board view">
             <button type="button" data-mode="list">List</button>
             <button type="button" data-mode="kanban">Kanban</button>
@@ -1521,10 +1587,7 @@
           <span class="spacer"></span>
           <span id="bl-synced" class="muted small"></span>
         </div>
-        <div id="bl-refresh" class="bl-queue bl-refresh hidden" role="status"></div>
-        <div id="bl-deprioritized" class="bl-queue bl-refresh hidden" role="status" data-testid="backlog-deprioritized"></div>
         <div id="bl-live" class="bl-live hidden" role="status"></div>
-        <div id="bl-local" class="bl-queue bl-local hidden"></div>
         <div id="bl-queue" class="bl-queue hidden"></div>
         <p id="bl-error" class="error small"></p>
         <div id="bl-list" class="pr-list" data-testid="backlog-list"></div>
@@ -1572,6 +1635,17 @@
         <button type="submit" id="btn-cut-line-ok" class="btn primary">Add cut line</button>
       </div>
     </form>
+  </div>
+  <div id="rm-versions-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="rm-versions-title">
+    <div class="modal-card">
+      <h3 id="rm-versions-title">Restore an earlier version</h3>
+      <p class="muted small">The roadmap as it was before each of your last edits (the last 20 are kept), newest first. Restore puts the stages, their order and their names back; items that started since keep their runs, items added since stay, and no run is stopped.</p>
+      <ul id="rm-versions" class="rm-versions" data-testid="roadmap-versions"></ul>
+      <p id="rm-versions-error" class="error small" role="alert"></p>
+      <div class="modal-actions">
+        <button type="button" id="btn-rm-versions-close" class="btn ghost">Close</button>
+      </div>
+    </div>
   </div>
   <div id="assign-modal" class="modal hidden">
     <form id="assign-form" class="modal-card">

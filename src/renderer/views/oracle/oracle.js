@@ -575,9 +575,12 @@
     render();
   }
   // #183: the chat about something on screen (a gate): its context chip and starters, the drawer beside it
+  // #271: a context with a first `question` (a failed roadmap item) asks it at once, once the chat is
+  // loaded; while the Oracle answers another question it waits in line with its context (ask)
   function openWith(context) {
     or.context = context || null;
     openDrawer({ side: true });
+    if (context?.question) Promise.resolve(or.loaded || load()).then(() => { if (or.context === context) ask(context.question); });
   }
 
   const surfaceHtml = (w) => `

@@ -125,6 +125,9 @@ body:not(.dev-mode) .dev-only { display: none !important; }
 
 .btn.danger-solid { background: var(--red); border-color: var(--red); color: #140808; }
 .btn.ghost.danger { color: var(--red); }
+/* a low-emphasis caution (#269, the Roadmap's Pause): burnt amber text and border, never filled */
+.btn.warn-ghost { background: transparent; color: #d9a441; border-color: rgba(217,164,65,.45); }
+.btn.warn-ghost:hover:not(:disabled) { border-color: #d9a441; }
 .row { display: flex; gap: 6px; align-items: center; }
 .spacer { flex: 1; }
 .icon-btn { background: none; border: 1px solid transparent; color: var(--muted); border-radius: 6px; padding: 4px; cursor: pointer; display: grid; place-items: center; }
@@ -794,6 +797,30 @@ body.resizing-dock .term-body { pointer-events: none; }
 .toast-close { position: absolute; top: 4px; right: 6px; background: none; border: 0; color: var(--muted); font-size: 16px; line-height: 1; cursor: pointer; padding: 2px 4px; }
 .toast-close:hover, .toast-close:focus-visible { color: var(--text); }
 .toast span { color: var(--muted); }
+/* a toast with an action (#281, "Undo"): only its button and × are clickable */
+.toast.has-action { cursor: default; }
+.toast .toast-action { align-self: flex-start; margin-top: 4px; }
+
+/* page alerts (#270, alerts.js): one alert at a time at the top of a page, coloured by its level
+   (info light blue, warning amber, error red), with a counter and arrows when there are several */
+.page-alerts { margin-bottom: 12px; }
+.page-alerts .alert { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 10px; }
+.alert-icon { display: grid; flex: none; place-items: center; }
+.alert-icon svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.alert-body { flex: 1 1 260px; min-width: 0; overflow-wrap: anywhere; }
+.alert-title { margin-right: 6px; }
+.alert-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.alerts-nav { display: inline-flex; align-items: center; gap: 2px; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.alert-close { font-size: 16px; line-height: 1; }
+.alert.alert-info { background: rgba(125,211,252,.1); border-color: rgba(125,211,252,.45); }
+.alert-info .alert-icon, .alert-info .alert-title { color: #7dd3fc; }
+.alert.alert-warning { background: rgba(250,204,21,.09); border-color: rgba(250,204,21,.45); }
+.alert-warning .alert-icon, .alert-warning .alert-title { color: var(--yellow); }
+.alert.alert-error { background: rgba(248,113,113,.1); border-color: rgba(248,113,113,.5); }
+.alert-error .alert-icon, .alert-error .alert-title { color: var(--red); }
+/* an action that is a switch (Auto-push): its state leads its label */
+.alert-switch::before { content: '○'; margin-right: 5px; color: var(--muted); }
+.alert-switch[aria-checked="true"]::before { content: '●'; color: var(--accent); }
 
 /* a gate card (the Run screen's, views/run/; the run chat's ask builds on .run-gate-wide) */
 .run-gate { display: flex; flex-direction: column; gap: 6px; }

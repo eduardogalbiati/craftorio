@@ -180,8 +180,6 @@ button.bl-label { font-family: inherit; cursor: pointer; }
 .bl-board { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; align-items: start; }
 .bl-board.with-local { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 .bl-col-local h3 { color: var(--orange); }
-.bl-local { border-color: var(--orange); }
-.bl-local .error { margin: 0; }
 .bl-notpushed { color: var(--orange); border-color: var(--orange); }
 .bl-push-commits { max-height: 220px; overflow: auto; margin: 6px 0; padding-left: 18px; }
 .bl-col { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 10px; }
@@ -232,9 +230,7 @@ button.bl-label { font-family: inherit; cursor: pointer; }
 .bl-group { color: var(--accent); }
 /* Write & Review on an issue (#103): its run's badge and the card's action */
 .bl-enrich { cursor: pointer; border: 1px solid var(--accent); color: var(--accent); background: transparent; }
-/* Backlog Refresh (#161): the banner is one line; an issue the last refresh updated has a badge for a day */
-.bl-refresh { flex-wrap: nowrap; border-color: var(--accent); }
-.bl-refresh > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Backlog Refresh (#161; its alert is the page's, #270): an issue the last refresh updated has a badge for a day */
 .bl-refreshed { border: 1px solid var(--accent); color: var(--accent); background: transparent; }
 .bl-skipped { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 /* Epics (#138): the card badge, the filter, the Epics view (backlog.js renderEpics) */
@@ -254,7 +250,6 @@ button.bl-label { font-family: inherit; cursor: pointer; }
 .bl-epics-bar { margin-bottom: 10px; }
 .bl-epic-head .bl-tasks { width: 110px; flex-shrink: 0; }
 .bl-epic-member > .badge, .bl-epic-member > span { flex-shrink: 0; white-space: nowrap; }
-.rm-by-epic { margin-right: 6px; }
 /* Backlog › Roadmap (backlog-roadmap.js) */
 .bl-roadmap { color: var(--accent); }
 /* #193: the page head (title, project, platform, Sync, New issue…) wraps on a narrow window instead
@@ -266,9 +261,30 @@ button.bl-label { font-family: inherit; cursor: pointer; }
 /* #193: no horizontal scroll. Every grid of the roadmap has one track that may shrink below its
    content (minmax(0, 1fr), not the default auto track sized by the longest nowrap line), so a long
    reason ends with "…" at the card's edge and the other long texts wrap inside the card. */
-.rm { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; min-width: 0; }
+/* #269: one gap (12px, the Board's) from the alerts to the filter row, the bar and each stage */
+.rm { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; min-width: 0; }
 .rm .bl-queue { margin-bottom: 0; }
 .rm-bar > span { min-width: 0; overflow-wrap: anywhere; }
+/* the bar (#269): its state dot before the title (the sidebar's run indicator: blue and pulsing while
+   running; amber paused, red paused by a failure, grey planned, green done), Stop in red, the ⋮ menu */
+.rm-bar-title { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.rm-state-dot { position: relative; flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--muted); }
+.rm-state-dot.is-running { background: var(--accent); animation: pulse 1.2s infinite; }
+.rm-state-dot.is-paused { background: var(--yellow); }
+.rm-state-dot.is-failed { background: var(--red); }
+.rm-state-dot.is-done { background: var(--green); }
+.rm-bar .btn.danger { border-color: rgba(248,113,113,.45); }
+.rm-bar .btn.danger:hover:not(:disabled) { border-color: var(--red); }
+.rm-menu-btn { padding: 2px 8px; font-size: 14px; line-height: 1.3; }
+/* the filter row above the bar (#269): the epic, Planned | All, the date range, Group by epic */
+.rm-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.rm-filters select { width: auto; flex: none; max-width: 220px; padding: 3px 6px; font-size: 12px; }
+.rm-filters select.active { border-color: #8B5CF6; }
+/* "Restore an earlier version…" (#281): the kept versions, newest first */
+.rm-versions { list-style: none; display: grid; gap: 4px; max-height: 50vh; margin: 8px 0; padding: 0; overflow: auto; }
+.rm-version { display: flex; align-items: center; gap: 12px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px; }
+.rm-version-what { display: grid; flex: 1; min-width: 0; }
+.rm-version-what b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rm-stage { border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px; background: var(--panel); display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; min-width: 0; }
 .rm-stage.current { border-color: var(--accent); }
 .rm-stage.finished { opacity: .7; }
@@ -333,8 +349,6 @@ a.rm-title:hover { text-decoration: underline; }
 .badge.rm-verdict-bad { color: var(--red); background: color-mix(in srgb, var(--red) 12%, var(--panel)); border-color: color-mix(in srgb, var(--red) 45%, transparent); }
 .rm-verdict .rm-sign { font-size: .85em; }
 /* #268: what the Roadmap shows: the Planned | All switch, the date range, the pages (earlier stages, "Loading…") */
-.rm-view-seg, select.rm-since { margin-right: 6px; }
-select.rm-since { width: auto; padding: 3px 6px; font-size: 12px; }
 .rm-earlier { display: block; margin: 0 auto 8px; }
 .rm-loading { padding: 10px; text-align: center; }
 /* #267: a stage's folded finished items: a chip in the run chat's done green (.duo-note.done) */
