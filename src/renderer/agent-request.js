@@ -8,7 +8,8 @@
 // line links to it).
 // #241: a request that waits for the owner's click (a run retry, what the Night watch does not allow)
 // is a card with Do it / Dismiss here, never in the Oracle's chat; a done change with a backup has Undo.
-// The click goes to the owner's channel (supervisor:requestAct, po:requestAct).
+// The click goes to the owner's channel (supervisor:requestAct, po:requestAct); until it answers, the
+// card's pill reads Running (Dismissing, Undoing).
 (function () {
   const SENDERS = { oracle: 'the Oracle' };
   const sender = (from) => SENDERS[from] || (from ? `the ${from}` : 'another agent');
@@ -51,11 +52,14 @@
       : st.canDo ? `<button class="btn primary sm" type="button" data-request-act="do" data-testid="request-do">Do it</button><button class="btn ghost sm" type="button" data-request-act="dismiss" data-testid="request-dismiss">Dismiss</button>`
         : st.canUndo ? `<button class="btn ghost sm" type="button" data-request-act="undo" data-testid="request-undo" title="Put back the backup taken before the change">Undo</button>` : '';
     return `<div class="sup-wmsg system agent-request${failed ? ' error' : ''}" data-testid="${esc(testid)}" data-request-ref="${esc(r.ref || '')}"${owner ? ` data-request-owner="${esc(owner)}" data-request-project="${esc(projectId || '')}"` : ''}>
-      <div class="sup-wmsg-meta">Request from ${esc(sender(r.from))} at ${esc(hhmm(msg.ts))} · <span class="badge">${esc(r.kind || '')}</span> · <span class="pill pill-${st.pill}">${esc(st.label)}</span>${back}</div>
+      <div class="sup-wmsg-meta">Request from ${esc(sender(r.from))} at ${esc(hhmm(msg.ts))} · <span class="badge">${esc(r.kind || '')}</span> · <span class="pill pill-${st.pill}" data-testid="request-state">${esc(st.label)}</span>${back}</div>
       ${msg.reason ? `<div>${esc(msg.reason)}</div>` : ''}
       ${question ? `<div class="small muted">${esc(question.text)}</div>` : ''}
       ${outcome}${cost}${buttons ? `<div class="row agent-request-actions">${buttons}</div>` : ''}</div>`;
   }
+
+  // the card's pill while the owner's click is being handled
+  const ACTING = { dismiss: 'Dismissing', do: 'Running', undo: 'Undoing' };
 
   // The owner's click on a card: the owner's channel runs it, then the screen redraws its conversation
   // (the 'agent-request:changed' event: { owner, projectId, messages, error }; no messages: reload them).
@@ -65,6 +69,13 @@
     if (!owner) return;
     const input = { ref: card.dataset.requestRef, action: btn.dataset.requestAct, mock: typeof devMode === 'function' ? devMode() : false };
     card.querySelectorAll('[data-request-act]').forEach((b) => { b.disabled = true; });
+    // until the owner's channel answers (a run retry can take a while), the card reads as running
+    const pill = card.querySelector('[data-testid="request-state"]');
+    if (pill) {
+      pill.className = 'pill pill-running';
+      pill.textContent = ACTING[input.action] || 'Working';
+    }
+    card.setAttribute('aria-busy', 'true');
     let out;
     try {
       out = owner === 'po' ? await window.api.productOwnerRequestAct({ ...input, projectId: card.dataset.requestProject }) : await window.api.supervisorRequestAct(input);

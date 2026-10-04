@@ -721,6 +721,12 @@ const REQUEST_KINDS = [
   'roadmap.skip',
 ];
 const JUDGMENT_KINDS = ['plan'];
+// #241: the kinds that publish to the issue tracker: an Oracle request of one waits for the owner's
+// click by day (under the Night watch, its permissions decide)
+const CONFIRM_KINDS = [
+  'issue.file',
+  'issue.update',
+];
 
 /**
  * Another agent's request (#240): { kind, params, reason, from, ref } → { ok, text, costUsd, error?, ownerTs }.
@@ -1463,6 +1469,7 @@ module.exports = {
   calibrateGroups,
   clearConversation,
   complexityOf,
+  CONFIRM_KINDS,
   costedGroups,
   costInputs,
   currentDraft,

@@ -6,7 +6,11 @@ const path = require('path');
 const simulation = require('../../engine/simulation');
 const supervisor = require('../../supervisor');
 const { createBridge, mcpCommand } = require('../../supervisor-bridge');
-const { CLICK_KINDS, createSupervisorChat } = require('../../supervisor-chat');
+const {
+  CLICK_KINDS,
+  CONFIRM_KINDS,
+  createSupervisorChat,
+} = require('../../supervisor-chat');
 const { createWatches } = require('../../supervisor-watch');
 const { resolveCommand } = require('../../engine/providers');
 const { supervisorTools } = require('../../supervisor-tools');
@@ -33,15 +37,16 @@ module.exports = (ctx) => {
 
   // ---- the inbox (#240, #241) ---------------------------------------------------------------------
   const performer = (mock) => (kind, params) => ctx.performAction(kind, params, { mock: !!mock || simulation.simulationOnly() });
-  const rules = (byContent = false) => ctx.inboxRules?.('supervisor', { clickKinds: CLICK_KINDS, byContent }) || {};
+  // (`byModel`: the Oracle's request_agent; by day its CONFIRM_KINDS wait too)
+  const rules = (byContent = false, byModel = false) => ctx.inboxRules?.('supervisor', { clickKinds: CLICK_KINDS, confirmKinds: CONFIRM_KINDS, byContent, byModel }) || {};
   // a request from the Oracle (or the owner's click on one) leaves a short line in the Oracle's chat
   const sent = (out) => {
     if (out.from !== 'oracle') return;
     ctx.oracleService?.()?.requested({ to: 'supervisor', ref: out.ref, ownerTs: out.ownerTs, requestKind: out.kind, text: out.text, costUsd: out.costUsd, error: out.error, pending: out.pending });
   };
   const answer = (out) => ({ ok: out.ok, text: out.text, costUsd: out.costUsd, ...(out.error ? { error: out.error } : {}), ...(out.pending ? { pending: true } : {}) });
-  const request = async ({ mock, byContent, ...input } = {}) => {
-    const out = await chat().handleRequest(input, { perform: performer(mock), ...rules(!!byContent) });
+  const request = async ({ mock, byContent, byModel, ...input } = {}) => {
+    const out = await chat().handleRequest(input, { perform: performer(mock), ...rules(!!byContent, !!byModel) });
     sent(out);
     return answer(out);
   };

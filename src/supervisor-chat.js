@@ -14,7 +14,8 @@
 // Its inbox (#240, src/agent-inbox.js): handleRequest takes another agent's request (the Oracle's) of
 // a kind in REQUEST_KINDS, all mechanical: the code of the app's own buttons, given by the service
 // (`perform`), no model call, US$ 0. The request and its result are messages of this chat.
-// #241: a kind that starts a run (CLICK_KINDS), or one the Night watch does not allow, is a card here
+// #241: a kind that starts a run (CLICK_KINDS), one the Night watch does not allow, or by day a
+// hard-to-reverse kind the Oracle's model asked for (CONFIRM_KINDS) is a card here
 // that runs on the owner's Do it (actRequest), never in the Oracle's chat.
 
 const fs = require('fs');
@@ -36,6 +37,15 @@ const REQUEST_KINDS = [
 const CLICK_KINDS = [
   'run.resume',
   'run.retry',
+];
+// #241: the kinds that are hard to reverse (a commit, a restore, a stop, a restart): an Oracle request
+// of one waits for the owner's click by day (under the Night watch, its permissions decide)
+const CONFIRM_KINDS = [
+  'dispatch.restart',
+  'run.stop',
+  'skill.restore',
+  'workflow.commit',
+  'workflow.restore',
 ];
 
 const DEFAULT_MODEL = 'claude-opus-5-5';
@@ -218,6 +228,7 @@ function createSupervisorChat({ dir, tools, bridge, mcpCommand, skillsDirs, reso
 
 module.exports = {
   CLICK_KINDS,
+  CONFIRM_KINDS,
   createSupervisorChat,
   DEFAULT_MODEL,
   questionText,

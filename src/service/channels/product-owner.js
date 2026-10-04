@@ -148,14 +148,15 @@ module.exports = (ctx) => {
   };
   const performer = (id, mock) => (kind, params) => REQUESTS[kind]({ ...params, projectId: id }, { mock: !!mock || simulation.simulationOnly() });
   // #241: which requests wait for the owner's click (the Night watch's permissions, content) and the night log
-  const rules = (id, byContent = false) => ctx.inboxRules?.('product-owner', { project: id, byContent }) || {};
+  // (`byModel`: the Oracle's request_agent; by day its CONFIRM_KINDS wait too)
+  const rules = (id, byContent = false, byModel = false) => ctx.inboxRules?.('product-owner', { project: id, byContent, byModel, confirmKinds: productOwner.CONFIRM_KINDS }) || {};
   // a request from the Oracle (or the owner's click on one) leaves a short line in the Oracle's chat
   const sent = (out, id) => {
     if (out.from !== 'oracle') return;
     ctx.oracleService?.()?.requested({ to: 'product-owner', ref: out.ref, ownerTs: out.ownerTs, requestKind: out.kind, projectId: id, text: out.text, costUsd: out.costUsd, error: out.error, pending: out.pending });
   };
   const answer = (out) => ({ ok: out.ok, text: out.text, costUsd: out.costUsd, ...(out.error ? { error: out.error } : {}), ...(out.pending ? { pending: true } : {}) });
-  const request = async ({ projectId, mock, byContent, ...input } = {}) => {
+  const request = async ({ projectId, mock, byContent, byModel, ...input } = {}) => {
     const id = project(projectId || '');
     // no project, no conversation to record it in
     let known = null;
@@ -175,7 +176,7 @@ module.exports = (ctx) => {
       request: input,
       perform: performer(id, mock),
       ask: ({ question, request: tag }) => productOwner.ask({ ...askOptions(id, simulated), question, mode: 'plan', request: tag }),
-      ...rules(id, !!byContent),
+      ...rules(id, !!byContent, !!byModel),
     });
     sent(out, id);
     return answer(out);

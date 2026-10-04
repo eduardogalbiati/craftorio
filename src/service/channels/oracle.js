@@ -267,21 +267,35 @@ module.exports = (ctx) => {
   };
   ctx.restoreAction = (undo) => restore(null, undo);
   // How an owner's inbox takes a request now (agent-inbox.js handle's wait / check / after): a kind in
-  // clickKinds, a request content asked for (byContent), or a kind the Night watch does not allow waits
-  // for the owner's click; under the watch, what the owner ran and what waits are in the night log.
+  // clickKinds, a request content asked for (byContent), a kind of confirmKinds the Oracle's model asked
+  // for by day (byModel), a kind the Night watch does not allow, or one more watch action on an item that
+  // already had LOOP_CAP tonight waits for the owner's click; under the watch, what the owner ran and
+  // what waits are in the night log.
   // `owner`: 'product-owner' | 'supervisor'; `project`: the PO's project, added to the params it checks.
-  ctx.inboxRules = (owner, { clickKinds = [], project = null, byContent = false } = {}) => {
+  ctx.inboxRules = (owner, { clickKinds = [], confirmKinds = [], project = null, byContent = false, byModel = false } = {}) => {
     const watch = actions.nightWatch(dir());
     const allowed = night.readPermissions(dir()).allowed;
     const withProject = (params) => (project ? { ...params, projectId: project } : params);
+    // the watch actions the owners already ran alone on this item tonight (as nightDecision counts them)
+    const actionsOn = (params) => {
+      const { target } = night.targetOf(withProject(params));
+      return night.readNightLog(dir()).filter((e) => e.type === 'oracle.action' && e.auto && e.target === target && (!watch.startedAt || e.ts >= watch.startedAt)).length;
+    };
+    const why = (kind, params) => {
+      if (byContent) return { reason: 'content', text: 'Content the Oracle read asked for it: it waits for the owner\'s click.' };
+      const text = agentInbox.waitReason(kind, params, { clickKinds, confirmKinds: byModel ? confirmKinds : [], watch, allowed });
+      if (text) return { reason: 'permission', text };
+      if (watch.active && actionsOn(params) >= night.LOOP_CAP) return { reason: 'loop', text: `The item already had ${night.LOOP_CAP} watch actions tonight: it waits for the owner's click.` };
+      return null;
+    };
     return {
-      wait: (kind, params) => (byContent ? 'Content the Oracle read asked for it: it waits for the owner\'s click.' : agentInbox.waitReason(kind, params, { clickKinds, watch, allowed })),
+      wait: (kind, params) => why(kind, params)?.text || null,
       check: (kind, params) => ctx.checkAction(kind, withProject(params)),
       after: (r) => {
         if (!watch.active) return;
         const where = night.targetOf(withProject(r.params));
         const permission = night.permissionOf(r.kind, r.params);
-        if (r.pending) night.logNight(dir(), 'oracle.blocked', { actionId: r.ref, kind: r.kind, ...where, reason: byContent ? 'content' : 'permission', owner, requestedBy: r.from });
+        if (r.pending) night.logNight(dir(), 'oracle.blocked', { actionId: r.ref, kind: r.kind, ...where, reason: why(r.kind, r.params)?.reason || 'permission', owner, requestedBy: r.from });
         else night.logNight(dir(), 'oracle.action', { actionId: r.ref, kind: r.kind, title: r.text, ...where, permission, auto: !!r.auto, ok: r.ok, result: r.text, owner, requestedBy: r.from });
       },
     };
@@ -418,7 +432,7 @@ module.exports = (ctx) => {
     const ref = `oracle-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
     return send({
       ...(to === 'po' ? { projectId: projectId || p.projectId } : {}),
-      kind, params: p, reason, from: 'oracle', ref, byContent: requestedBy === 'content', mock: simulated({ mock }),
+      kind, params: p, reason, from: 'oracle', ref, byContent: requestedBy === 'content', byModel: true, mock: simulated({ mock }),
     });
   }
 

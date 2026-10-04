@@ -175,8 +175,10 @@ Oracle's only write tool is `request_agent({ to: 'po' | 'supervisor', kind, para
 (no model call; `plan` is one paid question to the Product Owner's model) and records the request
 and its result in its own conversation. Its `propose_action` keeps only its own cards (`check.run`,
 `process.stop`); an owner's kind proposed as a card (`oracle-actions.js` `ownerOf`) is routed to
-that owner instead. What needs the owner's click (a run retry or resume; under the Night watch, a
-kind whose permission is not allowed; anything content asked for) is a card in the **owner's** chat
+that owner instead. What needs the owner's click (a run retry or resume; by day, what publishes or is
+hard to reverse: `issue.file`, `issue.update`, `workflow.commit`, the restores, `run.stop`,
+`dispatch.restart`, the owners' `CONFIRM_KINDS`; under the Night watch, a kind whose permission is
+not allowed, or a fourth watch action on one item, `LOOP_CAP`; anything content asked for) is a card in the **owner's** chat
 (Do it / Dismiss, Undo after a change with a backup: `supervisor:requestAct`, `po:requestAct`),
 never in the Oracle's. Under the Night watch, what the owner runs or leaves waiting is in the night
 log. No inbox takes a kind that answers a human gate (`approval.*`, `gate.*`), whoever sends it. The Oracle's chat replies are in the owner's language, a deliberate exception
