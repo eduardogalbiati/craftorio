@@ -186,8 +186,10 @@ function cleanItem(raw, known, previous) {
   if (!refs.length) throw new Error(`The ${workflow} item has no issue.`);
   const issues = refs.map((r) => issueOf(r, known));
   const old = previous.get(raw.id);
-  // #238: an archived issue is out of the plans (finished items keep their history)
-  const archived = FINISHED.has(old?.status) ? null : issues.find((i) => isArchived(known.get(i.number)));
+  // #238: an archived issue cannot join an item (what an item already held stays, so the roadmap
+  // can still be edited when an issue was archived on the platform)
+  const held = new Set(old ? itemIssues(old).map((i) => i.number) : []);
+  const archived = issues.find((i) => !held.has(i.number) && isArchived(known.get(i.number)));
   if (archived) throw new Error(`Issue #${archived.number} is archived: restore it in the Backlog before planning it.`);
   const state = old || { status: 'planned', runId: null, runs: [], error: null };
   const reason = String(raw.reason ?? old?.reason ?? '').trim();

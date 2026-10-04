@@ -663,6 +663,7 @@ function updateCachedIssue(dir, projectId, issue) {
 
 const ARCHIVED_COLOR = 'ededed';
 const sameLabel = (l, name) => String(l?.name ?? l).toLowerCase() === name;
+const notAnIssue = (n) => (Number.isInteger(n) && n > 0 ? null : `Not an issue number: ${n}`);
 
 function patchCachedIssue(dir, projectId, number, fn) {
   const issue = dir && projectId ? readBacklog(dir, projectId)?.issues?.find((i) => i.number === number) : null;
@@ -712,7 +713,7 @@ async function archiveIssues({ platform, repo, numbers, issues = [], dir = null,
   const results = [];
   let label = null;
   for (const number of (numbers || []).map(Number)) {
-    const refused = archiveBlockReason(known.get(number));
+    const refused = notAnIssue(number) || archiveBlockReason(known.get(number));
     if (refused) {
       results.push({ number, ok: false, error: refused });
       continue;
@@ -742,6 +743,10 @@ async function archiveIssues({ platform, repo, numbers, issues = [], dir = null,
 async function restoreIssues({ platform, repo, numbers, dir = null, projectId = null, exec = execCli }) {
   const results = [];
   for (const number of (numbers || []).map(Number)) {
+    if (notAnIssue(number)) {
+      results.push({ number, ok: false, error: notAnIssue(number) });
+      continue;
+    }
     try {
       const at = { platform, repo, number };
       await runSteps([
