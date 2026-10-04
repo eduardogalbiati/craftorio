@@ -69,6 +69,85 @@ test('only a request from the Oracle links back to the Oracle\'s chat', () => {
   assert.doesNotMatch(cardHtml(other, [other], { testid: 'po-request' }), /data-open-oracle-chat/);
 });
 
+// #241: the owner's click on a card. The module's document click listener is captured; the card is a
+// minimal element (its pill and buttons), the owner's channel a stub whose answer the test releases.
+function loadClicks(api) {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'agent-request.js'), 'utf8');
+  const events = [];
+  const window = { api, dispatchEvent: (ev) => events.push(ev) };
+  let onClick = null;
+  const esc = (s) => String(s ?? '');
+  class CustomEvent { constructor(type, init) { this.type = type; this.detail = init?.detail; } }
+  const document = { addEventListener: (type, fn) => { if (type === 'click') onClick = fn; }, querySelectorAll: () => [] };
+  const sandbox = { window, esc, document, setTimeout, CustomEvent };
+  vm.createContext(sandbox);
+  vm.runInContext(src, sandbox);
+  return { click: (target) => onClick({ target, preventDefault() {} }), events };
+}
+
+function pendingCard({ owner = 'supervisor', projectId = '' } = {}) {
+  const pill = { className: 'pill pill-cancelled', textContent: 'Waits for your click' };
+  const attrs = {};
+  const card = {
+    dataset: { requestRef: 'r1', requestOwner: owner, requestProject: projectId },
+    querySelector: (sel) => (sel === '[data-testid="request-state"]' ? pill : null),
+    querySelectorAll: () => buttons,
+    setAttribute: (k, v) => { attrs[k] = v; },
+  };
+  const button = (act) => ({ disabled: false, dataset: { requestAct: act }, closest: (sel) => (sel === '[data-request-act]' ? buttons.find((b) => b.dataset.requestAct === act) : sel === '[data-request-ref]' ? card : null) });
+  const buttons = [button('do'), button('dismiss')];
+  return { card, pill, attrs, buttons, btn: (act) => buttons.find((b) => b.dataset.requestAct === act) };
+}
+
+const deferred = () => { let resolve; const promise = new Promise((r) => { resolve = r; }); return { promise, resolve }; };
+const tick = () => new Promise((r) => setImmediate(r));
+
+test('after Do it, the card\'s state reads Running until the owner\'s channel answers, then its result is drawn', async () => {
+  const answer = deferred();
+  const calls = [];
+  const { click, events } = loadClicks({ supervisorRequestAct: (input) => { calls.push(input); return answer.promise; } });
+  const c = pendingCard();
+
+  click(c.btn('do'));
+  assert.equal(c.pill.textContent, 'Running');
+  assert.equal(c.pill.className, 'pill pill-running');
+  assert.equal(c.btn('do').disabled, true);
+  assert.equal(c.btn('dismiss').disabled, true);
+  assert.equal(c.attrs['aria-busy'], 'true');
+  assert.deepEqual(calls.map((x) => [x.ref, x.action]), [['r1', 'do']]);
+  await tick();
+  assert.equal(c.pill.textContent, 'Running', 'still running while the act has not answered');
+  assert.equal(events.length, 0);
+
+  const messages = [request({ pending: true, status: 'proposed' }), result({ text: 'Done: run r9 was stopped.' })];
+  answer.resolve({ ok: true, text: 'Done: run r9 was stopped.', costUsd: 0, messages });
+  await tick();
+  assert.equal(events.length, 1);
+  assert.equal(events[0].type, 'agent-request:changed');
+  assert.equal(events[0].detail.owner, 'supervisor');
+  assert.equal(events[0].detail.error, null);
+
+  const { cardHtml } = load();
+  const html = cardHtml(events[0].detail.messages[0], events[0].detail.messages, { testid: 'svc-request', owner: 'supervisor' });
+  assert.match(html, /data-testid="request-state">Done</);
+  assert.match(html, /Done: run r9 was stopped\./);
+  assert.doesNotMatch(html, /data-testid="request-do"/);
+});
+
+test('after Dismiss on a Product Owner card, the state reads Dismissing and the PO\'s channel gets the project', async () => {
+  const answer = deferred();
+  const calls = [];
+  const { click } = loadClicks({ productOwnerRequestAct: (input) => { calls.push(input); return answer.promise; } });
+  const c = pendingCard({ owner: 'po', projectId: 'demo' });
+
+  click(c.btn('dismiss'));
+  assert.equal(c.pill.textContent, 'Dismissing');
+  assert.equal(c.pill.className, 'pill pill-running');
+  assert.deepEqual(calls.map((x) => [x.ref, x.action, x.projectId]), [['r1', 'dismiss', 'demo']]);
+  answer.resolve({ ok: true, messages: [] });
+  await tick();
+});
+
 test('the cost reads US$ 0 for nothing and keeps cents otherwise', () => {
   const { usd } = load();
   assert.equal(usd(0), 'US$ 0');
