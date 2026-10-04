@@ -96,7 +96,7 @@
       </label>`).join('');
     const never = p.never.map((x) => `<span class="badge nw-never" title="Never allowed during the Night watch: it always needs you">🔒 ${esc(x.label)}</span>`).join('');
     const saved = p.defaults ? 'Defaults: retry and refresh only.' : `Saved ${esc(dateOf(p.updatedAt))}.`;
-    return `<div class="card nw-card">
+    return `<div class="card nw-card" data-testid="nw-permissions">
       <div class="row nw-card-head"><h3>What the Oracle may do without asking</h3><span class="muted small">${saved} An item gets at most ${s.loopCap} watch actions a night; the next one is left for you.</span></div>
       <div class="s-group nw-perms">${rows}</div>
       ${edit ? `<div class="row nw-perm-actions">${edit.error ? `<p class="error small">${esc(edit.error)}</p>` : ''}<span class="spacer"></span><button class="btn ghost sm" type="button" id="nw-perm-cancel">Cancel</button><button class="btn primary sm" type="button" id="nw-perm-save"${edit.saving ? ' disabled' : ''}>Save</button></div>` : ''}

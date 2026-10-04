@@ -60,7 +60,7 @@
     const text = (k) => s.tasks?.[k - 1]?.text || `Task ${k}`;
     return `<ol class="po-children">${p.children.map((c) => `<li class="po-child">
         <div class="po-child-head"><span class="badge" title="Children of the same stage can run together">stage ${c.stage}</span><span class="badge bl-triage bl-complexity lvl-${c.complexity}" title="Complexity ${c.complexity}/5">C${c.complexity}</span><b class="po-child-title" title="${esc(c.title)}">${esc(c.title)}</b></div>
-        <ul class="po-tasks small">${c.tasks.map((k) => `<li title="${esc(taskPlain(text(k)))}"><span class="muted mono">${k}.</span> ${taskHtml(text(k))}</li>`).join('')}</ul>
+        <ul class="po-tasks small">${c.tasks.map((k) => `<li data-testid="po-split-task" title="${esc(taskPlain(text(k)))}"><span class="muted mono">${k}.</span> ${taskHtml(text(k))}</li>`).join('')}</ul>
         ${c.reason ? `<div class="small muted">${esc(c.reason)}</div>` : ''}
       </li>`).join('')}</ol>
       <div class="small"><span class="muted">Then #${s.issue}:</span> ${p.parent === 'close' ? 'closed in favour of its children, with a comment linking them' : 'an umbrella, with a task list linking its children'}</div>`;
@@ -95,7 +95,7 @@
     const edit = edits.get(key);
     const done = filedSplit(ctx, msg, s);
     const title = s.title || ctx.issueOf(s.issue)?.title || '';
-    return `<div class="po-group po-split${done ? ' applied' : ''}" data-split="${s.issue}">
+    return `<div class="po-group po-split${done ? ' applied' : ''}" data-split="${s.issue}" data-testid="po-split-card">
         <div class="po-group-head">${ctx.issueRef(s.issue)}<b class="po-split-title" title="${esc(title)}">${esc(title)}</b>
           <span class="badge">${s.tasks?.length || 0} tasks</span>
           ${done ? `<span class="badge live">Split into ${esc(done.children.map((c) => (c.number ? `#${c.number}` : c.title)).join(', '))}</span>` : saved.has(key) ? '<span class="badge warn" title="You edited this proposal: the edit is what Split files">edited</span>' : ''}</div>
