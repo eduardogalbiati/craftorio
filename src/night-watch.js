@@ -70,11 +70,15 @@ const permissionsFile = (dir) => path.join(dir, 'night-permissions.json');
 const logFile = (dir) => path.join(dir, 'night-log.jsonl');
 const ms = (t) => (t ? Date.parse(t) : NaN);
 
-/** The permission an action card needs to run alone, or null (it always waits for the owner's click). */
+/** The permission an action card (or an owner's request kind, #241) needs to run alone, or null (it always waits for the owner's click). */
 function permissionOf(kind, params = {}) {
   const p = params && typeof params === 'object' ? params : {};
   switch (kind) {
     case 'roadmap.item': return p.action === 'skip' ? 'skip' : p.fresh ? 'fresh-start' : 'retry';
+    case 'roadmap.skip': return 'skip';
+    case 'roadmap.add': return 'append';
+    case 'roadmap.move': return 'regroup';
+    case 'roadmap.regroup':
     case 'roadmap.stages': return p.append ? 'append' : 'regroup';
     case 'issue.update': return p.mode === 'comment' ? null : 'refresh';
     case 'skill.restore':

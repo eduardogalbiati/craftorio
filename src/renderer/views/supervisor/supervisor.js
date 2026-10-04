@@ -116,7 +116,7 @@
   function messageHtml(msg, i, all) {
     const time = msg.ts ? new Date(msg.ts).toLocaleString() : '';
     // #240: another agent's request and its result, one card (agent-request.js)
-    if (msg.role === 'request') return window.AgentRequest.cardHtml(msg, all, { testid: 'svc-request' });
+    if (msg.role === 'request') return window.AgentRequest.cardHtml(msg, all, { testid: 'svc-request', owner: 'supervisor' });
     if (window.AgentRequest.inCard(msg)) return '';
     if (msg.role === 'user') {
       return `<div class="sup-wmsg user"><div class="sup-wmsg-meta">You · ${esc(time)}${msg.screen ? ` · <span title="What the supervisor was told about the screen">${esc(msg.screen)}</span>` : ''}</div><div>${esc(msg.text)}</div></div>`;
@@ -241,6 +241,14 @@
         if (p?.chat !== 'supervisor' || !sv.live) return;
         window.LiveTurn.apply(sv.live, p);
         renderLive();
+      });
+      // #241: the owner's Do it / Dismiss / Undo on a request card (agent-request.js)
+      window.addEventListener('agent-request:changed', async (e) => {
+        if (e.detail?.owner !== 'supervisor') return;
+        if (e.detail.messages) sv.messages = e.detail.messages;
+        else await load();
+        sv.error = e.detail.error || null;
+        render();
       });
       document.addEventListener('click', (e) => {
         // #180: the live turn's Stop and its steps' toggle

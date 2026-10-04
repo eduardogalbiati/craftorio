@@ -345,7 +345,7 @@
     // #240: a request it sent to an owner's inbox: one short line, the link opens the owner's message
     if (m.kind === 'request') {
       const owner = OWNERS[m.to] || m.to;
-      return `<div class="sup-wmsg system oracle-request${m.failed ? ' error' : ''}" data-testid="oracle-request"><div class="sup-wmsg-meta oracle-meta">Sent to the ${esc(owner)} · <span class="badge">${esc(m.requestKind)}</span> · <span class="pill ${m.failed ? 'pill-failed">Failed' : 'pill-success">Done'}</span> · ${esc(window.AgentRequest.usd(m.costUsd))} · ${esc(time(m.ts))} · <a href="#" data-oracle-open-request="${esc(m.to)}" data-ref="${esc(m.ref)}" data-project="${esc(m.projectId || '')}" title="The request and its result in the ${esc(owner)}'s conversation">Open</a></div><div class="oracle-cut small" title="${esc(m.text)}">${esc(m.text)}</div></div>`;
+      return `<div class="sup-wmsg system oracle-request${m.failed ? ' error' : ''}" data-testid="oracle-request"><div class="sup-wmsg-meta oracle-meta">Sent to the ${esc(owner)} · <span class="badge">${esc(m.requestKind)}</span> · <span class="pill ${m.failed ? 'pill-failed">Failed' : m.pending ? `pill-cancelled" title="A card waits for your click in the ${esc(owner)}'s chat">Waits for your click` : 'pill-success">Done'}</span> · ${esc(window.AgentRequest.usd(m.costUsd))} · ${esc(time(m.ts))} · <a href="#" data-oracle-open-request="${esc(m.to)}" data-ref="${esc(m.ref)}" data-project="${esc(m.projectId || '')}" title="The request and its result in the ${esc(owner)}'s conversation">Open</a></div><div class="oracle-cut small" title="${esc(m.text)}">${esc(m.text)}</div></div>`;
     }
     if (m.kind === 'wake') {
       const mutes = (m.runIds || []).map((id) => {
@@ -431,7 +431,7 @@
     }).join('');
   }
   function logHtml(v) {
-    return (v.state === 'empty' ? '<div class="svc-empty muted small">The Oracle keeps one conversation for the whole app. It reads your runs (events, sessions, decisions, costs), the roadmaps and the Backlog, the workflows and skills, and your projects\' repositories, read-only. Ask it why a run failed, where the tokens go or what to do next. Run events wake it when they need you. It changes nothing on its own: each change is a card you confirm with Do it.</div>' : '')
+    return (v.state === 'empty' ? '<div class="svc-empty muted small">The Oracle keeps one conversation for the whole app. It reads your runs (events, sessions, decisions, costs), the roadmaps and the Backlog, the workflows and skills, and your projects\' repositories, read-only. Ask it why a run failed, where the tokens go or what to do next. Run events wake it when they need you. It changes nothing itself: it sends each change to the agent that owns it (the Product Owner for the Backlog, the Supervisor for runs, workflows and skills), where it is done or waits for your click.</div>' : '')
       + messagesHtml()
       + (or.pending ? `<div class="sup-wmsg user"><div class="sup-wmsg-meta">You</div><div class="oracle-text">${esc(or.pending)}</div>${or.drafts.images.length ? `<div class="oracle-thumbs">${or.drafts.images.map((i) => `<span class="oracle-thumb"><img src="${esc(i.dataUrl)}" alt="" /></span>`).join('')}</div>` : ''}</div>` : '')
       + (or.live ? `<div class="oracle-live">${window.LiveTurn.html(or.live)}</div>` : v.state === 'answering' ? '<div class="sup-loading"><span class="spinner"></span><span>The Oracle is reading…</span></div>' : '')

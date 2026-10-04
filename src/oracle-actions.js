@@ -12,6 +12,10 @@
 // else still waits for the click. An action requested by content the Oracle read (an issue body, a
 // run output, a file: requestedBy 'content') always waits for the click.
 // Every proposal, action and result is appended to <oracle dir>/actions.jsonl.
+// #241: each area has one owner. The kinds an owner holds (OWNED: the Backlog's for the Product Owner,
+// the runs', workflows' and skills' for the Supervisor) keep their checks and descriptions here (the
+// owners' inboxes run them through the service), but the Oracle never performs them: ownerOf() routes
+// them to the owner's inbox (request_agent). Its own cards are ORACLE_KINDS: check.run, process.stop.
 
 const fs = require('fs');
 const path = require('path');
@@ -136,6 +140,24 @@ const ACTIONS = {
   },
 };
 const ACTION_KINDS = Object.keys(ACTIONS).sort();
+// #241: the kinds an owner holds (the Product Owner: the Backlog; the Supervisor: workflows, skills and
+// runs) → { to, kind(params) }: the Oracle routes them to that owner's inbox (request_agent), it never
+// performs them. kind() is the owner's request kind, null when no owner takes that variant.
+const OWNED = {
+  'dispatch.restart': { to: 'supervisor' },
+  'issue.file': { to: 'po' },
+  'issue.update': { to: 'po' },
+  'roadmap.item': { to: 'po', kind: (p) => (p.action === 'skip' ? 'roadmap.skip' : null) },
+  'roadmap.stages': { to: 'po', kind: () => 'roadmap.regroup' },
+  'run.resume': { to: 'supervisor' },
+  'run.retry': { to: 'supervisor' },
+  'run.stop': { to: 'supervisor' },
+  'skill.restore': { to: 'supervisor' },
+  'workflow.commit': { to: 'supervisor' },
+  'workflow.restore': { to: 'supervisor' },
+};
+// what the Oracle still proposes as its own cards: a check, and stopping a stray process (no owner)
+const ORACLE_KINDS = ACTION_KINDS.filter((k) => !OWNED[k]);
 const NIGHT_WATCH_KINDS = [
   'dispatch.restart',
   'issue.file',
@@ -161,6 +183,19 @@ function actionCard({ kind, params, why, requestedBy, source } = {}) {
     kind, params: p, why: s(why), requestedBy: REQUESTERS.includes(requestedBy) ? requestedBy : 'oracle', source: s(source) || null,
     ...def.describe(p), label: def.label,
   };
+}
+
+/**
+ * The owner of an action kind (#241): { to ('po' | 'supervisor'), kind (the owner's request kind, or
+ * null when no owner takes that variant), params } or null for the Oracle's own kinds (ORACLE_KINDS).
+ */
+function ownerOf(kind, params) {
+  const owned = OWNED[kind];
+  if (!owned) return null;
+  const p = params && typeof params === 'object' && !Array.isArray(params) ? params : {};
+  const to = owned.kind ? owned.kind(p) : kind;
+  const { action: _action, ...rest } = p;
+  return { to: owned.to, kind: to, params: kind === 'roadmap.item' ? rest : p };
 }
 
 const nightFile = (dir) => path.join(dir, 'night-watch.json');
@@ -226,6 +261,8 @@ module.exports = {
   NIGHT_WATCH_KINDS,
   nightDecision,
   nightWatch,
+  ORACLE_KINDS,
+  ownerOf,
   REQUESTERS,
   setNightWatch,
 };

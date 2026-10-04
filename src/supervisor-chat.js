@@ -14,6 +14,8 @@
 // Its inbox (#240, src/agent-inbox.js): handleRequest takes another agent's request (the Oracle's) of
 // a kind in REQUEST_KINDS, all mechanical: the code of the app's own buttons, given by the service
 // (`perform`), no model call, US$ 0. The request and its result are messages of this chat.
+// #241: a kind that starts a run (CLICK_KINDS), or one the Night watch does not allow, is a card here
+// that runs on the owner's Do it (actRequest), never in the Oracle's chat.
 
 const fs = require('fs');
 const path = require('path');
@@ -29,6 +31,11 @@ const REQUEST_KINDS = [
   'skill.restore',
   'workflow.commit',
   'workflow.restore',
+];
+// #241: the kinds that start a run (a real one costs money): a card in this chat until the owner's click
+const CLICK_KINDS = [
+  'run.resume',
+  'run.retry',
 ];
 
 const DEFAULT_MODEL = 'claude-opus-5-5';
@@ -187,11 +194,17 @@ function createSupervisorChat({ dir, tools, bridge, mcpCommand, skillsDirs, reso
     },
 
     /**
-     * Another agent's request (#240): { kind, params, reason, from, ref } → { ok, text, costUsd, error?, ownerTs }.
+     * Another agent's request (#240): { kind, params, reason, from, ref } → { ok, text, costUsd, error?, pending?, ownerTs }.
      * `perform(kind, params)` runs it with the app's own code (→ { text }); never a model call.
+     * #241: `wait`, `check` and `after` as in agent-inbox.js handle (a pending card waits for act()).
      */
-    handleRequest(request, { perform } = {}) {
-      return agentInbox.handle(request, { kinds: REQUEST_KINDS, role: 'supervisor', record: post, perform });
+    handleRequest(request, { perform, wait, check, after } = {}) {
+      return agentInbox.handle(request, { kinds: REQUEST_KINDS, role: 'supervisor', record: post, perform, wait, check, after });
+    },
+
+    /** The owner's Do it / Dismiss / Undo on a request card (#241, agent-inbox.js act): { ref, action } → { ok, text, ... }. */
+    actRequest(input, { perform, restore, after } = {}) {
+      return agentInbox.act(input, { history, role: 'supervisor', record: post, perform, restore, after });
     },
 
     /** A new conversation: the messages and the CLI session are forgotten. */
@@ -204,6 +217,7 @@ function createSupervisorChat({ dir, tools, bridge, mcpCommand, skillsDirs, reso
 }
 
 module.exports = {
+  CLICK_KINDS,
   createSupervisorChat,
   DEFAULT_MODEL,
   questionText,

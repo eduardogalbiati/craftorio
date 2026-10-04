@@ -138,7 +138,9 @@ The Supervisor drawer and page (`src/supervisor-chat.js`) run `claude` isolated 
 in the app (`src/supervisor-bridge.js`, 127.0.0.1, per-process bearer token) that runs the read-only
 tools of `src/supervisor-tools.js` over the service. So it sees the app's data (workflows, projects,
 runs, skills, agents, usage, analytics) and never the repositories' code. New tools go in
-`supervisor-tools.js`; write tools must preview and apply only on the user's click.
+`supervisor-tools.js`; write tools must preview and apply only on the user's click. Its model has
+no write tool; the changes it owns (runs, workflows, skills) arrive as requests from the Oracle
+(below) and run with the app's own code.
 
 ## The Oracle (#122)
 
@@ -163,5 +165,19 @@ runner (node, npm test/run, pytest, go test, dotnet test, mvn...; nothing that f
 no npx, npm exec, go run, pip) with plain arguments, no shell syntax or inline code, on a detached scratch worktree under `<workspace>/oracle/checks/` removed afterwards, with
 `MULTIAGENT_SIMULATION_ONLY=1`, stopped after 2 min; a longer check is a `check.run` card (20 min)
 the owner confirms. The service, not the model, writes its
-files (storage.md). The Oracle's chat replies are in the owner's language, a deliberate exception
+files (storage.md).
+
+**The Oracle routes, it never writes (#241).** Each area has one owner: the Backlog (issues,
+roadmap, queue) is the Product Owner's, runs, workflows and skills are the Supervisor's. The
+Oracle's only write tool is `request_agent({ to: 'po' | 'supervisor', kind, params, reason })`
+(channel `oracle:requestAgent`), which hands the change to the owner's inbox (`po:request`,
+`supervisor:request`, `src/agent-inbox.js`): the owner runs it with the code of its own buttons
+(no model call; `plan` is one paid question to the Product Owner's model) and records the request
+and its result in its own conversation. Its `propose_action` keeps only its own cards (`check.run`,
+`process.stop`); an owner's kind proposed as a card (`oracle-actions.js` `ownerOf`) is routed to
+that owner instead. What needs the owner's click (a run retry or resume; under the Night watch, a
+kind whose permission is not allowed; anything content asked for) is a card in the **owner's** chat
+(Do it / Dismiss, Undo after a change with a backup: `supervisor:requestAct`, `po:requestAct`),
+never in the Oracle's. Under the Night watch, what the owner runs or leaves waiting is in the night
+log. No inbox takes a kind that answers a human gate (`approval.*`, `gate.*`), whoever sends it. The Oracle's chat replies are in the owner's language, a deliberate exception
 to the English rule; everything it writes for the product is in English (skill `oracle`).

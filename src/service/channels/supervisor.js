@@ -6,7 +6,7 @@ const path = require('path');
 const simulation = require('../../engine/simulation');
 const supervisor = require('../../supervisor');
 const { createBridge, mcpCommand } = require('../../supervisor-bridge');
-const { createSupervisorChat } = require('../../supervisor-chat');
+const { CLICK_KINDS, createSupervisorChat } = require('../../supervisor-chat');
 const { createWatches } = require('../../supervisor-watch');
 const { resolveCommand } = require('../../engine/providers');
 const { supervisorTools } = require('../../supervisor-tools');
@@ -30,6 +30,24 @@ module.exports = (ctx) => {
     }
     return chats.get(root);
   };
+
+  // ---- the inbox (#240, #241) ---------------------------------------------------------------------
+  const performer = (mock) => (kind, params) => ctx.performAction(kind, params, { mock: !!mock || simulation.simulationOnly() });
+  const rules = (byContent = false) => ctx.inboxRules?.('supervisor', { clickKinds: CLICK_KINDS, byContent }) || {};
+  // a request from the Oracle (or the owner's click on one) leaves a short line in the Oracle's chat
+  const sent = (out) => {
+    if (out.from !== 'oracle') return;
+    ctx.oracleService?.()?.requested({ to: 'supervisor', ref: out.ref, ownerTs: out.ownerTs, requestKind: out.kind, text: out.text, costUsd: out.costUsd, error: out.error, pending: out.pending });
+  };
+  const answer = (out) => ({ ok: out.ok, text: out.text, costUsd: out.costUsd, ...(out.error ? { error: out.error } : {}), ...(out.pending ? { pending: true } : {}) });
+  const request = async ({ mock, byContent, ...input } = {}) => {
+    const out = await chat().handleRequest(input, { perform: performer(mock), ...rules(!!byContent) });
+    sent(out);
+    return answer(out);
+  };
+  // the Oracle's request_agent sends here (src/service/channels/oracle.js)
+  ctx.supervisorRequest = request;
+
   return [
     // Explains a run and recommends actions; the analysis is saved in the run folder
     // (supervisor/analysis-*.md), so it shows up in Artifacts.
@@ -77,21 +95,22 @@ module.exports = (ctx) => {
     },
     { channel: 'supervisor:chatHistory', method: 'supervisorChatHistory', fn: () => chat().history() },
     { channel: 'supervisor:chatClear', method: 'clearSupervisorChat', fn: () => chat().clear() },
-    // #240: another agent's request in the Supervisor's inbox: { kind, params, reason, from, ref, mock } →
-    // { ok, text, costUsd: 0, error? }. Every kind runs the app's own code (the Oracle's action functions,
-    // ctx.performAction), never a model; the request and its result are messages of the chat, and a
-    // request from the Oracle leaves a short line in its chat. A refused or failed one is ok: false.
+    // #240: another agent's request in the Supervisor's inbox: { kind, params, reason, from, ref, byContent?, mock } →
+    // { ok, text, costUsd: 0, error?, pending? }. Every kind runs the app's own code (the Oracle's action
+    // functions, ctx.performAction), never a model; the request and its result are messages of the chat,
+    // and a request from the Oracle leaves a short line in its chat. A refused or failed one is ok: false.
+    // #241: a run retry or resume (or what the Night watch does not allow) is a card waiting for the owner's click.
+    { channel: 'supervisor:request', method: 'supervisorRequest', params: 'opts', fn: (opts) => request(opts) },
+    // #241: the owner's click on a request card in this chat: { ref, action: 'do' | 'dismiss' | 'undo', mock } →
+    // { ok, text, costUsd, error?, messages }
     {
-      channel: 'supervisor:request',
-      method: 'supervisorRequest',
+      channel: 'supervisor:requestAct',
+      method: 'supervisorRequestAct',
       params: 'opts',
-      fn: async ({ mock, ...request } = {}) => {
-        const simulated = !!mock || simulation.simulationOnly();
-        const out = await chat().handleRequest(request, { perform: (kind, params) => ctx.performAction(kind, params, { mock: simulated }) });
-        if (out.from === 'oracle') {
-          ctx.oracleService?.()?.requested({ to: 'supervisor', ref: out.ref, ownerTs: out.ownerTs, requestKind: out.kind, text: out.text, costUsd: out.costUsd, error: out.error });
-        }
-        return { ok: out.ok, text: out.text, costUsd: out.costUsd, ...(out.error ? { error: out.error } : {}) };
+      fn: async ({ ref, action, mock } = {}) => {
+        const out = await chat().actRequest({ ref, action }, { perform: performer(mock), restore: ctx.restoreAction, after: rules().after });
+        sent(out);
+        return { ...answer(out), messages: chat().history() };
       },
     },
     // what the MCP server offers (names and descriptions), for the Supervisor page

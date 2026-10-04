@@ -727,7 +727,7 @@ const JUDGMENT_KINDS = ['plan'];
  * `perform(kind, params)` runs a mechanical kind with the owner's buttons' code (→ { text });
  * `ask({ question, request })` asks the model a plan question tagged with the request (→ { message }).
  */
-function handleRequest({ backlogDir, projectId, request, perform, ask: askModel }) {
+function handleRequest({ backlogDir, projectId, request, perform, ask: askModel, wait, check, after }) {
   return agentInbox.handle(request, {
     kinds: REQUEST_KINDS,
     judgment: JUDGMENT_KINDS,
@@ -735,6 +735,22 @@ function handleRequest({ backlogDir, projectId, request, perform, ask: askModel 
     record: (message) => appendMessage(backlogDir, projectId, message),
     perform,
     ask: (params, tag, reason) => askModel({ question: String(params.question || reason || '').trim(), request: tag }),
+    // #241: a card waiting for the owner's click (the Night watch did not allow it), and the night log
+    wait,
+    check,
+    after,
+  });
+}
+
+/** The owner's Do it / Dismiss / Undo on a request card (#241, agent-inbox.js act): { ref, action } → { ok, text, ... }. */
+function actRequest({ backlogDir, projectId, input, perform, restore, after }) {
+  return agentInbox.act(input, {
+    history: () => readConversation(backlogDir, projectId),
+    role: 'po',
+    record: (message) => appendMessage(backlogDir, projectId, message),
+    perform,
+    restore,
+    after,
   });
 }
 
@@ -1438,6 +1454,7 @@ async function callAgent({ mode = 'plan', question, report, previous, attachment
 }
 
 module.exports = {
+  actRequest,
   ANSWER_SCHEMA,
   applyEpicProposal,
   applySplit,

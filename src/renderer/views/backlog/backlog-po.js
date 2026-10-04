@@ -604,7 +604,7 @@
   function messageHtml(msg, m) {
     const time = msg.ts ? new Date(msg.ts).toLocaleTimeString() : '';
     // #240: another agent's request and its result, one card (agent-request.js)
-    if (msg.role === 'request') return window.AgentRequest.cardHtml(msg, po.messages, { testid: 'po-request' });
+    if (msg.role === 'request') return window.AgentRequest.cardHtml(msg, po.messages, { testid: 'po-request', owner: 'po', projectId: po.projectId });
     if (window.AgentRequest.inCard(msg)) return '';
     if (msg.role === 'user') {
       const files = [...(msg.issues || []).map(issueRef), ...(msg.attachments || []).map((f) => `<span class="badge" title="${esc(f)}">${esc(f.split(/[\\/]/).pop())}</span>`)].join(' ');
@@ -818,6 +818,14 @@
   $p('#btn-po-close').onclick = close;
   $p('#po-backdrop').onclick = close;
   $p('#btn-po-ask').onclick = askFromBox;
+  // #241: the owner's Do it / Dismiss / Undo on a request card (agent-request.js)
+  window.addEventListener('agent-request:changed', async (e) => {
+    const { owner, projectId, messages, error } = e.detail || {};
+    if (owner !== 'po' || projectId !== po.projectId) return;
+    try { po.messages = messages || await api.productOwnerHistory(projectId); } catch (err) { po.error = errMsg(err); }
+    if (error) po.error = error;
+    render();
+  });
   $p('#po-question').addEventListener('keydown', (e) => {
     // an Enter that ends an IME composition is not a send; while busy it sends nothing (#234)
     if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); askFromBox(); }

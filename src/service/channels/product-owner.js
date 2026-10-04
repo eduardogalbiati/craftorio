@@ -19,6 +19,8 @@
 // roadmap: roadmaps.propose; Assign: ctx.assignWorkflow; the Roadmap's skip and saved stages and the
 // issue writes: the action functions, ctx.performAction); `plan` is a po:ask question. A request from
 // the Oracle leaves a short line in its chat, linking to the result message here.
+// #241: po:request is the Product Owner's end of the Oracle's request_agent (ctx.productOwnerRequest);
+// a request waiting for the owner's click is a card in the drawer, run or dropped by po:requestAct.
 
 const path = require('path');
 const agents = require('../../agents');
@@ -144,6 +146,43 @@ module.exports = (ctx) => {
     // the Roadmap's Skip on an item ({ itemId })
     'roadmap.skip': (p, { mock }) => ctx.performAction('roadmap.item', { ...p, action: 'skip' }, { mock }),
   };
+  const performer = (id, mock) => (kind, params) => REQUESTS[kind]({ ...params, projectId: id }, { mock: !!mock || simulation.simulationOnly() });
+  // #241: which requests wait for the owner's click (the Night watch's permissions, content) and the night log
+  const rules = (id, byContent = false) => ctx.inboxRules?.('product-owner', { project: id, byContent }) || {};
+  // a request from the Oracle (or the owner's click on one) leaves a short line in the Oracle's chat
+  const sent = (out, id) => {
+    if (out.from !== 'oracle') return;
+    ctx.oracleService?.()?.requested({ to: 'product-owner', ref: out.ref, ownerTs: out.ownerTs, requestKind: out.kind, projectId: id, text: out.text, costUsd: out.costUsd, error: out.error, pending: out.pending });
+  };
+  const answer = (out) => ({ ok: out.ok, text: out.text, costUsd: out.costUsd, ...(out.error ? { error: out.error } : {}), ...(out.pending ? { pending: true } : {}) });
+  const request = async ({ projectId, mock, byContent, ...input } = {}) => {
+    const id = project(projectId || '');
+    // no project, no conversation to record it in
+    let known = null;
+    try {
+      known = projectId ? projects.readProject(ctx.ws.projects, id) : null;
+    } catch {
+      // readProject throws for a missing project file
+    }
+    if (!known) {
+      const error = `Unknown project: ${projectId || '(none)'}`;
+      return { ok: false, text: error, costUsd: 0, error };
+    }
+    const simulated = !!mock || simulation.simulationOnly();
+    const out = await productOwner.handleRequest({
+      backlogDir: ctx.ws.backlog,
+      projectId: id,
+      request: input,
+      perform: performer(id, mock),
+      ask: ({ question, request: tag }) => productOwner.ask({ ...askOptions(id, simulated), question, mode: 'plan', request: tag }),
+      ...rules(id, !!byContent),
+    });
+    sent(out, id);
+    return answer(out);
+  };
+  // the Oracle's request_agent sends here (src/service/channels/oracle.js)
+  ctx.productOwnerRequest = request;
+
   return [
     {
       channel: 'po:ask',
@@ -248,37 +287,25 @@ module.exports = (ctx) => {
       },
     },
     { channel: 'po:history', method: 'productOwnerHistory', params: ['projectId'], fn: ({ projectId }) => productOwner.readConversation(ctx.ws.backlog, project(projectId)) },
-    // #240: another agent's request: { projectId, kind, params, reason, from, ref, mock } → { ok, text, costUsd, error? };
-    // a refused or failed request is ok: false (recorded in the conversation too), never a throw
+    // #240: another agent's request: { projectId, kind, params, reason, from, ref, byContent?, mock } →
+    // { ok, text, costUsd, error?, pending? }; a refused or failed request is ok: false (recorded in the
+    // conversation too), never a throw. #241: under the Night watch, a kind it does not allow is a card
+    // waiting for the owner's click (pending).
+    { channel: 'po:request', method: 'productOwnerRequest', params: 'opts', fn: (opts) => request(opts) },
+    // #241: the owner's click on a request card in the drawer: { projectId, ref, action: 'do' | 'dismiss' | 'undo', mock } →
+    // { ok, text, costUsd, error?, messages }
     {
-      channel: 'po:request',
-      method: 'productOwnerRequest',
+      channel: 'po:requestAct',
+      method: 'productOwnerRequestAct',
       params: 'opts',
-      fn: async ({ projectId, mock, ...request } = {}) => {
-        const id = project(projectId || '');
-        // no project, no conversation to record it in
-        let known = null;
-        try {
-          known = projectId ? projects.readProject(ctx.ws.projects, id) : null;
-        } catch {
-          // readProject throws for a missing project file
-        }
-        if (!known) {
-          const error = `Unknown project: ${projectId || '(none)'}`;
-          return { ok: false, text: error, costUsd: 0, error };
-        }
-        const simulated = !!mock || simulation.simulationOnly();
-        const out = await productOwner.handleRequest({
-          backlogDir: ctx.ws.backlog,
-          projectId: id,
-          request,
-          perform: (kind, params) => REQUESTS[kind]({ ...params, projectId: id }, { mock: simulated }),
-          ask: ({ question, request: tag }) => productOwner.ask({ ...askOptions(id, simulated), question, mode: 'plan', request: tag }),
+      fn: async ({ projectId, ref, action, mock } = {}) => {
+        const id = project(projectId);
+        const out = await productOwner.actRequest({
+          backlogDir: ctx.ws.backlog, projectId: id, input: { ref, action },
+          perform: performer(id, mock), restore: ctx.restoreAction, after: rules(id).after,
         });
-        if (out.from === 'oracle') {
-          ctx.oracleService?.()?.requested({ to: 'product-owner', ref: out.ref, ownerTs: out.ownerTs, requestKind: out.kind, projectId: id, text: out.text, costUsd: out.costUsd, error: out.error });
-        }
-        return { ok: out.ok, text: out.text, costUsd: out.costUsd, ...(out.error ? { error: out.error } : {}) };
+        sent(out, id);
+        return { ...answer(out), messages: productOwner.readConversation(ctx.ws.backlog, id) };
       },
     },
   ];
