@@ -331,6 +331,18 @@ input[type=text].rm-note { max-width: 520px; }
 .rm-title { color: var(--text); font-weight: 600; text-decoration: none; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 a.rm-title:hover { text-decoration: underline; }
 .rm-actions { display: flex; align-items: center; gap: 6px; flex: none; }
+/* Retry / Skip / Ask the Oracle (#271): beside the title on a wide card; on their own row under it when the page
+   is narrow or the Oracle's drawer sits beside it (.shell.oracle-side, oracle.css), so the title keeps its place */
+.rm-fail-actions { display: flex; align-items: center; gap: 6px; flex: none; }
+.rm-fail-actions .btn.gate-oracle { margin-left: 0; }
+@media (max-width: 1100px) {
+  .rm-item-head { flex-wrap: wrap; }
+  .rm-fail-actions { order: 1; flex: 1 1 100%; flex-wrap: wrap; }
+}
+@media (max-width: 1700px) {
+  .shell.oracle-side .rm-item-head { flex-wrap: wrap; }
+  .shell.oracle-side .rm-fail-actions { order: 1; flex: 1 1 100%; flex-wrap: wrap; }
+}
 .rm-meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
 .rm-meta .pill { font-size: 10px; padding: 1px 7px; }
 .rm-wf, .rm-input { color: var(--muted); }

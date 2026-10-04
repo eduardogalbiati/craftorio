@@ -477,15 +477,16 @@
       const text = i.url ? `<a class="rm-title" href="${esc(i.url)}" target="_blank" rel="noopener" draggable="false">${esc(title || 'Open the issue')}</a>` : `<span class="rm-title">${esc(title)}</span>`;
       return `<li class="rm-issue"${locked || open ? '' : ` draggable="true" data-drag-issue="${i.number}" data-from="${esc(x.id)}"`} title="${esc(`#${i.number} ${title}`.trim())}"><span class="rm-num mono">#${i.number}</span>${text}</li>`;
     }).join('');
+    // what to do about an item that did not finish: its own group, which goes under the title on a narrow page (backlog.css)
+    const failActions = `${retryable(x, r) ? `<button class="btn sm primary" type="button" data-rm-item="retry" title="${refused ? 'Start it again: when an ended run kept work for its issues, you choose to resume that run or start from scratch' : 'Run it again (a new run)'}">Retry</button><button class="btn sm ghost" type="button" data-rm-item="skip" title="Count it as finished: the roadmap goes on">Skip</button>` : ''}${askOracleHtml(x)}`;
     // the card carries its status id once the item has started or ended (E2E steps count the done,
     // running and skipped cards); a planned item's id is on its pill only
     return `
       <div class="rm-item rm-${esc(status)}" data-testid="roadmap-item"${status === 'planned' ? '' : ` data-status="${esc(status)}"`} data-item="${esc(x.id)}" data-stage="${s}"${locked || open ? '' : ' draggable="true" data-drag-item'}>
         <div class="rm-item-head">
           <ul class="rm-titles">${titles}</ul>
+          ${failActions ? `<div class="rm-fail-actions">${failActions}</div>` : ''}
           <div class="rm-actions">
-            ${retryable(x, r) ? `<button class="btn sm primary" type="button" data-rm-item="retry" title="${refused ? 'Start it again: when an ended run kept work for its issues, you choose to resume that run or start from scratch' : 'Run it again (a new run)'}">Retry</button><button class="btn sm ghost" type="button" data-rm-item="skip" title="Count it as finished: the roadmap goes on">Skip</button>` : ''}
-            ${askOracleHtml(x)}
             ${locked ? '' : `<button class="btn sm ghost" type="button" data-rm-move="up" title="Earlier in the stage (or into the previous stage)"${n === 0 && s === 0 ? ' disabled' : ''}>↑</button>
             <button class="btn sm ghost" type="button" data-rm-move="down" title="Later in the stage (or into the next stage)">↓</button>
             <button class="link-btn small" type="button" data-rm-remove title="Take this item out of the roadmap">remove</button>`}
