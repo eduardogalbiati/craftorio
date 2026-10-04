@@ -411,3 +411,21 @@ test('ai-development-local-hero (#151): the docs name the ui_reviewer, the code_
   assert.match(engine, /code_review[\s\S]{0,300}(fan-out|parallel)|(fan-out|parallel)[\s\S]{0,300}code_review/i);
   assert.match(fsRead('docs', 'agents', 'renderer.md'), /design-system/);
 });
+
+test('ai-development-local-hero: the developer runs on Opus 5.5 by default, on Fable 5.1 when the run asks, with 1.5x the turn timeout', (t) => {
+  const make = (inputs) => {
+    const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ai-dev-model-'));
+    t.after(() => fs.rmSync(runsDir, { recursive: true, force: true }));
+    return new WorkflowRun({ file: WORKFLOW, inputs: { task: 'Add the feature', repo_path: runsDir, ...inputs }, mock: true, runsDir });
+  };
+  // the engine merges defaults into the agent when it calls it
+  const dev = (r) => ({ ...(r.wf.defaults || {}), ...r.wf.agents.developer });
+  const opus = make({});
+  assert.equal(opus.wf.agents.developer.model, 'claude-opus-5-5');
+  assert.equal(opus.turnTimeout(dev(opus)), 30 * 60e3);
+  const fable = make({ developer_model: 'claude-fable-5-1' });
+  assert.equal(fable.wf.agents.developer.model, 'claude-fable-5-1');
+  assert.equal(fable.turnTimeout(dev(fable)), 45 * 60e3);
+  assert.equal(fable.wf.agents.reviewer.model, 'claude-opus-5-5', 'the reviewer keeps its own model');
+  assert.equal(loadWorkflow(WORKFLOW).orchestrator.limits.max_total_cost_usd, 120);
+});
