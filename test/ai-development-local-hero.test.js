@@ -423,7 +423,7 @@ test('ai-development-local-hero (#151): the docs name the ui_reviewer, the code_
   assert.match(fsRead('docs', 'agents', 'renderer.md'), /design-system/);
 });
 
-test('ai-development-local-hero: the developer runs on Opus 5.5 by default, on Fable 5.1 when the run asks, with 1.5x the turn timeout', (t) => {
+test('ai-development-local-hero: the developer runs on Opus 5.5 by default, on Fable 5.1 when the run asks, with 3x the turn timeout', (t) => {
   const make = (inputs) => {
     const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ai-dev-model-'));
     t.after(() => fs.rmSync(runsDir, { recursive: true, force: true }));
@@ -436,7 +436,7 @@ test('ai-development-local-hero: the developer runs on Opus 5.5 by default, on F
   assert.equal(opus.turnTimeout(dev(opus)), 30 * 60e3);
   const fable = make({ developer_model: 'claude-fable-5-1' });
   assert.equal(fable.wf.agents.developer.model, 'claude-fable-5-1');
-  assert.equal(fable.turnTimeout(dev(fable)), 45 * 60e3);
+  assert.equal(fable.turnTimeout(dev(fable)), 90 * 60e3);
   assert.equal(fable.wf.agents.reviewer.model, 'claude-opus-5-5', 'the reviewer keeps its own model');
   assert.equal(loadWorkflow(WORKFLOW).orchestrator.limits.max_total_cost_usd, 120);
 });

@@ -169,14 +169,14 @@ inputs:
     options: { auto: Automatic, validated: Validated }
     description: "Automatic: the change goes straight from the developer to review and tests. Validated: the run stops after the developer so you can try the change before review and tests are paid for."
   # owner 2026-10-04: the developer's model per run (Fable 5.1 for the hardest work); a Fable run gets
-  # 1.5x the turn timeout (defaults.timeout); a model/provider choice per run with fallbacks is a later issue
+  # 3x the turn timeout (defaults.timeout); a model/provider choice per run with fallbacks is a later issue
   developer_model:
     label: "Developer model"
     type: string
     enum: [claude-opus-5-5, claude-fable-5-1]
     default: claude-opus-5-5
     options: { claude-opus-5-5: "Opus 5.5", claude-fable-5-1: "Fable 5.1" }
-    description: "The model of the developer agent. Fable 5.1 is the most capable (about 2.5x the price per token of Opus 5.5, and slower turns: the turn timeout is 1.5x). The reviewer and the test writer keep their own models."
+    description: "The model of the developer agent. Fable 5.1 is the most capable (about 2.5x the price per token of Opus 5.5, and slower turns: the turn timeout is 3x). The reviewer and the test writer keep their own models."
   # A boolean; saved inputs "true"/"false" (before #116) are accepted by the engine.
   validate_every_round:
     label: "Validate every round"
@@ -256,9 +256,9 @@ x-tools:
 defaults:
   # the run's own git worktree (orchestrator.worktree), or repo_path when it is not a git repo
   working_dir: "{{ worktree_dir }}"
-  # one agent turn: 30m, plus 10m per extra issue of a grouped run, at most 60m (#101); 1.5x when the
-  # developer runs on Fable 5.1 (slower turns on hard tasks)
-  timeout: "{{ ((30 + 10 * ((inputs.issues | length) - 1)) | clamp(30, 60)) * (1.5 if inputs.developer_model == 'claude-fable-5-1' else 1) }}m"
+  # one agent turn: 30m, plus 10m per extra issue of a grouped run, at most 60m (#101); 3x when the
+  # developer runs on Fable 5.1 (owner 2026-10-04: its first run needed more than 1.5x on a 3-issue change)
+  timeout: "{{ ((30 + 10 * ((inputs.issues | length) - 1)) | clamp(30, 60)) * (3 if inputs.developer_model == 'claude-fable-5-1' else 1) }}m"
   # persistent agents: once a turn ends above this context size, the next turn starts a fresh
   # session from the agent's handoff note (runs/<id>/handoffs/)
   max_context: 150k
