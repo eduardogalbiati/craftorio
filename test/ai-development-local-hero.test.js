@@ -62,7 +62,9 @@ test('ai-development-local-hero: the normal path runs the acceptance tests, the 
   assert.deepEqual(transitions, [
     'acceptance_tests>red_check',
     'red_check>develop',
-    'develop>code_review',
+    // #151: the mock developer lists one screen, so its screenshots are taken in automatic mode too
+    'develop>developer_screenshots',
+    'developer_screenshots>code_review',
     'code_review>suite',
     'suite>build',
     'build>evidence',
@@ -196,7 +198,10 @@ test('ai-development-local-hero (#179): a mock run shows the developer\'s self_r
   assert.match(prompts[0], /<skill name="code-review"/, 'the develop prompt carries the code-review skill');
   const developed = events.find((e) => e.type === 'step.finished' && e.step_id === 'develop');
   assert.ok(developed.output.self_review, 'the mock developer answers a self_review (from the schema)');
-  const review = events.find((e) => e.type === 'session.message_sent' && e.step_id === 'code_review');
+  // #151: code_review also runs the UI Reviewer; the code reviewer's own session is the one told
+  const reviewer = events.find((e) => e.type === 'session.opened' && e.session.agent === 'reviewer');
+  assert.ok(reviewer, 'the reviewer has a session');
+  const review = events.find((e) => e.type === 'session.message_sent' && e.step_id === 'code_review' && e.session_id === reviewer.session_id);
   assert.ok(review, 'code_review ran');
   assert.match(review.prompt, /self[- ]review/i, 'the reviewer is told about the developer\'s self-review');
   // the mock's value for a string field named self_review (src/engine/providers.js mockString)
@@ -207,4 +212,157 @@ test('ai-development-local-hero: quality first by default, the change\'s unit te
   const wf = loadWorkflow(WORKFLOW);
   assert.equal(wf.inputs.unit_tests.default, 'write_and_run');
   assert.equal(wf.inputs.e2e_tests.default, 'write_and_run');
+});
+
+// #151: a UI Reviewer runs next to the code reviewer, right after develop, on the screenshots the
+// machine takes in every mode; the final evidence step only collects evidence, it no longer judges the UI.
+const fsRead = (...p) => fs.readFileSync(path.join(__dirname, '..', ...p), 'utf8');
+
+// the goto of the first transition of a step whose `when` holds in this scope (the engine's order)
+function firstGoto(step, scope) {
+  const tr = step.transitions.find((x) => x.when === undefined || evalExpr(x.when, scope));
+  return tr && tr.goto;
+}
+// develop's answer and the run's state when it finishes a committed turn
+function developScope({ mode = 'auto', screenshots = [], files = ['src/engine/workflow.js'] } = {}) {
+  return {
+    inputs: { mode, validate_every_round: false, screenshots: 'all', issues: [], unit_tests: 'write_and_run', e2e_tests: 'write_and_run', base_branch: 'main' },
+    vars: {},
+    steps: {},
+    output: { committed: true, branch: 'feat', summary: 's', test_notes: 't', self_review: 'r', left_out: [], issues: [], files_changed: files, screenshots },
+  };
+}
+const SCREEN = { name: '151-dashboard-default', caption: 'The dashboard', args: ['--view', 'dashboard'] };
+// the sessions a step opened, by agent: { reviewer: [session ids], ui_reviewer: [...] }
+function sessionsOf(events, stepId) {
+  const out = {};
+  for (const e of events) if (e.type === 'session.opened' && e.session.step_id === stepId) (out[e.session.agent] ||= []).push(e.session_id);
+  return out;
+}
+
+test('ai-development-local-hero (#151): a change with screens to capture takes its screenshots right after develop, in automatic mode too', () => {
+  const develop = loadWorkflow(WORKFLOW).steps.find((s) => s.id === 'develop');
+  assert.equal(firstGoto(develop, developScope({ screenshots: [SCREEN] })), 'developer_screenshots');
+});
+
+test('ai-development-local-hero (#151): a change to src/renderer/ takes its screenshots after develop even when the developer listed no screen', () => {
+  const develop = loadWorkflow(WORKFLOW).steps.find((s) => s.id === 'develop');
+  assert.equal(firstGoto(develop, developScope({ screenshots: [], files: ['src/renderer/views/runs/runs.js'] })), 'developer_screenshots');
+});
+
+test('ai-development-local-hero (#151): a change with no UI skips the screenshots and goes straight to the review', () => {
+  const develop = loadWorkflow(WORKFLOW).steps.find((s) => s.id === 'develop');
+  assert.equal(firstGoto(develop, developScope({ screenshots: [], files: ['src/engine/workflow.js', 'docs/agents/engine.md'] })), 'code_review');
+});
+
+test('ai-development-local-hero (#151): the screenshots go to the review in automatic mode, to the owner\'s gate in validated mode', () => {
+  const wf = loadWorkflow(WORKFLOW);
+  const develop = wf.steps.find((s) => s.id === 'develop');
+  const shots = wf.steps.find((s) => s.id === 'developer_screenshots');
+  assert.equal(shots.type, 'screenshots', 'still the machine step (no model cost)');
+  assert.equal(firstGoto(develop, developScope({ mode: 'validated', screenshots: [SCREEN] })), 'developer_screenshots');
+  const after = (mode) => firstGoto(shots, { inputs: { mode, validate_every_round: false, screenshots: 'all' }, vars: {}, steps: { develop: { output: { screenshots: [SCREEN] } } }, output: { kind: 'screenshots', taken: 1, errors: [] } });
+  assert.equal(after('auto'), 'code_review');
+  assert.equal(after('validated'), 'developer_check');
+});
+
+test('ai-development-local-hero (#151): the ui_reviewer is a read-only, cheaper agent with the ui-conventions and design-system skills', () => {
+  const wf = loadWorkflow(WORKFLOW);
+  const ui = wf.agents.ui_reviewer;
+  assert.ok(ui, 'the workflow declares a ui_reviewer agent');
+  assert.deepEqual([...ui.skills].sort(), ['design-system', 'ui-conventions']);
+  const tools = ui.capabilities.tools;
+  assert.ok(tools.includes('read'), 'it reads the screenshots');
+  for (const t of ['edit', 'write']) assert.ok(!tools.includes(t), `read-only: no ${t}`);
+  assert.doesNotMatch(String(ui.model), /opus/i, 'a model chosen for cost (not Opus)');
+});
+
+test('ai-development-local-hero (#151): code_review fans out to the reviewer and the ui_reviewer, and a UI Reviewer failure alone does not fail it', () => {
+  const review = loadWorkflow(WORKFLOW).steps.find((s) => s.id === 'code_review');
+  assert.deepEqual([...(review.agents || [])].sort(), ['reviewer', 'ui_reviewer']);
+  assert.equal(review.min_success, 1, 'one agent answering is enough: a failed UI Reviewer never blocks the run');
+});
+
+test('ai-development-local-hero (#151): a mock run with a UI change takes the screenshots, then runs the reviewer and the ui_reviewer in parallel', { timeout: 120000 }, async (t) => {
+  const { events, transitions, finished } = await runAiDev(t, { mockSequences: { suite: { red_check: ['fail'], suite: ['pass'] } } });
+  assert.equal(finished.status, 'success', finished.error);
+  assert.ok(transitions.indexOf('develop>developer_screenshots') >= 0, 'the screenshots run after develop');
+  assert.ok(transitions.indexOf('developer_screenshots>code_review') > transitions.indexOf('develop>developer_screenshots'), 'then the review, without the owner\'s gate');
+  assert.ok(!transitions.includes('developer_screenshots>developer_check'), 'automatic mode has no developer_check gate');
+  const sessions = sessionsOf(events, 'code_review');
+  assert.ok(sessions.reviewer?.length, 'the reviewer ran in code_review');
+  assert.ok(sessions.ui_reviewer?.length, 'the ui_reviewer ran in code_review');
+  // in parallel: both agents are sent their prompt before either answers
+  const ids = [...sessions.reviewer, ...sessions.ui_reviewer];
+  const firstAnswer = events.findIndex((e) => e.type === 'session.message_received' && ids.includes(e.session_id));
+  const sent = (id) => events.findIndex((e) => e.type === 'session.message_sent' && e.session_id === id);
+  assert.ok(firstAnswer > 0, 'the review agents answered');
+  assert.ok(sent(sessions.reviewer[0]) < firstAnswer && sent(sessions.ui_reviewer[0]) < firstAnswer, 'both prompts are sent before the first answer');
+  // the UI Reviewer reviews against both skills: they are in its prompt
+  const uiPrompt = events.find((e) => e.type === 'session.message_sent' && e.session_id === sessions.ui_reviewer[0]).prompt;
+  assert.match(uiPrompt, /<skill name="ui-conventions"/);
+  assert.match(uiPrompt, /<skill name="design-system"/);
+});
+
+test('ai-development-local-hero (#151): a blocking UI finding goes back to develop once, and the second review comes before test, suite, E2E and build', { timeout: 120000 }, async (t) => {
+  // the mock's ui_findings: one blocking finding on every look (src/engine/providers.js)
+  const { transitions, finished, prompts } = await runAiDev(t, { mockSequences: { suite: { red_check: ['fail'], suite: ['pass'] }, ui_findings: true } });
+  assert.equal(finished.status, 'success', finished.error);
+  assert.equal(transitions.filter((x) => x === 'code_review>develop').length, 1, 'one UI fix round, then the run goes on');
+  const back = transitions.indexOf('code_review>develop');
+  const later = transitions.findIndex((x) => /^(test|suite|e2e|build|evidence)>/.test(x) || /^code_review>(test|suite|e2e|build)$/.test(x));
+  assert.ok(back >= 0 && later > back, 'the UI fix round happens before any test/suite/E2E/build');
+  assert.equal(transitions.filter((x) => x === 'developer_screenshots>code_review').length, 2, 'the fixed change is captured and reviewed again');
+  assert.equal(prompts.length, 2);
+  assert.match(prompts[1], /\(simulated\) problem/, 'the developer is given the blocking UI finding');
+});
+
+test('ai-development-local-hero (#151): code findings and a blocking UI finding reach develop together, in one turn', { timeout: 120000 }, async (t) => {
+  const { transitions, finished, prompts } = await runAiDev(t, {
+    mockSequences: { suite: { red_check: ['fail'], suite: ['pass'] }, verdict: ['changes_requested', 'approved'], ui_findings: true },
+  });
+  assert.equal(finished.status, 'success', finished.error);
+  assert.equal(transitions.filter((x) => x === 'code_review>develop').length, 1, 'one fix round for both reviews');
+  assert.match(prompts[1], /\(simulated\) description/, 'the code reviewer\'s finding');
+  assert.match(prompts[1], /\(simulated\) problem/, 'the UI Reviewer\'s blocking finding');
+});
+
+test('ai-development-local-hero (#151): the evidence step collects evidence but no longer judges the UI', () => {
+  const wf = loadWorkflow(WORKFLOW);
+  assert.ok(!wf.agents.evidence.skills.includes('ui-conventions'), 'evidence does not load ui-conventions');
+  const evidence = wf.steps.find((s) => s.id === 'evidence');
+  assert.equal(evidence.output_schema.properties.ui_findings, undefined, 'no ui_findings in its output');
+  assert.ok(evidence.output_schema.properties.evidence, 'it still returns the collected evidence');
+  for (const tr of evidence.transitions) assert.doesNotMatch(String(tr.when), /ui_findings/, 'no transition on a UI verdict');
+  assert.doesNotMatch(evidence.prompt, /ui_findings/, 'the prompt asks for no UI verdict');
+});
+
+test('ai-development-local-hero (#151): in a mock run, evidence\'s output carries no UI verdict even when the UI review blocks', { timeout: 120000 }, async (t) => {
+  const { events, finished } = await runAiDev(t, { mockSequences: { suite: { red_check: ['fail'], suite: ['pass'] }, ui_findings: true } });
+  assert.equal(finished.status, 'success', finished.error);
+  const evidence = events.filter((e) => e.type === 'step.finished' && e.step_id === 'evidence');
+  assert.equal(evidence.length, 1, 'evidence runs once: it sends nothing back to develop');
+  assert.equal(evidence[0].output.ui_findings, undefined);
+});
+
+test('ai-development-local-hero (#151): the design-system skill holds the app\'s tokens from src/renderer/style.css, apart from ui-conventions', () => {
+  const skillPath = path.join(__dirname, '..', 'skills', 'design-system', 'SKILL.md');
+  assert.ok(fs.existsSync(skillPath), 'skills/design-system/SKILL.md exists');
+  const skill = fs.readFileSync(skillPath, 'utf8');
+  assert.match(skill, /^---\r?\nname: design-system\r?\n/);
+  assert.match(skill, /src\/renderer\/style\.css/, 'it names where the tokens come from');
+  const css = fsRead('src', 'renderer', 'style.css');
+  for (const token of ['--bg', '--panel', '--border', '--text', '--muted', '--accent', '--radius']) {
+    assert.ok(css.includes(`${token}:`), `${token} is a style.css token`);
+    assert.ok(skill.includes(token), `the skill lists ${token}`);
+  }
+  for (const topic of [/colou?r/i, /spacing/i, /typograph/i, /align/i]) assert.match(skill, topic);
+  assert.notEqual(skill, fsRead('skills', 'ui-conventions', 'SKILL.md'));
+});
+
+test('ai-development-local-hero (#151): the docs name the ui_reviewer, the code_review fan-out and the design-system skill', () => {
+  const engine = fsRead('docs', 'agents', 'engine.md');
+  assert.match(engine, /ui_reviewer/);
+  assert.match(engine, /code_review[\s\S]{0,300}(fan-out|parallel)|(fan-out|parallel)[\s\S]{0,300}code_review/i);
+  assert.match(fsRead('docs', 'agents', 'renderer.md'), /design-system/);
 });

@@ -217,6 +217,7 @@ test('listAgents(dir, { workflowsDir }) lists every agent of every workflow afte
     'workflow:ai-arena.yaml:verifier',
     'workflow:ai-development-local-hero.yaml:developer',
     'workflow:ai-development-local-hero.yaml:reviewer',
+    'workflow:ai-development-local-hero.yaml:ui_reviewer',
     'workflow:ai-development-local-hero.yaml:test_writer',
     'workflow:ai-development-local-hero.yaml:builder',
     'workflow:ai-development-local-hero.yaml:verifier',
