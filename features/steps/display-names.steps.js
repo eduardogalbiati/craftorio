@@ -51,7 +51,7 @@ Given('the running demo run {string} has moved on to the step {string}', async (
   fs.appendFileSync(file, `${added.map((e) => JSON.stringify(e)).join('\n')}\n`);
 });
 
-// Workflows › Runs (the sidebar's Workflows opens it): its search keeps the matching runs
+// Workflows › Runs (the sidebar's Runs, in the Workflows group, opens it): its search keeps the matching runs
 When('I search the runs for {string}', async ({ e2e }, text) => {
   const page = e2e.window;
   await page.getByRole('textbox', { name: 'Search runs', exact: true }).filter({ visible: true }).first().fill(text);

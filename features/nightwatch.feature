@@ -13,7 +13,7 @@ Feature: Night watch
     And the permission "Skip an item" is ticked
     And the permission "Regroup or reorder planned items" is ticked
     And the permission "Retry a failed roadmap item" is ticked
-    When I open "Dashboard" in the sidebar
+    When I open "Home" in the sidebar
     And I open "Night watch" in the sidebar
     Then the permission "Skip an item" is ticked
     And the permission "Regroup or reorder planned items" is ticked
@@ -27,6 +27,6 @@ Feature: Night watch
     And I save the permissions
     Then the permissions show when they were saved
     And no permission is ticked
-    When I open "Dashboard" in the sidebar
+    When I open "Home" in the sidebar
     And I open "Night watch" in the sidebar
     Then no permission is ticked

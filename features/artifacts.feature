@@ -40,7 +40,7 @@ Feature: Artifacts
   Scenario: A category chip on the Artifacts screen keeps only that category
     Given the app is open
     And a finished demo run "res00225" with a result summary, screenshots, tests, reports, process and internal files
-    When I open "Artifacts" in the sidebar
+    When I open the Artifacts tab of Runs
     And I find the run "res00225" on the Artifacts screen
     Then the artifacts show "Produced"
     When I filter the artifacts by "Screenshots & images"

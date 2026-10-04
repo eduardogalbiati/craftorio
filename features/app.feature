@@ -5,9 +5,9 @@ Feature: The app opens
   @smoke
   Scenario: The app opens with its sidebar and nothing running
     Given the app is open
-    Then the sidebar offers "Dashboard"
+    Then the sidebar offers "Home"
     And the sidebar offers "Backlog"
-    And the sidebar offers "Workflows"
+    And the sidebar offers "Runs"
     And the sidebar offers "Settings"
     And the run status shows "idle"
     And the Start a workflow button is enabled

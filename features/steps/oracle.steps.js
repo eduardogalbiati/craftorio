@@ -1,5 +1,5 @@
-// Steps of features/oracle.feature (#208): the Oracle's panel (docked on the Dashboard, a drawer
-// elsewhere) in a narrow window: the app never shifts sideways, the panel's header stays readable.
+// Steps of features/oracle.feature (#208): the Oracle's panel (docked on Home, the Dashboard before
+// #254, a drawer elsewhere; opened by the header's Oracle button since #254) in a narrow window: the app never shifts sideways, the panel's header stays readable.
 // #244: a routine wake-up is a code-only notice, the daily budget counts each turn's own cost (not
 // Claude's cumulative session cost), the status shows the model and a fresh or resumed session.
 // #184: the Oracle's memory is seeded with the owner's standing decisions, edited and saved by the
@@ -26,7 +26,8 @@ When('I open the Oracle', async ({ e2e }) => {
     await backdrop.click({ position: { x: 5, y: 5 } });
     await expect(backdrop).toBeHidden();
   }
-  await page.getByRole('navigation').getByRole('button', { name: /^Oracle(\s+\d+)?$/ }).click();
+  // #254: the Oracle's button is in the header, top right (no longer a sidebar entry)
+  await page.getByRole('banner').getByRole('button', { name: /^Oracle(\s+\d+)?$/ }).click();
   const panel = oraclePanel(page);
   await expect(panel).toBeVisible();
   // opening it focuses its question box: the moment a focus scroll would shift the page

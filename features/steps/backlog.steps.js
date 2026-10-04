@@ -1,7 +1,8 @@
 // Steps of features/backlog.feature and features/visual.feature (#222): the Backlog's Board (list,
 // kanban) and Roadmap on the demo project, and their visual baselines; the Roadmap's progress ring
 // popover (#236), its Resume confirm (#243) and a finished stage scope (#237), and
-// features/product-owner.feature's Product Owner drawer (#234, #235). Locators are roles and
+// features/product-owner.feature's Product Owner drawer (#234, #235); epics kept off the Board and
+// listed on the Epics view (#253); the Roadmap opened from the menu (#254). Locators are roles and
 // data-testid only (skills/ui-conventions).
 
 const fs = require('fs');
@@ -18,8 +19,10 @@ When('I open the Board as a kanban', async ({ e2e }) => {
   await expect(board(page)).toBeVisible();
 });
 
+// #254: the Roadmap is its own screen (Code & Build › Roadmap), no longer a Backlog tab
 When('I open the Roadmap', async ({ e2e }) => {
-  await e2e.window.getByRole('tab', { name: 'Roadmap', exact: true }).click();
+  await e2e.window.getByRole('navigation').getByRole('button', { name: /^Roadmap(\s+\d+)?$/ }).click();
+  await expect(e2e.window.getByTestId('roadmap-stage').first()).toBeVisible();
 });
 
 Then('the board shows the column {string}', async ({ e2e }, name) => {
@@ -69,6 +72,51 @@ Then('the refused item is in view', async ({ e2e }) => {
 
 Then('the board looks like the baseline {string}', async ({ e2e }, name) => {
   await expect(board(e2e.window)).toHaveScreenshot(name);
+});
+
+// ---- epics off the Board, on the Epics view (#253) ------------------------------------------------------
+// The demo backlog's epics: #14 "Workspace safety and recovery" (members #11, #8) and #13 "Run
+// reports" (member #12). Assumes data-testid="backlog-epic" on each epic card of the Epics view and
+// data-testid="backlog-count" on the Board's "N issues" count.
+
+const epicCard = (page, title) => page.getByTestId('backlog-epic').filter({ hasText: title }).first();
+
+Then('the board does not show the issue {string}', async ({ e2e }, title) => {
+  const page = e2e.window;
+  await expect(board(page).getByRole('link').first()).toBeVisible();
+  await expect(board(page).getByRole('link', { name: title, exact: true })).toHaveCount(0);
+});
+
+When('I open the Epics view', async ({ e2e }) => {
+  const page = e2e.window;
+  await page.getByRole('tab', { name: 'Epics', exact: true }).click();
+  await expect(page.getByTestId('backlog-epic').first()).toBeVisible();
+});
+
+Then('the Epics view lists the epic {string} with its member {string}', async ({ e2e }, title, member) => {
+  const card = epicCard(e2e.window, title);
+  await expect(card).toBeVisible();
+  await expect(card.getByRole('link', { name: member, exact: true })).toBeVisible();
+});
+
+Then('the Epics view shows the progress of the epic {string}', async ({ e2e }, title) => {
+  await expect(epicCard(e2e.window, title)).toContainText(/\b\d+\/\d+\b/);
+});
+
+Then('the epic {string} cannot be selected for a workflow', async ({ e2e }, title) => {
+  const card = epicCard(e2e.window, title);
+  await expect(card).toBeVisible();
+  await expect(card.getByRole('checkbox')).toHaveCount(0);
+  await expect(card.getByRole('button', { name: /Assign workflow|Start/ })).toHaveCount(0);
+});
+
+// the count of the Board's list ("6 issues") is the number of rows it lists, epics left out
+Then("the Board's issue count leaves out the epics", async ({ e2e }) => {
+  const page = e2e.window;
+  const rows = page.getByTestId('backlog-list').getByTestId('backlog-issue');
+  await expect(rows.first()).toBeVisible();
+  const n = await rows.count();
+  await expect(page.getByTestId('backlog-count')).toHaveText(`${n} issue${n === 1 ? '' : 's'}`);
 });
 
 // ---- the Roadmap's progress ring and its steps popover (#236) ----------------------------------------

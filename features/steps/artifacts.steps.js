@@ -51,6 +51,13 @@ When('I open the run\'s Artifacts tab', async ({ e2e }) => {
   await expect(artifacts(e2e.window)).toBeVisible({ timeout: LOAD_TIMEOUT });
 });
 
+// #254: the Artifacts screen is the Artifacts tab of Workflows › Runs (no sidebar entry of its own)
+When('I open the Artifacts tab of Runs', async ({ e2e }) => {
+  const page = e2e.window;
+  await page.getByRole('navigation').getByRole('button', { name: /^Runs(\s+\d+)?$/ }).click();
+  await page.getByRole('main').getByRole('tab', { name: 'Artifacts', exact: true }).click();
+});
+
 // the Artifacts screen's search opens the matching run's group
 When('I find the run {string} on the Artifacts screen', async ({ e2e }, fragment) => {
   const page = e2e.window;

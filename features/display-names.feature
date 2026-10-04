@@ -21,7 +21,7 @@ Feature: Readable step names
   @issue-245
   Scenario: The run list's progress strip names the steps readably, the step ids in their tooltips
     Given the app is open
-    When I open "Workflows" in the sidebar
+    When I open "Runs" in the sidebar
     And I search the runs for "run00016"
     Then the "run list progress" shows the step "Code review"
     And no visible text in the "run list progress" shows a snake_case step id

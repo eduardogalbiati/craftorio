@@ -120,6 +120,33 @@ Feature: Backlog Board and Roadmap
     Then the list shows the issue "Old idea: a splash screen"
 
   # The demo roadmap's stage 5 (the unnamed stage) plans #10 alone
+  # The demo backlog has two epics: "Workspace safety and recovery" (#14, members #11 and #8) and
+  # "Run reports" (#13, member #12)
+  @issue-253
+  Scenario: The Board kanban shows no epic, the Epics view lists them with their members
+    Given the app is open
+    When I open "Backlog" in the sidebar
+    And I open the Board as a kanban
+    Then the board shows the issue "Add a /health endpoint"
+    And the board does not show the issue "Workspace safety and recovery"
+    And the board does not show the issue "Run reports"
+    When I open the Epics view
+    Then the Epics view lists the epic "Workspace safety and recovery" with its member "Crash when the workspace folder is renamed"
+    And the Epics view lists the epic "Run reports" with its member "Export a run report as Markdown"
+    And the Epics view shows the progress of the epic "Run reports"
+
+  @issue-253
+  Scenario: The Board list and its count leave the epics out, and an epic cannot be picked for a workflow
+    Given the app is open
+    When I open "Backlog" in the sidebar
+    And I open the Board as a list
+    Then the list shows the issue "Add a /health endpoint"
+    And the list does not show the issue "Workspace safety and recovery"
+    And the list does not show the issue "Run reports"
+    And the Board's issue count leaves out the epics
+    When I open the Epics view
+    Then the epic "Run reports" cannot be selected for a workflow
+
   @issue-238
   Scenario: An issue planned in the roadmap cannot be archived and says why
     Given the app is open

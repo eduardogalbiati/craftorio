@@ -69,12 +69,42 @@ Given('the request failed', async ({ e2e }) => {
 
 // ---- the Supervisor chat drawer ---------------------------------------------------------------------
 
+// #264: the Supervisor has no header button nor screen any more: its conversation is a right-side
+// drawer opened by the Workflows screen's "Supervisor" button (like the Backlog's Product Owner)
 const svcDrawer = (page) => page.getByTestId('svc-drawer');
+const workflowsTabs = (page) => page.getByRole('tablist', { name: 'Workflows', exact: true });
 
+async function openSupervisorFromWorkflows(page) {
+  await page.getByRole('main').getByRole('button', { name: 'Supervisor', exact: true }).click();
+  await expect(svcDrawer(page)).toBeVisible();
+}
+
+// from any screen: Workflows › Runs first, unless the Workflows screen is already in view
 When('I open the Supervisor chat', async ({ e2e }) => {
   const page = e2e.window;
-  await page.getByRole('banner').getByRole('button', { name: 'Supervisor', exact: true }).click();
-  await expect(svcDrawer(page)).toBeVisible();
+  if (!(await workflowsTabs(page).isVisible())) {
+    await page.getByRole('navigation').getByRole('button', { name: /^Runs(\s+\d+)?$/ }).click();
+    await expect(workflowsTabs(page)).toBeVisible();
+  }
+  await openSupervisorFromWorkflows(page);
+});
+
+When('I open the Supervisor from the Workflows screen', async ({ e2e }) => {
+  await expect(workflowsTabs(e2e.window)).toBeVisible();
+  await openSupervisorFromWorkflows(e2e.window);
+});
+
+Then('the Supervisor chat opens as a drawer on the right', async ({ e2e }) => {
+  const page = e2e.window;
+  const drawer = svcDrawer(page);
+  await expect(drawer).toBeVisible();
+  await expect(drawer).toHaveAttribute('aria-hidden', 'false');
+  // its question box takes the owner's question
+  await expect(drawer.getByRole('textbox').first()).toBeVisible();
+  const box = await drawer.boundingBox();
+  const width = await page.evaluate(() => window.innerWidth);
+  expect(box.x + box.width / 2, 'the drawer sits on the right half').toBeGreaterThan(width / 2);
+  expect(Math.round(box.x + box.width), 'the drawer reaches the right edge').toBeGreaterThanOrEqual(width - 2);
 });
 
 // ---- the request messages ---------------------------------------------------------------------------
