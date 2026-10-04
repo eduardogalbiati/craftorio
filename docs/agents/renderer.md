@@ -206,8 +206,9 @@ the Dashboard it focuses the dock, elsewhere it toggles the drawer. Both places 
 state from `OracleChatModel` (`views/oracle/oracle-chat-model.js`, pure, tested in Node):
 
 - **states**: `empty` (a line on what it reads, 4 `.chip` suggestions), `conversation`,
-  `answering` (`.sup-loading` "The Oracle is reading…", Send and chips disabled, input editable),
-  `error` (a `.sup-wmsg system error` line, the question back in the input), `paused` (daily budget:
+  `answering` (the shared chat's working line "Oracle is working…", Send and chips disabled, input
+  editable; the box emptied on Send, #274), `error` (the chat's error line, the question back in the
+  input; the Oracle's own buttons' errors as a `.sup-wmsg system error` line), `paused` (daily budget:
   a notice with spent/limit and a link to Settings › Execution, input and Send disabled),
   `unavailable` (another live process owns `oracle/owner.json`: the form is replaced by a notice
   naming it);
