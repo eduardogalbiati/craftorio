@@ -139,7 +139,22 @@ function totalOf(runs) {
   return total;
 }
 
+const topByCost = (map, n) => Object.fromEntries(Object.entries(map).sort((a, b) => b[1].costUsd - a[1].costUsd).slice(0, n));
+
+/** A run's figures with only its `top` costliest agents and steps and its suites counted (a short answer for many runs). */
+function briefOf(run, top = 3) {
+  const { byAgent, byStep, fullSuites, ...rest } = run;
+  return {
+    ...rest,
+    topAgents: topByCost(byAgent, top),
+    topSteps: topByCost(byStep, top),
+    fullSuites: fullSuites.length,
+    fullSuitesMs: fullSuites.reduce((s, x) => s + (x.durationMs || 0), 0),
+  };
+}
+
 module.exports = {
   analyzeRun,
+  briefOf,
   totalOf,
 };

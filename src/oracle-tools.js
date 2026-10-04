@@ -24,7 +24,11 @@ const runs = require('./runs');
 const skills = require('./skills');
 const workflows = require('./workflows');
 const { ACTION_KINDS, REQUESTERS } = require('./oracle-actions');
-const { analyzeRun, totalOf } = require('./oracle-run-analysis');
+const {
+  analyzeRun,
+  briefOf,
+  totalOf,
+} = require('./oracle-run-analysis');
 const { bundleStatus } = require('./seed');
 const { readEvents } = require('./supervisor');
 const { callTool, supervisorTools } = require('./supervisor-tools');
@@ -254,7 +258,12 @@ function oracleTools(ctx, hooks = {}) {
       inputSchema: obj({ runIds: { type: 'array', items: { type: 'string' }, description: 'The run ids' }, since: str('ISO date: the runs started from then') }),
       run: (input = {}) => {
         const list = analyzedRuns(input).map((dir) => analyzeRun(path.basename(dir), readJson(path.join(dir, 'summary.json')), readEvents(dir)));
-        return JSON.stringify({ runs: list, total: totalOf(list) });
+        const total = totalOf(list);
+        const full = JSON.stringify({ runs: list, total });
+        if (full.length <= MAX_FILE_BYTES) return full;
+        // #244: a long answer stays in the context: each run keeps its counts and its costliest agents and steps
+        const briefs = [3, 1, 0].map((top) => JSON.stringify({ runs: list.map((r) => briefOf(r, top)), total, note: `Per run: only the ${top} costliest agents and steps (the total has them all); ask for fewer runIds for the details.` }));
+        return briefs.find((b) => b.length <= MAX_FILE_BYTES) || briefs[briefs.length - 1];
       },
     },
     {

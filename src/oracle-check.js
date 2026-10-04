@@ -52,6 +52,34 @@ const SUBCOMMANDS = {
   yarn: ['run', 'test'],
 };
 const PYTHON_MODULES = ['pytest', 'unittest'];
+// options that load or start code from outside the repository's tests, in any runner, spaced or with
+// `=` (node loaders and preloads, npm's node options, go's exec wrappers and vet tools)
+const CODE_OPTIONS = new Set([
+  '--eval',
+  '--exec',
+  '--experimental-loader',
+  '--import',
+  '--inspect',
+  '--inspect-brk',
+  '--loader',
+  '--node-options',
+  '--print',
+  '--require',
+  '--toolexec',
+  '--vettool',
+  '-exec',
+  '-r',
+  '-toolexec',
+  '-vettool',
+]);
+// node's short options that take code or a preload: refused alone or combined (-pe, -re)
+const NODE_CODE_FLAGS = /^-[A-Za-z]*[cepr][A-Za-z]*$/;
+// mvn and gradle run their test goals only (a groupId:artifactId:version:goal would download and run a plugin)
+const BUILD_GOALS = {
+  gradle: /^(:[\w.-]+)*:?(build|check|clean|test)$/,
+  mvn: /^(clean|compile|test|test-compile|verify)$/,
+};
+const BUILD_VALUE_OPTIONS = ['--activate-profiles', '--exclude-task', '--file', '--project-dir', '--projects', '--resume-from', '--tests', '--threads', '-P', '-T', '-f', '-p', '-pl', '-rf', '-x'];
 
 /** The command's argv, or throws why it is refused. */
 function parseCheckCommand(command) {
@@ -60,11 +88,19 @@ function parseCheckCommand(command) {
   const bad = argv.find((a) => !SAFE_ARG.test(a));
   if (bad) throw new Error(`The check runs plain arguments only (no quotes, pipes, redirections or chains): "${bad}" is refused.`);
   if (!CHECK_PROGRAMS.includes(argv[0].toLowerCase())) throw new Error(`A check starts a test runner (${CHECK_PROGRAMS.join(', ')}), not ${argv[0]}.`);
-  if (argv.some((a) => INLINE_CODE.has(a))) throw new Error('A check runs the project\'s tests, not inline code.');
   const program = argv[0].toLowerCase();
+  const args = argv.slice(1);
+  if (args.some((a) => /data:|:\/\//i.test(a))) throw new Error('A check runs the repository\'s own files, not a URL or a data: module.');
+  const inline = (a) => INLINE_CODE.has(a) || a.split('=').some((part) => CODE_OPTIONS.has(part.toLowerCase())) || (program === 'node' && NODE_CODE_FLAGS.test(a));
+  if (args.some(inline)) throw new Error('A check runs the project\'s tests, not inline code, loaders or exec wrappers.');
   const sub = SUBCOMMANDS[program];
   if (sub && !sub.includes(argv[1])) throw new Error(`A check runs ${program} ${sub.join(' / ')} only.`);
   if (sub && argv[1] === '-m' && !PYTHON_MODULES.includes(argv[2])) throw new Error(`A check runs ${program} -m ${PYTHON_MODULES.join(' / ')} only.`);
+  const goals = BUILD_GOALS[program];
+  if (goals) {
+    const positional = args.filter((a, i) => !a.startsWith('-') && !BUILD_VALUE_OPTIONS.includes(args[i - 1]));
+    if (!positional.length || positional.some((a) => !goals.test(a))) throw new Error(`A check runs ${program}'s test goals only (e.g. ${program} test).`);
+  }
   return argv;
 }
 
