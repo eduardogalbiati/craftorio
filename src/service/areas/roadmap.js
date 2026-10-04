@@ -31,8 +31,11 @@ module.exports = (ctx) => {
   // A project's roadmap for the screen: item statuses derived from their runs (#112), each running
   // item with `waiting` (at a human gate), and each item with a run its progress (#194, `run`: the
   // trail, groups, state and the typical step times of its workflow's past runs, for the card's ring).
+  // A paused roadmap shows what the scheduler will settle (#237: a stage run on its own that finished
+  // while paused, e.g. after an edit of the file the scheduler has not seen, shows "Stage N done").
   function roadmapView(projectId, list = []) {
-    const roadmap = roadmaps.withStatus(roadmaps.readRoadmap(ctx.ws.backlog, path.basename(String(projectId))), roadmapRun);
+    const stored = roadmaps.readRoadmap(ctx.ws.backlog, path.basename(String(projectId)));
+    const roadmap = stored.state === 'paused' ? roadmaps.advance(stored, { runOf: roadmapRun, canStart: () => false }).roadmap : roadmaps.withStatus(stored, roadmapRun);
     const byId = new Map(list.map((r) => [r.runId, r]));
     // past runs of the same workflow file, simulated with simulated and real with real
     const history = new Map();
