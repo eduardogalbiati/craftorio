@@ -66,6 +66,9 @@
   // an item's issues: its `issues` list, or (an item stored before #163) the item itself as one issue
   const refs = (x) => (x.issues?.length ? x.issues : x.number ? [{ number: x.number, url: x.url, title: x.title, body: x.body, knownPullRequests: x.knownPullRequests }] : []);
   const editable = (x) => x.status === 'planned' || x.status === 'failed';
+  // #237: the stage run on its own (#141), or -1 when there is none or it is over (no unfinished item,
+  // or no longer in the roadmap): such a scope is dropped by the engine, a Resume runs the roadmap
+  const scopedStage = (r) => (r.scope ? r.stages.findIndex((s) => s.id === r.scope.stage && s.items.some((x) => x.status !== 'done' && x.status !== 'skipped')) : -1);
   const clone = (stages) => JSON.parse(JSON.stringify(stages || []));
   // inputs the Backlog fills itself when the run starts (as backlog.js's skipInput): never edited here
   const skipInput = (k, def) => k === 'task' || k === 'issue' || k === 'issues' || def.type === 'run' || ((def.type || 'string') === 'string' && /path|dir/i.test(k));
@@ -496,7 +499,7 @@
     const q = data?.queue?.items || [];
     const byNumber = new Map((data?.issues || []).map((i) => [i.number, i]));
     // a stage run on its own (#141) is the one in progress; the others keep their planned look
-    const scoped = r.scope ? r.stages.findIndex((s) => s.id === r.scope.stage) : -1;
+    const scoped = scopedStage(r);
     const current = scoped >= 0 ? scoped : r.stages.findIndex((s) => s.items.some((x) => x.status !== 'done' && x.status !== 'skipped'));
     const stateBadge = `<span class="badge ${r.state === 'running' ? 'live' : r.state === 'paused' ? 'warn' : ''}">${esc(STATE_LABEL[r.state] || r.state)}${scoped >= 0 ? ` · stage ${scoped + 1} only` : ''}${r.simulated ? ' · simulated' : ''}</span>`;
     const bar = `
@@ -745,10 +748,18 @@
       if (act === 'start') {
         const simulated = !!document.querySelector('#rm-simulate')?.checked && devMode();
         // Resume on a stage run on its own (#141) goes on with that stage only
-        const scope = r.state === 'paused' && r.scope ? r.scope.stage : null;
+        // (a finished scope is not sent: #237); #243: a Resume's confirm says Resume
+        const at = r.state === 'paused' ? scopedStage(r) : -1;
+        const scope = at >= 0 ? r.stages[at].id : null;
         if (!await checkPushes(ctx, r, scope)) return true;
         const real = !simulated && r.stages.some((s) => (!scope || s.id === scope) && s.items.some((x) => !x.mock && editable(x)));
-        if (real && !await confirmDialog('Start the roadmap', 'Its items run as real runs: they use your CLI subscriptions and cost money. Human gates still wait for you.', 'Start')) return true;
+        const cost = 'they use your CLI subscriptions and cost money). Human gates still wait for you.';
+        const [title, body, label] = r.state !== 'paused'
+          ? ['Start the roadmap', 'Its items run as real runs: they use your CLI subscriptions and cost money. Human gates still wait for you.', 'Start']
+          : at >= 0
+            ? [`Resume stage ${at + 1}`, `Runs in progress keep going; the next planned items of stage ${at + 1} start as real runs (${cost} The roadmap pauses again when that stage is done.`, 'Resume']
+            : ['Resume the roadmap', `Runs in progress keep going; the next planned items start as real runs (${cost}`, 'Resume'];
+        if (real && !await confirmDialog(title, body, label)) return true;
         ctx.setData(await api.startRoadmap(ctx.projectId, simulated, scope));
       } else if (e.target.closest('[data-rm-run-stage]')) {
         await runStage(ctx, r, locate(stages, e.target).s);

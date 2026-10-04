@@ -317,10 +317,12 @@ function setState(dir, projectId, state, { simulated, stage = null } = {}) {
   return updateRoadmap(dir, projectId, (r) => {
     if (state === 'running' && !r.stages.length) throw new Error('The roadmap has no stage: add items first.');
     let scope = state === 'paused' ? r.scope || null : null;
-    if (state === 'running' && stage) {
-      const s = r.stages.find((x) => x.id === stage);
+    const s = state === 'running' && stage ? r.stages.find((x) => x.id === stage) : null;
+    const over = !s || !s.items.some((x) => !FINISHED.has(x.status));
+    // #237: a Resume of a scope whose stage is over (or gone) drops it and runs the whole roadmap
+    if (state === 'running' && stage && !(over && r.scope?.stage === stage)) {
       if (!s) throw new Error('This stage is no longer in the roadmap.');
-      if (!s.items.some((x) => !FINISHED.has(x.status))) throw new Error('Every item of this stage is done or skipped.');
+      if (over) throw new Error('Every item of this stage is done or skipped.');
       scope = { stage: s.id };
     }
     return {
@@ -427,16 +429,25 @@ function advance(roadmap, { runOf, closed = () => false, canStart = () => true }
   let r = withStatus(roadmap, runOf);
   const blocker = r.pausedBy && findItem(r, r.pausedBy);
   if (blocker?.status === 'running') r = { ...r, pausedBy: null, error: null, state: r.state === 'paused' ? 'running' : r.state };
+  const finished = { ...r, state: 'done', error: null, pausedBy: null, scope: null };
+  const scopeOver = (at) => {
+    if (currentStage(r) < 0) return { roadmap: finished, start: [] };
+    return { roadmap: { ...r, state: 'paused', pausedBy: null, scope: null, error: `${stageName(r, at)} done. The other stages are still planned: Start runs the roadmap from its first unfinished stage.` }, start: [] };
+  };
+  // #237: a scope whose stage ended while the roadmap was paused goes as it does while running
+  if (r.state === 'paused' && r.scope && !r.pausedBy) {
+    const at = r.stages.findIndex((s) => s.id === r.scope.stage);
+    if (at < 0) return { roadmap: { ...r, scope: null }, start: [] };
+    if (r.stages[at].items.every((x) => FINISHED.has(x.status))) return scopeOver(at);
+  }
   // only starting new items (and pausing on a failure) waits for a running roadmap
   if (r.state !== 'running') return { roadmap: r, start: [] };
-  const finished = { ...r, state: 'done', error: null, pausedBy: null, scope: null };
   if (r.scope) {
     const at = r.stages.findIndex((s) => s.id === r.scope.stage);
     if (at < 0) return { roadmap: { ...r, state: 'paused', pausedBy: null, scope: null, error: 'The stage run on its own is no longer in the roadmap: press Start to run the roadmap.' }, start: [] };
     const step = stageStep(r, at, { closed, canStart });
     if (step) return step;
-    if (currentStage(r) < 0) return { roadmap: finished, start: [] };
-    return { roadmap: { ...r, state: 'paused', pausedBy: null, scope: null, error: `${stageName(r, at)} done. The other stages are still planned: Start runs the roadmap from its first unfinished stage.` }, start: [] };
+    return scopeOver(at);
   }
   for (;;) {
     const at = currentStage(r);
