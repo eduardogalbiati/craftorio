@@ -55,6 +55,7 @@
     try {
       sv.messages = await api.supervisorChatHistory();
       sv.loaded = true;
+      chat.setError('');
     } catch (e) { chat.setError(errMsg(e)); }
     render();
   }
