@@ -54,12 +54,14 @@ test('a discovery card whose thread ends with a question is a "What needs you" r
   });
   assert.deepEqual([...new Set(app.callsTo('listDiscoveryWaiting').map((a) => a.join()))], ['p1'], 'asked for the header\'s project');
   const cards = needRows(app).filter((r) => r.kind === 'card');
-  assert.equal(cards.length, 1, 'only the Inbox card: a card in Shape needs the Discovery board (#261)');
+  assert.equal(cards.length, 2, 'the Inbox card, and the card in Shape now that the Discovery board is a screen (#257)');
   assert.match(cards[0].text, /Dark mode for the run log/);
   assert.match(cards[0].text, /grill-me: Which contrast ratio\?/);
   assert.match(cards[0].text, /waiting 40 min/);
   assert.match(cards[0].html, /<button[^>]*data-home-card="c1"[^>]*>Answer<\/button>/);
-  assert.doesNotMatch(body(app), /Shaped card/);
+  assert.match(cards[1].text, /Shaped card/);
+  assert.match(cards[1].text, /grill-me: Who uses it\?/);
+  assert.match(cards[1].html, /<button[^>]*data-home-card="c2"[^>]*>Answer<\/button>/);
 });
 
 test('the Answer button opens the Inbox on the card (#255)', async () => {
