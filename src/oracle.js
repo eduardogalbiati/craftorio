@@ -120,11 +120,16 @@ function usageRuns(dir) {
   return [...days.values()];
 }
 
-/** The text sent for one question: the screen first, then the pasted images, then the question. */
-function questionText(text, screen, attachments = []) {
+// #183: what a question is about (a gate's context) is capped: the Oracle reads the rest with its tools
+const CONTEXT_MAX = 12000;
+
+/** The text sent for one question: the screen first, then the pasted images, then what the question
+ * is about (#183: a gate's context, { label, text }), then the question. */
+function questionText(text, screen, attachments = [], context = null) {
   const s = String(screen || '').trim();
   const a = attachments.length ? `[Attachments] ${attachments.join(', ')} (pasted images: read each with view_attachment)` : '';
-  return [s && `[Screen] ${s}`, a, text].filter(Boolean).join('\n\n');
+  const c = context?.text ? `[Context] ${context.label || ''}\n${String(context.text).slice(0, CONTEXT_MAX)}` : '';
+  return [s && `[Screen] ${s}`, a, c, text].filter(Boolean).join('\n\n');
 }
 
 /**
@@ -312,7 +317,7 @@ function createOracle({
 
   // The simulated Oracle: what its tools see, the session it is in. `mockContextTokens` lets tests
   // report a large context (compaction without a model).
-  async function mockTurn({ prompt, sessionId, screen, mockContextTokens, fresh, attachments = [], wake = null }) {
+  async function mockTurn({ prompt, sessionId, screen, mockContextTokens, fresh, attachments = [], about = null, wake = null }) {
     if (wake) {
       const text = `Simulated Oracle: no model was called. Woken by ${wake.length} run event(s):\n\n${wake.map((l) => `- ${l}`).join('\n')}`;
       const prev = fresh ? 0 : Number(state().contextTokens) || 0;
@@ -333,6 +338,7 @@ function createOracle({
       'Simulated Oracle: no model was called.',
       screen ? `You are on: ${screen}.` : 'I was not told which screen you are on.',
       attachments.length ? `You pasted ${attachments.length} image(s): ${attachments.join(', ')}.` : '',
+      about ? `You asked about: ${about.label}. The real Oracle reads that gate's diff and files with its tools; it never answers the gate.` : '',
       `Through my tools I see ${await count('list_runs', (r) => r.runs)} runs (${await count('active_runs')} in progress), ${await count('list_workflows')} workflows, ${await count('list_projects')} projects, ${await count('unpushed')} projects with local merges not pushed, and ${updates} workflows or skills with a newer default.`,
       fresh ? `This question started a new session from my skill, the memory (${mem} lines) and the last handoff note.` : 'This question continued the same session.',
       'Outside developer mode, the real Oracle reads them and answers (one model call per message).',
@@ -419,7 +425,7 @@ function createOracle({
 
   // One turn of the conversation (a question or a wake-up): compacts first when due, then answers.
   // → the Oracle's message. `extra`: fields recorded on that message (e.g. { wake: true }).
-  async function exchange({ text, heading, mock, mockContextTokens, screen = null, attachments = [], wake = null, extra = {}, onItem = null, signal = null }) {
+  async function exchange({ text, heading, mock, mockContextTokens, screen = null, attachments = [], about = null, wake = null, extra = {}, onItem = null, signal = null }) {
     const a = agent();
     const model = String(a.model || DEFAULT_MODEL);
     let st = state();
@@ -438,7 +444,7 @@ function createOracle({
     const fresh = !st.sessionId;
     const prompt = fresh ? openingPrompt(text, heading) : text;
     const res = mock
-      ? await mockTurn({ prompt, sessionId: st.sessionId, screen, mockContextTokens, fresh, attachments, wake })
+      ? await mockTurn({ prompt, sessionId: st.sessionId, screen, mockContextTokens, fresh, attachments, about, wake })
       : await realTurn({ prompt, sessionId: st.sessionId, model, effort: a.effort, onItem, signal });
     // #180: with a live view, the simulated turn streams fake steps and its text
     if (mock && onItem) await mockSteps(onItem, { steps: MOCK_STEPS, text: res.text, signal });
@@ -529,13 +535,13 @@ function createOracle({
     state: status,
 
     /**
-     * { question, screen, images, mock, mockContextTokens } → { message, messages, state }, or
+     * { question, screen, images, context, mock, mockContextTokens } → { message, messages, state }, or
      * { refused: { reason, text, ... }, message: null, messages, state } when a budget refuses it.
      * `images`: pasted screenshots (decodeImages), saved in attachments/ before the turn.
      * #180: `onItem` gets the turn's items as they arrive (a simulated turn streams fake steps);
      * `signal` stops it: the prose written so far is posted as the answer, marked `stopped`.
      */
-    async ask({ question, screen, images, mock, mockContextTokens, onItem = null, signal = null } = {}) {
+    async ask({ question, screen, images, context = null, mock, mockContextTokens, onItem = null, signal = null } = {}) {
       const pasted = decodeImages(images);
       const q = String(question || '').trim() || (pasted.length ? 'See the attached image.' : '');
       if (!q) throw new Error('Type a message for the Oracle.');
@@ -548,13 +554,15 @@ function createOracle({
         if (raw().at(-1)?.role === 'user') post({ role: 'system', kind: 'unanswered', text: 'The previous question got no answer (the app closed during the turn). This question continues the same conversation.' });
         const where = String(screen || '').trim() || null;
         const attachments = saveAttachments(pasted);
-        post({ role: 'user', text: q, screen: where, ...(attachments.length ? { attachments } : {}) });
+        // #183: what the question is about (a gate): its label and ref are kept with the message
+        const about = context?.text ? { label: String(context.label || ''), ref: String(context.ref || '') } : null;
+        post({ role: 'user', text: q, screen: where, ...(attachments.length ? { attachments } : {}), ...(about ? { context: about } : {}) });
         let message;
         // #180: the prose written so far, kept when the turn fails or is stopped
         const written = [];
         const seen = onItem && ((it) => { if (it?.kind === 'text') written.push(String(it.text || '')); onItem(it); });
         try {
-          message = await exchange({ text: questionText(q, where, attachments), mock, mockContextTokens, screen: where, attachments, onItem: seen, signal });
+          message = await exchange({ text: questionText(q, where, attachments, about && context), mock, mockContextTokens, screen: where, attachments, about, onItem: seen, signal });
         } catch (e) {
           const partial = partialText(written);
           message = signal?.aborted

@@ -71,7 +71,7 @@ function openProjectModal(p, { fromDrawer = false } = {}) {
   $('#pj-folder').oninput = () => { clearTimeout(pjDetectTimer); pjDetectTimer = setTimeout(detectProjectRun, 400); };
   detectProjectRun();
   openModal('#project-modal');
-  $('#pj-name').focus();
+  $('#pj-name').focus({ preventScroll: true });
 }
 
 // What the folder declares (.multiagent/local-preview.yaml) or is detected to run with (#115), so

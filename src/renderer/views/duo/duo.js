@@ -206,7 +206,7 @@
     const sel = $d('#duo-project');
     if ([...sel.options].some((o) => o.value === projectId && !o.disabled)) { sel.value = projectId; sel.onchange(); }
     const prompt = $d('#duo-prompt');
-    prompt.focus();
+    prompt.focus({ preventScroll: true });
     prompt.setSelectionRange(0, 0);
     prompt.scrollTop = 0;
   }
@@ -482,13 +482,15 @@
     const off = chat.live ? '' : ' disabled';
     // with "Accept and save to issue #n" when the run is about an issue (gateChoices in app.js, #125)
     const choices = gateChoices(ev);
-    const buttons = choices.map((c, i) => `<button type="button" class="btn sm ${i === 0 ? 'primary' : ''}" data-approval="${esc(ev.approval_id)}" data-choice="${esc(c.id)}"${c.intent ? ` data-intent="${esc(c.intent)}" title="${esc(c.title)}"` : ''}${off}>${esc(c.label)}</button>`).join('');
+    const buttons = choices.map((c, i) => `<button type="button" class="btn sm ${i === 0 ? 'primary' : ''}" data-approval="${esc(ev.approval_id)}" data-choice="${esc(c.id)}"${c.intent ? ` data-intent="${esc(c.intent)}" title="${esc(c.title)}"` : ''}${off}>${esc(c.label)}</button>`).join('')
+      // #183: "Interact with Oracle" at the end of the row
+      + (window.GateOracle?.gateOracleButtonHtml({ ...ev, run_id: ev.run_id || chat.runId }) || '');
     const field = ev.feedback ? `<label class="duo-ask-label">${esc(ev.feedback.label)}</label>
       <textarea class="duo-ask-text" rows="2" placeholder="${esc(ev.feedback.placeholder)}"${off}></textarea>` : '';
     chat.labels = Object.fromEntries(choices.map((c) => [c.intent ? `${c.id}:${c.intent}` : String(c.id), c.label]));
     message('supervisor', `<div class="duo-ask" data-gate="${esc(ev.approval_id)}"><p class="duo-msg-text">${esc(ev.message)}</p>${field}<div class="row gate-choices">${buttons}</div></div>`, ev.ts);
     $d('#duo-chat-status').textContent = 'The supervisor is waiting for you';
-    if (chat.live) document.querySelector(`[data-gate="${ev.approval_id}"] textarea`)?.focus();
+    if (chat.live) document.querySelector(`[data-gate="${ev.approval_id}"] textarea`)?.focus({ preventScroll: true });
   }
 
   // The user's answer, as their own message.
@@ -663,7 +665,7 @@
       `<figure><span class="duo-robot ${role}" aria-hidden="true">${robotSvg(role, st)}</span><figcaption><b class="c-${role}">${NAMES[role]}</b> · ${st}</figcaption></figure>`).join('');
     roles = prev;
     $d('#duo-help').classList.remove('hidden');
-    $d('#duo-help-close').focus();
+    $d('#duo-help-close').focus({ preventScroll: true });
   }
   const closeHelp = () => { $d('#duo-help').classList.add('hidden'); $d('#duo-help-cast').innerHTML = ''; };
 

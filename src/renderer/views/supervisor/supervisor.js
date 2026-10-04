@@ -101,7 +101,7 @@
     $('#svc-backdrop').classList.remove('hidden');
     render();
     if (!sv.loaded) load();
-    setTimeout(() => $('#svc-q-drawer').focus(), 200);
+    setTimeout(() => $('#svc-q-drawer').focus({ preventScroll: true }), 200);
   }
   function closeDrawerPanel() {
     sv.drawer = false;

@@ -834,7 +834,7 @@
     }
     ctx.render();
     // the form or note just opened: its first control gets the focus
-    document.querySelector('.rm [autofocus]')?.focus();
+    document.querySelector('.rm [autofocus]')?.focus({ preventScroll: true });
     return true;
   }
 

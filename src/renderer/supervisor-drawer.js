@@ -33,7 +33,7 @@ function openSupervisor(run, opts = {}) {
   $('#sup-backdrop').classList.remove('hidden');
   renderSupervisor();
   renderWatch();
-  setTimeout(() => $(opts.watch ? '#sup-watch-q' : '#sup-question').focus(), 200);
+  setTimeout(() => $(opts.watch ? '#sup-watch-q' : '#sup-question').focus({ preventScroll: true }), 200);
 }
 window.watchWithSupervisor = (run) => openSupervisor(run, { watch: true });
 

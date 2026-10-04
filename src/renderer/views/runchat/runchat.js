@@ -96,7 +96,9 @@
     const buttons = choices.map((c, i) => {
       const chosen = it.resolved && String(c.id) === it.resolved.choice && (c.intent || null) === (it.resolved.intent || null);
       return `<button type="button" class="btn sm ${!it.resolved && i === 0 ? 'primary' : ''}${chosen ? ' chosen' : ''}" data-approval="${esc(it.approvalId)}" data-choice="${esc(c.id)}"${c.intent ? ` data-intent="${esc(c.intent)}" title="${esc(c.title)}"` : ''}${c.feedback_required ? ' data-needs-text="1"' : ''}${off}>${esc(c.label)}</button>`;
-    }).join('');
+    }).join('')
+      // #183: "Interact with Oracle" at the end of the row
+      + (window.GateOracle?.gateOracleButtonHtml({ approval_id: it.approvalId, run_id: chat.runId, step_id: it.stepId }) || '');
     // Run App / Open the worktree (app.js), only while the gate waits in the live run
     const open = chat.live && !it.resolved && !it.closed;
     const tools = open && typeof gateToolsHtml === 'function' ? gateToolsHtml(it, { runId: chat.runId }) : '';
@@ -306,7 +308,7 @@
       if (!b || !chat.live || b.disabled) return;
       const v = b.dataset.choice;
       const text = b.closest('.duo-ask')?.querySelector('textarea')?.value || '';
-      if (b.dataset.needsText && !text.trim()) { showToast('Write your request first', `"${b.textContent}" sends the text to the agent.`); b.closest('.duo-ask')?.querySelector('textarea')?.focus(); return; }
+      if (b.dataset.needsText && !text.trim()) { showToast('Write your request first', `"${b.textContent}" sends the text to the agent.`); b.closest('.duo-ask')?.querySelector('textarea')?.focus({ preventScroll: true }); return; }
       const buttons = b.closest('.duo-ask').querySelectorAll('button');
       buttons.forEach((x) => { x.disabled = true; });
       // the answer opposite to the gate's recommendation asks once (#213); images pasted into the feedback (#130) go with it

@@ -354,8 +354,8 @@ function showRunAppSetup(setup, info, cfg, mode) {
   setup.classList.remove('hidden');
   const app = setup.querySelector('[data-setup-app]');
   if (app) app.onchange = () => showRunAppSetup(setup, info, info.suggestion.apps[+app.value], 'confirm');
-  setup.onkeydown = (ev) => { if (ev.key === 'Escape') { setup.classList.add('hidden'); setup.closest('.gate-tools')?.querySelector('[data-gate-tool="preview"]')?.focus(); } };
-  (setup.querySelector(mode === 'confirm' ? '[data-gate-tool="app-run"]' : '[data-setup="command"]'))?.focus();
+  setup.onkeydown = (ev) => { if (ev.key === 'Escape') { setup.classList.add('hidden'); setup.closest('.gate-tools')?.querySelector('[data-gate-tool="preview"]')?.focus({ preventScroll: true }); } };
+  (setup.querySelector(mode === 'confirm' ? '[data-gate-tool="app-run"]' : '[data-setup="command"]'))?.focus({ preventScroll: true });
 }
 
 // confirm: the owner clicked Run on the confirmation of a command not confirmed for the project yet
@@ -413,7 +413,7 @@ async function onGateTool(e, runId) {
     } else if (b.dataset.gateTool === 'app-save') {
       const val = (k) => setup.querySelector(`[data-setup="${k}"]`)?.value.trim() || '';
       const cfg = { install: val('install') || null, command: val('command'), url: val('url') || null, cwd: val('cwd') || null, env: setup._cfg?.env };
-      if (!cfg.command) { showToast('Write the command first', 'Run App runs that command in the worktree.'); setup.querySelector('[data-setup="command"]')?.focus(); return; }
+      if (!cfg.command) { showToast('Write the command first', 'Run App runs that command in the worktree.'); setup.querySelector('[data-setup="command"]')?.focus({ preventScroll: true }); return; }
       const writeRepo = !!setup.querySelector('[data-setup-repo]')?.checked;
       if (setup.dataset.project) {
         const saved = await api.saveLocalPreview(runId, approval, cfg, writeRepo);

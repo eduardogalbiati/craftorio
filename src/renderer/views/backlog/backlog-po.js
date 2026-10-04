@@ -145,7 +145,7 @@
     // a draft still to file: back to Register an issue
     if (openDraftIndex() >= 0 && !po.busy) po.mode = 'issue';
     render({ scroll: 'end' });
-    setTimeout(() => $p('#po-question').focus(), 200);
+    setTimeout(() => $p('#po-question').focus({ preventScroll: true }), 200);
   }
 
   function close() {
@@ -160,7 +160,7 @@
   function setMode(mode) {
     po.mode = mode === 'issue' ? 'issue' : 'plan';
     render();
-    $p('#po-question').focus();
+    $p('#po-question').focus({ preventScroll: true });
   }
 
   // #234: a short message where the owner clicked (no project selected)
@@ -267,7 +267,7 @@
     const box = $p('#po-question');
     if (!box.value.trim()) box.value = SELECTION_QUESTION;
     render();
-    box.focus();
+    box.focus({ preventScroll: true });
     box.setSelectionRange(box.value.length, box.value.length);
   }
 
@@ -849,7 +849,7 @@
     else if (e.target.closest('[data-po-unattach-all]')) po.attached = [];
     else return;
     render();
-    $p('#po-question').focus();
+    $p('#po-question').focus({ preventScroll: true });
   };
   $p('#po-mode').onclick = (e) => { const b = e.target.closest('[data-po-mode]'); if (b) setMode(b.dataset.poMode); };
   $p('#po-chips').onclick = (e) => {

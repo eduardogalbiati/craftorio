@@ -23,9 +23,11 @@ function renderRunGates() {
   if (box.dataset.key === key) return;
   box.dataset.key = key;
   box.innerHTML = gates.map((g) => {
-    const buttons = g.choices
+    // the choices, then "Interact with Oracle" at the end of the row (#183)
+    const buttons = (g.choices
       ? gateChoices(g).map((c, i) => `<button type="button" class="btn sm ${i === 0 ? 'primary' : 'ghost'}" data-choice="${esc(c.id)}"${c.intent ? ` data-intent="${esc(c.intent)}" title="${esc(c.title)}"` : ''}${c.feedback_required ? ' data-needs-text="1"' : ''} data-testid="run-gate-choice">${esc(c.label)}</button>`).join('')
-      : `<button type="button" class="btn sm ghost" data-testid="run-gate-choice" data-answer="false">${esc(g.reject?.label || 'Reject')}</button><button type="button" class="btn sm primary" data-testid="run-gate-choice" data-answer="true">${esc(g.approve?.label || 'Approve')}</button>`;
+      : `<button type="button" class="btn sm ghost" data-testid="run-gate-choice" data-answer="false">${esc(g.reject?.label || 'Reject')}</button><button type="button" class="btn sm primary" data-testid="run-gate-choice" data-answer="true">${esc(g.approve?.label || 'Approve')}</button>`)
+      + (window.GateOracle?.gateOracleButtonHtml(g) || '');
     const field = g.feedback ? `<label class="duo-ask-label">${esc(g.feedback.label || 'Instructions (optional)')}</label>
       <textarea class="duo-ask-text run-gate-feedback" rows="3" placeholder="${esc(g.feedback.placeholder || '')}"></textarea>` : '';
     const message = `<pre class="run-gate-message" data-testid="run-gate-message">${esc(g.message || '')}</pre>`;
@@ -50,7 +52,7 @@ function onRunGateClick(e) {
   if (!card) return;
   const answer = b.dataset.choice !== undefined ? b.dataset.choice : b.dataset.answer === 'true';
   const text = card.querySelector('.run-gate-feedback');
-  if (b.dataset.needsText && !text?.value.trim()) { showToast('Write your request first', `"${b.textContent}" sends the text to the agent.`); text?.focus(); return; }
+  if (b.dataset.needsText && !text?.value.trim()) { showToast('Write your request first', `"${b.textContent}" sends the text to the agent.`); text?.focus({ preventScroll: true }); return; }
   const buttons = card.querySelectorAll('button');
   buttons.forEach((x) => (x.disabled = true));
   const send = () => PasteImage.settle(text)
@@ -74,7 +76,7 @@ function focusRunGate() {
   requestAnimationFrame(() => {
     const card = $('#run-gates .run-gate');
     card?.scrollIntoView({ block: 'nearest' });
-    card?.querySelector('.run-gate-actions button')?.focus();
+    card?.querySelector('.run-gate-actions button')?.focus({ preventScroll: true });
   });
 }
 
@@ -384,7 +386,7 @@ function renderChainBanner() {
     ${editing ? '<div class="chain-banner-edit" data-chain-picker></div>' : ''}
     ${pipeForm}
     ${chainUi.error ? `<p class="error small">${esc(chainUi.error)}</p>` : ''}`;
-  if (savingPipe) box.querySelector('#pipe-save-name').focus();
+  if (savingPipe) box.querySelector('#pipe-save-name').focus({ preventScroll: true });
   if (editing) {
     const source = () => (chainUi.workflows || []).find((w) => w.name === r.workflow || w.file === r.file) || null;
     chainUi.picker = ChainPicker.mount(box.querySelector('[data-chain-picker]'), { workflows: () => chainUi.workflows || [], source, value: then });

@@ -16,6 +16,12 @@
 // runs or roadmaps watched and the runs muted (Unwatch, Unmute). oracle:changed reloads the chat.
 // Live progress (#180, window.LiveTurn, live-turn.js): while it answers, what the Oracle does and its
 // answer as it is written (chat:progress 'oracle'); Stop (api.cancelChatTurn) keeps what was written.
+// A gate's "Interact with Oracle" (#183, gate-oracle.js) calls OracleChat.openWith: the drawer opens
+// beside the screen (no backdrop, the content narrows), the question box shows a removable context
+// chip and the gate's starters; each question carries that context (oracle:ask `context`). A question
+// asked while another is answered queues. An answer's ```gate-feedback block becomes a card whose
+// "Use this text" fills the gate's feedback box. #208: fields are focused with preventScroll and the
+// head wraps its buttons under the title in the narrow dock.
 // Uses app.js globals ($, esc, state, api, errMsg, devMode, fmtCost, markdownHtml, confirmDialog,
 // selectRun, showView, openArtifactsAt, showSettingsTab, registerView, viewRegistry, Robots).
 (() => {
@@ -24,6 +30,9 @@
     messages: [], service: null, pending: null, error: null, loaded: false, drawer: false,
     drafts: { text: '', images: [] }, pasteError: null, memory: M.memoryForm(''), memoryOpen: false, refilledFor: null,
     wake: null, nightForm: null, acting: new Set(), live: null,
+    // #183: the question box's context chip ({ label, ref, text, starters }), the questions waiting
+    // for the one in flight, and the context of the one in flight
+    context: null, queue: [], pendingRef: null,
   };
   const SURFACES = ['dock', 'drawer'];
   const SUGGESTIONS = [
@@ -112,15 +121,19 @@
 
   async function ask(question) {
     const q = String(question ?? or.drafts.text).trim();
+    // #183: a question asked while another is answered waits in line
+    if (or.pending) { if (q) { or.queue.push(q); render(); } return; }
     const images = or.drafts.images;
     const v = view();
     if ((!q && !images.length) || !v.chipsEnabled) return;
-    Object.assign(or, { pending: q || `(${images.length} image${images.length > 1 ? 's' : ''})`, error: null, pasteError: null, live: window.LiveTurn.create({ agent: 'Oracle' }) });
+    const ctx = or.context;
+    Object.assign(or, { pending: q || `(${images.length} image${images.length > 1 ? 's' : ''})`, pendingRef: ctx?.ref || '', error: null, pasteError: null, live: window.LiveTurn.create({ agent: 'Oracle' }) });
     render();
     // #180: the timer and "Still working" move even when no item arrives
     const tick = setInterval(renderLive, 1000);
     try {
-      const out = await api.askOracle({ question: q, screen: screen(), images: images.map((i) => ({ dataUrl: i.dataUrl })), mock: devMode() });
+      const context = ctx ? { label: ctx.label, ref: ctx.ref, text: ctx.text } : undefined;
+      const out = await api.askOracle({ question: q, screen: screen(), images: images.map((i) => ({ dataUrl: i.dataUrl })), context, mock: devMode() });
       or.messages = out.messages;
       or.service = out.state;
       // a daily budget shows as the paused state; a monthly one as an error
@@ -133,8 +146,10 @@
       or.error = errMsg(e); // the question stays in the input, to resend
     } finally {
       clearInterval(tick);
-      Object.assign(or, { pending: null, live: null });
+      Object.assign(or, { pending: null, pendingRef: null, live: null });
       render();
+      const next = or.queue.shift();
+      if (next) ask(next);
     }
   }
 
@@ -164,7 +179,7 @@
     or.memoryOpen = true;
     try { or.memory = M.editMemory(M.memoryForm((await api.oracleMemory()).text)); } catch (e) { or.memory = { ...M.editMemory(M.memoryForm('')), error: errMsg(e) }; }
     render();
-    document.querySelector(`#oracle-mem-${or.drawer ? 'drawer' : 'dock'}`)?.focus();
+    document.querySelector(`#oracle-mem-${or.drawer ? 'drawer' : 'dock'}`)?.focus({ preventScroll: true });
   }
   async function saveMemory() {
     or.memory = { ...or.memory, saving: true };
@@ -276,10 +291,22 @@
       attachmentCache.set(n, api.oracleAttachment(n).then((url) => { attachmentCache.set(n, url || ''); render(); }).catch(() => attachmentCache.set(n, '')));
     }
   }
-  function messageHtml(m) {
+  // #183: the "Ask for changes" text the Oracle proposes (```gate-feedback blocks), out of the prose
+  function feedbackBlocks(text) {
+    const blocks = [];
+    const rest = String(text || '').replace(/```gate-feedback[^\n]*\n([\s\S]*?)```/g, (_, b) => { blocks.push(b.trim()); return ''; });
+    return { rest, blocks: blocks.filter(Boolean) };
+  }
+  // each proposal as a card; "Use this text" fills the gate's feedback box (never answers it)
+  const feedbackCardsHtml = (blocks, ref) => blocks.map((b) => `<div class="oracle-feedback-card" data-testid="oracle-feedback-card">
+      <div class="muted small">Proposed text for "Ask for changes"</div>
+      <div class="oracle-text">${esc(b)}</div>
+      ${ref ? `<div class="row oracle-card-actions"><button class="btn primary sm" type="button" data-oracle-use-text="${esc(ref)}" data-text="${esc(b)}" title="Put this text in the gate's feedback box; you still choose the answer">Use this text</button></div>` : ''}
+    </div>`).join('');
+  function messageHtml(m, ref = '') {
     if (m.role === 'user') {
       loadAttachments(m.attachments);
-      return `<div class="sup-wmsg user"><div class="sup-wmsg-meta oracle-meta">You · ${esc(time(m.ts))}${m.screen ? ` · <span class="oracle-cut" title="${esc(m.screen)}">${esc(m.screen)}</span>` : ''}${m.unanswered ? ' · <span class="badge warn">no answer</span>' : ''}</div><div class="oracle-text">${esc(m.text)}</div>${thumbsHtml(m.attachments)}</div>`;
+      return `<div class="sup-wmsg user"><div class="sup-wmsg-meta oracle-meta">You · ${esc(time(m.ts))}${m.screen ? ` · <span class="oracle-cut" title="${esc(m.screen)}">${esc(m.screen)}</span>` : ''}${m.unanswered ? ' · <span class="badge warn">no answer</span>' : ''}</div>${m.context?.label ? `<div class="oracle-cut small muted" title="${esc(m.context.label)}">About: ${esc(m.context.label)}</div>` : ''}<div class="oracle-text">${esc(m.text)}</div>${thumbsHtml(m.attachments)}</div>`;
     }
     if (m.kind === 'action' && m.action) return cardHtml(m);
     if (m.kind === 'delegation') {
@@ -298,7 +325,8 @@
     if (m.role === 'system') return `<div class="sup-wmsg system${m.error ? ' error' : ''}"><div class="sup-wmsg-meta">${esc(time(m.ts))}</div><div>${esc(m.text)}</div></div>`;
     const meta = M.metaParts(m, { fmtTime: time, fmtCost }).map(esc).join(' · ');
     const tag = m.wake ? ' · <span class="badge">wake-up</span>' : m.kind === 'night-summary' ? ' · <span class="badge warn">Night watch</span>' : m.stopped ? ' · <span class="badge warn" title="You stopped this turn: the answer is what was written until then">Stopped</span>' : '';
-    return `<div class="sup-wmsg oracle-msg"><div class="sup-wmsg-meta oracle-meta">${avatar('xs')} Oracle · ${meta}${tag}</div><div class="md md-compact oracle-md">${markdownHtml(m.text || '')}</div>${m.kind === 'night-summary' ? summaryUndoHtml(m) : ''}</div>`;
+    const fb = feedbackBlocks(m.text);
+    return `<div class="sup-wmsg oracle-msg"><div class="sup-wmsg-meta oracle-meta">${avatar('xs')} Oracle · ${meta}${tag}</div><div class="md md-compact oracle-md">${markdownHtml(fb.rest)}</div>${feedbackCardsHtml(fb.blocks, ref)}${m.kind === 'night-summary' ? summaryUndoHtml(m) : ''}</div>`;
   }
   // a card: the title leads; what changes, where, the backup and why; who asked; its buttons
   function cardHtml(m) {
@@ -352,11 +380,20 @@
     if (or.wake?.wakeScope === 'off') parts.push('<div class="muted small">Run events do not wake the Oracle (Settings › Execution › Oracle).</div>');
     return parts.join('');
   }
+  // an answer's "Use this text" belongs to the gate its question was about
+  function messagesHtml() {
+    let ref = '';
+    return or.messages.map((m) => {
+      if (m.role === 'user') ref = m.context?.ref || '';
+      return messageHtml(m, ref);
+    }).join('');
+  }
   function logHtml(v) {
     return (v.state === 'empty' ? '<div class="svc-empty muted small">The Oracle keeps one conversation for the whole app. It reads your runs (events, sessions, decisions, costs), the roadmaps and the Backlog, the workflows and skills, and your projects\' repositories, read-only. Ask it why a run failed, where the tokens go or what to do next. Run events wake it when they need you. It changes nothing on its own: each change is a card you confirm with Do it.</div>' : '')
-      + or.messages.map(messageHtml).join('')
+      + messagesHtml()
       + (or.pending ? `<div class="sup-wmsg user"><div class="sup-wmsg-meta">You</div><div class="oracle-text">${esc(or.pending)}</div>${or.drafts.images.length ? `<div class="oracle-thumbs">${or.drafts.images.map((i) => `<span class="oracle-thumb"><img src="${esc(i.dataUrl)}" alt="" /></span>`).join('')}</div>` : ''}</div>` : '')
       + (or.live ? `<div class="oracle-live">${window.LiveTurn.html(or.live)}</div>` : v.state === 'answering' ? '<div class="sup-loading"><span class="spinner"></span><span>The Oracle is reading…</span></div>' : '')
+      + or.queue.map((q) => `<div class="sup-wmsg user oracle-queued"><div class="sup-wmsg-meta">You · <span class="badge">queued</span></div><div class="oracle-text">${esc(q)}</div></div>`).join('')
       + (or.error ? `<div class="sup-wmsg system error"><div class="sup-wmsg-meta">now</div><div>${esc(or.error)}</div></div>` : '');
   }
   function noticeHtml(v) {
@@ -426,7 +463,13 @@
       $(`#oracle-screen-${w}`).textContent = where;
       $(`#oracle-screen-${w}`).title = where;
       $(`#oracle-notice-${w}`).innerHTML = noticeHtml(v);
-      $(`#oracle-chips-${w}`).innerHTML = v.state === 'empty' || (v.state === 'answering' && !or.messages.length)
+      // #183: with a context chip, its starters stay under the box (asked while busy, they queue)
+      $(`#oracle-context-${w}`).innerHTML = or.context ? `<span class="oracle-context-chip" data-testid="oracle-context-chip" title="${esc(or.context.label)}"><span class="oracle-cut">${esc(or.context.label)}</span><button class="icon-btn" type="button" data-oracle-uncontext aria-label="Remove the gate context" title="Remove the gate context: the next questions are not about this gate"><svg viewBox="0 0 24 24" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" /></svg></button></span>` : '';
+      const starters = or.context?.starters?.length ? or.context.starters : null;
+      const startersOn = v.state !== 'unavailable' && (v.chipsEnabled || v.state === 'answering');
+      $(`#oracle-starters-${w}`).innerHTML = starters
+        ? starters.map((q) => `<button class="chip" type="button" data-oracle-q="${esc(q)}"${startersOn ? '' : ' disabled'}>${esc(q)}</button>`).join('') : '';
+      $(`#oracle-chips-${w}`).innerHTML = !starters && (v.state === 'empty' || (v.state === 'answering' && !or.messages.length))
         ? SUGGESTIONS.map((q) => `<button class="chip" type="button" data-oracle-q="${esc(q)}"${v.chipsEnabled ? '' : ' disabled'}>${esc(q)}</button>`).join('') : '';
       $(`#oracle-thumbs-${w}`).innerHTML = v.attachments.map((i) => `<span class="oracle-thumb draft" title="${esc(i.name || 'Pasted image')}"><img src="${esc(i.dataUrl)}" alt="Pasted image" /><button class="icon-btn" type="button" data-oracle-unpaste="${esc(i.id)}" title="Remove this image" aria-label="Remove this image"><svg viewBox="0 0 24 24" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" /></svg></button></span>`).join('');
       const form = $(`[data-oracle-form="${w}"]`);
@@ -444,33 +487,43 @@
     badge.classList.toggle('hidden', !v.unread);
     badge.title = `${v.unread} new answer${v.unread === 1 ? '' : 's'} from the Oracle`;
     markRead();
+    window.GateOracle?.paint?.();
   }
 
   // ---- the drawer and the dock -------------------------------------------------------------
-  function openDrawer() {
-    if (onDashboard()) { $('#oracle-q-dock')?.focus(); return; }
+  // side: beside the screen (#183, a gate stays answerable on the left): no backdrop, the content narrows
+  function openDrawer({ side = false } = {}) {
+    if (onDashboard()) { render(); $('#oracle-q-dock')?.focus({ preventScroll: true }); return; }
     or.drawer = true;
     $('#oracle-drawer').classList.add('open');
+    $('#oracle-drawer').classList.toggle('side', side);
+    $('.shell')?.classList.toggle('oracle-side', side);
     $('#oracle-drawer').setAttribute('aria-hidden', 'false');
-    $('#oracle-backdrop').classList.remove('hidden');
+    $('#oracle-backdrop').classList.toggle('hidden', side);
     render();
     load();
-    setTimeout(() => $('#oracle-q-drawer')?.focus(), 200);
+    setTimeout(() => $('#oracle-q-drawer')?.focus({ preventScroll: true }), 200);
   }
   function closeDrawer() {
     if (!or.drawer) return;
     or.drawer = false;
-    $('#oracle-drawer').classList.remove('open');
+    $('#oracle-drawer').classList.remove('open', 'side');
+    $('.shell')?.classList.remove('oracle-side');
     $('#oracle-drawer').setAttribute('aria-hidden', 'true');
     $('#oracle-backdrop').classList.add('hidden');
     render();
+  }
+  // #183: the chat about something on screen (a gate): its context chip and starters, the drawer beside it
+  function openWith(context) {
+    or.context = context || null;
+    openDrawer({ side: true });
   }
 
   const surfaceHtml = (w) => `
     <div class="drawer-head oracle-head">
       <div class="oracle-who">${avatar()}
         <div class="sup-head">
-          <h2 class="drawer-title">Oracle</h2>
+          <h2 class="drawer-title oracle-title">Oracle</h2>
           <div class="muted small oracle-cut">On: <span id="oracle-screen-${w}"></span></div>
         </div>
       </div>
@@ -488,10 +541,12 @@
       <div id="oracle-notice-${w}" class="oracle-notice"></div>
       <div id="oracle-chips-${w}" class="svc-chips"></div>
       <div id="oracle-thumbs-${w}" class="oracle-thumbs"></div>
+      <div id="oracle-context-${w}" class="oracle-context"></div>
       <form class="svc-form" data-oracle-form="${w}">
         <textarea id="oracle-q-${w}" class="svc-input oracle-input" rows="2" placeholder="Ask the Oracle… (Enter to send, Shift+Enter for a new line; paste a screenshot)"></textarea>
         <button class="btn primary oracle-send" type="submit">Send</button>
       </form>
+      <div id="oracle-starters-${w}" class="svc-chips oracle-starters" role="group" aria-label="Suggested questions about the gate"></div>
       <p id="oracle-paste-error-${w}" class="error small oracle-paste-error hidden"></p>
       <p id="oracle-foot-${w}" class="muted small svc-note"></p>
     </div>`;
@@ -542,7 +597,7 @@
         if (M.nightWatchView(or.service?.nightWatch).active) return;
         or.nightForm = or.nightForm ? null : { until: M.defaultNightEnd(), saving: false, error: null };
         render();
-        if (or.nightForm) document.querySelector(`#oracle-night-until-${or.drawer ? 'drawer' : 'dock'}`)?.focus();
+        if (or.nightForm) document.querySelector(`#oracle-night-until-${or.drawer ? 'drawer' : 'dock'}`)?.focus({ preventScroll: true });
       }));
       document.addEventListener('input', (e) => {
         if (e.target.classList?.contains('oracle-mem-input')) or.memory = { ...or.memory, draft: e.target.value };
@@ -565,6 +620,9 @@
         if (t.closest('.oracle-live') && window.LiveTurn.onClick(e, or.live, { onStop: () => api.cancelChatTurn('oracle', '').catch((err) => { or.error = errMsg(err); render(); }), render: renderLive })) return;
         const chip = t.closest('[data-oracle-q]');
         if (chip) { ask(chip.dataset.oracleQ); return; }
+        if (t.closest('[data-oracle-uncontext]')) { or.context = null; render(); return; }
+        const use = t.closest('[data-oracle-use-text]');
+        if (use) { window.GateOracle?.useText(use.dataset.oracleUseText, use.dataset.text); return; }
         const un = t.closest('[data-oracle-unpaste]');
         if (un) { or.drafts.images = M.removeImage(or.drafts.images, un.dataset.oracleUnpaste); or.pasteError = null; render(); return; }
         if (t.closest('[data-oracle-mem-cancel]')) { or.memory = M.cancelMemory(or.memory); or.memoryOpen = false; render(); return; }
@@ -587,7 +645,7 @@
           closeDrawer();
           showView('settings');
           showSettingsTab('execution');
-          setTimeout(() => { $('#set-oracle-budget')?.focus(); $('#set-oracle')?.scrollIntoView({ block: 'center' }); }, 100);
+          setTimeout(() => { $('#set-oracle-budget')?.focus({ preventScroll: true }); $('#set-oracle')?.scrollIntoView({ block: 'center' }); }, 100);
           return;
         }
         const link = t.closest('[data-oracle-link]');
@@ -602,5 +660,5 @@
     },
   });
 
-  window.OracleChat = { ask, attach, open: openDrawer, close: closeDrawer, reload: load };
+  window.OracleChat = { ask, attach, open: () => openDrawer(), openWith, close: closeDrawer, reload: load, pendingRef: () => (or.pending ? or.pendingRef || '' : null) };
 })();

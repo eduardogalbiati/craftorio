@@ -659,7 +659,7 @@
     chat.labels = Object.fromEntries(choices.map((c) => [String(c.id), c.label]));
     message('supervisor', `<div class="duo-ask" data-gate="${esc(ev.approval_id)}"><p class="duo-msg-text">${esc(ev.message)}</p>${field}<div class="row">${buttons}</div></div>`, ev.ts);
     $a('#arena-chat-status').textContent = 'The supervisor is waiting for you';
-    if (chat.live) document.querySelector(`#arena-messages [data-gate="${ev.approval_id}"] textarea`)?.focus();
+    if (chat.live) document.querySelector(`#arena-messages [data-gate="${ev.approval_id}"] textarea`)?.focus({ preventScroll: true });
   }
 
   function onApprovalResolved(ev) {
@@ -756,7 +756,7 @@
     $a('#arena-help-cast').innerHTML = cast.map(([r, st, name, color]) =>
       `<figure><span class="duo-robot" aria-hidden="true">${robotSvg(r, st)}</span><figcaption><b style="color:${color}">${name}</b> · ${st}</figcaption></figure>`).join('');
     $a('#arena-help').classList.remove('hidden');
-    $a('#arena-help-close').focus();
+    $a('#arena-help-close').focus({ preventScroll: true });
   }
   const closeHelp = () => { $a('#arena-help').classList.add('hidden'); $a('#arena-help-cast').innerHTML = ''; };
 

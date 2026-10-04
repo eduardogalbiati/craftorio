@@ -91,7 +91,7 @@
     st.items = st.items.filter((i) => i !== item);
     if (item.path) api.clipboardDiscardImage(item.path).catch(() => {});
     render(ta);
-    ta.focus();
+    ta.focus({ preventScroll: true });
   }
 
   const chipHtml = (i) => {

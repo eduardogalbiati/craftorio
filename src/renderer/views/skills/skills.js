@@ -49,7 +49,7 @@ function openSkillModal(s) {
   $('#btn-sk-folder').onclick = () => s && api.openPath(s.path);
   $('#sk-error').textContent = '';
   openModal('#skill-modal');
-  (s ? $('#sk-description') : $('#sk-name')).focus();
+  (s ? $('#sk-description') : $('#sk-name')).focus({ preventScroll: true });
 }
 
 async function saveSkill(e) {

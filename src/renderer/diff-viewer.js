@@ -67,7 +67,7 @@
     window.addEventListener('keydown', onKey, true);
     paintBar();
     load();
-    el.querySelector('[data-dv-list]').focus();
+    el.querySelector('[data-dv-list]').focus({ preventScroll: true });
   }
 
   function close() {
@@ -76,7 +76,7 @@
     cur = null;
     window.removeEventListener('keydown', onKey, true);
     el.remove();
-    if (opener?.isConnected && typeof opener.focus === 'function') opener.focus();
+    if (opener?.isConnected && typeof opener.focus === 'function') opener.focus({ preventScroll: true });
   }
 
   // The run's files (all changes or cur.commit's), then the file asked for (or the first one).
@@ -387,7 +387,7 @@
     const i = list.indexOf(document.activeElement);
     const next = e.shiftKey ? (i <= 0 ? list.length - 1 : i - 1) : (i + 1) % list.length;
     e.preventDefault();
-    list[next].focus();
+    list[next].focus({ preventScroll: true });
   }
 
   window.DiffViewer = { close, isOpen: () => !!cur, open };

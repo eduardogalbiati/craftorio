@@ -24,7 +24,7 @@
     window.removeEventListener('blur', onBlur);
     window.removeEventListener('resize', onBlur);
     document.removeEventListener('scroll', onBlur, true);
-    if (refocus && opener?.isConnected) opener.focus();
+    if (refocus && opener?.isConnected) opener.focus({ preventScroll: true });
     opener = null;
   }
   const onOutside = (e) => { if (menu && !menu.contains(e.target)) close(); };
@@ -108,14 +108,14 @@
       if (ev.key === 'Escape') { ev.preventDefault(); close(true); } else if (ev.key === 'Tab') close(true);
       else if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') {
         ev.preventDefault();
-        all[(i + (ev.key === 'ArrowDown' ? 1 : -1) + all.length) % all.length].focus();
-      } else if (ev.key === 'Home' || ev.key === 'End') { ev.preventDefault(); all[ev.key === 'Home' ? 0 : all.length - 1].focus(); }
+        all[(i + (ev.key === 'ArrowDown' ? 1 : -1) + all.length) % all.length].focus({ preventScroll: true });
+      } else if (ev.key === 'Home' || ev.key === 'End') { ev.preventDefault(); all[ev.key === 'Home' ? 0 : all.length - 1].focus({ preventScroll: true }); }
     });
     document.addEventListener('mousedown', onOutside, true);
     window.addEventListener('blur', onBlur);
     window.addEventListener('resize', onBlur);
     document.addEventListener('scroll', onBlur, true);
-    menu.querySelector('.ctx-item')?.focus();
+    menu.querySelector('.ctx-item')?.focus({ preventScroll: true });
   }
 
   window.ArtifactMenu = { close, copyContent, open };

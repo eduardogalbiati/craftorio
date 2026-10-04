@@ -256,7 +256,7 @@ function wireWorkflowDefinitions(box) {
     const file = cardOf(b);
     if (!wfDefs.open.delete(file)) wfDefs.open.add(file);
     renderWorkflowDefinitions();
-    box.querySelector(`.wf-card[data-file="${CSS.escape(file)}"] [data-flow]`)?.focus();
+    box.querySelector(`.wf-card[data-file="${CSS.escape(file)}"] [data-flow]`)?.focus({ preventScroll: true });
   }));
   box.querySelectorAll('[data-restore]').forEach((b) => (b.onclick = async () => {
     const file = cardOf(b);

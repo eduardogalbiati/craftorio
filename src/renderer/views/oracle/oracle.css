@@ -7,9 +7,26 @@
 .oracle-dock { padding: 0; display: flex; flex-direction: column; min-height: 0; min-width: 0; overflow: hidden; }
 .oracle-dock .drawer-body { min-height: 0; }
 .oracle-drawer .drawer-head .row, .oracle-dock .drawer-head .row { gap: 6px; flex: none; }
-.oracle-head { gap: 10px; }
-.oracle-who { display: flex; align-items: center; gap: 10px; min-width: 0; }
+/* #208: in the narrow dock the buttons wrap onto a second line, never over the title */
+.drawer-head.oracle-head { flex-wrap: wrap; gap: 8px 10px; }
+.oracle-drawer .drawer-head .row, .oracle-dock .drawer-head .row { margin-left: auto; }
+.oracle-who { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1 1 auto; }
 .oracle-who .sup-head { min-width: 0; }
+.oracle-title { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+
+/* #183: beside a gate (the drawer opened from it): no backdrop, the screen narrows to stay answerable */
+:root { --oracle-side-width: min(520px, 42vw); }
+.oracle-drawer.side { width: var(--oracle-side-width); }
+.shell.oracle-side > .content { margin-right: var(--oracle-side-width); }
+.oracle-context:empty { display: none; }
+.oracle-context-chip { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; min-width: 0; padding: 2px 4px 2px 10px; border: 1px solid rgba(124,156,255,.45); border-radius: 99px; background: rgba(124,156,255,.12); font-size: 12px; }
+.oracle-context-chip .oracle-cut { min-width: 0; }
+.oracle-context-chip .icon-btn { flex: none; padding: 1px; }
+.oracle-context-chip .icon-btn svg { width: 12px; height: 12px; }
+.oracle-feedback-card { margin-top: 8px; padding: 8px 10px; border: 1px solid var(--border); border-left: 3px solid var(--yellow); border-radius: 6px; background: var(--panel-2); }
+/* the gate's "Interact with Oracle": at the end of the choices row, the avatar thinks while it answers */
+.btn.gate-oracle { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; }
+.oracle-avatar.sm { width: 20px; height: 20px; margin: -3px 0; }
 
 /* the avatar: a robot drawing, not a line icon (.nav-item svg strokes its icons) */
 .oracle-avatar { display: inline-grid; place-items: center; width: 36px; height: 36px; flex: none; }

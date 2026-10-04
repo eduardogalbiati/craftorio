@@ -72,7 +72,7 @@ function editRunTitle(btn) {
   input.value = meta.customTitle || box.querySelector('.run-title-text').textContent;
   input.placeholder = 'Default title';
   box.replaceChildren(input);
-  input.focus();
+  input.focus({ preventScroll: true });
   input.select();
   let done = false;
   const finish = async (save) => {

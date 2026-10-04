@@ -59,7 +59,8 @@ body {
   font: 13px/1.45 "Segoe UI", system-ui, sans-serif;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  /* #208: clip, not hidden: a hidden overflow still scrolls when a field is focused */
+  overflow: clip;
 }
 h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 10px; font-weight: 600; }
 h3 { margin: 0 0 6px; }
@@ -72,7 +73,8 @@ body:not(.dev-mode) .dev-only { display: none !important; }
 
 /* ---------- topbar ---------- */
 .topbar {
-  display: flex; align-items: center; gap: 20px;
+  /* #208: a narrow window wraps the bar onto a second line instead of widening the page */
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px; min-width: 0;
   padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--panel);
 }
 .brand { font-weight: 700; font-size: 15px; }
@@ -82,10 +84,10 @@ body:not(.dev-mode) .dev-only { display: none !important; }
   color: var(--orange); border: 1px solid currentColor;
 }
 .run-meta { display: flex; align-items: center; gap: 8px; }
-.kpis { display: flex; gap: 22px; margin-left: auto; }
+.kpis { display: flex; flex-wrap: wrap; gap: 4px 22px; margin-left: auto; min-width: 0; }
 .kpi label { display: block; font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
 .kpi b { font-family: var(--mono); font-size: 14px; font-weight: 600; }
-.actions { display: flex; gap: 8px; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; }
 
 /* ---------- pills / buttons ---------- */
 .pill { padding: 2px 9px; border-radius: 99px; font-size: 11px; font-weight: 600; border: 1px solid transparent; }
@@ -128,7 +130,7 @@ body:not(.dev-mode) .dev-only { display: none !important; }
 .run-meta.clickable:hover { border-color: var(--border); }
 
 /* ---------- shell: sidebar + content + right drawer ---------- */
-.shell { flex: 1; min-height: 0; display: flex; position: relative; overflow: hidden; }
+.shell { flex: 1; min-height: 0; display: flex; position: relative; overflow: clip; }
 .sidebar {
   width: 200px; flex: none; background: var(--panel); border-right: 1px solid var(--border);
   padding: 12px 10px; display: flex; flex-direction: column; gap: 2px;

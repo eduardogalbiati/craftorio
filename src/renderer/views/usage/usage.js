@@ -167,7 +167,7 @@ function openBudgetModal(id) {
   $('#bd-outside').checked = !!b.countOutside;
   $('#bd-error').textContent = '';
   openModal('#budget-modal');
-  $('#bd-usd').focus();
+  $('#bd-usd').focus({ preventScroll: true });
 }
 
 async function saveBudget(e) {

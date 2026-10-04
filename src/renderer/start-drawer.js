@@ -39,7 +39,7 @@ async function openDrawer({ category = null, workflow = null, project = null, in
   $('#drawer').classList.add('open');
   $('#drawer').setAttribute('aria-hidden', 'false');
   $('#drawer-backdrop').classList.remove('hidden');
-  setTimeout(() => (mainField() || $('#wf-select')).focus(), 200);
+  setTimeout(() => (mainField() || $('#wf-select')).focus({ preventScroll: true }), 200);
 }
 
 // The drawer's main free-text field (usually `task`), picked by selectWorkflow()
@@ -272,7 +272,7 @@ async function startRun({ keepOpen = false } = {}) {
     info.innerHTML = `<button type="button" class="link-btn" title="Open this run">Started ${esc(runLabel(view?.run || { workflow: wf.name, project: project?.name }))}</button>`;
     info.querySelector('button').onclick = () => { closeDrawer(); selectRun(runId, { open: true }); };
     if (oneRunAtATime()) info.insertAdjacentHTML('beforeend', '<br>Turn on concurrent runs in Settings › Execution to start several runs in a row.');
-    main?.focus();
+    main?.focus({ preventScroll: true });
   } catch (e) {
     $('#start-error').textContent = errMsg(e);
   } finally {

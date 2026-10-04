@@ -264,7 +264,7 @@
     renderPreview();
     openModal('#agent-modal');
     $a('.ag-form').scrollTop = 0;
-    if (system) document.activeElement?.blur(); else $a('#ag-name').focus();
+    if (system) document.activeElement?.blur(); else $a('#ag-name').focus({ preventScroll: true });
   }
 
   function renderPreview() {

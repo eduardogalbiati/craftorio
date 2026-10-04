@@ -504,7 +504,7 @@ test('attach (the Backlog\'s Send to Product Owner button): opens the drawer in 
   assert.match(fn, /if \(po\.mode !== 'plan'\) setMode\('plan'\);/);
   assert.match(fn, /po\.attached = \[\.\.\.new Set\(numbers\)\];/);
   assert.match(fn, /if \(!box\.value\.trim\(\)\) box\.value = SELECTION_QUESTION;/);
-  assert.match(fn, /box\.focus\(\);/);
+  assert.match(fn, /box\.focus\(\{ preventScroll: true \}\);/);
   assert.doesNotMatch(fn, /\bask\(/); // nothing is sent until the owner presses Ask
 });
 
@@ -526,7 +526,7 @@ test('#po-attached\'s click removes one attached issue, or clears them all, then
   const fn = /\$p\('#po-attached'\)\.onclick = \(e\) => \{[\s\S]*?\n  \};/.exec(src)[0];
   assert.match(fn, /po\.attached = po\.attached\.filter\(\(n\) => n !== Number\(one\.dataset\.poUnattachIssue\)\);/);
   assert.match(fn, /else if \(e\.target\.closest\('\[data-po-unattach-all\]'\)\) po\.attached = \[\];/);
-  assert.match(fn, /\$p\('#po-question'\)\.focus\(\);/);
+  assert.match(fn, /\$p\('#po-question'\)\.focus\(\{ preventScroll: true \}\);/);
 });
 
 test('Clear conversation forgets the attached issues and their checked extras, like the files and notes', () => {

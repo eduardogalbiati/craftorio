@@ -310,7 +310,7 @@
     };
     draw();
     openModal('#wb-skills-modal');
-    setTimeout(() => $('#wb-skill-search').focus(), 50);
+    setTimeout(() => $('#wb-skill-search').focus({ preventScroll: true }), 50);
     return new Promise((resolve) => {
       const done = (v) => { closeModal('#wb-skills-modal'); resolve(v); };
       $('#btn-wb-skills-ok').onclick = () => done([...picked]);

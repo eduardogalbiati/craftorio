@@ -402,7 +402,7 @@ module.exports = (ctx) => {
         const turn = ctx.chatTurns.start('oracle');
         let out;
         try {
-          out = await get().ask({ question: opts.question, screen: opts.screen, images: opts.images, mock, mockContextTokens: mock ? opts.mockContextTokens : undefined, onItem: turn.onItem, signal: turn.signal });
+          out = await get().ask({ question: opts.question, screen: opts.screen, images: opts.images, context: opts.context || null, mock, mockContextTokens: mock ? opts.mockContextTokens : undefined, onItem: turn.onItem, signal: turn.signal });
         } finally {
           turn.end(turn.stopped() ? 'stopped' : out?.message?.error || !out ? 'failed' : 'done');
         }

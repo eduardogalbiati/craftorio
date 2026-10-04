@@ -61,7 +61,7 @@
     window.addEventListener('keydown', onKey, true);
     window.addEventListener('resize', onResize);
     show(Math.min(Math.max(0, opts.index || 0), images.length - 1));
-    el.querySelector('[data-iv-close]').focus();
+    el.querySelector('[data-iv-close]').focus({ preventScroll: true });
   }
 
   function close() {
@@ -71,7 +71,7 @@
     window.removeEventListener('keydown', onKey, true);
     window.removeEventListener('resize', onResize);
     el.remove();
-    if (opener?.isConnected && typeof opener.focus === 'function') opener.focus();
+    if (opener?.isConnected && typeof opener.focus === 'function') opener.focus({ preventScroll: true });
   }
 
   const parts = () => ({ stage: cur.el.querySelector('.iv-stage'), img: cur.el.querySelector('.iv-img'), msg: cur.el.querySelector('.iv-msg') });
@@ -226,7 +226,7 @@
     const i = list.indexOf(document.activeElement);
     const next = e.shiftKey ? (i <= 0 ? list.length - 1 : i - 1) : (i + 1) % list.length;
     e.preventDefault();
-    list[next].focus();
+    list[next].focus({ preventScroll: true });
   }
 
   window.ImageViewer = { THUMB, close, isOpen: () => !!cur, open };

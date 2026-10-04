@@ -306,7 +306,7 @@
     input.setAttribute('aria-label', 'Session title');
     el.replaceWith(input);
     sx.editing = true;
-    input.focus();
+    input.focus({ preventScroll: true });
     input.select();
     let done = false;
     const finish = async (keep) => {
@@ -435,7 +435,7 @@
     $s('#sx-model').value = '';
     renderForm();
     $s('#sx-modal').classList.remove('hidden');
-    $s('#sx-model-select').focus();
+    $s('#sx-model-select').focus({ preventScroll: true });
   }
 
   // Models come from the CLI's own list ({ id, name, efforts, defaultEffort }); "Other…" takes any
@@ -521,7 +521,7 @@
       const other = e.target.value === OTHER;
       Object.assign(sx.form, { custom: other, model: other ? $s('#sx-model').value.trim() : e.target.value });
       renderForm();
-      if (other) $s('#sx-model').focus();
+      if (other) $s('#sx-model').focus({ preventScroll: true });
     };
     $s('#sx-model').oninput = (e) => { sx.form.model = e.target.value; };
     $s('#btn-sx-pick').onclick = async () => { const d = await api.pickFolder(); if (d) $s('#sx-folder').value = d; };

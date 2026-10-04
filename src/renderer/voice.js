@@ -181,7 +181,7 @@
       const e = focused ? ta.selectionEnd : Math.min(r.sel.end ?? s, ta.value.length);
       const out = insertText(ta.value, text, s, e);
       ta.value = out.value;
-      ta.focus();
+      ta.focus({ preventScroll: true });
       ta.setSelectionRange(out.caret, out.caret);
       ta.dispatchEvent(new Event('input', { bubbles: true }));
     } catch (e) {
