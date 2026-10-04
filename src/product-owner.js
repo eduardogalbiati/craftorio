@@ -57,6 +57,7 @@
 const fs = require('fs');
 const path = require('path');
 const backlog = require('./backlog');
+const { isArchived } = require('./renderer/views/backlog/backlog-archive');
 const costEstimate = require('./cost-estimate');
 const DefaultWorkflow = require('./renderer/default-workflow');
 const epics = require('./epics');
@@ -536,7 +537,8 @@ function backlogReport({ data, activeRuns = [], history = [], workflows = [], qu
   const mark = (file) => (workflow ? (file === workflow ? ' (chosen by the owner: every group uses it)' : '') : file === byDefault ? ' (default)' : '');
   const named = new Set([...String(question).matchAll(/#(\d+)/g)].map((m) => Number(m[1])));
   const all = data?.issues || [];
-  const attached = [...new Set(selection.map(Number))].map((n) => all.find((i) => i.number === n)).filter(Boolean);
+  // #238: an archived issue is out of the plans, even when the owner selected it
+  const attached = [...new Set(selection.map(Number))].map((n) => all.find((i) => i.number === n)).filter((i) => i && !isArchived(i));
   const issues = all.filter((i) => i.state === 'open' && !attached.includes(i));
   const issueText = (i, whole = false) => {
     const labels = (i.labels || []).map((l) => l.name).join(', ');

@@ -32,6 +32,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { itemIssues, withSyncedText } = require('./backlog');
 const { normalizeThen } = require('./renderer/chain-model');
+const { isArchived } = require('./renderer/views/backlog/backlog-archive');
 const { writeJsonSafe } = require('./state-file');
 
 // planned: edited, never started by itself · running · paused (a failure, the owner, a proposal) · done
@@ -185,6 +186,9 @@ function cleanItem(raw, known, previous) {
   if (!refs.length) throw new Error(`The ${workflow} item has no issue.`);
   const issues = refs.map((r) => issueOf(r, known));
   const old = previous.get(raw.id);
+  // #238: an archived issue is out of the plans (finished items keep their history)
+  const archived = FINISHED.has(old?.status) ? null : issues.find((i) => isArchived(known.get(i.number)));
+  if (archived) throw new Error(`Issue #${archived.number} is archived: restore it in the Backlog before planning it.`);
   const state = old || { status: 'planned', runId: null, runs: [], error: null };
   const reason = String(raw.reason ?? old?.reason ?? '').trim();
   const modeReason = String(raw.modeReason ?? raw.mode_reason ?? old?.modeReason ?? '').trim();
@@ -255,7 +259,16 @@ function plannedNumbers(roadmap) {
  * @param {{ stages: object[], note?: string } | object[]} proposal
  */
 function propose(dir, projectId, proposal, { replace = false, issues = [], alive = null, keepRunning = false } = {}) {
-  const stages = Array.isArray(proposal) ? proposal : proposal?.stages;
+  // #238: archived issues are left out of a proposal; the rest of it is kept
+  const archived = new Set((issues || []).filter(isArchived).map((i) => i.number));
+  const refNumber = (i) => Number(typeof i === 'object' ? i?.number : i);
+  const stages = (Array.isArray(proposal) ? proposal : proposal?.stages || []).map((s) => ({
+    ...s,
+    items: (s?.items || []).map((x) => {
+      const refs = Array.isArray(x?.issues) && x.issues.length ? x.issues : x?.number ? [x] : [];
+      return { ...x, number: undefined, issues: refs.filter((i) => !archived.has(refNumber(i))) };
+    }).filter((x) => x.issues.length),
+  }));
   let dropped = [];
   const roadmap = updateRoadmap(dir, projectId, (r) => {
     if (replace) {
