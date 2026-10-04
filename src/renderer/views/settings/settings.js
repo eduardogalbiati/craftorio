@@ -1,5 +1,5 @@
 /* global api */
-// Settings screen: General (workspace folder, backlog defaults with the default development workflow
+// Settings screen (Phone gates, #226: settings-phone.js): General (workspace folder, backlog defaults with the default development workflow
 // (#195, default-workflow.js), voice input, the workspace index and
 // its Rebuild index, src/store.js), Agents & CLIs (installed CLIs and
 // their sign-in), Execution (developer mode, Keep awake (keep-awake.js), notifications, concurrent runs, the Oracle's daily budget and compaction threshold) and About. Registers
@@ -12,6 +12,7 @@ function showSettingsTab(tab) {
   document.querySelectorAll('.settings-page').forEach((p) => p.classList.toggle('hidden', p.dataset.spage !== tab));
   if (tab === 'agents') renderTools();
   if (tab === 'about') renderAbout();
+  if (tab === 'phone') window.PhoneGatesSettings.render();
 }
 
 async function renderSettings() {
@@ -314,6 +315,7 @@ registerView({
             <button class="settings-tab active" data-stab="general">General</button>
             <button class="settings-tab" data-stab="agents">Agents &amp; CLIs</button>
             <button class="settings-tab" data-stab="execution">Execution</button>
+            <button class="settings-tab" data-stab="phone">Phone gates</button>
             <button class="settings-tab" data-stab="about">About</button>
           </aside>
           <div class="settings-body">
@@ -511,6 +513,12 @@ registerView({
                   <div class="s-ctrl oracle-wake-kinds" id="set-oracle-wake-on"></div>
                 </div>
               </div>
+            </div>
+
+            <!-- #226: answering the human gates from a paired phone (settings-phone.js) -->
+            <div class="settings-page hidden" data-spage="phone">
+              <h2 class="settings-title">Phone gates</h2>
+              <div id="set-phone" data-testid="phone-gates"></div>
             </div>
 
             <div class="settings-page hidden" data-spage="about">

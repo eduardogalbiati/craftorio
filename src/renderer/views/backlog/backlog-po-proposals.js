@@ -42,11 +42,25 @@
       `<option value="${esc(w.file)}"${w.file === value ? ' selected' : ''}>${esc(w.name || w.file)}${w.file === DefaultWorkflow.current().file ? ' (default)' : ''}</option>`).join('')}</select>`;
   }
 
+  // A task is the issue's checkbox line as written (#242): its inline Markdown (**bold**, *italic*,
+  // `code`, [text](url)) is rendered, and its hover is the plain text without the symbols.
+  const MD_CODE = /`([^`]+)`/g;
+  const MD_LINK = /\[([^\]]+)\]\([^)\s]+\)/g;
+  const MD_BOLD = /\*\*([^*]+)\*\*|__([^_]+)__/g;
+  const MD_ITALIC = /\*([^*\s][^*]*)\*/g;
+  const taskPlain = (text) => String(text ?? '').replace(MD_CODE, '$1').replace(MD_LINK, '$1').replace(MD_BOLD, '$1$2').replace(MD_ITALIC, '$1');
+  function taskHtml(text) {
+    const codes = [];
+    const html = esc(String(text ?? '').replace(MD_CODE, (_, c) => `\u0000${codes.push(c) - 1}\u0000`))
+      .replace(MD_LINK, '$1').replace(MD_BOLD, '<b>$1$2</b>').replace(MD_ITALIC, '<i>$1</i>');
+    return html.replace(/\u0000(\d+)\u0000/g, (_, i) => `<code>${esc(codes[i])}</code>`);
+  }
+
   function childrenHtml(s, p) {
     const text = (k) => s.tasks?.[k - 1]?.text || `Task ${k}`;
     return `<ol class="po-children">${p.children.map((c) => `<li class="po-child">
         <div class="po-child-head"><span class="badge" title="Children of the same stage can run together">stage ${c.stage}</span><span class="badge bl-triage bl-complexity lvl-${c.complexity}" title="Complexity ${c.complexity}/5">C${c.complexity}</span><b class="po-child-title" title="${esc(c.title)}">${esc(c.title)}</b></div>
-        <ul class="po-tasks small">${c.tasks.map((k) => `<li title="${esc(text(k))}"><span class="muted mono">${k}.</span> ${esc(text(k))}</li>`).join('')}</ul>
+        <ul class="po-tasks small">${c.tasks.map((k) => `<li title="${esc(taskPlain(text(k)))}"><span class="muted mono">${k}.</span> ${taskHtml(text(k))}</li>`).join('')}</ul>
         ${c.reason ? `<div class="small muted">${esc(c.reason)}</div>` : ''}
       </li>`).join('')}</ol>
       <div class="small"><span class="muted">Then #${s.issue}:</span> ${p.parent === 'close' ? 'closed in favour of its children, with a comment linking them' : 'an umbrella, with a task list linking its children'}</div>`;
@@ -69,7 +83,7 @@
             <label class="po-edit-num">Complexity <select data-split-cx="${i}">${[1, 2, 3, 4, 5].map((k) => `<option value="${k}"${c.complexity === k ? ' selected' : ''}>${k}</option>`).join('')}</select></label>
             ${i < e.children.length - 1 ? `<button class="link-btn small" type="button" data-split-merge="${i}" title="Child ${i + 2}'s tasks join this one">merge with child ${i + 2}</button>` : ''}
           </div></div>`).join('')}
-        <div class="field"><label>Tasks</label><div class="po-edit-tasks">${tasks.map((t) => `<label class="po-edit-task"><span class="small" title="${esc(t.text)}"><span class="muted mono">${t.n}.</span> ${esc(t.text)}</span>
+        <div class="field"><label>Tasks</label><div class="po-edit-tasks">${tasks.map((t) => `<label class="po-edit-task"><span class="small" title="${esc(taskPlain(t.text))}"><span class="muted mono">${t.n}.</span> ${taskHtml(t.text)}</span>
             <select data-split-task="${t.n}" aria-label="Child of task ${t.n}">${e.children.map((c, i) => `<option value="${i}"${c.tasks.includes(t.n) ? ' selected' : ''}>Child ${i + 1}</option>`).join('')}</select></label>`).join('')}</div>
           <div class="hint">Every task goes to exactly one child.</div></div>
         <div class="row"><button class="btn sm primary" type="button" data-split-act="save">Save</button><button class="btn sm ghost" type="button" data-split-act="cancel">Cancel</button></div>

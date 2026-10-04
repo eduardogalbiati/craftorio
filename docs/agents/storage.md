@@ -20,6 +20,15 @@ Read this before touching run listings, the Backlog queue, pending gates, notifi
   `usage.jsonl` (one line per real answer; added to Usage and the monthly budgets as one
   summary-like run per day, `usageRuns`) and `owner.json` (the one app process that answers, a
   run-owner heartbeat). Written by the service, never by the model.
+- `phone-gates/devices.json` (#226, `src/mobile-gates.js`): the phones paired with the gates page
+  (`id`, `name`, `tokenHash` (SHA-256; the token itself is only on the phone), `pairedAt`,
+  `lastSeen`); Revoke removes the entry. Pairing codes and the key that signs the gate links live
+  in memory only: a restart voids the codes and every gate link.
+- **The gate answer record**: a gate's `approval.resolved` event in `events.jsonl` carries
+  `approval_id`, `step_id`, `choice` (or `approved`), `by`, `wait_ms`, `feedback?`, `commit?`;
+  answered from a paired phone it adds `answered_by: "owner"`, `via: "mobile"`, `device` (the
+  device id of `phone-gates/devices.json`) next to the event's `ts`. Only the phone page writes
+  them (`answerPhoneGate`, never a channel); the `gates` index row is closed by the same event.
 - Never make the database the only copy of something a run produced.
 
 ## Issues: the git platform is the source of truth (#168)

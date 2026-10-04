@@ -263,7 +263,7 @@
       $('#nw-perm-save').onclick = async () => {
         nw.perms = { ...nw.perms, saving: true };
         render();
-        try { nw.state = await api.saveNightWatchPermissions({ allowed: nw.perms.allowed }); nw.perms = null; } catch (e) { nw.perms = { ...nw.perms, saving: false, error: errMsg(e) }; }
+        try { nw.state = await api.saveNightWatchPermissions(nw.perms.allowed); nw.perms = null; } catch (e) { nw.perms = { ...nw.perms, saving: false, error: errMsg(e) }; }
         render();
       };
     }

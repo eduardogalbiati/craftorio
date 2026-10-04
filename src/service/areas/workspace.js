@@ -33,6 +33,8 @@ module.exports = (ctx) => {
     ctx.openIndex();
     // the Backlog screen follows the backlog/ files live (#204, areas/backlog-watch.js)
     ctx.watchBacklog();
+    // the phone gates page (#226, areas/phone-gates.js), when the owner turned it on
+    ctx.resumePhoneGates();
     // queued issues never start on their own after a restart or a workspace change
     try { backlog.pauseAll(ws.backlog, 'Paused when the app started: resume to start the queued issues.'); } catch (e) { console.error('backlog queues:', e); }
     // a started roadmap continues where it was: its runs that ended meanwhile settle their stage

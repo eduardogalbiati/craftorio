@@ -95,9 +95,11 @@ function readPermissions(dir) {
   return { allowed: [...DEFAULT_PERMISSIONS], updatedAt: null, defaults: true };
 }
 
-/** Saves the checklist; a never-allowed or unknown permission is refused. → readPermissions */
+/** Saves the checklist; a never-allowed or unknown permission, or anything but a list, is refused
+ *  (#239: an object read as "nothing allowed" wiped the owner's choices). → readPermissions */
 function savePermissions(dir, allowed) {
-  const list = Array.isArray(allowed) ? allowed.map(String) : [];
+  if (!Array.isArray(allowed)) throw new Error('The permissions could not be saved: expected a list of permission ids.');
+  const list = allowed.map(String);
   const never = list.find((id) => NEVER_ALLOWED.some((n) => n.id === id));
   if (never) throw new Error(`${NEVER_ALLOWED.find((n) => n.id === never).label} is never allowed during the Night watch.`);
   const unknown = list.find((id) => !PERMISSION_IDS.includes(id));

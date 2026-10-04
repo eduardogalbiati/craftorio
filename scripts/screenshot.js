@@ -106,7 +106,7 @@ const VIEWS = {
   analytics: { tabs: ['usage', 'performance', 'run', 'occupancy'] },
   backlog: { modes: ['list', 'kanban', 'roadmap', 'epics'] },
   workflows: { tabs: ['runs', 'definitions'] },
-  settings: { tabs: ['general', 'agents', 'execution', 'about'] },
+  settings: { tabs: ['general', 'agents', 'execution', 'phone', 'about'] },
   'run-chat': { run: true },
   run: { live: true },
 };
@@ -292,6 +292,9 @@ function demoPoConversation(ws, projectId, po = null) {
   const big = DEMO_ISSUES.find((x) => x.number === 15);
   const poSplit = require('../src/po-split');
   const split = poSplit.normalizeSplit(poSplit.proposeSplit(big, { complexity: 5 }), big, { complexity: 5 });
+  // #242: a long title and a long task line with inline Markdown, so the card must fit the drawer
+  split.title = `${split.title || big.title}: keep every run's worktree, branch and logs safe when the app closes, crashes or the workspace moves to another disk`;
+  if (split.tasks?.[0]) split.tasks[0] = { ...split.tasks[0], text: `**Recovery inbox per workspace**: list the runs left behind with \`events.jsonl\` and their branches, offer Resume or Discard, and link [the storage doc](https://example.com/storage) from the empty state; ${split.tasks[0].text}` };
   const messages = [
     { ts: at(0), role: 'user', mode: 'issue', text: 'export the report as pdf', attachments: [shot] },
     { ts: at(20), role: 'po', mode: 'issue', model: 'claude-sonnet-5', costUsd: 0.04, text: 'One question before I draft it:', issue: { reply: 'One question before I draft it:', questions: ['Should the PDF replace the Markdown export, or sit next to it?'], draft: null, duplicates: [], existingIssue: null, addition: '', assumptions: [] } },
@@ -1363,6 +1366,7 @@ function main() {
       for (let i = 0; i < 100 && !document.querySelector(sel); i++) await new Promise((r) => setTimeout(r, 100));
       const el = document.querySelector(sel);
       if (!el) throw new Error('nothing matches ' + sel);
+      el.scrollIntoView({ block: 'center' }); // a card deep in a scrolled list or drawer is shown (#242)
       el.click();`);
     // a right-click at the element's center (an artifact's copy menu, #114)
     const context = (sel) => js(`

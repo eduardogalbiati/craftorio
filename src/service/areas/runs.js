@@ -285,7 +285,8 @@ module.exports = (ctx) => {
       if (ev.type === 'workflow.finished' && onFinished) {
         try { onFinished(ev); } catch (e) { console.error('run finished:', e.message); }
       }
-      ctx.notify(notifier.runNotice(ev, runInfo), { projectId: run.projectId, issue: run.issues?.map((i) => `#${i.number}`).join(', ') || null });
+      // a gate's notice carries its phone page link while Phone gates is on (#226)
+      ctx.notify(notifier.runNotice(ev, runInfo, { gateLink: ctx.phoneGateLink() }), { projectId: run.projectId, issue: run.issues?.map((i) => `#${i.number}`).join(', ') || null });
       // the next issues waiting in a Backlog queue start once this run is over; a queued issue whose
       // run failed pauses its queue (a failure that repeats would otherwise burn through it)
       if (ev.type === 'workflow.finished') {

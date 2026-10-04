@@ -23,7 +23,9 @@ const clip = (s, n = 180) => {
 
 // The notice for a run event, or null. `run`: { workflow, project (name or null), mock, title? }:
 // the run's display title (#84) is shown with its workflow, "Title (workflow)".
-function runNotice(ev, run = {}) {
+// `gateLink(runId, approvalId)` (#226, src/mobile-gates.js, set while phone gates are on): a gate's
+// notice carries `url`, the signed link to that gate's phone page.
+function runNotice(ev, run = {}, { gateLink } = {}) {
   const workflow = run.workflow || ev.workflow || 'Workflow';
   const name = () => (run.title ? `${run.title} (${workflow})` : workflow);
   const lines = (detail) => [`Project: ${run.project || 'none'}${run.mock ? ' (simulation)' : ''}`, detail && clip(detail)].filter(Boolean).join('\n');
@@ -33,9 +35,12 @@ function runNotice(ev, run = {}) {
   switch (ev.type) {
     case 'workflow.started':
       return notice('started', `Run started: ${name()}`, ev.resumed_from ? `Resumed from ${ev.resumed_from.run_id} at ${ev.resumed_from.step}` : '');
-    case 'approval.requested':
+    case 'approval.requested': {
       // the gate's "What happened" line (#213), else its message
-      return notice('waiting', `Waiting for you: ${name()}`, ev.brief?.headline || ev.message || `Approval needed at ${ev.step_id}`);
+      const n = notice('waiting', `Waiting for you: ${name()}`, ev.brief?.headline || ev.message || `Approval needed at ${ev.step_id}`);
+      if (gateLink && ev.approval_id) n.url = gateLink(ev.run_id, ev.approval_id);
+      return n;
+    }
     case 'workflow.finished': {
       const label = STATUS_LABEL[ev.status] || ev.status;
       const ok = ev.status === 'success' ? (ev.summary?.local_merge ? `Merged locally into ${ev.summary.local_merge.base}, not pushed yet.` : '') : ev.error;

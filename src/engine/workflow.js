@@ -3611,7 +3611,9 @@ class WorkflowRun extends EventEmitter {
   // images: pictures attached to the feedback (#129), checked (an error names the file and the limit),
   // copied into <run_dir>/attachments/<gate>-feedback/ and given to the next agent step. They never
   // decide anything: the answer is the owner's choice.
-  resolveApproval(id, answer, by = 'user', feedback = '', intent = null, images = []) {
+  // answeredBy: who answered and from where, recorded on the event (#226, the phone gates page:
+  // { answered_by: 'owner', via: 'mobile', device })
+  resolveApproval(id, answer, by = 'user', feedback = '', intent = null, images = [], answeredBy = null) {
     const a = this.approvals.get(id);
     if (!a) return false;
     const text = String(feedback ?? '').trim();
@@ -3628,7 +3630,7 @@ class WorkflowRun extends EventEmitter {
     if (intent === 'save_to_issue' && a.gate?.save_to_issue?.choice === answer) data.intent = intent;
     // the commit the owner decided on (#112): a resume may only pass this gate again while the branch is still there
     const commit = this.worktreeHead();
-    this.emitEvent('approval.resolved', { approval_id: id, step_id: a.stepId, ...data, by, wait_ms: waitMs, ...(commit ? { commit } : {}), ...(text ? { feedback: text } : {}), ...(stored.length ? { attachments: stored } : {}) });
+    this.emitEvent('approval.resolved', { approval_id: id, step_id: a.stepId, ...data, by, ...(answeredBy || {}), wait_ms: waitMs, ...(commit ? { commit } : {}), ...(text ? { feedback: text } : {}), ...(stored.length ? { attachments: stored } : {}) });
     if (text) this.ctx.feedback.push({ step: a.stepId, choice: typeof answer === 'boolean' ? String(answer) : answer, text, ts: new Date().toISOString(), ...(stored.length ? { images: stored } : {}) });
     this.setStatus(this.orchestrator, 'active');
     a.resolve({ answer, feedback: text });

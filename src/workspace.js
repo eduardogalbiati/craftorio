@@ -155,6 +155,10 @@ const DEFAULT_SETTINGS = {
   notifySessions: true,
   // days the notification center keeps notifications (src/store.js); older ones are deleted
   notificationRetentionDays: 30,
+  // Phone gates (#226, src/mobile-gates.js): the gates-only page the app serves on localhost:port to
+  // paired phones; publicUrl: the private address that reaches it from outside (Tailscale serve,
+  // Cloudflare Tunnel with access rules), used in the gate links; '' = the localhost address
+  phoneGates: { enabled: false, port: 7400, publicUrl: '' },
   lastProject: null,
   lastWorkflow: null,
   // where the Backlog screen syncs issues from by default: github | gitlab | bitbucket

@@ -21,8 +21,10 @@
 .po-msg { border-left-color: #0F9F8F; }
 .po-sec { margin-top: 12px; }
 .po-sec .sup-h { color: #2DD4BF; }
-.po-group { border: 1px solid var(--border); border-left: 3px solid #0F9F8F; background: var(--panel); border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; display: grid; gap: 5px; }
-.po-group-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.po-group { border: 1px solid var(--border); border-left: 3px solid #0F9F8F; background: var(--panel); border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 5px; }
+.po-group-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+/* #242: a card never grows past the drawer: its grids shrink (minmax(0, 1fr)), long words break */
+.po-group .po-list li { overflow-wrap: anywhere; }
 /* #216: the proposal card in sections: the workflow and its pills, Why / Mode / Files / Estimate / Cost, the warnings */
 .po-wf, .po-cost { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
 .po-wf-name { color: var(--text); font-weight: 600; }
@@ -98,18 +100,20 @@ span.po-applied { cursor: default; }
 .po-suggested .check > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Split what is too big (#124) and epics (#138): backlog-po-proposals.js */
 .po-split-title { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.po-children { margin: 0; padding-left: 18px; display: grid; gap: 6px; }
+.po-children { margin: 0; padding-left: 18px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; }
 .po-child-head { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .po-child-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.po-tasks { margin: 2px 0 0; padding-left: 14px; list-style: none; display: grid; gap: 1px; }
-.po-tasks li { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.po-edit { border: 1px solid var(--border); border-radius: 8px; background: var(--panel-2); padding: 10px; display: grid; gap: 8px; }
+.po-tasks { margin: 2px 0 0; padding-left: 14px; list-style: none; display: grid; grid-template-columns: minmax(0, 1fr); gap: 1px; }
+/* a task line wraps up to two lines, then an ellipsis; the full text is its title (hover) */
+.po-tasks li { min-width: 0; overflow: hidden; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.po-tasks code, .po-edit-task code { font-size: 11px; }
+.po-edit { border: 1px solid var(--border); border-radius: 8px; background: var(--panel-2); padding: 10px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
 .po-edit .field { margin-bottom: 0; }
-.po-edit-child { display: grid; gap: 4px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+.po-edit-child { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
 .po-edit-child input[type="text"] { width: 100%; }
 .po-edit-num { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); }
 .po-edit-num input { width: 52px; }
-.po-edit-tasks { display: grid; gap: 4px; max-height: 260px; overflow: auto; }
+.po-edit-tasks { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; max-height: 260px; overflow: auto; }
 .po-edit-task { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; }
 .po-edit-task > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
