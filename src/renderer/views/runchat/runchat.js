@@ -145,7 +145,7 @@
       case 'group': return groupHtml(it);
       case 'gate': return gateHtml(it);
       case 'system': return `<div class="rc-sys ${it.level}" data-item="${it.id}"><span>${esc(it.text)}</span><time>${clock(it.ts)}</time></div>`;
-      case 'fail': return `<div class="rc-sys error" data-item="${it.id}"><span title="${esc(it.stepId)}">${esc(stepName(it.stepId))} failed:${esc(it.text.slice(0, 400))}</span><time>${clock(it.ts)}</time></div>`;
+      case 'fail': return `<div class="rc-sys error" data-item="${it.id}"><span title="${esc(it.stepId)}">${esc(stepName(it.stepId))} failed: ${esc(it.text.slice(0, 400))}</span><time>${clock(it.ts)}</time></div>`;
       case 'reply': return `<div class="duo-msg user reply" data-item="${it.id}"><div class="duo-bubble">
         <div class="duo-meta"><b>${it.by === 'user' ? 'You' : esc(it.by)}</b>${stepTag(it.stepId)}<span class="time">${clock(it.ts)}</span></div>
         <p><b>${esc(it.label)}</b></p>${it.feedback ? `<p class="duo-msg-text">${esc(it.feedback)}</p>` : ''}</div></div>`;
