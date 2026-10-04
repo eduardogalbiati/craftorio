@@ -11,7 +11,8 @@
 (() => {
   const SS = 'multiagent.analytics.run';
   // a step or agent id as people read it (#245, display-name.js); the id stays in the tooltip
-  const readable = (id) => (typeof displayName === 'function' ? displayName(id) : String(id || ''));
+  // (`names`: the run's own id → name map, from its workflow's display names)
+  const readable = (id, names) => (typeof displayName === 'function' ? displayName(id, names) : String(id || ''));
   const TOKEN_COLORS = { input: 'var(--accent)', output: 'var(--green)', cache_read: 'var(--purple)', cache_write: 'var(--orange)' };
   const TOKEN_LABELS = { input: 'new input', output: 'output', cache_read: 'cache read', cache_write: 'cache creation' };
   const FIGURES = [['costUsd', 'Total cost', 'usd'], ['durationMs', 'Duration', 'ms'], ['costPerIssue', 'Cost per issue', 'usd']];
@@ -123,17 +124,18 @@
     const bars = f.timeline.map((b) => {
       const y = rows.indexOf(b.row) * RH + 4;
       const w = Math.max(2, x(b.to) - x(b.from));
-      return `<rect x="${x(b.from).toFixed(1)}" y="${y}" width="${w.toFixed(1)}" height="${RH - 8}" rx="3" style="fill:${colorOf(b.row)}"><title>${esc(readable(b.step))} (${esc(b.step)}) · visit ${b.visit} · ${esc(fmtDur(b.durationMs))}${b.costUsd ? ` · ${esc(fmtUsd(b.costUsd))}` : ''}${b.costEstimatedUsd ? ` (${esc(fmtUsd(b.costEstimatedUsd))} estimated)` : ''}${b.costNotRecorded ? ' · cost not recorded' : ''}</title></rect>
-        ${w > 60 ? `<text x="${(x(b.from) + 4).toFixed(1)}" y="${y + RH / 2 + 1}" class="an-gantt-label">${esc(readable(b.step))}</text>` : ''}`;
+      return `<rect x="${x(b.from).toFixed(1)}" y="${y}" width="${w.toFixed(1)}" height="${RH - 8}" rx="3" style="fill:${colorOf(b.row)}"><title>${esc(readable(b.step, f.stepNames))} (${esc(b.step)}) · visit ${b.visit} · ${esc(fmtDur(b.durationMs))}${b.costUsd ? ` · ${esc(fmtUsd(b.costUsd))}` : ''}${b.costEstimatedUsd ? ` (${esc(fmtUsd(b.costEstimatedUsd))} estimated)` : ''}${b.costNotRecorded ? ' · cost not recorded' : ''}</title></rect>
+        ${w > 60 ? `<text x="${(x(b.from) + 4).toFixed(1)}" y="${y + RH / 2 + 1}" class="an-gantt-label">${esc(readable(b.step, f.stepNames))}</text>` : ''}`;
     }).join('');
     const gy = rows.length * RH + 4;
     const gates = f.gates.map((g) => {
       const to = g.to || f.finishedAt || new Date(t1).toISOString();
       const w = Math.max(2, x(to) - x(g.from));
-      return `<rect x="${x(g.from).toFixed(1)}" y="0" width="${w.toFixed(1)}" height="${H - 4}" class="an-gantt-gate"><title>Waiting at the gate "${esc(g.gate)}": ${esc(fmtDur(g.waitMs))}</title></rect>
-        <text x="${(x(g.from) + 4).toFixed(1)}" y="${gy + RH / 2 + 1}" class="an-gantt-label muted">${esc(g.gate)} · ${esc(fmtDur(g.waitMs))}</text>`;
+      return `<rect x="${x(g.from).toFixed(1)}" y="0" width="${w.toFixed(1)}" height="${H - 4}" class="an-gantt-gate"><title>Waiting at the gate "${esc(readable(g.gate, f.stepNames))}" (${esc(g.gate)}): ${esc(fmtDur(g.waitMs))}</title></rect>
+        <text x="${(x(g.from) + 4).toFixed(1)}" y="${gy + RH / 2 + 1}" class="an-gantt-label muted">${esc(readable(g.gate, f.stepNames))} · ${esc(fmtDur(g.waitMs))}</text>`;
     }).join('');
-    const labels = [...rows, 'gates'].map((r, i) => `<text x="4" y="${i * RH + RH / 2 + 2}" class="an-gantt-row">${esc(r === 'gates' ? 'waiting for you' : r)}</text>`).join('');
+    const rowName = (r) => (r === 'gates' ? 'waiting for you' : r === 'orchestrator' ? r : readable(r, f.agentNames));
+    const labels = [...rows, 'gates'].map((r, i) => `<text x="4" y="${i * RH + RH / 2 + 2}" class="an-gantt-row">${esc(rowName(r))}</text>`).join('');
     return `<div class="an-gantt" data-testid="an-run-timeline"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Timeline of the run by agent">
       <defs><pattern id="an-hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" class="an-hatch-line" /></pattern></defs>
       ${gates}${bars}${labels}</svg>
@@ -155,22 +157,24 @@
   }
 
   function agentCharts(f, cmp) {
-    const chip = (a) => `<span class="an-agent"><i style="background:${colorOf(a)}"></i>${esc(a)}</span>`;
+    // the agent's readable name leads; its id in the bar's tooltip
+    const name = (a) => readable(a, f.agentNames);
+    const chip = (a) => `<span class="an-agent"><i style="background:${colorOf(a)}"></i>${esc(name(a))}</span>`;
     const time = hbars(f.agents.map((a) => ({
-      label: a.agent, chip: chip(a.agent), sub: `${fmtDur(a.activeMs)} active · ${fmtDur(a.waitingMs)} on tools`, title: `${a.agent}: ${fmtDur(a.activeMs)} active, ${fmtDur(a.waitingMs)} waiting on tools`,
+      label: name(a.agent), chip: chip(a.agent), sub: `${fmtDur(a.activeMs)} active · ${fmtDur(a.waitingMs)} on tools`, title: `${name(a.agent)} (${a.agent}): ${fmtDur(a.activeMs)} active, ${fmtDur(a.waitingMs)} waiting on tools`,
       parts: [{ value: a.activeMs, color: colorOf(a.agent), title: `active ${fmtDur(a.activeMs)}` }, { value: a.waitingMs, color: 'var(--muted)', title: `waiting on tools ${fmtDur(a.waitingMs)}` }],
     })), { stacked: true });
-    const turns = hbars(f.agents.map((a) => ({ label: a.agent, chip: chip(a.agent), value: a.turns, sub: `${fmtNum(a.turns)} turn${a.turns === 1 ? '' : 's'}`, color: colorOf(a.agent) })));
+    const turns = hbars(f.agents.map((a) => ({ label: name(a.agent), title: `${name(a.agent)} (${a.agent})`, chip: chip(a.agent), value: a.turns, sub: `${fmtNum(a.turns)} turn${a.turns === 1 ? '' : 's'}`, color: colorOf(a.agent) })));
     const cost = hbars(f.agents.map((a) => {
       const c = cmp?.agents?.[a.agent]?.costUsd;
       return {
-        label: a.agent, chip: chip(a.agent), value: a.costUsd, sub: `${fmtUsd(a.costUsd)}${c ? ` (${c.diff > 0 ? '▲' : c.diff < 0 ? '▼' : '='} median ${fmtUsd(c.median)})` : ''}`, color: colorOf(a.agent),
+        label: name(a.agent), title: `${name(a.agent)} (${a.agent})`, chip: chip(a.agent), value: a.costUsd, sub: `${fmtUsd(a.costUsd)}${c ? ` (${c.diff > 0 ? '▲' : c.diff < 0 ? '▼' : '='} median ${fmtUsd(c.median)})` : ''}`, color: colorOf(a.agent),
         marks: marksOf(a), keep: !!a.costNotRecorded, testid: 'an-agent-cost',
       };
     }));
     const tokens = hbars(f.agents.map((a) => ({
-      label: a.agent, chip: chip(a.agent), sub: `${fmtTok(a.totalTokens)} · ${a.usdPerMTokens == null ? '—' : `${fmtUsd(a.usdPerMTokens)}/M`}`,
-      title: `${a.agent}: ${Object.keys(TOKEN_LABELS).map((k) => `${TOKEN_LABELS[k]} ${fmtNum(a.tokens[k])}`).join(', ')}; effective ${a.usdPerMTokens == null ? '—' : fmtUsd(a.usdPerMTokens)} per million tokens`,
+      label: name(a.agent), chip: chip(a.agent), sub: `${fmtTok(a.totalTokens)} · ${a.usdPerMTokens == null ? '—' : `${fmtUsd(a.usdPerMTokens)}/M`}`,
+      title: `${name(a.agent)} (${a.agent}): ${Object.keys(TOKEN_LABELS).map((k) => `${TOKEN_LABELS[k]} ${fmtNum(a.tokens[k])}`).join(', ')}; effective ${a.usdPerMTokens == null ? '—' : fmtUsd(a.usdPerMTokens)} per million tokens`,
       parts: Object.keys(TOKEN_LABELS).map((k) => ({ value: a.tokens[k], color: TOKEN_COLORS[k], title: `${TOKEN_LABELS[k]}: ${fmtNum(a.tokens[k])}` })),
     })), { stacked: true });
     return `<div class="an-grid">
@@ -184,13 +188,13 @@
 
   function tables(f) {
     const steps = f.steps.length ? `<table class="u-table an-sessions"><thead><tr><th>Step</th><th>Agent</th><th class="num">Visits</th><th class="num">Duration</th></tr></thead><tbody>
-      ${f.steps.map((s) => `<tr><td title="${esc(s.step)}">${esc(readable(s.step))}</td><td>${s.agent ? `<span class="an-agent" title="${esc(s.agent)}"><i style="background:${colorOf(s.agent)}"></i>${esc(readable(s.agent))}</span>` : '<span class="muted">orchestrator</span>'}</td><td class="num">${s.visits}</td><td class="num">${fmtDur(s.durationMs)}</td></tr>`).join('')}</tbody></table>`
+      ${f.steps.map((s) => `<tr><td title="${esc(s.step)}">${esc(readable(s.step, f.stepNames))}</td><td>${s.agent ? `<span class="an-agent" title="${esc(s.agent)}"><i style="background:${colorOf(s.agent)}"></i>${esc(readable(s.agent, f.agentNames))}</span>` : '<span class="muted">orchestrator</span>'}</td><td class="num">${s.visits}</td><td class="num">${fmtDur(s.durationMs)}</td></tr>`).join('')}</tbody></table>`
       : '<p class="muted small an-empty">No step recorded.</p>';
     const suite = f.suiteRounds.length ? `<table class="u-table an-sessions"><thead><tr><th class="num">Round</th><th>Result</th><th class="num">Duration</th><th class="num">Failures</th><th class="num">Pre-existing</th></tr></thead><tbody>
       ${f.suiteRounds.map((r) => `<tr><td class="num">${r.round}</td><td><span class="badge ${r.status === 'pass' ? 'cat-monitor' : 'warn'}">${esc(r.status || '—')}</span></td><td class="num">${fmtDur(r.durationMs)}</td><td class="num">${r.failures}</td><td class="num">${r.preexisting}</td></tr>`).join('')}</tbody></table>`
       : '<p class="muted small an-empty">No suite round in this run.</p>';
     const tools = f.slowestTools.length ? `<table class="u-table an-sessions"><thead><tr><th>Command</th><th>Agent</th><th class="num">Time</th></tr></thead><tbody>
-      ${f.slowestTools.map((t) => `<tr><td class="an-title"><code class="an-file" title="${esc(t.command)}">${esc(t.command)}</code></td><td>${esc(t.agent || '—')}</td><td class="num">${fmtDur(t.durationMs)}</td></tr>`).join('')}</tbody></table>`
+      ${f.slowestTools.map((t) => `<tr><td class="an-title"><code class="an-file" title="${esc(t.command)}">${esc(t.command)}</code></td><td${t.agent ? ` title="${esc(t.agent)}"` : ''}>${esc(t.agent ? readable(t.agent, f.agentNames) : '—')}</td><td class="num">${fmtDur(t.durationMs)}</td></tr>`).join('')}</tbody></table>`
       : '<p class="muted small an-empty">No tool call recorded.</p>';
     return `<div class="an-grid an-grid-2">
         <div><h3 class="s-subtitle">Steps</h3><div class="card table-wrap">${steps}</div></div>

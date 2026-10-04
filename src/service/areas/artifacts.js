@@ -30,6 +30,7 @@ module.exports = (ctx) => {
     return {
       runId: r.runId, workflow: r.workflow, version: r.version, status: current ? 'running' : r.status,
       mock: r.mock, startedAt: r.startedAt, task: r.task, runDir: r.runDir,
+      stepNames: r.stepNames || null, // step id → display name (#245), for the round heads
       project: owner ? { id: owner.id, name: owner.name } : null,
     };
   }

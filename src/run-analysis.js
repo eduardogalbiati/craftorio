@@ -160,6 +160,9 @@ function runFigures({ summary = {}, events = [], now = Date.now() }) {
     runId: summary.run_id || null,
     workflow: summary.workflow || started.workflow || null,
     file: started.file || summary.file || null,
+    // the workflow's display names (#245): id → name, for agents and steps
+    agentNames: (started.display?.agents || started.agent_names) ? { ...started.display?.agents, ...started.agent_names } : null,
+    stepNames: started.display?.steps || null,
     title: summary.title || null,
     issues,
     status: summary.status || finished?.status || 'running',
