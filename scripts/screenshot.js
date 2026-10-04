@@ -724,7 +724,9 @@ function demoDiscovery(ws, projectId) {
     'Three customers this week stopped at the CLI install step. The recording and the notes are attached.');
   discovery.addAttachment(ws.discovery, projectId, call, { name: 'call-2026-10-02.m4a', data: Buffer.from('demo audio') });
   discovery.addAttachment(ws.discovery, projectId, call, { name: 'call-notes.pdf', data: Buffer.from('%PDF-1.4 demo') });
-  card(3 * 60, 'marina', 'Dark mode for the run log', 'The run log is hard to read at night: follow the app theme.');
+  const dark = card(3 * 60, 'marina', 'Dark mode for the run log', 'The run log is hard to read at night: follow the app theme.');
+  // a question waiting for the owner (Home's "What needs you", #255)
+  discovery.appendConversation(ws.discovery, projectId, dark, { kind: 'question', author: 'grill-me', text: 'Should the log follow the app theme, or get its own switch?', ts: new Date(Date.now() - 40 * min).toISOString() });
   const csv = card(5, 'eduardo', 'Export the night\'s runs as CSV', [
     'The owner wants a spreadsheet of the night\'s runs: the morning summary is read on the phone, the numbers are compared in a spreadsheet.', '',
     '## Open questions', '', '- Which columns: cost, duration, status, issue?', '- One file per night or per week?',

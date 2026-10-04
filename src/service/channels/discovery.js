@@ -93,6 +93,14 @@ module.exports = (ctx) => {
         return discovery.appendConversation(dir(), projectId, cardId, { kind: 'note', author: owner(), ...e });
       },
     },
+    // the cards whose thread ends with a question (Home's "What needs you", #255), the longest waiting
+    // first: { id, title, column, question: { ts, author, text } }
+    {
+      channel: 'discovery:waiting',
+      method: 'listDiscoveryWaiting',
+      params: ['projectId'],
+      fn: ({ projectId }) => discovery.listWaiting(dir(), projectId),
+    },
     // Discard: the card moves to archive/ with its reason
     {
       channel: 'discovery:archive',

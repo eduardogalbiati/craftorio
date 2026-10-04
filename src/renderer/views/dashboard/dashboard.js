@@ -10,7 +10,8 @@
 //   board, Workflows › Runs filtered on the runs in progress); a stage whose screen is not registered
 //   yet (the Discovery board, #261) is left out;
 // - "What needs you": the gates waiting (their age, and the gate's phone page link while Phone gates
-//   is on, #226) and the roadmap's failed items, each with one button;
+//   is on, #226), the discovery cards whose thread ends with a question (the Inbox opens the card to
+//   answer it) and the roadmap's failed items, each with one button;
 // - "Today": the real cost of the day and of the last night (the Night watch's window), the runs
 //   finished and failed, the 24/7 occupancy (#188) and the roadmap's next stage;
 // - a new workspace (no project, no run): how to start.
@@ -37,7 +38,7 @@ const HOME_STAGES = [
 ];
 const HOME_FAILED = ['failed', 'cancelled', 'interrupted'];
 // the attributes of the overview's buttons (onHomeClick)
-const HOME_ACTIONS = ['data-home-run', 'data-home-roadmap', 'data-home-act', 'data-stage'];
+const HOME_ACTIONS = ['data-home-run', 'data-home-card', 'data-home-roadmap', 'data-home-act', 'data-stage'];
 // asked: the project of the last read started (undefined: none yet); data: what the last read answered
 // html: what the overview shows now
 const homeView = { seq: 0, at: 0, asked: undefined, data: null, morning: null, html: null };
@@ -63,9 +64,10 @@ async function loadHome() {
   homeView.asked = projectId;
   const read = async (fn) => { try { return await fn(); } catch { return null; } };
   // (the top bar's usage, read once at start: "Today" waits for its first answer)
-  const [inbox, cards, backlog, releases, active, runs, occupancy] = await Promise.all([
+  const [inbox, cards, waiting, backlog, releases, active, runs, occupancy] = await Promise.all([
     read(() => projectId && api.listDiscoveryCards(projectId, 'inbox')),
     read(() => projectId && viewRegistry.has('discovery') && api.listDiscoveryCards(projectId)),
+    read(() => projectId && api.listDiscoveryWaiting(projectId)),
     read(() => projectId && api.getBacklog(projectId)),
     read(() => projectId && api.listReleases(projectId)),
     read(() => api.listActiveRuns()),
@@ -77,7 +79,7 @@ async function loadHome() {
   if (seq !== homeView.seq) return; // a newer read (the project changed) answers instead
   homeView.data = {
     projectId, backlog: backlog || null, releases: releases || null, occupancy: occupancy || null,
-    inbox: homeList(inbox), cards: homeList(cards), active: homeList(active), runs: homeList(runs?.runs || runs),
+    inbox: homeList(inbox), cards: homeList(cards), waiting: homeList(waiting), active: homeList(active), runs: homeList(runs?.runs || runs),
   };
   paintHome();
 }
@@ -115,7 +117,7 @@ function homeItemTitle(x) {
   return `#${issues[0].number}${issues[0].title ? ` ${issues[0].title}` : ''}${issues.length > 1 ? ` +${issues.length - 1} more` : ''}`;
 }
 
-// What waits for the owner: { kind: gate | failed-item, title, detail, since?, runId?, stage?, phoneUrl? }.
+// What waits for the owner: { kind: gate | card | failed-item, title, detail, since?, runId?, cardId?, stage?, phoneUrl? }.
 function homeNeeds(d) {
   const name = (id, names) => (typeof displayName === 'function' ? displayName(id, names) : id);
   // the gates of this app's runs, whatever their project
@@ -137,7 +139,25 @@ function homeNeeds(d) {
   const failed = items.filter((x) => x.status === 'failed').map((x) => ({
     kind: 'failed-item', stage: x.stage, title: homeItemTitle(x), detail: x.error || `Roadmap · ${x.stageName}`,
   }));
-  return [...gates, ...elsewhere, ...failed];
+  // the discovery cards whose thread ends with a question (e.g. a grill-me question); a card that left
+  // the Inbox needs the Discovery board (#261) to be answered
+  const questions = d.waiting.filter((c) => viewRegistry.has(c.column === 'inbox' ? 'inbox' : 'discovery')).map((c) => ({
+    kind: 'card', cardId: c.id, since: c.question?.ts || null,
+    title: c.title || 'Discovery card', detail: [c.question?.author, c.question?.text].filter(Boolean).join(': '),
+  }));
+  return [...gates, ...elsewhere, ...questions, ...failed];
+}
+
+const HOME_NEED_BADGES = {
+  gate: '<span class="badge warn">Gate</span>',
+  card: '<span class="badge warn">Question</span>',
+  'failed-item': '<span class="pill pill-failed">Failed</span>',
+};
+// the one button of a "What needs you" row
+function homeNeedButton(n) {
+  if (n.kind === 'gate') return `<button type="button" class="btn sm primary" data-home-run="${esc(n.runId)}">Open run</button>`;
+  if (n.kind === 'card') return `<button type="button" class="btn sm primary" data-home-card="${esc(n.cardId)}">Answer</button>`;
+  return `<button type="button" class="btn sm" data-home-roadmap="${n.stage}">Open roadmap</button>`;
 }
 
 function homeStripHtml(d) {
@@ -156,14 +176,13 @@ function homeStripHtml(d) {
 function homeNeedsHtml(d) {
   const needs = homeNeeds(d);
   const rows = needs.map((n) => {
-    const gate = n.kind === 'gate';
-    const age = gate && n.since && Date.parse(n.since) ? `<span class="muted small home-need-age" title="Asked ${esc(dateOf(n.since))}">waiting ${esc(homeAge(n.since))}</span>` : '';
+    const age = n.since && Date.parse(n.since) ? `<span class="muted small home-need-age" title="Asked ${esc(dateOf(n.since))}">waiting ${esc(homeAge(n.since))}</span>` : '';
     const phone = n.phoneUrl ? `<a class="small home-need-phone" href="${esc(n.phoneUrl)}" target="_blank" rel="noopener" title="This gate's page for a paired phone (Settings › Phone gates)">Phone link</a>` : '';
     return `<div class="home-need" data-testid="home-needs-item" data-kind="${n.kind}">
-      ${gate ? '<span class="badge warn">Gate</span>' : '<span class="pill pill-failed">Failed</span>'}
+      ${HOME_NEED_BADGES[n.kind]}
       <span class="home-need-text"><b title="${esc(n.title)}">${esc(n.title)}</b><span class="muted small" title="${esc(n.detail)}">${esc(n.detail)}</span></span>
       ${age}${phone}
-      ${gate ? `<button type="button" class="btn sm primary" data-home-run="${esc(n.runId)}">Open run</button>` : `<button type="button" class="btn sm" data-home-roadmap="${n.stage}">Open roadmap</button>`}
+      ${homeNeedButton(n)}
     </div>`;
   });
   return `<section class="home-block" data-testid="home-needs-you" aria-label="What needs you">
@@ -269,11 +288,19 @@ function openHomeStage(id) {
   showView(stage.view);
 }
 
+// A waiting card opens where its question is answered: the Inbox with the card open, else the Discovery board.
+function openHomeCard(id) {
+  const card = homeView.data?.waiting.find((c) => c.id === id);
+  return card?.column === 'inbox' ? window.InboxActions?.openCard(id) : showView('discovery');
+}
+
 function onHomeClick(e) {
   const tab = e.target.closest('[data-home-tab]');
   if (tab) return showView(tab.dataset.homeTab === 'analytics' ? 'analytics' : 'dashboard');
   const run = e.target.closest('[data-home-run]');
   if (run) return state.runs.has(run.dataset.homeRun) ? openGateOf(run.dataset.homeRun) : showRun(run.dataset.homeRun);
+  const card = e.target.closest('[data-home-card]');
+  if (card) return openHomeCard(card.dataset.homeCard);
   const roadmap = e.target.closest('[data-home-roadmap]');
   if (roadmap) return window.BacklogActions?.openStage(Number(roadmap.dataset.homeRoadmap));
   const act = e.target.closest('[data-home-act]')?.dataset.homeAct;

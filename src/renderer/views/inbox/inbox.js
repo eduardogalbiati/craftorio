@@ -495,6 +495,11 @@
     closeCard();
   }
 
+  // Home's "What needs you" (#255): the Inbox with one card open, to answer its question in the thread
+  window.InboxActions = {
+    openCard: (id) => { showView('inbox'); return openCard(id); },
+  };
+
   registerView({
     id: 'inbox',
     nav: {

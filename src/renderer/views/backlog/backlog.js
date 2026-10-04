@@ -95,7 +95,10 @@
   // Home's flow strip (#255) opens the board's columns for one visit (asked, then shown): the next
   // opening shows the remembered mode again
   let columns = null;
+  // the roadmap stage openStage was asked for before the backlog was read: shown by the read
+  let stageToShow = null;
   function openScreen(roadmap) {
+    stageToShow = null;
     if (roadmap) bl.mode = 'roadmap';
     else if (columns === 'asked') { bl.mode = 'kanban'; columns = 'shown'; }
     else if (bl.mode === 'roadmap' || columns === 'shown') { bl.mode = backlogMode(); columns = null; }
@@ -165,6 +168,10 @@
     try { setData(await api.getBacklog(id)); } catch (e) { bl.error = errMsg(e); }
     bl.platform = bl.data?.platform || state.settings.backlogPlatform || 'github';
     render();
+    // the stage openStage was asked for before this read
+    const stage = stageToShow;
+    stageToShow = null;
+    if (stage && bl.data && state.view === 'roadmap') openStage(stage);
     if (project()?.repo && !PLATFORMS[bl.platform]?.soon) sync();
   }
 
@@ -530,8 +537,10 @@
   }
 
   // The Roadmap scrolled to stage `n` (1-based; an applied group's badge in the Product Owner's drawer, #140).
+  // Asked before the backlog was read in this window (Home's "Open roadmap", #255): shown once it is drawn.
   function openStage(n) {
     showRoadmap();
+    if (!bl.data) { stageToShow = n; return; }
     const el = document.querySelector(`#bl-list .rm-stage[data-stage="${Number(n) - 1}"]`);
     if (!el) return;
     el.scrollIntoView({ block: 'start', behavior: 'smooth' });

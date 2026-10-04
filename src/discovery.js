@@ -365,6 +365,19 @@ function readConversation(dir, projectId, id) {
   return out;
 }
 
+/**
+ * The cards waiting for the owner (#255): the last entry of the card's thread is a question (`kind:
+ * 'question'`, e.g. one an agent asks while shaping the card); any later entry (the owner's note, an
+ * answer) ends the wait. { id, title, column, question: { ts, author, text } }, the longest waiting first.
+ */
+function listWaiting(dir, projectId) {
+  return listCards(dir, projectId)
+    .map((c) => ({ id: c.id, title: c.title, column: c.column, question: readConversation(dir, projectId, c.id).at(-1) }))
+    .filter((c) => c.question?.kind === 'question')
+    .map((c) => ({ ...c, question: { ts: c.question.ts, author: c.question.author || '', text: String(c.question.text || '') } }))
+    .sort((a, b) => String(a.question.ts).localeCompare(String(b.question.ts)));
+}
+
 // ---- archive --------------------------------------------------------------------------------------
 
 /**
@@ -436,6 +449,7 @@ module.exports = {
   createCard,
   listArchived,
   listCards,
+  listWaiting,
   MAX_ATTACHMENT_BYTES,
   mergeCard,
   moveCard,
