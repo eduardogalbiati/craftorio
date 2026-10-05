@@ -120,6 +120,9 @@ function said(text) {
   return !!t && !/^(tbd|todo|to be (defined|decided)|\?+|\.+)$/i.test(t);
 }
 
+// A line that opens or closes a code fence, with its marker.
+const FENCE = /^\s*(`{3,}|~{3,})/;
+
 // The document's sections: { title (lower case), body }, a body running to the next heading of the
 // same or a higher level (so a section made of sub-sections is not empty). `lead` is the text
 // before the first heading. A heading inside a code fence is text.
@@ -129,7 +132,7 @@ function outline(document) {
   let lead = '';
   let fence = false;
   for (const line of String(document ?? '').split(/\r?\n/)) {
-    if (/^\s*(```|~~~)/.test(line)) fence = !fence;
+    if (FENCE.test(line)) fence = !fence;
     // the title is trimmed below, not by the expression: a long line of spaces stays linear
     const m = fence ? null : /^ {0,3}(#{1,6})[ \t]+(.*)$/.exec(line);
     if (!m) {
@@ -239,9 +242,26 @@ function nextQuestion(card) {
   return id ? { criterion: id, label: CRITERIA[id].label, question: CRITERIA[id].question, proposal: proposal(id, card || {}) } : null;
 }
 
+// An answer as the body of its point's section (level 2), whatever markdown the person wrote: its
+// headings go two levels down (as a section of its own it would leave the point's empty, and the
+// point would be asked again), and a code fence left open is closed (the answers after it would be
+// code). The fences are read as `outline` reads them: a heading inside one is text.
+function contained(text) {
+  let fence = null;
+  const lines = text.split(/\r?\n/).map((line) => {
+    const mark = FENCE.exec(line);
+    if (mark) fence = fence ? null : mark[1];
+    if (fence || mark) return line;
+    return line.replace(/^( {0,3})(#{1,6})(?=[ \t])/, (m, indent, hashes) => `${indent}${'#'.repeat(Math.min(6, hashes.length + 2))}`);
+  });
+  if (fence) lines.push(fence);
+  return lines.join('\n');
+}
+
 /**
  * The card's text with the person's answer to a point: `{ acceptance }` (the criteria, one list item
- * per line) or `{ document }` (a new section under the point's heading, after what the document has).
+ * per line) or `{ document }` (a new section under the point's heading, after what the document has;
+ * the answer's own headings and fences stay inside it).
  */
 function recordAnswer(card = {}, criterion, answer) {
   const text = String(answer ?? '').trim();
@@ -252,7 +272,7 @@ function recordAnswer(card = {}, criterion, answer) {
   }
   const { label } = Object.hasOwn(CRITERIA, String(criterion)) ? CRITERIA[criterion] : CRITERIA.decisions;
   const before = after(card.document);
-  return { document: `${before}${before ? '\n' : ''}## ${label}\n\n${text}\n` };
+  return { document: `${before}${before ? '\n' : ''}## ${label}\n\n${contained(text)}\n` };
 }
 
 module.exports = {

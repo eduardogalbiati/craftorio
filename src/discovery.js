@@ -262,12 +262,13 @@ const newestFirst = (key) => (a, b) => String(key(b)).localeCompare(String(key(a
 // The rubric's score of a card's text (#166), as card.json's `clarity` keeps it.
 const scored = (card) => ({ ...clarity.scoreClarity(card), ts: now(), by: RUBRIC });
 
-// The clarity a caller records (another scorer's): its score is a whole percentage, or null. The
+// The clarity a caller records (another scorer's): its score is a whole percentage, or null, dated
+// when it is recorded unless the caller dates it (not with the date of the score it replaces). The
 // override is the owner's, written by moveCard only.
 function givenClarity({ override, ...given }) {
   const { score } = given;
   if (score !== undefined && score !== null && !(Number.isInteger(score) && score >= 0 && score <= 100)) throw new Error(`A clarity score is a whole number from 0 to 100: ${score}`);
-  return given;
+  return score !== undefined && given.ts === undefined ? { ...given, ts: now() } : given;
 }
 
 // The card's document was replaced (a restored version, a run's result): its score follows.
