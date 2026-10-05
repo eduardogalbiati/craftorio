@@ -41,19 +41,6 @@ function startReveal() {
   document.querySelectorAll('.timeline li, .day > div, .lessons article, .frame, .nums div').forEach((el) => { el.classList.add('reveal'); io.observe(el); });
 }
 
-// a video plays while at least half of it is on screen
-function startVideos() {
-  const videos = document.querySelectorAll('video[data-autoplay]');
-  if (reducedMotion || !('IntersectionObserver' in window)) return;
-  const io = new IntersectionObserver((entries) => {
-    for (const e of entries) {
-      if (e.isIntersecting) e.target.play().catch(() => { /* autoplay refused: the poster stays */ });
-      else e.target.pause();
-    }
-  }, { threshold: 0.5 });
-  videos.forEach((v) => io.observe(v));
-}
-
 // ---------------------------------------------------------------- newsletter
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
@@ -171,5 +158,4 @@ function startTracking() {
 drawClock();
 startTracking();
 startReveal();
-startVideos();
 startForm();

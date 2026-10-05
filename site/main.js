@@ -73,16 +73,9 @@ function startReveal() {
 }
 
 // ---------------------------------------------------------------- feature story
-// Desktop: the step in the middle of the viewport lights up and the pinned frame shows its media;
-// a video restarts from the beginning each time its step becomes active. Narrow screens: each
-// media moves into its own step and plays while visible.
-
-function play(media, restart) {
-  if (media.tagName !== 'VIDEO' || reducedMotion) return;
-  if (restart) media.currentTime = 0;
-  media.play().catch(() => { /* autoplay refused: the poster stays */ });
-}
-const pause = (media) => { if (media.tagName === 'VIDEO') media.pause(); };
+// Desktop: the step in the middle of the viewport lights up and the pinned frame shows its still.
+// Narrow screens: each still moves into its own step. Stills only: a video of the app's screens
+// looked blurry and could not be used on a phone anyway.
 
 function startStory() {
   const steps = [...document.querySelectorAll('.story-step')];
@@ -106,23 +99,15 @@ function startStory() {
   });
 
   let current = -1;
-  const activate = (i, force) => {
-    if (i < 0 || (i === current && !force)) return;
+  const activate = (i) => {
+    if (i < 0 || i === current) return;
     current = i;
     steps.forEach((s, n) => s.classList.toggle('active', n === i));
     dots.forEach((d, n) => d.classList.toggle('active', n === i));
-    media.forEach((m, n) => {
-      m.classList.toggle('active', n === i);
-      if (n === i) play(m, true); else pause(m);
-    });
+    media.forEach((m, n) => m.classList.toggle('active', n === i));
     label.textContent = labels[i];
   };
-  const layout = () => {
-    media.forEach((m, i) => (narrow.matches ? frames[i] : stage).append(m));
-    media.forEach(pause);
-    // back to wide: the step already reached plays again (at load nothing plays until one is reached)
-    if (!narrow.matches && current >= 0) activate(current, true);
-  };
+  const layout = () => media.forEach((m, i) => (narrow.matches ? frames[i] : stage).append(m));
 
   // wide: the step in the middle of the viewport is the active one
   const byStep = new IntersectionObserver((entries) => {
@@ -130,29 +115,14 @@ function startStory() {
     for (const e of entries) if (e.isIntersecting) activate(steps.indexOf(e.target));
   }, { rootMargin: '-45% 0px -45% 0px' });
   steps.forEach((s) => byStep.observe(s));
-  // narrow: each media plays while it is on screen
-  const byMedia = new IntersectionObserver((entries) => {
-    if (!narrow.matches) return;
-    for (const e of entries) {
-      e.target.dataset.visible = e.isIntersecting ? '1' : '';
-      if (e.isIntersecting) play(e.target, false); else pause(e.target);
-    }
-  }, { threshold: 0.5 });
-  media.forEach((m) => byMedia.observe(m));
-
-  // a play() asked before the video could play (first load) is retried once it can
-  media.forEach((m, i) => m.addEventListener('canplay', () => {
-    const wanted = narrow.matches ? m.dataset.visible === '1' : i === current;
-    if (wanted && m.paused) play(m, false);
-  }));
 
   narrow.addEventListener('change', layout);
   layout();
-  steps[0].classList.add('active'); // lit before the story is reached; its video starts when it is
+  steps[0].classList.add('active'); // lit before the story is reached
   dots[0]?.classList.add('active');
   label.textContent = labels[0];
-  // the next videos load while the first one plays
-  if (!narrow.matches) media.forEach((m) => { if (m.tagName === 'VIDEO') m.preload = 'auto'; });
+  // the next stills load while the first one shows
+  if (!narrow.matches) media.forEach((m) => { m.loading = 'eager'; });
 }
 // ---------------------------------------------------------------- form
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;

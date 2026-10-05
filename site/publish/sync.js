@@ -34,4 +34,4 @@ const missing = [...refs(fullHtml), ...refs(diaryHtml)]
   .filter((r) => !fs.existsSync(path.join(pub, r)));
 const left = (fullHtml + diaryHtml).match(/(?:src|href|poster)="(?:\.\.\/|img\/|style\.css|styles\.css|main\.js|24x7\/)/g) || [];
 const size = (dir, re) => fs.readdirSync(dir).filter((f) => re.test(f)).reduce((n, f) => n + fs.statSync(path.join(dir, f)).size, 0);
-console.log(JSON.stringify({ missing, relativeLeft: left.length, videosMB: +(size(path.join(fullDir, 'img'), /\.webm$/) / 1048576).toFixed(1), stillsMB: +(size(path.join(fullDir, 'img'), /\.png$/) / 1048576).toFixed(1) }));
+console.log(JSON.stringify({ missing, relativeLeft: left.length, stillsMB: +(size(path.join(fullDir, 'img'), /\.png$/) / 1048576).toFixed(1) }));

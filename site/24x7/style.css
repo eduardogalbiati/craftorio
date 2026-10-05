@@ -109,7 +109,7 @@ p { margin: 0; }
 .frame-bar { display: flex; align-items: center; gap: 6px; padding: 9px 12px; border-bottom: 1px solid var(--line-dark); font: 12px var(--mono); color: var(--on-night-soft); }
 .frame-bar i { width: 9px; height: 9px; border-radius: 50%; background: #2a3550; }
 .frame-bar span { margin-left: 8px; }
-.frame video { display: block; width: 100%; aspect-ratio: 14 / 9; object-fit: cover; object-position: top left; }
+.frame img { display: block; width: 100%; height: auto; aspect-ratio: 14 / 9; object-fit: cover; object-position: top left; }
 .note { margin-top: 14px; font: 13px var(--mono); color: var(--on-night-soft); }
 
 /* chapters */
