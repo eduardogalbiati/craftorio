@@ -57,7 +57,7 @@ const PRODUCT_OWNER = Object.freeze({
   name: 'Product Owner',
   system: true,
   description: 'The Backlog\'s own agent: analyzes the issues and proposes which to run together, which not in parallel, in what order, and which to enrich first.',
-  prompt: 'Built into the platform. It follows the backlog-product-owner skill and is read-only: it never edits issues, never starts runs and never answers a human approval gate. You apply its proposals with Assign or Add to roadmap. In Register an issue it drafts issues (issue-triage and issue-writing skills, on claude-sonnet-5); you file each draft with a click.',
+  prompt: 'Built into the platform. It follows the backlog-product-owner skill and is read-only: it never edits issues, never starts runs and never answers a human approval gate. You apply its proposals with Assign or Add to roadmap. In Register an issue it drafts issues (issue-triage, issue-writing and clarity-score skills, on claude-sonnet-5); you file each draft with a click.',
   skills: ['backlog-product-owner'],
   model: 'claude-opus-5-5',
   effort: 'high',

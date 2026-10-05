@@ -28,7 +28,8 @@
 //
 // Registering an issue (#117, mode 'issue'): the same conversation drafts an issue with the owner,
 // like the issue-tracker workflow's analyze + write steps in one turn (skills issue-triage and
-// issue-writing, the code analyzer's cheaper model: ISSUE_AGENT). It may ask at most two short
+// issue-writing, the code analyzer's cheaper model: ISSUE_AGENT); the draft carries its clarity score
+// (#166, skill clarity-score) with each gap as an open question. It may ask at most two short
 // questions over the whole thread; each new message revises the whole draft (ISSUE_SCHEMA). The
 // owner files it with a click (fileDraft: a new issue, or the addition appended to an existing
 // issue's body as a dated section, or as a comment) or discards it (discardDraft); both are recorded
@@ -813,7 +814,7 @@ const ISSUE_RULES = [
   'You are the Product Owner of this project, registering an issue with its owner in a conversation inside the orchestrator\'s Backlog screen. The owner describes it in a few words (typed, dictated, sometimes with screenshots); you draft the issue; the owner reviews the draft and files it with a click.',
   'Analyse the request with the issue-triage skill, in the project\'s code (your working directory, read-only: docs/agents/code-map.md, grep): the code involved with evidence (file:line, today\'s behaviour), the files likely to change, impact and complexity, duplicates and overlapping issues from the backlog report (open and closed), open pull requests that already cover part of it, and the grouping advice.',
   'Write the draft with the issue-writing skill: a specific title; a context grounded in the evidence; "Decision (owner): ..." for every decision the owner stated; tasks as verifiable acceptance criteria (for a UI change, UI criteria: the controls, the states, what leads); "Related: #n". Add a short "Triage" section: impact and complexity with their reasons, the estimated files (marked as an estimate) and the grouping advice. Labels: `impact:<n>`, `complexity:<n>`, the kind, `area:<...>`.',
-  'Score the draft with the clarity-score skill: end its "Triage" section with `Clarity: <n>%` ("needs grilling" below 85%) and write every gap the owner has not closed as an open question with the default you took, never as a silent assumption. When the owner asks to be grilled, interview them as the skill says (one question at a time, in `questions`).',
+  'Score the draft with the clarity-score skill: end its "Triage" section with `Clarity: <n>%` ("needs grilling" below 85%) and write every gap the owner has not closed as an open question with the default you took, never as a silent assumption. The interview (Grill me) is not held here: it runs in a discovery card\'s thread.',
   `The owner is here. When the request is ambiguous in a way that changes the issue, ask at most ${MAX_QUESTIONS} short questions in the whole thread (in \`questions\`) and leave the draft's title empty; otherwise draft at once and list your assumptions in \`assumptions\`. Each new message of the owner refines the current draft: always return the whole draft again.`,
   'When the owner asks to add to an existing issue ("add this to #110"), or an open issue already covers the request (`relation: duplicate`), set `existing_issue` to its number and write in `addition` only the new part (a short context and the new tasks as a checklist), keeping what the issue already says; otherwise 0 and "".',
   'Epic: when the new issue clearly belongs to an existing epic of the report\'s Epics section, set `draft.epic` to its id; otherwise "" (and, when several issues share its theme with no epic, say so in `reply`).',
