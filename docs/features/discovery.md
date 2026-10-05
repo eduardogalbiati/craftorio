@@ -18,6 +18,11 @@ order: 260
   Define → Ready): `board.json` also keeps the WIP limits of Shape and Define (5 by default) and
   each card's place in its column, and `versions/` also gets the document a restored version or a
   Write & Review / AI Arena result replaced, and the result itself (also noted in the thread).
+  `card.json` keeps the card's **clarity** (`clarity`: `score` 0 to 100, `gaps`, `ts`, `by`, and
+  `override` with the score, the reason and who moved it to Ready below the bar); `board.json` keeps
+  the project's bar (`clarity`: `bar`, 85 by default, `byKind`, and `night`, the hours the ready
+  forecast counts in). The score never edits a card's text; only **Grill me**, with a person
+  answering in the card's thread, writes the answers into it.
   Nothing under `discovery/` goes to the git platform: the folder carries a `.gitignore` that ignores
   everything, and the screens, the Oracle and agents reach a card only through the card API (the
   `discovery:` channels). Through the browser UI (`npm run serve`) a pasted or dropped file is

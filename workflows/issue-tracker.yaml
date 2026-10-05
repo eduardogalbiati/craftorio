@@ -165,7 +165,7 @@ agents:
     effort: high
     session: persistent   # revises its own draft with the owner's notes
     capabilities: *read_only
-    skills: [issue-writing, issue-triage]
+    skills: [issue-writing, issue-triage, clarity-score]
     system_prompt: |
       You are the issue writer. You turn the owner's request and the analyzer's findings into
       issues someone else can implement without asking (issue-writing). The repository is in
@@ -344,6 +344,9 @@ steps:
       When the analyzer found a duplicate (`relation: duplicate`), set `existing_issue` to its
       number and write in `addition` the comment that adds what is new; otherwise 0 and "".
       The analyzer's follow-ups stay out of the issue: list them in `follow_ups`.
+      Score each issue with the clarity-score rubric, asking nobody: end its "Triage" section with
+      `Clarity: <n>%` ("needs grilling" below 85%) and write every gap as an open question with
+      the default you took, never as a silent assumption.
       {% else %}
       The owner sent draft v{{ steps.write.visits - 1 }} back:
       {{ steps.review.output.feedback }}

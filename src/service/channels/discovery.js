@@ -1,6 +1,7 @@
 // Discovery cards (#256, src/discovery.js): the card API of the Inbox screen (views/inbox/) and of
 // the Discovery board (#257, views/discovery/: the board, its WIP limits, a card's place in its
-// column, the document's versions, a run's result coming back), and the
+// column, the document's versions, a run's result coming back; #166: the clarity bar, the override
+// into Ready, the ready forecast and the Grill me interview), and the
 // only way a screen, the Oracle or an agent reaches a card. Every channel works on the workspace's
 // discovery folder (layout().discovery), private to the workspace; the store refuses a project id,
 // a card id or an attachment name that is a path. The author of a card, a move or a note is the
@@ -53,12 +54,48 @@ module.exports = (ctx) => {
       params: ['projectId', 'cardId', 'column', 'index'],
       fn: ({ projectId, cardId, column, index }) => discovery.moveCard(dir(), projectId, cardId, column, { by: owner(), index }),
     },
-    // the board (#257): { columns: [{ id, title, wip }], order: { <column>: [card ids] } }
+    // the owner's override (#166): into Ready below the clarity bar, with a `reason` kept on the card
+    // (clarity.override). A person's click only: no agent and no automation calls it
+    {
+      channel: 'discovery:move-anyway',
+      method: 'moveDiscoveryCardAnyway',
+      params: ['projectId', 'cardId', 'reason'],
+      fn: ({ projectId, cardId, reason }) => discovery.moveCard(dir(), projectId, cardId, 'ready', { by: owner(), force: true, reason }),
+    },
+    // the board (#257): { columns: [{ id, title, wip }], order: { <column>: [card ids] } }, with the
+    // project's clarity bar and night (#166: clarity { bar, byKind, night }) and the ready work
+    // (forecast { count, unestimated, hours, nights, nightHours })
     {
       channel: 'discovery:board',
       method: 'discoveryBoard',
       params: ['projectId'],
-      fn: ({ projectId }) => discovery.readBoard(dir(), projectId),
+      fn: ({ projectId }) => ({ ...discovery.readBoard(dir(), projectId), forecast: discovery.readyForecast(dir(), projectId) }),
+    },
+    // the project's clarity bar (0 to 100), a bar per kind ({ hotfix: 60 }; null: the project's) and
+    // the night the forecast counts in ({ start, end } as HH:MM) → the board
+    {
+      channel: 'discovery:set-clarity-bar',
+      method: 'setDiscoveryClarityBar',
+      params: ['projectId', 'bar', 'byKind', 'night'],
+      fn: ({ projectId, bar, byKind, night }) => {
+        discovery.setClarityBar(dir(), projectId, { bar, byKind, night });
+        return { ...discovery.readBoard(dir(), projectId), forecast: discovery.readyForecast(dir(), projectId) };
+      },
+    },
+    // Grill me (#166): asks the card's next open point in its thread → { card, bar, question }
+    {
+      channel: 'discovery:grill',
+      method: 'grillDiscoveryCard',
+      params: ['projectId', 'cardId'],
+      fn: ({ projectId, cardId }) => discovery.grillCard(dir(), projectId, cardId),
+    },
+    // the person's answer to the waiting question, written into the card → { card, bar, question }
+    // (question: the next one, or null when the interview ended)
+    {
+      channel: 'discovery:grill-answer',
+      method: 'answerDiscoveryGrill',
+      params: ['projectId', 'cardId', 'text'],
+      fn: ({ projectId, cardId, text }) => discovery.answerGrill(dir(), projectId, cardId, { text, by: owner() }),
     },
     // a column's WIP limit (a positive integer) → the board; the limit warns, the store never blocks a move
     {

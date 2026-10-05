@@ -13,8 +13,15 @@
 // Write & Review / AI Arena with the document as the input: the run started there is remembered
 // (window.DiscoveryRuns, localStorage) and its document comes back as a new version and a thread
 // entry when it finishes. Esc closes the menu, then the card.
+// Clarity (#166): a card's badge is its score (`clarity 72%`, amber below the project's bar for its
+// kind); the panel shows who scored it and when, and the missing points. A move to Ready below the
+// bar is refused by the store: the board says why and the card offers "Grill me" (an interview in
+// its thread: one question at a time, the answer written into the card) and "Move anyway" (a dialog
+// that needs a reason, kept on the card). Above the columns: the ready forecast (nights of agent
+// work in Ready at or above the bar, an estimate) and "Bar and night…" (the bar, one per type, the
+// night's hours).
 // Registers itself with registerView (view-registry.js); uses app.js globals ($, esc, state, api,
-// errMsg, dateOf, confirmDialog), ncAgo (notification-center.js), markdownHtml (artifact-render.js),
+// errMsg, dateOf, confirmDialog, openModal, closeModal), ncAgo (notification-center.js), markdownHtml (artifact-render.js),
 // CurrentProject, ImageViewer, DiscoveryCardParts (views/inbox/inbox.js), DuoIssue (the document
 // types' goals), openDuoForCard (views/duo/duo.js) and openArenaForCard (views/arena/arena.js).
 (() => {
@@ -32,8 +39,11 @@
   // menu: the card whose "Move to…" menu is open; wipEdit: the column whose limit is being edited;
   // drag: the card being dragged; open: the opened card (of the project openProject) with its
   // thread and versions; viewing: the version shown ({ name, text }); previews: "<card id>/<name>" →
-  // what discovery:attachment returned; recording: the runs whose result is being recorded
+  // what discovery:attachment returned; recording: the runs whose result is being recorded;
+  // refused: the card whose move to Ready the clarity bar refused ({ id, text }); override: the card
+  // the "Move anyway" dialog is open for ({ id, projectId })
   const dv = {
+    refused: null, override: null,
     projectId: null, board: null, cards: [], loadError: '', error: '', seq: 0,
     filter: { type: '', tag: '', author: '', q: '' }, searchTimer: null,
     menu: null, wipEdit: null, wipSaving: false, drag: null,
@@ -50,6 +60,11 @@
   const columns = () => (dv.board?.columns || []).filter((c) => c.id !== 'inbox');
   const columnOf = (id) => columns().find((c) => c.id === id) || null;
   const cardOf = (id) => dv.cards.find((c) => c.id === id) || null;
+  // the clarity bar of a card's type (#166: the board's clarity { bar, byKind }), and a card under it
+  const barOf = (c) => dv.board?.clarity?.byKind?.[c.type] ?? dv.board?.clarity?.bar ?? 85;
+  const belowBar = (c) => !(typeof c.clarity?.score === 'number' && c.clarity.score >= barOf(c));
+  // the store's refusal of a move into Ready below the bar (src/discovery.js)
+  const REFUSED = /below the clarity bar/i;
 
   // The cards of a column in the board's order (a card the board does not list goes last).
   function cardsIn(column) {
@@ -84,7 +99,7 @@
     if (projectId !== dv.projectId) {
       // another project: its own board; the open card goes with its project, unless an edit with
       // changes holds it (it is saved to its own project, openProject)
-      Object.assign(dv, { board: null, cards: [], menu: null, wipEdit: null });
+      Object.assign(dv, { board: null, cards: [], menu: null, wipEdit: null, refused: null });
       if (dv.open && (documentDirty() || acceptanceDirty())) detailError('This card belongs to the project chosen before: save or cancel the edit first.');
       else if (dv.open) closeCard();
     }
@@ -104,8 +119,9 @@
     // the open card left the board (archived, merged, back in the Inbox)
     if (here && !open && !error) closeCard();
     if (open) {
-      Object.assign(dv.open, { column: open.column, type: open.type });
+      Object.assign(dv.open, { column: open.column, type: open.type, clarity: open.clarity });
       renderActions();
+      renderClarity();
     }
     fillFilters();
     render();
@@ -126,8 +142,12 @@
     const notes = Number(c.threadCount) || 0;
     const score = c.clarity?.score;
     const { usd, minutes } = c.estimate || {};
-    const estimate = [usd != null ? `$${Number(usd).toFixed(2)}` : '', minutes != null ? `${minutes} min` : ''].filter(Boolean).join(' · ');
+    // from an hour on, in hours: what the ready forecast counts in
+    const time = minutes == null ? '' : minutes < 60 ? `${minutes} min` : `${Math.round(minutes / 6) / 10} h`;
+    const estimate = [usd != null ? `$${Number(usd).toFixed(2)}` : '', time].filter(Boolean).join(' · ');
     const menu = dv.menu === c.id;
+    const bar = barOf(c);
+    const override = c.column === 'ready' ? c.clarity?.override : null;
     return `
       <article class="dsc-card${dv.open?.id === c.id ? ' active' : ''}" data-testid="discovery-card" data-card="${esc(c.id)}" data-type="${esc(c.type)}" data-column="${esc(c.column)}" draggable="true">
         <button type="button" class="dsc-card-title" data-testid="discovery-card-title" data-open="${esc(c.id)}" title="${esc(c.title)}">${esc(c.title)}</button>
@@ -135,7 +155,8 @@
           <div class="dsc-card-meta muted small">
             <span class="badge dsc-type" data-testid="discovery-card-type">${esc(c.type)}</span>
             <span data-testid="discovery-card-age" title="In ${esc(columnOf(c.column)?.title || c.column)} since ${esc(dateOf(since(c)))}">${esc(age(since(c)))}</span>
-            ${score != null ? `<span class="badge" data-testid="discovery-card-clarity" title="Clarity score">clarity ${esc(score)}</span>` : ''}
+            ${score != null ? `<span class="badge${score < bar ? ' warn' : ''}" data-testid="clarity-badge" title="${esc(score < bar ? `Needs grilling: below the clarity bar of ${bar}%` : `At or above the clarity bar of ${bar}%`)}"><span data-testid="discovery-card-clarity">clarity ${esc(score)}%</span></span>` : ''}
+            ${override ? `<span class="badge warn" data-testid="clarity-override" title="${esc(`Moved to Ready below the clarity bar: ${override.reason}`)}">moved anyway</span>` : ''}
             ${estimate ? `<span data-testid="discovery-card-estimate" title="Estimate">${esc(estimate)}</span>` : ''}
             <span class="inbox-card-files" data-testid="discovery-card-attachments" title="${esc(plural(files, 'attachment'))}">${parts().CLIP} ${files}</span>
             <span class="inbox-card-files" data-testid="discovery-card-thread" title="${esc(`${notes} in the thread`)}">${THREAD} ${notes}</span>
@@ -147,7 +168,31 @@
             </div>` : ''}
           </span>
         </div>
+        ${dv.refused?.id === c.id ? `<div class="dsc-card-refused" role="group" aria-label="Below the clarity bar">
+          <button type="button" class="btn sm" data-testid="grill-me" data-grill="${esc(c.id)}" title="An interview in the card's thread: one question at a time, each answer written into the card">Grill me</button>
+          <button type="button" class="btn sm warn-ghost" data-testid="clarity-move-anyway" data-move-anyway="${esc(c.id)}" title="To Ready below the bar: needs a reason, kept on the card">Move anyway</button>
+        </div>` : ''}
       </article>`;
+  }
+
+  // The ready work (#166, the board's forecast): nights and agent hours of the Ready cards at or
+  // above the bar, labelled as the estimate it is, then the bar and the night it counts with.
+  function forecastHtml() {
+    const f = dv.board.forecast;
+    const s = dv.board.clarity;
+    if (!f || !s) return '';
+    const loose = f.unestimated ? `; ${plural(f.unestimated, 'card')} not estimated` : '';
+    const [head, detail] = !f.count ? ['Nothing ready yet', 'an estimate from the cards in Ready at or above the clarity bar']
+      : !f.hours ? [`${plural(f.count, 'card')} ready`, 'no estimate of their agent work yet']
+        : [`${plural(f.nights, 'night')} ready`, `about ${f.hours} h of agent work, an estimate${loose}`];
+    const kinds = Object.entries(s.byKind || {}).map(([k, v]) => `${k} ${v}%`).join(', ');
+    return `
+        <div class="dsc-forecast">
+          <span data-testid="ready-forecast" title="${esc(`${plural(f.count, 'card')} in Ready at or above the clarity bar; a night is ${f.nightHours} h`)}"><b>${esc(head)}</b> <span class="muted">(${esc(detail)})</span></span>
+          <span class="muted small" data-testid="clarity-bar-summary">Clarity bar ${esc(s.bar)}%${kinds ? ` (${esc(kinds)})` : ''} · night ${esc(s.night.start)} to ${esc(s.night.end)}</span>
+          <span class="spacer"></span>
+          <button type="button" class="btn sm ghost" data-testid="clarity-settings" data-clarity-settings title="Change the clarity bar, a bar per type and the night's hours">Bar and night…</button>
+        </div>`;
   }
 
   // A column: its title, its count (every card it holds, the fast lane's too; `n / limit` with a WIP
@@ -175,6 +220,7 @@
 
   function render() {
     $('#dsc-error').textContent = [dv.loadError, dv.error].filter(Boolean).join(' ');
+    $('#dsc-refused').textContent = dv.refused?.text || '';
     const box = $('#dsc-board-box');
     if (!dv.projectId) {
       box.innerHTML = '<div class="empty-state"><b>No project chosen</b><p class="muted">Choose a project in the header: each project has its own Discovery board.</p></div>';
@@ -188,12 +234,14 @@
       ? '<p class="muted small dsc-note" data-testid="discovery-empty">No card on the board yet. Accept an idea in the Inbox: it lands in Triage.</p>'
       : shown < dv.cards.length ? `<p class="muted small dsc-note">${shown} of ${plural(dv.cards.length, 'card')} shown: the filters hide the others.</p>` : '';
     box.innerHTML = `${note}
-      <div class="dsc-board" data-testid="discovery-board" style="--dsc-cols:${cols.length}">
-        <section class="dsc-lane" data-testid="discovery-fast-lane" aria-label="Fast lane: bugs and hotfixes">
-          <h3 class="dsc-lane-title">Fast lane <span class="muted">bugs and hotfixes · may skip Shape</span></h3>
-          ${cols.map((c, i) => `<div class="dsc-lane-cell" data-testid="discovery-lane-cell" data-drop="${esc(c.id)}" aria-label="Fast lane, ${esc(c.title)}">${lists[i].filter((x) => isFast(x) && matches(x)).map(cardHtml).join('')}</div>`).join('')}
-        </section>
-        ${cols.map((c, i) => columnHtml(c, i, lists[i])).join('')}
+      <div data-testid="discovery-board">${forecastHtml()}
+        <div class="dsc-board" style="--dsc-cols:${cols.length}">
+          <section class="dsc-lane" data-testid="discovery-fast-lane" aria-label="Fast lane: bugs and hotfixes">
+            <h3 class="dsc-lane-title">Fast lane <span class="muted">bugs and hotfixes · may skip Shape</span></h3>
+            ${cols.map((c, i) => `<div class="dsc-lane-cell" data-testid="discovery-lane-cell" data-drop="${esc(c.id)}" aria-label="Fast lane, ${esc(c.title)}">${lists[i].filter((x) => isFast(x) && matches(x)).map(cardHtml).join('')}</div>`).join('')}
+          </section>
+          ${cols.map((c, i) => columnHtml(c, i, lists[i])).join('')}
+        </div>
       </div>`;
   }
 
@@ -223,6 +271,11 @@
       else focusMove(id);
       return;
     }
+    const grill = e.target.closest('[data-grill]');
+    if (grill) { grillFromBoard(grill.dataset.grill); return; }
+    const anyway = e.target.closest('[data-move-anyway]');
+    if (anyway) { openOverride(anyway.dataset.moveAnyway); return; }
+    if (e.target.closest('[data-clarity-settings]')) { openClaritySettings(); return; }
     const open = e.target.closest('[data-open]');
     if (open) openCard(open.dataset.open);
   }
@@ -244,8 +297,9 @@
 
   /**
    * Moves a card to a column (at `index` among its other cards, else last), or within its column.
-   * Nothing is refused: a move past the column's WIP limit, or one that skips Shape with a card that
-   * is not in the fast lane, asks first.
+   * A move past the column's WIP limit, or one that skips Shape with a card that is not in the fast
+   * lane, asks first. Only the store refuses, a move into Ready below the clarity bar (#166): the
+   * card stays, the board says why and the card offers "Grill me" and "Move anyway".
    */
   async function requestMove(id, column, index) {
     const card = cardOf(id);
@@ -264,12 +318,80 @@
       if (why.length && !(await confirmDialog(`Move to ${col.title}`, `${why.join(' ')} Move "${card.title}" there anyway?`, 'Move anyway'))) return;
     }
     if (projectId !== dv.projectId) return; // another project was chosen while the question was open
-    dv.error = '';
-    try { await api.moveDiscoveryCard(projectId, id, column, index); } catch (e) { dv.error = errMsg(e); }
+    Object.assign(dv, { error: '', refused: null });
+    try { await api.moveDiscoveryCard(projectId, id, column, index); } catch (e) {
+      const msg = errMsg(e);
+      if (REFUSED.test(msg)) dv.refused = { id, text: `"${card.title}" stays in ${columnOf(card.column)?.title || card.column}. ${msg}` };
+      else dv.error = msg;
+    }
     await refresh();
     focusMove(id);
     // the move kept a version of the open card's document
     if (dv.open?.id === id) reloadHistory();
+  }
+
+  // ---- the clarity bar (#166) ---------------------------------------------------------------------
+  // "Move anyway": the owner's override of a refused move, with a reason kept on the card.
+  function openOverride(id) {
+    const card = cardOf(id);
+    if (!card) return;
+    dv.override = { id, projectId: dv.projectId };
+    const score = card.clarity?.score;
+    $('#dsc-override-what').textContent = `"${card.title}" goes to Ready ${score == null ? 'without a clarity score' : `at ${score}% clear`}, below the bar of ${barOf(card)}%. The reason is kept on the card with that score.`;
+    $('#dsc-override-reason').value = '';
+    $('#dsc-override-error').textContent = '';
+    $('#btn-dsc-override-confirm').disabled = true;
+    openModal('#dsc-override-modal');
+    $('#dsc-override-reason').focus({ preventScroll: true });
+  }
+
+  function moveAnyway(e) {
+    e.preventDefault();
+    const { id, projectId } = dv.override || {};
+    const reason = String($('#dsc-override-reason').value || '').trim();
+    if (!id || !reason) return undefined;
+    return once(async () => {
+      try {
+        await api.moveDiscoveryCardAnyway(projectId, id, reason);
+        closeModal('#dsc-override-modal');
+        Object.assign(dv, { override: null, refused: null });
+        if (projectId !== dv.projectId) return;
+        await refresh();
+        focusMove(id);
+        if (dv.open?.id === id) reloadHistory();
+      } catch (err) { $('#dsc-override-error').textContent = errMsg(err); }
+    });
+  }
+
+  // "Bar and night…": the project's bar, a bar of its own per type (empty: the project's) and the night.
+  function openClaritySettings() {
+    const s = dv.board?.clarity;
+    if (!s) return;
+    $('#dsc-bar').value = s.bar;
+    for (const el of document.querySelectorAll('#dsc-clarity-form [data-bar-kind]')) el.value = s.byKind?.[el.dataset.barKind] ?? '';
+    $('#dsc-night-start').value = s.night.start;
+    $('#dsc-night-end').value = s.night.end;
+    $('#dsc-clarity-error').textContent = '';
+    openModal('#dsc-clarity-modal');
+    $('#dsc-bar').focus({ preventScroll: true });
+  }
+
+  function saveClaritySettings(e) {
+    e.preventDefault();
+    const projectId = dv.projectId;
+    const percent = (el) => (String(el.value).trim() === '' ? null : Number(el.value));
+    const byKind = Object.fromEntries([...document.querySelectorAll('#dsc-clarity-form [data-bar-kind]')].map((el) => [el.dataset.barKind, percent(el)]));
+    const night = { start: $('#dsc-night-start').value, end: $('#dsc-night-end').value };
+    return once(async () => {
+      try {
+        const board = await api.setDiscoveryClarityBar(projectId, percent($('#dsc-bar')), byKind, night);
+        closeModal('#dsc-clarity-modal');
+        if (projectId !== dv.projectId) return;
+        dv.board = board;
+        render();
+        renderClarity();
+      } catch (err) { $('#dsc-clarity-error').textContent = errMsg(err); }
+    });
   }
 
   function onDragStart(e) {
@@ -481,6 +603,7 @@
           </div>
           <div id="dsc-detail-actions"></div>
           <p id="dsc-detail-error" class="error small"></p>
+          <section id="dsc-clarity" class="inbox-section dsc-clarity" aria-label="Clarity"></section>
           <section class="inbox-section">
             <div class="inbox-section-head">
               <h3>Document</h3>
@@ -525,9 +648,10 @@
           <section class="inbox-section">
             <div class="inbox-section-head"><h3>Thread</h3></div>
             <div id="dsc-thread" class="inbox-thread" data-testid="card-thread"></div>
+            <div id="dsc-grill"></div>
             <div class="inbox-note">
               <textarea id="dsc-note" rows="2" placeholder="Add a note (Enter sends)" aria-label="Add a note"></textarea>
-              <button type="button" class="btn sm" data-detail="note">Add note</button>
+              <button type="button" id="dsc-note-send" class="btn sm" data-detail="note">Add note</button>
             </div>
           </section>
           <section class="inbox-section">
@@ -540,6 +664,7 @@
     $('#dsc-doc').value = c.document;
     renderTab();
     renderActions();
+    renderClarity();
     renderAcceptance();
     renderAttachments();
     renderThread();
@@ -571,6 +696,29 @@
         <button type="button" class="btn sm" data-testid="card-open-arena" data-detail="open-arena" title="Several models write from this card's document and the best of each is merged">Open in AI Arena</button>
       </div>
       <p class="muted small dsc-actions-hint">The card's document is the input. When the run finishes, its document comes back here as a new version and a thread entry.</p>`;
+  }
+
+  // The card's clarity (#166): its score against the bar of its type, who scored it and when, the
+  // override that took it to Ready below the bar, and the points still missing. Below the bar: Grill me.
+  function renderClarity() {
+    const c = dv.open;
+    const box = $('#dsc-clarity');
+    if (!c || !box) return;
+    const { score, gaps, ts, by, override } = c.clarity || {};
+    const bar = barOf(c);
+    const below = belowBar(c);
+    const when = (iso) => (iso ? `<time datetime="${esc(iso)}" title="${esc(dateOf(iso))}">${esc(ncAgo(iso))}</time>` : '');
+    const missing = Array.isArray(gaps) ? gaps : [];
+    box.innerHTML = `
+      <div class="inbox-section-head">
+        <h3>Clarity</h3>
+        ${score == null ? '<span class="badge">not scored</span>' : `<span class="badge${below ? ' warn' : ''}">${esc(score)}%</span>`}
+        <span class="muted small">${below ? `needs grilling: the bar is ${esc(bar)}%` : `at or above the bar of ${esc(bar)}%`}</span>
+        ${below ? '<button type="button" class="btn sm" data-testid="card-grill-me" data-detail="grill" title="An interview in this thread: one question at a time, each answer written into the card">Grill me</button>' : ''}
+      </div>
+      ${score != null && (by || ts) ? `<p class="muted small" data-testid="clarity-scored">Scored by <b>${esc(by || 'unknown')}</b> ${when(ts)}</p>` : ''}
+      ${override ? `<p class="small" data-testid="clarity-override"><span class="badge warn">moved anyway</span> <b>${esc(override.by)}</b> moved it to Ready ${override.score == null ? 'without a score' : `at ${esc(override.score)}%`} ${when(override.ts)}: ${esc(override.reason)}</p>` : ''}
+      ${missing.length ? `<p class="muted small">Missing:</p><ul class="dsc-missing" data-testid="clarity-missing">${missing.map((g) => `<li>${esc(g)}</li>`).join('')}</ul>` : ''}`;
   }
 
   function renderAcceptance() {
@@ -615,9 +763,27 @@
     if (dv.open?.id === c.id) renderAttachments();
   }
 
+  // The Grill me question the thread ends with (#166): the note box answers it.
+  const waitingGrill = () => { const last = dv.thread.at(-1); return last?.kind === 'question' && last.grill ? last : null; };
+
   function renderThread() {
     const box = $('#dsc-thread');
-    if (box) box.innerHTML = parts().threadHtml(dv.thread);
+    if (!box) return;
+    box.innerHTML = parts().threadHtml(dv.thread);
+    const q = waitingGrill();
+    $('#dsc-grill').innerHTML = !q ? '' : `
+      <div class="dsc-grill" data-testid="grill-interview">
+        <p class="small"><b>Grill me</b> waits for your answer: it is written into the card, and the card is scored again.</p>
+        ${q.proposal ? `<p class="muted small">A proposed answer, from the card:</p><pre class="dsc-grill-proposal" data-testid="grill-proposal">${esc(q.proposal)}</pre>` : ''}
+        <div class="row">
+          ${q.proposal ? '<button type="button" class="btn sm" data-testid="grill-use-proposal" data-detail="grill-use">Use this answer</button>' : ''}
+          <button type="button" class="btn sm ghost" data-testid="grill-end" data-detail="grill-end">End the interview</button>
+        </div>
+      </div>`;
+    const note = $('#dsc-note');
+    note.placeholder = q ? 'Your answer (Enter sends)' : 'Add a note (Enter sends)';
+    note.setAttribute('aria-label', q ? 'Answer the question' : 'Add a note');
+    $('#dsc-note-send').textContent = q ? 'Answer' : 'Add note';
   }
 
   // What a version is, from its reason (snapshotVersion's label in its file name).
@@ -626,7 +792,7 @@
     if (move) return `Moved to ${columnOf(move[1])?.title || move[1]}`;
     const result = /^result-(.+)$/.exec(reason);
     if (result) return `${SOURCES[result[1]] || result[1]} result`;
-    return { merge: 'Before a merge', 'before-restore': 'Before a restore', 'before-result': 'Before a run\'s result' }[reason] || reason;
+    return { merge: 'Before a merge', 'before-grill': 'Before a Grill me answer', 'before-restore': 'Before a restore', 'before-result': 'Before a run\'s result' }[reason] || reason;
   }
 
   function renderVersions() {
@@ -680,7 +846,8 @@
     try {
       const card = await api.updateDiscoveryCard(dv.openProject, id, { title: $('#dsc-title').value, document: $('#dsc-doc').value });
       if (dv.open?.id !== id) return;
-      Object.assign(dv.open, { title: card.title, document: card.document });
+      Object.assign(dv.open, { title: card.title, document: card.document, clarity: card.clarity });
+      renderClarity();
       const title = $('#dsc-detail .dsc-detail-title');
       title.textContent = card.title;
       title.title = card.title;
@@ -704,10 +871,12 @@
     try {
       const card = await api.updateDiscoveryCard(dv.openProject, id, { acceptance: $('#dsc-acc').value });
       if (dv.open?.id !== id) return;
-      dv.open.acceptance = card.acceptance;
+      Object.assign(dv.open, { acceptance: card.acceptance, clarity: card.clarity });
       dv.editAcceptance = false;
       renderAcceptance();
+      renderClarity();
       detailError('');
+      refresh();
     } catch (e) { detailError(errMsg(e)); }
   });
 
@@ -716,7 +885,7 @@
     const id = dv.open.id;
     try {
       const card = await api.updateDiscoveryCard(dv.openProject, id, fields);
-      if (dv.open?.id === id) Object.assign(dv.open, { type: card.type, tags: card.tags });
+      if (dv.open?.id === id) Object.assign(dv.open, { type: card.type, tags: card.tags, clarity: card.clarity });
       detailError('');
     } catch (e) { detailError(errMsg(e)); }
     if (dv.open?.id === id) {
@@ -767,11 +936,59 @@
     } catch (e) { detailError(errMsg(e)); }
   }
 
+  // ---- Grill me (#166) ------------------------------------------------------------------------------
+  // The interview runs in the open card's thread: the store asks the card's next open point, the
+  // note box answers it, the answer is written into the card (so an edit with changes goes first)
+  // and the next question comes, until the card reaches its bar or the person ends it.
+  const startGrill = () => once(async () => {
+    const id = dv.open?.id;
+    if (!id || editBlocks()) return;
+    try {
+      await api.grillDiscoveryCard(dv.openProject, id);
+      if (dv.open?.id !== id) return;
+      await reloadCard();
+      refresh();
+      const note = $('#dsc-note');
+      note?.scrollIntoView?.({ block: 'center' });
+      note?.focus({ preventScroll: true });
+    } catch (e) { detailError(errMsg(e)); }
+  });
+
+  // "Grill me" on a card's face: its panel opens, then the interview starts there.
+  async function grillFromBoard(id) {
+    if (dv.open?.id !== id) await openCard(id);
+    if (dv.open?.id === id) startGrill();
+  }
+
+  async function answerGrill(text) {
+    const id = dv.open.id;
+    if (editBlocks()) return;
+    try {
+      await api.answerDiscoveryGrill(dv.openProject, id, text);
+      if (dv.open?.id !== id) return;
+      await reloadCard();
+      refresh();
+      $('#dsc-note')?.focus({ preventScroll: true });
+    } catch (e) { detailError(errMsg(e)); }
+  }
+
+  // Any other entry ends the wait: the card keeps what was answered so far.
+  const endGrill = () => once(async () => {
+    const id = dv.open?.id;
+    if (!id) return;
+    try {
+      await api.appendDiscoveryConversation(dv.openProject, id, { text: 'Ended the Grill me interview.' });
+      await reloadHistory();
+      refresh();
+    } catch (e) { detailError(errMsg(e)); }
+  });
+
   const addNote = () => once(async () => {
     const id = dv.open?.id;
     const box = $('#dsc-note');
     const text = String(box?.value || '').trim();
     if (!id || !text) return;
+    if (waitingGrill()) { await answerGrill(text); return; }
     try {
       await api.appendDiscoveryConversation(dv.openProject, id, { text });
       const thread = await api.discoveryConversation(dv.openProject, id);
@@ -802,6 +1019,9 @@
     else if (act === 'view') viewAttachment(b.dataset.name);
     else if (act === 'unattach') removeAttachment(b.dataset.name);
     else if (act === 'note') addNote();
+    else if (act === 'grill') startGrill();
+    else if (act === 'grill-use') once(() => answerGrill(waitingGrill()?.proposal || ''));
+    else if (act === 'grill-end') endGrill();
     else if (act === 'version-open') openVersion(b.dataset.name);
     else if (act === 'version-restore') restoreVersion(b.dataset.name);
     else if (act === 'open-write-review') openRunScreen('write-review');
@@ -951,10 +1171,67 @@
           </div>
         </div>
         <p id="dsc-error" class="error small"></p>
+        <p id="dsc-refused" class="error small" data-testid="clarity-refused" role="alert"></p>
         <div id="dsc-board-box"></div>
         <div id="dsc-detail"></div>
       </section>`,
+    modals: `
+  <div id="dsc-override-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="dsc-override-title" data-testid="clarity-override-dialog">
+    <form id="dsc-override-form" class="modal-card">
+      <h3 id="dsc-override-title">Move anyway</h3>
+      <p id="dsc-override-what" class="muted small"></p>
+      <div class="field">
+        <label for="dsc-override-reason">Reason <span class="req">*</span></label>
+        <textarea id="dsc-override-reason" data-testid="clarity-override-reason" rows="3" placeholder="Why does it go to Ready below the bar? Kept on the card."></textarea>
+      </div>
+      <p id="dsc-override-error" class="error small"></p>
+      <div class="modal-actions">
+        <span class="spacer"></span>
+        <button type="button" id="btn-dsc-override-cancel" class="btn ghost">Cancel</button>
+        <button type="submit" id="btn-dsc-override-confirm" class="btn primary" data-testid="clarity-override-confirm" disabled>Move to Ready</button>
+      </div>
+    </form>
+  </div>
+  <div id="dsc-clarity-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="dsc-clarity-title" data-testid="clarity-settings-dialog">
+    <form id="dsc-clarity-form" class="modal-card">
+      <h3 id="dsc-clarity-title">Clarity bar and night</h3>
+      <p class="muted small">A card enters Ready at or above the bar of this project. A type with a bar of its own uses it instead (a hotfix may pass lower); leave it empty to use the project's.</p>
+      <div class="dsc-clarity-grid">
+        <div class="field">
+          <label for="dsc-bar">Bar (%) <span class="req">*</span></label>
+          <input type="number" id="dsc-bar" data-testid="clarity-bar" min="0" max="100" step="1" required />
+        </div>
+        ${TYPES.map((t) => `<div class="field">
+          <label for="dsc-bar-${t}">${t} (%)</label>
+          <input type="number" id="dsc-bar-${t}" data-testid="clarity-bar-${t}" data-bar-kind="${t}" min="0" max="100" step="1" placeholder="project's" />
+        </div>`).join('')}
+      </div>
+      <div class="dsc-clarity-grid">
+        <div class="field">
+          <label for="dsc-night-start">Night from <span class="req">*</span></label>
+          <input type="time" id="dsc-night-start" data-testid="clarity-night-start" required />
+        </div>
+        <div class="field">
+          <label for="dsc-night-end">Night to <span class="req">*</span></label>
+          <input type="time" id="dsc-night-end" data-testid="clarity-night-end" required />
+        </div>
+      </div>
+      <p class="hint">The night is when agents work alone: the ready forecast counts in nights of this length.</p>
+      <p id="dsc-clarity-error" class="error small"></p>
+      <div class="modal-actions">
+        <span class="spacer"></span>
+        <button type="button" id="btn-dsc-clarity-cancel" class="btn ghost">Cancel</button>
+        <button type="submit" class="btn primary" data-testid="clarity-settings-save">Save</button>
+      </div>
+    </form>
+  </div>`,
     mount() {
+      $('#dsc-override-form').onsubmit = moveAnyway;
+      $('#dsc-override-reason').oninput = (e) => { $('#btn-dsc-override-confirm').disabled = !e.target.value.trim(); };
+      $('#btn-dsc-override-cancel').onclick = () => { dv.override = null; closeModal('#dsc-override-modal'); };
+      $('#dsc-clarity-form').onsubmit = saveClaritySettings;
+      $('#btn-dsc-clarity-cancel').onclick = () => closeModal('#dsc-clarity-modal');
+
       const box = $('#dsc-board-box');
       box.onclick = onBoardClick;
       box.addEventListener('change', onBoardChange);

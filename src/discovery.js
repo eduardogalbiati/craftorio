@@ -17,6 +17,15 @@
 // its column (moveCard's `index`), and the document's history: versions/ also gets the document a
 // restored version or a run's result replaced (before-restore, before-result) and the result itself
 // (result-<source>: Write & Review, AI Arena), which the thread notes too ({ kind: 'result' }).
+// The clarity score (#166, src/clarity.js): card.json's `clarity` { score, gaps, ts, by, override? }
+// is the rubric's score of the card's text, computed when the card is created and again whenever its
+// document, its acceptance criteria or its type change (the text itself is never touched); a caller
+// may record another scorer's (updateCard's `clarity`). board.json's `clarity` { bar, byKind, night }
+// is the project's bar (85 by default, optionally one per kind) and the owner's night. A card enters
+// Ready only at or above its bar, or with the owner's override and a reason, kept on the card as
+// clarity.override { score, bar, reason, by, ts }; a card already in Ready is never moved back.
+// Grill me (grillCard, answerGrill) asks the card's open points one at a time in its thread and
+// writes each answer into the card.
 // Every file is written whole (temp file + rename, src/state-file.js); the thread is appended one
 // line at a time. Project ids, card ids and attachment names are checked before any path is built:
 // nothing outside a card's folder is read or written. Used by the discovery: channels
@@ -25,6 +34,7 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const clarity = require('./clarity');
 const { sniffImage } = require('./engine/providers');
 const { renameWithRetry, writeFileAtomic } = require('./state-file');
 
@@ -54,6 +64,9 @@ const TEMP_FILE = /\.\d+\.tmp$/;
 const VERSION_FILE = /^(\d{4}-\d{2}-\d{2}T\d{2})-(\d{2})-(\d{2})-(\d{3}Z)-([\w-]+)\.md$/;
 // the runs whose result comes back to a card (recordResult), by the `source` they are recorded under
 const RESULT_SOURCES = { 'ai-arena': 'AI Arena', 'write-review': 'Write & Review' };
+// who scores a card's text when it changes (clarity.by), and who asks in a Grill me interview
+const RUBRIC = 'Clarity rubric';
+const GRILL = 'Grill me';
 
 const now = () => new Date().toISOString();
 const mb = (n) => `${Math.ceil(n / 1024 / 1024)} MB`;
@@ -117,7 +130,7 @@ function readBoard(dir, projectId) {
   for (const c of BOARD_COLUMNS) if (!columns.some((x) => x.id === c.id)) columns.push({ ...c });
   const order = {};
   for (const c of columns) order[c.id] = Array.isArray(board?.order?.[c.id]) ? board.order[c.id].filter((id) => CARD_ID.test(id)) : [];
-  return { columns: columns.map((c) => ({ ...c, wip: c.wip ?? null })), order };
+  return { columns: columns.map((c) => ({ ...c, wip: c.wip ?? null })), order, clarity: clarity.claritySettings(board?.clarity) };
 }
 
 // Takes the card off every column, then puts it in `column`: first (a new card), at `index` among
@@ -147,6 +160,37 @@ function setWip(dir, projectId, column, limit) {
   col.wip = limit;
   writeJson(path.join(ensureProject(dir, projectId), 'board.json'), board);
   return board;
+}
+
+/**
+ * Sets the project's clarity bar (#166) and returns the board: `bar` (0 to 100), `byKind` (a bar of
+ * its own per kind, e.g. { hotfix: 60 }; null takes a kind's away) and `night` ({ start, end } as
+ * HH:MM, the window the ready forecast counts in). What is not given keeps its value.
+ */
+function setClarityBar(dir, projectId, { bar, byKind, night } = {}) {
+  const board = readBoard(dir, projectId);
+  const percent = (n, what) => {
+    if (!Number.isInteger(n) || n < 0 || n > 100) throw new Error(`${what} is a whole number from 0 to 100: ${n}`);
+    return n;
+  };
+  if (bar !== undefined) board.clarity.bar = percent(bar, 'A clarity bar');
+  for (const [kind, own] of Object.entries(byKind || {})) {
+    if (!clarity.KINDS.includes(kind)) throw new Error(`Unknown kind: ${kind} (one of ${clarity.KINDS.join(', ')})`);
+    if (own === null) delete board.clarity.byKind[kind];
+    else board.clarity.byKind[kind] = percent(own, `The clarity bar of ${kind}`);
+  }
+  if (night !== undefined) {
+    const checked = clarity.claritySettings({ night }).night;
+    if (checked.start !== night?.start || checked.end !== night?.end) throw new Error('A night is { start, end } as HH:MM, e.g. 23:00 to 08:00.');
+    board.clarity.night = checked;
+  }
+  writeJson(path.join(ensureProject(dir, projectId), 'board.json'), board);
+  return board;
+}
+
+/** The ready work of the project (#166): its Ready cards at or above their bar, as agent hours and nights (clarity.readyForecast). */
+function readyForecast(dir, projectId) {
+  return clarity.readyForecast(listCards(dir, projectId, { column: 'ready' }), readBoard(dir, projectId).clarity);
 }
 
 // ---- cards ----------------------------------------------------------------------------------------
@@ -210,6 +254,17 @@ function loadAll(dir, projectId, box) {
 }
 const newestFirst = (key) => (a, b) => String(key(b)).localeCompare(String(key(a))) || String(b.id).localeCompare(String(a.id));
 
+// The rubric's score of a card's text (#166), as card.json's `clarity` keeps it.
+const scored = (card) => ({ ...clarity.scoreClarity(card), ts: now(), by: RUBRIC });
+
+// The card's document was replaced (a restored version, a run's result): its score follows.
+function rescore(folder) {
+  const card = load(folder);
+  card.clarity = { ...card.clarity, ...scored(card) };
+  card.updated = now();
+  saveCard(folder, card);
+}
+
 /**
  * Creates a card (an `idea` in the Inbox by default) with its document (`text`) and returns it.
  * Throws on an unknown type or column, a missing title, or a project id that is not a plain name.
@@ -225,7 +280,7 @@ function createCard(dir, projectId, { title, text = '', author = 'owner', type =
     created: now(),
     updated: null,
     tags: tagList(tags),
-    clarity: { score: null, gaps: [] },
+    clarity: scored({ type, document: text, acceptance: '' }),
     estimate: { usd: null, minutes: null },
     links: { issues: [], release: null },
     history: [],
@@ -273,11 +328,13 @@ function listArchived(dir, projectId) {
 /**
  * Changes a card: `title`, `type`, `tags`, `clarity`, `estimate`, `links` (objects, merged into
  * the card's), and the `document` and `acceptance` files. The id, column, author and history
- * never change here.
+ * never change here. A new document, acceptance criteria or type scores the card again (#166); a
+ * `clarity` given with them is the one kept.
  */
 function updateCard(dir, projectId, id, fields = {}) {
   const folder = existingCard(dir, projectId, id);
   const card = load(folder);
+  const type = card.type;
   for (const k of EDITABLE) {
     if (fields[k] === undefined) continue;
     if (k === 'title') card.title = checkTitle(fields.title);
@@ -286,11 +343,29 @@ function updateCard(dir, projectId, id, fields = {}) {
     else if (fields[k] && typeof fields[k] === 'object' && !Array.isArray(fields[k])) card[k] = { ...card[k], ...fields[k] };
     else throw new Error(`${k} must be an object.`);
   }
-  if (fields.document !== undefined) writeFileAtomic(path.join(folder, 'document.md'), String(fields.document ?? ''));
-  if (fields.acceptance !== undefined) writeFileAtomic(path.join(folder, 'acceptance.md'), String(fields.acceptance ?? ''));
+  if (fields.document !== undefined) card.document = String(fields.document ?? '');
+  if (fields.acceptance !== undefined) card.acceptance = String(fields.acceptance ?? '');
+  if (fields.document !== undefined) writeFileAtomic(path.join(folder, 'document.md'), card.document);
+  if (fields.acceptance !== undefined) writeFileAtomic(path.join(folder, 'acceptance.md'), card.acceptance);
+  if (fields.document !== undefined || fields.acceptance !== undefined || card.type !== type) card.clarity = { ...card.clarity, ...scored(card), ...fields.clarity };
   card.updated = now();
   saveCard(folder, card);
   return load(folder);
+}
+
+// The gate into Ready (#166): a card below its bar (or never scored) is refused, unless the owner
+// forces it with a reason, which is kept on the card with the score at that moment.
+function passClarityBar(dir, projectId, card, { by, force, reason }) {
+  const bar = clarity.clarityBar(readBoard(dir, projectId).clarity, card.type);
+  const score = typeof card.clarity?.score === 'number' ? card.clarity.score : null;
+  if (score !== null && score >= bar) return;
+  if (!force) {
+    const why = score === null ? `it has no clarity score yet (the bar is ${bar}%)` : `its clarity is ${score}%, the bar is ${bar}%`;
+    throw new Error(`Below the clarity bar: ${why}. Close its gaps (Grill me), or move it anyway with a reason.`);
+  }
+  const why = String(reason ?? '').trim();
+  if (!why) throw new Error('Moving a card below the clarity bar needs a reason.');
+  card.clarity = { ...card.clarity, override: { score, bar, reason: why.slice(0, 500), by: String(by || 'owner'), ts: now() } };
 }
 
 /** Snapshots document.md as versions/<iso ts>-<reason>.md (a column move, a merge, an agent output). Returns the file name. */
@@ -309,8 +384,10 @@ function snapshotVersion(dir, projectId, id, reason) {
  * Moves a card to another column: a history entry { ts, from, to, by }, a version of its document,
  * the board's order (last in the column, or at `index` among its other cards). A move within its
  * own column only changes its place (with an `index`): no history entry, no version.
+ * Into Ready, the card passes the clarity bar (#166) or the move throws; `force` with a `reason` is
+ * the owner's override.
  */
-function moveCard(dir, projectId, id, column, { by = 'owner', index } = {}) {
+function moveCard(dir, projectId, id, column, { by = 'owner', index, force = false, reason } = {}) {
   const folder = existingCard(dir, projectId, id);
   checkColumn(dir, projectId, column);
   const card = load(folder);
@@ -318,6 +395,7 @@ function moveCard(dir, projectId, id, column, { by = 'owner', index } = {}) {
     if (Number.isInteger(index)) placeOnBoard(dir, projectId, id, column, { index });
     return card;
   }
+  if (column === 'ready') passClarityBar(dir, projectId, card, { by, force, reason });
   snapshotVersion(dir, projectId, id, `move-${column}`);
   const ts = now();
   card.history = [...(card.history || []), { ts, from: card.column, to: column, by: String(by || 'owner') }];
@@ -369,7 +447,7 @@ function restoreVersion(dir, projectId, id, name, { by = 'owner' } = {}) {
   const text = readVersion(dir, projectId, id, name);
   keepDocument(dir, projectId, id, 'before-restore');
   writeFileAtomic(path.join(folder, 'document.md'), text);
-  touch(folder);
+  rescore(folder);
   appendConversation(dir, projectId, id, { kind: 'restore', author: String(by || 'owner'), version: String(name), text: `Restored the version ${name} as the document.` });
   return load(folder);
 }
@@ -386,7 +464,7 @@ function recordResult(dir, projectId, id, { source, text, runId = null, by = 'ow
   keepDocument(dir, projectId, id, 'before-result');
   writeFileAtomic(path.join(folder, 'document.md'), String(text));
   const version = snapshotVersion(dir, projectId, id, `result-${source}`);
-  touch(folder);
+  rescore(folder);
   appendConversation(dir, projectId, id, {
     kind: 'result', source, runId: runId ? String(runId) : null, author: String(by || 'owner'), version,
     text: `${RESULT_SOURCES[source]} finished: its result is the document now (version ${version}).`,
@@ -498,6 +576,67 @@ function listWaiting(dir, projectId) {
     .sort((a, b) => String(a.question.ts).localeCompare(String(b.question.ts)));
 }
 
+// ---- Grill me (#166) --------------------------------------------------------------------------------
+// An interview in the card's thread, with the person who opened it: one question at a time, the
+// open points of the card's kind in the rubric's order (clarity.nextQuestion), each a thread entry
+// { kind: 'question', author: 'Grill me', grill: <point>, proposal? } that makes the card wait for
+// its owner (listWaiting). It ends when the card reaches its bar, when nothing is left to ask, or
+// when the person writes anything else in the thread.
+
+// The question the interview waits on: the thread's last entry, when Grill me asked it.
+function waitingGrill(dir, projectId, id) {
+  const last = readConversation(dir, projectId, id).at(-1);
+  return last?.kind === 'question' && last.grill ? last : null;
+}
+
+// Asks the card's next open point, or closes the interview with a note. → { card, bar, question }
+function askNext(dir, projectId, id, { reached = false } = {}) {
+  const card = readCard(dir, projectId, id);
+  const bar = clarity.clarityBar(readBoard(dir, projectId).clarity, card.type);
+  const next = reached ? null : clarity.nextQuestion(card);
+  if (!next) {
+    const text = reached
+      ? `Clarity ${card.clarity.score}%: at or above the bar of ${bar}%. The interview ends here; the card can move to Ready.`
+      : `Nothing left to ask: the document covers every point of the rubric for ${card.type}.`;
+    appendConversation(dir, projectId, id, { kind: 'note', author: GRILL, text });
+    return { card: readCard(dir, projectId, id), bar, question: null };
+  }
+  const question = appendConversation(dir, projectId, id, {
+    kind: 'question', author: GRILL, grill: next.criterion, text: `${next.label}: ${next.question}`, ...(next.proposal ? { proposal: next.proposal } : {}),
+  });
+  return { card: readCard(dir, projectId, id), bar, question };
+}
+
+/**
+ * Starts (or goes on with) the card's Grill me interview: asks its next open point in the thread and
+ * returns { card, bar, question } (question: the entry asked, the one already waiting, or null when
+ * nothing is left to ask).
+ */
+function grillCard(dir, projectId, id) {
+  const waiting = waitingGrill(dir, projectId, id);
+  if (!waiting) return askNext(dir, projectId, id);
+  const card = readCard(dir, projectId, id);
+  return { card, bar: clarity.clarityBar(readBoard(dir, projectId).clarity, card.type), question: waiting };
+}
+
+/**
+ * The person's answer to the waiting question: written into the card (its acceptance criteria, or
+ * a section of its document, kept as a version first), noted in the thread, and the card is scored
+ * again. Then the next question, or the end of the interview. → { card, bar, question }
+ */
+function answerGrill(dir, projectId, id, { text, by = 'owner' } = {}) {
+  const waiting = waitingGrill(dir, projectId, id);
+  if (!waiting) throw new Error('No Grill me question is waiting for an answer on this card.');
+  const answer = String(text ?? '').trim();
+  if (!answer) throw new Error('An answer needs a text.');
+  const fields = clarity.recordAnswer(readCard(dir, projectId, id), waiting.grill, answer);
+  if (fields.document !== undefined) keepDocument(dir, projectId, id, 'before-grill');
+  const card = updateCard(dir, projectId, id, fields);
+  appendConversation(dir, projectId, id, { kind: 'answer', author: String(by || 'owner'), grill: waiting.grill, text: answer });
+  const bar = clarity.clarityBar(readBoard(dir, projectId).clarity, card.type);
+  return askNext(dir, projectId, id, { reached: card.clarity.score >= bar });
+}
+
 // ---- archive --------------------------------------------------------------------------------------
 
 /**
@@ -563,10 +702,12 @@ function mergeCard(dir, projectId, fromId, intoId, { by = 'owner' } = {}) {
 
 module.exports = {
   addAttachment,
+  answerGrill,
   appendConversation,
   archiveCard,
   COLUMNS,
   createCard,
+  grillCard,
   listArchived,
   listCards,
   listVersions,
@@ -579,10 +720,12 @@ module.exports = {
   readCard,
   readConversation,
   readVersion,
+  readyForecast,
   recordResult,
   removeAttachment,
   restoreCard,
   restoreVersion,
+  setClarityBar,
   setWip,
   snapshotVersion,
   TYPES,

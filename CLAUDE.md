@@ -18,6 +18,9 @@ user-facing doc; the topic docs below are read on demand.
   `gl`. What a family shares is a suffix-less skill referenced with `uses:`. `code-review` is one
   skill with per-language `rules/*.md`.
 - **Agents run unattended**: skills never "ask the user"; they record an assumption or a default.
+  One exception (#166): **Grill me** asks a person, in a discovery card's own thread, where
+  someone is present by definition; it is never a workflow step. Inside a run the same rubric
+  (skill `clarity-score`) asks nothing and records each gap as an open question.
 - **The workspace is the product** (packaged .exe): everything the user edits or produces lives in
   the workspace folder; the app folder (read-only app.asar) only holds bundled defaults. Never read
   or write user data relative to `__dirname`.

@@ -62,6 +62,18 @@
 .dsc-fields .field { margin: 0; }
 .dsc-fields select, .dsc-fields input { width: 100%; }
 .dsc-actions { flex-wrap: wrap; margin-bottom: 4px; }
+/* clarity (#166): the ready forecast above the columns, a refused card's actions, the panel's
+   score with its missing points, the Grill me question's box and the bar's dialog */
+.dsc-forecast { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin-bottom: 10px; }
+#dsc-refused:empty { display: none; }
+.dsc-card-refused { display: flex; flex-wrap: wrap; gap: 6px; padding-top: 6px; border-top: 1px dashed var(--border); }
+.dsc-clarity p, .dsc-grill p { margin: 0; }
+.dsc-clarity { display: grid; gap: 4px; }
+.dsc-missing { margin: 0; padding-left: 18px; font-size: 13px; }
+.dsc-grill { display: grid; gap: 6px; margin-top: 8px; padding: 8px 10px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; }
+.dsc-grill-proposal { max-height: 140px; margin: 0; overflow: auto; white-space: pre-wrap; font: inherit; font-size: 13px; }
+.dsc-clarity-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0 12px; }
+.dsc-clarity-grid input { width: 100%; }
 .dsc-versions { display: grid; gap: 6px; }
 .dsc-version { padding: 6px 8px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; }
 .dsc-version-row { display: flex; align-items: center; gap: 8px; }

@@ -756,12 +756,16 @@ function demoDiscoveryBoard(ws, projectId) {
   const dir = ws.discovery;
   const hour = 3600000;
   const columns = ['triage', 'shape', 'define', 'ready'];
-  const card = (hoursAgo, to, { title, text = '', type = 'idea', author = 'eduardo', tags, clarity, estimate, acceptance }) => {
+  const card = (hoursAgo, to, { title, text = '', type = 'idea', author = 'eduardo', tags, clarity, gaps = [], estimate, acceptance, anyway }) => {
     const c = discovery.createCard(dir, projectId, { title, text, type, author, tags, column: 'triage' });
+    // the score first: a move into Ready goes through the clarity bar (#166), `anyway` is the
+    // owner's reason to move a card there below it
+    discovery.updateCard(dir, projectId, c.id, { ...(acceptance ? { acceptance } : {}), ...(clarity ? { clarity: { score: clarity, gaps, by: 'Product Owner' } } : {}), ...(estimate ? { estimate } : {}) });
     // a bug or a hotfix takes the fast lane: Triage → Define
     const fast = ['bug', 'hotfix'].includes(type);
-    for (const column of columns.slice(1, columns.indexOf(to) + 1)) if (!(fast && column === 'shape')) discovery.moveCard(dir, projectId, c.id, column, { by: author });
-    discovery.updateCard(dir, projectId, c.id, { ...(clarity ? { clarity: { score: clarity } } : {}), ...(estimate ? { estimate } : {}), ...(acceptance ? { acceptance } : {}) });
+    for (const column of columns.slice(1, columns.indexOf(to) + 1)) {
+      if (!(fast && column === 'shape')) discovery.moveCard(dir, projectId, c.id, column, { by: author, ...(column === 'ready' && anyway ? { force: true, reason: anyway } : {}) });
+    }
     // created and moved in the past, so the cards show different ages
     const file = path.join(dir, projectId, 'cards', c.id, 'card.json');
     const json = JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -785,9 +789,19 @@ function demoDiscoveryBoard(ws, projectId) {
       '## Non-goals', '', '- Budgets and alerts (the spending budget covers them)', '', '## Open questions', '', '- Per workflow too, or per project only?'].join('\n'),
   });
   card(20, 'define', { title: 'Keyboard shortcuts for the Roadmap', author: 'marina', tags: ['ux'], clarity: 88, estimate: { usd: 2.1, minutes: 20 }, text: 'Move an item between stages without the mouse.' });
-  card(96, 'define', { title: 'Compare two runs side by side', type: 'prd', tags: ['reports'], clarity: 81, text: 'Two runs of the same workflow next to each other: cost, duration, steps.' });
+  card(96, 'define', {
+    title: 'Compare two runs side by side', type: 'prd', tags: ['reports'], clarity: 81, text: 'Two runs of the same workflow next to each other: cost, duration, steps.',
+    gaps: ['Success metrics: how do we know the comparison is used?', 'Non-goals: is comparing runs of different workflows left out?'],
+  });
   card(1, 'define', { title: 'Login loop after the token refresh', type: 'hotfix', author: 'support', text: 'The phone page asks to log in again after every refresh.' });
-  card(140, 'ready', { title: 'Per-project spending budget', type: 'prd', tags: ['cost'], clarity: 94, estimate: { usd: 7.5, minutes: 60 }, text: 'A daily budget per project, next to the workspace one.' });
+  // Ready (#166): two cards at or above the bar (the forecast: 19 h, 2 nights of 9 h) and one the
+  // owner moved there below it, which the forecast leaves out
+  card(140, 'ready', { title: 'Per-project spending budget', type: 'prd', tags: ['cost'], clarity: 94, estimate: { usd: 7.5, minutes: 540 }, text: 'A daily budget per project, next to the workspace one.' });
+  card(70, 'ready', { title: 'Retry a failed step from the Run screen', tags: ['engine'], clarity: 90, estimate: { usd: 8.2, minutes: 600 }, text: 'A failed step is retried from its card, without restarting the run.' });
+  card(26, 'ready', {
+    title: 'Dark theme for the phone page', author: 'marina', tags: ['ux'], clarity: 58, estimate: { usd: 3, minutes: 240 }, text: 'The phone page follows the system theme.',
+    gaps: ['Acceptance criteria: which screens of the phone page must follow the theme?', 'Scope: the login page too?'], anyway: 'Needed for Friday\'s demo; the open points are cosmetic.',
+  });
   discovery.setWip(dir, projectId, 'define', 2);
 }
 
