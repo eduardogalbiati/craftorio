@@ -729,7 +729,7 @@ ${partial}` : ''}`, error: true });
       try {
         const st = state();
         const h = await writeHandoff('reset');
-        saveState({ ...st, sessionId: null, compactNext: false, contextTokens: 0, ...(st.sessionId ? { startReason: 'reset' } : {}) });
+        saveState({ ...st, sessionId: null, compactNext: false, contextTokens: 0, ...(st.sessionId || st.startReason ? { startReason: 'reset' } : {}) });
         post({ role: 'system', kind: 'reset', handoff: path.basename(h.file), text: `New session: the next question starts from the skill, the memory and the handoff note ${path.basename(h.file)}.` });
         return { handoff: path.basename(h.file), messages: history(), state: status() };
       } finally {

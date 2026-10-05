@@ -1251,8 +1251,8 @@ function recordUsage(backlogDir, { projectId, model, tokens, costUsd, sessionId 
   agentsUsage.appendTurn(usageFile(backlogDir), { agent: 'product-owner', projectId, model, tokens, costUsd, sessionId, startReason: 'one-shot' });
 }
 
-/** Every recorded call, every project, oldest first (Analytics' Agents tab, #280). */
-const usageLines = (backlogDir) => agentsUsage.readLines(usageFile(backlogDir));
+/** Every recorded call, every project, oldest first (Analytics' Agents tab, #280; `opts`: agentsUsage.readLines'). */
+const usageLines = (backlogDir, opts) => agentsUsage.readLines(usageFile(backlogDir), opts);
 
 /**
  * The Product Owner's calls this month, every project, as sessions for usage.withPeerUsage

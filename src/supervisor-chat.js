@@ -78,12 +78,12 @@ const usageFile = (dir) => path.join(dir, 'usage.jsonl');
 /**
  * #280: the chat's real turns, oldest first: usage.jsonl's lines and, before the first of them, the
  * answers chat.jsonl still holds from before usage.jsonl existed (their cost only: `tokens: null`,
- * no session id). `dir`: the workspace's supervisor folder.
+ * no session id). `dir`: the workspace's supervisor folder; `opts`: agentsUsage.readLines'.
  */
-function usageTurns(dir) {
-  const recorded = agentsUsage.readLines(usageFile(dir)).filter((u) => u.ts);
+function usageTurns(dir, opts) {
+  const recorded = agentsUsage.readLines(usageFile(dir), opts).filter((u) => u.ts);
   const since = recorded[0]?.ts || null;
-  const earlier = agentsUsage.readLines(path.join(dir, 'chat.jsonl'))
+  const earlier = agentsUsage.readLines(path.join(dir, 'chat.jsonl'), opts)
     .filter((m) => m.role === 'supervisor' && m.model && !m.simulated && m.ts && (!since || String(m.ts) < String(since)))
     .map((m) => ({ ts: m.ts, agent: 'supervisor', provider: 'claude', model: m.model, tokens: null, costUsd: Number(m.costUsd) || 0, sessionId: null }));
   return [...earlier, ...recorded];
@@ -146,7 +146,7 @@ function createSupervisorChat({ dir, tools, bridge, mcpCommand, skillsDirs, reso
   // attachments: this question's images (#129), already stored in the chat's attachments/ folder
   async function realTurn(text, model, attachments = [], { onItem = () => {}, signal = null } = {}) {
     refuseReal('the supervisor\'s CLI (claude)');
-    const { runTurn } = require('./engine/providers');
+    const { runTurn, seedClaudeTotal } = require('./engine/providers');
     const { render } = require('./engine/workflow');
     const { providerArgs, dedupeFlags } = require('./engine/capabilities');
     const { PROVIDERS } = require('./workflow-builder');
@@ -166,9 +166,13 @@ function createSupervisorChat({ dir, tools, bridge, mcpCommand, skillsDirs, reso
     ], provider.args || []);
     const st = state();
     const sessionId = st.model === model ? st.sessionId || null : null;
-    // #280: why a session starts: another model, or no session to resume: Clear forgot it (usage.jsonl
-    // survives Clear), else the first turn
-    const startReason = sessionId ? null : st.sessionId ? 'model-change' : fs.existsSync(usageFile(dir())) ? 'cleared' : 'first';
+    // #280: why a session starts: another model, or no session to resume: Clear removed chat.json
+    // (usage.jsonl survives it), else the first turn
+    const cleared = !fs.existsSync(files().state) && fs.existsSync(usageFile(dir()));
+    const startReason = sessionId ? null : st.sessionId ? 'model-change' : cleared ? 'cleared' : 'first';
+    // #233: Claude reports a resumed session's cumulative cost, and the total to subtract is only in
+    // memory: after an app restart it is seeded from the last one recorded, so the turn costs its own
+    if (sessionId) seedClaudeTotal(sessionId, agentsUsage.readLines(usageFile(dir())).filter((u) => u.sessionId === sessionId).at(-1)?.cumulativeUsd);
     let prompt = text;
     if (!sessionId) {
       let method = '';
@@ -183,8 +187,11 @@ function createSupervisorChat({ dir, tools, bridge, mcpCommand, skillsDirs, reso
       onItem: (it) => { if (it?.kind === 'context' && Number(it.tokens)) contextTokens = Number(it.tokens); onItem(it); },
     });
     const sid = res.providerSessionId || sessionId;
-    agentsUsage.appendTurn(usageFile(dir()), { agent: 'supervisor', model, tokens: res.usage, costUsd: res.costUsd, sessionId: sid, startReason, contextTokens });
     saveState({ sessionId: sid, model });
+    // the answer is paid for: a usage line that cannot be written never loses it
+    try {
+      agentsUsage.appendTurn(usageFile(dir()), { agent: 'supervisor', model, tokens: res.usage, costUsd: res.costUsd, sessionId: sid, startReason, contextTokens, extra: { cumulativeUsd: res.cliTotalCostUsd ?? null } });
+    } catch (e) { console.error('supervisor chat: the turn\'s usage was not recorded:', e); }
     return res;
   }
 

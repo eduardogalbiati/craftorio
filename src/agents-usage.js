@@ -3,7 +3,7 @@
 // src/service/areas/usage.js).
 //   <workspace>/oracle/usage.jsonl                  the Oracle (src/oracle.js: also cumulativeUsd, wake)
 //   <workspace>/backlog/product-owner.usage.jsonl   the Product Owner (src/product-owner.js: projectId)
-//   <workspace>/supervisor/usage.jsonl              the Supervisor chat (src/supervisor-chat.js)
+//   <workspace>/supervisor/usage.jsonl              the Supervisor chat (src/supervisor-chat.js: also cumulativeUsd)
 // One line per real turn (a simulated turn records nothing), appended, never rewritten:
 //   { ts, agent, projectId?, provider, model, tokens: { input, output, cache_read, cache_write }, costUsd,
 //     sessionId, session: 'fresh' | 'resumed', startReason? (why a fresh session started: first,
@@ -19,16 +19,20 @@ const path = require('path');
 const AGENTS = ['oracle', 'product-owner', 'supervisor'];
 const TOKEN_KINDS = ['input', 'output', 'cache_read', 'cache_write'];
 
-/** A .jsonl file's lines (a missing file: none; a line that is not JSON is skipped). */
-function readLines(file) {
+/**
+ * A .jsonl file's lines (a line that is not JSON is skipped). A file that cannot be read has none, like
+ * a missing one (the budget checks go on); `strict` throws instead, unless it is missing (the Agents
+ * tab shows the error).
+ */
+function readLines(file, { strict = false } = {}) {
   let text;
-  try { text = fs.readFileSync(file, 'utf8'); } catch (e) { if (e.code === 'ENOENT') return []; throw e; }
+  try { text = fs.readFileSync(file, 'utf8'); } catch (e) { if (strict && e.code !== 'ENOENT') throw e; return []; }
   return text.split('\n').map((l) => { try { return l ? JSON.parse(l) : null; } catch { return null; } }).filter(Boolean);
 }
 
 /**
  * Appends one real turn to an agent's usage file → the line. `startReason`: why the turn started a
- * session (null: it resumed one); `extra`: the agent's own fields (the Oracle's cumulativeUsd, wake).
+ * session (null: it resumed one); `extra`: the agent's own fields (cumulativeUsd, the Oracle's wake).
  */
 function appendTurn(file, { agent, projectId = null, provider = 'claude', model, tokens, costUsd, sessionId, startReason = null, contextTokens = null, extra = {} }) {
   const line = {

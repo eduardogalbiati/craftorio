@@ -48,6 +48,47 @@ test('#280 readLines: a missing file has no lines; a line that is not JSON is sk
   assert.deepEqual(agentsUsage.readLines(path.join(dir, 'u.jsonl')), [{ a: 1 }, { a: 2 }]);
 });
 
+test('#280 readLines: a file that cannot be read has no lines, and throws when strict (a missing one never does)', (t) => {
+  const dir = tmpDir(t);
+  // a folder in the file's place: reading it fails with something else than ENOENT
+  assert.deepEqual(agentsUsage.readLines(dir), []);
+  assert.throws(() => agentsUsage.readLines(dir, { strict: true }));
+  assert.deepEqual(agentsUsage.readLines(path.join(dir, 'none.jsonl'), { strict: true }), []);
+});
+
+// the Supervisor chat on a faked CLI: `results[n]` is merged into the n-th turn's result
+function fakeChat(t, results = []) {
+  const dir = tmpDir(t);
+  const providers = require('../src/engine/providers');
+  const real = { runTurn: providers.runTurn, seedClaudeTotal: providers.seedClaudeTotal };
+  const seeded = [];
+  let n = 0;
+  providers.seedClaudeTotal = (...args) => { seeded.push(args); };
+  providers.runTurn = async (opts) => ({ text: 'Fake answer: no model was called.', usage: tok(10, 5, 0, 0), costUsd: 0.1, providerSessionId: opts.providerSessionId || 'sess-1', exitCode: 0, ...results[n++] });
+  t.after(() => Object.assign(providers, real));
+  const chat = supervisorChat.createSupervisorChat({
+    dir: () => dir, tools: () => [], bridge: { start: async () => ({ url: 'http://127.0.0.1:1', token: 'test' }) },
+    mcpCommand: () => ({ command: 'node', args: [], env: {} }), skillsDirs: () => [], resolveCommand: () => 'claude', refuseReal: () => {},
+  });
+  return { chat, dir, seeded, lines: () => agentsUsage.readLines(path.join(dir, 'usage.jsonl')) };
+}
+
+test('#280 Supervisor chat: a resumed turn seeds the CLI session\'s last recorded total (an app restart forgets it), and records the new one', async (t) => {
+  const { chat, seeded, lines } = fakeChat(t, [{ cliTotalCostUsd: 0.4 }, { cliTotalCostUsd: 0.7 }]);
+  await chat.ask({ question: 'turn 1', mock: false });
+  assert.deepEqual(seeded, [], 'a fresh session has no total to seed');
+  await chat.ask({ question: 'turn 2', mock: false });
+  assert.deepEqual(seeded, [['sess-1', 0.4]]);
+  assert.deepEqual(lines().map((u) => u.cumulativeUsd), [0.4, 0.7]);
+});
+
+test('#280 Supervisor chat: a turn whose CLI gave no session id is followed by a "first" session, not a "cleared" one', async (t) => {
+  const { chat, lines } = fakeChat(t, [{ providerSessionId: null }]);
+  await chat.ask({ question: 'turn 1', mock: false });
+  await chat.ask({ question: 'turn 2', mock: false });
+  assert.deepEqual(lines().map((u) => u.startReason), ['first', 'first']);
+});
+
 test('#280 agentsAnalytics: lines from before #280 with one session id are one session, continued by a resumed line', () => {
   const out = agentsUsage.agentsAnalytics({
     oracle: [
@@ -142,6 +183,31 @@ test('#280 Oracle: a wake-up\'s turn is recorded with wake true, a question\'s w
   const lines = agentsUsage.readLines(path.join(dir, 'usage.jsonl'));
   assert.deepEqual(lines.map((u) => [u.wake, u.session]), [[false, 'fresh'], [true, 'resumed']]);
   assert.equal(lines[0].contextTokens, 10);
+});
+
+test('#280 Oracle: "New session" after a compaction whose turn failed starts the next session by "reset"', async (t) => {
+  const dir = tmpDir(t);
+  const providers = require('../src/engine/providers');
+  const real = providers.runTurn;
+  let n = 0;
+  providers.runTurn = async (opts) => {
+    n += 1;
+    if (n === 2) throw new Error('the CLI failed (test)');
+    // the first answer leaves a context over the default 150,000 tokens: the next turn compacts
+    return { text: 'Fake answer: no model was called.', usage: n === 1 ? tok(160000, 5, 0, 0) : tok(10, 5, 0, 0), costUsd: 0.1, providerSessionId: opts.providerSessionId || `sess-${n}`, exitCode: 0 };
+  };
+  t.after(() => { providers.runTurn = real; });
+  const o = oracle.createOracle({
+    dir: () => dir, tools: () => [], bridge: { start: async () => ({ url: 'http://127.0.0.1:1', token: 'test' }) },
+    mcpCommand: () => ({ command: 'node', args: [], env: {} }), skillsDirs: () => [], resolveCommand: () => 'claude', refuseReal: () => {},
+    agent: () => ({ model: M, effort: 'high' }), settings: () => ({}),
+  });
+  t.after(() => o.release());
+  await o.ask({ question: 'turn 1', mock: false });
+  await o.ask({ question: 'turn 2: the CLI fails after the compaction', mock: false }).catch(() => {});
+  await o.reset();
+  await o.ask({ question: 'turn 3', mock: false });
+  assert.deepEqual(agentsUsage.readLines(path.join(dir, 'usage.jsonl')).map((u) => u.startReason), ['first', 'reset']);
 });
 
 test('#280 writeDemoAgents: `today: false` leaves the Oracle without a turn today (UTC); by default it has one, before now', (t) => {

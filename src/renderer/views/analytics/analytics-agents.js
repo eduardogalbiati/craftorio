@@ -30,7 +30,7 @@
   };
   const gx = {
     unit: (() => { try { return localStorage.getItem(LS) === 'tokens' ? 'tokens' : 'usd'; } catch { return 'usd'; } })(),
-    range: null, data: null, error: null, loading: false,
+    range: null, data: null, error: null, loading: false, reads: 0,
     filter: 'all', // the agent whose sessions the table lists
     shown: PAGE,
   };
@@ -42,8 +42,13 @@
   // `range`: the screen's { from, to }; without it (Retry) the last one is read again
   async function load(range) {
     if (range) gx.range = { from: range.from, to: range.to };
+    // the latest read wins: a slower earlier answer (another range) is dropped
+    const read = ++gx.reads;
     gx.loading = true;
-    try { gx.data = await api.getAgentsAnalytics({ ...gx.range }); gx.error = null; } catch (e) { gx.error = errMsg(e); }
+    let out;
+    try { out = { data: await api.getAgentsAnalytics({ ...gx.range }), error: null }; } catch (e) { out = { error: errMsg(e) }; }
+    if (read !== gx.reads) return;
+    Object.assign(gx, out);
     gx.loading = false;
     gx.shown = PAGE;
   }

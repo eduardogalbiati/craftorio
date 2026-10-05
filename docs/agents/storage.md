@@ -28,7 +28,8 @@ Read this before touching run listings, the Backlog queue, pending gates, notifi
   `tokens { input, output, cache_read, cache_write }`, `costUsd` (the turn's own cost), `sessionId` (the
   CLI session), `session` (`fresh` or `resumed`), `startReason` on a fresh session (`first`, `compaction`,
   `model-change`, `idle`, `reset`, `cleared`, `one-shot`) and `contextTokens` (the context after the turn,
-  when known); the Oracle's lines also hold `cumulativeUsd` (#244) and `wake` (a wake-up's turn). Lines from
+  when known); the Oracle's and the Supervisor chat's lines also hold `cumulativeUsd` (the CLI session's total,
+  #244) and the Oracle's `wake` (a wake-up's turn). Lines from
   before #280 lack `agent`, `session` and `startReason` (the Product Owner's, `sessionId` too) and are
   read as they are; the Supervisor chat's turns from before its file are read from the answers' `costUsd`
   in `supervisor/chat.jsonl` (cost only, until Clear removes them). Readers: Analytics' Agents tab
