@@ -44,7 +44,12 @@ Then('Home is on its {string} tab', async ({ e2e }, name) => {
 });
 
 When('I open the {string} tab of Home', async ({ e2e }, name) => {
-  await homeTab(e2e.window, name).click();
+  const page = e2e.window;
+  // Home's tabs exist only on Home: from another screen (a scenario that just came from Agents), open Home first
+  if (!(await homeTab(page, name).isVisible())) {
+    await page.getByRole('navigation').getByRole('button', { name: 'Home', exact: true }).click();
+  }
+  await homeTab(page, name).click();
 });
 
 Then('the flow strip shows its stages in the order of the flow, each with a count', async ({ e2e }) => {
