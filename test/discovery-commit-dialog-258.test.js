@@ -16,7 +16,7 @@ const SPLIT = {
 };
 
 // The board with one Ready card at 90%, the proposal above and a commit that records its calls.
-async function boardWithCommit({ commit } = {}) {
+async function boardWithCommit({ commit, api = {} } = {}) {
   const ready = card({ title: 'Export runs as CSV', column: 'ready', clarity: 90 });
   const calls = [];
   const { store, methods } = boardApi({ cards: [ready] });
@@ -35,6 +35,7 @@ async function boardWithCommit({ commit } = {}) {
         committed = [{ ...done, delivery: { stage: 'in_delivery', counts: { todo: issues.length, running: 0, local: 0, done: 0 }, issues: issues.map((i) => ({ number: i.number, column: 'todo', title: i.title, url: i.url, release: null })), release: null } }];
         return { issues, card: done, simulated: true };
       },
+      ...api,
     },
   });
   return { page, ready, calls, store };
@@ -101,6 +102,42 @@ test('"merge with issue 2" joins two issues; an issue without a title is refused
   assert.deepEqual(calls, []);
   assert.match(page.text(dialog.querySelector('#dsc-commit-error')), /Issue 1 needs a title/);
   assert.ok(page.visible(dialog));
+});
+
+// Each roadmap proposal reduced to what the owner sees: one stage per filed issue, in order.
+const stagesOf = (proposals) => JSON.parse(JSON.stringify(proposals)).map(([projectId, { stages }]) => [projectId, stages.map((s) => [s.name, s.items.map((i) => [i.workflow, i.issues, i.reason])])]);
+
+test('"Plan them in the roadmap, in this order" plans one stage per filed issue, in the dialog\'s order', async () => {
+  const proposals = [];
+  const { page, ready } = await boardWithCommit({ api: { proposeRoadmap: async (...args) => { proposals.push(args); return {}; } } });
+  const dialog = await openDialog(page, ready.id);
+  const roadmap = dialog.querySelector(tid('discovery-commit-roadmap'));
+  assert.equal(roadmap.checked, false, 'off by default');
+  roadmap.checked = true;
+  await submit(page, dialog);
+  assert.deepEqual(stagesOf(proposals), [[P, [
+    ['Export runs as CSV, part 1', [['software-development.yaml', [101], `From discovery card ${ready.id}.`]]],
+    ['Export runs as CSV, part 2', [['software-development.yaml', [102], `From discovery card ${ready.id}.`]]],
+  ]]]);
+  assert.equal(page.visible(dialog), false);
+});
+
+test('the roadmap is not planned when its box is unchecked, nor when the backlog sync failed', async () => {
+  const proposals = [];
+  const proposeRoadmap = async (...args) => { proposals.push(args); return {}; };
+  const unchecked = await boardWithCommit({ api: { proposeRoadmap } });
+  await submit(unchecked.page, await openDialog(unchecked.page, unchecked.ready.id));
+  assert.equal(proposals.length, 0);
+
+  const unsynced = await boardWithCommit({
+    api: { proposeRoadmap },
+    commit: (split) => ({ issues: split.issues.map((i, n) => ({ ...i, number: 101 + n })), card: {}, syncError: 'gh: not logged in' }),
+  });
+  const dialog = await openDialog(unsynced.page, unsynced.ready.id);
+  dialog.querySelector(tid('discovery-commit-roadmap')).checked = true;
+  await submit(unsynced.page, dialog);
+  assert.equal(proposals.length, 0);
+  assert.equal(unsynced.page.visible(dialog), false, 'the card is committed all the same');
 });
 
 test('a refused commit stays in the dialog with the reason; Cancel files nothing', async () => {

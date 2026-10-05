@@ -148,6 +148,32 @@ test('commitCard: a filing that fails after the first issue commits the card wit
   assert.deepEqual(card.links.issues, [101]);
 });
 
+test('commitCard: when the second of three filings fails, the third is not tried and the card\'s thread names the issues left', async (t) => {
+  const ws = tmp(t);
+  const id = readyCard(ws.discovery, { title: 'Fails at the second' });
+  const titles = [];
+  const exec = async (_cli, args) => {
+    if (args[0] === 'label') return '[]';
+    titles.push(args[args.indexOf('--title') + 1]);
+    if (titles.length === 2) throw new Error('gh: rate limited');
+    return `${REPO}/issues/201\n`;
+  };
+  const split = { issues: [{ title: 'One', tasks: ['A'] }, { title: 'Two', tasks: ['B'] }, { title: 'Three', tasks: ['C'] }] };
+  const res = await commits.commitCard({ dir: ws.discovery, projectId: P, cardId: id, split, platform: 'github', repo: REPO, exec, by: 'tester' });
+  assert.deepEqual(titles, ['One', 'Two'], 'nothing is filed after a failure');
+  assert.deepEqual(res.failed.map((f) => f.title), ['Two', 'Three']);
+  assert.match(res.failed[0].error, /rate limited/);
+  assert.match(res.failed[1].error, /an issue before it failed/);
+  const card = discovery.readCard(ws.discovery, P, id);
+  assert.equal(card.column, 'committed');
+  assert.deepEqual(card.links.issues, [201]);
+  const note = discovery.readConversation(ws.discovery, P, id).at(-1);
+  assert.equal(note.kind, 'commit');
+  assert.deepEqual(note.issues, [201]);
+  assert.match(note.text, /#201 One/);
+  assert.match(note.text, /Not filed: Two; Three\./);
+});
+
 test('simulatedExec: an issue create joins the synced backlog with the next free number, and nothing else is run', async (t) => {
   const ws = tmp(t);
   fs.mkdirSync(ws.backlog, { recursive: true });
