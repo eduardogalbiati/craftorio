@@ -17,7 +17,7 @@
 //   display.steps) and `agentNames` (agent key → name: display.agents, the Agents menu's own names
 //   from `agent_names` winning over them).
 // - The bundled workflows (workflows/*.yaml) name their key steps: red_check "Red check (tests fail
-//   first)", the E2E scenarios step of ai-development-local-hero (`e2e`) "E2E scenarios", verify_change
+//   first)", the Run suite (E2E) step of ai-development-local-hero (`e2e`) "Run suite (E2E)", verify_change
 //   "Final verification"; every `display` they carry is a string of at most 40 characters.
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -167,14 +167,14 @@ test('#245 readRun: a run recorded with workflow.started display gives stepNames
 
 const stepOf = (file, id) => loadWorkflow(path.join(WORKFLOWS, file)).steps.find((s) => s.id === id);
 
-test('#245 bundled workflows: every red_check step is displayed "Red Check (TDD)"', () => {
+test('#245 bundled workflows: every red_check step is displayed "Red check (TDD)"', () => {
   const found = bundled().filter((f) => stepOf(f, 'red_check'));
   assert.ok(found.length >= 1, 'at least one bundled workflow has a red_check step');
-  for (const f of found) assert.equal(stepOf(f, 'red_check').display, 'Red Check (TDD)', f);
+  for (const f of found) assert.equal(stepOf(f, 'red_check').display, 'Red check (TDD)', f);
 });
 
-test('#245 bundled workflows: ai-development-local-hero\'s E2E scenarios step (e2e) is displayed "E2E scenarios"', () => {
-  assert.equal(stepOf('ai-development-local-hero.yaml', 'e2e')?.display, 'E2E scenarios');
+test('#245 bundled workflows: ai-development-local-hero\'s Run suite (E2E) step (e2e) is displayed "Run suite (E2E)"', () => {
+  assert.equal(stepOf('ai-development-local-hero.yaml', 'e2e')?.display, 'Run suite (E2E)');
 });
 
 test('#245 bundled workflows: every verify_change step is displayed "Final verification"', () => {

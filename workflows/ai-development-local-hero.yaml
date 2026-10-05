@@ -525,6 +525,7 @@ steps:
   # written before any code on the run's branch. Pointing at the right tests is what makes tests-first
   # work (TDAD, arXiv 2603.17973: TDD instructions without the affected tests made regressions worse).
   - id: acceptance_tests
+    display: Write tests (E2E)
     agent: test_writer
     # #223: with E2E on, the issue's BDD scenarios are written here too, first
     skills:
@@ -684,7 +685,7 @@ steps:
   # tests related to them (the code → tests graph) go to develop; a file that cannot run goes back to
   # the test writer once. A red check that cannot run at all (no test command) goes on to develop.
   - id: red_check
-    display: Red Check (TDD)
+    display: Red check (TDD)
     type: suite
     command: "{{ inputs.test_command }}"
     # #247: after the owner's request changed the criteria, only the test files changed in that visit
@@ -701,6 +702,7 @@ steps:
         set: { criteria_triage: "no" }
 
   - id: develop
+    display: Developer
     agent: developer
     # {{ test_map }}: the checkout's code → tests map (#219), for the tests of the files it changes
     test_map: true
@@ -963,6 +965,7 @@ steps:
   # evidence/developer/round-<n>/ (one round per visit). Never blocks: an empty list, a simulated run
   # or a failed capture is in its output's message, which developer_check and the ui_reviewer read.
   - id: developer_screenshots
+    display: Screenshots
     type: screenshots
     from: develop
     folder: developer
@@ -1268,6 +1271,7 @@ steps:
   # to the developer and tells the test writer when it is fixed. Its parts follow unit_tests /
   # e2e_tests (#203): it only runs when one of them makes it write something.
   - id: test
+    display: Write tests (Unit)
     agent: test_writer
     # the run's checkout of the base with its dependencies, for the pre-existing-failure check (#198)
     base_worktree: true
@@ -1409,6 +1413,7 @@ steps:
   # count. A suite that cannot run (no command) goes to test_failed. No timeout: it comes from the
   # project's recent suite durations (#210).
   - id: suite
+    display: Run suite (Unit)
     type: suite
     command: "{{ inputs.test_command }}"
     # #225: node's coverage (an npm script's <name>:coverage, or a plain node --test) as a Tests artifact
@@ -1447,7 +1452,7 @@ steps:
   # page's accessibility snapshot under .test-output/e2e/artifacts/. The visual baselines of the
   # screens the issue changes are checked in the same run. Green: no LLM at all. Red: the healer.
   - id: e2e
-    display: E2E scenarios
+    display: Run suite (E2E)
     type: suite
     command: '{{ inputs.e2e_command or "npm run test:e2e" }} -- --grep "{% for n in inputs | issue_numbers %}@issue-{{ n }}|{% endfor %}@smoke"'
     timeout: 30m
@@ -1466,6 +1471,7 @@ steps:
   # snapshot, never screenshots by default. A stale locator or a missing wait: fixed, the scenarios
   # run again. A product bug: to the developer with the evidence, then the scenarios run again.
   - id: heal
+    display: E2E Heal
     agent: healer
     prompt: |
       Task: {{ inputs.task }}
@@ -1578,6 +1584,7 @@ steps:
 
   # Builder: application build + dependency vulnerabilities.
   - id: build
+    display: Builder
     agent: builder
     prompt: |
       On branch `{{ steps.develop.output.branch }}`:
@@ -1851,6 +1858,7 @@ steps:
   # leaves as it was) and the developer resolves it on the run's branch; then only what the
   # resolution changed is reviewed, tested and verified (the build runs) before the next attempt.
   - id: resolve_merge
+    display: Merge & Resolve
     agent: developer
     # a rebase replays the test writer's commits: resolving their conflicts is part of the job
     edits_tests: true

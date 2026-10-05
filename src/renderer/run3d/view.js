@@ -188,13 +188,31 @@ export function fitText(g, text, max) {
   while (g.measureText(out).width > max && out.length > 4) out = out.slice(0, -2);
   return out === String(text) ? out : `${out.trimEnd()}…`;
 }
+/** Up to `maxLines` lines of `text` no wider than `max`, greedy by words; the last line is cut with an ellipsis. */
+export function wrapText(g, text, max, maxLines = 2) {
+  const words = String(text).split(/\s+/).filter(Boolean);
+  const lines = [];
+  let cur = '';
+  for (const word of words) {
+    const next = cur ? `${cur} ${word}` : word;
+    if (!cur || g.measureText(next).width <= max || lines.length === maxLines - 1) cur = next;
+    else { lines.push(cur); cur = word; }
+  }
+  if (cur) lines.push(cur);
+  return lines.map((l, i) => (i === lines.length - 1 ? fitText(g, l, max) : l));
+}
 export function textTexture(lines, w, h, themed = false) {
   return canvasTexture('text:' + JSON.stringify(lines) + w + h, w, h, (g) => {
     g.textAlign = 'center'; g.textBaseline = 'middle';
     for (const l of lines) {
       g.font = `${l.weight || 800} ${l.size}px Arial, Helvetica, sans-serif`;
       g.fillStyle = l.color;
-      g.fillText(fitText(g, l.text, w - 30), w / 2, l.y);
+      if (!l.wrap || g.measureText(String(l.text)).width <= w - 30) { g.fillText(fitText(g, l.text, w - 30), w / 2, l.y); continue; }
+      // a long name wraps onto two smaller lines around its baseline instead of being cut
+      const size = Math.round(l.size * 0.8);
+      g.font = `${l.weight || 800} ${size}px Arial, Helvetica, sans-serif`;
+      const rows = wrapText(g, l.text, w - 30, 2);
+      rows.forEach((row, i) => g.fillText(row, w / 2, l.y + (i - (rows.length - 1) / 2) * size * 1.1));
     }
   }, themed);
 }
