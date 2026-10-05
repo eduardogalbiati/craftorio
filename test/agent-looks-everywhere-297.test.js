@@ -89,7 +89,7 @@ function robotPaintField() {
 }
 
 /** A 3D view begun on a run of WF with one agent session, and the forWorkflow calls it made. */
-function view3d({ looks = {}, agent = 'test_writer' } = {}) {
+function view3d({ looks = {}, agent = 'test_writer', run = { id: 'r1', workflow: WF.name, file: WF.file }, sessionOpen = true } = {}) {
   const Robots = loadRobots();
   const AgentColors = loadAgentColors();
   const calls = [];
@@ -98,12 +98,14 @@ function view3d({ looks = {}, agent = 'test_writer' } = {}) {
     forWorkflow: (workflow, a) => { calls.push([String(workflow), String(a)]); return looks[`${workflow}/${a}`] || null; },
   };
   const mod = loadView({ Robots, AgentColors, AgentLooks, RunChatModel: { providerType: (p) => ({ claude: 'claude-code', codex: 'codex-cli', grok: 'grok-cli' }[p] || p) } });
-  const model = {
-    run: { id: 'r1', workflow: WF.name, file: WF.file },
-    agents: { [agent]: { name: agent, label: agent.replace(/_/g, ' '), provider: 'claude', model: 'claude-opus-5-5' } },
-  };
-  mod.begin({ player: { model, subscribe: () => () => {}, notify() {} }, workflows: [WF] });
-  return { mod, calls, Robots, AgentColors };
+  const session = { name: agent, label: agent.replace(/_/g, ' '), provider: 'claude', model: 'claude-opus-5-5' };
+  const model = { run, agents: sessionOpen ? { [agent]: session } : {} };
+  const player = { model, subscribe: () => () => {}, notify() {} };
+  mod.begin({ player, workflows: [WF] });
+  // the agent's session opens (its provider and model become known)
+  const openSession = () => { model.agents[agent] = session; };
+  const reopen = () => { mod.end(); mod.begin({ player, workflows: [WF] }); };
+  return { mod, calls, Robots, AgentColors, looks, openSession, reopen };
 }
 
 /** The robot the scene would draw for `def` (Robots.look with the scene's paint field). */
@@ -148,6 +150,40 @@ test('3D view: without a saved look, a workflow\'s own `color:` paints the robot
   const field = robotPaintField();
   const { mod } = view3d({ agent: 'my_bot' });
   assert.equal(String(mod.agentDef('my_bot')[field]).toUpperCase(), CUSTOM);
+});
+
+test('3D view: a run known only by its workflow\'s name (no file) still draws the look saved under that name', () => {
+  const field = robotPaintField();
+  const savedVariant = loadRobots().fromAppearance(SAVED, 'Saved');
+  const { mod, Robots } = view3d({ looks: { 'My Flow/test_writer': savedVariant }, run: { id: 'r1', workflow: WF.name } });
+  const def = mod.agentDef('test_writer');
+  assert.equal(String(drawn(Robots, def, field).body).toUpperCase(), '#112233');
+  assert.equal(String(drawn(Robots, def, field).logo), 'gear');
+});
+
+test('3D view: with a saved look, the role colour still marks the agent\'s desk and chips (def.color)', () => {
+  const savedVariant = loadRobots().fromAppearance(SAVED, 'Saved');
+  const { mod } = view3d({ looks: { 'my-flow/test_writer': savedVariant, 'My Flow/test_writer': savedVariant } });
+  assert.equal(String(mod.agentDef('test_writer').color).toUpperCase(), ORANGE);
+});
+
+test('3D view: a robot drawn before its session opened gets the Claude robot once its model is known', () => {
+  const { mod, Robots, openSession } = view3d({ sessionOpen: false });
+  mod.agentDef('test_writer'); // seen before its session: provider and model unknown
+  openSession();
+  const def = mod.agentDef('test_writer');
+  assert.equal(typeof def.variant === 'string' ? def.variant : JSON.stringify(def.variant), Robots.variantFor('claude-code', 'claude-opus-5-5'));
+});
+
+test('3D view: a look saved while the overlay is open shows on the next opening', () => {
+  const field = robotPaintField();
+  const { mod, Robots, looks, reopen } = view3d();
+  assert.equal(String(drawn(Robots, mod.agentDef('test_writer'), field).body).toUpperCase(), ORANGE, 'no look saved yet');
+  const savedVariant = loadRobots().fromAppearance(SAVED, 'Saved');
+  looks['my-flow/test_writer'] = savedVariant;
+  looks['My Flow/test_writer'] = savedVariant;
+  reopen();
+  assert.equal(String(drawn(Robots, mod.agentDef('test_writer'), field).body).toUpperCase(), '#112233');
 });
 
 test('3D view: the HUD draws its robots from the same agentDef as the scene', () => {
