@@ -7,6 +7,8 @@ build/
 # derived docs (npm run docs; rebuilt by prepare/prestart/pretest/prebuild): never committed, never conflicts
 docs/agents/code-map.md
 docs/agents/test-map.md
+# the run's 3D view, one bundle (scripts/build-3d.js; rebuilt by prepare/prestart/prebuild, packed into the app)
+generated/
 # npm test in agent mode: the human-readable report and the JSON (scripts/test.js, #219)
 .test-output/
 # the E2E suite (#222): the tests bddgen generates from features/, Playwright's default output folders

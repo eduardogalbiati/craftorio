@@ -2,8 +2,9 @@
 // one animated state per phase of a turn (thinking, writing, done...). Ported from the owner's
 // avatar generators. Animations are CSS classes prefixed with `rb-` (see chat.css), so the SVGs can
 // be inlined in the page without clashing with the app's own class names.
-// Exposes window.Robots = { svg(variant, state, opts), variantFor(provider, model), plaqueFor(model),
-// fromAppearance(appearance, label), define(name, appearance), emblem(name), VARIANTS, STATES, ... }.
+// Exposes window.Robots = { svg(variant, state, opts), look(variant, state, opts), variantFor(provider, model),
+// plaqueFor(model), fromAppearance(appearance, label), define(name, appearance), emblem(name),
+// lighten / darken(hex, t), VARIANTS, STATES, ... }.
 (() => {
   const C = Math.cos(Math.PI / 6), S = 0.5;
   const f = (n) => +(+n).toFixed(2);
@@ -346,10 +347,20 @@ ${flip(v.overlay || '')}
   // for the visor glow (unless the state has its own, e.g. error red); the emblem and the plaque stay
   // the provider's.
   function svg(variant, state = 'idle', opts = {}) {
-    const st = STATES[state] || STATES.idle;
-    const v = { ...(typeof variant === 'object' && variant ? variant : VARIANTS[variant] || VARIANTS.vanilla), ...st };
+    const v = look(variant, state, opts);
     v.mirror = !!opts.mirror;
     if (opts.plaque !== undefined) v.plaque = opts.plaque;
+    if (opts.bubble === false) delete v.overlay;
+    else if (v.overlay) v.overlay = v.overlay.replace('__UNFLIP__', v.mirror ? ' scale(-1,1)' : '');
+    return render(v, `rb${++uid}`);
+  }
+
+  // The look svg() draws, before it is drawn: the variant in the state, painted in `color` and with
+  // `accent` as above. The run's 3D view (run3d/) builds its robots from it: the same boxes and colours,
+  // the state's `face`, `overlay` (the balloon, with its __UNFLIP__ placeholder) and antenna.
+  function look(variant, state = 'idle', opts = {}) {
+    const st = STATES[state] || STATES.idle;
+    const v = { ...(typeof variant === 'object' && variant ? variant : VARIANTS[variant] || VARIANTS.vanilla), ...st };
     if (hex(opts.color)) {
       const c = opts.color;
       // an emblem on a light body would vanish in white (as in fromAppearance)
@@ -358,9 +369,7 @@ ${flip(v.overlay || '')}
       if (!st.accent) v.accent = lighten(c, .45);
     }
     if (opts.accent) v.accent = opts.accent; // the glow in the agent's colour (#224, agent-colors.js)
-    if (opts.bubble === false) delete v.overlay;
-    else if (v.overlay) v.overlay = v.overlay.replace('__UNFLIP__', v.mirror ? ' scale(-1,1)' : '');
-    return render(v, `rb${++uid}`);
+    return v;
   }
 
   function variantFor(provider, model = '') {
@@ -497,5 +506,5 @@ ${flip(v.overlay || '')}
     return scene(s, id);
   }
 
-  window.Robots = { svg, variantFor, plaqueFor, fromAppearance, define, emblem, desk, gate, VARIANTS, STATES, EYE_STYLES, EMBLEMS };
+  window.Robots = { svg, look, lighten, darken, variantFor, plaqueFor, fromAppearance, define, emblem, desk, gate, VARIANTS, STATES, EYE_STYLES, EMBLEMS };
 })();

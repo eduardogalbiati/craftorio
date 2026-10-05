@@ -75,6 +75,13 @@
 //                      the drawer plans with that workflow (#235, e.g. ai-development-local-hero.yaml)
 //   --click <css>      clicks this element once the view is open (repeatable, in order)
 //   --context <css>    then right-clicks this element (repeatable): e.g. an artifact's copy menu
+//   --press <css>[@f]  then presses the primary button on this element (repeatable), at the part f of
+//                      its width (0..1, default 0.5): a pointerdown / pointerup pair, for what listens
+//                      to the pointer instead of a click, e.g. the timeline of a run's 3D view:
+//                      --view run-chat --click "#rc-3d" --press "[data-testid=run3d-strip]@0.4"
+//   --key <key>        then presses this key on the page (repeatable; a KeyboardEvent key such as
+//                      ArrowLeft, or Space; "Shift+ArrowLeft" holds Shift), e.g. --key Space plays or
+//                      pauses the 3D view's replay
 //   --paste <css>      then pastes a demo screenshot into this prompt field (repeatable, #130): the
 //                      chip row under it, saved in the scratch workspace like a real Ctrl+V; e.g. the
 //                      Start drawer on issue-tracker: --view dashboard --workflow issue-tracker.yaml
@@ -149,7 +156,7 @@ const ROADMAP_STATES = ['states'];
 const PO_STATES = ['working', 'writing', 'stopped', 'failed'];
 
 function parseArgs(argv) {
-  const a = { view: 'dashboard', tab: null, mode: null, run: 'mock', workflow: 'software-development.yaml', clicks: [], contexts: [], pastes: [], inputs: {}, stopAt: null, keepAwake: null, theme: null, size: [1400, 900], ref: null, out: null, name: null, side: null, caption: null, wait: null, timeout: 90000, demoShots: true };
+  const a = { view: 'dashboard', tab: null, mode: null, run: 'mock', workflow: 'software-development.yaml', clicks: [], contexts: [], presses: [], keys: [], pastes: [], inputs: {}, stopAt: null, keepAwake: null, theme: null, size: [1400, 900], ref: null, out: null, name: null, side: null, caption: null, wait: null, timeout: 90000, demoShots: true };
   for (let i = 0; i < argv.length; i++) {
     const k = argv[i];
     const next = () => { const v = argv[++i]; if (v === undefined) throw new Error(`${k} needs a value`); return v; };
@@ -163,6 +170,15 @@ function parseArgs(argv) {
     else if (k === '--pipeline') a.pipeline = next();
     else if (k === '--click') a.clicks.push(next());
     else if (k === '--context') a.contexts.push(next());
+    else if (k === '--press') {
+      const m = /^(.*?)(?:@([\d.]+))?$/s.exec(next()), at = m[2] === undefined ? 0.5 : Number(m[2]);
+      if (!m[1] || !(at >= 0 && at <= 1)) throw new Error('--press takes <css> or <css>@<0..1>');
+      a.presses.push({ sel: m[1], at });
+    } else if (k === '--key') {
+      const parts = next().split('+'), key = parts.pop();
+      if (!key || parts.some((p) => p !== 'Shift')) throw new Error('--key takes a key name, or Shift+<key>');
+      a.keys.push({ key: key === 'Space' ? ' ' : key, shift: parts.length > 0 });
+    }
     else if (k === '--paste') a.pastes.push({ sel: next(), big: false });
     else if (k === '--paste-big') a.pastes.push({ sel: next(), big: true });
     else if (k === '--stop-at') a.stopAt = next();
@@ -1712,6 +1728,22 @@ function main() {
       el.scrollIntoView({ block: 'center' });
       const r = el.getBoundingClientRect();
       el.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 }));`);
+    // a primary-button press at a point of the element's width (pointer events, as a slider listens to)
+    const press = ({ sel, at }) => js(`
+      const sel = ${JSON.stringify(sel)};
+      for (let i = 0; i < 100 && !document.querySelector(sel); i++) await new Promise((r) => setTimeout(r, 100));
+      const el = document.querySelector(sel);
+      if (!el) throw new Error('nothing matches ' + sel);
+      const r = el.getBoundingClientRect();
+      const init = { bubbles: true, cancelable: true, button: 0, buttons: 1, pointerId: 1, pointerType: 'mouse', isPrimary: true, clientX: r.left + r.width * ${at}, clientY: r.top + r.height / 2 };
+      el.dispatchEvent(new PointerEvent('pointerdown', init));
+      el.dispatchEvent(new PointerEvent('pointerup', { ...init, buttons: 0 }));`);
+    // a key pressed on what has the focus (the page itself when nothing has)
+    const key = ({ key, shift }) => js(`
+      const init = { key: ${JSON.stringify(key)}, code: ${JSON.stringify(key === ' ' ? 'Space' : key)}, shiftKey: ${shift}, bubbles: true, cancelable: true };
+      const target = document.activeElement || document.body;
+      target.dispatchEvent(new KeyboardEvent('keydown', init));
+      target.dispatchEvent(new KeyboardEvent('keyup', init));`);
     // a prompt field gets a demo screenshot through a real paste event (#130): the chip, the save
     // through clipboard:saveImage; `big`: 12 MB, refused before anything is saved
     const paste = ({ sel, big }) => js(`
@@ -1842,6 +1874,8 @@ function main() {
     if (v === 'artifacts') await js(`const c = document.querySelector('#art-show-sim'); if (c && !c.checked) c.click();`);
     for (const sel of args.clicks) { await click(sel); await pause(500); }
     for (const sel of args.contexts) { await context(sel); await pause(500); }
+    for (const p of args.presses) { await press(p); await pause(500); }
+    for (const k of args.keys) { await key(k); await pause(500); }
     for (const p of args.pastes) { await paste(p); await pause(500); }
     if (v !== 'run') await pause(args.wait);
 

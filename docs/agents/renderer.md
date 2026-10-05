@@ -191,6 +191,39 @@ Read this before changing anything in `src/renderer/`.
   `--view run --input mode=validated --stop-at developer_check --click "#btn-run-diff"`, then
   `--click ".dv [data-dv-mode=unified]"`, `--click ".dv [data-dv-expand=all]"` or
   `--click ".dv [data-dv-file='docs/images/backoff.svg']"`.
+- **The run's 3D view** (`run3d.js`, `run3d.css`, model `run3d-model.js`) is a full-screen overlay
+  opened by the 3D button beside Chat (Run screen `#run-mode-3d`, run chat `#rc-3d`): the run's
+  recorded events, then its live `run:event`s, into a pure `Run3DModel` (Node-tested); "Open the
+  gate" closes it and calls `showRun` (it never answers a gate). The scene is the one exception to
+  "no bundler": React + React Three Fiber + three in `src/renderer/run3d/*.jsx`, bundled by
+  `scripts/build-3d.js` into `generated/run3d-scene.js` (gitignored, rebuilt by prepare / prestart /
+  prebuild, packed into the app) and loaded with a `<script src>` on the first click: run
+  `npm run build:3d` after changing a `.jsx`.
+  - **Themes** (`run3d-theme.js`): dark by default, the app's own tokens (a test compares its
+    palette with `style.css` `:root`), or the light palette of the approved proof of concept
+    (`poc/run-3d.html`). The HUD's colours are `--r3d-*` variables under `.r3d` /
+    `.r3d[data-theme="light"]` (no literal colour in a rule: a test checks it); the scene's are the
+    theme's palette (`useTheme()` in a component that paints with it; a texture drawn with theme
+    colours passes `themed`, so it is freed when the theme is left). A state colour comes from
+    `statusColor()` and always with its label. The top bar's sun / moon button
+    (`[data-testid=run3d-theme]`) switches; the choice is in localStorage (`multiagent.run3d.theme`).
+  - **Replay** (`run3d-replay.js`, a pure `Run3DPlayer`): it keeps every event, a `head` model (the
+    run now) and a `past` model (the replayed moment: the state kept at the last step boundary, then
+    the events up to it), and the views draw `view.model`, whichever is shown, with `nowMs()` /
+    `robotStateOf()` for the time-dependent parts. Controls in the pipeline card: play / pause
+    (`[data-testid=run3d-play]`, Space), previous / next step (`[data-r3d-step]`, Left / Right; with
+    Shift 1% of the timeline), speeds 1× to 64×, the strip (`[data-testid=run3d-strip]`: click or
+    drag), and `[data-testid=run3d-live]` back to the live run (or to a finished run's end). A wait
+    for the owner over a minute is cut to 45 s in a replay only (marked on the strip); the head of a
+    live run is always in real time.
+  - Capture it with `npm run screenshot -- --view run --input mode=validated --stop-at developer_check
+    --click "#run-mode-3d" --click ".r3d-zoom button[aria-label='Follow the run']"` (a finished run:
+    `--view run-chat --click "#rc-3d"`). Then `--click "[data-testid=run3d-theme]"` for the light
+    theme, `--click "[data-r3d-step='-1']"` (repeatable) for a replay paused at an earlier step (on
+    the live run: with "Live" offered), `--press "[data-testid=run3d-strip]@0.4"` to seek with the
+    pointer, `--key Space` to play, `--size 1150x780` for the narrow layout. The simulated run lasts
+    a few seconds: for hours on the clock and a cut wait, give `--run <folder>` a run folder whose
+    `events.jsonl` has them.
 - Test changes with a temporary Electron script (see `scripts/smoke.js`:
   `npx electron scripts/smoke.js <out.png>` runs a mock run and takes a screenshot) and look at
   the screenshots. Never open real CLI terminals or start real runs in those checks. In a fresh

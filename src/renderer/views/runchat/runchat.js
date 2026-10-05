@@ -355,6 +355,7 @@
             <button type="button" class="active" aria-pressed="true">Chat</button>
             <button id="rc-details" type="button" title="Sessions, prompts and events of this run">Details</button>
           </div>
+          <button id="rc-3d" class="btn ghost sm" type="button" data-run3d="chat" data-testid="run-3d" title="Show this run in 3D">3D</button>
           <div id="rc-title" class="rc-title"></div>
           <span id="rc-status" class="pill"></span>
           <div class="spacer"></div>
