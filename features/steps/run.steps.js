@@ -1,5 +1,5 @@
 // Steps of features/run.feature (#222): the Start panel, a simulated run of the demo project, its
-// gate card. Locators are roles and data-testid only (skills/ui-conventions).
+// gate card; the "Developer effort" field next to "Developer model" (#286). Locators are roles and data-testid only (skills/ui-conventions).
 
 const { expect } = require('@playwright/test');
 const { When, Then } = require('./fixtures');
@@ -155,4 +155,42 @@ When('I ask the Oracle the suggested question {string}', async ({ e2e }, questio
 // the simulated Oracle (MULTIAGENT_SIMULATION_ONLY) answers without a model: "Simulated Oracle: ..."
 Then('the Oracle shows a simulated answer', async ({ e2e }) => {
   await expect(oracleDrawer(e2e.window)).toContainText('Simulated Oracle', { timeout: 30000 });
+});
+
+// #286: the developer's effort (developer_effort: default | low | medium | high | xhigh), a row of
+// pills next to "Developer model" wherever the workflow's inputs are drawn (WorkflowInputs.fieldHtml):
+// the Start panel, the Assign dialog, a roadmap item's Edit. Found by role (a pill row is a
+// radiogroup named by its label); no new data-testid.
+const visibleGroup = (page, name) => page.getByRole('radiogroup', { name, exact: true }).filter({ visible: true }).first();
+
+When('I choose the workflow {string} in the Start panel', async ({ e2e }, name) => {
+  const page = e2e.window;
+  if (!(await page.getByTestId('start-workflow').isVisible())) await page.getByTestId('quick-start').click();
+  await page.getByRole('combobox', { name: 'Workflow', exact: true }).selectOption(`${name}.yaml`);
+});
+
+// the field right after the other one in the same form; in the Start panel both may sit in
+// "Advanced parameters", opened first when the field is hidden there
+Then('the field {string} comes right after {string}', async ({ e2e }, field, before) => {
+  const page = e2e.window;
+  if (!(await visibleGroup(page, before).isVisible())) {
+    const advanced = page.getByText('Advanced parameters', { exact: true }).filter({ visible: true });
+    if (await advanced.count()) await advanced.first().click();
+  }
+  await expect(visibleGroup(page, before)).toBeVisible();
+  await expect(visibleGroup(page, field)).toBeVisible();
+  const next = await visibleGroup(page, before).evaluate((el) => {
+    const own = el.closest('.wi-field') || el.parentElement;
+    return own?.nextElementSibling?.querySelector('label')?.textContent?.trim() || '';
+  });
+  expect(next.startsWith(field), `the field after "${before}" is "${next}"`).toBe(true);
+});
+
+// each value matches a pill whose label reads as it ("High" → high, "Extra high" or "XHigh" →
+// xhigh), in that order and no other pill
+Then('{string} offers the choices {string}, {string}, {string}, {string} and {string}', async ({ e2e }, field, a, b, c, d, e) => {
+  const radios = visibleGroup(e2e.window, field).getByRole('radio');
+  const norm = (s) => String(s).toLowerCase().replace(/[^a-z]/g, '').replace(/^extra/, 'x');
+  await expect(radios).toHaveCount(5);
+  expect((await radios.allTextContents()).map(norm)).toEqual([a, b, c, d, e].map(norm));
 });
