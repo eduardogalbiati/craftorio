@@ -3,9 +3,10 @@
 // is not interrupted. No Electron here: src/main.js passes Electron's powerSaveBlocker (tests a
 // fake one) and the service's pendingWork() (src/service/areas/keep-awake.js).
 // - workToDo(work): the rule that decides "work to do", from the runs in progress
-//   ({ waiting }), the roadmaps ({ state, stage, of }) and the queued items not paused. A running
-//   run counts; a run waiting at a gate counts only when a roadmap or a queue continues after it.
-// - keepAwakeLabel(state): what the switch shows ("Active: 2 runs, roadmap stage 3/6").
+//   ({ waiting }), the roadmaps ({ state, stage, of, disabled? }) and the queued items not paused. A
+//   running run counts; a run waiting at a gate counts only when a roadmap or a queue continues after it.
+// - keepAwakeLabel(state): what the switch shows ("Active: 2 runs, roadmap stage 3/6"; with disabled
+//   stages (#284), "roadmap stage 3/6 (1 disabled)").
 // - createKeepAwake({ blocker, enabled, readWork, onChange }): update() starts or stops the
 //   blocker and returns the state; stop() releases it (switch off, quit). 'prevent-app-suspension'
 //   only: the display may still turn off, and the owner's power plan, Sleep and the lid still win.
@@ -19,7 +20,7 @@ function workToDo({ runs = [], roadmaps = [], queued = 0 } = {}) {
   const running = runs.filter((r) => !r.waiting).length;
   const waiting = runs.length - running;
   const started = roadmaps.filter((r) => r.state === 'running')
-    .map((r) => ({ projectId: r.projectId || null, stage: Number(r.stage) || 0, of: Number(r.of) || 0 }));
+    .map((r) => ({ projectId: r.projectId || null, stage: Number(r.stage) || 0, of: Number(r.of) || 0, ...(Number(r.disabled) > 0 ? { disabled: Number(r.disabled) } : {}) }));
   const queue = Math.max(0, Math.floor(Number(queued) || 0));
   // a run at a gate keeps nothing busy on its own; it does when a roadmap or a queue goes on after it
   const continues = started.length > 0 || queue > 0;
@@ -40,7 +41,8 @@ function keepAwakeLabel({ enabled, holding, work } = {}) {
   const parts = [];
   if (work.runs) parts.push(plural(work.runs, 'run'));
   const [one, ...more] = work.roadmaps || [];
-  if (one && !more.length) parts.push(one.of && one.stage ? `roadmap stage ${one.stage}/${one.of}` : 'roadmap');
+  // #284: a disabled stage is in the total and never the current one; said apart
+  if (one && !more.length) parts.push(one.of && one.stage ? `roadmap stage ${one.stage}/${one.of}${one.disabled ? ` (${one.disabled} disabled)` : ''}` : 'roadmap');
   if (more.length) parts.push(plural(more.length + 1, 'roadmap'));
   if (work.queued) parts.push(`${work.queued} queued`);
   return `${holding ? 'Active' : 'On'}: ${parts.join(', ')}`;

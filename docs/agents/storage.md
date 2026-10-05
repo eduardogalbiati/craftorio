@@ -129,7 +129,8 @@ owner actions write to the platform (Save to issue, create, close, epics: `src/b
   enabled stage has no such field. `cleanStages` changes it only on an explicit `disabled: true` /
   `false`: a save that does not mention it (the Oracle's `roadmap.stages`, a proposal, an outside
   script) keeps what is stored. Undo and "Restore an earlier version…" put the stage back with the
-  switch it had (`roadmap-undo.js` `head`).
+  switch it had (`roadmap-undo.js` `head`). A save or an Undo that would disable a stage while one
+  of its items runs is refused with the reason (`saveStages`, `restoreStages`), whoever writes it.
 - **The roadmap's history** (#281, `src/roadmap-history.js`): before each owner edit of a roadmap
   (a save from the screen, a proposal added or replacing it, the queue moved in, Clear, an Undo, a
   Restore) the roadmap channels keep its stages as they were in

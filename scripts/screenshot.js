@@ -533,7 +533,7 @@ function demoRoadmap(ws, projectId, live = 'off', budget = null, more = null) {
 }
 
 // The roadmap's runs (#194): two finished local-hero runs that give each step its typical time, then
-// tonight's runs: one in code review, one waiting at the human review gate (both live in "another app",
+// tonight's runs: one in code review, one waiting at the developer's gate (both live in "another app",
 // studio-pc, whose heartbeat this script keeps fresh), one that failed in its tests. → their run ids.
 // `fixRound` (--roadmap states): the running one is back in Develop after its review (round 2).
 function demoRoadmapRuns(ws, projectId, { fixRound = false } = {}) {
@@ -549,7 +549,7 @@ function demoRoadmapRuns(ws, projectId, { fixRound = false } = {}) {
     develop: ['developer', 'claude-opus-5-5'], code_review: ['reviewer', 'claude-sonnet-5-5'], test: ['test_writer', 'claude-sonnet-5'],
     build: ['builder', 'claude-sonnet-5'], evidence: ['evidence', 'claude-sonnet-5'], verify_change: ['verifier', 'claude-sonnet-5'],
   };
-  const TYPE = { developer_screenshots: 'screenshots', suite: 'suite', human_review: 'human_approval' };
+  const TYPE = { developer_check: 'human_approval', developer_screenshots: 'screenshots', suite: 'suite', human_review: 'human_approval' };
   // [step, minutes]: the usual path of a run that merged
   const PATH = [['develop', 38], ['developer_screenshots', 2], ['code_review', 11], ['human_review', 9], ['test', 18], ['suite', 4], ['build', 6], ['evidence', 7], ['verify_change', 5]];
   const min = 6e4;
@@ -628,8 +628,8 @@ function demoRoadmapRuns(ws, projectId, { fixRound = false } = {}) {
   const failed = `${stamp(190)}-204000-run00013`;
   // in code review for 6 minutes
   write(running, events(now - 52 * min, fixRound ? [['develop', 30], ['developer_screenshots', 2], ['code_review', 11], ['develop', 9]] : [['develop', 44], ['developer_screenshots', 2], ['code_review', 6]], 'running').lines, null, true);
-  // at the human review gate
-  write(waiting, events(now - 95 * min, [['develop', 41], ['developer_screenshots', 2], ['code_review', 12], ['human_review', 0]], 'waiting').lines, null, true);
+  // at the developer's gate of the Validated mode (#282: the pipeline's "Your check" station)
+  write(waiting, events(now - 95 * min, [['develop', 41], ['developer_screenshots', 2], ['developer_check', 0]], 'waiting').lines, null, true);
   // failed in its tests (a review → developer loop before)
   const failedSteps = [['develop', 35], ['developer_screenshots', 2], ['code_review', 10], ['develop', 14], ['code_review', 6], ['human_review', 7], ['test', 22]];
   const f = events(now - 190 * min, failedSteps, 'failed');
