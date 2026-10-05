@@ -52,6 +52,18 @@ function killTree(pid) {
   try { process.kill(-pid, 'SIGKILL'); } catch { /* no such group */ }
 }
 
+// Closes the pty once killTree has ended its program. On Windows (ConPTY) node-pty's kill() first
+// forks an agent that attaches to the shell's pid and kills every process on that console. The shell
+// is already gone: the agent crashes ("AttachConsole failed") and node-pty kills the stale pid 5 s
+// later, or the pid was reused by a process on our own console and the agent kills that whole
+// console (every sibling process of a test run). killTree already did that job: skip the lookup, keep
+// the part that closes the pseudoconsole.
+function closePty(proc) {
+  const agent = proc._agent;
+  if (process.platform === 'win32' && typeof agent?._getConsoleProcessList === 'function') agent._getConsoleProcessList = () => Promise.resolve([]);
+  proc.kill();
+}
+
 class Terminals {
   /** @param send (channel, payload) => void, e.g. webContents.send */
   constructor(send) {
@@ -84,7 +96,7 @@ class Terminals {
       this.send('term:exit', { id, exitCode });
       try { onExit?.(exitCode); } catch (e) { console.error('terminal exit:', e); }
     });
-    this.procs.set(id, { title, pid: proc.pid, write: (d) => proc.write(d), resize: (c, r) => proc.resize(c, r), kill: () => { killTree(proc.pid); proc.kill(); } });
+    this.procs.set(id, { title, pid: proc.pid, write: (d) => proc.write(d), resize: (c, r) => proc.resize(c, r), kill: () => { killTree(proc.pid); closePty(proc); } });
     return { id, title, pid: proc.pid };
   }
 
