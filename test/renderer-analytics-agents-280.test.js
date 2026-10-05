@@ -66,9 +66,15 @@ function payload() {
   };
 }
 
-async function loadTab({ data = payload(), fail = null, load = true } = {}) {
+// failFirst: only the first read fails (a Retry then succeeds)
+async function loadTab({ data = payload(), fail = null, failFirst = null, load = true } = {}) {
   const calls = [];
-  const answer = async (...args) => { calls.push(args); if (fail) throw new Error(fail); return data; };
+  const answer = async (...args) => {
+    calls.push(args);
+    if (fail) throw new Error(fail);
+    if (failFirst && calls.length === 1) throw new Error(failFirst);
+    return data;
+  };
   const api = new Proxy({}, { get: (_, name) => (name === 'then' ? undefined : answer) });
   const window = {};
   const Robots = { svg: (variant, state = 'idle') => `<svg data-robot="${variant}" data-state="${state}"></svg>`, VARIANTS: {}, STATES: {} };
@@ -95,6 +101,36 @@ async function loadTab({ data = payload(), fail = null, load = true } = {}) {
   };
   return { tab, calls, render };
 }
+
+// a body whose controls can be used: querySelectorAll hands out one fake element per `data-ag-<name>`
+// attribute of the current markup (dataset and value as the browser would give), so the tab's own
+// handlers run; `use(name, value)` finds the last one handed out and returns it
+function interactiveBody() {
+  const handed = [];
+  const camel = (name) => `ag${name[0].toUpperCase()}${name.slice(1)}`;
+  const body = {
+    innerHTML: '', dataset: {}, addEventListener: () => {},
+    querySelector: (sel) => (sel === '[data-ag-root]' ? (body.innerHTML.includes('data-ag-root') ? {} : null) : { focus: () => {} }),
+    querySelectorAll: (sel) => {
+      const name = /^\[data-ag-([a-z]+)\]$/.exec(sel)?.[1];
+      if (!name) return [];
+      const els = [...body.innerHTML.matchAll(new RegExp(`data-ag-${name}(?:="([^"]*)")?`, 'g'))]
+        .map((m) => ({ name, dataset: { [camel(name)]: m[1] ?? '' }, value: '', focus: () => {} }));
+      handed.push(...els);
+      return els;
+    },
+  };
+  const use = (name, value) => {
+    const el = handed.filter((e) => e.name === name && (value == null || e.dataset[camel(name)] === value)).pop();
+    assert.ok(el, `a data-ag-${name}${value ? `="${value}"` : ''} control is rendered`);
+    return el;
+  };
+  return { body, use };
+}
+const rowAgents = (html) => rows(html).map((r) => {
+  const text = visible(`<x ${r}`);
+  return ['Product Owner', 'Supervisor', 'Oracle'].find((n) => text.includes(n)) || '?';
+});
 
 // what a person reads: tags dropped (so title attributes too), <title> tooltips of SVGs too
 const visible = (html) => html.replace(/<title>[\s\S]*?<\/title>/g, ' ').replace(/<[^>]*>/g, ' ')
@@ -247,4 +283,65 @@ test('#280 Agents tab: a read error shows its message and a Retry button', async
   assert.match(visible(html), /disk unreadable 280/);
   assert.match(html, /data-testid="agents-retry"/);
   assert.match(visible(html), /Retry/);
+});
+
+// ---- the tab's controls ----------------------------------------------------------------------------
+
+test('#280 Agents tab: a card says how many earlier turns have no recorded tokens', async () => {
+  const data = payload();
+  data.agents.supervisor.totals.turnsWithoutTokens = 2;
+  const { render } = await loadTab({ data });
+  const html = render();
+  assert.match(visible(block(html, 'agents-card-supervisor')), /Tokens of 2 earlier turns not recorded/);
+  assert.doesNotMatch(visible(block(html, 'agents-card-oracle')), /not recorded/);
+});
+
+test('#280 Agents tab: a click on a card shows only that agent\'s sessions, a second click every agent\'s again', async () => {
+  const { tab } = await loadTab();
+  const { body, use } = interactiveBody();
+  tab.render(body);
+  assert.deepEqual(rowAgents(body.innerHTML).sort(), ['Oracle', 'Oracle', 'Product Owner', 'Supervisor']);
+  use('card', 'product-owner').onclick();
+  assert.deepEqual(rowAgents(body.innerHTML), ['Product Owner']);
+  assert.match(block(body.innerHTML, 'agents-card-product-owner'), /aria-pressed="true"/);
+  use('card', 'product-owner').onclick();
+  assert.equal(rows(body.innerHTML).length, 4);
+});
+
+test('#280 Agents tab: the agent filter of the sessions table shows only the chosen agent\'s sessions', async () => {
+  const { tab } = await loadTab();
+  const { body, use } = interactiveBody();
+  tab.render(body);
+  const select = use('filter');
+  select.value = 'oracle';
+  select.onchange();
+  assert.deepEqual(rowAgents(body.innerHTML), ['Oracle', 'Oracle']);
+  assert.match(body.innerHTML, /<option value="oracle" selected>/);
+});
+
+test('#280 Agents tab: "Show more" lists the next sessions', async () => {
+  const data = payload();
+  data.agents.oracle.sessions = Array.from({ length: 60 }, (_, i) => session('oracle', `o-${i}`, 1, { start: new Date(Date.UTC(2026, 8, 1, 0, i)).toISOString() }));
+  data.agents['product-owner'].sessions = [];
+  data.agents.supervisor.sessions = [];
+  const { tab } = await loadTab({ data });
+  const { body, use } = interactiveBody();
+  tab.render(body);
+  assert.equal(rows(body.innerHTML).length, 50);
+  use('more').onclick();
+  assert.equal(rows(body.innerHTML).length, 60);
+  assert.doesNotMatch(body.innerHTML, /data-testid="agents-show-more"/);
+});
+
+test('#280 Agents tab: Retry reads the same date range again and shows the cards', async () => {
+  const { tab, calls } = await loadTab({ failFirst: 'disk unreadable 280' });
+  const { body, use } = interactiveBody();
+  tab.render(body);
+  assert.match(body.innerHTML, /data-testid="agents-retry"/);
+  await use('retry').onclick();
+  assert.equal(calls.length, 2, 'a second read');
+  assert.equal(calls[1][0]?.from, RANGE.from);
+  assert.equal(calls[1][0]?.to, RANGE.to);
+  assert.match(body.innerHTML, /data-testid="agents-card-oracle"/);
+  assert.doesNotMatch(body.innerHTML, /disk unreadable 280/);
 });

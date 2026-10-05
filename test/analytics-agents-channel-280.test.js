@@ -231,6 +231,51 @@ test('#280 Usage: the Supervisor chat\'s spend this month joins the Usage totals
   near(snap.providers.find((p) => p.id === 'claude').month.costUsd, 6, 'Claude Code\'s month');
 });
 
+test('#280 budget: the Supervisor chat\'s spend this month counts toward the Product Owner\'s blocking monthly budget', async (t) => {
+  // a "real" po:ask without a model: simulation-only is lifted for this call and the provider CLI is
+  // faked (were the budget not to block, the fake answer comes back instead of the refusal)
+  const simulation = require('../src/engine/simulation');
+  const providers = require('../src/engine/providers');
+  const { roadmapProject } = require('./service/helpers');
+  const { service, api } = makeService(t);
+  const ws = service.workspace();
+  const p = await roadmapProject(api, ws, t, [1, 2], 'po-budget-280');
+  await api['settings:set']({ budgets: { claude: { monthlyUsd: 5, blockOnLimit: true } } });
+  jsonl(path.join(ws.supervisor, 'usage.jsonl'), [
+    { ts: new Date().toISOString(), agent: 'supervisor', provider: 'claude', model: M, tokens: tok(100, 100, 0, 0), costUsd: 6, sessionId: 's-1', session: 'fresh', startReason: 'first' },
+  ]);
+  const realSimOnly = simulation.simulationOnly;
+  const realRunTurn = providers.runTurn;
+  t.after(() => { simulation.simulationOnly = realSimOnly; providers.runTurn = realRunTurn; });
+  simulation.simulationOnly = () => false;
+  let called = 0;
+  providers.runTurn = async () => { called += 1; return { text: 'Fake answer: no model was called.', usage: tok(1, 1, 0, 0), costUsd: 0.01, exitCode: 0 }; };
+  const out = await api['po:ask']({ projectId: p.id, question: 'Analyze the backlog', mock: false, mode: 'plan', attachments: [], issues: [] });
+  assert.equal(called, 0, 'no provider turn once the budget is reached');
+  assert.equal(out.message?.error, true);
+  assert.match(String(out.message?.text), /monthly budget/i);
+});
+
+// ---- totals of turns whose tokens were not recorded, and read errors --------------------------------
+
+test('#280 analytics:agents: the Supervisor chat counts its earlier turn as one whose tokens were not recorded', async (t) => {
+  const { out } = await agentsFor(t);
+  assert.equal(out.agents.supervisor.totals.turnsWithoutTokens, 1);
+  assert.ok(!out.agents.oracle.totals.turnsWithoutTokens, 'every Oracle line has its tokens');
+});
+
+test('#280 analytics:agents: a Supervisor usage file that cannot be read is an error, not an agent without turns', async (t) => {
+  const { service, api } = makeService(t);
+  fs.mkdirSync(path.join(service.workspace().supervisor, 'usage.jsonl'), { recursive: true });
+  await assert.rejects(async () => api['analytics:agents'](RANGE));
+});
+
+test('#280 analytics:agents: an Oracle usage file that cannot be read is an error, not an agent without turns', async (t) => {
+  const { service, api } = makeService(t);
+  fs.mkdirSync(path.join(service.workspace().oracle, 'usage.jsonl'), { recursive: true });
+  await assert.rejects(async () => api['analytics:agents'](RANGE));
+});
+
 // ---- simulated data for the screenshot (criterion 9) -----------------------------------------------
 
 test('#280 screenshot: --view analytics offers the agents tab', () => {

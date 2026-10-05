@@ -210,6 +210,30 @@ test('#280 Oracle: "New session" after a compaction whose turn failed starts the
   assert.deepEqual(agentsUsage.readLines(path.join(dir, 'usage.jsonl')).map((u) => u.startReason), ['first', 'reset']);
 });
 
+test('#280 Oracle: a compaction whose turn failed is still the reason of the session the next answer starts', async (t) => {
+  const dir = tmpDir(t);
+  const providers = require('../src/engine/providers');
+  const real = providers.runTurn;
+  let n = 0;
+  providers.runTurn = async (opts) => {
+    n += 1;
+    if (n === 2) throw new Error('the CLI failed (test)');
+    return { text: 'Fake answer: no model was called.', usage: n === 1 ? tok(160000, 5, 0, 0) : tok(10, 5, 0, 0), costUsd: 0.1, providerSessionId: opts.providerSessionId || `sess-${n}`, exitCode: 0 };
+  };
+  t.after(() => { providers.runTurn = real; });
+  const o = oracle.createOracle({
+    dir: () => dir, tools: () => [], bridge: { start: async () => ({ url: 'http://127.0.0.1:1', token: 'test' }) },
+    mcpCommand: () => ({ command: 'node', args: [], env: {} }), skillsDirs: () => [], resolveCommand: () => 'claude', refuseReal: () => {},
+    agent: () => ({ model: M, effort: 'high' }), settings: () => ({}),
+  });
+  t.after(() => o.release());
+  await o.ask({ question: 'turn 1', mock: false });
+  await o.ask({ question: 'turn 2: the CLI fails after the compaction', mock: false }).catch(() => {});
+  await o.ask({ question: 'turn 3', mock: false });
+  const lines = agentsUsage.readLines(path.join(dir, 'usage.jsonl'));
+  assert.deepEqual(lines.map((u) => [u.session, u.startReason ?? null]), [['fresh', 'first'], ['fresh', 'compaction']]);
+});
+
 test('#280 writeDemoAgents: `today: false` leaves the Oracle without a turn today (UTC); by default it has one, before now', (t) => {
   const now = Date.parse('2026-10-05T01:30:00Z'); // 01:30 UTC: "three hours ago" is yesterday
   const today = '2026-10-05';
