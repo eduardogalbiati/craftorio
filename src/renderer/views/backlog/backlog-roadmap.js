@@ -104,7 +104,7 @@
   const editable = (x) => x.status === 'planned' || x.status === 'failed';
   // #237: the stage run on its own (#141), or -1 when there is none or it is over (no unfinished item,
   // or no longer in the roadmap): such a scope is dropped by the engine, a Resume runs the roadmap
-  const scopedStage = (r) => (r.scope ? r.stages.findIndex((s) => s.id === r.scope.stage && s.items.some((x) => x.status !== 'done' && x.status !== 'skipped')) : -1);
+  const scopedStage = (r) => (r.scope ? r.stages.findIndex((s) => s.id === r.scope.stage && !s.disabled && s.items.some((x) => x.status !== 'done' && x.status !== 'skipped')) : -1);
   const clone = (stages) => JSON.parse(JSON.stringify(stages || []));
   // inputs the Backlog fills itself when the run starts (as backlog.js's skipInput): never edited here
   const skipInput = (k, def) => k === 'task' || k === 'issue' || k === 'issues' || def.type === 'run' || ((def.type || 'string') === 'string' && /path|dir/i.test(k));
@@ -232,7 +232,7 @@
   function meterHtml(kind, m) {
     const [label, id] = METER[kind];
     const right = m.text ? `<span class="rm-meter-verdict rm-verdict rm-verdict-${m.level}">${verdictInner(m.sign, m.text)}</span>` : m.note ? `<span class="rm-meter-note muted">${esc(m.note)}</span>` : '';
-    return `<div class="rm-meter" ${id} data-verdict="${m.verdict}"${m.title ? ` title="${esc(m.title)}"` : ''}><div class="rm-meter-row"><span class="rm-meter-label">${label}</span><span class="rm-meter-value">${m.value}</span>${m.of ? `<span class="rm-meter-of muted">${esc(m.of)}</span>` : ''}<span class="spacer"></span>${right}</div>${m.ratio != null ? `<div class="rm-bar" aria-hidden="true">${barInner(m.ratio)}</div>` : ''}</div>`;
+    return `<div class="rm-meter" ${id} data-verdict="${m.verdict}"${m.title ? ` title="${esc(m.title)}"` : ''}><div class="rm-meter-row"><span class="rm-meter-label">${label}</span><span class="rm-meter-value">${m.value}</span>${m.of ? `<span class="rm-meter-of muted">${esc(m.of)}</span>` : ''}<span class="spacer"></span>${right}</div>${m.ratio != null ? `<div class="rm-meter-bar" aria-hidden="true">${barInner(m.ratio)}</div>` : ''}</div>`;
   }
   // a real value against its estimate; `running`: within the estimate reads "on track"
   function againstHtml(kind, actual, estimate, { fmt, more, running = false, extra = [] }) {
@@ -412,7 +412,7 @@
       const meter = el.closest?.('.rm-meter');
       const live = meter ? liveTime(ms, minutes) : null;
       if (live?.ratio != null) {
-        const bar = meter.querySelector('.rm-bar');
+        const bar = meter.querySelector('.rm-meter-bar');
         const inner = barInner(live.ratio);
         if (bar && bar.dataset.drawn !== inner) { bar.innerHTML = inner; bar.dataset.drawn = inner; }
         const verdict = meter.querySelector('.rm-meter-verdict');
@@ -477,13 +477,14 @@
       `Elapsed ${dur(est.elapsedMs)}${est.state === 'done' ? '' : ` · about ${dur(est.leftMs)} left`}`,
       v.clock ? `Working time (gate waits left out): ${mins(Math.floor(v.clock.ms / 60000))}` : '',
       round ? `Same run, ${round}` : '',
-      `Now: ${label}${est.state === 'running' || est.state === 'waiting' ? ` (${v.who})` : ''}`,
+      `Now: ${label}${v.whereId}${est.state === 'running' || est.state === 'waiting' ? ` (${v.who})` : ''}`,
       // the gate's "What happened" line (#213)
       est.state === 'waiting' && run.gate ? `Gate: ${run.gate}` : '',
       `Run ${x.runId}${run.mock ? ' (simulated)' : ''}`,
     ].filter(Boolean);
     const how = `How: ${basis}. A return to an earlier step (a fix round) keeps what the run had earned; it stays under 100% until the run ends.`;
     const pct = est.state === 'done' ? 100 : est.percent;
+    // (the ring's accessible name keeps "Show the run's steps": the E2E steps find the ring by it)
     // next to the pill: the step (the pill already says Running, Waiting for you, Failed, Done)
     const step = est.state === 'done' ? '' : est.state === 'failed' || est.state === 'stopped' ? `at ${where}` : where;
     const gate = x.waiting && run.gate ? run.gate : '';
@@ -494,7 +495,7 @@
           <span class="rm-ring-pct">${pct}%</span>
         </button>
         <div class="rm-progress-text"><span class="rm-status-line">${StatusPill.statusPill(pillStatus(x, est), { title: gate, className: 'rm-state' })}${step ? `<span class="rm-progress-step" data-testid="roadmap-progress-step">${esc(step)}</span>` : ''}</span>${round ? `<span class="rm-round" data-testid="roadmap-round">${esc(round.replace(/^r/, 'R'))}</span>` : ''}</div>
-        <div class="rm-steps" role="group" aria-label="The run's summary"><div class="rm-run-summary small" data-testid="roadmap-run-summary">${summary.map((l) => `<div>${esc(l)}</div>`).join('')}<div class="muted">${esc(how)}</div><div class="muted">The pipeline below opens the run at a step.</div></div></div>
+        <div class="rm-steps" role="tooltip" aria-label="The run's summary"><div class="rm-run-summary small" data-testid="roadmap-run-summary">${summary.map((l) => `<div>${esc(l)}</div>`).join('')}<div class="muted">${esc(how)}</div><div class="muted">The pipeline below opens the run at a step.</div></div></div>
       </div>`;
   }
 
@@ -1275,7 +1276,7 @@
     ctx.setData(await api.startRoadmap(ctx.projectId, simulated, stage.id));
   }
 
-  // #194: a step chip of an item's ring opens its run with that group open (the Run screen's steps).
+  // #194, #282: a station of an item's pipeline opens its run with that group open (the Run screen's steps).
   function openRunAt(el) {
     const box = el.closest('[data-rm-progress]');
     const runId = box.dataset.rmProgress;
@@ -1403,11 +1404,17 @@
     if (e.target.closest('[role="menuitem"][aria-disabled="true"]')) return true;
     const closing = menuOpen && !e.target.closest('.rm-menu-wrap');
     if (closing) menuOpen = false;
-    // #282: a stage's menu closes on any click but its own button's; drawn closed before the click's
-    // action, which may open a dialog (the handlers read the clicked element's own ancestors)
-    if (stageMenu != null && !e.target.closest('[data-rm-stage-menu]')) {
+    // #282: a stage's menu closes on any click but its own button's: hidden at once (the click's
+    // action may open a dialog), not redrawn, so the clicked control stays in the page (a checkbox
+    // still gets its change, an entry still finds its stage); the redraw follows the action
+    const closingStage = stageMenu != null && !e.target.closest('[data-rm-stage-menu]');
+    if (closingStage) {
       stageMenu = null;
-      ctx.render();
+      const open = document.querySelector('#bl-list .rm-stage-menu');
+      if (open) {
+        open.hidden = true;
+        open.previousElementSibling?.setAttribute('aria-expanded', 'false');
+      }
     }
     const mine = await clicked(e, ctx, data);
     if (closing) ctx.render();
@@ -1462,7 +1469,8 @@
       document.querySelector(`#bl-list .rm-stage[data-stage="${first}"]`)?.scrollIntoView({ block: 'start' });
       return true;
     }
-    // the ring (#194): a click pins its steps open (hover shows them too); a chip opens the run there
+    // a station of the pipeline (#282) opens the run there; the ring (#194): a click pins its summary open
+    // (hover shows it too)
     const chip = e.target.closest('[data-rm-chip]');
     if (chip) { openRunAt(chip); return true; }
     const ring = e.target.closest('[data-rm-ring]');
@@ -1769,9 +1777,10 @@
     ctx.setData(await api.saveRoadmap(ctx.projectId, stages, `Added ${issues.map((i) => `#${i.number}`).join(', ')} to the roadmap`));
   }
 
-  // #204: a live reload waits while the owner drags, or edits an item or a stage's note; Reload in
-  // the Edit form's "The roadmap changed" notice closes the form (its values were not saved).
-  const busy = () => !!(dragging || editing || noteEditing);
+  // #204: a live reload waits while the owner drags, edits an item or a stage's note, or has a ⋮ menu
+  // open (#282: a redraw would take the focus from its entries); Reload in the Edit form's "The
+  // roadmap changed" notice closes the form (its values were not saved).
+  const busy = () => !!(dragging || editing || noteEditing || menuOpen || stageMenu != null);
   function closeEdit() {
     editing = null;
     adding = false;

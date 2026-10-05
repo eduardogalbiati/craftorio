@@ -144,6 +144,10 @@ test('#271 backlog.css gives the titles the full width on a narrow card (Retry /
   const at = css.search(/@container\s+rm-card\s*\(max-width:\s*\d+px\)\s*\{/);
   const narrow = at < 0 ? '' : css.slice(at, css.indexOf('\n}', at));
   assert.match(narrow, /\.rm-issues\s*\{[^}]*grid-column:\s*1 \/ -1/, 'the titles keep the full width');
+  // Retry / Skip / the Oracle\'s button flow as rows of the status block, which wraps
+  assert.match(css, /\.rm-status\s*\{[^}]*flex-wrap:\s*wrap/);
+  assert.match(css, /(^|[\s,}])\.rm-fail-actions\s*\{[^}]*display:\s*contents/);
+  assert.match(css, /\.rm-fail-actions \.btn\.gate-oracle\s*\{[^}]*order:\s*2/, 'the Oracle\'s longer button after Retry, Skip, move and Remove');
   assert.doesNotMatch(css, /\.shell\.oracle-side \.rm-/);
 });
 

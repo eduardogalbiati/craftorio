@@ -183,7 +183,9 @@
 
   // what the screen shows, to tell an automatic refresh that changes nothing (#214)
   let shownData = '';
-  const dataKey = (id, data) => `${id}:${JSON.stringify(data ?? null)}`;
+  // (`edit`, #281: the id a save answers with for its Undo toast, is not something the screen shows:
+  // with it in the key, the backlog:changed that follows every edit redrew the same list once more)
+  const dataKey = (id, data) => `${id}:${JSON.stringify(data ? { ...data, edit: undefined } : null)}`;
   function setData(data) {
     bl.data = data;
     shownData = dataKey(bl.projectId, data);

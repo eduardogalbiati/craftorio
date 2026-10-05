@@ -355,15 +355,15 @@ a.rm-title:hover { text-decoration: underline; }
 .rm-meter-value { font: 600 13px var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .rm-meter-of, .rm-meter-note { white-space: nowrap; }
 .rm-meter-verdict { font-weight: 600; white-space: nowrap; }
-.rm-bar { position: relative; height: 3px; border-radius: 2px; background: var(--border); }
-.rm-bar > i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 2px; background: var(--green); }
-.rm-bar > u { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--text); border-radius: 1px; }
+.rm-meter-bar { position: relative; height: 3px; border-radius: 2px; background: var(--border); }
+.rm-meter-bar > i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 2px; background: var(--green); }
+.rm-meter-bar > u { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--text); border-radius: 1px; }
 /* #215: a real value against its estimate, by verdict (the sign says it too: colour is never alone) */
 .rm-meter[data-verdict="warn"] .rm-meter-value, .rm-meter-verdict.rm-verdict-warn { color: var(--yellow); }
 .rm-meter[data-verdict="over"] .rm-meter-value, .rm-meter-verdict.rm-verdict-bad { color: var(--red); }
 .rm-meter-verdict.rm-verdict-good { color: var(--green); }
-.rm-meter[data-verdict="warn"] .rm-bar > i { background: var(--yellow); }
-.rm-meter[data-verdict="over"] .rm-bar > i { background: var(--red); }
+.rm-meter[data-verdict="warn"] .rm-meter-bar > i { background: var(--yellow); }
+.rm-meter[data-verdict="over"] .rm-meter-bar > i { background: var(--red); }
 /* the status block: the one place that says how the item goes, then what to do about it */
 .rm-status { display: flex; align-items: center; gap: 8px 10px; flex-wrap: wrap; border-left: 1px solid var(--border); padding-left: 14px; min-width: 0; }
 .rm-status > .rm-actions { margin-left: auto; order: 1; }

@@ -46,8 +46,7 @@ Feature: Backlog Board and Roadmap
     Given the app is open in a 900x800 window
     When I open "Backlog" in the sidebar
     And I open the Roadmap
-    And I hover the progress ring of the roadmap item "Keyboard focus is lost after closing a dialog"
-    And I hover an agent in the run's steps popover
+    And I hover an agent in the pipeline of the roadmap item "Keyboard focus is lost after closing a dialog"
     Then the agent card is shown inside the window
 
   # The demo roadmap is paused (a refused start); its stage 5 is the unnamed stage with one planned item

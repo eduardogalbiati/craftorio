@@ -183,7 +183,9 @@ module.exports = (ctx) => {
         if (ids(before).some((list, i) => JSON.stringify(list) !== JSON.stringify(kept[i] || []))) throw new Error('An append may only add items: a planned item moved or disappeared. Nothing was saved.');
       }
       const backup = snapshotRoadmap(a, id);
-      roadmaps.saveStages(ctx.ws.backlog, id, a.params.stages, { issues: synced(id) });
+      // #284: `disabled` is the owner's switch: whatever the Oracle sends, the stored value is kept
+      const stages = (a.params.stages || []).map((s) => { const { disabled, ...rest } = s || {}; return rest; });
+      roadmaps.saveStages(ctx.ws.backlog, id, stages, { issues: synced(id) });
       await ctx.dispatchRoadmaps();
       return { text: `The roadmap of ${id} was saved (validated, ${a.params.stages.length} stage(s)).`, backup };
     },

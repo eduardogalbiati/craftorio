@@ -119,7 +119,7 @@ Then("the Board's issue count leaves out the epics", async ({ e2e }) => {
   await expect(page.getByTestId('backlog-count')).toHaveText(`${n} issue${n === 1 ? '' : 's'}`);
 });
 
-// ---- the Roadmap's progress ring and its steps popover (#236) ----------------------------------------
+// ---- the Roadmap's progress ring and its summary popover (#236; #282: the steps are the pipeline) ------
 
 Given('the app is open in a {int}x{int} window', async ({ e2e }, w, h) => {
   await e2e.open({ size: `${w}x${h}` });
@@ -127,7 +127,8 @@ Given('the app is open in a {int}x{int} window', async ({ e2e }, w, h) => {
 
 const roadmapItem = (page, title) => page.getByTestId('roadmap-item').filter({ hasText: title }).first();
 const ringOf = (item) => item.getByRole('button', { name: /Show the run's steps/ });
-const stepsPopover = (page) => page.getByRole('group', { name: "The run's steps" }).filter({ visible: true }).first();
+const stepsPopover = (page) => page.getByRole('tooltip', { name: "The run's summary" }).filter({ visible: true }).first();
+const pipelineOf = (page, title) => roadmapItem(page, title).getByTestId('roadmap-pipeline');
 
 When('I hover the progress ring of the roadmap item {string}', async ({ e2e }, title) => {
   const item = roadmapItem(e2e.window, title);
@@ -150,13 +151,15 @@ Then('the progress ring has no native tooltip', async ({ e2e }) => {
   await expect(ringOf(progress)).not.toHaveAttribute('title');
 });
 
-When("I hover an agent in the run's steps popover", async ({ e2e }) => {
-  await stepsPopover(e2e.window).getByTestId('progress-agent').first().hover();
+When('I hover an agent in the pipeline of the roadmap item {string}', async ({ e2e }, title) => {
+  const agent = pipelineOf(e2e.window, title).getByTestId('progress-agent').first();
+  await agent.scrollIntoViewIfNeeded();
+  await agent.hover();
 });
 
 Then('the agent card is shown inside the window', async ({ e2e }) => {
   const page = e2e.window;
-  const card = stepsPopover(page).getByRole('tooltip').filter({ visible: true }).first();
+  const card = page.getByTestId('roadmap-pipeline').getByRole('tooltip').filter({ visible: true }).first();
   await expect(card).toBeVisible();
   const box = await card.boundingBox();
   const view = await page.evaluate(() => ({ width: document.documentElement.clientWidth, height: document.documentElement.clientHeight }));

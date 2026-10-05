@@ -200,9 +200,10 @@
     for (const g of gates) {
       const group = groupOf.get(g.id);
       const hostKey = group != null ? `group:${group}` : byKey.has(`step:${targets.get(g.id)}`) ? `step:${targets.get(g.id)}` : `group:${groupOf.get(targets.get(g.id))}`;
-      const at = stations.findIndex((st) => st.key === hostKey);
+      let at = stations.findIndex((st) => st.key === hostKey);
       if (at < 0) continue;
       const host = stations[at];
+      while (stations[at + 1]?.gate) at += 1; // after the gates already placed there
       stations.splice(at + 1, 0, { key: `gate:${g.id}`, name: g.id, grouped: false, steps: [g.id], gate: true, host: { name: host.name, grouped: host.grouped } });
     }
     return stations;

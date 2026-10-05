@@ -276,6 +276,8 @@ function cleanStages(stages, { issues = [], previous = null } = {}) {
 function saveStages(dir, projectId, stages, { issues } = {}) {
   return updateRoadmap(dir, projectId, (r) => {
     const next = { ...r, stages: cleanStages(stages, { issues, previous: r }) };
+    // #284: a stage run on its own (#141) that is disabled is no scope any more: a Resume runs the roadmap
+    if (next.scope && next.stages.some((s) => s.id === next.scope.stage && s.disabled)) next.scope = null;
     // an edit that leaves nothing to run ends a running roadmap (not one that waits at a cut line, #260)
     return next.stages.length && currentStage(next) < 0 && r.state === 'running' && !pendingRelease(next, -1) ? { ...next, state: 'done', scope: null } : next;
   });
@@ -559,6 +561,8 @@ function advance(roadmap, { runOf, closed = () => false, canStart = () => true }
   if (r.scope) {
     const at = r.stages.findIndex((s) => s.id === r.scope.stage);
     if (at < 0) return { roadmap: { ...r, state: 'paused', pausedBy: null, scope: null, error: 'The stage run on its own is no longer in the roadmap: press Start to run the roadmap.' }, start: [] };
+    // #284: disabled meanwhile (a file edited outside the app): nothing of it starts
+    if (r.stages[at].disabled) return { roadmap: { ...r, state: 'paused', pausedBy: null, scope: null, error: 'The stage run on its own is disabled: enable it, or press Start to run the roadmap.' }, start: [] };
     const step = stageStep(r, at, { closed, canStart });
     if (step) return step;
     return scopeOver(at);

@@ -207,7 +207,7 @@ function homeTodayHtml(d) {
   const o = d.occupancy;
   const occupancy = o && !o.empty ? `${Math.round((Number(o.occupancy) || 0) * 100)}%` : '—';
   const stages = d.backlog?.roadmap?.stages || [];
-  const next = stages.findIndex((s) => (s.items || []).some((x) => !['done', 'skipped'].includes(x.status)));
+  const next = stages.findIndex((s) => !s.disabled && (s.items || []).some((x) => !['done', 'skipped'].includes(x.status)));
   const nextName = next < 0 ? '' : stages[next].name || `Stage ${next + 1}`;
   const stat = (label, value, title) => `<div class="u-stat" title="${esc(title)}"><label>${esc(label)}</label><b>${value}</b></div>`;
   return `<section class="home-block" data-testid="home-today" aria-label="Today">
