@@ -52,7 +52,7 @@ module.exports = (ctx) => {
     const out = change(withRunStatus(id, stages));
     if (!out.ok) throw new Error(out.reason);
     return out.stages;
-  });
+  }, { alive: ctx.runAlive });
   return [
     { channel: 'roadmap:get', method: 'getRoadmap', params: ['projectId'], fn: ({ projectId }) => ctx.roadmapView(project(projectId)) },
     // the edited stages ([{ id?, name, note, items: [{ id?, workflow, inputs, mock, issues }] }]); runs are kept by item id;
@@ -64,7 +64,7 @@ module.exports = (ctx) => {
       fn: async ({ projectId, stages, label }) => {
         const id = project(projectId);
         const before = stagesOf(id);
-        roadmaps.saveStages(ctx.ws.backlog, id, stages, { issues: synced(projectId) });
+        roadmaps.saveStages(ctx.ws.backlog, id, stages, { issues: synced(projectId), alive: ctx.runAlive });
         const edit = edited(id, before, String(label || 'Edited the roadmap'));
         await ctx.dispatchRoadmaps();
         return withEdit(projectId, edit);

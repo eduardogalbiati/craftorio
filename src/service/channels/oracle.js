@@ -185,7 +185,7 @@ module.exports = (ctx) => {
       const backup = snapshotRoadmap(a, id);
       // #284: `disabled` is the owner's switch: whatever the Oracle sends, the stored value is kept
       const stages = (a.params.stages || []).map((s) => { const { disabled, ...rest } = s || {}; return rest; });
-      roadmaps.saveStages(ctx.ws.backlog, id, stages, { issues: synced(id) });
+      roadmaps.saveStages(ctx.ws.backlog, id, stages, { issues: synced(id), alive: ctx.runAlive });
       await ctx.dispatchRoadmaps();
       return { text: `The roadmap of ${id} was saved (validated, ${a.params.stages.length} stage(s)).`, backup };
     },
