@@ -135,6 +135,20 @@ test('a new type scores the card with that kind\'s rubric; a clarity given with 
   assert.equal(discovery.updateCard(dir, P, card.id, { title: 'Export runs', tags: ['x'] }).clarity.score, 91);
 });
 
+test('a card from before the clarity score is scored when it is read, as of its last change, and can enter Ready', (t) => {
+  const dir = tmp(t);
+  const text = ['Problem', 'Goal', 'Scope', 'Non-goals', 'Acceptance criteria', 'Decisions', 'Open questions', 'Dependencies', 'Evidence'].map((h) => `## ${h}\n\nSaid.\n`).join('\n');
+  const card = discovery.createCard(dir, P, { title: 'An old card', text });
+  const file = path.join(dir, P, 'cards', card.id, 'card.json');
+  const old = { ...JSON.parse(fs.readFileSync(file, 'utf8')), clarity: { score: null, gaps: [] } };
+  fs.writeFileSync(file, JSON.stringify(old));
+  const read = discovery.readCard(dir, P, card.id);
+  assert.deepEqual(read.clarity, { score: 100, gaps: [], ts: old.updated, by: 'Clarity rubric' });
+  assert.equal(discovery.listCards(dir, P)[0].clarity.score, 100);
+  assert.equal(discovery.moveCard(dir, P, card.id, 'ready').column, 'ready');
+  assert.equal(JSON.parse(fs.readFileSync(file, 'utf8')).clarity.score, 100);
+});
+
 test('a run\'s result and a restored version score the card again', (t) => {
   const dir = tmp(t);
   const card = discovery.createCard(dir, P, { title: 'Export', text: 'Notes.' });

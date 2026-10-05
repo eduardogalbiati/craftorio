@@ -19,8 +19,9 @@
 // (result-<source>: Write & Review, AI Arena), which the thread notes too ({ kind: 'result' }).
 // The clarity score (#166, src/clarity.js): card.json's `clarity` { score, gaps, ts, by, override? }
 // is the rubric's score of the card's text, computed when the card is created and again whenever its
-// document, its acceptance criteria or its type change (the text itself is never touched); a caller
-// may record another scorer's (updateCard's `clarity`). board.json's `clarity` { bar, byKind, night }
+// document, its acceptance criteria or its type change (the text itself is never touched; a card
+// from before the score gets it when it is read); a caller may record another scorer's (updateCard's
+// `clarity`). board.json's `clarity` { bar, byKind, night }
 // is the project's bar (85 by default, optionally one per kind) and the owner's night. A card enters
 // Ready only at or above its bar, or with the owner's override and a reason, kept on the card as
 // clarity.override { score, bar, reason, by, ts }; a card already in Ready is never moved back.
@@ -226,10 +227,14 @@ function countThread(folder) {
 // thread entries (`threadCount`: a card's face shows it without reading the thread).
 function load(folder) {
   const card = JSON.parse(fs.readFileSync(path.join(folder, 'card.json'), 'utf8'));
+  const text = { document: readText(path.join(folder, 'document.md')), acceptance: readText(path.join(folder, 'acceptance.md')) };
+  // a card from before the clarity score (#166) was never scored: it is as it is read, as of its
+  // last change (saved with the card's next change)
+  const unscored = !card.clarity?.ts && typeof card.clarity?.score !== 'number';
   return {
     ...card,
-    document: readText(path.join(folder, 'document.md')),
-    acceptance: readText(path.join(folder, 'acceptance.md')),
+    ...(unscored ? { clarity: { ...card.clarity, ...clarity.scoreClarity({ type: card.type, ...text }), ts: card.updated || card.created, by: RUBRIC } } : {}),
+    ...text,
     attachments: attachmentNames(folder),
     threadCount: countThread(folder),
   };
