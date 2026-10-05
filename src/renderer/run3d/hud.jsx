@@ -320,7 +320,7 @@ export function Pipeline({ shown, onSelect }) {
             return (
               <button type="button" key={g.name} className={'r3d-mile ' + cls} style={{ '--c': statusColor(status === 'pending' ? 'running' : status) }} onClick={() => onSelect((live || touched[touched.length - 1] || g.stations[0]).id)}>
                 <i>{cls === 'done' && <Icon name="check" size={13} />}</i>
-                <b>{g.name}</b><small>{live ? `${live.id} · ${clockOf(ms)}` : touched.length ? clockOf(ms) : 'queued'}</small>
+                <b>{g.name}</b><small>{live ? `${live.label} · ${clockOf(ms)}` : touched.length ? clockOf(ms) : 'queued'}</small>
               </button>
             );
           })}</div>
@@ -350,7 +350,7 @@ export function Tags({ shown, onSelect }) {
         const text = target === st.id ? 'supervisor on it' : step.status === 'waiting' ? 'waiting for you' : r?.busy ? r.act : step.status === 'pending' ? '' : STATUS[step.status].label.toLowerCase();
         return (
           <div key={st.id} ref={tagRef(st.id)} className={'r3d-tag' + (shown === st.id ? ' sel' : '') + (live ? ' live' : step.visits ? '' : ' dim')} onClick={() => onSelect(st.id)}>
-            <i className={'r3d-dot' + (live ? ' live' : '')} style={{ '--c': statusColor(r?.busy && step.status !== 'waiting' ? 'running' : step.status) }} />{st.id}{text && <span>{text}</span>}
+            <i className={'r3d-dot' + (live ? ' live' : '')} style={{ '--c': statusColor(r?.busy && step.status !== 'waiting' ? 'running' : step.status) }} />{st.label}{text && <span>{text}</span>}
           </div>
         );
       })}
