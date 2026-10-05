@@ -142,10 +142,11 @@ const usageFile = (dir) => path.join(dir, 'usage.jsonl');
  * session's cumulative total_cost_usd: a line written before #244 (no `cumulativeUsd`) costs the
  * difference with the previous line of the same session; a later line holds its own cost in
  * `costUsd` and the session's total in `cumulativeUsd`. The file is never rewritten.
+ * `opts`: agentsUsage.readLines' (`strict`: a file that cannot be read throws; Analytics' Agents tab, #280).
  */
-function usageLines(dir) {
+function usageLines(dir, opts) {
   const totals = new Map(); // provider session id → its cumulative cost so far
-  return readLines(usageFile(dir)).map((u) => {
+  return agentsUsage.readLines(usageFile(dir), opts).map((u) => {
     const sid = u.sessionId || null;
     const cost = Number(u.costUsd) || 0;
     if ('cumulativeUsd' in u) {

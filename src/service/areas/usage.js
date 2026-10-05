@@ -45,7 +45,7 @@ module.exports = (ctx) => {
     // strict: a usage file that cannot be read is an error on the tab, not an agent without turns
     const strict = { strict: true };
     const out = agentsUsage.agentsAnalytics({
-      oracle: oracle.usageLines(oracleDir()), productOwner: productOwner.usageLines(ctx.ws.backlog, strict), supervisor: supervisorChat.usageTurns(supervisorDir(), strict),
+      oracle: oracle.usageLines(oracleDir(), strict), productOwner: productOwner.usageLines(ctx.ws.backlog, strict), supervisor: supervisorChat.usageTurns(supervisorDir(), strict),
       from: range.from, to: range.to,
     });
     const { dailyBudgetUsd } = oracle.oracleSettings(workspace.readSettings(ctx.ws));
