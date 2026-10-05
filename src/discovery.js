@@ -262,6 +262,14 @@ const newestFirst = (key) => (a, b) => String(key(b)).localeCompare(String(key(a
 // The rubric's score of a card's text (#166), as card.json's `clarity` keeps it.
 const scored = (card) => ({ ...clarity.scoreClarity(card), ts: now(), by: RUBRIC });
 
+// The clarity a caller records (another scorer's): its score is a whole percentage, or null. The
+// override is the owner's, written by moveCard only.
+function givenClarity({ override, ...given }) {
+  const { score } = given;
+  if (score !== undefined && score !== null && !(Number.isInteger(score) && score >= 0 && score <= 100)) throw new Error(`A clarity score is a whole number from 0 to 100: ${score}`);
+  return given;
+}
+
 // The card's document was replaced (a restored version, a run's result): its score follows.
 function rescore(folder) {
   const card = load(folder);
@@ -291,6 +299,7 @@ function createCard(dir, projectId, { title, text = '', author = 'owner', type =
     history: [],
   };
   card.updated = card.created;
+  if (card.column === 'ready') passClarityBar(dir, projectId, card, {});
   const d = new Date(card.created);
   const day = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
   let folder = null;
@@ -345,14 +354,14 @@ function updateCard(dir, projectId, id, fields = {}) {
     if (k === 'title') card.title = checkTitle(fields.title);
     else if (k === 'type') card.type = checkType(fields.type);
     else if (k === 'tags') card.tags = tagList(fields.tags);
-    else if (fields[k] && typeof fields[k] === 'object' && !Array.isArray(fields[k])) card[k] = { ...card[k], ...fields[k] };
+    else if (fields[k] && typeof fields[k] === 'object' && !Array.isArray(fields[k])) card[k] = { ...card[k], ...(k === 'clarity' ? givenClarity(fields[k]) : fields[k]) };
     else throw new Error(`${k} must be an object.`);
   }
   if (fields.document !== undefined) card.document = String(fields.document ?? '');
   if (fields.acceptance !== undefined) card.acceptance = String(fields.acceptance ?? '');
   if (fields.document !== undefined) writeFileAtomic(path.join(folder, 'document.md'), card.document);
   if (fields.acceptance !== undefined) writeFileAtomic(path.join(folder, 'acceptance.md'), card.acceptance);
-  if (fields.document !== undefined || fields.acceptance !== undefined || card.type !== type) card.clarity = { ...card.clarity, ...scored(card), ...fields.clarity };
+  if (fields.document !== undefined || fields.acceptance !== undefined || card.type !== type) card.clarity = { ...card.clarity, ...scored(card), ...(fields.clarity ? givenClarity(fields.clarity) : {}) };
   card.updated = now();
   saveCard(folder, card);
   return load(folder);
@@ -633,7 +642,7 @@ function answerGrill(dir, projectId, id, { text, by = 'owner' } = {}) {
   const waiting = waitingGrill(dir, projectId, id);
   if (!waiting) throw new Error('No Grill me question is waiting for an answer on this card.');
   const answer = String(text ?? '').trim();
-  if (!answer) throw new Error('An answer needs a text.');
+  if (!clarity.said(answer)) throw new Error('An answer needs a text, more than a placeholder: end the interview to leave the point open.');
   const fields = clarity.recordAnswer(readCard(dir, projectId, id), waiting.grill, answer);
   if (fields.document !== undefined) keepDocument(dir, projectId, id, 'before-grill');
   const card = updateCard(dir, projectId, id, fields);

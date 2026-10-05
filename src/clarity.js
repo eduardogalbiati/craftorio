@@ -6,7 +6,8 @@
 //   scoreClarity(card)            → { score, gaps }             card: { type, document, acceptance }
 //   clarityBar(settings, kind)    → the bar a kind must reach to enter Ready (85 by default)
 //   claritySettings(raw)          → { bar, byKind, night } checked, with the defaults (board.json)
-//   readyForecast(items, settings)→ the ready work in agent hours and nights
+//   readyForecast(items, settings)→ the ready work in agent hours and nights (nightHours: a night's length)
+//   said(text)                    → is something written (not a placeholder such as TBD)
 //   nextQuestion / recordAnswer   → the Grill me interview: the next open point as a question (with a
 //                                   proposed answer when the card already holds one), and the answer
 //                                   written into the card's text under the point's heading
@@ -16,6 +17,7 @@
 const DEFAULT_BAR = 85;
 // the owner's night, when agents work alone
 const DEFAULT_NIGHT = { start: '23:00', end: '08:00' };
+// `task` is the development board's kind: no discovery card has it yet (discovery.TYPES)
 const KINDS = ['idea', 'prd', 'rfc', 'task', 'bug', 'hotfix'];
 
 const NON_GOALS = /\bnon[- ]?goals?\b|\b(out of|not in) scope\b/;
@@ -98,9 +100,23 @@ const RUBRICS = {
   hotfix: BUG,
 };
 
-// Something is written: more than list markers, empty checkboxes or a placeholder.
+// The text without its HTML comments (a template's hints). No regular expression: a document is any
+// text, and one full of unclosed comments must not slow the scan down.
+function withoutComments(text) {
+  let out = '';
+  let from = 0;
+  for (;;) {
+    const start = text.indexOf('<!--', from);
+    const end = start < 0 ? -1 : text.indexOf('-->', start + 4);
+    if (end < 0) return out + text.slice(from);
+    out += text.slice(from, start);
+    from = end + 3;
+  }
+}
+
+/** Something is written: more than list markers, empty checkboxes or a placeholder (TBD, TODO, ?). */
 function said(text) {
-  const t = String(text ?? '').replace(/<!--[\s\S]*?-->/g, '').replace(/^[\s>*+-]+/gm, '').replace(/\[[ xX]?\]/g, '').trim();
+  const t = withoutComments(String(text ?? '')).replace(/^[\s>*+-]+/gm, '').replace(/\[[ xX]?\]/g, '').trim();
   return !!t && !/^(tbd|todo|to be (defined|decided)|\?+|\.+)$/i.test(t);
 }
 
@@ -114,14 +130,15 @@ function outline(document) {
   let fence = false;
   for (const line of String(document ?? '').split(/\r?\n/)) {
     if (/^\s*(```|~~~)/.test(line)) fence = !fence;
-    const m = fence ? null : /^ {0,3}(#{1,6})\s+(.*?)\s*#*\s*$/.exec(line);
+    // the title is trimmed below, not by the expression: a long line of spaces stays linear
+    const m = fence ? null : /^ {0,3}(#{1,6})[ \t]+(.*)$/.exec(line);
     if (!m) {
       if (!open.length) lead += `${line}\n`;
       for (const s of open) s.body += `${line}\n`;
       continue;
     }
     while (open.length && open.at(-1).level >= m[1].length) open.pop();
-    const section = { level: m[1].length, title: m[2].replace(/[*_`:]/g, '').trim().toLowerCase(), body: '' };
+    const section = { level: m[1].length, title: m[2].replace(/[*_`:#]/g, '').trim().toLowerCase(), body: '' };
     sections.push(section);
     open.push(section);
   }
@@ -129,9 +146,10 @@ function outline(document) {
 }
 
 // The points of the card's kind that its text does not cover, in the rubric's order.
-function openPoints({ type, document, acceptance } = {}) {
+function openPoints(card) {
+  const { type, document, acceptance } = card || {};
   const { sections } = outline(document);
-  const rubric = RUBRICS[type] || RUBRICS.idea;
+  const rubric = Object.hasOwn(RUBRICS, String(type)) ? RUBRICS[type] : RUBRICS.idea;
   const covered = (id) => (id === 'acceptance' && said(acceptance)) || sections.some((s) => CRITERIA[id].heading(s.title) && said(s.body));
   return { rubric, open: rubric.filter((id) => !covered(id)) };
 }
@@ -140,7 +158,7 @@ function openPoints({ type, document, acceptance } = {}) {
  * Scores a card's text against the rubric of its kind: `score` (an integer, 0 to 100) and `gaps`,
  * one line per point not covered ("Acceptance criteria: nothing verifiable says when it is done").
  */
-function scoreClarity(card = {}) {
+function scoreClarity(card) {
   const { rubric, open } = openPoints(card);
   const weight = (ids) => ids.reduce((sum, id) => sum + CRITERIA[id].weight, 0);
   return {
@@ -163,7 +181,8 @@ function clarityBar(settings, kind) {
 function claritySettings(raw) {
   const byKind = {};
   for (const kind of KINDS) if (isPercent(raw?.byKind?.[kind])) byKind[kind] = raw.byKind[kind];
-  const night = CLOCK.test(raw?.night?.start) && CLOCK.test(raw?.night?.end) ? { start: raw.night.start, end: raw.night.end } : { ...DEFAULT_NIGHT };
+  // a night that starts when it ends has no length: not a night
+  const night = CLOCK.test(raw?.night?.start) && CLOCK.test(raw?.night?.end) && raw.night.start !== raw.night.end ? { start: raw.night.start, end: raw.night.end } : { ...DEFAULT_NIGHT };
   return { bar: clarityBar({ bar: raw?.bar }), byKind, night };
 }
 
@@ -171,7 +190,7 @@ function claritySettings(raw) {
 function nightHours(night) {
   const minutes = (clock) => { const [h, m] = clock.split(':').map(Number); return h * 60 + m; };
   const { start, end } = claritySettings({ night }).night;
-  const span = (minutes(end) - minutes(start) + 1440) % 1440 || 1440;
+  const span = (minutes(end) - minutes(start) + 1440) % 1440;
   return Math.round(span / 6) / 10;
 }
 
@@ -184,11 +203,12 @@ function nightHours(night) {
 function readyForecast(items, settings) {
   const perNight = nightHours(settings?.night);
   const ready = (items || []).filter((c) => typeof c?.clarity?.score === 'number' && c.clarity.score >= clarityBar(settings, c.type));
-  const minutes = ready.reduce((sum, c) => sum + (Number(c.estimate?.minutes) || 0), 0);
+  const estimate = (c) => Math.max(0, Number(c.estimate?.minutes) || 0);
+  const minutes = ready.reduce((sum, c) => sum + estimate(c), 0);
   const hours = Math.round(minutes / 6) / 10;
   return {
     count: ready.length,
-    unestimated: ready.filter((c) => !(Number(c.estimate?.minutes) > 0)).length,
+    unestimated: ready.filter((c) => !estimate(c)).length,
     hours,
     nights: hours > 0 ? Math.max(1, Math.floor(hours / perNight)) : 0,
     nightHours: perNight,
@@ -214,9 +234,9 @@ function proposal(id, card) {
 }
 
 /** The next question of the interview: the first open point of the card's kind, `{ criterion, label, question, proposal }`, or null when every point is covered. */
-function nextQuestion(card = {}) {
+function nextQuestion(card) {
   const [id] = openPoints(card).open;
-  return id ? { criterion: id, label: CRITERIA[id].label, question: CRITERIA[id].question, proposal: proposal(id, card) } : null;
+  return id ? { criterion: id, label: CRITERIA[id].label, question: CRITERIA[id].question, proposal: proposal(id, card || {}) } : null;
 }
 
 /**
@@ -230,7 +250,7 @@ function recordAnswer(card = {}, criterion, answer) {
     const items = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean).map((l) => (/^([-*+]|\d+[.)]) /.test(l) ? l : `- ${l}`));
     return { acceptance: `${after(card.acceptance)}${items.join('\n')}\n` };
   }
-  const { label } = CRITERIA[criterion] || CRITERIA.decisions;
+  const { label } = Object.hasOwn(CRITERIA, String(criterion)) ? CRITERIA[criterion] : CRITERIA.decisions;
   const before = after(card.document);
   return { document: `${before}${before ? '\n' : ''}## ${label}\n\n${text}\n` };
 }
@@ -245,5 +265,6 @@ module.exports = {
   nightHours,
   readyForecast,
   recordAnswer,
+  said,
   scoreClarity,
 };
