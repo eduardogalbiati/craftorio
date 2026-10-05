@@ -117,6 +117,33 @@ test('a refused commit stays in the dialog with the reason; Cancel files nothing
   assert.equal(page.cardColumn(ready.id), 'ready');
 });
 
+test('while the issues are being filed the dialog cannot be cancelled, by its button or by Esc', async () => {
+  let release;
+  const filed = new Promise((resolve) => { release = resolve; });
+  const { page, ready, calls } = await boardWithCommit({ commit: async () => { await filed; throw new Error('gh: network down'); } });
+  const dialog = await openDialog(page, ready.id);
+  const { Event } = page.dom.classes;
+  dialog.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+  await settle();
+  const cancel = dialog.querySelector('#btn-dsc-commit-cancel');
+  assert.equal(!!cancel.disabled, true);
+  assert.equal(!!dialog.querySelector(tid('discovery-commit-file')).disabled, true);
+  page.document.dispatchEvent(new Event('keydown', { bubbles: true, cancelable: true, key: 'Escape' }));
+  await settle();
+  assert.ok(page.visible(dialog), 'Esc leaves the dialog open while filing');
+  // a second submit meanwhile files nothing more
+  dialog.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+  release();
+  await settle(30);
+  assert.equal(calls.length, 1);
+  assert.equal(!!cancel.disabled, false);
+  assert.match(page.text(dialog.querySelector('#dsc-commit-error')), /network down/);
+  page.document.dispatchEvent(new Event('keydown', { bubbles: true, cancelable: true, key: 'Escape' }));
+  await settle();
+  assert.equal(page.visible(dialog), false, 'Esc is Cancel once nothing is being filed');
+  assert.ok(page.$(tid('discovery-card-detail')), 'the card\'s panel stays open behind the dialog');
+});
+
 test('a committed card opens read-only, with its delivery and "New card from this one"', async () => {
   const done = { ...card({ title: 'Export runs as CSV', column: 'committed', clarity: 90 }), links: { issues: [101], release: null } };
   const delivery = { stage: 'released', counts: { todo: 0, running: 0, local: 0, done: 1 }, issues: [{ number: 101, column: 'done', title: 'Export the runs table', url: 'https://github.com/o/r/issues/101', release: 'v1.2' }], release: 'v1.2' };

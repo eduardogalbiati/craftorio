@@ -65,6 +65,19 @@ test('simulated: the proposal is the split by the rules, and committing it files
   await assert.rejects(async () => api['discovery:commit']({ projectId, cardId, split: proposal.split }), /already committed/);
 });
 
+test('a card whose issues are being filed is not committed a second time', async (t) => {
+  const { service, api } = makeService(t);
+  const ws = service.workspace();
+  const projectId = await project(t, api, ws);
+  const cardId = readyCard(ws.discovery, projectId);
+  const split = { issues: [{ title: 'One', tasks: ['A'] }] };
+  const first = api['discovery:commit']({ projectId, cardId, split });
+  await assert.rejects(async () => api['discovery:commit']({ projectId, cardId, split }), /being committed/);
+  assert.deepEqual((await first).issues.map((i) => i.number), [8]);
+  const data = await api['backlog:get']({ projectId });
+  assert.deepEqual(data.issues.map((i) => i.number).sort((a, b) => a - b), [7, 8], 'one issue was filed, not two');
+});
+
 test('discovery:commit-proposal refuses like the commit: under 85%, and without a synced backlog', async (t) => {
   const { service, api } = makeService(t);
   const ws = service.workspace();

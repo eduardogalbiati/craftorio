@@ -11,6 +11,8 @@
 // on the project's synced repository and commits the card; the board lists the committed cards
 // with their delivery (`committed`). Under MULTIAGENT_SIMULATION_ONLY the proposal is the
 // rule-based one and the issues only join the workspace's synced backlog: never gh/glab, no model.
+// `preview` (the screen's developer mode, like po:file and po:split): the rule-based proposal, and a
+// commit that only answers with the commands it would run.
 
 const os = require('os');
 const path = require('path');
@@ -30,6 +32,8 @@ function owner() {
 
 module.exports = (ctx) => {
   const dir = () => ctx.ws.discovery;
+  // the cards whose issues are being filed: a second commit of one files nothing
+  const committing = new Set();
   // when the card was committed: the list shows the last committed first
   const committedAt = (c) => (c.history || []).findLast((h) => h.to === discovery.COMMITTED)?.ts || c.updated;
   // The committed cards (#258), each with its delivery from the Backlog's issues and the releases.
@@ -116,10 +120,10 @@ module.exports = (ctx) => {
     {
       channel: 'discovery:commit-proposal',
       method: 'proposeDiscoveryCommit',
-      params: ['projectId', 'cardId'],
-      fn: async ({ projectId, cardId }) => {
+      params: ['projectId', 'cardId', 'preview'],
+      fn: async ({ projectId, cardId, preview }) => {
         const card = committable(projectId, cardId);
-        const simulated = simulation.simulationOnly();
+        const simulated = !!preview || simulation.simulationOnly();
         const options = ctx.productOwnerOptions(path.basename(String(projectId)), simulated);
         try {
           return await productOwner.proposeCommit({ ...options, card });
@@ -132,12 +136,13 @@ module.exports = (ctx) => {
     // confirmed `split` ({ issues: [{ title, tasks, complexity, workflow }] }) on the project's synced
     // repository, each issue with "From discovery card <id>", and commits the card (links.issues, off
     // the board) → { issues: [{ number, url, title, … }], card, simulated, failed?, skippedLabels?,
-    // syncError? }. Refused outside Ready and under 85% clarity (the message lists the gaps)
+    // syncError? }. Refused outside Ready and under 85% clarity (the message lists the gaps).
+    // `preview`: nothing is filed or committed → { preview: true, commands, issues: [], card }
     {
       channel: 'discovery:commit',
       method: 'commitDiscoveryCard',
-      params: ['projectId', 'cardId', 'split'],
-      fn: async ({ projectId, cardId, split }) => {
+      params: ['projectId', 'cardId', 'split', 'preview'],
+      fn: async ({ projectId, cardId, split, preview }) => {
         committable(projectId, cardId);
         const id = path.basename(String(projectId));
         const data = backlog.readBacklog(ctx.ws.backlog, id);
@@ -146,10 +151,19 @@ module.exports = (ctx) => {
         const platform = data.platform || workspace.readSettings(ctx.ws).backlogPlatform || backlog.DEFAULT_PLATFORM;
         const repo = data.repo || project?.repo;
         const simulated = simulation.simulationOnly();
-        const res = await commits.commitCard({
-          dir: dir(), projectId, cardId, split, platform, repo, by: owner(),
-          ...(simulated ? { exec: commits.simulatedExec({ backlogDir: ctx.ws.backlog, projectId: id, platform, repo }) } : {}),
-        });
+        if (preview && !simulated) return commits.commitCard({ dir: dir(), projectId, cardId, split, platform, repo, preview: true });
+        const key = `${id}/${cardId}`;
+        if (committing.has(key)) throw new Error('This card is being committed: its issues are being filed.');
+        committing.add(key);
+        let res;
+        try {
+          res = await commits.commitCard({
+            dir: dir(), projectId, cardId, split, platform, repo, by: owner(),
+            ...(simulated ? { exec: commits.simulatedExec({ backlogDir: ctx.ws.backlog, projectId: id, platform, repo }) } : {}),
+          });
+        } finally {
+          committing.delete(key);
+        }
         if (simulated) return { ...res, simulated };
         // after a real filing the Backlog shows the new issues right away
         try {

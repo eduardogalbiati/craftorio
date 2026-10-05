@@ -59,7 +59,9 @@ Read this before touching run listings, the Backlog queue, pending gates, notifi
   content is stored once) and `conversation.jsonl` (the thread, appended). `archive/<card id>/`: a
   discarded or merged card, same layout, `card.archived = { ts, reason, by, mergedInto? }`.
   A committed card (#258, `src/discovery-commit.js`): `card.column = 'committed'` (no board column,
-  in no `order`; `moveCard` and `mergeCard` refuse it, `restoreCard` keeps it committed),
+  in no `order`; `moveCard` and `mergeCard` refuse it, `restoreCard` keeps it committed, and it is
+  kept as it was committed: `updateCard` only takes `links.release`, a new document, attachment,
+  restored version, run result or Grill me interview is refused; its thread still takes notes),
   `links.issues` the numbers of the issues filed from it (`markCommitted`; `issueCards` gives the
   Backlog each issue's card from the `card.json` files alone), `filed/<iso ts>-issue-<n>.md` the
   text of each issue, a thread entry `{ kind: 'commit', issues }`; `links.from` on a card created

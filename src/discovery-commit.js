@@ -9,7 +9,9 @@
 //   normalizeSplit(raw, …)   a model's proposal kept to the card: only tasks the card has, each once
 //   checkSplit(split)        the proposal the owner confirmed (titles, tasks, complexity and workflow
 //                            may all have been edited), cleaned; throws when it files nothing
-//   commitCard(…)            files each issue (gh/glab issue create, the issue-writing layout: where it
+//   commitCard(…)            (`preview`: checks everything and answers with the commands it would
+//                            run, files and commits nothing: the screen's developer mode)
+//                            files each issue (gh/glab issue create, the issue-writing layout: where it
 //                            comes from, its tasks, the card's document as evidence; the first line
 //                            is "From discovery card <id>"), then commits the card in the store
 //                            (src/discovery.js markCommitted: links.issues, off the board). Nothing is
@@ -31,8 +33,10 @@ const backlog = require('./backlog');
 const discovery = require('./discovery');
 const poSplit = require('./po-split');
 
-const COMMIT_BAR = 85;
+const { COMMIT_BAR } = discovery;
 const MAX_ISSUES = 8;
+// the labels a commit gives an issue: its kind and its complexity (issueLabels)
+const KINDS = ['bug', 'enhancement'];
 const MAX_TITLE = 200;
 // the card's document, as an issue's evidence: its first characters (the card itself stays private)
 const EVIDENCE_CLIP = 4000;
@@ -166,13 +170,14 @@ function issueBody({ card, issue, index, total, siblings = [] }) {
     '',
     ...issue.tasks.map((t) => `- [ ] ${t}`),
     ...(evidence ? ['', '## From the card', '', evidence] : []),
+    // the issues filed before this one: the platform shows them the mention, so both sides link
     ...(siblings.length ? ['', `Related: ${refs(siblings)} (same discovery card).`] : []),
     '',
   ].join('\n');
 }
 
 // An issue's labels: its kind from the card's type, and its complexity.
-const issueLabels = (card, issue) => [['bug', 'hotfix'].includes(card.type) ? 'bug' : 'enhancement', `complexity:${issue.complexity}`];
+const issueLabels = (card, issue) => [KINDS[['bug', 'hotfix'].includes(card.type) ? 0 : 1], `complexity:${issue.complexity}`];
 
 /**
  * Commits a card on the owner's click: checks the bar and the split, files each issue, then
@@ -180,18 +185,25 @@ const issueLabels = (card, issue) => [['bug', 'hotfix'].includes(card.type) ? 'b
  * A refusal (not Ready, under the bar, already committed, an empty split) files nothing. A filing
  * that fails after an issue was filed still commits the card with the issues filed (filing them
  * again would duplicate them): `failed` names the ones left.
- * @param {{ dir: string, projectId: string, cardId: string, split: { issues: object[] }, platform: string, repo: string, exec?: Function, by?: string }} o
+ * `preview`: the same checks, then the commands it would run; nothing is filed or committed.
+ * @param {{ dir: string, projectId: string, cardId: string, split: { issues: object[] }, platform: string, repo: string, exec?: Function, by?: string, preview?: boolean }} o
  *   dir: the workspace's discovery folder
- * @returns {Promise<{ issues: { number, url, title, tasks, complexity, workflow }[], card: object, skippedLabels?: string[], failed?: { title, error }[] }>}
+ * @returns {Promise<{ issues: { number, url, title, tasks, complexity, workflow }[], card: object, skippedLabels?: string[], failed?: { title, error }[], preview?: true, commands?: string[] }>}
  */
-async function commitCard({ dir, projectId, cardId, split, platform, repo, exec = backlog.execCli, by = 'owner' }) {
+async function commitCard({ dir, projectId, cardId, split, platform, repo, exec = backlog.execCli, by = 'owner', preview = false }) {
   const card = discovery.readCard(dir, projectId, cardId);
   const check = checkCommit(card);
   if (!check.ok) throw new Error(check.reason);
   const wanted = checkSplit(split);
-  const known = await backlog.repoLabels({ platform, repo, exec });
   const folder = discovery.filedDir(dir, projectId, cardId);
   const at = stamp();
+  if (preview) {
+    const commands = wanted.map((issue, index) => backlog.issueCreateCommand({
+      platform, repo, title: issue.title, labels: issueLabels(card, issue), file: path.join(folder, `${at}-issue-${index + 1}.md`), text: issueBody({ card, issue, index, total: wanted.length }),
+    }).display);
+    return { preview: true, commands, issues: [], card };
+  }
+  const known = await backlog.repoLabels({ platform, repo, exec });
   const skipped = new Set();
   const issues = [];
   const failed = [];
@@ -208,7 +220,8 @@ async function commitCard({ dir, projectId, cardId, split, platform, repo, exec 
       fs.writeFileSync(file, body);
       const url = String(await exec(command.cli, command.args) || '').match(/https?:\/\/\S+/)?.[0] || null;
       const number = Number(url?.match(/\/(\d+)\/?$/)?.[1]) || null;
-      if (!number) throw new Error(`${command.cli} did not answer with the new issue's URL.`);
+      // filed, but its number is unknown: it cannot be linked, and trying again could file it twice
+      if (!number) throw new Error(`${command.cli} did not answer with the URL of "${issue.title}": look for it in the repository before committing again.`);
       issues.push({ number, url, ...issue });
     } catch (e) {
       // nothing filed yet: the card stays in Ready and the commit can be tried again
@@ -216,7 +229,13 @@ async function commitCard({ dir, projectId, cardId, split, platform, repo, exec 
       failed.push({ title: issue.title, error: e.message });
     }
   }
-  const committed = discovery.markCommitted(dir, projectId, cardId, { issues: issues.map((i) => i.number), by });
+  let committed;
+  try {
+    committed = discovery.markCommitted(dir, projectId, cardId, { issues: issues.map((i) => i.number), by });
+  } catch (e) {
+    // the card changed while its issues were being filed: say which ones exist now
+    throw new Error(`${refs(issues.map((i) => i.number))} ${issues.length > 1 ? 'were' : 'was'} filed, but the card was not committed: ${e.message}`);
+  }
   discovery.appendConversation(dir, projectId, cardId, {
     kind: 'commit', author: String(by || 'owner'), issues: issues.map((i) => i.number),
     text: `Committed to the backlog: ${issues.map((i) => `#${i.number} ${i.title}`).join('; ')}.${failed.length ? ` Not filed: ${failed.map((f) => f.title).join('; ')}.` : ''}`,
@@ -227,12 +246,14 @@ async function commitCard({ dir, projectId, cardId, split, platform, repo, exec 
 /**
  * The CLI of a simulated commit (simulation-only, the screenshots): nothing reaches gh/glab; an
  * `issue create` adds the issue to the project's synced backlog (the cache in `backlogDir`) with the
- * next free number and answers with its URL, as the CLI does.
+ * next free number and answers with its URL, as the CLI does. The simulated repository has the
+ * labels a commit uses.
  */
 function simulatedExec({ backlogDir, projectId, platform, repo }) {
   const flag = (args, name) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : null; };
+  const flags = (args, name) => args.filter((_, i) => args[i - 1] === name);
   return async (_cli, args) => {
-    if (args[0] === 'label') return '[]';
+    if (args[0] === 'label') return JSON.stringify([...KINDS, ...[1, 2, 3, 4, 5].map((n) => `complexity:${n}`)].map((name) => ({ name })));
     if (args[0] !== 'issue' || args[1] !== 'create') return '';
     const data = backlog.readBacklog(backlogDir, projectId);
     if (!data) throw new Error('Sync the backlog first: a commit files into the synced backlog.');
@@ -243,7 +264,7 @@ function simulatedExec({ backlogDir, projectId, platform, repo }) {
     const url = `${base}${platform === 'gitlab' ? '/-' : ''}/issues/${number}`;
     const now = new Date().toISOString();
     data.issues = [
-      { number, title: flag(args, '--title'), state: 'open', labels: [], url, author: null, assignees: [], body, tasks: backlog.taskProgress(body), createdAt: now, updatedAt: now, pullRequests: [] },
+      { number, title: flag(args, '--title'), state: 'open', labels: flags(args, '--label').flatMap((l) => l.split(',')).map((name) => ({ name, color: null })), url, author: null, assignees: [], body, tasks: backlog.taskProgress(body), createdAt: now, updatedAt: now, pullRequests: [] },
       ...(data.issues || []),
     ];
     fs.writeFileSync(path.join(backlogDir, `${path.basename(String(projectId))}.json`), JSON.stringify(data, null, 2));
@@ -264,9 +285,10 @@ function simulatedExec({ backlogDir, projectId, platform, repo }) {
  */
 function cardDelivery(card, issues = [], releases = []) {
   const byNumber = new Map((issues || []).map((i) => [Number(i.number), i]));
+  // each issue's first shipped release, and the releases in the history's order (the oldest first)
   const shippedIn = new Map();
-  for (const r of releases || []) {
-    if (r?.status !== 'shipped') continue;
+  const shipped = (releases || []).filter((r) => r?.status === 'shipped');
+  for (const r of shipped) {
     for (const i of r.issues || []) if (!shippedIn.has(Number(i.number))) shippedIn.set(Number(i.number), r.version);
   }
   const counts = { todo: 0, running: 0, local: 0, done: 0 };
@@ -278,7 +300,9 @@ function cardDelivery(card, issues = [], releases = []) {
   });
   const released = list.length > 0 && list.every((i) => i.release);
   const delivered = list.length > 0 && counts.done === list.length;
-  return { stage: DELIVERY_STAGES[released ? 2 : delivered ? 1 : 0], counts, issues: list, release: released ? list[list.length - 1].release : null };
+  // released with the release that shipped its last issue
+  const last = released ? shipped.findLast((r) => list.some((i) => i.release === r.version)) : null;
+  return { stage: DELIVERY_STAGES[released ? 2 : delivered ? 1 : 0], counts, issues: list, release: last?.version || null };
 }
 
 module.exports = {

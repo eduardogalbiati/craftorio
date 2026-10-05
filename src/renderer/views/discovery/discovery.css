@@ -94,9 +94,7 @@
 .dsc-delivery-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dsc-delivery-issues a { color: var(--muted); text-decoration: none; }
 .dsc-delivery-issues a:hover { text-decoration: underline; }
-.dsc-stage.delivered, .dsc-stage.released, .dsc-issue-col.done, .dsc-issue-col.released { color: var(--green); }
-.dsc-stage.in_delivery, .dsc-issue-col.in_progress, .dsc-issue-col.local { color: var(--accent); }
-.dsc-issue-col.waiting { color: var(--yellow); }
+.dsc-delivery .pill { flex: none; white-space: nowrap; }
 .dsc-detail.read-only [data-detail="unattach"], .dsc-detail.read-only [data-detail="version-restore"] { display: none; }
 /* the issues scroll inside the dialog: its roadmap choice and File the issues stay in view */
 #dsc-commit-body { max-height: 52vh; overflow: auto; margin-bottom: 12px; }

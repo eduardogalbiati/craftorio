@@ -12,22 +12,27 @@
   // id → [pill colour (style.css .pill-<colour>), label]
   const STATUS = {
     cancelled: ['cancelled', 'Cancelled'],
+    delivered: ['success', 'Delivered'],
     done: ['success', 'Done'],
     failed: ['failed', 'Failed'],
     failed_to_start: ['failed', 'Failed to start'],
     idle: ['idle', 'Idle'],
+    in_delivery: ['running', 'In delivery'],
+    in_progress: ['running', 'In progress'],
     interrupted: ['interrupted', 'Interrupted'],
     local: ['success', 'Merged locally'],
     paused: ['cancelled', 'Paused'],
     pending: ['idle', 'Pending'],
     planned: ['idle', 'Planned'],
     queued: ['idle', 'Queued'],
+    released: ['success', 'Released'],
     running: ['running', 'Running'],
     simulated: ['idle', 'Simulated'],
     skipped: ['interrupted', 'Skipped'],
     stopped: ['cancelled', 'Stopped'],
     succeeded: ['success', 'Succeeded'],
     success: ['success', 'Succeeded'],
+    todo: ['idle', 'To do'],
     waiting: ['cancelled', 'Waiting for you'],
   };
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);

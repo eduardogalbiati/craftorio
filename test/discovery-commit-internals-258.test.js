@@ -163,6 +163,58 @@ test('simulatedExec: an issue create joins the synced backlog with the next free
   assert.match(issues[1].body, new RegExp(`^From discovery card ${id}$`, 'm'));
   assert.deepEqual(issues[1].tasks, { done: 0, total: 1 });
   assert.equal(await exec('gh', ['issue', 'close', '42']), '');
+  // the simulated repository has the labels a commit uses: none is reported as left out
+  assert.deepEqual(issues[1].labels.map((l) => l.name), ['enhancement', 'complexity:1']);
+  assert.equal(res.skippedLabels, undefined);
+});
+
+test('commitCard preview: the same checks, then the commands it would run; nothing is filed or committed', async (t) => {
+  const ws = tmp(t);
+  const id = readyCard(ws.discovery);
+  const exec = async () => { throw new Error('the CLI must not be called'); };
+  const split = { issues: [{ title: 'One', tasks: ['A'] }, { title: 'Two', tasks: ['B'] }] };
+  const res = await commits.commitCard({ dir: ws.discovery, projectId: P, cardId: id, split, platform: 'github', repo: REPO, exec, preview: true });
+  assert.equal(res.preview, true);
+  assert.deepEqual(res.issues, []);
+  assert.equal(res.commands.length, 2);
+  assert.match(res.commands[0], /^gh issue create --repo o\/r --title One --body-file /);
+  assert.equal(discovery.readCard(ws.discovery, P, id).column, 'ready');
+  assert.equal(fs.existsSync(discovery.filedDir(ws.discovery, P, id)), false);
+  await assert.rejects(commits.commitCard({ dir: ws.discovery, projectId: P, cardId: id, split: { issues: [] }, platform: 'github', repo: REPO, exec, preview: true }), /Nothing to file/);
+});
+
+test('the store: a committed card is kept as it was committed; only its release is still written', (t) => {
+  const ws = tmp(t);
+  const dir = ws.discovery;
+  const id = readyCard(dir);
+  discovery.markCommitted(dir, P, id, { issues: [7, 8], by: 'tester' });
+  const kept = /kept as it was committed/;
+  assert.throws(() => discovery.updateCard(dir, P, id, { document: 'Rewritten' }), kept);
+  assert.throws(() => discovery.updateCard(dir, P, id, { links: { issues: [] } }), kept);
+  assert.throws(() => discovery.updateCard(dir, P, id, { links: { release: 'v1' }, title: 'Renamed' }), kept);
+  assert.throws(() => discovery.addAttachment(dir, P, id, { name: 'a.txt', data: Buffer.from('x') }), kept);
+  assert.throws(() => discovery.recordResult(dir, P, id, { source: 'write-review', text: 'A new document' }), kept);
+  assert.throws(() => discovery.grillCard(dir, P, id), kept);
+  assert.equal(discovery.updateCard(dir, P, id, { links: { release: 'v1' } }).links.release, 'v1');
+  const card = discovery.readCard(dir, P, id);
+  assert.deepEqual(card.links.issues, [7, 8]);
+  assert.match(card.document, /cannot be exported/);
+  // its thread still takes notes (the commit's own, a remark on the delivery)
+  discovery.appendConversation(dir, P, id, { kind: 'note', author: 'tester', text: 'Shipped on Friday.' });
+});
+
+test('Grill me: a Ready card at its own lower bar is interviewed up to the commit bar', (t) => {
+  const ws = tmp(t);
+  const dir = ws.discovery;
+  discovery.setClarityBar(dir, P, { byKind: { hotfix: 60 } });
+  const card = discovery.createCard(dir, P, { title: 'Login loop after the token refresh', type: 'hotfix', text: 'The phone page asks to log in again.' });
+  discovery.updateCard(dir, P, card.id, { clarity: { score: 70, gaps: ['Steps to reproduce'] } });
+  discovery.moveCard(dir, P, card.id, 'define', { by: 'tester' });
+  assert.equal(discovery.grillCard(dir, P, card.id).bar, 60, 'outside Ready: the bar of its type');
+  discovery.moveCard(dir, P, card.id, 'ready', { by: 'tester' });
+  assert.equal(discovery.readCard(dir, P, card.id).column, 'ready', 'it passed its own bar');
+  assert.equal(discovery.grillCard(dir, P, card.id).bar, discovery.COMMIT_BAR);
+  assert.equal(commits.COMMIT_BAR, discovery.COMMIT_BAR);
 });
 
 test('cardDelivery: a released card names the release of its last issue; a card without issues is in delivery', () => {
@@ -171,6 +223,8 @@ test('cardDelivery: a released card names the release of its last issue; a card 
     [{ version: 'v1', status: 'shipped', issues: [{ number: 1 }] }, { version: 'v2', status: 'shipped', issues: [{ number: 2 }] }]);
   assert.equal(d.stage, 'released');
   assert.equal(d.release, 'v2');
+  // whatever the order of the card's issues: the release that completed it
+  assert.equal(commits.cardDelivery({ links: { issues: [2, 1] } }, [], [{ version: 'v1', status: 'shipped', issues: [{ number: 1 }] }, { version: 'v2', status: 'shipped', issues: [{ number: 2 }] }]).release, 'v2');
   assert.deepEqual(d.issues.map((i) => i.release), ['v1', 'v2']);
   assert.deepEqual({ title: d.issues[0].title, url: d.issues[0].url }, { title: 'One', url: 'u1' });
   assert.equal(commits.cardDelivery({ links: { issues: [] } }, [], []).stage, 'in_delivery');

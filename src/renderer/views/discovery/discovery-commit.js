@@ -6,22 +6,24 @@
 // - the commit dialog (open): the Product Owner's proposed split, one framed row per issue in the
 //   look of the Backlog's split proposals (its title, complexity, workflow and tasks, one per line,
 //   all editable; "merge with issue n" joins two), "Plan them in the roadmap, in this order", then
-//   File the issues / Cancel. Nothing is filed before File the issues;
+//   File the issues / Cancel (Esc; neither while the issues are being filed). Nothing is filed
+//   before File the issues. In developer mode on a workspace that can run for real, the proposal
+//   is the rule-based one and File the issues only previews the commands (as the Product Owner's
+//   own writes do): nothing is filed, the card stays in Ready;
 // - the Committed list beside the board (committedHtml): each committed card with its delivery
 //   (deliveryHtml: the stage In delivery / Delivered / Released, the counts to do, running, merged
-//   locally, done, and each issue with the Backlog's column name). A committed card has no
+//   locally, done, and each issue with its status, all drawn by StatusPill). A committed card has no
 //   "Move to…": it never returns to the board.
-// Uses app.js globals ($, esc, state, errMsg, openModal, closeModal) and DefaultWorkflow.
+// Uses app.js globals ($, esc, state, errMsg, openModal, closeModal), StatusPill and DefaultWorkflow.
 (() => {
   const BAR = 85; // the commit bar (src/discovery-commit.js COMMIT_BAR)
-  const STAGES = { in_delivery: 'In delivery', delivered: 'Delivered', released: 'Released' };
-  // the Backlog's column names (views/backlog/backlog.js)
-  const COLUMNS = { todo: 'To do', in_progress: 'In progress', waiting: 'Waiting for approval', local: 'Merged locally', done: 'Done' };
   const COUNTS = [['todo', 'to do'], ['running', 'running'], ['local', 'merged locally'], ['done', 'done']];
   const MAX_ISSUES = 8;
 
   // cm: the dialog's card and project, the split being edited, what the proposal said about itself
-  const cm = { projectId: null, card: null, issues: [], loading: false, busy: false, note: '', seq: 0, done: null };
+  // preview: developer mode on a workspace that can run for real (nothing is filed or committed)
+  const cm = { projectId: null, card: null, issues: [], loading: false, busy: false, note: '', seq: 0, done: null, preview: false };
+  const pill = (status, title) => window.StatusPill.statusPill(status, { title });
 
   const scoreOf = (c) => (typeof c?.clarity?.score === 'number' ? c.clarity.score : null);
   /** Whether a Ready card is under the commit bar (never scored counts as under). */
@@ -42,21 +44,22 @@
   }
 
   // ---- delivery -----------------------------------------------------------------------------------
-  const stageBadge = (d) => `<span class="badge dsc-stage ${esc(d.stage)}" data-testid="discovery-delivery-stage"${d.release ? ` title="${esc(`Shipped in ${d.release}`)}"` : ''}>${esc(STAGES[d.stage] || d.stage)}${d.stage === 'released' && d.release ? ` ${esc(d.release)}` : ''}</span>`;
+  // the stage as a status pill; a released card names its release next to it
+  const stageHtml = (d) => `<span class="dsc-stage" data-testid="discovery-delivery-stage" data-stage="${esc(d.stage)}">${pill(d.stage)}${d.stage === 'released' && d.release ? ` <span class="mono small">${esc(d.release)}</span>` : ''}</span>`;
 
-  /** A committed card's progress: its stage, the counts, then each issue with its Backlog column. */
+  /** A committed card's progress: its stage, the counts, then each issue with its status (its Backlog column, or Released). */
   function deliveryHtml(card) {
     const d = card.delivery;
     if (!d) return `<div class="dsc-delivery muted small" data-testid="discovery-delivery">${esc((card.links?.issues || []).map((n) => `#${n}`).join(', '))}</div>`;
     const counts = COUNTS.filter(([k]) => d.counts?.[k]).map(([k, label]) => `${d.counts[k]} ${label}`).join(' · ');
     return `
       <div class="dsc-delivery" data-testid="discovery-delivery">
-        <div class="dsc-delivery-head">${stageBadge(d)} <span class="muted small" data-testid="discovery-delivery-counts">${esc(counts)}</span></div>
+        <div class="dsc-delivery-head">${stageHtml(d)} <span class="muted small" data-testid="discovery-delivery-counts">${esc(counts)}</span></div>
         <ul class="dsc-delivery-issues">${(d.issues || []).map((i) => `
           <li>
             ${i.url ? `<a class="mono" href="${esc(i.url)}" target="_blank" rel="noopener" title="Open the issue">#${esc(i.number)}</a>` : `<span class="mono">#${esc(i.number)}</span>`}
             <span class="dsc-delivery-title" title="${esc(i.title || '')}">${esc(i.title || 'not synced yet')}</span>
-            <span class="badge dsc-issue-col ${esc(i.release ? 'released' : i.column)}"${i.release ? ` title="${esc(`Shipped in ${i.release}`)}"` : ''}>${esc(i.release ? 'Released' : COLUMNS[i.column] || i.column)}</span>
+            ${i.release ? pill('released', `Shipped in ${i.release}`) : pill(i.column)}
           </li>`).join('')}</ul>
       </div>`;
   }
@@ -140,7 +143,9 @@
       [...body.querySelectorAll('[data-commit-tasks]')].forEach((el, i) => { el.value = cm.issues[i].tasks.join('\n'); });
     }
     $('#btn-dsc-commit-file').disabled = cm.loading || cm.busy || !cm.issues.length;
-    $('#dsc-commit-roadmap').disabled = cm.loading || cm.busy;
+    $('#dsc-commit-roadmap').disabled = cm.loading || cm.busy || cm.preview;
+    // filing cannot be called back: no Cancel while it runs
+    $('#btn-dsc-commit-cancel').disabled = cm.busy;
   }
 
   // The rows as the owner left them: what File the issues files.
@@ -159,16 +164,20 @@
    * `done(out, problems)`: after the issues were filed and the card committed (the dialog is closed).
    */
   async function open({ projectId, card, done }) {
+    if (cm.busy) return; // the issues of another card are being filed
     const seq = ++cm.seq;
-    Object.assign(cm, { projectId, card, issues: [], loading: true, busy: false, note: '', done });
-    $('#dsc-commit-what').textContent = `"${card.title}" becomes issues in the Backlog, each with "From discovery card ${card.id}", its tasks and the card's document. ${state.simulationOnly
-      ? 'Simulation: they only join this workspace\'s backlog, nothing reaches GitHub or GitLab.' : 'They are filed on the project\'s repository.'} The card then leaves the board for the Committed list and never comes back.`;
+    const preview = !!state.settings?.developerMode && !state.simulationOnly;
+    Object.assign(cm, { projectId, card, issues: [], loading: true, busy: false, note: '', done, preview });
+    const where = state.simulationOnly ? 'Simulation: they only join this workspace\'s backlog, nothing reaches GitHub or GitLab. The card then leaves the board for the Committed list and never comes back.'
+      : preview ? 'Developer mode: File the issues only previews the commands. Nothing is filed and the card stays in Ready.'
+        : 'They are filed on the project\'s repository. The card then leaves the board for the Committed list and never comes back.';
+    $('#dsc-commit-what').textContent = `"${card.title}" becomes issues in the Backlog, each with "From discovery card ${card.id}", its tasks and the card's document. ${where}`;
     $('#dsc-commit-error').textContent = '';
     $('#dsc-commit-roadmap').checked = false;
     renderDialog();
     openModal('#dsc-commit-modal');
     try {
-      const out = await api.proposeDiscoveryCommit(projectId, card.id);
+      const out = await api.proposeDiscoveryCommit(projectId, card.id, preview);
       if (seq !== cm.seq) return;
       cm.issues = (out?.split?.issues || []).slice(0, MAX_ISSUES).map((i) => ({ ...i, tasks: [...(i.tasks || [])] }));
       cm.note = out?.fallback ? `The Product Owner could not be asked (${out.fallback}): this is the split by the rules.`
@@ -183,6 +192,7 @@
   }
 
   function close() {
+    if (cm.busy) return;
     cm.seq++;
     Object.assign(cm, { card: null, issues: [], loading: false, busy: false, done: null });
     closeModal('#dsc-commit-modal');
@@ -219,18 +229,23 @@
     const error = $('#dsc-commit-error');
     const bad = issues.findIndex((i) => !i.title || !i.tasks.length);
     if (bad >= 0) { error.textContent = `Issue ${bad + 1} needs ${issues[bad].title ? 'at least one task' : 'a title'}.`; return; }
-    const { projectId, card, done } = cm;
+    const { projectId, card, done, preview } = cm;
     const roadmap = $('#dsc-commit-roadmap').checked;
     Object.assign(cm, { issues, busy: true });
     error.textContent = '';
     renderDialog();
     let out;
     try {
-      out = await api.commitDiscoveryCard(projectId, card.id, { issues: issues.map(({ title, tasks, complexity, workflow }) => ({ title, tasks, complexity, workflow })) });
+      out = await api.commitDiscoveryCard(projectId, card.id, { issues: issues.map(({ title, tasks, complexity, workflow }) => ({ title, tasks, complexity, workflow })) }, preview);
     } catch (err) {
       cm.busy = false;
       renderDialog();
       error.textContent = errMsg(err);
+      return;
+    }
+    if (out.preview) {
+      Object.assign(cm, { busy: false, note: `Preview (developer mode): nothing was filed. The app would run: ${(out.commands || []).join(' ; ')}` });
+      renderDialog();
       return;
     }
     // the card is committed: what goes wrong from here is told, never undone
@@ -241,6 +256,7 @@
     if (roadmap && !out.syncError) {
       try { await planRoadmap(projectId, card, out.issues || []); } catch (err) { problems.push(`Not planned in the roadmap: ${errMsg(err)}`); }
     } else if (roadmap) problems.push('Not planned in the roadmap: sync the backlog, then add the issues to it.');
+    cm.busy = false;
     close();
     done?.({ ...out, roadmap }, problems);
   }
@@ -252,6 +268,12 @@
       const b = e.target.closest('[data-commit-merge]');
       if (b && !cm.busy) merge(Number(b.dataset.commitMerge));
     };
+    // Esc is Cancel (not while the issues are being filed); the card's panel behind stays open
+    document.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape' || $('#dsc-commit-modal').classList.contains('hidden')) return;
+      e.preventDefault();
+      close();
+    });
   }
 
   window.DiscoveryCommit = {

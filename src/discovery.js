@@ -30,8 +30,10 @@
 // The commitment point (#258, src/discovery-commit.js): a Ready card committed to the backlog leaves
 // the board (markCommitted): its column becomes 'committed' (no board column), links.issues holds the
 // numbers of the issues filed from it and filed/ keeps the text of each one. A committed card never
-// moves again (moveCard refuses it): new learning is a new card whose links.from names it
-// (createCard's `from`).
+// moves again (moveCard refuses it) and is kept as it was committed (its text, files and score no
+// longer change; only links.release, the release that shipped its issues, is still written): new
+// learning is a new card whose links.from names it (createCard's `from`). COMMIT_BAR (85) is the
+// clarity a commit needs: Grill me interviews a Ready card up to it, also past a lower bar of its own.
 // Every file is written whole (temp file + rename, src/state-file.js); the thread is appended one
 // line at a time. Project ids, card ids and attachment names are checked before any path is built:
 // nothing outside a card's folder is read or written. Used by the discovery: channels
@@ -57,6 +59,10 @@ const BOARD_COLUMNS = [
 const COLUMNS = BOARD_COLUMNS.map((c) => c.id);
 // where a committed card is (#258): off the board, in the Committed list, for good
 const COMMITTED = 'committed';
+// the clarity a Ready card needs to be committed (the owner's decision, 2026-10-04): not the
+// project's bar into Ready, which a type's own bar or an override can pass lower
+const COMMIT_BAR = 85;
+const KEPT = 'A committed card is kept as it was committed: new learning is a new card linked to it.';
 const MAX_ATTACHMENT_BYTES = 50 * 1024 * 1024;
 // an image attachment larger than this is not sent to the screen as a thumbnail
 const MAX_PREVIEW_BYTES = 10 * 1024 * 1024;
@@ -98,6 +104,15 @@ function cardDir(dir, projectId, id, box = 'cards') {
 function existingCard(dir, projectId, id, box = 'cards') {
   const folder = cardDir(dir, projectId, id, box);
   if (!fs.existsSync(path.join(folder, 'card.json'))) throw new Error(`${box === 'archive' ? 'Archived card' : 'Card'} not found: ${id}`);
+  return folder;
+}
+
+// The folder of a card that may still change: a committed card (#258) is kept as it was committed.
+function editableCard(dir, projectId, id) {
+  const folder = existingCard(dir, projectId, id);
+  let column = null;
+  try { column = JSON.parse(fs.readFileSync(path.join(folder, 'card.json'), 'utf8')).column; } catch { /* unreadable: the caller's read says why */ }
+  if (column === COMMITTED) throw new Error(KEPT);
   return folder;
 }
 
@@ -355,11 +370,16 @@ function listArchived(dir, projectId) {
  * Changes a card: `title`, `type`, `tags`, `clarity`, `estimate`, `links` (objects, merged into
  * the card's), and the `document` and `acceptance` files. The id, column, author and history
  * never change here. A new document, acceptance criteria or type scores the card again (#166); a
- * `clarity` given with them is the one kept.
+ * `clarity` given with them is the one kept. A committed card (#258) only takes `links.release`.
  */
 function updateCard(dir, projectId, id, fields = {}) {
   const folder = existingCard(dir, projectId, id);
   const card = load(folder);
+  if (card.column === COMMITTED) {
+    const given = Object.keys(fields).filter((k) => fields[k] !== undefined);
+    const release = given.every((k) => k === 'links') && Object.keys(fields.links || {}).every((k) => k === 'release');
+    if (!release) throw new Error(KEPT);
+  }
   const type = card.type;
   for (const k of EDITABLE) {
     if (fields[k] === undefined) continue;
@@ -518,7 +538,7 @@ function keepDocument(dir, projectId, id, reason) {
  * (before-restore), so nothing is lost, and the thread notes who restored what.
  */
 function restoreVersion(dir, projectId, id, name, { by = 'owner' } = {}) {
-  const folder = existingCard(dir, projectId, id);
+  const folder = editableCard(dir, projectId, id);
   const text = readVersion(dir, projectId, id, name);
   keepDocument(dir, projectId, id, 'before-restore');
   writeFileAtomic(path.join(folder, 'document.md'), text);
@@ -533,7 +553,7 @@ function restoreVersion(dir, projectId, id, name, { by = 'owner' } = {}) {
  * kept too), and the thread gets an entry { kind: 'result', source, runId }. Returns the card.
  */
 function recordResult(dir, projectId, id, { source, text, runId = null, by = 'owner' } = {}) {
-  const folder = existingCard(dir, projectId, id);
+  const folder = editableCard(dir, projectId, id);
   if (!Object.hasOwn(RESULT_SOURCES, String(source))) throw new Error(`Unknown result source: ${source} (one of ${Object.keys(RESULT_SOURCES).join(', ')})`);
   if (!String(text ?? '').trim()) throw new Error('A result needs a text.');
   keepDocument(dir, projectId, id, 'before-result');
@@ -560,7 +580,7 @@ const sameContent = (file, src) => {
  * same content under the same name is stored once. Returns the stored name.
  */
 function addAttachment(dir, projectId, id, { path: from, name, data } = {}) {
-  const folder = existingCard(dir, projectId, id);
+  const folder = editableCard(dir, projectId, id);
   let src;
   if (from) {
     const stat = fs.statSync(String(from));
@@ -592,7 +612,7 @@ function addAttachment(dir, projectId, id, { path: from, name, data } = {}) {
 
 /** Deletes an attachment of the card. `name` is one of its attachment names: anything else throws. */
 function removeAttachment(dir, projectId, id, name) {
-  const folder = existingCard(dir, projectId, id);
+  const folder = editableCard(dir, projectId, id);
   fs.rmSync(attachmentFile(folder, name), { force: true });
   touch(folder);
   return true;
@@ -664,14 +684,21 @@ function waitingGrill(dir, projectId, id) {
   return last?.kind === 'question' && last.grill ? last : null;
 }
 
+// The bar an interview takes the card to: its own, and in Ready the commit bar when that is
+// higher (#258: a card there under 85% is grilled until it can be committed).
+function grillBar(dir, projectId, card) {
+  const bar = clarity.clarityBar(readBoard(dir, projectId).clarity, card.type);
+  return card.column === 'ready' ? Math.max(bar, COMMIT_BAR) : bar;
+}
+
 // Asks the card's next open point, or closes the interview with a note. → { card, bar, question }
 function askNext(dir, projectId, id, { reached = false } = {}) {
   const card = readCard(dir, projectId, id);
-  const bar = clarity.clarityBar(readBoard(dir, projectId).clarity, card.type);
+  const bar = grillBar(dir, projectId, card);
   const next = reached ? null : clarity.nextQuestion(card);
   if (!next) {
     const text = reached
-      ? `Clarity ${card.clarity.score}%: at or above the bar of ${bar}%. The interview ends here; the card can move to Ready.`
+      ? `Clarity ${card.clarity.score}%: at or above the bar of ${bar}%. The interview ends here; the card can ${card.column === 'ready' ? 'be committed' : 'move to Ready'}.`
       : `Nothing left to ask: the document covers every point of the rubric for ${card.type}.`;
     appendConversation(dir, projectId, id, { kind: 'note', author: GRILL, text });
     return { card: readCard(dir, projectId, id), bar, question: null };
@@ -688,10 +715,11 @@ function askNext(dir, projectId, id, { reached = false } = {}) {
  * nothing is left to ask).
  */
 function grillCard(dir, projectId, id) {
+  editableCard(dir, projectId, id);
   const waiting = waitingGrill(dir, projectId, id);
   if (!waiting) return askNext(dir, projectId, id);
   const card = readCard(dir, projectId, id);
-  return { card, bar: clarity.clarityBar(readBoard(dir, projectId).clarity, card.type), question: waiting };
+  return { card, bar: grillBar(dir, projectId, card), question: waiting };
 }
 
 /**
@@ -708,8 +736,7 @@ function answerGrill(dir, projectId, id, { text, by = 'owner' } = {}) {
   if (fields.document !== undefined) keepDocument(dir, projectId, id, 'before-grill');
   const card = updateCard(dir, projectId, id, fields);
   appendConversation(dir, projectId, id, { kind: 'answer', author: String(by || 'owner'), grill: waiting.grill, text: answer });
-  const bar = clarity.clarityBar(readBoard(dir, projectId).clarity, card.type);
-  return askNext(dir, projectId, id, { reached: card.clarity.score >= bar });
+  return askNext(dir, projectId, id, { reached: card.clarity.score >= grillBar(dir, projectId, card) });
 }
 
 // ---- archive --------------------------------------------------------------------------------------
@@ -785,6 +812,7 @@ module.exports = {
   appendConversation,
   archiveCard,
   COLUMNS,
+  COMMIT_BAR,
   COMMITTED,
   createCard,
   filedDir,
