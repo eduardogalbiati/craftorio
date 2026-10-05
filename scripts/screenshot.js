@@ -35,7 +35,11 @@
 //                      discovery (#257): empty (no card: the empty board; without it, demo cards in
 //                      every column, a bug and a hotfix in the fast lane, Define over its WIP limit;
 //                      a card's panel: --click "[data-testid=discovery-card][data-type=prd]
-//                      [data-testid=discovery-card-title]"; a narrow window: --size 820x900)
+//                      [data-testid=discovery-card-title]"; a narrow window: --size 820x900;
+//                      #258: two committed cards in the Committed list (a committed card's panel:
+//                      --click "[data-testid=discovery-committed-title]"); the commit dialog:
+//                      --click "[data-testid=discovery-card][data-column=ready]
+//                      [data-testid=discovery-card-title]" --click "[data-testid=discovery-commit]")
 //   --run <mock|dir>   run-chat: a simulated software-development run (default) or a copy of a run folder
 //   --workflow <file>  the workflow of the simulated run (default software-development.yaml)
 //   --pipeline <file>  run: starts this saved pipeline instead (#135, e.g. develop-to-retrospective.yaml):
@@ -797,13 +801,42 @@ function demoDiscoveryBoard(ws, projectId) {
   card(1, 'define', { title: 'Login loop after the token refresh', type: 'hotfix', author: 'support', text: 'The phone page asks to log in again after every refresh.' });
   // Ready (#166): two cards at or above the bar (the forecast: 19 h, 2 nights of 9 h) and one the
   // owner moved there below it, which the forecast leaves out
-  card(140, 'ready', { title: 'Per-project spending budget', type: 'prd', tags: ['cost'], clarity: 94, estimate: { usd: 7.5, minutes: 540 }, text: 'A daily budget per project, next to the workspace one.' });
+  card(140, 'ready', { title: 'Per-project spending budget', type: 'prd', tags: ['cost'], clarity: 94, estimate: { usd: 7.5, minutes: 540 }, text: 'A daily budget per project, next to the workspace one.',
+    // #258: criteria in two parts, so the commit dialog proposes two issues
+    acceptance: ['## Budget', '- [ ] A daily budget per project in Settings, next to the workspace one', '- [ ] A project that reached its budget starts no new run until the next day', '', '## Reporting', '- [ ] The Usage screen shows what each project spent against its budget', '- [ ] A notice when a project reaches 80% of its budget'].join('\n'),
+  });
   card(70, 'ready', { title: 'Retry a failed step from the Run screen', tags: ['engine'], clarity: 90, estimate: { usd: 8.2, minutes: 600 }, text: 'A failed step is retried from its card, without restarting the run.' });
   card(26, 'ready', {
     title: 'Dark theme for the phone page', author: 'marina', tags: ['ux'], clarity: 58, estimate: { usd: 3, minutes: 240 }, text: 'The phone page follows the system theme.',
     gaps: ['Acceptance criteria: which screens of the phone page must follow the theme?', 'Scope: the login page too?'], anyway: 'Needed for Friday\'s demo; the open points are cosmetic.',
   });
   discovery.setWip(dir, projectId, 'define', 2);
+}
+
+// The committed cards (#258): one in delivery, filed as two issues of the demo backlog (#12 and #9),
+// and one whose issue (#8) the release v0.9 shipped. The Discovery board lists them beside its
+// columns with their delivery; the Backlog shows each of these issues with its card's badge.
+function demoCommittedCards(ws, projectId) {
+  const discovery = require('../src/discovery');
+  const dir = ws.discovery;
+  const committed = ({ title, text, acceptance, clarity, issues }) => {
+    const c = discovery.createCard(dir, projectId, { title, text, type: 'prd', author: 'eduardo', column: 'triage' });
+    discovery.updateCard(dir, projectId, c.id, { acceptance, clarity: { score: clarity, gaps: [], by: 'Product Owner' } });
+    for (const column of ['shape', 'define', 'ready']) discovery.moveCard(dir, projectId, c.id, column, { by: 'eduardo' });
+    discovery.markCommitted(dir, projectId, c.id, { issues, by: 'eduardo' });
+    discovery.appendConversation(dir, projectId, c.id, { kind: 'commit', author: 'eduardo', issues, text: `Committed to the backlog: ${issues.map((n) => `#${n}`).join(', ')}.` });
+    return c.id;
+  };
+  committed({
+    title: 'Share a run outside the app', clarity: 92, issues: [12, 9],
+    text: ['# Share a run outside the app', '', 'The report of a run leaves the app: exported as Markdown, and checked by a monitor through a health endpoint.'].join('\n'),
+    acceptance: ['- [ ] The run report is exported as Markdown', '- [ ] A /health endpoint answers while the server runs'].join('\n'),
+  });
+  committed({
+    title: 'A reference of the workflow YAML for new users', clarity: 88, issues: [8],
+    text: 'New users read one page that lists every key of a workflow file, with an example.',
+    acceptance: '- [ ] Every key of the workflow YAML is documented with an example',
+  });
 }
 
 // #225, #185, #182: finished runs whose artifacts the E2E scenarios (features/artifacts.feature,
@@ -1523,12 +1556,15 @@ function main() {
     // also on Project: its run list shows the run's "issue from cache" badge (#168)
     if (home || ['backlog', 'project', 'releases'].includes(args.view)) demoLocalMerge(ws, project.id);
     // #260: the Releases screen's history; the Backlog's "Released" badge on the issues it shipped
-    if (home || ['backlog', 'releases'].includes(args.view)) demoReleases(ws, project.id);
+    // (#258: also on Discovery, whose committed cards follow their issues to the release)
+    if (home || ['backlog', 'discovery', 'releases'].includes(args.view)) demoReleases(ws, project.id);
     if (home || args.view === 'backlog') demoRoadmap(ws, project.id, args.live, args.budget);
     if (args.view === 'backlog') demoPoConversation(ws, project.id, args.po);
     if (args.view === 'backlog' && project.folder) demoBacklogRefresh(ws, project.folder, project.id);
     if (home || (['inbox', 'discovery'].includes(args.view) && args.mode !== 'empty')) demoDiscovery(ws, project.id);
     if (args.view === 'discovery' && args.mode !== 'empty') demoDiscoveryBoard(ws, project.id);
+    // #258: the committed cards, on the Discovery board and as badges on their issues in the Backlog
+    if (['backlog', 'discovery'].includes(args.view) && args.mode !== 'empty') demoCommittedCards(ws, project.id);
     // also on Artifacts: a second run group (its document.md) for Collapse all / Expand all (#126)
     if (['artifacts', 'backlog', 'duo'].includes(args.view)) demoEnrichRun(ws, project.id);
     if (args.view === 'analytics') demoAnalyticsRuns(ws, project.id);

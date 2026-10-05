@@ -27,6 +27,11 @@
 // clarity.override { score, bar, reason, by, ts }; a card already in Ready is never moved back.
 // Grill me (grillCard, answerGrill) asks the card's open points one at a time in its thread and
 // writes each answer into the card.
+// The commitment point (#258, src/discovery-commit.js): a Ready card committed to the backlog leaves
+// the board (markCommitted): its column becomes 'committed' (no board column), links.issues holds the
+// numbers of the issues filed from it and filed/ keeps the text of each one. A committed card never
+// moves again (moveCard refuses it): new learning is a new card whose links.from names it
+// (createCard's `from`).
 // Every file is written whole (temp file + rename, src/state-file.js); the thread is appended one
 // line at a time. Project ids, card ids and attachment names are checked before any path is built:
 // nothing outside a card's folder is read or written. Used by the discovery: channels
@@ -50,6 +55,8 @@ const BOARD_COLUMNS = [
   { id: 'ready', title: 'Ready', wip: null },
 ];
 const COLUMNS = BOARD_COLUMNS.map((c) => c.id);
+// where a committed card is (#258): off the board, in the Committed list, for good
+const COMMITTED = 'committed';
 const MAX_ATTACHMENT_BYTES = 50 * 1024 * 1024;
 // an image attachment larger than this is not sent to the screen as a thumbnail
 const MAX_PREVIEW_BYTES = 10 * 1024 * 1024;
@@ -281,10 +288,14 @@ function rescore(folder) {
 
 /**
  * Creates a card (an `idea` in the Inbox by default) with its document (`text`) and returns it.
- * Throws on an unknown type or column, a missing title, or a project id that is not a plain name.
+ * `from`: the card it was learned from (#258: a committed card never returns to the board), kept as
+ * links.from.
+ * Throws on an unknown type or column, a missing title, a `from` that is no card, or a project id
+ * that is not a plain name.
  */
-function createCard(dir, projectId, { title, text = '', author = 'owner', type = 'idea', column = 'inbox', tags } = {}) {
+function createCard(dir, projectId, { title, text = '', author = 'owner', type = 'idea', column = 'inbox', tags, from } = {}) {
   const base = path.join(ensureProject(dir, projectId), 'cards');
+  const source = from ? readCard(dir, projectId, from).id : null;
   const card = {
     id: null,
     title: checkTitle(title),
@@ -296,7 +307,7 @@ function createCard(dir, projectId, { title, text = '', author = 'owner', type =
     tags: tagList(tags),
     clarity: scored({ type, document: text, acceptance: '' }),
     estimate: { usd: null, minutes: null },
-    links: { issues: [], release: null },
+    links: { issues: [], release: null, ...(source ? { from: source } : {}) },
     history: [],
   };
   card.updated = card.created;
@@ -400,12 +411,13 @@ function snapshotVersion(dir, projectId, id, reason) {
  * the board's order (last in the column, or at `index` among its other cards). A move within its
  * own column only changes its place (with an `index`): no history entry, no version.
  * Into Ready, the card passes the clarity bar (#166) or the move throws; `force` with a `reason` is
- * the owner's override.
+ * the owner's override. A committed card (#258) never moves: the move throws, forced or not.
  */
 function moveCard(dir, projectId, id, column, { by = 'owner', index, force = false, reason } = {}) {
   const folder = existingCard(dir, projectId, id);
   checkColumn(dir, projectId, column);
   const card = load(folder);
+  if (card.column === COMMITTED) throw new Error('A committed card stays committed: it follows its issues to the release. New learning is a new card linked to it.');
   if (card.column === column) {
     if (Number.isInteger(index)) placeOnBoard(dir, projectId, id, column, { index });
     return card;
@@ -419,6 +431,54 @@ function moveCard(dir, projectId, id, column, { by = 'owner', index, force = fal
   saveCard(folder, card);
   placeOnBoard(dir, projectId, id, column, { index });
   return load(folder);
+}
+
+/** The folder that keeps the text of each issue filed from the card (#258): cards/<id>/filed. */
+function filedDir(dir, projectId, id) {
+  return path.join(existingCard(dir, projectId, id), 'filed');
+}
+
+/**
+ * Commits a Ready card (#258): it leaves the board for good (column 'committed'), with the numbers
+ * of the issues filed from it in links.issues, a history entry and a version of its document.
+ * The caller checked the commit bar and filed the issues (src/discovery-commit.js).
+ */
+function markCommitted(dir, projectId, id, { issues = [], by = 'owner' } = {}) {
+  const folder = existingCard(dir, projectId, id);
+  const card = load(folder);
+  if (card.column !== 'ready') throw new Error(card.column === COMMITTED ? 'This card is already committed.' : 'Only a Ready card is committed.');
+  const numbers = [...new Set((Array.isArray(issues) ? issues : []).map(Number).filter((n) => Number.isInteger(n) && n > 0))];
+  if (!numbers.length) throw new Error('A card is committed with the issues filed from it.');
+  snapshotVersion(dir, projectId, id, 'commit');
+  const ts = now();
+  card.history = [...(card.history || []), { ts, from: card.column, to: COMMITTED, by: String(by || 'owner') }];
+  card.links = { ...card.links, issues: numbers };
+  card.column = COMMITTED;
+  card.updated = ts;
+  saveCard(folder, card);
+  placeOnBoard(dir, projectId, id, null);
+  return load(folder);
+}
+
+/**
+ * The issues filed from the project's cards (#258): issue number → { id, title } of its card.
+ * Reads each card.json only (the Backlog asks on every read); a project without cards has none.
+ */
+function issueCards(dir, projectId) {
+  const out = new Map();
+  let base = null;
+  let names = [];
+  try {
+    base = path.join(projectDir(dir, projectId), 'cards');
+    names = fs.readdirSync(base).filter((n) => CARD_ID.test(n));
+  } catch { return out; }
+  for (const n of names) {
+    try {
+      const card = JSON.parse(fs.readFileSync(path.join(base, n, 'card.json'), 'utf8'));
+      for (const number of card.links?.issues || []) if (!out.has(Number(number))) out.set(Number(number), { id: card.id, title: card.title });
+    } catch { /* a folder without a readable card.json */ }
+  }
+  return out;
 }
 
 // ---- versions -------------------------------------------------------------------------------------
@@ -682,11 +742,13 @@ function restoreCard(dir, projectId, id, { by = 'owner' } = {}) {
   renameWithRetry(folder, target);
   const { archived, ...card } = load(target);
   const ts = now();
-  if (!readBoard(dir, projectId).columns.some((c) => c.id === card.column)) card.column = 'inbox';
+  // a committed card comes back committed (#258: never to the board)
+  const committed = card.column === COMMITTED;
+  if (!committed && !readBoard(dir, projectId).columns.some((c) => c.id === card.column)) card.column = 'inbox';
   card.history = [...(card.history || []), { ts, from: 'archive', to: card.column, by: String(by || 'owner') }];
   card.updated = ts;
   saveCard(target, card);
-  placeOnBoard(dir, projectId, id, card.column);
+  placeOnBoard(dir, projectId, id, committed ? null : card.column);
   return load(target);
 }
 
@@ -700,6 +762,8 @@ function mergeCard(dir, projectId, fromId, intoId, { by = 'owner' } = {}) {
   const fromFolder = existingCard(dir, projectId, fromId);
   const from = load(fromFolder);
   const into = readCard(dir, projectId, intoId);
+  // a committed card is delivery work (#258): it is neither merged away nor rewritten by a merge
+  if (from.column === COMMITTED || into.column === COMMITTED) throw new Error('A committed card takes no merge: new learning is a new card linked to it.');
   const heading = `## Merged from: ${from.title} (${from.id})`;
   // a merge tried again after a failed archive joins nothing twice
   const join = (a, b) => (b.trim() && !a.includes(heading) ? `${a.trimEnd()}${a.trim() ? '\n\n---\n\n' : ''}${heading}\n\n${b.trim()}\n` : undefined);
@@ -721,12 +785,16 @@ module.exports = {
   appendConversation,
   archiveCard,
   COLUMNS,
+  COMMITTED,
   createCard,
+  filedDir,
   grillCard,
+  issueCards,
   listArchived,
   listCards,
   listVersions,
   listWaiting,
+  markCommitted,
   MAX_ATTACHMENT_BYTES,
   mergeCard,
   moveCard,

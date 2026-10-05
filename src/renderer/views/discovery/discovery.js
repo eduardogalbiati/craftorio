@@ -20,8 +20,15 @@
 // that needs a reason, kept on the card). Above the columns: the ready forecast (nights of agent
 // work in Ready at or above the bar, an estimate) and "Bar and night…" (the bar, one per type, the
 // night's hours).
+// The commitment point (#258, discovery-commit.js): a Ready card's panel offers "Commit to the
+// backlog" (from 85% clarity; under it the button is disabled and the Clarity section lists the gaps
+// with Grill me); the commit dialog files the issues the Product Owner proposed and the owner edited.
+// The committed cards (the board's `committed`) leave the columns for the Committed list beside the
+// board, each with its issues' delivery; a committed card's panel is read-only (it also opens from
+// its issues' badge in the Backlog: window.DiscoveryActions.openCard) and offers "New card from this
+// one": new learning is a new Inbox card linked to it, the committed card never returns to the board.
 // Registers itself with registerView (view-registry.js); uses app.js globals ($, esc, state, api,
-// errMsg, dateOf, confirmDialog, openModal, closeModal), ncAgo (notification-center.js), markdownHtml (artifact-render.js),
+// errMsg, dateOf, confirmDialog, openModal, closeModal, showToast), ncAgo (notification-center.js), markdownHtml (artifact-render.js),
 // CurrentProject, ImageViewer, DiscoveryCardParts (views/inbox/inbox.js), DuoIssue (the document
 // types' goals), openDuoForCard (views/duo/duo.js) and openArenaForCard (views/arena/arena.js).
 (() => {
@@ -41,8 +48,10 @@
   // thread and versions; viewing: the version shown ({ name, text }); previews: "<card id>/<name>" →
   // what discovery:attachment returned; recording: the runs whose result is being recorded;
   // refused: the card whose move to Ready the clarity bar refused ({ id, text }); override: the card
-  // the "Move anyway" dialog is open for ({ id, projectId })
+  // the "Move anyway" dialog is open for ({ id, projectId }); committed: the committed cards with
+  // their delivery (#258, the board's `committed`)
   const dv = {
+    committed: [],
     refused: null, override: null,
     projectId: null, board: null, cards: [], loadError: '', error: '', seq: 0,
     filter: { type: '', tag: '', author: '', q: '' }, searchTimer: null,
@@ -60,6 +69,10 @@
   const columns = () => (dv.board?.columns || []).filter((c) => c.id !== 'inbox');
   const columnOf = (id) => columns().find((c) => c.id === id) || null;
   const cardOf = (id) => dv.cards.find((c) => c.id === id) || null;
+  // #258: a committed card is off the board, in the Committed list; its panel is read-only
+  const commit = () => window.DiscoveryCommit;
+  const committedOf = (id) => dv.committed.find((c) => c.id === id) || null;
+  const readOnly = () => dv.open?.column === 'committed';
   // the clarity bar of a card's type (#166: the board's clarity { bar, byKind }), and a card under it
   const barOf = (c) => dv.board?.clarity?.byKind?.[c.type] ?? dv.board?.clarity?.bar ?? 85;
   const belowBar = (c) => !(typeof c.clarity?.score === 'number' && c.clarity.score >= barOf(c));
@@ -99,7 +112,7 @@
     if (projectId !== dv.projectId) {
       // another project: its own board; the open card goes with its project, unless an edit with
       // changes holds it (it is saved to its own project, openProject)
-      Object.assign(dv, { board: null, cards: [], menu: null, wipEdit: null, refused: null });
+      Object.assign(dv, { board: null, cards: [], committed: [], menu: null, wipEdit: null, refused: null });
       if (dv.open && (documentDirty() || acceptanceDirty())) detailError('This card belongs to the project chosen before: save or cancel the edit first.');
       else if (dv.open) closeCard();
     }
@@ -114,12 +127,16 @@
     dv.board = board;
     dv.loadError = error;
     dv.cards = (cards || []).filter((c) => columnOf(c.column));
+    dv.committed = board?.committed || [];
     const here = !!dv.open && dv.openProject === projectId;
-    const open = here && cardOf(dv.open.id);
+    const open = here && (cardOf(dv.open.id) || committedOf(dv.open.id));
     // the open card left the board (archived, merged, back in the Inbox)
     if (here && !open && !error) closeCard();
     if (open) {
-      Object.assign(dv.open, { column: open.column, type: open.type, clarity: open.clarity });
+      const was = dv.open.column;
+      Object.assign(dv.open, { column: open.column, type: open.type, clarity: open.clarity, links: open.links });
+      // committed meanwhile: its panel turns read-only
+      if (was !== open.column && readOnly()) renderDetail();
       renderActions();
       renderClarity();
     }
@@ -233,8 +250,11 @@
     const note = !dv.cards.length
       ? '<p class="muted small dsc-note" data-testid="discovery-empty">No card on the board yet. Accept an idea in the Inbox: it lands in Triage.</p>'
       : shown < dv.cards.length ? `<p class="muted small dsc-note">${shown} of ${plural(dv.cards.length, 'card')} shown: the filters hide the others.</p>` : '';
+    // the Committed list sits beside the columns once a card was committed (#258)
+    const committed = commit().committedHtml(dv.committed, dv.open?.id);
     box.innerHTML = `${note}
       <div data-testid="discovery-board">${forecastHtml()}
+        ${committed ? '<div class="dsc-board-row">' : ''}
         <div class="dsc-board" style="--dsc-cols:${cols.length}">
           <section class="dsc-lane" data-testid="discovery-fast-lane" aria-label="Fast lane: bugs and hotfixes">
             <h3 class="dsc-lane-title">Fast lane <span class="muted">bugs and hotfixes · may skip Shape</span></h3>
@@ -242,6 +262,7 @@
           </section>
           ${cols.map((c, i) => columnHtml(c, i, lists[i])).join('')}
         </div>
+        ${committed ? `${committed}</div>` : ''}
       </div>`;
   }
 
@@ -579,8 +600,11 @@
   function renderDetail() {
     const c = dv.open;
     if (!c) return;
+    // a committed card (#258): nothing of it is edited any more
+    const ro = readOnly();
+    const off = ro ? ' hidden' : '';
     $('#dsc-detail').innerHTML = `
-      <aside class="drawer open dsc-detail" data-testid="discovery-card-detail" aria-label="Card: ${esc(c.title)}">
+      <aside class="drawer open dsc-detail${ro ? ' read-only' : ''}" data-testid="discovery-card-detail" aria-label="Card: ${esc(c.title)}">
         <div class="drawer-head">
           <h2 class="drawer-title dsc-detail-title" data-testid="card-document-title" title="${esc(c.title)}">${esc(c.title)}</h2>
           <button type="button" class="icon-btn" data-detail="close" title="Close (Esc)" aria-label="Close the card">${CLOSE}</button>
@@ -590,15 +614,17 @@
             <span>${esc(c.author)}</span>
             <span>${esc(dateOf(c.created))}</span>
             <span class="mono" title="The card's folder in the workspace's discovery/">${esc(c.id)}</span>
+            ${c.links?.from ? `<span data-testid="card-from" title="New learning from the committed card ${esc(c.links.from)}">from <span class="mono">${esc(c.links.from)}</span></span>` : ''}
+            ${ro ? '<span class="badge" data-testid="card-read-only" title="Committed to the backlog: the card is kept as it was committed">committed · read-only</span>' : ''}
           </p>
           <div class="dsc-fields">
             <div class="field">
               <label for="dsc-type">Type</label>
-              <select id="dsc-type" data-testid="card-type">${TYPES.map((t) => `<option value="${t}"${t === c.type ? ' selected' : ''}>${t}</option>`).join('')}</select>
+              <select id="dsc-type" data-testid="card-type"${ro ? ' disabled' : ''}>${TYPES.map((t) => `<option value="${t}"${t === c.type ? ' selected' : ''}>${t}</option>`).join('')}</select>
             </div>
             <div class="field">
               <label for="dsc-tags">Tags</label>
-              <input type="text" id="dsc-tags" data-testid="card-tags" value="${esc((c.tags || []).join(', '))}" placeholder="Comma-separated" autocomplete="off" />
+              <input type="text" id="dsc-tags" data-testid="card-tags" value="${esc((c.tags || []).join(', '))}" placeholder="Comma-separated" autocomplete="off"${ro ? ' disabled' : ''} />
             </div>
           </div>
           <div id="dsc-detail-actions"></div>
@@ -607,7 +633,7 @@
           <section class="inbox-section">
             <div class="inbox-section-head">
               <h3>Document</h3>
-              <div class="seg sm" role="group" aria-label="Document">
+              <div class="seg sm${off}" role="group" aria-label="Document">
                 <button type="button" data-detail="tab" data-tab="preview">Preview</button>
                 <button type="button" data-detail="tab" data-tab="edit">Edit</button>
               </div>
@@ -640,7 +666,7 @@
           <section class="inbox-section">
             <div class="inbox-section-head">
               <h3>Attachments</h3>
-              <button type="button" class="btn sm ghost" data-detail="attach">Attach files</button>
+              <button type="button" class="btn sm ghost${off}" data-detail="attach">Attach files</button>
               <input type="file" id="dsc-file" class="hidden" multiple aria-label="Attach files to the card" />
             </div>
             <div id="dsc-files" class="inbox-files" data-testid="card-attachments"></div>
@@ -649,7 +675,7 @@
             <div class="inbox-section-head"><h3>Thread</h3></div>
             <div id="dsc-thread" class="inbox-thread" data-testid="card-thread"></div>
             <div id="dsc-grill"></div>
-            <div class="inbox-note">
+            <div class="inbox-note${off}">
               <textarea id="dsc-note" rows="2" placeholder="Add a note (Enter sends)" aria-label="Add a note"></textarea>
               <button type="button" id="dsc-note-send" class="btn sm" data-detail="note">Add note</button>
             </div>
@@ -686,10 +712,23 @@
     }
   }
 
-  // The column's actions: in Shape, the two screens that work on the document.
+  // The column's actions: in Shape, the two screens that work on the document; in Ready, the commit
+  // (#258); a committed card shows its delivery and starts new learning as a new card.
   function renderActions() {
     const box = $('#dsc-detail-actions');
     if (!box || !dv.open) return;
+    if (dv.open.column === 'ready') { box.innerHTML = commit().actionHtml(dv.open); return; }
+    if (readOnly()) {
+      box.innerHTML = `
+      <section class="inbox-section dsc-delivery-box" aria-label="Delivery">
+        <div class="inbox-section-head"><h3>Delivery</h3></div>
+        ${commit().deliveryHtml(committedOf(dv.open.id) || dv.open)}
+        <div class="row dsc-actions">
+          <button type="button" class="btn sm" data-testid="card-new-from" data-detail="new-from" title="A committed card never returns to the board: new learning starts a new card in the Inbox, linked to this one">New card from this one</button>
+        </div>
+      </section>`;
+      return;
+    }
     box.innerHTML = dv.open.column !== 'shape' ? '' : `
       <div class="row dsc-actions" role="group" aria-label="Shape">
         <button type="button" class="btn sm" data-testid="card-open-write-review" data-detail="open-write-review" title="A writer and a reviewer work on this card's document">Open in Write &amp; Review</button>
@@ -707,14 +746,16 @@
     const { score, gaps, ts, by, override } = c.clarity || {};
     const bar = barOf(c);
     const below = belowBar(c);
+    // in Ready at its own bar (a type's lower bar, an override) but under the commit bar (#258): the gaps still count
+    const uncommittable = c.column === 'ready' && commit().underBar(c);
     const when = (iso) => (iso ? `<time datetime="${esc(iso)}" title="${esc(dateOf(iso))}">${esc(ncAgo(iso))}</time>` : '');
     const missing = Array.isArray(gaps) ? gaps : [];
     box.innerHTML = `
       <div class="inbox-section-head">
         <h3>Clarity</h3>
         ${score == null ? '<span class="badge">not scored</span>' : `<span class="badge${below ? ' warn' : ''}">${esc(score)}%</span>`}
-        <span class="muted small">${below ? `needs grilling: the bar is ${esc(bar)}%` : `at or above the bar of ${esc(bar)}%`}</span>
-        ${below ? '<button type="button" class="btn sm" data-testid="card-grill-me" data-detail="grill" title="An interview in this thread: one question at a time, each answer written into the card">Grill me</button>' : ''}
+        <span class="muted small">${below ? `needs grilling: the bar is ${esc(bar)}%` : uncommittable ? `at the bar of ${esc(bar)}%, but a commit needs ${commit().BAR}%` : `at or above the bar of ${esc(bar)}%`}</span>
+        ${(below || uncommittable) && !readOnly() ? '<button type="button" class="btn sm" data-testid="card-grill-me" data-detail="grill" title="An interview in this thread: one question at a time, each answer written into the card">Grill me</button>' : ''}
       </div>
       ${score != null && (by || ts) ? `<p class="muted small" data-testid="clarity-scored">Scored by <b>${esc(by || 'unknown')}</b> ${when(ts)}</p>` : ''}
       ${override ? `<p class="small" data-testid="clarity-override"><span class="badge warn">moved anyway</span> <b>${esc(override.by)}</b> moved it to Ready ${override.score == null ? 'without a score' : `at ${esc(override.score)}%`} ${when(override.ts)}: ${esc(override.reason)}</p>` : ''}
@@ -725,7 +766,7 @@
     const c = dv.open;
     const box = $('#dsc-acceptance');
     if (!c || !box) return;
-    $('#dsc-acc-edit').classList.toggle('hidden', dv.editAcceptance);
+    $('#dsc-acc-edit').classList.toggle('hidden', dv.editAcceptance || readOnly());
     if (!dv.editAcceptance) {
       box.innerHTML = String(c.acceptance || '').trim()
         ? `<article class="md md-compact inbox-doc">${markdownHtml(c.acceptance)}</article>`
@@ -897,7 +938,7 @@
 
   async function attachToCard(list) {
     const id = dv.open?.id;
-    if (!id) return;
+    if (!id || readOnly()) return;
     const { files, errors } = await parts().readFiles(list);
     for (const f of files) {
       try { await api.addDiscoveryAttachment(dv.openProject, id, undefined, f.name, f.data); } catch (e) { errors.push(`${f.name}: ${errMsg(e)}`); }
@@ -1000,11 +1041,45 @@
     } catch (e) { detailError(errMsg(e)); }
   });
 
+  // "Commit to the backlog" (#258): the dialog files the issues; then the card is in the Committed list.
+  function openCommit() {
+    if (editBlocks()) return;
+    commit().open({
+      projectId: dv.openProject,
+      card: dv.open,
+      done: (out, problems) => {
+        const filed = (out.issues || []).map((i) => `#${i.number}`).join(', ');
+        const planned = out.roadmap && !problems.some((p) => /roadmap/.test(p));
+        showToast(`Committed "${out.card?.title || ''}" to the backlog`, [`Filed ${filed}${out.simulated ? ' (simulated)' : ''}${planned ? ', planned in the roadmap' : ''}.`, ...problems].join(' '));
+        if (dv.open?.id === out.card?.id) closeCard();
+        refresh();
+      },
+    });
+  }
+
+  // New learning from a committed card (#258): a new Inbox card linked to it, opened to be written.
+  const newFromCard = () => once(async () => {
+    const from = dv.open;
+    if (!from) return;
+    try {
+      const card = await api.createDiscoveryCard(dv.openProject, `Learned from: ${from.title}`.slice(0, 200), '', 'idea', from.id);
+      showToast('New card in the Inbox', `Linked to the committed card "${from.title}".`);
+      closeCard();
+      await window.InboxActions?.openCard(card.id);
+    } catch (e) { detailError(errMsg(e)); }
+  });
+
+  // what a committed card's panel still does (#258): it is read, never edited
+  const READ_ONLY_ACTS = ['close', 'view', 'version-open', 'new-from'];
+
   function onDetailClick(e) {
     const b = e.target.closest('[data-detail]');
     if (!b || !dv.open) return;
     const act = b.dataset.detail;
+    if (readOnly() && !READ_ONLY_ACTS.includes(act)) return;
     if (act === 'close') { if (!editBlocks()) closeCard(); }
+    else if (act === 'commit') openCommit();
+    else if (act === 'new-from') newFromCard();
     else if (act === 'tab') {
       dv.tab = b.dataset.tab;
       renderTab();
@@ -1029,7 +1104,7 @@
   }
 
   function onDetailChange(e) {
-    if (!dv.open) return;
+    if (!dv.open || readOnly()) return;
     if (e.target.id === 'dsc-file') { attachToCard(e.target.files); e.target.value = ''; }
     else if (e.target.id === 'dsc-type') saveField({ type: e.target.value });
     else if (e.target.id === 'dsc-tags') saveField({ tags: e.target.value.split(',') });
@@ -1134,6 +1209,10 @@
   }
 
   window.DiscoveryRuns = { started: runStarted };
+  // the Backlog's badge of an issue's discovery card (#258): the board with that card's panel open
+  window.DiscoveryActions = {
+    openCard: (id) => { showView('discovery'); return openCard(id); },
+  };
 
   registerView({
     id: 'discovery',
@@ -1224,8 +1303,9 @@
         <button type="submit" class="btn primary" data-testid="clarity-settings-save">Save</button>
       </div>
     </form>
-  </div>`,
+  </div>${window.DiscoveryCommit.MODAL}`,
     mount() {
+      commit().mount();
       $('#dsc-override-form').onsubmit = moveAnyway;
       $('#dsc-override-reason').oninput = (e) => { $('#btn-dsc-override-confirm').disabled = !e.target.value.trim(); };
       $('#btn-dsc-override-cancel').onclick = () => { dv.override = null; closeModal('#dsc-override-modal'); };

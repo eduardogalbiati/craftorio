@@ -6,9 +6,22 @@
 // discovery folder (layout().discovery), private to the workspace; the store refuses a project id,
 // a card id or an attachment name that is a path. The author of a card, a move or a note is the
 // person at this machine (the OS user name).
+// The commitment point (#258, src/discovery-commit.js): discovery:commit-proposal asks the Product
+// Owner how a Ready card splits into issues, discovery:commit files the split the owner confirmed
+// on the project's synced repository and commits the card; the board lists the committed cards
+// with their delivery (`committed`). Under MULTIAGENT_SIMULATION_ONLY the proposal is the
+// rule-based one and the issues only join the workspace's synced backlog: never gh/glab, no model.
 
 const os = require('os');
+const path = require('path');
+const backlog = require('../../backlog');
+const commits = require('../../discovery-commit');
 const discovery = require('../../discovery');
+const productOwner = require('../../product-owner');
+const projects = require('../../projects');
+const releases = require('../../releases');
+const simulation = require('../../engine/simulation');
+const workspace = require('../../workspace');
 
 // who captures, moves and discards from this app
 function owner() {
@@ -17,6 +30,29 @@ function owner() {
 
 module.exports = (ctx) => {
   const dir = () => ctx.ws.discovery;
+  // when the card was committed: the list shows the last committed first
+  const committedAt = (c) => (c.history || []).findLast((h) => h.to === discovery.COMMITTED)?.ts || c.updated;
+  // The committed cards (#258), each with its delivery from the Backlog's issues and the releases.
+  function committed(projectId) {
+    const cards = discovery.listCards(dir(), projectId, { column: discovery.COMMITTED });
+    if (!cards.length) return [];
+    const id = path.basename(String(projectId));
+    const issues = ctx.withIssueRuns(backlog.readBacklog(ctx.ws.backlog, id))?.issues || [];
+    const history = releases.readReleases(ctx.ws.releases, id).releases;
+    return cards
+      .sort((a, b) => String(committedAt(b)).localeCompare(String(committedAt(a))))
+      .map((c) => ({ ...c, delivery: commits.cardDelivery(c, issues, history) }));
+  }
+  // the Backlog marks the issues filed from a card with it (#258, src/service/areas/backlog.js withIssueRuns)
+  ctx.discoveryIssueCards = (projectId) => discovery.issueCards(dir(), projectId);
+  const board = (projectId) => ({ ...discovery.readBoard(dir(), projectId), forecast: discovery.readyForecast(dir(), projectId), committed: committed(projectId) });
+  // A card that may be committed, or the refusal (not Ready, under the commit bar with its gaps).
+  function committable(projectId, cardId) {
+    const card = discovery.readCard(dir(), projectId, cardId);
+    const check = commits.checkCommit(card);
+    if (!check.ok) throw new Error(check.reason);
+    return card;
+  }
   return [
     // the project's cards, newest first; `column` narrows them (the Inbox screen: 'inbox')
     {
@@ -32,12 +68,13 @@ module.exports = (ctx) => {
       params: ['projectId', 'cardId'],
       fn: ({ projectId, cardId }) => discovery.readCard(dir(), projectId, cardId),
     },
-    // quick capture: a card (an `idea` unless `type` says otherwise) in the Inbox, `text` its document
+    // quick capture: a card (an `idea` unless `type` says otherwise) in the Inbox, `text` its document;
+    // `from` (#258): the committed card it was learned from, kept as links.from
     {
       channel: 'discovery:create',
       method: 'createDiscoveryCard',
-      params: ['projectId', 'title', 'text', 'type'],
-      fn: ({ projectId, title, text, type }) => discovery.createCard(dir(), projectId, { title, text, type: type || 'idea', author: owner() }),
+      params: ['projectId', 'title', 'text', 'type', 'from'],
+      fn: ({ projectId, title, text, type, from }) => discovery.createCard(dir(), projectId, { title, text, type: type || 'idea', author: owner(), from: from || undefined }),
     },
     // fields: title, type, tags, clarity, estimate, links, document, acceptance
     {
@@ -63,13 +100,65 @@ module.exports = (ctx) => {
       fn: ({ projectId, cardId, reason }) => discovery.moveCard(dir(), projectId, cardId, 'ready', { by: owner(), force: true, reason }),
     },
     // the board (#257): { columns: [{ id, title, wip }], order: { <column>: [card ids] } }, with the
-    // project's clarity bar and night (#166: clarity { bar, byKind, night }) and the ready work
-    // (forecast { count, unestimated, hours, nights, nightHours })
+    // project's clarity bar and night (#166: clarity { bar, byKind, night }), the ready work
+    // (forecast { count, unestimated, hours, nights, nightHours }) and the committed cards (#258:
+    // committed [{ ...card, delivery: { stage, counts, issues, release } }], the last committed first)
     {
       channel: 'discovery:board',
       method: 'discoveryBoard',
       params: ['projectId'],
-      fn: ({ projectId }) => ({ ...discovery.readBoard(dir(), projectId), forecast: discovery.readyForecast(dir(), projectId) }),
+      fn: ({ projectId }) => board(projectId),
+    },
+    // the Product Owner's proposal for committing a Ready card (#258): { split: { issues: [{ title,
+    // tasks, complexity, workflow, reason }] }, model, costUsd, fallback? }. Refused like the commit
+    // itself. A proposal the Product Owner could not give (no CLI, the budget, no folder) is the
+    // rule-based one, with why in `fallback`: the commit never waits on a model
+    {
+      channel: 'discovery:commit-proposal',
+      method: 'proposeDiscoveryCommit',
+      params: ['projectId', 'cardId'],
+      fn: async ({ projectId, cardId }) => {
+        const card = committable(projectId, cardId);
+        const simulated = simulation.simulationOnly();
+        const options = ctx.productOwnerOptions(path.basename(String(projectId)), simulated);
+        try {
+          return await productOwner.proposeCommit({ ...options, card });
+        } catch (e) {
+          return { ...(await productOwner.proposeCommit({ ...options, card, mock: true })), fallback: e.message };
+        }
+      },
+    },
+    // the commit (#258), on the owner's click only (no agent and no automation calls it): files the
+    // confirmed `split` ({ issues: [{ title, tasks, complexity, workflow }] }) on the project's synced
+    // repository, each issue with "From discovery card <id>", and commits the card (links.issues, off
+    // the board) → { issues: [{ number, url, title, … }], card, simulated, failed?, skippedLabels?,
+    // syncError? }. Refused outside Ready and under 85% clarity (the message lists the gaps)
+    {
+      channel: 'discovery:commit',
+      method: 'commitDiscoveryCard',
+      params: ['projectId', 'cardId', 'split'],
+      fn: async ({ projectId, cardId, split }) => {
+        committable(projectId, cardId);
+        const id = path.basename(String(projectId));
+        const data = backlog.readBacklog(ctx.ws.backlog, id);
+        if (!data) throw new Error('Sync the backlog first: a commit files its issues on the synced repository.');
+        const project = projects.readProject(ctx.ws.projects, id);
+        const platform = data.platform || workspace.readSettings(ctx.ws).backlogPlatform || backlog.DEFAULT_PLATFORM;
+        const repo = data.repo || project?.repo;
+        const simulated = simulation.simulationOnly();
+        const res = await commits.commitCard({
+          dir: dir(), projectId, cardId, split, platform, repo, by: owner(),
+          ...(simulated ? { exec: commits.simulatedExec({ backlogDir: ctx.ws.backlog, projectId: id, platform, repo }) } : {}),
+        });
+        if (simulated) return { ...res, simulated };
+        // after a real filing the Backlog shows the new issues right away
+        try {
+          await backlog.syncBacklog({ dir: ctx.ws.backlog, project, platform });
+          return { ...res, simulated };
+        } catch (e) {
+          return { ...res, simulated, syncError: e.message };
+        }
+      },
     },
     // the project's clarity bar (0 to 100), a bar per kind ({ hotfix: 60 }; null: the project's) and
     // the night the forecast counts in ({ start, end } as HH:MM) → the board
@@ -79,7 +168,7 @@ module.exports = (ctx) => {
       params: ['projectId', 'bar', 'byKind', 'night'],
       fn: ({ projectId, bar, byKind, night }) => {
         discovery.setClarityBar(dir(), projectId, { bar, byKind, night });
-        return { ...discovery.readBoard(dir(), projectId), forecast: discovery.readyForecast(dir(), projectId) };
+        return board(projectId);
       },
     },
     // Grill me (#166): asks the card's next open point in its thread → { card, bar, question }

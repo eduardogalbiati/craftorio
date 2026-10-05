@@ -443,7 +443,8 @@
     if (editBlocks()) return;
     const id = inbox.open.id;
     let others = [];
-    try { others = (await api.listDiscoveryCards(inbox.projectId)).filter((c) => c.id !== id); } catch (e) { return detailError(errMsg(e)); }
+    // (a committed card takes no merge, #258)
+    try { others = (await api.listDiscoveryCards(inbox.projectId)).filter((c) => c.id !== id && c.column !== 'committed'); } catch (e) { return detailError(errMsg(e)); }
     if (inbox.open?.id !== id) return;
     $('#inbox-merge-what').textContent = `The document and the attachments of "${inbox.open.title}" join the card chosen here; this card is archived with a link to it.`;
     $('#inbox-merge-target').innerHTML = others.map((c) => `<option value="${esc(c.id)}">${esc(c.title)} (${esc(c.column)})</option>`).join('');

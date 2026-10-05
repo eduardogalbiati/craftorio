@@ -40,7 +40,11 @@ module.exports = (ctx) => {
     const refresh = refreshBanner(project, live, local);
     const refreshed = new Set(refresh.refreshed);
     // the issues a release shipped (#260) are marked Released (`released`: its version, shown on the card)
+    // the issues filed from a discovery card (#258) name it (`discoveryCard`: { id, title }, the card's
+    // badge); the card store is the discovery channels' (src/service/channels/discovery.js)
+    const cards = ctx.discoveryIssueCards?.(data.projectId) || new Map();
     const issues = ctx.markReleasedIssues(data.projectId, backlog.linkRuns(data.issues, live, queue, local))
+      .map((i) => (cards.has(i.number) ? { ...i, discoveryCard: cards.get(i.number) } : i))
       .map((i) => (stages.has(i.number) ? { ...i, roadmap: stages.get(i.number) } : i))
       .map((i) => (refreshed.has(i.number) && i.state === 'open' ? { ...i, refreshed: true } : i));
     return { ...data, queue, local, roadmap, refresh, autoPush: !!project?.autoPush, autoEpic: !!project?.autoEpic, issues };

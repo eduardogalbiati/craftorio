@@ -80,8 +80,36 @@
 .dsc-version-label { font-size: 13px; font-weight: 600; }
 .dsc-version-text { max-height: 320px; overflow: auto; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); }
 
+/* the commitment point (#258): the Committed list beside the columns, a committed card's delivery
+   (stage, counts, its issues with their Backlog column), the read-only panel and the commit dialog */
+.dsc-board-row { display: flex; align-items: flex-start; gap: 12px; }
+.dsc-board-row > .dsc-board { flex: 1; min-width: 0; }
+.dsc-committed { flex: none; width: 280px; padding: 10px; background: var(--panel); border: 1px dashed var(--border); border-radius: 10px; }
+.dsc-committed-list { display: grid; gap: 8px; }
+.dsc-committed-card { cursor: default; }
+.dsc-delivery { display: grid; gap: 4px; min-width: 0; }
+.dsc-delivery-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.dsc-delivery-issues { display: grid; gap: 3px; margin: 0; padding: 0; list-style: none; font-size: 12px; }
+.dsc-delivery-issues li { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.dsc-delivery-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dsc-delivery-issues a { color: var(--muted); text-decoration: none; }
+.dsc-delivery-issues a:hover { text-decoration: underline; }
+.dsc-stage.delivered, .dsc-stage.released, .dsc-issue-col.done, .dsc-issue-col.released { color: var(--green); }
+.dsc-stage.in_delivery, .dsc-issue-col.in_progress, .dsc-issue-col.local { color: var(--accent); }
+.dsc-issue-col.waiting { color: var(--yellow); }
+.dsc-detail.read-only [data-detail="unattach"], .dsc-detail.read-only [data-detail="version-restore"] { display: none; }
+/* the issues scroll inside the dialog: its roadmap choice and File the issues stay in view */
+#dsc-commit-body { max-height: 52vh; overflow: auto; margin-bottom: 12px; }
+.dsc-commit-issues { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.dsc-commit-issue { margin-bottom: 0; }
+.dsc-commit-issue input[type="text"], .dsc-commit-issue textarea, .dsc-commit-issue select { width: 100%; }
+.dsc-commit-grid { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 12px; }
+.dsc-commit-roadmap { margin-bottom: 10px; font-size: 13px; }
+
 /* a narrow window: the columns keep a readable width and the board scrolls sideways (room below
-   for a card's open "Move to…" menu) */
+   for a card's open "Move to…" menu); the Committed list goes below the board */
 @media (max-width: 1100px) {
   .dsc-board { grid-template-columns: repeat(var(--dsc-cols, 4), minmax(180px, 1fr)); overflow-x: auto; padding-bottom: 130px; }
+  .dsc-board-row { flex-direction: column; align-items: stretch; }
+  .dsc-committed { width: auto; }
 }

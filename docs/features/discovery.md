@@ -3,7 +3,7 @@ order: 260
 ---
 
 <!-- section:workspace-tree -->
-  discovery/<project>/  private discovery cards (Inbox, Discovery board): board.json, cards/<id>/ (card.json, document.md, acceptance.md, versions/, attachments/, conversation.jsonl), archive/<id>/
+  discovery/<project>/  private discovery cards (Inbox, Discovery board): board.json, cards/<id>/ (card.json, document.md, acceptance.md, versions/, attachments/, conversation.jsonl, filed/), archive/<id>/
 
 <!-- section:workspace -->
 - **Discovery cards stay private.** Ideas captured in **Plan & Design › Inbox** are cards in
@@ -23,7 +23,14 @@ order: 260
   the project's bar (`clarity`: `bar`, 85 by default, `byKind`, and `night`, the hours the ready
   forecast counts in). The score never edits a card's text; only **Grill me**, with a person
   answering in the card's thread, writes the answers into it.
-  Nothing under `discovery/` goes to the git platform: the folder carries a `.gitignore` that ignores
+  **Commit to the backlog** is the one place where a card's content leaves the workspace, on the
+  owner's click: a Ready card at 85% clarity or more becomes one or more issues on the project's
+  repository, each starting with `From discovery card <id>` and holding the card's title, its tasks
+  and the first 4000 characters of its document. The card keeps the issue numbers in
+  `links.issues`, the text of each issue in `filed/`, and the column `committed`: it is in no board
+  column any more and never moves again. A card started from it keeps the link in `links.from`;
+  `links.release` is the release that shipped its issues.
+  Nothing else under `discovery/` goes to the git platform: the folder carries a `.gitignore` that ignores
   everything, and the screens, the Oracle and agents reach a card only through the card API (the
   `discovery:` channels). Through the browser UI (`npm run serve`) a pasted or dropped file is
   limited by the server's request size (15 MB); the desktop app takes the full 50 MB.

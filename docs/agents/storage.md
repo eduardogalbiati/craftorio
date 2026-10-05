@@ -57,7 +57,14 @@ Read this before touching run listings, the Backlog queue, pending gates, notifi
   version file is refused),
   `attachments/` (any file up to 50 MB, original names, a taken name gets a `-2` suffix, the same
   content is stored once) and `conversation.jsonl` (the thread, appended). `archive/<card id>/`: a
-  discarded or merged card, same layout, `card.archived = { ts, reason, by, mergedInto? }`. Every
+  discarded or merged card, same layout, `card.archived = { ts, reason, by, mergedInto? }`.
+  A committed card (#258, `src/discovery-commit.js`): `card.column = 'committed'` (no board column,
+  in no `order`; `moveCard` and `mergeCard` refuse it, `restoreCard` keeps it committed),
+  `links.issues` the numbers of the issues filed from it (`markCommitted`; `issueCards` gives the
+  Backlog each issue's card from the `card.json` files alone), `filed/<iso ts>-issue-<n>.md` the
+  text of each issue, a thread entry `{ kind: 'commit', issues }`; `links.from` on a card created
+  from another (`createCard`'s `from`). Its delivery is never stored: the `discovery:board`
+  channel computes it on each read from the synced backlog and the release history. Every
   file is written whole (temp file + rename, `writeFileAtomic` in `src/state-file.js`); project
   ids, card ids and attachment names are checked before a path is built, so nothing outside a
   card's folder is read or written. No index row: the folders are read directly. Screens, the

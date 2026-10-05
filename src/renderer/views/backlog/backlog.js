@@ -853,6 +853,11 @@
       </span>`;
   }
 
+  // Filed from a discovery card (#258, the service's `discoveryCard`): the card's title; a click opens
+  // the card on the Discovery board, read-only.
+  const discoveryBadge = (i) => (i.discoveryCard
+    ? `<button class="badge bl-discovery" type="button" data-testid="issue-discovery-card" data-discovery-card="${esc(i.discoveryCard.id)}" title="${esc(`Filed from the discovery card "${i.discoveryCard.title}": open it (read-only)`)}">card: ${esc(i.discoveryCard.title)}</button>` : '');
+
   function issueRow(i) {
     const open = bl.expanded.has(i.number);
     const host = PLATFORMS[bl.data?.platform]?.label || 'the platform';
@@ -865,7 +870,7 @@
           <span class="bl-num mono">#${i.number}</span>
           <div class="bl-main">
             <div class="bl-title">${esc(i.title)}</div>
-            <div class="bl-labels">${refreshedBadge(i)}${epicBadge(i)}${triage(i)}${labels(i)}</div>
+            <div class="bl-labels">${refreshedBadge(i)}${discoveryBadge(i)}${epicBadge(i)}${triage(i)}${labels(i)}</div>
           </div>
           <span class="bl-status">${prBadges(i)}${status(i)}</span>
           ${tasks(i) || '<span></span>'}
@@ -886,7 +891,7 @@
   const card = (i) => `
     <div class="bl-card${bl.selected.has(i.number) ? ' selected' : ''}" data-n="${i.number}">
       <div class="bl-card-head">${checkbox(i)}<span class="bl-num mono">#${i.number}</span><a class="bl-card-title" href="${esc(i.url)}" target="_blank" rel="noopener" title="Open on ${esc(PLATFORMS[bl.data?.platform]?.label || 'the platform')}">${esc(i.title)}</a>${issueMenu(i)}</div>
-      <div class="bl-labels">${refreshedBadge(i)}${epicBadge(i)}${triage(i)}${labels(i)}</div>
+      <div class="bl-labels">${refreshedBadge(i)}${discoveryBadge(i)}${epicBadge(i)}${triage(i)}${labels(i)}</div>
       ${tasks(i)}
       ${prBadges(i) || status(i) ? `<div class="bl-card-run">${prBadges(i)}${status(i)}</div>` : ''}
     </div>`;
@@ -1516,6 +1521,8 @@
       if (e.target.closest('[data-clear-filters]')) { clearFilters(); return; }
       const run = e.target.closest('[data-run]');
       if (run) { openRun(run); return; }
+      const fromCard = e.target.closest('[data-discovery-card]');
+      if (fromCard) { window.DiscoveryActions?.openCard(fromCard.dataset.discoveryCard); return; }
       const gate = e.target.closest('[data-gate]');
       if (gate) { openGate(gate); return; }
       const out = e.target.closest('[data-unqueue]');

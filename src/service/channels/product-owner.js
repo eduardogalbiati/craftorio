@@ -83,6 +83,8 @@ module.exports = (ctx) => {
       prices: settings.prices || {},
     };
   };
+  // a discovery card's commit proposal asks the same Product Owner (#258, src/service/channels/discovery.js)
+  ctx.productOwnerOptions = askOptions;
 
   // ---- the inbox's mechanical kinds (#240): the code of the owner's own buttons ------------------
   const numbersOf = (list) => [...new Set((Array.isArray(list) ? list : [list]).map(Number).filter((n) => Number.isInteger(n) && n > 0))];

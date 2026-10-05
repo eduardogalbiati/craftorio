@@ -232,6 +232,9 @@ button.bl-label { font-family: inherit; cursor: pointer; }
 .bl-enrich { cursor: pointer; border: 1px solid var(--accent); color: var(--accent); background: transparent; }
 /* Backlog Refresh (#161; its alert is the page's, #270): an issue the last refresh updated has a badge for a day */
 .bl-refreshed { border: 1px solid var(--accent); color: var(--accent); background: transparent; }
+/* Filed from a discovery card (#258): the card's title, cut with an ellipsis; a click opens the card */
+.bl-discovery { max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; border: 1px solid var(--purple); color: var(--purple); background: transparent; }
+.bl-discovery:focus-visible { outline: var(--focus-ring); outline-offset: 1px; }
 .bl-skipped { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 /* Epics (#138): the card badge, the filter, the Epics view (backlog.js renderEpics) */
 .bl-epic { border: 1px solid transparent; color: #A78BFA; background: color-mix(in srgb, #8B5CF6 18%, var(--panel)); cursor: pointer; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: inherit; font-size: 11px; }

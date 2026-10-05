@@ -42,6 +42,10 @@
 // sent to the platform). Clearing the conversation keeps these folders. A preview (simulated) never
 // calls gh/glab.
 //
+// A discovery card's commit (#258, src/discovery-commit.js): `proposeCommit` proposes the issues a
+// Ready card becomes (one read-only turn, mode 'commit': titles, the card's acceptance criteria as
+// tasks, complexity, workflow), kept to the card by normalizeSplit; `mock` answers with the
+// rule-based split. The owner edits and files it in the Discovery board's commit dialog.
 // Splitting (#124, src/po-split.js): the plan answer's `splits` propose 2-4 child issues for each
 // issue too big for one run; `applySplit` files them on the owner's click (the owner may move tasks
 // or merge children first) and updates the parent. Epics (#138, src/epics.js): the answer's `epics`
@@ -69,6 +73,7 @@ const backlog = require('./backlog');
 const { isArchived } = require('./renderer/views/backlog/backlog-archive');
 const costEstimate = require('./cost-estimate');
 const DefaultWorkflow = require('./renderer/default-workflow');
+const discoveryCommit = require('./discovery-commit');
 const epics = require('./epics');
 const poCalibration = require('./renderer/po-calibration');
 const poSplit = require('./po-split');
@@ -1395,10 +1400,81 @@ async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns,
   return { message, messages: readConversation(backlogDir, projectId) };
 }
 
+// ---- a discovery card's commit (#258) ---------------------------------------------------------------
+// The split of a Ready card into the issues it is committed as (src/discovery-commit.js files them
+// on the owner's click): the model's proposal kept to the card's acceptance criteria
+// (normalizeSplit), or the rule-based one (proposeSplit: the simulated answer, and the fallback).
+const COMMIT_SCHEMA = {
+  type: 'object',
+  required: ['issues'],
+  properties: {
+    issues: {
+      type: 'array',
+      items: {
+        type: 'object',
+        required: ['title', 'tasks'],
+        properties: {
+          title: { type: 'string' },
+          tasks: { type: 'array', items: { type: 'string' } },
+          complexity: { type: 'integer' },
+          workflow: { type: 'string' },
+          reason: { type: 'string' },
+        },
+      },
+    },
+  },
+};
+
+const COMMIT_RULES = [
+  'You are the Product Owner of this project. A discovery card reached Ready and its owner commits it to the backlog: propose the issues it becomes, from the card below and, when you need to, from the project\'s code (your working directory, read-only: docs/agents/code-map.md, grep).',
+  'One issue when one run can deliver the card; two or more when its parts can ship on their own, touch unrelated areas of the code or hold more than about eight tasks. List the issues in the order to deliver them.',
+  'Each issue has a title written with the issue-writing skill, the card\'s acceptance criteria it takes as `tasks` (copied as written; every criterion in exactly one issue, none dropped or invented), its `complexity` (1 to 5), the `workflow` that implements it (a file of the Workflows list; the default unless the issue needs another) and, when the card is split, a one-line `reason`.',
+  'You never file issues and never start runs: the owner edits your proposal and files it with a click. Write in English.',
+].join('\n');
+
+function commitReport({ card, tasks, workflows, workflow }) {
+  return [
+    `## Discovery card ${card.id}: ${card.title}`,
+    `Type: ${card.type}. Clarity: ${card.clarity?.score ?? 'not scored'}%.`,
+    `### Document\n${clip(card.document, MAX_REPORT) || '(empty)'}`,
+    `### Acceptance criteria (the tasks to hand out)\n${tasks.length ? tasks.map((t) => `- [ ] ${t}`).join('\n') : '(none written: derive the tasks from the document)'}`,
+    `## Workflows\n${(workflows || []).map((w) => `- \`${w.file}\`${w.file === workflow ? ' (default)' : ''}: ${w.name || w.file}`).join('\n')}`,
+  ].join('\n\n');
+}
+
+/**
+ * The Product Owner's proposal for committing a discovery card: the issues it becomes.
+ * `mock`: the rule-based proposal (no model call, no cost). The other options are ask's.
+ * @returns {Promise<{ split: { issues: { title, tasks, complexity, workflow, reason }[] }, model: string, costUsd: number, invalid?: string }>}
+ */
+async function proposeCommit({ backlogDir, projectId, card, workflows, defaultWorkflow = null, folder, agent, skillsDirs, resolveCommand, budget, mock }) {
+  const files = (workflows || []).map((w) => w.file);
+  const workflow = DefaultWorkflow.resolve(defaultWorkflow, files).file;
+  if (mock) return { split: discoveryCommit.proposeSplit(card, { workflow }), model: 'simulated', costUsd: 0 };
+  checkBudget(budget);
+  const report = commitReport({ card, tasks: discoveryCommit.cardTasks(card), workflows, workflow });
+  const { raw, costUsd, model, invalid, tokens, sessionId } = await callAgent({ mode: 'commit', report, folder, agent, skillsDirs, resolveCommand });
+  recordUsage(backlogDir, { projectId, model, tokens, costUsd, sessionId });
+  return { split: discoveryCommit.normalizeSplit(raw, card, { workflow, workflows: files }), model, costUsd, ...(invalid ? { invalid } : {}) };
+}
+
+// What each mode of a Product Owner turn brings: its skills, rules, answer schema and step id.
+const TURNS = {
+  commit: { skills: ['issue-writing'], rules: COMMIT_RULES, schema: COMMIT_SCHEMA, stepId: 'product-owner-commit', fallback: () => ({ issues: [] }) },
+  issue: {
+    skills: ['issue-triage', 'issue-writing', 'clarity-score'], rules: ISSUE_RULES, schema: ISSUE_SCHEMA, stepId: 'product-owner-issue',
+    fallback: (prose) => ({ reply: prose, questions: [], draft: { title: '', body: '', labels: [], related: [] }, duplicates: [], existing_issue: 0, addition: '', assumptions: [] }),
+  },
+  plan: {
+    skills: ['backlog-product-owner'], rules: RULES, schema: ANSWER_SCHEMA, stepId: 'product-owner',
+    fallback: (prose) => ({ summary: prose, groups: [], conflicts: [], enrich: [], splits: [], epics: {} }),
+  },
+};
+
 // One read-only Claude Code turn in the project folder. An answer that does not validate is kept as
 // prose (no second call: one call per question). Mode 'issue': the issue skills, ISSUE_SCHEMA, and
 // read access to the attachments' folder. A plan turn states its calibration (#189) and its Cost step
-// (#205) after the rules.
+// (#205) after the rules. Mode 'commit' (#258): the card's report only, COMMIT_SCHEMA.
 // #235: the prompt's section for the workflow the owner chose (it replaces the default; the
 // orchestrator puts every group on it and adds the owner's options to the groups' inputs)
 function workflowSection(workflow, costOff) {
@@ -1417,7 +1493,7 @@ function lastWorkflow(backlogDir, projectId) {
   return null;
 }
 
-async function callAgent({ mode = 'plan', question, report, previous, attachments = [], selection = [], folder, agent, skillsDirs, resolveCommand, onItem = () => {}, signal = null, calibration = null, cost = null, workflow = null, costOff = false }) {
+async function callAgent({ mode = 'plan', question = '', report, previous = [], attachments = [], selection = [], folder, agent, skillsDirs, resolveCommand, onItem = () => {}, signal = null, calibration = null, cost = null, workflow = null, costOff = false }) {
   const { extractJson, validateSchema, render } = require('./engine/workflow');
   const { runTurn, isImagePath } = require('./engine/providers');
   const { resolveSkill, skillPrompt } = require('./skills');
@@ -1427,8 +1503,10 @@ async function callAgent({ mode = 'plan', question, report, previous, attachment
   if (!resolveCommand(provider.command)) throw new Error(`The Product Owner needs ${provider.command}, which is not installed.`);
   if (!folder || !fs.existsSync(folder)) throw new Error('The project has no folder on this machine: the Product Owner reads its code there.');
   const issueMode = mode === 'issue';
-  const schema = issueMode ? ISSUE_SCHEMA : ANSWER_SCHEMA;
-  const skills = (issueMode ? ['issue-triage', 'issue-writing', 'clarity-score'] : ['backlog-product-owner']).map((s) => resolveSkill(skillsDirs, s));
+  const planMode = mode === 'plan';
+  const turn = TURNS[mode] || TURNS.plan;
+  const { schema } = turn;
+  const skills = turn.skills.map((s) => resolveSkill(skillsDirs, s));
   const readOnly = providerArgs(provider.type, { caps: normalize({ tools: ['read'] }) }).args;
   // images go as the turn's attachments (#129: checked against the limits, Read on their folder);
   // other files are listed with read access to their folder
@@ -1438,30 +1516,27 @@ async function callAgent({ mode = 'plan', question, report, previous, attachment
   const extraArgs = dedupeFlags([...readOnly, ...dirs, ...skills.flatMap((skill) => (provider.skill_args || []).map((x) => render(x, { skill_dir: skill.path })))], provider.args || []);
   const prompt = [
     ...skills.map(skillPrompt),
-    issueMode ? ISSUE_RULES : RULES,
-    issueMode ? '' : poCalibration.promptSection(calibration ?? agent?.calibration),
-    issueMode || costOff ? '' : poCalibration.costPromptSection(cost ?? agent?.cost, poCalibration.clamp(calibration ?? agent?.calibration)),
-    issueMode || !workflow ? '' : workflowSection(workflow, costOff),
+    turn.rules,
+    planMode ? poCalibration.promptSection(calibration ?? agent?.calibration) : '',
+    planMode && !costOff ? poCalibration.costPromptSection(cost ?? agent?.cost, poCalibration.clamp(calibration ?? agent?.calibration)) : '',
+    planMode && workflow ? workflowSection(workflow, costOff) : '',
     selection.length ? SELECTION_RULES : '',
     report,
-    issueMode ? issueContext(previous) : previousExchanges(previous),
-    issueMode ? `## The owner's new message\n${question}` : `## The owner's question\n${question}`,
+    issueMode ? issueContext(previous) : planMode ? previousExchanges(previous) : '',
+    issueMode ? `## The owner's new message\n${question}` : planMode ? `## The owner's question\n${question}` : '',
     others.length ? `## Files the owner attached (read them)\n${others.map((f) => `- ${f}`).join('\n')}` : '',
     `\n---\nAt the end of your response you MUST include a \`\`\`json block with an object that validates against this JSON Schema:\n\`\`\`json\n${JSON.stringify(schema, null, 2)}\n\`\`\``,
   ].filter(Boolean).join('\n\n');
   const res = await runTurn({
     provider, model: agent.model, effort: agent.effort && agent.effort !== 'default' ? agent.effort : undefined, prompt, cwd: folder, extraArgs, attachments: images,
-    timeoutMs: 15 * 60e3, render, hint: { stepId: issueMode ? 'product-owner-issue' : 'product-owner', visit: 1, agent: 'product-owner', schema }, onItem, signal,
+    timeoutMs: 15 * 60e3, render, hint: { stepId: turn.stepId, visit: 1, agent: 'product-owner', schema }, onItem, signal,
   });
   let raw;
   let errs;
   try { raw = extractJson(res.text); errs = validateSchema(raw, schema); } catch (e) { errs = [e.message]; }
   if (errs.length) {
     const prose = String(res.text || '').replace(/```json[\s\S]*$/, '').trim() || 'The answer could not be read.';
-    const fallback = issueMode
-      ? { reply: prose, questions: [], draft: { title: '', body: '', labels: [], related: [] }, duplicates: [], existing_issue: 0, addition: '', assumptions: [] }
-      : { summary: prose, groups: [], conflicts: [], enrich: [], splits: [], epics: {} };
-    return { raw: fallback, costUsd: res.costUsd || 0, tokens: res.usage, sessionId: res.providerSessionId || null, model: agent.model, invalid: errs.join('; '), text: res.text || '' };
+    return { raw: turn.fallback(prose), costUsd: res.costUsd || 0, tokens: res.usage, sessionId: res.providerSessionId || null, model: agent.model, invalid: errs.join('; '), text: res.text || '' };
   }
   return { raw, costUsd: res.costUsd || 0, tokens: res.usage, sessionId: res.providerSessionId || null, model: agent.model, invalid: null, text: res.text || '' };
 }
@@ -1495,6 +1570,7 @@ module.exports = {
   normalizeAnswer,
   normalizeIssueAnswer,
   packGroups,
+  proposeCommit,
   readConversation,
   REQUEST_KINDS,
   runHistory,
