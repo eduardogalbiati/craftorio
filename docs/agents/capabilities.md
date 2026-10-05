@@ -130,6 +130,13 @@ read-only agents (verifier, builder, blaster, ci_pusher...) must use `git show <
 `git diff` and single `node -e` / `python -c` one-liners, never scratch files, stash or worktrees.
 `bash:git`/`bash:node` can still change the repo: read-only is a convention, not a sandbox.
 
+## Asking a person: only Grill me (#166)
+
+Agents run unattended, so a skill never "asks the user": it records an assumption or a default.
+The one exception is **Grill me**: it asks a person, in a discovery card's own thread, where
+someone is present by definition, and it is never a workflow step. Inside a run the same rubric
+(skill `clarity-score`) asks nothing and records each gap as an open question.
+
 ## The app-wide Supervisor chat (#28)
 
 The Supervisor drawer and page (`src/supervisor-chat.js`) run `claude` isolated with `--tools ""`
