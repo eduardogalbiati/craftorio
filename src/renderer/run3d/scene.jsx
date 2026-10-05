@@ -20,7 +20,7 @@ import { useFrame, useThree } from '@react-three/fiber';
 import { MapControls } from 'three/addons/controls/MapControls.js';
 import {
   agentDef, entityPos, geoOf, lanePoint, rbox, rig, robotStateOf, STATUS, svgTexture,
-  TAG_LIFT, tagEls, textTexture, canvasTexture, fitText, useModel, useTheme, view, VIEW_DIR,
+  TAG_LIFT, tagEls, textTexture, canvasTexture, fitText, useModel, useTheme, view, VIEW_DIR, wrapText,
 } from './view.js';
 
 const U = 0.01; // robots.js draws in units of 1/100 of ours
@@ -176,7 +176,7 @@ function Station({ st, selected, onSelect }) {
   const first = agentDef(st.agents[0]), T = useTheme(), WOOD = T.wood;
   const sub = n === 1 ? ((first.model && window.Robots.plaqueFor(first.model)) || first.label) : st.agents.map((a) => agentDef(a).label).join(' + ');
   const label = textTexture([
-    { text: st.label, size: 60, y: 96, color: lighten(WOOD, 0.86) },
+    { text: st.label, size: 60, y: 96, color: lighten(WOOD, 0.86), wrap: true },
     { text: sub, size: 38, y: 162, color: lighten(WOOD, 0.6), weight: 700 },
   ], (x1 - x0 - 12) * 2, 240, true);
   return (
@@ -206,7 +206,9 @@ function Machine({ st, selected, onSelect }) {
     g.fillStyle = K.title; g.font = '700 22px Arial, Helvetica, sans-serif';
     g.fillText(`ENGINE · ${st.type.replace(/_/g, ' ').toUpperCase()}`, 28, 40);
     g.fillStyle = K.ink; g.font = '800 44px Arial, Helvetica, sans-serif';
-    g.fillText(fitText(g, st.label, w - 56), 28, 100);
+    const rows = wrapText(g, st.label, w - 56, 2);
+    if (rows.length > 1) g.font = '800 34px Arial, Helvetica, sans-serif';
+    rows.forEach((row, i) => g.fillText(row, 28, rows.length > 1 ? 82 + i * 40 : 100));
     g.fillStyle = col; g.beginPath(); g.arc(40, 166, 11, 0, 7); g.fill();
     g.font = '800 30px Arial, Helvetica, sans-serif';
     g.fillText(status === 'running' ? 'Running…' : STATUS[status].label, 64, 168);
