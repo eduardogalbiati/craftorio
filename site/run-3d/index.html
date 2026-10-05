@@ -955,7 +955,7 @@ function CameraRig() {
     Object.assign(c, { enableDamping: true, dampingFactor: 0.12, minDistance: 9, maxDistance: 75, minPolarAngle: 0.35, maxPolarAngle: 1.2, zoomSpeed: 0.8 });
     c.target.copy(CENTER);
     if (COVER) c.enabled = false;
-    camera.position.copy(CENTER).addScaledVector(VIEW_DIR, 52);
+    camera.position.copy(CENTER).addScaledVector(VIEW_DIR, COVER ? 26 : 52);
     return c;
   }, [camera, gl]);
   useEffect(() => {
@@ -1643,7 +1643,7 @@ function App() {
   const followRun = () => { setFollow(true); Object.assign(rig, { free: false, distGoal: 36, targetFn: followRunTarget }); };
   const overview = () => { setSel(null); setFollow(false); Object.assign(rig, { free: false, distGoal: 50, angleGoal: true, targetFn: (out) => out.copy(CENTER) }); };
   useEffect(() => {
-    if (COVER) rig.distGoal = 42;
+    if (COVER) rig.distGoal = 26;
     rig.targetFn = followRunTarget;
     // dragging the scene pins what was shown and stops following the run
     rig.onUserMove = () => { if (live.current.follow) { setSel(live.current.shown); setFollow(false); } };
