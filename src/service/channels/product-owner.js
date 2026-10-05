@@ -27,7 +27,6 @@ const agents = require('../../agents');
 const backlog = require('../../backlog');
 const DefaultWorkflow = require('../../renderer/default-workflow');
 const notifier = require('../../notifications');
-const oracle = require('../../oracle');
 const productOwner = require('../../product-owner');
 const projects = require('../../projects');
 const roadmaps = require('../../roadmap');
@@ -78,7 +77,7 @@ module.exports = (ctx) => {
       skillsDirs: [ctx.ws.skills, ctx.BUNDLED_SKILLS_DIR],
       resolveCommand,
       // its own past calls and the Oracle's are in no run: add them to what the runs used this month
-      budget: simulated ? null : usage.withPeerUsage(usage.budgetBaseline({ runsDir: ctx.ws.runs, settings, extraRuns: oracle.usageRuns(ctx.ws.oracle) }), productOwner.monthUsage(ctx.ws.backlog), settings.prices),
+      budget: simulated ? null : usage.withPeerUsage(usage.budgetBaseline({ runsDir: ctx.ws.runs, settings, extraRuns: ctx.agentUsageRuns() }), productOwner.monthUsage(ctx.ws.backlog), settings.prices),
       mock: simulated,
       // #206: the prices of the estimates
       prices: settings.prices || {},

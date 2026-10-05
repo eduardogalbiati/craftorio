@@ -1,7 +1,9 @@
 // Demo data for Analytics' Run tab (#228) and 24/7 tab (#188), written by scripts/screenshot.js into
 // its scratch workspace (like src/night-watch-demo.js): real (not simulated) finished runs with
 // events.jsonl and summary.json, the app's heartbeat log (src/app-sessions.js) and the Product
-// Owner's plan answers with a calibration (#189).
+// Owner's plan answers with a calibration (#189). And for the Agents tab (#280): the usage files of
+// the Oracle, the Product Owner and the Supervisor chat (src/agents-usage.js), which the E2E demo
+// workspace gets too (features/support/app.js).
 
 const fs = require('fs');
 const path = require('path');
@@ -138,7 +140,79 @@ function writeDemoOccupancy(ws, projectId, { now = Date.now() } = {}) {
   writeDemoNights(ws, projectId, { now });
 }
 
+/**
+ * The Agents tab (#280): four weeks of turns in the three usage files. The Oracle: a session a day
+ * (two every third day), questions and wake-ups, restarted by idle time, twice by a compaction after a
+ * long session, once by a reset and twice by a model change. The Product Owner: a call per question
+ * on two projects, its two oldest lines from before #280 (no session id, no start reason). The
+ * Supervisor chat: its first session, two Clears and two model changes.
+ * `today: false` leaves the Oracle without a turn today (its daily budget starts from zero).
+ */
+function writeDemoAgents(ws, projectId, { now = Date.now(), today = true } = {}) {
+  const HOUR = 60 * MIN;
+  const DAY = 24 * HOUR;
+  const opus = 'claude-opus-5-5';
+  const sonnet = 'claude-sonnet-5-5';
+  const iso = (t) => new Date(t).toISOString();
+  const tokens = (input, output, cacheRead, cacheWrite) => ({ input, output, cache_read: cacheRead, cache_write: cacheWrite });
+  const write = (file, lines) => {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, `${lines.map((l) => JSON.stringify(l)).join('\n')}\n`);
+  };
+  // a session's turns, `gapMin` apart: the first starts it (`reason`), the others resume it while the
+  // context grows by 14k tokens a turn
+  const session = (agent, id, t0, { reason, turns, model, gapMin }) => Array.from({ length: turns }, (_, j) => {
+    const context = 30000 + 14000 * j;
+    return {
+      ts: iso(t0 + j * gapMin * MIN), agent, provider: 'claude', model,
+      tokens: j ? tokens(300 + 40 * j, 700 + 60 * j, context - 14000, 14000) : tokens(1200, 900, 0, context),
+      costUsd: j ? +(0.09 + 0.012 * j).toFixed(2) : 0.34,
+      sessionId: id, session: j ? 'resumed' : 'fresh', ...(j ? {} : { startReason: reason }), contextTokens: context,
+    };
+  });
+
+  // the Oracle's line also holds the session's cumulative cost and whether the turn was a wake-up
+  const oracleSession = (...args) => {
+    let sum = 0;
+    return session('oracle', ...args).map((l, j) => ({ ...l, cumulativeUsd: +(sum += l.costUsd).toFixed(2), wake: j % 3 !== 0 }));
+  };
+  const RESTARTS = { 5: 'compaction', 10: 'reset', 15: 'model-change', 21: 'model-change', 26: 'compaction' };
+  const utcMidnight = new Date(now).setUTCHours(0, 0, 0, 0);
+  const oracle = [];
+  let n = 0;
+  let model = opus;
+  for (let k = 27; k >= (today ? 0 : 1); k--) {
+    for (const hoursAgo of k % 3 === 0 ? [9, 3] : [3]) {
+      const reason = n === 0 ? 'first' : RESTARTS[n] || 'idle';
+      if (reason === 'model-change') model = model === opus ? sonnet : opus;
+      // ten turns pass the 150,000-token context: the next session starts by compaction
+      const turns = RESTARTS[n + 1] === 'compaction' ? 10 : 2 + (n % 5);
+      // the newest session is today's (UTC, like the daily budget), whatever the hour: its turns fit before `now`
+      const newest = k === 0 && hoursAgo === 3;
+      const t0 = newest ? Math.max(now - hoursAgo * HOUR, utcMidnight) : now - k * DAY - hoursAgo * HOUR;
+      oracle.push(...oracleSession(`demo-oracle-${n}`, t0, { reason, turns, model, gapMin: newest ? Math.min(15, (now - t0) / MIN / (turns + 1)) : 15 }));
+      n += 1;
+    }
+  }
+  write(path.join(ws.oracle, 'usage.jsonl'), oracle);
+
+  const po = Array.from({ length: 26 }, (_, i) => {
+    const old = i < 2;
+    return {
+      ts: iso(now - (27 - i) * DAY - 7 * HOUR), ...(old ? {} : { agent: 'product-owner' }), projectId: i % 4 === 3 ? 'demo-api' : projectId, provider: 'claude', model: opus,
+      tokens: tokens(42000 + 1500 * (i % 7), 2600 + 200 * (i % 5), 9000, 12000), costUsd: +(0.22 + 0.03 * (i % 6)).toFixed(2),
+      ...(old ? {} : { sessionId: `demo-po-${i}`, session: 'fresh', startReason: 'one-shot' }),
+    };
+  });
+  write(path.join(ws.backlog, 'product-owner.usage.jsonl'), po);
+
+  const supervisor = [[25, 'first', 3, opus], [18, 'cleared', 2, opus], [11, 'model-change', 4, sonnet], [6, 'cleared', 3, sonnet], [1, 'model-change', 2, opus]]
+    .flatMap(([k, reason, turns, m], i) => session('supervisor', `demo-supervisor-${i}`, now - k * DAY - 5 * HOUR, { reason, turns, model: m, gapMin: 6 }));
+  write(path.join(ws.supervisor, 'usage.jsonl'), supervisor);
+}
+
 module.exports = {
+  writeDemoAgents,
   writeDemoOccupancy,
   writeDemoRunInDepth,
 };

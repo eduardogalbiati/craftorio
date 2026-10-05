@@ -1,6 +1,7 @@
 // The app under test for the Playwright E2E suite (#222). launchApp() seeds a fresh scratch
 // workspace with the demo data of scripts/screenshot.js (the project `demo-app`, its backlog, a
-// roadmap with Tonight's runs, a local merge, the dependency cache) and launches the real Electron
+// roadmap with Tonight's runs, a local merge, the dependency cache) and the three agents' usage
+// (src/analytics-demo.js, #280), and launches the real Electron
 // app on it with Playwright's _electron (features/support/electron-main.js), in simulation:
 // MULTIAGENT_SIMULATION_ONLY=1 (the engine refuses real runs, real providers and CLI terminals),
 // sign-in off, HOME/USERPROFILE/APPDATA inside the scratch folder (no CLI session or account of this
@@ -33,6 +34,8 @@ async function seedWorkspace(wsDir) {
   demo.demoLocalMerge(ws, project.id);
   demo.demoRoadmap(ws, project.id);
   demo.demoDepsCache(ws, project.id);
+  // Analytics' Agents tab (#280); no Oracle turn today: oracle.feature counts today's spend from zero
+  src('analytics-demo').writeDemoAgents(ws, project.id, { today: false });
   if (project.folder) {
     fs.mkdirSync(project.folder, { recursive: true });
     fs.writeFileSync(path.join(project.folder, 'package.json'), JSON.stringify({ name: 'demo-app', private: true, scripts: { start: 'node server.js' } }, null, 2));

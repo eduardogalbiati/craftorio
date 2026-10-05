@@ -348,7 +348,7 @@ module.exports = (ctx) => {
       defaultWorkflow: settings.defaultWorkflow, // #195
       folder: p.folder, agent: agents.readAgent(ctx.ws.agents, agents.PRODUCT_OWNER_ID),
       skillsDirs: [ctx.ws.skills, ctx.BUNDLED_SKILLS_DIR], resolveCommand,
-      budget: sim ? null : usage.withPeerUsage(usage.budgetBaseline({ runsDir: ctx.ws.runs, settings, extraRuns: oracle.usageRuns(dir()) }), productOwner.monthUsage(ctx.ws.backlog), settings.prices),
+      budget: sim ? null : usage.withPeerUsage(usage.budgetBaseline({ runsDir: ctx.ws.runs, settings, extraRuns: ctx.agentUsageRuns() }), productOwner.monthUsage(ctx.ws.backlog), settings.prices),
       mock: sim, mode,
     });
     const m = out.message || {};
@@ -459,10 +459,10 @@ module.exports = (ctx) => {
         skillsDirs: () => [ctx.ws.skills, ctx.BUNDLED_SKILLS_DIR], resolveCommand, refuseReal: simulation.refuseReal,
         agent: () => agents.readAgent(ctx.ws.agents, agents.ORACLE_ID),
         settings: () => workspace.readSettings(ctx.ws),
-        // the runs' spend, the Oracle's own days and the Product Owner's calls this month
+        // the runs' spend, the Oracle's own days, the Supervisor chat's (#280) and the Product Owner's calls this month
         budget: () => {
           const settings = workspace.readSettings(ctx.ws);
-          const base = usage.budgetBaseline({ runsDir: ctx.ws.runs, settings, extraRuns: oracle.usageRuns(dir()) });
+          const base = usage.budgetBaseline({ runsDir: ctx.ws.runs, settings, extraRuns: ctx.agentUsageRuns() });
           return usage.withPeerUsage(base, productOwner.monthUsage(ctx.ws.backlog), settings.prices);
         },
         perform, restore,

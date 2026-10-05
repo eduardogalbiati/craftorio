@@ -2,6 +2,9 @@
 // screen (#254, #264; expanded, the whole conversation). One conversation per workspace, resumed turn after turn
 // (claude --resume), kept in <workspace>/supervisor/chat.jsonl (messages) and chat.json (the CLI
 // session and model); the images attached to questions in attachments/ (#129).
+// #280: every real turn also goes to <workspace>/supervisor/usage.jsonl, the agents' shared record
+// (src/agents-usage.js: tokens, cost, the CLI session, whether the turn resumed it or why it started
+// one), which Clear keeps; usageRuns counts the chat in Usage and the monthly budgets.
 //
 // Each question carries the screen the person is on ("Builder, editing workflow X"), so requests need
 // not repeat it. The supervisor reads the app's data through its read-only MCP tools
@@ -21,6 +24,7 @@
 const fs = require('fs');
 const path = require('path');
 const agentInbox = require('./agent-inbox');
+const agentsUsage = require('./agents-usage');
 const { mockSteps, partialText } = require('./chat-progress');
 
 // the kinds another agent may ask the Supervisor for (#240)
@@ -69,6 +73,26 @@ const RULES = [
 ].join('\n');
 
 const readJson = (file, fallback) => { try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return fallback; } };
+const usageFile = (dir) => path.join(dir, 'usage.jsonl');
+
+/**
+ * #280: the chat's real turns, oldest first: usage.jsonl's lines and, before the first of them, the
+ * answers chat.jsonl still holds from before usage.jsonl existed (their cost only: `tokens: null`,
+ * no session id). `dir`: the workspace's supervisor folder.
+ */
+function usageTurns(dir) {
+  const recorded = agentsUsage.readLines(usageFile(dir)).filter((u) => u.ts);
+  const since = recorded[0]?.ts || null;
+  const earlier = agentsUsage.readLines(path.join(dir, 'chat.jsonl'))
+    .filter((m) => m.role === 'supervisor' && m.model && !m.simulated && m.ts && (!since || String(m.ts) < String(since)))
+    .map((m) => ({ ts: m.ts, agent: 'supervisor', provider: 'claude', model: m.model, tokens: null, costUsd: Number(m.costUsd) || 0, sessionId: null }));
+  return [...earlier, ...recorded];
+}
+
+/** #280: the chat's spend as summary-like runs, one per day (usage.computeUsage's `extraRuns`, like the Oracle's). */
+function usageRuns(dir) {
+  return agentsUsage.dayRuns(usageTurns(dir), { id: 'supervisor-chat', workflow: 'Supervisor chat' });
+}
 
 /** The text sent for one question: the screen first, then the question. */
 function questionText(text, screen) {
@@ -142,6 +166,9 @@ function createSupervisorChat({ dir, tools, bridge, mcpCommand, skillsDirs, reso
     ], provider.args || []);
     const st = state();
     const sessionId = st.model === model ? st.sessionId || null : null;
+    // #280: why a session starts: another model, or no session to resume: Clear forgot it (usage.jsonl
+    // survives Clear), else the first turn
+    const startReason = sessionId ? null : st.sessionId ? 'model-change' : fs.existsSync(usageFile(dir())) ? 'cleared' : 'first';
     let prompt = text;
     if (!sessionId) {
       let method = '';
@@ -149,11 +176,15 @@ function createSupervisorChat({ dir, tools, bridge, mcpCommand, skillsDirs, reso
       prompt = [RULES, method && `## How you supervise a run\n${method}`, text].filter(Boolean).join('\n\n');
     }
     fs.mkdirSync(dir(), { recursive: true });
+    let contextTokens = null;
     const res = await runTurn({
       provider, model, providerSessionId: sessionId, prompt, cwd: dir(), extraArgs, timeoutMs: TIMEOUT_MS, render, attachments,
-      hint: { stepId: 'supervisor-chat', visit: 1, agent: 'supervisor' }, onItem, signal,
+      hint: { stepId: 'supervisor-chat', visit: 1, agent: 'supervisor' }, signal,
+      onItem: (it) => { if (it?.kind === 'context' && Number(it.tokens)) contextTokens = Number(it.tokens); onItem(it); },
     });
-    saveState({ sessionId: res.providerSessionId || sessionId, model });
+    const sid = res.providerSessionId || sessionId;
+    agentsUsage.appendTurn(usageFile(dir()), { agent: 'supervisor', model, tokens: res.usage, costUsd: res.costUsd, sessionId: sid, startReason, contextTokens });
+    saveState({ sessionId: sid, model });
     return res;
   }
 
@@ -217,7 +248,7 @@ function createSupervisorChat({ dir, tools, bridge, mcpCommand, skillsDirs, reso
       return agentInbox.act(input, { history, role: 'supervisor', record: post, perform, restore, after });
     },
 
-    /** A new conversation: the messages and the CLI session are forgotten. */
+    /** A new conversation: the messages and the CLI session are forgotten (usage.jsonl is kept, #280). */
     clear() {
       fs.rmSync(files().log, { force: true });
       fs.rmSync(files().state, { force: true });
@@ -234,4 +265,6 @@ module.exports = {
   questionText,
   REQUEST_KINDS,
   RULES,
+  usageRuns,
+  usageTurns,
 };

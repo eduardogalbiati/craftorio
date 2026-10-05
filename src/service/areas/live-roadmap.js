@@ -10,7 +10,6 @@ const agents = require('../../agents');
 const backlog = require('../../backlog');
 const live = require('../../live-roadmap');
 const notifier = require('../../notifications');
-const oracle = require('../../oracle');
 const productOwner = require('../../product-owner');
 const projects = require('../../projects');
 const roadmaps = require('../../roadmap');
@@ -92,7 +91,7 @@ module.exports = (ctx) => {
       skillsDirs: [ws.skills, ctx.BUNDLED_SKILLS_DIR],
       resolveCommand,
       // as po:ask: its own and the Oracle's calls count in the monthly budget (a blocking one refuses)
-      budget: simulated ? null : usage.withPeerUsage(usage.budgetBaseline({ runsDir: ws.runs, settings, extraRuns: oracle.usageRuns(ws.oracle) }), productOwner.monthUsage(ws.backlog), settings.prices),
+      budget: simulated ? null : usage.withPeerUsage(usage.budgetBaseline({ runsDir: ws.runs, settings, extraRuns: ctx.agentUsageRuns() }), productOwner.monthUsage(ws.backlog), settings.prices),
       mock: simulated,
       mode: 'plan',
       selection: picks.map((i) => i.number),

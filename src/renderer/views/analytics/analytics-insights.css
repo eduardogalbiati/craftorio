@@ -1,5 +1,6 @@
-/* Analytics' Run (#228) and 24/7 (#188) tabs, and Repository performance's project picker and
-   recommendations (#197): analytics-run.js, analytics-occupancy.js, analytics.js. */
+/* Analytics' Run (#228), 24/7 (#188) and Agents (#280) tabs, and Repository performance's project
+   picker and recommendations (#197): analytics-run.js, analytics-occupancy.js, analytics-agents.js,
+   analytics.js. */
 
 /* the analysed project / the picked run, at the top of the tab */
 .an-project-pick { display: grid; grid-template-columns: minmax(220px, 340px) minmax(0, 1fr); align-items: end; gap: 16px; padding: 12px 14px; margin-bottom: 12px; }
@@ -50,3 +51,21 @@
 .an-idle-cell { min-width: 160px; }
 .an-trend { fill: none; stroke: var(--accent); stroke-width: 2; vector-effect: non-scaling-stroke; }
 .an-trend-dot { fill: var(--accent); }
+
+/* Agents (#280): a card per agent (they wrap on a narrow window), each a button that filters the sessions */
+.ag-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 12px; margin-bottom: 12px; }
+.ag-card { display: flex; flex-direction: column; align-items: stretch; gap: 4px; min-width: 0; padding: 12px 14px; font: inherit; color: inherit; text-align: left; }
+button.ag-card { cursor: pointer; }
+button.ag-card:hover, button.ag-card.active { border-color: var(--accent); }
+button.ag-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.ag-card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+.ag-robot { flex: none; width: 44px; height: 44px; }
+.ag-robot svg { display: block; width: 100%; height: 100%; }
+.ag-name { font-size: 14px; }
+.ag-line { display: block; min-width: 0; }
+.ag-main { font-size: 15px; }
+.ag-card-empty .ag-robot { opacity: .55; }
+.ag-budget { display: block; height: 6px; margin-top: 4px; border-radius: 3px; background: var(--panel-2); overflow: hidden; }
+.ag-budget i { display: block; height: 100%; border-radius: 3px; background: var(--accent); }
+.ag-budget.full i { background: var(--red); }
+.ag-chart-controls { flex-wrap: wrap; justify-content: flex-end; gap: 8px 14px; }

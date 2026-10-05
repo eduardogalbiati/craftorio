@@ -21,7 +21,9 @@
 //                    knows (#184, skills/oracle/knowledge.md), memory, state.md)
 //   handoffs/        one note per compaction or reset (<stamp>-<reason>.md)
 //   usage.jsonl      one line per real answer: tokens, the turn's own cost and the session's
-//                    cumulative cost (#244; older lines hold the cumulative cost only: usageLines)
+//                    cumulative cost (#244; older lines hold the cumulative cost only: usageLines);
+//                    #280: the agents' shared record (src/agents-usage.js), with whether the turn
+//                    resumed its session or why it started one, and `wake` (a wake-up's turn)
 //   owner.json       the app process that answers (run-owner hold: pid, host, heartbeat)
 //   attachments/     the images pasted into questions (#171); the model reads them with view_attachment
 //   read.json        when the owner last read the conversation (the drawer's unread badge, #171)
@@ -60,6 +62,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const actions = require('./oracle-actions');
+const agentsUsage = require('./agents-usage');
 const knowledge = require('./oracle-knowledge');
 const { mockSteps, partialText } = require('./chat-progress');
 const night = require('./night-watch');
@@ -177,14 +180,7 @@ function spentOn(dir, now = new Date()) {
  * no run folder, and counts in Usage and the monthly budgets like the runs.
  */
 function usageRuns(dir) {
-  const days = new Map();
-  for (const u of usageLines(dir)) {
-    if (!u.ts) continue;
-    const day = String(u.ts).slice(0, 10);
-    if (!days.has(day)) days.set(day, { run_id: `oracle-${day}`, workflow: 'Oracle', started_at: u.ts, status: 'succeeded', sessions: [] });
-    days.get(day).sessions.push({ provider: u.provider || 'claude', model: u.model, tokens: u.tokens || {}, cost_usd: u.turnUsd, provider_session_id: u.sessionId || null, turns: 1 });
-  }
-  return [...days.values()];
+  return agentsUsage.dayRuns(usageLines(dir), { id: 'oracle', workflow: 'Oracle' });
 }
 
 // #183: what a question is about (a gate's context) is capped: the Oracle reads the rest with its tools
@@ -384,20 +380,21 @@ function createOracle({
   }
 
   // #244: `cumulativeUsd` is Claude's total for the session (null when it did not report one); the
-  // turn's own cost is its difference with the session's previous total in usage.jsonl
-  function recordUsage({ model, tokens, costUsd, cumulativeUsd = null, sessionId }) {
+  // turn's own cost is its difference with the session's previous total in usage.jsonl.
+  // #280: `startReason` (null: the turn resumed its session), `contextTokens` and `wake` go on the line
+  function recordUsage({ model, tokens, costUsd, cumulativeUsd = null, sessionId, startReason = null, contextTokens = null, wake = false }) {
     ensure();
     let own = Number(costUsd) || 0;
     if (cumulativeUsd != null) {
       const before = sessionTotal(dir(), sessionId);
       own = cumulativeUsd >= before ? +(cumulativeUsd - before).toFixed(6) : cumulativeUsd;
     }
-    fs.appendFileSync(usageFile(dir()), `${JSON.stringify({ ts: new Date().toISOString(), provider: 'claude', model, tokens: tokens || {}, costUsd: own, cumulativeUsd, sessionId: sessionId || null })}\n`);
+    agentsUsage.appendTurn(usageFile(dir()), { agent: 'oracle', model, tokens, costUsd: own, sessionId, startReason, contextTokens, extra: { cumulativeUsd, wake } });
     return own;
   }
 
   // ---- the model, real or simulated ----------------------------------------------------------
-  async function realTurn({ prompt, sessionId, model, effort, onItem = null, signal = null, timeoutMs = TIMEOUT_MS }) {
+  async function realTurn({ prompt, sessionId, model, effort, onItem = null, signal = null, timeoutMs = TIMEOUT_MS, startReason = null, wake = false }) {
     refuseReal('the Oracle\'s CLI (claude)');
     const { runTurn } = require('./engine/providers');
     const { render } = require('./engine/workflow');
@@ -418,8 +415,9 @@ function createOracle({
     });
     const u = res.usage || {};
     const sid = res.providerSessionId || sessionId;
-    const own = recordUsage({ model, tokens: u, costUsd: res.costUsd, cumulativeUsd: res.cliTotalCostUsd ?? null, sessionId: sid });
-    return { text: String(res.text || '').trim(), costUsd: res.costUsd == null && res.cliTotalCostUsd == null ? null : own, tokens: u, sessionId: sid, contextTokens: contextTokens ?? ((u.input || 0) + (u.cache_read || 0) + (u.cache_write || 0)) };
+    const context = contextTokens ?? ((u.input || 0) + (u.cache_read || 0) + (u.cache_write || 0));
+    const own = recordUsage({ model, tokens: u, costUsd: res.costUsd, cumulativeUsd: res.cliTotalCostUsd ?? null, sessionId: sid, startReason, contextTokens: context, wake });
+    return { text: String(res.text || '').trim(), costUsd: res.costUsd == null && res.cliTotalCostUsd == null ? null : own, tokens: u, sessionId: sid, contextTokens: context };
   }
 
   // The simulated Oracle: what its tools see, the session it is in. `mockContextTokens` lets tests
@@ -561,18 +559,20 @@ function createOracle({
           ? `${reached}: a new session starts from the skill, the memory and the handoff note ${path.basename(h.file)}.`
           : `The model changed to ${model}: a new session starts from the skill, the memory and the handoff note ${path.basename(h.file)}.`,
       });
-      st = { ...st, sessionId: null, compactNext: false, contextTokens: 0 };
+      st = { ...st, sessionId: null, compactNext: false, contextTokens: 0, startReason: why };
       saveState(st);
     } else if (st.sessionId && !(Date.now() - Date.parse(st.lastTurnAt || '') < WARM_MS)) {
       // #244: idle past the prompt cache's lifetime: resuming would rewrite the whole context at the
       // cache-write price, a fresh session from state.md costs a fraction of it
-      st = { ...st, sessionId: null, compactNext: false, contextTokens: 0 };
+      st = { ...st, sessionId: null, compactNext: false, contextTokens: 0, startReason: 'idle' };
     }
     const fresh = !st.sessionId;
+    // #280: why this session starts, for usage.jsonl (state.json keeps it until a turn answers)
+    const startReason = fresh ? st.startReason || 'first' : null;
     const prompt = fresh ? openingPrompt(text, heading) : text;
     const res = mock
       ? await mockTurn({ prompt, sessionId: st.sessionId, screen, mockContextTokens, fresh, attachments, about, wake })
-      : await realTurn({ prompt, sessionId: st.sessionId, model, effort: a.effort, onItem, signal, timeoutMs });
+      : await realTurn({ prompt, sessionId: st.sessionId, model, effort: a.effort, onItem, signal, timeoutMs, startReason, wake: !!wake });
     // #180: with a live view, the simulated turn streams fake steps and its text
     if (mock && onItem) await mockSteps(onItem, { steps: MOCK_STEPS, text: res.text, signal });
     const now = new Date().toISOString();
@@ -729,7 +729,7 @@ ${partial}` : ''}`, error: true });
       try {
         const st = state();
         const h = await writeHandoff('reset');
-        saveState({ ...st, sessionId: null, compactNext: false, contextTokens: 0 });
+        saveState({ ...st, sessionId: null, compactNext: false, contextTokens: 0, ...(st.sessionId ? { startReason: 'reset' } : {}) });
         post({ role: 'system', kind: 'reset', handoff: path.basename(h.file), text: `New session: the next question starts from the skill, the memory and the handoff note ${path.basename(h.file)}.` });
         return { handoff: path.basename(h.file), messages: history(), state: status() };
       } finally {

@@ -23,8 +23,9 @@
 //                      than the Dashboard, whose panel reads the answers; the Edit form of its
 //                      memory: --click "#oracle-dock [data-oracle-memory]")
 //   --tab <name>       settings: general | projects | agents | execution | phone | about; workflows: runs | definitions | builder | pipelines;
-//                      analytics: usage | performance | run | occupancy (performance: a demo git repository and a
-//                      marker; run: AI Development runs, the newest shown; occupancy: 30 days of runs and nights)
+//                      analytics: usage | performance | run | occupancy | agents (performance: a demo git repository and a
+//                      marker; run: AI Development runs, the newest shown; occupancy: 30 days of runs and nights;
+//                      agents: four weeks of the Oracle's, the Product Owner's and the Supervisor chat's turns, #280)
 //   --mode <name>      backlog: list | kanban | epics (roadmap: the Roadmap screen, #254)
 //                      nightwatch (#278): self-healing (Self-healing on since yesterday: "Self-healing
 //                      is on" in place of the end time, a finding of each detector, its days in the
@@ -123,7 +124,7 @@ const VIEWS = {
   // ("Self-healing is on" in place of the end time, its days in the report)
   nightwatch: { modes: ['self-healing'] },
   // run: one AI Development run in depth against its workflow's runs (#228); occupancy: the 24/7 tab (#188)
-  analytics: { tabs: ['usage', 'performance', 'run', 'occupancy'] },
+  analytics: { tabs: ['usage', 'performance', 'run', 'occupancy', 'agents'] },
   backlog: { modes: ['list', 'kanban', 'roadmap', 'epics'] },
   // the Inbox (#256): demo discovery cards; empty: none (the empty state)
   inbox: { modes: ['empty'] },
@@ -1538,11 +1539,13 @@ function main() {
     if (args.view === 'workflows') demoPipelines(ws, appDir);
     if (args.view === 'settings') demoDepsCache(ws, project.id);
     if (args.view === 'analytics' && args.tab === 'performance') demoPerformanceRuns(ws, project.folder, project.id);
-    // the Run (#228) and 24/7 (#188) tabs (an app before them: nothing)
-    if (args.view === 'analytics' && ['run', 'occupancy'].includes(args.tab)) {
+    // the Run (#228), 24/7 (#188) and Agents (#280) tabs (an app before them: nothing)
+    if (args.view === 'analytics' && ['run', 'occupancy', 'agents'].includes(args.tab)) {
       try {
         const demo = src('analytics-demo');
-        if (args.tab === 'run') demo.writeDemoRunInDepth(ws, project.id); else demo.writeDemoOccupancy(ws, project.id);
+        if (args.tab === 'run') demo.writeDemoRunInDepth(ws, project.id);
+        else if (args.tab === 'agents') demo.writeDemoAgents?.(ws, project.id);
+        else demo.writeDemoOccupancy(ws, project.id);
       } catch (e) { if (e.code !== 'MODULE_NOT_FOUND') throw e; }
     }
     // the Night watch's nights (#172): its screen, and Home's morning summary (an app before it: nothing)

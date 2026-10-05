@@ -7,7 +7,9 @@
 // #197, #254: the analysed project is the header's (window.CurrentProject), named at the top of that tab, and each file
 // over the shared limit has a recommendation, "Create issue" (or its open issue) and "Ask for a plan".
 // More tabs register in window.AnalyticsTabs before this file loads: Run (#228, analytics-run.js) and
-// 24/7 (#188, analytics-occupancy.js), each { id, label, order, load(), render(body), sub(), context() }.
+// 24/7 (#188, analytics-occupancy.js), each { id, label, order, load(), render(body), sub(), context() };
+// Agents (#280, analytics-agents.js) has `usesRange`: it keeps the date range controls and its load()
+// gets the range.
 // window.openAnalytics({ tab, runId }) opens a tab (the top bar's 24/7 chip, "Open in Analytics").
 // Registers itself with registerView (view-registry.js).
 // Uses app.js globals: api, esc, fmtTok, fmtUsd, fmtDur, fmtNum, dateOf, errMsg, markdownHtml, state, window.showRun, openDrawer.
@@ -56,7 +58,7 @@
     const extra = extraTab(ax.tab);
     if (extra) {
       renderControls();
-      await extra.load();
+      await extra.load(range());
       if (ax.tab === extra.id) render();
       return;
     }
@@ -119,8 +121,13 @@
     });
     document.querySelectorAll('#view-analytics .an-usage-only').forEach((el) => el.classList.toggle('hidden', perf || !!extra));
     document.querySelectorAll('#view-analytics .an-perf-only').forEach((el) => el.classList.toggle('hidden', !perf));
-    document.querySelectorAll('#view-analytics .an-range').forEach((el) => el.classList.toggle('hidden', !!extra));
+    document.querySelectorAll('#view-analytics .an-range').forEach((el) => el.classList.toggle('hidden', !!extra && !extra.usesRange));
     if (extra) {
+      if (extra.usesRange) {
+        document.querySelectorAll('#view-analytics [data-an-days]').forEach((b) => b.classList.toggle('active', +b.dataset.anDays === ax.days));
+        $a('#an-from').value = r.from;
+        $a('#an-to').value = r.to;
+      }
       $a('#an-sub').textContent = extra.sub();
       return;
     }

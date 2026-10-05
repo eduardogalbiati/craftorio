@@ -25,6 +25,7 @@
 // The conversation is kept per project in <workspace>/backlog/<projectId>.po.jsonl until cleared.
 // Each real call's cost and tokens also go to <workspace>/backlog/product-owner.usage.jsonl, which
 // clearing does not touch: monthUsage feeds them to the monthly budget check (they are in no run).
+// #280: a line is the agents' shared record (src/agents-usage.js); every call is a one-shot session.
 //
 // Registering an issue (#117, mode 'issue'): the same conversation drafts an issue with the owner,
 // like the issue-tracker workflow's analyze + write steps in one turn (skills issue-triage and
@@ -63,6 +64,7 @@
 const fs = require('fs');
 const path = require('path');
 const agentInbox = require('./agent-inbox');
+const agentsUsage = require('./agents-usage');
 const backlog = require('./backlog');
 const { isArchived } = require('./renderer/views/backlog/backlog-archive');
 const costEstimate = require('./cost-estimate');
@@ -1244,10 +1246,13 @@ async function applyEpicProposal({ backlogDir, projectId, runsDir, at, key, epic
 // ---- usage: every real call, for the monthly budgets ------------------------------------------------
 const usageFile = (backlogDir) => path.join(backlogDir, 'product-owner.usage.jsonl');
 
-function recordUsage(backlogDir, { projectId, model, tokens, costUsd }) {
-  fs.mkdirSync(backlogDir, { recursive: true });
-  fs.appendFileSync(usageFile(backlogDir), `${JSON.stringify({ ts: new Date().toISOString(), projectId, provider: 'claude', model, tokens: tokens || {}, costUsd: costUsd || 0 })}\n`);
+// #280: each question is a fresh CLI call (callAgent), so every line starts a session: one-shot
+function recordUsage(backlogDir, { projectId, model, tokens, costUsd, sessionId }) {
+  agentsUsage.appendTurn(usageFile(backlogDir), { agent: 'product-owner', projectId, model, tokens, costUsd, sessionId, startReason: 'one-shot' });
 }
+
+/** Every recorded call, every project, oldest first (Analytics' Agents tab, #280). */
+const usageLines = (backlogDir) => agentsUsage.readLines(usageFile(backlogDir));
 
 /**
  * The Product Owner's calls this month, every project, as sessions for usage.withPeerUsage
@@ -1255,10 +1260,8 @@ function recordUsage(backlogDir, { projectId, model, tokens, costUsd }) {
  */
 function monthUsage(backlogDir, now = new Date()) {
   const month = now.toISOString().slice(0, 7);
-  let lines = [];
-  try { lines = fs.readFileSync(usageFile(backlogDir), 'utf8').split('\n'); } catch { return []; }
-  return lines.map((l) => { try { return l ? JSON.parse(l) : null; } catch { return null; } })
-    .filter((u) => u && String(u.ts).slice(0, 7) === month)
+  return usageLines(backlogDir)
+    .filter((u) => String(u.ts).slice(0, 7) === month)
     .map((u) => ({ provider: u.provider, model: u.model, tokens: u.tokens, costUsd: u.costUsd }));
 }
 
@@ -1360,12 +1363,13 @@ async function ask({ backlogDir, projectId, runsDir, question, data, activeRuns,
     } else {
       checkBudget(budget);
       let tokens;
+      let sessionId;
       const shared = issueMode ? null : await sharedFiles({ runs: (runs || []).filter((r) => !r.mock).slice(0, SHARED_FILE_RUNS), repo: folder, store: storeFor(runsDir), limit: SHARED_FILES });
       const report = (issueMode ? issueReport : backlogReport)({ data, activeRuns, history, workflows, question: q, selection: selected, shared, defaultWorkflow: byDefault, workflow: chosen });
-      ({ raw, costUsd, model, invalid, tokens, text: analysis } = await callAgent({
+      ({ raw, costUsd, model, invalid, tokens, sessionId, text: analysis } = await callAgent({
         mode, question: q, report, previous, attachments: files, selection: selected, folder, agent: issueMode ? ISSUE_AGENT : agent, skillsDirs, resolveCommand, onItem: seen, signal, calibration: level, cost: costLevel, workflow: chosen, costOff,
       }));
-      recordUsage(backlogDir, { projectId, model, tokens, costUsd });
+      recordUsage(backlogDir, { projectId, model, tokens, costUsd, sessionId });
     }
   } catch (e) {
     const partial = partialText(written);
@@ -1457,9 +1461,9 @@ async function callAgent({ mode = 'plan', question, report, previous, attachment
     const fallback = issueMode
       ? { reply: prose, questions: [], draft: { title: '', body: '', labels: [], related: [] }, duplicates: [], existing_issue: 0, addition: '', assumptions: [] }
       : { summary: prose, groups: [], conflicts: [], enrich: [], splits: [], epics: {} };
-    return { raw: fallback, costUsd: res.costUsd || 0, tokens: res.usage, model: agent.model, invalid: errs.join('; '), text: res.text || '' };
+    return { raw: fallback, costUsd: res.costUsd || 0, tokens: res.usage, sessionId: res.providerSessionId || null, model: agent.model, invalid: errs.join('; '), text: res.text || '' };
   }
-  return { raw, costUsd: res.costUsd || 0, tokens: res.usage, model: agent.model, invalid: null, text: res.text || '' };
+  return { raw, costUsd: res.costUsd || 0, tokens: res.usage, sessionId: res.providerSessionId || null, model: agent.model, invalid: null, text: res.text || '' };
 }
 
 module.exports = {
@@ -1498,4 +1502,5 @@ module.exports = {
   SELECTION_RULES,
   sizeGroup,
   testBatchStages,
+  usageLines,
 };

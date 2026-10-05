@@ -20,6 +20,20 @@ Read this before touching run listings, the Backlog queue, pending gates, notifi
   `usage.jsonl` (one line per real answer; added to Usage and the monthly budgets as one
   summary-like run per day, `usageRuns`) and `owner.json` (the one app process that answers, a
   run-owner heartbeat). Written by the service, never by the model.
+- The three conversational agents' usage (#280, `src/agents-usage.js`): every real turn appends one line
+  (a simulated turn records nothing; nothing is ever rewritten) to `oracle/usage.jsonl` (the Oracle),
+  `backlog/product-owner.usage.jsonl` (the Product Owner, every project; Clear keeps it) or
+  `supervisor/usage.jsonl` (the Supervisor chat; Clear keeps it). Fields: `ts`, `agent` (`oracle`,
+  `product-owner`, `supervisor`), `projectId` (Product Owner), `provider`, `model`,
+  `tokens { input, output, cache_read, cache_write }`, `costUsd` (the turn's own cost), `sessionId` (the
+  CLI session), `session` (`fresh` or `resumed`), `startReason` on a fresh session (`first`, `compaction`,
+  `model-change`, `idle`, `reset`, `cleared`, `one-shot`) and `contextTokens` (the context after the turn,
+  when known); the Oracle's lines also hold `cumulativeUsd` (#244) and `wake` (a wake-up's turn). Lines from
+  before #280 lack `agent`, `session` and `startReason` (the Product Owner's, `sessionId` too) and are
+  read as they are; the Supervisor chat's turns from before its file are read from the answers' `costUsd`
+  in `supervisor/chat.jsonl` (cost only, until Clear removes them). Readers: Analytics' Agents tab
+  (`analytics:agents`), Usage and the monthly budgets (the Oracle's and the Supervisor chat's days as
+  summary-like runs, the Product Owner's month through `usage.withPeerUsage`).
 - `phone-gates/devices.json` (#226, `src/mobile-gates.js`): the phones paired with the gates page
   (`id`, `name`, `tokenHash` (SHA-256; the token itself is only on the phone), `pairedAt`,
   `lastSeen`); Revoke removes the entry. `phone-gates/secret`: the key that signs the gate links,
