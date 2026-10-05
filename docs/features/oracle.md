@@ -72,9 +72,7 @@ The button's badge counts the answers that arrived while the conversation was ou
   the watch at once. It never answers a gate, pushes, closes an issue or deletes data.
 - **Apply merged fixes to this app** (under Self-healing, off by default; only when the app runs
   from a source checkout and a project of the workspace is its repository, else the row says why):
-  the app takes the fixes merged into that project's local main, after every roadmap stage or only
-  after items marked "Update the app after this" (a switch on the roadmap card; the Oracle marks an
-  item it appends for a fix the running app needs). In code, with no model call: the roadmap pauses
+  the app takes the fixes merged into that project's local main after a roadmap stage ends. In code, with no model call: the roadmap pauses
   ("Updating the app"), the runs in progress finish (a gate is waited for, never answered), the app
   folder is fast-forwarded (refused with uncommitted changes or a diverged history: nothing changes
   and the roadmap resumes), dependencies are installed only when `package-lock.json` changed (a

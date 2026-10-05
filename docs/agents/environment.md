@@ -43,8 +43,8 @@ the workspace folder.
   and Settings › Execution › Oracle › "Apply merged fixes to this app" on, a source checkout
   (`app.isPackaged` false) whose repository is a project of the workspace (same `origin`, or the
   app's commit in the clone's local main) takes the fixes merged into that clone's **local main**
-  (never the network): after a merged roadmap item marked "Update the app after this" (or after
-  every stage, in that mode) it pauses the roadmaps ("Updating the app") and the Backlog queues,
+  (never the network): after a roadmap stage ends (the one trigger since #285; a merged item alone
+  never updates the app) it pauses the roadmaps ("Updating the app") and the Backlog queues,
   waits for every run in progress (a gate is waited for, never answered), refuses a dirty app
   folder or a history that is not a fast-forward (`git merge --ff-only`), runs `npm install` only
   when `package-lock.json` changed (a failure resets the folder to the previous commit), writes

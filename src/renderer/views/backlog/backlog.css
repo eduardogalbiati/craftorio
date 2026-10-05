@@ -292,6 +292,10 @@ button.bl-label { font-family: inherit; cursor: pointer; }
 .rm-stage { border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px; background: var(--panel); display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; min-width: 0; }
 .rm-stage.current { border-color: var(--accent); }
 .rm-stage.finished { opacity: .7; }
+/* #284: a disabled stage is skipped while the roadmap runs: still listed in its place, dashed and dimmed
+   (55%: its titles keep 5:1 against the panel, its cards still work); its badge and its ⋮ menu stay full */
+.rm-stage.disabled { border-style: dashed; }
+.rm-stage.disabled > .rm-items, .rm-stage.disabled > .rm-note-text, .rm-stage.disabled > .rm-stage-head > :not(.rm-stage-menu-wrap):not(.rm-disabled-badge), .rm-item.rm-item-off { opacity: .55; }
 /* the stage run on its own (#141); a stage opened from the Product Owner's drawer (#140) */
 .rm-stage.scoped { border-color: var(--green); box-shadow: inset 3px 0 0 var(--green); }
 .rm-stage.flash { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); transition: box-shadow .3s; }
@@ -311,7 +315,7 @@ input[type=text].rm-note { max-width: 520px; }
 .rm-cut.shipped { color: var(--muted); }
 .badge.bl-released { color: var(--green); background: color-mix(in srgb, var(--green) 12%, var(--panel)); border-color: color-mix(in srgb, var(--green) 45%, transparent); }
 .rm-items { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; }
-.rm-item { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; min-width: 0; }
+.rm-item { border: 1px solid var(--border); border-radius: 8px; padding: 12px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; min-width: 0; }
 /* an item's error (a failed run, a refused start #196): wrapped inside the card, then what to do */
 .rm-error { overflow-wrap: anywhere; }
 .rm-error-hint { margin-top: 2px; }
@@ -325,39 +329,121 @@ input[type=text].rm-note { max-width: 520px; }
 .rm-stage.rm-drop-end .rm-items::after { content: ''; display: block; height: 3px; border-radius: 2px; background: var(--accent); }
 .rm-drop-denied { border-color: var(--red); border-style: dashed; }
 .rm-drop-denied[data-drop-why]::after { content: attr(data-drop-why); color: var(--red); font-size: 12px; }
+/* #282: the item card reads in three bands. Band 1: its issues (what leads) | cost and time | the
+   status block. The card answers to its own width (a container query: the sidebar and the Oracle's
+   drawer beside it narrow the card, not the window): the issues share the row only while they keep
+   540px, else they take the full width with cost/time and status in a row under them; a narrow card
+   is one column and its titles wrap. */
+.rm-items { container: rm-card / inline-size; position: relative; }
+/* (a container is a stacking context: the one in use keeps its popovers above the stages after it) */
+.rm-items:hover, .rm-items:focus-within, .rm-items:has(.rm-progress.open) { z-index: 2; }
+.rm-item-top { display: grid; grid-template-columns: minmax(0, 1fr) 310px 270px; gap: 14px; align-items: center; min-width: 0; }
+.rm-issues { display: grid; gap: 5px; min-width: 0; }
 /* an item leads with its issues' titles, one line each (ellipsis, the full title on hover) */
-.rm-item-head { display: flex; align-items: flex-start; gap: 8px; }
-.rm-titles { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; flex: 1; min-width: 0; }
-.rm-issue { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+.rm-titles { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; min-width: 0; }
+.rm-issue { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
 .rm-issue[draggable="true"] { cursor: grab; }
 .rm-num { color: var(--muted); font-size: 12px; flex: none; }
 .rm-title { color: var(--text); font-weight: 600; text-decoration: none; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 a.rm-title:hover { text-decoration: underline; }
+.rm-issues-foot { font-size: 11px; }
+/* cost and time: a line each (label, value, "of ≈ estimate", the verdict at the right), a 3px bar under it */
+.rm-meters { background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; display: grid; gap: 8px; min-width: 0; }
+.rm-meter { display: grid; gap: 4px; min-width: 0; }
+.rm-meter-row { display: flex; align-items: baseline; gap: 6px; font-size: 12px; min-width: 0; }
+.rm-meter-label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; flex: none; width: 34px; }
+.rm-meter-value { font: 600 13px var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.rm-meter-of, .rm-meter-note { white-space: nowrap; }
+.rm-meter-verdict { font-weight: 600; white-space: nowrap; }
+.rm-bar { position: relative; height: 3px; border-radius: 2px; background: var(--border); }
+.rm-bar > i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 2px; background: var(--green); }
+.rm-bar > u { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--text); border-radius: 1px; }
+/* #215: a real value against its estimate, by verdict (the sign says it too: colour is never alone) */
+.rm-meter[data-verdict="warn"] .rm-meter-value, .rm-meter-verdict.rm-verdict-warn { color: var(--yellow); }
+.rm-meter[data-verdict="over"] .rm-meter-value, .rm-meter-verdict.rm-verdict-bad { color: var(--red); }
+.rm-meter-verdict.rm-verdict-good { color: var(--green); }
+.rm-meter[data-verdict="warn"] .rm-bar > i { background: var(--yellow); }
+.rm-meter[data-verdict="over"] .rm-bar > i { background: var(--red); }
+/* the status block: the one place that says how the item goes, then what to do about it */
+.rm-status { display: flex; align-items: center; gap: 8px 10px; flex-wrap: wrap; border-left: 1px solid var(--border); padding-left: 14px; min-width: 0; }
+.rm-status > .rm-actions { margin-left: auto; order: 1; }
+/* the run's progress keeps its own row above the buttons */
+.rm-status:has(> .rm-fail-actions, > .rm-actions) > .rm-progress { flex-basis: 100%; }
 .rm-actions { display: flex; align-items: center; gap: 6px; flex: none; }
-/* Retry / Skip / Ask the Oracle (#271): beside the title on a wide card; on their own row under it when the page
-   is narrow or the Oracle's drawer sits beside it (.shell.oracle-side, oracle.css), so the title keeps its place */
-.rm-fail-actions { display: flex; align-items: center; gap: 6px; flex: none; }
-.rm-fail-actions .btn.gate-oracle { margin-left: 0; }
-@media (max-width: 1100px) {
-  .rm-item-head { flex-wrap: wrap; }
-  .rm-fail-actions { order: 1; flex: 1 1 100%; flex-wrap: wrap; }
+/* Retry / Skip / Ask the Oracle (#271) flow with the block's own rows: Retry and Skip share theirs with
+   move and Remove, the Oracle's longer button follows */
+.rm-fail-actions { display: contents; }
+.rm-fail-actions .btn.gate-oracle { margin-left: 0; order: 2; }
+@container rm-card (max-width: 1173px) {
+  .rm-item-top { grid-template-columns: minmax(0, 310px) minmax(0, 1fr); }
+  .rm-issues { grid-column: 1 / -1; }
 }
-@media (max-width: 1700px) {
-  .shell.oracle-side .rm-item-head { flex-wrap: wrap; }
-  .shell.oracle-side .rm-fail-actions { order: 1; flex: 1 1 100%; flex-wrap: wrap; }
+@container rm-card (max-width: 520px) {
+  .rm-item-top { grid-template-columns: minmax(0, 1fr); }
+  .rm-title { white-space: normal; overflow-wrap: anywhere; }
+  .rm-status { border-left: 0; padding-left: 0; }
 }
-.rm-meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
-.rm-meta .pill { font-size: 10px; padding: 1px 7px; }
+/* Band 2, the Workflow band: its settings on the left (the name, the mode, the rest), its pipeline
+   on the right; stacked on a card too narrow for both */
+.rm-workflow { background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 16px; align-items: center; min-width: 0; }
+.rm-wf-config { display: grid; gap: 8px; min-width: 0; }
+.rm-wf-head { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.rm-eyebrow { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; flex: none; }
+.rm-wf-name { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* #266: the run chip: the workflow's name and "Open run →" open the item's run */
+.rm-run-chip { display: flex; align-items: baseline; gap: 8px; flex: 1; min-width: 0; padding: 0; border: 0; background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; border-radius: 4px; }
+.rm-run-chip .rm-open-run { margin-left: auto; color: var(--accent); font-weight: 600; white-space: nowrap; }
+.rm-run-chip:hover .rm-open-run { text-decoration: underline; }
+.rm-run-chip:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
+.rm-wf-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; font-size: 12px; }
+.rm-workflow .seg { background: var(--panel); }
+.rm-workflow .seg button.active { background: var(--panel-2); }
+.rm-mode-seg.locked button { cursor: default; }
+.rm-mode-seg.locked button:not(.active) { opacity: .45; }
+.rm-mode-seg.locked button:hover:not(.active) { color: var(--muted); }
+.rm-meta { display: flex; align-items: center; gap: 4px 6px; flex-wrap: wrap; min-width: 0; }
+.rm-meta:empty { display: none; }
 .rm-wf, .rm-input { color: var(--muted); }
-/* a long input value or run id is abbreviated (the full value in the tooltip), never wider than the card */
+/* a long input value is abbreviated (the full value in the tooltip), never wider than the card */
 .rm-meta > .badge, .rm-meta > .bl-run { max-width: 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rm-meta > .rm-input { max-width: min(100%, 320px); }
+/* the other inputs read as "Label: value" pairs, not as one more row of badges */
+.rm-meta > .wi-pill { border-color: transparent; background: none; padding-left: 0; color: var(--text); font-family: inherit; font-size: 12px; }
+/* the pipeline: one station per stage of the workflow, always visible */
+.rm-pipe { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; min-width: 0; border-left: 1px solid var(--border); padding-left: 16px; }
+.rm-pipe-none { align-self: stretch; }
+.rm-station { display: grid; justify-items: center; gap: 1px; min-width: 78px; max-width: 150px; padding: 4px 6px; border-radius: 8px; border: 1px solid transparent; background: none; font: inherit; color: inherit; text-align: center; }
+button.rm-station { cursor: pointer; }
+button.rm-station:hover { border-color: var(--accent); }
+button.rm-station:focus-visible { outline: var(--focus-ring); outline-offset: 1px; }
+.rm-station .rp-avs { height: 36px; }
+.rm-station .rp-av { width: 36px; height: 36px; }
+.rm-station-name { font-size: 12px; font-weight: 600; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rm-station-state { font-size: 11px; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; color: var(--muted); }
+.rm-station.st-done .rm-station-state { color: var(--green); }
+.rm-station.st-running { background: color-mix(in srgb, var(--accent) 8%, transparent); border-color: color-mix(in srgb, var(--accent) 35%, transparent); }
+.rm-station.st-running .rm-station-state { color: var(--accent); }
+.rm-station.st-back .rm-station-state, .rm-station.st-gate .rm-station-state, .rm-station.st-waiting .rm-station-state { color: var(--yellow); }
+.rm-station.st-waiting { background: color-mix(in srgb, var(--yellow) 8%, transparent); border-color: color-mix(in srgb, var(--yellow) 45%, transparent); }
+.rm-station.st-waiting .rm-station-state { font-weight: 600; }
+.rm-station.st-failed { border-color: color-mix(in srgb, var(--red) 45%, transparent); }
+.rm-station.st-failed .rm-station-state { color: var(--red); font-weight: 600; }
+/* not reached (or passed by): dimmed, its robots grey; a robot that is not at work stands still */
+.rm-station.st-todo .rp-avs, .rm-station.st-todo .rm-station-name, .rm-station.st-skipped .rp-avs, .rm-station.st-skipped .rm-station-name { opacity: .45; }
+.rm-station.st-todo .rp-av svg, .rm-station.st-skipped .rp-av svg { filter: grayscale(1); }
+.rm-station:not(.st-running):not(.st-waiting) .rp-av svg * { animation: none !important; }
+/* the owner's gate of the Validated mode: a dashed yellow border, the person icon */
+.rm-station.gate { border-style: dashed; border-color: color-mix(in srgb, var(--yellow) 40%, transparent); }
+.rm-station.gate.st-waiting { border-style: solid; }
+@container rm-card (max-width: 980px) {
+  .rm-workflow { grid-template-columns: minmax(0, 1fr); }
+  .rm-pipe { border-left: 0; padding-left: 0; }
+}
 /* #205/#206: the Product Owner's Cost step, the estimate and the real cost of an item */
 .rm-cost { border-color: rgba(45,212,191,.45); }
 .rm-cost-1, .rm-cost-2 { background: rgba(15,159,143,.14); }
 .rm-cost-4, .rm-cost-5 { background: rgba(168,85,247,.12); border-color: rgba(168,85,247,.4); }
 .rm-estimate { font-variant-numeric: tabular-nums; }
-.rm-no-estimate { color: var(--muted); }
 .rm-actual { font-variant-numeric: tabular-nums; color: var(--text); }
 /* #215: a real value against its estimate, by verdict (the arrow says it too: colour is never alone) */
 .badge.rm-verdict-good { color: var(--green); background: color-mix(in srgb, var(--green) 12%, var(--panel)); border-color: color-mix(in srgb, var(--green) 45%, transparent); }
@@ -371,19 +457,15 @@ a.rm-title:hover { text-decoration: underline; }
 .rm-done-chip { justify-self: start; padding: 2px 9px; border: 1px solid rgba(74, 222, 128, .35); border-radius: 99px; background: rgba(74, 222, 128, .1); color: var(--green); font: inherit; font-size: 11px; font-weight: 600; cursor: pointer; }
 .rm-done-chip:hover { background: rgba(74, 222, 128, .18); }
 .rm-done-chip:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
-/* #266: the kanban's run chip on the card: the status, the workflow's name, the run's title */
-.rm-run-chip > span:not(.pill) { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.rm-run-wf { color: var(--muted); }
 .rm-item.flash { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); transition: box-shadow .3s; }
 /* #195: a workflow that pushes while the default development workflow merges locally */
 .badge.rm-wf-push { color: var(--orange); background: color-mix(in srgb, var(--orange) 14%, var(--panel)); border-color: color-mix(in srgb, var(--orange) 45%, transparent); }
 /* the workflow select next to Split + roadmap / Create + roadmap (#195) */
 select.po-wf { width: auto; max-width: 220px; padding: 3px 6px; font-size: 12px; }
-/* #194: the run's progress ring on the right of the item: the estimated %, the current step with its
-   agent; hover, focus or a click shows the run's steps (the runs list's chips) in a popover that
-   opens to the left, so it never widens the page */
-.rm-progress { position: relative; display: flex; align-items: center; gap: 8px; flex: 0 1 190px; min-width: 0; justify-content: flex-end; }
-.rm-ring { position: relative; width: 44px; height: 44px; flex: none; padding: 0; border: 0; border-radius: 50%; background: none; cursor: pointer; color: var(--accent); }
+/* #194: the run's progress in the status block: the ring with the estimated %, then the status pill
+   with the step and the fix round; hover, focus or a click shows the run's summary in a popover */
+.rm-progress { position: relative; display: flex; align-items: center; gap: 10px; flex: 1 1 auto; min-width: 0; }
+.rm-ring { position: relative; width: 48px; height: 48px; flex: none; padding: 0; border: 0; border-radius: 50%; background: none; cursor: pointer; color: var(--accent); }
 .rm-ring:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 .rm-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
 .rm-ring circle { fill: none; stroke-width: 3.4; }
@@ -397,41 +479,27 @@ select.po-wf { width: auto; max-width: 220px; padding: 3px 6px; font-size: 12px;
 .rm-progress.st-done .rm-ring { color: var(--green); }
 .rm-progress.st-stopped .rm-ring { color: var(--muted); }
 .rm-progress-text { display: grid; gap: 2px; min-width: 0; font-size: 12px; justify-items: start; }
-.rm-progress-step { display: flex; align-items: center; gap: 5px; min-width: 0; max-width: 100%; }
-.rm-progress-step > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rm-status-line { display: flex; align-items: center; gap: 4px 8px; flex-wrap: wrap; min-width: 0; }
+.rm-progress-step { font-weight: 600; font-size: 13px; min-width: 0; overflow-wrap: anywhere; }
 .rm-progress.st-waiting .rm-progress-step { color: var(--yellow); }
 .rm-progress.st-failed .rm-progress-step { color: var(--red); }
-.rm-progress .rm-progress-step .rp-av { width: 22px; height: 22px; flex: none; }
-.rm-progress-text .badge { font-size: 10px; padding: 0 5px; }
-/* #272: the run's timer under the ring, coloured against the item's estimate (green within it, amber up
-   to 130%, red beyond; its tooltip says both times), and the fix round under the step */
-.rm-ring-col { display: grid; justify-items: center; gap: 3px; flex: none; }
-.rm-timer { font: 600 10.5px/1 var(--mono); font-variant-numeric: tabular-nums; color: var(--muted); }
-.rm-timer-ok { color: var(--green); }
+/* #272: the run's timer is the time line's value (#282), coloured once past the item's estimate (amber up
+   to 130%, red beyond; its accessible name says both times); the fix round under the step, in full */
+.rm-timer { font-variant-numeric: tabular-nums; }
 .rm-timer-warn { color: var(--yellow); }
 .rm-timer-over { color: var(--red); }
-.rm-round { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; color: var(--yellow); }
+.rm-round { font-size: 11px; color: var(--yellow); overflow-wrap: anywhere; }
 .rm-steps { display: none; position: absolute; right: 0; top: calc(100% + 6px); z-index: 30; width: max-content; max-width: min(560px, 80vw); padding: 8px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 12px 32px rgba(0,0,0,.4); }
 .rm-progress:hover .rm-steps, .rm-progress:focus-within .rm-steps, .rm-progress.open .rm-steps { display: block; }
-.rm-steps .rp-strip { flex-wrap: wrap; }
-/* #236: the run's summary heads the popover; the popover stays inside a narrow window */
+/* #236: the run's summary is the popover; it stays inside a narrow window */
 .rm-steps { max-width: min(560px, calc(100vw - 12px)); }
-.rm-run-summary { display: grid; gap: 1px; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid var(--border); font-size: 11px; line-height: 1.45; }
-.rm-chip { padding: 0; border: 0; background: none; font: inherit; color: inherit; cursor: pointer; border-radius: 8px; text-align: inherit; }
-.rm-chip:hover .rp-chip { outline: 1px solid var(--accent); }
-.rm-chip:focus-visible { outline: var(--focus-ring); outline-offset: 1px; }
-/* narrow windows: a small ring with its % only (the step is in its tooltip) */
-@media (max-width: 1100px) {
-  .rm-progress { flex-basis: auto; }
-  .rm-progress-text { display: none; }
-  .rm-ring { width: 34px; height: 34px; }
-  .rm-ring-pct { font-size: 9.5px; }
-}
-.rm-mode svg, .rm-mode-seg svg { width: 11px; height: 11px; margin-right: 4px; vertical-align: -1px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linejoin: round; }
-.badge.rm-mode-validated, .rm-mode-seg button.rm-mode-validated.active { color: var(--accent); }
+.rm-run-summary { display: grid; gap: 1px; font-size: 11px; line-height: 1.45; }
+.rm-mode-seg svg { width: 11px; height: 11px; margin-right: 4px; vertical-align: -1px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linejoin: round; }
+.rm-mode-seg button.rm-mode-validated.active { color: var(--accent); }
 .rm-mode-seg button { display: inline-flex; align-items: center; }
 .rm-mode-seg button:focus-visible { outline: var(--focus-ring); outline-offset: 1px; }
 .rm-reason { min-width: 0; }
+/* band 3: the Product Owner's reason, one line (the full text when it fits), a click for all of it */
 .rm-reason > summary { list-style: none; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rm-reason > summary::-webkit-details-marker { display: none; }
 .rm-reason[open] > summary { white-space: normal; overflow-wrap: anywhere; }

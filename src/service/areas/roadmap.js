@@ -157,9 +157,13 @@ module.exports = (ctx) => {
     } else if (roadmap.state === 'paused' && before.state === 'running') {
       ctx.notify({ kind: 'run', event: 'failed', title: 'Roadmap paused', body: String(roadmap.error || '').slice(0, 180) });
     }
-    if (roadmap.state === 'done' && before.state === 'running') ctx.notify({ kind: 'run', event: 'succeeded', title: 'Roadmap finished', body: `Every stage of ${projectId} is done.` });
-    // #279: a real item marked "Update the app after this" that merged, or a stage that ended, may
-    // update the app (areas/app-update.js): its cycle paused every roadmap, nothing more starts here
+    if (roadmap.state === 'done' && before.state === 'running') {
+      // #284: a disabled stage with work left was skipped, not done: the notice says so
+      const off = roadmap.stages.filter((s) => s.disabled && s.items.some((x) => !['done', 'skipped'].includes(x.status))).length;
+      ctx.notify({ kind: 'run', event: 'succeeded', title: 'Roadmap finished', body: off ? `Every enabled stage of ${projectId} is done; ${off} disabled stage${off === 1 ? ' was' : 's were'} left out.` : `Every stage of ${projectId} is done.` });
+    }
+    // #279: a stage that ended may update the app (areas/app-update.js): its cycle paused every
+    // roadmap, nothing more starts here
     if (!before.simulated && appUpdateStarted(before, roadmap, mockOf)) return;
     // a live roadmap's last stage ended (#164): the Product Owner adds the next stages (not awaited:
     // its answer takes minutes; the refill dispatches the roadmap again)
@@ -208,13 +212,10 @@ module.exports = (ctx) => {
     }
   }
 
-  // The items that merged in this step (stored not done before) and the stage that ended, as the
-  // events of the app update's trigger; true when its cycle started.
+  // The stage that ended in this step (with a real item), as the event of the app update's trigger
+  // (the only one since #285); true when its cycle started.
   function appUpdateStarted(before, roadmap, mockOf) {
     const finished = (x) => ['done', 'skipped'].includes(x.status);
-    const was = new Map(before.stages.flatMap((s) => s.items).map((x) => [x.id, x.status]));
-    const merged = roadmap.stages.flatMap((s) => s.items).filter((x) => x.status === 'done' && was.get(x.id) !== 'done' && !mockOf(x));
-    if (merged.some((item) => ctx.appUpdateEvent({ type: 'item-merged', item }))) return true;
     const at = roadmaps.currentStage(before);
     const stage = at >= 0 ? roadmap.stages.find((s) => s.id === before.stages[at].id) : null;
     return !!stage && stage.items.some((x) => !mockOf(x)) && stage.items.every(finished) && ctx.appUpdateEvent({ type: 'stage-done' });
@@ -227,7 +228,8 @@ module.exports = (ctx) => {
     const id = path.basename(String(projectId));
     const r = roadmaps.readRoadmap(ws.backlog, id);
     const stages = stage ? r.stages.filter((s) => s.id === stage) : r.stages;
-    if (!simulated && stages.some((s) => s.items.some((x) => !x.mock && !['done', 'skipped'].includes(x.status)))) {
+    // a disabled stage (#284) starts nothing: its real items do not make this start a real one
+    if (!simulated && stages.some((s) => !s.disabled && s.items.some((x) => !x.mock && !['done', 'skipped'].includes(x.status)))) {
       simulation.refuseReal('real runs from a roadmap');
       await host.assertCanRun?.({ mock: false });
     }

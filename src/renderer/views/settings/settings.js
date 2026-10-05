@@ -228,10 +228,11 @@ async function renderSelfHealing() {
   $('#set-oracle-self-healing-perms').onclick = () => showView('nightwatch');
 }
 
-// "Apply merged fixes to this app" (#279, settings.oracle.appUpdate / appUpdateWhen, src/app-update.js):
+// "Apply merged fixes to this app" (#279, settings.oracle.appUpdate, src/app-update.js):
 // the row under Self-healing. `o`: settings.oracle; `info`: the app-update:state result (null while it
 // is read): { applies, reason } or { applies, project, short, behind }. Off and disabled, with the
-// reason, when it does not apply or Self-healing is off; the source line and the When modes otherwise.
+// reason, when it does not apply or Self-healing is off; the source line otherwise. One trigger (#285):
+// a roadmap stage that ended; a stored oracle.appUpdateWhen is ignored.
 function appUpdateHtml(o, info) {
   const healing = !!o && o.selfHealing === true;
   const applies = !!info && info.applies === true;
@@ -239,14 +240,11 @@ function appUpdateHtml(o, info) {
     : !applies ? `Unavailable: ${info.reason}.`
       : !healing ? 'Turn Self-healing on first.' : '';
   const on = applies && healing && o.appUpdate === true;
-  const when = o?.appUpdateWhen === 'stage' ? 'stage' : 'marked';
   const behind = applies ? (info.behind > 0 ? `${info.behind} commit${info.behind === 1 ? '' : 's'} ahead of this app` : 'the app is up to date') : '';
-  const mode = (value, label) => `<button type="button" data-app-update-when="${value}" aria-pressed="${when === value}" class="${when === value ? 'active' : ''}"${on ? '' : ' disabled'}>${esc(label)}</button>`;
   return `<div class="s-label"><b>Apply merged fixes to this app</b>
-      <span>The app updates itself from the local main of the project that is its repository: it pauses the roadmap, waits for the runs in progress (a gate is never answered), fast-forwards, restarts and resumes the roadmap. It never pushes.</span>
+      <span>After a roadmap stage ends, the app updates itself from the local main of the project that is its repository: it pauses the roadmap, waits for the runs in progress (a gate is never answered), fast-forwards, restarts and resumes the roadmap. It never pushes.</span>
       ${applies ? `<span data-testid="app-update-source">Source: <b>${esc(info.project?.name || info.project?.id || '')}</b>, local main (<code>${esc(info.short)}</code>, ${esc(behind)})</span>` : ''}
       ${why ? `<span class="muted small" data-testid="app-update-reason">${esc(why)}</span>` : ''}
-      ${applies ? `<span class="row">When: <span class="seg sm" role="group" aria-label="When to apply merged fixes" data-testid="app-update-when">${mode('stage', 'After every roadmap stage')}${mode('marked', 'Only after items marked “Update the app after this”')}</span></span>` : ''}
     </div>
     <label class="switch"><input type="checkbox" id="set-app-update" data-testid="app-update-switch" aria-label="Apply merged fixes to this app"${on ? ' checked' : ''}${applies && healing ? '' : ' disabled'} /><span></span></label>`;
 }
@@ -265,7 +263,6 @@ async function renderAppUpdate(fresh = true) {
     renderAppUpdate(false);
   };
   $('#set-app-update').onchange = (e) => save({ appUpdate: !!e.target.checked });
-  row.querySelectorAll('[data-app-update-when]').forEach((b) => { b.onclick = () => save({ appUpdateWhen: b.dataset.appUpdateWhen }); });
 }
 
 // The Oracle's wake-ups (#123, src/oracle-wake.js): which runs wake it and on which events, saved

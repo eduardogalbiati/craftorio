@@ -313,6 +313,26 @@ changed in `style.css` goes into that skill too. In this app:
   (`MENU` in `backlog-roadmap.js`: `.bl-menu-wrap`, a button with `aria-haspopup="menu"` and
   `aria-expanded`, `role="menu"` / `role="menuitem"`, the first entry focused when it opens, Esc
   closes it and gives the focus back), so a new action is a line in the list, not a new button.
+- **The roadmap item card** (#282, `itemHtml` in `backlog-roadmap.js`, `.rm-*` in `backlog.css`) reads in
+  three bands. Band 1, `.rm-item-top`: the issues (`.rm-issues`: the titles, then the count and the
+  complexity, `roadmap-issues-foot`) | cost and time (`metersHtml`: `roadmap-meter-cost` /
+  `roadmap-meter-time` with `data-verdict` none | estimate | ok | warn | over; the time of a run at
+  work is the live timer, `roadmap-run-timer`, moved by `tick()`) | the status block (`statusHtml`,
+  `roadmap-status`: the ring, the StatusPill and the step, the fix round in full, then Retry / Skip
+  or move and Remove; never an agent avatar). Band 2, `.rm-workflow` (`workflowHtml`,
+  `roadmap-workflow`): the workflow's name, the run chip ("Open run →") or Edit, the mode toggle
+  (`roadmap-mode`: `.seg.sm`, locked while the item runs), the badges and input pills (`.rm-meta`),
+  and the pipeline (`pipelineHtml`, `roadmap-pipeline` / `roadmap-station` with `data-state`), whose
+  stations come from `RunProgress.pipeline` (`run-progress-model.js`): the workflow's groups and its
+  steps in no group, in order (a human gate in no group is no station; the gate a mode turns on is
+  one, right after the station that holds it), each with what the run's trail did there. Band 3: the
+  Product Owner's reason, then the error line and the Edit form. The card answers to its own width
+  (`@container rm-card` on `.rm-items`, not the window: the sidebar and the Oracle's drawer narrow
+  it): the issues share the first row only while they keep 540px, the Workflow band stacks under
+  980px, and under 520px everything is one column. A stage's actions are its ⋮ menu
+  (`stageMenuHtml`, `roadmap-stage-menu`; an entry that cannot be used is `aria-disabled` with its
+  reason under it); a disabled stage (#284) is `.rm-stage.disabled` with `data-disabled="true"`.
+  More states for screenshots: `--roadmap states` (a fix round, a disabled stage, a simulated item).
 - **Check it**: extend the screen's demo data in `scripts/screenshot.js` with the fields you add,
   then capture the default view and each state with `--click` (e.g.
   `npm run screenshot -- --view backlog --mode roadmap --click "[data-rm-edit]"`). List those

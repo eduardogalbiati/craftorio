@@ -64,6 +64,9 @@
 //   --budget <state>   backlog: the spending budget (#206): paused (a daily budget of $60 reached: the
 //                      roadmap paused before its next stage, with Raise for today / Resume anyway) |
 //                      set (the same budget, not reached: the top bar's "$X / $60 today")
+//   --roadmap <state>  backlog: more states of the roadmap card (#282, #284): states (the running run
+//                      in a fix round, back in Develop after its review; the stage "Reports and
+//                      health" disabled; the last stage's item simulated)
 //   --po <state>       backlog: the Product Owner's drawer open with its live turn (#180): working (the
 //                      activity line, timer, Stop and the last steps) | writing (the answer as it is
 //                      written, its JSON block hidden) | stopped (an answer stopped by the owner) |
@@ -142,6 +145,7 @@ const VIEWS = {
 const THEMES = ['dark', 'light', 'system'];
 const KEEP_AWAKE = ['off', 'idle', 'active', 'error'];
 const LIVE_STATES = ['off', 'on', 'refilling', 'empty', 'budget'];
+const ROADMAP_STATES = ['states'];
 const PO_STATES = ['working', 'writing', 'stopped', 'failed'];
 
 function parseArgs(argv) {
@@ -185,6 +189,7 @@ function parseArgs(argv) {
     else if (k === '--oracle') a.oracle = next();
     else if (k === '--live') a.live = next();
     else if (k === '--budget') a.budget = next();
+    else if (k === '--roadmap') a.roadmap = next();
     else if (k === '--po') a.po = next();
     else throw new Error(`Unknown argument: ${k}`);
   }
@@ -199,6 +204,8 @@ function parseArgs(argv) {
   if (a.oracle && !ORACLE_STATES.includes(a.oracle)) throw new Error(`--oracle takes ${ORACLE_STATES.join(' | ')}`);
   if (a.live && !LIVE_STATES.includes(a.live)) throw new Error(`--live takes ${LIVE_STATES.join(' | ')}`);
   if (a.live && a.view !== 'backlog') throw new Error('--live applies to --view backlog');
+  if (a.roadmap && !ROADMAP_STATES.includes(a.roadmap)) throw new Error(`--roadmap takes ${ROADMAP_STATES.join(' | ')}`);
+  if (a.roadmap && a.view !== 'backlog') throw new Error('--roadmap applies to --view backlog');
   if (a.po && !PO_STATES.includes(a.po)) throw new Error(`--po takes ${PO_STATES.join(' | ')}`);
   if (a.po && a.view !== 'backlog') throw new Error('--po applies to --view backlog');
   if ((a.stopAt || Object.keys(a.inputs).length) && a.view !== 'run') throw new Error('--stop-at and --input apply to --view run');
@@ -455,7 +462,10 @@ function demoPoTurn(sender, which, projectId) {
 // also pauses the roadmap before its next stage, as the budget cap does.
 // Cost (#205): the group of stage 2 was planned at Economy (grouped, existing tests only, no
 // screenshots), so a test-batch item follows it; the UI issue of stage 3 at Generous.
-function demoRoadmap(ws, projectId, live = 'off', budget = null) {
+// `more` (#282, #284, --roadmap states): the running run is in a fix round, the stage "Reports and
+// health" is disabled and the last stage's item is simulated (the test-batch item has no estimate).
+function demoRoadmap(ws, projectId, live = 'off', budget = null, more = null) {
+  const states = more === 'states';
   const at = (h, m) => { const d = new Date(); d.setHours(h, m, 0, 0); return d.toISOString(); };
   const ended = live === 'empty' || live === 'budget';
   const refill = {
@@ -478,7 +488,7 @@ function demoRoadmap(ws, projectId, live = 'off', budget = null) {
   });
   // without --live: a stage "Tonight" with a running, a waiting and a failed run (#194: the progress
   // rings) and a start refused for kept work that paused the roadmap (#196: Retry / Skip)
-  const tonight = live === 'off' ? demoRoadmapRuns(ws, projectId) : null;
+  const tonight = live === 'off' ? demoRoadmapRuns(ws, projectId, { fixRound: states }) : null;
   const refused = 'Could not start #14: #14 already has work from a cancelled run, 20260119-221000-demo0014 (3 commits on its branch). Choose with Retry on the roadmap item, Resume on the queue or Start on the issue.';
   fs.writeFileSync(path.join(ws.backlog, `${projectId}.roadmap.json`), JSON.stringify({
     state: 'planned', simulated: false, error: null, pausedBy: null, updatedAt: new Date().toISOString(), ...liveFields,
@@ -495,7 +505,7 @@ function demoRoadmap(ws, projectId, live = 'off', budget = null) {
         item('item-9', 'software-development-local-hero.yaml', [9], { status: 'done', runId: tonight.better, runs: [tonight.better] }),
         item('item-10', 'software-development-local-hero.yaml', [12], { status: 'done', runId: tonight.worse, runs: [tonight.worse] }),
       ] }] : []),
-      { id: 'stage-2', name: 'Reports and health', note: 'Both touch the server: one run, no conflict.', items: [item('item-2', 'software-development-local-hero.yaml', [12, 9], {
+      { id: 'stage-2', name: 'Reports and health', note: 'Both touch the server: one run, no conflict.', ...(states ? { disabled: true } : {}), items: [item('item-2', 'software-development-local-hero.yaml', [12, 9], {
         // #193: a reason of 500+ characters ends with "…" at the card's edge, whole when opened
         reason: 'Both add a server route and share the report formatter: one run avoids a merge conflict in src/server. Split from #136, whose tasks were spread over two stages: the report export needs the formatter that the health endpoint introduces, and both register their routes in src/server/routes.js, which every parallel run of this area edits; running them apart would conflict there and in the formatter tests. The health endpoint is small (complexity 3) and the export reuses its formatter, so together they stay under the group size of five issues per run and take one review instead of two.',
         modeReason: 'Auto: server code with no screen to try.',
@@ -508,6 +518,7 @@ function demoRoadmap(ws, projectId, live = 'off', budget = null) {
         inputs: {}, reason: 'Economy: these issues ran with their existing tests only; one test writer session writes their unit tests together, after their stage.',
       })] },
       { id: 'stage-3', name: '', note: '', items: [item('item-3', 'software-development.yaml', [10], {
+        ...(states ? { mock: true } : {}),
         inputs: { language: 'js', mode: 'validated', unit_tests: 'write_and_run', e2e_tests: 'write_and_run', screenshots: 'all' }, reason: 'A small UI fix on its own.', modeReason: 'Validated: a screen the owner can try in the app.',
         cost: { level: 5, name: 'Generous', inputs: { unit_tests: 'write_and_run', e2e_tests: 'write_and_run', screenshots: 'all' }, notAdjustable: [] },
       })] },
@@ -524,7 +535,8 @@ function demoRoadmap(ws, projectId, live = 'off', budget = null) {
 // The roadmap's runs (#194): two finished local-hero runs that give each step its typical time, then
 // tonight's runs: one in code review, one waiting at the human review gate (both live in "another app",
 // studio-pc, whose heartbeat this script keeps fresh), one that failed in its tests. → their run ids.
-function demoRoadmapRuns(ws, projectId) {
+// `fixRound` (--roadmap states): the running one is back in Develop after its review (round 2).
+function demoRoadmapRuns(ws, projectId, { fixRound = false } = {}) {
   const file = 'software-development-local-hero.yaml';
   const workflow = 'software-development-local-hero';
   const groups = [
@@ -615,7 +627,7 @@ function demoRoadmapRuns(ws, projectId) {
   const waiting = `${stamp(95)}-221500-run00015`;
   const failed = `${stamp(190)}-204000-run00013`;
   // in code review for 6 minutes
-  write(running, events(now - 52 * min, [['develop', 44], ['developer_screenshots', 2], ['code_review', 6]], 'running').lines, null, true);
+  write(running, events(now - 52 * min, fixRound ? [['develop', 30], ['developer_screenshots', 2], ['code_review', 11], ['develop', 9]] : [['develop', 44], ['developer_screenshots', 2], ['code_review', 6]], 'running').lines, null, true);
   // at the human review gate
   write(waiting, events(now - 95 * min, [['develop', 41], ['developer_screenshots', 2], ['code_review', 12], ['human_review', 0]], 'waiting').lines, null, true);
   // failed in its tests (a review → developer loop before)
@@ -1558,7 +1570,7 @@ function main() {
     // #260: the Releases screen's history; the Backlog's "Released" badge on the issues it shipped
     // (#258: also on Discovery, whose committed cards follow their issues to the release)
     if (home || ['backlog', 'discovery', 'releases'].includes(args.view)) demoReleases(ws, project.id);
-    if (home || args.view === 'backlog') demoRoadmap(ws, project.id, args.live, args.budget);
+    if (home || args.view === 'backlog') demoRoadmap(ws, project.id, args.live, args.budget, args.roadmap);
     if (args.view === 'backlog') demoPoConversation(ws, project.id, args.po);
     if (args.view === 'backlog' && project.folder) demoBacklogRefresh(ws, project.folder, project.id);
     if (home || (['inbox', 'discovery'].includes(args.view) && args.mode !== 'empty')) demoDiscovery(ws, project.id);

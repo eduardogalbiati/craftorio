@@ -75,13 +75,18 @@ test('#272 beyond one hour the timer reads h:mm:ss ("1:05:12")', async () => {
   assert.equal(timerOf(draw(R, timed({ start, progress: [step('develop', 'running', start)] }))).text, '1:05:12');
 });
 
-test('#272 the timer sits in the ring\'s box (.rm-progress), under its percentage', async () => {
+test('#272 the timer sits in the card\'s time line (#282: no longer under the ring)', async () => {
   const { R } = await ready();
   const start = H.NOW - 10 * H.MIN;
   const { el } = timerOf(draw(R, timed({ start, progress: [step('develop', 'running', start)] })));
+  let inTime = false;
   let inRing = false;
-  for (let p = el.parent; p; p = p.parent) if ('data-rm-progress' in p.attrs) inRing = true;
-  assert.equal(inRing, true);
+  for (let p = el.parent; p; p = p.parent) {
+    if (p.attrs['data-testid'] === 'roadmap-meter-time') inTime = true;
+    if ('data-rm-progress' in p.attrs) inRing = true;
+  }
+  assert.equal(inTime, true);
+  assert.equal(inRing, false);
 });
 
 test('#272 each render reads the clock: one second later the timer says one second more', async () => {

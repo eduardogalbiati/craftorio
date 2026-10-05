@@ -46,13 +46,14 @@ function runChip(html, id) {
   return { chip, pill, text: H.visibleText(chip.inner), label: H.visibleText(pill.inner) };
 }
 
-test('#266 roadmap card: a run in progress shows the run chip "Running" (pulsing dot) + workflow name + run title, opening the run', () => {
+test('#266 roadmap card: a run in progress shows the run chip "Running" (pulsing dot) + workflow name, opening the run; #282: not the run title again', () => {
   const { pill, label, text } = runChip(render(withRun('a', 'running', 'running')), 'a');
   assert.equal(pill.attrs['data-status'], 'running');
   assert.equal(label, 'Running');
   assert.ok(H.findEl(pill.inner, (e) => /\bstatus-dot\b/.test(e.attrs.class || '')), 'the running pill holds the pulsing .status-dot');
   assert.match(text, /local hero/i, 'the workflow\'s display name');
-  assert.match(text, /Login page/, 'the run\'s title');
+  assert.match(text, /Open run/);
+  assert.doesNotMatch(text, /Login page/, 'the issues list already says the title');
 });
 
 test('#266 roadmap card: a run waiting at a gate shows the run chip "Waiting for you"', () => {
@@ -64,12 +65,12 @@ test('#266 roadmap card: a run waiting at a gate shows the run chip "Waiting for
   assert.equal(label, 'Waiting for you');
 });
 
-test('#266 roadmap card: a failed item with a run shows the chip "Failed" + workflow name + run title, still opening the run', () => {
+test('#266 roadmap card: a failed item with a run shows the chip "Failed" + workflow name, still opening the run', () => {
   const { pill, label, text } = runChip(render(withRun('a', 'failed', 'failed')), 'a');
   assert.equal(pill.attrs['data-status'], 'failed');
   assert.equal(label, 'Failed');
   assert.match(text, /local hero/i);
-  assert.match(text, /Login page/);
+  assert.match(text, /Open run/);
 });
 
 test('#266 roadmap card: a done item keeps a clickable chip with its final status, readable', () => {

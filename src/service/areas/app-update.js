@@ -121,12 +121,12 @@ module.exports = (ctx) => {
     return cycle;
   }
 
-  // Called by the roadmap (areas/roadmap.js advanceRoadmap) with { type: 'item-merged', item } or
-  // { type: 'stage-done' }: true when the cycle started (the caller starts nothing more).
+  // Called by the roadmap (areas/roadmap.js advanceRoadmap) with { type: 'stage-done' }: true when
+  // the cycle started (the caller starts nothing more).
   function appUpdateEvent(event) {
     if (cycle || !ctx.ws || !host.relaunch || simulation.simulationOnly()) return false;
     const o = workspace.readSettings(ctx.ws).oracle || {};
-    const due = (behind) => appUpdate.updateDue({ selfHealing: o.selfHealing === true, on: o.appUpdate === true, when: o.appUpdateWhen, event, behind });
+    const due = (behind) => appUpdate.updateDue({ selfHealing: o.selfHealing === true, on: o.appUpdate === true, event, behind });
     if (!due(1)) return false;
     let source;
     try { source = appUpdateSource({ fresh: true }); } catch (e) { console.error('app update source:', e.message); return false; }

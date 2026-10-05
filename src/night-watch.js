@@ -172,7 +172,8 @@ function incidentOf(ev) {
   }
 }
 
-const unfinished = (r) => (r.stages || []).flatMap((s) => s.items || []).filter((x) => !['done', 'skipped'].includes(x.status));
+// a disabled stage (#284) is skipped by the automation (src/roadmap.js currentStage): its items are not work left
+const unfinished = (r) => (r.stages || []).filter((s) => !s.disabled).flatMap((s) => s.items || []).filter((x) => !['done', 'skipped'].includes(x.status));
 
 /**
  * The roadmap anomalies of the moment: `roadmaps` [{ projectId, roadmap }] (the files), `active`

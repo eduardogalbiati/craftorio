@@ -88,6 +88,14 @@ function verdictBadge(block, level) {
   const next = block.indexOf('class="badge', i);
   return block.slice(i, next < 0 ? i + 400 : next);
 }
+// #282: the cost or time line of an item's card (its value, its estimate, its verdict), with its data-verdict
+function meter(block, kind) {
+  const at = block.indexOf(`data-testid="roadmap-meter-${kind}"`);
+  assert.ok(at >= 0, `the ${kind} line is rendered`);
+  const next = block.indexOf('data-testid="roadmap-', at + 20);
+  const html = block.slice(at, next < 0 ? undefined : next);
+  return { html, verdict: /data-verdict="([^"]*)"/.exec(html)?.[1] };
+}
 
 const ref = (number, title) => ({ number, title, url: `https://github.com/o/r/issues/${number}` });
 const item = (id, status, number, title, extra = {}) => ({ id, status, workflow: 'software-development-local-hero.yaml', inputs: {}, issues: [ref(number, title)], ...extra });
@@ -179,8 +187,11 @@ test('#215 a planned item shows its estimated time next to its estimated cost', 
   assert.match(t, /≈ 1 h 45 min/);
 });
 
+// #282: the stage's estimate shows with more than one item (a single item's card already says it)
+const pair = (x, stageExtra = {}) => ({ roadmap: { state: 'running', stages: [{ id: 'st1', name: '', note: '', items: [x, { ...x, id: `${x.id}2`, issues: [ref(99, 'Other')] }], ...stageExtra }] }, issues: [] });
+
 test('#215 a stage shows its estimated duration', () => {
-  const data = single(item('a', 'planned', 1, 'A', { estimate }), { estimate: { usd: 15.18, minutes: 105, items: 1, missing: 0, runs: 30 } });
+  const data = pair(item('a', 'planned', 1, 'A', { estimate }), { estimate: { usd: 30.36, minutes: 105, items: 2, missing: 0, runs: 30 } });
   assert.match(text(stageHead(loadRoadmap().html(data, () => {}), 1)), /≈ 1 h 45 min/);
 });
 
@@ -193,8 +204,8 @@ test('#215 a finished item worse than estimated: real / estimate in red with an 
   const x = item('a', 'done', 1, 'A', { estimate, actualUsd: 22.21, actualMinutes: 221, runId: 'r1', runs: ['r1'] });
   const block = itemBlock(loadRoadmap().html(single(x), () => {}, { showAll: true }), 'a');
   const t = text(block);
-  assert.match(t, /\$22\.21 \/ ≈ \$15\.18/);
-  assert.match(t, /3 h 41 min \/ ≈ 1 h 45 min/);
+  assert.match(t, /\$22\.21 of ≈ \$15\.18/);
+  assert.match(t, /3 h 41 min of ≈ 1 h 45 min/);
   const bad = verdictBadge(block, 'bad');
   assert.ok(bad, 'a rm-verdict-bad badge');
   assert.match(text(`<x ${bad}`), /[▲↑+]/);
@@ -214,8 +225,14 @@ test('#215 a finished item better than estimated: green with a down sign', () =>
 test('#215 a finished item slightly over the estimate is amber; cost and time get their own verdicts', () => {
   const x = item('a', 'done', 1, 'A', { estimate, actualUsd: 17, actualMinutes: 221, runId: 'r1', runs: ['r1'] });
   const block = itemBlock(loadRoadmap().html(single(x), () => {}, { showAll: true }), 'a');
-  assert.match(text(`<x ${verdictBadge(block, 'warn') || ''}`), /\$17\.00/);
-  assert.match(text(`<x ${verdictBadge(block, 'bad') || ''}`), /3 h 41 min/);
+  const cost = meter(block, 'cost');
+  const time = meter(block, 'time');
+  assert.equal(cost.verdict, 'warn');
+  assert.match(text(cost.html), /\$17\.00/);
+  assert.match(cost.html, /rm-verdict-warn/);
+  assert.equal(time.verdict, 'over');
+  assert.match(text(time.html), /3 h 41 min/);
+  assert.match(time.html, /rm-verdict-bad/);
 });
 
 test('#215 while running: elapsed vs estimate, amber then red once it passes the estimate', () => {
@@ -229,7 +246,7 @@ test('#215 while running: elapsed vs estimate, amber then red once it passes the
 
 test('#215 a finished stage shows its real total cost against its estimate, coloured', () => {
   const x = item('a', 'done', 1, 'A', { estimate, actualUsd: 22.21, actualMinutes: 221, runId: 'r1', runs: ['r1'] });
-  const data = single(x, { estimate: { usd: 15.18, minutes: 105, items: 1, missing: 0, runs: 30 }, actualUsd: 22.21 });
+  const data = pair(x, { estimate: { usd: 15.18, minutes: 105, items: 2, missing: 0, runs: 30 }, actualUsd: 22.21 });
   const head = stageHead(loadRoadmap().html(data, () => {}, { showAll: true }), 1);
   assert.match(text(head), /\$22\.21/);
   assert.match(head, /rm-verdict-bad/);

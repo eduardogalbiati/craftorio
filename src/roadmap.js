@@ -149,8 +149,12 @@ function roadmapProjects(dir) {
 const allItems = (roadmap) => (roadmap.stages || []).flatMap((s) => s.items || []);
 const findItem = (roadmap, itemId) => allItems(roadmap).find((x) => x.id === itemId) || null;
 const findStage = (roadmap, stageId) => (roadmap.stages || []).find((s) => s.id === stageId) || null;
-/** Index of the stage in progress: the first one with an item not done or skipped (-1: none left). */
-const currentStage = (roadmap) => (roadmap.stages || []).findIndex((s) => (s.items || []).some((x) => !FINISHED.has(x.status)));
+/**
+ * Index of the stage in progress: the first enabled one with an item not done or skipped (-1: none
+ * left). A disabled stage (#284: `disabled: true`, the owner's switch on the Roadmap screen) is
+ * skipped by the automation: it stays in the list and nothing of it starts while the roadmap runs.
+ */
+const currentStage = (roadmap) => (roadmap.stages || []).findIndex((s) => !s.disabled && (s.items || []).some((x) => !FINISHED.has(x.status)));
 
 // One issue of an item, from a number, an issue of the synced backlog or an item's issue.
 function issueOf(ref, known) {
@@ -209,13 +213,10 @@ function cleanItem(raw, known, previous) {
   const then = normalizeThen(raw.then);
   // the Product Owner's Cost choices (#205), shown on the card
   const cost = raw.cost && typeof raw.cost === 'object' ? raw.cost : old?.cost || null;
-  // #279: Self-healing updates the app once this item's run has merged
-  const updateAfter = !!(raw.updateAfter ?? old?.updateAfter);
   return {
     id: old ? old.id : newId('item'), workflow, workflowName: raw.workflowName || old?.workflowName || workflow,
     inputs: raw.inputs && typeof raw.inputs === 'object' ? raw.inputs : {}, mock: !!raw.mock,
     ...(reason ? { reason } : {}), ...(modeReason ? { modeReason } : {}), ...(origin ? { origin } : {}), ...(then ? { then } : {}), ...(cost ? { cost } : {}),
-    ...(updateAfter ? { updateAfter } : {}),
     ...issues[0], issues,
     status: ITEM_STATES.includes(state.status) ? state.status : 'planned', runId: state.runId || null, runs: state.runs || [], error: state.error || null,
   };
@@ -253,12 +254,17 @@ function cleanStages(stages, { issues = [], previous = null } = {}) {
   const known = new Map((issues || []).map((i) => [i.number, i]));
   const prevItems = new Map(allItems(previous || emptyRoadmap()).map((x) => [x.id, x]));
   const prevReleases = new Map((previous?.stages || []).filter((s) => s?.id && s.release).map((s) => [s.id, s.release]));
+  const prevDisabled = new Set((previous?.stages || []).filter((s) => s?.id && s.disabled).map((s) => s.id));
   const out = (Array.isArray(stages) ? stages : []).map((s) => {
     const release = cleanRelease(s?.release, prevReleases.get(s?.id));
+    // #284: only an edit that says so changes the switch; a writer that does not know it (the
+    // Oracle's roadmap.stages, a proposal, an outside script) keeps what is stored
+    const disabled = s?.disabled === undefined ? prevDisabled.has(s?.id) : !!s.disabled;
     return {
       // no name: shown as "Stage <n>" wherever it is when shown (reordering renumbers it)
       id: s?.id || newId('stage'), name: String(s?.name || '').trim(), note: String(s?.note || '').trim(),
       ...(release ? { release } : {}),
+      ...(disabled ? { disabled: true } : {}),
       items: (Array.isArray(s?.items) ? s.items : []).map((x) => cleanItem(x, known, prevItems)),
     };
   }).filter((s) => s.items.length);
@@ -380,6 +386,7 @@ function setState(dir, projectId, state, { simulated, stage = null } = {}) {
     // #237: a Resume of a scope whose stage is over (or gone) drops it and runs the whole roadmap
     if (state === 'running' && stage && !(over && r.scope?.stage === stage)) {
       if (!s) throw new Error('This stage is no longer in the roadmap.');
+      if (s.disabled) throw new Error('This stage is disabled: enable it to run it.');
       if (over) throw new Error('Every item of this stage is done or skipped.');
       scope = { stage: s.id };
     }
@@ -455,7 +462,8 @@ function mergedPullRequest(runDir) {
 // `release` before stage `at` (every stage when `at` < 0: the roadmap is over), all finished by then.
 function pendingRelease(r, at) {
   const reached = at < 0 ? r.stages : r.stages.slice(0, at);
-  return reached.find((s) => s.release && s.release.status !== 'shipped') || null;
+  // a disabled stage (#284) is skipped, its cut line with it
+  return reached.find((s) => !s.disabled && s.release && s.release.status !== 'shipped') || null;
 }
 
 /** Records what the release run did on a stage's cut line (#260): `patch` = { status, runId, ... }; null when the line is gone. */
@@ -603,7 +611,7 @@ function skipClosed(dir, projectId, itemId) {
 function issueStages(roadmap) {
   const out = new Map();
   (roadmap.stages || []).forEach((s, n) => {
-    for (const x of s.items) for (const i of itemIssues(x)) if (!testsLater(x) || !out.has(i.number)) out.set(i.number, { stage: n + 1, name: s.name || `Stage ${n + 1}`, status: x.status, itemId: x.id, origin: x.origin || null });
+    for (const x of s.items) for (const i of itemIssues(x)) if (!testsLater(x) || !out.has(i.number)) out.set(i.number, { stage: n + 1, name: s.name || `Stage ${n + 1}`, status: x.status, itemId: x.id, origin: x.origin || null, ...(s.disabled ? { disabled: true } : {}) });
   });
   return out;
 }

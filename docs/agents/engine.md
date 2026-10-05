@@ -475,6 +475,14 @@ same features for users; this is the implementer's summary.
   (backlog-refresh, #161): its item is done when its run succeeds (service `roadmapRun` reads the run's
   workflow file). Any other end pauses the roadmap (`pausedBy`); a resumed run
   (`resume.runId` = the item's run) takes the item's place (`adoptResumed`).
+  The stage a dispatch runs is `currentStage`: the first **enabled** stage with an item not done or
+  skipped. A stage with `disabled: true` (#284, the owner's switch in the stage's ⋮ menu) is skipped
+  whatever starts the dispatch: nothing of it starts, its cut line holds nothing (`pendingRelease`),
+  the stage after it runs as if it were not there, and a roadmap whose enabled stages are all
+  finished is `done` while the disabled ones stay planned. Enabling a stage makes it eligible at the
+  next dispatch, in its place; enabling one on a `done` roadmap starts nothing (the owner starts it).
+  "Run this stage" on a disabled stage is refused (`setState`). The Night watch (`unfinished`) and
+  the Live roadmap's refill (`applyRefill`) do not count a disabled stage's items as work left.
 - Inputs with `type: array` take a list; text from a form becomes one item per line or comma.
 - software-development (0.15.0) for several issues: the developer answers `issues: [{ issue, done, summary }]`;
   one with `done: false` goes to the `issue_not_done` gate (continue without it / stop), asked once per

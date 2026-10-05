@@ -50,6 +50,8 @@ module.exports = (ctx) => {
             outputs: wf.outputs || {},
             // how its work lands (#195): local (no push), remote (a branch and a PR/MR) or none
             merge: mergeOf(wf),
+            // #282: the stations of the roadmap card's pipeline (RunProgress.workflowStations)
+            groups: (wf.groups || []).map((g) => ({ name: g.name, steps: g.steps || [] })),
             agents: Object.fromEntries(Object.entries(wf.agents).map(([k, a]) => {
               const d = { ...(wf.defaults || {}), ...a };
               return [k, {
@@ -73,6 +75,8 @@ module.exports = (ctx) => {
               // `type: workflow` (#174): the child workflow, once or for each item
               ...(s.type === 'workflow' ? { workflow: s.workflow, foreach: s.foreach !== undefined, max_parallel: s.max_parallel ?? null } : {}),
               next: [...new Set((s.transitions || []).map((t) => t.goto).filter(Boolean))],
+              // #282: which transitions a mode turns on (the pipeline's human gate station)
+              transitions: (s.transitions || []).filter((t) => t.goto && /inputs\.mode\b/.test(String(t.when || ""))).map((t) => ({ goto: t.goto, when: String(t.when) })),
             })),
           };
         } catch (e) {

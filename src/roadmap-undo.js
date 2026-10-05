@@ -64,7 +64,7 @@ function undoEdit(currentStages, edit) {
     if (!cur) { const { items, ...rest } = clone(old); return rest; }
     const { items, ...rest } = cur;
     const edited = thenStages.get(old.id);
-    for (const k of ['name', 'note', 'release']) {
+    for (const k of ['name', 'note', 'release', 'disabled']) {
       if (after && edited && same(old[k], edited[k])) continue;
       // a cut line whose release run has started is not the edit's to change
       if (k === 'release' && (rest.release?.status || rest.release?.runId)) continue;

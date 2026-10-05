@@ -26,7 +26,6 @@ const PAUSE_REASON = 'Updating the app';
 const POLL_MS = 15000;
 const REASON_PACKAGED = 'the packaged app updates with a new install';
 const REASON_NO_PROJECT = "no project of this workspace is this app's repository";
-const WHEN_MODES = ['marked', 'stage'];
 
 const short = (sha) => String(sha || '').slice(0, 7);
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
@@ -160,15 +159,12 @@ function firstLine(e) {
 }
 
 /**
- * Whether an event calls for an update: Self-healing and the switch on, the source ahead, and the
- * event matching the mode (`marked`: a merged item marked "Update the app after this"; `stage`: also
- * every stage end).
+ * Whether an event calls for an update: Self-healing and the switch on, the source ahead, and a
+ * roadmap stage that ended (the one trigger since #285: a merged item alone never updates the app).
  */
-function updateDue({ selfHealing, on, when = 'marked', event, behind } = {}) {
+function updateDue({ selfHealing, on, event, behind } = {}) {
   if (!selfHealing || !on || !(Number(behind) > 0) || !event) return false;
-  if (event.type === 'item-merged') return !!(event.item && event.item.updateAfter);
-  if (event.type === 'stage-done') return when === 'stage';
-  return false;
+  return event.type === 'stage-done';
 }
 
 // ---- the intent ---------------------------------------------------------------------------------
@@ -290,6 +286,5 @@ module.exports = {
   readIntent,
   runUpdateCycle,
   updateDue,
-  WHEN_MODES,
   writeIntent,
 };

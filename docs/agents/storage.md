@@ -125,6 +125,11 @@ owner actions write to the platform (Save to issue, create, close, epics: `src/b
   record of what a release shipped: an issue's "Released" badge is read from it on every Backlog
   read (`releasedIssues`), never written into the synced `<project>.json`, which each sync rewrites.
   A roadmap's cut line keeps its release run in `<project>.roadmap.json` (`stage.release`).
+- **A disabled stage** (#284) is `disabled: true` on the stage in `<project>.roadmap.json`; an
+  enabled stage has no such field. `cleanStages` changes it only on an explicit `disabled: true` /
+  `false`: a save that does not mention it (the Oracle's `roadmap.stages`, a proposal, an outside
+  script) keeps what is stored. Undo and "Restore an earlier version…" put the stage back with the
+  switch it had (`roadmap-undo.js` `head`).
 - **The roadmap's history** (#281, `src/roadmap-history.js`): before each owner edit of a roadmap
   (a save from the screen, a proposal added or replacing it, the queue moved in, Clear, an Undo, a
   Restore) the roadmap channels keep its stages as they were in
@@ -209,8 +214,9 @@ An app update (#279, `src/app-update.js`) writes `oracle/app-update.json` `{ fro
 roadmaps, appDir, at }` right before its restart, and an `oracle.action` entry of kind `app.update`
 (`from`, `to`, `subjects`). The next start reads it before the roadmap dispatch: within 2 minutes of
 `at` it resumes the listed roadmaps and deletes it; later it is kept for the failed-update banner
-until the owner dismisses it (`app-update:dismiss`). Settings: `oracle.appUpdate`,
-`oracle.appUpdateWhen` (`marked` | `stage`); a roadmap item's mark is `updateAfter: true`.
+until the owner dismisses it (`app-update:dismiss`). Setting: `oracle.appUpdate` (a stored
+`oracle.appUpdateWhen` is ignored and an item's `updateAfter` is dropped at the roadmap's next save:
+both removed by #285).
 
 ## Rules
 

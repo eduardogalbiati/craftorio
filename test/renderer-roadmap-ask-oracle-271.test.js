@@ -136,18 +136,15 @@ test('#271 planned and running cards have no .rm-fail-actions group', () => {
   assert.deepEqual([group('p'), group('r')], [false, false]);
 });
 
-test('#271 backlog.css puts .rm-fail-actions on its own row at 1100px, and at 1700px with the Oracle beside the page', () => {
+// #282: the card answers to its own width (a container query on .rm-items), so a narrow window and the
+// Oracle's drawer beside the page are the same case: no rule per window width or for .shell.oracle-side
+test('#271 backlog.css gives the titles the full width on a narrow card (Retry / Skip / the Oracle go under them, in the status block), whatever narrows it (window or the Oracle beside the page)', () => {
   const css = fs.readFileSync(path.join(H.R, 'views', 'backlog', 'backlog.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
-  const media = (width) => {
-    const at = css.search(new RegExp(`@media\\s*\\(max-width:\\s*${width}px\\)\\s*\\{`));
-    return at < 0 ? '' : css.slice(at, css.indexOf('\n}', at));
-  };
-  const narrow = media(1100);
-  assert.match(narrow, /(^|[\s,}])\.rm-fail-actions\s*\{[^}]*flex:\s*1 1 100%/, 'own row in a narrow window');
-  assert.match(narrow, /\.rm-item-head\s*\{[^}]*flex-wrap:\s*wrap/);
-  const side = media(1700);
-  assert.match(side, /\.shell\.oracle-side \.rm-fail-actions\s*\{[^}]*flex:\s*1 1 100%/, 'own row with the Oracle drawer open');
-  assert.match(side, /\.shell\.oracle-side \.rm-item-head\s*\{[^}]*flex-wrap:\s*wrap/);
+  assert.match(css, /\.rm-items\s*\{[^}]*container:\s*rm-card\s*\/\s*inline-size/, 'the cards\' list is the container');
+  const at = css.search(/@container\s+rm-card\s*\(max-width:\s*\d+px\)\s*\{/);
+  const narrow = at < 0 ? '' : css.slice(at, css.indexOf('\n}', at));
+  assert.match(narrow, /\.rm-issues\s*\{[^}]*grid-column:\s*1 \/ -1/, 'the titles keep the full width');
+  assert.doesNotMatch(css, /\.shell\.oracle-side \.rm-/);
 });
 
 test('#271 while the Oracle answers another question the button reads "Oracle is answering…"', () => {

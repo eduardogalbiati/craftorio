@@ -162,6 +162,85 @@
     return chips;
   }
 
+  // ---- the fixed stations of a workflow's pipeline (#282: the roadmap card's Workflow band) -----------
+  const MODE_GATE = (mode) => new RegExp(`inputs\\.mode\\s*==\\s*['"]${String(mode).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}['"]`);
+  /**
+   * A workflow's stations, in the order of its steps: one per group (`human`: a group of human gates
+   * only), one per step in no group. A human gate in no group is never a station of its own, but the
+   * gates the item's `mode` turns on: a human_approval step reached by a transition whose `when`
+   * asks for that mode (`inputs.mode == 'validated'`) is a station right after the one that holds it
+   * (its group, else the step that leads to it).
+   * `steps`: [{ id, type, agent, agents, transitions: [{ goto, when }] }], `groups`: [{ name, steps }]
+   * → [{ key, name, grouped, steps: [ids], human?: true, gate?: true, host?: { name, grouped } }]
+   */
+  function workflowStations({ steps = [], groups = [], mode = null } = {}) {
+    const groupOf = new Map();
+    for (const g of groups || []) for (const s of g.steps || []) groupOf.set(s, g.name);
+    const human = (s) => s.type === 'human_approval';
+    const asked = mode == null || mode === '' ? null : MODE_GATE(mode);
+    const targets = new Map(); // gate step id → the first step that leads to it in that mode
+    if (asked) {
+      for (const s of steps) for (const t of s.transitions || []) if (t?.goto && asked.test(String(t.when || '')) && !targets.has(t.goto)) targets.set(t.goto, s.id);
+    }
+    const gates = steps.filter((s) => human(s) && targets.has(s.id));
+    const gateIds = new Set(gates.map((s) => s.id));
+    const byKey = new Map();
+    const out = [];
+    for (const s of steps) {
+      if (gateIds.has(s.id)) continue;
+      const name = groupOf.get(s.id);
+      if (name == null && human(s)) continue;
+      const key = name != null ? `group:${name}` : `step:${s.id}`;
+      let st = byKey.get(key);
+      if (!st) { st = { key, name: name ?? s.id, grouped: name != null, steps: [], work: 0 }; byKey.set(key, st); out.push(st); }
+      st.steps.push(s.id);
+      if (!human(s)) st.work += 1;
+    }
+    const stations = out.map(({ work, ...st }) => (work ? st : { ...st, human: true }));
+    for (const g of gates) {
+      const group = groupOf.get(g.id);
+      const hostKey = group != null ? `group:${group}` : byKey.has(`step:${targets.get(g.id)}`) ? `step:${targets.get(g.id)}` : `group:${groupOf.get(targets.get(g.id))}`;
+      const at = stations.findIndex((st) => st.key === hostKey);
+      if (at < 0) continue;
+      const host = stations[at];
+      stations.splice(at + 1, 0, { key: `gate:${g.id}`, name: g.id, grouped: false, steps: [g.id], gate: true, host: { name: host.name, grouped: host.grouped } });
+    }
+    return stations;
+  }
+
+  /**
+   * The stations with what a run did at each (its trail): → the stations, each with
+   * state: todo (not reached) | gate (a mode's gate not reached) | done | skipped (the run went past
+   *   it without entering) | running | waiting | failed | stopped | back (it sent the run back to an
+   *   earlier station: `sentBackBy`, estimateProgress's), round (the times the run entered it), current
+   *   (the step it is at, on the station it is at), agents (who worked there, as progressGroups').
+   * Without a trail every station is todo (a gate: gate).
+   */
+  function pipeline({ steps = [], groups = [], mode = null, progress = [], status = 'running', sentBackBy = null } = {}) {
+    const stations = workflowStations({ steps, groups, mode });
+    const idle = (st) => ({ ...st, state: st.gate ? 'gate' : 'todo', round: 0, current: null, agents: [] });
+    const chips = progressGroups(progress, stations.map((st) => ({ name: st.key, steps: st.steps })), status);
+    const indexOf = (chip) => stations.findIndex((st) => chip.key === `group:${st.key}`);
+    const visits = chips.map(indexOf);
+    // where the run is: the last station it entered (a step of no station, a human gate, stays on it)
+    const at = visits.reduce((a, i) => (i >= 0 ? i : a), -1);
+    if (at < 0) return stations.map(idle);
+    const now = chips.at(-1).status;
+    const over = now === 'done';
+    return stations.map((st, i) => {
+      const mine = chips.filter((c, k) => visits[k] === i);
+      if (!mine.length) return { ...idle(st), ...(i < at || over ? { state: 'skipped' } : {}) };
+      const agents = [];
+      for (const a of mine.flatMap((c) => c.agents)) {
+        const same = agents.find((x) => x.agent === a.agent && !!x.human === !!a.human);
+        if (!same) agents.push({ ...a, steps: [...a.steps] });
+        else Object.assign(same, { provider: a.provider || same.provider, model: a.model || same.model, steps: [...new Set([...same.steps, ...a.steps])], cost: same.cost + a.cost, durationMs: same.durationMs + a.durationMs });
+      }
+      const state = i === at ? now : i < at || over ? 'done' : sentBackBy && st.steps.includes(sentBackBy) ? 'back' : st.gate ? 'gate' : 'todo';
+      return { ...st, state, round: Math.max(...mine.map((c) => c.round)), current: i === at ? chips.at(-1).current : null, agents };
+    });
+  }
+
   // ---- the estimate of a run's progress (#194: the roadmap card's ring) ------------------------------
   /**
    * The typical time of each step in past runs: the median of the finished visits' durations, from
@@ -269,9 +348,11 @@
     StepTrail,
     estimateProgress,
     hydrationEvents,
+    pipeline,
     progressGroups,
     trailOf,
     typicalStepTimes,
+    workflowStations,
   };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.RunProgress = api;

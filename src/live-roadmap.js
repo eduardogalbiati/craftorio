@@ -147,7 +147,8 @@ function applyRefill(roadmap, { status, at = new Date().toISOString(), added = 0
   const cutoff = Date.parse(at) - DAY_MS;
   const liveRefills = [...(roadmap.liveRefills || []), ...(costUsd ? [{ at, costUsd }] : [])].filter((x) => Date.parse(x.at) >= cutoff);
   const r = { ...roadmap, liveRefill: { status, at, added, costUsd, message }, liveRefills };
-  const left = (r.stages || []).some((s) => (s.items || []).some((x) => !['done', 'skipped'].includes(x.status)));
+  // a disabled stage (#284) is not work left: a live roadmap with only such stages left ends like an empty one
+  const left = (r.stages || []).some((s) => !s.disabled && (s.items || []).some((x) => !['done', 'skipped'].includes(x.status)));
   if (status === 'refilling' || status === 'added' || left || r.state !== 'running') return r;
   if (status === 'failed') return { ...r, state: 'paused', pausedBy: null, error: message };
   return { ...r, state: 'done', error: null, pausedBy: null, scope: null };

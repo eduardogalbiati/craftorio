@@ -120,7 +120,11 @@ function progressMarkup() {
   const block = html.slice(start, meta < 0 ? undefined : meta);
   const stepsAt = block.indexOf('class="rm-steps"');
   assert.ok(stepsAt >= 0, 'the steps popover (.rm-steps) is rendered');
-  return { block, steps: block.slice(block.lastIndexOf('<', stepsAt)) };
+  // #282: the popover holds the run's summary; its steps are the pipeline of the Workflow band
+  const band = block.indexOf('data-testid="roadmap-workflow"', stepsAt);
+  const pipeAt = html.indexOf('data-testid="roadmap-pipeline"', start);
+  assert.ok(pipeAt >= 0, 'the pipeline is rendered');
+  return { block, steps: block.slice(block.lastIndexOf('<', stepsAt), band < 0 ? undefined : block.lastIndexOf('<', band)), pipeline: html.slice(html.lastIndexOf('<', pipeAt), html.indexOf('</section>', pipeAt)) };
 }
 
 test('#236 the roadmap ring (.rm-ring) and the current step text (.rm-progress-text) carry no title attribute', () => {
@@ -140,17 +144,19 @@ test('#236 the run summary the ring\'s tooltip held (elapsed time, run id) is in
   assert.match(t, /run-42/);
 });
 
-test('#236 nothing inside the steps popover carries a title: step chips, their state line, the agents\' robots and the human\'s avatar', () => {
-  const { steps } = progressMarkup();
-  assert.match(steps, /class="rm-chip"/, 'the step chips are in the popover');
+test('#236 nothing inside the summary popover or the pipeline carries a title: stations, their state line, the agents\' robots and the human\'s avatar', () => {
+  const { steps, pipeline } = progressMarkup();
+  assert.match(pipeline, /data-testid="roadmap-station"/, 'the stations are in the pipeline');
+  assert.doesNotMatch(steps, /data-rm-chip/, 'no step strip in the popover any more');
   assert.deepEqual(titles(steps), []);
+  assert.deepEqual(titles(pipeline), []);
 });
 
-test('#236 each step chip keeps its "Open the run at <step>" hint as an aria-label (or visible text), not a title', () => {
-  const { steps } = progressMarkup();
-  const chips = steps.match(/<button\b[^>]*class="rm-chip"[^>]*>/g) || [];
+test('#236 each station keeps its "Open the run at <step>" hint as an aria-label (or visible text), not a title', () => {
+  const { pipeline } = progressMarkup();
+  const chips = pipeline.match(/<button\b[^>]*data-rm-chip="[^"]*"[^>]*>/g) || [];
   assert.equal(chips.length, 3);
-  const noTitles = steps.replace(/\stitle="[^"]*"/g, '');
+  const noTitles = pipeline.replace(/\stitle="[^"]*"/g, '');
   for (const name of ['Develop', 'Check', 'Review']) assert.ok(noTitles.includes(`Open the run at ${name}`), `the hint for ${name} is kept outside a title`);
 });
 
