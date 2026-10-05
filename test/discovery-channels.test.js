@@ -144,3 +144,39 @@ test('a channel refuses a project or card id that is a path', async (t) => {
   await assert.rejects(async () => service.api['discovery:create']({ projectId: '../x', title: 'x', text: '' }));
   await assert.rejects(async () => service.api['discovery:get']({ projectId: 'p1', cardId: '..\\..\\settings' }));
 });
+
+test('#166 the clarity channels: the board carries the bar and the forecast, the bar is saved, Move anyway records the owner\'s override, Grill me asks and takes an answer', async (t) => {
+  const { service } = makeService(t);
+  const byChannel = Object.fromEntries(service.manifest.filter((e) => e.channel).map((e) => [e.channel, e.method]));
+  assert.equal(byChannel['discovery:board'], 'discoveryBoard');
+  assert.equal(byChannel['discovery:move-anyway'], 'moveDiscoveryCardAnyway');
+  assert.equal(byChannel['discovery:set-clarity-bar'], 'setDiscoveryClarityBar');
+  assert.equal(byChannel['discovery:grill'], 'grillDiscoveryCard');
+  assert.equal(byChannel['discovery:grill-answer'], 'answerDiscoveryGrill');
+  const api = service.api;
+
+  const card = await api['discovery:create']({ projectId: 'p1', title: 'Export runs as CSV', text: '' });
+  const board = await api['discovery:board']({ projectId: 'p1' });
+  assert.equal(board.clarity.bar, 85);
+  assert.equal(board.forecast.count, 0);
+
+  const saved = await api['discovery:set-clarity-bar']({ projectId: 'p1', bar: 90, byKind: { hotfix: 60 }, night: { start: '22:00', end: '06:00' } });
+  assert.equal(saved.clarity.bar, 90);
+  assert.equal(saved.clarity.byKind.hotfix, 60);
+  assert.equal(saved.forecast.nightHours, 8);
+  await assert.rejects(async () => api['discovery:set-clarity-bar']({ projectId: 'p1', bar: 150 }), /0 to 100/);
+
+  const { question } = await api['discovery:grill']({ projectId: 'p1', cardId: card.id });
+  assert.equal(question.grill, 'problem');
+  const answered = await api['discovery:grill-answer']({ projectId: 'p1', cardId: card.id, text: 'The runs table cannot be exported.' });
+  assert.equal(answered.question.grill, 'goal');
+  assert.match(answered.card.document, /## Problem\n\nThe runs table cannot be exported\./);
+
+  await assert.rejects(async () => api['discovery:move']({ projectId: 'p1', cardId: card.id, column: 'ready' }), /clarity/i);
+  await assert.rejects(async () => api['discovery:move-anyway']({ projectId: 'p1', cardId: card.id, reason: '' }), /reason/i);
+  const forced = await api['discovery:move-anyway']({ projectId: 'p1', cardId: card.id, reason: 'Needed tonight' });
+  assert.equal(forced.column, 'ready');
+  assert.equal(forced.clarity.override.reason, 'Needed tonight');
+  assert.equal(typeof forced.clarity.override.by, 'string');
+  assert.equal((await api['discovery:board']({ projectId: 'p1' })).forecast.count, 0, 'a card moved anyway is not ready work');
+});

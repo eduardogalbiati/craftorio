@@ -145,3 +145,102 @@ test('Grill me in the panel asks in the thread and the note box sends the answer
   assert.equal(after.querySelector(tid('grill-interview')), null);
   assert.equal(page.text(after.querySelector('#dsc-note-send')), 'Add note');
 });
+
+test('"Use this answer" sends the question\'s proposal, and "End the interview" leaves a note in the thread and closes the box', async () => {
+  const c = card({ title: 'Export runs as CSV', column: 'shape', clarity: 20 });
+  const thread = [{ ts: '2026-10-04T10:00:00.000Z', kind: 'question', author: 'Grill me', grill: 'problem', text: 'Problem: What is wrong or missing today?', proposal: 'The owner copies the runs table by hand.' }];
+  const answers = [];
+  const notes = [];
+  const page = await openBoard({
+    cards: [c],
+    api: {
+      discoveryConversation: async () => structuredClone(thread),
+      answerDiscoveryGrill: async (_p, _id, text) => {
+        answers.push(text);
+        thread.push({ ts: '2026-10-04T10:01:00.000Z', kind: 'answer', author: 'owner', text }, { ts: '2026-10-04T10:01:01.000Z', kind: 'question', author: 'Grill me', grill: 'goal', text: 'Goal: What should be true when this is done?' });
+      },
+      appendDiscoveryConversation: async (_p, _id, entry) => { notes.push(entry.text); thread.push({ ts: '2026-10-04T10:02:00.000Z', kind: 'note', author: 'owner', text: entry.text }); },
+    },
+  });
+  const detail = await page.openCard(c.id);
+  detail.querySelector(tid('grill-use-proposal')).click();
+  await settle(20);
+  assert.deepEqual(answers, ['The owner copies the runs table by hand.']);
+  const next = page.$(tid('discovery-card-detail'));
+  assert.ok(next.querySelector(tid('grill-interview')), 'the next question keeps the interview open');
+  assert.equal(next.querySelector(tid('grill-use-proposal')), null, 'a question without a proposal offers none');
+  next.querySelector(tid('grill-end')).click();
+  await settle(20);
+  assert.equal(notes.length, 1);
+  assert.match(notes[0], /Ended the Grill me interview/);
+  assert.equal(page.$(tid('discovery-card-detail')).querySelector(tid('grill-interview')), null);
+});
+
+test('"Bar and night…" saves the project\'s bar, a bar per type (empty: the project\'s) and the night, then shows them', async () => {
+  let clarity = { bar: 85, byKind: {}, night: { start: '23:00', end: '08:00' } };
+  const saved = [];
+  const cards = [card({ title: 'A card' })];
+  const page = await openBoard({
+    cards,
+    api: {
+      discoveryBoard: boardWith(cards, () => ({ clarity, forecast: { count: 0, unestimated: 0, hours: 0, nights: 0, nightHours: 9 } })),
+      setDiscoveryClarityBar: async (projectId, bar, byKind, night) => {
+        saved.push({ projectId, bar, byKind, night });
+        clarity = { bar, byKind: Object.fromEntries(Object.entries(byKind).filter(([, v]) => v !== null)), night };
+        return { ...(await boardWith(cards, () => ({ clarity, forecast: { count: 0, unestimated: 0, hours: 0, nights: 0, nightHours: 8 } }))()) };
+      },
+    },
+  });
+  page.$(tid('clarity-settings')).click();
+  await settle();
+  const dialog = page.$(tid('clarity-settings-dialog'));
+  assert.ok(page.visible(dialog));
+  assert.equal(String(dialog.querySelector(tid('clarity-bar')).value), '85');
+  await page.setField(dialog.querySelector(tid('clarity-bar')), '90');
+  await page.setField(dialog.querySelector(tid('clarity-bar-hotfix')), '60');
+  await page.setField(dialog.querySelector(tid('clarity-night-start')), '22:00');
+  await page.setField(dialog.querySelector(tid('clarity-night-end')), '06:00');
+  const { Event } = page.dom.classes;
+  dialog.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+  await settle(20);
+  assert.equal(saved.length, 1);
+  assert.equal(saved[0].projectId, P);
+  assert.equal(saved[0].bar, 90);
+  assert.equal(saved[0].byKind.hotfix, 60);
+  assert.equal(saved[0].byKind.prd, null);
+  assert.deepEqual({ ...saved[0].night }, { start: '22:00', end: '06:00' });
+  assert.ok(!page.visible(dialog));
+  assert.match(page.text(page.$(tid('clarity-bar-summary'))), /Clarity bar 90% \(hotfix 60%\) · night 22:00 to 06:00/);
+});
+
+test('a refused save of "Bar and night…" keeps the dialog open with the store\'s message', async () => {
+  const clarity = { bar: 85, byKind: {}, night: { start: '23:00', end: '08:00' } };
+  const cards = [card({ title: 'A card' })];
+  const page = await openBoard({
+    cards,
+    api: {
+      discoveryBoard: boardWith(cards, () => ({ clarity, forecast: { count: 0, unestimated: 0, hours: 0, nights: 0, nightHours: 9 } })),
+      setDiscoveryClarityBar: async () => { throw new Error('A clarity bar is a whole number from 0 to 100: 150'); },
+    },
+  });
+  page.$(tid('clarity-settings')).click();
+  await settle();
+  const dialog = page.$(tid('clarity-settings-dialog'));
+  await page.setField(dialog.querySelector(tid('clarity-bar')), '150');
+  const { Event } = page.dom.classes;
+  dialog.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+  await settle(20);
+  assert.ok(page.visible(dialog));
+  assert.match(page.text(page.$('#dsc-clarity-error')), /whole number from 0 to 100/);
+});
+
+test('a card\'s estimate reads in hours from an hour on, in minutes below', async () => {
+  const hour = card({ title: 'An hour', column: 'define', estimate: { usd: null, minutes: 60 } });
+  const half = card({ title: 'Ninety minutes', column: 'define', estimate: { usd: null, minutes: 90 } });
+  const short = card({ title: 'Short', column: 'define', estimate: { usd: null, minutes: 45 } });
+  const page = await openBoard({ cards: [hour, half, short] });
+  const est = (c) => page.text(page.cardEl(c.id).querySelector(tid('discovery-card-estimate')));
+  assert.match(est(hour), /\b1 h\b/);
+  assert.match(est(half), /\b1\.5 h\b/);
+  assert.match(est(short), /\b45 min\b/);
+});
