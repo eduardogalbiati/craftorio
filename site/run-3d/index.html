@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Run 3D view (proof of concept)</title>
-<style>body.cover .tag { pointer-events: none; } body.cover .boot { color: #7A859C; }</style>
+<style>body.cover .tag { pointer-events: none; } body:not(.ready) .tags { visibility: hidden; } body.cover .boot { color: #7A859C; }</style>
 <script>if (new URLSearchParams(location.search).has('cover')) document.documentElement.classList.add('cover-mode');</script>
 <!--
   Proof of concept: a workflow run as a 3D floor (React + React Three Fiber), one file, no build step.
@@ -1408,8 +1408,18 @@ function Floor() {
   </group>`;
 }
 
+let firstFrame = true;
 function Scene({ shown, onSelect }) {
-  useFrame((_, dt) => sim.tick(dt));
+  useFrame((_, dt) => {
+    sim.tick(dt);
+    if (firstFrame) {
+      firstFrame = false;
+      requestAnimationFrame(() => {
+        document.body.classList.add('ready');
+        if (COVER && window.parent !== window) window.parent.postMessage({ type: 'run3d-ready' }, '*');
+      });
+    }
+  });
   return html`<group>
     <hemisphereLight args=${['#FFFFFF', '#CBD5EC', 1.95]} />
     <directionalLight position=${[-12, 24, 15]} intensity=${1.45} castShadow
@@ -1651,7 +1661,7 @@ function App() {
 
   return html`<div>
     <div className="stage">
-      <${Canvas} shadows flat dpr=${[1, 2]} camera=${{ fov: 30, near: 1, far: 400 }} onPointerMissed=${() => {}}>
+      <${Canvas} shadows flat dpr=${[1, 2]} gl=${{ preserveDrawingBuffer: new URLSearchParams(location.search).has('shot') }} camera=${{ fov: 30, near: 1, far: 400 }} onPointerMissed=${() => {}}>
         <color attach="background" args=${['#E8EDF7']} />
         <${Scene} shown=${shown} onSelect=${select} />
       <//>

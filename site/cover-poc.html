@@ -31,7 +31,10 @@
   <style>
     /* POC: the 3D run as the page's cover (run-3d/index.html?cover in an iframe that takes no input) */
     .cover { position: relative; height: 100vh; height: 100svh; min-height: 560px; overflow: hidden; background: #E8EDF7; }
-    .cover iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; pointer-events: none; }
+    /* the poster (a still of the scene) shows while the 3D loads; the scene fades in once it drew */
+    .cover-poster { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 40%; }
+    .cover iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; pointer-events: none; opacity: 0; transition: opacity .9s ease; }
+    .cover.ready iframe { opacity: 1; }
     .cover::after { content: ''; position: absolute; inset: auto 0 0 0; height: 42%; pointer-events: none;
       background: linear-gradient(to bottom, rgba(7, 7, 13, 0) 0%, rgba(7, 7, 13, .55) 45%, var(--bg) 100%); }
     .cover-copy { position: absolute; z-index: 2; left: 0; right: 0; bottom: 9vh; text-align: center; padding: 0 16px; }
@@ -74,6 +77,7 @@
   <main id="top">
     <!-- POC COVER: the 3D floor of a simulated run (site/run-3d/index.html, ?cover mode) -->
     <section class="cover" aria-label="Uma execução simulada em 3D: cada robô é um agente do workflow">
+      <img class="cover-poster" src="run-3d/poster.jpg" width="1600" height="900" alt="" fetchpriority="high">
       <iframe src="run-3d/index.html?cover" title="Execução simulada em 3D" loading="eager" tabindex="-1" aria-hidden="true"></iframe>
       <div class="cover-copy">
         <span class="cover-kicker"><span class="dot"></span> Uma execução ao vivo · simulação</span>
@@ -527,6 +531,10 @@
   <script>
     (() => {
       const cover = document.querySelector('.cover');
+      // the scene says when it drew its first frame (run-3d/index.html); until then the poster shows
+      addEventListener('message', (e) => {
+        if (e.data?.type === 'run3d-ready' && e.source === cover.querySelector('iframe').contentWindow) cover.classList.add('ready');
+      });
       const set = () => document.body.classList.toggle('on-cover', cover.getBoundingClientRect().bottom > 80);
       set(); addEventListener('scroll', set, { passive: true });
     })();
