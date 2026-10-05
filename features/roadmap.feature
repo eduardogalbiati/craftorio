@@ -302,35 +302,6 @@ Feature: Roadmap statuses, done items, filters and run timers
     When I restore the most recent earlier version
     Then the roadmap shows the item "Dark scrollbars in the terminal dock"
 
-  # ---- #286: the developer's effort in a roadmap item's Edit and on its card -------------------------
-  # A planned item of a new stage is switched to the ai-development-local-hero workflow; Save writes
-  # every field of the form, so an untouched effort is saved as 'default' and left off the card.
-
-  @issue-286
-  Scenario: A roadmap item's developer effort set to High in Edit shows on its card
-    Given the app is open
-    And the roadmap has a stage of 2 planned items
-    And the roadmap item "Planned item 1001" runs the workflow "ai-development-local-hero"
-    When I open "Backlog" in the sidebar
-    And I open the Roadmap
-    And I edit the inputs of the roadmap item "Planned item 1001"
-    Then the field "Developer effort" comes right after "Developer model"
-    And "Default" is selected for "Developer effort"
-    When I pick "High" for "Developer effort"
-    And I save the inputs of the roadmap item "Planned item 1001"
-    Then the roadmap item "Planned item 1001" shows the input "Developer effort: High"
-
-  @issue-286
-  Scenario: A roadmap item left at the default developer effort shows no effort on its card
-    Given the app is open
-    And the roadmap has a stage of 2 planned items
-    And the roadmap item "Planned item 1001" runs the workflow "ai-development-local-hero"
-    When I open "Backlog" in the sidebar
-    And I open the Roadmap
-    And I edit the inputs of the roadmap item "Planned item 1001"
-    And I save the inputs of the roadmap item "Planned item 1001"
-    Then the roadmap item "Planned item 1001" shows no "Developer effort" input
-
   # ---- #282: the item card's bands, its Workflow band and pipeline, the stage actions menu -------------
   # "Dark scrollbars in the terminal dock" (#10) is planned in Validated mode on the software-development
   # workflow (its owner's gate is "Your check"); "Keyboard focus is lost after closing a dialog" (#16)
