@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Run 3D view (proof of concept)</title>
-<style>body.cover .tag { pointer-events: none; } body:not(.ready) .tags { visibility: hidden; } body.cover .boot { color: #7A859C; }</style>
+<style>body.cover { --bg: #07070D; --muted: #8A93B0; } body.cover .tag { pointer-events: none; } body:not(.ready) .tags { visibility: hidden; } body.cover .boot { color: #7A859C; }</style>
 <script>if (new URLSearchParams(location.search).has('cover')) document.documentElement.classList.add('cover-mode');</script>
 <!--
   Proof of concept: a workflow run as a 3D floor (React + React Three Fiber), one file, no build step.
@@ -713,6 +713,7 @@ import htm from 'htm';
 const html = htm.bind(React.createElement);
 // ?cover: the landing page's cover (site/cover-poc.html): the scene and its tags only, no controls
 const COVER = new URLSearchParams(location.search).has('cover');
+const DK = (light, dark) => (COVER ? dark : light);
 const Robots = window.Robots;
 
 // ---------------------------------------------------------------------------------------------
@@ -1186,7 +1187,7 @@ function Station({ def, selected, onSelect }) {
     { text: Robots.plaqueFor(def.model), size: 38, y: 162, color: lighten(WOOD, 0.6), weight: 700 },
   ], 516, 240);
   return html`<group position=${stepPos(def)} onClick=${(e) => { e.stopPropagation(); onSelect(def.id); }} ...${pointer}>
-    <${B} p=${[0, 0.04, 0.45]} s=${[4.1, 0.08, 4.5]} c="#FFFFFF" r=${0.04} />
+    <${B} p=${[0, 0.04, 0.45]} s=${[4.1, 0.08, 4.5]} c=${DK('#FFFFFF', '#1A1F33')} r=${0.04} />
     <${B} ref=${light} p=${[0, 0.09, 2.45]} s=${[2.6, 0.05, 0.16]} c=${col} emissive=${col} r=${0.02} castShadow=${false} />
     ${selected && html`<group position-z=${0.45}><${SelectionRing} r=${2.9} /></group>`}
     <${B} ...${S(10, -26, 44, 130, 16, 150)} c=${CHAIR} r=${0.06} />
@@ -1248,7 +1249,7 @@ function Gate({ def, selected, onSelect }) {
     who.current.position.y = 0.1 + (status === 'waiting' ? Math.abs(Math.sin(clock.elapsedTime * 3)) * 0.07 : 0);
   });
   return html`<group position=${stepPos(def)} onClick=${(e) => { e.stopPropagation(); onSelect(def.id); }} ...${pointer}>
-    <${B} p=${[0, 0.05, -0.5]} s=${[3.2, 0.1, 5.2]} c="#DDE3EF" r=${0.04} />
+    <${B} p=${[0, 0.05, -0.5]} s=${[3.2, 0.1, 5.2]} c=${DK('#DDE3EF', '#232A45')} r=${0.04} />
     ${selected && html`<group position-z=${-0.5}><${SelectionRing} r=${2.9} /></group>`}
     <${B} p=${[0, 1.25, -1.35]} s=${[0.3, 2.3, 0.3]} c=${amber} r=${0.05} />
     <${B} p=${[0, 1.25, 1.35]} s=${[0.3, 2.3, 0.3]} c=${amber} r=${0.05} />
@@ -1278,7 +1279,7 @@ function Supervisor({ selected, onSelect }) {
   });
   return html`<group>
     <group position=${SUP_POS} onClick=${(e) => { e.stopPropagation(); onSelect('supervisor'); }} ...${pointer}>
-      <mesh position-y=${0.13} castShadow receiveShadow><cylinderGeometry args=${[1.45, 1.6, 0.26, 40]} /><meshStandardMaterial color="#FFFFFF" roughness=${0.7} /></mesh>
+      <mesh position-y=${0.13} castShadow receiveShadow><cylinderGeometry args=${[1.45, 1.6, 0.26, 40]} /><meshStandardMaterial color=${DK('#FFFFFF', '#262C48')} roughness=${0.7} /></mesh>
       <mesh position-y=${0.27} rotation-x=${-Math.PI / 2}><ringGeometry args=${[1.22, 1.36, 40]} /><meshBasicMaterial color="#7C5CFF" toneMapped=${false} /></mesh>
       ${selected && html`<${SelectionRing} r=${1.9} />`}
       <group position-y=${0.26} rotation-y=${Math.PI / 4}><${Robot} variant="supervisor" state=${state} /></group>
@@ -1337,7 +1338,7 @@ function Route() {
   return html`<group>
     ${segs.map((g, i) => html`<group key=${i}>
       <mesh position=${[g.mid.x, 0.012, g.mid.z]} rotation-y=${g.alongX ? 0 : Math.PI / 2} receiveShadow>
-        <boxGeometry args=${[g.len + 0.9, 0.02, 0.9]} /><meshStandardMaterial color="#DDE3F0" roughness=${0.9} />
+        <boxGeometry args=${[g.len + 0.9, 0.02, 0.9]} /><meshStandardMaterial color=${DK('#DDE3F0', '#283052')} roughness=${0.9} />
       </mesh>
       <mesh ref=${(m) => { done.current[i] = m; }} rotation-y=${g.alongX ? 0 : Math.PI / 2}>
         <boxGeometry args=${[1, 0.02, 0.2]} /><meshBasicMaterial color="#4C6FFF" toneMapped=${false} />
@@ -1365,35 +1366,35 @@ function Tree({ p, s = 1 }) {
 // The floor, the walls behind it, where the task comes in (issue) and where it ends (main).
 function Floor() {
   const sign = textTexture([
-    { text: RUN.workflow, size: 64, y: 70, color: '#4C6FFF' },
+    { text: RUN.workflow, size: 64, y: 70, color: DK('#4C6FFF', '#93A6FF') },
     { text: `run ${RUN.id} · issue ${RUN.issue}`, size: 34, y: 136, color: '#7A859C', weight: 600 },
   ], 900, 180);
   const leds = useRef();
   useFrame(({ clock }) => {
     leds.current?.children.forEach((m, i) => { m.material.opacity = sim.s.status === 'completed' ? 1 : 0.35 + 0.65 * (Math.sin(clock.elapsedTime * 3 + i * 1.7) > 0.2 ? 1 : 0); });
   });
-  const win = '#C7D8FF';
+  const win = DK('#C7D8FF', '#4A66C8');
   return html`<group>
-    <mesh rotation-x=${-Math.PI / 2} position-y=${-0.4}><circleGeometry args=${[160, 48]} /><meshBasicMaterial color="#E8EDF7" toneMapped=${false} /></mesh>
-    <mesh rotation-x=${-Math.PI / 2} position-y=${-0.395} receiveShadow><circleGeometry args=${[60, 48]} /><shadowMaterial opacity=${0.13} color="#3A4A7A" /></mesh>
-    <${B} p=${[0, -0.2, 1.4]} s=${[27, 0.4, 23.4]} c="#EDF0F8" r=${0.12} rough=${0.95} castShadow=${false} />
-    <${B} p=${[0, 1.25, -10.0]} s=${[27, 2.5, 0.4]} c="#DCE3F1" r=${0.08} />
-    <${B} p=${[0, 2.56, -10.0]} s=${[27.2, 0.14, 0.6]} c="#FFFFFF" r=${0.05} />
-    <${B} p=${[-13.3, 1.25, 1.5]} s=${[0.4, 2.5, 23.2]} c="#DCE3F1" r=${0.08} />
-    <${B} p=${[-13.3, 2.56, 1.5]} s=${[0.6, 0.14, 23.4]} c="#FFFFFF" r=${0.05} />
+    <mesh rotation-x=${-Math.PI / 2} position-y=${-0.4}><circleGeometry args=${[160, 48]} /><meshBasicMaterial color=${DK('#E8EDF7', '#07070D')} toneMapped=${false} /></mesh>
+    <mesh rotation-x=${-Math.PI / 2} position-y=${-0.395} receiveShadow><circleGeometry args=${[60, 48]} /><shadowMaterial opacity=${DK(0.13, 0.5)} color=${DK('#3A4A7A', '#000000')} /></mesh>
+    <${B} p=${[0, -0.2, 1.4]} s=${[27, 0.4, 23.4]} c=${DK('#EDF0F8', '#121627')} r=${0.12} rough=${0.95} castShadow=${false} />
+    <${B} p=${[0, 1.25, -10.0]} s=${[27, 2.5, 0.4]} c=${DK('#DCE3F1', '#1B2036')} r=${0.08} />
+    <${B} p=${[0, 2.56, -10.0]} s=${[27.2, 0.14, 0.6]} c=${DK('#FFFFFF', '#2B3354')} r=${0.05} />
+    <${B} p=${[-13.3, 1.25, 1.5]} s=${[0.4, 2.5, 23.2]} c=${DK('#DCE3F1', '#1B2036')} r=${0.08} />
+    <${B} p=${[-13.3, 2.56, 1.5]} s=${[0.6, 0.14, 23.4]} c=${DK('#FFFFFF', '#2B3354')} r=${0.05} />
     ${[-10.5, -7.2, 7.2, 10.5].map((x) => html`<${B} key=${x} p=${[x, 1.4, -9.79]} s=${[2.4, 1.2, 0.06]} c=${win} r=${0.02} rough=${0.3} castShadow=${false} />`)}
     ${[-6, -2.4, 4.6, 8.2].map((z) => html`<${B} key=${z} p=${[-13.09, 1.4, z]} s=${[0.06, 1.2, 2.4]} c=${win} r=${0.02} rough=${0.3} castShadow=${false} />`)}
-    <${B} p=${[0, 1.4, -9.78]} s=${[9.4, 1.9, 0.08]} c="#FFFFFF" r=${0.03} castShadow=${false} />
+    <${B} p=${[0, 1.4, -9.78]} s=${[9.4, 1.9, 0.08]} c=${DK('#FFFFFF', '#161B2E')} r=${0.03} castShadow=${false} />
     <${Decal} tex=${sign} size=${[9, 1.8]} position=${[0, 1.4, -9.735]} />
 
     <group position=${PATH[0]}>
-      <${B} p=${[-0.2, 0.04, 0]} s=${[2.4, 0.08, 2.4]} c="#FFFFFF" r=${0.04} />
-      <${B} p=${[-0.9, 0.45, 0]} s=${[0.9, 0.8, 1.5]} c="#C9D2E4" r=${0.06} />
+      <${B} p=${[-0.2, 0.04, 0]} s=${[2.4, 0.08, 2.4]} c=${DK('#FFFFFF', '#1A1F33')} r=${0.04} />
+      <${B} p=${[-0.9, 0.45, 0]} s=${[0.9, 0.8, 1.5]} c=${DK('#C9D2E4', '#3A4366')} r=${0.06} />
       <${B} p=${[-0.9, 0.9, 0.2]} s=${[0.6, 0.1, 0.8]} c="#F4F1EA" r=${0.02} />
       <${B} p=${[-0.9, 0.98, 0.15]} s=${[0.6, 0.06, 0.8]} c="#FFFFFF" r=${0.02} />
     </group>
     <group position=${[12, 0, PATH[5].z]}>
-      <${B} p=${[-0.6, 0.04, 0]} s=${[2.6, 0.08, 3.2]} c="#FFFFFF" r=${0.04} />
+      <${B} p=${[-0.6, 0.04, 0]} s=${[2.6, 0.08, 3.2]} c=${DK('#FFFFFF', '#1A1F33')} r=${0.04} />
       ${[-0.75, 0.75].map((z) => html`<${B} key=${z} p=${[0, 1.25, z]} s=${[1.0, 2.5, 1.1]} c="#2B3350" r=${0.07} rough=${0.5} />`)}
       <group ref=${leds}>
         ${[0, 1, 2, 3, 4, 5, 6, 7].map((i) => html`<mesh key=${i} position=${[0.51, 0.55 + (i >> 1) * 0.5, (i % 2 ? 0.75 : -0.75)]} rotation-y=${Math.PI / 2}>
@@ -1421,8 +1422,8 @@ function Scene({ shown, onSelect }) {
     }
   });
   return html`<group>
-    <hemisphereLight args=${['#FFFFFF', '#CBD5EC', 1.95]} />
-    <directionalLight position=${[-12, 24, 15]} intensity=${1.45} castShadow
+    <hemisphereLight args=${[DK('#FFFFFF', '#DCE4FF'), DK('#CBD5EC', '#1B2140'), DK(1.95, 1.45)]} />
+    <directionalLight position=${[-12, 24, 15]} intensity=${DK(1.45, 1.85)} castShadow
       shadow-mapSize=${[2048, 2048]} shadow-camera-left=${-26} shadow-camera-right=${26} shadow-camera-top=${26} shadow-camera-bottom=${-26}
       shadow-camera-near=${1} shadow-camera-far=${90} shadow-bias=${-0.0004} shadow-normalBias=${0.04} />
     <${CameraRig} />
@@ -1662,7 +1663,7 @@ function App() {
   return html`<div>
     <div className="stage">
       <${Canvas} shadows flat dpr=${[1, 2]} gl=${{ preserveDrawingBuffer: new URLSearchParams(location.search).has('shot') }} camera=${{ fov: 30, near: 1, far: 400 }} onPointerMissed=${() => {}}>
-        <color attach="background" args=${['#E8EDF7']} />
+        <color attach="background" args=${[DK('#E8EDF7', '#07070D')]} />
         <${Scene} shown=${shown} onSelect=${select} />
       <//>
     </div>
