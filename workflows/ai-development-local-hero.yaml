@@ -177,6 +177,15 @@ inputs:
     default: claude-opus-5-5
     options: { claude-opus-5-5: "Opus 5.5", claude-fable-5-1: "Fable 5.1" }
     description: "The model of the developer agent. Fable 5.1 is the most capable (about 2.5x the price per token of Opus 5.5, and slower turns: the turn timeout is 3x). The reviewer and the test writer keep their own models."
+  # #286: the developer's reasoning effort per run; `default` passes no --effort (the CLI's own
+  # default for the model, the behaviour before #286); xhigh doubles the turn timeout
+  developer_effort:
+    label: "Developer effort"
+    type: string
+    enum: [default, low, medium, high, xhigh]
+    default: default
+    options: { "default": "Default", "low": "Low", "medium": "Medium", "high": "High", "xhigh": "Extra high" }
+    description: "How hard the developer thinks on each turn: a higher effort trades time and cost for depth (Extra high also doubles the turn timeout). Default: the CLI's own effort for the model."
   # A boolean; saved inputs "true"/"false" (before #116) are accepted by the engine.
   validate_every_round:
     label: "Validate every round"
@@ -233,6 +242,8 @@ providers:
     type: claude-code
     command: claude
     args: ["-p", "--output-format", "stream-json", "--verbose", "--model", "{{ model }}"]
+    # #286: an agent's `effort` reaches the CLI only through effort_args (none: no --effort flag)
+    effort_args: ["--effort", "{{ effort }}"]
     resume_args: ["--resume", "{{ session_id }}"]
     # Lets the agent read the skill folder (outside working_dir). Codex in
     # read-only mode can already read any path.
@@ -241,6 +252,7 @@ providers:
     type: codex-cli
     command: codex
     args: ["exec", "--json", "--skip-git-repo-check", "-m", "{{ model }}"]
+    effort_args: ["-c", "model_reasoning_effort={{ effort }}"]
     resume_args: ["resume", "{{ session_id }}"]
     stdin_arg: "-"
 
@@ -257,8 +269,9 @@ defaults:
   # the run's own git worktree (orchestrator.worktree), or repo_path when it is not a git repo
   working_dir: "{{ worktree_dir }}"
   # one agent turn: 30m, plus 10m per extra issue of a grouped run, at most 60m (#101); 3x when the
-  # developer runs on Fable 5.1 (owner 2026-10-04: its first run needed more than 1.5x on a 3-issue change)
-  timeout: "{{ ((30 + 10 * ((inputs.issues | length) - 1)) | clamp(30, 60)) * (3 if inputs.developer_model == 'claude-fable-5-1' else 1) }}m"
+  # developer runs on Fable 5.1 (owner 2026-10-04: its first run needed more than 1.5x on a 3-issue change);
+  # 2x more when its effort is xhigh (#286: longer turns; high stays within the base limit)
+  timeout: "{{ ((30 + 10 * ((inputs.issues | length) - 1)) | clamp(30, 60)) * (3 if inputs.developer_model == 'claude-fable-5-1' else 1) * (2 if inputs.developer_effort == 'xhigh' else 1) }}m"
   # persistent agents: once a turn ends above this context size, the next turn starts a fresh
   # session from the agent's handoff note (runs/<id>/handoffs/)
   max_context: 150k
@@ -307,6 +320,8 @@ agents:
     color: "#4C7DFF" # #224: its role's colour in the run chat and the runs list
     provider: claude
     model: "{{ inputs.developer_model or 'claude-opus-5-5' }}"
+    # #286: empty for `default`, so no --effort flag and the session records effort null
+    effort: "{{ '' if (inputs.developer_effort or 'default') == 'default' else inputs.developer_effort }}"
     session: handoff
     # subagents: exploration sub-agents map the code, so the main context stays small
     capabilities: { tools: [read, edit, write, *toolchains], web: false, subagents: true }

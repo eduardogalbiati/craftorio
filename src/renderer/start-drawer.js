@@ -127,7 +127,7 @@ function selectWorkflow(file) {
   const wf = state.workflows.find((w) => w.file === (pipeline ? pipeline.stages[0].workflow : file));
   state.wf = wf;
   $('#drawer .drawer-title').textContent = pipeline ? 'Start pipeline' : 'Start workflow';
-  $('#wf-desc').textContent = pipeline ? pipeline.description || '' : wf.error ? `Error: ${wf.error}` : wf.description || '';
+  $('#wf-desc').textContent = pipeline ? pipeline.description || '' : wf.error ? `Error: ${wf.error}` : [wf.description || '', ...(wf.warnings || []).map((m) => `Warning: ${m}.`)].filter(Boolean).join(' ');
   $('#wf-steps-mini').innerHTML = (wf.steps || []).map((s) =>
     `<span class="step-chip ${s.type === 'human_approval' ? 'human' : ''}" title="${esc(`${s.id}${s.type === 'human_approval' ? ' (human approval)' : s.agent ? ` · ${s.agent}` : ''}`)}">${esc(s.display || (typeof displayName === 'function' ? displayName(s.id) : s.id))}</span>`).join('<span class="arrow">›</span>');
   // what each agent may use (capabilities) and how its conversation is kept (session)

@@ -216,6 +216,13 @@ same features for users; this is the implementer's summary.
   thinking item and never opens them.
 - Agent `provider`/`model`/`effort` can be templates over the inputs (resolved once in the constructor);
   `cli_args` can be a map keyed by provider; providers' `effort_args` get `{{ effort }}`.
+  An agent's `effort` reaches its CLI **only** through its provider's `effort_args` (claude
+  `["--effort", "{{ effort }}"]`, codex `["-c", "model_reasoning_effort={{ effort }}"]`, grok
+  `["--reasoning-effort", "{{ effort }}"]`); an effort that resolves to empty adds no flag and the
+  session records `effort: null` (e.g. `developer_effort: default`, #286). An effort on a provider
+  without `effort_args` is never silent (#286): `loadWorkflow` returns it in its non-enumerable
+  `warnings` (the Workflows card and the Start drawer show it; a test fails for a bundled workflow)
+  and the run logs it as a `warn` at start (resolved providers, so templated ones are checked too).
   `max_visits` / `loop.max_iterations` accept templates. `agents.<name>.enabled` (bool or template)
   drops an agent from the run (`dropDisabledAgents`: removed from fan-outs, `min_success` capped;
   a single-agent step on it throws). ai-arena's five contender slots use it (`provider: none`).

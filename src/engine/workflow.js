@@ -450,7 +450,25 @@ function loadWorkflow(file) {
   }
   validateGroups(wf.groups, ids);
   validateOutputs(wf.outputs);
+  // #286: problems that do not stop a run, shown on the workflow's screen (not enumerable, so
+  // nothing that walks the workflow's keys sees it); a templated provider is checked per run
+  Object.defineProperty(wf, 'warnings', { value: silentEfforts(wf), enumerable: false, writable: true });
   return wf;
+}
+
+// #286: the agents whose `effort` never reaches their CLI (the engine adds a provider's
+// effort_args only when it declares them); a templated provider or effort that resolves to
+// nothing is skipped, the run checks its resolved agents again
+function silentEfforts(wf) {
+  const out = [];
+  for (const [name, a] of Object.entries(wf.agents || {})) {
+    const effort = String(a?.effort ?? '').trim();
+    const provider = String(a?.provider ?? '');
+    if (!effort || provider.includes('{{')) continue;
+    const p = wf.providers?.[provider];
+    if (p && !(Array.isArray(p.effort_args) && p.effort_args.length)) out.push(`the effort of ${name} is not passed: its provider has no effort_args`);
+  }
+  return out;
 }
 
 // `outputs:` (#134): the run's result contract, { <name>: { type, description, value } }. `value` is a
@@ -864,6 +882,8 @@ class WorkflowRun extends EventEmitter {
       }
     }
     this.dropDisabledAgents();
+    // #286: an effort the CLI never gets goes to the run's log at start, never silent
+    for (const message of silentEfforts(this.wf)) this.notices.push({ level: 'warn', message });
     this.pickPersonas(personas || [], resume?.personas);
     this.ctx = {
       inputs: this.inputs, steps: {}, loop: { iteration: 0 }, run_id: this.runId, run_dir: this.runDir, runs_dir: runsDir, workflows_dir: path.dirname(path.resolve(file)),

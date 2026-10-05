@@ -182,6 +182,8 @@ providers:
     type: claude-code
     command: claude
     args: ["-p", "--output-format", "stream-json", "--verbose", "--model", "{{ model }}"]
+    # #286: an agent's `effort` reaches the CLI only through effort_args
+    effort_args: ["--effort", "{{ effort }}"]
     resume_args: ["--resume", "{{ session_id }}"]
     # Lets the agent read the skill folder (outside working_dir). Codex in
     # read-only mode can already read any path.
@@ -190,6 +192,7 @@ providers:
     type: codex-cli
     command: codex
     args: ["exec", "--json", "--skip-git-repo-check", "-m", "{{ model }}"]
+    effort_args: ["-c", "model_reasoning_effort={{ effort }}"]
     resume_args: ["resume", "{{ session_id }}"]
     stdin_arg: "-"
 

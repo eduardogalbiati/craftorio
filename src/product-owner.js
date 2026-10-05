@@ -446,8 +446,9 @@ function costInputs(g, step, workflows) {
   for (const [k, v] of Object.entries(want)) if (allowed(k, v)) set[k] = v;
   const notAdjustable = [];
   if (step.cheapAgents) {
-    // the developer keeps its model (a medium effort only); the test writer, evidence and verifier get the cheaper model
-    const agentInputs = Object.keys(declared).filter((k) => /_effort$/.test(k) || (/_model$/.test(k) && !/^develop/.test(k)));
+    // the developer keeps its model and its effort (#286: developer_effort stays out until a
+    // measured run shows medium is as good); the test writer, evidence and verifier get the cheaper model
+    const agentInputs = Object.keys(declared).filter((k) => /_(effort|model)$/.test(k) && !/^develop/.test(k));
     for (const k of agentInputs) {
       const v = /_effort$/.test(k) ? CHEAP_EFFORT : CHEAP_MODEL;
       if (allowed(k, v)) set[k] = v;

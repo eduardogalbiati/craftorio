@@ -43,6 +43,8 @@ module.exports = (ctx) => {
             description: wf.metadata?.description,
             category: wf.metadata?.category || 'build',
             tags: wf.metadata?.tags || [],
+            // #286: what does not stop a run but does not work as written (an effort never passed)
+            warnings: wf.warnings || [],
             inputs: wf.inputs || {},
             // the result contract a chain maps from (#134)
             outputs: wf.outputs || {},

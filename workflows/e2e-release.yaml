@@ -108,6 +108,8 @@ providers:
     type: claude-code
     command: claude
     args: ["-p", "--output-format", "stream-json", "--verbose", "--model", "{{ model }}"]
+    # #286: an agent's `effort` reaches the CLI only through effort_args
+    effort_args: ["--effort", "{{ effort }}"]
     resume_args: ["--resume", "{{ session_id }}"]
     skill_args: ["--add-dir", "{{ skill_dir }}"]
 

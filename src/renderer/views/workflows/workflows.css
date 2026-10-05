@@ -18,6 +18,7 @@
 .wf-card .badges { margin: 4px 0 0; }
 .wf-file { max-width: 220px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--muted); }
 .wf-desc { margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.wf-warning { margin: 0; }
 .wf-avs { display: flex; flex: none; }
 .wf-av { width: 28px; height: 28px; display: grid; place-items: center; }
 .wf-av + .wf-av { margin-left: -8px; }

@@ -219,6 +219,7 @@ function workflowCard(w) {
         ${avatars ? `<div class="wf-avs">${avatars}</div>` : ''}
       </div>
       <p class="muted small wf-desc" title="${esc(w.error ? `Error: ${w.error}` : w.description || '')}">${esc(w.error ? `Error: ${w.error}` : w.description || '')}</p>
+      ${(w.warnings || []).map((m) => `<p class="small warn-text wf-warning" role="status" data-testid="workflow-warning">Warning: ${esc(m)}</p>`).join('')}
       ${modes || outputs ? `<div class="wf-tags">${modes}${outputs}</div>` : ''}
       ${(w.steps || []).length ? `<button class="wf-flow steps-mini" data-flow aria-expanded="${open}" title="${open ? 'Hide the steps' : 'Show every step'}"><span class="badge">${w.steps.length} step${w.steps.length === 1 ? '' : 's'}</span>${stepFlow(w)}<span class="wf-flow-caret" aria-hidden="true">${open ? '▴' : '▾'}</span></button>` : ''}
       ${open ? `<ol class="wf-steps">${stepList(w)}</ol>` : ''}
