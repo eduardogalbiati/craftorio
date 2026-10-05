@@ -641,6 +641,11 @@
     const top = log.scrollTop;
     const toEnd = scroll === 'end' || atEnd(log);
     const cost = po.messages.reduce((a, x) => a + (x.costUsd || 0), 0);
+    // #234: locked while a question is in flight (the text box stays free). Drawn before the chat's
+    // update, so the chat locks them too while its send is still in flight after ask() has ended
+    $p('#po-chips').innerHTML = issueMode ? '' : [...QUESTIONS.map((q) => `<button class="chip" type="button" data-testid="po-pill" data-q="${esc(q)}"${po.busy ? ' disabled' : ''}>${esc(q)}</button>`),
+      `<button class="chip" type="button" data-testid="po-pill" data-mode="issue"${po.busy ? ' disabled' : ''} title="Describe an issue; the Product Owner drafts it and you file it">${esc(REGISTER)}…</button>`].join('');
+    $p('#po-chips').classList.toggle('hidden', issueMode);
     // #274: the messages, the question in flight, the live turn and the error, through the shared chat
     chat.update({ messages: po.messages, live: po.live, error: po.error, busy: po.busy });
     // #148: the simulation-only scenario picker (never in the production UI)
@@ -650,10 +655,6 @@
       b.classList.toggle('active', b.dataset.poMode === po.mode);
       b.disabled = po.busy;
     });
-    // #234: locked while a question is in flight (the text box stays free)
-    $p('#po-chips').innerHTML = issueMode ? '' : [...QUESTIONS.map((q) => `<button class="chip" type="button" data-testid="po-pill" data-q="${esc(q)}"${po.busy ? ' disabled' : ''}>${esc(q)}</button>`),
-      `<button class="chip" type="button" data-testid="po-pill" data-mode="issue"${po.busy ? ' disabled' : ''} title="Describe an issue; the Product Owner drafts it and you file it">${esc(REGISTER)}…</button>`].join('');
-    $p('#po-chips').classList.toggle('hidden', issueMode);
     // #235: the workflow of a plan question and its options (Plan mode only)
     $p('#po-wf-row').classList.toggle('hidden', issueMode || !po.projectId);
     $p('#po-workflow').disabled = po.busy;
