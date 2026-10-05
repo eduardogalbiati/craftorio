@@ -167,10 +167,10 @@ test('#245 readRun: a run recorded with workflow.started display gives stepNames
 
 const stepOf = (file, id) => loadWorkflow(path.join(WORKFLOWS, file)).steps.find((s) => s.id === id);
 
-test('#245 bundled workflows: every red_check step is displayed "Red check (tests fail first)"', () => {
+test('#245 bundled workflows: every red_check step is displayed "Red Check (TDD)"', () => {
   const found = bundled().filter((f) => stepOf(f, 'red_check'));
   assert.ok(found.length >= 1, 'at least one bundled workflow has a red_check step');
-  for (const f of found) assert.equal(stepOf(f, 'red_check').display, 'Red check (tests fail first)', f);
+  for (const f of found) assert.equal(stepOf(f, 'red_check').display, 'Red Check (TDD)', f);
 });
 
 test('#245 bundled workflows: ai-development-local-hero\'s E2E scenarios step (e2e) is displayed "E2E scenarios"', () => {

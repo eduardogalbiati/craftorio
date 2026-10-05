@@ -684,7 +684,7 @@ steps:
   # tests related to them (the code → tests graph) go to develop; a file that cannot run goes back to
   # the test writer once. A red check that cannot run at all (no test command) goes on to develop.
   - id: red_check
-    display: Red check (tests fail first)
+    display: Red Check (TDD)
     type: suite
     command: "{{ inputs.test_command }}"
     # #247: after the owner's request changed the criteria, only the test files changed in that visit
