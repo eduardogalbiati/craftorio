@@ -1,0 +1,39 @@
+Feature: Agents, how the agents look
+  The Agents screen (AI › Agents) lists the user's agents, the built-in ones and, one section per
+  workflow, the workflows' own agents. A workflow's agent is read-only there except for its look:
+  its card's "Customize look" opens the agent editor with a large robot preview. An agent whose
+  look was never customised draws its provider's robot painted in its role's colour (the agent's
+  `color` in the workflow YAML), so two agents of the same provider tell apart.
+
+  # Assumes the demo workspace has the bundled workflow ai-development-local-hero, whose agents
+  # "Developer" (developer, #4C7DFF) and "Reviewer" (reviewer, #A06BFF) both run on claude and
+  # were never customised.
+  @issue-297
+  Scenario: "Customize look" opens a workflow agent's editor with a full-size robot preview
+    Given the app is open in a 1400x900 window
+    When I open "Agents" in the sidebar
+    Then the workflow agent "developer" of "ai-development-local-hero.yaml" offers "Customize look" and not "View"
+    When I click "Customize look" on the workflow agent "developer" of "ai-development-local-hero.yaml"
+    Then the agent editor is titled "Developer · ai-development-local-hero"
+    And the agent editor's robot preview is 280x280 pixels
+    And the agent editor's prompt is read-only
+
+  # The Analytics Agents tab's cards and the agent editor once shared a CSS class: the editor's
+  # 280 px preview must not grow the cards' small robots
+  @issue-297
+  Scenario: The Analytics Agents tab keeps its small robots on the cards
+    Given the app is open in a 1400x900 window
+    When I open "Agents" in the sidebar
+    And I click "Customize look" on the workflow agent "developer" of "ai-development-local-hero.yaml"
+    And I close the agent editor
+    And I open the "Analytics" tab of Home
+    And I open the "Agents" Analytics tab
+    Then the robots of the Analytics agent cards "Oracle", "Product Owner" and "Supervisor" are 44x44 pixels
+
+  @issue-297
+  Scenario: Two uncustomised workflow agents of the same provider are painted in their role colours
+    Given the app is open
+    When I open "Agents" in the sidebar
+    Then the card robot of the workflow agent "developer" of "ai-development-local-hero.yaml" is painted "#4C7DFF"
+    And the card robot of the workflow agent "reviewer" of "ai-development-local-hero.yaml" is painted "#A06BFF"
+    And the card robots of the workflow agents "developer" and "reviewer" of "ai-development-local-hero.yaml" look different
