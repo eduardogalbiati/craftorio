@@ -276,3 +276,107 @@ Then('the board shows {string} with {string}, labelled as an estimate', async ({
   await expect(forecast).toContainText(hours);
   await expect(forecast).toContainText(/estimate/i);
 });
+
+// ---- #258: commit a clear Ready card to the backlog -----------------------------------------------------
+// Assumes these data-testids (the developer adds them):
+//   discovery-commit                         in the card's panel: the "Commit to the backlog" button,
+//                                            disabled under the clarity bar
+//   discovery-commit-dialog                  the commit dialog (role=dialog): the proposed split, one
+//   discovery-commit-issue                   row per issue, and its "File the issues" button
+//   discovery-committed                      the Committed list beside the board
+//   discovery-committed-card                 a card in it, data-card (its id)
+//   discovery-delivery                       a committed card's progress line (To do, running,
+//                                            merged locally, done)
+//   issue-discovery-card                     a backlog issue's badge of its Discovery card (opens the
+//                                            card read-only)
+// In simulation the split comes from the PO's simulated proposal (its titles are not asserted) and
+// the issues are filed into the project's local backlog.
+
+const commitDialog = (page) => page.getByTestId('discovery-commit-dialog');
+const committedCard = (page, title) => page.getByTestId('discovery-committed').getByTestId('discovery-committed-card').filter({ hasText: title });
+const discoveryBadge = (page, title) => page.getByTestId('backlog-list').getByTestId('issue-discovery-card').filter({ hasText: title });
+
+async function openCommitDialog(page) {
+  const button = cardDetail(page).getByTestId('discovery-commit');
+  await expect(button).toHaveAccessibleName('Commit to the backlog');
+  await expect(button).toBeEnabled();
+  await button.click();
+  await expect(commitDialog(page)).toBeVisible();
+}
+
+async function fileIssues(page, name) {
+  const dialog = commitDialog(page);
+  await dialog.getByRole('button', { name, exact: true }).click();
+  await expect(dialog).toBeHidden();
+}
+
+When('I choose {string} in the card\'s panel', async ({ e2e }, action) => {
+  const button = cardDetail(e2e.window).getByTestId('discovery-commit');
+  await expect(button).toHaveAccessibleName(action);
+  await openCommitDialog(e2e.window);
+});
+
+Then('the commit dialog lists the proposed issues', async ({ e2e }) => {
+  const dialog = commitDialog(e2e.window);
+  await expect(dialog).toHaveRole('dialog');
+  const issues = dialog.getByTestId('discovery-commit-issue');
+  await expect(issues.first()).toBeVisible();
+  expect(await issues.count()).toBeGreaterThan(0);
+});
+
+When('I confirm the commit with {string}', async ({ e2e }, name) => {
+  await fileIssues(e2e.window, name);
+});
+
+Then('the Committed list shows the card {string} with its issues\' progress {string}', async ({ e2e }, title, progress) => {
+  const card = committedCard(e2e.window, title);
+  await expect(card).toBeVisible();
+  await expect(card).toHaveAttribute('data-card', /.+/);
+  await expect(card.getByTestId('discovery-delivery')).toContainText(progress);
+});
+
+Then('the committed card {string} cannot be moved back to the board', async ({ e2e }, title) => {
+  const page = e2e.window;
+  await expect(committedCard(page, title)).toBeVisible();
+  await expect(committedCard(page, title).getByTestId('card-move')).toHaveCount(0);
+  await expect(boardCard(page, title)).toHaveCount(0);
+});
+
+Then('the card\'s panel shows {string} disabled', async ({ e2e }, action) => {
+  const button = cardDetail(e2e.window).getByTestId('discovery-commit');
+  await expect(button).toHaveAccessibleName(action);
+  await expect(button).toBeDisabled();
+});
+
+Then('the card\'s panel offers {string}', async ({ e2e }, action) => {
+  const button = cardDetail(e2e.window).getByTestId('card-grill-me');
+  await expect(button).toBeVisible();
+  await expect(button).toHaveAccessibleName(action);
+});
+
+When('I commit the Discovery card {string} to the backlog', async ({ e2e }, title) => {
+  const page = e2e.window;
+  await boardCard(page, title).getByTestId('discovery-card-title').click();
+  await expect(cardDetail(page)).toBeVisible();
+  await openCommitDialog(page);
+  await expect(commitDialog(page).getByTestId('discovery-commit-issue').first()).toBeVisible();
+  await fileIssues(page, 'File the issues');
+  await expect(committedCard(page, title)).toBeVisible();
+});
+
+Then('an issue of the list shows the badge of the Discovery card {string}', async ({ e2e }, title) => {
+  await expect(discoveryBadge(e2e.window, title).first()).toBeVisible();
+});
+
+When('I open the badge of the Discovery card {string}', async ({ e2e }, title) => {
+  await discoveryBadge(e2e.window, title).first().click();
+});
+
+Then('the Discovery card {string} opens read-only', async ({ e2e }, title) => {
+  const detail = cardDetail(e2e.window);
+  await expect(detail).toBeVisible();
+  await expect(detail).toContainText(title);
+  await expect(detail.getByTestId('card-type')).toBeDisabled();
+  await expect(detail.getByTestId('discovery-commit')).toHaveCount(0);
+  await expect(detail.getByTestId('card-move')).toHaveCount(0);
+});

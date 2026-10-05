@@ -87,3 +87,44 @@ Feature: Shape accepted ideas on the Discovery board
     And I move the Discovery card "Compare two runs" to "Ready" anyway because "Needed for the demo"
     Then the Discovery column "Ready" shows the card "Compare two runs"
     And the board shows "1 night ready" with "about 3 h of agent work", labelled as an estimate
+
+  @issue-258
+  Scenario: A clear Ready card is committed to the backlog and moves to the Committed list
+    Given the app is open
+    And the Discovery card "Export runs as CSV" waits in "Define", 90% clear with about 3 h of work
+    When I open "Discovery" in the sidebar
+    And I move the Discovery card "Export runs as CSV" to "Ready"
+    And I open the Discovery card "Export runs as CSV"
+    And I choose "Commit to the backlog" in the card's panel
+    Then the commit dialog lists the proposed issues
+    When I confirm the commit with "File the issues"
+    Then the Discovery column "Ready" does not show the card "Export runs as CSV"
+    And the Committed list shows the card "Export runs as CSV" with its issues' progress "To do"
+    And the committed card "Export runs as CSV" cannot be moved back to the board
+
+  @issue-258
+  Scenario: A Ready card below the clarity bar cannot be committed and offers Grill me
+    Given the app is open
+    And the Discovery card "Share a run report" waits in "Define", scored 70% clear by "Product Owner" on "2026-10-01T09:00:00.000Z", missing:
+      | point                          |
+      | Who receives the report        |
+      | Which format the report uses   |
+    When I open "Discovery" in the sidebar
+    And I move the Discovery card "Share a run report" to "Ready" anyway because "Needed for the demo"
+    And I open the Discovery card "Share a run report"
+    Then the card's panel shows "Commit to the backlog" disabled
+    And the card's panel lists the missing points "Who receives the report" and "Which format the report uses"
+    And the card's panel offers "Grill me"
+
+  @issue-258
+  Scenario: A backlog issue filed from a committed card shows its badge, which opens the card read-only
+    Given the app is open
+    And the Discovery card "Per-project budget" waits in "Define", 92% clear with about 2 h of work
+    When I open "Discovery" in the sidebar
+    And I move the Discovery card "Per-project budget" to "Ready"
+    And I commit the Discovery card "Per-project budget" to the backlog
+    And I open "Backlog" in the sidebar
+    And I open the Board as a list
+    Then an issue of the list shows the badge of the Discovery card "Per-project budget"
+    When I open the badge of the Discovery card "Per-project budget"
+    Then the Discovery card "Per-project budget" opens read-only
