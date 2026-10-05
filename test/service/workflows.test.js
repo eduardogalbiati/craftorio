@@ -225,3 +225,24 @@ test('workflows:pipelines (#135): a fresh workspace already lists the bundled de
   assert.ok(pipelines.every((p) => !p.error), pipelines.map((p) => p.error).filter(Boolean).join('; '));
   assert.ok(pipelines.every((p) => p.origin === 'default'));
 });
+
+test('listWorkflows (#286): an agent effort on a provider without effort_args comes back as a warning; with effort_args, and in the bundled ai-development-local-hero, none', (t) => {
+  const { api, service } = makeService(t);
+  const yamlOf = (name, effortArgs) => [
+    'apiVersion: multiagent/v1', 'kind: Workflow', 'metadata:', `  name: ${name}`,
+    'providers:', '  claude:', '    type: claude-code', '    command: claude', '    args: ["-p", "--model", "{{ model }}"]',
+    ...(effortArgs ? ['    effort_args: ["--effort", "{{ effort }}"]'] : []),
+    'agents:', '  reviewer: { provider: claude, model: m, session: ephemeral, effort: high }',
+    'steps:', '  - id: review', '    agent: reviewer', '    prompt: "review it"', '',
+  ].join('\n');
+  fs.writeFileSync(path.join(service.workspace().workflows, 'silent-effort.yaml'), yamlOf('silent-effort', false));
+  fs.writeFileSync(path.join(service.workspace().workflows, 'passed-effort.yaml'), yamlOf('passed-effort', true));
+  const list = api['workflows:list']();
+  const silent = list.find((w) => w.file === 'silent-effort.yaml');
+  assert.equal(silent.error || '', '', 'a silent effort does not stop the workflow from loading');
+  assert.deepEqual(Array.from(silent.warnings || []).map(String), ['the effort of reviewer is not passed: its provider has no effort_args']);
+  assert.equal(Array.from(list.find((w) => w.file === 'passed-effort.yaml').warnings || []).length, 0);
+  const hero = list.find((w) => w.file === 'ai-development-local-hero.yaml');
+  assert.ok(hero, 'the bundled workflow is listed');
+  assert.equal(Array.from(hero.warnings || []).length, 0);
+});

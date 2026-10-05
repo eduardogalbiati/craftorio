@@ -421,3 +421,16 @@ test('showWorkflowDefinition: resets the section and the search box so a filtere
   assert.equal(search.value, '');
   assert.deepEqual(calls.showView, [['workflows']]);
 });
+
+// ---------------------------------------------------------------------------
+// #286: the Workflows card shows an effort its provider never passes
+// ---------------------------------------------------------------------------
+test('workflowCard (#286): each load warning is a "Warning: ..." line (data-testid workflow-warning); none, no line', () => {
+  const { helpers } = loadDefs();
+  const base = { file: 'wf.yaml', name: 'WF', description: 'Builds things.', agents: {}, steps: [] };
+  const html = helpers.workflowCard({ ...base, warnings: ['the effort of reviewer is not passed: its provider has no effort_args'] });
+  assert.equal((html.match(/data-testid="workflow-warning"/g) || []).length, 1);
+  assert.match(html, /Warning: the effort of reviewer is not passed: its provider has no effort_args/);
+  assert.doesNotMatch(helpers.workflowCard({ ...base, warnings: [] }), /workflow-warning/);
+  assert.doesNotMatch(helpers.workflowCard(base), /workflow-warning/);
+});

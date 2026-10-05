@@ -237,3 +237,34 @@ test('inputPills: no inputs gives no pills; no workflow still labels each input 
   assert.equal(pillsText(WorkflowInputs.inputPills(heroWorkflow, {})).trim(), '');
   assert.match(pillsText(WorkflowInputs.inputPills(null, { unit_tests: 'off' })), /Unit tests: Off/);
 });
+
+// ---- #286: developer_effort of ai-development-local-hero, drawn by the shared renderer -------
+// The Start drawer, the Assign dialog and the roadmap item's Edit all draw the workflow's inputs
+// with formHtml, and the roadmap card's input pairs come from inputPills: the real YAML's inputs.
+const heroInputs = () => {
+  const yaml = require('js-yaml');
+  const file = require('path').join(__dirname, '..', 'workflows', 'ai-development-local-hero.yaml');
+  return yaml.load(require('fs').readFileSync(file, 'utf8')).inputs;
+};
+
+test('formHtml (#286): "Developer effort" comes right after "Developer model", Default to Extra high, Default selected', () => {
+  const html = WorkflowInputs.formHtml(heroInputs(), { values: {} });
+  const keys = [...html.matchAll(/data-wi-key="([^"]+)"/g)].map((m) => m[1]);
+  const at = keys.indexOf('developer_effort');
+  assert.ok(at > 0, 'the developer_effort field is drawn');
+  assert.equal(keys[at - 1], 'developer_model');
+  assert.match(html, />Developer effort</);
+  const pills = [...html.matchAll(/data-wi-pill="([^"]+)"[^>]*>([^<]*)</g)].map((m) => `${m[1]}=${m[2]}`);
+  for (const p of ['default=Default', 'low=Low', 'medium=Medium', 'high=High', 'xhigh=Extra high']) assert.ok(pills.includes(p), `pill ${p}`);
+  assert.match(html, /data-wi-input="developer_effort"[^>]*value="default"/);
+  assert.match(WorkflowInputs.formHtml(heroInputs(), { values: { developer_effort: 'high' } }), /data-wi-input="developer_effort"[^>]*value="high"/);
+});
+
+test('inputPills (#286): the roadmap card shows "Developer effort: High", never a plain pill at Default', () => {
+  const wf = { file: 'ai-development-local-hero.yaml', inputs: heroInputs() };
+  assert.match(pillsText(WorkflowInputs.inputPills(wf, { developer_effort: 'high' })), /Developer effort: High/);
+  assert.match(pillsText(WorkflowInputs.inputPills(wf, { developer_effort: 'xhigh' })), /Developer effort: Extra high/);
+  const html = WorkflowInputs.inputPills(wf, { developer_effort: 'default' });
+  const at = html.indexOf('Developer effort');
+  if (at >= 0) assert.match(html.slice(html.lastIndexOf('class="', at), at), /dim|default/);
+});

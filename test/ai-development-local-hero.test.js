@@ -441,6 +441,20 @@ test('ai-development-local-hero: the developer runs on Opus 5.5 by default, on F
   assert.equal(loadWorkflow(WORKFLOW).orchestrator.limits.max_total_cost_usd, 120);
 });
 
+test('ai-development-local-hero (#286): an Extra high developer effort doubles the turn timeout; Default and High keep it', (t) => {
+  const make = (inputs) => {
+    const runsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ai-dev-effort-'));
+    t.after(() => fs.rmSync(runsDir, { recursive: true, force: true }));
+    return new WorkflowRun({ file: WORKFLOW, inputs: { task: 'Add the feature', repo_path: runsDir, ...inputs }, mock: true, runsDir });
+  };
+  const timeoutOf = (inputs) => { const r = make(inputs); return r.turnTimeout({ ...(r.wf.defaults || {}), ...r.wf.agents.developer }); };
+  assert.equal(timeoutOf({}), 30 * 60e3);
+  assert.equal(timeoutOf({ developer_effort: 'default' }), 30 * 60e3);
+  assert.equal(timeoutOf({ developer_effort: 'high' }), 30 * 60e3);
+  assert.equal(timeoutOf({ developer_effort: 'xhigh' }), 60 * 60e3);
+  assert.equal(timeoutOf({ developer_effort: 'xhigh', developer_model: 'claude-fable-5-1' }), 180 * 60e3, '3x for Fable 5.1, then 2x for Extra high');
+});
+
 // #247 (acceptance tests, written before the code): Ask for changes at the owner's validation gate
 // goes to the test writer first. It triages the request: criteria changed → it updates the affected
 // acceptance tests and scenarios, the red check runs on them, then develop; a simple change → nothing

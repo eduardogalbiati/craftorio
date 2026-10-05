@@ -1092,3 +1092,21 @@ test('applyEpicProposal: a preview writes nothing and never counts as applied', 
   });
   assert.equal(real.epic.number, 950);
 });
+
+// #286: the Cost step's cheaper agents leave the developer's model and effort alone (no measure yet
+// shows medium is as good), while another agent's effort input still goes to medium
+test('costInputs (#286): cheaper agents set writer_effort to medium but never developer_effort or developer_model', () => {
+  const step = { level: 'economy', name: 'Economy', unitTests: 'run_existing', e2eTests: 'off', screenshots: 'off', cheapAgents: true };
+  const effortEnum = ['default', 'low', 'medium', 'high', 'xhigh'];
+  const writer = productOwner.costInputs({ workflow: 'wr.yaml', inputs: {} }, step, [{ file: 'wr.yaml', inputs: { writer_effort: { enum: effortEnum, default: 'high' } } }]);
+  assert.equal(writer.inputs.writer_effort, 'medium');
+  const heroDeclared = {
+    developer_model: { enum: ['claude-opus-5-5', 'claude-fable-5-1'], default: 'claude-opus-5-5' },
+    developer_effort: { enum: effortEnum, default: 'default' },
+  };
+  const hero = productOwner.costInputs({ workflow: 'hero.yaml', inputs: { developer_effort: 'high' } }, step, [{ file: 'hero.yaml', inputs: heroDeclared }]);
+  assert.equal(hero.inputs.developer_effort, 'high', 'the item\'s own developer effort is kept');
+  assert.equal(hero.inputs.developer_model, undefined);
+  const fresh = productOwner.costInputs({ workflow: 'hero.yaml', inputs: {} }, step, [{ file: 'hero.yaml', inputs: heroDeclared }]);
+  assert.equal(fresh.inputs.developer_effort, undefined);
+});
