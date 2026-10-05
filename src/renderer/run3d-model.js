@@ -16,6 +16,8 @@
 //   at a step's start and go back to it; `floorOf` gives a replayed moment the floor of the whole run.
 // Browser: window.Run3DModel; Node: module.exports.
 (function (root) {
+  // names as people read them (display-name.js, #245): the YAML's display names when the workflow has them, else the slug made readable
+  const displayName = typeof module === 'object' && module.exports ? require('./display-name.js').displayName : root.displayName;
   const baseOf = (id) => String(id || '').split(':')[0]; // "develop:context_limit" → "develop"
   const subOf = (id) => String(id || '').split(':')[1] || null;
   const isSupervisor = (agent, stepId) => /^_?supervisor$/.test(agent || '') || subOf(stepId) === 'supervisor';
@@ -238,10 +240,10 @@
       return (this.robots[key] ||= { busy: false, act: 'thinking', tool: '', say: '', ctx: 0, doneAt: -Infinity, seen: false });
     }
 
-    label(id) { return this.steps.find((s) => s.id === id)?.label || id; }
+    label(id) { return this.steps.find((s) => s.id === id)?.label || displayName(id); }
 
     agentOf(name) {
-      return (this.agents[name] ||= { name, label: (this.displayAgents || {})[name] || String(name).replace(/_/g, ' '), provider: '', model: '' });
+      return (this.agents[name] ||= { name, label: displayName(name, this.displayAgents || {}), provider: '', model: '' });
     }
 
     // The robot an agent's turn animates: the one at that step's desk, else the agent's own desk (a
@@ -366,7 +368,7 @@
       this.steps = (ev.steps || []).map((s) => {
         const agents = s.agent ? String(s.agent).split('·').map((a) => a.trim()).filter(Boolean) : [];
         agents.forEach((a) => this.agentOf(a));
-        return { id: s.id, type: s.type || 'agent', agents, label: (display.steps || {})[s.id] || s.id };
+        return { id: s.id, type: s.type || 'agent', agents, label: displayName(s.id, display.steps || {}) };
       });
       this.state = Object.fromEntries(this.steps.map((s) => [s.id, { status: 'pending', visits: 0, note: '', handoff: '', ask: '', t0: 0, t1: null, before: 'pending', asked: false }]));
       this.say('running', `${this.run.workflow} started${this.run.resumedFrom ? ` (resumed at ${this.run.resumedFrom})` : ''}`, 'start');
