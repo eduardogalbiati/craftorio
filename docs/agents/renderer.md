@@ -307,6 +307,13 @@ changed in `style.css` goes into that skill too. In this app:
   (label above the control, `.hint` for the help line, `.row` for a pair); `.s-group`/`.s-row` for
   settings-like lists; `.switch` and `.check` for flags; `.seg` (`.sm`) for a small set of choices;
   `.empty-state`; the standard `select` / `input[type=text]` styles (their focus is on the control).
+- **Class names are per screen**: every stylesheet is global and `index.html` loads them in a
+  generated order, so a screen's own classes carry its prefix and no other screen reuses them. The
+  robot containers in particular: `ag-robot` is the Agents screen's 280px editor preview
+  (`views/agents/agents.css`), the Analytics Agents tab's 44px card robot is `an-robot`
+  (`views/analytics/analytics-insights.css`), the 3D HUD's `r3d-avatar`
+  (#297: a second `.ag-robot` once shrank the editor's preview to 44px; a test refuses one outside
+  `views/agents/`).
 - **Controls follow the data**: workflow inputs are always drawn by `WorkflowInputs`
   (`workflow-inputs.js`, #116), never by hand: the input's `label` (or one derived from the key; a
   YAML slug is never shown), its `options` labels, pills (`.seg`) for an enum of up to 5 short

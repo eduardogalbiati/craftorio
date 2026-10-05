@@ -37,10 +37,11 @@ export const Icon = ({ name, size = 17 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={ICON[name]} /></svg>
 );
 
-// A robot of robots.js as it is (Robots.svg), in the agent's colour and state.
+// A robot of robots.js as it is (Robots.svg), in the agent's state: the look saved in Agents as saved,
+// else the provider's robot painted in the role's colour (agentDef's variant and paint, #297).
 function Avatar({ agent, state, size = 30, bubble = false }) {
   const def = agent === 'supervisor' ? { variant: 'supervisor' } : agentDef(agent);
-  const svg = useMemo(() => window.Robots.svg(def.variant, state, { ...(def.color ? { color: def.color } : {}), bubble, plaque: '' }), [def.variant, def.color, state, bubble]);
+  const svg = useMemo(() => window.Robots.svg(def.variant, state, { ...(def.paint ? { color: def.paint } : {}), bubble, plaque: '' }), [def.variant, def.paint, state, bubble]);
   return <div className="r3d-avatar" style={{ width: size, height: size }} dangerouslySetInnerHTML={{ __html: svg }} />;
 }
 const Badge = ({ icon, color, size = 30 }) => (

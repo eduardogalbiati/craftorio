@@ -102,16 +102,26 @@ function providerType(provider, model) {
   if (fn) return fn(provider, model);
   return { claude: 'claude-code', codex: 'codex-cli', grok: 'grok-cli' }[provider] || provider || '';
 }
-/** An agent of the run: { name, label, model, provider, color (#RRGGBB), variant (Robots) }. */
+/**
+ * An agent of the run: { name, label, model, provider, color (#RRGGBB: the role's colour, for its desk
+ * and chips), variant (Robots: the look saved in Agents, else the provider's robot), paint (the colour
+ * the robot is painted in: the role's colour, nothing over a saved look, #297) }.
+ */
 export function agentDef(name) {
   if (looks.has(name)) return looks.get(name);
   const m = view.model, a = m.agents[name] || { name, label: String(name).replace(/_/g, ' '), provider: '', model: '' };
   const colors = window.AgentColors;
   const def = colors?.defIn(view.workflows, m.run.file || m.run.workflow, name) || colors?.defIn(view.workflows, m.run.workflow, name);
+  const color = colors ? colors.hexFor(name, def) : '#7C5CFF'; // the role's colour, the same in both themes
+  // the look customised in Agents, keyed by the workflow's file without .yaml or its name (agents.js),
+  // read when the overlay opens: a look saved meanwhile shows on the next opening
+  const file = String(m.run.file || '').replace(/\.ya?ml$/i, '');
+  const saved = (file && window.AgentLooks?.forWorkflow(file, name)) || window.AgentLooks?.forWorkflow(m.run.workflow, name) || null;
   const look = {
     ...a,
-    color: colors ? colors.hexFor(name, def) : '#7C5CFF', // the role's colour, the same in both themes
-    variant: window.Robots.variantFor(providerType(a.provider, a.model), a.model || ''),
+    color,
+    paint: saved ? '' : color,
+    variant: saved || window.Robots.variantFor(providerType(a.provider, a.model), a.model || ''),
   };
   // a robot seen before its session opened gets its model later: cache only a complete look
   if (a.model) looks.set(name, look);

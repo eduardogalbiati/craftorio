@@ -158,7 +158,7 @@ function Seat({ st, agent, x }) {
       <B {...S(10, -26, 44, 130, 16, 150)} c={CHAIR} r={0.06} />
       <B {...S(62, 70, 0, 26, 26, 40)} c={darken(CHAIR, 0.2)} />
       <B {...S(0, 10, 40, 150, 170, 14)} c={CHAIR} r={0.05} />
-      <Robot variant={def.variant} color={def.color} state={state} seated />
+      <Robot variant={def.variant} color={def.paint} state={state} seated />
       <B {...S(50, 174, 152, 84, 56, 5)} c={T.laptop} r={0.02} />
       <B {...S(50, 230, 152, 84, 5, 46)} c={T.laptopLid} r={0.02} />
       <mesh ref={screen} position={[0.17, 1.75, 1.54]} rotation-y={Math.PI}>

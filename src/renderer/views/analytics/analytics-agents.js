@@ -54,7 +54,7 @@
   }
 
   // ---- the cards ---------------------------------------------------------------------------
-  const head = (g, state) => `<span class="ag-card-head"><span class="ag-robot" aria-hidden="true">${window.Robots ? window.Robots.svg(g.id, state, { bubble: false, plaque: '' }) : ''}</span><b class="ag-name">${esc(g.name)}</b></span>`;
+  const head = (g, state) => `<span class="ag-card-head"><span class="an-robot" data-testid="agents-card-robot" aria-hidden="true">${window.Robots ? window.Robots.svg(g.id, state, { bubble: false, plaque: '' }) : ''}</span><b class="ag-name">${esc(g.name)}</b></span>`;
 
   function oracleLines(a) {
     const t = a.totals;
