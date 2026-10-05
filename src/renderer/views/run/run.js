@@ -671,6 +671,7 @@ registerView({
             <button id="run-mode-chat" type="button" title="Follow this run as a chat">Chat</button>
             <button type="button" class="active" aria-pressed="true">Details</button>
           </div>
+          <button id="run-mode-3d" class="btn ghost sm" type="button" data-run3d="run" data-testid="run-3d" title="Show this run in 3D">3D</button>
         </div>
         <div class="run-layout">
           <aside class="panel config">

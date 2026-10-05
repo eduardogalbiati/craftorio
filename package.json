@@ -10,8 +10,8 @@
   "scripts": {
     "docs": "node scripts/docs.js",
     "lint:lists": "node scripts/lint-lists.js",
-    "prepare": "node scripts/docs.js --derived",
-    "prestart": "node scripts/docs.js --derived",
+    "prepare": "node scripts/docs.js --derived && node scripts/build-3d.js",
+    "prestart": "node scripts/docs.js --derived && node scripts/build-3d.js",
     "start": "electron .",
     "run": "node scripts/run.js",
     "serve": "node scripts/serve.js",
@@ -23,8 +23,9 @@
     "test:e2e": "bddgen && playwright test",
     "test:e2e:update": "bddgen && playwright test --update-snapshots",
     "test:engine": "node scripts/run.js --mock --auto-approve --task \"Engine test\"",
-    "prebuild": "node scripts/docs.js --derived",
+    "prebuild": "node scripts/docs.js --derived && node scripts/build-3d.js",
     "build": "node scripts/package.js build",
+    "build:3d": "node scripts/build-3d.js",
     "package": "node scripts/package.js"
   },
   "dependencies": {
@@ -43,8 +44,13 @@
     "@electron/fuses": "^2.1.3",
     "@electron/packager": "^20.3.0",
     "@playwright/test": "^1.63.0",
+    "@react-three/fiber": "^8.18.0",
     "electron": "^44.4.5",
-    "playwright-bdd": "^9.2.1"
+    "esbuild": "^0.28.2",
+    "playwright-bdd": "^9.2.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "three": "^0.169.0"
   },
   "allowScripts": {
     "node-pty@1.1.0": true

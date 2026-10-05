@@ -26,6 +26,16 @@ test('--help prints the header comment: every option, without comment markers', 
   assert.doesNotMatch(text, /^\/\//m);
 });
 
+test('--press takes an element and a part of its width, --key a key (Space, Shift+<key>): what listens to the pointer or the keyboard', () => {
+  const a = parseArgs(['--view', 'run-chat', '--click', '#rc-3d', '--press', '[data-testid=run3d-strip]@0.4', '--press', '.slider', '--key', 'Space', '--key', 'Shift+ArrowLeft']);
+  assert.deepEqual(a.presses, [{ sel: '[data-testid=run3d-strip]', at: 0.4 }, { sel: '.slider', at: 0.5 }]);
+  assert.deepEqual(a.keys, [{ key: ' ', shift: false }, { key: 'ArrowLeft', shift: true }]);
+  assert.throws(() => parseArgs(['--press', '.slider@2']), /--press takes <css> or <css>@<0\.\.1>/);
+  assert.throws(() => parseArgs(['--key', 'Ctrl+A']), /--key takes a key name, or Shift\+<key>/);
+  assert.match(usage(), /--press <css>\[@f\]/);
+  assert.match(usage(), /--key <key>/);
+});
+
 test('the backlog view offers roadmap and epics modes, alongside list and kanban', () => {
   assert.deepEqual(VIEWS.backlog.modes, ['list', 'kanban', 'roadmap', 'epics']);
   assert.equal(parseArgs(['--view', 'backlog', '--mode', 'roadmap']).name, 'backlog-roadmap');
