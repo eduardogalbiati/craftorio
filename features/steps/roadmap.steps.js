@@ -317,14 +317,12 @@ const seconds = (text) => {
   return c == null ? a * 60 + b : a * 3600 + b * 60 + c;
 };
 
-Then('the roadmap item {string} shows a run timer under its progress ring', async ({ e2e }, title) => {
+// #282: the timer is the value of the item's Time meter, and the only timer on the card
+Then('the roadmap item {string} shows a run timer in its Time line', async ({ e2e }, title) => {
   const item = roadmapItem(e2e.window, title);
-  const clock = timer(e2e.window, title);
-  await expect(clock).toBeVisible({ timeout: LOAD_TIMEOUT });
-  const ring = await ringOf(item).boundingBox();
-  const box = await clock.boundingBox();
-  expect(box.y, 'the timer is below the ring').toBeGreaterThanOrEqual(ring.y + ring.height - 1);
-  expect(box.x + box.width > ring.x && box.x < ring.x + ring.width, 'the timer is under the ring').toBe(true);
+  const line = item.getByTestId('roadmap-meter-time');
+  await expect(line.getByTestId('roadmap-run-timer')).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(item.getByTestId('roadmap-run-timer')).toHaveCount(1);
 });
 
 Then('the run timer of the roadmap item {string} reads about {int} minutes', async ({ e2e }, title, minutes) => {
@@ -374,8 +372,8 @@ Then('the progress of the roadmap item {string} has not dropped', async ({ e2e }
 });
 
 // ---- #279: "Update the app after this" ---------------------------------------------------------------
-// data-testid="roadmap-update-after": a switch (checkbox named "Update the app after this") on an item
-// card, only when applying merged fixes to the app applies in this workspace (item.updateAfter).
+// #285 removed the switch (data-testid="roadmap-update-after", a checkbox named "Update the app after
+// this"): the step asserts that no card draws it any more.
 
 Then('the roadmap item {string} offers no {string} switch', async ({ e2e }, title, name) => {
   const item = roadmapItem(e2e.window, title);

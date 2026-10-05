@@ -124,11 +124,11 @@ Feature: Roadmap statuses, done items, filters and run timers
   # events (as the engine records it), then reloading the app.
 
   @issue-272
-  Scenario: A running item shows a live timer under its progress ring, within its estimate
+  Scenario: A running item shows a live timer in its Time line, within its estimate
     Given the app is open
     When I open "Backlog" in the sidebar
     And I open the Roadmap
-    Then the roadmap item "Keyboard focus is lost after closing a dialog" shows a run timer under its progress ring
+    Then the roadmap item "Keyboard focus is lost after closing a dialog" shows a run timer in its Time line
     And the run timer of the roadmap item "Keyboard focus is lost after closing a dialog" reads about 52 minutes
     And the run timer of the roadmap item "Keyboard focus is lost after closing a dialog" ticks
     And the run timer of the roadmap item "Keyboard focus is lost after closing a dialog" is coloured "ok"

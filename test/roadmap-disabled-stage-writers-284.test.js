@@ -71,3 +71,29 @@ test('#284 restore: an Undo that would disable a stage whose item started meanwh
   assert.throws(() => roadmaps.restoreStages(dir, 'p1', (now) => now.map((s) => ({ ...s, disabled: true }))), /running.*before disabling/i);
   assert.equal('disabled' in roadmaps.readRoadmap(dir, 'p1').stages[0], false);
 });
+
+// The file stores an item whose run is in progress as `planned` with its runId (src/roadmap.js
+// persisted): a running run is told by the service's `alive(runId)`, as for propose / dropIssues /
+// itemAction. The cases above store `status: 'running'`, which the file never holds.
+const alive = (id) => id === 'live';
+const stored = () => [
+  { id: 's1', name: 'One', note: '', items: [mkItem('a', 1, { runId: 'live', runs: ['live'] })] },
+  { id: 's2', name: 'Two', note: '', items: [mkItem('b', 2, { runId: 'gone', runs: ['gone'] })] },
+];
+
+test('#284 save: disabling a stage whose run is alive (stored planned with its runId) is refused; a finished run does not block', (t) => {
+  const dir = tmp(t);
+  const stages = stored();
+  write(dir, stages);
+  assert.throws(() => roadmaps.saveStages(dir, 'p1', [sent(stages[0], { disabled: true }), sent(stages[1])], { alive }), /running.*before disabling/i);
+  assert.equal(roadmaps.readRoadmap(dir, 'p1').stages.some((s) => s.disabled), false);
+  roadmaps.saveStages(dir, 'p1', [sent(stages[0]), sent(stages[1], { disabled: true })], { alive });
+  assert.deepEqual(roadmaps.readRoadmap(dir, 'p1').stages.map((s) => !!s.disabled), [false, true]);
+});
+
+test('#284 restore: an Undo that would disable a stage whose run is alive (stored planned with its runId) is refused', (t) => {
+  const dir = tmp(t);
+  write(dir, stored());
+  assert.throws(() => roadmaps.restoreStages(dir, 'p1', (now) => now.map((s) => ({ ...s, disabled: s.id === 's1' })), { alive }), /running.*before disabling/i);
+  assert.equal('disabled' in roadmaps.readRoadmap(dir, 'p1').stages[0], false);
+});

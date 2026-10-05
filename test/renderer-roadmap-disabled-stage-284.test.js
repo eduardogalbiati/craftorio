@@ -172,3 +172,17 @@ test('#284 when every enabled stage is finished the screen says one disabled sta
   ], { state: 'done' });
   assert.match(H.visibleText(draw(R, d)), /1 disabled stage/);
 });
+
+// ---- the view grouped by epic -------------------------------------------------------------------------
+
+test('#284 grouped by epic, an item of a disabled stage is dimmed and says "stage n · disabled"; the others do not', async () => {
+  const { R } = load();
+  const d = { ...withDisabled(), epics: [{ id: 'E1', title: 'Epic one' }], issues: [1, 2, 3].map((number) => ({ number, title: `Issue ${number}`, epic: 'E1' })) };
+  const { ctx } = H.makeCtx();
+  await R.onChange({ target: { matches: (sel) => sel === '[data-rm-by-epic]', checked: true } }, ctx, d);
+  const items = H.findAll(draw(R, d), (e) => e.attrs['data-testid'] === 'roadmap-item');
+  const row = (n) => items.find((e) => text(e).includes(`Issue ${n}`));
+  assert.deepEqual([2, 3].map((n) => !!row(n)), [true, true]);
+  assert.deepEqual([hasClass(row(2), 'rm-item-off'), /stage 2 · disabled/.test(text(row(2)))], [true, true]);
+  assert.deepEqual([hasClass(row(3), 'rm-item-off'), /disabled/.test(text(row(3)))], [false, false]);
+});
