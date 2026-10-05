@@ -592,7 +592,8 @@
   // Left: the workflow's name with "Open run →" (#266: the run chip; an item with a run) or Edit (an
   // editable item), the mode toggle, then the rest in one row: the push badge (#195), Simulated, the
   // chain (#134), the Product Owner's Cost step (#205) and the other inputs (#216, WorkflowInputs.
-  // inputPills). Right: the pipeline.
+  // inputPills). Right: the pipeline. Not drawn (#285): the "Update the app after this" switch of
+  // #279 (data-testid="roadmap-update-after"), which the E2E steps assert absent on every card.
   function workflowHtml(x, locked, open, v) {
     const push = pushesAgainstDefault(x);
     const name = readable(String(x.run?.workflow || x.workflow || '').replace(/\.ya?ml$/i, ''));
