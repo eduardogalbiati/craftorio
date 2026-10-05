@@ -22,7 +22,9 @@ When('I draw a cut line {string} after stage {int}', async ({ e2e }, name, n) =>
   const page = e2e.window;
   const stage = stages(page).nth(n - 1);
   await expect(stage, `the roadmap's stage ${n}`).toBeVisible();
-  await stage.getByRole('button', { name: 'Release here', exact: true }).first().click();
+  // #282: the stage's actions are in its ⋮ menu
+  await stage.getByTestId('roadmap-stage-menu').click();
+  await page.getByRole('menu').getByRole('menuitem', { name: /Release here/ }).click();
   const dialog = page.getByRole('dialog').filter({ has: page.getByRole('textbox', { name: 'Release name' }) });
   await expect(dialog).toBeVisible();
   await dialog.getByRole('textbox', { name: 'Release name' }).fill(name);

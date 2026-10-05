@@ -1,7 +1,7 @@
 // #279 internals (the developer's tests, next to the acceptance tests of test/app-update-279.test.js):
-// the Undo's goBack, the remote URL comparison, the failed-update window, a marked item in the
-// "every stage" mode, and the Settings row's HTML (src/renderer/views/settings/settings.js, run in a
-// vm sandbox as the other renderer tests do).
+// the Undo's goBack, the remote URL comparison, the failed-update window, the single trigger (#285: a
+// stored appUpdateWhen 'marked' is ignored), and the Settings row's HTML (src/renderer/views/settings/
+// settings.js, run in a vm sandbox as the other renderer tests do; #285: no "When" choice).
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
@@ -77,9 +77,11 @@ test('#279 failedUpdate: none within 2 minutes of the intent, the command to go 
   assert.equal(f.command, 'git -C "C:/app" checkout febef8b');
 });
 
-test('#279 updateDue: a marked item updates in the "every stage" mode too', () => {
-  assert.equal(appUpdate.updateDue({ selfHealing: true, on: true, when: 'stage', event: { type: 'item-merged', item: { updateAfter: true } }, behind: 1 }), true);
-  assert.equal(appUpdate.updateDue({ selfHealing: true, on: true, when: 'stage', event: { type: 'item-merged', item: {} }, behind: 1 }), false);
+test('#285 updateDue: a stored appUpdateWhen "marked" is ignored: a stage end updates, a merged item does not', () => {
+  assert.deepEqual([
+    appUpdate.updateDue({ selfHealing: true, on: true, when: 'marked', event: { type: 'stage-done' }, behind: 1 }),
+    appUpdate.updateDue({ selfHealing: true, on: true, when: 'marked', event: { type: 'item-merged', item: { updateAfter: true } }, behind: 1 }),
+  ], [true, false]);
 });
 
 // ---- the Settings row -------------------------------------------------------------------------
@@ -103,16 +105,32 @@ test('#279 Settings row: unavailable says why, off and disabled, with no source 
   assert.doesNotMatch(html, /id="set-app-update"[^>]* checked/);
 });
 
-test('#279 Settings row: applies, with the source, the When modes and the switch; Self-healing off disables it', () => {
+test('#279 Settings row: applies, with the source and the switch; Self-healing off disables it', () => {
   const info = { applies: true, project: { id: 'p1', name: 'multiagent-orchestrator' }, short: '5d9be33', behind: 3 };
-  const on = appUpdateHtml({ selfHealing: true, appUpdate: true, appUpdateWhen: 'stage' }, info);
+  const on = appUpdateHtml({ selfHealing: true, appUpdate: true }, info);
   assert.match(on, /data-testid="app-update-source"/);
   assert.match(on, /multiagent-orchestrator/);
   assert.match(on, /5d9be33/);
   assert.match(on, /3 commits ahead of this app/);
-  assert.match(on, /data-app-update-when="stage" aria-pressed="true"/);
   assert.match(on, /id="set-app-update"[^>]* checked/);
   const off = appUpdateHtml({ selfHealing: false, appUpdate: true }, info);
   assert.match(off, /Turn Self-healing on first/);
   assert.match(off, /id="set-app-update"[^>]* disabled/);
+});
+
+const APPLIES = { applies: true, project: { id: 'p1', name: 'multiagent-orchestrator' }, short: '5d9be33', behind: 3 };
+
+test('#285 Settings row: no "When" choice is rendered, even with a stored appUpdateWhen', () => {
+  const html = appUpdateHtml({ selfHealing: true, appUpdate: true, appUpdateWhen: 'marked' }, APPLIES);
+  assert.deepEqual([/data-app-update-when/.test(html), /data-testid="app-update-when"/.test(html), />\s*When:/.test(html)], [false, false, false]);
+});
+
+test('#285 Settings row: the row says the app updates after a roadmap stage ends', () => {
+  const html = appUpdateHtml({ selfHealing: true, appUpdate: true }, APPLIES);
+  assert.match(html.replace(/<[^>]*>/g, ' '), /after a roadmap stage/i);
+});
+
+test('#285 Settings row: nothing mentions "Update the app after this" any more', () => {
+  const html = appUpdateHtml({ selfHealing: true, appUpdate: true }, APPLIES);
+  assert.equal(/Update the app after this/.test(html), false);
 });

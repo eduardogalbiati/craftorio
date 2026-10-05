@@ -2,7 +2,9 @@
 // "+n done" chip (#267), the date filter, the Planned | All switch, infinite scroll and the header
 // count (#268), the live run timer and a fix round (#272), no "Update the app after this" switch (#279),
 // the bar's state dot, icons, ⋮ menu and filter row (#269), "Ask the Oracle about this failure" (#271),
-// Undo a removal and earlier versions (#281), the developer's effort in Edit and on the card (#286), on the demo roadmap (scripts/screenshot.js
+// Undo a removal and earlier versions (#281), the developer's effort in Edit and on the card (#286),
+// the item card's bands, Workflow band, pipeline and the
+// stage actions menu (#282), disabling a stage (#284), no "Update the app after this" control (#285), on the demo roadmap (scripts/screenshot.js
 // demoRoadmap / demoRoadmapRuns). Locators are roles and data-testid only (skills/ui-conventions).
 //
 // What the screens expose (the renderer's contract for these steps):
@@ -678,4 +680,184 @@ Then('the roadmap item {string} shows no {string} input', async ({ e2e }, title,
   const item = roadmapItem(e2e.window, title);
   await expect(item).toBeVisible({ timeout: LOAD_TIMEOUT });
   await expect(item.getByTestId('input-pill').filter({ hasText: new RegExp(`^\\s*${escapeRe(label)}:`) })).toHaveCount(0);
+});
+
+// ---- #282: the item card's bands, its Workflow band and pipeline, the stage actions menu ---------------
+// What the card exposes (new for #282), inside data-testid="roadmap-item":
+// - the issues band: the issue titles and data-testid="roadmap-issues-foot" ("N issues · complexity C");
+//   the meters data-testid="roadmap-meter-cost" and "roadmap-meter-time"; one status block
+//   data-testid="roadmap-status" (the ring, the status pill, the step, the full round line).
+// - data-testid="roadmap-workflow": the Workflow band, with data-testid="roadmap-workflow-name" (the
+//   workflow's display name), data-testid="roadmap-mode" (buttons data-mode="auto" / "validated", named
+//   "Automatic" / "Validated", aria-pressed; a click saves the item's mode at once) and
+//   data-testid="roadmap-pipeline", always shown: its stations data-testid="roadmap-station" with
+//   data-state = done | running | back | todo | gate (the owner's gate reads "Your check").
+// Each stage (data-testid="roadmap-stage") has a ⋮ button data-testid="roadmap-stage-menu" (accessible
+// name "Stage actions", aria-haspopup="menu", aria-expanded) opening a role="menu" of role="menuitem"
+// entries (Release here, Run this stage, Run earlier / later, the note, Disable / Enable); Enter opens it
+// and focuses its first entry, Esc closes it and gives the focus back to the ⋮ button.
+
+const MODES = { Automatic: 'auto', Validated: 'validated' };
+const workflowBand = (page, title) => roadmapItem(page, title).getByTestId('roadmap-workflow');
+const pipeline = (page, title) => workflowBand(page, title).getByTestId('roadmap-pipeline');
+const stations = (page, title) => pipeline(page, title).getByTestId('roadmap-station');
+const modeButton = (page, title, label) => {
+  expect(Object.keys(MODES), `a mode named "${label}"`).toContain(label);
+  return workflowBand(page, title).getByTestId('roadmap-mode').locator(`button[data-mode="${MODES[label]}"]`);
+};
+const stageMenuButton = (page, n) => stage(page, n).getByRole('button', { name: 'Stage actions', exact: true });
+const stageMenu = (page) => page.getByRole('menu').filter({ visible: true }).first();
+
+Then('the roadmap item {string} shows its issues, its cost and time meters and one status block', async ({ e2e }, title) => {
+  const item = roadmapItem(e2e.window, title);
+  await expect(item).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(item.getByTestId('roadmap-issues-foot')).toBeVisible();
+  await expect(item.getByTestId('roadmap-meter-cost')).toBeVisible();
+  await expect(item.getByTestId('roadmap-meter-time')).toBeVisible();
+  await expect(item.getByTestId('roadmap-status')).toHaveCount(1);
+  await expect(item.getByTestId('roadmap-status')).toBeVisible();
+});
+
+// the complexity follows the count only when the item has one (the demo items may not)
+Then('the issues footer of the roadmap item {string} counts {string}', async ({ e2e }, title, count) => {
+  await expect(roadmapItem(e2e.window, title).getByTestId('roadmap-issues-foot')).toHaveText(new RegExp(`^${escapeRe(count)}( · complexity \\S+)?$`));
+});
+
+Then('the Workflow band of the roadmap item {string} names the workflow {string}', async ({ e2e }, title, name) => {
+  await expect(workflowBand(e2e.window, title).getByTestId('roadmap-workflow-name')).toHaveText(new RegExp(`^${escapeRe(name)}$`, 'i'), { timeout: LOAD_TIMEOUT });
+});
+
+Then('the roadmap item {string} is in {string} mode', async ({ e2e }, title, label) => {
+  await expect(modeButton(e2e.window, title, label)).toHaveAttribute('aria-pressed', 'true', { timeout: LOAD_TIMEOUT });
+  for (const other of Object.keys(MODES).filter((x) => x !== label)) {
+    await expect(modeButton(e2e.window, title, other)).toHaveAttribute('aria-pressed', 'false');
+  }
+});
+
+When('I switch the roadmap item {string} to {string} mode', async ({ e2e }, title, label) => {
+  const button = modeButton(e2e.window, title, label);
+  await button.scrollIntoViewIfNeeded();
+  await expect(button).toHaveAccessibleName(label);
+  await button.click();
+  await expect(button).toHaveAttribute('aria-pressed', 'true');
+});
+
+// the gate station: the owner's check ("Your check"), data-state="gate"
+Then('the pipeline of the roadmap item {string} shows the {string} station, waiting for me', async ({ e2e }, title, name) => {
+  await expect(pipeline(e2e.window, title)).toBeVisible({ timeout: LOAD_TIMEOUT });
+  const station = stations(e2e.window, title).filter({ hasText: name });
+  await expect(station).toHaveCount(1);
+  await expect(station).toHaveAttribute('data-state', 'gate');
+});
+
+Then('the pipeline of the roadmap item {string} shows no {string} station', async ({ e2e }, title, name) => {
+  await expect(pipeline(e2e.window, title)).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(stations(e2e.window, title).first()).toBeVisible();
+  await expect(stations(e2e.window, title).filter({ hasText: name })).toHaveCount(0);
+  await expect(pipeline(e2e.window, title).locator('[data-testid="roadmap-station"][data-state="gate"]')).toHaveCount(0);
+});
+
+// done stations first, exactly one running station after them, the rest still to do
+Then('the pipeline of the roadmap item {string} shows done stations, then one running station', async ({ e2e }, title) => {
+  await expect(pipeline(e2e.window, title)).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(pipeline(e2e.window, title).locator('[data-testid="roadmap-station"][data-state="running"]')).toHaveCount(1);
+  const states = await stations(e2e.window, title).evaluateAll((els) => els.map((el) => el.getAttribute('data-state')));
+  const running = states.indexOf('running');
+  expect(running, `a done station before the running one in ${states.join(', ')}`).toBeGreaterThan(0);
+  expect(states.slice(0, running).every((s) => s === 'done'), `only done stations before the running one: ${states.join(', ')}`).toBe(true);
+  expect(states.slice(running + 1).every((s) => s === 'todo' || s === 'gate'), `only stations to do after the running one: ${states.join(', ')}`).toBe(true);
+});
+
+Then('stage {int} offers no {string} button outside its stage actions menu', async ({ e2e }, n, name) => {
+  await expect(stageMenuButton(e2e.window, n)).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(stageMenuButton(e2e.window, n)).toHaveAttribute('data-testid', 'roadmap-stage-menu');
+  await expect(stage(e2e.window, n).getByRole('button', { name, exact: true })).toHaveCount(0);
+});
+
+When('I open the stage actions menu of stage {int} with the keyboard', async ({ e2e }, n) => {
+  const page = e2e.window;
+  const button = stageMenuButton(page, n);
+  await expect(button).toHaveAttribute('aria-haspopup', 'menu', { timeout: LOAD_TIMEOUT });
+  await button.focus();
+  await page.keyboard.press('Enter');
+  await expect(stageMenu(page)).toBeVisible();
+  await expect(button).toHaveAttribute('aria-expanded', 'true');
+});
+
+When('I open the stage actions menu of stage {int}', async ({ e2e }, n) => {
+  const button = stageMenuButton(e2e.window, n);
+  await button.scrollIntoViewIfNeeded();
+  await button.click();
+  await expect(stageMenu(e2e.window)).toBeVisible();
+});
+
+Then("the stage actions menu's first entry is focused", async ({ e2e }) => {
+  await expect(stageMenu(e2e.window).getByRole('menuitem').first()).toBeFocused();
+});
+
+Then('the stage actions menu offers {string}', async ({ e2e }, name) => {
+  await expect(stageMenu(e2e.window).getByRole('menuitem', { name, exact: true })).toBeVisible();
+});
+
+Then('the stage actions menu offers {string}, disabled', async ({ e2e }, name) => {
+  const entry = stageMenu(e2e.window).getByRole('menuitem', { name, exact: true });
+  await expect(entry).toBeVisible();
+  await expect(entry).toBeDisabled();
+});
+
+When('I choose {string} in the stage actions menu', async ({ e2e }, name) => {
+  await stageMenu(e2e.window).getByRole('menuitem', { name, exact: true }).click();
+});
+
+Then('the stage actions menu of stage {int} is closed, its ⋮ button focused', async ({ e2e }, n) => {
+  const page = e2e.window;
+  await expect(page.getByRole('menu').filter({ visible: true })).toHaveCount(0);
+  await expect(stageMenuButton(page, n)).toHaveAttribute('aria-expanded', 'false');
+  await expect(stageMenuButton(page, n)).toBeFocused();
+});
+
+// ---- #284: disable a stage ------------------------------------------------------------------------------
+// "Disable" / "Enable" in the stage actions menu is data-testid="roadmap-stage-toggle"; a disabled stage
+// keeps its place and number with data-disabled="true" on its section and a "Disabled" badge
+// (data-testid="roadmap-stage-disabled"); "Run this stage" is disabled in its menu.
+
+Then('the stage actions menu entry {string} is the stage toggle', async ({ e2e }, name) => {
+  await expect(stageMenu(e2e.window).getByRole('menuitem', { name, exact: true })).toHaveAttribute('data-testid', 'roadmap-stage-toggle');
+});
+
+Then('stage {int} is shown as disabled', async ({ e2e }, n) => {
+  const s = stage(e2e.window, n);
+  await expect(s).toHaveAttribute('data-disabled', 'true', { timeout: LOAD_TIMEOUT });
+  await expect(s.getByTestId('roadmap-stage-disabled')).toHaveText('Disabled');
+});
+
+Then('stage {int} is not shown as disabled', async ({ e2e }, n) => {
+  const s = stage(e2e.window, n);
+  await expect(s).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(s).not.toHaveAttribute('data-disabled', 'true');
+  await expect(s.getByTestId('roadmap-stage-disabled')).toHaveCount(0);
+});
+
+Then('stage {int} shows {int} item card(s)', async ({ e2e }, n, count) => {
+  await expect(stage(e2e.window, n).getByTestId('roadmap-item')).toHaveCount(count);
+});
+
+// in the page's order of stage sections, numbered as the roadmap numbers them ("Stage 3")
+Then('stage {int} sits between stage {int} and stage {int}', async ({ e2e }, n, before, after) => {
+  const page = e2e.window;
+  await expect(stage(page, after)).toBeVisible();
+  const order = await page.getByTestId('roadmap-stage').evaluateAll((els, ns) => ns.map((k) => els.findIndex((el) => new RegExp(`\\bStage ${k}\\b`).test(el.textContent))), [before, n, after]);
+  expect(order.every((i) => i >= 0), `stages ${before}, ${n} and ${after} are shown`).toBe(true);
+  expect(order[0] < order[1] && order[1] < order[2], `stage ${n} between stage ${before} and stage ${after}`).toBe(true);
+});
+
+// ---- #285: no "Update the app after this" control ------------------------------------------------------
+
+Then('no roadmap item shows an {string} control', async ({ e2e }, name) => {
+  const items = e2e.window.getByTestId('roadmap-item');
+  await expect(items.first()).toBeVisible({ timeout: LOAD_TIMEOUT });
+  await expect(items.getByTestId('roadmap-update-after')).toHaveCount(0);
+  await expect(items.getByRole('checkbox', { name, exact: true })).toHaveCount(0);
+  await expect(items.getByRole('switch', { name, exact: true })).toHaveCount(0);
+  await expect(items.getByText(name, { exact: true })).toHaveCount(0);
 });

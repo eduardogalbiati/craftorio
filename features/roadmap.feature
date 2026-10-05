@@ -330,3 +330,99 @@ Feature: Roadmap statuses, done items, filters and run timers
     And I edit the inputs of the roadmap item "Planned item 1001"
     And I save the inputs of the roadmap item "Planned item 1001"
     Then the roadmap item "Planned item 1001" shows no "Developer effort" input
+
+  # ---- #282: the item card's bands, its Workflow band and pipeline, the stage actions menu -------------
+  # "Dark scrollbars in the terminal dock" (#10) is planned in Validated mode on the software-development
+  # workflow (its owner's gate is "Your check"); "Keyboard focus is lost after closing a dialog" (#16)
+  # runs in Automatic mode, in code review. Stage 3 is "Reports and health", planned, with no cut line.
+
+  @issue-282
+  Scenario: A running item shows its issues, its cost and time meters, one status block and its pipeline
+    Given the app is open
+    When I open "Backlog" in the sidebar
+    And I open the Roadmap
+    Then the roadmap item "Keyboard focus is lost after closing a dialog" shows its issues, its cost and time meters and one status block
+    And the issues footer of the roadmap item "Keyboard focus is lost after closing a dialog" counts "1 issue"
+    And the Workflow band of the roadmap item "Keyboard focus is lost after closing a dialog" names the workflow "Software development local hero"
+    And the roadmap item "Keyboard focus is lost after closing a dialog" is in "Automatic" mode
+    And the pipeline of the roadmap item "Keyboard focus is lost after closing a dialog" shows done stations, then one running station
+    And the pipeline of the roadmap item "Keyboard focus is lost after closing a dialog" shows no "Your check" station
+
+  @issue-282
+  Scenario: Switching a planned item between Validated and Automatic adds and removes "Your check", saved at once
+    Given the app is open
+    When I open "Backlog" in the sidebar
+    And I open the Roadmap
+    Then the roadmap item "Dark scrollbars in the terminal dock" is in "Validated" mode
+    And the pipeline of the roadmap item "Dark scrollbars in the terminal dock" shows the "Your check" station, waiting for me
+    When I switch the roadmap item "Dark scrollbars in the terminal dock" to "Automatic" mode
+    Then the pipeline of the roadmap item "Dark scrollbars in the terminal dock" shows no "Your check" station
+    When I reload the app
+    And I open "Backlog" in the sidebar
+    And I open the Roadmap
+    Then the roadmap item "Dark scrollbars in the terminal dock" is in "Automatic" mode
+    And the pipeline of the roadmap item "Dark scrollbars in the terminal dock" shows no "Your check" station
+    When I switch the roadmap item "Dark scrollbars in the terminal dock" to "Validated" mode
+    Then the pipeline of the roadmap item "Dark scrollbars in the terminal dock" shows the "Your check" station, waiting for me
+
+  @issue-282
+  Scenario: A stage's actions live in its ⋮ menu, which the keyboard opens and Escape closes
+    Given the app is open
+    When I open "Backlog" in the sidebar
+    And I open the Roadmap
+    Then stage 3 offers no "Run this stage" button outside its stage actions menu
+    When I open the stage actions menu of stage 3 with the keyboard
+    Then the stage actions menu's first entry is focused
+    And the stage actions menu offers "Release here"
+    And the stage actions menu offers "Run this stage"
+    And the stage actions menu offers "Disable"
+    When I press Escape
+    Then the stage actions menu of stage 3 is closed, its ⋮ button focused
+
+  # ---- #284: disable a stage ----------------------------------------------------------------------------
+
+  @issue-284
+  Scenario: Disabling a stage keeps it in place with a "Disabled" badge, and Enable brings it back
+    Given the app is open
+    When I open "Backlog" in the sidebar
+    And I open the Roadmap
+    And I open the stage actions menu of stage 3
+    Then the stage actions menu entry "Disable" is the stage toggle
+    When I choose "Disable" in the stage actions menu
+    Then stage 3 is shown as disabled
+    When I open the stage actions menu of stage 3
+    Then the stage actions menu offers "Run this stage", disabled
+    And the stage actions menu offers "Enable"
+    And the stage actions menu entry "Enable" is the stage toggle
+    When I choose "Enable" in the stage actions menu
+    Then stage 3 is not shown as disabled
+
+  @issue-284
+  Scenario: A disabled stage keeps its place, its number and its cards, also after a reload
+    Given the app is open
+    When I open "Backlog" in the sidebar
+    And I open the Roadmap
+    And I open the stage actions menu of stage 3
+    And I choose "Disable" in the stage actions menu
+    Then stage 3 is shown as disabled
+    And stage 3 shows 1 item card
+    And stage 3 sits between stage 2 and stage 4
+    When I reload the app
+    And I open "Backlog" in the sidebar
+    And I open the Roadmap
+    Then stage 3 is shown as disabled
+    And stage 3 shows 1 item card
+    And stage 3 sits between stage 2 and stage 4
+
+  # ---- #285: no "Update the app after this" switch ------------------------------------------------------
+
+  @issue-285
+  Scenario: No roadmap item shows an "Update the app after this" control, even with Self-healing on
+    Given the app is open
+    And the roadmap has a stage of 2 planned items
+    When I open "Settings" in the sidebar
+    And I open the "Execution" settings tab
+    And I turn Self-healing on
+    And I open "Backlog" in the sidebar
+    And I open the Roadmap
+    Then no roadmap item shows an "Update the app after this" control

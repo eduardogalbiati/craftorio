@@ -8,8 +8,8 @@
 // - applyUpdate({ appDir, sourceDir, install }) -> { ok: true, from, to, subjects, installed } or
 //   { ok: false, reason } (nothing changed); install({ cwd }) only when package-lock.json changed,
 //   a failed install puts the app folder back on `from`.
-// - updateDue({ selfHealing, on, when: 'stage' | 'marked', event: { type: 'item-merged', item } |
-//   { type: 'stage-done' }, behind }) -> boolean.
+// - updateDue({ selfHealing, on, event: { type: 'item-merged', item } | { type: 'stage-done' }, behind })
+//   -> boolean. #285: one trigger, a roadmap stage that ended; a merged item never triggers it.
 // - runUpdateCycle({ workspaceDir, appDir, sourceDir, pause(reason) -> roadmap ids, resume(ids),
 //   activeRuns() -> [{ runId, gate }], pollMs, install, notify({ title, body }), relaunch() }) -> result.
 // - writeIntent(workspaceDir, intent, { now }), readIntent(workspaceDir), afterRestart(workspaceDir, { now }),
@@ -182,32 +182,32 @@ test('#279 update: a failed install puts the app folder back on the previous com
 
 // ---- When it is due ----------------------------------------------------------------------------
 
-test('#279 trigger: only with Self-healing and the switch on, and only when the source is ahead', () => {
+test('#279 #285 trigger: a stage that ended updates only with Self-healing and the switch on, and only when the source is ahead', () => {
   const { updateDue } = load();
-  const merged = { type: 'item-merged', item: { updateAfter: true } };
-  assert.equal(updateDue({ selfHealing: true, on: true, when: 'marked', event: merged, behind: 2 }), true);
-  assert.equal(updateDue({ selfHealing: false, on: true, when: 'marked', event: merged, behind: 2 }), false);
-  assert.equal(updateDue({ selfHealing: true, on: false, when: 'marked', event: merged, behind: 2 }), false);
-  assert.equal(updateDue({ selfHealing: true, on: true, when: 'marked', event: merged, behind: 0 }), false);
-});
-
-test('#279 trigger: "only after marked items" ignores unmarked items and stage ends; "after every stage" updates at a stage end', () => {
-  const { updateDue } = load();
-  const unmarked = { type: 'item-merged', item: {} };
   const stageDone = { type: 'stage-done' };
-  assert.equal(updateDue({ selfHealing: true, on: true, when: 'marked', event: unmarked, behind: 2 }), false);
-  assert.equal(updateDue({ selfHealing: true, on: true, when: 'marked', event: stageDone, behind: 2 }), false);
-  assert.equal(updateDue({ selfHealing: true, on: true, when: 'stage', event: stageDone, behind: 2 }), true);
+  assert.deepEqual([
+    updateDue({ selfHealing: true, on: true, event: stageDone, behind: 2 }),
+    updateDue({ selfHealing: false, on: true, event: stageDone, behind: 2 }),
+    updateDue({ selfHealing: true, on: false, event: stageDone, behind: 2 }),
+    updateDue({ selfHealing: true, on: true, event: stageDone, behind: 0 }),
+  ], [true, false, false, false]);
 });
 
-test('#279 roadmap: an item keeps its "Update the app after this" mark', (t) => {
+test('#285 trigger: an item merged mid-stage never starts an update, marked or not', () => {
+  const { updateDue } = load();
+  assert.deepEqual([
+    updateDue({ selfHealing: true, on: true, event: { type: 'item-merged', item: { updateAfter: true } }, behind: 2 }),
+    updateDue({ selfHealing: true, on: true, event: { type: 'item-merged', item: {} }, behind: 2 }),
+  ], [false, false]);
+});
+
+test('#285 roadmap: an item saved with updateAfter: true is stored without the field', (t) => {
   const backlogDir = tmp(t, 'appupd-backlog-');
   roadmapModel.saveStages(backlogDir, 'p1', [
     { items: [{ workflow: 'software-development.yaml', number: 1, mock: true, updateAfter: true }, { workflow: 'software-development.yaml', number: 2, mock: true }] },
   ], { issues: [1, 2].map((n) => ({ number: n, title: `Issue ${n}`, state: 'open', url: `https://github.com/o/r/issues/${n}`, body: '' })) });
   const items = roadmapModel.readRoadmap(backlogDir, 'p1').stages[0].items;
-  assert.equal(items[0].updateAfter, true);
-  assert.equal(!!items[1].updateAfter, false);
+  assert.deepEqual(items.map((x) => 'updateAfter' in x), [false, false]);
 });
 
 // ---- The cycle ---------------------------------------------------------------------------------

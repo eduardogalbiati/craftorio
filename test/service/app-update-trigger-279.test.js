@@ -1,6 +1,7 @@
 // #279 at the service seam, after review: where the update applies (app-update:state, the Settings
-// row and the roadmap cards), the Undo's channel (app-update:back), and the roadmap's trigger: a real
-// item marked "Update the app after this" that merged starts the cycle and nothing more starts.
+// row), the Undo's channel (app-update:back), and the roadmap's trigger (#285: one trigger, a stage
+// that ended; a stored appUpdateWhen 'marked' is ignored): a real item that merged and ended its stage
+// starts the cycle and nothing more starts.
 // The app folder and the project's clone are temporary git repositories (host.appDir), the restart
 // is injected (host.relaunch); no model is ever called (the roadmap's workflow has no agent step).
 const test = require('node:test');
@@ -101,7 +102,7 @@ test('#279 app-update:back: refuses a value that is not a commit hash, a package
   assert.equal(r.git(r.appDir, 'rev-parse', 'HEAD'), r.from);
 });
 
-test('#279 trigger: a real marked item that merged pauses the roadmap, updates the app and restarts; the next stage does not start', async (t) => {
+test('#279 #285 trigger: a real item that merged and ended its stage pauses the roadmap, updates the app and restarts, although the stored setting says "marked"; the next stage does not start', async (t) => {
   const r = appAndClone(t, { ahead: 2 });
   let relaunched = 0;
   const { service, api } = makeService(t, {
@@ -116,9 +117,10 @@ test('#279 trigger: a real marked item that merged pauses the roadmap, updates t
   const prev = api['settings:get']();
   api['settings:set']({ oracle: { ...prev.oracle, selfHealing: true, appUpdate: true, appUpdateWhen: 'marked' } });
 
-  // stage 1: a real item marked "Update the app after this" whose run succeeded and merged
+  // stage 1: a real item (no mark: #285 removed it) whose run succeeded and merged, ending the stage;
+  // the setting stored before #285 still says 'marked' and is ignored
   roadmapModel.saveStages(ws.backlog, p.id, [
-    { items: [{ workflow: 'fixture-no-agent.yaml', number: 1, mock: false, updateAfter: true }] },
+    { items: [{ workflow: 'fixture-no-agent.yaml', number: 1, mock: false }] },
     { items: [{ workflow: 'fixture-no-agent.yaml', number: 2, mock: false }] },
   ], { issues: [roadmapIssue(1), roadmapIssue(2)] });
   roadmapModel.setState(ws.backlog, p.id, 'running', { simulated: false });
@@ -158,7 +160,7 @@ test('#279 trigger: a real marked item that merged pauses the roadmap, updates t
   assert.ok(notes.some((n) => n.includes(`Updating the app: ${r.from.slice(0, 7)} → ${r.to.slice(0, 7)}, 2 commits`)), notes.join(' | '));
 });
 
-test('#279 trigger: with "only after marked items", an unmarked real item that merged starts no update', async (t) => {
+test('#279 #285 trigger: with the switch off, a real item that merged and ended the last stage starts no update', async (t) => {
   const r = appAndClone(t, { ahead: 2 });
   let relaunched = 0;
   const { service, api } = makeService(t, { appDir: r.appDir, relaunch: () => { relaunched++; } });
@@ -168,7 +170,7 @@ test('#279 trigger: with "only after marked items", an unmarked real item that m
   fs.mkdirSync(ws.backlog, { recursive: true });
   fs.writeFileSync(path.join(ws.backlog, `${p.id}.json`), JSON.stringify({ projectId: p.id, platform: 'github', repo: 'https://github.com/o/r', issues: [roadmapIssue(1)] }));
   const prev = api['settings:get']();
-  api['settings:set']({ oracle: { ...prev.oracle, selfHealing: true, appUpdate: true, appUpdateWhen: 'marked' } });
+  api['settings:set']({ oracle: { ...prev.oracle, selfHealing: true, appUpdate: false } });
   roadmapModel.saveStages(ws.backlog, p.id, [{ items: [{ workflow: 'fixture-no-agent.yaml', number: 1, mock: false }] }], { issues: [roadmapIssue(1)] });
   roadmapModel.setState(ws.backlog, p.id, 'running', { simulated: false });
   const item1 = roadmapModel.readRoadmap(ws.backlog, p.id).stages[0].items[0];
